@@ -195,6 +195,14 @@ type Input struct {
 	// shape, so run it at startup.
 	ExternallyProvisioned bool
 
+	// TombstoneView emits the state view (Delete / GetLive and the cache
+	// twins) for a schema WITHOUT a u8 EntityLifecycle role, driven
+	// entirely by the tombstone pair the store's constructor then
+	// requires (<Store>StoreConfig.TombstoneDetect / TombstoneWrite).
+	// Refused on a schema that binds the role — its state view exists
+	// already, with the u8 marker as the pair's default binding.
+	TombstoneView bool
+
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),
 	// ORDER BY (Key[, Order]) resolved to physical names, and the

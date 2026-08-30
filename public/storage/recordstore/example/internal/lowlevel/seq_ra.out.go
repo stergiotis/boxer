@@ -44,8 +44,8 @@ type MembershipPackSeqTableMeasure struct {
 func NewMembershipPackSeqTableMeasureMeasure() (inst *MembershipPackSeqTableMeasure) {
 	inst = &MembershipPackSeqTableMeasure{}
 	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexLowCardVerbatim = 4
-	inst.ColumnIndexLowCardVerbatimAccel = 5
+	inst.ColumnIndexLowCardVerbatim = 3
+	inst.ColumnIndexLowCardVerbatimAccel = 4
 	return
 }
 
@@ -149,11 +149,6 @@ type ReadAccessSeqTablePlainEntityIdAttributes struct {
 	ColumnIndexEid uint32
 }
 
-type ReadAccessSeqTablePlainEntityLifecycleAttributes struct {
-	ValueLifecycle       *array.Uint8
-	ColumnIndexLifecycle uint32
-}
-
 type ReadAccessSeqTableTaggedMeasureAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
@@ -193,38 +188,9 @@ func (inst *ReadAccessSeqTablePlainEntityIdAttributes) SetColumnIndices(indices 
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessSeqTablePlainEntityIdAttributes)(nil)
 
-func NewReadAccessSeqTablePlainEntityLifecycleAttributes() (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) {
-	inst = &ReadAccessSeqTablePlainEntityLifecycleAttributes{}
-	inst.ColumnIndexLifecycle = 2
-	return
-}
-
-func (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexLifecycle,
-	}
-	return
-}
-
-func (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessSeqTablePlainEntityLifecycleAttributes.ColumnIndexLifecycle",
-	}
-	return
-}
-
-func (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexLifecycle = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessSeqTablePlainEntityLifecycleAttributes)(nil)
-
 func NewReadAccessSeqTableTaggedMeasureAttributes() (inst *ReadAccessSeqTableTaggedMeasureAttributes) {
 	inst = &ReadAccessSeqTableTaggedMeasureAttributes{}
-	inst.ColumnIndexValue = 3
+	inst.ColumnIndexValue = 2
 	return
 }
 
@@ -261,10 +227,6 @@ func (inst *ReadAccessSeqTablePlainEntityIdAttributes) Reset() {
 	inst.ValueEid = nil
 }
 
-func (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) Reset() {
-	inst.ValueLifecycle = nil
-}
-
 func (inst *ReadAccessSeqTableTaggedMeasureAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
@@ -282,12 +244,6 @@ func (inst *ReadAccessSeqTablePlainEntityIdAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueEid)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessSeqTablePlainEntityLifecycleAttributes)(nil)
-
-func (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueLifecycle)
-}
-
 var _ runtime.ReleasableI = (*ReadAccessSeqTableTaggedMeasureAttributes)(nil)
 
 func (inst *ReadAccessSeqTableTaggedMeasureAttributes) Release() {
@@ -303,13 +259,6 @@ func (inst *ReadAccessSeqTableTaggedMeasureAttributes) Release() {
 func (inst *ReadAccessSeqTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
 		nEntities = inst.ValueId.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) Len() (nEntities int) {
-	if inst.ValueLifecycle != nil {
-		nEntities = inst.ValueLifecycle.Len()
 	}
 	return
 }
@@ -338,14 +287,6 @@ func (inst *ReadAccessSeqTablePlainEntityIdAttributes) LoadFromRecord(rec runtim
 	return
 }
 
-func (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexLifecycle, arrow.UINT8, rec, &inst.ValueLifecycle, array.NewUint8Data)
-	if err != nil {
-		return
-	}
-	return
-}
-
 func (inst *ReadAccessSeqTableTaggedMeasureAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
 	if err != nil {
@@ -368,10 +309,6 @@ func (inst *ReadAccessSeqTablePlainEntityIdAttributes) GetAttrValueId(entityIdx 
 }
 func (inst *ReadAccessSeqTablePlainEntityIdAttributes) GetAttrValueEid(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
 	scalarAttrValue = inst.ValueEid.Value(int(entityIdx))
-	return
-}
-func (inst *ReadAccessSeqTablePlainEntityLifecycleAttributes) GetAttrValueLifecycle(entityIdx runtime.EntityIdx) (scalarAttrValue uint8) {
-	scalarAttrValue = inst.ValueLifecycle.Value(int(entityIdx))
 	return
 }
 
@@ -484,22 +421,19 @@ func (inst *ReadAccessSeqTableTaggedMeasure) GetSectionMembershipSpec() common.M
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
 
 type ReadAccessSeqTable struct {
-	EntityId        *ReadAccessSeqTablePlainEntityIdAttributes
-	EntityLifecycle *ReadAccessSeqTablePlainEntityLifecycleAttributes
-	Measure         *ReadAccessSeqTableTaggedMeasure
+	EntityId *ReadAccessSeqTablePlainEntityIdAttributes
+	Measure  *ReadAccessSeqTableTaggedMeasure
 }
 
 func NewReadAccessSeqTable() (inst *ReadAccessSeqTable) {
 	inst = &ReadAccessSeqTable{}
 	inst.EntityId = NewReadAccessSeqTablePlainEntityIdAttributes()
-	inst.EntityLifecycle = NewReadAccessSeqTablePlainEntityLifecycleAttributes()
 	inst.Measure = NewReadAccessSeqTableTaggedMeasure()
 	return
 }
 
 func (inst *ReadAccessSeqTable) Release() {
 	runtime.ReleaseIfNotNil(inst.EntityId)
-	runtime.ReleaseIfNotNil(inst.EntityLifecycle)
 	runtime.ReleaseIfNotNil(inst.Measure)
 }
 
@@ -508,13 +442,6 @@ func (inst *ReadAccessSeqTable) LoadFromRecord(rec runtime.RecordI) (err error) 
 		err = inst.EntityId.LoadFromRecord(rec)
 		if err != nil {
 			err = eb.Build().Str("tableName", "seq-table").Str("fieldName", "EntityId").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntityLifecycle != nil {
-		err = inst.EntityLifecycle.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "seq-table").Str("fieldName", "EntityLifecycle").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
@@ -533,9 +460,6 @@ func (inst *ReadAccessSeqTable) SetColumnIndices(indices []uint32) (rest []uint3
 	if inst.EntityId != nil {
 		rest = inst.EntityId.SetColumnIndices(rest)
 	}
-	if inst.EntityLifecycle != nil {
-		rest = inst.EntityLifecycle.SetColumnIndices(rest)
-	}
 	if inst.Measure != nil {
 		rest = inst.Measure.SetColumnIndices(rest)
 	}
@@ -546,9 +470,6 @@ func (inst *ReadAccessSeqTable) GetColumnIndices() (columnIndices []uint32) {
 	if inst.EntityId != nil {
 		columnIndices = slices.Concat(columnIndices, inst.EntityId.GetColumnIndices())
 	}
-	if inst.EntityLifecycle != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntityLifecycle.GetColumnIndices())
-	}
 	if inst.Measure != nil {
 		columnIndices = slices.Concat(columnIndices, inst.Measure.GetColumnIndices())
 	}
@@ -558,9 +479,6 @@ func (inst *ReadAccessSeqTable) GetColumnIndices() (columnIndices []uint32) {
 func (inst *ReadAccessSeqTable) GetColumnIndexFieldNames() (fieldNames []string) {
 	if inst.EntityId != nil {
 		fieldNames = slices.Concat(fieldNames, inst.EntityId.GetColumnIndexFieldNames())
-	}
-	if inst.EntityLifecycle != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntityLifecycle.GetColumnIndexFieldNames())
 	}
 	if inst.Measure != nil {
 		fieldNames = slices.Concat(fieldNames, inst.Measure.GetColumnIndexFieldNames())

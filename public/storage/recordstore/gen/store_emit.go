@@ -201,7 +201,15 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		err = eh.Errorf("Order column Go type %q not supported — Replay and the decode assume the timestamp lane; declare the EntityTimestamp column as a temporal (ctabb.Z64 for nanosecond replay precision), or bind a uint64 column explicitly via Roles.Order", model.order.goType)
 		return
 	}
-	stateView := model.stateView
+	if inst.TombstoneView && model.stateView {
+		err = eh.Errorf("TombstoneView is set, but the schema binds a u8 EntityLifecycle role (%s) — the state view exists already, with the u8 marker as the tombstone pair's default binding", model.lifecycle.name)
+		return
+	}
+	// stateView says the Delete/GetLive verb family (and its cache twins)
+	// is emitted; model.stateView keeps saying the u8 Lifecycle role
+	// exists. They differ exactly for TombstoneView stores, whose verbs
+	// run on the configured pair alone (ADR-0100 Update 2026-08-30).
+	stateView := model.stateView || inst.TombstoneView
 
 	idSrc, hasIdSrc := inst.wrapper().(marshallgen.MembershipIdSourceI)
 	if !hasIdSrc && len(plans) > 0 {
@@ -605,6 +613,11 @@ func plainReaderVar(itemType common.PlainItemTypeE) string {
 // false is the z64 timestamp lane.
 func (inst emitter) orderU64() bool { return inst.orderGoType == "uint64" }
 
+// stateViewOn reports whether the store emits the Delete/GetLive family:
+// the u8 Lifecycle role binds, or TombstoneView declares the
+// predicate-driven view (ADR-0100 Update 2026-08-30).
+func (inst emitter) stateViewOn() bool { return inst.model.stateView || inst.TombstoneView }
+
 // orderArg is the Begin/Delete/Ingest parameter name carrying the Order
 // value: "ts" on the timestamp lane, "ord" under the u64 regime.
 func (inst emitter) orderArg() string {
@@ -977,7 +990,7 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("const (")
 	p("\t%sColKey = `\"%s\"`", inst.StoreName, key.physical)
 	p("\t%sColOrder = `\"%s\"`", inst.StoreName, order.physical)
-	if stateView {
+	if inst.model.stateView {
 		p("\t%sColLifecycle = `\"%s\"`", inst.StoreName, lifecycle.physical)
 	}
 	p(")")
@@ -1009,7 +1022,7 @@ func (inst emitter) emitEntityBag(sb *strings.Builder, comps []storeComponent, s
 	} else {
 		p("\tTs time.Time")
 	}
-	if stateView {
+	if inst.model.stateView {
 		p("\tLifecycle uint8")
 	}
 	if len(inst.model.passthrough) > 0 {
@@ -1032,10 +1045,13 @@ func (inst emitter) emitEntityBag(sb *strings.Builder, comps []storeComponent, s
 	p("\treturn")
 	p("}")
 	p("")
-	if stateView {
+	if inst.model.stateView {
 		p("// IsTombstone reports whether this row is a state-view deletion")
 		p("// marker — what the tombstone-blind verbs (Latest, Replay, the")
-		p("// cache's Get) hand back for a deleted key.")
+		p("// cache's Get) hand back for a deleted key. It is the tombstone")
+		p("// pair's DEFAULT binding; the verbs consult the configured")
+		p("// TombstoneDetect when one is set, and so must callers holding a")
+		p("// store whose config overrides the pair.")
 		p("func (inst *%s) IsTombstone() bool {", inst.entityType())
 		p("\treturn inst.Lifecycle == recordstore.LifecycleTombstone")
 		p("}")
@@ -1075,6 +1091,37 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t// descriptor fact (resolution self-heals on the dimension's own flush).")
 	p("\t// The default keeps the descriptor durable no later than the row.")
 	p("\tBestEffortStampFlush bool")
+	if inst.stateViewOn() {
+		p("\t// TombstoneDetect is the read half of the state-view tombstone pair")
+		p("\t// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache")
+		p("\t// views' — reads a detected row as absent. It may consult any entity")
+		p("\t// content, envelope fields or component attributes. It runs Go-side")
+		p("\t// on the newest row per key, which is all GetLive needs; it cannot")
+		p("\t// push down into SQL, so Scan verbs and hand-written SQL apply their")
+		p("\t// own discipline. Supply BOTH halves or neither: Delete writes what")
+		p("\t// the predicate recognises, and a lone half would tear the pair.")
+		if inst.model.stateView {
+			p("\t// Nil (the default) binds the u8 Lifecycle marker")
+			p("\t// (Entity.IsTombstone).")
+		} else {
+			p("\t// This store binds no u8 Lifecycle role (generated with")
+			p("\t// TombstoneView), so the pair is required — the constructor")
+			p("\t// panics on a nil half.")
+		}
+		p("\tTombstoneDetect func(*%s) bool", inst.entityType())
+		p("\t// TombstoneWrite is the write half of the pair: Delete opens an")
+		p("\t// entity frame for (key, Order) and hands the builder here to")
+		p("\t// compose the marker row the configured TombstoneDetect recognises.")
+		p("\t// The marker is an ordinary row: a Scan whose filter it satisfies")
+		p("\t// returns it, so pick marker content the store's scans exclude.")
+		if inst.model.stateView {
+			p("\t// Nil (the default) appends the bare envelope row with")
+			p("\t// Lifecycle = recordstore.LifecycleTombstone. When set, Delete's")
+			p("\t// frame carries Lifecycle = recordstore.LifecycleLive — the u8")
+			p("\t// column stops being the marker; the pair is the marker.")
+		}
+		p("\tTombstoneWrite func(*%s)", inst.builderType())
+	}
 	p("}")
 	p("")
 	p("// %s is single-goroutine, like every part it composes. Batched", inst.storeType())
@@ -1125,6 +1172,16 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 		p("\t\tpanic(\"%s: Stampers configured, but a component reads the HighCardRef membership lane back as data (a tuple @membership field on the highCardRef channel) — a stamp would decode as a spurious ref id; move the ref memberships to another lane or drop the stampers\")", inst.storeType())
 		p("\t}")
 	}
+	if inst.stateViewOn() {
+		p("\tif (cfg.TombstoneDetect == nil) != (cfg.TombstoneWrite == nil) {")
+		p("\t\tpanic(\"%s: the tombstone pair comes whole — supply both TombstoneDetect and TombstoneWrite, or neither\")", inst.storeType())
+		p("\t}")
+		if !inst.model.stateView {
+			p("\tif cfg.TombstoneDetect == nil {")
+			p("\t\tpanic(\"%s: generated with TombstoneView and no u8 Lifecycle role — the tombstone pair (TombstoneDetect, TombstoneWrite) is required\")", inst.storeType())
+			p("\t}")
+		}
+	}
 	p("\tif cfg.Table != \"\" {")
 	p("\t\tif terr := recordstore.CheckTableRef(cfg.Table); terr != nil {")
 	p("\t\t\tpanic(\"%s: \" + terr.Error())", inst.storeType())
@@ -1146,6 +1203,22 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\treturn %sTableName", inst.StoreName)
 	p("}")
 	p("")
+	if inst.stateViewOn() {
+		p("// isTombstone applies the tombstone pair's read half — the interpreted")
+		p("// state-view verbs (GetLive here and on the cache views) route through")
+		p("// it, so the pair and the verbs cannot disagree.")
+		if inst.model.stateView {
+			p("func (inst *%s) isTombstone(e *%s) bool {", inst.storeType(), inst.entityType())
+			p("\tif inst.cfg.TombstoneDetect != nil {")
+			p("\t\treturn inst.cfg.TombstoneDetect(e)")
+			p("\t}")
+			p("\treturn e.IsTombstone()")
+			p("}")
+		} else {
+			p("func (inst *%s) isTombstone(e *%s) bool { return inst.cfg.TombstoneDetect(e) }", inst.storeType(), inst.entityType())
+		}
+		p("")
+	}
 	p("// applyStampers consults the configured stampers and pushes their surrogate")
 	p("// ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),")
 	p("// returning the count so Commit/Rollback pop exactly that many.")
@@ -1348,7 +1421,7 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	hasPT := len(inst.model.passthrough) > 0
 	p("// Begin opens one entity with the envelope roles as typed arguments")
 	extras := make([]string, 0, 2)
-	if stateView {
+	if inst.model.stateView {
 		extras = append(extras, "a live lifecycle")
 	}
 	if hasPT {
@@ -1368,7 +1441,7 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	}
 	p("%s) *%s {", sig, inst.builderType())
 	lit := fmt.Sprintf("%s{ID: id, %s: %s", inst.entityType(), inst.orderEntityField(), inst.orderArg())
-	if stateView {
+	if inst.model.stateView {
 		lit += ", Lifecycle: recordstore.LifecycleLive"
 	}
 	if hasPT {
@@ -1826,7 +1899,7 @@ func (inst emitter) emitCacheView(sb *strings.Builder, stateView bool) {
 		p("// the authoritative read. A miss queues the batch fetch like Get.")
 		p("func (inst *%s[W]) GetLive(key %s) (ent *%s, found bool) {", inst.cacheType(), inst.keyGoType, inst.entityType())
 		p("\tent, found = inst.cache.Get(key)")
-		p("\tif found && ent.IsTombstone() {")
+		p("\tif found && inst.st.isTombstone(ent) {")
 		p("\t\tent = nil")
 		p("\t\tfound = false")
 		p("\t}")
@@ -1840,7 +1913,7 @@ func (inst emitter) emitCacheView(sb *strings.Builder, stateView bool) {
 		p("// came from a stale entry.")
 		p("func (inst *%s[W]) GetLiveAcceptStale(key %s) (ent *%s, found bool, stale bool) {", inst.cacheType(), inst.keyGoType, inst.entityType())
 		p("\tent, found, stale = inst.cache.GetAcceptStale(key)")
-		p("\tif found && ent.IsTombstone() {")
+		p("\tif found && inst.st.isTombstone(ent) {")
 		p("\t\tent = nil")
 		p("\t\tfound = false")
 		p("\t}")
@@ -2015,35 +2088,63 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("// --- state view (Delete / GetLive; ADR-0100 SD4). Versioned writes")
 	p("// go through Begin — appending a new version IS the update. ---")
 	p("")
-	p("// Delete appends a tombstone row for id (no components; lifecycle marks")
-	p("// the deletion). The tombstone writes through to attached cache views")
-	p("// like any commit — a versioned deletion, so GetLive reads the key as")
-	p("// absent immediately.")
-	p("func (inst *%s) Delete(id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+	beginArgs := "id, " + inst.orderArg()
 	if len(inst.model.passthrough) > 0 {
-		p("\tvar env %sEnvelope // a tombstone carries no pass-through payload", inst.StoreName)
+		beginArgs += ", " + inst.StoreName + "Envelope{}"
 	}
-	inst.emitBeginFrame(p, "inst.dml", "recordstore.LifecycleTombstone", "env")
-	p("\terr = %s", inst.ctrlCall("inst.dml", "CommitEntity"))
-	p("\tif err != nil {")
-	p("\t\t_ = %s // discard the failed frame; the store stays usable", inst.ctrlCall("inst.dml", "RollbackEntity"))
-	p("\t\treturn")
-	p("\t}")
-	p("\tinst.buffered++")
-	p("\tinst.dirty[id] = struct{}{}")
-	p("\tinst.notifyWrite(id, &%s{ID: id, %s: %s, Lifecycle: recordstore.LifecycleTombstone})", inst.entityType(), inst.orderEntityField(), inst.orderArg())
-	p("\treturn")
-	p("}")
+	if inst.model.stateView {
+		p("// Delete appends a tombstone row for id — the marker row the tombstone")
+		p("// pair recognises. Under the default pair the row carries no components")
+		p("// and the u8 Lifecycle column marks the deletion; a configured pair")
+		p("// composes the marker through TombstoneWrite on an ordinary builder")
+		p("// frame instead (whose Lifecycle column then reads LifecycleLive — the")
+		p("// pair is the marker). Either way the deletion writes through to")
+		p("// attached cache views like any commit — versioned, so GetLive reads")
+		p("// the key as absent immediately.")
+		p("func (inst *%s) Delete(id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+		p("\tif inst.cfg.TombstoneWrite != nil {")
+		p("\t\tb := inst.Begin(%s)", beginArgs)
+		p("\t\tinst.cfg.TombstoneWrite(b)")
+		p("\t\treturn b.Commit()")
+		p("\t}")
+		if len(inst.model.passthrough) > 0 {
+			p("\tvar env %sEnvelope // a tombstone carries no pass-through payload", inst.StoreName)
+		}
+		inst.emitBeginFrame(p, "inst.dml", "recordstore.LifecycleTombstone", "env")
+		p("\terr = %s", inst.ctrlCall("inst.dml", "CommitEntity"))
+		p("\tif err != nil {")
+		p("\t\t_ = %s // discard the failed frame; the store stays usable", inst.ctrlCall("inst.dml", "RollbackEntity"))
+		p("\t\treturn")
+		p("\t}")
+		p("\tinst.buffered++")
+		p("\tinst.dirty[id] = struct{}{}")
+		p("\tinst.notifyWrite(id, &%s{ID: id, %s: %s, Lifecycle: recordstore.LifecycleTombstone})", inst.entityType(), inst.orderEntityField(), inst.orderArg())
+		p("\treturn")
+		p("}")
+	} else {
+		p("// Delete appends the tombstone marker row for id: an entity frame at")
+		p("// (key, Order) composed by the configured TombstoneWrite — the row the")
+		p("// configured TombstoneDetect recognises (this store binds no u8")
+		p("// Lifecycle role; the pair is the whole marker). The deletion writes")
+		p("// through to attached cache views like any commit — versioned, so")
+		p("// GetLive reads the key as absent immediately.")
+		p("func (inst *%s) Delete(id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+		p("\tb := inst.Begin(%s)", beginArgs)
+		p("\tinst.cfg.TombstoneWrite(b)")
+		p("\treturn b.Commit()")
+		p("}")
+	}
 	p("")
 	p("// GetLive is Latest plus tombstone interpretation: newest row wins, a")
 	p("// tombstone reads as absent — the state-view read (the cache view")
-	p("// carries the cached twin).")
+	p("// carries the cached twin). Interpretation runs Go-side through the")
+	p("// tombstone pair's detect, on the one newest row this verb needs.")
 	p("func (inst *%s) GetLive(ctx context.Context, key %s) (ent *%s, found bool, err error) {", inst.storeType(), inst.keyGoType, inst.entityType())
 	p("\tent, found, err = inst.Latest(ctx, key)")
 	p("\tif err != nil || !found {")
 	p("\t\treturn")
 	p("\t}")
-	p("\tif ent.IsTombstone() {")
+	p("\tif inst.isTombstone(ent) {")
 	p("\t\tent = nil")
 	p("\t\tfound = false")
 	p("\t}")
@@ -2213,7 +2314,7 @@ func (inst emitter) emitDecode(sb *strings.Builder, comps []storeComponent, stat
 	} else {
 		p("\t\t\tTs: %s.%s.Value(i).ToTime(tsType.Unit).UTC(),", orderVar, orderField)
 	}
-	if stateView {
+	if inst.model.stateView {
 		p("\t\t\tLifecycle: %s.Value%s.Value(i),", plainReaderVar(inst.model.lifecycle.itemType), inst.model.lifecycle.pascal)
 	}
 	p("\t\t}")

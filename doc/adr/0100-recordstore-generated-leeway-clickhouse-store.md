@@ -1030,6 +1030,71 @@ view over clickhouse-local) and `gen_roles_test.go`
 (`TestGenerateRolesU64OrderSignatures`,
 `TestGeneratePositionalU64OrderRefused`).
 
+### 2026-08-30 — the tombstone becomes first-class: a configurable pair, with the u8 marker as its default binding
+
+SD4's state view read the tombstone off one hard-wired `u8` Lifecycle
+column. The marker is now a **pair** bound at store construction —
+`<Store>StoreConfig.TombstoneDetect func(*<Store>Entity) bool` (the read
+half: `GetLive`, on the store and the cache views, reads a detected row as
+absent) and `TombstoneWrite func(*<Store>EntityBuilder)` (the write half:
+`Delete` opens an entity frame at the given key and Order and hands the
+builder over to compose the marker row). The pair may consult or write any
+entity content — envelope fields or component attributes — not one `u8`
+column. The existing `u8` behaviour is the pair's **default binding**, so
+every current store keeps its semantics; `Entity.IsTombstone` stays emitted
+on role-bearing stores as that default, documented as such. The pair comes
+whole: the constructor panics on a lone half, because a `Delete` writing
+what the detect does not recognise would resurrect on read.
+
+- **Where the pair binds — construction, not generation.** A
+  generation-time pair would be Go source injected as strings into the
+  emitted store, unable to name the generated entity type it runs over;
+  a construction-time pair is typed against `<Store>Entity` /
+  `<Store>EntityBuilder` and testable. `Delete` stays a verb (not demoted
+  to "the caller appends what its predicate recognises") so the deletion
+  keeps its one-call write-through and cache-invalidation path; its body
+  is the demotion, internalized.
+- **Schemas without the u8 role get the view by declaration:**
+  `gen.Input.TombstoneView` emits Delete/GetLive (and the cache twins) for
+  a role-less schema; the constructor then requires the pair. Refused on a
+  schema that binds the role (the view exists already). Stores that bind
+  neither stay exactly as before — no view, byte-identical output
+  (cqrsexample's close-as-domain-event stance is untouched).
+- **Interpretation runs Go-side and cannot push down.** `GetLive` needs
+  only the newest row per key, so a Go predicate is exactly sufficient
+  there; it is not expressible to SQL, so `Scan` verbs and hand-written
+  SQL keep their own discipline. Corollary: a marker row is an ordinary
+  row — a Scan whose Filter it satisfies returns it, so marker content
+  should be chosen outside what the store's scans select.
+- **A configured pair retires the u8 column as the marker**: `Delete`'s
+  builder frame writes `LifecycleLive` like any Begin, and only the pair
+  decides. The column stays ordinary envelope data.
+- **Canonform / signing warning (CS-2-adjacent).** An attribute-shaped
+  marker is canonform *content* — it moves the record digest — where the
+  old `u8` envelope column was erased with the plains (ADR-0201 SD1/SD6).
+  A kind that will carry signed, persisted history must fix its tombstone
+  binding **before** history persists; switching later changes what its
+  digests cover.
+- **ReplacingMergeTree is the per-table compaction lever, not the state
+  view.** `TableOptions.Engine` (ADR-0102, per store via `gen.Input.DDL`)
+  may select `ReplacingMergeTree(ver[, is_deleted])`: a u64 Order column
+  composes as `ver`; `is_deleted` must be a **physical column**, so an
+  RMT-mode table materializes its marker as a real (u8-role-like) column —
+  a predicate over array content cannot serve it. RMT collapses to the
+  newest version at merge time, background and eventual, so reads keep the
+  `LIMIT 1 BY` / detect discipline regardless of engine. Never put RMT
+  under an append-only history table (collapsing destroys what `Replay`
+  exists to read), and RMT purge is compaction of superseded versions, not
+  erasure — erasure remains the vault-side `ALTER … DELETE` path.
+
+Fixtures: the `seq` store (role-less `TombstoneView` + pair, over the u64
+Order — `TestSeqStoreU64OrderRoundTrip`,
+`TestSeqStoreRequiresTombstonePair`) and
+`TestDeviceStoreCustomTombstonePair` (a role-bearing store overriding the
+pair: the u8 column stays Live, the pair marks). Default-binding behaviour
+is pinned by the pre-existing device / widget / pushoutstore suites, which
+pass unchanged over the regenerated stores.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

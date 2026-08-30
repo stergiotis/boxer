@@ -44,9 +44,8 @@ const SeqTableName = "seq"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	SeqColKey       = `"id:id:u64:47::0:"`
-	SeqColOrder     = `"id:eid:u64:47::0:"`
-	SeqColLifecycle = `"lc:lifecycle:u8:4::0:"`
+	SeqColKey   = `"id:id:u64:47::0:"`
+	SeqColOrder = `"id:eid:u64:47::0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -79,7 +78,6 @@ type SeqEntity struct {
 	// Ord is the Order role value — the caller-supplied, per-key
 	// strictly monotonic sequence (ADR-0100 SD2).
 	Ord        uint64
-	Lifecycle  uint8
 	SeqReading option.Option[SeqReading]
 }
 
@@ -89,13 +87,6 @@ func (inst *SeqEntity) Archetype() (a []string) {
 		a = append(a, "seqReading")
 	}
 	return
-}
-
-// IsTombstone reports whether this row is a state-view deletion
-// marker — what the tombstone-blind verbs (Latest, Replay, the
-// cache's Get) hand back for a deleted key.
-func (inst *SeqEntity) IsTombstone() bool {
-	return inst.Lifecycle == recordstore.LifecycleTombstone
 }
 
 type SeqStoreConfig struct {
@@ -126,6 +117,24 @@ type SeqStoreConfig struct {
 	// descriptor fact (resolution self-heals on the dimension's own flush).
 	// The default keeps the descriptor durable no later than the row.
 	BestEffortStampFlush bool
+	// TombstoneDetect is the read half of the state-view tombstone pair
+	// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache
+	// views' — reads a detected row as absent. It may consult any entity
+	// content, envelope fields or component attributes. It runs Go-side
+	// on the newest row per key, which is all GetLive needs; it cannot
+	// push down into SQL, so Scan verbs and hand-written SQL apply their
+	// own discipline. Supply BOTH halves or neither: Delete writes what
+	// the predicate recognises, and a lone half would tear the pair.
+	// This store binds no u8 Lifecycle role (generated with
+	// TombstoneView), so the pair is required — the constructor
+	// panics on a nil half.
+	TombstoneDetect func(*SeqEntity) bool
+	// TombstoneWrite is the write half of the pair: Delete opens an
+	// entity frame for (key, Order) and hands the builder here to
+	// compose the marker row the configured TombstoneDetect recognises.
+	// The marker is an ordinary row: a Scan whose filter it satisfies
+	// returns it, so pick marker content the store's scans exclude.
+	TombstoneWrite func(*SeqEntityBuilder)
 }
 
 // SeqStore is single-goroutine, like every part it composes. Batched
@@ -164,6 +173,12 @@ func NewSeqStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg SeqStor
 	if len(cfg.Stampers) > 0 {
 		panic("SeqStore: Stampers configured, but no section of the seq schema declares a HighCardRef membership column — stamps would be dropped silently; declare the channel (AddSectionMembership) or drop the stampers")
 	}
+	if (cfg.TombstoneDetect == nil) != (cfg.TombstoneWrite == nil) {
+		panic("SeqStore: the tombstone pair comes whole — supply both TombstoneDetect and TombstoneWrite, or neither")
+	}
+	if cfg.TombstoneDetect == nil {
+		panic("SeqStore: generated with TombstoneView and no u8 Lifecycle role — the tombstone pair (TombstoneDetect, TombstoneWrite) is required")
+	}
 	if cfg.Table != "" {
 		if terr := recordstore.CheckTableRef(cfg.Table); terr != nil {
 			panic("SeqStore: " + terr.Error())
@@ -184,6 +199,11 @@ func (inst *SeqStore) tableName() string {
 	}
 	return SeqTableName
 }
+
+// isTombstone applies the tombstone pair's read half — the interpreted
+// state-view verbs (GetLive here and on the cache views) route through
+// it, so the pair and the verbs cannot disagree.
+func (inst *SeqStore) isTombstone(e *SeqEntity) bool { return inst.cfg.TombstoneDetect(e) }
 
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
@@ -342,12 +362,11 @@ func (inst *SeqEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and a live lifecycle.
+// (Key, Order).
 func (inst *SeqStore) Begin(id uint64, ord uint64) *SeqEntityBuilder {
 	lowlevel.InEntitySeqTableBeginEntity(inst.dml)
 	lowlevel.InEntitySeqTableSetId(inst.dml, id, ord)
-	lowlevel.InEntitySeqTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
-	b := &SeqEntityBuilder{store: inst, key: id, ent: SeqEntity{ID: id, Ord: ord, Lifecycle: recordstore.LifecycleLive}}
+	b := &SeqEntityBuilder{store: inst, key: id, ent: SeqEntity{ID: id, Ord: ord}}
 	b.pushed = inst.applyStampers()
 	return b
 }
@@ -736,7 +755,7 @@ func (inst *SeqCache[W]) InvalidateAll() {
 // the authoritative read. A miss queues the batch fetch like Get.
 func (inst *SeqCache[W]) GetLive(key uint64) (ent *SeqEntity, found bool) {
 	ent, found = inst.cache.Get(key)
-	if found && ent.IsTombstone() {
+	if found && inst.st.isTombstone(ent) {
 		ent = nil
 		found = false
 	}
@@ -750,7 +769,7 @@ func (inst *SeqCache[W]) GetLive(key uint64) (ent *SeqEntity, found bool) {
 // came from a stale entry.
 func (inst *SeqCache[W]) GetLiveAcceptStale(key uint64) (ent *SeqEntity, found bool, stale bool) {
 	ent, found, stale = inst.cache.GetAcceptStale(key)
-	if found && ent.IsTombstone() {
+	if found && inst.st.isTombstone(ent) {
 		ent = nil
 		found = false
 	}
@@ -891,34 +910,28 @@ func (inst *SeqStore) Replay(ctx context.Context, key uint64, fromOrder uint64, 
 // --- state view (Delete / GetLive; ADR-0100 SD4). Versioned writes
 // go through Begin — appending a new version IS the update. ---
 
-// Delete appends a tombstone row for id (no components; lifecycle marks
-// the deletion). The tombstone writes through to attached cache views
-// like any commit — a versioned deletion, so GetLive reads the key as
-// absent immediately.
+// Delete appends the tombstone marker row for id: an entity frame at
+// (key, Order) composed by the configured TombstoneWrite — the row the
+// configured TombstoneDetect recognises (this store binds no u8
+// Lifecycle role; the pair is the whole marker). The deletion writes
+// through to attached cache views like any commit — versioned, so
+// GetLive reads the key as absent immediately.
 func (inst *SeqStore) Delete(id uint64, ord uint64) (err error) {
-	lowlevel.InEntitySeqTableBeginEntity(inst.dml)
-	lowlevel.InEntitySeqTableSetId(inst.dml, id, ord)
-	lowlevel.InEntitySeqTableSetLifecycle(inst.dml, recordstore.LifecycleTombstone)
-	err = lowlevel.InEntitySeqTableCommitEntity(inst.dml)
-	if err != nil {
-		_ = lowlevel.InEntitySeqTableRollbackEntity(inst.dml) // discard the failed frame; the store stays usable
-		return
-	}
-	inst.buffered++
-	inst.dirty[id] = struct{}{}
-	inst.notifyWrite(id, &SeqEntity{ID: id, Ord: ord, Lifecycle: recordstore.LifecycleTombstone})
-	return
+	b := inst.Begin(id, ord)
+	inst.cfg.TombstoneWrite(b)
+	return b.Commit()
 }
 
 // GetLive is Latest plus tombstone interpretation: newest row wins, a
 // tombstone reads as absent — the state-view read (the cache view
-// carries the cached twin).
+// carries the cached twin). Interpretation runs Go-side through the
+// tombstone pair's detect, on the one newest row this verb needs.
 func (inst *SeqStore) GetLive(ctx context.Context, key uint64) (ent *SeqEntity, found bool, err error) {
 	ent, found, err = inst.Latest(ctx, key)
 	if err != nil || !found {
 		return
 	}
-	if ent.IsTombstone() {
+	if inst.isTombstone(ent) {
 		ent = nil
 		found = false
 	}
@@ -1003,9 +1016,8 @@ func (inst *SeqStore) iterateEntities(ctx context.Context, sql string) iter.Seq2
 // kind-homogeneous helpers cannot decode them).
 func decodeSeqRecord(rec arrow.RecordBatch) (ents []*SeqEntity, err error) {
 	idR := lowlevel.NewReadAccessSeqTablePlainEntityIdAttributes()
-	lcR := lowlevel.NewReadAccessSeqTablePlainEntityLifecycleAttributes()
 	measureR := lowlevel.NewReadAccessSeqTableTaggedMeasure()
-	readers := []seqSectionReaderI{idR, lcR, measureR}
+	readers := []seqSectionReaderI{idR, measureR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1023,9 +1035,8 @@ func decodeSeqRecord(rec arrow.RecordBatch) (ents []*SeqEntity, err error) {
 	ents = make([]*SeqEntity, 0, n)
 	for i := range n {
 		ent := &SeqEntity{
-			ID:        idR.ValueId.Value(i),
-			Ord:       idR.ValueEid.Value(i),
-			Lifecycle: lcR.ValueLifecycle.Value(i),
+			ID:  idR.ValueId.Value(i),
+			Ord: idR.ValueEid.Value(i),
 		}
 		{
 			row, ok, e := seqReadingReadRow(i, measureR.GetAttributes(), measureR.GetMemberships())

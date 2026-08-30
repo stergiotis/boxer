@@ -98,7 +98,10 @@ func (inst *PersistEntity) Archetype() (a []string) {
 
 // IsTombstone reports whether this row is a state-view deletion
 // marker — what the tombstone-blind verbs (Latest, Replay, the
-// cache's Get) hand back for a deleted key.
+// cache's Get) hand back for a deleted key. It is the tombstone
+// pair's DEFAULT binding; the verbs consult the configured
+// TombstoneDetect when one is set, and so must callers holding a
+// store whose config overrides the pair.
 func (inst *PersistEntity) IsTombstone() bool {
 	return inst.Lifecycle == recordstore.LifecycleTombstone
 }
@@ -131,6 +134,27 @@ type PersistStoreConfig struct {
 	// descriptor fact (resolution self-heals on the dimension's own flush).
 	// The default keeps the descriptor durable no later than the row.
 	BestEffortStampFlush bool
+	// TombstoneDetect is the read half of the state-view tombstone pair
+	// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache
+	// views' — reads a detected row as absent. It may consult any entity
+	// content, envelope fields or component attributes. It runs Go-side
+	// on the newest row per key, which is all GetLive needs; it cannot
+	// push down into SQL, so Scan verbs and hand-written SQL apply their
+	// own discipline. Supply BOTH halves or neither: Delete writes what
+	// the predicate recognises, and a lone half would tear the pair.
+	// Nil (the default) binds the u8 Lifecycle marker
+	// (Entity.IsTombstone).
+	TombstoneDetect func(*PersistEntity) bool
+	// TombstoneWrite is the write half of the pair: Delete opens an
+	// entity frame for (key, Order) and hands the builder here to
+	// compose the marker row the configured TombstoneDetect recognises.
+	// The marker is an ordinary row: a Scan whose filter it satisfies
+	// returns it, so pick marker content the store's scans exclude.
+	// Nil (the default) appends the bare envelope row with
+	// Lifecycle = recordstore.LifecycleTombstone. When set, Delete's
+	// frame carries Lifecycle = recordstore.LifecycleLive — the u8
+	// column stops being the marker; the pair is the marker.
+	TombstoneWrite func(*PersistEntityBuilder)
 }
 
 // PersistStore is single-goroutine, like every part it composes. Batched
@@ -164,6 +188,9 @@ type PersistStore struct {
 
 // NewPersistStore wires the store. A nil alloc selects the Go allocator.
 func NewPersistStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg PersistStoreConfig) (inst *PersistStore) {
+	if (cfg.TombstoneDetect == nil) != (cfg.TombstoneWrite == nil) {
+		panic("PersistStore: the tombstone pair comes whole — supply both TombstoneDetect and TombstoneWrite, or neither")
+	}
 	if cfg.Table != "" {
 		if terr := recordstore.CheckTableRef(cfg.Table); terr != nil {
 			panic("PersistStore: " + terr.Error())
@@ -183,6 +210,16 @@ func (inst *PersistStore) tableName() string {
 		return inst.cfg.Table
 	}
 	return PersistTableName
+}
+
+// isTombstone applies the tombstone pair's read half — the interpreted
+// state-view verbs (GetLive here and on the cache views) route through
+// it, so the pair and the verbs cannot disagree.
+func (inst *PersistStore) isTombstone(e *PersistEntity) bool {
+	if inst.cfg.TombstoneDetect != nil {
+		return inst.cfg.TombstoneDetect(e)
+	}
+	return e.IsTombstone()
 }
 
 // applyStampers consults the configured stampers and pushes their surrogate
@@ -754,7 +791,7 @@ func (inst *PersistCache[W]) InvalidateAll() {
 // the authoritative read. A miss queues the batch fetch like Get.
 func (inst *PersistCache[W]) GetLive(key string) (ent *PersistEntity, found bool) {
 	ent, found = inst.cache.Get(key)
-	if found && ent.IsTombstone() {
+	if found && inst.st.isTombstone(ent) {
 		ent = nil
 		found = false
 	}
@@ -768,7 +805,7 @@ func (inst *PersistCache[W]) GetLive(key string) (ent *PersistEntity, found bool
 // came from a stale entry.
 func (inst *PersistCache[W]) GetLiveAcceptStale(key string) (ent *PersistEntity, found bool, stale bool) {
 	ent, found, stale = inst.cache.GetAcceptStale(key)
-	if found && ent.IsTombstone() {
+	if found && inst.st.isTombstone(ent) {
 		ent = nil
 		found = false
 	}
@@ -909,11 +946,20 @@ func (inst *PersistStore) Replay(ctx context.Context, key string, fromOrder time
 // --- state view (Delete / GetLive; ADR-0100 SD4). Versioned writes
 // go through Begin — appending a new version IS the update. ---
 
-// Delete appends a tombstone row for id (no components; lifecycle marks
-// the deletion). The tombstone writes through to attached cache views
-// like any commit — a versioned deletion, so GetLive reads the key as
-// absent immediately.
+// Delete appends a tombstone row for id — the marker row the tombstone
+// pair recognises. Under the default pair the row carries no components
+// and the u8 Lifecycle column marks the deletion; a configured pair
+// composes the marker through TombstoneWrite on an ordinary builder
+// frame instead (whose Lifecycle column then reads LifecycleLive — the
+// pair is the marker). Either way the deletion writes through to
+// attached cache views like any commit — versioned, so GetLive reads
+// the key as absent immediately.
 func (inst *PersistStore) Delete(id string, ts time.Time) (err error) {
+	if inst.cfg.TombstoneWrite != nil {
+		b := inst.Begin(id, ts)
+		inst.cfg.TombstoneWrite(b)
+		return b.Commit()
+	}
 	lowlevel.InEntityPersiststateTableBeginEntity(inst.dml)
 	lowlevel.InEntityPersiststateTableSetId(inst.dml, id)
 	lowlevel.InEntityPersiststateTableSetTimestamp(inst.dml, ts)
@@ -931,13 +977,14 @@ func (inst *PersistStore) Delete(id string, ts time.Time) (err error) {
 
 // GetLive is Latest plus tombstone interpretation: newest row wins, a
 // tombstone reads as absent — the state-view read (the cache view
-// carries the cached twin).
+// carries the cached twin). Interpretation runs Go-side through the
+// tombstone pair's detect, on the one newest row this verb needs.
 func (inst *PersistStore) GetLive(ctx context.Context, key string) (ent *PersistEntity, found bool, err error) {
 	ent, found, err = inst.Latest(ctx, key)
 	if err != nil || !found {
 		return
 	}
-	if ent.IsTombstone() {
+	if inst.isTombstone(ent) {
 		ent = nil
 		found = false
 	}

@@ -24,10 +24,9 @@ func CreateSchemaSeqTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:id:u64:47::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 001 */ arrow.Field{Name: "id:eid:u64:47::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
-		/* 002 */ arrow.Field{Name: "lc:lifecycle:u8:4::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint8},
-		/* 003 */ arrow.Field{Name: "tv:measure:value:val:u64:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 004 */ arrow.Field{Name: "tv:measure:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 005 */ arrow.Field{Name: "tv:measure:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 002 */ arrow.Field{Name: "tv:measure:value:val:u64:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 003 */ arrow.Field{Name: "tv:measure:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 004 */ arrow.Field{Name: "tv:measure:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -49,14 +48,10 @@ type InEntitySeqTable struct {
 	ambientHighCardRef []uint64
 	plainId0           uint64
 
-	plainEid1 uint64
-
-	plainLifecycle2       uint8
+	plainEid1             uint64
 	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001 *array.Uint64Builder
-
-	scalarFieldBuilder002 *array.Uint8Builder
 }
 
 func NewInEntitySeqTable(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *InEntitySeqTable) {
@@ -71,7 +66,6 @@ func NewInEntitySeqTable(allocator memory.Allocator, estimatedNumberOfRecords in
 	inst.initSections(builder)
 	inst.scalarFieldBuilder000 = builder.Field(0).(*array.Uint64Builder)
 	inst.scalarFieldBuilder001 = builder.Field(1).(*array.Uint64Builder)
-	inst.scalarFieldBuilder002 = builder.Field(2).(*array.Uint8Builder)
 
 	return inst
 }
@@ -118,21 +112,6 @@ func (inst *InEntitySeqTable) setId(id0 uint64, eid1 uint64) *InEntitySeqTable {
 	return inst
 }
 
-///////////////////////////////////////////////////////////////////
-// code generator
-// dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
-
-func (inst *InEntitySeqTable) setLifecycle(lifecycle2 uint8) *InEntitySeqTable {
-	if inst.state != runtime.EntityStateInEntity {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.plainLifecycle2 = lifecycle2
-
-	return inst
-}
-
 // PushMembershipHighCardRef adds id to the ambient HighCardRef memberships
 // replayed onto every attribute as it closes, until it is popped (ADR-0112 M1).
 // The stamp scope — one section vs the whole entity — is the caller's to set.
@@ -164,15 +143,11 @@ func (inst *InEntitySeqTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
 
 	inst.scalarFieldBuilder001.Append(inst.plainEid1)
-
-	inst.scalarFieldBuilder002.Append(inst.plainLifecycle2)
 }
 func (inst *InEntitySeqTable) resetPlainValues() {
 	inst.plainId0 = uint64(0)
 
 	inst.plainEid1 = uint64(0)
-
-	inst.plainLifecycle2 = uint8(0)
 }
 func (inst *InEntitySeqTable) initSections(builder *array.RecordBuilder) {
 	inst.section00Inst = NewInEntitySeqTableSectionMeasure(builder, inst)
@@ -305,9 +280,6 @@ func InEntitySeqTableReleaseBuilder(e *InEntitySeqTable)                { e.buil
 func InEntitySeqTableSetId(e *InEntitySeqTable, id0 uint64, eid1 uint64) *InEntitySeqTable {
 	return e.setId(id0, eid1)
 }
-func InEntitySeqTableSetLifecycle(e *InEntitySeqTable, lifecycle2 uint8) *InEntitySeqTable {
-	return e.setLifecycle(lifecycle2)
-}
 
 func (inst *InEntitySeqTable) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
@@ -322,8 +294,8 @@ type InEntitySeqTableSectionMeasure struct {
 	state                 runtime.EntityStateE
 	attributeCount        int
 	parent                *InEntitySeqTable
-	scalarFieldBuilder003 *array.Uint64Builder
-	scalarListBuilder003  *array.ListBuilder
+	scalarFieldBuilder002 *array.Uint64Builder
+	scalarListBuilder002  *array.ListBuilder
 }
 
 func NewInEntitySeqTableSectionMeasure(builder *array.RecordBuilder, parent *InEntitySeqTable) (inst *InEntitySeqTableSectionMeasure) {
@@ -333,8 +305,8 @@ func NewInEntitySeqTableSectionMeasure(builder *array.RecordBuilder, parent *InE
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder002 = builder.Field(2).(*array.ListBuilder)
 
 	return inst
 }
@@ -348,7 +320,7 @@ func (inst *InEntitySeqTableSectionMeasure) endAttribute() {
 		return
 	}
 }
-func (inst *InEntitySeqTableSectionMeasure) BeginAttribute(value3 uint64) *InEntitySeqTableSectionMeasureInAttr {
+func (inst *InEntitySeqTableSectionMeasure) BeginAttribute(value2 uint64) *InEntitySeqTableSectionMeasureInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -357,7 +329,7 @@ func (inst *InEntitySeqTableSectionMeasure) BeginAttribute(value3 uint64) *InEnt
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder003.Append(value3)
+	inst.scalarFieldBuilder002.Append(value2)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
@@ -413,14 +385,14 @@ type InEntitySeqTableSectionMeasureInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
 	parent                           *InEntitySeqTableSectionMeasure
-	scalarFieldBuilder003            *array.Uint64Builder
-	scalarListBuilder003             *array.ListBuilder
-	membershipFieldBuilder004        *array.BinaryBuilder
-	membershipListBuilder004         *array.ListBuilder
-	membershipSupportFieldBuilder005 *array.Uint64Builder
-	membershipSupportListBuilder005  *array.ListBuilder
+	scalarFieldBuilder002            *array.Uint64Builder
+	scalarListBuilder002             *array.ListBuilder
+	membershipFieldBuilder003        *array.BinaryBuilder
+	membershipListBuilder003         *array.ListBuilder
+	membershipSupportFieldBuilder004 *array.Uint64Builder
+	membershipSupportListBuilder004  *array.ListBuilder
 
-	membershipContainerLength004 int
+	membershipContainerLength003 int
 }
 
 func NewInEntitySeqTableSectionMeasureInAttr(builder *array.RecordBuilder, parent *InEntitySeqTableSectionMeasure) (inst *InEntitySeqTableSectionMeasureInAttr) {
@@ -428,47 +400,47 @@ func NewInEntitySeqTableSectionMeasureInAttr(builder *array.RecordBuilder, paren
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
-	inst.membershipFieldBuilder004 = builder.Field(4).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder004 = builder.Field(4).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder005 = builder.Field(5).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder005 = builder.Field(5).(*array.ListBuilder)
+	inst.scalarFieldBuilder002 = builder.Field(2).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.scalarListBuilder002 = builder.Field(2).(*array.ListBuilder)
+	inst.membershipFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder003 = builder.Field(3).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder004 = builder.Field(4).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder004 = builder.Field(4).(*array.ListBuilder)
 
 	return inst
 }
 func (inst *InEntitySeqTableSectionMeasureInAttr) beginAttribute() {
-	inst.membershipListBuilder004.Append(true)
-	inst.membershipContainerLength004 = 0
-	inst.scalarListBuilder003.Append(true)
-	inst.membershipSupportListBuilder005.Append(true)
+	inst.membershipListBuilder003.Append(true)
+	inst.membershipContainerLength003 = 0
+	inst.scalarListBuilder002.Append(true)
+	inst.membershipSupportListBuilder004.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntitySeqTableSectionMeasureInAttr) AddMembershipLowCardVerbatim(lv4 []byte) *InEntitySeqTableSectionMeasureInAttr {
+func (inst *InEntitySeqTableSectionMeasureInAttr) AddMembershipLowCardVerbatim(lv3 []byte) *InEntitySeqTableSectionMeasureInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder004.Append(lv4)
-	inst.membershipContainerLength004++
+	inst.membershipFieldBuilder003.Append(lv3)
+	inst.membershipContainerLength003++
 	return inst
 }
-func (inst *InEntitySeqTableSectionMeasureInAttr) AddMembershipLowCardVerbatimP(lv4 []byte) {
+func (inst *InEntitySeqTableSectionMeasureInAttr) AddMembershipLowCardVerbatimP(lv3 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder004.Append(lv4)
-	inst.membershipContainerLength004++
+	inst.membershipFieldBuilder003.Append(lv3)
+	inst.membershipContainerLength003++
 	return
 }
 func (inst *InEntitySeqTableSectionMeasureInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength004
-	inst.membershipContainerLength004 = 0
-	inst.membershipSupportFieldBuilder005.Append(uint64(l))
+	l = inst.membershipContainerLength003
+	inst.membershipContainerLength003 = 0
+	inst.membershipSupportFieldBuilder004.Append(uint64(l))
 }
 func (inst *InEntitySeqTableSectionMeasureInAttr) handleNonScalarSupportColumns() {
 	var l int

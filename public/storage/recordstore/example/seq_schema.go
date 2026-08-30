@@ -7,14 +7,15 @@ import (
 	easp "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 )
 
-// GetSeqSchemaInManipulator builds the u64-Order reference schema (ADR-0100
-// Update 2026-08-30): the Key is the leading EntityId (id), the Order is a
-// SECOND EntityId column (eid) bound explicitly through gen.Input.Roles —
-// the shape positional binding cannot produce — plus the u8 state-view
-// marker and one verbatim-membership section for the component. The Order
-// values are a caller-supplied sequence, not a clock; the SD2 contract
-// (strictly monotonic per key) is the caller's obligation here exactly as
-// on the timestamp lane.
+// GetSeqSchemaInManipulator builds the u64-Order, predicate-state-view
+// reference schema (ADR-0100 Updates 2026-08-30): the Key is the leading
+// EntityId (id), the Order is a SECOND EntityId column (eid) bound
+// explicitly through gen.Input.Roles — the shape positional binding cannot
+// produce — and there is deliberately NO u8 Lifecycle column: the state
+// view is generated with TombstoneView, driven by the tombstone pair the
+// store's constructor requires. The Order values are a caller-supplied
+// sequence, not a clock; the SD2 contract (strictly monotonic per key) is
+// the caller's obligation here exactly as on the timestamp lane.
 func GetSeqSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	manip, err = common.NewTableManipulator()
 	if err != nil {
@@ -27,8 +28,6 @@ func GetSeqSchemaInManipulator() (manip *common.TableManipulator, err error) {
 		AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
 	manip.PlainValueColumn(common.PlainItemTypeEntityId, "eid", ctabb.U64).
 		AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
-	manip.PlainValueColumn(common.PlainItemTypeEntityLifecycle, "lifecycle", ctabb.U8).
-		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
 
 	sec := manip.TaggedValueSection("measure").
 		SectionStreamingGroup("data").

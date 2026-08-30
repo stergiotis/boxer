@@ -9,18 +9,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSeqStoreU64OrderRoundTrip is the u64-Order acceptance (ADR-0100
-// Update 2026-08-30): write versions under a caller-supplied integer
-// sequence, flush through clickhouse-local, and check that Latest, the
-// Replay bounds (plain integer comparisons, server-evaluated), Scan and the
-// state view all follow the declared Order.
+// seqTombstone is the marker value the fixture's tombstone pair writes and
+// recognises — the schema has no u8 Lifecycle role, so the pair is the
+// whole state-view marker (ADR-0100 Update 2026-08-30).
+const seqTombstone = ^uint64(0)
+
+func seqPairConfig() SeqStoreConfig {
+	return SeqStoreConfig{
+		TombstoneDetect: func(e *SeqEntity) bool {
+			return e.SeqReading.Has && e.SeqReading.Val.Value == seqTombstone
+		},
+		TombstoneWrite: func(b *SeqEntityBuilder) {
+			b.AddSeqReading(SeqReading{Value: seqTombstone})
+		},
+	}
+}
+
+// TestSeqStoreU64OrderRoundTrip is the u64-Order plus predicate-tombstone
+// acceptance (ADR-0100 Updates 2026-08-30): write versions under a
+// caller-supplied integer sequence, flush through clickhouse-local, and
+// check that Latest, the Replay bounds (plain integer comparisons,
+// server-evaluated), Scan and the pair-driven state view all follow the
+// declared Order.
 func TestSeqStoreU64OrderRoundTrip(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
 		t.Skipf("clickhouse unavailable: %v", err)
 	}
 	ctx := context.Background()
-	st := NewSeqStore(exec, nil, SeqStoreConfig{})
+	st := NewSeqStore(exec, nil, seqPairConfig())
 	defer st.Close()
 	require.NoError(t, st.EnsureTable(ctx))
 	require.NoError(t, st.VerifySchema(ctx), "fresh table must match the generated schema")
@@ -52,14 +69,17 @@ func TestSeqStoreU64OrderRoundTrip(t *testing.T) {
 	require.Equal(t, []uint64{100}, replay(0, recordstore.ReplayOptsU64{Limit: 1}))
 
 	// Scan orders by (Order, Key) across keys.
-	var scanned [][2]uint64
-	for ent, serr := range st.ScanSeqReading(ctx, recordstore.ScanOpts{}) {
-		require.NoError(t, serr)
-		scanned = append(scanned, [2]uint64{ent.Ord, ent.ID})
+	scan := func() (rows [][2]uint64) {
+		for ent, serr := range st.ScanSeqReading(ctx, recordstore.ScanOpts{}) {
+			require.NoError(t, serr)
+			rows = append(rows, [2]uint64{ent.Ord, ent.ID})
+		}
+		return
 	}
-	require.Equal(t, [][2]uint64{{100, 1}, {150, 2}, {200, 1}}, scanned)
+	require.Equal(t, [][2]uint64{{100, 1}, {150, 2}, {200, 1}}, scan())
 
-	// State view: the tombstone rides the same integer Order.
+	// State view: Delete appends the marker row the pair recognises, at the
+	// same integer Order lane.
 	require.NoError(t, st.Delete(1, 300))
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
@@ -69,10 +89,28 @@ func TestSeqStoreU64OrderRoundTrip(t *testing.T) {
 	tomb, found, err := st.Latest(ctx, 1)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.True(t, tomb.IsTombstone())
 	require.Equal(t, uint64(300), tomb.Ord)
+	require.True(t, tomb.SeqReading.Has && tomb.SeqReading.Val.Value == seqTombstone,
+		"the tombstone-blind Latest hands back the marker row")
 	other, live, err := st.GetLive(ctx, 2)
 	require.NoError(t, err)
 	require.True(t, live)
 	require.Equal(t, uint64(150), other.Ord)
+
+	// The marker is an ordinary row: a Scan whose filter it satisfies
+	// returns it — the documented caveat of an attribute-shaped marker.
+	require.Equal(t, [][2]uint64{{100, 1}, {150, 2}, {200, 1}, {300, 1}}, scan())
+}
+
+// TestSeqStoreRequiresTombstonePair: a TombstoneView store binds no u8
+// Lifecycle role, so the constructor refuses a missing or torn pair.
+func TestSeqStoreRequiresTombstonePair(t *testing.T) {
+	require.PanicsWithValue(t,
+		"SeqStore: generated with TombstoneView and no u8 Lifecycle role — the tombstone pair (TombstoneDetect, TombstoneWrite) is required",
+		func() { NewSeqStore(nil, nil, SeqStoreConfig{}) })
+	half := seqPairConfig()
+	half.TombstoneWrite = nil
+	require.PanicsWithValue(t,
+		"SeqStore: the tombstone pair comes whole — supply both TombstoneDetect and TombstoneWrite, or neither",
+		func() { NewSeqStore(nil, nil, half) })
 }
