@@ -31,7 +31,7 @@ var _ = time.Time{}
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:251
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:291
 
 type MembershipPackPersiststateTableShared1 struct {
 	ValueHighCardRef                           *array.List
@@ -438,7 +438,7 @@ func (inst *MembershipPackPersiststateTableShared1) GetNumberOfMemberItemsByAttr
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:869
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:930
 
 type ReadAccessPersiststateTablePlainEntityIdAttributes struct {
 	ValueId       *array.String
@@ -720,7 +720,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessPersiststateTableTaggedStateRun
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1087
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1148
 
 func (inst *ReadAccessPersiststateTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -762,7 +762,7 @@ func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1161
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1222
 
 var _ runtime.ReleasableI = (*ReadAccessPersiststateTablePlainEntityIdAttributes)(nil)
 
@@ -820,7 +820,7 @@ func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1240
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1301
 
 func (inst *ReadAccessPersiststateTablePlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -881,7 +881,7 @@ func (inst *ReadAccessPersiststateTableTaggedStateRunIdAttributes) Len() (nEntit
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1292
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1353
 
 func (inst *ReadAccessPersiststateTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.STRING, rec, &inst.ValueId, array.NewStringData)
@@ -1003,7 +1003,7 @@ func (inst *ReadAccessPersiststateTablePlainEntityLifecycleAttributes) GetAttrVa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1976
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2037
 
 func (inst *ReadAccessPersiststateTableTaggedStateBlobAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
@@ -1034,7 +1034,7 @@ func (inst *ReadAccessPersiststateTableTaggedStateInstanceKeyAttributes) GetNumb
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2143
 
 type ReadAccessPersiststateTableTaggedStateBlob struct {
 	Attributes  *ReadAccessPersiststateTableTaggedStateBlobAttributes
@@ -1474,7 +1474,7 @@ func (inst *ReadAccessPersiststateTableTaggedStateInstanceKey) GetSectionMembers
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2528
 
 type ReadAccessPersiststateTable struct {
 	EntityId         *ReadAccessPersiststateTablePlainEntityIdAttributes

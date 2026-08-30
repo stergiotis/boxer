@@ -51,7 +51,7 @@ func CreateSchemaTestTableRenamed() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
 
 type InEntityTestTableRenamed struct {
 	plainSeenAt1          time.Time
@@ -129,7 +129,7 @@ var InEntityTestTableRenamedSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntityTestTableRenamed) SetId(ident0 uint64) *InEntityTestTableRenamed {
 	if inst.state != runtime.EntityStateInEntity {
@@ -144,7 +144,7 @@ func (inst *InEntityTestTableRenamed) SetId(ident0 uint64) *InEntityTestTableRen
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntityTestTableRenamed) SetTimestamp(seenAt1 time.Time, stampedAt2 []time.Time) *InEntityTestTableRenamed {
 	if inst.state != runtime.EntityStateInEntity {

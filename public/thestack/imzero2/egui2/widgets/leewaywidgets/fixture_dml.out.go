@@ -57,7 +57,7 @@ func CreateSchemaFixture() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
 
 type InEntityFixture struct {
 	errs               []error
@@ -138,7 +138,7 @@ var InEntityFixtureSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 string) *InEntityFixture {
 	if inst.state != runtime.EntityStateInEntity {

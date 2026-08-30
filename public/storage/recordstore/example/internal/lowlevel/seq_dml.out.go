@@ -34,7 +34,7 @@ func CreateSchemaSeqTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
 
 type InEntitySeqTable struct {
 	errs               []error
@@ -99,7 +99,7 @@ var InEntitySeqTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntitySeqTable) setId(id0 uint64, eid1 uint64) *InEntitySeqTable {
 	if inst.state != runtime.EntityStateInEntity {
