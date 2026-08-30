@@ -76,8 +76,16 @@ const NamingStyle = naming.LowerSpinalCase
 // find a free number. **…316 through …334 are taken** — nineteen consecutive
 // values held by a consuming repository, which crossed to this scheme on
 // 2026-08-20 and could not keep its previous values: they were short-prefix
-// tags this contract reserves for the runtime generators. The next free
-// value is 2178335.
+// tags this contract reserves for the runtime generators.
+//
+// **…335 is taken** by shadow-boxer's `photofacts` vocabulary, claimed
+// 2026-08-30 as `shadowboxerPhoto`. It crossed for the same reason and at the
+// same cost: its hand-picked base 32 encodes to a width-8 tag, so every
+// membership id moved and the facts already written under the old base had to
+// be re-crawled. Two repositories have now paid that, which is the argument
+// for a consumer claiming here before it writes rows rather than after.
+//
+// The next free value is 2178336.
 var TagValueClaim = tagmint.MustClaim("lading", 2178315, MaxExpectedMemberships)
 
 // MaxExpectedMemberships is what this vocabulary tells the mint it will need.

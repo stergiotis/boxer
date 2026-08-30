@@ -37,18 +37,18 @@ the linked document wins.
 
 ## Build & test: read this first
 
-**Pass the repo's build tags.** Every `go build` / `test` / `vet` / `run` should
-carry them so local builds match CI. Nothing is *required* any more — the one
-active tag selects a profiling arm, and the tree builds cleanly without it
-([ENGINEERING_PRACTICES §3](./doc/ENGINEERING_PRACTICES.md#3-build-tag-discipline)):
+**Always pass the repo's build tags**, even though [`./tags`](./tags) has been
+empty since ADR-0212 retired the last one. Every `go build` / `test` /
+`vet` / `run` reads the file rather than hardcoding its contents, so a tag added
+later reaches every invocation at once:
 
 ```sh
 go test  -tags="$(cat ./tags)" ./...
 go build -tags="$(cat ./tags)" ./...
 ```
 
-The active tags live in [`./tags`](./tags). Editors and LSP need them too —
-export `GOFLAGS=-tags=<contents of ./tags>` so gopls resolves symbols. Details:
+Editors and LSP read it the same way — export `GOFLAGS=-tags=<contents of
+./tags>` so gopls resolves symbols. Details:
 [ENGINEERING_PRACTICES §3 — Build-tag discipline](./doc/ENGINEERING_PRACTICES.md#3-build-tag-discipline).
 
 **Check module drift with `go mod tidy --diff`**, not `tidy` followed by

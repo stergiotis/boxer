@@ -244,7 +244,7 @@ O4 is the recorded fallback decoder. No opcode, no Rust change.
   opens a device itself, so an audio-output capability brokered by the
   keelson runtime — the shape of [ADR-0026](./0026-app-runtime-and-capability-subjects.md)
   §SD7's file-dialog powerbox, and what a compartment boundary
-  ([ADR-0207](./0207-keelson-trust-boundaries-compartments.md), proposed)
+  (ADR-0207, proposed and unwritten — the number is reserved)
   would enforce — can be introduced by giving out a different `Sink`
   without touching the player. That capability is a keelson decision, not
   this one. An `oto`-backed sink for macOS, Windows and ALSA-only hosts is
