@@ -5,90 +5,13 @@ here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 clientDir="$here/target/release/"
 VSYNC="${VSYNC:-on}"
-# Resolve a Noto font file via fontconfig so this works across distros
-# instead of hardcoding one layout: Fedora ships them under
-# google-noto-vf/, Arch under noto/ & noto-cjk/, Debian under
-# truetype/noto/ — each with different directory and file names. fc-match
-# is part of fontconfig and present on every mainstream desktop. It
-# always returns *some* font though, so each lookup is guarded by the
-# matched family name to reject a silent fallback to an unrelated font.
-resolve_noto() {
-    local family="$1" want="$2" line file fam
-    command -v fc-match >/dev/null 2>&1 || return 0
-    line=$(fc-match -f '%{file}\t%{family}\n' "$family" 2>/dev/null) || return 0
-    file="${line%%$'\t'*}"; fam="${line#*$'\t'}"
-    [[ "$fam" == *"$want"* && -f "$file" ]] && printf '%s' "$file"
-}
-
-# Proportional UI font: Noto Sans (base latin). Override MAIN_FONT to pin
-# a specific .ttf; otherwise detect, falling back to the Fedora path only
-# when fontconfig is unavailable.
-MAIN_FONT="${MAIN_FONT:-$(resolve_noto 'Noto Sans' 'Noto Sans')}"
-MAIN_FONT="${MAIN_FONT:-/usr/share/fonts/google-noto-vf/NotoSans[wght].ttf}"
-# Fixed-width font, resolved the same guarded way, with one extra
-# requirement: BOX-DRAWING COVERAGE (U+2500…).
-#
-# It is not enough for the face to be monospaced. Anything that renders a
-# query result — ClickHouse's own `system.documentation` examples, a
-# `clickhouse client` transcript pasted into a doc — draws its frame from
-# U+2500-block characters, and a face without them sends exactly those
-# characters to the fallback chain, where the advance is somebody else's.
-# The result is a box whose corners do not meet: every row is individually
-# monospaced and no two rows are the same width. So the guard here checks
-# the charset, not just the family name.
-#
-# Leaving this empty makes the Rust loader re-use MAIN_FONT as the
-# FontFamily::Monospace primary — a PROPORTIONAL face, under which nothing
-# fixed-width lines up at all. That was the default until it was found to
-# be the reason boxes render ragged; it survives only as the last resort
-# when no covering face exists on the machine.
-resolve_mono() {
-    local family="$1" line file fam
-    command -v fc-match >/dev/null 2>&1 || return 0
-    line=$(fc-match -f '%{file}\t%{family}\n' "$family" 2>/dev/null) || return 0
-    file="${line%%$'\t'*}"; fam="${line#*$'\t'}"
-    [[ -f "$file" ]] || return 0
-    # Reject a silent fallback to an unrelated family, then require the
-    # box-drawing block. fc-query prints the charset as hex ranges; 2500
-    # falling inside one of them is what makes the frame line up.
-    [[ "$fam" == *"$want_mono"* ]] || return 0
-    command -v fc-query >/dev/null 2>&1 || { printf '%s' "$file"; return 0; }
-    fc-query --format='%{charset}\n' "$file" 2>/dev/null \
-        | tr ' ' '\n' | grep -qE '^25[0-7][0-9a-f]' || return 0
-    printf '%s' "$file"
-}
-# Preference order: DejaVu Sans Mono is the widest-installed face that
-# covers the block; Liberation Mono and Adwaita Mono are the common
-# alternatives on distros that ship neither.
-if [ -z "${MONO_FONT:-}" ]; then
-    for want_mono in 'DejaVu Sans Mono' 'Liberation Mono' 'Adwaita Mono'; do
-        MONO_FONT=$(resolve_mono "$want_mono")
-        [ -n "$MONO_FONT" ] && break
-    done
-fi
-# Set MONO_FONT explicitly to pin a face (e.g. via
-# hmi-fonts-pragmatapro.sh, which scopes a licensed override).
-MONO_FONT="${MONO_FONT:-}"
-# ADR-0044 iconography: PHOSPHOR_FONT is the single icon font (Phosphor
-# regular). Vendored from the `stergiotis/ids-fonts` v0.2.4 release at
-# `assets/fonts/phosphor/`. No download fallback needed.
-PHOSPHOR_FONT="${PHOSPHOR_FONT:-$here/assets/fonts/phosphor/Phosphor.ttf}"
-# CJK fallback: query a language-qualified family ('... CJK JP') because
-# the bare 'Noto Sans Mono CJK' is not a fontconfig family and silently
-# falls back to plain Noto Sans (no CJK glyphs); the 'CJK' guard rejects
-# that. Falls back to the Fedora path when fontconfig is unavailable.
-FALLBACK_FONT="${FALLBACK_FONT:-$(resolve_noto 'Noto Sans Mono CJK JP' 'CJK')}"
-FALLBACK_FONT="${FALLBACK_FONT:-/usr/share/fonts/google-noto-sans-mono-cjk-vf-fonts/NotoSansMonoCJK-VF.ttc}"
-
-# Best-effort heads-up: a missing MAIN_FONT means the app silently falls
-# back to egui's built-in font. The optional CJK FALLBACK_FONT may be
-# absent. Detection above keeps these pointing at real files wherever
-# Noto is installed; this only fires on a box that lacks it.
-if [[ -n "$MAIN_FONT" && ! -f "$MAIN_FONT" ]]; then
-    echo "hmi.sh: MAIN_FONT not found: $MAIN_FONT" >&2
-    echo "  install Noto Sans (Fedora: google-noto-sans-vf-fonts, Arch: noto-fonts," >&2
-    echo "  Debian/Ubuntu: fonts-noto-core) or set MAIN_FONT to an absolute .ttf." >&2
-fi
+# Font selection lives in font-resolve.sh, sourced rather than repeated: the
+# launchers here and the ones in consuming repositories (shadow-boxer, sailing,
+# which reach this file through their boxer pin) then cannot drift apart. Set
+# MAIN_FONT / MONO_FONT / PHOSPHOR_FONT / FALLBACK_FONT beforehand to pin a
+# face; hmi-fonts-pragmatapro.sh is exactly that, scoped to a licensed install.
+. "$here/font-resolve.sh"
+imzero2_resolve_fonts
 
 # IMZERO2_SCREENSHOT_SIZE=WxH widens the eframe viewport to fit the
 # requested tour capture rect (ADR-0008 SD5). The Go-side parser is
@@ -202,8 +125,5 @@ export BOXER_COMPONENT="${BOXER_COMPONENT:-imzero2-demo}"
 		      --clientFullscreen off \
 		      --clientInitialMainWindowWidth "$WINDOW_W" \
 		      --clientInitialMainWindowHeight "$WINDOW_H" \
-		      ${MAIN_FONT:+--mainFontTTF "$MAIN_FONT"} \
-		      ${MONO_FONT:+--monoFontTTF "$MONO_FONT"} \
-		      ${PHOSPHOR_FONT:+--phosphorFontTTF "$PHOSPHOR_FONT"} \
-		      ${FALLBACK_FONT:+--fallbackFontTTF "$FALLBACK_FONT"} \
+		      "${IMZERO2_FONT_ARGS[@]}" \
 		      "$@"
