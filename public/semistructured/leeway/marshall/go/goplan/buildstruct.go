@@ -127,7 +127,7 @@ func (s *attrSubColumns) add(elemField, column, ctOverride string, shape FieldSh
 		column = "value"
 	}
 	if prev, dup := s.usedCols[column]; dup {
-		err = ctx.Str("column", column).Str("first", prev).Str("noun", s.noun).Errorf("sub-column appears on two fields")
+		err = ctx.Str("column", column).Str("first", prev).Errorf("sub-column appears on two %s fields", s.noun) //boxer:lint disable=CS013 reason="noun/place fill a grammatical slot, not a data slot — see attrSubColumns"
 		return
 	}
 	s.usedCols[column] = elemField
@@ -150,7 +150,7 @@ func (s *attrSubColumns) add(elemField, column, ctOverride string, shape FieldSh
 		}
 	}
 	if isRoaring {
-		err = ctx.Str("place", s.place).Errorf("*roaring.Bitmap not supported here — no stable element index to zip with the co-containers; use []T")
+		err = ctx.Errorf("*roaring.Bitmap not supported %s — no stable element index to zip with the co-containers; use []T", s.place) //boxer:lint disable=CS013 reason="noun/place fill a grammatical slot, not a data slot — see attrSubColumns"
 		return
 	}
 	if isSlice {
