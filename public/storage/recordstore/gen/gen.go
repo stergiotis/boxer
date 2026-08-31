@@ -237,18 +237,18 @@ func (inst Input) Generate() (err error) {
 	// TableName's first letter; a multi-word name would disagree with the
 	// generators' own style conversion and emit non-compiling references.
 	if !tableNameRe.MatchString(inst.TableName) {
-		err = eh.Errorf("TableName %q must be a single lowercase word ([a-z][a-z0-9]*) — the store emitter derives the generated class names from it", inst.TableName)
+		err = eb.Build().Str("tableName", inst.TableName).Errorf("TableName must be a single lowercase word ([a-z][a-z0-9]*) — the store emitter derives the generated class names from it")
 		return
 	}
 	if n := string(inst.Table.DictionaryEntry.Name); n != "" && n != inst.TableName {
-		err = eh.Errorf("Input.TableName %q and the TableDesc's own name %q disagree — the emitted DDL and SQL use TableName; align the two", inst.TableName, n)
+		err = eb.Build().Str("tableName", inst.TableName).Str("descName", n).Errorf("Input.TableName and the TableDesc's own name disagree — the emitted DDL and SQL use TableName; align the two")
 		return
 	}
 	// The database name is emitted unquoted into the qualified reference
 	// (and into CREATE DATABASE), so it carries the same simple-identifier
 	// constraint as TableName.
 	if inst.Database != "" && !tableNameRe.MatchString(inst.Database) {
-		err = eh.Errorf("Database %q must be a single lowercase word ([a-z][a-z0-9]*) — it is emitted unquoted into the qualified table reference", inst.Database)
+		err = eb.Build().Str("database", inst.Database).Errorf("Database must be a single lowercase word ([a-z][a-z0-9]*) — it is emitted unquoted into the qualified table reference")
 		return
 	}
 	conv, err := ddl.NewHumanReadableNamingConvention(":")
@@ -307,7 +307,7 @@ func (inst Input) Generate() (err error) {
 	// generation time.
 	wrapper := inst.wrapper()
 	if _, ok := wrapper.(marshallgen.MembershipIdSourceI); !ok && len(inst.ComponentPaths) > 0 {
-		err = eh.Errorf("Wrapper %T does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map", wrapper)
+		err = eb.Build().Type("wrapper", wrapper).Errorf("Wrapper does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map")
 		return
 	}
 	plans := make([]*mappingplan.Plan, 0, len(inst.ComponentPaths))
@@ -316,7 +316,7 @@ func (inst Input) Generate() (err error) {
 		var plan *mappingplan.Plan
 		plan, err = marshallgen.ParsePlan(in)
 		if err != nil {
-			err = eh.Errorf("parse component %s: %w", in, err)
+			err = eb.Build().Str("componentPath", in).Errorf("parse component: %w", err)
 			return
 		}
 		mode := marshallgen.EmitModeStoreSupport
@@ -326,7 +326,7 @@ func (inst Input) Generate() (err error) {
 		var rendered []byte
 		rendered, err = marshallgen.EmitPlan(plan, wrapper, marshallgen.EmitOpts{Mode: mode})
 		if err != nil {
-			err = eh.Errorf("emit component codec %s: %w", in, err)
+			err = eb.Build().Str("componentPath", in).Errorf("emit component codec: %w", err)
 			return
 		}
 		err = inst.write(out, rendered)
@@ -485,7 +485,7 @@ func (inst Input) write(name string, data []byte) (err error) {
 	path := filepath.Join(inst.OutDir, name)
 	err = os.MkdirAll(filepath.Dir(path), 0755)
 	if err != nil {
-		err = eh.Errorf("create directory for %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("create directory: %w", err)
 		return
 	}
 	err = os.WriteFile(path, data, 0644)

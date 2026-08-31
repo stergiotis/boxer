@@ -189,7 +189,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	switch model.key.goType {
 	case "uint64", "string":
 	default:
-		err = eh.Errorf("Key column Go type %q not supported (uint64 and string are; ADR-0100 SD2)", model.key.goType)
+		err = eb.Build().Str("goType", model.key.goType).Errorf("Key column Go type not supported (uint64 and string are; ADR-0100 SD2)")
 		return
 	}
 	switch {
@@ -199,11 +199,11 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		// through the explicit declaration — positional binding stays on
 		// the timestamp lane, so undeclared schemas cannot drift into it.
 	default:
-		err = eh.Errorf("Order column Go type %q not supported — Replay and the decode assume the timestamp lane; declare the EntityTimestamp column as a temporal (ctabb.Z64 for nanosecond replay precision), or bind a uint64 column explicitly via Roles.Order", model.order.goType)
+		err = eb.Build().Str("goType", model.order.goType).Errorf("Order column Go type not supported — Replay and the decode assume the timestamp lane; declare the EntityTimestamp column as a temporal (ctabb.Z64 for nanosecond replay precision), or bind a uint64 column explicitly via Roles.Order")
 		return
 	}
 	if inst.TombstoneView && model.stateView {
-		err = eh.Errorf("TombstoneView is set, but the schema binds a u8 EntityLifecycle role (%s) — the state view exists already, with the u8 marker as the tombstone pair's default binding", model.lifecycle.name)
+		err = eb.Build().Str("lifecycleColumn", model.lifecycle.name).Errorf("TombstoneView is set, but the schema binds a u8 EntityLifecycle role — the state view exists already, with the u8 marker as the tombstone pair's default binding")
 		return
 	}
 	// stateView says the Delete/GetLive verb family (and its cache twins)
@@ -216,7 +216,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	if !hasIdSrc && len(plans) > 0 {
 		// Generate gates this earlier with the same message; kept here so
 		// emitStore is safe against a future direct caller.
-		err = eh.Errorf("Wrapper %T does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map", inst.wrapper())
+		err = eb.Build().Type("wrapper", inst.wrapper()).Errorf("Wrapper does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map")
 		return
 	}
 	comps := make([]storeComponent, 0, len(plans))
@@ -244,7 +244,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	for _, sc := range comps {
 		for _, name := range sortedIdNames(sc.ids) {
 			if owner, taken := membOwner[name]; taken && owner != sc.Kind {
-				err = eh.Errorf("components %s and %s both use membership %q — its kind symbol is declared once per generated package, so two kinds cannot share a membership in one store", owner, sc.Kind, name)
+				err = eb.Build().Str("component", owner).Str("otherComponent", sc.Kind).Str("membership", name).Errorf("two components use the same membership — its kind symbol is declared once per generated package, so two kinds cannot share a membership in one store")
 				return
 			}
 			membOwner[name] = sc.Kind
@@ -252,7 +252,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		for _, slot := range verbatimSlots(sc.plan) {
 			key := slot.section + "@" + slot.name
 			if owner, taken := verbatimOwner[key]; taken && owner != sc.Kind {
-				err = eh.Errorf("components %s and %s both name verbatim membership %q in section %q — a component is present on any matched slot, so two kinds sharing one (section, name) would decode as each other", owner, sc.Kind, slot.name, slot.section)
+				err = eb.Build().Str("component", owner).Str("otherComponent", sc.Kind).Str("membership", slot.name).Str("section", slot.section).Errorf("two components name the same verbatim membership in one section — a component is present on any matched slot, so two kinds sharing one (section, name) would decode as each other")
 				return
 			}
 			verbatimOwner[key] = sc.Kind
@@ -278,7 +278,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 					continue
 				}
 				if owner, taken := sectionOwner[g.Section]; taken && owner != sc.Kind {
-					err = eh.Errorf("components %s and %s both bind section %q — components must own disjoint sections (ADR-0100 SD6)", owner, sc.Kind, g.Section)
+					err = eb.Build().Str("component", owner).Str("otherComponent", sc.Kind).Str("section", g.Section).Errorf("two components bind the same section — components must own disjoint sections (ADR-0100 SD6)")
 					return
 				}
 				sectionOwner[g.Section] = sc.Kind
@@ -295,7 +295,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 			for _, name := range sortedIdNames(sc.ids) {
 				id := sc.ids[name]
 				if prev, taken := idOwner[id]; taken && prev.name != name {
-					err = eh.Errorf("memberships %q (component %s) and %q (component %s) share id %d — a globally-unique id source must assign distinct ids (id-level disjointness, ADR-0105 D2)", prev.name, prev.kind, name, sc.Kind, id)
+					err = eb.Build().Str("membership", prev.name).Str("component", prev.kind).Str("otherMembership", name).Str("otherComponent", sc.Kind).Uint64("id", id).Errorf("two memberships share one id — a globally-unique id source must assign distinct ids (id-level disjointness, ADR-0105 D2)")
 					return
 				}
 				idOwner[id] = idClaim{kind: sc.Kind, name: name}
@@ -317,7 +317,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 		}
 		for _, pt := range model.passthrough {
 			if reserved[pt.pascal] {
-				err = eh.Errorf("pass-through envelope column %s maps to entity field %q, which collides with a fixed field/method or a component — rename the column", pt.physical, pt.pascal)
+				err = eb.Build().Str("column", pt.physical).Str("field", pt.pascal).Errorf("pass-through envelope column maps to an entity field that collides with a fixed field/method or a component — rename the column")
 				return
 			}
 			reserved[pt.pascal] = true // also catches two columns styling to one name
@@ -373,7 +373,7 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 	raw := []byte(sb.String())
 	code, err = format.Source(raw)
 	if err != nil {
-		err = eh.Errorf("gofmt rejected store output: %w; emitted:\n%s", err, string(raw))
+		err = eb.Build().Str("emitted", string(raw)).Errorf("gofmt rejected store output: %w", err)
 	}
 	return
 }
@@ -400,7 +400,7 @@ func (inst Input) enumeratePlain(info *readback.InformationRetrieval) (m plainMo
 		case common.PlainItemTypeEntityId, common.PlainItemTypeEntityTimestamp,
 			common.PlainItemTypeEntityRouting, common.PlainItemTypeEntityLifecycle:
 		default:
-			err = eh.Errorf("plain column %s carries item type %v — only the envelope item types (EntityId / EntityTimestamp / EntityRouting / EntityLifecycle) are supported; Transaction and Opaque plain columns are deferred", cr.PhysicalColumn.String(), it)
+			err = eb.Build().Str("column", cr.PhysicalColumn.String()).Stringer("itemType", it).Errorf("plain column carries an unsupported item type — only the envelope item types (EntityId / EntityTimestamp / EntityRouting / EntityLifecycle) are supported; Transaction and Opaque plain columns are deferred")
 			return
 		}
 		var col plainCol
@@ -484,16 +484,16 @@ func (inst Input) bindDeclaredRoles(m *plainModel) (err error) {
 		return nil
 	}
 	taken := func(role string, c *plainCol) error {
-		return eh.Errorf("Roles.%s names column %q, which another declared role already binds — every role needs its own column (ADR-0100 SD2)", role, c.name)
+		return eb.Build().Str("role", role).Str("column", c.name).Errorf("a Roles entry names a column another declared role already binds — every role needs its own column (ADR-0100 SD2)")
 	}
 	if inst.Roles.Key != "" {
 		c := find(inst.Roles.Key)
 		if c == nil {
-			err = eh.Errorf("Roles.Key names no plain column %q in the schema", inst.Roles.Key)
+			err = eb.Build().Str("column", inst.Roles.Key).Errorf("Roles.Key names no plain column in the schema")
 			return
 		}
 		if c.itemType != common.PlainItemTypeEntityId {
-			err = eh.Errorf("Roles.Key column %q carries item type %v — the Key role requires an EntityId plain column", c.name, c.itemType)
+			err = eb.Build().Str("name", c.name).Stringer("itemType", c.itemType).Errorf("Roles.Key column carries the wrong item type — the Key role requires an EntityId plain column")
 			return
 		}
 		c.role = roleKey
@@ -502,7 +502,7 @@ func (inst Input) bindDeclaredRoles(m *plainModel) (err error) {
 	if inst.Roles.Order != "" {
 		c := find(inst.Roles.Order)
 		if c == nil {
-			err = eh.Errorf("Roles.Order names no plain column %q in the schema", inst.Roles.Order)
+			err = eb.Build().Str("column", inst.Roles.Order).Errorf("Roles.Order names no plain column in the schema")
 			return
 		}
 		if c.role != rolePassThrough {
@@ -510,7 +510,7 @@ func (inst Input) bindDeclaredRoles(m *plainModel) (err error) {
 			return
 		}
 		if c.itemType != common.PlainItemTypeEntityTimestamp && c.goType != "uint64" {
-			err = eh.Errorf("Roles.Order column %q carries item type %v with Go type %s — the Order role takes the EntityTimestamp z64 lane or a plain column deriving to uint64", c.name, c.itemType, c.goType)
+			err = eb.Build().Str("name", c.name).Stringer("itemType", c.itemType).Str("goType", c.goType).Errorf("Roles.Order column carries an unsupported item type — the Order role takes the EntityTimestamp z64 lane or a plain column deriving to uint64")
 			return
 		}
 		c.role = roleOrder
@@ -519,7 +519,7 @@ func (inst Input) bindDeclaredRoles(m *plainModel) (err error) {
 	if inst.Roles.Lifecycle != "" {
 		c := find(inst.Roles.Lifecycle)
 		if c == nil {
-			err = eh.Errorf("Roles.Lifecycle names no plain column %q in the schema", inst.Roles.Lifecycle)
+			err = eb.Build().Str("column", inst.Roles.Lifecycle).Errorf("Roles.Lifecycle names no plain column in the schema")
 			return
 		}
 		if c.role != rolePassThrough {
@@ -527,7 +527,7 @@ func (inst Input) bindDeclaredRoles(m *plainModel) (err error) {
 			return
 		}
 		if c.itemType != common.PlainItemTypeEntityLifecycle || c.goType != "uint8" {
-			err = eh.Errorf("Roles.Lifecycle column %q carries item type %v with Go type %s — the Lifecycle role requires a u8 EntityLifecycle plain column", c.name, c.itemType, c.goType)
+			err = eb.Build().Str("name", c.name).Stringer("itemType", c.itemType).Str("goType", c.goType).Errorf("Roles.Lifecycle column carries the wrong item type — the Lifecycle role requires a u8 EntityLifecycle plain column")
 			return
 		}
 		c.role = roleLifecycle
@@ -795,7 +795,7 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 	sc.plan = plan
 	sc.groups = goplan.ComputeGroups(plan)
 	if ok, reason := marshallgen.ReadRowSupported(plan); !ok {
-		err = eh.Errorf("component %s: %s — <Kind>ReadRow is not emitted for this shape (ADR-0100 Deferred)", sc.Kind, reason)
+		err = eb.Build().Str("kind", sc.Kind).Str("reason", reason).Errorf("<Kind>ReadRow is not emitted for this component shape (ADR-0100 Deferred)")
 		return
 	}
 	sc.ids, err = idSrc.PlanMembershipIds(plan)
@@ -1553,7 +1553,7 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 			continue
 		}
 		if gt := idCol.GoType(); gt != inst.keyGoType {
-			err = eh.Errorf("component %s: plain id field %s has Go type %s but the Key column is %s — Ingest%s cannot be emitted", c.Kind, idCol.GoField, gt, inst.keyGoType, c.Kind)
+			err = eb.Build().Str("kind", c.Kind).Str("idField", idCol.GoField).Str("idFieldGoType", gt).Str("keyGoType", inst.keyGoType).Errorf("component plain id field's Go type does not match the Key column — Ingest<Kind> cannot be emitted")
 			return
 		}
 		ord := inst.orderArg()
