@@ -435,7 +435,7 @@ func TestValidate_TupleContract(t *testing.T) {
 	}
 	err := marshallreflect.Validate[oneContainerDoc](table)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "AddToContainerP")
+	require.Contains(t, fieldList(t, err, "problems"), "AddToContainerP")
 
 	// Two scalar sub-columns mapped where the DML's BeginAttribute takes
 	// one: arity mismatch reported.
@@ -454,7 +454,7 @@ func TestValidate_TupleContract(t *testing.T) {
 	}
 	err = marshallreflect.Validate[twoScalarDoc](table)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "BeginAttribute takes 1 arg(s), want 2")
+	require.Contains(t, fieldList(t, err, "problems"), "BeginAttribute takes 1 arg(s), want 2")
 }
 
 // TestPlanFor_TupleRejections pins the plan-time rules of the tuple

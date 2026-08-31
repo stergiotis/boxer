@@ -10,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor/codecdemo"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
@@ -104,9 +106,10 @@ func TestArityParity_GenAndReflectRefuseAMultiValuedUnit(t *testing.T) {
 	require.Error(t, genErr, "the generated codec must refuse a multi-element value under a unit definition")
 	require.Error(t, reflectErr, "the reflect codec must refuse a multi-element value under a unit definition")
 	for name, err := range map[string]error{"gen": genErr, "reflect": reflectErr} {
-		require.ErrorContainsf(t, err, "u64Array", "%s front-end names the section", name)
-		require.ErrorContainsf(t, err, "battery", "%s front-end names the membership", name)
-		require.ErrorContainsf(t, err, "Battery", "%s front-end names the field", name)
+		pf := ebtest.Fields(t, err)
+		assert.Equalf(t, "u64Array", pf["section"], "%s front-end names the section", name)
+		assert.Equalf(t, "battery", pf["membership"], "%s front-end names the membership", name)
+		assert.Equalf(t, "Battery", ebtest.Fields(t, err)["field"], "%s front-end names the field", name)
 	}
 }
 
@@ -173,7 +176,8 @@ func TestArityParity_GenAndReflectRefuseTheSameWire(t *testing.T) {
 	require.Error(t, reflectErr, "the reflect codec must refuse a colliding slot")
 	// Both name the slot, so a caller can tell which component collided.
 	for name, err := range map[string]error{"gen": genErr, "reflect": reflectErr} {
-		require.ErrorContainsf(t, err, "symbol", "%s front-end names the section", name)
-		require.ErrorContainsf(t, err, "droneStatus", "%s front-end names the membership", name)
+		pf := ebtest.Fields(t, err)
+		assert.Equalf(t, "symbol", pf["section"], "%s front-end names the section", name)
+		assert.Equalf(t, "droneStatus", pf["membership"], "%s front-end names the membership", name)
 	}
 }

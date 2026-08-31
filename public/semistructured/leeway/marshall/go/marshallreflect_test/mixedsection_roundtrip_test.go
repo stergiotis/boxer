@@ -263,7 +263,7 @@ func TestValidate_MixedSectionContract(t *testing.T) {
 	}
 	err := marshallreflect.Validate[textDocOneContainer](table)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "AddToContainerP")
+	require.Contains(t, fieldList(t, err, "problems"), "AddToContainerP")
 
 	// Two scalar sub-columns mapped where the DML's BeginAttribute takes
 	// one: arity mismatch reported.
@@ -278,7 +278,7 @@ func TestValidate_MixedSectionContract(t *testing.T) {
 	}
 	err = marshallreflect.Validate[textDocTwoScalars](table)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "BeginAttribute takes 1 arg(s), want 2")
+	require.Contains(t, fieldList(t, err, "problems"), "BeginAttribute takes 1 arg(s), want 2")
 }
 
 // TestPlanFor_MixedSectionRejections pins the plan-time structural rules

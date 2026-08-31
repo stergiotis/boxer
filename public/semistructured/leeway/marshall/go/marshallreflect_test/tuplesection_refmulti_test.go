@@ -321,7 +321,7 @@ func TestValidate_TupleRefChannelMissingOnSection(t *testing.T) {
 	table := anchor.NewInEntityTestTable(memory.NewGoAllocator(), 1)
 	err = marshallreflect.Validate[fkHighDoc](table)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "AddMembershipHighCardRefP")
+	require.Contains(t, fieldList(t, err, "problems"), "AddMembershipHighCardRefP")
 }
 
 // twoRefTag has TWO fixed ref memberships; used to force a membership
