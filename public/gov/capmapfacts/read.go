@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapvocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 )
@@ -141,14 +142,14 @@ func readCompetences(ctx context.Context, q QuerierI, table string) (comps []cap
 	sql := competenceSQL(table)
 	rows, err := queryJSON[competenceRow](ctx, q, table, sql)
 	if err != nil {
-		return nil, eh.Errorf("unable to read competences from %s: %w", table, err)
+		return nil, eb.Build().Str("table", table).Errorf("unable to read competences: %w", err)
 	}
 	comps = make([]capmapcorpus.Competence, 0, len(rows))
 	for _, r := range rows {
 		if r.Slug == "" {
 			// A row wearing the competence kind but carrying no slug is not
 			// addressable, so there is nothing to write it back as.
-			return nil, eh.Errorf("capmapfacts: a competence row in %s carries no slug", table)
+			return nil, eb.Build().Str("table", table).Errorf("capmapfacts: a competence row in carries no slug")
 		}
 		comp := capmapcorpus.Competence{
 			Slug:       r.Slug,
@@ -192,9 +193,9 @@ func readCompetences(ctx context.Context, q QuerierI, table string) (comps []cap
 func requireSurface(ctx context.Context, q QuerierI) (err error) {
 	body, err := q.Query(ctx, "SELECT "+lwsqlsurface.VersionFunctionName+"() AS v FORMAT TabSeparated")
 	if err != nil {
-		return eh.Errorf(
-			"capmapfacts: this server carries no leeway SQL read surface (%s), which the read-back queries expand into; install it with `boxer leeway sqlsurface install`: %w",
-			lwsqlsurface.VersionFunctionName, err)
+		return eb.Build().Str("versionFunction", lwsqlsurface.VersionFunctionName).Errorf(
+			"capmapfacts: this server carries no leeway SQL read surface, which the read-back queries expand into; install it with `boxer leeway sqlsurface install`: %w",
+			err)
 	}
 	defer func() { _ = body.Close() }()
 	raw, rErr := io.ReadAll(body)
@@ -203,13 +204,12 @@ func requireSurface(ctx context.Context, q QuerierI) (err error) {
 	}
 	got, pErr := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
 	if pErr != nil {
-		return eh.Errorf("capmapfacts: %s() answered %q, which is not a version: %w",
-			lwsqlsurface.VersionFunctionName, strings.TrimSpace(string(raw)), pErr)
+		return eb.Build().Str("versionFunction", lwsqlsurface.VersionFunctionName).Str("answer", strings.TrimSpace(string(raw))).
+			Errorf("capmapfacts: the version function's answer is not a version: %w", pErr)
 	}
 	if got != uint64(lwsqlsurface.Version) {
-		return eh.Errorf(
-			"capmapfacts: this server carries leeway SQL read surface v%d and this build emits v%d; reconcile them with `boxer leeway sqlsurface install`",
-			got, lwsqlsurface.Version)
+		return eb.Build().Uint64("serverVersion", got).Int("buildVersion", lwsqlsurface.Version).Errorf(
+			"capmapfacts: this server's leeway SQL read surface version and the one this build emits differ; reconcile them with `boxer leeway sqlsurface install`")
 	}
 	return nil
 }
@@ -295,21 +295,21 @@ func parseFactsTime(s string) (t time.Time) {
 func readRelations(ctx context.Context, q QuerierI, table string, slugById map[uint64]string) (rels []capmapcorpus.Relation, err error) {
 	rows, err := queryJSON[relationRow](ctx, q, table, relationSQL(table))
 	if err != nil {
-		return nil, eh.Errorf("unable to read relations from %s: %w", table, err)
+		return nil, eb.Build().Str("table", table).Errorf("unable to read relations: %w", err)
 	}
 	rels = make([]capmapcorpus.Relation, 0, len(rows))
 	for _, r := range rows {
 		sourceId, pErr := strconv.ParseUint(r.SourceId, 10, 64)
 		if pErr != nil {
-			return nil, eh.Errorf("capmapfacts: relation source id %q is not a number: %w", r.SourceId, pErr)
+			return nil, eb.Build().Str("sourceId", r.SourceId).Errorf("capmapfacts: relation source id is not a number: %w", pErr)
 		}
 		source, known := slugById[sourceId]
 		if !known {
 			// The source competence is not in the table. Skipping would make
 			// the dump quietly lossy in exactly the case worth knowing about —
 			// a partially-ingested corpus.
-			return nil, eh.Errorf("capmapfacts: relation to %q has source id %d, which no competence in %s carries",
-				r.Target, sourceId, table)
+			return nil, eb.Build().Str("target", r.Target).Uint64("sourceId", sourceId).Str("table", table).
+				Errorf("capmapfacts: relation has a source id no competence in the table carries")
 		}
 		rels = append(rels, capmapcorpus.Relation{
 			SourceSlug: source,

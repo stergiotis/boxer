@@ -7,7 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
@@ -68,7 +68,7 @@ const (
 func prepare(sql string, table string) (out string, err error) {
 	database, _, qualified := strings.Cut(table, ".")
 	if !qualified || database == "" {
-		return "", eh.Errorf("capmapfacts: %q is not a database-qualified table", table)
+		return "", eb.Build().Str("table", table).Errorf("capmapfacts: is not a database-qualified table")
 	}
 	resolver := lwsql.NewResolver(passes.NewStaticSchemaProvider(
 		map[string][]string{table: factsColumnNames()}))
@@ -80,7 +80,7 @@ func prepare(sql string, table string) (out string, err error) {
 	} {
 		out, err = pass.Apply(env.NewEnvironment(), out)
 		if err != nil {
-			return "", eh.Errorf("capmapfacts: %s: %w", pass.Name, err)
+			return "", eb.Build().Str("pass", pass.Name).Errorf("capmapfacts: pass failed: %w", err)
 		}
 	}
 	return out, nil

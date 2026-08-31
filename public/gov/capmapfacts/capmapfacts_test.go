@@ -12,6 +12,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 )
 
 // captureSink records what an ingest would have written. The encoding is
@@ -184,5 +185,5 @@ func TestIngestSurfacesSinkErrors(t *testing.T) {
 	sink := &captureSink{err: assert.AnError}
 	_, err := capmapfacts.Ingest(context.Background(), sampleCorpus(), sink, "custom.table", fixedNow)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "custom.table")
+	assert.Equal(t, "custom.table", ebtest.Fields(t, err)["table"], "the error names the table it tried to write")
 }
