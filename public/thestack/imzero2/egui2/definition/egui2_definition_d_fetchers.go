@@ -369,6 +369,27 @@ self.io.write_plain_b(pressed)?;
 		AddReturnValue("pressed", ctabb.B).
 		Build())
 
+	// fetchF2KeyPressed — the launcher shortcut (ADR-0214 §SD9), the second
+	// runtime-global binding and the one the comment above anticipated
+	// ("future runtime-level shortcuts (debugger, command palette) would each
+	// add their own fetcher to keep the consumed-event ownership explicit per
+	// binding"). Same shape as F1 for the same reasons: consumed so no widget
+	// sees it twice, no modifier requirement, and polled by the shell chrome
+	// rather than by an app.
+	//
+	// A bare function key rather than the conventional Ctrl+K palette
+	// binding, precisely because this consumes globally: F2 is a key no text
+	// field has a claim on, and a global consuming Ctrl+K would take a
+	// keystroke every editor in every app expects to receive.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchF2KeyPressed").
+		WithApplyCodeClientRust(rustClientCode(`
+let pressed = {{EguiContext}}.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2));
+self.io.write_plain_b(pressed)?;
+{{SendMessage}}
+`)).
+		AddReturnValue("pressed", ctabb.B).
+		Build())
+
 	// ADR-0140: drains the per-frame canvas wheel captures stamped by a
 	// paintCanvas with .CaptureZoom()/.CaptureScroll() while the pointer was
 	// over it. Six homogeneous arrays keyed by the canvas widget id — a canvas

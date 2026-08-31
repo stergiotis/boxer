@@ -1441,6 +1441,10 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // completion pane emits it only while it has something to complete, so Tab
     // means a tab character every other frame.
     text_edit_pending_capture_tab: bool,
+    // captureKeys (ADR-0214 §SD9): the mask form of the flag above. One bit
+    // per keycodes::Code; drained by the textEdit apply block before the
+    // widget runs, so a masked key never reaches the editor as text.
+    text_edit_pending_capture_keys: u64,
     // ADR-0088 runtime codec pipeline: `setVideoPipeline` stashes the
     // requested codec here (0=H.264, 1=VP9, 2=AV1); the headless host drains
     // it after dispatch and re-points the encoder. `video_cap_*` are pushed
@@ -1792,6 +1796,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             text_edit_pending_report_cursor: false,
             text_edit_pending_set_cursor: None,
             text_edit_pending_capture_tab: false,
+            text_edit_pending_capture_keys: 0,
             r9_et_prefetch_ids: Vec::with_capacity(8),
             r9_et_prefetch_values: Vec::with_capacity(32),
             r10_true_ids: Vec::with_capacity(1024),
@@ -5117,6 +5122,19 @@ self.apply_widget(w,u,f,Some(i));
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 let pressed = c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1));
+                self.io.write_plain_b(pressed)?;
+                self.io.flush()?;
+            }
+            FuncProcId::FetchF2KeyPressed => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchF2KeyPressed");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let pressed = c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2));
                 self.io.write_plain_b(pressed)?;
                 self.io.flush()?;
             }
@@ -10181,6 +10199,12 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                             puffin::profile_scope!("match TextEditBuilderMethodId::CaptureTab");
                             self.text_edit_pending_capture_tab = true;
                         }
+                        TextEditBuilderMethodId::CaptureKeys => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match TextEditBuilderMethodId::CaptureKeys");
+                            let mut mask = self.io.read_plain_u64()?;
+                            self.text_edit_pending_capture_keys = mask;
+                        }
                     }
                 }
                 if d == 0 {
@@ -10256,6 +10280,49 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                                 // R26 is read at the END of this frame, so Go acts on the
                                 // capture while building the NEXT one — and the keypress that
                                 // would have asked for that frame has just been eaten here.
+                                ctx.request_repaint();
+                            }
+                        }
+                    }
+                }
+                // captureKeys (ADR-0214 §SD9): the same consume over a whole mask. Every
+                // masked press is reported, not just the first: a held arrow key can deliver
+                // two in one frame, and dropping the second makes fast navigation lossy.
+                //
+                // A key outside the mask is left in the queue untouched, which is what keeps
+                // typing working — the mask names navigation, and the letters go to the
+                // editor as they always did.
+                if self.text_edit_pending_capture_keys != 0 {
+                    let mask = std::mem::take(&mut self.text_edit_pending_capture_keys);
+                    if let Some(ctx) = u.as_deref().map(|ui| ui.ctx().clone()) {
+                        if ctx.memory(|m| m.has_focus(i)) {
+                            let mods_now = ctx.input(|inp| inp.modifiers);
+                            let mods_byte = (mods_now.shift as u8)
+                                | ((mods_now.ctrl as u8) << 1)
+                                | ((mods_now.alt as u8) << 2)
+                                | ((mods_now.command as u8) << 3);
+                            let mut hits: Vec<u8> = Vec::new();
+                            ctx.input_mut(|inp| {
+                                inp.events.retain(|ev| {
+                                    if let egui::Event::Key {
+                                        key, pressed: true, ..
+                                    } = ev
+                                    {
+                                        let code = crate::imzero2::keycodes::imzero_key_code(*key);
+                                        // Code 0 is the reserved unknown; a key the vocabulary
+                                        // cannot name is a key no mask can have asked for.
+                                        if code != 0 && (mask & (1u64 << code)) != 0 {
+                                            hits.push(code);
+                                            return false;
+                                        }
+                                    }
+                                    true
+                                });
+                            });
+                            if !hits.is_empty() {
+                                for code in hits {
+                                    self.r26_key_capture_push(i.value(), code, mods_byte);
+                                }
                                 ctx.request_repaint();
                             }
                         }

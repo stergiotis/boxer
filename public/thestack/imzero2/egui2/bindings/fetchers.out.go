@@ -17,6 +17,11 @@ func (inst *Fetcher) FetchF1KeyPressed() (pressed bool) {
 	pressed = inst.readB()
 	return
 }
+func (inst *Fetcher) FetchF2KeyPressed() (pressed bool) {
+	inst.invoke(FuncProcIdFetchF2KeyPressed)
+	pressed = inst.readB()
+	return
+}
 func (inst *Fetcher) FetchFrameMetrics() (interpretUs uint64, passNr uint64) {
 	inst.invoke(FuncProcIdFetchFrameMetrics)
 	interpretUs = inst.readU64()

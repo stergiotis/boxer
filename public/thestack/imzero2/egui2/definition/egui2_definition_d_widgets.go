@@ -597,6 +597,27 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("captureTab").
 				CodeClientRust(rustClientCode("self.text_edit_pending_capture_tab = true;\n")).
 				EndMethod().
+				// captureKeys (ADR-0214 §SD9): the mask form of captureTab —
+				// one bit per keycodes.Code, the same declaration Frame already
+				// takes, consumed at the same point in the frame.
+				//
+				// It exists because a launcher is a text field the arrows and
+				// Enter belong to while the caret stays in it. Frame's
+				// .CaptureKeys() cannot serve that: capture is gated on the
+				// capturing widget having focus (ADR-0177 §SD1), and the widget
+				// with focus here is the editor. Nor can a fetcher — plain Enter
+				// is consumed by the TextEdit long before frame end, which
+				// fetchCommandEnterPressed documents from the other side.
+				//
+				// Same pre-widget consume as captureTab, for the same reason,
+				// and captureTab is left alone rather than reimplemented on top
+				// of this: its per-frame opt-in is load-bearing for the
+				// completion pane that asks for it (ADR-0190 §SD5), and a
+				// widened mask is not the shape to express "only while I have
+				// something to complete".
+				BeginMethod("captureKeys").Arg("mask", ctabb.U64).
+				CodeClientRust(rustClientCode("self.text_edit_pending_capture_keys = mask;\n")).
+				EndMethod().
 				Build()...).
 			WithConstructionCodeClientRust(rustClientCode("if multiline { egui::TextEdit::multiline(&mut text).id({{Id}}) } else { egui::TextEdit::singleline(&mut text).id({{Id}}) };\n")).
 			WithSettingImmediate(true).
@@ -658,6 +679,46 @@ if std::mem::take(&mut self.text_edit_pending_capture_tab) {
                 // R26 is read at the END of this frame, so Go acts on the
                 // capture while building the NEXT one — and the keypress that
                 // would have asked for that frame has just been eaten here.
+                ctx.request_repaint();
+            }
+        }
+    }
+}
+// captureKeys (ADR-0214 §SD9): the same consume over a whole mask. Every
+// masked press is reported, not just the first: a held arrow key can deliver
+// two in one frame, and dropping the second makes fast navigation lossy.
+//
+// A key outside the mask is left in the queue untouched, which is what keeps
+// typing working — the mask names navigation, and the letters go to the
+// editor as they always did.
+if self.text_edit_pending_capture_keys != 0 {
+    let mask = std::mem::take(&mut self.text_edit_pending_capture_keys);
+    if let Some(ctx) = {{EguiUiOptionalOuter}}.as_deref().map(|ui| ui.ctx().clone()) {
+        if ctx.memory(|m| m.has_focus({{Id}})) {
+            let mods_now = ctx.input(|inp| inp.modifiers);
+            let mods_byte = (mods_now.shift as u8)
+                | ((mods_now.ctrl as u8) << 1)
+                | ((mods_now.alt as u8) << 2)
+                | ((mods_now.command as u8) << 3);
+            let mut hits: Vec<u8> = Vec::new();
+            ctx.input_mut(|inp| {
+                inp.events.retain(|ev| {
+                    if let egui::Event::Key { key, pressed: true, .. } = ev {
+                        let code = crate::imzero2::keycodes::imzero_key_code(*key);
+                        // Code 0 is the reserved unknown; a key the vocabulary
+                        // cannot name is a key no mask can have asked for.
+                        if code != 0 && (mask & (1u64 << code)) != 0 {
+                            hits.push(code);
+                            return false;
+                        }
+                    }
+                    true
+                });
+            });
+            if !hits.is_empty() {
+                for code in hits {
+                    self.r26_key_capture_push({{Id}}.value(), code, mods_byte);
+                }
                 ctx.request_repaint();
             }
         }
