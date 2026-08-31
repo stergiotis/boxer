@@ -133,8 +133,8 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		gateFindings = append(gateFindings, gateQualitative(l)...)
 	}
 	if len(gateFindings) > 0 {
-		err = eh.Errorf("qualitative palette gate: %d finding(s) (ADR-0156 §SD3):\n  %s",
-			len(gateFindings), strings.Join(gateFindings, "\n  "))
+		err = eb.Build().Strs("findings", gateFindings).
+			Errorf("qualitative palette gate reported findings (ADR-0156 §SD3)")
 		return
 	}
 
@@ -303,34 +303,34 @@ func readCrameriTxt(path, name string, expected int) (l lut, err error) {
 		}
 		fields := strings.Fields(line)
 		if len(fields) < 3 {
-			err = eh.Errorf("%s line %d: expected ≥3 floats, got %q", path, lineNo, line)
+			err = eb.Build().Str("path", path).Int("line", lineNo).Str("text", line).Errorf("expected at least 3 floats")
 			return
 		}
 		var r, g, bl float64
 		r, err = strconv.ParseFloat(fields[0], 64)
 		if err != nil {
-			err = eh.Errorf("%s line %d: parse r: %w", path, lineNo, err)
+			err = eb.Build().Str("path", path).Int("line", lineNo).Errorf("parse r: %w", err)
 			return
 		}
 		g, err = strconv.ParseFloat(fields[1], 64)
 		if err != nil {
-			err = eh.Errorf("%s line %d: parse g: %w", path, lineNo, err)
+			err = eb.Build().Str("path", path).Int("line", lineNo).Errorf("parse g: %w", err)
 			return
 		}
 		bl, err = strconv.ParseFloat(fields[2], 64)
 		if err != nil {
-			err = eh.Errorf("%s line %d: parse b: %w", path, lineNo, err)
+			err = eb.Build().Str("path", path).Int("line", lineNo).Errorf("parse b: %w", err)
 			return
 		}
 		rgbs = append(rgbs, [3]uint8{toU8(r), toU8(g), toU8(bl)})
 	}
 	err = scanner.Err()
 	if err != nil {
-		err = eh.Errorf("%s scan: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("scan failed: %w", err)
 		return
 	}
 	if len(rgbs) != expected {
-		err = eh.Errorf("%s: got %d entries, want %d", path, len(rgbs), expected)
+		err = eb.Build().Str("path", path).Int("got", len(rgbs)).Int("want", expected).Errorf("palette has the wrong number of entries")
 		return
 	}
 	l.Cardinality = expected
@@ -423,24 +423,24 @@ func readHexPalette(path, name string, expected int) (l lut, err error) {
 		}
 		field := strings.Fields(line)[0]
 		if len(field) != 6 {
-			err = eh.Errorf("%s line %d: expected 6 hex digits, got %q", path, lineNo, field)
+			err = eb.Build().Str("path", path).Int("line", lineNo).Str("text", field).Errorf("expected 6 hex digits")
 			return
 		}
 		var v uint64
 		v, err = strconv.ParseUint(field, 16, 32)
 		if err != nil {
-			err = eh.Errorf("%s line %d: parse hex: %w", path, lineNo, err)
+			err = eb.Build().Str("path", path).Int("line", lineNo).Errorf("parse hex: %w", err)
 			return
 		}
 		rgbs = append(rgbs, [3]uint8{uint8(v >> 16), uint8(v >> 8), uint8(v)})
 	}
 	err = scanner.Err()
 	if err != nil {
-		err = eh.Errorf("%s scan: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("scan failed: %w", err)
 		return
 	}
 	if len(rgbs) != expected {
-		err = eh.Errorf("%s: got %d entries, want %d", path, len(rgbs), expected)
+		err = eb.Build().Str("path", path).Int("got", len(rgbs)).Int("want", expected).Errorf("palette has the wrong number of entries")
 		return
 	}
 	l.Cardinality = expected
@@ -583,6 +583,6 @@ func findRepoRoot() (root string, err error) {
 		}
 		d = parent
 	}
-	err = eh.Errorf("could not locate repo root above %s", here)
+	err = eb.Build().Str("from", here).Errorf("could not locate the repo root")
 	return
 }

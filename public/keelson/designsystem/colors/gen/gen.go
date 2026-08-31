@@ -373,7 +373,7 @@ func verifyFile(path, want string) (err error) {
 		return
 	}
 	if string(got) != want {
-		err = eh.Errorf("verify: %s drift — re-run ./boxer.sh designsystem colors gen", path)
+		err = eb.Build().Str("path", path).Errorf("verify: generated file drift — re-run ./boxer.sh designsystem colors gen")
 		return
 	}
 	return
@@ -400,6 +400,6 @@ func findRepoRoot() (root string, err error) {
 		}
 		d = parent
 	}
-	err = eh.Errorf("could not locate repo root (go.mod not found above %s)", here)
+	err = eb.Build().Str("from", here).Errorf("could not locate the repo root (no go.mod above)")
 	return
 }
