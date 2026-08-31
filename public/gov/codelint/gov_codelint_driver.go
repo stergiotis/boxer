@@ -94,6 +94,7 @@ func (inst *Linter) Run(pkgs []*packages.Package) iter.Seq2[Finding, error] {
 						Line:     int32(pos.Line),
 						Col:      int32(pos.Column),
 						Message:  d.Message,
+						Fix:      soleReplacement(d),
 					}
 					if !yield(f, nil) {
 						return
@@ -102,6 +103,21 @@ func (inst *Linter) Run(pkgs []*packages.Package) iter.Seq2[Finding, error] {
 			}
 		}
 	}
+}
+
+// soleReplacement renders a diagnostic's suggested fix as replacement text,
+// for the single-edit case a rule uses when it can rewrite one expression. A
+// fix spanning several edits has no single text to show and is reported as a
+// finding without one, rather than as a partial suggestion someone might paste.
+func soleReplacement(d analysis.Diagnostic) (text string) {
+	if len(d.SuggestedFixes) != 1 {
+		return
+	}
+	edits := d.SuggestedFixes[0].TextEdits
+	if len(edits) != 1 {
+		return
+	}
+	return string(edits[0].NewText)
 }
 
 // runAnalyzer builds a per-package analysis.Pass and invokes the analyzer.

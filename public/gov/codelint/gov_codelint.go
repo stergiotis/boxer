@@ -34,7 +34,15 @@ func (inst FindingSeverityE) String() (s string) {
 // Finding is a single rule violation discovered during a codelint pass.
 //
 // Line and Col are 1-based; zero means "not pinpointed within the file".
-// The shape matches doclint.Finding so reporters can be shared structurally.
+// The shape matches doclint.Finding so reporters can be shared structurally;
+// Fix is the one addition, and it is omitted when empty so a consumer reading
+// either kind of finding sees the same object.
+//
+// Fix carries the replacement text for the flagged expression when the rule
+// judged the rewrite mechanical. It is a triage signal first: over a backlog,
+// the findings with a Fix are the ones nobody has to think about. It is not
+// applied automatically, and applying it may need imports reconciled — see the
+// rule that produced it.
 type Finding struct {
 	RuleId   string           `json:"rule"`
 	Severity FindingSeverityE `json:"severity"`
@@ -42,4 +50,5 @@ type Finding struct {
 	Line     int32            `json:"line,omitempty"`
 	Col      int32            `json:"col,omitempty"`
 	Message  string           `json:"message"`
+	Fix      string           `json:"fix,omitempty"`
 }

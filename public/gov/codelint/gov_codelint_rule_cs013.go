@@ -59,6 +59,10 @@ var ehFormatEntryPoints = map[string]int{
 // naming the boundary, not merely asserting the message matters. A test
 // asserting the value appears in Error() is the usual evidence that a site is
 // one of these.
+//
+// A finding carries a SuggestedFix when the rewrite needs no human judgment.
+// suggestCS013Fix decides that, and the reasons it declines are the useful
+// half — see gov_codelint_rule_cs013_fix.go.
 type RuleCS013 struct{}
 
 func NewRuleCS013() (inst *RuleCS013) {
@@ -125,12 +129,16 @@ func (inst *RuleCS013) run(pass *analysis.Pass) (res any, err error) {
 			if len(verbs) == 0 {
 				return
 			}
-			pass.Report(analysis.Diagnostic{
+			d := analysis.Diagnostic{
 				Pos: call.Pos(),
 				End: call.End(),
 				Message: "CS013: " + kind + " format carries " + strings.Join(verbs, ", ") +
 					" — wrap with \"%w\" only and move the values to eb.Build().Str(…)/Int(…)",
-			})
+			}
+			if fix, fixable := suggestCS013Fix(pass, call, sel, kind, fmtIdx, format); fixable {
+				d.SuggestedFixes = []analysis.SuggestedFix{fix}
+			}
+			pass.Report(d)
 			return
 		})
 	}
