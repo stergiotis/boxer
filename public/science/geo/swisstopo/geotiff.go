@@ -48,7 +48,7 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 		return
 	}
 	if data[0] != 'I' || data[1] != 'I' {
-		err = eh.Errorf("unsupported byte order %c%c, expected little-endian II: %w", data[0], data[1], eh.Errorf("bad byte order"))
+		err = eb.Build().Uint8("byte0", data[0]).Uint8("byte1", data[1]).Errorf("unsupported byte order, expected little-endian II: %w", eh.Errorf("bad byte order"))
 		return
 	}
 
@@ -70,7 +70,7 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 	expectedTiles := tilesAcross * tilesDown
 
 	if int32(len(tileOffsets)) != expectedTiles {
-		err = eh.Errorf("expected %d tiles, got %d offsets: %w", expectedTiles, len(tileOffsets), eh.Errorf("tile count mismatch"))
+		err = eb.Build().Int32("expectedTiles", expectedTiles).Int("offsets", len(tileOffsets)).Errorf("tile count does not match the offsets present: %w", eh.Errorf("tile count mismatch"))
 		return
 	}
 
@@ -83,7 +83,7 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 			var tilePixels []float32
 			tilePixels, err = decodeLZWTile(data, tileOffsets[tileIdx], tileByteCounts[tileIdx], tiffTileWidth, tiffTileLength)
 			if err != nil {
-				err = eh.Errorf("unable to decode tile %d (tx=%d, ty=%d): %w", tileIdx, tx, ty, err)
+				err = eb.Build().Int32("tile", tileIdx).Int32("tx", tx).Int32("ty", ty).Errorf("unable to decode tile: %w", err)
 				return
 			}
 
@@ -116,7 +116,7 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 // parseTIFFIFD reads the first IFD and extracts tile offsets and byte counts.
 func parseTIFFIFD(data []byte, ifdOffset uint32) (tileOffsets []uint32, tileByteCounts []uint32, err error) {
 	if int(ifdOffset)+2 > len(data) {
-		err = eh.Errorf("IFD offset out of range: %w", eh.Errorf("offset %d exceeds file size %d", ifdOffset, len(data)))
+		err = eb.Build().Uint32("offset", ifdOffset).Int("fileSize", len(data)).Errorf("IFD offset exceeds the file size")
 		return
 	}
 
@@ -125,7 +125,7 @@ func parseTIFFIFD(data []byte, ifdOffset uint32) (tileOffsets []uint32, tileByte
 
 	for i := range numEntries {
 		if int(pos)+12 > len(data) {
-			err = eh.Errorf("IFD entry %d out of range: %w", i, eh.Errorf("truncated"))
+			err = eb.Build().Uint16("entry", i).Errorf("IFD entry out of range: %w", eh.Errorf("truncated"))
 			return
 		}
 
@@ -184,7 +184,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 			off := valueOffset
 			for i := range count {
 				if int(off)+2 > len(data) {
-					err = eh.Errorf("SHORT array out of range at index %d: %w", i, eh.Errorf("truncated"))
+					err = eb.Build().Uint32("index", i).Errorf("SHORT array index out of range: %w", eh.Errorf("truncated"))
 					return
 				}
 				values[i] = uint32(binary.LittleEndian.Uint16(data[off : off+2]))
@@ -200,7 +200,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 			off := valueOffset
 			for i := range count {
 				if int(off)+4 > len(data) {
-					err = eh.Errorf("LONG array out of range at index %d: %w", i, eh.Errorf("truncated"))
+					err = eb.Build().Uint32("index", i).Errorf("LONG array index out of range: %w", eh.Errorf("truncated"))
 					return
 				}
 				values[i] = binary.LittleEndian.Uint32(data[off : off+4])
@@ -208,7 +208,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 			}
 		}
 	default:
-		err = eh.Errorf("unsupported field type %d for uint32 array: %w", fieldType, eh.Errorf("bad type"))
+		err = eb.Build().Uint16("fieldType", fieldType).Errorf("unsupported field type for a uint32 array: %w", eh.Errorf("bad type"))
 		return
 	}
 	return
@@ -218,7 +218,7 @@ func readUint32Array(data []byte, fieldType uint16, count uint32, valueOffset ui
 // differencing predictor for float32 data.
 func decodeLZWTile(data []byte, offset uint32, byteCount uint32, tileW int32, tileH int32) (pixels []float32, err error) {
 	if int(offset)+int(byteCount) > len(data) {
-		err = eh.Errorf("tile data out of range: offset=%d count=%d filesize=%d: %w", offset, byteCount, len(data), eh.Errorf("truncated"))
+		err = eb.Build().Uint32("offset", offset).Uint32("count", byteCount).Int("fileSize", len(data)).Errorf("tile data out of range: %w", eh.Errorf("truncated"))
 		return
 	}
 
@@ -237,7 +237,7 @@ func decodeLZWTile(data []byte, offset uint32, byteCount uint32, tileW int32, ti
 	}
 
 	if int32(len(decoded)) < expectedBytes {
-		err = eh.Errorf("decoded size %d < expected %d bytes: %w", len(decoded), expectedBytes, eh.Errorf("short read"))
+		err = eb.Build().Int("decoded", len(decoded)).Int32("expected", expectedBytes).Errorf("decoded size is smaller than expected: %w", eh.Errorf("short read"))
 		return
 	}
 

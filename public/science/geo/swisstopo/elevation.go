@@ -108,7 +108,7 @@ func (inst *ElevationSampler) loadTile(eKm int32, nKm int32) (pixels []float32, 
 	// find tile file via index (O(1) lookup instead of filepath.Glob)
 	tilePath, found := inst.tileIndex[key]
 	if !found {
-		err = eb.Build().Str("tilesDir", inst.tilesDir).Str("gridKey", key).Errorf("no tile file in %q for grid key %s", inst.tilesDir, key)
+		err = eb.Build().Str("tilesDir", inst.tilesDir).Str("gridKey", key).Errorf("no tile file for this grid key")
 		return
 	}
 
@@ -129,7 +129,7 @@ func (inst *ElevationSampler) Sample(lv LV95Coord) (elevation float32, err error
 	var pixels []float32
 	pixels, err = inst.loadTile(eKm, nKm)
 	if err != nil {
-		err = eh.Errorf("unable to load tile for %s: %w", lv, err)
+		err = eb.Build().Stringer("coord", lv).Errorf("unable to load tile: %w", err)
 		return
 	}
 
@@ -173,7 +173,7 @@ func (inst *ElevationSampler) SampleProfile(from LV95Coord, to LV95Coord, stepMe
 		elevations = make([]float32, 1)
 		elevations[0], err = inst.Sample(from)
 		if err != nil {
-			err = eh.Errorf("unable to sample elevation at %s: %w", from, err)
+			err = eb.Build().Stringer("point", from).Errorf("unable to sample elevation: %w", err)
 			return
 		}
 		return
@@ -203,7 +203,7 @@ func (inst *ElevationSampler) SampleProfile(from LV95Coord, to LV95Coord, stepMe
 		var elev float32
 		elev, err = inst.Sample(pt)
 		if err != nil {
-			err = eh.Errorf("unable to sample elevation at dist=%.1f (%s): %w", dist, pt, err)
+			err = eb.Build().Float64("dist", dist).Stringer("point", pt).Errorf("unable to sample elevation: %w", err)
 			return
 		}
 

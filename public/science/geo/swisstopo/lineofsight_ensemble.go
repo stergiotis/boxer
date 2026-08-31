@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // EnsembleSpec configures a Monte-Carlo line-of-sight ensemble. The bearing
@@ -101,7 +102,7 @@ func (inst *ElevationSampler) LineOfSightSweepEnsemble(from LV95Coord, fromHeigh
 			var m LOSSweepResult
 			m, err = inst.LineOfSightSweep(jFrom, fromHeight+dObsH, jTo, toHeight+dTgtH, spec.HalfRangeDeg, spec.StepDeg)
 			if err != nil {
-				err = eh.Errorf("ensemble sweep %d failed: %w", i, err)
+				err = eb.Build().Int("sweep", i).Errorf("ensemble sweep failed: %w", err)
 				return
 			}
 			members = append(members, m)

@@ -3,7 +3,7 @@ package swisstopo
 import (
 	"math"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // LOSSweepResult is a polar fan of line-of-sight rays about a common
@@ -44,11 +44,11 @@ type LOSSweepResult struct {
 // height), forwarded unchanged to each ray's LineOfSight.
 func (inst *ElevationSampler) LineOfSightSweep(from LV95Coord, fromHeight float64, to LV95Coord, toHeight float64, halfRangeDeg float64, stepDeg float64) (result LOSSweepResult, err error) {
 	if halfRangeDeg < 0 {
-		err = eh.Errorf("halfRangeDeg must be >= 0, got %g", halfRangeDeg)
+		err = eb.Build().Float64("halfRangeDeg", halfRangeDeg).Errorf("halfRangeDeg must be >= 0")
 		return
 	}
 	if halfRangeDeg > 0 && stepDeg <= 0 {
-		err = eh.Errorf("stepDeg must be > 0 when halfRangeDeg > 0, got %g", stepDeg)
+		err = eb.Build().Float64("stepDeg", stepDeg).Errorf("stepDeg must be > 0 when halfRangeDeg > 0")
 		return
 	}
 
@@ -62,7 +62,7 @@ func (inst *ElevationSampler) LineOfSightSweep(from LV95Coord, fromHeight float6
 		var ray LOSResult
 		ray, err = inst.LineOfSight(from, fromHeight, target, toHeight)
 		if err != nil {
-			err = eh.Errorf("line-of-sight at sweep offset %g deg failed: %w", deg, err)
+			err = eb.Build().Float64("offsetDeg", deg).Errorf("line-of-sight failed at this sweep offset: %w", err)
 			return
 		}
 		result.Targets = append(result.Targets, target)
