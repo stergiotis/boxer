@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-31
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-08-31
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0213: leeway single-membership declaration — exactly one membership per attribute, per channel, as a writable schema statement
 
@@ -60,6 +60,8 @@ of section S" live in the schema?
 - **O3** — section use-aspects, one per channel
   (`useaspects.AspectSectionSingleMembership*`), following the
   `AspectSectionMembershipsAllPrimary`/`AllSecondary` precedent.
+- **O4** — encoding aspects on the membership lane (an
+  `encodingaspects.AspectE` per channel).
 
 **Criteria.**
 
@@ -79,12 +81,12 @@ of section S" live in the schema?
 **Assessment.** `++` strong positive, `+` positive, `−` negative, `−−`
 strong negative.
 
-|    | O1 | O2 | O3 |
-|----|----|----|----|
-| C1 | −− | −  | ++ |
-| C2 | −  | −− | ++ |
-| C3 | −− | −  | ++ |
-| C4 | ++ | ++ | ++ |
+|    | O1 | O2 | O3 | O4 |
+|----|----|----|----|----|
+| C1 | −− | −  | ++ | +  |
+| C2 | −  | −− | ++ | −− |
+| C3 | −− | −  | ++ | −− |
+| C4 | ++ | ++ | ++ | +  |
 
 O1 is killed by the type itself: `MembershipSpecE` is a full `uint8` — a
 per-channel twin bit doubles the space and widening the type breaks the
@@ -93,11 +95,37 @@ DTO gains a map key (moving the encoded bytes of every serialized table
 unless `omitempty` is retrofitted), and schema discovery ignores
 cardinality lanes entirely, so the field cannot be reconstructed from
 column names except by reading *absence* as proof — exactly the inference
-`constructsql` refuses for good reason. O3 rides machinery that already
-round-trips: use-aspects serialize in the existing DTO field, encode into
-every tagged column name (the naming convention's use-aspects segment) and
-are rebuilt by discovery, so the names road carries the declaration as a
-positive statement.
+`constructsql` refuses for good reason. O4 is killed three ways: encoding
+aspects have no authored home on a membership lane —
+`TaggedValuesSection` carries them for value columns only, and the lanes'
+hints are derived output (`ResolveMembership` machine-chooses them from
+the channel bit on every IR rebuild), so the declaration would be erased
+by the schema's own round-trip unless the section grows a per-channel
+hints field (O2's plumbing) and `TechnologySpecificMembershipSetGenI`
+changes shape; the column the declaration most naturally describes is the
+one it removes, putting the names road back to inferring from absence;
+and the vocabulary's contract is *droppable hints* (technology filters
+silently discard unimplemented aspects, correctness never depends on
+them), which a load-bearing declaration — it moves the column set, the
+write contract and the licensed read form — inverts. O3 rides machinery
+that already round-trips: use-aspects serialize in the existing DTO
+field, encode into every tagged column name (the naming convention's
+use-aspects segment) and are rebuilt by discovery, so the names road
+carries the declaration as a positive statement.
+
+O3 carries a semantic tension worth stating (owner review, 2026-08-31):
+the use-aspects vocabulary is framed as intended *use cases* of a
+section's data, and exactly-one-per-attribute is a structural contract.
+The vocabulary has hosted a second genre since
+`AspectSectionMembershipsAllPrimary`/`AllSecondary` — engine-anchored
+section contracts, admissible under ADR-0182's "a format the engine
+itself commits to" — and the new aspects read as writer-side usage
+contracts in that family. The constraint is the wire, not the words: the
+aspect segment is the only per-section, authored, serialized,
+discovery-round-tripped slot in the 13/21-component physical naming
+convention, and a dedicated "layout contract" segment would rename every
+column of every existing table. The Go identifiers are free to move (the
+wire is the numeric index); the segment placement is not.
 
 ## Decision
 
@@ -249,7 +277,7 @@ mean two different tables.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-08-31.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
