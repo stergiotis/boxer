@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -99,7 +100,7 @@ func (inst *cursor) advance() (err error) {
 	ent, nerr, ok := inst.next()
 	if nerr != nil {
 		inst.live = false
-		err = eh.Errorf("sysmreplay: reading %s: %w", inst.domain, nerr)
+		err = eb.Build().Str("domain", inst.domain).Errorf("sysmreplay: reading: %w", nerr)
 		return
 	}
 	if !ok || ent == nil {
@@ -400,7 +401,7 @@ func (inst *Reader) fetchCarry(ctx context.Context, domain string, w Window) (c 
 	for ent, rerr := range inst.store.Replay(ctx, key, w.From, recordstore.ReplayOpts{To: w.To}) {
 		if rerr != nil {
 			c = nil
-			err = eh.Errorf("sysmreplay: reading %s: %w", domain, rerr)
+			err = eb.Build().Str("domain", domain).Errorf("sysmreplay: reading: %w", rerr)
 			return
 		}
 		c.rows = append(c.rows, ent)
@@ -434,7 +435,7 @@ func (inst *Reader) fetchAsOf(ctx context.Context, domain string, key uint64, bo
 	for got, serr := range seq {
 		if serr != nil {
 			ent = nil
-			err = eh.Errorf("sysmreplay: seeding %s: %w", domain, serr)
+			err = eb.Build().Str("domain", domain).Errorf("sysmreplay: seeding: %w", serr)
 			return
 		}
 		ent = got

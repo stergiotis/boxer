@@ -20,6 +20,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Mode selects how a diagram's stage index and within-stage order are
@@ -221,7 +222,7 @@ func (d Diagram) validate() (index map[string]int, order []int, err error) {
 			return nil, nil, eh.Errorf("node %d has an empty id", i)
 		}
 		if _, dup := index[n.ID]; dup {
-			return nil, nil, eh.Errorf("duplicate node id %q", n.ID)
+			return nil, nil, eb.Build().Str("id", n.ID).Errorf("duplicate node id")
 		}
 		if d.Mode == ModeAlluvial && n.Stage < 0 {
 			return nil, nil, eh.Errorf("node %q has stage %d; alluvial stages must be >= 0", n.ID, n.Stage)

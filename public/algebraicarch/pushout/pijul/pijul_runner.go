@@ -13,6 +13,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // RunnerI is the lower-level CLI-verb seam used by the text
@@ -280,7 +281,7 @@ func (inst *cliRunner) LatestChangeFile(ctx context.Context, repoDir string) (pa
 		return
 	})
 	if werr != nil {
-		err = eh.Errorf("walk changes dir %s: %w", changeDir, werr)
+		err = eb.Build().Str("changeDir", changeDir).Errorf("walk changes dir: %w", werr)
 		return
 	}
 	if patchPath == "" {

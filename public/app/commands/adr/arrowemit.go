@@ -8,7 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/gov/adrcorpus"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // strList yields Arrow List<String> with non-nullable elements so ClickHouse
@@ -183,20 +183,20 @@ func writeRecord(path string, schema *arrow.Schema, rb *array.RecordBuilder) (er
 	var f *os.File
 	f, err = os.Create(path)
 	if err != nil {
-		return eh.Errorf("unable to create arrow file %q: %w", path, err)
+		return eb.Build().Str("path", path).Errorf("unable to create arrow file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	var w *ipc.FileWriter
 	w, err = ipc.NewFileWriter(f, ipc.WithZstd(), ipc.WithAllocator(memory.DefaultAllocator), ipc.WithSchema(schema))
 	if err != nil {
-		return eh.Errorf("unable to create arrow writer %q: %w", path, err)
+		return eb.Build().Str("path", path).Errorf("unable to create arrow writer: %w", err)
 	}
 	if err = w.Write(rec); err != nil {
 		_ = w.Close()
-		return eh.Errorf("unable to write arrow record %q: %w", path, err)
+		return eb.Build().Str("path", path).Errorf("unable to write arrow record: %w", err)
 	}
 	if err = w.Close(); err != nil {
-		return eh.Errorf("unable to close arrow writer %q: %w", path, err)
+		return eb.Build().Str("path", path).Errorf("unable to close arrow writer: %w", err)
 	}
 	return nil
 }

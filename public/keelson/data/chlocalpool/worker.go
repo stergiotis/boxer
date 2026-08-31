@@ -12,6 +12,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Worker wraps one clickhouse-local subprocess. The pool spawns
@@ -236,7 +237,7 @@ func (inst *Worker) Close() (err error) {
 		// Cleanup tmpdir.
 		if inst.tmpdir != "" {
 			if rmErr := os.RemoveAll(inst.tmpdir); rmErr != nil {
-				inst.closeErr = eh.Errorf("chlocalpool: rm tmpdir %s: %w", inst.tmpdir, rmErr)
+				inst.closeErr = eb.Build().Str("tmpdir", inst.tmpdir).Errorf("chlocalpool: rm tmpdir: %w", rmErr)
 			}
 		}
 		// Notify pool last so the live count drops after cleanup.

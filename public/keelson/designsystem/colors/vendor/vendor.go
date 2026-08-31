@@ -49,6 +49,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/cvd"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Config controls a vendor invocation.
@@ -283,7 +284,7 @@ func assemble(upstreamDir string) (out []lut, err error) {
 func readCrameriTxt(path, name string, expected int) (l lut, err error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		err = eh.Errorf("read %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("read: %w", err)
 		return
 	}
 	sum := sha256.Sum256(b)
@@ -403,7 +404,7 @@ func gateQualitative(l lut) (findings []string) {
 func readHexPalette(path, name string, expected int) (l lut, err error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		err = eh.Errorf("read %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("read: %w", err)
 		return
 	}
 	sum := sha256.Sum256(b)

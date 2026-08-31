@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Subject taxonomy implemented by this service (ADR-0026 §SD3).
@@ -240,7 +241,7 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 	p, ok := inst.pending[reqId]
 	if !ok {
 		inst.mu.Unlock()
-		err = eh.Errorf("fsbroker: no pending request %q", reqId)
+		err = eb.Build().Str("reqId", reqId).Errorf("fsbroker: no pending request")
 		return
 	}
 	delete(inst.pending, reqId)
@@ -286,7 +287,7 @@ func (inst *Service) Cancel(reqId string) (err error) {
 	p, ok := inst.pending[reqId]
 	if !ok {
 		inst.mu.Unlock()
-		err = eh.Errorf("fsbroker: no pending request %q", reqId)
+		err = eb.Build().Str("reqId", reqId).Errorf("fsbroker: no pending request")
 		return
 	}
 	delete(inst.pending, reqId)

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // CodeRef is one row of the `coderef` table: a single citation of an ADR
@@ -129,7 +130,7 @@ func scanFile(root, path, lang string) (refs []CodeRef, err error) {
 	var data []byte
 	data, err = os.ReadFile(path)
 	if err != nil {
-		return nil, eh.Errorf("unable to read %q: %w", path, err)
+		return nil, eb.Build().Str("path", path).Errorf("unable to read: %w", err)
 	}
 	if !bytes.Contains(data, []byte("ADR")) && !bytes.Contains(data, []byte("adr/")) {
 		return nil, nil

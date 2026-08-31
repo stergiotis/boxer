@@ -359,7 +359,7 @@ func (t TypedLiteral) ToAny() (val any, err error) {
 		return tupleToAny(t.Elements)
 
 	default:
-		err = eh.Errorf("unknown kind %s", t.Kind)
+		err = eb.Build().Stringer("kind", t.Kind).Errorf("unknown kind")
 		return
 	}
 }
@@ -384,7 +384,7 @@ func scalarToAny(t TypedLiteral) (val any, err error) {
 	case "b":
 		return t.BoolVal, nil
 	default:
-		err = eh.Errorf("unsupported scalar type %s", t.ScalarType)
+		err = eb.Build().Stringer("scalarType", t.ScalarType).Errorf("unsupported scalar type")
 		return
 	}
 }
@@ -416,7 +416,7 @@ func homogeneousArrayToAny(a *HomogeneousArray) (val any, err error) {
 		copy(out, a.BoolVals)
 		return out, nil
 	default:
-		err = eh.Errorf("unsupported homogeneous array element type %s", a.ElementType)
+		err = eb.Build().Stringer("elementType", a.ElementType).Errorf("unsupported homogeneous array element type")
 		return
 	}
 }

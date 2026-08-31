@@ -30,6 +30,7 @@ import (
 	"github.com/stergiotis/boxer/public/code/synthesis/golang/align"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	leewayddl "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -115,7 +116,7 @@ func runJsonmapCodegen(cCtx *cli.Context) (err error) {
 	out := cCtx.String("out")
 	err = align.WriteAligned(out, code)
 	if err != nil {
-		err = eh.Errorf("write %s: %w", out, err)
+		err = eb.Build().Str("out", out).Errorf("write: %w", err)
 		return
 	}
 	log.Info().Str("out", out).Int("bytes", len(code)).Msg("canonical JSON mapping DML generated")
@@ -153,7 +154,7 @@ func runJsonmapDdl(cCtx *cli.Context) (err error) {
 	// The same guard the facts DDL command carries: this drops databases, and
 	// the live store must never be a target.
 	if db == "boxer" {
-		err = eh.Errorf("refusing to target the live facts database %q", db)
+		err = eb.Build().Str("db", db).Errorf("refusing to target the live facts database")
 		return
 	}
 	table := cCtx.String("table")
@@ -175,7 +176,7 @@ func runJsonmapDdl(cCtx *cli.Context) (err error) {
 	if cCtx.Bool("drop") {
 		err = cli0.Exec(ctx, "DROP DATABASE IF EXISTS "+db)
 		if err != nil {
-			err = eh.Errorf("drop database %s: %w", db, err)
+			err = eb.Build().Str("db", db).Errorf("drop database: %w", err)
 			return
 		}
 	}

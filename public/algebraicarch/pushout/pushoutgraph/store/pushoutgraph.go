@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
@@ -149,7 +150,7 @@ func (inst *PushoutGraph) DeletedNodeCount() int {
 // downContext: nodes that should follow this node.
 func (inst *PushoutGraph) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upContext, downContext []t.NodeID) error {
 	if inst.HasNode(id) {
-		return eh.Errorf("node %v: %w", id, ErrNodeExists)
+		return eb.Build().Stringer("id", id).Errorf("node: %w", ErrNodeExists)
 	}
 	inst.nodes.Add(id)
 	inst.contents[id] = content
@@ -171,7 +172,7 @@ func (inst *PushoutGraph) AddNode(id t.NodeID, content []byte, patch t.PatchHash
 	}
 	for _, down := range downContext {
 		if !inst.HasNode(down) {
-			return eh.Errorf("down-context node %v: %w", down, ErrNodeMissing)
+			return eb.Build().Stringer("down", down).Errorf("down-context node: %w", ErrNodeMissing)
 		}
 		kind := t.EdgeKindLive
 		if inst.IsDeleted(down) {
@@ -203,7 +204,7 @@ func (inst *PushoutGraph) DeleteNode(id t.NodeID, deleter t.PatchHash) error {
 		return nil
 	}
 	if !inst.nodes.Contains(id) {
-		return eh.Errorf("node %v: %w", id, ErrNodeMissing)
+		return eb.Build().Stringer("id", id).Errorf("node: %w", ErrNodeMissing)
 	}
 	if id == t.RootNodeID {
 		return eh.Errorf("%w", ErrRootImmutable)
@@ -248,7 +249,7 @@ func (inst *PushoutGraph) DeleteNode(id t.NodeID, deleter t.PatchHash) error {
 // pseudo-edge recomputation handles each independently.
 func (inst *PushoutGraph) UndeleteNode(id t.NodeID, undeleter t.PatchHash) error {
 	if !inst.deletedNodes.Contains(id) {
-		return eh.Errorf("node %v: %w", id, ErrNotDeleted)
+		return eb.Build().Stringer("id", id).Errorf("node: %w", ErrNotDeleted)
 	}
 	set := inst.deleters[id]
 	if _, ok := set[undeleter]; !ok {
@@ -373,10 +374,10 @@ func (inst *PushoutGraph) dropReasonsForRep(rep t.NodeID) {
 // AddEdge adds a directed edge between two existing nodes.
 func (inst *PushoutGraph) AddEdge(src, dest t.NodeID, patch t.PatchHash) error {
 	if !inst.HasNode(src) {
-		return eh.Errorf("source node %v: %w", src, ErrNodeMissing)
+		return eb.Build().Stringer("src", src).Errorf("source node: %w", ErrNodeMissing)
 	}
 	if !inst.HasNode(dest) {
-		return eh.Errorf("dest node %v: %w", dest, ErrNodeMissing)
+		return eb.Build().Stringer("dest", dest).Errorf("dest node: %w", ErrNodeMissing)
 	}
 	kind := t.EdgeKindLive
 	if inst.IsDeleted(src) || inst.IsDeleted(dest) {

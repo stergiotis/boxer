@@ -33,6 +33,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Dataset aliases. The alias is advisory — the seeded SQL names the
@@ -257,7 +258,7 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 
 	stream, err := encodeGoMatches(snap.goRows)
 	if err != nil {
-		err = eh.Errorf("encode %s: %w", goDatasetAlias, err)
+		err = eb.Build().Str("goDatasetAlias", goDatasetAlias).Errorf("encode: %w", err)
 		return
 	}
 	inst.mu.RLock()
@@ -268,7 +269,7 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 		Alias: goDatasetAlias, Handle: priorGo, ArrowIPCStream: stream,
 	})
 	if err != nil {
-		err = eh.Errorf("publish %s: %w", goDatasetAlias, err)
+		err = eb.Build().Str("goDatasetAlias", goDatasetAlias).Errorf("publish: %w", err)
 		return
 	}
 	handles.goHandle = res.Handle
@@ -285,7 +286,7 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 		var chStream []byte
 		chStream, err = encodeChExtract(snap.chRows)
 		if err != nil {
-			err = eh.Errorf("encode %s: %w", chDatasetAlias, err)
+			err = eb.Build().Str("chDatasetAlias", chDatasetAlias).Errorf("encode: %w", err)
 			return
 		}
 		var chRes adhocdata.PublishResult
@@ -293,7 +294,7 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 			Alias: chDatasetAlias, Handle: priorCh, ArrowIPCStream: chStream,
 		})
 		if err != nil {
-			err = eh.Errorf("publish %s: %w", chDatasetAlias, err)
+			err = eb.Build().Str("chDatasetAlias", chDatasetAlias).Errorf("publish: %w", err)
 			return
 		}
 		handles.chHandle = chRes.Handle

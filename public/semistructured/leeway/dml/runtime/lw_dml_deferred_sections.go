@@ -140,7 +140,7 @@ func (inst *DeferredSectionBuffer) Flush(endSection func(section string) error) 
 		if endSection != nil {
 			cerr := endSection(section)
 			if cerr != nil && err == nil {
-				err = eb.Build().Str("section", section).Errorf("unable to close section %s: %w", section, cerr)
+				err = eb.Build().Str("section", section).Errorf("unable to close section: %w", cerr)
 			}
 		}
 	}

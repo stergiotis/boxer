@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DefaultDebounce is how long a captured width is held before it is
@@ -130,7 +131,7 @@ func New(store StoreI, opts Opts) (inst *Resolver, err error) {
 		return
 	}
 	if opts.Debounce < 0 {
-		err = eh.Errorf("colwidth: New: negative debounce %s", opts.Debounce)
+		err = eb.Build().Stringer("debounce", opts.Debounce).Errorf("colwidth: New: negative debounce")
 		return
 	}
 	if opts.Debounce == 0 {

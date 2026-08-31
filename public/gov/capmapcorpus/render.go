@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Rendering a corpus back to a vault — the inverse of [ParseDir], and what
@@ -237,7 +238,7 @@ func WriteVault(corpus Corpus, dir string) (stats WriteStats, err error) {
 			return stats, eh.Errorf("unable to create directory for %q: %w", rel, mkErr)
 		}
 		if wErr := os.WriteFile(full, content, 0o644); wErr != nil {
-			return stats, eh.Errorf("unable to write %q: %w", rel, wErr)
+			return stats, eb.Build().Str("rel", rel).Errorf("unable to write: %w", wErr)
 		}
 		stats.Files++
 		if filepath.Base(rel) == markerFileName {

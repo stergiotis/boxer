@@ -82,7 +82,7 @@ func criticalValueAndBandsCtx(
 
 	family := bandFamilyDispatch(method)
 	if family == nil {
-		err = eh.Errorf("unknown BandMethodE %d", method)
+		err = eb.Build().Uint8("method", uint8(method)).Errorf("unknown BandMethodE")
 		return
 	}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -113,7 +114,7 @@ type TabRegistry struct {
 
 func (inst *TabRegistry) validate(spec TabSpec, replaceIdx int) (err error) {
 	if spec.ID == "" || spec.DockID == 0 || spec.Render == nil {
-		err = eh.Errorf("tab %q: ID, a non-zero DockID, and Render are required", spec.ID)
+		err = eb.Build().Str("id", spec.ID).Errorf("tab: ID, a non-zero DockID, and Render are required")
 		return
 	}
 	for i := range inst.specs {
@@ -121,7 +122,7 @@ func (inst *TabRegistry) validate(spec TabSpec, replaceIdx int) (err error) {
 			continue
 		}
 		if inst.specs[i].ID == spec.ID {
-			err = eh.Errorf("tab %q: duplicate ID", spec.ID)
+			err = eb.Build().Str("id", spec.ID).Errorf("tab: duplicate ID")
 			return
 		}
 		if inst.specs[i].DockID == spec.DockID {
@@ -168,7 +169,7 @@ func (inst *TabRegistry) Replace(id string, spec TabSpec) (err error) {
 		inst.specs[i] = spec
 		return
 	}
-	err = eh.Errorf("tab %q: not registered", id)
+	err = eb.Build().Str("id", id).Errorf("tab: not registered")
 	return
 }
 
@@ -193,7 +194,7 @@ func (inst *TabRegistry) SetZone(id string, z TabZoneE) (err error) {
 			return
 		}
 	}
-	err = eh.Errorf("tab %q: not registered", id)
+	err = eb.Build().Str("id", id).Errorf("tab: not registered")
 	return
 }
 
@@ -208,7 +209,7 @@ func (inst *TabRegistry) Remove(id string) (err error) {
 			return
 		}
 	}
-	err = eh.Errorf("tab %q: not registered", id)
+	err = eb.Build().Str("id", id).Errorf("tab: not registered")
 	return
 }
 

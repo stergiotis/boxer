@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // WatchEventKindE classifies a single filesystem change reported by a
@@ -195,7 +196,7 @@ func pickBackend(path string, req WatchRequest) (b watcherBackendI, name string,
 	var st unix.Statfs_t
 	err = unix.Statfs(path, &st)
 	if err != nil {
-		err = eh.Errorf("fsbroker: statfs %q: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("fsbroker: statfs: %w", err)
 		return
 	}
 	if _, blind := inotifyBlindFsMagic[int64(st.Type)]; blind {
@@ -257,7 +258,7 @@ func newInotifyWatcher(path string, recursive bool) (w *inotifyWatcher, err erro
 	rootWd, err := unix.InotifyAddWatch(fd, path, inotifyWatchMask)
 	if err != nil {
 		_ = unix.Close(fd)
-		err = eh.Errorf("fsbroker: inotify add %q: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("fsbroker: inotify add: %w", err)
 		return
 	}
 	w = &inotifyWatcher{
@@ -543,7 +544,7 @@ type fileMeta struct {
 func newPollerWatcher(path string, interval time.Duration, recursive bool) (w *pollerWatcher, err error) {
 	fi, err := os.Stat(path)
 	if err != nil {
-		err = eh.Errorf("fsbroker: poller stat %q: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("fsbroker: poller stat: %w", err)
 		return
 	}
 	w = &pollerWatcher{

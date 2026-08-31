@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 )
@@ -150,7 +151,7 @@ func runIngest(cCtx *cli.Context) (err error) {
 func tierFiles(dir string, n int) (out []string, err error) {
 	matches, err := filepath.Glob(filepath.Join(dir, "file_*.json.gz"))
 	if err != nil {
-		err = eh.Errorf("glob %s: %w", dir, err)
+		err = eb.Build().Str("dir", dir).Errorf("glob: %w", err)
 		return
 	}
 	sort.Strings(matches)
@@ -227,13 +228,13 @@ var undecodable uint64
 func eachDoc(file string, limit uint64, fn func(raw []byte, doc map[string]any) error) (err error) {
 	f, err := os.Open(file)
 	if err != nil {
-		err = eh.Errorf("open %s: %w", file, err)
+		err = eb.Build().Str("file", file).Errorf("open: %w", err)
 		return
 	}
 	defer func() { _ = f.Close() }()
 	gz, err := gzip.NewReader(bufio.NewReaderSize(f, 1<<20))
 	if err != nil {
-		err = eh.Errorf("gzip %s: %w", file, err)
+		err = eb.Build().Str("file", file).Errorf("gzip: %w", err)
 		return
 	}
 	defer func() { _ = gz.Close() }()
@@ -258,7 +259,7 @@ func eachDoc(file string, limit uint64, fn func(raw []byte, doc map[string]any) 
 		seen++
 	}
 	if err = sc.Err(); err != nil {
-		err = eh.Errorf("scan %s: %w", file, err)
+		err = eb.Build().Str("file", file).Errorf("scan: %w", err)
 	}
 	return
 }
@@ -415,7 +416,7 @@ func (inst *ingester) add(ctx context.Context, doc map[string]any) (err error) {
 
 	err = inst.ent.CommitEntity()
 	if err != nil {
-		err = eh.Errorf("commit entity %d: %w", id, err)
+		err = eb.Build().Uint64("id", id).Errorf("commit entity: %w", err)
 		return
 	}
 	inst.held++
@@ -439,7 +440,7 @@ func addPathMemberships[T any](add func(uint64, []byte) T, t shredded) (err erro
 	var p []byte
 	p, err = formatParams(t.params)
 	if err != nil {
-		err = eh.Errorf("path %s: %w", t.path, err)
+		err = eb.Build().Str("path", t.path).Errorf("path: %w", err)
 		return
 	}
 	if p != nil {

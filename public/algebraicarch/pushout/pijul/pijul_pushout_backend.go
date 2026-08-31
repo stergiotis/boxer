@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/exchange"
@@ -426,7 +427,7 @@ func changesForResolution(v repo.ViewI, cells []KVLine) (changes []patch.Change,
 			continue
 		}
 		if _, exists := byPath[c.Path]; !exists {
-			err = eh.Errorf("cell %q: %w", c.Path, ErrCellCreateWhileConflicted)
+			err = eb.Build().Str("path", c.Path).Errorf("cell: %w", ErrCellCreateWhileConflicted)
 			return
 		}
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // FuncName is the table-function name the macro uses.
@@ -188,7 +189,7 @@ func expand(reg *introspect.Registry, sql string, target func(name string, p int
 		}
 		p, ok := reg.Lookup(name)
 		if !ok {
-			return "", eh.Errorf("keelsonsql: unknown keelson table %q", name)
+			return "", eb.Build().Str("name", name).Errorf("keelsonsql: unknown keelson table")
 		}
 		nanopass.ReplaceNode(rw, fn, target(name, p))
 	}

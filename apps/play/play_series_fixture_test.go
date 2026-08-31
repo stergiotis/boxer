@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -227,7 +228,7 @@ func TestPublishFixtureAsksTheCapability(t *testing.T) {
 	_, err := doPublishFixture(bus, fixtureSpec{kind: adscore.AnomalyKindTransplant, seed: 2})
 
 	require.Error(t, err, "a refused publish is reported, never swallowed")
-	assert.Contains(t, err.Error(), fixtureSeriesAlias, "the error names which dataset failed")
+	assert.Equal(t, fixtureSeriesAlias, ebtest.Fields(t, err)["alias"], "the error names which dataset failed")
 
 	require.Len(t, bus.subjects, 1, "the second publish is not attempted after the first fails")
 	assert.Equal(t, adhocdata.SubjectPublish, bus.subjects[0])

@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // SeekableReader is a random-access reader over a BXAD stream's
@@ -104,11 +105,11 @@ func (inst *SeekableReader) Seek(offset int64, whence int) (pos int64, err error
 	case io.SeekEnd:
 		pos = inst.plainSize + offset
 	default:
-		err = eh.Errorf("adhocdata: seek: invalid whence %d", whence)
+		err = eb.Build().Int("whence", whence).Errorf("adhocdata: seek: invalid whence")
 		return
 	}
 	if pos < 0 {
-		err = eh.Errorf("adhocdata: seek: negative position %d", pos)
+		err = eb.Build().Int64("pos", pos).Errorf("adhocdata: seek: negative position")
 		pos = inst.pos
 		return
 	}
@@ -162,12 +163,12 @@ func (inst *SeekableReader) load(idx int64) (err error) {
 	}
 	ct := inst.ctBuf[:ctLen]
 	if _, err = inst.ra.ReadAt(ct, diskOff+lenPrefixSize); err != nil {
-		return eh.Errorf("adhocdata: read chunk %d: %w", idx, err)
+		return eb.Build().Int64("idx", idx).Errorf("adhocdata: read chunk: %w", err)
 	}
 	nonce := makeNonce(uint64(idx), final)
 	plain, err := inst.aead.Open(inst.plain[:0], nonce[:], ct, inst.aad)
 	if err != nil {
-		return eh.Errorf("adhocdata: authenticate chunk %d: %w", idx, err)
+		return eb.Build().Int64("idx", idx).Errorf("adhocdata: authenticate chunk: %w", err)
 	}
 	inst.plain = plain
 	inst.chunk = idx

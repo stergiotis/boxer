@@ -171,12 +171,10 @@ func ParseTrace(r io.Reader) (steps []Step, err error) {
 		}
 		var st Step
 		if err = json.Unmarshal([]byte(text), &st); err != nil {
-			return nil, eb.Build().Int("line", line).
-				Errorf("unable to parse trace step at line %d: %w", line, err)
+			return nil, eb.Build().Int("line", line).Errorf("unable to parse trace step at line %d: %w", line, err) //boxer:lint disable=CS013 reason="line is already a field; %d keeps it in the human-read diagnostic"
 		}
 		if st.Do == "" {
-			return nil, eb.Build().Int("line", line).
-				Errorf("trace step at line %d has no \"do\" verb", line)
+			return nil, eb.Build().Int("line", line).Errorf("trace step at line %d has no \"do\" verb", line) //boxer:lint disable=CS013 reason="line is already a field; %d keeps it in the human-read diagnostic"
 		}
 		steps = append(steps, st)
 	}

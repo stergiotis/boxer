@@ -17,7 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // play_graph.go is slice 1 of ADR-0097 (`play` as a reactive query-graph): the
@@ -675,14 +675,14 @@ func (inst *queryGraph) demand(ctx context.Context, id NodeID) (res *nodeResult,
 	defer inst.mu.Unlock()
 	n := inst.nodes[id]
 	if n == nil {
-		err = eh.Errorf("queryGraph.demand: unknown node %q", id)
+		err = eb.Build().Str("id", string(id)).Errorf("queryGraph.demand: unknown node")
 		return
 	}
 	inst.demanded[id] = true
 
 	c, cErr := n.Compile(inst.sig)
 	if cErr != nil {
-		err = eh.Errorf("queryGraph.demand: compile node %q: %w", id, cErr)
+		err = eb.Build().Str("id", string(id)).Errorf("queryGraph.demand: compile node: %w", cErr)
 		return
 	}
 	memoKey := c.key()

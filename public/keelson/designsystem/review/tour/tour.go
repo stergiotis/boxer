@@ -35,6 +35,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/review/ssim"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // StatusE classifies the per-scene outcome of a tour comparison.
@@ -129,12 +130,12 @@ func Compare(ctx context.Context, baselineDir, candidateDir string, cfg Config) 
 
 	baselines, err := listPngs(baselineDir)
 	if err != nil {
-		err = eh.Errorf("scan baseline dir %s: %w", baselineDir, err)
+		err = eb.Build().Str("baselineDir", baselineDir).Errorf("scan baseline dir: %w", err)
 		return
 	}
 	candidates, err := listPngs(candidateDir)
 	if err != nil {
-		err = eh.Errorf("scan candidate dir %s: %w", candidateDir, err)
+		err = eb.Build().Str("candidateDir", candidateDir).Errorf("scan candidate dir: %w", err)
 		return
 	}
 

@@ -85,7 +85,7 @@ type TableOptions struct {
 // needed).
 func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresentation, tableRowConfig common.TableRowConfigE, conv common.NamingConventionI, opts TableOptions) (sql string, err error) {
 	if opts.Engine == "" {
-		err = eh.Errorf("compose create table %s: Engine is required", tableName)
+		err = eb.Build().Str("tableName", tableName).Errorf("compose create table: Engine is required")
 		return
 	}
 	var b strings.Builder
@@ -97,7 +97,7 @@ func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresenta
 	case CreateModeOrReplace:
 		b.WriteString("CREATE OR REPLACE TABLE ")
 	default:
-		err = eh.Errorf("compose create table %s: unknown create mode %d", tableName, opts.Mode)
+		err = eb.Build().Str("tableName", tableName).Uint8("mode", uint8(opts.Mode)).Errorf("compose create table: unknown create mode")
 		return
 	}
 	b.WriteString(tableName)
@@ -108,7 +108,7 @@ func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresenta
 	err = ddl.NewGeneratorDriver().GenerateColumnsCode(ir.IterateColumnProps(), tableRowConfig, conv, tech,
 		func(hint encodingaspects.AspectE) (bool, string) { return true, "" })
 	if err != nil {
-		err = eh.Errorf("compose create table %s: columns: %w", tableName, err)
+		err = eb.Build().Str("tableName", tableName).Errorf("compose create table: columns: %w", err)
 		return
 	}
 
@@ -117,7 +117,7 @@ func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresenta
 		var derived []IndexSpec
 		derived, err = DeriveSkipIndexes(ir, *opts.SkipIndexes)
 		if err != nil {
-			err = eh.Errorf("compose create table %s: skip-index policy: %w", tableName, err)
+			err = eb.Build().Str("tableName", tableName).Errorf("compose create table: skip-index policy: %w", err)
 			return
 		}
 		indexes = append(append([]IndexSpec{}, indexes...), derived...)
@@ -131,7 +131,7 @@ func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresenta
 		var col string
 		col, err = resolveColumnRef(idx.Ref, ir, tableRowConfig, conv)
 		if err != nil {
-			err = eh.Errorf("compose create table %s: index column: %w", tableName, err)
+			err = eb.Build().Str("tableName", tableName).Errorf("compose create table: index column: %w", err)
 			return
 		}
 		name := idx.Name

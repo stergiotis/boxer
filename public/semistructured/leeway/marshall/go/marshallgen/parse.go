@@ -628,7 +628,7 @@ func renderInner(expr ast.Expr) (s string, err error) {
 		err = eb.Build().Errorf("pointer types forbidden — use option.Option[T] for ZeroToOne fields")
 		return
 	default:
-		err = eb.Build().Errorf("unsupported type expression %T", expr)
+		err = eb.Build().Type("expr", expr).Errorf("unsupported type expression")
 		return
 	}
 	return

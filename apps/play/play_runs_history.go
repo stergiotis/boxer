@@ -177,8 +177,7 @@ func (inst *Client) rawTsvQuery(ctx context.Context, sql string) (raw []byte, er
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(body))).
-			Errorf("history http %d", resp.StatusCode)
+		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(body))).Errorf("history http")
 		return
 	}
 	raw, err = io.ReadAll(io.LimitReader(resp.Body, 4<<20))

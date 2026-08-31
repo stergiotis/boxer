@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -240,7 +241,7 @@ func generateFixture(spec fixtureSpec) (fixture *adscore.Fixture, err error) {
 		}
 	}
 	if !known {
-		return nil, eh.Errorf("play: fixture: unknown anomaly kind %d", spec.kind)
+		return nil, eb.Build().Uint8("kind", uint8(spec.kind)).Errorf("play: fixture: unknown anomaly kind")
 	}
 	gen := adscore.DefaultFixtureSpec(spec.kind, spec.seed)
 	fixture, err = adscore.GenerateE(gen)
@@ -305,13 +306,13 @@ func doPublishFixture(bus busPublisherI, spec fixtureSpec) (out fixturePublished
 		Alias: fixtureSeriesAlias, ArrowIPCStream: seriesIPC, Publisher: fixturePublisher,
 	})
 	if err != nil {
-		return out, eh.Errorf("play: fixture: publish %s: %w", fixtureSeriesAlias, err)
+		return out, eb.Build().Str("alias", fixtureSeriesAlias).Errorf("play: fixture: publish: %w", err)
 	}
 	truthRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
 		Alias: fixtureTruthAlias, ArrowIPCStream: truthIPC, Publisher: fixturePublisher,
 	})
 	if err != nil {
-		return out, eh.Errorf("play: fixture: publish %s: %w", fixtureTruthAlias, err)
+		return out, eb.Build().Str("alias", fixtureTruthAlias).Errorf("play: fixture: publish: %w", err)
 	}
 	out.seriesHandle = seriesRes.Handle
 	out.truthHandle = truthRes.Handle

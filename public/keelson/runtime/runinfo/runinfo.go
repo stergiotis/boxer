@@ -11,6 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 )
 
@@ -80,7 +81,7 @@ func Init() (inst *Inst, err error) {
 		}
 		setErr := os.Setenv(EnvVar, runId)
 		if setErr != nil {
-			err = eh.Errorf("runinfo: setenv %s: %w", EnvVar, setErr)
+			err = eb.Build().Str("envVar", EnvVar).Errorf("runinfo: setenv: %w", setErr)
 			return
 		}
 	}

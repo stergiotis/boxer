@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // play_split.go is ADR-0097 slice 3a: the SPLIT CONTRACT. It recovers the
@@ -151,7 +152,7 @@ func splitGraph(sql string) (res splitResult, err error) {
 			var cErr error
 			client, cErr = recognizeTsCall(pr, cte.Scopes[0])
 			if cErr != nil {
-				err = eh.Errorf("splitGraph: CTE %q: %w", cte.Name, cErr)
+				err = eb.Build().Str("name", cte.Name).Errorf("splitGraph: CTE: %w", cErr)
 				return
 			}
 		}

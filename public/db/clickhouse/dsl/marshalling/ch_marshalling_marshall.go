@@ -237,7 +237,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		}
 		numPart = token[1:]
 		if len(numPart) == 0 {
-			err = eh.Errorf("bare sign %q", token)
+			err = eb.Build().Str("token", token).Errorf("bare sign")
 			return
 		}
 	}
@@ -259,7 +259,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 			result.ScalarType = ctabb.F64
 			result.FloatVal, err = strconv.ParseFloat(numPart, 64)
 			if err != nil {
-				err = eh.Errorf("invalid hex float %q: %w", token, err)
+				err = eb.Build().Str("token", token).Errorf("invalid hex float: %w", err)
 				return
 			}
 			result.FloatVal *= signF
@@ -268,7 +268,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		var val uint64
 		val, err = strconv.ParseUint(numPart[2:], 16, 64)
 		if err != nil {
-			err = eh.Errorf("invalid hex literal %q: %w", token, err)
+			err = eb.Build().Str("token", token).Errorf("invalid hex literal: %w", err)
 			return
 		}
 		if sign >= 0 || val == 0 {
@@ -292,7 +292,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		result.ScalarType = ctabb.F64
 		result.FloatVal, err = strconv.ParseFloat(numPart, 64)
 		if err != nil {
-			err = eh.Errorf("invalid float literal %q: %w", token, err)
+			err = eb.Build().Str("token", token).Errorf("invalid float literal: %w", err)
 			return
 		}
 		result.FloatVal *= signF
@@ -303,7 +303,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		var val uint64
 		val, err = strconv.ParseUint(numPart, 10, 64)
 		if err != nil {
-			err = eh.Errorf("unrecognised literal %q: %w", token, err)
+			err = eb.Build().Str("token", token).Errorf("unrecognised literal: %w", err)
 			result.Unknown = true
 			return
 		}

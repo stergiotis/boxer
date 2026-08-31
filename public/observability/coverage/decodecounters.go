@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Format constants of the coverage counter-data file, version 1 (ADR-0169
@@ -87,7 +88,7 @@ func DecodeCounters(data []byte) (snap *covsnap.CounterSnapshot, err error) {
 		}
 		err = decodeCounterSegment(r, flavor, bigEndian != 0, seg == 0, snap)
 		if err != nil {
-			return nil, eh.Errorf("coverage counter segment %d: %w", seg, err)
+			return nil, eb.Build().Uint32("seg", seg).Errorf("coverage counter segment: %w", err)
 		}
 	}
 	return
@@ -159,7 +160,7 @@ func decodeCounterSegment(r *byteReader, flavor uint8, bigEndian bool, keepArgs 
 			}
 			return
 		}
-		return 0, eh.Errorf("unknown counter flavor %d", flavor)
+		return 0, eb.Build().Uint8("flavor", flavor).Errorf("unknown counter flavor")
 	}
 	for i := range fcnEntries {
 		var numCtrs, pkgIdx, funcIdx uint32

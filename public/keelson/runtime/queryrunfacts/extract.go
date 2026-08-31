@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ScopeE is the capture-scope knob (ADR-0115 outline): all terminal
@@ -93,7 +94,7 @@ func ComposeExtractSql(factsTable string, pullURL string, scope ScopeE, batchCap
 	case ScopeStamped:
 		scopePredicate = "\n  AND JSONHas(log_comment, 'run_id')"
 	default:
-		err = eh.Errorf("queryrunfacts: extract not composable for scope %q", scope)
+		err = eb.Build().Str("scope", string(scope)).Errorf("queryrunfacts: extract not composable for scope")
 		return
 	}
 	// The watermark is read once into a scalar so the emptiness test and the

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // CodecI is a pure wire serialization for EnvelopeV1. Implementations do
@@ -111,7 +112,7 @@ func NewRegistry(codecs ...CodecI) (reg *Registry, err error) {
 			return
 		}
 		if _, dup := r.codecs[name]; dup {
-			err = eh.Errorf("duplicate codec %q: %w", name, ErrCodecName)
+			err = eb.Build().Str("name", name).Errorf("duplicate codec: %w", ErrCodecName)
 			return
 		}
 		r.codecs[name] = c
@@ -124,7 +125,7 @@ func NewRegistry(codecs ...CodecI) (reg *Registry, err error) {
 func (inst *Registry) Lookup(name string) (c CodecI, err error) {
 	c, ok := inst.codecs[name]
 	if !ok {
-		err = eh.Errorf("codec %q: %w", name, ErrUnknownCodec)
+		err = eb.Build().Str("name", name).Errorf("codec: %w", ErrUnknownCodec)
 	}
 	return
 }

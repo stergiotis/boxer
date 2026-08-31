@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // byteReader is a bounds-checked cursor over a decoded blob. Every read
@@ -68,7 +69,7 @@ func (r *byteReader) uleb() (v uint64, err error) {
 			return 0, err
 		}
 		if shift >= 64 {
-			return 0, eh.Errorf("malformed ULEB128 at offset %d: exceeds 64 bits", r.off)
+			return 0, eb.Build().Int("off", r.off).Errorf("malformed ULEB128 at offset: exceeds 64 bits")
 		}
 		v |= uint64(b&0x7f) << shift
 		if b&0x80 == 0 {

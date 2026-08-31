@@ -15,6 +15,7 @@ package pipelineview
 
 import (
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 )
 
@@ -248,7 +249,7 @@ func (p Pipeline) Validate() error {
 			return
 		}
 		if _, dup := stages[st.ID]; dup {
-			dupErr = eh.Errorf("duplicate stage id %q", st.ID)
+			dupErr = eb.Build().Str("id", st.ID).Errorf("duplicate stage id")
 			return
 		}
 		stages[st.ID] = st
@@ -265,10 +266,10 @@ func (p Pipeline) Validate() error {
 			return eh.Errorf("endpoint with empty ID")
 		}
 		if _, dup := stages[ep.ID]; dup {
-			return eh.Errorf("endpoint id collides with stage id %q", ep.ID)
+			return eb.Build().Str("id", ep.ID).Errorf("endpoint id collides with stage id")
 		}
 		if _, dup := endpoints[ep.ID]; dup {
-			return eh.Errorf("duplicate endpoint id %q", ep.ID)
+			return eb.Build().Str("id", ep.ID).Errorf("duplicate endpoint id")
 		}
 		endpoints[ep.ID] = ep
 	}
@@ -289,12 +290,12 @@ func (p Pipeline) Validate() error {
 				return eh.Errorf("endpoint ref %q carries a port", r.Endpoint)
 			}
 			if _, ok := endpoints[r.Endpoint]; !ok {
-				return eh.Errorf("unknown endpoint %q", r.Endpoint)
+				return eb.Build().Str("endpoint", r.Endpoint).Errorf("unknown endpoint")
 			}
 		case r.Stage != "":
 			st, ok := stages[r.Stage]
 			if !ok {
-				return eh.Errorf("unknown stage %q", r.Stage)
+				return eb.Build().Str("stage", r.Stage).Errorf("unknown stage")
 			}
 			if r.Port == "" {
 				return nil // implicit primary anchor

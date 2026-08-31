@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
@@ -165,7 +166,7 @@ func NewPatch(author string, description string, deps []t.PatchHash, changes []C
 func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 	err = inst.validateAgainst(g)
 	if err != nil {
-		err = eh.Errorf("apply %s: %w", inst.Hash, err)
+		err = eb.Build().Stringer("hash", inst.Hash).Errorf("apply: %w", err)
 		return
 	}
 	// Pass 1: non-deletion changes.
@@ -174,7 +175,7 @@ func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 		case ChangeKindNewNode:
 			err = g.AddNode(c.NodeID, c.Content, inst.Hash, c.UpContext, c.DownContext)
 			if err != nil {
-				err = eh.Errorf("apply NewNode %v: %w", c.NodeID, err)
+				err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("apply NewNode: %w", err)
 				return
 			}
 		case ChangeKindNewEdge:
@@ -192,7 +193,7 @@ func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 		}
 		err = g.DeleteNode(c.NodeID, inst.Hash)
 		if err != nil {
-			err = eh.Errorf("apply DeleteNode %v: %w", c.NodeID, err)
+			err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("apply DeleteNode: %w", err)
 			return
 		}
 	}
@@ -216,7 +217,7 @@ func (inst *Patch) validateAgainst(g t.GraphReaderI) (err error) {
 		switch c.Kind {
 		case ChangeKindNewNode:
 			if exists(c.NodeID) {
-				err = eh.Errorf("node %v: node already exists", c.NodeID)
+				err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("node: node already exists")
 				return
 			}
 			for _, up := range c.UpContext {
@@ -280,7 +281,7 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 		}
 		err = assertNoForeignEdges(g, c.NodeID, inst.Hash)
 		if err != nil {
-			err = eh.Errorf("unapply %s: %w", inst.Hash, err)
+			err = eb.Build().Stringer("hash", inst.Hash).Errorf("unapply: %w", err)
 			return
 		}
 	}
@@ -347,7 +348,7 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 		}
 		err = g.UndeleteNode(c.NodeID, inst.Hash)
 		if err != nil {
-			err = eh.Errorf("unapply DeleteNode %v: %w", c.NodeID, err)
+			err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("unapply DeleteNode: %w", err)
 			return
 		}
 	}

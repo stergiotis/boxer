@@ -11,6 +11,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Country geometry + identity, parsed once from the vendored Natural Earth
@@ -218,7 +219,7 @@ func decodeRings(g neGeometry) ([][]projPt, []bool, error) {
 		}
 		return rings, holes, nil
 	default:
-		return nil, nil, eh.Errorf("unsupported geometry type %q", g.Type)
+		return nil, nil, eb.Build().Str("type", g.Type).Errorf("unsupported geometry type")
 	}
 }
 

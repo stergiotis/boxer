@@ -4,7 +4,6 @@ import (
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
@@ -63,7 +62,7 @@ var _ MembershipResolver = (*LookupResolver)(nil)
 func (r *LookupResolver) Resolve(name string, spec common.MembershipSpecE) (res ResolvedMembership, err error) {
 	roles, rerr := membershipRoles(spec)
 	if rerr != nil {
-		err = eh.Errorf("unable to resolve membership %q: %w", name, rerr)
+		err = eb.Build().Str("name", name).Errorf("unable to resolve membership: %w", rerr)
 		return
 	}
 	res.Spec = spec

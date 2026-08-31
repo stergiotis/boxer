@@ -34,6 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Env registry (ADR-0009): the queryrunsd coordinates.
@@ -158,7 +159,7 @@ func New(cfg Config, log zerolog.Logger) (s *Service, err error) {
 	switch cfg.Scope {
 	case queryrunfacts.ScopeAll, queryrunfacts.ScopeStamped, queryrunfacts.ScopeOff:
 	default:
-		err = eh.Errorf("queryrunsvc: unknown scope %q", cfg.Scope)
+		err = eb.Build().Str("scope", string(cfg.Scope)).Errorf("queryrunsvc: unknown scope")
 		return
 	}
 	if cfg.Database == "" {
@@ -206,16 +207,16 @@ func (s *Service) PullURL() string { return "http://" + s.Addr() + "/pull" }
 func (s *Service) Start(ctx context.Context) (err error) {
 	host, _, splitErr := net.SplitHostPort(s.cfg.Listen)
 	if splitErr != nil {
-		err = eh.Errorf("queryrunsvc: bad listen addr %q: %w", s.cfg.Listen, splitErr)
+		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: bad listen addr: %w", splitErr)
 		return
 	}
 	if !isLoopbackHost(host) {
-		err = eh.Errorf("queryrunsvc: refusing non-loopback bind %q; remote exposure (token+TLS) is deferred to ADR-0082 §SD1", s.cfg.Listen)
+		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: refusing non-loopback bind; remote exposure (token+TLS) is deferred to ADR-0082 §SD1")
 		return
 	}
 	ln, lnErr := net.Listen("tcp", s.cfg.Listen)
 	if lnErr != nil {
-		err = eh.Errorf("queryrunsvc: listen %q: %w", s.cfg.Listen, lnErr)
+		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: listen: %w", lnErr)
 		return
 	}
 	s.ln = ln

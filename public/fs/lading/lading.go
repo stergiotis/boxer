@@ -151,7 +151,7 @@ func Verify(ctx context.Context, exec recordstore.ExecutorI) (err error) {
 	} {
 		err = t.verify(ctx)
 		if err != nil {
-			err = eh.Errorf("verify %s: %w", t.name, err)
+			err = eb.Build().Str("name", t.name).Errorf("verify: %w", err)
 			return
 		}
 	}
@@ -191,7 +191,7 @@ func verifyFinished(ctx context.Context, exec recordstore.ExecutorI) (err error)
 		`SELECT name FROM system.tables WHERE database = %s AND name = %s AND engine = 'MaterializedView'`,
 		ladingschema.QuoteLiteral(ladingschema.DatabaseName), ladingschema.QuoteLiteral(view)))
 	if err != nil {
-		err = eh.Errorf("read materialized view %s: %w", view, err)
+		err = eb.Build().Str("view", view).Errorf("read materialized view: %w", err)
 		return
 	}
 	if len(found) == 0 {

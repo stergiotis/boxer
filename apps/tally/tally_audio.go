@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/audio/decode"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/sink"
@@ -179,7 +180,7 @@ func (inst *stagedRecording) sealE(ctx context.Context, r io.Reader) (err error)
 	}
 	if err != nil {
 		_ = os.Remove(tmp)
-		return eh.Errorf("unable to seal %s: %w", inst.name, err)
+		return eb.Build().Str("name", inst.name).Errorf("unable to seal: %w", err)
 	}
 	if err = os.Rename(tmp, final); err != nil {
 		_ = os.Remove(tmp)
@@ -199,7 +200,7 @@ func (inst *stagedRecording) holdPlainE(ctx context.Context, r io.Reader) (err e
 	}
 	inst.plain = os.NewFile(uintptr(fd), "memfd:"+inst.name)
 	if _, err = copyChunked(ctx, inst.plain, r); err != nil {
-		return eh.Errorf("unable to stage %s: %w", inst.name, err)
+		return eb.Build().Str("name", inst.name).Errorf("unable to stage: %w", err)
 	}
 	return nil
 }
@@ -272,7 +273,7 @@ func (inst *stagedRecording) openSealedWavE() (src pcm.SourceI, err error) {
 	sr, err := adhocdata.NewSeekableReader(f, st.Size(), inst.key)
 	if err != nil {
 		_ = f.Close()
-		return nil, eh.Errorf("unable to unseal %s: %w", inst.name, err)
+		return nil, eb.Build().Str("name", inst.name).Errorf("unable to unseal: %w", err)
 	}
 	file, err := wavfile.NewReaderE(&sealedReaderAt{r: sr}, sr.PlaintextSize())
 	if err != nil {

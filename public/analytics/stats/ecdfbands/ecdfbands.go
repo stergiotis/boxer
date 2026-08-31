@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // SampleBand bundles a finite-sample exact simultaneous (1-α)·100%
@@ -137,7 +138,7 @@ func BandsForGrid(xs, fnAt []float64, n int, alpha float64, method BandMethodE) 
 
 	family := bandFamilyDispatch(method)
 	if family == nil {
-		err = eh.Errorf("unknown BandMethodE %d", method)
+		err = eb.Build().Uint8("method", uint8(method)).Errorf("unknown BandMethodE")
 		return
 	}
 

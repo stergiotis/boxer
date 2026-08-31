@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // LifecycleFilter narrows the rows returned by LifecyclesByRun. RunId is
@@ -133,7 +134,7 @@ func parseLastHeartbeatRow(raw []byte) (ts time.Time, found bool, err error) {
 	}
 	tsSec, perr := strconv.ParseInt(line, 10, 64)
 	if perr != nil {
-		err = eh.Errorf("chstore: last heartbeat: parse ts %q: %w", line, perr)
+		err = eb.Build().Str("line", line).Errorf("chstore: last heartbeat: parse ts: %w", perr)
 		return
 	}
 	ts = time.Unix(tsSec, 0).UTC()

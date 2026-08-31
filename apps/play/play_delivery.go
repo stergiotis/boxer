@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // play_delivery.go is the editor-delivery seam (ADR-0097 slice-6 D5 Update,
@@ -47,7 +48,7 @@ func (inst *PlayApp) ReplaceSql(text string) {
 func (inst *PlayApp) ActivateTab(id string) (err error) {
 	dockID, ok := inst.tabs.dockIDForSlug(id)
 	if !ok {
-		err = eh.Errorf("play: ActivateTab: unknown tab %q", id)
+		err = eb.Build().Str("id", id).Errorf("play: ActivateTab: unknown tab")
 		return
 	}
 	inst.raiseDockTab(dockID)
@@ -209,7 +210,7 @@ func (inst *PlayApp) openCreator(cfg appletcreatecfg.AppletCreate) (err error) {
 // inert while a split lacks the name, and revive when it returns.
 func (inst *PlayApp) BindTab(tabID string, cteName string) (err error) {
 	if _, ok := inst.tabs.dockIDForSlug(tabID); !ok {
-		err = eh.Errorf("play: BindTab: unknown tab %q", tabID)
+		err = eb.Build().Str("tabID", tabID).Errorf("play: BindTab: unknown tab")
 		return
 	}
 	inst.bindTab(tabID, NodeID(cteName))

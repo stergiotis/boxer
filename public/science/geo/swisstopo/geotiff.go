@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // swissALTI3D 2m COG tile constants
@@ -37,7 +38,7 @@ func readSwissALTI3DTile(path string) (pixels []float32, err error) {
 	var data []byte
 	data, err = os.ReadFile(path)
 	if err != nil {
-		err = eh.Errorf("unable to read tile file %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("unable to read tile file: %w", err)
 		return
 	}
 

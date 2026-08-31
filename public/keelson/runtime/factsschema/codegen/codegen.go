@@ -43,6 +43,7 @@ import (
 	"github.com/stergiotis/boxer/public/code/synthesis/golang"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	leewayddl "github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -113,7 +114,7 @@ func writeFile(path string, data []byte) (err error) {
 	_ = os.Remove(path)
 	err = os.WriteFile(path, data, 0o644)
 	if err != nil {
-		err = eh.Errorf("codegen: write %q: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("codegen: write: %w", err)
 		return
 	}
 	return

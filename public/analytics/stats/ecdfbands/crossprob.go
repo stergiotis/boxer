@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // CrossingAlgorithmE selects which boundary-crossing-probability
@@ -79,7 +80,7 @@ func CrossingProbability(lower, upper []float64, algo CrossingAlgorithmE) (p flo
 	case CrossingAlgorithmMoscovich:
 		p, err = crossingProbabilityMoscovich(lower, upper)
 	default:
-		err = eh.Errorf("unknown CrossingAlgorithmE value %d", algo)
+		err = eb.Build().Uint8("algo", uint8(algo)).Errorf("unknown CrossingAlgorithmE value")
 	}
 	return
 }

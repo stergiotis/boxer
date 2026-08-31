@@ -38,6 +38,7 @@ import (
 	"github.com/google/pprof/profile"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // fixedColumns are the column names the converter itself emits; a
@@ -122,7 +123,7 @@ func Convert(r io.Reader, opts ...Option) (res Result, err error) {
 			return
 		}
 		if slices.Contains(res.ExtraColumns, col) {
-			err = eh.Errorf("pprofarrow: two sample types sanitize to column name %q", col)
+			err = eb.Build().Str("col", col).Errorf("pprofarrow: two sample types sanitize to column name")
 			return
 		}
 		res.ExtraColumns = append(res.ExtraColumns, col)

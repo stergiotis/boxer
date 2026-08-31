@@ -25,6 +25,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Pool manages a set of clickhouse-local worker processes per the
@@ -63,7 +64,7 @@ func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 		return
 	}
 	if _, statErr := os.Stat(cfg.BinaryPath); statErr != nil {
-		err = eh.Errorf("chlocalpool: binary %s: %w", cfg.BinaryPath, statErr)
+		err = eb.Build().Str("binaryPath", cfg.BinaryPath).Errorf("chlocalpool: binary: %w", statErr)
 		return
 	}
 	p = &Pool{

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
@@ -90,7 +91,7 @@ func Validate(env EnvelopeV1) (err error) {
 		}
 	}
 	if slices.ContainsFunc(env.Patch.Changes, changeHasPlaceholder) {
-		err = eh.Errorf("patch %s: %w", env.Patch.Hash, ErrPlaceholderNodeID)
+		err = eb.Build().Stringer("hash", env.Patch.Hash).Errorf("patch: %w", ErrPlaceholderNodeID)
 		return
 	}
 	return

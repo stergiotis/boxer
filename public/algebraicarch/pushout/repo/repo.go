@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
@@ -276,7 +277,7 @@ func (inst *Repo) Record(ctx context.Context, author, message string, changes []
 			break
 		}
 		if attempt > 16 {
-			err = eh.Errorf("applied patch %s: %w", p.Hash, ErrIdentityExhausted)
+			err = eb.Build().Stringer("hash", p.Hash).Errorf("applied patch: %w", ErrIdentityExhausted)
 			return
 		}
 		p = patch.NewPatch(author, message, deps, shiftPlaceholderIndexes(changes, attempt<<32))
@@ -340,7 +341,7 @@ func (inst *Repo) ApplyEnvelope(ctx context.Context, framed []byte) (h t.PatchHa
 func (inst *Repo) commitPatchLocked(ctx context.Context, p *patch.Patch, framed []byte, info PatchInfo) (err error) {
 	next := inst.g.Clone()
 	if aerr := p.Apply(next); aerr != nil {
-		err = eh.Errorf("apply %s: %w", p.Hash, aerr)
+		err = eb.Build().Stringer("hash", p.Hash).Errorf("apply: %w", aerr)
 		return
 	}
 	if err = inst.st.PutEnvelope(ctx, p.Hash, framed); err != nil {

@@ -29,6 +29,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // tripwireCase is one triple-tuple for engine-fidelity comparison: a
@@ -296,7 +297,7 @@ func (inst *App) tripwireCHMatches(ctx context.Context, alloc memory.Allocator, 
 	col := rec.Column(0)
 	list, ok := col.(*array.List)
 	if !ok {
-		err = eh.Errorf("tripwire unexpected column type %T", col)
+		err = eb.Build().Type("col", col).Errorf("tripwire unexpected column type")
 		return
 	}
 	inner, ok := list.ListValues().(*array.String)

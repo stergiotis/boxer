@@ -3,7 +3,7 @@ package ladingschema
 import (
 	"fmt"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 )
@@ -133,7 +133,7 @@ func CreateTableStatements(p Profile) (stmts []string, err error) {
 		var sql string
 		sql, err = composeCreateTable(DatabaseName+"."+t.name, td, t.opts)
 		if err != nil {
-			err = eh.Errorf("compose %s: %w", t.name, err)
+			err = eb.Build().Str("name", t.name).Errorf("compose: %w", err)
 			return
 		}
 		stmts = append(stmts, sql)
@@ -155,7 +155,7 @@ func composeSnapTable(p Profile) (sql string, err error) {
 	}
 	sql, err = composeCreateTable(DatabaseName+"."+TableNameSnap, td, SnapTableOptions(p))
 	if err != nil {
-		err = eh.Errorf("compose %s: %w", TableNameSnap, err)
+		err = eb.Build().Str("tableNameSnap", TableNameSnap).Errorf("compose: %w", err)
 	}
 	return
 }

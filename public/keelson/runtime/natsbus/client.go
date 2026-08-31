@@ -6,6 +6,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DefaultRequestTimeout bounds Request when Options.RequestTimeout is unset.
@@ -54,7 +55,7 @@ func Connect(opts Options) (inst *Client, err error) {
 	natsOpts = append(natsOpts, opts.ConnectOptions...)
 	nc, cerr := nats.Connect(opts.URL, natsOpts...)
 	if cerr != nil {
-		err = eh.Errorf("natsbus: connect %q: %w", opts.URL, cerr)
+		err = eb.Build().Str("url", opts.URL).Errorf("natsbus: connect: %w", cerr)
 		return
 	}
 	inst = &Client{nc: nc, requestTimeout: opts.RequestTimeout}
@@ -64,7 +65,7 @@ func Connect(opts Options) (inst *Client, err error) {
 func (inst *Client) Publish(subject string, payload []byte) (err error) {
 	err = inst.nc.Publish(subject, payload)
 	if err != nil {
-		err = eh.Errorf("natsbus: publish %q: %w", subject, err)
+		err = eb.Build().Str("subject", subject).Errorf("natsbus: publish: %w", err)
 	}
 	return
 }
@@ -81,7 +82,7 @@ func (inst *Client) Subscribe(subject string, handler app.MsgHandlerFunc) (unsub
 		})
 	})
 	if serr != nil {
-		err = eh.Errorf("natsbus: subscribe %q: %w", subject, serr)
+		err = eb.Build().Str("subject", subject).Errorf("natsbus: subscribe: %w", serr)
 		return
 	}
 	unsubscribe = func() { _ = sub.Unsubscribe() }
@@ -100,7 +101,7 @@ func (inst *Client) RequestWithTimeout(subject string, payload []byte, d time.Du
 	}
 	m, rerr := inst.nc.Request(subject, payload, d)
 	if rerr != nil {
-		err = eh.Errorf("natsbus: request %q: %w", subject, rerr)
+		err = eb.Build().Str("subject", subject).Errorf("natsbus: request: %w", rerr)
 		return
 	}
 	reply = m.Data

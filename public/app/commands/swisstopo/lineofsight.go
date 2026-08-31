@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	swisstopoLib "github.com/stergiotis/boxer/public/science/geo/swisstopo"
 	cli "github.com/urfave/cli/v2"
 )
@@ -138,7 +139,7 @@ func lineOfSightAction(c *cli.Context) (err error) {
 		if csvPath != "" {
 			w, err = os.Create(csvPath)
 			if err != nil {
-				err = eh.Errorf("unable to create CSV file %s: %w", csvPath, err)
+				err = eb.Build().Str("csvPath", csvPath).Errorf("unable to create CSV file: %w", err)
 				return
 			}
 			defer func() {

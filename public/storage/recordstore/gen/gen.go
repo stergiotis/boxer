@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -489,7 +490,7 @@ func (inst Input) write(name string, data []byte) (err error) {
 	}
 	err = os.WriteFile(path, data, 0644)
 	if err != nil {
-		err = eh.Errorf("write %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("write: %w", err)
 	}
 	return
 }

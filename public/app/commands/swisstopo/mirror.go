@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/hmi/progressbar"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	cli "github.com/urfave/cli/v2"
 )
 
@@ -421,7 +422,7 @@ func enumerateTiles(ctx context.Context, pb *progressbar.Bar) (tiles []tileDesc,
 		var data stacResponse
 		data, err = fetchStacPage(ctx, client, url)
 		if err != nil {
-			err = eh.Errorf("unable to fetch STAC page %d: %w", page, err)
+			err = eb.Build().Int("page", page).Errorf("unable to fetch STAC page: %w", err)
 			return
 		}
 		page++
@@ -521,7 +522,7 @@ func fetchStacPage(ctx context.Context, client *http.Client, url string) (data s
 				}
 				continue
 			}
-			err = eh.Errorf("STAC returned status %d: %w", resp.StatusCode, eh.Errorf("unexpected status"))
+			err = eb.Build().Int("statusCode", resp.StatusCode).Errorf("STAC returned status: %w", eh.Errorf("unexpected status"))
 			return
 		}
 

@@ -288,8 +288,7 @@ func (inst *Poller) query(ctx context.Context, ids []string) (rows []processRow,
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(raw))).
-			Errorf("queryprogress: system.processes http %d", resp.StatusCode)
+		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(raw))).Errorf("queryprogress: system.processes http")
 		return
 	}
 	raw, rerr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))

@@ -273,7 +273,7 @@ func SplitTupleElemLW(tag string) (out ParsedTupleElemTag, err error) {
 	case head == TupleMembershipMarker:
 		out.IsMembership = true
 	case strings.HasPrefix(head, "@"):
-		err = eb.Build().Str("tag", tag).Str("token", head).Errorf("unknown `@` marker in tuple element tag (recognised: %s)", TupleMembershipMarker)
+		err = eb.Build().Str("tag", tag).Str("token", head).Str("tupleMembershipMarker", TupleMembershipMarker).Errorf("unknown `@` marker in tuple element tag (recognised:)")
 		return
 	case head == "":
 		err = eb.Build().Str("tag", tag).Errorf("tuple element tag must start with `%s` or `<section>:<column>`", TupleMembershipMarker)

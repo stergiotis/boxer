@@ -848,7 +848,7 @@ func validateResponseFormat(rf *ResponseFormat) (err error) {
 			err = eh.Errorf("openaichat: json_schema response format requires Name and Schema")
 		}
 	default:
-		err = eb.Build().Str("type", rf.Type).Errorf("openaichat: unknown ResponseFormat.Type %q", rf.Type)
+		err = eb.Build().Str("type", rf.Type).Errorf("openaichat: unknown ResponseFormat.Type")
 	}
 	return
 }

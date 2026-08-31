@@ -63,7 +63,7 @@ func (inst *ElevationSampler) buildTileIndex(ctx context.Context) (err error) {
 	var matches []string
 	matches, err = filepath.Glob(pattern)
 	if err != nil {
-		err = eb.Build().Str("tilesDir", inst.tilesDir).Errorf("unable to glob tiles directory %q: %w", inst.tilesDir, err)
+		err = eb.Build().Str("tilesDir", inst.tilesDir).Errorf("unable to glob tiles directory: %w", err)
 		return
 	}
 	for i, path := range matches {
@@ -114,7 +114,7 @@ func (inst *ElevationSampler) loadTile(eKm int32, nKm int32) (pixels []float32, 
 
 	pixels, err = readSwissALTI3DTile(tilePath)
 	if err != nil {
-		err = eh.Errorf("unable to read tile %s: %w", tilePath, err)
+		err = eb.Build().Str("tilePath", tilePath).Errorf("unable to read tile: %w", err)
 		return
 	}
 

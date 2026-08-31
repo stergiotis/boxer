@@ -16,6 +16,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // StageE names a semantic execution point in the life of a SQL statement.
@@ -131,7 +132,7 @@ func (inst *Registry) Register(e Entry) (err error) {
 		return
 	}
 	if e.Pass.Name == "" {
-		err = eh.Errorf("passreg: pass has no name (stage %s)", e.Stage)
+		err = eb.Build().Stringer("stage", e.Stage).Errorf("passreg: pass has no name (stage)")
 		return
 	}
 	if e.Pass.Apply == nil {
@@ -162,7 +163,7 @@ func (inst *Registry) RegisterFactory(f Factory) (err error) {
 		return
 	}
 	if f.Name == "" {
-		err = eh.Errorf("passreg: factory has no name (stage %s)", f.Stage)
+		err = eb.Build().Stringer("stage", f.Stage).Errorf("passreg: factory has no name (stage)")
 		return
 	}
 	if f.Build == nil {

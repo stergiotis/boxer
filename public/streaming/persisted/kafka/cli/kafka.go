@@ -49,6 +49,7 @@ import (
 	cli "github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 )
 
@@ -214,7 +215,7 @@ func buildTLS(c *cli.Context) (enabled bool, cfg *tls.Config, err error) {
 		var caPEM []byte
 		caPEM, err = os.ReadFile(caFile)
 		if err != nil {
-			err = eh.Errorf("read --tls-ca-file %q: %w", caFile, err)
+			err = eb.Build().Str("caFile", caFile).Errorf("read --tls-ca-file: %w", err)
 			return
 		}
 		pool := x509.NewCertPool()
@@ -562,7 +563,7 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 	var n int
 	n, err = strconv.Atoi(lenStr)
 	if err != nil {
-		err = eh.Errorf("invalid netstring length %q: %w", lenStr, err)
+		err = eb.Build().Str("lenStr", lenStr).Errorf("invalid netstring length: %w", err)
 		return
 	}
 	if n < 0 {

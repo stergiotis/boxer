@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // OpenSubject is the audited request/reply subject apps use to open
@@ -60,7 +61,7 @@ func NewOpenService(bus *inprocbus.Inst, host *Inst, log zerolog.Logger) (svc *O
 	})
 	svc.unsub, err = svc.busClient.Subscribe(OpenSubject, svc.handleRequest)
 	if err != nil {
-		err = eh.Errorf("openservice: subscribe %s: %w", OpenSubject, err)
+		err = eb.Build().Str("openSubject", OpenSubject).Errorf("openservice: subscribe: %w", err)
 		return
 	}
 	return

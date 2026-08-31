@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
@@ -232,7 +233,7 @@ func scanFences(src []byte) (fences []fence) {
 func ParseBook(bookID string, fsys fs.FS) (defs []*AppletDef, errs []error) {
 	book, err := help.NewBook(app.AppIdT(appletIdPrefix+"book/"+bookID), fsys)
 	if err != nil {
-		errs = append(errs, eh.Errorf("sqlapplet: book %q: %w", bookID, err))
+		errs = append(errs, eb.Build().Str("bookID", bookID).Errorf("sqlapplet: book: %w", err))
 		return
 	}
 	docs := book.Docs()

@@ -46,6 +46,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // defaultEngine is empty on purpose: an empty clause makes the store apply the
@@ -133,7 +134,7 @@ func readVault(c *cli.Context) (corpus capmapcorpus.Corpus, dir string, err erro
 		}
 	}
 	if corpus, err = capmapcorpus.ParseDir(dir); err != nil {
-		return corpus, dir, eh.Errorf("unable to read vault %q: %w", dir, err)
+		return corpus, dir, eb.Build().Str("dir", dir).Errorf("unable to read vault: %w", err)
 	}
 	return corpus, dir, nil
 }
@@ -302,7 +303,7 @@ func checkOutputDir(dir string, force bool) (err error) {
 		if os.IsNotExist(rErr) {
 			return nil
 		}
-		return eh.Errorf("unable to inspect %q: %w", dir, rErr)
+		return eb.Build().Str("dir", dir).Errorf("unable to inspect: %w", rErr)
 	}
 	if len(entries) > 0 && !force {
 		return eh.Errorf("%q is not empty; a dump adds files and removes none, so its contents would mix with the corpus being written — empty it, name another, or pass --force", dir)

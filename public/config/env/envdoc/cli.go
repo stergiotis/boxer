@@ -42,7 +42,7 @@ func runGenDocs(ctx *cli.Context) (err error) {
 	}
 	err = os.WriteFile(outPath, []byte(body), 0o644)
 	if err != nil {
-		err = eb.Build().Str("outPath", outPath).Errorf("envgen: write %s: %w", outPath, err)
+		err = eb.Build().Str("outPath", outPath).Errorf("envgen: write: %w", err)
 	}
 	return
 }

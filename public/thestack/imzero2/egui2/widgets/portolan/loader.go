@@ -17,6 +17,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // LoaderOptions configures a TileLoader. The zero value is usable: six
@@ -403,7 +404,7 @@ func (l *TileLoader) deliver(req *tileRequest, px []uint32, w, h int, err error)
 func (l *TileLoader) fetch(url string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return nil, eh.Errorf("portolan: bad tile url %q: %w", url, err)
+		return nil, eb.Build().Str("url", url).Errorf("portolan: bad tile url: %w", err)
 	}
 	req.Header.Set("User-Agent", l.opts.UserAgent)
 	resp, err := l.client.Do(req)

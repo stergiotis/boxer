@@ -15,6 +15,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // progress.go is ADR-0115 plane A: live query progress from ClickHouse's
@@ -84,7 +85,7 @@ func (inst *progressTransport) RoundTrip(req *http.Request) (resp *http.Response
 	}
 	conn, err := net.DialTimeout("tcp", host, progressDialTimeout)
 	if err != nil {
-		err = eh.Errorf("chserver: progress transport: dial %q: %w", host, err)
+		err = eb.Build().Str("host", host).Errorf("chserver: progress transport: dial: %w", err)
 		return
 	}
 	// The ctx watcher closes the connection on cancellation — mid-header or
@@ -196,7 +197,7 @@ func readHeaderStreaming(br *bufio.Reader, onProgress func(p runstream.Progress)
 	}
 	proto, rest, ok := strings.Cut(statusLine, " ")
 	if !ok || !strings.HasPrefix(proto, "HTTP/1.") {
-		err = eh.Errorf("malformed status line %q", statusLine)
+		err = eb.Build().Str("statusLine", statusLine).Errorf("malformed status line")
 		return
 	}
 	codeStr, _, _ := strings.Cut(rest, " ")
@@ -225,7 +226,7 @@ func readHeaderStreaming(br *bufio.Reader, onProgress func(p runstream.Progress)
 		}
 		key, value, found := strings.Cut(line, ":")
 		if !found {
-			err = eh.Errorf("malformed header line %q", line)
+			err = eb.Build().Str("line", line).Errorf("malformed header line")
 			return
 		}
 		key = textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(key))

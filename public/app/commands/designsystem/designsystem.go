@@ -18,6 +18,7 @@ import (
 	"os"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/gen"
@@ -282,13 +283,13 @@ func newReviewTourCommand() (cmd *cli.Command) {
 func loadImage(path string) (img image.Image, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		err = eh.Errorf("open %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("open: %w", err)
 		return
 	}
 	defer f.Close()
 	img, _, err = image.Decode(f)
 	if err != nil {
-		err = eh.Errorf("decode %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("decode: %w", err)
 	}
 	return
 }

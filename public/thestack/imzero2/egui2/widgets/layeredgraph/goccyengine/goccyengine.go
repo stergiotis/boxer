@@ -20,6 +20,7 @@ import (
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 )
 
@@ -178,7 +179,7 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 		}
 		gn, err := graph.CreateNodeByName(n.ID)
 		if err != nil {
-			return nil, eh.Errorf("create node %q: %w", n.ID, err)
+			return nil, eb.Build().Str("id", n.ID).Errorf("create node: %w", err)
 		}
 		label := n.Label
 		if label == "" {

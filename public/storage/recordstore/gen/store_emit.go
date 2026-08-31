@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
@@ -409,7 +410,7 @@ func (inst Input) enumeratePlain(info *readback.InformationRetrieval) (m plainMo
 		col.pascal = cr.Name.Convert(naming.UpperCamelCase).String()
 		col.goType, col.isArray, err = fieldGoType(cr.CanonicalType)
 		if err != nil {
-			err = eh.Errorf("derive Go type for plain column %s: %w", col.physical, err)
+			err = eb.Build().Str("physical", col.physical).Errorf("derive Go type for plain column: %w", err)
 			return
 		}
 		gi, ok := byType[it]
@@ -799,13 +800,13 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 	}
 	sc.ids, err = idSrc.PlanMembershipIds(plan)
 	if err != nil {
-		err = eh.Errorf("component %s: resolve membership ids: %w", sc.Kind, err)
+		err = eb.Build().Str("kind", sc.Kind).Errorf("component: resolve membership ids: %w", err)
 		return
 	}
 	g := readback.NewGenerator(info, readback.NewLookupResolver(marshallreflect.MapLookup(sc.ids)))
 	artefacts, err := g.Generate(plan)
 	if err != nil {
-		err = eh.Errorf("component %s: generate read-back artefacts: %w", sc.Kind, err)
+		err = eb.Build().Str("kind", sc.Kind).Errorf("component: generate read-back artefacts: %w", err)
 		return
 	}
 	sc.filter = artefacts.Filter

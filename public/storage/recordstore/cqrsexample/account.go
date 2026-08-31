@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -98,7 +99,7 @@ func (inst *Service) Load(ctx context.Context, id string) (acct *Account, err er
 	}
 	for ev, rerr := range inst.st.Replay(ctx, id, from, recordstore.ReplayOpts{}) {
 		if rerr != nil {
-			err = eh.Errorf("replay %s: %w", id, rerr)
+			err = eb.Build().Str("id", id).Errorf("replay: %w", rerr)
 			return
 		}
 		err = acct.fold(ev)
@@ -162,7 +163,7 @@ func (inst *Service) Deposit(ctx context.Context, id string, amount uint64) (err
 		return
 	}
 	if amount == 0 {
-		err = eh.Errorf("deposit to %s: amount must be positive", id)
+		err = eb.Build().Str("id", id).Errorf("deposit to: amount must be positive")
 		return
 	}
 	return inst.append(ctx, acct, func(b *LedgerEntityBuilder) {
@@ -219,7 +220,7 @@ func (inst *Service) Snapshot(ctx context.Context, id string) (err error) {
 		return
 	}
 	if !acct.exists {
-		err = eh.Errorf("snapshot %s: account does not exist", id)
+		err = eb.Build().Str("id", id).Errorf("snapshot: account does not exist")
 		return
 	}
 	asOf := acct.nextSeq - 1

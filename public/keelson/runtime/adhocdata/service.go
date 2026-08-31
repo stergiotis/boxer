@@ -183,7 +183,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		dir = resolveStoreDir()
 	}
 	if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
-		return nil, eh.Errorf("adhocdata: mkdir store dir %q: %w", dir, mkErr)
+		return nil, eb.Build().Str("dir", dir).Errorf("adhocdata: mkdir store dir: %w", mkErr)
 	}
 	grace := cfg.RetractGrace
 	if grace <= 0 {
@@ -204,7 +204,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 	// Register the keelson('adhoc') catalog over the live dataset table
 	// (ADR-0134 SD6).
 	if regErr := reg.Register(newCatalogProvider(inst)); regErr != nil {
-		return nil, eh.Errorf("adhocdata: register catalog %q: %w", CatalogTableName, regErr)
+		return nil, eb.Build().Str("catalogTableName", CatalogTableName).Errorf("adhocdata: register catalog: %w", regErr)
 	}
 	if cfg.Bus != nil {
 		if subErr := inst.subscribe(cfg.Bus); subErr != nil {
@@ -350,7 +350,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 			inst.mu.Unlock()
 			inst.keys.DeregisterDatasetKey(handle)
 			_ = os.Remove(path)
-			return res, eh.Errorf("adhocdata: register %q: %w", handle, regErr)
+			return res, eb.Build().Str("handle", handle).Errorf("adhocdata: register: %w", regErr)
 		}
 		inst.datasets[handle] = &dataset{
 			handle: handle, alias: in.Alias, publisher: in.Publisher,
@@ -380,7 +380,7 @@ func (inst *Service) Grant(handle string) (res GrantResult, err error) {
 	ds := inst.datasets[handle]
 	if ds == nil {
 		inst.mu.RUnlock()
-		return res, eh.Errorf("adhocdata: unknown handle %q", handle)
+		return res, eb.Build().Str("handle", handle).Errorf("adhocdata: unknown handle")
 	}
 	res = GrantResult{
 		Structure:     ds.structure,
@@ -470,7 +470,7 @@ func (inst *Service) Retract(handle string) (err error) {
 	ds := inst.datasets[handle]
 	if ds == nil {
 		inst.mu.Unlock()
-		return eh.Errorf("adhocdata: unknown handle %q", handle)
+		return eb.Build().Str("handle", handle).Errorf("adhocdata: unknown handle")
 	}
 	delete(inst.datasets, handle)
 	inst.totalBytes -= ds.bytes

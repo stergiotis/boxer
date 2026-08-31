@@ -99,11 +99,11 @@ func ParseRequest(r *http.Request, maxSQLBytes int64) (req Request, err error) {
 		case strings.HasPrefix(key, ParamPrefix):
 			name := key[len(ParamPrefix):]
 			if !validParamName(name) {
-				err = eh.Errorf("chhttp: invalid parameter name %q", key)
+				err = eh.Errorf("chhttp: invalid parameter name %q", key) //boxer:lint disable=CS013 reason="this message is the 400 response body; a field the client cannot read would drop the name"
 				return
 			}
 			if len(values) != 1 {
-				err = eh.Errorf("chhttp: parameter %q given %d times", key, len(values))
+				err = eh.Errorf("chhttp: parameter %q given %d times", key, len(values)) //boxer:lint disable=CS013 reason="this message is the 400 response body; a field the client cannot read would drop the name"
 				return
 			}
 			if req.Params == nil {

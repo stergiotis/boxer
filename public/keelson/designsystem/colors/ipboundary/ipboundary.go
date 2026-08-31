@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Source is one cached published palette.
@@ -39,7 +39,7 @@ type Collision struct {
 func LoadAll(refsDir string) (sources []Source, err error) {
 	entries, err := os.ReadDir(refsDir)
 	if err != nil {
-		err = eh.Errorf("read ip-refs dir %s: %w", refsDir, err)
+		err = eb.Build().Str("refsDir", refsDir).Errorf("read ip-refs dir: %w", err)
 		return
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
@@ -62,13 +62,13 @@ func LoadAll(refsDir string) (sources []Source, err error) {
 func loadOne(path string) (src Source, err error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		err = eh.Errorf("read %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("read: %w", err)
 		return
 	}
 	var raw map[string]string
 	err = json.Unmarshal(b, &raw)
 	if err != nil {
-		err = eh.Errorf("parse %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("parse: %w", err)
 		return
 	}
 	src.Anchors = make(map[string]string, len(raw))

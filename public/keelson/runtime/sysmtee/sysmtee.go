@@ -46,6 +46,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
@@ -193,7 +194,7 @@ func Start(opts Options) (inst *Tee, err error) {
 	}
 	err = inst.consumer.Start()
 	if err != nil {
-		err = eh.Errorf("sysmtee: subscribe %s: %w", opts.Subject, err)
+		err = eb.Build().Str("subject", opts.Subject).Errorf("sysmtee: subscribe: %w", err)
 		inst = nil
 		return
 	}

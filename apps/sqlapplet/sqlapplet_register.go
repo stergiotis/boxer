@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // bookFS embeds the host's own starter book (apps/sqlapplet/book/*.md) —
@@ -210,7 +211,7 @@ func RegisterBook(id string, fsys fs.FS, topics []app.TopicT) (err error) {
 	defer booksMu.Unlock()
 	for _, b := range books {
 		if b.id == id {
-			err = eh.Errorf("sqlapplet: RegisterBook: duplicate book id %q", id)
+			err = eb.Build().Str("id", id).Errorf("sqlapplet: RegisterBook: duplicate book id")
 			return
 		}
 	}
