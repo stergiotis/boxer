@@ -381,22 +381,22 @@ func parseLookupRunStartRow(raw []byte) (row factsstore.RuntimeStartRow, found b
 	}
 	parts := strings.Split(line, "\t")
 	if len(parts) != 9 {
-		err = eh.Errorf("chstore: lookup run start: expected 9 columns, got %d (line=%q)", len(parts), line)
+		err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: lookup run start: expected 9 columns")
 		return
 	}
 	_, perr := strconv.ParseUint(parts[0], 10, 64)
 	if perr != nil {
-		err = eh.Errorf("chstore: lookup run start: parse id %q: %w", parts[0], perr)
+		err = eb.Build().Str("id", parts[0]).Errorf("chstore: lookup run start: parse id: %w", perr)
 		return
 	}
 	tsSec, perr := strconv.ParseInt(parts[1], 10, 64)
 	if perr != nil {
-		err = eh.Errorf("chstore: lookup run start: parse ts %q: %w", parts[1], perr)
+		err = eb.Build().Str("ts", parts[1]).Errorf("chstore: lookup run start: parse ts: %w", perr)
 		return
 	}
 	pid, perr := strconv.ParseInt(parts[7], 10, 64)
 	if perr != nil {
-		err = eh.Errorf("chstore: lookup run start: parse pid %q: %w", parts[7], perr)
+		err = eb.Build().Str("pid", parts[7]).Errorf("chstore: lookup run start: parse pid: %w", perr)
 		return
 	}
 	row = factsstore.RuntimeStartRow{
@@ -425,22 +425,22 @@ func parseLifecyclesByRunRows(raw []byte) (rows []factsstore.AppLifecycleRow, er
 		}
 		parts := strings.Split(line, "\t")
 		if len(parts) != 7 {
-			err = eh.Errorf("chstore: lifecycles by run: expected 7 columns, got %d (line=%q)", len(parts), line)
+			err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: lifecycles by run: expected 7 columns")
 			return
 		}
 		_, perr := strconv.ParseUint(parts[0], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: lifecycles by run: parse id %q: %w", parts[0], perr)
+			err = eb.Build().Str("id", parts[0]).Errorf("chstore: lifecycles by run: parse id: %w", perr)
 			return
 		}
 		tsSec, perr := strconv.ParseInt(parts[1], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: lifecycles by run: parse ts %q: %w", parts[1], perr)
+			err = eb.Build().Str("ts", parts[1]).Errorf("chstore: lifecycles by run: parse ts: %w", perr)
 			return
 		}
 		tileKey, perr := strconv.ParseUint(parts[6], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: lifecycles by run: parse tile_key %q: %w", parts[6], perr)
+			err = eb.Build().Str("tileKey", parts[6]).Errorf("chstore: lifecycles by run: parse tile_key: %w", perr)
 			return
 		}
 		phaseStr := unescapeTabSeparated(parts[4])

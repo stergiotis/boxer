@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // LogFilter narrows the rows returned by RecentLogs. Every field is
@@ -216,19 +217,19 @@ func parseRecentLogsRows(raw []byte) (rows []factsstore.LogRow, err error) {
 		}
 		parts := strings.Split(line, "\t")
 		if len(parts) != 9 {
-			err = eh.Errorf("chstore: recent logs: expected 9 columns, got %d (line=%q)", len(parts), line)
+			err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: recent logs: expected 9 columns")
 			return
 		}
 		// parts[0] = id (uint64) — not currently surfaced on LogRow;
 		// kept in the SELECT for future ordering / pagination work.
 		_, perr := strconv.ParseUint(parts[0], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: recent logs: parse id %q: %w", parts[0], perr)
+			err = eb.Build().Str("id", parts[0]).Errorf("chstore: recent logs: parse id: %w", perr)
 			return
 		}
 		tsSec, perr := strconv.ParseInt(parts[1], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: recent logs: parse ts %q: %w", parts[1], perr)
+			err = eb.Build().Str("ts", parts[1]).Errorf("chstore: recent logs: parse ts: %w", perr)
 			return
 		}
 		row := factsstore.LogRow{

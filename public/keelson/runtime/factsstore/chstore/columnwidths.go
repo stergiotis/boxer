@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Physical column names for the f64 section. Read off the live table
@@ -202,22 +203,22 @@ func parseListColumnWidthsRows(appId app.AppIdT, raw []byte) (rows []factsstore.
 		}
 		parts := strings.Split(line, "\t")
 		if len(parts) != 6 {
-			err = eh.Errorf("chstore: list column widths: expected 6 columns, got %d (line=%q)", len(parts), line)
+			err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: list column widths: expected 6 columns")
 			return
 		}
 		points, perr := strconv.ParseFloat(parts[3], 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: list column widths: parse points %q: %w", parts[3], perr)
+			err = eb.Build().Str("points", parts[3]).Errorf("chstore: list column widths: parse points: %w", perr)
 			return
 		}
 		fontSize, perr := strconv.ParseFloat(parts[4], 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: list column widths: parse font_size %q: %w", parts[4], perr)
+			err = eb.Build().Str("fontSize", parts[4]).Errorf("chstore: list column widths: parse font_size: %w", perr)
 			return
 		}
 		tsSec, perr := strconv.ParseInt(parts[5], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: list column widths: parse ts %q: %w", parts[5], perr)
+			err = eb.Build().Str("ts", parts[5]).Errorf("chstore: list column widths: parse ts: %w", perr)
 			return
 		}
 		rows = append(rows, factsstore.ColumnWidthRow{

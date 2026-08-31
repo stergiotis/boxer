@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 )
 
@@ -345,7 +346,7 @@ func (inst *Store) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err error)
 		ids[i] = id
 		inst.encodeLogEntity(ent, id, rows[i])
 		if cErr := ent.CommitEntity(); cErr != nil {
-			err = eh.Errorf("chstore: write logs: commit entity %d: %w", i, cErr)
+			err = eb.Build().Int("entity", i).Errorf("chstore: write logs: commit entity: %w", cErr)
 			return
 		}
 	}
