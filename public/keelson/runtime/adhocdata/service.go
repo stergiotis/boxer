@@ -277,14 +277,14 @@ func (inst *Service) unloadDataset(ds *dataset) {
 // and swaps the file/key in place under the same handle.
 func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	if !validAlias(in.Alias) {
-		return res, eh.Errorf("adhocdata: invalid alias %q (want [A-Za-z_][A-Za-z0-9_]*, <=64)", in.Alias)
+		return res, eb.Build().Str("alias", in.Alias).Errorf("adhocdata: invalid alias (want [A-Za-z_][A-Za-z0-9_]*, <=64)")
 	}
 	schema, structure, plaintext, rows, err := canonicalize(in.ArrowIPCStream)
 	if err != nil {
 		return res, err
 	}
 	if uint64(len(plaintext)) > PerDatasetMaxBytes {
-		return res, eh.Errorf("adhocdata: dataset exceeds per-dataset quota (%d bytes)", PerDatasetMaxBytes)
+		return res, eb.Build().Int("quotaBytes", PerDatasetMaxBytes).Errorf("adhocdata: dataset exceeds the per-dataset quota")
 	}
 
 	// Resolve the handle and reserve quota under the lock; encrypt outside.
@@ -295,7 +295,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		existing = inst.datasets[handle]
 		if existing == nil {
 			inst.mu.Unlock()
-			return res, eh.Errorf("adhocdata: unknown handle %q to republish", handle)
+			return res, eb.Build().Str("handle", handle).Errorf("adhocdata: unknown handle to republish")
 		}
 	} else {
 		handle, err = inst.mintHandleLocked()
@@ -505,7 +505,7 @@ func (inst *Service) checkQuotaLocked(existing *dataset, newBytes uint64) (err e
 		count++
 	}
 	if count > MaxDatasets {
-		return eh.Errorf("adhocdata: dataset count quota (%d) exceeded", MaxDatasets)
+		return eb.Build().Int("quota", MaxDatasets).Errorf("adhocdata: dataset count quota exceeded")
 	}
 	total := inst.totalBytes
 	if existing != nil {
@@ -513,7 +513,7 @@ func (inst *Service) checkQuotaLocked(existing *dataset, newBytes uint64) (err e
 	}
 	total += newBytes
 	if total > StoreMaxBytes {
-		return eh.Errorf("adhocdata: store byte quota (%d) exceeded", StoreMaxBytes)
+		return eb.Build().Int("quotaBytes", StoreMaxBytes).Errorf("adhocdata: store byte quota exceeded")
 	}
 	return nil
 }

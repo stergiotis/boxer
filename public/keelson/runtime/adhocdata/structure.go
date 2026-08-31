@@ -117,7 +117,7 @@ func chTypeFor(dt arrow.DataType, nullable bool, colName string) (chType string,
 func arrayTypeFor(dt arrow.DataType, colName string) (chType string, err error) {
 	ll, ok := dt.(arrow.ListLikeType)
 	if !ok {
-		return "", eh.Errorf("adhocdata: column %q: list type %s exposes no element field", colName, dt)
+		return "", eb.Build().Str("colName", colName).Stringer("dataType", dt).Errorf("adhocdata: column: list type exposes no element field")
 	}
 	elem := ll.ElemField()
 	inner, err := chTypeFor(elem.Type, elem.Nullable, colName)
@@ -243,10 +243,10 @@ func scalarTypeFor(dt arrow.DataType, colName string) (chType string, err error)
 		case "":
 			chType = "DateTime64(" + prec + ")"
 		default:
-			return "", eh.Errorf("adhocdata: column %q: timestamp timezone must be UTC or empty (naive), got %q", colName, ts.TimeZone)
+			return "", eb.Build().Str("colName", colName).Str("timeZone", ts.TimeZone).Errorf("adhocdata: column timestamp timezone must be UTC or empty (naive)")
 		}
 	default:
-		return "", eh.Errorf("adhocdata: column %q: arrow type %s is not in the supported set", colName, dt)
+		return "", eb.Build().Str("colName", colName).Stringer("dataType", dt).Errorf("adhocdata: column: arrow type is not in the supported set")
 	}
 	return
 }
@@ -261,7 +261,7 @@ func checkColumnName(name, col string) (err error) {
 		return eb.Build().Str("col", col).Errorf("adhocdata: column: a column or nested field name may not be empty")
 	}
 	if len(name) > maxColumnNameLen {
-		return eh.Errorf("adhocdata: column %q: name %q exceeds %d bytes", col, name, maxColumnNameLen)
+		return eb.Build().Str("col", col).Str("name", name).Int("maxColumnNameLen", maxColumnNameLen).Errorf("adhocdata: column name is longer than the limit")
 	}
 	return nil
 }

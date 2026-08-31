@@ -32,6 +32,7 @@ import (
 	"io"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 const (
@@ -87,11 +88,11 @@ func NewWriter(w io.Writer, key []byte) (inst *Writer, err error) {
 // with any chunk size read back correctly.
 func newWriterChunk(w io.Writer, key []byte, chunkSize int) (inst *Writer, err error) {
 	if len(key) != KeySize {
-		err = eh.Errorf("adhocdata: key must be %d bytes, got %d", KeySize, len(key))
+		err = eb.Build().Int("want", KeySize).Int("got", len(key)).Errorf("adhocdata: key has the wrong length")
 		return
 	}
 	if chunkSize <= 0 || chunkSize > maxChunkSize {
-		err = eh.Errorf("adhocdata: chunk size %d out of range (1..%d)", chunkSize, maxChunkSize)
+		err = eb.Build().Int("chunkSize", chunkSize).Int("max", maxChunkSize).Errorf("adhocdata: chunk size out of range")
 		return
 	}
 	aead, err := newGCM(key)
@@ -195,7 +196,7 @@ type Reader struct {
 // It reads and authenticates the header eagerly.
 func NewReader(r io.Reader, key []byte) (inst *Reader, err error) {
 	if len(key) != KeySize {
-		err = eh.Errorf("adhocdata: key must be %d bytes, got %d", KeySize, len(key))
+		err = eb.Build().Int("want", KeySize).Int("got", len(key)).Errorf("adhocdata: key has the wrong length")
 		return
 	}
 	aead, err := newGCM(key)
@@ -254,7 +255,7 @@ func (inst *Reader) fill() (err error) {
 	}
 	ctLen := binary.LittleEndian.Uint32(lenBuf[:])
 	if ctLen < tagSize || int(ctLen) > inst.chunkSize+tagSize {
-		return eh.Errorf("adhocdata: chunk length %d out of range", ctLen)
+		return eb.Build().Uint32("ctLen", ctLen).Errorf("adhocdata: chunk length out of range")
 	}
 	ct := make([]byte, ctLen)
 	if _, err = io.ReadFull(inst.br, ct); err != nil {
@@ -275,7 +276,7 @@ func (inst *Reader) fill() (err error) {
 		return eh.Errorf("adhocdata: authenticate chunk: %w", err)
 	}
 	if !final && len(plain) != inst.chunkSize {
-		return eh.Errorf("adhocdata: malformed non-final chunk: %d plaintext bytes, want %d", len(plain), inst.chunkSize)
+		return eb.Build().Int("got", len(plain)).Int("want", inst.chunkSize).Errorf("adhocdata: malformed non-final chunk")
 	}
 	inst.plain = plain
 	inst.off = 0
@@ -335,12 +336,12 @@ func readHeader(r io.Reader) (chunkSize int, aad []byte, err error) {
 		return
 	}
 	if hdr[len(magic)] != formatVersion {
-		err = eh.Errorf("adhocdata: unsupported format version %d", hdr[len(magic)])
+		err = eb.Build().Uint8("version", hdr[len(magic)]).Errorf("adhocdata: unsupported format version")
 		return
 	}
 	cs := binary.LittleEndian.Uint32(hdr[len(magic)+1:])
 	if cs == 0 || cs > maxChunkSize {
-		err = eh.Errorf("adhocdata: chunk size %d out of range", cs)
+		err = eb.Build().Uint32("chunkSize", cs).Errorf("adhocdata: chunk size out of range")
 		return
 	}
 	chunkSize = int(cs)

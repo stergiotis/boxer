@@ -53,7 +53,7 @@ type aeadOpener interface {
 // first touched.
 func NewSeekableReader(ra io.ReaderAt, size int64, key []byte) (inst *SeekableReader, err error) {
 	if len(key) != KeySize {
-		err = eh.Errorf("adhocdata: key must be %d bytes, got %d", KeySize, len(key))
+		err = eb.Build().Int("want", KeySize).Int("got", len(key)).Errorf("adhocdata: key has the wrong length")
 		return
 	}
 	aead, err := newGCM(key)
@@ -75,7 +75,7 @@ func NewSeekableReader(ra io.ReaderAt, size int64, key []byte) (inst *SeekableRe
 	nFull := (t - minCt) / fullCt
 	finalPlain := t - nFull*fullCt - minCt
 	if finalPlain < 0 || finalPlain > cs {
-		err = eh.Errorf("adhocdata: ciphertext size %d does not fit the chunk geometry", size)
+		err = eb.Build().Int64("size", size).Errorf("adhocdata: ciphertext size does not fit the chunk geometry")
 		return
 	}
 	inst = &SeekableReader{
@@ -156,7 +156,7 @@ func (inst *SeekableReader) load(idx int64) (err error) {
 	}
 	ctLen := int64(binary.LittleEndian.Uint32(lenBuf[:]))
 	if ctLen != wantPlain+tagSize {
-		return eh.Errorf("adhocdata: chunk %d length %d, geometry wants %d", idx, ctLen, wantPlain+tagSize)
+		return eb.Build().Int64("chunk", idx).Int64("length", ctLen).Int64("want", wantPlain+tagSize).Errorf("adhocdata: chunk length does not match the geometry")
 	}
 	if int64(cap(inst.ctBuf)) < ctLen {
 		inst.ctBuf = make([]byte, ctLen)
