@@ -517,6 +517,7 @@ func TestCS012_PassesGoodFile(t *testing.T) {
 		t.Fatalf("unexpected finding: %+v", f)
 	}
 }
+
 func TestCS013_FlagsNonWrapVerbs(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs013/bad")
 	require.NoError(t, err)
@@ -568,5 +569,21 @@ func TestCS013_PassesGoodFile(t *testing.T) {
 	for f, runErr := range linter.Run(pkgs) {
 		require.NoError(t, runErr)
 		t.Fatalf("unexpected finding: %+v", f)
+	}
+}
+
+func TestIsTestSupportPackage(t *testing.T) {
+	for _, name := range []string{
+		"exchangetest", "storagetest", "pcmtest", "codectest",
+		"genbuildertest", "stashtest", "unittest", "test",
+		"codelint_test", // external test form; only present when Tests is set
+	} {
+		assert.True(t, codelint.IsTestSupportPackage(name), name)
+	}
+	for _, name := range []string{
+		"codelint", "eh", "eb", "leeway", "play", "recordstore", "", "testdata",
+		"testing", "latest", "greatest", "protest", "manifest",
+	} {
+		assert.False(t, codelint.IsTestSupportPackage(name), name)
 	}
 }

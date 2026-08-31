@@ -52,6 +52,9 @@ func (inst *Linter) Register(r RuleI) {
 // Run executes every registered rule against the supplied packages and
 // yields findings as they are produced. Suppression directives are
 // applied before yielding.
+//
+// Test-support packages are skipped for every rule — see
+// IsTestSupportPackage.
 func (inst *Linter) Run(pkgs []*packages.Package) iter.Seq2[Finding, error] {
 	return func(yield func(Finding, error) bool) {
 		for _, r := range inst.rules {
@@ -60,6 +63,9 @@ func (inst *Linter) Run(pkgs []*packages.Package) iter.Seq2[Finding, error] {
 			sev := r.DefaultSeverity()
 			for _, pkg := range pkgs {
 				if pkg.Types == nil || pkg.TypesInfo == nil {
+					continue
+				}
+				if IsTestSupportPackage(pkg.Name) {
 					continue
 				}
 				diags, perr := runAnalyzer(analyzer, pkg)
