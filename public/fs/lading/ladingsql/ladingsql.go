@@ -395,7 +395,7 @@ func (inst Config) scopeMount(mount mountArg) (out mountArg, err error) {
 	if !mount.all {
 		if inst.Visibility == nil || !inst.Visibility.VisibleMount(mount.id) {
 			err = eb.Build().Uint64("mount", mount.id.Value()).
-				Errorf("mount %d is not visible to this caller", mount.id.Value())
+				Errorf("mount is not visible to this caller")
 		}
 		return
 	}
@@ -522,23 +522,23 @@ type snapshotArg struct {
 func callArgs(e *env.Environment, fn *grammar1.TableFunctionExprContext) (mount mountArg, snap snapshotArg, err error) {
 	al := fn.TableArgList()
 	if al == nil {
-		err = eh.Errorf("%s() needs a mount id", callName(fn))
+		err = eb.Build().Str("call", callName(fn)).Errorf("the call needs a mount id")
 		return
 	}
 	args := al.AllTableArgExpr()
 	if len(args) < 1 || len(args) > 2 {
-		err = eb.Build().Int("args", len(args)).
-			Errorf("%s() takes a mount id and an optional snapshot, got %d arguments", callName(fn), len(args))
+		err = eb.Build().Str("call", callName(fn)).Int("args", len(args)).
+			Errorf("the call takes a mount id and an optional snapshot")
 		return
 	}
 
 	raw, isString, ok, aerr := argValue(e, args[0])
 	if aerr != nil {
-		err = eh.Errorf("%s() mount: %w", callName(fn), aerr)
+		err = eb.Build().Str("call", callName(fn)).Errorf("mount argument: %w", aerr)
 		return
 	}
 	if !ok {
-		err = eh.Errorf("%s() mount must be a literal id or a bound {name:Type} slot, not an expression", callName(fn))
+		err = eb.Build().Str("call", callName(fn)).Errorf("mount must be a literal id or a bound {name:Type} slot, not an expression")
 		return
 	}
 	if isString && raw == AllMounts {
@@ -546,13 +546,13 @@ func callArgs(e *env.Environment, fn *grammar1.TableFunctionExprContext) (mount 
 	} else {
 		value, perr := parseMountID(raw, isString)
 		if perr != nil {
-			err = eh.Errorf("%s(): %w", callName(fn), perr)
+			err = eb.Build().Str("call", callName(fn)).Errorf("call failed: %w", perr)
 			return
 		}
 		mount.id = value
 		if !mount.id.IsValid() {
-			err = eb.Build().Uint64("mount", mount.id.Value()).
-				Errorf("%s() mount id is not a valid tagged id", callName(fn))
+			err = eb.Build().Str("call", callName(fn)).Uint64("mount", mount.id.Value()).
+				Errorf("mount id is not a valid tagged id")
 			return
 		}
 	}
@@ -563,11 +563,11 @@ func callArgs(e *env.Environment, fn *grammar1.TableFunctionExprContext) (mount 
 	}
 	raw, isString, ok, aerr = argValue(e, args[1])
 	if aerr != nil {
-		err = eh.Errorf("%s() snapshot: %w", callName(fn), aerr)
+		err = eb.Build().Str("call", callName(fn)).Errorf("snapshot argument: %w", aerr)
 		return
 	}
 	if !ok {
-		err = eh.Errorf("%s() snapshot must be a literal or a bound {name:Type} slot, not an expression", callName(fn))
+		err = eb.Build().Str("call", callName(fn)).Errorf("snapshot must be a literal or a bound {name:Type} slot, not an expression")
 		return
 	}
 	switch {
@@ -581,8 +581,8 @@ func callArgs(e *env.Environment, fn *grammar1.TableFunctionExprContext) (mount 
 		var nanos uint64
 		nanos, err = strconv.ParseUint(raw, 10, 64)
 		if err != nil {
-			err = eb.Build().Str("arg", raw).
-				Errorf("%s() snapshot must be '*', a datetime literal or Unix nanoseconds", callName(fn))
+			err = eb.Build().Str("call", callName(fn)).Str("arg", raw).
+				Errorf("snapshot must be '*', a datetime literal or Unix nanoseconds")
 			return
 		}
 		snap.expr = fmt.Sprintf("fromUnixTimestamp64Nano(toInt64(%d), 'UTC')", nanos)
@@ -600,10 +600,10 @@ func parseMountID(raw string, isString bool) (mount identifier.TaggedId, err err
 	value, perr := strconv.ParseUint(text, base, 64)
 	if perr != nil {
 		if isString {
-			err = eb.Build().Str("arg", raw).Errorf("mount id %q is not a number; a mount is addressed by its id, and name-as-sugar is not implemented", raw)
+			err = eb.Build().Str("arg", raw).Errorf("mount id is not a number; a mount is addressed by its id, and name-as-sugar is not implemented")
 			return
 		}
-		err = eb.Build().Str("arg", raw).Errorf("mount id %q is not a number", raw)
+		err = eb.Build().Str("arg", raw).Errorf("mount id is not a number")
 		return
 	}
 	mount = identifier.TaggedId(value)
@@ -641,7 +641,7 @@ func argValue(e *env.Environment, arg grammar1.ITableArgExprContext) (raw string
 		}
 	}
 	if bound.Raw == "" {
-		err = eb.Build().Str("slot", name).Errorf("%w: {%s} — SET param_%s = … in the prelude, or write the value", ErrUnboundSlot, name, name)
+		err = eb.Build().Str("slot", name).Errorf("%w — SET param_<slot> = … in the prelude, or write the value", ErrUnboundSlot)
 		return
 	}
 	text := bound.Raw
