@@ -104,7 +104,7 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		err = eh.Errorf("unable to compose go imports: %w", err)
 		return
 	}
-	_, err = s.WriteString("\n)\nvar _ = time.Time{}")
+	_, err = s.WriteString("\n)\nvar _ = time.Time{}\nvar _ = log.Logger")
 	if err != nil {
 		return
 	}
