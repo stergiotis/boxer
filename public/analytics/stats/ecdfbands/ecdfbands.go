@@ -114,20 +114,20 @@ type GridBand struct {
 // the family's "rank-n" tail bound and the upper edge is 1.
 func BandsForGrid(xs, fnAt []float64, n int, alpha float64, method BandMethodE) (b GridBand, err error) {
 	if len(xs) != len(fnAt) {
-		err = eh.Errorf("xs and fnAt length mismatch (%d vs %d)", len(xs), len(fnAt))
+		err = eb.Build().Int("xsLen", len(xs)).Int("fnAtLen", len(fnAt)).Errorf("xs and fnAt length mismatch")
 		return
 	}
 	if n <= 0 {
-		err = eh.Errorf("n must be positive, got %d", n)
+		err = eb.Build().Int("n", n).Errorf("n must be positive")
 		return
 	}
 	for i, v := range fnAt {
 		if math.IsNaN(v) || v < 0 || v > 1 {
-			err = eh.Errorf("fnAt[%d] out of [0,1]: %v", i, v)
+			err = eb.Build().Int("index", i).Float64("value", v).Errorf("fnAt out of [0,1]")
 			return
 		}
 		if i > 0 && v < fnAt[i-1] {
-			err = eh.Errorf("fnAt not monotone at i=%d (%v < %v)", i, v, fnAt[i-1])
+			err = eb.Build().Int("index", i).Float64("value", v).Float64("previous", fnAt[i-1]).Errorf("fnAt not monotone")
 			return
 		}
 	}
@@ -180,24 +180,24 @@ func BandsForGrid(xs, fnAt []float64, n int, alpha float64, method BandMethodE) 
 // is the sample size F_n was built on.
 func DkwBandForGrid(xs, fnAt []float64, n int, alpha float64) (b GridBand, err error) {
 	if len(xs) != len(fnAt) {
-		err = eh.Errorf("xs and fnAt length mismatch (%d vs %d)", len(xs), len(fnAt))
+		err = eb.Build().Int("xsLen", len(xs)).Int("fnAtLen", len(fnAt)).Errorf("xs and fnAt length mismatch")
 		return
 	}
 	if n <= 0 {
-		err = eh.Errorf("n must be positive, got %d", n)
+		err = eb.Build().Int("n", n).Errorf("n must be positive")
 		return
 	}
 	if alpha <= 0 || alpha >= 1 || math.IsNaN(alpha) {
-		err = eh.Errorf("alpha must lie strictly inside (0, 1), got %v", alpha)
+		err = eb.Build().Float64("alpha", alpha).Errorf("alpha must lie strictly inside (0, 1)")
 		return
 	}
 	for i, v := range fnAt {
 		if math.IsNaN(v) || v < 0 || v > 1 {
-			err = eh.Errorf("fnAt[%d] out of [0,1]: %v", i, v)
+			err = eb.Build().Int("index", i).Float64("value", v).Errorf("fnAt out of [0,1]")
 			return
 		}
 		if i > 0 && v < fnAt[i-1] {
-			err = eh.Errorf("fnAt not monotone at i=%d (%v < %v)", i, v, fnAt[i-1])
+			err = eb.Build().Int("index", i).Float64("value", v).Float64("previous", fnAt[i-1]).Errorf("fnAt not monotone")
 			return
 		}
 	}
@@ -278,11 +278,11 @@ func WarmBand(ctx context.Context, n int, alpha float64, method BandMethodE, onP
 func validateSorted(sorted []float64) (err error) {
 	for i, x := range sorted {
 		if math.IsNaN(x) {
-			err = eh.Errorf("NaN in sample at i=%d", i)
+			err = eb.Build().Int("index", i).Errorf("NaN in sample")
 			return
 		}
 		if i > 0 && x < sorted[i-1] {
-			err = eh.Errorf("sample not sorted at i=%d (%v < %v)", i, x, sorted[i-1])
+			err = eb.Build().Int("index", i).Float64("value", x).Float64("previous", sorted[i-1]).Errorf("sample not sorted")
 			return
 		}
 	}
