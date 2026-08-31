@@ -517,3 +517,56 @@ func TestCS012_PassesGoodFile(t *testing.T) {
 		t.Fatalf("unexpected finding: %+v", f)
 	}
 }
+func TestCS013_FlagsNonWrapVerbs(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs013/bad")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS013())
+
+	var findings []codelint.Finding
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		findings = append(findings, f)
+	}
+
+	require.Len(t, findings, 6, "expected 6 unsuppressed CS013 findings (suppressed one omitted)")
+	for _, f := range findings {
+		assert.Equal(t, "CS013", f.RuleId)
+		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Contains(t, f.Path, "bad.go")
+	}
+
+	// The message names the offending verbs, so a reader knows which values
+	// have to move onto the builder.
+	byLine := make(map[int32]string, len(findings))
+	for _, f := range findings {
+		byLine[f.Line] = f.Message
+	}
+	assert.Contains(t, byLine[11], "%q, %d")
+	assert.Contains(t, byLine[11], "eh.Errorf")
+	assert.Contains(t, byLine[21], "eb.Build()…Errorf")
+	assert.Contains(t, byLine[35], "eh.ErrorfWithData")
+	assert.Contains(t, byLine[43], "%s")
+}
+
+func TestCS013_PassesGoodFile(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs013/good")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS013())
+
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		t.Fatalf("unexpected finding: %+v", f)
+	}
+}
