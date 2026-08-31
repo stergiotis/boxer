@@ -67,8 +67,7 @@ func appendHeader(dst []byte, spec headerSpec) (out []byte, rf64 bool, err error
 	if blockAlign > int64(^uint16(0)) {
 		return dst, false, eb.Build().
 			Int64("blockAlign", blockAlign).
-			Uint16("channels", spec.format.Channels).
-			Errorf("frame of %d bytes is wider than the block-align field", blockAlign)
+			Uint16("channels", spec.format.Channels).Errorf("frame of bytes is wider than the block-align field")
 	}
 	dataSize := spec.dataSize()
 	pad := dataSize & 1

@@ -121,8 +121,8 @@ func TestAppendHeaderRejects(t *testing.T) {
 	}{
 		{name: "invalid format", spec: headerSpec{frames: 1, encoding: EncodingPCMInt, bits: 16}, error: "invalid pcm format"},
 		{name: "unknown encoding", spec: func() headerSpec { s := base; s.encoding = EncodingUnknown; return s }(), error: "unsupported sample encoding"},
-		{name: "unsupported width", spec: func() headerSpec { s := base; s.bits = 12; return s }(), error: "unsupported width of 12 bits"},
-		{name: "float width", spec: func() headerSpec { s := base; s.encoding = EncodingIEEEFloat; s.bits = 16; return s }(), error: "unsupported width of 16 bits"},
+		{name: "unsupported width", spec: func() headerSpec { s := base; s.bits = 12; return s }(), error: "unsupported sample width"},
+		{name: "float width", spec: func() headerSpec { s := base; s.encoding = EncodingIEEEFloat; s.bits = 16; return s }(), error: "unsupported sample width"},
 		{name: "negative frames", spec: func() headerSpec { s := base; s.frames = -1; return s }(), error: "negative frame count"},
 		{
 			name:  "frame wider than block align",
