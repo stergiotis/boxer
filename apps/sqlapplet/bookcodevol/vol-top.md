@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Biggest dependencies
+summary: "Chart the modules taking the most room in the binary"
 icon: "📊"
 endpoint: introspection
 tabs: [chart, table]

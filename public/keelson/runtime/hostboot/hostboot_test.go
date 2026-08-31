@@ -50,6 +50,7 @@ func newTestRegistry(t *testing.T) (reg *app.Registry) {
 		Display:    "seeded",
 		Title:      "seeded",
 		Topics:     []app.TopicT{app.TopicRuntime},
+		Summary:    "fixture summary",
 		Surface:    app.SurfaceWindowed,
 		LaunchKind: testCfgKind,
 	}
@@ -60,6 +61,7 @@ func newTestRegistry(t *testing.T) (reg *app.Registry) {
 		Display: "plain",
 		Title:   "plain",
 		Topics:  []app.TopicT{app.TopicRuntime},
+		Summary: "fixture summary",
 		Surface: app.SurfaceWindowed,
 	}
 	require.NoError(t, reg.Register(&seedApp{manifest: plain}))

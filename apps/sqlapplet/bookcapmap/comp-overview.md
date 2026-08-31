@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Competence overview
+summary: "Count what the competence vault holds and how much is judged"
 icon: "🗂"
 endpoint: introspection
 tabs: [table]

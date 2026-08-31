@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Socket owners
+summary: "Join listening sockets to the processes that own them"
 icon: "🔌"
 endpoint: introspection
 tabs: [table, detail]

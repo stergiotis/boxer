@@ -20,6 +20,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Terrain scope",
 	Title:    "Terrain scope — swissALTI3D line-of-sight",
+	Summary:  "Compute swissALTI3D line-of-sight between two points",
 	Icon:     icons.PhMountains,
 	Topics:   []app.TopicT{app.TopicGeo},
 	Keywords: []string{"terrain", "elevation", "line of sight", "viewshed", "swisstopo"},

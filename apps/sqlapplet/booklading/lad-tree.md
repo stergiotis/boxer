@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Browse a snapshot
+summary: "Browse a whole snapshot as a tree or an outline"
 icon: "🗂️"
 endpoint: default
 tabs: [files, detail@side]

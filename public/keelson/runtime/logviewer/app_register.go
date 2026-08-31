@@ -22,6 +22,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "Log viewer",
 	Title:    "Log Viewer",
+	Summary:  "Read this run's log lines, filtered by level and app",
 	Icon:     icons.PhScroll,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicRuntime, runtimeapp.TopicObservability},
 	Keywords: []string{"log", "logs", "zerolog", "trace", "level"},

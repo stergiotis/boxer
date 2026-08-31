@@ -38,6 +38,7 @@ type: reference
 audience: end-user
 status: draft
 title: Runtime environment
+summary: "Query the env-var registry with the values in force"
 icon: "🌡"
 endpoint: introspection
 tabs: [table, detail]
@@ -61,9 +62,16 @@ WHERE name LIKE {pattern:String}
 
 The rules, all enforced by the same gate everywhere:
 
-- **`title` is required**; `icon` is optional (one glyph). The
+- **`title` and `summary` are required**; `icon` is optional (one glyph). The
   documentation-standard keys (`type`, `audience`, `status`) keep the
   help-book conformance check quiet.
+- **`summary`** is the one line the launcher renders under the title
+  ([ADR-0214](../adr/0214-launcher-as-app-summary-detail-recall.md)). Its job
+  is to tell this applet from the others in its book, so write what a reader
+  choosing between them needs: verb-first, one clause, around 60 characters,
+  no full stop, and never opening with the title again. It is not the body's
+  first paragraph — that one introduces a document someone has already
+  opened.
 - The **first role-less `sql` fence is the buffer**, and it must stay
   pasteable-complete: paste it into the playground, press Run, and you have
   the applet. Later role-less fences are prose examples; a `sql bands`

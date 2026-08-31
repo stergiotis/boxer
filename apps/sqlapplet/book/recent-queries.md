@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Recent queries
+summary: "List the server's most recently completed queries"
 icon: "🕘"
 tabs: [table, detail]
 ---

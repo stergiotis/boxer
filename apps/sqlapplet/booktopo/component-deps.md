@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Component dependencies
+summary: "Draw the declared component needs graph and its closure"
 icon: "⛓"
 endpoint: introspection
 tabs: [network, table]

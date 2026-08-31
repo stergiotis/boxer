@@ -22,6 +22,7 @@ var manifest = app.Manifest{
 	Version: "0.1.0",
 	Display: "Capability inspector",
 	Title:   "Capability inspector",
+	Summary: "Inspect the capability subjects each app declares",
 	// Phosphor plug — the capability-inspector metaphor (plugged-in
 	// runtime introspection); rendered from the Phosphor icon font
 	// registered at carousel startup (ADR-0044).

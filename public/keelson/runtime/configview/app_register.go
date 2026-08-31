@@ -20,6 +20,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Config inspector",
 	Title:    "Config inspector",
+	Summary:  "Inspect the env-var registry and the values in force",
 	Icon:     icons.PhGear,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"config", "env", "environment", "settings", "flags"},

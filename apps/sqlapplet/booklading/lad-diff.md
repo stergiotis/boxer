@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Compare two snapshots
+summary: "Join two snapshots on path to classify every change"
 icon: "🔀"
 endpoint: default
 tabs: [table]

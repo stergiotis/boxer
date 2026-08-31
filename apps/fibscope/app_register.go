@@ -17,6 +17,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Fibscope",
 	Title:    "Fibscope — fibonacci-tagged id explorer",
+	Summary:  "Explore fibonacci-tagged identifier sequences",
 	Icon:     icons.PhBinary,
 	Topics:   []app.TopicT{app.TopicData},
 	Keywords: []string{"fibonacci", "sequence", "numbers"},

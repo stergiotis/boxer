@@ -365,6 +365,7 @@ func manifestFor(def *AppletDef, bookFsys fs.FS) (m app.Manifest) {
 		Version:  "0.1.0",
 		Display:  def.Title,
 		Title:    def.Title,
+		Summary:  def.Summary,
 		Icon:     def.Icon,
 		Topics:   def.Topics,
 		Keywords: def.Keywords,

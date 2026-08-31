@@ -15,6 +15,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Leeway widgets tour",
 	Title:    "leeway widgets — fixture showcase",
+	Summary:  "Browse leeway data widgets against fixture datasets",
 	Icon:     icons.PhFlask,
 	Topics:   []app.TopicT{app.TopicData, app.TopicUi},
 	Keywords: []string{"leeway", "columnar", "schema", "mapping"},

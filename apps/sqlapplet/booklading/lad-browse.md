@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Browse a directory
+summary: "List one snapshot directory with sizes and storage class"
 icon: "📁"
 endpoint: default
 tabs: [table, detail@side]

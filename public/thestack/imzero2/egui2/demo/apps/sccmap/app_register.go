@@ -16,6 +16,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "Repo code exploration",
 	Title:    "Repo code exploration",
+	Summary:  "Explore package imports, cycles and code volume",
 	Icon:     icons.PhGridNine,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicCode},
 	Keywords: []string{"packages", "imports", "scc", "dependencies", "cycles"},

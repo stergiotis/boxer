@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Source volume
+summary: "Count compiled lines of Go by who wrote them"
 icon: "📏"
 endpoint: introspection
 tabs: [table]

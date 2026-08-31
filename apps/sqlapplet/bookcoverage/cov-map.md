@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Coverage map
+summary: "Map the package tree by coverage bracket and code size"
 icon: "🗺"
 endpoint: introspection
 tabs: [treemap, table]

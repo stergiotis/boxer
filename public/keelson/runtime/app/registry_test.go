@@ -21,6 +21,7 @@ func testManifest(id AppIdT) (m Manifest) {
 		Version: "0.1.0",
 		Display: string(id),
 		Topics:  []TopicT{TopicRuntime},
+		Summary: "fixture summary",
 		Surface: SurfaceWindowed,
 	}
 	return

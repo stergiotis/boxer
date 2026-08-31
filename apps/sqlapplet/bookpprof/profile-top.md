@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: CPU top functions
+summary: "Rank functions by self and cumulative CPU cost"
 icon: "🔥"
 endpoint: introspection
 tabs: [table, detail]

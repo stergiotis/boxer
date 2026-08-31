@@ -41,6 +41,12 @@ var listSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "caps", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "persisted_keys", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "version", Type: arrow.BinaryTypes.String},
+	// summary is appended rather than filed beside display/title (ADR-0214
+	// §SD4): the column order is documented as stable and `--launch`
+	// predicates may address it positionally, so a new column goes on the
+	// end. It is also the widest string here, which reads better last in a
+	// PrettyCompact table.
+	{Name: "summary", Type: arrow.BinaryTypes.String},
 }, nil)
 
 // codeForId is the inverse of legacyCodeToId — returns ok=false when the
@@ -88,6 +94,7 @@ func manifestsToArrowIPC(manifests []runtimeapp.Manifest) (buf []byte, err error
 	caps := bldr.Field(11).(*array.Uint32Builder)
 	persisted := bldr.Field(12).(*array.Uint32Builder)
 	version := bldr.Field(13).(*array.StringBuilder)
+	summary := bldr.Field(14).(*array.StringBuilder)
 
 	for _, m := range sorted {
 		id.Append(string(m.Id))
@@ -111,6 +118,7 @@ func manifestsToArrowIPC(manifests []runtimeapp.Manifest) (buf []byte, err error
 		caps.Append(uint32(len(m.Caps)))
 		persisted.Append(uint32(len(m.PersistedKeys)))
 		version.Append(m.Version)
+		summary.Append(m.Summary)
 	}
 
 	rec := bldr.NewRecord()

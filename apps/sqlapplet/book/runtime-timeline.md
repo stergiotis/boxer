@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Runtime event timeline
+summary: "Plot everything this runtime recorded about itself"
 icon: "🧵"
 endpoint: introspection
 tabs: [timeline, table, detail]

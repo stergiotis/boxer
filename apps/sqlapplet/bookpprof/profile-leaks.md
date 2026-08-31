@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Leaked goroutines
+summary: "List goroutine stacks blocked with no way to wake"
 icon: "🫧"
 endpoint: introspection
 tabs: [table, detail]

@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Data catalog overview
+summary: "Count tables per database and how many leeway can rebuild"
 icon: "🗂"
 endpoint: default
 tabs: [table]

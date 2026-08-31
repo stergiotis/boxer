@@ -21,6 +21,7 @@ var manifest = app.Manifest{
 	Version: "0.1.0",
 	Display: "Writing style scope",
 	Title:   "Writing style scope — shared writing between two documents",
+	Summary: "Measure shared writing between two documents",
 	Icon:    icons.PhGitDiff,
 	Topics:  []app.TopicT{app.TopicData},
 	Keywords: []string{"stylometry", "plagiarism", "compression", "similarity",

@@ -26,6 +26,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "tally",
 	Title:    "tally — lading browser",
+	Summary:  "Browse lading file-tree snapshots and open files from them",
 	Icon:     icons.PhFolderOpen,
 	Topics:   []app.TopicT{app.TopicData},
 	Keywords: []string{"lading", "snapshot", "browser", "files", "fs", "mount"},

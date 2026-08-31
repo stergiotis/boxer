@@ -29,7 +29,7 @@ import (
 
 // App is the authoring window. A fresh instance per Open (factory dispatch);
 // the launch config seeds the SQL buffer and endpoint at Mount, the user
-// fills slug/title/icon, and Save or Export emits. The draft fields are stable
+// fills slug/title/summary/icon, and Save or Export emits. The draft fields are stable
 // heap storage the TextEdit bindings write back across frames (the imzero2
 // stable-pointer rule).
 type App struct {
@@ -44,6 +44,7 @@ type App struct {
 	sql      string // seeded from the launch config; editable
 	slug     string
 	title    string
+	summary  string
 	icon     string
 	endpoint string // launch-config endpoint id ("" / "default" / "introspection")
 
@@ -134,6 +135,12 @@ func (inst *App) renderForm() {
 					SendRespVal(&inst.title)
 			}
 			for range c.Horizontal().KeepIter() {
+				c.Label("summary").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
+				c.TextEdit(ids.PrepareStr("summary"), inst.summary, false).
+					HintText("one line: what it does, for whom").
+					SendRespVal(&inst.summary)
+			}
+			for range c.Horizontal().KeepIter() {
 				c.Label("icon").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
 				c.TextEdit(ids.PrepareStr("icon"), inst.icon, false).
 					SendRespVal(&inst.icon)
@@ -188,12 +195,13 @@ func (inst *App) renderForm() {
 func (inst *App) composeDoc() (doc []byte, slug string, err error) {
 	slug = strings.TrimSpace(inst.slug)
 	title := strings.TrimSpace(inst.title)
+	summary := strings.TrimSpace(inst.summary)
 	icon := strings.TrimSpace(inst.icon)
 	endpoint := ""
 	if inst.endpoint == appletcreatecfg.EndpointIntrospection {
 		endpoint = "introspection"
 	}
-	doc, err = appletstore.ComposeAppletDoc(title, icon, endpoint, inst.sql)
+	doc, err = appletstore.ComposeAppletDoc(title, summary, icon, endpoint, inst.sql)
 	return
 }
 

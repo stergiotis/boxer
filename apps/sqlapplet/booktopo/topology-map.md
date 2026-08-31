@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Topology map
+summary: "Draw components, their needs edges and open sockets"
 icon: "🕸"
 endpoint: introspection
 tabs: [network, table]

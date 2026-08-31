@@ -5,6 +5,7 @@ status: stable
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-08-24
 title: JSONBench latency by arm
+summary: "Compare JSONBench query latency across trial arms"
 icon: "⏱️"
 tabs: [table]
 ---

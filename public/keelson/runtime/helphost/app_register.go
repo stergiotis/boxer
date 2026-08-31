@@ -33,6 +33,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Help center",
 	Title:    "Help center",
+	Summary:  "Read the help books every app ships, with search",
 	Icon:     icons.PhBookOpen,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"help", "docs", "documentation", "manual", "book"},

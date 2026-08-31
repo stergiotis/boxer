@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Documentation search
+summary: "Search help, decisions and SQL passes at section grain"
 icon: "🔎"
 endpoint: introspection
 tabs: [table, detail]

@@ -39,6 +39,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "mdedit",
 	Title:    "mdedit — markdown editor",
+	Summary:  "Edit and preview markdown documents from the filesystem",
 	Icon:     icons.PhMarkdownLogo,
 	Topics:   []app.TopicT{app.TopicCode},
 	Keywords: []string{"markdown", "editor", "notes", "preview", "obsidian", "writing"},

@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Snapshot ledger
+summary: "List every snapshot with its mount, policy and expiry"
 icon: "📒"
 endpoint: default
 tabs: [table, timeline]

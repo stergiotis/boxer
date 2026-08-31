@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Unmatched opaque tables
+summary: "List tables that are neither leeway nor panel-shaped"
 icon: "🕳"
 endpoint: default
 tabs: [table]

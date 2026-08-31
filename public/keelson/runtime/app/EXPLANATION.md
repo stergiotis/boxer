@@ -83,8 +83,12 @@ type Manifest struct {
     Version string
     Display string       // human-readable label shown in launchers
     Title   string       // window title; falls back to Display
+    Summary string       // one line: what it does (required for windowed apps)
     Icon    string       // optional Unicode glyph prefixed to title
-    Category string      // grouping in launcher UIs
+
+    Topics   []TopicT    // subject classification from the registered vocabulary
+    Keywords []string    // free retrieval text; ungoverned by design
+    Kind     KindE       // provenance: app / applet / demo
 
     Surface      SurfaceE      // see Surfaces below
     SurfaceHints SurfaceHints  // initial size / screenshot stage
@@ -127,6 +131,15 @@ The `Title` field falls back to `Display` when empty; the `Icon` field
 is prefixed verbatim as `"{Icon} {Title}"`. One Unicode codepoint is the
 intended shape, but multi-character strings work for users who prefer
 text labels over emoji.
+
+`Summary` is the one line the launcher renders under `Display`
+([ADR-0214](../../../../doc/adr/0214-launcher-as-app-summary-detail-recall.md)
+§SD4), and `Validate` requires it of every windowed app. Write it for
+someone choosing between your app and its neighbours on the same topic, not
+for someone who already opened it: verb-first, one clause, around 60
+characters, no full stop, and never opening with your own `Display` again.
+The style budget is enforced by a tree-wide test rather than by `Validate`,
+so an over-long line is a red build and not a silently dropped app.
 
 The runtime enforcement lives in
 [`carousel.adaptToRenderer`](../../../thestack/imzero2/egui2/demo/carousel/imzero2_demo_resolve.go):

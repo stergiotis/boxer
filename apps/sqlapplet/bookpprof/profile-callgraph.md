@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: CPU call graph
+summary: "Draw the CPU capture as a weighted call graph"
 icon: "🕸"
 endpoint: introspection
 tabs: [network, table, detail]

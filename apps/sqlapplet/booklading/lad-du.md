@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Disk usage
+summary: "Find where a snapshot's bytes are, by directory and file"
 icon: "📊"
 endpoint: default
 tabs: ["treemap:files", table]

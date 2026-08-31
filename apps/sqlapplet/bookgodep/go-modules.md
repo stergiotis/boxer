@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Go modules
+summary: "Roll the third-party surface up by owning module"
 icon: "📚"
 endpoint: introspection
 tabs: [table, network, detail]

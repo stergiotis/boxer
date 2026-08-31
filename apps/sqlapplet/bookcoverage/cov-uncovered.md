@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Uncovered functions
+summary: "List functions that never ran, by code at stake"
 icon: "🔎"
 endpoint: introspection
 tabs: [table, detail]

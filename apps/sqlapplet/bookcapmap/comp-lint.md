@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Competence links
+summary: "List declared competence links and how each resolved"
 icon: "🔗"
 endpoint: introspection
 tabs: [table, detail]

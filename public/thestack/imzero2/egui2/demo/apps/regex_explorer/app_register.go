@@ -17,6 +17,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "Regex explorer",
 	Title:    "Regex Explorer",
+	Summary:  "Test a regular expression against sample text live",
 	Icon:     icons.PhMagnifyingGlass,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicCode},
 	Keywords: []string{"regex", "regexp", "pattern", "match", "text"},

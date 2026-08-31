@@ -19,6 +19,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Task primitive",
 	Title:    "Background task",
+	Summary:  "Run a background task and watch its progress reported",
 	Icon:     icons.PhHourglass,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"task", "background", "job", "progress"},

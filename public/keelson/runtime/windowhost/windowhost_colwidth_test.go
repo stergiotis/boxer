@@ -35,6 +35,7 @@ func mkColWidthApp() *colWidthApp {
 		Id:      "test.colwidth",
 		Display: "colwidth",
 		Topics:  []app.TopicT{app.TopicRuntime},
+		Summary: "fixture summary",
 		Surface: app.SurfaceWindowed,
 	}}
 }

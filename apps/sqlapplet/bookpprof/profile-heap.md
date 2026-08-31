@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Heap in use and churn
+summary: "Split heap allocation sites into live bytes and churn"
 icon: "🧠"
 endpoint: introspection
 tabs: [table, detail]
