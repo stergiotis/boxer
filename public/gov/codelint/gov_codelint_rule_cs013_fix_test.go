@@ -1,10 +1,13 @@
 package codelint_test
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/gov/codelint"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The cases below are drawn from the CS013 backlog, and each one is the reason
@@ -75,5 +78,77 @@ func TestUsefulFieldKey(t *testing.T) {
 	// A field nobody can interpret is no better than the prose it came from.
 	for _, k := range []string{"s", "h", "i", "n", "p", "x", "tt", "aa"} {
 		assert.False(t, codelint.UsefulFieldKey(k), k)
+	}
+}
+
+// TestCS013OffersAFixWhenMechanical pins the rewrite CS013 hands over, since
+// the text is what someone pastes. The fourth case is the reason the key
+// derivation consults the argument's type: an index expression has no name of
+// its own, and "ids[0]" is not a field name.
+func TestCS013OffersAFixWhenMechanical(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs013/fixable")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS013())
+
+	byLine := map[int32]codelint.Finding{}
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		byLine[f.Line] = f
+	}
+
+	for _, tc := range []struct {
+		line int32
+		fix  string
+	}{
+		{23, `eb.Build().Str("path", path).Errorf("open SBOM: %w", ErrNotApplied)`},
+		{29, `eb.Build().Stringer("patchHash", h).Errorf("patch: %w", ErrNotApplied)`},
+		{35, `eb.Build().Str("nodeID", string(ids[0])).Errorf("duplicate node id")`},
+		{42, `eb.Build().Uint8("stage", uint8(stage)).Errorf("unknown stage")`},
+	} {
+		f, found := byLine[tc.line]
+		require.True(t, found, "expected a CS013 finding on line %d", tc.line)
+		assert.Equal(t, tc.fix, f.Fix, "line %d", tc.line)
+		assert.NotContains(t, f.Message, "[", "a fixable finding carries no decline reason")
+	}
+}
+
+// TestCS013ReportsWhyItDeclined checks the triage labels reach the finding, so
+// a backlog can be split by the kind of work each site needs.
+func TestCS013ReportsWhyItDeclined(t *testing.T) {
+	root, err := filepath.Abs("./testdata/cs013/bad")
+	require.NoError(t, err)
+
+	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+
+	linter := codelint.NewLinter()
+	linter.Register(codelint.NewRuleCS013())
+
+	reasons := map[string]int{}
+	for f, runErr := range linter.Run(pkgs) {
+		require.NoError(t, runErr)
+		if i := strings.LastIndex(f.Message, "["); i >= 0 {
+			reasons[strings.Trim(f.Message[i:], "[]")]++
+		}
+	}
+	// bad.go's "unknown kind %d" sits mid-sentence in one case and names its
+	// argument in others, so both labels have to appear for the split to mean
+	// anything.
+	assert.NotEmpty(t, reasons, "at least one declined finding must say why")
+	for r := range reasons {
+		assert.Contains(t, []string{
+			codelint.DeclineNeedsMessageRewrite,
+			codelint.DeclineNeedsFieldName,
+			codelint.DeclineNoFieldForVerb,
+			codelint.DeclineFormattedError,
+			codelint.DeclineNotMechanical,
+		}, r, "unexpected decline reason")
 	}
 }

@@ -135,8 +135,11 @@ func (inst *RuleCS013) run(pass *analysis.Pass) (res any, err error) {
 				Message: "CS013: " + kind + " format carries " + strings.Join(verbs, ", ") +
 					" — wrap with \"%w\" only and move the values to eb.Build().Str(…)/Int(…)",
 			}
-			if fix, fixable := suggestCS013Fix(pass, call, sel, kind, fmtIdx, format); fixable {
+			fix, fixable, decline := suggestCS013Fix(pass, call, sel, kind, fmtIdx, format)
+			if fixable {
 				d.SuggestedFixes = []analysis.SuggestedFix{fix}
+			} else if decline != "" {
+				d.Message += " [" + decline + "]"
 			}
 			pass.Report(d)
 			return

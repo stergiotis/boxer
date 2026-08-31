@@ -65,6 +65,18 @@ var shortFieldKeys = map[string]struct{}{
 	"id": {}, "db": {}, "wd": {}, "ip": {}, "os": {}, "fd": {}, "ok": {},
 }
 
+// Decline reasons. These are the shapes the remaining backlog is made of, and
+// they name the kind of work a site needs rather than restating the finding —
+// "the sentence has to be rewritten" and "somebody has to name this field" are
+// different jobs, batched differently.
+const (
+	DeclineNeedsMessageRewrite = "message needs rewriting"
+	DeclineNeedsFieldName      = "field name needs choosing"
+	DeclineNoFieldForVerb      = "no eb field preserves this verb"
+	DeclineFormattedError      = "wraps a formatted error; %w is a semantic change"
+	DeclineNotMechanical       = "not mechanically decidable"
+)
+
 // printfDirective locates one verb in a format string.
 type printfDirective struct {
 	start, end int // byte range in the unquoted format
@@ -253,6 +265,18 @@ func EbFieldMethod(t types.Type, verb rune) (method string, conv string, ok bool
 	return "", "", false
 }
 
+// declineForType separates the two reasons EbFieldMethod says no, because they
+// are different work: a formatted error becomes %w by hand (and changes what
+// errors.Is traverses), while a rendering-specific verb needs a decision about
+// what the message was for.
+func declineForType(t types.Type) (reason string) {
+	errIface, _ := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+	if errIface != nil && (types.Implements(t, errIface) || types.Implements(types.NewPointer(t), errIface)) {
+		return DeclineFormattedError
+	}
+	return DeclineNoFieldForVerb
+}
+
 func hasStringMethod(t types.Type) (ok bool) {
 	ms := types.NewMethodSet(t)
 	for i := 0; i < ms.Len(); i++ {
@@ -371,41 +395,94 @@ func sliceFieldMethod(s *types.Slice, verb rune) (method string, ok bool) {
 	return "", false
 }
 
-// deriveFieldKey turns a name-shaped argument into a field key: the last
-// identifier segment, lower-camelised. An argument that is not name-shaped —
-// a call, an index, an expression — has no name to borrow, and inventing one
-// is the human's job.
-func deriveFieldKey(e ast.Expr) (key string, ok bool) {
+// deriveFieldKey turns an argument into a field key.
+//
+// First choice is the argument's own name — the last identifier segment,
+// lower-camelised, so PkgPath reads as pkgPath. When that name is too short to
+// mean anything to whoever reads the field later ("h", "i", "s"), the
+// argument's type name is tried instead: a repo.PatchHash reads as patchHash,
+// which says more than "h" ever did. An unnamed basic type offers nothing
+// worth having — Int("int", n) is not an improvement — so those decline.
+//
+// An argument that is not name-shaped (a call, an index, an expression) has no
+// name to borrow at either level, and inventing one is the human's job.
+func deriveFieldKey(e ast.Expr, t types.Type) (key string, ok bool) {
+	if name, nok := exprName(e); nok {
+		if k := lowerCamel(name); UsefulFieldKey(k) {
+			return k, true
+		}
+	}
+	if name, nok := namedTypeName(t); nok {
+		if k := lowerCamel(name); UsefulFieldKey(k) {
+			return k, true
+		}
+	}
+	return "", false
+}
+
+// exprName is the identifier a name-shaped argument ends in.
+func exprName(e ast.Expr) (name string, ok bool) {
 	switch v := e.(type) {
 	case *ast.Ident:
-		key = v.Name
+		name = v.Name
 	case *ast.SelectorExpr:
 		if !nameShaped(v.X) {
 			return "", false
 		}
-		key = v.Sel.Name
+		name = v.Sel.Name
 	default:
 		return "", false
 	}
-	if key == "" || key == "_" {
+	if name == "" || name == "_" {
 		return "", false
 	}
-	r := []rune(key)
-	if unicode.IsUpper(r[0]) {
-		// Lower the leading run of capitals up to the next word, so PkgPath
-		// becomes pkgPath and ID becomes id.
-		i := 0
-		for i < len(r) && unicode.IsUpper(r[i]) {
-			i++
-		}
-		if i > 1 && i < len(r) {
-			i--
-		}
-		for j := 0; j < i; j++ {
-			r[j] = unicode.ToLower(r[j])
-		}
+	return name, true
+}
+
+// namedTypeName is the declared name of a named type, pointers dereferenced.
+// An unnamed type, or a named type whose name is one of the predeclared basics,
+// yields nothing: those describe the representation, not the value.
+func namedTypeName(t types.Type) (name string, ok bool) {
+	if t == nil {
+		return
 	}
-	return string(r), true
+	if p, isPtr := t.(*types.Pointer); isPtr {
+		t = p.Elem()
+	}
+	n, isNamed := t.(*types.Named)
+	if !isNamed {
+		return
+	}
+	name = n.Obj().Name()
+	if name == "" {
+		return "", false
+	}
+	if types.Universe.Lookup(name) != nil {
+		// A type literally named after a predeclared identifier tells the
+		// reader nothing the value does not already say.
+		return "", false
+	}
+	return name, true
+}
+
+// lowerCamel lowers the leading run of capitals up to the next word, so
+// PkgPath becomes pkgPath and ID becomes id.
+func lowerCamel(name string) (out string) {
+	r := []rune(name)
+	if len(r) == 0 || !unicode.IsUpper(r[0]) {
+		return name
+	}
+	i := 0
+	for i < len(r) && unicode.IsUpper(r[i]) {
+		i++
+	}
+	if i > 1 && i < len(r) {
+		i--
+	}
+	for j := 0; j < i; j++ {
+		r[j] = unicode.ToLower(r[j])
+	}
+	return string(r)
 }
 
 func nameShaped(e ast.Expr) (ok bool) {
@@ -465,22 +542,27 @@ func renderExpr(fset *token.FileSet, e ast.Expr) (s string) {
 // present: whether a file's last eh use is going away is a file-level question
 // this per-call fix cannot answer, so an applier has to reconcile imports
 // itself.
-func suggestCS013Fix(pass *analysis.Pass, call *ast.CallExpr, sel *ast.SelectorExpr, kind string, fmtIdx int, format string) (fix analysis.SuggestedFix, ok bool) {
+func suggestCS013Fix(pass *analysis.Pass, call *ast.CallExpr, sel *ast.SelectorExpr, kind string, fmtIdx int, format string) (fix analysis.SuggestedFix, ok bool, decline string) {
 	// ErrorfWithData already has a structured channel of its own; folding one
 	// into a builder chain is a different change.
 	if kind != "eh.Errorf" && kind != "eb.Build()…Errorf" {
+		decline = DeclineNotMechanical
 		return
 	}
 	if strings.Contains(format, "%[") {
-		return // explicit argument index: positional mapping is not reliable
+		// Explicit argument index: positional mapping is not reliable.
+		decline = DeclineNotMechanical
+		return
 	}
 	dirs := printfDirectives(format)
 	args := call.Args[fmtIdx+1:]
 	if len(dirs) != len(args) {
+		decline = DeclineNotMechanical
 		return
 	}
 	newMessage, mok := MessageWithoutDirectives(format)
 	if !mok {
+		decline = DeclineNeedsMessageRewrite
 		return
 	}
 
@@ -499,29 +581,35 @@ func suggestCS013Fix(pass *analysis.Pass, call *ast.CallExpr, sel *ast.SelectorE
 			continue
 		}
 		a := args[i]
-		key, kok := deriveFieldKey(a)
-		if !kok || !UsefulFieldKey(key) {
+		key, kok := deriveFieldKey(a, pass.TypesInfo.Types[a].Type)
+		if !kok {
+			decline = DeclineNeedsFieldName
 			return
 		}
 		if _, dup := seen[key]; dup {
+			decline = DeclineNeedsFieldName
 			return
 		}
 		arg := renderExpr(pass.Fset, a)
 		if arg == "" {
+			decline = DeclineNotMechanical
 			return
 		}
 		if _, already := haveArg[arg]; already {
 			continue // the chain carries this value; dropping the directive is the edit
 		}
 		if _, clash := haveKey[key]; clash {
+			decline = DeclineNeedsFieldName
 			return
 		}
 		tv, found := pass.TypesInfo.Types[a]
 		if !found || tv.Type == nil {
+			decline = DeclineNotMechanical
 			return
 		}
 		method, conv, mok2 := EbFieldMethod(tv.Type, d.verb)
 		if !mok2 {
+			decline = declineForType(tv.Type)
 			return
 		}
 		if conv != "" {
