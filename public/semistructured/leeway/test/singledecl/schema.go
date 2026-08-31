@@ -5,6 +5,10 @@
 // artefacts, the SQL authoring surface and schema discovery, so the
 // declaration's write-time enforcement and read-side fast path are pinned
 // against the undeclared general form.
+//
+// A third table, striple, pins the facts11'-shaped four-channel section
+// (lv single | lr carded | mvhp single | hv carded, list values) — the exact
+// combination hackathon_2026's facts11' relocation declares (its ADR-0027).
 package singledecl
 
 import (
@@ -46,5 +50,38 @@ func GetSchemaInManipulator(declared bool) (manip *common.TableManipulator, err 
 		addr.AddSectionSingleMembership(common.MembershipSpecMixedLowCardVerbatimHighCardParameters)
 	}
 	addr.TaggedValueColumn("value", ctabb.S)
+	return
+}
+
+// GetTripleSchemaInManipulator builds striple: one section carrying the
+// four-channel combination a facts11'-shaped canonical section declares —
+// lv (single, the semantic type) beside lr (carded, the reserved curated
+// twin, empty until populated), mvhp (single, the address) and hv (carded,
+// 0..N additive annotations) — over a LIST value lane, so the card-less
+// list read (arraySlice over the length lane at an indexOf'd position) is
+// exercised beside carded channels. hv has no other in-tree producer; this
+// fixture is deliberately its first.
+func GetTripleSchemaInManipulator() (manip *common.TableManipulator, err error) {
+	manip, err = common.NewTableManipulator()
+	if err != nil {
+		err = eh.Errorf("create table manipulator: %w", err)
+		return
+	}
+	manip.SetTableName("striple")
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.U64)
+
+	facts := manip.TaggedValueSection("facts").
+		SectionStreamingGroup("data").
+		AddSectionMembership(
+			common.MembershipSpecLowCardVerbatim,
+			common.MembershipSpecLowCardRef,
+			common.MembershipSpecMixedLowCardVerbatimHighCardParameters,
+			common.MembershipSpecHighCardVerbatim,
+		)
+	facts.AddSectionSingleMembership(
+		common.MembershipSpecLowCardVerbatim,
+		common.MembershipSpecMixedLowCardVerbatimHighCardParameters,
+	)
+	facts.TaggedValueColumn("value", ctabb.Sh)
 	return
 }

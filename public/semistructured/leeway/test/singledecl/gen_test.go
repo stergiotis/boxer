@@ -23,9 +23,16 @@ import (
 func TestGenerateSingleDeclFixture(t *testing.T) {
 	conv, err := ddl.NewHumanReadableNamingConvention(":")
 	require.NoError(t, err)
+	manips := make([]*common.TableManipulator, 0, 3)
 	for _, declared := range []bool{true, false} {
 		manip, merr := GetSchemaInManipulator(declared)
 		require.NoError(t, merr)
+		manips = append(manips, manip)
+	}
+	triple, err := GetTripleSchemaInManipulator()
+	require.NoError(t, err)
+	manips = append(manips, triple)
+	for _, manip := range manips {
 		td, berr := manip.BuildTableDesc()
 		require.NoError(t, berr)
 		stem := string(td.DictionaryEntry.Name)
