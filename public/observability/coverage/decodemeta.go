@@ -3,6 +3,7 @@ package coverage
 import (
 	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Format constants of the coverage meta-data file, version 1 (ADR-0169
@@ -19,7 +20,7 @@ const metaSymbolHeaderSize = 44 // MetaSymbolHeader wire size
 // assigning the profile-wide global unit index along the way.
 func DecodeMeta(data []byte) (prof *covsnap.MetaProfile, err error) {
 	if len(data) < metaFileHeaderSize {
-		return nil, eh.Errorf("coverage meta-data blob truncated: %d bytes is shorter than the %d-byte header", len(data), metaFileHeaderSize)
+		return nil, eb.Build().Int("size", len(data)).Int("headerSize", metaFileHeaderSize).Errorf("coverage meta-data blob is shorter than its header")
 	}
 	r := &byteReader{b: data}
 	var magic []byte
@@ -36,7 +37,7 @@ func DecodeMeta(data []byte) (prof *covsnap.MetaProfile, err error) {
 		return
 	}
 	if version > metaFileVersion {
-		return nil, eh.Errorf("coverage meta-data blob has unknown version %d (decoder is pinned to %d)", version, metaFileVersion)
+		return nil, eb.Build().Uint32("version", version).Uint32("pinnedVersion", metaFileVersion).Errorf("coverage meta-data blob has an unknown version")
 	}
 	var totalLength, entries uint64
 	totalLength, err = r.u64()
@@ -44,7 +45,7 @@ func DecodeMeta(data []byte) (prof *covsnap.MetaProfile, err error) {
 		return
 	}
 	if totalLength > uint64(len(data)) {
-		return nil, eh.Errorf("coverage meta-data blob truncated: header claims %d bytes, have %d", totalLength, len(data))
+		return nil, eb.Build().Uint64("claimed", totalLength).Int("have", len(data)).Errorf("coverage meta-data blob is shorter than its header claims")
 	}
 	entries, err = r.u64()
 	if err != nil {
@@ -80,7 +81,7 @@ func DecodeMeta(data []byte) (prof *covsnap.MetaProfile, err error) {
 	}
 
 	if entries > uint64(r.remaining())/16 {
-		return nil, eh.Errorf("coverage meta-data blob corrupt: %d package entries exceed remaining %d bytes", entries, r.remaining())
+		return nil, eb.Build().Uint64("entries", entries).Int("remaining", r.remaining()).Errorf("coverage meta-data blob corrupt: package entries exceed the bytes remaining")
 	}
 	pkgOffsets := make([]uint64, entries)
 	pkgLengths := make([]uint64, entries)
@@ -104,11 +105,11 @@ func DecodeMeta(data []byte) (prof *covsnap.MetaProfile, err error) {
 		off := pkgOffsets[i]
 		length := pkgLengths[i]
 		if off > totalLength || length > totalLength || off+length > totalLength {
-			return nil, eh.Errorf("coverage meta-data blob corrupt: package %d spans [%d,%d) beyond total length %d", i, off, off+length, totalLength)
+			return nil, eb.Build().Int("package", i).Uint64("start", off).Uint64("end", off+length).Uint64("totalLength", totalLength).Errorf("coverage meta-data blob corrupt: package spans beyond the total length")
 		}
 		err = decodeMetaPackage(data[off:off+length], &prof.Pkgs[i], &unitBase, &stmtTotal)
 		if err != nil {
-			return nil, eh.Errorf("coverage meta-data package %d: %w", i, err)
+			return nil, eb.Build().Int("package", i).Errorf("coverage meta-data package: %w", err)
 		}
 	}
 	prof.TotalUnits = unitBase
@@ -126,7 +127,7 @@ func decodeMetaPackage(blob []byte, pkg *covsnap.PkgMeta, unitBase *uint32, stmt
 		return
 	}
 	if uint64(length) > uint64(len(blob)) {
-		return eh.Errorf("package blob truncated: header claims %d bytes, have %d", length, len(blob))
+		return eb.Build().Uint32("claimed", length).Int("have", len(blob)).Errorf("package blob is shorter than its header claims")
 	}
 	pkgNameIdx, err = r.u32()
 	if err != nil {
@@ -154,7 +155,7 @@ func decodeMetaPackage(blob []byte, pkg *covsnap.PkgMeta, unitBase *uint32, stmt
 	}
 
 	if uint64(numFuncs) > uint64(r.remaining())/4 {
-		return eh.Errorf("package blob corrupt: %d function offsets exceed remaining %d bytes", numFuncs, r.remaining())
+		return eb.Build().Uint32("functionOffsets", numFuncs).Int("remaining", r.remaining()).Errorf("package blob corrupt: function offsets exceed the bytes remaining")
 	}
 	funcOffsets := make([]uint32, numFuncs)
 	for i := range funcOffsets {
@@ -171,7 +172,7 @@ func decodeMetaPackage(blob []byte, pkg *covsnap.PkgMeta, unitBase *uint32, stmt
 	}
 	str := func(idx uint32) (s string, err error) {
 		if int(idx) >= len(strs) {
-			return "", eh.Errorf("string index %d out of range (table has %d entries)", idx, len(strs))
+			return "", eb.Build().Uint32("index", idx).Int("entries", len(strs)).Errorf("string index is out of range")
 		}
 		return strs[idx], nil
 	}
@@ -193,12 +194,12 @@ func decodeMetaPackage(blob []byte, pkg *covsnap.PkgMeta, unitBase *uint32, stmt
 	for i := range pkg.Funcs {
 		foff := funcOffsets[i]
 		if foff < metaSymbolHeaderSize || uint64(foff) > uint64(len(blob)) {
-			return eh.Errorf("malformed offset %d for function %d", foff, i)
+			return eb.Build().Uint32("offset", foff).Int("function", i).Errorf("malformed function offset")
 		}
 		fr := &byteReader{b: blob, off: int(foff)}
 		err = decodeMetaFunc(fr, strs, &pkg.Funcs[i], *unitBase)
 		if err != nil {
-			return eh.Errorf("function %d: %w", i, err)
+			return eb.Build().Int("function", i).Errorf("decode function: %w", err)
 		}
 		fn := &pkg.Funcs[i]
 		*unitBase += uint32(len(fn.Units))
@@ -233,7 +234,7 @@ func decodeMetaFunc(r *byteReader, strs []string, fn *covsnap.FuncMeta, unitBase
 	fn.SrcFile = strs[fileIdx]
 	fn.UnitBase = unitBase
 	if numUnits > uint64(r.remaining()) {
-		return eh.Errorf("corrupt unit count %d exceeds remaining %d bytes", numUnits, r.remaining())
+		return eb.Build().Uint64("unitCount", numUnits).Int("remaining", r.remaining()).Errorf("corrupt unit count exceeds the bytes remaining")
 	}
 	fn.Units = make([]covsnap.UnitMeta, numUnits)
 	for k := range fn.Units {
@@ -242,7 +243,7 @@ func decodeMetaFunc(r *byteReader, strs []string, fn *covsnap.FuncMeta, unitBase
 		for f, dst := range []*uint32{&u.StLine, &u.StCol, &u.EnLine, &u.EnCol, &u.NxStmts} {
 			v, err = r.uleb()
 			if err != nil {
-				return eh.Errorf("unit %d field %d: %w", k, f, err)
+				return eb.Build().Int("unit", k).Int("field", f).Errorf("decode unit field: %w", err)
 			}
 			*dst = uint32(v)
 		}
@@ -266,7 +267,7 @@ func decodeStringTable(r *byteReader) (strs []string, err error) {
 		return
 	}
 	if n > uint64(r.remaining()) {
-		return nil, eh.Errorf("corrupt string table: %d entries exceed remaining %d bytes", n, r.remaining())
+		return nil, eb.Build().Uint64("entries", n).Int("remaining", r.remaining()).Errorf("corrupt string table: entries exceed the bytes remaining")
 	}
 	strs = make([]string, 0, n)
 	for range n {

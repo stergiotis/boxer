@@ -3,7 +3,6 @@ package coverage
 import (
 	"encoding/binary"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -21,7 +20,7 @@ func (r *byteReader) remaining() int {
 
 func (r *byteReader) take(n int) (b []byte, err error) {
 	if n < 0 || r.remaining() < n {
-		return nil, eh.Errorf("truncated input: need %d bytes at offset %d, have %d", n, r.off, r.remaining())
+		return nil, eb.Build().Int("need", n).Int("offset", r.off).Int("have", r.remaining()).Errorf("truncated input")
 	}
 	b = r.b[r.off : r.off+n]
 	r.off += n
