@@ -1,0 +1,315 @@
+package launcher
+
+// The row list (ADR-0214 §SD5): icon, Display over a dimmed Summary, and
+// badges that only appear when they say something.
+
+import (
+	"strconv"
+
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+)
+
+var (
+	selectionFill   = color.Hex(styletokens.AccentSubtle.AsHex())
+	selectionStroke = color.Hex(styletokens.AccentDefault.AsHex())
+	clearFill       = color.Transparent
+)
+
+// seqRowBase keeps the per-row Frame ids clear of the sequence space the
+// pane's other PrepareSeq callers draw from.
+const seqRowBase = uint64(0x1a00)
+
+// The list column's width range. Not a fixed width: the pane is resizable, so
+// the column has to be able to follow it in both directions.
+const (
+	rowMinWidth = float32(160)
+	rowMaxWidth = float32(2000)
+)
+
+// rowHeight is two text lines plus breathing room, in egui points. A row
+// carries the name and the summary, and the summary is the whole reason the
+// row is two lines tall (§SD2's diagnosis: a one-line row carries identity
+// and nothing else).
+//
+// The base is a measured figure rather than a token: egui_table takes ONE row
+// height for the whole table, and what has to fit is a body line, a small
+// line, and the item spacing between them — text metrics that the IDS spacing
+// ladder does not describe. Only the breathing room comes from the ladder. A
+// value too small does not clip, it overlaps the next row, which is how the
+// first screenshot run failed.
+//
+// Section headings share the height and end up with air around them. That
+// reads as a section break rather than as waste, so it is left alone.
+func (inst *Inst) rowHeight() (h float32) {
+	const twoTextLines = 44
+	h = twoTextLines + 2*styletokens.PaddingTight(inst.density)
+	return
+}
+
+// renderRows draws the list: sectioned by topic with no query, one ranked
+// flat list with one.
+//
+// Both paths go through the same virtualising table (§SD5). The sectioned
+// path flattens its groups into one row slice with heading rows interleaved,
+// rather than emitting a table per section: egui_table's visible-range query
+// culls rows within one table, so N tables would cull N times and still walk
+// every section header. One table also means the keyboard cursor is one index
+// into one list, whichever view is showing.
+func (inst *Inst) renderRows(ids *c.WidgetIdStack, visible []app.Manifest, rows []rowT) {
+	if len(rows) == 0 {
+		c.Label(inst.emptyResultHint()).Send()
+		return
+	}
+	if q := inst.query(); q != "" {
+		renderSearchNotes(launcherBattery(q), countAppRows(rows), len(visible))
+	}
+	inst.clampCursor(rows)
+	// Selection IS the cursor. A launcher where the highlighted row and the
+	// described row can differ has two places to look and no way to tell which
+	// Enter would act on; the surveyed launchers all fold the two together, and
+	// this is where the fold happens — a click moves the cursor (see
+	// renderAppRow) and so does an arrow key, and the detail pane reads it.
+	if inst.cursor >= 0 && inst.cursor < len(rows) && rows[inst.cursor].heading == "" {
+		inst.selected = rows[inst.cursor].m.Id
+	}
+	openSet := inst.openAppSet()
+
+	// One column, declared before the table: egui_table takes its columns from
+	// the EtColumn ops pushed ahead of the EndETable, and a table with none
+	// renders nothing at all — which is what the first screenshot run showed.
+	//
+	// A single column is the whole point of the shape: a launcher row is one
+	// target carrying a name over a summary, not a grid of fields. The width
+	// range spans from something usable at the narrowest sensible pane to well
+	// past the widest, so the column follows the pane the user sized rather
+	// than fighting it.
+	c.EtColumn(listPanelDefaultWidth).RangeMinMax(rowMinWidth, rowMaxWidth).Resizable(false).Send()
+	et := c.EndETable(ids.PrepareStr("launcher-rows"), uint64(len(rows)), inst.rowHeight(), 0, 0).
+		FillPane(true)
+	rowBegin, rowEnd := 0, len(rows)
+	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
+		rowBegin = min(int(rb), len(rows))
+		rowEnd = min(int(re), rowEnd)
+	}
+	for i := rowBegin; i < rowEnd; i++ {
+		r := rows[i]
+		if r.heading != "" {
+			inst.renderHeadingRow(et, i, r.heading)
+			continue
+		}
+		_, isOpen := openSet[r.m.Id]
+		inst.renderAppRow(ids, et, i, r.m, isOpen, i == inst.cursor)
+	}
+	// The terminal. egui_table's Go surface accumulates columns, then the
+	// table, then the captured cell blocks, and Send ships the lot — so a
+	// table without it renders nothing at all, which is exactly what the
+	// first screenshot run showed.
+	et.Send()
+}
+
+// rowT is one line of the list: either a section heading or an app. A single
+// row type is what lets one virtualised table serve both views.
+type rowT struct {
+	heading string
+	m       app.Manifest
+}
+
+// buildRows resolves the current query and filters into the row slice.
+func (inst *Inst) buildRows(visible []app.Manifest) (rows []rowT) {
+	if q := inst.query(); q != "" {
+		hits := inst.hits(visible)
+		rows = make([]rowT, 0, len(hits))
+		for _, m := range hits {
+			rows = append(rows, rowT{m: m})
+		}
+		return
+	}
+	groups := groupByTopic(visible, inst.topicFilter)
+	rows = make([]rowT, 0, len(visible)+len(groups))
+	for _, g := range groups {
+		rows = append(rows, rowT{heading: topicLabel(g.Topic)})
+		for _, m := range g.Manifests {
+			rows = append(rows, rowT{m: m})
+		}
+	}
+	return
+}
+
+// countAppRows counts the rows that are apps rather than headings — the
+// number the selectivity readout means.
+func countAppRows(rows []rowT) (n int) {
+	for i := range rows {
+		if rows[i].heading == "" {
+			n++
+		}
+	}
+	return
+}
+
+// clampCursor keeps the keyboard cursor on an app row inside the current
+// list. The list changes shape under the cursor as the query changes, so this
+// runs every frame rather than trusting the stored value; a cursor that
+// landed on a heading advances off it, which is what makes ↓ from the last
+// app of one section reach the first app of the next.
+func (inst *Inst) clampCursor(rows []rowT) {
+	if inst.cursor < 0 {
+		inst.cursor = 0
+	}
+	if inst.cursor >= len(rows) {
+		inst.cursor = len(rows) - 1
+	}
+	for inst.cursor < len(rows) && rows[inst.cursor].heading != "" {
+		inst.cursor++
+	}
+	if inst.cursor >= len(rows) {
+		// Every row from the old cursor on was a heading; fall back to the
+		// first app row rather than pointing past the end.
+		inst.cursor = firstAppRow(rows)
+	}
+}
+
+// firstAppRow is the index of the first app row, or 0 when there is none.
+func firstAppRow(rows []rowT) (idx int) {
+	for i := range rows {
+		if rows[i].heading == "" {
+			idx = i
+			return
+		}
+	}
+	return
+}
+
+// renderHeadingRow draws a section heading as a row of the same table.
+func (inst *Inst) renderHeadingRow(et c.EndETableFluid, rowIdx int, heading string) {
+	et.BeginCells(uint64(rowIdx), 0)
+	for range c.Vertical().KeepIter() {
+		for rt := range c.RichTextLabel(heading) {
+			rt.Strong()
+		}
+		c.Separator().Horizontal().Send()
+	}
+	et.EndCells()
+}
+
+// renderAppRow draws one app: the full-width click layer, then the two text
+// lines and the badges.
+//
+// The whole row senses the click, not a button inside it — a launcher row is
+// one target, and a person aiming at the summary line means the same thing as
+// one aiming at the name. A single click selects (filling the detail pane); a
+// double click opens. Selecting on single click is what makes the detail pane
+// reachable at all without committing to an open, which is §SD6's whole
+// premise.
+func (inst *Inst) renderAppRow(ids *c.WidgetIdStack, et c.EndETableFluid, rowIdx int, m app.Manifest, isOpen bool, isCursor bool) {
+	selected := m.Id == inst.selected || isCursor
+	fill, stroke, strokeW := clearFill, clearFill, float32(0)
+	if selected {
+		fill, stroke, strokeW = selectionFill, selectionStroke, 1.0
+	}
+	var flags c.ResponseFlagsE
+	for range et.Rows(uint64(rowIdx)) {
+		fr := c.Frame(ids.PrepareSeq(seqRowBase+uint64(rowIdx))).
+			Fill(fill).
+			Stroke(strokeW, stroke).
+			OuterMargin(0).
+			// Zero margins, both of them. This Frame is a painted band and a
+			// click target, not a content container — the row's text is
+			// emitted separately into the table's cell. An inner margin here
+			// adds to the min height set below, so the band grows past the row
+			// and paints over its neighbour, which is how the second
+			// screenshot run failed. Padding belongs on the cell.
+			InnerMargin(0).
+			SenseClick().
+			HoverCursorPointer()
+		for range fr.KeepIter() {
+			c.UiSetMinWidthAvailable()
+			// Both strokes, not one: a Frame paints its content rect grown by
+			// the stroke width on every side, so this is what makes the
+			// painted rect exactly the row (the fsbrowser/tree precedent).
+			c.UiSetMinHeight(inst.rowHeight() - 2*strokeW)
+		}
+		flags = c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())
+	}
+	et.BeginCells(uint64(rowIdx), 0)
+	for range c.Vertical().KeepIter() {
+		for range c.Horizontal().KeepIter() {
+			if m.Icon != "" {
+				c.Label(m.Icon).Send()
+			}
+			for rt := range c.RichTextLabel(rowLabel(m)) {
+				rt.Strong()
+			}
+			inst.renderRowBadges(ids, m, isOpen, rowIdx)
+		}
+		if m.Summary != "" {
+			for rt := range c.RichTextLabel(m.Summary) {
+				rt.Small().Weak()
+			}
+		}
+	}
+	et.EndCells()
+
+	// Only the cursor is written: selection follows it at the top of the next
+	// frame's renderRows, so there is one assignment rather than two that
+	// could disagree.
+	if flags.HasDoubleClicked() {
+		inst.cursor = rowIdx
+		inst.open(m.Id)
+		return
+	}
+	if flags.HasPrimaryClicked() {
+		inst.cursor = rowIdx
+	}
+}
+
+// renderRowBadges draws the accessories, and only the ones that say
+// something (§SD5). A plain app gets none: a badge reading "app" on 16 of 72
+// rows is chrome, and the provenance that matters is the exception.
+//
+// Ids are keyed by ROW INDEX, not by app id. Under ADR-0158 §SD3 a manifest
+// appears under every topic it declares, so the browse view renders the same
+// app id on two rows — and keying by it derives one id for both, which egui
+// reports as a duplicate and resolves by sharing state between them. This is
+// the hazard the pre-0214 launcher solved by keying its buttons with the
+// section name; the row index is the same fix in a list that has a stable
+// index and no section string.
+func (inst *Inst) renderRowBadges(ids *c.WidgetIdStack, m app.Manifest, isOpen bool, rowIdx int) {
+	key := func(suffix string) string {
+		return "row-badge-" + suffix + "-" + strconv.Itoa(rowIdx)
+	}
+	if isOpen {
+		badge.New(ids.PrepareStr(key("open")), "open").
+			Tone(badge.ToneSuccess).
+			Size(badge.SizeSm).
+			Tooltip("a window for this app is already open — clicking raises it").
+			Send()
+	}
+	switch m.Kind {
+	case app.KindApplet:
+		badge.New(ids.PrepareStr(key("kind")), "applet").
+			Tone(badge.ToneInfo).
+			Size(badge.SizeSm).
+			Tooltip("minted from a committed SQL-applet document").
+			Send()
+	case app.KindDemo:
+		badge.New(ids.PrepareStr(key("kind")), "demo").
+			Tone(badge.ToneNeutral).
+			Size(badge.SizeSm).
+			Tooltip("demonstrates a widget or a runtime facility rather than doing a user's work").
+			Send()
+	}
+}
+
+// rowLabel is the name on the row: Display, falling back to the Id when a
+// manifest somehow has none (Validate refuses that, so this is a belt).
+func rowLabel(m app.Manifest) (s string) {
+	s = m.Display
+	if s == "" {
+		s = string(m.Id)
+	}
+	return
+}

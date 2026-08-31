@@ -4,6 +4,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/apps/capinspector"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -44,6 +45,11 @@ type ChromeConfig struct {
 	// HelpHost wires the F1 shortcut to open/focus the HelpHost (carousel:
 	// true; elle: false). Requires Host != nil.
 	HelpHost bool
+	// Launcher, when non-empty, wires the F2 shortcut to open-or-raise this
+	// app (ADR-0214 §SD1) — the launcher. Empty leaves F2 unbound, which is
+	// what the screenshot-tour path and any host without a launcher want.
+	// Requires Host != nil.
+	Launcher app.AppIdT
 }
 
 // DecorateRenderer wraps an inner renderer in the shared host chrome:
@@ -107,6 +113,17 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 		if cc.HelpHost && cc.Host != nil && c.CurrentApplicationState.StateManager.GetF1KeyPressed() {
 			if _, _, openErr := cc.Host.OpenOrRaise(helphost.ManifestId); openErr != nil {
 				log.Warn().Err(openErr).Msg("F1: helphost open failed")
+			}
+		}
+		// F2: the launcher (ADR-0214 §SD1). Same shape as F1 and for the same
+		// reasons — a process-singleton consumer of a consumed key, and
+		// OpenOrRaise so a second press raises the launcher rather than
+		// stacking another window. This is what makes the corpus searchable
+		// while apps are open, which the empty-state pane could not do because
+		// it exists only while nothing is.
+		if cc.Launcher != "" && cc.Host != nil && c.CurrentApplicationState.StateManager.GetF2KeyPressed() {
+			if _, _, openErr := cc.Host.OpenOrRaise(cc.Launcher); openErr != nil {
+				log.Warn().Err(openErr).Msg("F2: launcher open failed")
 			}
 		}
 		// Drive the next frame. Continuous mode (the default) and screenshot

@@ -26,9 +26,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker/pickerbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
+	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
@@ -438,6 +440,26 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	}
 	host := windowhost.NewInst(reg, logger)
 	host.SetBus(rt.Bus)
+	// The launcher (ADR-0214 §SD1/§SD3). Registered at init like every other
+	// app; what it cannot know until now is the host it opens through, so the
+	// two halves meet here. *Inst satisfies launcher.HostI structurally —
+	// neither package imports the other's types.
+	lchr := launcher.Default
+	lchr.SetHost(host)
+	lchr.SetHelpApp(helphost.ManifestId)
+	// Ranking, when the facts store can answer for it (ADR-0214 §SD7). A
+	// no-op against the in-memory fallback, which is the correct behaviour
+	// rather than a degraded one: a run with no server has no trail to rank
+	// by, so the launcher orders by authored metadata as it did before.
+	if rt.Facts != nil {
+		// A bounded read on the boot path: the launcher's ordering is not
+		// worth delaying the first frame for, and a server that cannot answer
+		// in two seconds is one the rest of the boot is already tolerating.
+		histCtx, histCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		lchr.BindHistory(histCtx, rt.Facts)
+		histCancel()
+	}
+	host.SetLauncher(lchr)
 	if rt.opts.Services.Sysmetrics {
 		rt.bootSysmetrics()
 	}
@@ -575,6 +597,11 @@ func (rt *Runtime) chrome(extraMenus func(), host *windowhost.Inst) imzhost.Chro
 		Host:        host,
 		VideoOutput: rt.opts.VideoOutput,
 		HelpHost:    rt.opts.HelpHost,
+		// The launcher is bound wherever a window host exists — it is that
+		// host's own surface (ADR-0214 §SD1), not an optional service, and the
+		// only path that has no window host is the screenshot tour, which does
+		// not build chrome from here.
+		Launcher: launcher.ManifestId,
 	}
 }
 
