@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	"github.com/stretchr/testify/assert"
@@ -196,7 +197,7 @@ func TestUnknownKindIsRefusedAndListsTheAlternatives(t *testing.T) {
 	_, err := expand(t, "SELECT LW_COMPONENT('SysNope') FROM boxer.facts")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no registered store publishes this component kind")
-	assert.Contains(t, err.Error(), "SysMem", "the message should list what is registered")
+	assert.Contains(t, ebtest.Fields(t, err)["knownKinds"], "SysMem", "the error lists what is registered")
 }
 
 // A component read whose SELECT reads a different table would emit column

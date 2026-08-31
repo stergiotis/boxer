@@ -95,14 +95,14 @@ func expandCore(passName string, sql string, seg lwsql.TableSegments, schema Tar
 	}
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", passName, err)
+		err = eb.Build().Errorf(passName+": %w", err)
 		return
 	}
 	seg, tgt := bindTarget(pr, schema, defaultDatabase, seg)
 	st := &expandState{pr: pr, rw: nanopass.NewRewriter(pr), seg: seg, target: tgt}
 	err = st.walk(pr.Tree)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", passName, err)
+		err = eb.Build().Errorf(passName+": %w", err)
 		return
 	}
 	result = nanopass.GetText(st.rw)

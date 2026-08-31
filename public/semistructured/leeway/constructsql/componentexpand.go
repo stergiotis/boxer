@@ -77,12 +77,12 @@ func expandComponents(sql string, comps ComponentSourceI, defaultDatabase string
 	}
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ComponentPassName, err)
+		err = eb.Build().Errorf(ComponentPassName+": %w", err)
 		return
 	}
 	roots, err := nanopass.BuildScopes(pr, defaultDatabase)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ComponentPassName, err)
+		err = eb.Build().Errorf(ComponentPassName+": %w", err)
 		return
 	}
 	st := &componentState{
@@ -95,7 +95,7 @@ func expandComponents(sql string, comps ComponentSourceI, defaultDatabase string
 	}
 	err = st.walk(pr.Tree)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ComponentPassName, err)
+		err = eb.Build().Errorf(ComponentPassName+": %w", err)
 		return
 	}
 	st.injectFilters()
@@ -179,8 +179,8 @@ func (inst *componentState) expandCall(name string, spelled string, funcExpr *gr
 		// the same list as a table, for a reader who wants it before writing
 		// the call rather than after (ADR-0189 §SD8).
 		err = inst.errCall(spelled, funcExpr).Str("kind", kind).
-			Errorf("no registered store publishes this component kind; keelson('lw_components') lists them: %s",
-				strings.Join(inst.comps.Kinds(), ", "))
+			Strs("knownKinds", inst.comps.Kinds()).
+			Errorf("no registered store publishes this component kind; keelson('lw_components') lists them")
 		return
 	}
 
