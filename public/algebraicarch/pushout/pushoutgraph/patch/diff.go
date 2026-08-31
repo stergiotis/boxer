@@ -3,7 +3,7 @@ package patch
 import (
 	"bytes"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
@@ -31,14 +31,14 @@ const maxLineDiffCells = 4 << 20
 // LCS table would exceed maxLineDiffCells.
 func LineDiff(oldIDs []t.NodeID, oldContents [][]byte, newLines [][]byte) (result DiffResult, err error) {
 	if len(oldIDs) != len(oldContents) {
-		err = eh.Errorf("LineDiff: %d oldIDs but %d oldContents", len(oldIDs), len(oldContents))
+		err = eb.Build().Int("oldIDs", len(oldIDs)).Int("oldContents", len(oldContents)).Errorf("LineDiff: oldIDs and oldContents lengths differ")
 		return
 	}
 	// Compute LCS using standard DP.
 	m := len(oldContents)
 	n := len(newLines)
 	if (m+1)*(n+1) > maxLineDiffCells {
-		err = eh.Errorf("LineDiff: input too large for the quadratic LCS table (%d x %d lines, cap %d cells)", m, n, maxLineDiffCells)
+		err = eb.Build().Int("oldLines", m).Int("newLines", n).Int("capCells", maxLineDiffCells).Errorf("LineDiff: input too large for the quadratic LCS table")
 		return
 	}
 

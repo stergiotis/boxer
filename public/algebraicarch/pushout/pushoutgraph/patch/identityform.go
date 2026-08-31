@@ -6,6 +6,7 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
@@ -248,6 +249,6 @@ func (inst *identityWriter) writeChange(c *Change) {
 		inst.writeNodeID(c.Src)
 		inst.writeNodeID(c.Dest)
 	default:
-		inst.err = eh.Errorf("change kind %d has no identity-form encoding", c.Kind)
+		inst.err = eb.Build().Uint8("kind", uint8(c.Kind)).Errorf("change kind has no identity-form encoding")
 	}
 }

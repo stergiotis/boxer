@@ -181,7 +181,7 @@ func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 		case ChangeKindNewEdge:
 			err = g.AddEdge(c.Src, c.Dest, inst.Hash)
 			if err != nil {
-				err = eh.Errorf("apply NewEdge %v->%v: %w", c.Src, c.Dest, err)
+				err = eb.Build().Stringer("src", c.Src).Stringer("dest", c.Dest).Errorf("apply NewEdge: %w", err)
 				return
 			}
 		}
@@ -222,24 +222,24 @@ func (inst *Patch) validateAgainst(g t.GraphReaderI) (err error) {
 			}
 			for _, up := range c.UpContext {
 				if !exists(up) {
-					err = eh.Errorf("up-context node %v does not exist", up)
+					err = eb.Build().Stringer("nodeID", up).Errorf("up-context node does not exist")
 					return
 				}
 			}
 			for _, down := range c.DownContext {
 				if !exists(down) {
-					err = eh.Errorf("down-context node %v does not exist", down)
+					err = eb.Build().Stringer("down", down).Errorf("down-context node does not exist")
 					return
 				}
 			}
 			willExist[c.NodeID] = struct{}{}
 		case ChangeKindNewEdge:
 			if !exists(c.Src) {
-				err = eh.Errorf("source node %v does not exist", c.Src)
+				err = eb.Build().Stringer("src", c.Src).Errorf("source node does not exist")
 				return
 			}
 			if !exists(c.Dest) {
-				err = eh.Errorf("dest node %v does not exist", c.Dest)
+				err = eb.Build().Stringer("dest", c.Dest).Errorf("dest node does not exist")
 				return
 			}
 		case ChangeKindDeleteNode:
@@ -248,7 +248,7 @@ func (inst *Patch) validateAgainst(g t.GraphReaderI) (err error) {
 				return
 			}
 			if !exists(c.NodeID) {
-				err = eh.Errorf("node %v does not exist", c.NodeID)
+				err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("node does not exist")
 				return
 			}
 		}
@@ -311,11 +311,11 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 			continue
 		}
 		if _, own := ownDeletes[c.NodeID]; !own {
-			err = eh.Errorf("unapply %s: node %v is tombstoned by another still-applied patch: %w", inst.Hash, c.NodeID, ErrHasDependents)
+			err = eb.Build().Stringer("hash", inst.Hash).Stringer("nodeID", c.NodeID).Errorf("unapply: node is tombstoned by another still-applied patch: %w", ErrHasDependents)
 			return
 		}
 		if n, known := deleterCount(c.NodeID); known && n > 1 {
-			err = eh.Errorf("unapply %s: node %v is tombstoned by %d patches: %w", inst.Hash, c.NodeID, n, ErrHasDependents)
+			err = eb.Build().Stringer("hash", inst.Hash).Stringer("nodeID", c.NodeID).Int("patches", n).Errorf("unapply: node is tombstoned by other patches: %w", ErrHasDependents)
 			return
 		}
 	}
@@ -336,7 +336,7 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 		if n, known := deleterCount(c.NodeID); known && n > 1 {
 			continue
 		}
-		err = eh.Errorf("unapply %s: node %v has been swept: %w", inst.Hash, c.NodeID, ErrRetentionPermanent)
+		err = eb.Build().Stringer("hash", inst.Hash).Stringer("nodeID", c.NodeID).Errorf("unapply: node has been swept: %w", ErrRetentionPermanent)
 		return
 	}
 
@@ -395,7 +395,7 @@ func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) (err e
 			continue // pseudo-edges are derived, not authored
 		}
 		if e.IntroducedBy != own {
-			err = eh.Errorf("node %v has foreign forward edge from patch %s: %w", id, e.IntroducedBy, ErrHasDependents)
+			err = eb.Build().Stringer("id", id).Stringer("introducedBy", e.IntroducedBy).Errorf("node has foreign forward edge from patch: %w", ErrHasDependents)
 			return
 		}
 	}
@@ -404,7 +404,7 @@ func assertNoForeignEdges(g t.GraphReaderI, id t.NodeID, own t.PatchHash) (err e
 			continue
 		}
 		if e.IntroducedBy != own {
-			err = eh.Errorf("node %v has foreign back edge from patch %s: %w", id, e.IntroducedBy, ErrHasDependents)
+			err = eb.Build().Stringer("id", id).Stringer("introducedBy", e.IntroducedBy).Errorf("node has foreign back edge from patch: %w", ErrHasDependents)
 			return
 		}
 	}

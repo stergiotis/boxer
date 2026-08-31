@@ -53,7 +53,7 @@ func (inst *pijulTextBackend) NewRepo(actor string, path string) (repo RepoI) {
 func (inst *pijulTextBackend) Clone(ctx context.Context, src RepoI, destPath string, destActor string) (dest RepoI, audit string, err error) {
 	srcRepo, ok := src.(*pijulTextRepo)
 	if !ok {
-		err = eh.Errorf("pijul-text backend cannot clone from a %T", src)
+		err = eb.Build().Type("source", src).Errorf("pijul-text backend cannot clone from this source type")
 		return
 	}
 	parentDir := filepath.Dir(destPath)
@@ -225,7 +225,7 @@ func (inst *pijulTextRepo) Apply(ctx context.Context, env PatchEnvelope) (audit 
 func (inst *pijulTextRepo) Push(ctx context.Context, dest RepoI) (audit string, err error) {
 	other, ok := dest.(*pijulTextRepo)
 	if !ok {
-		err = eh.Errorf("pijul-text Push requires a pijul-text destination, got %T", dest)
+		err = eb.Build().Type("dest", dest).Errorf("pijul-text Push requires a pijul-text destination")
 		return
 	}
 	audit, err = inst.runner.Push(ctx, inst.path, other.path)
@@ -235,7 +235,7 @@ func (inst *pijulTextRepo) Push(ctx context.Context, dest RepoI) (audit string, 
 func (inst *pijulTextRepo) Pull(ctx context.Context, src RepoI) (audit string, hadConflict bool, err error) {
 	other, ok := src.(*pijulTextRepo)
 	if !ok {
-		err = eh.Errorf("pijul-text Pull requires a pijul-text source, got %T", src)
+		err = eb.Build().Type("source", src).Errorf("pijul-text Pull requires a pijul-text source")
 		return
 	}
 	audit, hadConflict, err = inst.runner.Pull(ctx, inst.path, other.path)
