@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Decimation — replaying a range longer than the history window can hold
@@ -76,7 +77,7 @@ func (inst *Reader) CountBundles(ctx context.Context, w Window) (n int64, err er
 		counts, ok := rec.Column(0).(*array.Int64)
 		if !ok {
 			rec.Release()
-			err = eh.Errorf("sysmreplay: count column is %s, not int64", rec.Column(0).DataType())
+			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("sysmreplay: count column is not int64")
 			return
 		}
 		if rec.NumRows() > 0 {
@@ -131,7 +132,7 @@ func (inst *Reader) PlanDecimation(ctx context.Context, w Window, slots int) (pl
 		if !ok {
 			rec.Release()
 			plan.TimesMS = nil
-			err = eh.Errorf("sysmreplay: decimation stamp column is %s, not int64", rec.Column(0).DataType())
+			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("sysmreplay: decimation stamp column is not int64")
 			return
 		}
 		for i := range int(rec.NumRows()) {

@@ -7,6 +7,7 @@ import (
 	factsddl "github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ddl"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // MvBaseName is the unqualified name of the refreshable materialized
@@ -31,22 +32,22 @@ func ddlColumns() (cols [][2]string, err error) {
 			continue
 		}
 		if !strings.HasPrefix(line, `"`) {
-			err = eh.Errorf("queryrunfacts: ddl column line without leading quote: %q", line)
+			err = eb.Build().Str("line", line).Errorf("queryrunfacts: ddl column line without leading quote")
 			return
 		}
 		name, rest, found := strings.Cut(line[1:], `"`)
 		if !found {
-			err = eh.Errorf("queryrunfacts: ddl column line without closing quote: %q", line)
+			err = eb.Build().Str("line", line).Errorf("queryrunfacts: ddl column line without closing quote")
 			return
 		}
 		chType, _, found := strings.Cut(strings.TrimSpace(rest), " CODEC(")
 		if !found {
-			err = eh.Errorf("queryrunfacts: ddl column %q without CODEC clause: %q", name, line)
+			err = eb.Build().Str("column", name).Str("line", line).Errorf("queryrunfacts: ddl column without CODEC clause")
 			return
 		}
 		chType = strings.TrimSpace(chType)
 		if chType == "" {
-			err = eh.Errorf("queryrunfacts: ddl column %q with empty type: %q", name, line)
+			err = eb.Build().Str("column", name).Str("line", line).Errorf("queryrunfacts: ddl column with empty type")
 			return
 		}
 		cols = append(cols, [2]string{name, chType})
@@ -108,7 +109,7 @@ func ComposeMvSql(mvName string, factsTable string, pullURL string, cadenceSecon
 		return
 	}
 	if cadenceSeconds < 1 {
-		err = eh.Errorf("queryrunfacts: mv cadence %d < 1s", cadenceSeconds)
+		err = eb.Build().Int("cadenceSeconds", cadenceSeconds).Errorf("queryrunfacts: mv cadence < 1s")
 		return
 	}
 	var structure string

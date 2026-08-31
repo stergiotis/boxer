@@ -3,6 +3,7 @@ package sysmreplay
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
@@ -40,7 +41,7 @@ func TopologyFrom(row sysmfacts.SysTopology) (topo *sysmsnap.Topology, err error
 	for i := range n {
 		num := row.Node[i]
 		if prev, dup := byNum[num]; dup {
-			err = eh.Errorf("sysmreplay: sysTopology node number %d appears at positions %d and %d", num, prev, i)
+			err = eb.Build().Uint32("node", num).Int("firstPosition", prev).Int("secondPosition", i).Errorf("sysmreplay: sysTopology node number appears twice")
 			return
 		}
 		byNum[num] = i
@@ -71,7 +72,7 @@ func TopologyFrom(row sysmfacts.SysTopology) (topo *sysmsnap.Topology, err error
 		p := row.Parent[i]
 		if p < 0 {
 			if rootIdx >= 0 {
-				err = eh.Errorf("sysmreplay: sysTopology has more than one root (nodes %d and %d)", row.Node[rootIdx], row.Node[i])
+				err = eb.Build().Uint32("root", row.Node[rootIdx]).Uint32("otherRoot", row.Node[i]).Errorf("sysmreplay: sysTopology has more than one root")
 				return
 			}
 			rootIdx = i
@@ -79,11 +80,11 @@ func TopologyFrom(row sysmfacts.SysTopology) (topo *sysmsnap.Topology, err error
 		}
 		pi, ok := byNum[uint32(p)]
 		if !ok {
-			err = eh.Errorf("sysmreplay: sysTopology node %d names parent %d, which is not in the row", row.Node[i], p)
+			err = eb.Build().Uint32("node", row.Node[i]).Int32("parent", p).Errorf("sysmreplay: sysTopology node names a parent that is not in the row")
 			return
 		}
 		if pi == i {
-			err = eh.Errorf("sysmreplay: sysTopology node %d is its own parent", row.Node[i])
+			err = eb.Build().Uint32("node", row.Node[i]).Errorf("sysmreplay: sysTopology node is its own parent")
 			return
 		}
 		objs[pi].Children = append(objs[pi].Children, objs[i])
@@ -106,7 +107,7 @@ func TopologyFrom(row sysmfacts.SysTopology) (topo *sysmsnap.Topology, err error
 		}
 	}
 	if seen != n {
-		err = eh.Errorf("sysmreplay: sysTopology is not a tree: %d of %d nodes reachable from the root", seen, n)
+		err = eb.Build().Int("reachable", seen).Int("nodes", n).Errorf("sysmreplay: sysTopology is not a tree — not every node is reachable from the root")
 		return
 	}
 

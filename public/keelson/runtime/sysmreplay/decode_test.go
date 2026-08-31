@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ func TestNetFrom_RefusesMisalignedArrays(t *testing.T) {
 	snap, err := NetFrom(row)
 	require.Error(t, err, "a short array must not be silently padded or truncated")
 	assert.Nil(t, snap)
-	assert.Contains(t, err.Error(), "Running")
+	assert.Contains(t, arrayNames(t, err), "Running")
 	assert.Contains(t, err.Error(), "misaligned")
 }
 
@@ -52,7 +53,7 @@ func TestGPUFrom_RefusesMisalignedArrays(t *testing.T) {
 	}
 	_, err := GPUFrom(row)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "MemoryUsedBytes")
+	assert.Contains(t, arrayNames(t, err), "MemoryUsedBytes")
 }
 
 // TestBatteryFrom_GroupsAreCheckedSeparately pins that the two power-supply
@@ -73,7 +74,7 @@ func TestBatteryFrom_GroupsAreCheckedSeparately(t *testing.T) {
 	row.AcOnline = []uint8{1, 0}
 	_, err = BatteryFrom(row)
 	require.Error(t, err, "the adapter group is still checked within itself")
-	assert.Contains(t, err.Error(), "AcOnline")
+	assert.Contains(t, arrayNames(t, err), "AcOnline")
 }
 
 func TestProcsFrom_RefusesMisalignedCmdRow(t *testing.T) {
@@ -90,7 +91,7 @@ func TestProcsFrom_RefusesMisalignedCmdRow(t *testing.T) {
 	}
 	_, err := ProcsFrom(row, cmd)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "sysProcCmd")
+	assert.Equal(t, "sysProcCmd", ebtest.Fields(t, err)["kind"])
 }
 
 // TestProcsFrom_JoinsOnPid pins that the command line follows its own pid
@@ -215,7 +216,10 @@ func TestTopologyFrom_RefusesDuplicateNodeNumbers(t *testing.T) {
 	row.Node[2] = 1
 	_, err := TopologyFrom(row)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "appears at positions")
+	assert.Contains(t, err.Error(), "appears twice")
+	f := ebtest.Fields(t, err)
+	assert.NotNil(t, f["firstPosition"])
+	assert.NotNil(t, f["secondPosition"])
 }
 
 // TestTopologyFrom_HonoursStoredNodeNumbers pins why the writer stores the node
@@ -236,7 +240,7 @@ func TestTopologyFrom_RefusesMisalignedArrays(t *testing.T) {
 	row.FreqGovernor = []string{"", ""}
 	_, err := TopologyFrom(row)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "FreqGovernor")
+	assert.Contains(t, arrayNames(t, err), "FreqGovernor")
 }
 
 // TestParseTopoKind_RoundTripsEveryKind pins the label inverse against the
@@ -259,4 +263,12 @@ func TestCarry_HoldsUntilTheNextRow(t *testing.T) {
 	assert.Equal(t, msTime(100), c.at(msTime(299)).Ts, "it is held across ticks that carry none")
 	assert.Equal(t, msTime(300), c.at(msTime(300)).Ts)
 	assert.Equal(t, msTime(300), c.at(msTime(9999)).Ts, "the last row holds to the end")
+}
+
+// arrayNames returns the pair of array names a misalignment error carries, so a
+// test can name the array it expects without matching prose.
+func arrayNames(t *testing.T, err error) (names []any) {
+	t.Helper()
+	f := ebtest.Fields(t, err)
+	return []any{f["array"], f["otherArray"]}
 }

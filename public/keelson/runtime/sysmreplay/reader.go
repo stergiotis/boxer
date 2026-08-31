@@ -429,7 +429,7 @@ func (inst *Reader) fetchAsOf(ctx context.Context, domain string, key uint64, bo
 	case DomainTopology:
 		seq = inst.store.ScanSysTopology(ctx, opts)
 	default:
-		err = eh.Errorf("sysmreplay: %s is not a carried kind", domain)
+		err = eb.Build().Str("domain", domain).Errorf("sysmreplay: domain is not a carried kind")
 		return
 	}
 	for got, serr := range seq {

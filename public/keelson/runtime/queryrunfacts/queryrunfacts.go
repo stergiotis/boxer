@@ -23,7 +23,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // KindLabel is the human-readable kind tag on the symbol section — the
@@ -257,7 +257,7 @@ func BuildEntities(ent *dml.InEntityFacts, rows []Row) (err error) {
 		EncodeEntity(ent, rows[i])
 		err = ent.CommitEntity()
 		if err != nil {
-			err = eh.Errorf("queryrunfacts: commit entity %d (query_id %q): %w", i, rows[i].QueryId, err)
+			err = eb.Build().Int("entity", i).Str("queryId", rows[i].QueryId).Errorf("queryrunfacts: commit entity: %w", err)
 			return
 		}
 	}
