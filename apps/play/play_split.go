@@ -378,7 +378,7 @@ func checkUniqueIDs(nodes []splitNode) (err error) {
 	seen := make(map[NodeID]struct{}, len(nodes))
 	for i := range nodes {
 		if _, dup := seen[nodes[i].ID]; dup {
-			err = eh.Errorf("splitGraph: duplicate node id %q", nodes[i].ID)
+			err = eb.Build().Str("nodeID", string(nodes[i].ID)).Errorf("splitGraph: duplicate node id")
 			return
 		}
 		seen[nodes[i].ID] = struct{}{}
@@ -803,7 +803,7 @@ func checkAcyclic(nodes []splitNode) (err error) {
 		for _, d := range adj[id] {
 			switch color[d] {
 			case gray:
-				vErr = eh.Errorf("splitGraph: dependency cycle through node %q", d)
+				vErr = eb.Build().Str("nodeID", string(d)).Errorf("splitGraph: dependency cycle through node")
 				return
 			case white:
 				vErr = visit(d)

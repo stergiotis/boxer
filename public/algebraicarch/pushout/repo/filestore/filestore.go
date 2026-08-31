@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
@@ -146,7 +147,7 @@ func (inst *Store) GetEnvelope(ctx context.Context, h t.PatchHash) (framed []byt
 			err = eh.Errorf("%s: %w", h, repo.ErrEnvelopeNotFound)
 			return
 		}
-		err = eh.Errorf("read envelope %s: %w", h, rerr)
+		err = eb.Build().Stringer("patchHash", h).Errorf("read envelope: %w", rerr)
 	}
 	return
 }
@@ -158,7 +159,7 @@ func (inst *Store) HasEnvelope(ctx context.Context, h t.PatchHash) (ok bool, err
 		ok = true
 	case errors.Is(serr, fs.ErrNotExist):
 	default:
-		err = eh.Errorf("stat envelope %s: %w", h, serr)
+		err = eb.Build().Stringer("patchHash", h).Errorf("stat envelope: %w", serr)
 	}
 	return
 }

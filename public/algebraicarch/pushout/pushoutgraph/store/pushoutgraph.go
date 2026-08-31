@@ -157,7 +157,7 @@ func (inst *PushoutGraph) AddNode(id t.NodeID, content []byte, patch t.PatchHash
 
 	for _, up := range upContext {
 		if !inst.HasNode(up) {
-			return eh.Errorf("up-context node %v: %w", up, ErrNodeMissing)
+			return eb.Build().Stringer("nodeID", up).Errorf("up-context node: %w", ErrNodeMissing)
 		}
 		kind := t.EdgeKindLive
 		if inst.IsDeleted(up) {

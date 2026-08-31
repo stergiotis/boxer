@@ -302,7 +302,7 @@ func (inst *App) tripwireCHMatches(ctx context.Context, alloc memory.Allocator, 
 	}
 	inner, ok := list.ListValues().(*array.String)
 	if !ok {
-		err = eh.Errorf("tripwire inner column type %T", list.ListValues())
+		err = eb.Build().Type("array", list.ListValues()).Errorf("tripwire inner column type")
 		return
 	}
 	offsets := list.Offsets()

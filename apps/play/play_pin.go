@@ -144,7 +144,7 @@ func arrowColumnType(dt arrow.DataType) (chType string, err error) {
 		// values; declare the value type.
 		chType, err = arrowColumnType(t.ValueType)
 	default:
-		err = eh.Errorf("play: pin: unsupported column type %s", dt)
+		err = eb.Build().Stringer("dataType", dt).Errorf("play: pin: unsupported column type")
 	}
 	return
 }

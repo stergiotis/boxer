@@ -174,7 +174,7 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 		}
 		env, codecName, derr := opts.Codecs.Decode(framed)
 		if derr != nil {
-			err = eh.Errorf("applied %s: %w", h, errors.Join(ErrCorruptStore, derr))
+			err = eb.Build().Stringer("patchHash", h).Errorf("applied: %w", errors.Join(ErrCorruptStore, derr))
 			return
 		}
 		if env.Patch.Hash != h {
@@ -188,7 +188,7 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 			}
 		}
 		if aerr := env.Patch.Apply(r0.g); aerr != nil {
-			err = eh.Errorf("replay %s: %w", h, errors.Join(ErrCorruptStore, aerr))
+			err = eb.Build().Stringer("patchHash", h).Errorf("replay: %w", errors.Join(ErrCorruptStore, aerr))
 			return
 		}
 		r0.appliedSet[h] = struct{}{}
@@ -385,7 +385,7 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	}
 	idx := slices.Index(inst.applied, h)
 	if idx < 0 {
-		err = eh.Errorf("patch %s: %w", h, ErrNotApplied)
+		err = eb.Build().Stringer("patchHash", h).Errorf("patch: %w", ErrNotApplied)
 		return
 	}
 	for _, other := range inst.applied {
@@ -410,10 +410,10 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	next := inst.g.Clone()
 	if uerr := info.Patch.Unapply(next); uerr != nil {
 		if errors.Is(uerr, patch.ErrRetentionPermanent) {
-			err = eh.Errorf("unrecord %s: %w", h, errors.Join(ErrRetentionBlocked, uerr))
+			err = eb.Build().Stringer("patchHash", h).Errorf("unrecord: %w", errors.Join(ErrRetentionBlocked, uerr))
 			return
 		}
-		err = eh.Errorf("unrecord %s: %w", h, uerr)
+		err = eb.Build().Stringer("patchHash", h).Errorf("unrecord: %w", uerr)
 		return
 	}
 	newApplied := slices.Delete(slices.Clone(inst.applied), idx, idx+1)
