@@ -28,6 +28,7 @@
 package factsstore
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"sync"
@@ -494,6 +495,46 @@ type RunEventFilter struct {
 // optional-capability pattern, and treat absence as an empty trail.
 type RunEventReaderI interface {
 	ListRunEvents(filter RunEventFilter) (rows []RunEventRow, err error)
+}
+
+// AppLaunchStat is one app's aggregated launch history: how many times it has
+// been opened, how recently, and the exponentially-decayed weight the two fold
+// into (ADR-0214 §SD8).
+//
+// Score is computed store-side rather than here so the decay runs over the
+// whole trail without shipping a row per launch. LastTs is carried alongside
+// because "most recent" and "most frecent" are different orders and the
+// launcher wants both: the menu's recents list is the first, its ranking bonus
+// the second.
+type AppLaunchStat struct {
+	AppId  app.AppIdT
+	Opens  uint64
+	LastTs time.Time
+	Score  float64
+}
+
+// AppLaunchHistoryReaderI is the optional capability behind the launcher's
+// ranking (ADR-0214 §SD7). Like [RunEventReaderI] it is deliberately NOT part
+// of [FactsStoreI]: only the ClickHouse-backed store can answer it, and
+// requiring it of every writer would put a method the in-memory store cannot
+// serve on every test fake. Consumers type-assert and treat absence as "no
+// history", which is the correct reading — a run with no server has no trail
+// to rank by, and the launcher falls back to authored-metadata ordering.
+//
+// This is the read ADR-0158 §SD10 named as ranking's blocker. The write half
+// has existed since ADR-0026: every window open writes an app-lifecycle
+// `started` row. What was missing is exactly this — an aggregate ACROSS runs,
+// which [Store.LifecyclesByRun] deliberately refuses to offer because a
+// run-anchored reader is what its own consumer needed.
+type AppLaunchHistoryReaderI interface {
+	// AppLaunchStats returns one row per app that has ever been opened, in
+	// Score-descending order. halfLife sets the decay: a launch that old
+	// counts half as much as one just now. A non-positive halfLife is an
+	// error rather than a silent default — the caller owns the tuning knob.
+	//
+	// Apps with no launches are absent rather than present with a zero score,
+	// so a caller can tell "never opened" from "opened long ago".
+	AppLaunchStats(ctx context.Context, halfLife time.Duration, limit uint32) (stats []AppLaunchStat, err error)
 }
 
 // FactsStoreI is the contract implementations satisfy. Write methods
