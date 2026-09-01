@@ -74,6 +74,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -155,7 +156,7 @@ func NewFranzReaderOrdered(opts FranzReaderOrderedOpts, clientOpts func() (kgoOp
 		return
 	}
 	if opts.MaxYieldBatchBytes > opts.PartitionBufferBytes {
-		err = eh.Errorf("MaxYieldBatchBytes (%d) must be <= PartitionBufferBytes (%d)", opts.MaxYieldBatchBytes, opts.PartitionBufferBytes)
+		err = eb.Build().Int64("maxYieldBatchBytes", opts.MaxYieldBatchBytes).Int64("partitionBufferBytes", opts.PartitionBufferBytes).Errorf("MaxYieldBatchBytes must be <= PartitionBufferBytes")
 		return
 	}
 	log := opts.Logger

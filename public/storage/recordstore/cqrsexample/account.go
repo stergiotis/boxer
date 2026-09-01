@@ -3,7 +3,6 @@ package cqrsexample
 import (
 	"context"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -54,14 +53,14 @@ func (inst *Account) fold(row *LedgerEntity) (err error) {
 		inst.Balance += row.Deposited.Val.Amount
 	case row.Withdrawn.Has:
 		if row.Withdrawn.Val.Amount > inst.Balance {
-			err = eh.Errorf("event stream violates the balance invariant at seq %d", recordstore.SeqOf(row.Ts))
+			err = eb.Build().Uint64("seq", recordstore.SeqOf(row.Ts)).Errorf("event stream violates the balance invariant")
 			return
 		}
 		inst.Balance -= row.Withdrawn.Val.Amount
 	case row.Closed.Has:
 		inst.Closed = true
 	default:
-		err = eh.Errorf("ledger row at seq %d carries no known event component", recordstore.SeqOf(row.Ts))
+		err = eb.Build().Uint64("seq", recordstore.SeqOf(row.Ts)).Errorf("ledger row carries no known event component")
 		return
 	}
 	inst.nextSeq = recordstore.SeqOf(row.Ts) + 1
@@ -85,7 +84,7 @@ func (inst *Service) Load(ctx context.Context, id string) (acct *Account, err er
 	from := recordstore.SeqTs(0)
 	snap, found, err := inst.st.Latest(ctx, snapKey(id))
 	if err != nil {
-		err = eh.Errorf("load snapshot for %s: %w", id, err)
+		err = eb.Build().Str("id", id).Errorf("load snapshot failed: %w", err)
 		return
 	}
 	if found && snap.AccountState.Has {
@@ -125,12 +124,12 @@ func (inst *Service) append(ctx context.Context, acct *Account, add func(b *Ledg
 	add(b)
 	err = b.Commit()
 	if err != nil {
-		err = eh.Errorf("append event to %s: %w", acct.ID, err)
+		err = eb.Build().Str("id", acct.ID).Errorf("append event failed: %w", err)
 		return
 	}
 	_, err = inst.st.Flush(ctx)
 	if err != nil {
-		err = eh.Errorf("flush event to %s: %w", acct.ID, err)
+		err = eb.Build().Str("id", acct.ID).Errorf("flush event failed: %w", err)
 		return
 	}
 	acct.nextSeq++
@@ -182,7 +181,7 @@ func (inst *Service) Withdraw(ctx context.Context, id string, amount uint64) (er
 		return
 	}
 	if amount > acct.Balance {
-		err = eh.Errorf("withdraw %d from %s: balance is %d", amount, id, acct.Balance)
+		err = eb.Build().Uint64("amount", amount).Str("id", id).Uint64("balance", acct.Balance).Errorf("withdrawal exceeds the balance")
 		return
 	}
 	return inst.append(ctx, acct, func(b *LedgerEntityBuilder) {

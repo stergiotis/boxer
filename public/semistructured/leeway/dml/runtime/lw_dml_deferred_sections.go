@@ -79,7 +79,7 @@ func (inst *DeferredSectionBuffer) StartKind(kind string) (err error) {
 // something neither spelling promised.
 func (inst *DeferredSectionBuffer) MarkRaw() (err error) {
 	if len(inst.kinds) > 0 {
-		err = eb.Build().Str("kind", inst.kinds[0]).Errorf("Raw() cannot be used on an entity that already carries component %s — the two spellings are exclusive per entity", inst.kinds[0])
+		err = eb.Build().Str("kind", inst.kinds[0]).Errorf("Raw() cannot be used on an entity that already carries a component — the two spellings are exclusive per entity")
 		return
 	}
 	inst.rawInUse = true

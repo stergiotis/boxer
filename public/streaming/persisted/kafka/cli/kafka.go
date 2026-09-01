@@ -171,7 +171,7 @@ func parseSASLMechanism(s string) (m pkafka.SASLMechanismE, err error) {
 	case "OAUTHBEARER":
 		m = pkafka.SASLMechanismOAuthBearer
 	default:
-		err = eh.Errorf("unsupported --sasl-mechanism %q (try PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or none)", s)
+		err = eb.Build().Str("mechanism", s).Errorf("unsupported --sasl-mechanism (try PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or none)")
 	}
 	return
 }
@@ -567,12 +567,12 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 		return
 	}
 	if n < 0 {
-		err = eh.Errorf("invalid netstring length %d (must be non-negative)", n)
+		err = eb.Build().Int("length", n).Errorf("invalid netstring length (must be non-negative)")
 		return
 	}
 	value = make([]byte, n)
 	if _, err = io.ReadFull(r, value); err != nil {
-		err = eh.Errorf("read netstring value (%d bytes): %w", n, err)
+		err = eb.Build().Int("length", n).Errorf("read netstring value: %w", err)
 		return
 	}
 	var term byte
@@ -582,7 +582,7 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 		return
 	}
 	if term != ',' {
-		err = eh.Errorf("invalid netstring terminator: expected ',', got %q", term)
+		err = eb.Build().Str("terminator", string(term)).Errorf("invalid netstring terminator; expected ','")
 		return
 	}
 	ok = true
@@ -677,7 +677,7 @@ func parseOffset(s string) (off kgo.Offset, err error) {
 		var n int64
 		n, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			err = eh.Errorf("invalid offset %q: %w", s, err)
+			err = eb.Build().Str("offset", s).Errorf("invalid offset: %w", err)
 			return
 		}
 		off = kgo.NewOffset().At(n)

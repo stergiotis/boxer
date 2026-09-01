@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 )
 
@@ -70,7 +71,7 @@ func TestNewFranzReaderOrderedValidation(t *testing.T) {
 			r, err := kafka.NewFranzReaderOrdered(opts, stubClientOpts)
 			require.Error(t, err)
 			require.Nil(t, r)
-			assert.Contains(t, err.Error(), tc.errMatch)
+			assert.Contains(t, ebtest.Text(t, err), tc.errMatch)
 		})
 	}
 }
@@ -127,7 +128,7 @@ func TestSASLMechanismsUnsupported(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, mechs)
 	assert.True(t, errors.Is(err, kafka.ErrUnsupportedSASLMechanism), "wraps ErrUnsupportedSASLMechanism")
-	assert.Contains(t, err.Error(), "mechanism 0:")
+	assert.EqualValues(t, 0, ebtest.Fields(t, err)["mechanism"], "the error names which mechanism")
 }
 
 // TestFranzConnectionDetailsZeroDurationsAreUsable is a regression

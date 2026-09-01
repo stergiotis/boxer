@@ -35,7 +35,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/twmb/franz-go/pkg/sasl"
 	"github.com/twmb/franz-go/pkg/sasl/oauth"
 	"github.com/twmb/franz-go/pkg/sasl/plain"
@@ -112,7 +112,7 @@ func SASLMechanisms(configs []SASLConfig) (mechanisms []sasl.Mechanism, err erro
 		case SASLMechanismSCRAMSHA512:
 			m = scram512Sasl(c.Username, c.Password)
 		default:
-			err = eh.Errorf("mechanism %v: %w", i, ErrUnsupportedSASLMechanism)
+			err = eb.Build().Int("mechanism", int(i)).Errorf("unsupported mechanism: %w", ErrUnsupportedSASLMechanism)
 			return
 		}
 		mechanisms = append(mechanisms, m)

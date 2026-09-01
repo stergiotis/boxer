@@ -58,7 +58,7 @@ func TestRawAndTypedContributionsAreExclusive(t *testing.T) {
 	require.NoError(t, typedFirst.StartKind("Label"))
 	err := typedFirst.MarkRaw()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Label", "the error names what is already on the entity")
+	assert.Equal(t, "Label", ebtest.Fields(t, err)["kind"], "the error names what is already on the entity")
 	assert.False(t, typedFirst.IsRaw())
 
 	var rawFirst runtime.DeferredSectionBuffer

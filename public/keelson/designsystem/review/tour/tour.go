@@ -187,9 +187,10 @@ func compareOne(scene, baselinePath, candidatePath string, window int) (o Outcom
 		switch {
 		case errors.Is(computeErr, ssim.ErrSizeMismatch):
 			o.Status = StatusDimMismatch
-			o.Err = eh.Errorf("baseline %dx%d vs candidate %dx%d",
-				a.Bounds().Dx(), a.Bounds().Dy(),
-				b.Bounds().Dx(), b.Bounds().Dy())
+			o.Err = eb.Build().
+				Int("baselineWidth", a.Bounds().Dx()).Int("baselineHeight", a.Bounds().Dy()).
+				Int("candidateWidth", b.Bounds().Dx()).Int("candidateHeight", b.Bounds().Dy()).
+				Errorf("baseline and candidate dimensions differ")
 		default:
 			o.Status = StatusDecodeError
 			o.Err = computeErr

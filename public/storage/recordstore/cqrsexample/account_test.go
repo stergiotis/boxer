@@ -4,8 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +38,7 @@ func TestAccountLifecycle(t *testing.T) {
 	require.NoError(t, svc.Deposit(ctx, id, 100))
 	require.NoError(t, svc.Deposit(ctx, id, 50))
 	require.NoError(t, svc.Withdraw(ctx, id, 30))
-	require.ErrorContains(t, svc.Withdraw(ctx, id, 1000), "balance is 120")
+	assert.EqualValues(t, 120, ebtest.Fields(t, svc.Withdraw(ctx, id, 1000))["balance"], "the error names the balance")
 
 	acct, err := svc.Load(ctx, id)
 	require.NoError(t, err)

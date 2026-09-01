@@ -207,8 +207,8 @@ func directCapabilities(ctx context.Context, opts Options) (capsByPkg map[string
 	})
 	if len(loadErrs) > 0 {
 		sort.Strings(loadErrs)
-		err = eh.Errorf("package load reported %d error(s), the analysis would be incomplete:\n\t%s",
-			len(loadErrs), strings.Join(loadErrs, "\n\t"))
+		err = eb.Build().Strs("errors", loadErrs).
+			Errorf("package load reported errors; the analysis would be incomplete")
 		return
 	}
 	queried := analyzer.GetQueriedPackages(pkgs)

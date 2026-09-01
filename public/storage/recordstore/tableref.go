@@ -93,7 +93,7 @@ func ProvisioningStatements(script, baked, target string) (stmts []string, err e
 		}
 	}
 	if create == "" {
-		err = eh.Errorf("provisioning statements: no CREATE TABLE header naming %q found at the start of the script", baked)
+		err = eb.Build().Str("baked", baked).Errorf("provisioning statements: no CREATE TABLE header naming the baked reference at the start of the script")
 		return
 	}
 	create = strings.TrimRight(create, " \t\r\n;")

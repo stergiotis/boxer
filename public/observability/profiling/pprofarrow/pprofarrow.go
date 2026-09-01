@@ -119,7 +119,7 @@ func Convert(r io.Reader, opts ...Option) (res Result, err error) {
 		}
 		col := sanitizeColumn(st.Type)
 		if _, clash := fixedColumns[col]; clash {
-			err = eh.Errorf("pprofarrow: sample type %q sanitizes to reserved column name %q", valueTypeName(st), col)
+			err = eb.Build().Str("sampleType", valueTypeName(st)).Str("column", col).Errorf("pprofarrow: sample type sanitizes to a reserved column name")
 			return
 		}
 		if slices.Contains(res.ExtraColumns, col) {
@@ -158,7 +158,7 @@ func aggregate(p *profile.Profile) (rows []*row, err error) {
 	var frames []string
 	for i, s := range p.Sample {
 		if len(s.Value) != nTypes {
-			err = eh.Errorf("pprofarrow: sample %d carries %d values for %d sample types", i, len(s.Value), nTypes)
+			err = eb.Build().Int("sample", i).Int("values", len(s.Value)).Int("sampleTypes", nTypes).Errorf("pprofarrow: sample value count does not match the sample types")
 			return
 		}
 		frames = appendFramesRootFirst(frames[:0], s)

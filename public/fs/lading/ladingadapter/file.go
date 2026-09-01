@@ -312,7 +312,7 @@ func (inst *File) readFixed(p []byte, off, end int64) (n int, err error) {
 		b, ok := inst.blocks[seq]
 		if !ok {
 			return n, eb.Build().Uint32("seq", seq).Uint32("blocks", inst.e.row.Blocks).
-				Errorf("a block of %s is missing from the snapshot", inst.name)
+				Str("path", inst.name).Errorf("a block is missing from the snapshot")
 		}
 		start := int64(seq) * bs
 		lo := max(off-start, 0)

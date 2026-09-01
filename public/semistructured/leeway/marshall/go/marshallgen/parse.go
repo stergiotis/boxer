@@ -534,7 +534,7 @@ func classifyType(expr ast.Expr) (shape goplan.FieldShape, err error) {
 		// marshalltypes.X per attribute (the scalar branch below).
 		if sel, isSel := at.Elt.(*ast.SelectorExpr); isSel {
 			if pkg, pkgOk := sel.X.(*ast.Ident); pkgOk && pkg.Name == "marshalltypes" {
-				err = eb.Build().Str("carrier", sel.Sel.Name).Errorf("slice carriers (`[]marshalltypes.%s`) were removed with `,explode` (ADR-0113 D1) — a carrier is a scalar `marshalltypes.%s`, one per attribute", sel.Sel.Name, sel.Sel.Name)
+				err = eb.Build().Str("carrier", sel.Sel.Name).Errorf("slice carriers were removed with `,explode` (ADR-0113 D1) — a carrier is a scalar `marshalltypes.<T>`, one per attribute")
 				return
 			}
 		}

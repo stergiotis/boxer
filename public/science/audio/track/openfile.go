@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/audio/decode"
 )
 
@@ -34,7 +34,7 @@ func OpenFileE(ctx context.Context, path string, opts Options) (inst *Track, kin
 	}
 	inst, err = OpenE(ctx, src, opts)
 	if err != nil {
-		return nil, kind, eh.Errorf("unable to open %s as a track: %w", kind, err)
+		return nil, kind, eb.Build().Stringer("kind", kind).Errorf("unable to open the file as a track: %w", err)
 	}
 	return inst, kind, nil
 }

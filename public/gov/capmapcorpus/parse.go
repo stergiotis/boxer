@@ -160,8 +160,8 @@ func ParseDir(vaultDir string) (corpus Corpus, err error) {
 	known := make(map[string]struct{}, len(files))
 	for i := range files {
 		if _, dup := known[files[i].slug]; dup {
-			return Corpus{}, eh.Errorf("duplicate competence slug %q at %s: slugs are the corpus's identity and must be unique",
-				files[i].slug, files[i].path)
+			return Corpus{}, eb.Build().Str("slug", files[i].slug).Str("path", files[i].path).
+				Errorf("duplicate competence slug: slugs are the corpus's identity and must be unique")
 		}
 		known[files[i].slug] = struct{}{}
 	}
