@@ -100,6 +100,44 @@ CS001 ships first as the scaffold validator.
 
 Accepted 2026-05-18. Phase 1 lands incrementally; CS001 ships with this ADR. The CS-numbering is append-only from this point.
 
+## Updates
+
+### 2026-09-01 — CS013 lands, and the phase-2 %w rule is done
+
+Phase 2's "always-`%w` for error args" is implemented as `CS013` and promoted to
+`error` severity under this ADR's own condition: the residual count reached zero
+across `public/` and `apps/`. It shipped reporting 1116 findings.
+
+Three things about the rule are worth carrying forward, because none was
+apparent from the rule-by-rule audit that produced this ADR:
+
+- **The backlog was a prose problem, not a mechanics problem.** A scripted pass
+  cleared a quarter of it; the rest needed a sentence rewritten by hand, because
+  a value sitting mid-clause takes the clause with it. Extending the fixer's key
+  derivation bought twelve sites. There was no second scripted pass to find.
+- **A constant interpolated with `%s` belongs back in the sentence.** A pass
+  name, a tag marker, a unit list: concatenating the constant leaves the message
+  byte-identical and takes the finding with it, because a constant expression is
+  still a constant format string. That is strictly better than moving a word
+  that the sentence needs into a field.
+- **The exceptions are four recognisable shapes**, now documented in
+  CODINGSTANDARDS "Error Handling → When a value has to stay in the message" and
+  on `RuleCS013` itself. The dangerous one is a message another component
+  string-matches: `strings.Contains` over an error from elsewhere in the tree is
+  invisible from the call site, and the producer's own tests keep passing when
+  the consumer breaks.
+
+`CS013` also carries the first `analysis.SuggestedFix` in this package, which is
+how it reports the sites it can rewrite mechanically. That keeps the
+"liftable into a `go vet -vettool=` driver" property this ADR's Alternatives
+section argued for: such a driver's `-fix` would apply them unchanged.
+
+Reading a field back in a test needed a helper that did not exist, so
+`eh/eb/ebtest` was added alongside — `Fields` to pin one value under a named
+key, `Text` for a case table that only needs the error to mention something.
+Without it, a test asserting a value inside `Error()` had no replacement
+assertion and the call site could not be fixed at all.
+
 ## Consequences
 
 - One more lint step in `scripts/ci/lint.sh`; expected overhead is well below staticcheck (no SSA construction, single AST pass per rule per package).
