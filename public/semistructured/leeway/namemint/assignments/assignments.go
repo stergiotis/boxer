@@ -185,7 +185,7 @@ func WriteGoldenFile(packageDir string, src SourceI) (err error) {
 func CompareToGoldenFile(packageDir string, src SourceI) (differences []string, err error) {
 	raw, err := os.ReadFile(GoldenPath(packageDir))
 	if err != nil {
-		err = eb.Build().Str("path", GoldenPath(packageDir)).Errorf("unable to read the golden (regenerate with %s=1): %w", RegenEnvVar, err)
+		err = eb.Build().Str("path", GoldenPath(packageDir)).Errorf("unable to read the golden (regenerate with "+RegenEnvVar+"=1): %w", err)
 		return
 	}
 	golden, err := Parse(string(raw))

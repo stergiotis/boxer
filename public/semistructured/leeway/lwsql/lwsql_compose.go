@@ -306,7 +306,7 @@ func (inst *Composer) name(kind string, s string) (n naming.StylableName, err er
 		return
 	}
 	if strings.Contains(string(n), inst.seg.Separator) {
-		err = eb.Build().Str(kind, s).Str("separator", inst.seg.Separator).Errorf("%s name contains the name separator", kind)
+		err = eb.Build().Str(kind, s).Str("separator", inst.seg.Separator).Errorf("the name contains the name separator")
 		return
 	}
 	return

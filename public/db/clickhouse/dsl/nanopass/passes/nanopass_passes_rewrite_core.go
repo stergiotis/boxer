@@ -6,7 +6,7 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // This file is the functional core shared by the local-rewrite canonicalisation
@@ -38,7 +38,7 @@ type nodeRule func(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (repl
 func rewriteNodes(sql string, name string, rules ...nodeRule) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eh.Errorf("%s: %w", name, err)
+		err = eb.Build().Str("pass", name).Errorf("rewrite pass failed: %w", err)
 		return
 	}
 	rw := nanopass.NewRewriter(pr)
@@ -73,7 +73,7 @@ type tokenRule func(tok antlr.Token) (replacement string, ok bool)
 func rewriteTokens(sql string, name string, rule tokenRule) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eh.Errorf("%s: %w", name, err)
+		err = eb.Build().Str("pass", name).Errorf("rewrite pass failed: %w", err)
 		return
 	}
 	rw := nanopass.NewRewriter(pr)

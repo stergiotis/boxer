@@ -256,53 +256,66 @@ func (inst *Inst) paddedCell(ids *c.WidgetIdStack, rowIdx int, body func()) {
 // double click opens. Selecting on single click is what makes the detail pane
 // reachable at all without committing to an open, which is §SD6's whole
 // premise.
+//
+// That the row is one target has to be true of the POINTER too, and every
+// label says so with Selectable(false). egui makes labels selectable by
+// default and a selectable label senses click-and-drag: it sits over the band
+// and takes both the click and the cursor, so aiming at the name gave an
+// I-beam and a text selection where aiming two points higher gave a hand and
+// an open. Non-selectable labels take neither, and the band's
+// HoverCursorPointer reaches the whole row.
 func (inst *Inst) renderAppRow(ids *c.WidgetIdStack, et c.EndETableFluid, rowIdx int, m app.Manifest, isOpen bool, isCursor bool) {
 	selected := m.Id == inst.selected || isCursor
 	fill, stroke, strokeW := clearFill, clearFill, float32(0)
 	if selected {
-		fill, stroke, strokeW = selectionFill, selectionStroke, 1.0
+		fill, stroke, strokeW = selectionFill, selectionStroke, rowStrokeW
 	}
 	var flags c.ResponseFlagsE
 	for range et.Rows(uint64(rowIdx)) {
 		fr := c.Frame(ids.PrepareSeq(seqRowBase+uint64(rowIdx))).
 			Fill(fill).
 			Stroke(strokeW, stroke).
-			OuterMargin(0).
-			// Zero margins, both of them. This Frame is a painted band and a
-			// click target, not a content container — the row's text is
-			// emitted separately into the table's cell. An inner margin here
-			// adds to the min height set below, so the band grows past the row
-			// and paints over its neighbour, which is how the second
-			// screenshot run failed. Padding belongs on the cell.
+			OuterMargin(rowOutset).
+			// Outer margin, never an inner one. This Frame is a painted band
+			// and a click target, not a content container — the row's text is
+			// emitted separately into the table's cell, behind which the band
+			// sits. An INNER margin adds to the min height set below, so the
+			// band would grow past the row and paint over its neighbour, which
+			// is how the second screenshot run failed; the outer margin comes
+			// off the min height instead. Padding belongs on the cell.
 			InnerMargin(0).
 			SenseClick().
 			HoverCursorPointer()
 		for range fr.KeepIter() {
 			c.UiSetMinWidthAvailable()
-			// Both strokes, not one: a Frame paints its content rect grown by
-			// the stroke width on every side, so this is what makes the
-			// painted rect exactly the row (the fsbrowser/tree precedent).
-			c.UiSetMinHeight(inst.rowHeight() - 2*strokeW)
+			// Both strokes and both outsets: a Frame paints its content rect
+			// grown by the stroke width on every side and allocates that grown
+			// by the outer margin, so this is what makes the painted rect the
+			// row minus its outset (the fsbrowser/tree precedent, plus the
+			// outset).
+			c.UiSetMinHeight(inst.rowHeight() - 2*(rowOutset+strokeW))
 		}
 		flags = c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())
 	}
 	et.BeginCells(uint64(rowIdx), 0)
-	for range c.Vertical().KeepIter() {
-		for range c.Horizontal().KeepIter() {
-			if m.Icon != "" {
-				c.Label(m.Icon).Send()
+	inst.paddedCell(ids, rowIdx, func() {
+		for range c.Vertical().KeepIter() {
+			for range c.Horizontal().KeepIter() {
+				if m.Icon != "" {
+					c.Label(m.Icon).Selectable(false).Send()
+				}
+				c.LabelAtoms(c.Atoms().BeginRichText(rowLabel(m)).Strong().End().Keep()).
+					Selectable(false).Send()
+				inst.renderRowBadges(ids, m, isOpen, rowIdx)
 			}
-			for rt := range c.RichTextLabel(rowLabel(m)) {
-				rt.Strong()
+			if m.Summary != "" {
+				// Truncate, not wrap: the row height is fixed, so a summary
+				// allowed to wrap is a summary clipped mid-line.
+				c.LabelAtoms(c.Atoms().BeginRichText(m.Summary).Small().Weak().End().Keep()).
+					Selectable(false).Truncate().Send()
 			}
-			inst.renderRowBadges(ids, m, isOpen, rowIdx)
 		}
-		if m.Summary != "" {
-			for rt := range c.RichTextLabel(m.Summary) {
-				rt.Small().Weak()
-			}
-		}
-	}
+	})
 	et.EndCells()
 
 	// Only the cursor is written: selection follows it at the top of the next

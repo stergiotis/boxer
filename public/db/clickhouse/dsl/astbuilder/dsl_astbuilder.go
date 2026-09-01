@@ -12,7 +12,7 @@ import (
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/ast"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ============================================================================
@@ -370,7 +370,7 @@ func (inst SelectBuilder) Limit(n int) SelectBuilder {
 func (inst SelectBuilder) Offset(n int) SelectBuilder {
 	if inst.sel.Limit == nil {
 		if inst.err == nil {
-			inst.err = eh.Errorf("Offset(%d) requires a preceding Limit()", n)
+			inst.err = eb.Build().Int("offset", n).Errorf("Offset requires a preceding Limit()")
 		}
 		return inst
 	}

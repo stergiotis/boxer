@@ -126,7 +126,7 @@ func ValidateColumnNames(pattern string) nanopass.Pass {
 func ValidatorFromRegexp(pattern *regexp.Regexp) ColumnNameValidator {
 	return func(unquotedColName string, isAlias bool) (err error) {
 		if !pattern.MatchString(unquotedColName) {
-			err = eh.Errorf("invalid column name: %q (alias=%v)", unquotedColName, isAlias)
+			err = eb.Build().Str("column", unquotedColName).Bool("alias", isAlias).Errorf("invalid column name")
 		}
 		return
 	}

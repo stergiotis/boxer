@@ -29,11 +29,16 @@ type HostI interface {
 	OpenAppIds() (ids []app.AppIdT)
 }
 
-// listPanelDefaultWidth is the list pane's initial width in egui points —
-// enough for a ~60-character summary at the default density, which is the
-// budget Manifest.Summary is authored against. Resizable, and egui remembers
-// where the user put it.
-const listPanelDefaultWidth = 380
+// listPanelDefaultWidth is the list pane's initial width in egui points.
+//
+// The budget it has to clear is a ~60-character summary at the default
+// density — what Manifest.Summary is authored against — plus, on each side,
+// the row's chrome (rows.rowInset) and the pane's own padding. Sized a little
+// past that rather than onto it: a row whose summary ends exactly at the
+// outline reads as truncated whether or not it is, and the first line carries
+// an icon, a name and up to two badges that the character budget says nothing
+// about. Resizable, and egui remembers where the user put it.
+const listPanelDefaultWidth = 420
 
 // Inst is the launcher component. One value backs every mount point (§SD2),
 // so the query, the facet filters and the selection survive moving between

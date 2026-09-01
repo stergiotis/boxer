@@ -170,7 +170,7 @@ func ComposeCreateTable(tableName string, ir *common.IntermediateTableRepresenta
 			var col string
 			col, err = resolveColumnRef(ref, ir, tableRowConfig, conv)
 			if err != nil {
-				err = eh.Errorf("compose create table %s: order by: %w", tableName, err)
+				err = eb.Build().Str("tableName", tableName).Errorf("compose create table: order by: %w", err)
 				return
 			}
 			cols = append(cols, col)
@@ -216,7 +216,7 @@ func resolveColumnRef(ref ColumnRef, ir *common.IntermediateTableRepresentation,
 		}
 	}
 	if selectors != 1 {
-		err = eb.Build().Errorf("column reference must use exactly one selector (Plain, PlainItem or Section), got %d", selectors)
+		err = eb.Build().Int("selectors", selectors).Errorf("column reference must use exactly one selector (Plain, PlainItem or Section)")
 		return
 	}
 

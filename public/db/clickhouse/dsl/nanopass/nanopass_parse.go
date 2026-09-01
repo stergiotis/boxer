@@ -2,7 +2,6 @@ package nanopass
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
@@ -82,7 +81,7 @@ func (inst *errorListener) buildError(kind string) error {
 	// structured-only and would not surface in Error().
 	return eb.Build().
 		Int("errorCount", n).
-		Errorf("%s: %s", kind, strings.Join(shown, "; "))
+		Str("kind", kind).Strs("errors", shown).Errorf("the parser reported errors")
 }
 
 // attempt carries one parse attempt's outcome. Both stages of a two-stage

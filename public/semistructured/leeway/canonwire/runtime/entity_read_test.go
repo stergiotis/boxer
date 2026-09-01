@@ -6,9 +6,11 @@ import (
 	"io"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
@@ -337,7 +339,7 @@ func TestEntityReaderRejectsAWrongVersion(t *testing.T) {
 	er := NewEntityReader(NewCborReader(raw))
 	er.Begin()
 	require.ErrorIs(t, er.Err(), ErrVersion)
-	require.ErrorContains(t, er.Err(), "version 2")
+	assert.EqualValues(t, 2, ebtest.Fields(t, er.Err())["version"], "the error names the version it saw")
 }
 
 func TestAttributeReaderRejectsAWrongOuterLength(t *testing.T) {

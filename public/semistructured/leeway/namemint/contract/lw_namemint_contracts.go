@@ -57,7 +57,7 @@ func NewVcsManagedContract() *VcsManagedContract {
 // it three different ways.
 func (inst *VcsManagedContract) ValidateTagValue(tv identifier.TagValue) error {
 	if tv == tagmint.RuntimeMintTagValue {
-		return eb.Build().Uint32("tv", tv.Value()).Errorf("tag value %d is reserved for ids minted outside version control", tv.Value())
+		return eb.Build().Uint32("tv", tv.Value()).Errorf("this tag value is reserved for ids minted outside version control")
 	}
 	tag := tv.GetTag()
 	if !tag.IsValid() {

@@ -18,7 +18,7 @@ import (
 // UnescapeString removes surrounding single quotes and resolves escape sequences.
 func UnescapeString(raw string) (result string, err error) {
 	if len(raw) < 2 || raw[0] != '\'' || raw[len(raw)-1] != '\'' {
-		err = eh.Errorf("input must be a single-quoted string, got %q", raw)
+		err = eb.Build().Str("input", raw).Errorf("input must be a single-quoted string")
 		return
 	}
 	inner := raw[1 : len(raw)-1]
@@ -64,40 +64,40 @@ func UnescapeString(raw string) (result string, err error) {
 				i += 2
 			case 'x':
 				if i+3 >= len(inner) {
-					err = eh.Errorf("truncated \\x escape at position %d", i)
+					err = eb.Build().Int("position", i).Errorf("truncated \\x escape")
 					return
 				}
 				val, parseErr := strconv.ParseUint(inner[i+2:i+4], 16, 8)
 				if parseErr != nil {
-					err = eh.Errorf("invalid \\x escape at position %d: %w", i, parseErr)
+					err = eb.Build().Int("position", i).Errorf("invalid \\x escape: %w", parseErr)
 					return
 				}
 				buf.WriteByte(byte(val))
 				i += 4
 			case 'u':
 				if i+5 >= len(inner) {
-					err = eh.Errorf("truncated \\u escape at position %d", i)
+					err = eb.Build().Int("position", i).Errorf("truncated \\u escape")
 					return
 				}
 				val, parseErr := strconv.ParseUint(inner[i+2:i+6], 16, 32)
 				if parseErr != nil {
-					err = eh.Errorf("invalid \\u escape at position %d: %w", i, parseErr)
+					err = eb.Build().Int("position", i).Errorf("invalid \\u escape: %w", parseErr)
 					return
 				}
 				buf.WriteRune(rune(val))
 				i += 6
 			case 'U':
 				if i+9 >= len(inner) {
-					err = eh.Errorf("truncated \\U escape at position %d", i)
+					err = eb.Build().Int("position", i).Errorf("truncated \\U escape")
 					return
 				}
 				val, parseErr := strconv.ParseUint(inner[i+2:i+10], 16, 32)
 				if parseErr != nil {
-					err = eh.Errorf("invalid \\U escape at position %d: %w", i, parseErr)
+					err = eb.Build().Int("position", i).Errorf("invalid \\U escape: %w", parseErr)
 					return
 				}
 				if !utf8.ValidRune(rune(val)) {
-					err = eh.Errorf("invalid Unicode code point U+%04X at position %d", val, i)
+					err = eb.Build().Uint64("codePoint", val).Int("position", i).Errorf("invalid Unicode code point")
 					return
 				}
 				buf.WriteRune(rune(val))
@@ -457,7 +457,7 @@ func marshalTypedLiteralListToSQL(prefix string, suffix byte, ctx string, elems 
 		}
 		elemSQL, elemErr := MarshalTypedLiteralToSQLEx(elem, mapFunc)
 		if elemErr != nil {
-			err = eb.Build().Int("element", i).Errorf("%s: %w", ctx, elemErr)
+			err = eb.Build().Int("element", i).Str("context", ctx).Errorf("element is not marshallable: %w", elemErr)
 			return
 		}
 		sb.WriteString(elemSQL)

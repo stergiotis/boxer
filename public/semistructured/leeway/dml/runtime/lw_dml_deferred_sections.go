@@ -61,11 +61,11 @@ type contribution struct {
 // component, before that component's [DeferredSectionBuffer.Enqueue] calls.
 func (inst *DeferredSectionBuffer) StartKind(kind string) (err error) {
 	if inst.rawInUse {
-		err = eb.Build().Str("kind", kind).Errorf("component %s cannot be added to an entity that is being written through Raw() — the two spellings are exclusive per entity", kind)
+		err = eb.Build().Str("kind", kind).Errorf("the component cannot be added to an entity that is being written through Raw() — the two spellings are exclusive per entity")
 		return
 	}
 	if slices.Contains(inst.kinds, kind) {
-		err = eb.Build().Str("kind", kind).Errorf("component %s is already on this entity — one contribution per kind per entity; use a container field for multiplicity within the kind", kind)
+		err = eb.Build().Str("kind", kind).Errorf("the component is already on this entity — one contribution per kind per entity; use a container field for multiplicity within the kind")
 		return
 	}
 	inst.kinds = append(inst.kinds, kind)

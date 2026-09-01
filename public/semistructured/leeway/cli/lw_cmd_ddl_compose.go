@@ -174,7 +174,7 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 		for _, spec := range specs {
 			fields := strings.Fields(spec)
 			if len(fields) != 2 {
-				err = eb.Build().Str(kind, spec).Errorf("%s spec needs exactly: <section> <key>", kind)
+				err = eb.Build().Str(kind, spec).Errorf("spec needs exactly: <section> <key>")
 				return
 			}
 			var section naming.StylableName

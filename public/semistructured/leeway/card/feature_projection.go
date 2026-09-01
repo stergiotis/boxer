@@ -5,6 +5,7 @@ import (
 
 	umap "github.com/nozzle/umap-go"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -115,7 +116,7 @@ func PreprocessFeatureMatrix(m *mat.Dense) (err error) {
 	nRows := raw.Rows
 	nCols := raw.Cols
 	if nCols != NumFeatures {
-		err = eh.Errorf("expected %d feature columns, got %d", NumFeatures, nCols)
+		err = eb.Build().Int("want", NumFeatures).Int("got", nCols).Errorf("unexpected feature column count")
 		return
 	}
 	data := raw.Data
@@ -129,7 +130,7 @@ func PreprocessFeatureMatrix(m *mat.Dense) (err error) {
 		for ri := range nRows {
 			v := data[ri*stride+int(fi)]
 			if math.IsNaN(v) || math.IsInf(v, 0) {
-				err = eh.Errorf("feature %d has NaN/Inf at row %d", fi, ri)
+				err = eb.Build().Int32("feature", fi).Int("row", ri).Errorf("feature has a NaN or Inf value")
 				return
 			}
 			if doLog {
@@ -228,7 +229,7 @@ func RunUMAP(m *mat.Dense, opts UMAPOptions) (coords [][2]float64, err error) {
 		return
 	}
 	if len(emb) != nRows {
-		err = eh.Errorf("umap returned %d rows, expected %d", len(emb), nRows)
+		err = eb.Build().Int("got", len(emb)).Int("want", nRows).Errorf("umap returned an unexpected row count")
 		return
 	}
 

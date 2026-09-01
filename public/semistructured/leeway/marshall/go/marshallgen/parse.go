@@ -439,7 +439,7 @@ func classifyLwMembershipMarker(name string, isSlice bool) (shape goplan.FieldSh
 		return
 	}
 	if !ok {
-		err = eb.Build().Str("marker", "lw."+name).Errorf("lw.%s is not supported by the codegen front-end — only the membership markers (lw.Ref / lw.HighRef / lw.Verbatim / lw.HighVerbatim) are wired; spell a value-shape marker as `,unit` / `,ct=` on a plain field (ADR-0113 P1)", name)
+		err = eb.Build().Str("marker", "lw."+name).Errorf("that lw marker is not supported by the codegen front-end — only the membership markers (lw.Ref / lw.HighRef / lw.Verbatim / lw.HighVerbatim) are wired; spell a value-shape marker as `,unit` / `,ct=` on a plain field (ADR-0113 P1)")
 		return
 	}
 	if isSlice {

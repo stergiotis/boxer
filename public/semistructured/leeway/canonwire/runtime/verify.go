@@ -81,7 +81,7 @@ func verifyEntity(r *CborReader) {
 		return
 	}
 	if v != Version {
-		r.fail(eb.Build().Int("pos", r.pos).Uint64("version", v).Uint64("want", Version).Errorf("entity carries version %d: %w", v, ErrVersion))
+		r.fail(eb.Build().Int("pos", r.pos).Uint64("version", v).Uint64("want", Version).Errorf("entity carries an unexpected version: %w", ErrVersion))
 		return
 	}
 	verifyPlains(r)

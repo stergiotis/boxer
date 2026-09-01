@@ -426,7 +426,7 @@ func heterogeneousArrayToAny(elems []TypedLiteral) (val any, err error) {
 	for i, elem := range elems {
 		out[i], err = elem.ToAny()
 		if err != nil {
-			err = eh.Errorf("array element %d: %w", i, err)
+			err = eb.Build().Int("element", i).Errorf("array element is not marshallable: %w", err)
 			return
 		}
 	}
@@ -438,7 +438,7 @@ func tupleToAny(elems []TypedLiteral) (val any, err error) {
 	for i, elem := range elems {
 		values[i], err = elem.ToAny()
 		if err != nil {
-			err = eh.Errorf("tuple element %d: %w", i, err)
+			err = eb.Build().Int("element", i).Errorf("tuple element is not marshallable: %w", err)
 			return
 		}
 	}
