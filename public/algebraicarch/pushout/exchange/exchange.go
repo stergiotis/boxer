@@ -26,7 +26,7 @@ package exchange
 import (
 	"context"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
@@ -75,7 +75,7 @@ func Pull(ctx context.Context, into *repo.Repo, from PeerI) (stats Stats, err er
 		return
 	}
 	if len(envs) != len(missing) {
-		err = eh.Errorf("peer returned %d envelopes for %d requested", len(envs), len(missing))
+		err = eb.Build().Int("returned", len(envs)).Int("requested", len(missing)).Errorf("peer returned a different envelope count than requested")
 		return
 	}
 	for _, framed := range envs {

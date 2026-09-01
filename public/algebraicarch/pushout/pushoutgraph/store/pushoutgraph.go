@@ -253,7 +253,7 @@ func (inst *PushoutGraph) UndeleteNode(id t.NodeID, undeleter t.PatchHash) error
 	}
 	set := inst.deleters[id]
 	if _, ok := set[undeleter]; !ok {
-		return eh.Errorf("node %v, undeleter %s (deleters: %s): %w", id, undeleter, deleterList(set), ErrWrongUndeleter)
+		return eb.Build().Stringer("nodeID", id).Stringer("undeleter", undeleter).Str("deleters", deleterList(set)).Errorf("the undeleter is not among the node's deleters: %w", ErrWrongUndeleter)
 	}
 	if len(set) > 1 {
 		// Other still-applied patches keep the tombstone alive.

@@ -84,7 +84,7 @@ func Unframe(framed []byte) (codecName string, payload []byte, err error) {
 
 func checkCodecName(name string) (err error) {
 	if len(name) == 0 || len(name) > maxCodecNameLen {
-		err = eh.Errorf("name %q length %d (want 1..%d): %w", name, len(name), maxCodecNameLen, ErrCodecName)
+		err = eb.Build().Str("name", name).Int("length", len(name)).Int("max", maxCodecNameLen).Errorf("codec name length is out of range: %w", ErrCodecName)
 		return
 	}
 	for i := 0; i < len(name); i++ {

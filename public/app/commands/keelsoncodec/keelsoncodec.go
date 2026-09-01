@@ -65,7 +65,7 @@ func NewCliCommand() *cli.Command {
 				log.Info().Str("output", outputPath).Str("target", target).Msg("keelsoncodec: wrote codec")
 			}
 			if failed > 0 {
-				return eh.Errorf("keelsoncodec: %d of %d input(s) failed", failed, len(inputs))
+				return eb.Build().Int("failed", failed).Int("inputs", len(inputs)).Errorf("keelsoncodec: some inputs failed")
 			}
 			return
 		},

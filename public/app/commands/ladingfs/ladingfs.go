@@ -165,7 +165,7 @@ func parseMount(s string) (mount identifier.TaggedId, err error) {
 	}
 	mount = identifier.TaggedId(v)
 	if !mount.IsValid() {
-		err = eb.Build().Str("mount", s).Errorf("%q is not a valid tagged id", s)
+		err = eb.Build().Str("mount", s).Errorf("mount is not a valid tagged id")
 	}
 	return
 }

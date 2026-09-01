@@ -29,6 +29,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmtee"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
 )
 
@@ -83,7 +84,7 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 	client := chclient.New(cfg, nil)
 	err = client.Ping(ctx)
 	if err != nil {
-		err = eh.Errorf("sysmetricsd: tee needs ClickHouse at %s: %w", cfg.URL, err)
+		err = eb.Build().Str("url", cfg.URL).Errorf("sysmetricsd: tee needs ClickHouse: %w", err)
 		return
 	}
 	exec, err := storeexec.New(client, nil)
@@ -95,7 +96,7 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 	err = store.VerifySchema(ctx)
 	if err != nil {
 		store.Close()
-		err = eh.Errorf("sysmetricsd: tee schema check against %s: %w", sysmfacts.SysmetricsTableName, err)
+		err = eh.Errorf("sysmetricsd: tee schema check against "+sysmfacts.SysmetricsTableName+": %w", err)
 		return
 	}
 	tee, err := sysmtee.Start(sysmtee.Options{

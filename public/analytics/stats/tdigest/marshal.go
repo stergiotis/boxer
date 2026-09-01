@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type stateDTO struct {
@@ -42,7 +43,7 @@ func (inst *TDigest) UnmarshalJSON(data []byte) (err error) {
 		return
 	}
 	if len(dto.Means) != len(dto.Weights) {
-		err = eh.Errorf("tdigest: means/weights length mismatch (%d vs %d)", len(dto.Means), len(dto.Weights))
+		err = eb.Build().Int("means", len(dto.Means)).Int("weights", len(dto.Weights)).Errorf("tdigest: means/weights length mismatch")
 		return
 	}
 	// Reject NaN/Inf means before the order check: any comparison
@@ -50,20 +51,20 @@ func (inst *TDigest) UnmarshalJSON(data []byte) (err error) {
 	// past `Means[i] < Means[i-1]` and poison every future quantile.
 	for i, m := range dto.Means {
 		if math.IsNaN(m) || math.IsInf(m, 0) {
-			err = eh.Errorf("tdigest: invalid mean at index %d: %v", i, m)
+			err = eb.Build().Int("index", i).Float64("mean", m).Errorf("tdigest: invalid mean")
 			return
 		}
 	}
 	for i := 1; i < len(dto.Means); i++ {
 		if dto.Means[i] < dto.Means[i-1] {
-			err = eh.Errorf("tdigest: means not ascending at index %d (%v < %v)",
-				i, dto.Means[i], dto.Means[i-1])
+			err = eb.Build().Int("index", i).Float64("value", dto.Means[i]).Float64("previous", dto.Means[i-1]).
+				Errorf("tdigest: means not ascending")
 			return
 		}
 	}
 	for i, w := range dto.Weights {
 		if w < 0 || math.IsNaN(w) || math.IsInf(w, 0) {
-			err = eh.Errorf("tdigest: invalid weight at index %d: %v", i, w)
+			err = eb.Build().Int("index", i).Float64("weight", w).Errorf("tdigest: invalid weight")
 			return
 		}
 	}

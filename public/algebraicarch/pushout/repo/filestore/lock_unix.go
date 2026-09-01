@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // acquireLock takes an advisory exclusive lock on dir via flock(2) on a
@@ -25,7 +26,7 @@ func acquireLock(dir string) (lockFile *os.File, err error) {
 	}
 	if ferr := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); ferr != nil {
 		_ = f.Close()
-		err = eh.Errorf("%s: %w", path, errors.Join(ErrLocked, ferr))
+		err = eb.Build().Str("path", path).Errorf("unable to lock: %w", errors.Join(ErrLocked, ferr))
 		return
 	}
 	lockFile = f

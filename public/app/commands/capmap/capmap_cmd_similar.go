@@ -91,7 +91,7 @@ func actionSimilar(c *cli.Context) (err error) {
 			return eh.Errorf("unable to encode the report: %w", err)
 		}
 		if err = os.WriteFile(path, data, 0o644); err != nil {
-			return eh.Errorf("unable to write the report to %q: %w", path, err)
+			return eb.Build().Str("path", path).Errorf("unable to write the report: %w", err)
 		}
 		fmt.Printf("\nreport written to %s\n", path)
 	}

@@ -331,7 +331,7 @@ func downloadFile(ctx context.Context, client *http.Client, href string, destPat
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		err = eh.Errorf("unexpected status %d for %s: %w", resp.StatusCode, href, err)
+		err = eb.Build().Int("status", resp.StatusCode).Str("href", href).Errorf("unexpected status: %w", err)
 		return
 	}
 
@@ -367,7 +367,7 @@ func downloadFile(ctx context.Context, client *http.Client, href string, destPat
 		if expectedSha256 != "" {
 			actual := hex.EncodeToString(h.Sum(nil))
 			if actual != expectedSha256 {
-				err = eh.Errorf("sha256 mismatch: expected %s got %s: %w", expectedSha256, actual, eh.Errorf("integrity check failed"))
+				err = eb.Build().Str("expected", expectedSha256).Str("actual", actual).Errorf("sha256 mismatch: %w", eh.Errorf("integrity check failed"))
 				return
 			}
 		}

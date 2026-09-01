@@ -19,9 +19,14 @@ var (
 	clearFill       = color.Transparent
 )
 
-// seqRowBase keeps the per-row Frame ids clear of the sequence space the
-// pane's other PrepareSeq callers draw from.
-const seqRowBase = uint64(0x1a00)
+// seqRowBase and seqCellBase keep the per-row Frame ids clear of the sequence
+// space the pane's other PrepareSeq callers draw from, and clear of each
+// other: a row draws two Frames, the click band and the padded cell it sits
+// behind.
+const (
+	seqRowBase  = uint64(0x1a00)
+	seqCellBase = uint64(0x2a00)
+)
 
 // The list column's width range. Not a fixed width: the pane is resizable, so
 // the column has to be able to follow it in both directions.
@@ -30,15 +35,43 @@ const (
 	rowMaxWidth = float32(2000)
 )
 
-// rowHeight is two text lines plus breathing room, in egui points. A row
-// carries the name and the summary, and the summary is the whole reason the
-// row is two lines tall (§SD2's diagnosis: a one-line row carries identity
+// The row band's chrome, in egui points.
+//
+// rowOutset is what the band leaves between its painted rect and the rect
+// egui_table gave the row. Zero is the obvious value and it costs the band its
+// right edge: the Frame paints its content rect grown by the stroke, and
+// asking for the full available width puts that growth a fraction of a point
+// outside what the table clips, so the outline drew three sides. The outset
+// also keeps one selected row's outline off its neighbour's.
+//
+// rowStrokeW is the selection outline's width, named rather than inlined
+// because the cell reserves it on every row, selected or not — an inset that
+// appeared with the selection would shift the row's text as the cursor moved
+// onto it.
+const (
+	rowOutset  = float32(2)
+	rowStrokeW = float32(1)
+)
+
+// rowInset is the distance from the row's own rect to its text: past the
+// band's outset, past the outline the band paints when selected, and then the
+// ladder's tight padding. It is the whole of the row's chrome, so the row is
+// exactly this much taller than the text it carries.
+func (inst *Inst) rowInset() (v float32) {
+	v = rowOutset + rowStrokeW + styletokens.PaddingTight(inst.density)
+	return
+}
+
+// rowHeight is two text lines plus the chrome around them, in egui points. A
+// row carries the name and the summary, and the summary is the whole reason
+// the row is two lines tall (§SD2's diagnosis: a one-line row carries identity
 // and nothing else).
 //
 // The base is a measured figure rather than a token: egui_table takes ONE row
 // height for the whole table, and what has to fit is a body line, a small
 // line, and the item spacing between them — text metrics that the IDS spacing
-// ladder does not describe. Only the breathing room comes from the ladder. A
+// ladder does not describe. Everything around it is rowInset, so the two lines
+// get their natural height and the padding is what the row is taller by. A
 // value too small does not clip, it overlaps the next row, which is how the
 // first screenshot run failed.
 //
@@ -46,7 +79,7 @@ const (
 // reads as a section break rather than as waste, so it is left alone.
 func (inst *Inst) rowHeight() (h float32) {
 	const twoTextLines = 44
-	h = twoTextLines + 2*styletokens.PaddingTight(inst.density)
+	h = twoTextLines + 2*inst.rowInset()
 	return
 }
 
@@ -98,7 +131,7 @@ func (inst *Inst) renderRows(ids *c.WidgetIdStack, visible []app.Manifest, rows 
 	for i := rowBegin; i < rowEnd; i++ {
 		r := rows[i]
 		if r.heading != "" {
-			inst.renderHeadingRow(et, i, r.heading)
+			inst.renderHeadingRow(ids, et, i, r.heading)
 			continue
 		}
 		_, isOpen := openSet[r.m.Id]
@@ -183,16 +216,35 @@ func firstAppRow(rows []rowT) (idx int) {
 	return
 }
 
-// renderHeadingRow draws a section heading as a row of the same table.
-func (inst *Inst) renderHeadingRow(et c.EndETableFluid, rowIdx int, heading string) {
+// renderHeadingRow draws a section heading as a row of the same table. It
+// takes the same inset as an app row, so a heading and the names under it
+// start on one left edge.
+func (inst *Inst) renderHeadingRow(ids *c.WidgetIdStack, et c.EndETableFluid, rowIdx int, heading string) {
 	et.BeginCells(uint64(rowIdx), 0)
-	for range c.Vertical().KeepIter() {
-		for rt := range c.RichTextLabel(heading) {
-			rt.Strong()
+	inst.paddedCell(ids, rowIdx, func() {
+		for range c.Vertical().KeepIter() {
+			c.LabelAtoms(c.Atoms().BeginRichText(heading).Strong().End().Keep()).
+				Selectable(false).Send()
+			c.Separator().Horizontal().Send()
 		}
-		c.Separator().Horizontal().Send()
-	}
+	})
 	et.EndCells()
+}
+
+// paddedCell wraps a row's content in the inset its chrome needs.
+//
+// The padding lives here and not on the band because the band is a painted
+// rect rather than a container: an inner margin on it adds to the min height
+// set beside it, growing the band past the row and over its neighbour, which
+// is how the second screenshot run failed. The cell is the container, so the
+// cell is where the padding goes.
+func (inst *Inst) paddedCell(ids *c.WidgetIdStack, rowIdx int, body func()) {
+	for range c.Frame(ids.PrepareSeq(seqCellBase + uint64(rowIdx))).
+		OuterMargin(0).
+		InnerMargin(inst.rowInset()).
+		KeepIter() {
+		body()
+	}
 }
 
 // renderAppRow draws one app: the full-width click layer, then the two text

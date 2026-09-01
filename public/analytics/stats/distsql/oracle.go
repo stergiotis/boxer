@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/analytics/stats/letterval"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // GridOracle adapts a validated (ps, qs, n) quantile grid to
@@ -31,7 +32,7 @@ func NewGridOracle(ps, qs []float64, n int64) (inst *GridOracle, err error) {
 		return nil, eh.Errorf("grid oracle: %w", err)
 	}
 	if n < 0 {
-		return nil, eh.Errorf("grid oracle: negative n %d", n)
+		return nil, eb.Build().Int64("n", n).Errorf("grid oracle: n must not be negative")
 	}
 	inst = &GridOracle{ps: ps, qs: qs, n: n}
 	return

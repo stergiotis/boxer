@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // PatchHash is the 32-byte content-addressed identifier of a patch: the
@@ -45,7 +46,7 @@ func (inst PatchHash) MarshalText() (text []byte, err error) {
 // UnmarshalText parses a 64-char hex string back into a PatchHash.
 func (inst *PatchHash) UnmarshalText(text []byte) (err error) {
 	if len(text) != hex.EncodedLen(len(inst)) {
-		err = eh.Errorf("PatchHash: expected %d hex chars, got %d", hex.EncodedLen(len(inst)), len(text))
+		err = eb.Build().Int("want", hex.EncodedLen(len(inst))).Int("got", len(text)).Errorf("PatchHash: wrong number of hex chars")
 		return
 	}
 	_, derr := hex.Decode(inst[:], text)

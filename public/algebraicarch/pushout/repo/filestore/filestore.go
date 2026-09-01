@@ -144,7 +144,7 @@ func (inst *Store) GetEnvelope(ctx context.Context, h t.PatchHash) (framed []byt
 	framed, rerr := os.ReadFile(inst.envelopePath(h))
 	if rerr != nil {
 		if errors.Is(rerr, fs.ErrNotExist) {
-			err = eh.Errorf("%s: %w", h, repo.ErrEnvelopeNotFound)
+			err = eb.Build().Stringer("patchHash", h).Errorf("no envelope for that patch: %w", repo.ErrEnvelopeNotFound)
 			return
 		}
 		err = eb.Build().Stringer("patchHash", h).Errorf("read envelope: %w", rerr)
@@ -218,7 +218,7 @@ func (inst *Store) LoadApplied(ctx context.Context) (hs []t.PatchHash, err error
 				// engine never acknowledged it; drop silently.
 				break
 			}
-			err = eh.Errorf("applied log line %d malformed: %w", i+1, uerr)
+			err = eb.Build().Int("line", i+1).Errorf("applied log line is malformed: %w", uerr)
 			return
 		}
 		hs = append(hs, h)
@@ -311,23 +311,23 @@ func (inst *Store) LoadRetention(ctx context.Context) (entries []repo.RetentionE
 		}
 		fields := strings.Split(line, " ")
 		if len(fields) != 3 {
-			err = eh.Errorf("retention ledger line %d: want 3 fields, got %d", i+1, len(fields))
+			err = eb.Build().Int("line", i+1).Int("fields", len(fields)).Errorf("retention ledger line wants 3 fields")
 			return
 		}
 		var e repo.RetentionEntry
 		if uerr := e.Node.Patch.UnmarshalText([]byte(fields[0])); uerr != nil {
-			err = eh.Errorf("retention ledger line %d: %w", i+1, uerr)
+			err = eb.Build().Int("line", i+1).Errorf("retention ledger line is malformed: %w", uerr)
 			return
 		}
 		idx, perr := strconv.ParseUint(fields[1], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("retention ledger line %d index: %w", i+1, perr)
+			err = eb.Build().Int("line", i+1).Errorf("retention ledger line index is malformed: %w", perr)
 			return
 		}
 		e.Node.Index = idx
 		nanos, perr := strconv.ParseInt(fields[2], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("retention ledger line %d unixnano: %w", i+1, perr)
+			err = eb.Build().Int("line", i+1).Errorf("retention ledger line unixnano is malformed: %w", perr)
 			return
 		}
 		e.UnixNano = nanos

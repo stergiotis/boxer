@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/stats/ecdfbands"
 	"github.com/stergiotis/boxer/public/analytics/stats/tdigest"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // BandsForDigest evaluates F_n at a uniform x-grid spanning
@@ -36,7 +37,7 @@ func BandsForDigest(
 		return
 	}
 	if gridN < 2 {
-		err = eh.Errorf("gridN must be ≥ 2, got %d", gridN)
+		err = eb.Build().Int("gridN", gridN).Errorf("gridN must be at least 2")
 		return
 	}
 	n := digest.Count()
@@ -47,7 +48,7 @@ func BandsForDigest(
 	xmin := digest.Min()
 	xmax := digest.Max()
 	if !(xmax > xmin) {
-		err = eh.Errorf("digest support collapsed (Min=%v Max=%v); the band is degenerate", xmin, xmax)
+		err = eb.Build().Float64("min", xmin).Float64("max", xmax).Errorf("digest support collapsed; the band is degenerate")
 		return
 	}
 	xs, fn := BuildGrid(digest, gridN)

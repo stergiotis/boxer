@@ -1,7 +1,7 @@
 package distsql
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // The ADR-0161 §SD1 contract column names. Required columns gate the play
@@ -34,22 +34,22 @@ const (
 // tests — a claim must never fail into a silently empty plot.
 func ValidateSeries(ps, qs []float64) (err error) {
 	if len(ps) != len(qs) {
-		return eh.Errorf("ps/qs length mismatch: %d vs %d", len(ps), len(qs))
+		return eb.Build().Int("ps", len(ps)).Int("qs", len(qs)).Errorf("ps/qs length mismatch")
 	}
 	if len(ps) < 2 {
-		return eh.Errorf("grid too short: %d levels (need ≥ 2)", len(ps))
+		return eb.Build().Int("levels", len(ps)).Errorf("grid too short; at least 2 levels are needed")
 	}
 	for i, p := range ps {
 		if !(p > 0 && p < 1) {
-			return eh.Errorf("ps[%d] = %v outside (0, 1)", i, p)
+			return eb.Build().Int("index", i).Float64("p", p).Errorf("ps value is outside (0, 1)")
 		}
 		if i > 0 && !(p > ps[i-1]) {
-			return eh.Errorf("ps not strictly ascending at [%d]: %v after %v", i, p, ps[i-1])
+			return eb.Build().Int("index", i).Float64("value", p).Float64("previous", ps[i-1]).Errorf("ps not strictly ascending")
 		}
 	}
 	for i := 1; i < len(qs); i++ {
 		if qs[i] < qs[i-1] {
-			return eh.Errorf("qs not non-decreasing at [%d]: %v after %v", i, qs[i], qs[i-1])
+			return eb.Build().Int("index", i).Float64("value", qs[i]).Float64("previous", qs[i-1]).Errorf("qs not non-decreasing")
 		}
 	}
 	return nil
@@ -61,11 +61,11 @@ func ValidateSeries(ps, qs []float64) (err error) {
 // width, so a zero-width bin is invalid rather than merely useless.
 func ValidateHist(lo, hi, w []float64) (err error) {
 	if len(lo) != len(hi) || len(lo) != len(w) {
-		return eh.Errorf("hist triplet lengths differ: lo=%d hi=%d w=%d", len(lo), len(hi), len(w))
+		return eb.Build().Int("lo", len(lo)).Int("hi", len(hi)).Int("w", len(w)).Errorf("hist triplet lengths differ")
 	}
 	for i := range lo {
 		if !(hi[i] > lo[i]) {
-			return eh.Errorf("hist bin [%d] has non-positive width: [%v, %v)", i, lo[i], hi[i])
+			return eb.Build().Int("bin", i).Float64("lo", lo[i]).Float64("hi", hi[i]).Errorf("hist bin has non-positive width")
 		}
 	}
 	return nil

@@ -72,7 +72,7 @@ func Validate(env EnvelopeV1) (err error) {
 	}
 	computed := env.Patch.ComputeHash()
 	if env.Patch.Hash != computed {
-		err = eh.Errorf("stored %s, computed %s: %w", env.Patch.Hash, computed, ErrTampered)
+		err = eb.Build().Stringer("stored", env.Patch.Hash).Stringer("computed", computed).Errorf("stored and computed hashes differ: %w", ErrTampered)
 		return
 	}
 	declared := make(map[t.PatchHash]struct{}, len(env.Patch.Dependencies))

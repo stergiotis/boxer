@@ -209,7 +209,7 @@ func probePackageE(ctx context.Context, root string, importPath string, dir stri
 	// module-resolution hiccup). Treat those as inconclusive (err) so the
 	// static verdict stands, rather than scoring a false Red.
 	if isHarnessError(string(combined)) {
-		err = eb.Build().Str("pkg", importPath).Errorf("probe inconclusive: %s", firstMeaningfulLine(string(combined)))
+		err = eb.Build().Str("pkg", importPath).Str("output", firstMeaningfulLine(string(combined))).Errorf("probe inconclusive")
 		return TierUnknown, Reason{}, millis, err
 	}
 

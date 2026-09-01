@@ -320,7 +320,7 @@ func (inst *Repo) ApplyEnvelope(ctx context.Context, framed []byte) (h t.PatchHa
 	}
 	for _, dep := range env.Patch.Dependencies {
 		if _, ok := inst.appliedSet[dep]; !ok {
-			err = eh.Errorf("patch %s needs %s: %w", h, dep, ErrMissingDependency)
+			err = eb.Build().Stringer("patchHash", h).Stringer("dep", dep).Errorf("patch needs a dependency that is not applied: %w", ErrMissingDependency)
 			return
 		}
 	}
@@ -398,7 +398,7 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 			return
 		}
 		if slices.Contains(oInfo.Patch.Dependencies, h) {
-			err = eh.Errorf("patch %s is required by %s: %w", h, other, ErrDependentExists)
+			err = eb.Build().Stringer("patchHash", h).Stringer("requiredBy", other).Errorf("patch is required by another: %w", ErrDependentExists)
 			return
 		}
 	}
@@ -670,7 +670,7 @@ func (inst *Repo) View(ctx context.Context, fn func(v ViewI) error) (err error) 
 		return
 	}
 	if n := inst.g.DirtyRepCount(); n != 0 {
-		err = eh.Errorf("pushoutgraph at rest has %d dirty pseudo-edge components — engine bug", n)
+		err = eb.Build().Int("components", n).Errorf("pushoutgraph at rest has dirty pseudo-edge components — engine bug")
 		return
 	}
 	err = fn(&view{r: inst, ctx: ctx})

@@ -145,7 +145,7 @@ type snapReader struct {
 
 func (r *snapReader) take(n int) (out []byte, err error) {
 	if n < 0 || r.pos+n > len(r.data) {
-		err = eh.Errorf("truncated at offset %d (need %d bytes): %w", r.pos, n, ErrBadSnapshot)
+		err = eb.Build().Int("offset", r.pos).Int("need", n).Errorf("truncated snapshot: %w", ErrBadSnapshot)
 		return
 	}
 	out = r.data[r.pos : r.pos+n]
@@ -386,7 +386,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 				return
 			}
 			if !g.HasNode(src) || !g.HasNode(dest) {
-				err = eh.Errorf("edge %v->%v references unknown node: %w", src, dest, ErrBadSnapshot)
+				err = eb.Build().Stringer("src", src).Stringer("dest", dest).Errorf("edge references an unknown node: %w", ErrBadSnapshot)
 				return
 			}
 			// Edge kinds always reflect endpoint liveness in engine
@@ -396,12 +396,12 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			switch t.EdgeKindE(kind) {
 			case t.EdgeKindLive:
 				if anyDeleted {
-					err = eh.Errorf("live edge %v->%v with tombstoned endpoint: %w", src, dest, ErrBadSnapshot)
+					err = eb.Build().Stringer("src", src).Stringer("dest", dest).Errorf("live edge has a tombstoned endpoint: %w", ErrBadSnapshot)
 					return
 				}
 			case t.EdgeKindDeleted:
 				if !anyDeleted {
-					err = eh.Errorf("deleted-kind edge %v->%v with both endpoints live: %w", src, dest, ErrBadSnapshot)
+					err = eb.Build().Stringer("src", src).Stringer("dest", dest).Errorf("deleted-kind edge has both endpoints live: %w", ErrBadSnapshot)
 					return
 				}
 			}
@@ -409,7 +409,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 		}
 	}
 	if r.pos != len(r.data) {
-		err = eh.Errorf("%d trailing bytes: %w", len(r.data)-r.pos, ErrBadSnapshot)
+		err = eb.Build().Int("trailing", len(r.data)-r.pos).Errorf("snapshot has trailing bytes: %w", ErrBadSnapshot)
 		return
 	}
 	if !g.nodes.Contains(t.RootNodeID) {
