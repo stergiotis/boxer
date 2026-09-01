@@ -107,3 +107,51 @@ func stripUrlFragment(u string) (clean string, anchorOnly bool) {
 	}
 	return
 }
+
+// backtickToken is one inline code span found by forEachBacktickToken.
+//
+// Line is 1-based within the slice scanned (see inlineLink.Line for the
+// front-matter caveat). Text is the span content without its backticks.
+// InLinkText reports that the span is the whole text of an inline link —
+// [`doc/x.md`](./x.md) — where the link, not the span, is the reference
+// and DL007 already checks it.
+type backtickToken struct {
+	Text       string
+	Line       int32
+	InLinkText bool
+}
+
+// forEachBacktickToken visits every single-backtick code span outside
+// fenced blocks, in document order, stopping when fn returns false. It is
+// the shared scanner for the rules that read what a span says (DL016,
+// DL017) rather than the rules that read around one (DL008 skips spans).
+// Spans that open and close on the same line only — a multi-line span is
+// prose, not a path.
+func forEachBacktickToken(body []byte, fn func(tok backtickToken) (cont bool)) {
+	inFence := false
+	for i, raw := range bytes.Split(body, []byte("\n")) {
+		trimmed := bytes.TrimLeft(raw, " \t")
+		if bytes.HasPrefix(trimmed, []byte("```")) || bytes.HasPrefix(trimmed, []byte("~~~")) {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		line := string(raw)
+		for _, sp := range findBacktickSpans(line) {
+			start, end := sp[0], sp[1]
+			if end-start < 3 {
+				continue
+			}
+			tok := backtickToken{
+				Text:       line[start+1 : end-1],
+				Line:       int32(i + 1),
+				InLinkText: start > 0 && line[start-1] == '[' && strings.HasPrefix(line[end:], "]("),
+			}
+			if !fn(tok) {
+				return
+			}
+		}
+	}
+}

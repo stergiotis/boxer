@@ -389,6 +389,7 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | Go doc-link targets `[Symbol]` resolve to an exported symbol in the same package. | §4, §5 | `DL008` (qualified `[pkg.Symbol]` and method `[Type.Method]` not yet checked) |
 | ADRs contain `Context`, `Decision`, `Alternatives`, `Consequences`, `Status` sections. | §1 ADR | `DL010` |
 | ADRs: QOC section is used when ≥3 options × ≥3 criteria. | §1 ADR | *manual* |
+| ADR sub-item declarations (SDs, milestones, phases) parse into the `subtask` table; a bullet that nearly parses is reported rather than silently dropped. | §1 ADR | `DL012` |
 | Every `.md` under scoped paths begins with a compliant front-matter stanza. | §4 | `DL001` |
 | `type` is in the allowed enum (reference / how-to / explanation / tutorial / adr). | §4 | `DL001` |
 | `status` is in the allowed enum for the doc's `type`. | §4 | `DL001` |
@@ -396,14 +397,14 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | Draft banner present iff `status` is `draft` / `proposed`; banner state matches front-matter status. | §4 | `DL004` |
 | Banned filenames (`SPEC.md`, `DESIGN.md`, `ARCH.md`, `NOTES.md`, `MISC.md`, `TODO.md`, `IDEA.md`, `IDEAS.md`) do not appear in package directories. | §6 | `DL005` |
 | Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `DL006` |
-| Every in-repo Markdown link resolves to an existing file that git tracks. A git-ignored target counts as missing: it resolves in a working checkout and in no clean one. | §7 | `DL007` (anchor existence not yet checked) |
+| Every in-repo Markdown link resolves to an existing file that git tracks. A git-ignored target counts as missing: it resolves in a working checkout and in no clean one. Targets are percent-decoded before resolving, so a link to `Architecture%20Overview.md` finds `Architecture Overview.md`. | §7 | `DL007` (anchor existence not yet checked) |
 | Open set of `status: draft` / `status: proposed` docs reported (informational, not a merge block). | §4 | `DL011` |
-| Markdown references a source file by link, not by bare backticked path. | §4 *Claims that decay*, §7 | `DL012 (pending)` |
+| A bare backticked in-repo path (`doc/<file>.md`, `public/<pkg>/`, `./<file>`) resolves to a file or directory that exists and git tracks. Templates (`<`, `>`, `*`, `{`, `$`, `…`) and sibling-checkout paths (`../boxer/…`) are skipped; a `:NNN` pin is stripped first (DL016 reports the pin). Whether the path should have been a link stays a judgment call. | §4 *Claims that decay*, §7 | `DL017` (warn while the in-tree backlog is measured) |
 | Identifiers named in Markdown resolve to a symbol in the tree. Docs in `draft` / `proposed` are exempt: they describe symbols that do not exist yet, which is their purpose. | §4 *Claims that decay* | `DL013 (pending)` |
 | ADR citations — in Markdown and in Go comments — resolve to an existing ADR, and cite by number rather than filename. | §1 ADR | `DL014 (pending)` |
 | Quantitative claims are dated, or true against the current tree. | §4 *Claims that decay* | *manual* |
 | Exclusivity claims name a guard or a date. | §4 *Claims that decay* | *manual* |
-| Markdown does not pin a source location by line number (`path.go:NNN`); it names the symbol and links the file. | §4 *What to leave out* | `DL016 (pending)` |
+| Markdown does not pin a source location by line number (`path.go:NNN`); it names the symbol and links the file. | §4 *What to leave out* | `DL016` (info: ubiquitous in existing docs; raise once the backlog is cleared) |
 | Prose records the decision; the state of the tree is linked, not transcribed — no call-site inventories, implementation walkthroughs, or pasted command output. | §4 *What to leave out* | *manual* |
 | Time words (*today*, *currently*, *not yet*) carry a date or are rewritten as durable statements. | §4 *What to leave out* | *manual* |
 | A doc comment carries something the signature does not. | §1 Reference, §4 | *manual* |

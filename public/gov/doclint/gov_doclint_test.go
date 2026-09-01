@@ -568,3 +568,171 @@ func TestRuleDL015IsSilentWithoutHistory(t *testing.T) {
 	findings := collectFindings(t, rule, []string{"testdata/dl015"})
 	require.Empty(t, findings)
 }
+
+func TestRuleDL007PercentDecodesLinkTargets(t *testing.T) {
+	// A link is a URL: a file with a space in its name is linked as
+	// 'Architecture%20Overview.md'. Stat'ing the encoded form reported an
+	// existing file as missing.
+	rule := NewRuleDL007()
+	findings := collectFindings(t, rule, []string{"testdata/dl007"})
+	bases := map[string]bool{}
+	for _, f := range findings {
+		bases[filepath.Base(f.Path)] = true
+	}
+	require.False(t, bases["percent_encoded.md"], "decoded target exists; must not be flagged")
+	require.True(t, bases["percent_encoded_broken.md"], "decoding must not conjure a missing file")
+	require.Equal(t, "Architecture Overview.md", percentDecodePath("Architecture%20Overview.md"))
+	require.Equal(t, "plain.md", percentDecodePath("plain.md"))
+	require.Equal(t, "bad%zz.md", percentDecodePath("bad%zz.md"), "malformed escape is left as written")
+}
+
+func TestForEachBacktickToken(t *testing.T) {
+	body := []byte("a `one` and `two words`\n```\n`fenced`\n```\n[`linked`](./x.md) ``\n")
+	var got []backtickToken
+	forEachBacktickToken(body, func(tok backtickToken) bool {
+		got = append(got, tok)
+		return true
+	})
+	require.Len(t, got, 3)
+	require.Equal(t, backtickToken{Text: "one", Line: 1}, got[0])
+	require.Equal(t, backtickToken{Text: "two words", Line: 1}, got[1])
+	require.Equal(t, backtickToken{Text: "linked", Line: 5, InLinkText: true}, got[2])
+}
+
+// newDL017Repo stands up a repository-shaped tree: a '.git' marker, the
+// top-level directories the fixture names, and the files that must resolve.
+// The fixture Markdown is copied in so the rule sees the same text a
+// checked-in doc would, against a tree the test controls.
+func newDL017Repo(t *testing.T, fixture string) (dir string) {
+	t.Helper()
+	dir = t.TempDir()
+	for _, d := range []string{".git", "doc", filepath.Join("public", "pkg"), "scripts"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, d), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "doc", "existing.md"), []byte("x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "doc", "sibling.md"), []byte("x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "public", "pkg", "file.go"), []byte("package pkg\n"), 0o644))
+	src, err := os.ReadFile(filepath.Join("testdata", "dl017", fixture))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "doc", fixture), src, 0o644))
+	return
+}
+
+func TestRuleDL017FlagsUnresolvedBacktickedPaths(t *testing.T) {
+	dir := newDL017Repo(t, "paths.md")
+	findings := collectFindings(t, NewRuleDL017(), []string{filepath.Join(dir, "doc")})
+	var msgs []string
+	var lines []int32
+	for _, f := range findings {
+		require.Equal(t, "DL017", f.RuleId)
+		require.Equal(t, FindingSeverityWarn, f.Severity)
+		require.Equal(t, "paths.md", filepath.Base(f.Path))
+		msgs = append(msgs, f.Message)
+		lines = append(lines, f.Line)
+	}
+	require.Len(t, findings, 2, "exactly the two missing paths: %v", msgs)
+	require.Contains(t, msgs[0], "'doc/phantom/2026_07_31__x.md'")
+	require.Contains(t, msgs[1], "'./nope.md'")
+	require.Equal(t, []int32{13, 14}, lines, "front-matter offset applied")
+}
+
+func TestRuleDL017ReportsGitIgnoredPaths(t *testing.T) {
+	dir := newDL017Repo(t, "paths.md")
+	doc := filepath.Join(dir, "doc", "ignored.md")
+	require.NoError(t, os.WriteFile(doc, []byte("see `doc/existing.md` and `doc/sibling.md`\n"), 0o644))
+	ignored := map[string]struct{}{filepath.Join(dir, "doc", "sibling.md"): {}}
+	var findings []Finding
+	rule := NewRuleDL017()
+	cont, err := rule.checkOne(doc, ignored, func(f Finding, e error) bool {
+		require.NoError(t, e)
+		findings = append(findings, f)
+		return true
+	})
+	require.NoError(t, err)
+	require.True(t, cont)
+	require.Len(t, findings, 1)
+	require.Contains(t, findings[0].Message, "git-ignored")
+	require.Contains(t, findings[0].Message, "'doc/sibling.md'")
+}
+
+func TestClassifyBacktickPath(t *testing.T) {
+	top := map[string]struct{}{"doc": {}, "public": {}}
+	cases := []struct {
+		tok       string
+		path      string
+		candidate bool
+	}{
+		{"doc/x.md", "doc/x.md", true},
+		{"doc/", "doc/", true},
+		{"./x.md", "./x.md", true},
+		{"public/gov/doclint/gov_doclint.go:42", "public/gov/doclint/gov_doclint.go", true},
+		{"../boxer/doc/x.md", "", false},
+		{"/etc/passwd", "", false},
+		{"doc/adr/NNNN-<slug>.md", "", false},
+		{"public/*/README.md", "", false},
+		{"doc/{a,b}.md", "", false},
+		{"scripts/$name.sh", "", false},
+		{"doc/adr/0001-….md", "", false},
+		{"doc/a b.md", "", false},
+		{"github.com/stergiotis/boxer", "", false},
+		{"doc", "", false},
+		{"", "", false},
+	}
+	for _, c := range cases {
+		path, cand := classifyBacktickPath(c.tok, top)
+		assert.Equal(t, c.candidate, cand, c.tok)
+		if c.candidate {
+			assert.Equal(t, c.path, path, c.tok)
+		}
+	}
+	_, cand := classifyBacktickPath("doc/x.md", nil)
+	assert.False(t, cand, "outside any repository only './' spans are candidates")
+	_, cand = classifyBacktickPath("./x.md", nil)
+	assert.True(t, cand)
+}
+
+func TestRuleDL016FlagsLinePins(t *testing.T) {
+	dir := newDL017Repo(t, "pins.md")
+	findings := collectFindings(t, NewRuleDL016(), []string{filepath.Join(dir, "doc")})
+	var pinned []string
+	for _, f := range findings {
+		require.Equal(t, "DL016", f.RuleId)
+		require.Equal(t, FindingSeverityInfo, f.Severity)
+		require.Equal(t, "pins.md", filepath.Base(f.Path))
+		require.Contains(t, f.Message, "name the symbol")
+		pinned = append(pinned, f.Message)
+	}
+	require.Len(t, findings, 3, "%v", pinned)
+	require.Contains(t, pinned[0], "'statemanagement.go:244'")
+	require.Contains(t, pinned[1], "'public/gov/doclint/gov_doclint.go:10-20'")
+	require.Contains(t, pinned[2], "'doc/DOCUMENTATION_STANDARD.md:406'")
+	require.Equal(t, int32(10), findings[0].Line)
+}
+
+func TestMatchLinePin(t *testing.T) {
+	for tok, want := range map[string]string{
+		"a.go:1":               "a.go",
+		"dir/b.md:12-14":       "dir/b.md",
+		"localhost:8080":       "",
+		"example.com:443":      "",
+		"file.go":              "",
+		"file.go:abc":          "",
+		"pkg.Type.Method:1":    "",
+		"x.go:1:2":             "",
+		"src/main.rs:99":       "src/main.rs",
+		"scripts/ci/lint.sh:5": "scripts/ci/lint.sh",
+	} {
+		path, pinned := matchLinePin(tok)
+		assert.Equal(t, want != "", pinned, tok)
+		assert.Equal(t, want, path, tok)
+	}
+}
+
+func TestDefaultLinterCarriesNewRules(t *testing.T) {
+	ids := map[string]bool{}
+	for _, r := range NewDefaultLinter().rules {
+		ids[r.Id()] = true
+	}
+	require.True(t, ids["DL016"])
+	require.True(t, ids["DL017"])
+}

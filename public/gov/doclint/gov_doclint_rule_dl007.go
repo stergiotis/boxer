@@ -2,8 +2,10 @@ package doclint
 
 import (
 	"iter"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -17,8 +19,11 @@ import (
 // skipped because anchor existence is a future concern.
 //
 // For each remaining local URL the rule strips any '#anchor' /
-// '?query' suffix, resolves the path against the containing file's
-// directory, and stat's the result. Missing targets are errors;
+// '?query' suffix, percent-decodes the remainder (a link is a URL, so
+// a file named 'Architecture Overview.md' is written
+// 'Architecture%20Overview.md'; stat'ing the encoded form reported an
+// existing file as missing), resolves the path against the containing
+// file's directory, and stat's the result. Missing targets are errors;
 // permission or other unexpected stat failures are warnings so the
 // scan keeps going.
 //
@@ -69,6 +74,7 @@ func checkOneDL007(filePath string, ignored map[string]struct{}, yield func(Find
 		if anchorOnly || clean == "" {
 			continue
 		}
+		clean = percentDecodePath(clean)
 		var resolved string
 		if filepath.IsAbs(clean) {
 			resolved = clean
@@ -122,6 +128,22 @@ func checkOneDL007(filePath string, ignored map[string]struct{}, yield func(Find
 		if !cont {
 			return
 		}
+	}
+	return
+}
+
+// percentDecodePath returns the path with percent-escapes decoded. A
+// malformed escape ('%zz', a trailing '%') leaves the input untouched:
+// the literal form is then what gets stat'd, which is also what a file
+// named that way would need.
+func percentDecodePath(p string) (out string) {
+	out = p
+	if !strings.Contains(p, "%") {
+		return
+	}
+	dec, err := url.PathUnescape(p)
+	if err == nil {
+		out = dec
 	}
 	return
 }

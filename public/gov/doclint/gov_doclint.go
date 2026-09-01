@@ -99,6 +99,8 @@ func NewDefaultLinter() (inst *Linter) {
 	inst.Register(NewRuleDL011())
 	inst.Register(NewRuleDL012())
 	inst.Register(NewRuleDL015())
+	inst.Register(NewRuleDL016())
+	inst.Register(NewRuleDL017())
 	return
 }
 
