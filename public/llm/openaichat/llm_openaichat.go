@@ -521,7 +521,7 @@ func (inst *Client) Complete(ctx context.Context, req CompletionRequest) (resp C
 		err = eb.Build().
 			Str("finishReason", resp.FinishReason).
 			Int("outputTokens", int(resp.OutputTokens)).
-			Errorf("openaichat: completion finish_reason=%q: %w", resp.FinishReason, ErrIncompleteCompletion)
+			Errorf("openaichat: completion stopped early: %w", ErrIncompleteCompletion)
 		return
 	}
 	return
@@ -546,7 +546,7 @@ func (inst *Client) ListModels(ctx context.Context) (models []string, err error)
 			Str("url", url).
 			Int("status", status).
 			Str("rawSnippet", snippet(string(rawBody), 256)).
-			Errorf("openaichat: list models non-2xx (status=%d)", status)
+			Errorf("openaichat: list models returned a non-2xx status")
 		return
 	}
 
@@ -957,13 +957,13 @@ func (inst *Client) classifyHttpError(ctx context.Context, url string, status in
 	if unmarshalErr != nil {
 		err = bld.
 			Str("rawSnippet", snippet(string(rawBody), 256)).
-			Errorf("openaichat: non-2xx response (status=%d): %w", status, sentinel)
+			Errorf("openaichat: non-2xx response: %w", sentinel)
 		return
 	}
 	err = bld.
 		Str("apiErrorType", env.Error.Type).
 		Str("apiErrorMessage", env.Error.Message).
-		Errorf("openaichat: non-2xx response (status=%d, message=%q): %w", status, env.Error.Message, sentinel)
+		Errorf("openaichat: non-2xx response with an API error: %w", sentinel)
 	return
 }
 

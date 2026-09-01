@@ -222,7 +222,7 @@ func (inst ExtractLanes) ValueColumnFor(subColumn string) (col ValueColumn, err 
 			col = inst.Values[0]
 		default:
 			err = eb.Build().Str("section", inst.Section).Str("candidates", strings.Join(inst.ValueNames(), ", ")).
-				Errorf("section has more than one value column; name the one to read with col:<%s>", strings.Join(inst.ValueNames(), "|"))
+				Errorf("section has more than one value column; name the one to read with col:<name>")
 		}
 		return
 	}
@@ -235,7 +235,7 @@ func (inst ExtractLanes) ValueColumnFor(subColumn string) (col ValueColumn, err 
 	}
 	err = eb.Build().Str("section", inst.Section).Str("subColumn", subColumn).
 		Str("candidates", strings.Join(inst.ValueNames(), ", ")).
-		Errorf("no such value column in section; it has %s", strings.Join(inst.ValueNames(), ", "))
+		Errorf("no such value column in section")
 	return
 }
 
@@ -251,7 +251,7 @@ func (inst ExtractLanes) ChannelFor(name string) (ch Channel, err error) {
 			ch = inst.Channels[0]
 		default:
 			err = eb.Build().Str("section", inst.Section).Str("candidates", strings.Join(inst.ChannelNames(), ", ")).
-				Errorf("section carries more than one membership channel; name the one to read with chan:<%s>", strings.Join(inst.ChannelNames(), "|"))
+				Errorf("section carries more than one membership channel; name the one to read with chan:<name>")
 		}
 		return
 	}
@@ -263,7 +263,7 @@ func (inst ExtractLanes) ChannelFor(name string) (ch Channel, err error) {
 		}
 	}
 	err = eb.Build().Str("section", inst.Section).Str("channel", name).Str("candidates", strings.Join(inst.ChannelNames(), ", ")).
-		Errorf("section does not carry that membership channel; it carries %s", strings.Join(inst.ChannelNames(), ", "))
+		Errorf("section does not carry that membership channel")
 	return
 }
 

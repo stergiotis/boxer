@@ -132,7 +132,7 @@ func (inst *OllamaClient) Chat(ctx context.Context, model string, messages []orc
 			Int("status", httpResp.StatusCode).
 			Str("model", model).
 			Int("response_bytes", len(respBytes)).
-			Errorf("ollama error: %s", string(respBytes))
+			Str("response", string(respBytes)).Errorf("ollama returned an error")
 		return
 	}
 

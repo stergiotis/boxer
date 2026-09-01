@@ -64,7 +64,7 @@ func (inst *VcsManagedContract) ValidateTagValue(tv identifier.TagValue) error {
 		return eb.Build().Uint32("tv", tv.Value()).Errorf("tag value does not encode to a valid tag")
 	}
 	if w := tag.GetTagWidth(); w != tagmint.VocabularyTagWidth {
-		return eb.Build().Uint32("tv", tv.Value()).Int("width", w).Int("want", tagmint.VocabularyTagWidth).Errorf("a vcs-managed vocabulary claims from the width-%d class; this value's code is %d bits wide", tagmint.VocabularyTagWidth, w)
+		return eb.Build().Uint32("tv", tv.Value()).Int("width", w).Int("want", tagmint.VocabularyTagWidth).Errorf("a vcs-managed vocabulary claims from a different width class than this value's code")
 	}
 	return nil
 }

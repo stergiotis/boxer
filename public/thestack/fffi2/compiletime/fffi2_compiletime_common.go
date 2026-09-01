@@ -101,7 +101,7 @@ func (inst *StateAndErrTracker[T]) CheckState(allowed T) {
 		inst.MergeError(eb.Build().
 			Uint64("currentState", uint64(inst.state)).
 			Uints64("allowedStates", slices.Collect(functional.IterRightOnly(iterateHighBits(uint64(allowed), 1)))).
-			Errorf("%s: %w", inst.ErrorMessagePrefix, ErrInvalidState))
+			Str("prefix", inst.ErrorMessagePrefix).Errorf("%w", ErrInvalidState))
 	}
 }
 func (inst *StateAndErrTracker[T]) Check(destSate T, allowedStates T) (err error) {

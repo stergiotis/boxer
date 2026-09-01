@@ -47,7 +47,7 @@ func (temperatureGloss) Affinities() []string { return nil }
 func (inst temperatureGloss) Bind(params map[string]string) (InstanceI, error) {
 	unit, ok := params[ParamUnit]
 	if !ok {
-		return nil, eb.Build().Str("mediaType", MediaTypeTemperature).Errorf("%s requires %s=%s|%s|%s (the stored unit)", MediaTypeTemperature, ParamUnit, UnitKelvin, UnitCelsius, UnitFahrenheit)
+		return nil, eb.Build().Str("mediaType", MediaTypeTemperature).Errorf(MediaTypeTemperature + " requires " + ParamUnit + "=" + UnitKelvin + "|" + UnitCelsius + "|" + UnitFahrenheit + " (the stored unit)")
 	}
 	symbol := map[string]string{UnitKelvin: "K", UnitCelsius: "°C", UnitFahrenheit: "°F"}[unit]
 	return &temperatureInstance{params: params, symbol: symbol}, nil
@@ -108,7 +108,7 @@ func (lengthGloss) Affinities() []string { return nil }
 func (inst lengthGloss) Bind(params map[string]string) (InstanceI, error) {
 	unit, ok := params[ParamUnit]
 	if !ok {
-		return nil, eb.Build().Str("mediaType", MediaTypeLength).Errorf("%s requires %s=%s|%s|%s|%s|%s (the stored unit)", MediaTypeLength, ParamUnit, UnitMetre, UnitCentimetre, UnitMillimetre, UnitKilometre, UnitFoot)
+		return nil, eb.Build().Str("mediaType", MediaTypeLength).Errorf(MediaTypeLength + " requires " + ParamUnit + "=" + UnitMetre + "|" + UnitCentimetre + "|" + UnitMillimetre + "|" + UnitKilometre + "|" + UnitFoot + " (the stored unit)")
 	}
 	return &lengthInstance{params: params, toMetres: lengthToMetres[unit]}, nil
 }

@@ -127,7 +127,7 @@ func Claim(name string, value identifier.TagValue, maxExpectedIds uint64) (r Cla
 		return
 	}
 	if cl.MaxBodyIncl < maxExpectedIds {
-		err = eb.Build().Str("name", name).Uint32("tagValue", value.Value()).Int("width", cl.Width).Uint64("holds", cl.MaxBodyIncl).Uint64("declared", maxExpectedIds).Errorf("tag value's width-%d class holds %d ids, fewer than the %d declared — claim a value from a narrower class", cl.Width, cl.MaxBodyIncl, maxExpectedIds)
+		err = eb.Build().Str("name", name).Uint32("tagValue", value.Value()).Int("width", cl.Width).Uint64("holds", cl.MaxBodyIncl).Uint64("declared", maxExpectedIds).Errorf("the tag value's width class holds fewer ids than declared — claim a value from a narrower class")
 		return
 	}
 
@@ -138,7 +138,7 @@ func Claim(name string, value identifier.TagValue, maxExpectedIds uint64) (r Cla
 		return
 	}
 	if prev, has := byValue[value]; has {
-		err = eb.Build().Str("name", name).Uint32("tagValue", value.Value()).Str("claimant", prev.name).Str("claimedAt", prev.origin).Errorf("tag value %d is already claimed by %q at %s — ids under one tag value are one id space, so two claimants collide", value.Value(), prev.name, prev.origin)
+		err = eb.Build().Str("name", name).Uint32("tagValue", value.Value()).Str("claimant", prev.name).Str("claimedAt", prev.origin).Errorf("the tag value is already claimed — ids under one tag value are one id space, so two claimants collide")
 		return
 	}
 	c := &claim{
