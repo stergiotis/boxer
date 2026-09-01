@@ -1,18 +1,21 @@
 // crash_recovery_unsafe_snapshot.qnt
 //
-// The counterfactual that justifies Open's snapshot PREFIX check
-// (repo/repo.go:147, `isPrefix(snap.Applied, applied)`). Unrecord saves a
-// snapshot of the post-unrecord state BEFORE it replaces the log
-// (repo/repo.go:420 then :428); a crash in between leaves a snapshot whose
-// applied list is generally NOT a prefix of the still-old log. The real Open
-// discards such a snapshot and replays the whole log (rolling the unrecord
-// back). This model instead TRUSTS any snapshot as a recovery base — and the
-// model checker shows it silently drops a patch:
+// The counterfactual that justifies Open's COVERAGE-based recovery
+// (repo.Open: use a snapshot only if `isSubset(snap.Applied, applied)`, then
+// replay exactly the log entries the snapshot does not cover). Unrecord saves
+// a snapshot of the post-unrecord state BEFORE it replaces the log; a crash
+// in between leaves a snapshot whose applied list is a subset but generally
+// NOT a prefix of the still-old log (the unrecorded patch sits in the
+// middle). The real Open restores that snapshot and replays the uncovered
+// entry from its kept envelope (rolling the unrecord back). This model
+// instead trusts any snapshot as a base and replays the log's POSITIONAL
+// suffix, as a prefix-shaped recovery would — and the model checker shows it
+// silently drops a patch:
 //
 //   quint run --invariant=RecoveryCorrect crash_recovery_unsafe_snapshot.qnt
 //
-// So the prefix check is not an optimization guard — it is a correctness
-// requirement.
+// So replaying by coverage rather than by position is not an optimization —
+// it is a correctness requirement.
 module crash_recovery_unsafe_snapshot {
   type Patch = int
 
@@ -26,8 +29,9 @@ module crash_recovery_unsafe_snapshot {
   pure def removeAll(l: List[Patch], p: Patch): List[Patch] =
     l.foldl(List(), (acc, x) => if (x == p) acc else acc.append(x))
 
-  // UNSAFE recovery: trust an existing snapshot as a base WITHOUT checking that
-  // its applied list is a prefix of the log (the omitted check is the bug).
+  // UNSAFE recovery: trust an existing snapshot as a base without a coverage
+  // check and replay the log's positional suffix (the positional replay is
+  // the bug: it assumes the snapshot's list is a prefix of the log).
   pure def recoveredUnsafe(hasS: bool, snapA: List[Patch], snapS: Set[Patch], log: List[Patch]): Set[Patch] =
     if (hasS) snapS.union(listToSet(log.slice(snapA.length(), log.length())))
     else listToSet(log)
@@ -73,7 +77,8 @@ module crash_recovery_unsafe_snapshot {
     recoveredUnsafe(hasSnap, snapApplied, snapState, appliedLog) == listToSet(appliedLog)
 
   // Witness: log [1,2,3]; the crash window for unrecording the MIDDLE patch 2
-  // leaves snapshot [1,3] (not a prefix of [1,2,3]); trusting it recovers
+  // leaves snapshot [1,3] (a subset, not a prefix, of [1,2,3]); positional
+  // suffix replay from it recovers
   // {1,3} — patch 2 is silently lost even though the durable log still has it.
   run unsafeSnapshotDropsPatchTest =
     init

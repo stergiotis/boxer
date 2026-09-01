@@ -1,5 +1,5 @@
 node_modules/
-package-lock.json
+# package-lock.json is tracked: CI runs `npm ci` against it (formal-pushout.yaml)
 *.itf.json
 _apalache-out/
 states/

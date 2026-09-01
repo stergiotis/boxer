@@ -20,14 +20,17 @@
 //     4. in-memory commit       volatile
 //   The envelope is KEPT (never deleted) so a rolled-back unrecord replays.
 //
-// On restart Open (repo/repo.go:109) recovers: load the log; if the snapshot's
-// Applied list is a PREFIX of the log, restore the snapshot state and replay
-// only the suffix envelopes; otherwise DISCARD the snapshot and replay the
-// whole log from empty. The prefix check is the crux for Unrecord: a crash
-// between steps 2 and 3 leaves a snapshot of newApplied while the log still
-// holds the old list — and newApplied is generally NOT a prefix of the old
-// log, so the snapshot must be discarded and the old log replayed (the
-// unrecord rolls back atomically).
+// On restart repo.Open recovers: load the log; if the snapshot's Applied set
+// is COVERED by the log (a SUBSET test — independent patches commute, so the
+// pushoutgraph state is a function of the applied set), restore the snapshot
+// state and replay only the log entries the snapshot does not hold, in log
+// order; otherwise discard the snapshot and replay the whole log from empty.
+// A log that lists a patch twice is ErrCorruptStore. The coverage rule is the
+// crux for Unrecord: a crash between steps 2 and 3 leaves a snapshot of
+// newApplied while the log still holds the old list — newApplied is a subset
+// of the old log (generally NOT a prefix: the unrecorded patch may sit in the
+// middle), so Open restores the snapshot and replays the unrecorded patch's
+// KEPT envelope on top: the unrecord rolls back atomically.
 //
 // REFINEMENT MAP (spec action -> Go):
 //   recordBegin/putEnv/appendLog/memCommit -> commitPatchLocked  repo/repo.go:340-367
@@ -36,7 +39,7 @@
 //   unrReplaceLog   -> st.ReplaceApplied (COMMIT POINT)          repo/repo.go:428
 //   unrMemCommit    -> in-memory commit                          repo/repo.go:431-433
 //   checkpoint      -> repo.Repo.Checkpoint                      repo/repo.go:475
-//   crash           -> power loss + repo.Open recovery           repo/repo.go:109
+//   crash           -> power loss + repo.Open recovery (coverage = isSubset)
 module crash_recovery {
   type Patch = int
 
@@ -49,27 +52,27 @@ module crash_recovery {
   pure def listToSet(l: List[Patch]): Set[Patch] =
     l.foldl(Set(), (acc, x) => acc.union(Set(x)))
 
-  // pre is a prefix of full  (Open's isPrefix, repo/repo.go:233)
-  pure def isPrefix(pre: List[Patch], full: List[Patch]): bool =
-    pre.length() <= full.length() and full.slice(0, pre.length()) == pre
-
   // remove every occurrence of p (= the single one, since the log has no dups);
   // models slices.Delete of the unrecorded patch from the applied list.
   pure def removeAll(l: List[Patch], p: Patch): List[Patch] =
     l.foldl(List(), (acc, x) => if (x == p) acc else acc.append(x))
 
   // --- Open's recovery, as pure functions of the durable state -------
-  // A snapshot is usable only if its applied list is a prefix of the log.
+  // A snapshot is usable only if its applied set is covered by the log
+  // (Open's isSubset(snap.Applied, applied)).
   pure def snapUsable(hasS: bool, snapA: List[Patch], log: List[Patch]): bool =
-    hasS and isPrefix(snapA, log)
-  // The set of patches whose envelopes must be replayed (only the suffix when
-  // a snapshot is used; the whole log otherwise).
+    hasS and listToSet(snapA).subseteq(listToSet(log))
+  // The set of patches whose envelopes must be replayed: the log entries the
+  // snapshot does not cover when a snapshot is used; the whole log otherwise.
   pure def replayNeedsEnv(hasS: bool, snapA: List[Patch], log: List[Patch]): Set[Patch] =
-    if (snapUsable(hasS, snapA, log)) listToSet(log.slice(snapA.length(), log.length()))
+    if (snapUsable(hasS, snapA, log)) listToSet(log).exclude(listToSet(snapA))
     else listToSet(log)
-  // The state Open reconstructs: snapshot base + replayed suffix, or full replay.
+  // Open rejects a log that lists a patch twice (ErrCorruptStore).
+  pure def logHasDup(log: List[Patch]): bool = log.length() != listToSet(log).size()
+  // The state Open reconstructs: snapshot base + replayed uncovered entries,
+  // or full replay.
   pure def recoveredSet(hasS: bool, snapA: List[Patch], snapS: Set[Patch], log: List[Patch]): Set[Patch] =
-    if (snapUsable(hasS, snapA, log)) snapS.union(listToSet(log.slice(snapA.length(), log.length())))
+    if (snapUsable(hasS, snapA, log)) snapS.union(listToSet(log).exclude(listToSet(snapA)))
     else listToSet(log)
 
   // ---- Durable storage (survives a crash) --------------------------
@@ -188,7 +191,9 @@ module crash_recovery {
 
   // crash: power loss wipes volatile state; Open recovers from durable storage.
   action crash = all {
-    corrupt'    = not(replayNeedsEnv(hasSnap, snapApplied, appliedLog).subseteq(envStore)),
+    // (parenthesised: `x' = a or b` would parse as `(x' = a) or b`)
+    corrupt'    = (logHasDup(appliedLog)
+                   or not(replayNeedsEnv(hasSnap, snapApplied, appliedLog).subseteq(envStore))),
     memApplied' = recoveredSet(hasSnap, snapApplied, snapState, appliedLog),
     opKind' = 0, opPhase' = 0, opPatch' = 0,
     pendingApplied' = List(), pendingState' = Set(),
@@ -206,8 +211,9 @@ module crash_recovery {
 
   // ===== SAFETY INVARIANTS =====
 
-  // Recovery never returns ErrCorruptStore (the kept envelope makes every
-  // replay — including an unrecord rollback's suffix replay — total).
+  // Recovery never returns ErrCorruptStore (the log never duplicates, and the
+  // kept envelope makes every replay — including an unrecord rollback's
+  // replay of the unrecorded patch — total).
   val NoCorruption = not(corrupt)
 
   // Every logged patch has a durable envelope (put-before-append; unrecord
@@ -225,13 +231,14 @@ module crash_recovery {
   val StableConsistency = (opKind == 0) implies (memApplied == listToSet(appliedLog))
 
   // A snapshot's stored state always equals its own applied list's set, so the
-  // snapshot never lies about the prefix it represents.
+  // snapshot never lies about the applied set it represents.
   val SnapshotConsistent = hasSnap implies (snapState == listToSet(snapApplied))
 
   // THE ATOMICITY RESULT: whenever a crash happens, Open reconstructs EXACTLY
   // the state of the durable log — never a half-applied or half-unrecorded
-  // mess. This is what the prefix-check-or-discard logic buys; drop the check
-  // (crash_recovery_unsafe_snapshot.qnt) and this fails.
+  // mess. This is what coverage-based replay buys (restore a covered snapshot,
+  // replay exactly the log entries it lacks); replay the log's positional
+  // suffix instead (crash_recovery_unsafe_snapshot.qnt) and this fails.
   val RecoveryCorrect =
     recoveredSet(hasSnap, snapApplied, snapState, appliedLog) == listToSet(appliedLog)
 
@@ -265,9 +272,9 @@ module crash_recovery {
       .expect(memApplied == Set(1) and appliedLog == List(1))
 
   // ATOMICITY — crash BEFORE ReplaceApplied, unrecording the MIDDLE patch 2.
-  // The snapshot's applied list [1,3] is NOT a prefix of the durable log
-  // [1,2,3], so Open DISCARDS it and replays the whole log: the unrecord rolls
-  // back to {1,2,3}. (The kept envelope for 2 makes the replay total.)
+  // The snapshot's applied list [1,3] is a subset (not a prefix) of the
+  // durable log [1,2,3], so Open RESTORES it and replays the one uncovered
+  // entry, 2, from its kept envelope: the unrecord rolls back to {1,2,3}.
   run unrecordRollbackOnCrashTest =
     init
       .then(recordBegin(1)).then(putEnv).then(appendLog).then(memCommit)
