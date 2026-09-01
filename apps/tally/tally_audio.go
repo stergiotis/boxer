@@ -116,8 +116,8 @@ var _ decode.FdInputI = (*stagedRecording)(nil)
 // caller's to close.
 func stageRecording(ctx context.Context, fsys fs.FS, p string, size int64) (inst *stagedRecording, err error) {
 	if size > audioMaxBytes {
-		return nil, eh.Errorf("%s is %s, over the %s a recording may be staged at",
-			path.Base(p), humanSize(size), humanSize(audioMaxBytes))
+		return nil, eb.Build().Str("file", path.Base(p)).Str("size", humanSize(size)).Str("limit", humanSize(audioMaxBytes)).
+			Errorf("the recording is over the size a recording may be staged at")
 	}
 	f, err := fsys.Open(p)
 	if err != nil {
@@ -129,7 +129,7 @@ func stageRecording(ctx context.Context, fsys fs.FS, p string, size int64) (inst
 	br := bufio.NewReaderSize(f, audioCopyChunk)
 	head, perr := br.Peek(16)
 	if perr != nil && len(head) == 0 {
-		return nil, eh.Errorf("unable to read %s: %w", path.Base(p), perr)
+		return nil, eb.Build().Str("file", path.Base(p)).Errorf("unable to read the file: %w", perr)
 	}
 	inst = &stagedRecording{name: path.Base(p), kind: decode.Sniff(head)}
 	if inst.kind == decode.KindWAV {
@@ -196,7 +196,7 @@ func (inst *stagedRecording) sealE(ctx context.Context, r io.Reader) (err error)
 func (inst *stagedRecording) holdPlainE(ctx context.Context, r io.Reader) (err error) {
 	fd, err := unix.MemfdCreate(audioStagePrefix+inst.name, unix.MFD_CLOEXEC)
 	if err != nil {
-		return eh.Errorf("unable to hold %s for the decoder: %w", inst.name, err)
+		return eb.Build().Str("name", inst.name).Errorf("unable to hold the recording for the decoder: %w", err)
 	}
 	inst.plain = os.NewFile(uintptr(fd), "memfd:"+inst.name)
 	if _, err = copyChunked(ctx, inst.plain, r); err != nil {
@@ -239,11 +239,11 @@ func (inst *stagedRecording) Name() (s string) { return inst.name }
 // would have two ffmpeg processes sharing a file offset.
 func (inst *stagedRecording) OpenE() (f *os.File, err error) {
 	if inst.plain == nil {
-		return nil, eh.Errorf("%s is not staged for an external decoder", inst.name)
+		return nil, eb.Build().Str("name", inst.name).Errorf("the recording is not staged for an external decoder")
 	}
 	f, err = os.Open(fmt.Sprintf("/proc/self/fd/%d", inst.plain.Fd()))
 	if err != nil {
-		return nil, eh.Errorf("unable to re-open the staged %s: %w", inst.name, err)
+		return nil, eb.Build().Str("name", inst.name).Errorf("unable to re-open the staged recording: %w", err)
 	}
 	return f, nil
 }
@@ -263,12 +263,12 @@ func (inst *stagedRecording) openSourceE(ctx context.Context) (src pcm.SourceI, 
 func (inst *stagedRecording) openSealedWavE() (src pcm.SourceI, err error) {
 	f, err := os.Open(inst.sealPath)
 	if err != nil {
-		return nil, eh.Errorf("unable to open the staged %s: %w", inst.name, err)
+		return nil, eb.Build().Str("name", inst.name).Errorf("unable to open the staged recording: %w", err)
 	}
 	st, err := f.Stat()
 	if err != nil {
 		_ = f.Close()
-		return nil, eh.Errorf("unable to size the staged %s: %w", inst.name, err)
+		return nil, eb.Build().Str("name", inst.name).Errorf("unable to size the staged recording: %w", err)
 	}
 	sr, err := adhocdata.NewSeekableReader(f, st.Size(), inst.key)
 	if err != nil {

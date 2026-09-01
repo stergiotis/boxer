@@ -4,7 +4,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // concatBatches fuses all record batches into a single one. The returned
@@ -36,7 +36,7 @@ func concatBatches(batches []arrow.RecordBatch, alloc memory.Allocator) (out arr
 			for _, a := range cols {
 				a.Release()
 			}
-			err = eh.Errorf("unable to concatenate arrow column %d: %w", c, err)
+			err = eb.Build().Int("column", c).Errorf("unable to concatenate an arrow column: %w", err)
 			return
 		}
 		cols = append(cols, merged)

@@ -8,6 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // play_ts_executor.go makes a recognised call executable (ADR-0163 §SD4): the
@@ -94,10 +95,11 @@ func applyTsCall(call *tsCall, in arrow.RecordBatch, params map[string]string, a
 		// The readout register (ADR-0097 Update 2026-08-05): a refusal is read
 		// after the fact, and both numbers are what the reader sizes the cut
 		// against.
-		err = eh.Errorf("%s: the input has %s rows, past this function's %s-row ceiling — "+
-			"the algorithm is superlinear and the wait would stop being a wait. "+
-			"Aggregate to a coarser grid, or narrow the range, before the call",
-			call.Spec.Name, humanize.Comma(int64(n)), humanize.Comma(int64(call.Spec.MaxLen)))
+		err = eb.Build().Str("function", call.Spec.Name).Str("rows", humanize.Comma(int64(n))).
+			Str("ceiling", humanize.Comma(int64(call.Spec.MaxLen))).
+			Errorf("the input has more rows than this function's ceiling — " +
+				"the algorithm is superlinear and the wait would stop being a wait. " +
+				"Aggregate to a coarser grid, or narrow the range, before the call")
 		return
 	}
 	switch call.Spec.Name {
@@ -110,7 +112,7 @@ func applyTsCall(call *tsCall, in arrow.RecordBatch, params map[string]string, a
 	case "tsAnomalySpans":
 		return tsApplySpans(call, ts, vals, params, alloc)
 	}
-	err = eh.Errorf("%s: recognised but not implemented", call.Spec.Name)
+	err = eb.Build().Str("function", call.Spec.Name).Errorf("the function is recognised but not implemented")
 	return
 }
 
@@ -131,15 +133,13 @@ func readTsInput(call *tsCall, in arrow.RecordBatch) (ts []int64, vals []float64
 		if len(tIdx) != 0 {
 			missing = vName
 		}
-		err = eh.Errorf("%s: the input CTE %q has no column %q; it has %v",
-			call.Spec.Name, string(call.Input), missing, fieldNames(schema))
+		err = eb.Build().Str("function", call.Spec.Name).Str("cte", string(call.Input)).Str("missing", missing).
+			Strs("has", fieldNames(schema)).Errorf("the input CTE has no such column")
 		return
 	}
 	tArr, vArr := in.Column(tIdx[0]), in.Column(vIdx[0])
 	if !isSeriesTemporalType(tArr.DataType()) {
-		err = eh.Errorf("%s: column %q is %s, which is not a time. A ClickHouse DateTime arrives as a "+
-			"bare UInt32 and cannot be told from a count — wrap it: toDateTime64(%s, 3)",
-			call.Spec.Name, tName, tArr.DataType(), tName)
+		err = eh.Errorf("%s: column %q is %s, which is not a time. A ClickHouse DateTime arrives as a bare UInt32 and cannot be told from a count — wrap it: toDateTime64(%s, 3)", call.Spec.Name, tName, tArr.DataType(), tName) //boxer:lint disable=CS013 reason="the remedy is copy-pasteable SQL built from the column name; toDateTime64(<column>, 3) is not valid SQL, and play renders this into the panel"
 		return
 	}
 	n := int(in.NumRows())
@@ -148,23 +148,23 @@ func readTsInput(call *tsCall, in arrow.RecordBatch) (ts []int64, vals []float64
 	for row := range n {
 		ms, ok := temporalCellMS(tArr, row, false)
 		if !ok || tArr.IsNull(row) {
-			err = eh.Errorf("%s: row %s has no time in %q. The transform reads a series, and skipping a "+
-				"row would close a gap that is really there",
-				call.Spec.Name, humanize.Comma(int64(row)), tName)
+			err = eb.Build().Str("function", call.Spec.Name).Str("row", humanize.Comma(int64(row))).Str("column", tName).
+				Errorf("a row has no time. The transform reads a series, and skipping a " +
+					"row would close a gap that is really there")
 			return
 		}
 		v, got := numericCellValue(vArr, int64(row))
 		if !got {
-			err = eh.Errorf("%s: row %s has a NULL %q. Decide what the gap means in the input CTE — "+
-				"drop it, or fill it explicitly — rather than letting the analysis guess",
-				call.Spec.Name, humanize.Comma(int64(row)), vName)
+			err = eb.Build().Str("function", call.Spec.Name).Str("row", humanize.Comma(int64(row))).Str("column", vName).
+				Errorf("a row has a NULL value. Decide what the gap means in the input CTE — " +
+					"drop it, or fill it explicitly — rather than letting the analysis guess")
 			return
 		}
 		ts = append(ts, ms)
 		vals = append(vals, v)
 	}
 	if len(ts) == 0 {
-		err = eh.Errorf("%s: the input CTE %q returned no rows", call.Spec.Name, string(call.Input))
+		err = eb.Build().Str("function", call.Spec.Name).Str("cte", string(call.Input)).Errorf("the input CTE returned no rows")
 	}
 	return
 }
@@ -181,13 +181,14 @@ func tsIntArg(call *tsCall, pos int, params map[string]string) (v int32, err err
 	name := tsSlotName(text)
 	raw, bound := params["param_"+name]
 	if !bound || raw == "" {
-		err = eh.Errorf("%s: %s reads {%s}, which has no value. Bind it — a SET line, or a control that "+
-			"writes the signal — before the analysis can run", call.Spec.Name, call.Spec.Args[pos].Name, name)
+		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", name).
+			Errorf("an argument reads a slot with no value. Bind it — a SET line, or a control that " +
+				"writes the signal — before the analysis can run")
 		return
 	}
 	if !isTsIntLiteral(raw) {
-		err = eh.Errorf("%s: %s reads {%s}, whose value %q is not a whole number",
-			call.Spec.Name, call.Spec.Args[pos].Name, name, raw)
+		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("slot", name).
+			Str("value", raw).Errorf("an argument's slot value is not a whole number")
 		return
 	}
 	return tsParseInt32(call, pos, raw)
@@ -197,7 +198,7 @@ func tsIntArg(call *tsCall, pos int, params map[string]string) (v int32, err err
 func tsParseInt32(call *tsCall, pos int, digits string) (v int32, err error) {
 	n, cErr := strconv.ParseInt(digits, 10, 32)
 	if cErr != nil {
-		err = eh.Errorf("%s: %s is out of range (%s)", call.Spec.Name, call.Spec.Args[pos].Name, digits)
+		err = eb.Build().Str("function", call.Spec.Name).Str("arg", call.Spec.Args[pos].Name).Str("digits", digits).Errorf("an argument is out of range")
 		return
 	}
 	return int32(n), nil

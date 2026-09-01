@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -143,7 +144,7 @@ func TestDispatchRefusalStopsTheRun(t *testing.T) {
 	dec := c.Dispatch("SELECT 1", "")
 	_, _, _, err := c.ExecuteArrowStream(context.Background(), "SELECT 1", memory.NewGoAllocator(), nil, nil, dec)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "names both planes", "the refusal reason must reach the user")
+	assert.Contains(t, ebtest.Fields(t, err)["dispatchReason"], "names both planes", "the refusal reason is on the error; play's panel renders only the message")
 	assert.Zero(t, *hits, "a refused run must not reach a server")
 }
 

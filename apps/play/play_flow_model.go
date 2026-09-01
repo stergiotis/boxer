@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // play_flow_model.go is the ADR-0153 flow-graph derivation: a pure, UI-free
@@ -109,7 +110,7 @@ const (
 // id). Pure and deterministic: identical inputs yield identical graphs.
 func buildFlowGraph(sql string, siblingCTEs map[string]struct{}, resultLabel string) (g flowGraph, err error) {
 	if kind := analysis.ClassifyStatementKind(sql); kind != analysis.KindReadOnly {
-		err = eh.Errorf("flow graph: not a SELECT-shaped statement (%s)", kind)
+		err = eb.Build().Stringer("kind", kind).Errorf("flow graph: not a SELECT-shaped statement")
 		return
 	}
 	pr, pErr := nanopass.Parse(sql)

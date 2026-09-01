@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // play_flow_lineage.go is the ADR-0153 lineage lens: column-level provenance
@@ -39,7 +40,7 @@ type lineageRef struct {
 // caveat the panel shows (today: union statements trace their first member).
 func buildLineageGraph(sql string, siblingCTEs map[string]struct{}) (g flowGraph, note string, err error) {
 	if kind := analysis.ClassifyStatementKind(sql); kind != analysis.KindReadOnly {
-		err = eh.Errorf("lineage: not a SELECT-shaped statement (%s)", kind)
+		err = eb.Build().Stringer("kind", kind).Errorf("lineage: not a SELECT-shaped statement")
 		return
 	}
 	pr, pErr := nanopass.Parse(sql)

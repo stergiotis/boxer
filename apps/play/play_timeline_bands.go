@@ -11,7 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 )
@@ -115,34 +115,34 @@ func mapBandsRecord(rec arrow.RecordBatch) (bands []layout.BackgroundBand, skipp
 	colColor := schema.FieldIndices(timelineSlotBandColor)
 	colLabel := schema.FieldIndices(timelineSlotBandLabel)
 	if len(colFrom) == 0 || len(colTo) == 0 || len(colColor) == 0 {
-		err = eh.Errorf("bands SQL must return %q, %q, %q (and optionally %q); got %v",
-			timelineSlotBandFrom, timelineSlotBandTo, timelineSlotBandColor,
-			timelineSlotBandLabel, fieldNames(schema))
+		err = eb.Build().Strs("got", fieldNames(schema)).
+			Errorf("bands SQL must return \"" + timelineSlotBandFrom + "\", \"" + timelineSlotBandTo + "\", \"" + timelineSlotBandColor +
+				"\" (and optionally \"" + timelineSlotBandLabel + "\")")
 		return
 	}
 	fromArr, ok := rec.Column(colFrom[0]).(*array.Timestamp)
 	if !ok {
-		err = eh.Errorf("%q must be a Timestamp column (got %s)",
-			timelineSlotBandFrom, rec.Column(colFrom[0]).DataType())
+		err = eb.Build().Stringer("dataType", rec.Column(colFrom[0]).DataType()).
+			Errorf("\"" + timelineSlotBandFrom + "\" must be a Timestamp column")
 		return
 	}
 	toArr, ok := rec.Column(colTo[0]).(*array.Timestamp)
 	if !ok {
-		err = eh.Errorf("%q must be a Timestamp column (got %s)",
-			timelineSlotBandTo, rec.Column(colTo[0]).DataType())
+		err = eb.Build().Stringer("dataType", rec.Column(colTo[0]).DataType()).
+			Errorf("\"" + timelineSlotBandTo + "\" must be a Timestamp column")
 		return
 	}
 	if !isStringLikeType(rec.Column(colColor[0]).DataType()) {
-		err = eh.Errorf("%q must be a String / Binary column (got %s)",
-			timelineSlotBandColor, rec.Column(colColor[0]).DataType())
+		err = eb.Build().Stringer("dataType", rec.Column(colColor[0]).DataType()).
+			Errorf("\"" + timelineSlotBandColor + "\" must be a String / Binary column")
 		return
 	}
 	colorArr := rec.Column(colColor[0])
 	var labelArr arrow.Array
 	if len(colLabel) > 0 {
 		if !isStringLikeType(rec.Column(colLabel[0]).DataType()) {
-			err = eh.Errorf("%q must be a String / Binary column (got %s)",
-				timelineSlotBandLabel, rec.Column(colLabel[0]).DataType())
+			err = eb.Build().Stringer("dataType", rec.Column(colLabel[0]).DataType()).
+				Errorf("\"" + timelineSlotBandLabel + "\" must be a String / Binary column")
 			return
 		}
 		labelArr = rec.Column(colLabel[0])

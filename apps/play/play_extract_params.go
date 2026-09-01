@@ -150,7 +150,7 @@ func iterateSettingExprs(setStmt *grammar1.SetStmtContext, visit func(expr *gram
 // child layout `identifier EQ_SINGLE settingValue`, so we read by position.
 func extractSettingNameValue(pr *nanopass.ParseResult, expr *grammar1.SettingExprContext) (name string, value string, err error) {
 	if expr.GetChildCount() < 3 {
-		err = eh.Errorf("settingExpr has %d children, expected at least 3", expr.GetChildCount())
+		err = eb.Build().Int("children", expr.GetChildCount()).Errorf("settingExpr has fewer children than the expected minimum of 3")
 		return
 	}
 	ident, ok := expr.GetChild(0).(*grammar1.IdentifierContext)

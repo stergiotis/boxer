@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/timeseries/matrixprofile"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/mssmooth"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // play_ts_transforms.go holds the four v1 transforms (ADR-0163 §SD3). Each is
@@ -37,8 +38,8 @@ func tsApplySmooth(call *tsCall, ts []int64, vals []float64, params map[string]s
 		return
 	}
 	if min := mssmooth.MinHalfWidth(tsSmoothDegree); halfWidth < min {
-		err = eh.Errorf("tsSmooth: halfWidth %d is below the degree-%d kernel's minimum of %d",
-			halfWidth, tsSmoothDegree, min)
+		err = eb.Build().Int32("halfWidth", halfWidth).Int32("minimum", min).Int32("degree", tsSmoothDegree).
+			Errorf("tsSmooth: halfWidth is below the kernel's minimum for this degree")
 		return
 	}
 	if int(halfWidth)*2+1 > len(vals) {
@@ -46,9 +47,7 @@ func tsApplySmooth(call *tsCall, ts []int64, vals []float64, params map[string]s
 		// halfWidth — so all three take the readout register. The minimum-kernel
 		// refusal above stays plain: it fires only when halfWidth is below a
 		// single-digit minimum.
-		err = eh.Errorf("tsSmooth: halfWidth %s needs at least %s samples; the input has %s",
-			humanize.Comma(int64(halfWidth)), humanize.Comma(int64(halfWidth)*2+1),
-			humanize.Comma(int64(len(vals))))
+		err = eh.Errorf("tsSmooth: halfWidth %s needs at least %s samples; the input has %s", humanize.Comma(int64(halfWidth)), humanize.Comma(int64(halfWidth)*2+1), humanize.Comma(int64(len(vals)))) //boxer:lint disable=CS013 reason="the comment above records that all three numbers deliberately take the readout register"
 		return
 	}
 	kernel, err := mssmooth.NewKernelE(tsSmoothDegree, halfWidth)

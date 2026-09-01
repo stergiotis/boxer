@@ -161,7 +161,7 @@ func composePinTableDDL(tableName string, schema *arrow.Schema) (ddl string, err
 	cols := make([]string, 0, schema.NumFields())
 	for _, f := range schema.Fields() {
 		if strings.ContainsRune(f.Name, '`') {
-			err = eh.Errorf("play: pin: column name %q contains a backtick", f.Name)
+			err = eb.Build().Str("column", f.Name).Errorf("play: pin: column name contains a backtick")
 			return
 		}
 		chType, tErr := arrowColumnType(f.Type)
@@ -408,7 +408,7 @@ func parsePinRows(raw []byte) (rows []pinRow, err error) {
 		}
 		parts := strings.Split(line, "\t")
 		if len(parts) != pinRowColumns {
-			err = eh.Errorf("play: pin browser: expected %d columns, got %d (line=%q)", pinRowColumns, len(parts), line)
+			err = eb.Build().Int("want", pinRowColumns).Int("got", len(parts)).Str("line", line).Errorf("play: pin browser: unexpected column count")
 			return
 		}
 		var row pinRow
@@ -418,7 +418,7 @@ func parsePinRows(raw []byte) (rows []pinRow, err error) {
 			}
 			v, perr := strconv.ParseUint(parts[i], 10, 64)
 			if perr != nil {
-				err = eh.Errorf("play: pin browser: column %d %q: %w", i, parts[i], perr)
+				err = eb.Build().Int("column", i).Str("raw", parts[i]).Errorf("play: pin browser: unable to parse a column: %w", perr)
 			}
 			return v
 		}

@@ -124,7 +124,7 @@ func (inst dispatchDecision) killTarget() (endpoint string, err error) {
 // one place.
 func (inst dispatchDecision) target() (targetURL string, err error) {
 	if inst.class == dispatchClassRefused {
-		err = eb.Build().Str("dispatchReason", inst.reason).Errorf("play: not dispatched: %s", inst.reason)
+		err = eb.Build().Str("dispatchReason", inst.reason).Errorf("play: not dispatched")
 		return
 	}
 	if inst.targetURL == "" {
