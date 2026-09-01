@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -139,5 +140,5 @@ func TestExecOnPool_RejectsBadParamName(t *testing.T) {
 	require.NoError(t, err, "transport succeeds; the broker replies with a structured error")
 	_, _ = io.ReadAll(rep)
 	require.Error(t, rep.Err())
-	assert.Contains(t, rep.Err().Error(), "invalid parameter name")
+	assert.Contains(t, ebtest.Text(t, rep.Err()), "invalid parameter name")
 }

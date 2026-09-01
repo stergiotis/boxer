@@ -74,12 +74,12 @@ func Expand(sql string, cat *gloss.Catalog) (result string, err error) {
 	}
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", PassName, err)
+		err = eb.Build().Errorf(PassName+": %w", err)
 		return
 	}
 	st := &expandState{pr: pr, rw: nanopass.NewRewriter(pr), cat: cat}
 	if err = st.walk(pr.Tree); err != nil {
-		err = eb.Build().Errorf("%s: %w", PassName, err)
+		err = eb.Build().Errorf(PassName+": %w", err)
 		return
 	}
 	return nanopass.GetText(st.rw), nil
@@ -237,7 +237,7 @@ func (inst *expandState) expandCall(spelled string, funcExpr *grammar1.ColumnExp
 	}
 	for k, v := range pairs {
 		if _, dup := params[k]; dup {
-			err = inst.errCall(spelled, funcExpr).Str("key", k).Errorf("parameter %q is in the media type and in a pair", k)
+			err = inst.errCall(spelled, funcExpr).Str("key", k).Errorf("the parameter is in the media type and in a pair")
 			return
 		}
 		if params == nil {

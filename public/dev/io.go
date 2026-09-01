@@ -44,7 +44,7 @@ func newRedirectFlag(flagName string, openFlags int, dst **os.File, what string,
 			if s != "" {
 				f, err := os.OpenFile(s, openFlags, os.ModePerm)
 				if err != nil {
-					return eb.Build().Str(flagName, s).Errorf("unable to replace %s with %s: %w", what, verb, err)
+					return eb.Build().Str(flagName, s).Str("what", what).Str("verb", verb).Errorf("unable to replace: %w", err)
 				}
 				*dst = f
 				log.Info().Str(flagName, s).Msg("attaching " + what + " to file")

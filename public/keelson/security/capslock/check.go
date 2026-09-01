@@ -80,6 +80,7 @@ import (
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep/godepcollect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	// Side-effect imports: each app's init() registers into app.DefaultRegistry,
 	// and the gate can only evaluate apps registered in *this* binary. Every
@@ -195,7 +196,7 @@ func directCapabilities(ctx context.Context, opts Options) (capsByPkg map[string
 	// yields an empty capability set — which reads as "no findings" and passes
 	// the gate. Refuse to report a clean bill from a load that did not happen.
 	if len(pkgs) == 0 {
-		err = eh.Errorf("no packages matched %v under %q", patterns, root)
+		err = eb.Build().Strs("patterns", patterns).Str("root", root).Errorf("no packages matched")
 		return
 	}
 	var loadErrs []string

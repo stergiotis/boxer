@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type ContributorRecord struct {
@@ -120,7 +121,7 @@ func (inst *ContributorAnalyzer) collect(ctx context.Context, git *GitRunner) (r
 		var count int
 		count, err = strconv.Atoi(strings.TrimSpace(parts[0]))
 		if err != nil {
-			err = eh.Errorf("unable to parse commit count %q: %w", parts[0], err)
+			err = eb.Build().Str("raw", parts[0]).Errorf("unable to parse the commit count: %w", err)
 			return
 		}
 		totalCommits += count

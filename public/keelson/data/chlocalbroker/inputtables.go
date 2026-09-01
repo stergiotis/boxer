@@ -61,7 +61,7 @@ func materializeInputTables(baseTmpDir string, tables map[string][]byte) (prelud
 		return
 	}
 	if len(tables) > maxInputTables {
-		err = eh.Errorf("chlocalbroker: too many input tables: %d (max %d)", len(tables), maxInputTables)
+		err = eb.Build().Int("tables", len(tables)).Int("max", maxInputTables).Errorf("chlocalbroker: too many input tables")
 		return
 	}
 

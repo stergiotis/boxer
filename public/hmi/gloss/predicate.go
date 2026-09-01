@@ -42,7 +42,7 @@ func matches(prefix string, pattern string, get func(*Spec) string) Predicate {
 	p := Predicate{text: prefix + "~" + pattern}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		p.err = eb.Build().Str("pattern", pattern).Errorf("%s pattern does not compile: %w", prefix, err)
+		p.err = eb.Build().Str("pattern", pattern).Str("prefix", prefix).Errorf("pattern does not compile: %w", err)
 		return p
 	}
 	p.test = func(s *Spec) bool { return re.MatchString(get(s)) }

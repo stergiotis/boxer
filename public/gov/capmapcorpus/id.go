@@ -6,7 +6,6 @@ import (
 
 	"lukechampine.com/blake3"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
@@ -98,7 +97,7 @@ func slugForPath(path string) (slug string, err error) {
 		raw = filepath.Base(filepath.Dir(path))
 	}
 	if slug, err = NormalizeSlug(raw); err != nil {
-		return "", eh.Errorf("unable to derive slug for %q: %w", path, err)
+		return "", eb.Build().Str("path", path).Errorf("unable to derive a slug: %w", err)
 	}
 	return slug, nil
 }

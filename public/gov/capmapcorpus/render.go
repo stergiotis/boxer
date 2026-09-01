@@ -119,7 +119,7 @@ func RenderCompetence(comp Competence, rels []Relation) (out []byte, err error) 
 
 	stanza, mErr := yaml.Marshal(fm)
 	if mErr != nil {
-		return nil, eh.Errorf("unable to render frontmatter for %q: %w", comp.Slug, mErr)
+		return nil, eb.Build().Str("slug", comp.Slug).Errorf("unable to render frontmatter: %w", mErr)
 	}
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -235,7 +235,7 @@ func WriteVault(corpus Corpus, dir string) (stats WriteStats, err error) {
 		}
 		full := filepath.Join(dir, rel)
 		if mkErr := os.MkdirAll(filepath.Dir(full), 0o755); mkErr != nil {
-			return stats, eh.Errorf("unable to create directory for %q: %w", rel, mkErr)
+			return stats, eb.Build().Str("rel", rel).Errorf("unable to create the directory: %w", mkErr)
 		}
 		if wErr := os.WriteFile(full, content, 0o644); wErr != nil {
 			return stats, eb.Build().Str("rel", rel).Errorf("unable to write: %w", wErr)

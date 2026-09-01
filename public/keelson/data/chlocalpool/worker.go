@@ -104,7 +104,7 @@ func newWorker(ctx context.Context, p *Pool) (w *Worker, err error) {
 				_, _ = cmd.Process.Wait()
 			}
 		}()
-		err = eh.Errorf("chlocalpool: spawn timed out after %s", cfg.SpawnTimeout)
+		err = eb.Build().Stringer("timeout", cfg.SpawnTimeout).Errorf("chlocalpool: spawn timed out")
 		return
 	case <-ctx.Done():
 		go func() {
@@ -173,7 +173,7 @@ func (inst *Worker) Wait() (err error) {
 		if waitErr != nil {
 			tail := inst.stderr.Bytes()
 			if len(tail) > 0 {
-				inst.waitErr = eh.Errorf("chlocalpool: worker exit: %w (stderr: %q)", waitErr, string(tail))
+				inst.waitErr = eb.Build().Str("stderr", string(tail)).Errorf("chlocalpool: worker exit: %w", waitErr)
 			} else {
 				inst.waitErr = eh.Errorf("chlocalpool: worker exit: %w", waitErr)
 			}

@@ -50,7 +50,7 @@ var (
 func ResolveCorpus() (adrDir, root string, err error) {
 	if adrDir = envAdrDir.Get(); adrDir != "" {
 		if !isDir(adrDir) {
-			return "", "", eh.Errorf("%s is set to %q, which is not a directory", EnvAdrDirName, adrDir)
+			return "", "", eb.Build().Str("value", adrDir).Errorf(EnvAdrDirName + " is not set to a directory")
 		}
 		return adrDir, resolveRoot(adrDir), nil
 	}

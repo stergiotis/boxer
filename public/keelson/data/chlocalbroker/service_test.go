@@ -151,7 +151,7 @@ func TestExecOnPool_StreamingRejectedInM2(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Error(t, rep.Err())
-	assert.Contains(t, rep.Err().Error(), "streaming")
+	assert.Contains(t, ebtest.Text(t, rep.Err()), "streaming")
 }
 
 func TestExecOnPool_NoCapDenied(t *testing.T) {

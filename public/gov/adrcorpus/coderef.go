@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -112,7 +111,7 @@ func ScanCodeRefs(root, excludeDir, outDir string) (refs []CodeRef, err error) {
 		return nil
 	})
 	if walkErr != nil {
-		return nil, eh.Errorf("unable to scan code refs under %q: %w", root, walkErr)
+		return nil, eb.Build().Str("root", root).Errorf("unable to scan code refs: %w", walkErr)
 	}
 	sort.Slice(refs, func(i, j int) bool {
 		if refs[i].Num != refs[j].Num {

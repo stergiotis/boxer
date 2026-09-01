@@ -177,7 +177,7 @@ func verifyFinished(ctx context.Context, exec recordstore.ExecutorI) (err error)
 		`SELECT arrayJoin(arrayFilter(c -> NOT has(groupArray(name), c), %s)) FROM system.columns WHERE database = %s AND table = %s AND default_kind = 'MATERIALIZED'`,
 		sqlStringArray(treeColumns), ladingschema.QuoteLiteral(ladingschema.DatabaseName), ladingschema.QuoteLiteral(ladingschema.TableNameMeta)))
 	if err != nil {
-		err = eh.Errorf("read materialized columns of %s: %w", ladingschema.TableNameMeta, err)
+		err = eh.Errorf("read materialized columns of "+ladingschema.TableNameMeta+": %w", err)
 		return
 	}
 	if len(missing) > 0 {
@@ -215,7 +215,7 @@ func scalarStrings(ctx context.Context, exec recordstore.ExecutorI, sql string) 
 		}
 		col, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("column is %s, not a string", rec.Column(0).DataType())
+			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("column is not a string")
 			rec.Release()
 			return
 		}

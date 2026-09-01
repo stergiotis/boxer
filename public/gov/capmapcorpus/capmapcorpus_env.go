@@ -41,7 +41,7 @@ var envVaultDir = env.NewPath(env.Spec{
 func ResolveVault() (vaultDir string, err error) {
 	if vaultDir = envVaultDir.Get(); vaultDir != "" {
 		if !isDir(vaultDir) {
-			return "", eh.Errorf("%s is set to %q, which is not a directory", EnvVaultDirName, vaultDir)
+			return "", eb.Build().Str("value", vaultDir).Errorf(EnvVaultDirName + " is not set to a directory")
 		}
 		return vaultDir, nil
 	}

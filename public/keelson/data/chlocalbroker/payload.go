@@ -3,6 +3,7 @@ package chlocalbroker
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // wireRequest is the envelope sent on ch.local.exec.<pool>, wire-encoded
@@ -72,7 +73,7 @@ func decodeRequest(b []byte) (req wireRequest, err error) {
 		return
 	}
 	if req.V > wireVersion {
-		err = eh.Errorf("chlocalbroker: request version %d unsupported (max %d)", req.V, wireVersion)
+		err = eb.Build().Uint8("version", req.V).Uint8("max", wireVersion).Errorf("chlocalbroker: request version is unsupported")
 		return
 	}
 	return

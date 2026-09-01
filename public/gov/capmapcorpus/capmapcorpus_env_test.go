@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func TestResolveVaultRefusesNonDirectory(t *testing.T) {
 	_, err := ResolveVault()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), EnvVaultDirName)
-	assert.Contains(t, err.Error(), missing, "the env branch must be the one that failed")
+	assert.Equal(t, missing, ebtest.Fields(t, err)["value"], "the env branch must be the one that failed")
 }
 
 // The setting wins over the walk-up, so a process started inside a checkout

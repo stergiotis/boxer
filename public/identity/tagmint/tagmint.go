@@ -134,7 +134,7 @@ func Claim(name string, value identifier.TagValue, maxExpectedIds uint64) (r Cla
 	mu.Lock()
 	defer mu.Unlock()
 	if prev, has := byName[name]; has {
-		err = eb.Build().Str("name", name).Str("claimedAt", prev.origin).Errorf("tag-value name %q is already claimed at %s", name, prev.origin)
+		err = eb.Build().Str("name", name).Str("claimedAt", prev.origin).Errorf("tag-value name is already claimed")
 		return
 	}
 	if prev, has := byValue[value]; has {

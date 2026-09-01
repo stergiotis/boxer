@@ -324,7 +324,7 @@ func runMarkdownCheck(
 				return nil
 			})
 			if err != nil {
-				yield(Finding{}, eb.Build().Str("root", root).Errorf("%s walk: %w", ruleID, err))
+				yield(Finding{}, eb.Build().Str("root", root).Str("rule", ruleID).Errorf("walk failed: %w", err))
 				return
 			}
 		}

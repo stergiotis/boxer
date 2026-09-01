@@ -35,6 +35,18 @@ const (
 	rowMaxWidth = float32(2000)
 )
 
+// etAutoSizeAlways is egui_table's AutoSizeMode::Always as the binding takes
+// it — a discriminant, not a Go enum.
+//
+// The one column has to BE the pane, and only auto-size makes it so. A column
+// is declared with a width, and a width is a guess about a pane the user can
+// drag: guess high and every row is wider than the viewport, so the table
+// scrolls sideways and the outline's right edge is clipped away — the defect
+// this is here for. Always re-fits the column to the table's own parent width
+// each frame, which is the same number egui_table lays the rows out in, so the
+// row rect and the viewport cannot disagree.
+const etAutoSizeAlways = uint8(1)
+
 // The row band's chrome, in egui points.
 //
 // rowOutset is what the band leaves between its painted rect and the rect
@@ -119,10 +131,12 @@ func (inst *Inst) renderRows(ids *c.WidgetIdStack, visible []app.Manifest, rows 
 	// target carrying a name over a summary, not a grid of fields. The width
 	// range spans from something usable at the narrowest sensible pane to well
 	// past the widest, so the column follows the pane the user sized rather
-	// than fighting it.
+	// than fighting it; the declared width is only where it starts, since
+	// etAutoSizeAlways re-fits it to the pane every frame.
 	c.EtColumn(listPanelDefaultWidth).RangeMinMax(rowMinWidth, rowMaxWidth).Resizable(false).Send()
 	et := c.EndETable(ids.PrepareStr("launcher-rows"), uint64(len(rows)), inst.rowHeight(), 0, 0).
-		FillPane(true)
+		FillPane(true).
+		AutoSizeMode(etAutoSizeAlways)
 	rowBegin, rowEnd := 0, len(rows)
 	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
 		rowBegin = min(int(rb), len(rows))

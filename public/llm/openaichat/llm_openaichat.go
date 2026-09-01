@@ -445,11 +445,11 @@ func (inst *Client) Complete(ctx context.Context, req CompletionRequest) (resp C
 	}
 	for i, m := range req.Messages {
 		if !m.Role.IsValid() {
-			err = eb.Build().Int("index", i).Errorf("openaichat: message %d has invalid role %d", i, uint8(m.Role))
+			err = eb.Build().Int("index", i).Uint8("role", uint8(m.Role)).Errorf("openaichat: message has an invalid role")
 			return
 		}
 		if m.Role == ChatRoleTool && m.ToolCallId == "" {
-			err = eb.Build().Int("index", i).Errorf("openaichat: tool message %d is missing ToolCallId", i)
+			err = eb.Build().Int("index", i).Errorf("openaichat: tool message is missing ToolCallId")
 			return
 		}
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -147,7 +146,7 @@ func (inst *Registry) Register(e Entry) (err error) {
 		return
 	}
 	if _, exists := inst.factories[k]; exists {
-		err = eh.Errorf("passreg: name %q at stage %s already registered as a factory", e.Pass.Name, e.Stage)
+		err = eb.Build().Str("name", e.Pass.Name).Stringer("stage", e.Stage).Errorf("passreg: the name at that stage is already registered as a factory")
 		return
 	}
 	inst.entries[k] = e
@@ -178,7 +177,7 @@ func (inst *Registry) RegisterFactory(f Factory) (err error) {
 		return
 	}
 	if _, exists := inst.entries[k]; exists {
-		err = eh.Errorf("passreg: name %q at stage %s already registered as an entry", f.Name, f.Stage)
+		err = eb.Build().Str("name", f.Name).Stringer("stage", f.Stage).Errorf("passreg: the name at that stage is already registered as an entry")
 		return
 	}
 	inst.factories[k] = f
