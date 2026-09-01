@@ -4,7 +4,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -31,7 +30,7 @@ func (r *Registry) Register(p Provider) (err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.byName[name]; exists {
-		return eh.Errorf("introspect: table %q already registered", name)
+		return eb.Build().Str("name", name).Errorf("introspect: table already registered")
 	}
 	r.byName[name] = p
 	return

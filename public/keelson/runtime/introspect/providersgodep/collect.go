@@ -8,7 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep"
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep/godepcollect"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Collection status values, reported in go_collection.status.
@@ -134,8 +134,8 @@ func (inst *cache) collect(done chan struct{}) {
 		// no root to classify against, so that lone row is noise, not data:
 		// fail the collection instead and say where to point it. (Found by
 		// launching the applet from a directory with no go.mod.)
-		err = eh.Errorf("no main Go module at %q — set BOXER_GODEP_ROOT to the module to collect",
-			cmp.Or(inst.cfg.Root, "the working directory"))
+		err = eb.Build().Str("root", cmp.Or(inst.cfg.Root, "the working directory")).
+			Errorf("no main Go module at that root — set BOXER_GODEP_ROOT to the module to collect")
 	}
 	if err != nil {
 		s.status = statusFailed

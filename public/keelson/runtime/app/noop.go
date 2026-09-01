@@ -16,17 +16,17 @@ type NoopBus struct{}
 var _ BusI = (*NoopBus)(nil)
 
 func (inst *NoopBus) Publish(subject string, payload []byte) (err error) {
-	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1 (subject=%s)", subject)
+	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1")
 	return
 }
 
 func (inst *NoopBus) Subscribe(subject string, handler MsgHandlerFunc) (unsubscribe func(), err error) {
-	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1 (subject=%s)", subject)
+	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1")
 	return
 }
 
 func (inst *NoopBus) Request(subject string, payload []byte) (reply []byte, err error) {
-	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1 (subject=%s)", subject)
+	err = eb.Build().Str("subject", subject).Errorf("noopbus: broker not available in M1")
 	return
 }
 
@@ -41,17 +41,17 @@ type NoopStorage struct{}
 var _ StorageI = (*NoopStorage)(nil)
 
 func (inst *NoopStorage) Get(key string) (value []byte, found bool, err error) {
-	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1 (key=%s)", key)
+	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
 	return
 }
 
 func (inst *NoopStorage) Set(key string, value []byte) (err error) {
-	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1 (key=%s)", key)
+	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
 	return
 }
 
 func (inst *NoopStorage) Delete(key string) (err error) {
-	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1 (key=%s)", key)
+	err = eb.Build().Str("key", key).Errorf("noopstorage: storage not available in M1")
 	return
 }
 

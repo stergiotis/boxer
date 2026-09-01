@@ -120,7 +120,7 @@ func queryArg(fn *grammar1.TableFunctionExprContext) (query string, err error) {
 	}
 	args := al.AllTableArgExpr()
 	if len(args) != 1 {
-		err = eh.Errorf("docsearchsql: docsearch() takes exactly one argument, got %d", len(args))
+		err = eb.Build().Int("args", len(args)).Errorf("docsearchsql: docsearch() takes exactly one argument")
 		return
 	}
 	lit := args[0].Literal()

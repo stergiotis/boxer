@@ -62,7 +62,7 @@ func (inst *Client) Get(key string) (value []byte, found bool, err error) {
 		return
 	}
 	if r.Error != "" {
-		err = eh.Errorf("persist: get %s: %s", subject, r.Error)
+		err = eb.Build().Str("subject", subject).Str("reason", r.Error).Errorf("persist: get rejected")
 		return
 	}
 	value = r.Value
@@ -86,7 +86,7 @@ func (inst *Client) Set(key string, value []byte) (err error) {
 		return
 	}
 	if r.Error != "" {
-		err = eh.Errorf("persist: set %s: %s", subject, r.Error)
+		err = eb.Build().Str("subject", subject).Str("reason", r.Error).Errorf("persist: set rejected")
 		return
 	}
 	return
@@ -109,7 +109,7 @@ func (inst *Client) Delete(key string) (err error) {
 		return
 	}
 	if r.Error != "" {
-		err = eh.Errorf("persist: delete %s: %s", subject, r.Error)
+		err = eb.Build().Str("subject", subject).Str("reason", r.Error).Errorf("persist: delete rejected")
 		return
 	}
 	return

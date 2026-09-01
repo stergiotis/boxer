@@ -345,7 +345,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	}
 	m, ok := inst.registry.LookupManifest(appId)
 	if !ok {
-		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered id=%s", string(appId))
+		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered")
 		return
 	}
 	if kind == "" && len(cfg) > 0 {

@@ -194,7 +194,7 @@ func (e *Engine) exec(ctx context.Context, sql, format string, tables []string, 
 		// the honest answer — snapshotting it would hand back ciphertext.
 		if _, isEnc := prov.(introspect.EncryptedDatasetI); isEnc {
 			return nil, "", eb.Build().Str("table", t).
-				Errorf("introspectengine: %q is a sealed dataset; query it through the introspection /query endpoint, which resolves it by handle", t)
+				Errorf("introspectengine: the table is a sealed dataset; query it through the introspection /query endpoint, which resolves it by handle")
 		}
 		pj, ok := proj[t]
 		if !ok {
@@ -202,7 +202,7 @@ func (e *Engine) exec(ctx context.Context, sql, format string, tables []string, 
 		}
 		b, snapErr := introspect.SnapshotFile(prov, pj)
 		if snapErr != nil {
-			return nil, "", eh.Errorf("introspectengine: snapshot %q: %w", t, snapErr)
+			return nil, "", eb.Build().Str("table", t).Errorf("introspectengine: snapshot failed: %w", snapErr)
 		}
 		if inputs == nil {
 			inputs = make(map[string][]byte, len(tables))

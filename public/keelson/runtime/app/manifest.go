@@ -354,11 +354,11 @@ func (inst Manifest) Validate() (err error) {
 		return
 	}
 	if inst.Display == "" {
-		err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: empty Display id=%s", string(inst.Id))
+		err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: empty Display")
 		return
 	}
 	if inst.Surface == SurfaceUnspecified {
-		err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: Surface must be set id=%s", string(inst.Id))
+		err = eb.Build().Str("id", string(inst.Id)).Errorf("manifest: Surface must be set")
 		return
 	}
 	// ADR-0158 §SD1/§SD2: topics are the launcher's only subject axis, so a
@@ -367,13 +367,13 @@ func (inst Manifest) Validate() (err error) {
 	// apps have no launcher presence and are exempt.
 	if inst.Surface == SurfaceWindowed && len(inst.Topics) == 0 {
 		err = eb.Build().Str("id", string(inst.Id)).
-			Errorf("manifest: windowed app declares no Topics id=%s", string(inst.Id))
+			Errorf("manifest: windowed app declares no Topics")
 		return
 	}
 	for _, t := range inst.Topics {
 		if !t.IsRegistered() {
 			err = eb.Build().Str("id", string(inst.Id)).Str("topic", string(t)).
-				Errorf("manifest: unregistered topic %q id=%s", string(t), string(inst.Id))
+				Errorf("manifest: unregistered topic")
 			return
 		}
 	}
@@ -388,12 +388,12 @@ func (inst Manifest) Validate() (err error) {
 	// rule here would silently cost an app its place in the launcher.
 	if inst.Surface == SurfaceWindowed && inst.Summary == "" {
 		err = eb.Build().Str("id", string(inst.Id)).
-			Errorf("manifest: windowed app declares no Summary id=%s", string(inst.Id))
+			Errorf("manifest: windowed app declares no Summary")
 		return
 	}
 	if !inst.Kind.IsValid() {
 		err = eb.Build().Str("id", string(inst.Id)).
-			Errorf("manifest: invalid Kind %d id=%s", uint8(inst.Kind), string(inst.Id))
+			Uint8("kind", uint8(inst.Kind)).Errorf("manifest: invalid Kind")
 		return
 	}
 	// ADR-0148 §SD7: a workingset record is an instance of the app's
@@ -403,7 +403,7 @@ func (inst Manifest) Validate() (err error) {
 	// first close.
 	if inst.Workingset && inst.LaunchKind == "" {
 		err = eb.Build().Str("id", string(inst.Id)).
-			Errorf("manifest: Workingset requires a non-empty LaunchKind id=%s", string(inst.Id))
+			Errorf("manifest: Workingset requires a non-empty LaunchKind")
 		return
 	}
 	return

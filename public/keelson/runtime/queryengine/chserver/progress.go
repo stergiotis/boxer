@@ -136,7 +136,7 @@ func (inst *progressTransport) RoundTrip(req *http.Request) (resp *http.Response
 		n, pErr := strconv.ParseInt(header.Get("Content-Length"), 10, 64)
 		if pErr != nil {
 			closeAll()
-			err = eh.Errorf("chserver: progress transport: bad content-length %q", header.Get("Content-Length"))
+			err = eb.Build().Str("contentLength", header.Get("Content-Length")).Errorf("chserver: progress transport: bad content-length")
 			return
 		}
 		bodyReader = io.LimitReader(br, n)
@@ -203,7 +203,7 @@ func readHeaderStreaming(br *bufio.Reader, onProgress func(p runstream.Progress)
 	codeStr, _, _ := strings.Cut(rest, " ")
 	statusCode, err = strconv.Atoi(codeStr)
 	if err != nil {
-		err = eh.Errorf("malformed status code in %q", statusLine)
+		err = eb.Build().Str("statusLine", statusLine).Errorf("malformed status code in the status line")
 		return
 	}
 	status = rest
@@ -221,7 +221,7 @@ func readHeaderStreaming(br *bufio.Reader, onProgress func(p runstream.Progress)
 		}
 		total += len(line)
 		if total > progressMaxHeaderBytes {
-			err = eh.Errorf("response header section exceeds %d bytes", progressMaxHeaderBytes)
+			err = eb.Build().Int("progressMaxHeaderBytes", progressMaxHeaderBytes).Errorf("response header section exceeds its byte budget")
 			return
 		}
 		key, value, found := strings.Cut(line, ":")

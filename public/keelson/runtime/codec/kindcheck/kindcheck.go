@@ -60,7 +60,7 @@ func Check(kind string, b []byte) (err error) {
 	probe := probes[kind]
 	mu.RUnlock()
 	if probe == nil {
-		err = eb.Build().Str("kind", kind).Errorf("kindcheck: kind is not registered (known: %s)", knownList())
+		err = eb.Build().Str("kind", kind).Str("known", knownList()).Errorf("kindcheck: kind is not registered")
 		return
 	}
 	err = probe(b)
@@ -95,9 +95,9 @@ func PeekKind(b []byte) (kind string, err error) {
 	case 1:
 		kind = matches[0]
 	case 0:
-		err = eb.Build().Int("len", len(b)).Errorf("kindcheck: bytes decode as no registered kind (known: %s)", knownList())
+		err = eb.Build().Int("len", len(b)).Str("known", knownList()).Errorf("kindcheck: bytes decode as no registered kind")
 	default:
-		err = eb.Build().Str("matches", strings.Join(matches, ",")).Errorf("kindcheck: bytes decode ambiguously as %d registered kinds", len(matches))
+		err = eb.Build().Str("matches", strings.Join(matches, ",")).Int("kinds", len(matches)).Errorf("kindcheck: bytes decode ambiguously as several registered kinds")
 	}
 	return
 }

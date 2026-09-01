@@ -98,11 +98,11 @@ func ParseBackfill(spec string, now time.Time) (from time.Time, err error) {
 	}
 	d, derr := time.ParseDuration(spec)
 	if derr != nil {
-		err = eh.Errorf("queryrunsvc: backfill %q is not %q, %q, or a duration: %w", spec, BackfillAll, BackfillNone, derr)
+		err = eb.Build().Str("spec", spec).Errorf("queryrunsvc: backfill is not \""+BackfillAll+"\", \""+BackfillNone+"\", or a duration: %w", derr)
 		return
 	}
 	if d < 0 {
-		err = eh.Errorf("queryrunsvc: backfill duration %q must not be negative", spec)
+		err = eb.Build().Str("spec", spec).Errorf("queryrunsvc: backfill duration must not be negative")
 		return
 	}
 	return now.Add(-d), nil
@@ -336,7 +336,7 @@ func (s *Service) extract(ctx context.Context) (rows []queryrunfacts.Row, err er
 	for dec.More() {
 		var row queryrunfacts.Row
 		if dErr := dec.Decode(&row); dErr != nil {
-			err = eh.Errorf("queryrunsvc: decode extract row %d: %w", len(rows), dErr)
+			err = eb.Build().Int("row", len(rows)).Errorf("queryrunsvc: decode extract row: %w", dErr)
 			return
 		}
 		rows = append(rows, row)

@@ -150,7 +150,7 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 	// refusal is what covers that one.
 	if singleton && m.Workingset {
 		err = eb.Build().Str("id", string(m.Id)).
-			Errorf("registry: Workingset requires factory registration (RegisterFactory), not Register id=%s", string(m.Id))
+			Errorf("registry: Workingset requires factory registration (RegisterFactory), not Register")
 		return
 	}
 	inst.mu.Lock()
@@ -171,7 +171,7 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 		if inst.entries[i].manifest.Id.SubjectAlias() == newAlias {
 			err = eb.Build().Str("id", string(m.Id)).Str("alias", newAlias).
 				Str("collidesWith", string(inst.entries[i].manifest.Id)).
-				Errorf("registry: SubjectAlias %q collides with already-registered app %s", newAlias, string(inst.entries[i].manifest.Id))
+				Errorf("registry: SubjectAlias collides with an already-registered app")
 			return
 		}
 	}

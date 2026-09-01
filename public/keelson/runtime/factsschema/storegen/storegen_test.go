@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/tagmint"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -250,8 +251,8 @@ func TestGenerate_RefusesComponentFromAnotherPackage(t *testing.T) {
 		Ids:            map[string]uint64{"storegenProbeHost": 7001},
 	}.Generate()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "declares package")
-	assert.Contains(t, err.Error(), "somethingElse")
+	assert.Contains(t, err.Error(), "declare different packages")
+	assert.Equal(t, "somethingElse", ebtest.Fields(t, err)["packageName"])
 }
 
 func readFile(t *testing.T, path string) string {

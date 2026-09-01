@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Reconcile makes the pipeline objects match this process's
@@ -126,8 +127,8 @@ func (s *Service) checkDestinationSchema(ctx context.Context) (err error) {
 	}
 	if len(missing) > 0 {
 		example := missing[0]
-		err = eh.Errorf("queryrunsvc: destination %s exists but lacks %d of the %d current facts columns (e.g. %q) — an older schema generation; migrate it or move it aside, this service will not mutate an existing table",
-			s.FactsTable(), len(missing), len(want), example)
+		err = eb.Build().Str("destination", s.FactsTable()).Int("missing", len(missing)).Int("want", len(want)).Str("example", example).
+			Errorf("queryrunsvc: the destination exists but lacks some current facts columns — an older schema generation; migrate it or move it aside, this service will not mutate an existing table")
 		return
 	}
 	return

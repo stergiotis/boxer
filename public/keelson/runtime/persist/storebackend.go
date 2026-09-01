@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -134,7 +135,7 @@ func (inst *StoreBackend) Get(ref StorageRef, key string) (value []byte, found b
 	defer inst.mu.Unlock()
 	ent, found, err := inst.pc.GetFetch(context.Background(), stateKey(ref, key))
 	if err != nil {
-		err = eh.Errorf("persist: store get %s.%s: %w", ref.Alias, key, err)
+		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store get failed: %w", err)
 		found = false
 		return
 	}
@@ -146,7 +147,7 @@ func (inst *StoreBackend) Get(ref StorageRef, key string) (value []byte, found b
 		// A live row with no State component is not a shape this backend
 		// writes. Reporting absent would silently lose a value someone
 		// else's writer put there; saying so names the real condition.
-		err = eh.Errorf("persist: store get %s.%s: row carries no state component", ref.Alias, key)
+		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store get: row carries no state component")
 		found = false
 		return
 	}
@@ -174,12 +175,12 @@ func (inst *StoreBackend) Set(ref StorageRef, key string, value []byte) (err err
 	}).Commit()
 	if err != nil {
 		inst.st.DiscardPending()
-		err = eh.Errorf("persist: store set %s.%s: %w", ref.Alias, key, err)
+		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store set failed: %w", err)
 		return
 	}
 	err = inst.flushLocked()
 	if err != nil {
-		err = eh.Errorf("persist: store set %s.%s: %w", ref.Alias, key, err)
+		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store set failed: %w", err)
 	}
 	return
 }
@@ -193,12 +194,12 @@ func (inst *StoreBackend) Delete(ref StorageRef, key string) (err error) {
 	err = inst.st.Delete(stateKey(ref, key), time.Now().UTC())
 	if err != nil {
 		inst.st.DiscardPending()
-		err = eh.Errorf("persist: store delete %s.%s: %w", ref.Alias, key, err)
+		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store delete failed: %w", err)
 		return
 	}
 	err = inst.flushLocked()
 	if err != nil {
-		err = eh.Errorf("persist: store delete %s.%s: %w", ref.Alias, key, err)
+		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store delete failed: %w", err)
 	}
 	return
 }

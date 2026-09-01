@@ -5,7 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/naturalkey"
 	"github.com/zeebo/xxh3"
@@ -45,7 +45,7 @@ func entityNaturalKey(host, domain string) (nk []byte, err error) {
 	enc.Begin().AddStr(host).AddStr(domain)
 	nk, err = enc.End(naturalkey.SerializationFormatJson)
 	if err != nil {
-		err = eh.Errorf("sysmtee: natural key for %s/%s: %w", host, domain, err)
+		err = eb.Build().Str("host", host).Str("domain", domain).Errorf("sysmtee: natural key failed: %w", err)
 	}
 	return
 }

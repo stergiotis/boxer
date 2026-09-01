@@ -11,6 +11,7 @@ package appletstore
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // SubjectSave is the request subject: publish a [SaveRequest], receive a
@@ -62,7 +63,7 @@ func DecodeSaveRequest(b []byte) (req SaveRequest, err error) {
 		return
 	}
 	if req.V == 0 || req.V > wireVersion {
-		err = eh.Errorf("appletstore: save request version %d unsupported (max %d)", req.V, wireVersion)
+		err = eb.Build().Uint8("version", req.V).Uint8("max", wireVersion).Errorf("appletstore: save request version is unsupported")
 	}
 	return
 }
@@ -85,7 +86,7 @@ func DecodeSaveReply(b []byte) (rep SaveReply, err error) {
 		return
 	}
 	if rep.V == 0 || rep.V > wireVersion {
-		err = eh.Errorf("appletstore: save reply version %d unsupported (max %d)", rep.V, wireVersion)
+		err = eb.Build().Uint8("version", rep.V).Uint8("max", wireVersion).Errorf("appletstore: save reply version is unsupported")
 	}
 	return
 }

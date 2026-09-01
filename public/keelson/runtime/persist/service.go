@@ -45,7 +45,7 @@ func NewService(inst *inprocbus.Inst, log zerolog.Logger, backend StorageBackend
 	})
 	s.unsub, err = s.busClient.Subscribe(SubjectPrefix+">", s.handleRequest)
 	if err != nil {
-		err = eh.Errorf("persist: subscribe %s>: %w", SubjectPrefix, err)
+		err = eh.Errorf("persist: subscribe "+SubjectPrefix+">: %w", err)
 		return
 	}
 	return

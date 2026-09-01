@@ -167,7 +167,7 @@ func GenerateDMLWithBuilderPackage(outPath, packageName string, builderPkg leewa
 		clsNamer,
 	)
 	if err != nil {
-		err = eh.Errorf("codegen: generate dml go classes (%s): %w", builderPkg.Alias, err)
+		err = eb.Build().Str("alias", builderPkg.Alias).Errorf("codegen: generate dml go classes: %w", err)
 		return
 	}
 	return writeFile(outPath, code)
