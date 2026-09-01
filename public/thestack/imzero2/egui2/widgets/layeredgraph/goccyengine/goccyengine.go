@@ -209,16 +209,16 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 	for i, ed := range m.Edges {
 		tail, ok := gnodes[ed.From]
 		if !ok {
-			return nil, eh.Errorf("edge %d: unknown from-node %q", i, ed.From)
+			return nil, eb.Build().Int("edge", i).Str("from", ed.From).Errorf("edge names an unknown from-node")
 		}
 		head, ok := gnodes[ed.To]
 		if !ok {
-			return nil, eh.Errorf("edge %d: unknown to-node %q", i, ed.To)
+			return nil, eb.Build().Int("edge", i).Str("to", ed.To).Errorf("edge names an unknown to-node")
 		}
 		// Unique per-edge name keeps parallel edges distinct in the graph.
 		ge, err := graph.CreateEdgeByName(strconv.Itoa(i), tail, head)
 		if err != nil {
-			return nil, eh.Errorf("create edge %d (%s->%s): %w", i, ed.From, ed.To, err)
+			return nil, eb.Build().Int("edge", i).Str("from", ed.From).Str("to", ed.To).Errorf("create edge: %w", err)
 		}
 		if ed.Label != "" {
 			ge.SetLabel(ed.Label)

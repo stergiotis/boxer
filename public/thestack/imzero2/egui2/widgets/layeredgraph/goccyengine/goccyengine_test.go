@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine"
 )
@@ -116,7 +117,7 @@ func TestLayout_UnknownEdgeNodeErrors(t *testing.T) {
 	}
 	_, err := e.Layout(context.Background(), m, layeredgraph.LayoutOpts{})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ghost")
+	assert.Equal(t, "ghost", ebtest.Fields(t, err)["to"], "the error names the unknown node")
 }
 
 // Nodes that share an ID (e.g. fsmview states with the same label) must merge

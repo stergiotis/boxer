@@ -131,7 +131,7 @@ func loadAtlas() (*Atlas, error) {
 	for _, f := range fc.Features {
 		rings, holes, rerr := decodeRings(f.Geometry)
 		if rerr != nil {
-			return nil, eh.Errorf("%s: %w", f.Properties.Admin, rerr)
+			return nil, eb.Build().Str("admin", f.Properties.Admin).Errorf("unable to decode country rings: %w", rerr)
 		}
 		if len(rings) == 0 {
 			continue

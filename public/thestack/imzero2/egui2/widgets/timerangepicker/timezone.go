@@ -103,7 +103,7 @@ func (inst *tzCatalogue) lookup(name string) (id uint16, err error) {
 	}
 	next := len(inst.byID)
 	if next >= 1<<16 {
-		err = eh.Errorf("timerangepicker: tz catalogue full (%d entries)", next)
+		err = eb.Build().Int("entries", next).Errorf("timerangepicker: tz catalogue is full")
 		return
 	}
 	id = uint16(next)

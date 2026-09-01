@@ -345,7 +345,7 @@ func (l *TileLoader) worker() {
 			// A hit on the negative cache is not a new failure: it neither
 			// extends the entry (the tile is retried once the TTL from the
 			// real failure has passed) nor counts in Health.
-			l.deliver(req, nil, 0, 0, eh.Errorf("portolan: tile failed recently, not retried before %s", exp.Format(time.RFC3339)))
+			l.deliver(req, nil, 0, 0, eb.Build().Str("retryAfter", exp.Format(time.RFC3339)).Errorf("portolan: tile failed recently and is not retried yet"))
 			continue // deliver unlocks
 		}
 		data, cached := l.cache.get(req.url)
@@ -413,14 +413,14 @@ func (l *TileLoader) fetch(url string) ([]byte, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, eh.Errorf("portolan: tile server answered %d for %s", resp.StatusCode, url)
+		return nil, eb.Build().Int("statusCode", resp.StatusCode).Str("url", url).Errorf("portolan: tile server answered an error status")
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, l.opts.MaxTileBytes+1))
 	if err != nil {
 		return nil, eh.Errorf("portolan: tile body unreadable: %w", err)
 	}
 	if int64(len(data)) > l.opts.MaxTileBytes {
-		return nil, eh.Errorf("portolan: tile body over %d bytes", l.opts.MaxTileBytes)
+		return nil, eb.Build().Int64("maxTileBytes", l.opts.MaxTileBytes).Errorf("portolan: tile body exceeds the size limit")
 	}
 	return data, nil
 }

@@ -84,7 +84,7 @@ func ParsePaletteJSONE(raw []byte, fallbackName string) (p NamedPalette, err err
 		stops = append(stops, rgba)
 	}
 	if len(stops) < 2 {
-		err = eh.Errorf("palette needs >= 2 stops, got %d", len(stops))
+		err = eb.Build().Int("stops", len(stops)).Errorf("palette needs at least 2 stops")
 		return
 	}
 	name := pf.Name
@@ -104,19 +104,19 @@ func ParseHexRGBAE(s string) (rgba uint32, err error) {
 	case 6:
 		v, e := strconv.ParseUint(t, 16, 32)
 		if e != nil {
-			err = eh.Errorf("invalid hex %q: %w", s, e)
+			err = eb.Build().Str("hex", s).Errorf("invalid hex: %w", e)
 			return
 		}
 		rgba = uint32(v)<<8 | 0xff
 	case 8:
 		v, e := strconv.ParseUint(t, 16, 32)
 		if e != nil {
-			err = eh.Errorf("invalid hex %q: %w", s, e)
+			err = eb.Build().Str("hex", s).Errorf("invalid hex: %w", e)
 			return
 		}
 		rgba = uint32(v)
 	default:
-		err = eh.Errorf("hex stop must be 6 or 8 digits, got %q", s)
+		err = eb.Build().Str("hex", s).Errorf("hex stop must be 6 or 8 digits")
 	}
 	return
 }

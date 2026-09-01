@@ -284,10 +284,10 @@ func (p Pipeline) Validate() error {
 	checkRef := func(r Ref, source bool) error {
 		switch {
 		case r.Stage != "" && r.Endpoint != "":
-			return eh.Errorf("ref names both stage %q and endpoint %q", r.Stage, r.Endpoint)
+			return eb.Build().Str("stage", r.Stage).Str("endpoint", r.Endpoint).Errorf("ref names both stage and endpoint")
 		case r.Endpoint != "":
 			if r.Port != "" {
-				return eh.Errorf("endpoint ref %q carries a port", r.Endpoint)
+				return eb.Build().Str("endpoint", r.Endpoint).Errorf("endpoint ref carries a port")
 			}
 			if _, ok := endpoints[r.Endpoint]; !ok {
 				return eb.Build().Str("endpoint", r.Endpoint).Errorf("unknown endpoint")
@@ -302,13 +302,13 @@ func (p Pipeline) Validate() error {
 			}
 			cl, ok := portClass(st, r.Port)
 			if !ok {
-				return eh.Errorf("stage %q has no port %q", r.Stage, r.Port)
+				return eb.Build().Str("stage", r.Stage).Str("port", r.Port).Errorf("stage has no port")
 			}
 			if source && cl != PortDiagnostic && cl != PortArtifact {
-				return eh.Errorf("port %q.%q is not an output class", r.Stage, r.Port)
+				return eb.Build().Str("stage", r.Stage).Str("port", r.Port).Errorf("port is not an output class")
 			}
 			if !source && cl != PortConfig {
-				return eh.Errorf("port %q.%q is not an input class", r.Stage, r.Port)
+				return eb.Build().Str("stage", r.Stage).Str("port", r.Port).Errorf("port is not an input class")
 			}
 		default:
 			return eh.Errorf("empty ref")
@@ -323,11 +323,12 @@ func (p Pipeline) Validate() error {
 			return err
 		}
 		if e.From.IsEndpoint() && e.To.IsEndpoint() {
-			return eh.Errorf("endpoint-to-endpoint edge %q -> %q", e.From.Endpoint, e.To.Endpoint)
+			return eb.Build().Str("from", e.From.Endpoint).Str("to", e.To.Endpoint).Errorf("endpoint-to-endpoint edge is not supported")
 		}
 		if !e.From.IsEndpoint() && !e.To.IsEndpoint() && (e.From.Port != "" || e.To.Port != "") {
-			return eh.Errorf("stage-to-stage edge on named ports (%q.%q -> %q.%q) is not supported; route it through an endpoint",
-				e.From.Stage, e.From.Port, e.To.Stage, e.To.Port)
+			return eb.Build().Str("fromStage", e.From.Stage).Str("fromPort", e.From.Port).
+				Str("toStage", e.To.Stage).Str("toPort", e.To.Port).
+				Errorf("stage-to-stage edge on named ports is not supported; route it through an endpoint")
 		}
 	}
 	return nil

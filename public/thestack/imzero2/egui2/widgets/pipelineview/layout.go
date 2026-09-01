@@ -3,7 +3,7 @@ package pipelineview
 import (
 	"math"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Layout geometry is in the imzero2 painter's space: points, top-left
@@ -312,7 +312,7 @@ func Compute(p Pipeline, opts LayoutOpts) (*Layout, error) {
 	for _, id := range epOrder {
 		ei := eps[id]
 		if !ei.homed {
-			return nil, eh.Errorf("endpoint %q is not referenced by any edge", id)
+			return nil, eb.Build().Str("id", id).Errorf("endpoint is not referenced by any edge")
 		}
 		si := byID[ei.stage]
 		switch ei.side {

@@ -20,6 +20,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Tree is the input hierarchy in columnar form: three parallel slices, one
@@ -127,19 +128,19 @@ func (t Tree) Validate() error {
 		return eh.Errorf("tree has no nodes")
 	}
 	if len(t.Parents) != n || len(t.Self) != n {
-		return eh.Errorf("column lengths disagree: %d labels, %d parents, %d self values",
-			n, len(t.Parents), len(t.Self))
+		return eb.Build().Int("labels", n).Int("parents", len(t.Parents)).Int("selfValues", len(t.Self)).
+			Errorf("column lengths disagree")
 	}
 	for i := range n {
 		p := t.Parents[i]
 		if p == int32(i) {
-			return eh.Errorf("node %d is its own parent", i)
+			return eb.Build().Int("node", i).Errorf("node is its own parent")
 		}
 		if p < -1 || int(p) >= n {
-			return eh.Errorf("node %d has parent %d, which is out of range [-1,%d)", i, p, n)
+			return eb.Build().Int("node", i).Int32("parent", p).Int("nodes", n).Errorf("node parent is out of range")
 		}
 		if v := t.Self[i]; math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
-			return eh.Errorf("node %d has self value %v; values must be finite and >= 0", i, v)
+			return eb.Build().Int("node", i).Float64("value", v).Errorf("node self value must be finite and >= 0")
 		}
 	}
 	return t.checkAcyclic()
@@ -161,7 +162,7 @@ func (t Tree) checkAcyclic() error {
 		v := int32(i)
 		for v != -1 && !grounded[v] {
 			if len(path) > n {
-				return eh.Errorf("node %d lies on a parent cycle", i)
+				return eb.Build().Int("node", i).Errorf("node lies on a parent cycle")
 			}
 			path = append(path, v)
 			v = t.Parents[v]

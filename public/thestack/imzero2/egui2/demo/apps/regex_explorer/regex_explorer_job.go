@@ -18,7 +18,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // runQueryBlocking executes sql via the bus and hands the first column of
@@ -31,13 +31,13 @@ import (
 func runQueryBlocking[T any](ctx context.Context, inst *App, label string, sql string, decode func(col arrow.Array) (out T, err error)) (out T, err error) {
 	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, inst.alloc)
 	if execErr != nil {
-		err = eh.Errorf("execute %s query: %w", label, execErr)
+		err = eb.Build().Str("label", label).Errorf("execute query: %w", execErr)
 		return
 	}
 	defer func() {
 		cErr := closer.Close()
 		if cErr != nil && err == nil {
-			err = eh.Errorf("close %s query: %w", label, cErr)
+			err = eb.Build().Str("label", label).Errorf("close query: %w", cErr)
 		}
 	}()
 	defer rdr.Release()
@@ -45,15 +45,15 @@ func runQueryBlocking[T any](ctx context.Context, inst *App, label string, sql s
 	if !rdr.Next() {
 		readerErr := rdr.Err()
 		if readerErr != nil {
-			err = eh.Errorf("read %s result: %w", label, readerErr)
+			err = eb.Build().Str("label", label).Errorf("read result: %w", readerErr)
 			return
 		}
-		err = eh.Errorf("%s query returned no records", label)
+		err = eb.Build().Str("label", label).Errorf("query returned no records")
 		return
 	}
 	rec := rdr.Record()
 	if rec.NumRows() == 0 || rec.NumCols() == 0 {
-		err = eh.Errorf("%s query returned empty record (rows=%d cols=%d)", label, rec.NumRows(), rec.NumCols())
+		err = eb.Build().Str("label", label).Int64("rows", rec.NumRows()).Int64("cols", rec.NumCols()).Errorf("query returned an empty record")
 		return
 	}
 	out, err = decode(rec.Column(0))
@@ -71,7 +71,7 @@ func runQueryBlocking[T any](ctx context.Context, inst *App, label string, sql s
 func listRowRange(label string, list *array.List) (start int, end int, err error) {
 	offsets := list.Offsets()
 	if len(offsets) < 2 {
-		err = eh.Errorf("%s: list column carries %d offset(s); one row needs 2", label, len(offsets))
+		err = eb.Build().Str("label", label).Int("offsets", len(offsets)).Errorf("list column offset count is wrong; one row needs 2")
 		return
 	}
 	start = int(offsets[0])
@@ -83,7 +83,7 @@ func listRowRange(label string, list *array.List) (start int, end int, err error
 func asList(label string, col arrow.Array) (list *array.List, err error) {
 	list, ok := col.(*array.List)
 	if !ok {
-		err = eh.Errorf("%s query returned unexpected column type %T (expected *array.List)", label, col)
+		err = eb.Build().Str("label", label).Type("col", col).Errorf("query returned an unexpected column type (expected *array.List)")
 	}
 	return
 }
@@ -93,7 +93,7 @@ func runMatchBlocking(ctx context.Context, inst *App, haystack string, pattern s
 	return runQueryBlocking(ctx, inst, "match", buildMatchSQL(haystack, pattern), func(col arrow.Array) (out bool, err error) {
 		u8, ok := col.(*array.Uint8)
 		if !ok {
-			err = eh.Errorf("match query returned unexpected column type %T (expected *array.Uint8)", col)
+			err = eb.Build().Type("col", col).Errorf("match query returned unexpected column type (expected *array.Uint8)")
 			return
 		}
 		out = u8.Value(0) != 0
@@ -107,7 +107,7 @@ func runReplaceAllBlocking(ctx context.Context, inst *App, haystack string, patt
 	return runQueryBlocking(ctx, inst, "replaceRegexpAll", buildReplaceAllSQL(haystack, pattern, replacement), func(col arrow.Array) (out string, err error) {
 		strCol, ok := col.(*array.String)
 		if !ok {
-			err = eh.Errorf("replaceRegexpAll returned unexpected column type %T (expected *array.String)", col)
+			err = eb.Build().Type("col", col).Errorf("replaceRegexpAll returned unexpected column type (expected *array.String)")
 			return
 		}
 		out = strCol.Value(0)
@@ -129,7 +129,7 @@ func runExtractAllBlocking(ctx context.Context, inst *App, haystack string, patt
 		}
 		inner, ok := list.ListValues().(*array.String)
 		if !ok {
-			err = eh.Errorf("extractAll inner column type %T (expected *array.String)", list.ListValues())
+			err = eb.Build().Type("array", list.ListValues()).Errorf("extractAll inner column type (expected *array.String)")
 			return
 		}
 		start, end, err := listRowRange("extractAll", list)
@@ -160,12 +160,12 @@ func runExtractAllGroupsBlocking(ctx context.Context, inst *App, haystack string
 		}
 		inner, ok := outer.ListValues().(*array.List)
 		if !ok {
-			err = eh.Errorf("extractAllGroups inner column type %T (expected *array.List)", outer.ListValues())
+			err = eb.Build().Type("array", outer.ListValues()).Errorf("extractAllGroups inner column type (expected *array.List)")
 			return
 		}
 		leaf, ok := inner.ListValues().(*array.String)
 		if !ok {
-			err = eh.Errorf("extractAllGroups leaf column type %T (expected *array.String)", inner.ListValues())
+			err = eb.Build().Type("array", inner.ListValues()).Errorf("extractAllGroups leaf column type (expected *array.String)")
 			return
 		}
 		matchStart, matchEnd, err := listRowRange("extractAllGroups", outer)
@@ -174,7 +174,7 @@ func runExtractAllGroupsBlocking(ctx context.Context, inst *App, haystack string
 		}
 		innerOffsets := inner.Offsets()
 		if len(innerOffsets) < matchEnd+1 {
-			err = eh.Errorf("extractAllGroups: %d inner offset(s) for %d match(es)", len(innerOffsets), matchEnd-matchStart)
+			err = eb.Build().Int("offsets", len(innerOffsets)).Int("matches", matchEnd-matchStart).Errorf("extractAllGroups: inner offset count does not match the match count")
 			return
 		}
 		out = make([][]string, 0, matchEnd-matchStart)
@@ -235,7 +235,7 @@ func runMultiMatchBlocking(ctx context.Context, inst *App, haystack string, patt
 		}
 		inner, ok := list.ListValues().(*array.Uint64)
 		if !ok {
-			err = eh.Errorf("multiMatchAllIndices inner column type %T (expected *array.Uint64)", list.ListValues())
+			err = eb.Build().Type("array", list.ListValues()).Errorf("multiMatchAllIndices inner column type (expected *array.Uint64)")
 			return
 		}
 		start, end, err := listRowRange("multiMatchAllIndices", list)

@@ -195,12 +195,12 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 		pattern := tc.effective()
 		goMatches, goErr := inst.tripwireGoMatches(pattern, tc.Haystack)
 		if goErr != nil {
-			err = eh.Errorf("tripwire[%d=%s]: Go compile: %w", i, tc.Name, goErr)
+			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: Go compile: %w", goErr)
 			return
 		}
 		chMatches, chErr := inst.tripwireCHMatches(ctx, alloc, pattern, tc.Haystack)
 		if chErr != nil {
-			err = eh.Errorf("tripwire[%d=%s]: ClickHouse: %w", i, tc.Name, chErr)
+			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: ClickHouse: %w", chErr)
 			return
 		}
 
@@ -212,7 +212,7 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 		// mismatched result, so it is reported as a drift on its own.
 		vsAccepted, vsErr := inst.tripwireVectorScanAccepts(ctx, alloc, pattern, tc.Haystack)
 		if vsErr != nil {
-			err = eh.Errorf("tripwire[%d=%s]: VectorScan: %w", i, tc.Name, vsErr)
+			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: VectorScan: %w", vsErr)
 			return
 		}
 		if !vsAccepted {

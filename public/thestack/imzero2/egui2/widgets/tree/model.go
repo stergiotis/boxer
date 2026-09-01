@@ -22,7 +22,7 @@ package tree
 import (
 	"slices"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Tree is the input hierarchy in columnar form: two parallel slices, one entry
@@ -77,18 +77,18 @@ func (t Tree) Len() int { return len(t.Labels) }
 func (t Tree) Validate() error {
 	n := len(t.Labels)
 	if len(t.Parents) != n {
-		return eh.Errorf("column lengths disagree: %d labels, %d parents", n, len(t.Parents))
+		return eb.Build().Int("labels", n).Int("parents", len(t.Parents)).Errorf("column lengths disagree")
 	}
 	if t.Keys != nil && len(t.Keys) != n {
-		return eh.Errorf("column lengths disagree: %d labels, %d keys", n, len(t.Keys))
+		return eb.Build().Int("labels", n).Int("keys", len(t.Keys)).Errorf("column lengths disagree")
 	}
 	for i := range n {
 		p := t.Parents[i]
 		if p == int32(i) {
-			return eh.Errorf("node %d is its own parent", i)
+			return eb.Build().Int("node", i).Errorf("node is its own parent")
 		}
 		if p < -1 || int(p) >= n {
-			return eh.Errorf("node %d has parent %d, which is out of range [-1,%d)", i, p, n)
+			return eb.Build().Int("node", i).Int32("parent", p).Int("nodes", n).Errorf("node parent is out of range")
 		}
 	}
 	return t.checkAcyclic()
@@ -114,7 +114,7 @@ func (t Tree) checkAcyclic() error {
 		v := int32(i)
 		for v != -1 && !grounded[v] {
 			if len(path) > n {
-				return eh.Errorf("node %d lies on a parent cycle", i)
+				return eb.Build().Int("node", i).Errorf("node lies on a parent cycle")
 			}
 			path = append(path, v)
 			v = t.Parents[v]

@@ -335,7 +335,7 @@ func waitFor(c *Client, st Step, opts RunOptions) (err error) {
 		}
 		if time.Now().After(deadline) {
 			return eb.Build().Int("attempts", attempt+1).
-				Errorf("still not ready after %s: %w", opts.Timeout, last)
+				Stringer("timeout", opts.Timeout).Errorf("still not ready before the timeout: %w", last)
 		}
 		if err = c.Idle(150 * time.Millisecond); err != nil {
 			return err
