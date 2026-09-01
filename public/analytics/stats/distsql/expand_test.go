@@ -6,6 +6,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,7 +124,7 @@ func TestExpandRejects(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := expandDescriptiveStatistics(tt.input, testGrid)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), tt.wantSub)
+			require.Contains(t, ebtest.Text(t, err), tt.wantSub)
 		})
 	}
 }

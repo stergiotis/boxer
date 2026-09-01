@@ -189,7 +189,7 @@ func actionQuery(c *cli.Context) error {
 		return err
 	}
 	if !ok {
-		return eh.Errorf("clickhouse not found (looked at %s and $PATH); install it or run `boxer adr build` and query the Arrow files yourself", chlocalpool.DefaultBinaryPath)
+		return eb.Build().Str("defaultBinaryPath", chlocalpool.DefaultBinaryPath).Errorf("clickhouse not found at the default path nor on $PATH; install it or run `boxer adr build` and query the Arrow files yourself")
 	}
 	return nil
 }

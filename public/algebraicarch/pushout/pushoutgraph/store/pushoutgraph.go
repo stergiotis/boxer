@@ -263,7 +263,7 @@ func (inst *PushoutGraph) UndeleteNode(id t.NodeID, undeleter t.PatchHash) error
 	// Last deleter: actual resurrection. The purge check applies only
 	// here — removing a non-final deleter never needs the content back.
 	if _, purged := inst.contentPurged[id]; purged {
-		return eh.Errorf("node %v has been swept; patch is permanent past retention: %w", id, ErrContentPurged)
+		return eb.Build().Stringer("id", id).Errorf("node has been swept; patch is permanent past retention: %w", ErrContentPurged)
 	}
 	delete(inst.deleters, id)
 

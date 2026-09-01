@@ -225,7 +225,7 @@ func (inst *expandState) expandCall(spelled string, funcExpr *grammar1.ColumnExp
 			continue
 		}
 		if _, dup := pairs[key]; dup {
-			err = inst.errCall(spelled, funcExpr).Str("key", key).Errorf("parameter %q given twice", key)
+			err = inst.errCall(spelled, funcExpr).Str("key", key).Errorf("parameter given twice")
 			return
 		}
 		pairs[key] = value

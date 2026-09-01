@@ -134,7 +134,7 @@ func (inst *DeferredSectionBuffer) Flush(endSection func(section string) error) 
 		for _, c := range inst.bySec[section] {
 			cerr := c.emit()
 			if cerr != nil && err == nil {
-				err = eb.Build().Str("kind", c.kind).Str("section", section).Errorf("component %s failed to write section %s: %w", c.kind, section, cerr)
+				err = eb.Build().Str("kind", c.kind).Str("section", section).Errorf("component failed to write section: %w", cerr)
 			}
 		}
 		if endSection != nil {

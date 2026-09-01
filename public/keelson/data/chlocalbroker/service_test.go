@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 )
 
 func requireBinary(t *testing.T) {
@@ -137,7 +138,7 @@ func TestExecOnPool_BadSQLReturnsErrorWithStderr(t *testing.T) {
 	require.NoError(t, err, "bus request should succeed; worker error surfaces via rep.Err()")
 	require.NotNil(t, rep)
 	require.Error(t, rep.Err())
-	assert.Contains(t, rep.Err().Error(), "stderr")
+	assert.Contains(t, ebtest.Text(t, rep.Err()), "stderr")
 }
 
 func TestExecOnPool_StreamingRejectedInM2(t *testing.T) {

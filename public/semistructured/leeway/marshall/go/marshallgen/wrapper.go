@@ -208,7 +208,7 @@ func (inst FixedIdsWrapper) PlanMembershipIds(plan *mappingplan.Plan) (map[strin
 	for _, f := range uniqueMemberships(plan) {
 		id, ok := inst.Ids[f.LWMembership]
 		if !ok {
-			return nil, eb.Build().Str("membership", f.LWMembership).Errorf("fixed-ids wrapper: membership %q has no assigned id — every ref-channel membership needs an entry in Ids", f.LWMembership)
+			return nil, eb.Build().Str("membership", f.LWMembership).Errorf("fixed-ids wrapper: membership has no assigned id — every ref-channel membership needs an entry in Ids")
 		}
 		out[f.LWMembership] = id
 	}

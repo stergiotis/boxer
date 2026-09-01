@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Corpus location, resolved once here rather than by each consumer. The names
@@ -60,7 +61,7 @@ func ResolveCorpus() (adrDir, root string, err error) {
 	if adrDir, found := findAdrDirAbove(wd); found {
 		return adrDir, resolveRoot(adrDir), nil
 	}
-	return "", "", eh.Errorf("no doc/adr directory found at or above %q; set %s to point at one", wd, EnvAdrDirName)
+	return "", "", eb.Build().Str("wd", wd).Str("envAdrDirName", EnvAdrDirName).Errorf("no doc/adr directory found at or above the working directory; set the env var to point at one")
 }
 
 // resolveRoot picks the tree to scan: the override when set, else the checkout

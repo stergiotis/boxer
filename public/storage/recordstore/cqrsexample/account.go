@@ -144,7 +144,7 @@ func (inst *Service) Open(ctx context.Context, id string, owner string) (err err
 		return
 	}
 	if acct.exists {
-		err = eh.Errorf("account %s is already open", id)
+		err = eb.Build().Str("id", id).Errorf("account is already open")
 		return
 	}
 	return inst.append(ctx, acct, func(b *LedgerEntityBuilder) {
@@ -234,23 +234,23 @@ func (inst *Service) Snapshot(ctx context.Context, id string) (err error) {
 	})
 	err = b.Commit()
 	if err != nil {
-		err = eh.Errorf("snapshot %s commit: %w", id, err)
+		err = eb.Build().Str("id", id).Errorf("snapshot commit: %w", err)
 		return
 	}
 	_, err = inst.st.Flush(ctx)
 	if err != nil {
-		err = eh.Errorf("snapshot %s flush: %w", id, err)
+		err = eb.Build().Str("id", id).Errorf("snapshot flush: %w", err)
 	}
 	return
 }
 
 func (inst *Account) mustBeActive() (err error) {
 	if !inst.exists {
-		err = eh.Errorf("account %s does not exist", inst.ID)
+		err = eb.Build().Str("id", inst.ID).Errorf("account does not exist")
 		return
 	}
 	if inst.Closed {
-		err = eh.Errorf("account %s is closed", inst.ID)
+		err = eb.Build().Str("id", inst.ID).Errorf("account is closed")
 	}
 	return
 }

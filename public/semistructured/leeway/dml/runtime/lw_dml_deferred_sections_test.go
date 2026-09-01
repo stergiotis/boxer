@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 )
 
@@ -80,8 +81,9 @@ func TestFlushAttributesAFailingContribution(t *testing.T) {
 	err := buf.Flush(nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, boom)
-	assert.Contains(t, err.Error(), "Label")
-	assert.Contains(t, err.Error(), "symbol")
+	txt := ebtest.Text(t, err)
+	assert.Contains(t, txt, "Label")
+	assert.Contains(t, txt, "symbol")
 }
 
 // A failed contribution must not leave its section open: the entity commit

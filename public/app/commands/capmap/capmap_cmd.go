@@ -219,7 +219,7 @@ func actionLoad(c *cli.Context) (err error) {
 		return err
 	}
 	if len(corpus.Competences) == 0 {
-		return eh.Errorf("vault %q holds no competences; refusing to ingest an empty corpus", dir)
+		return eb.Build().Str("dir", dir).Errorf("vault holds no competences; refusing to ingest an empty corpus")
 	}
 
 	ctx := context.Background()

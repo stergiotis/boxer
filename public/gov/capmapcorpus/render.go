@@ -272,7 +272,7 @@ func vaultPaths(corpus Corpus) (paths map[string]string, err error) {
 			rel = stored
 		}
 		if prev, dup := claimed[rel]; dup {
-			return nil, eh.Errorf("capmapcorpus: %q and %q both map to vault path %q", prev, comp.Slug, rel)
+			return nil, eb.Build().Str("prev", prev).Str("slug", comp.Slug).Str("rel", rel).Errorf("capmapcorpus: two competences map to one vault path")
 		}
 		claimed[rel] = comp.Slug
 		paths[comp.Slug] = rel

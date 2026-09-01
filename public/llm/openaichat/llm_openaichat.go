@@ -641,8 +641,7 @@ func (inst *Client) send(ctx context.Context, method, url string, body []byte) (
 		return
 	}
 	if inst.maxResponseBytes > 0 && int64(len(raw)) > inst.maxResponseBytes {
-		err = eb.Build().Str("url", url).Int("status", status).
-			Errorf("openaichat: response exceeds %d bytes", inst.maxResponseBytes)
+		err = eb.Build().Str("url", url).Int("status", status).Int64("maxResponseBytes", inst.maxResponseBytes).Errorf("openaichat: response exceeds the byte limit")
 		return
 	}
 	return

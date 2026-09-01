@@ -15,6 +15,9 @@
 package ebtest
 
 import (
+	"fmt"
+	"sort"
+	"strings"
 	"testing"
 
 	fxcbor "github.com/fxamacker/cbor/v2"
@@ -129,6 +132,58 @@ func decodeMap(t *testing.T, data []byte) (out map[string]any) {
 			return
 		}
 		out[ks] = v
+	}
+	return
+}
+
+// Text renders the error's message together with every field it carries, as
+// "message [key=value …]", for a test that asserts the error MENTIONS something
+// without caring whether it says so in prose or in a field.
+//
+// Use it for a case table whose expectations predate the move to fields: the
+// table keeps its substrings and stops depending on which half of the error
+// carries them. Where a test means to pin a specific value, Fields is the
+// stronger assertion and says so.
+func Text(t *testing.T, err error) (s string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("ebtest: error is nil")
+		return
+	}
+	var sb strings.Builder
+	sb.WriteString(err.Error())
+	f := fieldsOrEmpty(t, err)
+	if len(f) == 0 {
+		return sb.String()
+	}
+	keys := make([]string, 0, len(f))
+	for k := range f {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	sb.WriteString(" [")
+	for i, k := range keys {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		fmt.Fprintf(&sb, "%s=%v", k, f[k])
+	}
+	sb.WriteString("]")
+	return sb.String()
+}
+
+// fieldsOrEmpty is Fields without the "no payload" failure, since an error
+// built by eh.Errorf legitimately carries none.
+func fieldsOrEmpty(t *testing.T, err error) (fields map[string]any) {
+	t.Helper()
+	fields = map[string]any{}
+	for _, data := range payloads(err) {
+		for k, v := range decodeMap(t, data) {
+			if _, seen := fields[k]; seen {
+				continue
+			}
+			fields[k] = v
+		}
 	}
 	return
 }

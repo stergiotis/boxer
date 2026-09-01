@@ -169,7 +169,7 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 		h := applied[i]
 		framed, gerr := opts.Storage.GetEnvelope(ctx, h)
 		if gerr != nil {
-			err = eh.Errorf("applied %s has no envelope: %w", h, errors.Join(ErrCorruptStore, gerr))
+			err = eb.Build().Stringer("patchHash", h).Errorf("applied has no envelope: %w", errors.Join(ErrCorruptStore, gerr))
 			return
 		}
 		env, codecName, derr := opts.Codecs.Decode(framed)
@@ -178,12 +178,12 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 			return
 		}
 		if env.Patch.Hash != h {
-			err = eh.Errorf("envelope for %s carries patch %s: %w", h, env.Patch.Hash, ErrCorruptStore)
+			err = eb.Build().Stringer("patchHash", h).Stringer("hash", env.Patch.Hash).Errorf("the stored envelope carries a different patch than the key it is filed under: %w", ErrCorruptStore)
 			return
 		}
 		for _, dep := range env.Patch.Dependencies {
 			if _, ok := r0.appliedSet[dep]; !ok {
-				err = eh.Errorf("applied %s precedes its dependency %s: %w", h, dep, ErrCorruptStore)
+				err = eb.Build().Stringer("patchHash", h).Stringer("dep", dep).Errorf("applied precedes its dependency: %w", ErrCorruptStore)
 				return
 			}
 		}
@@ -640,7 +640,7 @@ func (inst *Repo) patchInfo(ctx context.Context, h t.PatchHash) (info PatchInfo,
 		return
 	}
 	if env.Patch.Hash != h {
-		err = eh.Errorf("envelope for %s carries patch %s: %w", h, env.Patch.Hash, ErrCorruptStore)
+		err = eb.Build().Stringer("patchHash", h).Stringer("hash", env.Patch.Hash).Errorf("the stored envelope carries a different patch than the key it is filed under: %w", ErrCorruptStore)
 		return
 	}
 	info = PatchInfo{Patch: env.Patch, Producer: env.Producer, Timestamp: env.Timestamp, Codec: codecName}

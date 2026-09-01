@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ParamPrefix marks a query-string key as a statement parameter: the URL key
@@ -82,7 +83,7 @@ func ParseRequest(r *http.Request, maxSQLBytes int64) (req Request, err error) {
 		return
 	}
 	if int64(len(b)) > maxSQLBytes {
-		err = eh.Errorf("chhttp: statement exceeds %d bytes", maxSQLBytes)
+		err = eb.Build().Int64("maxSQLBytes", maxSQLBytes).Errorf("chhttp: statement exceeds the byte limit")
 		return
 	}
 	req.SQL = strings.TrimSpace(string(b))

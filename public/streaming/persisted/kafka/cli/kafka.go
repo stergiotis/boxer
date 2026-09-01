@@ -220,7 +220,7 @@ func buildTLS(c *cli.Context) (enabled bool, cfg *tls.Config, err error) {
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(caPEM) {
-			err = eh.Errorf("--tls-ca-file %q contains no PEM certificates", caFile)
+			err = eb.Build().Str("caFile", caFile).Errorf("--tls-ca-file contains no PEM certificates")
 			return
 		}
 		cfg.RootCAs = pool
@@ -465,7 +465,7 @@ func runProduce(c *cli.Context) (err error) {
 	case "netstring":
 		err = produceNetstrings(c, writer, topic, keyDelim)
 	default:
-		err = eh.Errorf("invalid --input-mode %q (try lines, netstring)", mode)
+		err = eb.Build().Str("mode", mode).Errorf("invalid --input-mode (try lines, netstring)")
 	}
 	return
 }
@@ -550,7 +550,7 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 	if readErr != nil {
 		if errors.Is(readErr, io.EOF) {
 			if len(lenStr) > 0 {
-				err = eh.Errorf("unexpected EOF after %q (missing ':')", lenStr)
+				err = eb.Build().Str("lenStr", lenStr).Errorf("unexpected EOF after the length prefix (missing ':')")
 				return
 			}
 			// clean EOF — no more frames
@@ -703,7 +703,7 @@ func makeRecordWriter(c *cli.Context) (fn formatter, err error) {
 	case "netstring":
 		fn = netstringWriter
 	default:
-		err = eh.Errorf("invalid --output-mode %q (try format, cbor, netstring)", mode)
+		err = eb.Build().Str("mode", mode).Errorf("invalid --output-mode (try format, cbor, netstring)")
 	}
 	return
 }

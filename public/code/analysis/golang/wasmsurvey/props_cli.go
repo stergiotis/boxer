@@ -274,7 +274,7 @@ func runPropsVerify(c *cli.Context) (err error) {
 	fmt.Fprintf(os.Stdout, "props verify: %d regression(s), %d drift(s), %d unjudged\n",
 		regressions, drifts, unjudged)
 	if regressions > 0 {
-		return eb.Build().Errorf("props verify failed: %d declared-amenable package(s) are now blocked", regressions)
+		return eb.Build().Int("regressions", regressions).Errorf("props verify failed: declared-amenable package(s) are now blocked")
 	}
 	return nil
 }

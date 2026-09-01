@@ -44,7 +44,7 @@ type composeDdlInput struct {
 func composeDdlName(kind string, s string) (n naming.StylableName, err error) {
 	n, err = naming.MakeStylableName(s)
 	if err != nil {
-		err = eb.Build().Str(kind, s).Errorf("invalid %s name: %w", kind, err)
+		err = eb.Build().Str(kind, s).Str("kind", kind).Errorf("invalid name: %w", err)
 	}
 	return
 }
@@ -185,7 +185,7 @@ func composeDdl(in composeDdlInput) (sql string, err error) {
 			// A group flag never introduces a section — a typo would mint a
 			// phantom one and silently leave the real section ungrouped.
 			if _, known := tvSections[string(section)]; !known && !membSections[string(section)] {
-				err = eb.Build().Str(kind, spec).Str("section", fields[0]).Errorf("unknown section in %s spec — declare it via --tv or --memb first (typo?)", kind)
+				err = eb.Build().Str(kind, spec).Str("section", fields[0]).Str("kind", kind).Errorf("unknown section in spec — declare it via --tv or --memb first (typo?)")
 				return
 			}
 			var key naming.Key

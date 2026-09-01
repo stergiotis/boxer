@@ -128,7 +128,7 @@ func NewRegistry() *Registry {
 // registration stays.
 func (inst *Registry) Register(e Entry) (err error) {
 	if !knownStage(e.Stage) {
-		err = eh.Errorf("passreg: unknown stage %d (pass %q)", e.Stage, e.Pass.Name)
+		err = eb.Build().Uint8("stage", uint8(e.Stage)).Str("name", e.Pass.Name).Errorf("passreg: unknown stage for a pass")
 		return
 	}
 	if e.Pass.Name == "" {
@@ -136,14 +136,14 @@ func (inst *Registry) Register(e Entry) (err error) {
 		return
 	}
 	if e.Pass.Apply == nil {
-		err = eh.Errorf("passreg: pass %q has nil Apply", e.Pass.Name)
+		err = eb.Build().Str("name", e.Pass.Name).Errorf("passreg: pass has nil Apply")
 		return
 	}
 	k := entryKey{stage: e.Stage, name: e.Pass.Name}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if _, exists := inst.entries[k]; exists {
-		err = eh.Errorf("passreg: pass %q already registered at stage %s", e.Pass.Name, e.Stage)
+		err = eb.Build().Str("name", e.Pass.Name).Stringer("stage", e.Stage).Errorf("passreg: pass already registered at stage")
 		return
 	}
 	if _, exists := inst.factories[k]; exists {
@@ -159,7 +159,7 @@ func (inst *Registry) Register(e Entry) (err error) {
 // concrete entries. A duplicate is an error and the first registration stays.
 func (inst *Registry) RegisterFactory(f Factory) (err error) {
 	if !knownStage(f.Stage) {
-		err = eh.Errorf("passreg: unknown stage %d (factory %q)", f.Stage, f.Name)
+		err = eb.Build().Uint8("stage", uint8(f.Stage)).Str("name", f.Name).Errorf("passreg: unknown stage for a factory")
 		return
 	}
 	if f.Name == "" {
@@ -167,14 +167,14 @@ func (inst *Registry) RegisterFactory(f Factory) (err error) {
 		return
 	}
 	if f.Build == nil {
-		err = eh.Errorf("passreg: factory %q has nil Build", f.Name)
+		err = eb.Build().Str("name", f.Name).Errorf("passreg: factory has nil Build")
 		return
 	}
 	k := entryKey{stage: f.Stage, name: f.Name}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if _, exists := inst.factories[k]; exists {
-		err = eh.Errorf("passreg: factory %q already registered at stage %s", f.Name, f.Stage)
+		err = eb.Build().Str("name", f.Name).Stringer("stage", f.Stage).Errorf("passreg: factory already registered at stage")
 		return
 	}
 	if _, exists := inst.entries[k]; exists {

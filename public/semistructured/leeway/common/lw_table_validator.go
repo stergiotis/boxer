@@ -57,7 +57,7 @@ func (inst *TableValidator) validateNames(names []naming.StylableName, nameType 
 			}
 			has := d.Has(string(name2))
 			if has {
-				err = eb.Build().Stringer("column", name).Stringer("namingStyle", s).Stringer("columnNameStyled", name2).Errorf("found duplicate %s name, must be unique in all naming styles", nameType)
+				err = eb.Build().Stringer("column", name).Stringer("namingStyle", s).Stringer("columnNameStyled", name2).Str("nameType", nameType).Errorf("found duplicate name, must be unique in all naming styles")
 				return
 			}
 		}
@@ -65,7 +65,7 @@ func (inst *TableValidator) validateNames(names []naming.StylableName, nameType 
 			d.Add(string(naming.ConvertNameStyle(name, s)))
 		}
 		if !matchesNamingStyle {
-			err = eb.Build().Stringer("column", name).Strs("possibleNames", possibleNames).Errorf("found %s name that does not follow any of the supported naming conventions", nameType)
+			err = eb.Build().Stringer("column", name).Strs("possibleNames", possibleNames).Str("nameType", nameType).Errorf("found name that does not follow any of the supported naming conventions")
 			return
 		}
 	}

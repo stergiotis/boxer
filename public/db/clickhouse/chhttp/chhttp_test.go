@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +44,8 @@ func TestParseRequestStatementSources(t *testing.T) {
 	r = httptest.NewRequest("POST", "/query", strings.NewReader(strings.Repeat("x", 32)))
 	_, err = ParseRequest(r, 16)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exceeds 16 bytes")
+	assert.Contains(t, err.Error(), "exceeds the byte limit")
+	assert.EqualValues(t, 16, ebtest.Fields(t, err)["maxSQLBytes"])
 }
 
 func TestParseRequestParams(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // tableRefRe is the shape a runtime table override must have: an unquoted
@@ -22,7 +23,7 @@ var tableRefRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0
 // carry it.
 func CheckTableRef(ref string) (err error) {
 	if !tableRefRe.MatchString(ref) {
-		err = eh.Errorf("table reference %q must be an unquoted ClickHouse identifier, optionally database-qualified ([A-Za-z_][A-Za-z0-9_]*(.[A-Za-z_][A-Za-z0-9_]*)?)", ref)
+		err = eb.Build().Str("ref", ref).Errorf("table reference must be an unquoted ClickHouse identifier, optionally database-qualified ([A-Za-z_][A-Za-z0-9_]*(.[A-Za-z_][A-Za-z0-9_]*)?)")
 	}
 	return
 }
@@ -76,7 +77,7 @@ func ProvisioningStatements(script, baked, target string) (stmts []string, err e
 	if db, _, qualified := strings.Cut(baked, "."); qualified {
 		prelude := "CREATE DATABASE IF NOT EXISTS " + db + ";\n\n"
 		if !strings.HasPrefix(rest, prelude) {
-			err = eh.Errorf("provisioning statements: baked reference %q is qualified but the script does not start with its database prelude", baked)
+			err = eb.Build().Str("baked", baked).Errorf("provisioning statements: baked reference is qualified but the script does not start with its database prelude")
 			return
 		}
 		rest = rest[len(prelude):]

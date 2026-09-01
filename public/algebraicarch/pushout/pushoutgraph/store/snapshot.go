@@ -286,7 +286,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			return
 		}
 		if g.nodes.Contains(id) || g.deletedNodes.Contains(id) {
-			err = eh.Errorf("node %v in both sections or duplicated: %w", id, ErrBadSnapshot)
+			err = eb.Build().Stringer("id", id).Errorf("node in both sections or duplicated: %w", ErrBadSnapshot)
 			return
 		}
 		g.deletedNodes.Add(id)
@@ -308,7 +308,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			if _, present := g.contents[id]; present {
 				// SweepTombstones destroys the bytes when it sets the
 				// marker; purged-with-content is engine-impossible.
-				err = eh.Errorf("tombstone %v purged but carrying content: %w", id, ErrBadSnapshot)
+				err = eb.Build().Stringer("id", id).Errorf("tombstone purged but carrying content: %w", ErrBadSnapshot)
 				return
 			}
 			g.contentPurged[id] = struct{}{}
@@ -325,7 +325,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			// Engine states always record at least one deleter per
 			// tombstone (DeleteNode records, the last UndeleteNode
 			// resurrects); a zero-deleter tombstone is corruption.
-			err = eh.Errorf("tombstone %v with no deleters: %w", id, ErrBadSnapshot)
+			err = eb.Build().Stringer("id", id).Errorf("tombstone with no deleters: %w", ErrBadSnapshot)
 			return
 		}
 		if nDel > maxSnapshotCount {

@@ -302,7 +302,7 @@ func NewComposer(seg TableSegments) (inst *Composer, err error) {
 func (inst *Composer) name(kind string, s string) (n naming.StylableName, err error) {
 	n, err = naming.MakeStylableName(s)
 	if err != nil {
-		err = eb.Build().Str(kind, s).Errorf("invalid %s name: %w", kind, err)
+		err = eb.Build().Str(kind, s).Str("kind", kind).Errorf("invalid name: %w", err)
 		return
 	}
 	if strings.Contains(string(n), inst.seg.Separator) {

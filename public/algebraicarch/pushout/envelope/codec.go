@@ -65,7 +65,7 @@ func Frame(codecName string, payload []byte) (framed []byte, err error) {
 // payload aliases the input.
 func Unframe(framed []byte) (codecName string, payload []byte, err error) {
 	if len(framed) < len(frameMagic) || string(framed[:len(frameMagic)]) != frameMagic {
-		err = eh.Errorf("missing %q magic: %w", frameMagic, ErrBadFrame)
+		err = eb.Build().Str("frameMagic", frameMagic).Errorf("missing magic: %w", ErrBadFrame)
 		return
 	}
 	rest := framed[len(frameMagic):]

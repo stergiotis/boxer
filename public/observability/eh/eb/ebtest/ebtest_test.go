@@ -59,3 +59,16 @@ func TestFieldsReachesAPayloadUnderAPlainWrap(t *testing.T) {
 
 	assert.Equal(t, "abc", ebtest.Fields(t, outer)["id"])
 }
+
+func TestTextCarriesMessageAndFields(t *testing.T) {
+	err := eb.Build().Str("clause", "ORDER BY").Int("limit", 5).Errorf("clause not supported")
+	got := ebtest.Text(t, err)
+	assert.Contains(t, got, "clause not supported", "the message")
+	assert.Contains(t, got, "ORDER BY", "a field value")
+	assert.Contains(t, got, "limit", "a field name")
+}
+
+func TestTextOnAnErrorWithoutAPayload(t *testing.T) {
+	// eh.Errorf carries no fields; Text is still usable, unlike Fields.
+	assert.Equal(t, "plain", ebtest.Text(t, eh.New("plain")))
+}

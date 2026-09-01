@@ -27,6 +27,7 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Kind selects a [Program]'s resolution policy.
@@ -270,7 +271,7 @@ func (p *Program) resolve(o Opts) (name string, pre []string, err error) {
 	}
 	switch p.Kind {
 	case Local:
-		err = eh.Errorf("extbin: program %q is Local and requires an explicit Opts.Path", p.Name)
+		err = eb.Build().Str("name", p.Name).Errorf("extbin: program is Local and requires an explicit Opts.Path")
 	case Host:
 		name, err = p.lookHost()
 		pre = p.prefixArgs()
@@ -284,7 +285,7 @@ func (p *Program) resolve(o Opts) (name string, pre []string, err error) {
 		name = goBinary()
 		pre = []string{"tool", p.Name}
 	default:
-		err = eh.Errorf("extbin: program %q has unknown kind %d", p.Name, p.Kind)
+		err = eb.Build().Str("name", p.Name).Uint8("kind", uint8(p.Kind)).Errorf("extbin: program has unknown kind")
 	}
 	return
 }

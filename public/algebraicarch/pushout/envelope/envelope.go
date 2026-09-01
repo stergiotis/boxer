@@ -86,7 +86,7 @@ func Validate(env EnvelopeV1) (err error) {
 			continue
 		}
 		if _, ok := declared[d]; !ok {
-			err = eh.Errorf("patch %s references %s: %w", env.Patch.Hash, d, ErrUndeclaredDependency)
+			err = eb.Build().Stringer("hash", env.Patch.Hash).Stringer("patchHash", d).Errorf("patch references: %w", ErrUndeclaredDependency)
 			return
 		}
 	}
