@@ -438,6 +438,48 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-09-01 — the quantity family reaches the nautical quantities, and the catalog opens
+
+Two changes, one of them structural.
+
+**The quantity family gains three members and a fourth gloss beside it.**
+`gloss/velocity` (`unit=kn|mps|kmh|mph`, optional `show=` to convert),
+`gloss/planeangle` (`unit=deg|rad`, `as=plain|bearing|signed`), and
+`gloss/coordinate` (`axis=lat|lon`, `as=dm|dms|deg`). `gloss/length` gains the
+nautical mile and the fathom, and an optional `show=` that renders in a named
+unit instead of auto-scaling to SI — the default is unchanged, so every
+declaration written before it renders as it did.
+
+The names follow `public/science/units` as the family's doc says they should:
+`AspectVelocitySI` and `AspectPlaneAngleSI` were already there. `coordinate`
+is the exception and is deliberately not a quantity: a position's presentation
+is a convention — degrees and decimal minutes with a hemisphere letter — not a
+choice of unit, and no unit conversion turns a signed float into `47°04.926'N`.
+
+Two findings worth keeping. A declaration is a media type, so a parameter
+value must be a MIME token: `unit=m/s` is refused by `mime.ParseMediaType`
+because `/` is a tspecial. The spellings are therefore `mps` and `kmh` while
+the *symbols shown* stay `m/s` and `km/h` — spelling and symbol are separate
+things, and the gloss holds both. And a velocity is never auto-scaled the way
+a length is: a boat's speeds occupy a narrow band, and a scale sliding between
+m/s and km/h down one column would make two readings of the same quantity look
+like different measurements.
+
+**`Default` is no longer closed.** `RegisterDefault` lets a consuming
+repository add a gloss its own domain needs, from an `init` in a package the
+binary imports. Until now the two families were unexported and every host
+called `Default`, so a consumer could build a catalog with `NewCatalog` and
+nothing that renders a result column would ever look in it — a domain gloss
+was only reachable by changing this package, which is the wrong shape for a
+vocabulary §SD3 describes as a set of names rather than a closed enum.
+
+Extras are appended after the built-ins, so registration order — which is
+affinity order — still lets a built-in win a contested column: an extension
+can add a rendering but not silently change an existing one. A media type
+already held by a built-in or an earlier registration panics at registration
+rather than resolving by import order, which is not something either package
+can see.
+
 ### 2026-08-15 — the truncated faces were the re-fit frame, not only the seed
 
 Milestones recorded a pre-existing width-seed under-measurement as the cause

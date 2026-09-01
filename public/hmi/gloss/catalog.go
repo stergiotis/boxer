@@ -188,5 +188,10 @@ func Default() *Catalog {
 	for _, g := range presentationFamily() {
 		c.MustRegister(g)
 	}
+	// Consumer extensions last, so a built-in affinity rule still wins a
+	// contested column — see RegisterDefault.
+	for _, g := range RegisteredDefaults() {
+		c.MustRegister(g)
+	}
 	return c
 }

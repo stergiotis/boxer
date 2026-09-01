@@ -20,6 +20,9 @@ func presentationFamily() []GlossI {
 	return []GlossI{
 		temperatureGloss{},
 		lengthGloss{},
+		velocityGloss{},
+		planeAngleGloss{},
+		coordinateGloss{},
 		epochGloss{},
 		durationGloss{},
 		bytesGloss(),
