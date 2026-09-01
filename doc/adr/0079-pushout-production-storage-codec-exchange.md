@@ -114,9 +114,10 @@ exist to avoid O(history) replay, not O(state) reconstruction.
 **Q4: How does recovery relate snapshot to log?**
 
 - O4a: snapshot is authoritative; log truncated to it.
-- O4b: log is authoritative; snapshot is a cache valid only if its
-  applied list is a *prefix* of the log; otherwise discard and
-  full-replay from envelopes.
+- O4b: log is authoritative; snapshot is a cache valid only if the log
+  *covers* its applied set (a subset test — originally a prefix test;
+  relaxed 2026-09-01, see the crash-recovery bullet under the 2026-06-26
+  update); otherwise discard and full-replay from envelopes.
 
 O4b chosen. The log is the system of record (append on apply, atomic
 rewrite on unrecord); correctness never depends on snapshot freshness.
@@ -266,16 +267,17 @@ before the verb acks. But the *pending* retention horizon —
 `tombstoneAt[id]` for tombstones not yet swept — is **not** durable
 across the full-replay recovery path. `tombstoneAt` is stamped by
 `DeleteNode` from `Options.Clock` at apply time and persisted only inside
-the GRG1 snapshot; snapshot-prefix recovery restores it, but full replay
+the GRG1 snapshot; snapshot recovery restores it, but full replay
 re-runs `DeleteNode` and re-stamps every tombstone to *replay time*. Full
-replay is the crash fallback (a non-prefix snapshot, e.g. a crash
-mid-unrecord) and the only path for a fresh clone (which has no
-snapshot). So §Context's "purge un-happens on restart" hole was closed
+replay is the crash fallback (a snapshot the log does not cover; since
+2026-09-01 a crash mid-unrecord no longer lands here, because that
+snapshot's applied set is a subset of the log and `Open` uses it) and
+the only path for a fresh clone (which has no snapshot). So §Context's "purge un-happens on restart" hole was closed
 for swept content but left open for the *un-swept horizon*: it resets to
 "now" on those paths. Two consequences of different character:
 
-- **Same-store restart — fixable.** A crash without a clean `Close`, or a
-  non-prefix snapshot, resets horizons on the next `Open` even though the
+- **Same-store restart — fixable.** A crash without a clean `Close`, or an
+  uncovered snapshot, resets horizons on the next `Open` even though the
   data has objectively been tombstoned since the original delete. A repo
   that crash-loops faster than its horizon could defer a compliance purge
   indefinitely.
@@ -304,7 +306,7 @@ stamp otherwise, drop entries for nodes no longer tombstoned, and write
 back only when the set changed. The pushoutgraph's `tombstoneAt` is a working
 copy of the ledger, re-seeded via `SeedTombstoneStamps`.
 
-**Rejected.** *Salvaging stamps from a discarded (non-prefix) snapshot* —
+**Rejected.** *Salvaging stamps from a discarded (uncovered) snapshot* —
 couples retention to topology the engine has decided not to trust, and
 does nothing for a fresh clone (no snapshot exists). *Per-patch
 first-applied-at* instead of per-node — adds a node→deleter→time
@@ -376,12 +378,19 @@ and machine-checks the protocol against this ADR's decisions:
   sync. The prefix a peer is left holding when `Push`/`Pull` stop on the
   first error (O6b) is always dependency-closed.
 - **Crash-recovery atomicity** (`crash_recovery.qnt`, Apalache) — Record
-  and Unrecord are each all-or-nothing across a crash between any two
-  steps. Two counterfactuals show the SD1 ack-ordering and the Q4/O4b
-  prefix-or-discard rule are load-bearing, not stylistic: swapping the
-  durable writes to append-then-put yields the `ErrCorruptStore`
-  recovery refuses (`crash_recovery_unsafe.qnt`), and trusting a
-  non-prefix snapshot silently drops a patch
+  and Unrecord are modelled all-or-nothing across a crash between any
+  two steps (`RecoveryCorrect`, verified at depth 12) and exercised by
+  the fault-injection tests in `repo/repo_test.go`
+  (`TestRepo_UnrecordCrashBetweenSnapshotAndLogKeepsPurge` and
+  siblings). Recovery uses any snapshot whose applied set the log
+  covers, as a set rather than a prefix (`repo.Open`; the 2026-09-01
+  change, which closed the Unrecord crash window in which a discarded
+  mid-unrecord snapshot forced a full replay that re-materialised
+  swept content). Two counterfactuals show the SD1 ack-ordering and the
+  Q4/O4b cover-or-discard rule are load-bearing, not stylistic: swapping
+  the durable writes to append-then-put yields the `ErrCorruptStore`
+  recovery refuses (`crash_recovery_unsafe.qnt`), and trusting an
+  uncovered snapshot silently drops a patch
   (`crash_recovery_unsafe_snapshot.qnt`). Q5/O5b's snapshot-before-ack
   is the same put-before-commit shape.
 - **Convergence liveness** (`convergence.tla`, TLC) —

@@ -18,8 +18,11 @@ import (
 )
 
 // PushoutGraph is the core data structure: a directed graph of lines (nodes).
-// It generalises a file's linear order into a partial order, enabling
-// mathematically correct merging via categorical pushouts.
+// It generalises a file's linear order into a partial order so that
+// causally independent patches can be applied in any order — property-tested
+// on full graph state by TestProperty_MixedPatchesCommuteOnFullState
+// (commutativity_test.go). No pushout object is computed: the vocabulary is
+// Mimram & Di Giusto's, the construction is ojo's (see ../NOTICE).
 //
 // Deleted nodes are tombstoned ("ghost lines"), never truly removed.
 // Pseudo-edges bridge over deleted regions so the live subgraph stays connected.
@@ -907,12 +910,15 @@ func (inst *PushoutGraph) NodeContentStatus(id t.NodeID) (status t.NodeContentSt
 // subgraph stays well-defined — but contentPurged[id] is set and
 // contents[id] is freed.
 //
-// Implements the storage-limitation duty under GDPR Art 5(1)(e) and FADP
-// Art 6(4): personal data that is no longer necessary must be destroyed
-// or anonymised. The legal framing (the choice between salt-destruction,
+// This is the mechanism a consumer may use for storage limitation (GDPR
+// Art 5(1)(e), FADP Art 6(4)); it does not discharge that duty by itself.
+// It purges the in-memory graph only: envelopes in storage keep
+// Change.Content, and StorageI has no delete verb, so the bytes remain
+// recoverable from storage (at-rest and fleet-wide erasure are ADR-0025's
+// layer, proposed). The legal framing (the choice between salt-destruction,
 // commitment-destruction, encryption-shredding, etc.) is the consuming
-// repo's concern; this method is the mechanism that drops content past
-// a retention horizon under any of those architectures.
+// repo's concern; this method drops content past a retention horizon
+// under any of those architectures.
 //
 // Trade-off: a tombstoned node with purged content can no longer be
 // resurrected. Patch.Unapply of the patch that introduced the

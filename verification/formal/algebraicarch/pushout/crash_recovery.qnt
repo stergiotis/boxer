@@ -7,13 +7,13 @@
 // TWO write verbs, each with its own durable-write ordering and commit point,
 // and a crash (power loss) that can strike between ANY two steps:
 //
-//   Record/ApplyEnvelope (commitPatchLocked, repo/repo.go:340):
+//   Record/ApplyEnvelope (repo.Repo.commitPatchLocked):
 //     1. clone+Apply            volatile
 //     2. PutEnvelope            DURABLE
 //     3. AppendApplied          DURABLE   <= commit point
 //     4. in-memory commit       volatile
 //
-//   Unrecord (repo/repo.go:379):
+//   Unrecord (repo.Repo.Unrecord):
 //     1. clone+Unapply          volatile  (pre-flight: no applied dependent)
 //     2. SaveSnapshot(next, newApplied)  DURABLE
 //     3. ReplaceApplied(newApplied)      DURABLE   <= commit point
@@ -33,12 +33,12 @@
 // KEPT envelope on top: the unrecord rolls back atomically.
 //
 // REFINEMENT MAP (spec action -> Go):
-//   recordBegin/putEnv/appendLog/memCommit -> commitPatchLocked  repo/repo.go:340-367
-//   unrecordBegin   -> Unrecord pre-flight + clone+Unapply       repo/repo.go:385-418
-//   unrSaveSnapshot -> saveSnapshotLocked(next, newApplied)      repo/repo.go:420
-//   unrReplaceLog   -> st.ReplaceApplied (COMMIT POINT)          repo/repo.go:428
-//   unrMemCommit    -> in-memory commit                          repo/repo.go:431-433
-//   checkpoint      -> repo.Repo.Checkpoint                      repo/repo.go:475
+//   recordBegin/putEnv/appendLog/memCommit -> repo.Repo.commitPatchLocked
+//   unrecordBegin   -> repo.Repo.Unrecord pre-flight + clone+Unapply
+//   unrSaveSnapshot -> repo.Repo.saveSnapshotLocked(next, newApplied)
+//   unrReplaceLog   -> StorageI.ReplaceApplied (COMMIT POINT)
+//   unrMemCommit    -> in-memory commit (tail of repo.Repo.Unrecord)
+//   checkpoint      -> repo.Repo.Checkpoint
 //   crash           -> power loss + repo.Open recovery (coverage = isSubset)
 module crash_recovery {
   type Patch = int

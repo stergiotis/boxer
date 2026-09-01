@@ -92,7 +92,7 @@ ojo code was copied verbatim. Several design choices diverge from
 ojo: the BLAKE3 hash function (versus crypto/sha256), patch identity
 covering the canonicalized dependency set, deleter-set tombstones in
 `store.PushoutGraph.DeleteNode`/`UndeleteNode`, the de-fixup step in
-`patch.Patch.ComputeHash`, and the hex `MarshalText` / `UnmarshalText`
+`patch.Patch.ComputeHash` (`patch/identityform.go`), and the hex `MarshalText` / `UnmarshalText`
 on `types.PatchHash`.
 
 ----------------------------------------------------------------------

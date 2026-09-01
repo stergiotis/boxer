@@ -58,8 +58,13 @@ order a patch after everything its author had ever seen rather than
 after what it actually reads.
 
 Patches with no dependency path between them are causally independent
-by construction, and the pushout property makes them commute: applying
-them in either order yields the identical pushoutgraph. Commutation is not
+by construction, and they commute: applying them in either order yields
+the identical pushoutgraph. That is not derived from a pushout
+construction — none is computed — but property-tested on full graph
+state by `TestProperty_MixedPatchesCommuteOnFullState`
+(`pushoutgraph/store/commutativity_test.go`), which applies random
+independent mixed patches in permuted orders and compares the resulting
+graphs. Commutation is not
 a threat to causality; it is what the *absence* of a causal constraint
 looks like, made explicit. Consequently peers never need to agree on
 an order. The applied log is each repo's local linearization of the
@@ -112,7 +117,8 @@ skew:
 A **version** is a set of patch hashes that is downward-closed under
 dependencies. Every applied log is one, by the dependency gate. Since
 the pushoutgraph state is a function of the set (order-free, by
-commutation), a version identifies a state.
+commutation — the property test cited in §2), a version identifies a
+state.
 
 "More advanced" is set inclusion — a partial order with four outcomes,
 computed by `exchange.Compare`:
@@ -181,9 +187,14 @@ transport seam.
   the receiver's decode completes. The streaming shape fits a broker
   subject naturally (publish symbols until ack).
 
-Order-of-magnitude intuition for `n` = 1M patches, `d` = 100: full
-lists ≈ 32 MB, a Bloom filter of the whole set ≈ 1.2 MB, an IBLT ≈
-3 KB, minisketch ≈ 1 KB.
+Hypothetical sizing example — order-of-magnitude intuition for `n` =
+1M patches, `d` = 100: full lists ≈ 32 MB, a Bloom filter of the whole
+set ≈ 1.2 MB, an IBLT ≈ 3 KB, minisketch ≈ 1 KB. These are wire-size
+estimates, not a measured workload. The measured 1M figures in
+`pushoutgraph/store/benchmark_test.go` (`BenchmarkPatchApply_Insert1M`,
+`BenchmarkRender_1MNodes`, `BenchmarkClone_1MNodes`) count nodes in one
+graph, not patches on the wire: Apply, Render, Clone and snapshot
+encoding scale linearly and take 3–5 s at 1M nodes.
 
 Adversarial caveat: sketches operate on truncated fingerprints (e.g.
 64-bit), so an untrusted peer can craft collisions to stall decoding.

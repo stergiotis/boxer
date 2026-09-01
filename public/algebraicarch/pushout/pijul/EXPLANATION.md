@@ -31,6 +31,15 @@ file — boxer's `pushoutgraph`) so that pushouts always exist — at the
 cost of admitting non-linear intermediate states that re-emerge as
 conflicts.
 
+Boxer borrows that vocabulary; it does not compute a pushout object.
+The engine is ojo's construction — a line graph with tombstones and
+pseudo-edges over a content-addressed patch log — in which a merge is
+the set union of applied patches and conflicts are detected after the
+fact as non-linear regions. That independent patches commute is not
+derived from the categorical framing but property-tested on full graph
+state (`TestProperty_MixedPatchesCommuteOnFullState`,
+`pushoutgraph/store/commutativity_test.go`).
+
 External references:
 
 - Joe Neeman's [merging](https://jneem.github.io/merging/) /
@@ -157,28 +166,32 @@ analogous to recovering a dropped commit by its hash from git's object
 database, except that pushout's "object database" has no retention
 horizon and no GC.
 
-**Architecture for actual erasure.** Documented in
-[ADR-0025](../../../../doc/adr/0025-pushout-forget-architecture.md);
-**Architecture A** (vault-by-design, per-occurrence nonce commitments —
-ADR-0025 SD6) is the selected erasure architecture for a greenfield,
-multi-actor deployment.
+**Architecture for actual erasure.** Designed in
+[ADR-0025](../../../../doc/adr/0025-pushout-forget-architecture.md)
+(proposed): **Architecture A** (vault-by-design, per-occurrence nonce
+commitments — ADR-0025 SD6) is the selected erasure architecture for a
+greenfield, multi-actor deployment. It is a design, not shipped code:
+no vault, nonce, commitment or Forget code exists in the tree. The one
+implemented piece is `SweepTombstones` (ADR-0025 SD8), which purges
+tombstoned content from the in-memory graph past a retention horizon
+while envelopes in storage keep their content.
 
-Under Architecture A the patch DAG is never rewritten. PII-flagged
-fields are intercepted at `SetAndRecord` time: cleartext plus a fresh
-256-bit nonce are written to a controller-side vault (realised as a
-Leeway facts table in ClickHouse, per ADR-0025 SD5), and
-`Change.Content` carries a fixed-size carrier token
-`(version, vaultRef, C)` in place of the raw bytes, where `C` is the
-keyed-BLAKE3 commitment under that row's nonce (ADR-0025 SD6).
-Unchanged values reuse their existing token byte-for-byte, so diffs
-stay quiet. The `ForgetSubject` / `ForgetRefs` operations (ADR-0025
-SD9) shred the subject's at-rest key (SD12) and delete the vault rows
-under the mutation-finality contract in ADR-0025 SD11 — after which
-each in-patch commitment is an unrecoverable, mutually uncorrelatable
-32-byte residue. The vault is never propagated; only the patch
-envelope (with carrier tokens) flows through Push / Pull. One
-mechanism discharges both GDPR Art 17 and FADP Art 32(2)(c); under
-the Swiss relative approach peers hold non-personal data throughout,
+As designed, the patch DAG would never be rewritten. PII-flagged
+fields would be intercepted at `SetAndRecord` time: cleartext plus a
+fresh 256-bit nonce written to a controller-side vault (a Leeway facts
+table in ClickHouse, per ADR-0025 SD5), and `Change.Content` would
+carry a fixed-size carrier token `(version, vaultRef, C)` in place of
+the raw bytes, where `C` is the keyed-BLAKE3 commitment under that
+row's nonce (ADR-0025 SD6). Unchanged values would reuse their
+existing token byte-for-byte, so diffs stay quiet. The `ForgetSubject`
+/ `ForgetRefs` operations (ADR-0025 SD9) would shred the subject's
+at-rest key (SD12) and delete the vault rows under the
+mutation-finality contract in ADR-0025 SD11 — after which each in-patch
+commitment is an unrecoverable, mutually uncorrelatable 32-byte
+residue. The vault would never be propagated; only the patch envelope
+(with carrier tokens) would flow through Push / Pull. One mechanism
+would discharge both GDPR Art 17 and FADP Art 32(2)(c); under the
+Swiss relative approach peers would hold non-personal data throughout,
 since they never see vault rows or nonces.
 
 The earlier architecture-design discussion considered a *compensating
@@ -197,8 +210,9 @@ is no longer load-bearing for erasure under Architecture A — the
 dependency-minimisation output it produces was a prerequisite for
 compensating-patch construction, which is not performed. Antiquing
 remains a real correctness / theoretical-alignment question for pushout
-on its own merits; ADR-0039's Decision section is deferred pending the
-internal SD1–SD10 + OQ1–OQ6 design dialogue.
+on its own merits; ADR-0039 (deferred) keeps the design record, its
+Decision section intentionally empty pending the internal SD1–SD10 +
+OQ1–OQ6 design dialogue.
 
 ## Invariants
 
