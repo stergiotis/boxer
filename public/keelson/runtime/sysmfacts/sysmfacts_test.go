@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmvocab"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -154,7 +155,7 @@ func TestGenerationRefusesAMissingMembership(t *testing.T) {
 	delete(ids, "sysmCpuTotalPct")
 	_, err := generate(t, ids)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "sysmCpuTotalPct")
+	assert.Contains(t, ebtest.Text(t, err), "sysmCpuTotalPct")
 }
 
 // The generated Set satisfies the registry contract (ADR-0189 M0/M1). This is

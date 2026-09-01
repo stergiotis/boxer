@@ -197,8 +197,8 @@ func TestExpandsListForm(t *testing.T) {
 func TestSubColumnToken(t *testing.T) {
 	_, err := expandExtract(t, "SELECT LW_GET('geoPoint', 'here') FROM events")
 	require.ErrorContains(t, err, "more than one value column")
-	require.ErrorContains(t, err, "lat")
-	require.ErrorContains(t, err, "lon")
+	require.Contains(t, ebtest.Text(t, err), "lat")
+	require.Contains(t, ebtest.Text(t, err), "lon")
 
 	out, err := expandExtract(t, "SELECT LW_GET('geoPoint', 'here', 'col:lat') FROM events")
 	require.NoError(t, err)

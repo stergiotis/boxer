@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stretchr/testify/require"
@@ -133,7 +134,7 @@ func TestAssetBuilderRefusesDoubleAddAndRawMixing(t *testing.T) {
 		AddLabel(Label{ID: 11, Name: "second"}).
 		Commit()
 	require.Error(t, err, "one contribution per kind per entity")
-	require.ErrorContains(t, err, "Label")
+	require.Contains(t, ebtest.Text(t, err), "Label")
 	require.Equal(t, buffered, st.Buffered(), "a failed Commit must not leave a partial row buffered")
 
 	b := st.Begin(12, t0).AddLabel(Label{ID: 12, Name: "typed"})
