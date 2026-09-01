@@ -75,11 +75,19 @@ func (inst *RuleCS013) Id() (id string) {
 	return
 }
 
-// DefaultSeverity is warn, per ADR-0011's staging policy for a rule with
-// in-tree fallout: ship at warn so the backlog can be measured without
-// breaking the build, promote to error once the residual count is zero.
+// DefaultSeverity is error. The rule shipped at warn under ADR-0011's staging
+// policy — measure the backlog without breaking the build — and promotes here
+// because that policy's condition is met: the residual count is zero across
+// public/ and apps/.
+//
+// A new finding is therefore a build failure, which is the point. The sites
+// that legitimately keep a directive carry a per-line disable naming the
+// reason, and the reasons that recurred are worth knowing before adding
+// another: a message that crosses a text-only boundary, a directive filling a
+// grammatical slot rather than a data slot, a remedy the reader copies, and a
+// message another component string-matches.
 func (inst *RuleCS013) DefaultSeverity() (sev FindingSeverityE) {
-	sev = FindingSeverityWarn
+	sev = FindingSeverityError
 	return
 }
 
