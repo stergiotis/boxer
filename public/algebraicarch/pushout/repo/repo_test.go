@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -203,7 +204,7 @@ func TestRepo_FullReplayWithoutSnapshot(tt *testing.T) {
 	}
 }
 
-func TestRepo_NonPrefixSnapshotDiscarded(tt *testing.T) {
+func TestRepo_UncoveredSnapshotDiscarded(tt *testing.T) {
 	ctx := context.Background()
 	dir := tt.TempDir()
 	r := openTest(tt, dir)
@@ -213,7 +214,7 @@ func TestRepo_NonPrefixSnapshotDiscarded(tt *testing.T) {
 	if err := r.Close(ctx); err != nil {
 		tt.Fatal(err)
 	}
-	// Corrupt the snapshot's applied list into a non-prefix.
+	// Corrupt the snapshot's applied list into one the log does not cover.
 	st, err := filestore.Open(dir)
 	if err != nil {
 		tt.Fatal(err)
@@ -233,7 +234,7 @@ func TestRepo_NonPrefixSnapshotDiscarded(tt *testing.T) {
 	}
 	defer r2.Close(ctx)
 	if recovered.FromSnapshot {
-		tt.Fatal("non-prefix snapshot must be discarded")
+		tt.Fatal("a snapshot the log does not cover must be discarded")
 	}
 	if got := fingerprint(tt, r2); got != want {
 		tt.Fatalf("recovery after snapshot discard diverged:\n got:\n%s\nwant:\n%s", got, want)
@@ -667,4 +668,259 @@ func TestRepo_HooksFire(tt *testing.T) {
 // removeEnvelopeFile reaches into the filestore layout (test-only).
 func removeEnvelopeFile(dir, hexHash string) error {
 	return os.Remove(filepath.Join(dir, "changes", hexHash[:2], hexHash))
+}
+
+// Crash inside Unrecord between its two durable writes — the snapshot of
+// the post-unrecord state has landed, the log rewrite has not — with the
+// unrecorded patch in the MIDDLE of the log and an earlier Sweep having
+// purged a tombstone. The snapshot's applied list is not a prefix of the
+// log; recovery must still use it (it is covered by the log), because a
+// replay from empty would rebuild the purged content from its envelope
+// and the compliance guarantee of TestRepo_SweepDurableAcrossCrash would
+// silently lapse until the next sweep.
+func TestRepo_UnrecordCrashBetweenSnapshotAndLogKeepsPurge(tt *testing.T) {
+	ctx := context.Background()
+	dir := tt.TempDir()
+	opts := testOptions(tt, dir)
+	fault := &faultStore{StorageI: opts.Storage}
+	opts.Storage = fault
+	r, err := repo.Open(ctx, opts)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	_, nA := recordLine(tt, r, t.RootNodeID, "alpha")
+	hDel := recordDelete(tt, r, nA)
+	report, err := r.Sweep(ctx, time.Unix(2_000_000_000, 0).UTC(), 0)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	if len(report.Purged) != 1 {
+		tt.Fatalf("setup: sweep purged %d nodes, want 1", len(report.Purged))
+	}
+	// Two independent lines after the sweep, so the unrecord target sits
+	// in the middle of the log and the post-unrecord snapshot is not a
+	// prefix of it.
+	hBeta, _ := recordLine(tt, r, t.RootNodeID, "beta")
+	recordLine(tt, r, t.RootNodeID, "gamma")
+	want := fingerprint(tt, r)
+	if !strings.Contains(want, "status=2") {
+		tt.Fatalf("setup: expected a purged tombstone in the fingerprint:\n%s", want)
+	}
+
+	fault.failReplace = true
+	if err := r.Unrecord(ctx, hBeta); !errors.Is(err, errInjected) {
+		tt.Fatalf("expected the injected log-rewrite fault, got %v", err)
+	}
+	if got := fingerprint(tt, r); got != want {
+		tt.Fatalf("in-memory state changed across failed unrecord:\n got:\n%s\nwant:\n%s", got, want)
+	}
+
+	// Crash: release the lock as process exit would, reopen from disk.
+	_ = fault.Close()
+	var rec repo.RecoveredEvent
+	opts2 := testOptions(tt, dir)
+	opts2.Hooks.OnRecovered = func(ev repo.RecoveredEvent) { rec = ev }
+	r2, err := repo.Open(ctx, opts2)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	defer r2.Close(ctx)
+	if got := fingerprint(tt, r2); got != want {
+		tt.Fatalf("crash-reopen diverged (purged content re-materialised?):\n got:\n%s\nwant:\n%s", got, want)
+	}
+	if !rec.FromSnapshot || rec.Replayed != 1 {
+		tt.Fatalf("expected the covered snapshot plus one replayed envelope, got %+v", rec)
+	}
+	// The compliance consequence holds across the crash: the deleting
+	// patch is still permanent.
+	if err := r2.Unrecord(ctx, hDel); !errors.Is(err, repo.ErrRetentionBlocked) {
+		tt.Fatalf("expected ErrRetentionBlocked after crash-reopen, got %v", err)
+	}
+	assertInvariants(tt, r2)
+}
+
+// A snapshot covered by the log but not a prefix of it — the shape a
+// crashed Unrecord leaves — is restored and completed by replaying the
+// uncovered entries, without a purge in play.
+func TestRepo_CoveredNonPrefixSnapshotIsUsed(tt *testing.T) {
+	ctx := context.Background()
+	dir := tt.TempDir()
+	r := openTest(tt, dir)
+	_, nA := recordLine(tt, r, t.RootNodeID, "alpha")
+	recordLine(tt, r, nA, "beta")
+	hGamma, _ := recordLine(tt, r, t.RootNodeID, "gamma")
+	recordLine(tt, r, t.RootNodeID, "delta")
+	want := fingerprint(tt, r)
+	if err := r.Close(ctx); err != nil { // snapshot of the full log
+		tt.Fatal(err)
+	}
+	// Rewrite the snapshot's applied list without gamma — the state bytes
+	// still contain gamma, which a replay of gamma's envelope would then
+	// reject (node already exists), so this also pins that Open replays
+	// exactly the uncovered entries and nothing else.
+	st, err := filestore.Open(dir)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	snap, ok, err := st.LoadSnapshot(ctx)
+	if err != nil || !ok {
+		tt.Fatalf("snapshot: ok=%v err=%v", ok, err)
+	}
+	snap.Applied = slices.DeleteFunc(snap.Applied, func(h t.PatchHash) bool { return h == hGamma })
+	// Re-derive the graph bytes for that applied list by unrecording gamma
+	// in a scratch repo over the same store, so snapshot and list agree.
+	_ = st.Close()
+	r3 := openTest(tt, dir)
+	if err := r3.Unrecord(ctx, hGamma); err != nil {
+		tt.Fatal(err)
+	}
+	if err := r3.Close(ctx); err != nil {
+		tt.Fatal(err)
+	}
+	// Now put the OLD log (with gamma) back: exactly the crash window.
+	st, err = filestore.Open(dir)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	applied, err := st.LoadApplied(ctx)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	applied = slices.Insert(applied, 2, hGamma)
+	if err := st.ReplaceApplied(ctx, applied); err != nil {
+		tt.Fatal(err)
+	}
+	_ = st.Close()
+
+	var rec repo.RecoveredEvent
+	opts := testOptions(tt, dir)
+	opts.Hooks.OnRecovered = func(ev repo.RecoveredEvent) { rec = ev }
+	r2, err := repo.Open(ctx, opts)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	defer r2.Close(ctx)
+	if !rec.FromSnapshot || rec.Replayed != 1 || rec.Applied != 4 {
+		tt.Fatalf("expected covered snapshot + 1 replay, got %+v", rec)
+	}
+	if got := fingerprint(tt, r2); got != want {
+		tt.Fatalf("recovery diverged:\n got:\n%s\nwant:\n%s", got, want)
+	}
+	assertInvariants(tt, r2)
+}
+
+// liveLines returns the live node contents in linear order (nil when the
+// graph is not linear).
+func liveLines(tt testing.TB, r *repo.Repo) (lines []string) {
+	tt.Helper()
+	err := r.View(context.Background(), func(v repo.ViewI) error {
+		for _, id := range v.LinearOrder() {
+			if id != t.RootNodeID {
+				lines = append(lines, string(v.Graph().NodeContent(id)))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		tt.Fatal(err)
+	}
+	return
+}
+
+// KNOWN LIMITATION, pinned so the paragraph on Record's identity
+// collision (repo.go) stays executable — a pending design decision owns
+// the behaviour; this test documents it rather than endorsing it.
+//
+// The placeholder shift that disambiguates an identical re-creation
+// counts collisions against the LOCAL applied set. Two replicas whose
+// applied sets hold different members of the same collision chain land
+// on different hashes for the same re-creation: A, holding the original
+// and one re-creation, shifts twice; B, holding only the re-creation,
+// shifts zero times and reproduces the ORIGINAL's identity — a patch A
+// has already applied and deleted. Post-sync, A's historical delete then
+// tombstones B's re-creation, so the two identical re-creations converge
+// on one live line rather than the "benign duplicate" the paragraph
+// describes.
+func TestRepo_KnownLimitation_RecreationIdentityDivergesAcrossRepos(tt *testing.T) {
+	ctx := context.Background()
+	a := openTest(tt, tt.TempDir())
+	defer a.Close(ctx)
+	b := openTest(tt, tt.TempDir())
+	defer b.Close(ctx)
+	mk := func() []patch.Change {
+		return []patch.Change{{
+			Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0},
+			Content: []byte("same\n"), UpContext: []t.NodeID{t.RootNodeID},
+		}}
+	}
+	record := func(r *repo.Repo, msg string) t.PatchHash {
+		h, err := r.Record(ctx, "x", msg, mk())
+		if err != nil {
+			tt.Fatal(err)
+		}
+		return h
+	}
+	// nodeOf: the single node a re-creation introduced (its index carries
+	// the collision shift, so it is not simply 0).
+	nodeOf := func(r *repo.Repo, h t.PatchHash) t.NodeID {
+		info, err := r.PatchInfo(ctx, h)
+		if err != nil {
+			tt.Fatal(err)
+		}
+		return info.Patch.Changes[0].NodeID
+	}
+	ship := func(from, to *repo.Repo, h t.PatchHash) (applied bool) {
+		framed, err := from.EncodedEnvelope(ctx, h)
+		if err != nil {
+			tt.Fatal(err)
+		}
+		_, applied, err = to.ApplyEnvelope(ctx, framed)
+		if err != nil {
+			tt.Fatal(err)
+		}
+		return
+	}
+
+	// A: original, delete, re-creation (shift 1).
+	h1 := record(a, "original")
+	d1 := recordDelete(tt, a, nodeOf(a, h1))
+	h2 := record(a, "re-creation")
+	// B holds only the re-creation (it depends on nothing, so it ships alone).
+	if !ship(a, b, h2) {
+		tt.Fatal("setup: h2 not applied on B")
+	}
+	// Both delete the re-creation's node and re-create the same content.
+	dA := recordDelete(tt, a, nodeOf(a, h2))
+	dB := recordDelete(tt, b, nodeOf(b, h2))
+	if dA != dB {
+		tt.Fatalf("sanity: identical deletes must share identity: %s vs %s", dA, dB)
+	}
+	reA := record(a, "re-creation 2")
+	reB := record(b, "re-creation 2")
+	if reA == reB {
+		tt.Fatalf("the limitation no longer reproduces (both repos landed on %s); revisit the Record doc and this test", reA)
+	}
+	if reB != h1 {
+		tt.Fatalf("expected B's re-creation to reproduce the original's identity %s, got %s", h1, reB)
+	}
+
+	// Post-sync consequence.
+	if ship(b, a, reB) {
+		tt.Fatal("A must see B's re-creation as a duplicate of its own original")
+	}
+	if ship(a, b, h1) {
+		tt.Fatal("B must see A's original as a duplicate of its own re-creation")
+	}
+	if !ship(a, b, d1) || !ship(a, b, reA) {
+		tt.Fatal("shipping A's delete and re-creation to B")
+	}
+	la, lb := liveLines(tt, a), liveLines(tt, b)
+	if !slices.Equal(la, lb) {
+		tt.Fatalf("replicas did not converge: A=%q B=%q", la, lb)
+	}
+	if !slices.Equal(la, []string{"same\n"}) {
+		tt.Fatalf("converged state: got %q, want exactly one live line (B's re-creation was tombstoned by A's historical delete)", la)
+	}
+	assertInvariants(tt, a)
+	assertInvariants(tt, b)
 }

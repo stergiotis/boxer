@@ -101,12 +101,23 @@ type Repo struct {
 }
 
 // Open recovers (or freshly initialises) a repo from storage: load the
-// applied log; if a snapshot exists whose Applied list is a prefix of
-// the log, restore it and replay only the suffix envelopes, otherwise
-// replay everything from an empty pushoutgraph. Replay enforces the engine's
-// own guarantees (envelope present and decodable, identity matches the
-// log entry, dependencies precede dependents) and refuses to open a
-// store that violates them (ErrCorruptStore).
+// applied log; if a snapshot exists whose Applied set is covered by the
+// log, restore it and replay only the log entries it does not hold (in
+// log order), otherwise replay everything from an empty pushoutgraph.
+// Replay enforces the engine's own guarantees (envelope present and
+// decodable, identity matches the log entry, no duplicate log entries,
+// dependencies precede dependents) and refuses to open a store that
+// violates them (ErrCorruptStore).
+//
+// Coverage is a SUBSET test, not a prefix test, because independent
+// patches commute (the engine's premise; the pushoutgraph state is a
+// function of the applied set — verification/formal's crash_recovery
+// model abstracts state to exactly that set). The case that needs it is
+// a crash inside Unrecord between its snapshot (of the log minus the
+// target) and its log rewrite: a prefix rule would discard that snapshot
+// and replay from empty, re-materialising content an earlier Sweep had
+// purged; the subset rule restores the snapshot — purge markers intact
+// — and replays the target's kept envelope on top.
 func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 	if opts.Storage == nil || opts.Codecs == nil {
 		err = eh.Errorf("Options.Storage and Options.Codecs are required")
@@ -143,30 +154,37 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 		meta:       make(map[t.PatchHash]PatchInfo),
 	}
 
-	replayFrom := 0
 	fromSnapshot := false
-	if haveSnap && isPrefix(snap.Applied, applied) {
+	covered := make(map[t.PatchHash]struct{})
+	if haveSnap && isSubset(snap.Applied, applied) {
 		g, derr := store.DecodeSnapshot(snap.PushoutGraph)
 		if derr != nil {
 			err = eh.Errorf("snapshot: %w", errors.Join(ErrCorruptStore, derr))
 			return
 		}
 		r0.g = g
-		replayFrom = len(snap.Applied)
 		fromSnapshot = true
+		for _, h := range snap.Applied {
+			covered[h] = struct{}{}
+		}
 	} else {
 		r0.g = store.New()
 	}
 	r0.g.SetClock(opts.Clock)
-	for _, h := range applied[:replayFrom] {
-		r0.appliedSet[h] = struct{}{}
-	}
 
-	for i := replayFrom; i < len(applied); i++ {
+	replayed := 0
+	for _, h := range applied {
 		if err = ctx.Err(); err != nil {
 			return
 		}
-		h := applied[i]
+		if _, dup := r0.appliedSet[h]; dup {
+			err = eb.Build().Stringer("patchHash", h).Errorf("applied log lists a patch twice: %w", ErrCorruptStore)
+			return
+		}
+		if _, ok := covered[h]; ok {
+			r0.appliedSet[h] = struct{}{}
+			continue
+		}
 		framed, gerr := opts.Storage.GetEnvelope(ctx, h)
 		if gerr != nil {
 			err = eb.Build().Stringer("patchHash", h).Errorf("applied has no envelope: %w", errors.Join(ErrCorruptStore, gerr))
@@ -193,6 +211,7 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 		}
 		r0.appliedSet[h] = struct{}{}
 		r0.meta[h] = PatchInfo{Patch: env.Patch, Producer: env.Producer, Timestamp: env.Timestamp, Codec: codecName}
+		replayed++
 	}
 	r0.applied = slices.Clone(applied)
 
@@ -224,19 +243,21 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 		r0.hooks.OnRecovered(RecoveredEvent{
 			Applied:      len(applied),
 			FromSnapshot: fromSnapshot,
-			Replayed:     len(applied) - replayFrom,
+			Replayed:     replayed,
 		})
 	}
 	r = r0
 	return
 }
 
-func isPrefix(prefix, full []t.PatchHash) bool {
-	if len(prefix) > len(full) {
-		return false
+// isSubset reports whether every hash in sub occurs in full.
+func isSubset(sub, full []t.PatchHash) bool {
+	set := make(map[t.PatchHash]struct{}, len(full))
+	for _, h := range full {
+		set[h] = struct{}{}
 	}
-	for i := range prefix {
-		if prefix[i] != full[i] {
+	for _, h := range sub {
+		if _, ok := set[h]; !ok {
 			return false
 		}
 	}
@@ -376,7 +397,11 @@ func (inst *Repo) commitPatchLocked(ctx context.Context, p *patch.Patch, framed 
 //
 // Disk ordering: snapshot of the post-unrecord state first, then the
 // atomic log rewrite, then the in-memory commit. A crash between the
-// two leaves a non-prefix snapshot that recovery discards.
+// two leaves a snapshot of the log minus the target beside the old log;
+// Open restores that snapshot (its set is covered by the log) and
+// replays the target's kept envelope, so the unrecord rolls back without
+// a full replay — a full replay would re-materialise content an earlier
+// Sweep purged, because purge markers live only in snapshots.
 func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -448,7 +473,9 @@ type SweepReport struct {
 // Sweep destroys tombstone content older than now-horizon and makes the
 // purge DURABLE before returning: the swept state is snapshotted to
 // storage first, then committed in memory. A sweep that purges nothing
-// performs no disk write.
+// performs no disk write. The snapshot is the only durable carrier of
+// purge markers (the retention ledger holds stamps, not purges), which
+// is why Open must never discard a snapshot the log covers.
 func (inst *Repo) Sweep(ctx context.Context, now time.Time, horizon time.Duration) (report SweepReport, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

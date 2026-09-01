@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -847,7 +848,9 @@ func TestCherryPick_NoConflict(tt *testing.T) {
 
 	// Now "merge" by applying any extra patches from g1 to g2.
 	// Since pX is already applied to both, there's nothing to do.
-	// The key point: the same patch applied twice is a no-op (idempotent by identity).
+	// The key point: the same patch has one identity, so a merge never
+	// applies it twice (what a second Apply does is pinned by
+	// TestPatchApply_TwiceOnBareGraph).
 
 	r1 := string(g1.Render())
 	r2 := string(g2.Render())
@@ -858,4 +861,50 @@ func TestCherryPick_NoConflict(tt *testing.T) {
 	if r1 != expected {
 		tt.Fatalf("expected %q, got %q", expected, r1)
 	}
+}
+
+// Applying the same *patch.Patch twice on a bare PushoutGraph (no repo
+// dedup in front of it): a node-bearing patch is rejected by pass 0 with
+// patch.ErrNodeExists and the graph stays exactly as after the first
+// application; a node-free patch (deletes and edges only) is a no-op the
+// second time and returns nil. Patch.Apply's doc states the same.
+func TestPatchApply_TwiceOnBareGraph(tt *testing.T) {
+	g, base := makeBasePushoutGraph(3, "twice")
+	g.SetClock(fixedClock)
+	l := func(i uint64) t.NodeID { return t.NodeID{Patch: base.Hash, Index: i} }
+
+	nodeBearing := patch.NewPatch("t", "insert+delete", []t.PatchHash{base.Hash}, []patch.Change{
+		{Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0}, Content: []byte("x\n"), UpContext: []t.NodeID{l(0)}, DownContext: []t.NodeID{l(2)}},
+		{Kind: patch.ChangeKindDeleteNode, NodeID: l(1)},
+	})
+	if err := nodeBearing.Apply(g); err != nil {
+		tt.Fatal(err)
+	}
+	once := fingerprintGraph(tt, g)
+	err := nodeBearing.Apply(g)
+	if !errors.Is(err, patch.ErrNodeExists) {
+		tt.Fatalf("second apply of a node-bearing patch: want ErrNodeExists, got %v", err)
+	}
+	if diff := diffFingerprints(once, fingerprintGraph(tt, g)); len(diff) > 0 {
+		tt.Fatalf("rejected second apply changed the graph: %v", diff)
+	}
+
+	nodeFree := patch.NewPatch("t", "delete+edge", []t.PatchHash{base.Hash}, []patch.Change{
+		{Kind: patch.ChangeKindNewEdge, Src: l(0), Dest: l(2)},
+		{Kind: patch.ChangeKindDeleteNode, NodeID: l(2)},
+	})
+	if err := nodeFree.Apply(g); err != nil {
+		tt.Fatal(err)
+	}
+	once = fingerprintGraph(tt, g)
+	if err := nodeFree.Apply(g); err != nil {
+		tt.Fatalf("second apply of a node-free patch must be a no-op, got %v", err)
+	}
+	if diff := diffFingerprints(once, fingerprintGraph(tt, g)); len(diff) > 0 {
+		tt.Fatalf("second apply of a node-free patch changed the graph: %v", diff)
+	}
+	if n := g.NodeDeleterCount(l(2)); n != 1 {
+		tt.Fatalf("deleter set must deduplicate: %d deleters", n)
+	}
+	assertNoInvariantViolations(tt, g)
 }

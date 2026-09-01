@@ -30,6 +30,11 @@ type GraphReaderI interface {
 // GraphWriterI provides mutation access to the graph.
 // Used by Patch.Apply and Patch.Unapply.
 //
+// Each call is atomic: a call that returns an error must have left the
+// store untouched. Patch.Apply rolls a partially applied patch back by
+// reverting only the calls that succeeded, so a half-applied call would
+// escape the rollback.
+//
 // DeleteNode and UndeleteNode carry the identity of the deleting /
 // undeleting patch: tombstones track the set of patches that deleted them,
 // and a node is resurrected only when its last deleter is unapplied. Two

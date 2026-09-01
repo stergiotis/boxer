@@ -346,9 +346,12 @@ func TestProperty_RandomMixedSequence(tt *testing.T) {
 	}
 }
 
-func TestProperty_RandomMixedSequenceCommutativity(tt *testing.T) {
-	// Generate two independent patches from a random base, apply in both orders,
-	// verify same live node set. Uses mixed operations (not just inserts).
+// TestProperty_InsertOnlyPairCommutativity applies two independent
+// single-insert patches in both orders and compares live-node sets under
+// invariant checks. It covers inserts only — the mixed-kind, full-state
+// version is TestProperty_MixedPatchesCommuteOnFullState in
+// commutativity_test.go.
+func TestProperty_InsertOnlyPairCommutativity(tt *testing.T) {
 	for seed := range int64(30) {
 		rng := rand.New(rand.NewSource(seed))
 		lineCount := 3 + rng.Intn(4)

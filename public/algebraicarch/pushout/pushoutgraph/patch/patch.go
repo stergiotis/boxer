@@ -4,6 +4,7 @@ package patch
 
 import (
 	"bytes"
+	"errors"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -159,15 +160,32 @@ func NewPatch(author string, description string, deps []t.PatchHash, changes []C
 // Changes are applied in order: NewNode and NewEdge first, then DeleteNode.
 // After applying, ResolvePseudoEdges is called.
 //
-// Apply is all-or-nothing with respect to the failure modes it can
-// detect: every change is validated against the store (pass 0) before
-// the first mutation, so a patch with a missing context or dangling
-// delete target leaves the store untouched instead of half-applied.
+// Apply is all-or-nothing. Every change is validated against the store
+// (pass 0) before the first mutation, so a patch with a missing context,
+// a duplicate node or a dangling delete target leaves the store untouched
+// instead of half-applied. Should the store still reject a mutation after
+// that (a decorated or remote store, an injected fault), the changes
+// already applied are reverted in reverse order before the error is
+// returned — relying on GraphWriterI's per-call atomicity for the
+// rejected call itself. A rollback failure is joined onto the error.
+//
+// Applying the same patch twice: a patch that introduces nodes is
+// rejected by pass 0 with ErrNodeExists and the store stays as after the
+// first application; a patch of only DeleteNode/NewEdge changes is a
+// no-op on the second application (deleter sets and edges deduplicate)
+// and returns nil.
 func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 	err = inst.validateAgainst(g)
 	if err != nil {
 		err = eb.Build().Stringer("hash", inst.Hash).Errorf("apply: %w", err)
 		return
+	}
+	applied := make([]Change, 0, len(inst.Changes))
+	rollback := func(ferr error) error {
+		if rerr := inst.revert(g, applied); rerr != nil {
+			ferr = errors.Join(ferr, eb.Build().Stringer("hash", inst.Hash).Errorf("apply rollback: %w", rerr))
+		}
+		return ferr
 	}
 	// Pass 1: non-deletion changes.
 	for _, c := range inst.Changes {
@@ -175,15 +193,17 @@ func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 		case ChangeKindNewNode:
 			err = g.AddNode(c.NodeID, c.Content, inst.Hash, c.UpContext, c.DownContext)
 			if err != nil {
-				err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("apply NewNode: %w", err)
+				err = rollback(eb.Build().Stringer("nodeID", c.NodeID).Errorf("apply NewNode: %w", err))
 				return
 			}
+			applied = append(applied, c)
 		case ChangeKindNewEdge:
 			err = g.AddEdge(c.Src, c.Dest, inst.Hash)
 			if err != nil {
-				err = eb.Build().Stringer("src", c.Src).Stringer("dest", c.Dest).Errorf("apply NewEdge: %w", err)
+				err = rollback(eb.Build().Stringer("src", c.Src).Stringer("dest", c.Dest).Errorf("apply NewEdge: %w", err))
 				return
 			}
+			applied = append(applied, c)
 		}
 	}
 	// Pass 2: deletions (after additions to handle ordering).
@@ -193,9 +213,10 @@ func (inst *Patch) Apply(g t.GraphStoreI) (err error) {
 		}
 		err = g.DeleteNode(c.NodeID, inst.Hash)
 		if err != nil {
-			err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("apply DeleteNode: %w", err)
+			err = rollback(eb.Build().Stringer("nodeID", c.NodeID).Errorf("apply DeleteNode: %w", err))
 			return
 		}
+		applied = append(applied, c)
 	}
 	g.ResolvePseudoEdges()
 	return
@@ -217,7 +238,7 @@ func (inst *Patch) validateAgainst(g t.GraphReaderI) (err error) {
 		switch c.Kind {
 		case ChangeKindNewNode:
 			if exists(c.NodeID) {
-				err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("node: node already exists")
+				err = eb.Build().Stringer("nodeID", c.NodeID).Errorf("node: %w", ErrNodeExists)
 				return
 			}
 			for _, up := range c.UpContext {
@@ -340,9 +361,19 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 		return
 	}
 
+	err = inst.revert(g, inst.Changes)
+	return
+}
+
+// revert undoes changes — a prefix of this patch's application order
+// (every NewNode/NewEdge, then every DeleteNode) — in reverse: tombstones
+// are lifted first, then edges and nodes are removed, then pseudo-edges
+// are re-resolved. It is the mutation tail shared by Unapply and by
+// Apply's rollback of a partially applied patch.
+func (inst *Patch) revert(g t.GraphStoreI, changes []Change) (err error) {
 	// Pass 1: undelete nodes.
-	for i := len(inst.Changes) - 1; i >= 0; i-- {
-		c := inst.Changes[i]
+	for i := len(changes) - 1; i >= 0; i-- {
+		c := changes[i]
 		if c.Kind != ChangeKindDeleteNode {
 			continue
 		}
@@ -353,8 +384,8 @@ func (inst *Patch) Unapply(g t.GraphStoreI) (err error) {
 		}
 	}
 	// Pass 2: remove edges then nodes.
-	for i := len(inst.Changes) - 1; i >= 0; i-- {
-		c := inst.Changes[i]
+	for i := len(changes) - 1; i >= 0; i-- {
+		c := changes[i]
 		switch c.Kind {
 		case ChangeKindNewEdge:
 			kind := t.EdgeKindLive

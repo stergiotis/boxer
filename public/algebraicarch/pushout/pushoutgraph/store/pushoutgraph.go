@@ -148,17 +148,28 @@ func (inst *PushoutGraph) DeletedNodeCount() int {
 // between the given context nodes.
 // upContext: nodes that should precede this node.
 // downContext: nodes that should follow this node.
+//
+// The call is atomic: every context node is checked before the first
+// mutation, so a rejected AddNode leaves the graph untouched (the
+// GraphWriterI contract Patch.Apply's rollback relies on).
 func (inst *PushoutGraph) AddNode(id t.NodeID, content []byte, patch t.PatchHash, upContext, downContext []t.NodeID) error {
 	if inst.HasNode(id) {
 		return eb.Build().Stringer("id", id).Errorf("node: %w", ErrNodeExists)
+	}
+	for _, up := range upContext {
+		if !inst.HasNode(up) {
+			return eb.Build().Stringer("nodeID", up).Errorf("up-context node: %w", ErrNodeMissing)
+		}
+	}
+	for _, down := range downContext {
+		if !inst.HasNode(down) {
+			return eb.Build().Stringer("down", down).Errorf("down-context node: %w", ErrNodeMissing)
+		}
 	}
 	inst.nodes.Add(id)
 	inst.contents[id] = content
 
 	for _, up := range upContext {
-		if !inst.HasNode(up) {
-			return eb.Build().Stringer("nodeID", up).Errorf("up-context node: %w", ErrNodeMissing)
-		}
 		kind := t.EdgeKindLive
 		if inst.IsDeleted(up) {
 			kind = t.EdgeKindDeleted
@@ -171,9 +182,6 @@ func (inst *PushoutGraph) AddNode(id t.NodeID, content []byte, patch t.PatchHash
 		inst.addEdgeInternal(up, id, kind, patch)
 	}
 	for _, down := range downContext {
-		if !inst.HasNode(down) {
-			return eb.Build().Stringer("down", down).Errorf("down-context node: %w", ErrNodeMissing)
-		}
 		kind := t.EdgeKindLive
 		if inst.IsDeleted(down) {
 			kind = t.EdgeKindDeleted
@@ -393,11 +401,21 @@ func (inst *PushoutGraph) AddEdge(src, dest t.NodeID, patch t.PatchHash) error {
 		}
 	}
 	inst.addEdgeInternal(src, dest, kind, patch)
-	// If both deleted and adjacent, merge in partition.
-	if inst.IsDeleted(src) && inst.IsDeleted(dest) {
-		inst.deletedPartition.Union(src, dest)
-		rep := inst.deletedPartition.Find(src)
-		inst.dirtyReps[rep] = struct{}{}
+	// A deleted-kind edge either merges two deleted components or gives one
+	// a new live boundary neighbour; both change the component's pseudo-edge
+	// set, so mark it dirty for re-resolution — the same bookkeeping AddNode
+	// does for a deleted context node. (Found by the mixed-patch
+	// commutativity property: an edge from a tombstone to a live node left
+	// the live boundary without its pseudo-edges in one apply order.)
+	if kind == t.EdgeKindDeleted {
+		if inst.IsDeleted(src) && inst.IsDeleted(dest) {
+			inst.deletedPartition.Union(src, dest)
+		}
+		for _, end := range [2]t.NodeID{src, dest} {
+			if inst.deletedPartition.Contains(end) {
+				inst.dirtyReps[inst.deletedPartition.Find(end)] = struct{}{}
+			}
+		}
 	}
 	return nil
 }

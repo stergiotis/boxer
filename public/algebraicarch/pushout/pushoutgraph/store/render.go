@@ -2,7 +2,7 @@ package store
 
 import (
 	"bytes"
-	"sort"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
@@ -43,6 +43,16 @@ func (inst *PushoutGraph) renderLinear(order []t.NodeID) []byte {
 // renderWithConflicts does a DFS traversal of the live subgraph,
 // emitting conflict markers where the graph forks.
 //
+// The output is replica-independent: sibling branches of an order
+// conflict are emitted in CompareNodeID order of each SCC's smallest
+// member, and the members of a cycle conflict in CompareNodeID order.
+// Tarjan's SCC numbering and stack order follow adjacency-list order,
+// which is apply order — two replicas that converged on the same graph
+// by applying the same patches in different orders would otherwise
+// render the same conflict with its branches swapped (found by the
+// mixed-patch commutativity property; DetectConflicts sorts for the
+// same reason).
+//
 // The traversal is iterative: a recursive DFS would blow the goroutine
 // stack on long files. We use a work stack with two op kinds — visit (do
 // the SCC's own emission and queue its children) and emit (write a literal
@@ -57,7 +67,10 @@ func (inst *PushoutGraph) renderWithConflicts() []byte {
 	// Build the condensed DAG from Tarjan SCCs.
 	sccs := algo.Tarjan(inst)
 	sccID := make(map[t.NodeID]int)
+	sccKey := make([]t.NodeID, len(sccs)) // smallest member: the SCC's canonical name
 	for i, scc := range sccs {
+		slices.SortFunc(scc, t.CompareNodeID)
+		sccKey[i] = scc[0]
 		for _, v := range scc {
 			sccID[v] = i
 		}
@@ -128,7 +141,7 @@ func (inst *PushoutGraph) renderWithConflicts() []byte {
 		for c := range childSCCs {
 			children = append(children, c)
 		}
-		sort.Ints(children)
+		slices.SortFunc(children, func(a, b int) int { return t.CompareNodeID(sccKey[a], sccKey[b]) })
 
 		if len(children) == 1 {
 			work = append(work, op{kind: opVisit, scc: children[0]})

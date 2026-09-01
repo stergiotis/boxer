@@ -6,12 +6,16 @@ import (
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
 
-// Snapshot is a persisted acceleration point: the pushoutgraph state (via
+// Snapshot is a persisted acceleration point — and the durable carrier
+// of Sweep's purge markers: the pushoutgraph state (via
 // store.EncodeSnapshot) after applying exactly the patches in Applied,
-// in that order. Recovery uses it only when Applied is a PREFIX of the
-// current applied log; otherwise the snapshot is discarded and the log
-// is replayed from empty — correctness never depends on snapshot
-// freshness, only on the log and the envelopes.
+// in that order. Recovery uses it only when every hash in Applied occurs
+// in the current applied log (a subset, not necessarily a prefix — the
+// remaining log entries are replayed on top in log order); otherwise the
+// snapshot is discarded and the log is replayed from empty. Correctness
+// never depends on snapshot freshness, only on the log and the
+// envelopes; purge durability does depend on a covered snapshot being
+// used.
 type Snapshot struct {
 	Applied      []t.PatchHash
 	PushoutGraph []byte

@@ -5,6 +5,11 @@ import "errors"
 // Sentinel errors for programmatic matching via errors.Is; wrapped with
 // eh.Errorf("...: %w", Err...) at the call sites.
 var (
+	// ErrNodeExists: Apply's pre-validation found a NewNode whose id is
+	// already in the store — typically the same patch applied twice. The
+	// store is left untouched. Same text as store.ErrNodeExists (no
+	// patch→store import).
+	ErrNodeExists = errors.New("node already exists")
 	// ErrHasDependents: Unapply refused because another still-applied
 	// patch references this patch's nodes (incident foreign edges or a
 	// foreign tombstone). Unapply dependents first.
