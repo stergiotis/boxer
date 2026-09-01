@@ -3,6 +3,7 @@ package play
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -75,6 +76,6 @@ func TestActivateTabUnknownSlugErrors(t *testing.T) {
 	app := tabsTestApp()
 	err := app.ActivateTab("no-such-tab")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no-such-tab")
+	assert.Equal(t, "no-such-tab", ebtest.Fields(t, err)["id"], "the error names which slug failed")
 	assert.Equal(t, uint64(0), app.pendingDockActivate)
 }

@@ -47,6 +47,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/profiling/pprofarrow"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
@@ -177,7 +178,7 @@ func captureLookup(name string) func(ctx context.Context, report bgjob.Reporter)
 		report(0, 0, "snapshotting")
 		p := pprof.Lookup(name)
 		if p == nil {
-			err = eh.Errorf("unknown profile %q", name)
+			err = eb.Build().Str("name", name).Errorf("unknown profile")
 			return
 		}
 		var buf bytes.Buffer

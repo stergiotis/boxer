@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // FuncName is the table-function name the macro uses.
@@ -188,7 +189,7 @@ func expand(reg *introspect.Registry, sql string, target func(name string, p int
 		}
 		p, ok := reg.Lookup(name)
 		if !ok {
-			return "", eh.Errorf("keelsonsql: unknown keelson table %q", name)
+			return "", eb.Build().Str("name", name).Errorf("keelsonsql: unknown keelson table")
 		}
 		nanopass.ReplaceNode(rw, fn, target(name, p))
 	}
@@ -227,7 +228,7 @@ func tableArg(fn *grammar1.TableFunctionExprContext) (name string, err error) {
 	}
 	args := al.AllTableArgExpr()
 	if len(args) != 1 {
-		return "", eh.Errorf("keelsonsql: keelson() takes exactly one argument, got %d", len(args))
+		return "", eb.Build().Int("args", len(args)).Errorf("keelsonsql: keelson() takes exactly one argument")
 	}
 	arg := args[0]
 	if lit := arg.Literal(); lit != nil {
@@ -235,7 +236,7 @@ func tableArg(fn *grammar1.TableFunctionExprContext) (name string, err error) {
 		if len(t) >= 2 && t[0] == '\'' && t[len(t)-1] == '\'' {
 			return t[1 : len(t)-1], nil
 		}
-		return "", eh.Errorf("keelsonsql: keelson() argument must be a quoted table name, got %s", t)
+		return "", eb.Build().Str("arg", t).Errorf("keelsonsql: keelson() argument must be a quoted table name")
 	}
 	if ni := arg.NestedIdentifier(); ni != nil {
 		return nanopass.DecodeIdentifier(ni.GetText()), nil

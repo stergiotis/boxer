@@ -26,7 +26,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Kind selects a [Program]'s resolution policy.
@@ -218,7 +218,7 @@ func (p *Program) capture(ctx context.Context, o Opts, combined bool, args []str
 		if ok {
 			return runCapture(fb, combined)
 		}
-		err = eh.Errorf("%w (and no %q on PATH to fall back to)", err, p.Name)
+		err = eb.Build().Str("name", p.Name).Errorf("%w (and no fallback on PATH)", err)
 	}
 	return
 }
@@ -270,7 +270,7 @@ func (p *Program) resolve(o Opts) (name string, pre []string, err error) {
 	}
 	switch p.Kind {
 	case Local:
-		err = eh.Errorf("extbin: program %q is Local and requires an explicit Opts.Path", p.Name)
+		err = eb.Build().Str("name", p.Name).Errorf("extbin: program is Local and requires an explicit Opts.Path")
 	case Host:
 		name, err = p.lookHost()
 		pre = p.prefixArgs()
@@ -284,7 +284,7 @@ func (p *Program) resolve(o Opts) (name string, pre []string, err error) {
 		name = goBinary()
 		pre = []string{"tool", p.Name}
 	default:
-		err = eh.Errorf("extbin: program %q has unknown kind %d", p.Name, p.Kind)
+		err = eb.Build().Str("name", p.Name).Uint8("kind", uint8(p.Kind)).Errorf("extbin: program has unknown kind")
 	}
 	return
 }
@@ -344,9 +344,9 @@ func (p *Program) goToolFallback(ctx context.Context, o Opts, args []string) (cm
 
 func (p *Program) notFound(cause error) (err error) {
 	if p.InstallHint != "" {
-		return eh.Errorf("extbin: program %q not found (looked for %q; %s): %w", p.Name, p.lookupName(), p.InstallHint, cause)
+		return eb.Build().Str("name", p.Name).Str("lookedFor", p.lookupName()).Str("installHint", p.InstallHint).Errorf("extbin: program not found: %w", cause)
 	}
-	return eh.Errorf("extbin: program %q not found (looked for %q): %w", p.Name, p.lookupName(), cause)
+	return eb.Build().Str("name", p.Name).Str("lookedFor", p.lookupName()).Errorf("extbin: program not found: %w", cause)
 }
 
 // goBinary resolves the `go` executable, preferring PATH and falling back to
@@ -363,7 +363,7 @@ func runCapture(cmd *exec.Cmd, combined bool) (out []byte, err error) {
 	if combined {
 		out, err = cmd.CombinedOutput()
 		if err != nil {
-			err = eh.Errorf("%s: %w (output: %s)", cmd.Path, err, strings.TrimSpace(string(out)))
+			err = eb.Build().Str("path", cmd.Path).Str("output", strings.TrimSpace(string(out))).Errorf("external program failed: %w", err)
 		}
 		return
 	}
@@ -372,7 +372,7 @@ func runCapture(cmd *exec.Cmd, combined bool) (out []byte, err error) {
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
-		err = eh.Errorf("%s: %w (stderr: %s)", cmd.Path, err, strings.TrimSpace(stderr.String()))
+		err = eb.Build().Str("path", cmd.Path).Str("stderr", strings.TrimSpace(stderr.String())).Errorf("external program failed: %w", err)
 		return
 	}
 	out = stdout.Bytes()

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Scalar convenience wrappers. These are thin shims over the bulk API for
@@ -35,7 +36,7 @@ func (inst *Handle) LatLngToCellE(
 		return
 	}
 	if len(cells) != 1 || len(statuses) != 1 {
-		err = eh.Errorf("h3: LatLngToCellE: bulk API returned %d cells / %d statuses", len(cells), len(statuses))
+		err = eb.Build().Int("cells", len(cells)).Int("statuses", len(statuses)).Errorf("h3: LatLngToCellE: bulk API returned mismatched lengths")
 		return
 	}
 	cell = cells[0]
@@ -60,7 +61,7 @@ func (inst *Handle) CellToLatLngE(
 		return
 	}
 	if len(lats) != 1 || len(lngs) != 1 || len(statuses) != 1 {
-		err = eh.Errorf("h3: CellToLatLngE: bulk API returned %d lats / %d lngs / %d statuses", len(lats), len(lngs), len(statuses))
+		err = eb.Build().Int("lats", len(lats)).Int("lngs", len(lngs)).Int("statuses", len(statuses)).Errorf("h3: CellToLatLngE: bulk API returned mismatched lengths")
 		return
 	}
 	latDeg = lats[0]
@@ -89,7 +90,7 @@ func (inst *Handle) GridDiskE(
 		return
 	}
 	if len(offsets) != 2 || len(statuses) != 1 {
-		err = eh.Errorf("h3: GridDiskE: bulk API returned %d offsets / %d statuses", len(offsets), len(statuses))
+		err = eb.Build().Int("offsets", len(offsets)).Int("statuses", len(statuses)).Errorf("h3: GridDiskE: bulk API returned mismatched lengths")
 		return
 	}
 	// Slice is valid when statuses[0] == StatusOk. On non-Ok, the row

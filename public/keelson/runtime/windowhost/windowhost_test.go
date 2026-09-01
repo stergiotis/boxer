@@ -45,6 +45,7 @@ func mkManifest(id app.AppIdT) (m app.Manifest) {
 		Display: string(id),
 		Title:   string(id),
 		Topics:  []app.TopicT{app.TopicRuntime},
+		Summary: "fixture summary",
 		Surface: app.SurfaceWindowed,
 	}
 	return

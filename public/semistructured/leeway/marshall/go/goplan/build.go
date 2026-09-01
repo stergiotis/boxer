@@ -363,7 +363,7 @@ func rejectRemovedValueChannel(ch mappingplan.MembershipChannel, goFieldName, lw
 // verbatim label (ADR-0103).
 func rejectReservedMembership(membership string) (err error) {
 	if strings.HasPrefix(membership, "@") {
-		err = eb.Build().Str("membership", membership).Errorf("membership names starting with `@` are reserved for the tuple element grammar (`%s` inside a slice-of-struct element)", TupleMembershipMarker)
+		err = eb.Build().Str("membership", membership).Errorf("membership names starting with `@` are reserved for the tuple element grammar (`" + TupleMembershipMarker + "` inside a slice-of-struct element)")
 	}
 	return
 }

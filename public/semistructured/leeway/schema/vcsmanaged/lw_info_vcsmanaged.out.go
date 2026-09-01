@@ -59,7 +59,7 @@ func createRecordBuilder() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
 
 type InEntity struct {
 	errs                  []error
@@ -142,7 +142,7 @@ var InEntitySectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntity) SetId(key0 uint64) *InEntity {
 	if inst.state != runtime.EntityStateInEntity {

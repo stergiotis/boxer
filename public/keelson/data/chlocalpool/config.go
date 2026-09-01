@@ -3,7 +3,7 @@ package chlocalpool
 import (
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Defaults for Config fields per ADR-0028 §SD3.
@@ -71,11 +71,11 @@ func (inst Config) withDefaults() (cfg Config) {
 
 func (inst Config) validate() (err error) {
 	if inst.MinIdle > inst.MaxConcurrent {
-		err = eh.Errorf("chlocalpool: MinIdle (%d) exceeds MaxConcurrent (%d)", inst.MinIdle, inst.MaxConcurrent)
+		err = eb.Build().Uint8("minIdle", inst.MinIdle).Uint8("maxConcurrent", inst.MaxConcurrent).Errorf("chlocalpool: MinIdle exceeds MaxConcurrent")
 		return
 	}
 	if inst.SpawnConcurrency > inst.MaxConcurrent {
-		err = eh.Errorf("chlocalpool: SpawnConcurrency (%d) exceeds MaxConcurrent (%d)", inst.SpawnConcurrency, inst.MaxConcurrent)
+		err = eb.Build().Uint8("spawnConcurrency", inst.SpawnConcurrency).Uint8("maxConcurrent", inst.MaxConcurrent).Errorf("chlocalpool: SpawnConcurrency exceeds MaxConcurrent")
 		return
 	}
 	return

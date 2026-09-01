@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // nanopass_profile.go is ADR-0192: opt-in wall-clock attribution for one Run,
@@ -91,7 +91,7 @@ func (inst StepCost) Walk(visit func(step StepCost, depth int)) {
 func (p Pass) RunProfiled(sql string) (result string, cost StepCost, err error) {
 	e, body, err := env.Extract(sql)
 	if err != nil {
-		err = eh.Errorf("RunProfiled %s: %w", p.Name, err)
+		err = eb.Build().Str("name", p.Name).Errorf("RunProfiled: %w", err)
 		return
 	}
 	rec := &costRecorder{}
@@ -109,7 +109,7 @@ func (p Pass) RunProfiled(sql string) (result string, cost StepCost, err error) 
 	}
 	result, err = e.Integrate(newBody)
 	if err != nil {
-		err = eh.Errorf("RunProfiled %s: %w", p.Name, err)
+		err = eb.Build().Str("name", p.Name).Errorf("RunProfiled: %w", err)
 	}
 	return
 }

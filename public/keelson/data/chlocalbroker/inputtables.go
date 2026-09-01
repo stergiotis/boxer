@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // maxInputTables bounds how many TEMPORARY tables one request may
@@ -60,14 +61,14 @@ func materializeInputTables(baseTmpDir string, tables map[string][]byte) (prelud
 		return
 	}
 	if len(tables) > maxInputTables {
-		err = eh.Errorf("chlocalbroker: too many input tables: %d (max %d)", len(tables), maxInputTables)
+		err = eb.Build().Int("tables", len(tables)).Int("max", maxInputTables).Errorf("chlocalbroker: too many input tables")
 		return
 	}
 
 	names := make([]string, 0, len(tables))
 	for name := range tables {
 		if !validInputTableName(name) {
-			err = eh.Errorf("chlocalbroker: invalid input table name %q", name)
+			err = eb.Build().Str("name", name).Errorf("chlocalbroker: invalid input table name")
 			return
 		}
 		names = append(names, name)
@@ -85,7 +86,7 @@ func materializeInputTables(baseTmpDir string, tables map[string][]byte) (prelud
 	for _, name := range names {
 		path := filepath.Join(dir, name+".arrow")
 		if wErr := os.WriteFile(path, tables[name], 0o600); wErr != nil {
-			err = eh.Errorf("chlocalbroker: write input table %q: %w", name, wErr)
+			err = eb.Build().Str("name", name).Errorf("chlocalbroker: write input table: %w", wErr)
 			return
 		}
 		b.WriteString("CREATE TEMPORARY TABLE ")

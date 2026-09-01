@@ -44,6 +44,11 @@ type humanReporter struct {
 func (inst *humanReporter) Add(f Finding) {
 	fmt.Fprintf(inst.w, "%s:%d:%d  %s  %s  %s\n",
 		f.Path, f.Line, f.Col, f.RuleId, f.Severity, f.Message)
+	if f.Fix != "" {
+		// Indented under its finding so the one-line-per-finding grep habit
+		// still works on the first column.
+		fmt.Fprintf(inst.w, "    fix: %s\n", f.Fix)
+	}
 }
 
 func (inst *humanReporter) FinishE() (err error) { return }

@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -102,7 +103,9 @@ func TestDecodeRGBA8RejectsOversized(t *testing.T) {
 	pixels, w, h, err := DecodeRGBA8(data, 1<<20) // 1 Mpix budget vs 16 Mpix image
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "over the")
-	assert.Contains(t, err.Error(), "4000x4000", "the reason names the dimensions")
+	f := ebtest.Fields(t, err)
+	assert.EqualValues(t, 4000, f["width"], "the error names the dimensions")
+	assert.EqualValues(t, 4000, f["height"])
 	assert.Nil(t, pixels)
 	assert.Zero(t, w)
 	assert.Zero(t, h)

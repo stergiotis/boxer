@@ -3,7 +3,7 @@ package ecdfbands
 import (
 	"math"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // CrossingAlgorithmE selects which boundary-crossing-probability
@@ -79,7 +79,7 @@ func CrossingProbability(lower, upper []float64, algo CrossingAlgorithmE) (p flo
 	case CrossingAlgorithmMoscovich:
 		p, err = crossingProbabilityMoscovich(lower, upper)
 	default:
-		err = eh.Errorf("unknown CrossingAlgorithmE value %d", algo)
+		err = eb.Build().Uint8("algo", uint8(algo)).Errorf("unknown CrossingAlgorithmE value")
 	}
 	return
 }
@@ -92,26 +92,26 @@ func CrossingProbability(lower, upper []float64, algo CrossingAlgorithmE) (p flo
 // upstream bugs early.
 func validateBoundaries(lower, upper []float64) (err error) {
 	if len(lower) != len(upper) {
-		err = eh.Errorf("lower and upper boundary lengths differ: %d vs %d", len(lower), len(upper))
+		err = eb.Build().Int("lowerLen", len(lower)).Int("upperLen", len(upper)).Errorf("lower and upper boundary lengths differ")
 		return
 	}
 	for i, lo := range lower {
 		hi := upper[i]
 		if math.IsNaN(lo) || math.IsNaN(hi) {
-			err = eh.Errorf("NaN boundary at i=%d (lower=%v, upper=%v)", i, lo, hi)
+			err = eb.Build().Int("index", i).Float64("lower", lo).Float64("upper", hi).Errorf("NaN boundary")
 			return
 		}
 		if lo < 0 || lo > 1 || hi < 0 || hi > 1 {
-			err = eh.Errorf("boundary out of [0,1] at i=%d (lower=%v, upper=%v)", i, lo, hi)
+			err = eb.Build().Int("index", i).Float64("lower", lo).Float64("upper", hi).Errorf("boundary out of [0,1]")
 			return
 		}
 		if i > 0 {
 			if lo < lower[i-1] {
-				err = eh.Errorf("lower boundary not non-decreasing at i=%d (%v < %v)", i, lo, lower[i-1])
+				err = eb.Build().Int("index", i).Float64("value", lo).Float64("previous", lower[i-1]).Errorf("lower boundary not non-decreasing")
 				return
 			}
 			if hi < upper[i-1] {
-				err = eh.Errorf("upper boundary not non-decreasing at i=%d (%v < %v)", i, hi, upper[i-1])
+				err = eb.Build().Int("index", i).Float64("value", hi).Float64("previous", upper[i-1]).Errorf("upper boundary not non-decreasing")
 				return
 			}
 		}

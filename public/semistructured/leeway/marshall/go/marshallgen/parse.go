@@ -439,7 +439,7 @@ func classifyLwMembershipMarker(name string, isSlice bool) (shape goplan.FieldSh
 		return
 	}
 	if !ok {
-		err = eb.Build().Str("marker", "lw."+name).Errorf("lw.%s is not supported by the codegen front-end — only the membership markers (lw.Ref / lw.HighRef / lw.Verbatim / lw.HighVerbatim) are wired; spell a value-shape marker as `,unit` / `,ct=` on a plain field (ADR-0113 P1)", name)
+		err = eb.Build().Str("marker", "lw."+name).Errorf("that lw marker is not supported by the codegen front-end — only the membership markers (lw.Ref / lw.HighRef / lw.Verbatim / lw.HighVerbatim) are wired; spell a value-shape marker as `,unit` / `,ct=` on a plain field (ADR-0113 P1)")
 		return
 	}
 	if isSlice {
@@ -534,7 +534,7 @@ func classifyType(expr ast.Expr) (shape goplan.FieldShape, err error) {
 		// marshalltypes.X per attribute (the scalar branch below).
 		if sel, isSel := at.Elt.(*ast.SelectorExpr); isSel {
 			if pkg, pkgOk := sel.X.(*ast.Ident); pkgOk && pkg.Name == "marshalltypes" {
-				err = eb.Build().Str("carrier", sel.Sel.Name).Errorf("slice carriers (`[]marshalltypes.%s`) were removed with `,explode` (ADR-0113 D1) — a carrier is a scalar `marshalltypes.%s`, one per attribute", sel.Sel.Name, sel.Sel.Name)
+				err = eb.Build().Str("carrier", sel.Sel.Name).Errorf("slice carriers were removed with `,explode` (ADR-0113 D1) — a carrier is a scalar `marshalltypes.<T>`, one per attribute")
 				return
 			}
 		}
@@ -628,7 +628,7 @@ func renderInner(expr ast.Expr) (s string, err error) {
 		err = eb.Build().Errorf("pointer types forbidden — use option.Option[T] for ZeroToOne fields")
 		return
 	default:
-		err = eb.Build().Errorf("unsupported type expression %T", expr)
+		err = eb.Build().Type("expr", expr).Errorf("unsupported type expression")
 		return
 	}
 	return

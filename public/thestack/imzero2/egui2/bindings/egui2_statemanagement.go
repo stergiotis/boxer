@@ -246,6 +246,12 @@ type StateManager struct {
 	// inside an app should NOT poll, since they'd race the carousel
 	// for the same consumed event.
 	f1KeyPressed bool
+	// f2KeyPressed mirrors the per-frame fetchF2KeyPressed drain — the
+	// launcher shortcut (ADR-0214 §SD9), the same contract as F1 one key over.
+	// The shell chrome polls it via GetF2KeyPressed and opens-or-raises the
+	// launcher; apps must not poll it, for the reason spelled out on
+	// GetF1KeyPressed.
+	f2KeyPressed bool
 	// commandEnter mirrors the per-frame fetchCommandEnterPressed drain: the
 	// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter "submit" pair, each true exactly
 	// once per physical press and never both. Read via
@@ -346,6 +352,17 @@ func (inst *StateManager) GetZoomDelta() ZoomDeltaValue {
 // shortcuts on top of [app.OpenRef] rather than polling this.
 func (inst *StateManager) GetF1KeyPressed() (pressed bool) {
 	pressed = inst.f1KeyPressed
+	return
+}
+
+// GetF2KeyPressed reports whether the user pressed F2 between this frame's
+// Sync and the previous one — the launcher shortcut (ADR-0214 §SD9).
+//
+// The consumer shape is F1's, and for F1's reason: one process-singleton
+// poller in the host chrome, which opens-or-raises the launcher. An app that
+// polled it too would act on the same consumed press.
+func (inst *StateManager) GetF2KeyPressed() (pressed bool) {
+	pressed = inst.f2KeyPressed
 	return
 }
 
@@ -805,10 +822,13 @@ func (inst *StateManager) Sync() {
 		inst.r20Pointer = PointerValue{X: x, Y: y, Valid: valid}
 	}
 	{
-		// F1 global help binding. consume_key drains the event from
-		// egui's input queue so other widgets in the same frame don't
-		// also react — the runtime owns this shortcut exclusively.
+		// F1 / F2 global bindings — help and the launcher. consume_key
+		// drains each event from egui's input queue so other widgets in the
+		// same frame don't also react: the runtime owns these two shortcuts
+		// exclusively, and each has its own fetcher so that ownership is
+		// explicit per binding rather than pooled behind one "any key" drain.
 		inst.f1KeyPressed = fetcher.FetchF1KeyPressed()
+		inst.f2KeyPressed = fetcher.FetchF2KeyPressed()
 	}
 	{
 		// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter. Draining these at

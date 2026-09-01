@@ -146,18 +146,18 @@ func expandExtract(sql string, lanes LaneSourceI, ids MembershipIdsI, defaultDat
 	}
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ExtractPassName, err)
+		err = eb.Build().Errorf(ExtractPassName+": %w", err)
 		return
 	}
 	roots, err := nanopass.BuildScopes(pr, defaultDatabase)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ExtractPassName, err)
+		err = eb.Build().Errorf(ExtractPassName+": %w", err)
 		return
 	}
 	st := &extractState{pr: pr, rw: nanopass.NewRewriter(pr), lanes: lanes, ids: ids, byNode: indexScopes(roots)}
 	err = st.walk(pr.Tree)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ExtractPassName, err)
+		err = eb.Build().Errorf(ExtractPassName+": %w", err)
 		return
 	}
 	result = nanopass.GetText(st.rw)
@@ -285,23 +285,25 @@ func (inst *extractState) expandCall(name string, spelled string, funcExpr *gram
 		return
 	}
 	if paramsGiven && ch.Param == "" {
-		err = inst.errCall(spelled, funcExpr).Str("section", lanes.Section).Str("channel", ch.Name).
-			Errorf("only a mixed channel carries a parameter lane; %s identifies a membership by its name alone", ch.Name)
+		err = inst.errCall(spelled, funcExpr).Str("section", lanes.Section).Str("channel", ch.Name).Errorf("only a mixed channel carries a parameter lane; identifies a membership by its name alone")
 		return
 	}
 
-	// The membership cardinality lane is required, and its absence is a
-	// refusal rather than a licence. lwextract reads an empty Card as "the
-	// schema proves one membership per attribute" and drops the
-	// position→attribute map accordingly; a column merely missing from this
-	// table's listing is not that proof, and taking the fast form on the
-	// strength of it would read a membership position as an attribute index
-	// on every row. The read-back generator refuses the same situation.
+	// The membership cardinality lane is required unless the schema DECLARES
+	// the channel single-instance (ADR-0213). lwextract reads an empty Card
+	// as "the schema proves one membership per attribute" and drops the
+	// position→attribute map accordingly; the declaration — recovered from
+	// the use-aspects the column names encode (Channel.SingleMembership) —
+	// is that proof, and licenses the fast form. A column merely missing
+	// from this table's listing is not, and taking the fast form on the
+	// strength of absence alone would read a membership position as an
+	// attribute index on every row. The read-back generator draws the same
+	// line.
 	//
 	// NameSel is the one member exempt: it selects positions in the identity
 	// lane and never crosses to the attribute axis, so it has nothing to map
 	// and nothing to get wrong.
-	if ch.Card == "" && name != nanopass.NormalizeCallName(NameSel) {
+	if ch.Card == "" && !ch.SingleMembership && name != nanopass.NormalizeCallName(NameSel) {
 		err = inst.errCall(spelled, funcExpr).Str("section", lanes.Section).Str("channel", ch.Name).
 			Errorf("the section's membership cardinality column is not among this table's columns; an attribute cannot be located without it")
 		return
@@ -438,10 +440,8 @@ func (inst *extractState) bind(section string, funcExpr *grammar1.ColumnExprFunc
 		// editor, and "unknown section" without the list of known ones
 		// sends them to the schema to find out what they could have typed.
 		b := eb.Build().Str("section", section)
-		detail := ""
 		if len(searched) > 0 {
 			b = b.Str("tables", strings.Join(searched, ", "))
-			detail = "; searched " + strings.Join(searched, ", ")
 			var have []string
 			for _, ref := range notFound {
 				// Asked with the SAME database the lookup used, or the
@@ -451,10 +451,9 @@ func (inst *extractState) bind(section string, funcExpr *grammar1.ColumnExprFunc
 			}
 			if len(have) > 0 {
 				b = b.Str("sectionsFound", strings.Join(have, ", "))
-				detail += ", which carry " + strings.Join(have, ", ")
 			}
 		}
-		err = b.Errorf("no table in scope carries that section%s", detail)
+		err = b.Errorf("no table in scope carries that section")
 	default:
 		var where []string
 		for _, c := range found {

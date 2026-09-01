@@ -1,6 +1,9 @@
 package play
 
-import "github.com/stergiotis/boxer/public/observability/eh"
+import (
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+)
 
 // Ad-hoc dataset delivery ops (ADR-0134 §SD4/§SD5). An embedder that hosts
 // a play instance drives it to bind ephemeral dataset handles to stable
@@ -30,10 +33,10 @@ func (inst *PlayApp) RequestRun() {
 // state, applied by the embedder between construction and mount.
 func (inst *PlayApp) BindDataset(alias, handle string) error {
 	if !validDatasetIdentifier(alias) {
-		return eh.Errorf("play: invalid dataset alias %q", alias)
+		return eb.Build().Str("alias", alias).Errorf("play: invalid dataset alias")
 	}
 	if !validDatasetIdentifier(handle) {
-		return eh.Errorf("play: invalid dataset handle %q", handle)
+		return eb.Build().Str("handle", handle).Errorf("play: invalid dataset handle")
 	}
 	if inst.client == nil {
 		return eh.Errorf("play: BindDataset needs a client")
@@ -50,7 +53,7 @@ func (inst *PlayApp) BindDataset(alias, handle string) error {
 // Unbinding an alias that is not bound is a no-op.
 func (inst *PlayApp) UnbindDataset(alias string) error {
 	if !validDatasetIdentifier(alias) {
-		return eh.Errorf("play: invalid dataset alias %q", alias)
+		return eb.Build().Str("alias", alias).Errorf("play: invalid dataset alias")
 	}
 	if inst.client == nil {
 		return eh.Errorf("play: UnbindDataset needs a client")

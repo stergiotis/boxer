@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/patch"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
@@ -71,7 +72,7 @@ func Validate(env EnvelopeV1) (err error) {
 	}
 	computed := env.Patch.ComputeHash()
 	if env.Patch.Hash != computed {
-		err = eh.Errorf("stored %s, computed %s: %w", env.Patch.Hash, computed, ErrTampered)
+		err = eb.Build().Stringer("stored", env.Patch.Hash).Stringer("computed", computed).Errorf("stored and computed hashes differ: %w", ErrTampered)
 		return
 	}
 	declared := make(map[t.PatchHash]struct{}, len(env.Patch.Dependencies))
@@ -85,12 +86,12 @@ func Validate(env EnvelopeV1) (err error) {
 			continue
 		}
 		if _, ok := declared[d]; !ok {
-			err = eh.Errorf("patch %s references %s: %w", env.Patch.Hash, d, ErrUndeclaredDependency)
+			err = eb.Build().Stringer("hash", env.Patch.Hash).Stringer("patchHash", d).Errorf("patch references: %w", ErrUndeclaredDependency)
 			return
 		}
 	}
 	if slices.ContainsFunc(env.Patch.Changes, changeHasPlaceholder) {
-		err = eh.Errorf("patch %s: %w", env.Patch.Hash, ErrPlaceholderNodeID)
+		err = eb.Build().Stringer("hash", env.Patch.Hash).Errorf("patch: %w", ErrPlaceholderNodeID)
 		return
 	}
 	return

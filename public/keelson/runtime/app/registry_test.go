@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,6 +22,7 @@ func testManifest(id AppIdT) (m Manifest) {
 		Version: "0.1.0",
 		Display: string(id),
 		Topics:  []TopicT{TopicRuntime},
+		Summary: "fixture summary",
 		Surface: SurfaceWindowed,
 	}
 	return
@@ -302,7 +304,7 @@ func TestRegister_RefusesWorkingsetSingleton(t *testing.T) {
 	err = reg.Register(a)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires factory registration")
-	assert.Contains(t, err.Error(), "org.test.ws")
+	assert.Equal(t, "org.test.ws", ebtest.Fields(t, err)["id"])
 	assert.Zero(t, reg.Len(), "a refused registration must leave nothing behind")
 
 	// The same manifest through the factory path is the supported shape.

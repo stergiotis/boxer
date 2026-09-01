@@ -6,12 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,9 +104,12 @@ func TestGenerateAllVerbatimSharedSectionAllowed(t *testing.T) {
 func TestGenerateRejectsSharedVerbatimSlot(t *testing.T) {
 	a, b := verbatimDTOs(t, "dup", "shared", "dup", "shared")
 	err := generateInto(t, verbatimManipulator(t, "shared"), a, b)
-	require.ErrorContains(t, err, "both name verbatim membership")
-	require.ErrorContains(t, err, "KindA")
-	require.ErrorContains(t, err, "KindB")
+	require.ErrorContains(t, err, "name the same verbatim membership")
+	f := ebtest.Fields(t, err)
+	assert.Equal(t, "dup", f["membership"])
+	assert.Equal(t, "shared", f["section"])
+	assert.ElementsMatch(t, []any{"KindA", "KindB"},
+		[]any{f["component"], f["otherComponent"]}, "both kinds are named")
 }
 
 // TestGenerateVerbatimSameNameAcrossSectionsAllowed: the match is scoped to
@@ -587,7 +592,7 @@ type RefDoc struct {
 		AddSectionMembership(common.MembershipSpecLowCardRef, common.MembershipSpecHighCardRef)
 	sec.TaggedValueColumn("value", ctabb.S)
 	err = generateInto(t, manip, a)
-	require.ErrorContains(t, err, "dynamic-membership tuple")
+	assert.Contains(t, ebtest.Fields(t, err)["reason"], "dynamic-membership tuple")
 }
 
 // --- Membership-id wrapper gates (ADR-0100 SD6 as corrected 2026-08-10;
@@ -667,7 +672,8 @@ func TestGenerateFixedIdsRepeatedIdRejected(t *testing.T) {
 	a, b := sharedSectionDTOs(t)
 	err := generateIntoWrapper(t, validationManipulator(t, "shared"),
 		marshallgen.FixedIdsWrapper{Ids: map[string]uint64{"fieldA": 11, "fieldB": 11}}, a, b)
-	require.ErrorContains(t, err, "share id 11")
+	require.ErrorContains(t, err, "share one id")
+	assert.EqualValues(t, 11, ebtest.Fields(t, err)["id"])
 }
 
 // TestGenerateRejectsSharedMembershipAcrossKinds: two kinds naming one
@@ -694,7 +700,8 @@ type KindB struct {
 }
 `)
 	err := generateInto(t, validationManipulator(t, "solo", "other"), a, b)
-	require.ErrorContains(t, err, "both use membership")
+	require.ErrorContains(t, err, "use the same membership")
+	assert.NotEmpty(t, ebtest.Fields(t, err)["membership"])
 }
 
 // noIdSourceWrapper implements WrapperEmitterI but not

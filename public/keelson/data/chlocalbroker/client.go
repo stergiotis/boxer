@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // ExecRequest is the caller-facing request shape for ExecOnPool. The
@@ -125,7 +126,7 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 	}
 	replyBytes, err := bus.Request(SubjectExecPrefix+poolName, reqBytes)
 	if err != nil {
-		err = eh.Errorf("chlocalbroker: bus request %s: %w", SubjectExecPrefix+poolName, err)
+		err = eb.Build().Str("subject", SubjectExecPrefix+poolName).Errorf("chlocalbroker: bus request failed: %w", err)
 		return
 	}
 	decoded, err := decodeReply(replyBytes)
@@ -140,9 +141,9 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 	}
 	if !decoded.OK {
 		if decoded.Stderr != "" {
-			rep.err = eh.Errorf("chlocalbroker: %s (stderr: %q)", decoded.Error, decoded.Stderr)
+			rep.err = eb.Build().Str("error", decoded.Error).Str("stderr", decoded.Stderr).Errorf("chlocalbroker: the local engine reported an error")
 		} else {
-			rep.err = eh.Errorf("chlocalbroker: %s", decoded.Error)
+			rep.err = eb.Build().Str("reason", decoded.Error).Errorf("chlocalbroker: the local engine reported an error")
 		}
 	}
 	return

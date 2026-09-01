@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	cli "github.com/urfave/cli/v2"
 )
 
@@ -155,7 +156,7 @@ func NewCommand() *cli.Command {
 		Action: func(context *cli.Context) error {
 			nMessages := cfg.FromContext(config.IdentityNameTransf, context)
 			if nMessages > 0 {
-				return eh.Errorf("invalid configuration: %d messages", nMessages)
+				return eb.Build().Int("nMessages", nMessages).Errorf("invalid configuration: message count out of range")
 			}
 			f := NewFileDumpService(&cfg)
 			return f.Listen()

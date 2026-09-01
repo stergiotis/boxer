@@ -219,13 +219,13 @@ func (inst *File) parseE(size int64) (err error) {
 	default:
 		return eb.Build().
 			Str("fourCC", fourCCString(riffID)).
-			Errorf("leading four-cc %q is not a riff container", fourCCString(riffID))
+			Errorf("leading four-cc is not a riff container")
 	}
 	formID := readFourCC(buf[8:12])
 	if formID != ccWAVE {
 		return eb.Build().
 			Str("formType", fourCCString(formID)).
-			Errorf("riff form type %q is not a wave", fourCCString(formID))
+			Errorf("riff form type is not a wave")
 	}
 
 	haveData := false
@@ -301,7 +301,7 @@ func (inst *File) checkChunkFitsE(id uint32, body int64, chunkSize int64, size i
 			Int64("offset", body).
 			Int64("chunkSize", chunkSize).
 			Int64("size", size).
-			Errorf("chunk %q extends past the end of the stream", fourCCString(id))
+			Errorf("chunk extends past the end of the stream")
 	}
 	return nil
 }
@@ -315,7 +315,7 @@ func (inst *File) resolveChunkSizeE(id uint32, size32 uint32) (n int64, err erro
 	if !inst.haveDs64 {
 		return 0, eb.Build().
 			Str("chunk", fourCCString(id)).
-			Errorf("chunk %q escapes to a 64-bit size but no ds64 chunk preceded it", fourCCString(id))
+			Errorf("chunk escapes to a 64-bit size but no ds64 chunk preceded it")
 	}
 	if id == ccData {
 		return inst.ds64DataSize, nil
@@ -327,7 +327,7 @@ func (inst *File) resolveChunkSizeE(id uint32, size32 uint32) (n int64, err erro
 	}
 	return 0, eb.Build().
 		Str("chunk", fourCCString(id)).
-		Errorf("chunk %q escapes to a 64-bit size but the ds64 table does not list it", fourCCString(id))
+		Errorf("chunk escapes to a 64-bit size but the ds64 table does not list it")
 }
 
 // parseDs64E reads EBU Tech 3306's ds64 chunk. Of its three 64-bit counts
@@ -402,8 +402,7 @@ func (inst *File) parseFmtE(off int64, chunkSize int64) (err error) {
 		cbSize := binary.LittleEndian.Uint16(buf[16:18])
 		if cbSize < 22 {
 			return eb.Build().
-				Uint16("cbSize", cbSize).
-				Errorf("extensible fmt chunk declares %d extension bytes where 22 are needed", cbSize)
+				Uint16("cbSize", cbSize).Errorf("extensible fmt chunk declares extension bytes where 22 are needed")
 		}
 		validBits = binary.LittleEndian.Uint16(buf[18:20])
 		// buf[20:24] is dwChannelMask, the speaker layout, which nothing
@@ -421,7 +420,7 @@ func (inst *File) parseFmtE(off int64, chunkSize int64) (err error) {
 	default:
 		return eb.Build().
 			Uint16("formatTag", tag).
-			Errorf("unsupported wave format tag 0x%04x", tag)
+			Errorf("unsupported wave format tag")
 	}
 	err = validateSampleFormatE(inst.encoding, bits)
 	if err != nil {
@@ -441,8 +440,7 @@ func (inst *File) parseFmtE(off int64, chunkSize int64) (err error) {
 	blockAlign := int64(channels) * int64(bits/8)
 	if blockAlign > int64(^uint16(0)) {
 		return eb.Build().
-			Int64("blockAlign", blockAlign).
-			Errorf("frame of %d bytes is wider than the block-align field", blockAlign)
+			Int64("blockAlign", blockAlign).Errorf("frame of bytes is wider than the block-align field")
 	}
 	if declaredBlockAlign != 0 && int64(declaredBlockAlign) != blockAlign {
 		return eb.Build().

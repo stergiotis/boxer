@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: ADR timeline
+summary: "Plot each decision from proposal to resolution"
 icon: "🗓"
 endpoint: introspection
 tabs: [timeline, table, detail]

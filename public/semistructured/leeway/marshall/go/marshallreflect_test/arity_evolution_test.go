@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
@@ -201,7 +202,7 @@ func TestArityEvolution_NarrowingIsLoud(t *testing.T) {
 	var got []evNarrowUnit
 	err = marshallreflect.Unmarshal(readers, &got, lookup)
 	require.Error(t, err, "a multi-element value under a unit definition is a contract violation, not a zero")
-	require.ErrorContains(t, err, "Battery", "the error names the field that declared the value single")
+	assert.Equal(t, "Battery", ebtest.Fields(t, err)["field"], "the error names the field that declared the value single")
 	require.ErrorContains(t, err, "exactly one")
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapsimilarity"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // similarCommand is `boxer capmap similar`: rank every competence's nearest
@@ -90,7 +91,7 @@ func actionSimilar(c *cli.Context) (err error) {
 			return eh.Errorf("unable to encode the report: %w", err)
 		}
 		if err = os.WriteFile(path, data, 0o644); err != nil {
-			return eh.Errorf("unable to write the report to %q: %w", path, err)
+			return eb.Build().Str("path", path).Errorf("unable to write the report: %w", err)
 		}
 		fmt.Printf("\nreport written to %s\n", path)
 	}
@@ -114,18 +115,18 @@ func writeSimilar(dir string, corpus capmapcorpus.Corpus, res capmapsimilarity.R
 		path := filepath.Join(dir, e.VaultPath)
 		var content, out []byte
 		if content, err = os.ReadFile(path); err != nil {
-			return written, unchanged, eh.Errorf("unable to read %q: %w", path, err)
+			return written, unchanged, eb.Build().Str("path", path).Errorf("unable to read: %w", err)
 		}
 		var changed bool
 		if out, changed, err = capmapcorpus.UpsertSimilar(content, entries); err != nil {
-			return written, unchanged, eh.Errorf("unable to update %q: %w", path, err)
+			return written, unchanged, eb.Build().Str("path", path).Errorf("unable to update: %w", err)
 		}
 		if !changed {
 			unchanged++
 			continue
 		}
 		if err = os.WriteFile(path, out, 0o644); err != nil {
-			return written, unchanged, eh.Errorf("unable to write %q: %w", path, err)
+			return written, unchanged, eb.Build().Str("path", path).Errorf("unable to write: %w", err)
 		}
 		written++
 	}

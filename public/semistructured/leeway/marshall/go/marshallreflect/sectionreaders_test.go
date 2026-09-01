@@ -1,10 +1,12 @@
 package marshallreflect_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
 
@@ -24,6 +26,13 @@ func TestSectionReaders_MissingCoverageReported(t *testing.T) {
 	// Register nothing.
 	err := marshallreflect.Unmarshal(marshallreflect.NewSectionReaders(0), &got, marshallreflect.NoLookup{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "id")
-	require.Contains(t, err.Error(), "symbol")
+	require.Contains(t, fieldList(t, err, "missing"), "id")
+	require.Contains(t, fieldList(t, err, "missing"), "symbol")
+}
+
+// fieldList renders a []string error field as one string, so a test can assert
+// on a substring of one entry without pinning the entry's exact wording.
+func fieldList(t *testing.T, err error, key string) (s string) {
+	t.Helper()
+	return fmt.Sprint(ebtest.Fields(t, err)[key])
 }

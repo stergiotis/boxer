@@ -203,6 +203,7 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		Version:  "0.1.0",
 		Display:  "SQL playground",
 		Title:    "SQL Playground",
+		Summary:  "Write, run and explain ClickHouse queries",
 		Icon:     icons.PhDatabase,
 		Topics:   []app.TopicT{app.TopicSql, app.TopicData},
 		Keywords: []string{"query", "queries", "playground", "editor", "clickhouse", "ide"},

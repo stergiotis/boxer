@@ -144,7 +144,7 @@ func TestGenerationRefusesCollidingIds(t *testing.T) {
 	ids["sysmMemHost"] = ids["sysmCpuHost"]
 	_, err := generate(t, ids)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "share id")
+	assert.Contains(t, err.Error(), "share one id")
 }
 
 // TestGenerationRefusesAMissingMembership is the other half: a DTO tag the

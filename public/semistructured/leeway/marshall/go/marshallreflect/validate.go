@@ -3,7 +3,6 @@ package marshallreflect
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
@@ -38,7 +37,7 @@ func Validate[T any](dml any) (err error) {
 	if len(problems) == 0 {
 		return nil
 	}
-	return eb.Build().Str("dml", reflect.TypeOf(dml).String()).Str("kind", r.plan.KindName).Errorf("dml does not satisfy the write contract: %s", strings.Join(problems, "; "))
+	return eb.Build().Str("dml", reflect.TypeOf(dml).String()).Str("kind", r.plan.KindName).Strs("problems", problems).Errorf("dml does not satisfy the write contract")
 }
 
 // requireMethod records a problem if typ lacks a method named `name`. When

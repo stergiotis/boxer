@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -64,6 +65,38 @@ func (inst *Scaffold) valid() (err error) {
 	return
 }
 
+// Roles binds the ADR-0100 SD2 envelope roles by leeway column name (as
+// authored in the TableDesc), overriding the positional defaults — the
+// leading EntityId column as Key, the first EntityTimestamp as Order, the
+// first u8 EntityLifecycle as Lifecycle. Each field overrides only its own
+// role; an empty field keeps that role's positional default, so the zero
+// value is exactly the positional binding.
+//
+// Validation happens at generation time: a named column must exist among
+// the schema's plain columns, fit the role's type gate, and no two roles
+// may bind one column. The derived DDL defaults follow the declaration —
+// ORDER BY binds to the declared Key and Order.
+type Roles struct {
+	// Key names the point-lookup key column: an EntityId plain column
+	// deriving to uint64 or string.
+	Key string
+	// Order names the version / replay-order column: an EntityTimestamp
+	// column on the z64 timestamp lane, or any envelope plain column
+	// deriving to uint64 (e.g. a consumer's sequential EntityId). Under a
+	// u64 Order the store's verb signatures carry uint64 — Begin, Delete,
+	// Ingest<Kind>, Replay (with recordstore.ReplayOptsU64), the cache's
+	// MarkStaleIfOlder — the entity field is Ord, and the generated range
+	// SQL compares plain integers. The SD2 contract is unchanged: Order
+	// values must stay strictly monotonic per key, the caller's
+	// obligation, which for tagged id streams means a single writer
+	// stream per key per table (cross-tag numeric order follows code bit
+	// patterns and carries no meaning — ADR-0106).
+	Order string
+	// Lifecycle names the state-view marker column: a u8 EntityLifecycle
+	// plain column.
+	Lifecycle string
+}
+
 // Input parameterizes one store generation.
 type Input struct {
 	// PackageName is the Go package the emitted files declare.
@@ -90,8 +123,14 @@ type Input struct {
 	Database string
 	// Table is the physical schema. Its plain columns form the envelope;
 	// the ADR-0100 roles are bound by PlainItemTypeE: EntityId → Key,
-	// EntityTimestamp → Order, EntityLifecycle → Lifecycle (state view).
+	// EntityTimestamp → Order, EntityLifecycle → Lifecycle (state view) —
+	// unless Roles names the columns explicitly.
 	Table common.TableDesc
+	// Roles optionally binds the envelope roles by column name, for a
+	// schema whose role columns positional binding cannot elect — several
+	// same-typed columns, or an Order that is not the timestamp lane. The
+	// zero value keeps the positional defaults (ADR-0100 SD2).
+	Roles Roles
 	// RowConfig is the leeway table-row configuration.
 	RowConfig common.TableRowConfigE
 	// ComponentPaths are the lw:-tagged DTO sources, one kind per file.
@@ -157,6 +196,14 @@ type Input struct {
 	// shape, so run it at startup.
 	ExternallyProvisioned bool
 
+	// TombstoneView emits the state view (Delete / GetLive and the cache
+	// twins) for a schema WITHOUT a u8 EntityLifecycle role, driven
+	// entirely by the tombstone pair the store's constructor then
+	// requires (<Store>StoreConfig.TombstoneDetect / TombstoneWrite).
+	// Refused on a schema that binds the role — its state view exists
+	// already, with the u8 marker as the pair's default binding.
+	TombstoneView bool
+
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),
 	// ORDER BY (Key[, Order]) resolved to physical names, and the
@@ -190,18 +237,18 @@ func (inst Input) Generate() (err error) {
 	// TableName's first letter; a multi-word name would disagree with the
 	// generators' own style conversion and emit non-compiling references.
 	if !tableNameRe.MatchString(inst.TableName) {
-		err = eh.Errorf("TableName %q must be a single lowercase word ([a-z][a-z0-9]*) — the store emitter derives the generated class names from it", inst.TableName)
+		err = eb.Build().Str("tableName", inst.TableName).Errorf("TableName must be a single lowercase word ([a-z][a-z0-9]*) — the store emitter derives the generated class names from it")
 		return
 	}
 	if n := string(inst.Table.DictionaryEntry.Name); n != "" && n != inst.TableName {
-		err = eh.Errorf("Input.TableName %q and the TableDesc's own name %q disagree — the emitted DDL and SQL use TableName; align the two", inst.TableName, n)
+		err = eb.Build().Str("tableName", inst.TableName).Str("descName", n).Errorf("Input.TableName and the TableDesc's own name disagree — the emitted DDL and SQL use TableName; align the two")
 		return
 	}
 	// The database name is emitted unquoted into the qualified reference
 	// (and into CREATE DATABASE), so it carries the same simple-identifier
 	// constraint as TableName.
 	if inst.Database != "" && !tableNameRe.MatchString(inst.Database) {
-		err = eh.Errorf("Database %q must be a single lowercase word ([a-z][a-z0-9]*) — it is emitted unquoted into the qualified table reference", inst.Database)
+		err = eb.Build().Str("database", inst.Database).Errorf("Database must be a single lowercase word ([a-z][a-z0-9]*) — it is emitted unquoted into the qualified table reference")
 		return
 	}
 	conv, err := ddl.NewHumanReadableNamingConvention(":")
@@ -260,7 +307,7 @@ func (inst Input) Generate() (err error) {
 	// generation time.
 	wrapper := inst.wrapper()
 	if _, ok := wrapper.(marshallgen.MembershipIdSourceI); !ok && len(inst.ComponentPaths) > 0 {
-		err = eh.Errorf("Wrapper %T does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map", wrapper)
+		err = eb.Build().Type("wrapper", wrapper).Errorf("Wrapper does not provide generation-time membership ids (marshallgen.MembershipIdSourceI) — the store bakes ids into its Scan filter SQL and the <Store>MembershipIds map")
 		return
 	}
 	plans := make([]*mappingplan.Plan, 0, len(inst.ComponentPaths))
@@ -269,7 +316,7 @@ func (inst Input) Generate() (err error) {
 		var plan *mappingplan.Plan
 		plan, err = marshallgen.ParsePlan(in)
 		if err != nil {
-			err = eh.Errorf("parse component %s: %w", in, err)
+			err = eb.Build().Str("componentPath", in).Errorf("parse component: %w", err)
 			return
 		}
 		mode := marshallgen.EmitModeStoreSupport
@@ -279,7 +326,7 @@ func (inst Input) Generate() (err error) {
 		var rendered []byte
 		rendered, err = marshallgen.EmitPlan(plan, wrapper, marshallgen.EmitOpts{Mode: mode})
 		if err != nil {
-			err = eh.Errorf("emit component codec %s: %w", in, err)
+			err = eb.Build().Str("componentPath", in).Errorf("emit component codec: %w", err)
 			return
 		}
 		err = inst.write(out, rendered)
@@ -328,17 +375,28 @@ func (inst Input) Generate() (err error) {
 // bind ORDER BY to the envelope roles — Key leading (the point-lookup
 // guidance), Order second when the schema has one. Both are addressed by
 // column name, so a composite id (several EntityId columns, the rest
-// pass-through) leaves the ORDER BY unambiguous; the Key is the leading
-// EntityId column, matching enumeratePlain's binding.
+// pass-through) leaves the ORDER BY unambiguous; the Key is the declared
+// Roles.Key or the leading EntityId column, matching enumeratePlain's
+// binding (Generate runs the store emission — and thereby the role
+// validation — before composing the DDL, so the names are resolved here
+// only after they are known to exist).
 func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 	opts = clickhouse.TableOptions{
 		Mode:     clickhouse.CreateModeIfNotExists,
 		Engine:   "MergeTree()",
 		Settings: []string{"allow_suspicious_low_cardinality_types=1"},
 	}
-	if keyName, ok := firstPlainName(inst.Table, common.PlainItemTypeEntityId); ok {
+	keyName, hasKey := firstPlainName(inst.Table, common.PlainItemTypeEntityId)
+	if inst.Roles.Key != "" {
+		keyName, hasKey = naming.StylableName(inst.Roles.Key), true
+	}
+	if hasKey {
 		opts.OrderBy = []clickhouse.ColumnRef{{Plain: keyName}}
-		if orderName, ok := firstPlainName(inst.Table, common.PlainItemTypeEntityTimestamp); ok {
+		orderName, hasOrder := firstPlainName(inst.Table, common.PlainItemTypeEntityTimestamp)
+		if inst.Roles.Order != "" {
+			orderName, hasOrder = naming.StylableName(inst.Roles.Order), true
+		}
+		if hasOrder {
 			opts.OrderBy = append(opts.OrderBy, clickhouse.ColumnRef{Plain: orderName})
 		}
 	}
@@ -427,12 +485,12 @@ func (inst Input) write(name string, data []byte) (err error) {
 	path := filepath.Join(inst.OutDir, name)
 	err = os.MkdirAll(filepath.Dir(path), 0755)
 	if err != nil {
-		err = eh.Errorf("create directory for %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("create directory: %w", err)
 		return
 	}
 	err = os.WriteFile(path, data, 0644)
 	if err != nil {
-		err = eh.Errorf("write %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("write: %w", err)
 	}
 	return
 }

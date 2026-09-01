@@ -297,11 +297,10 @@ func resolvePhysicalPlainName(plain string) (quoted string, err error) {
 	case 1:
 		quoted = matches[0]
 	case 0:
-		err = eb.Build().Str("plain", plain).
-			Errorf("no plain column named %q in the facts shape", plain)
+		err = eb.Build().Str("plain", plain).Errorf("the facts shape has no plain column of that name")
 	default:
 		err = eb.Build().Str("plain", plain).Str("matches", strings.Join(matches, ", ")).
-			Errorf("plain %q resolves to %d physical columns", plain, len(matches))
+			Int("matches", len(matches)).Errorf("plain name resolves to more than one physical column")
 	}
 	return
 }

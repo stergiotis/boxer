@@ -3,11 +3,9 @@ package demo
 import (
 	"testing"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/apps/sqlapplet"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
 
@@ -22,8 +20,7 @@ import (
 // typo a compile error, which covers the Go manifests; this test covers what
 // the compiler cannot see, principally applet frontmatter.
 func TestEveryRegisteredManifestIsClassifiable(t *testing.T) {
-	_, errs := sqlapplet.MintManifests(zerolog.Nop())
-	require.Empty(t, errs, "the applet corpus must mint cleanly")
+	mintCorpusOnce(t)
 
 	manifests := runtimeapp.AllManifests()
 	require.NotEmpty(t, manifests, "the carousel blank-imports every app; an empty registry means that broke")

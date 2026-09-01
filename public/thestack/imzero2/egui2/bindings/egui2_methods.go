@@ -28,6 +28,13 @@ func (inst FrameFluid) Id() uint64 { return inst.id }
 // close affordances without reaching into the unexported `id` field.
 func (inst WindowFluid) Id() uint64 { return inst.id }
 
+// Id returns the widget id stamped on this TextEdit at construction time.
+// Needed by the two ops that address a field rather than being chained onto
+// it: [RequestFocus] / [SurrenderFocus], and the R26 capture read-back
+// [StateManager.GetCapturedKeys] that .CaptureKeys() feeds (ADR-0214 §SD9's
+// launcher keyboard path). Mirrors [FrameFluid.Id].
+func (inst TextEditFluid) Id() uint64 { return inst.id }
+
 func (inst ButtonFluid) SendResp() ResponseFlagsE {
 	inst.Send()
 	return CurrentApplicationState.StateManager.GetResponseByIdRaw(inst.id)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // LogEntry maps the JSON record emitted by `pijul log
@@ -292,7 +293,7 @@ func SplitKVLine(line string) (path string, value string, ok bool) {
 func validateCellPaths(cells []KVLine) (err error) {
 	for _, c := range cells {
 		if c.Path == "" || strings.ContainsAny(c.Path, " \"\n") {
-			err = eh.Errorf("invalid cell path %q: must be non-empty, without spaces, quotes, or newlines", c.Path)
+			err = eb.Build().Str("path", c.Path).Errorf("invalid cell path: must be non-empty, without spaces, quotes, or newlines")
 			return
 		}
 	}

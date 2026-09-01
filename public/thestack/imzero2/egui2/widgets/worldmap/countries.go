@@ -11,6 +11,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Country geometry + identity, parsed once from the vendored Natural Earth
@@ -130,7 +131,7 @@ func loadAtlas() (*Atlas, error) {
 	for _, f := range fc.Features {
 		rings, holes, rerr := decodeRings(f.Geometry)
 		if rerr != nil {
-			return nil, eh.Errorf("%s: %w", f.Properties.Admin, rerr)
+			return nil, eb.Build().Str("admin", f.Properties.Admin).Errorf("unable to decode country rings: %w", rerr)
 		}
 		if len(rings) == 0 {
 			continue
@@ -218,7 +219,7 @@ func decodeRings(g neGeometry) ([][]projPt, []bool, error) {
 		}
 		return rings, holes, nil
 	default:
-		return nil, nil, eh.Errorf("unsupported geometry type %q", g.Type)
+		return nil, nil, eb.Build().Str("type", g.Type).Errorf("unsupported geometry type")
 	}
 }
 

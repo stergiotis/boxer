@@ -61,6 +61,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -170,7 +171,7 @@ func (inst *Executor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arro
 func (inst *Executor) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
 	err = inst.client.InsertArrow(ctx, table, records)
 	if err != nil {
-		err = eh.Errorf("storeexec: insert into %s: %w", table, err)
+		err = eb.Build().Str("table", table).Errorf("storeexec: insert failed: %w", err)
 	}
 	return
 }

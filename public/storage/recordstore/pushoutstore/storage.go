@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/repo"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -90,11 +91,11 @@ func hexOfHash(h types.PatchHash) string {
 func hashFromHex(s string) (h types.PatchHash, err error) {
 	b, err := hex.DecodeString(s)
 	if err != nil {
-		err = eh.Errorf("decode patch hash %q: %w", s, err)
+		err = eb.Build().Str("raw", s).Errorf("decode patch hash: %w", err)
 		return
 	}
 	if len(b) != len(h) {
-		err = eh.Errorf("decode patch hash %q: %d bytes, want %d", s, len(b), len(h))
+		err = eb.Build().Str("raw", s).Int("got", len(b)).Int("want", len(h)).Errorf("decode patch hash: wrong length")
 		return
 	}
 	copy(h[:], b)
@@ -113,7 +114,7 @@ func (inst *Storage) nextTs(ctx context.Context, key string) (ts time.Time, err 
 		var found bool
 		ent, found, err = inst.st.Latest(ctx, key)
 		if err != nil {
-			err = eh.Errorf("derive sequence for %q: %w", key, err)
+			err = eb.Build().Str("key", key).Errorf("derive sequence failed: %w", err)
 			return
 		}
 		n = 1
@@ -194,7 +195,7 @@ func (inst *Storage) GetEnvelope(ctx context.Context, h types.PatchHash) (framed
 		return
 	}
 	if !found || !ent.Envelope.Has {
-		err = eh.Errorf("get envelope %s: %w", hexOfHash(h), repo.ErrEnvelopeNotFound)
+		err = eb.Build().Str("patchHash", hexOfHash(h)).Errorf("get envelope: %w", repo.ErrEnvelopeNotFound)
 		return
 	}
 	framed = ent.Envelope.Val.Framed
@@ -422,7 +423,7 @@ func (inst *Storage) LoadRetention(ctx context.Context) (entries []repo.Retentio
 	}
 	ret := ent.Retention.Val
 	if len(ret.Hashes) != len(ret.Indices) || len(ret.Hashes) != len(ret.Times) {
-		err = eh.Errorf("retention ledger arrays misaligned: %d/%d/%d", len(ret.Hashes), len(ret.Indices), len(ret.Times))
+		err = eb.Build().Int("hashes", len(ret.Hashes)).Int("indices", len(ret.Indices)).Int("times", len(ret.Times)).Errorf("retention ledger arrays are misaligned")
 		return
 	}
 	for i := range ret.Hashes {

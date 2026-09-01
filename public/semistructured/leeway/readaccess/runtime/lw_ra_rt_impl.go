@@ -38,10 +38,7 @@ func unexpectedDataTypeE(schema *arrow.Schema, idx uint32, effective arrow.DataT
 	// and the two side by side read as unrelated. The full type follows in
 	// parentheses because it carries the element type of a list, which is
 	// often the part that is actually wrong.
-	err = eb.Build().Uint32("columnIndex", idx).Str("columnName", name).
-		Stringer("effective", effective).Stringer("expected", expected).
-		Errorf("unexpected data type for column %d %q: got %s (%s), want %s: %w",
-			idx, name, effective.ID(), effective, expected, ErrUnexpectedArrowDataType)
+	err = eb.Build().Uint32("columnIndex", idx).Str("columnName", name).Stringer("effective", effective).Stringer("expected", expected).Errorf("unexpected data type for column %d %q: got %s (%s), want %s: %w", idx, name, effective.ID(), effective, expected, ErrUnexpectedArrowDataType) //boxer:lint disable=CS013 reason="the type pair and column name are composed to read side by side; the comment above says why, and the test asserts it"
 	return
 }
 
@@ -107,8 +104,6 @@ func checkColumnIndexE(rec recordShapeI, idx uint32) (err error) {
 		}
 		have += " (" + rendered + ")"
 	}
-	err = eb.Build().Uint32("columnIndex", idx).Int64("numColumns", n).Strs("columnNames", names).
-		Errorf("read access binds column %d but the record has only %s: %w",
-			idx, have, ErrColumnIndexOutOfRange)
+	err = eb.Build().Uint32("columnIndex", idx).Int64("numColumns", n).Strs("columnNames", names).Errorf("read access binds column %d but the record has only %s: %w", idx, have, ErrColumnIndexOutOfRange) //boxer:lint disable=CS013 reason="the record's own column list is what makes the mismatch obvious; the test asserts it"
 	return
 }

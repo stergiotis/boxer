@@ -6,7 +6,7 @@ import (
 	"github.com/akrylysov/pogreb"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/caching"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Compile-time assertion that PogrebStash satisfies caching.StashBackendI.
@@ -39,7 +39,7 @@ func NewPogrebStash[K comparable, V any](path string, softCap int, cleanStart bo
 
 	db, err := pogreb.Open(path, opts)
 	if err != nil {
-		return nil, eh.Errorf("failed to open pogreb db at %s: %w", path, err)
+		return nil, eb.Build().Str("path", path).Errorf("unable to open the pogreb db: %w", err)
 	}
 
 	return &PogrebStash[K, V]{

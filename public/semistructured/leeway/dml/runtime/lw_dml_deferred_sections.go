@@ -61,11 +61,11 @@ type contribution struct {
 // component, before that component's [DeferredSectionBuffer.Enqueue] calls.
 func (inst *DeferredSectionBuffer) StartKind(kind string) (err error) {
 	if inst.rawInUse {
-		err = eb.Build().Str("kind", kind).Errorf("component %s cannot be added to an entity that is being written through Raw() — the two spellings are exclusive per entity", kind)
+		err = eb.Build().Str("kind", kind).Errorf("the component cannot be added to an entity that is being written through Raw() — the two spellings are exclusive per entity")
 		return
 	}
 	if slices.Contains(inst.kinds, kind) {
-		err = eb.Build().Str("kind", kind).Errorf("component %s is already on this entity — one contribution per kind per entity; use a container field for multiplicity within the kind", kind)
+		err = eb.Build().Str("kind", kind).Errorf("the component is already on this entity — one contribution per kind per entity; use a container field for multiplicity within the kind")
 		return
 	}
 	inst.kinds = append(inst.kinds, kind)
@@ -79,7 +79,7 @@ func (inst *DeferredSectionBuffer) StartKind(kind string) (err error) {
 // something neither spelling promised.
 func (inst *DeferredSectionBuffer) MarkRaw() (err error) {
 	if len(inst.kinds) > 0 {
-		err = eb.Build().Str("kind", inst.kinds[0]).Errorf("Raw() cannot be used on an entity that already carries component %s — the two spellings are exclusive per entity", inst.kinds[0])
+		err = eb.Build().Str("kind", inst.kinds[0]).Errorf("Raw() cannot be used on an entity that already carries a component — the two spellings are exclusive per entity")
 		return
 	}
 	inst.rawInUse = true
@@ -134,13 +134,13 @@ func (inst *DeferredSectionBuffer) Flush(endSection func(section string) error) 
 		for _, c := range inst.bySec[section] {
 			cerr := c.emit()
 			if cerr != nil && err == nil {
-				err = eb.Build().Str("kind", c.kind).Str("section", section).Errorf("component %s failed to write section %s: %w", c.kind, section, cerr)
+				err = eb.Build().Str("kind", c.kind).Str("section", section).Errorf("component failed to write section: %w", cerr)
 			}
 		}
 		if endSection != nil {
 			cerr := endSection(section)
 			if cerr != nil && err == nil {
-				err = eb.Build().Str("section", section).Errorf("unable to close section %s: %w", section, cerr)
+				err = eb.Build().Str("section", section).Errorf("unable to close section: %w", cerr)
 			}
 		}
 	}

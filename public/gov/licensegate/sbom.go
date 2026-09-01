@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Minimal subset of the CycloneDX 1.6 schema needed for license-policy
@@ -44,14 +44,14 @@ type licenseObjT struct {
 func loadSBOM(path string) (b sbomT, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		err = eh.Errorf("open SBOM %q: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("open SBOM: %w", err)
 		return
 	}
 	defer func() { _ = f.Close() }()
 	dec := json.NewDecoder(f)
 	err = dec.Decode(&b)
 	if err != nil {
-		err = eh.Errorf("decode SBOM %q: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("decode SBOM: %w", err)
 		return
 	}
 	return

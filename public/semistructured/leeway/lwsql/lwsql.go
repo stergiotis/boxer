@@ -71,6 +71,10 @@ type sectionIndex struct {
 	// asks — "which column carries this section's low-card-ref identities" —
 	// and the answer is a role, not a spelling (ADR-0181 §SD3).
 	roles map[common.ColumnRoleE]string
+	// single carries the channels the schema declares single-instance
+	// (ADR-0213), recovered from the use-aspects the column names encode —
+	// the proof that an absent cardinality lane is a statement, not a gap.
+	single common.MembershipSpecE
 }
 
 type columnRef struct {
@@ -225,7 +229,7 @@ func (inst *Resolver) build(dbName string, tableName string) (idx *tableIndex, k
 	for c := range cols {
 		names = append(names, c)
 	}
-	infos, meta, ok := classifyColumns(names)
+	infos, meta, singles, ok := classifyColumns(names)
 	if !ok {
 		return nil, known // not leeway-shaped
 	}
@@ -238,7 +242,7 @@ func (inst *Resolver) build(dbName string, tableName string) (idx *tableIndex, k
 		fs := fold(ci.section)
 		si := idx.sections[fs]
 		if si == nil {
-			si = &sectionIndex{display: ci.section, byColumn: make(map[string]string, 4), roles: make(map[common.ColumnRoleE]string, 4)}
+			si = &sectionIndex{display: ci.section, byColumn: make(map[string]string, 4), roles: make(map[common.ColumnRoleE]string, 4), single: singles[fs]}
 			idx.sections[fs] = si
 		}
 		si.byColumn[fold(ci.column)] = ci.physical
@@ -290,22 +294,30 @@ type tableMeta struct {
 
 // classifyColumns parses a table's physical column names and classifies each.
 // ok is false when the names are not leeway-shaped (a plain SQL table, an
-// aggregation result, an unreachable server).
-func classifyColumns(names []string) (infos []columnInfo, meta tableMeta, ok bool) {
+// aggregation result, an unreachable server). singles carries each section's
+// single-instance membership declaration (ADR-0213), recovered from the
+// use-aspects the column names encode — keyed by folded section name.
+func classifyColumns(names []string) (infos []columnInfo, meta tableMeta, singles map[string]common.MembershipSpecE, ok bool) {
 	meta.separator = detectSeparator(names)
 	conv, err := ddl.NewHumanReadableNamingConvention(meta.separator)
 	if err != nil {
-		return nil, tableMeta{}, false
+		return nil, tableMeta{}, nil, false
 	}
 	phys, err := conv.ParseColumns(names)
 	if err != nil {
-		return nil, tableMeta{}, false
+		return nil, tableMeta{}, nil, false
 	}
 	table, trc, err := conv.DiscoverTableFromPhysicalColumns(phys)
 	if err != nil {
-		return nil, tableMeta{}, false
+		return nil, tableMeta{}, nil, false
 	}
 	meta.tableRowConfig = trc
+	singles = make(map[string]common.MembershipSpecE, len(table.TaggedValuesSections))
+	for _, sec := range table.TaggedValuesSections {
+		if m := common.SingleMembershipSpecs(sec.UseAspects); m != 0 {
+			singles[fold(string(sec.Name))] = m
+		}
+	}
 	// The reconstructed TableDesc is the authority for which (section, column)
 	// pairs are value columns; support columns are excluded from that set.
 	valueCols := make(map[string]struct{}, len(table.TaggedValuesSections))
@@ -365,7 +377,7 @@ func classifyColumns(names []string) (infos []columnInfo, meta tableMeta, ok boo
 		}
 		infos = append(infos, ci)
 	}
-	return infos, meta, true
+	return infos, meta, singles, true
 }
 
 // plainSectionName maps a plain/backbone item type to its user-facing section

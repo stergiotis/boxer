@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Runtime apps
+summary: "Query this process's registered apps as a relation"
 icon: "🧩"
 endpoint: introspection
 ---

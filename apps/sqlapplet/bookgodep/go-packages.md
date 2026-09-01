@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Go packages
+summary: "Table the package closure with one import neighbourhood"
 icon: "🕸"
 endpoint: introspection
 tabs: [table, network, detail]

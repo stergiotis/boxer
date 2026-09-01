@@ -15,6 +15,16 @@ var Families = []aspectcodec.Family[AspectE]{
 	{Name: "attribute-history", Members: []AspectE{AspectHistoryRetained, AspectHistoryOverwritten, AspectHistoryDual}, Exclusive: true},
 	{Name: "tlp", Members: []AspectE{AspectTlpClear, AspectTlpGreen, AspectTlpAmber, AspectTlpAmberStrict, AspectTlpRed}, Exclusive: true},
 	{Name: "section-uniformity", Members: []AspectE{AspectSectionMembershipsAllPrimary, AspectSectionMembershipsAllSecondary}, Exclusive: true},
+	{Name: "single-membership", Members: []AspectE{
+		AspectSectionSingleMembershipHighCardRef,
+		AspectSectionSingleMembershipHighCardVerbatim,
+		AspectSectionSingleMembershipHighCardRefParametrized,
+		AspectSectionSingleMembershipLowCardRef,
+		AspectSectionSingleMembershipLowCardVerbatim,
+		AspectSectionSingleMembershipLowCardRefParametrized,
+		AspectSectionSingleMembershipMixedLowCardRefHighCardParameters,
+		AspectSectionSingleMembershipMixedLowCardVerbatimHighCardParameters,
+	}, Exclusive: false},
 }
 
 // CheckFamilyExclusivity rejects sets carrying more than one member of an

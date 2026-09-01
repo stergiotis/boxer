@@ -171,12 +171,10 @@ func ParseTrace(r io.Reader) (steps []Step, err error) {
 		}
 		var st Step
 		if err = json.Unmarshal([]byte(text), &st); err != nil {
-			return nil, eb.Build().Int("line", line).
-				Errorf("unable to parse trace step at line %d: %w", line, err)
+			return nil, eb.Build().Int("line", line).Errorf("unable to parse trace step at line %d: %w", line, err) //boxer:lint disable=CS013 reason="line is already a field; %d keeps it in the human-read diagnostic"
 		}
 		if st.Do == "" {
-			return nil, eb.Build().Int("line", line).
-				Errorf("trace step at line %d has no \"do\" verb", line)
+			return nil, eb.Build().Int("line", line).Errorf("trace step at line %d has no \"do\" verb", line) //boxer:lint disable=CS013 reason="line is already a field; %d keeps it in the human-read diagnostic"
 		}
 		steps = append(steps, st)
 	}
@@ -337,7 +335,7 @@ func waitFor(c *Client, st Step, opts RunOptions) (err error) {
 		}
 		if time.Now().After(deadline) {
 			return eb.Build().Int("attempts", attempt+1).
-				Errorf("still not ready after %s: %w", opts.Timeout, last)
+				Stringer("timeout", opts.Timeout).Errorf("still not ready before the timeout: %w", last)
 		}
 		if err = c.Idle(150 * time.Millisecond); err != nil {
 			return err

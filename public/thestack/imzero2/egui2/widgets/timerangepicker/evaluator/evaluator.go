@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
 
@@ -111,7 +112,7 @@ func (inst *Evaluator) Eval(ctx context.Context, anchor time.Time, tzID uint16, 
 	}
 	fromMs, toMs, err = parseTSVRow(out)
 	if err != nil {
-		err = eh.Errorf("evaluator: result %q: %w", string(out), err)
+		err = eb.Build().Str("result", string(out)).Errorf("evaluator: unusable result: %w", err)
 		return
 	}
 	return
@@ -125,22 +126,22 @@ func parseTSVRow(out []byte) (fromMs, toMs int64, err error) {
 	}
 	lines := strings.Split(s, "\n")
 	if len(lines) != 1 {
-		err = eh.Errorf("expected 1 row, got %d", len(lines))
+		err = eb.Build().Int("rows", len(lines)).Errorf("expected exactly 1 row")
 		return
 	}
 	cols := strings.Split(lines[0], "\t")
 	if len(cols) != 2 {
-		err = eh.Errorf("expected 2 columns, got %d", len(cols))
+		err = eb.Build().Int("columns", len(cols)).Errorf("expected exactly 2 columns")
 		return
 	}
 	fromMs, err = strconv.ParseInt(strings.TrimSpace(cols[0]), 10, 64)
 	if err != nil {
-		err = eh.Errorf("parse from_ms %q: %w", cols[0], err)
+		err = eb.Build().Str("fromMs", cols[0]).Errorf("parse from_ms: %w", err)
 		return
 	}
 	toMs, err = strconv.ParseInt(strings.TrimSpace(cols[1]), 10, 64)
 	if err != nil {
-		err = eh.Errorf("parse to_ms %q: %w", cols[1], err)
+		err = eb.Build().Str("toMs", cols[1]).Errorf("parse to_ms: %w", err)
 		return
 	}
 	return

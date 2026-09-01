@@ -14,9 +14,11 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
@@ -104,9 +106,10 @@ func TestLookupDiagnosis_ScalarErrorNamesWhatTheSectionCarries(t *testing.T) {
 	var got []ldScalar
 	err := marshallreflect.Unmarshal(readers, &got, ldWrong())
 	require.Error(t, err)
-	require.ErrorContains(t, err, "ldHealth")
-	require.ErrorContains(t, err, "section carries [1]",
-		"the observed id is what tells you the lookup resolved 91 against a wire holding 1")
+	f := ebtest.Fields(t, err)
+	assert.Equal(t, "ldHealth", f["membership"])
+	assert.Equal(t, "1", f["sectionCarries"],
+		"the error reports what the section actually carries")
 	require.ErrorContains(t, err, "membership lookup")
 }
 

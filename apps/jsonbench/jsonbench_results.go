@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // resultsCommand lands a run directory's measurements in a facts table, which
@@ -62,7 +63,7 @@ func runResults(cCtx *cli.Context) (err error) {
 
 	arms, err := filepath.Glob(filepath.Join(runDir, "arm-*"))
 	if err != nil {
-		err = eh.Errorf("glob %s: %w", runDir, err)
+		err = eb.Build().Str("runDir", runDir).Errorf("glob: %w", err)
 		return
 	}
 	if len(arms) == 0 {

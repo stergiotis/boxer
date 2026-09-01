@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // markerFileName is the file a directory-backed competence is defined in —
@@ -153,14 +154,14 @@ func ParseDir(vaultDir string) (corpus Corpus, err error) {
 		return nil
 	})
 	if err != nil {
-		return Corpus{}, eh.Errorf("unable to walk vault %q: %w", vaultDir, err)
+		return Corpus{}, eb.Build().Str("vaultDir", vaultDir).Errorf("unable to walk vault: %w", err)
 	}
 
 	known := make(map[string]struct{}, len(files))
 	for i := range files {
 		if _, dup := known[files[i].slug]; dup {
-			return Corpus{}, eh.Errorf("duplicate competence slug %q at %s: slugs are the corpus's identity and must be unique",
-				files[i].slug, files[i].path)
+			return Corpus{}, eb.Build().Str("slug", files[i].slug).Str("path", files[i].path).
+				Errorf("duplicate competence slug: slugs are the corpus's identity and must be unique")
 		}
 		known[files[i].slug] = struct{}{}
 	}
@@ -211,14 +212,14 @@ func relativeTo(root, path string) (rel string) {
 func parseFile(path string, slug string, vaultDir string) (comp Competence, rels []Relation, err error) {
 	var data []byte
 	if data, err = os.ReadFile(path); err != nil {
-		return comp, nil, eh.Errorf("unable to read %q: %w", path, err)
+		return comp, nil, eb.Build().Str("path", path).Errorf("unable to read: %w", err)
 	}
 	var (
 		fm   frontmatter
 		body string
 	)
 	if fm, body, err = splitFrontmatter(string(data)); err != nil {
-		return comp, nil, eh.Errorf("unable to parse %q: %w", path, err)
+		return comp, nil, eb.Build().Str("path", path).Errorf("unable to parse: %w", err)
 	}
 
 	relPath, relErr := filepath.Rel(vaultDir, path)

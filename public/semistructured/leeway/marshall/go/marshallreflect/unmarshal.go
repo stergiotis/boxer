@@ -184,7 +184,7 @@ func (r *SectionReaders) checkCoverage(plan *mappingplan.Plan, groups []goplan.S
 		}
 	}
 	if len(missing) > 0 {
-		return eb.Build().Str("kind", plan.KindName).Errorf("SectionReaders is missing readers for: %s", strings.Join(missing, ", "))
+		return eb.Build().Str("kind", plan.KindName).Strs("missing", missing).Errorf("SectionReaders is missing readers")
 	}
 	return nil
 }
@@ -437,16 +437,15 @@ func arityError(s mappingplan.Slot, got int, observed ...string) error {
 		Str("max", upper)
 	if fields != "" {
 		b = b.Str("fields", fields)
-		fields = " (fields " + fields + ")"
 	}
 	if got > s.MaxAttrs && s.MaxAttrs != mappingplan.ArityUnbounded {
-		return b.Errorf("slot %s@%s%s carries %d attributes but the DTO admits at most %s — several producers claim this slot, so the reader cannot tell which attribute is this kind's", s.Section, s.Membership, fields, got, upper)
+		return b.Errorf("slot carries more attributes than the DTO admits — several producers claim this slot, so the reader cannot tell which attribute is this kind's")
 	}
 	if len(observed) > 0 {
 		b = b.Str("sectionCarries", strings.Join(observed, ","))
-		return b.Errorf("slot %s@%s%s carries %d attributes but the DTO requires at least %d — the section carries [%s], so check the membership lookup resolves %s to one of them", s.Section, s.Membership, fields, got, s.MinAttrs, strings.Join(observed, ", "), s.Membership)
+		return b.Errorf("slot carries fewer attributes than the DTO requires — check the membership lookup resolves it to one of the memberships the section carries")
 	}
-	return b.Errorf("slot %s@%s%s carries %d attributes but the DTO requires at least %d", s.Section, s.Membership, fields, got, s.MinAttrs)
+	return b.Errorf("slot carries fewer attributes than the DTO requires")
 }
 
 // dispatchMemberships iterates the per-attribute membership channel (uint64 or
@@ -561,7 +560,7 @@ func readSingleValue(attrs reflect.Value, f mappingplan.TaggedField, i int, attr
 	rets := mustCall(attrs, method, reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))
 	if reportsMismatch {
 		if e, _ := rets[len(rets)-1].Interface().(error); e != nil {
-			err = eb.Build().Str("field", f.GoFieldName).Str("section", f.LWSection).Str("membership", f.LWMembership).Errorf("slot %s@%s (field %s) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", f.LWSection, f.LWMembership, f.GoFieldName, e)
+			err = eb.Build().Str("field", f.GoFieldName).Str("section", f.LWSection).Str("membership", f.LWMembership).Errorf("slot has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", e)
 			return
 		}
 	}
@@ -870,7 +869,7 @@ func distributeTupleMemberships(elem reflect.Value, ts goplan.TupleSpec, section
 			continue
 		}
 		if len(vals) != len(fields) {
-			err = eb.Build().Str("section", section).Str("channel", ch.AddMethodSuffix()).Int("got", len(vals)).Int("want", len(fields)).Errorf("tuple attribute carries %d %s membership(s) but the element declares %d — membership count mismatch on read", len(vals), ch.AddMethodSuffix(), len(fields))
+			err = eb.Build().Str("section", section).Str("channel", ch.AddMethodSuffix()).Int("got", len(vals)).Int("want", len(fields)).Errorf("tuple attribute carries a different membership count than the element declares — membership count mismatch on read")
 			return
 		}
 		for idx, m := range fields {

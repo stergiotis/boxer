@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -331,7 +332,7 @@ func TestUnboundSlotIsRefused(t *testing.T) {
 	_, err := ladingsql.Expand(openCfg(), "SELECT path FROM fs({m:UInt64})")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ladingsql.ErrUnboundSlot)
-	assert.Contains(t, err.Error(), "param_m")
+	assert.Equal(t, "m", ebtest.Fields(t, err)["slot"], "the error names the unbound slot")
 
 	_, err = ladingsql.Expand(openCfg(), "SET param_m = 4322952322827452417;\nSELECT path FROM fs({m:UInt64} + 1)")
 	assert.Error(t, err, "an expression around a slot is still an expression")

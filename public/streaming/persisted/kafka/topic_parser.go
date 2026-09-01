@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // parsePartitions parses a single partition spec or a contiguous range
@@ -38,7 +39,7 @@ func parsePartitions(expr string) (parts []int32, err error) {
 
 	rangeExpr := strings.Split(expr, "-")
 	if len(rangeExpr) > 2 {
-		err = eh.Errorf("partition '%v' is invalid, only one range can be specified", expr)
+		err = eb.Build().Str("partition", expr).Errorf("partition is invalid; only one range can be specified")
 		return
 	}
 
@@ -94,11 +95,11 @@ func ParseTopics(sourceTopics []string, defaultOffset int64, allowExplicitOffset
 			}
 
 			if len(splitByColon) > 3 {
-				err = eh.Errorf("topic '%v' is invalid, only one partition and an optional offset should be specified", trimmed)
+				err = eb.Build().Str("topic", trimmed).Errorf("topic is invalid; only one partition and an optional offset should be specified")
 				return
 			}
 			if len(splitByColon) == 3 && !allowExplicitOffsets {
-				err = eh.Errorf("topic '%v' is invalid, explicit offsets are not supported by this input", trimmed)
+				err = eb.Build().Str("topic", trimmed).Errorf("topic is invalid; explicit offsets are not supported by this input")
 				return
 			}
 

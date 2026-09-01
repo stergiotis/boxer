@@ -21,6 +21,7 @@ var manifest = app.Manifest{
 	Version:      "0.1.0",
 	Display:      "SQL applet creator",
 	Title:        "SQL applet creator",
+	Summary:      "Author a SQL applet document and publish it to the store",
 	Icon:         icons.PhPuzzlePiece,
 	Topics:       []app.TopicT{app.TopicSql},
 	Keywords:     []string{"applet", "author", "publish", "save"},

@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Plane staleness
+summary: "Check how old each observed topology sample is"
 icon: "⏱"
 endpoint: introspection
 tabs: [table]

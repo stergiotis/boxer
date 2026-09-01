@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // pijulTextBackend is the realisation of [BackendI] that drives a
@@ -52,14 +53,14 @@ func (inst *pijulTextBackend) NewRepo(actor string, path string) (repo RepoI) {
 func (inst *pijulTextBackend) Clone(ctx context.Context, src RepoI, destPath string, destActor string) (dest RepoI, audit string, err error) {
 	srcRepo, ok := src.(*pijulTextRepo)
 	if !ok {
-		err = eh.Errorf("pijul-text backend cannot clone from a %T", src)
+		err = eb.Build().Type("source", src).Errorf("pijul-text backend cannot clone from this source type")
 		return
 	}
 	parentDir := filepath.Dir(destPath)
 	name := filepath.Base(destPath)
 	merr := os.MkdirAll(parentDir, 0755)
 	if merr != nil {
-		err = eh.Errorf("create parent dir %s: %w", parentDir, merr)
+		err = eb.Build().Str("parentDir", parentDir).Errorf("create parent dir: %w", merr)
 		return
 	}
 	audit, err = inst.runner.Clone(ctx, srcRepo.path, parentDir, name)
@@ -98,7 +99,7 @@ func (inst *pijulTextRepo) Path() (p string) {
 func (inst *pijulTextRepo) Init(ctx context.Context) (audit string, err error) {
 	merr := os.MkdirAll(inst.path, 0755)
 	if merr != nil {
-		err = eh.Errorf("create repo dir %s: %w", inst.path, merr)
+		err = eb.Build().Str("path", inst.path).Errorf("create repo dir: %w", merr)
 		return
 	}
 	audit, err = inst.runner.Init(ctx, inst.path)
@@ -165,7 +166,7 @@ func (inst *pijulTextRepo) SetAndRecord(ctx context.Context, cells []KVLine, aut
 
 	werr := os.WriteFile(file, raw, 0644)
 	if werr != nil {
-		err = eh.Errorf("write %s: %w", file, werr)
+		err = eb.Build().Str("file", file).Errorf("write: %w", werr)
 		return
 	}
 
@@ -224,7 +225,7 @@ func (inst *pijulTextRepo) Apply(ctx context.Context, env PatchEnvelope) (audit 
 func (inst *pijulTextRepo) Push(ctx context.Context, dest RepoI) (audit string, err error) {
 	other, ok := dest.(*pijulTextRepo)
 	if !ok {
-		err = eh.Errorf("pijul-text Push requires a pijul-text destination, got %T", dest)
+		err = eb.Build().Type("dest", dest).Errorf("pijul-text Push requires a pijul-text destination")
 		return
 	}
 	audit, err = inst.runner.Push(ctx, inst.path, other.path)
@@ -234,7 +235,7 @@ func (inst *pijulTextRepo) Push(ctx context.Context, dest RepoI) (audit string, 
 func (inst *pijulTextRepo) Pull(ctx context.Context, src RepoI) (audit string, hadConflict bool, err error) {
 	other, ok := src.(*pijulTextRepo)
 	if !ok {
-		err = eh.Errorf("pijul-text Pull requires a pijul-text source, got %T", src)
+		err = eb.Build().Type("source", src).Errorf("pijul-text Pull requires a pijul-text source")
 		return
 	}
 	audit, hadConflict, err = inst.runner.Pull(ctx, inst.path, other.path)
@@ -259,7 +260,7 @@ func (inst *pijulTextRepo) ExportLatest(ctx context.Context) (env PatchEnvelope,
 	}
 	bytes, rerr := os.ReadFile(srcFile)
 	if rerr != nil {
-		err = eh.Errorf("read patch %s: %w", srcFile, rerr)
+		err = eb.Build().Str("srcFile", srcFile).Errorf("read patch: %w", rerr)
 		return
 	}
 	env = PatchEnvelope{

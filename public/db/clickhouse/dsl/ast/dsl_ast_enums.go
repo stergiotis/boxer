@@ -3,7 +3,7 @@ package ast
 import (
 	"fmt"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type ExprKind uint8
@@ -249,7 +249,7 @@ func ParseIntervalUnit(s string) (unit IntervalUnitE, err error) {
 	case "YEAR":
 		unit = IntervalYear
 	default:
-		err = eh.Errorf("unknown interval unit %q", s)
+		err = eb.Build().Str("unit", s).Errorf("unknown interval unit")
 	}
 	return
 }

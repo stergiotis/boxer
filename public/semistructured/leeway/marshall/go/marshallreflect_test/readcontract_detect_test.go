@@ -369,5 +369,5 @@ func TestDetect_MissingReaderIsReported(t *testing.T) {
 		PlainColumn("id", idR.ValueId).
 		PlainColumn("naturalKey", idR.ValueNaturalKey)
 	_, err := marshallreflect.Detect[rcScalar](readers, 0, lk)
-	require.ErrorContains(t, err, "symbol")
+	require.Contains(t, fieldList(t, err, "missing"), "symbol")
 }

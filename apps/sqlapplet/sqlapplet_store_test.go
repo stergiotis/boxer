@@ -46,7 +46,9 @@ func saveDoc(t *testing.T, caller *inprocbus.Client, slug string, doc []byte) (r
 }
 
 func testDoc(title string, sql string) []byte {
-	return []byte("---\ntype: reference\nstatus: draft\ntitle: \"" + title + "\"\n---\n\n# " + title + "\n\nProse.\n\n```sql\n" + sql + "\n```\n")
+	return []byte("---\ntype: reference\nstatus: draft\ntitle: \"" + title + "\"\n" +
+		"summary: \"Fixture applet for store tests\"\n" +
+		"---\n\n# " + title + "\n\nProse.\n\n```sql\n" + sql + "\n```\n")
 }
 
 func TestStoreSaveMintsAndPersists(t *testing.T) {
@@ -108,7 +110,8 @@ func TestStoreRefusals(t *testing.T) {
 
 	// The committed corpus wins slug collisions (O4-D3).
 	committed := &AppletDef{
-		Slug: "taken", Title: "Taken", SQL: "SELECT 1",
+		Slug: "taken", Title: "Taken", Summary: "Fixture applet for store tests",
+		SQL:   "SELECT 1",
 		Class: analysis.QuerySecurityRead, Topics: []app.TopicT{app.TopicSql},
 	}
 	require.NoError(t, reg.RegisterFactory(manifestFor(committed, nil), func() (app.AppI, error) {
@@ -139,7 +142,7 @@ func TestStoreRefusals(t *testing.T) {
 // document the creator composes is accepted and parsed back to the same
 // buffer by the store's gate (O4-D5 / §SD1's pasteable-complete invariant).
 func TestComposeRoundTrip(t *testing.T) {
-	doc, err := appletstore.ComposeAppletDoc("Röund \"trip\"", "🧪", "introspection", "SET param_x = 1;\nSELECT {x:UInt64}")
+	doc, err := appletstore.ComposeAppletDoc("Röund \"trip\"", "Round-trip the composer against the parser", "🧪", "introspection", "SET param_x = 1;\nSELECT {x:UInt64}")
 	require.NoError(t, err)
 	def, err := ParseDocSource("store", "round-trip.md", doc)
 	require.NoError(t, err)

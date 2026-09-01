@@ -21,7 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // CodecI is the wire-format contract. Implementations must be goroutine-
@@ -115,7 +115,7 @@ func Lookup[T any]() (c CodecI) {
 func Encode[T any](v T) (b []byte, err error) {
 	b, err = Lookup[T]().Encode(v)
 	if err != nil {
-		err = eh.Errorf("buscodec: encode %T: %w", v, err)
+		err = eb.Build().Type("value", v).Errorf("buscodec: encode failed: %w", err)
 		return
 	}
 	return
@@ -125,7 +125,7 @@ func Encode[T any](v T) (b []byte, err error) {
 func Decode[T any](b []byte) (v T, err error) {
 	err = Lookup[T]().Decode(b, &v)
 	if err != nil {
-		err = eh.Errorf("buscodec: decode %T: %w", v, err)
+		err = eb.Build().Type("value", v).Errorf("buscodec: decode failed: %w", err)
 		return
 	}
 	return
@@ -141,7 +141,7 @@ func Reply[T any](pub PublishFunc, subject string, v T) (err error) {
 	}
 	err = pub(subject, b)
 	if err != nil {
-		err = eh.Errorf("buscodec: publish %T on %s: %w", v, subject, err)
+		err = eb.Build().Type("value", v).Str("subject", subject).Errorf("buscodec: publish failed: %w", err)
 		return
 	}
 	return

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
 )
@@ -144,7 +145,7 @@ type snapReader struct {
 
 func (r *snapReader) take(n int) (out []byte, err error) {
 	if n < 0 || r.pos+n > len(r.data) {
-		err = eh.Errorf("truncated at offset %d (need %d bytes): %w", r.pos, n, ErrBadSnapshot)
+		err = eb.Build().Int("offset", r.pos).Int("need", n).Errorf("truncated snapshot: %w", ErrBadSnapshot)
 		return
 	}
 	out = r.data[r.pos : r.pos+n]
@@ -155,7 +156,7 @@ func (r *snapReader) take(n int) (out []byte, err error) {
 func (r *snapReader) uvarint() (v uint64, err error) {
 	v, n := binary.Uvarint(r.data[r.pos:])
 	if n <= 0 {
-		err = eh.Errorf("bad uvarint at offset %d: %w", r.pos, ErrBadSnapshot)
+		err = eb.Build().Int("pos", r.pos).Errorf("bad uvarint at offset: %w", ErrBadSnapshot)
 		return
 	}
 	r.pos += n
@@ -165,7 +166,7 @@ func (r *snapReader) uvarint() (v uint64, err error) {
 func (r *snapReader) varint() (v int64, err error) {
 	v, n := binary.Varint(r.data[r.pos:])
 	if n <= 0 {
-		err = eh.Errorf("bad varint at offset %d: %w", r.pos, ErrBadSnapshot)
+		err = eb.Build().Int("pos", r.pos).Errorf("bad varint at offset: %w", ErrBadSnapshot)
 		return
 	}
 	r.pos += n
@@ -215,7 +216,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 		return
 	}
 	if string(magic) != snapshotMagic {
-		err = eh.Errorf("magic %q: %w", magic, ErrBadSnapshot)
+		err = eb.Build().Bytes("magic", magic).Errorf("magic: %w", ErrBadSnapshot)
 		return
 	}
 
@@ -242,7 +243,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			g.contents[id] = bytes.Clone(raw)
 			return nil
 		default:
-			return eh.Errorf("content flag %d: %w", flag, ErrBadSnapshot)
+			return eb.Build().Uint8("flag", flag).Errorf("content flag: %w", ErrBadSnapshot)
 		}
 	}
 
@@ -251,7 +252,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 		return
 	}
 	if nLive > maxSnapshotCount {
-		err = eh.Errorf("live count %d: %w", nLive, ErrBadSnapshot)
+		err = eb.Build().Uint64("nLive", nLive).Errorf("live count: %w", ErrBadSnapshot)
 		return
 	}
 	for range nLive {
@@ -261,7 +262,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			return
 		}
 		if g.nodes.Contains(id) {
-			err = eh.Errorf("duplicate live node %v: %w", id, ErrBadSnapshot)
+			err = eb.Build().Stringer("id", id).Errorf("duplicate live node: %w", ErrBadSnapshot)
 			return
 		}
 		g.nodes.Add(id)
@@ -275,7 +276,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 		return
 	}
 	if nDeleted > maxSnapshotCount {
-		err = eh.Errorf("deleted count %d: %w", nDeleted, ErrBadSnapshot)
+		err = eb.Build().Uint64("nDeleted", nDeleted).Errorf("deleted count: %w", ErrBadSnapshot)
 		return
 	}
 	for range nDeleted {
@@ -285,7 +286,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			return
 		}
 		if g.nodes.Contains(id) || g.deletedNodes.Contains(id) {
-			err = eh.Errorf("node %v in both sections or duplicated: %w", id, ErrBadSnapshot)
+			err = eb.Build().Stringer("id", id).Errorf("node in both sections or duplicated: %w", ErrBadSnapshot)
 			return
 		}
 		g.deletedNodes.Add(id)
@@ -307,12 +308,12 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			if _, present := g.contents[id]; present {
 				// SweepTombstones destroys the bytes when it sets the
 				// marker; purged-with-content is engine-impossible.
-				err = eh.Errorf("tombstone %v purged but carrying content: %w", id, ErrBadSnapshot)
+				err = eb.Build().Stringer("id", id).Errorf("tombstone purged but carrying content: %w", ErrBadSnapshot)
 				return
 			}
 			g.contentPurged[id] = struct{}{}
 		} else if purged != 0 {
-			err = eh.Errorf("purged flag %d: %w", purged, ErrBadSnapshot)
+			err = eb.Build().Uint8("purged", purged).Errorf("purged flag: %w", ErrBadSnapshot)
 			return
 		}
 		nDel, e := r.uvarint()
@@ -324,11 +325,11 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			// Engine states always record at least one deleter per
 			// tombstone (DeleteNode records, the last UndeleteNode
 			// resurrects); a zero-deleter tombstone is corruption.
-			err = eh.Errorf("tombstone %v with no deleters: %w", id, ErrBadSnapshot)
+			err = eb.Build().Stringer("id", id).Errorf("tombstone with no deleters: %w", ErrBadSnapshot)
 			return
 		}
 		if nDel > maxSnapshotCount {
-			err = eh.Errorf("deleter count %d: %w", nDel, ErrBadSnapshot)
+			err = eb.Build().Uint64("nDel", nDel).Errorf("deleter count: %w", ErrBadSnapshot)
 			return
 		}
 		for range nDel {
@@ -346,7 +347,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 		return
 	}
 	if nSources > maxSnapshotCount {
-		err = eh.Errorf("source count %d: %w", nSources, ErrBadSnapshot)
+		err = eb.Build().Uint64("nSources", nSources).Errorf("source count: %w", ErrBadSnapshot)
 		return
 	}
 	for range nSources {
@@ -361,7 +362,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			return
 		}
 		if nEdges > maxSnapshotCount {
-			err = eh.Errorf("edge count %d: %w", nEdges, ErrBadSnapshot)
+			err = eb.Build().Uint64("nEdges", nEdges).Errorf("edge count: %w", ErrBadSnapshot)
 			return
 		}
 		for range nEdges {
@@ -376,7 +377,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 				return
 			}
 			if t.EdgeKindE(kind) == t.EdgeKindPseudo || kind > byte(t.EdgeKindPseudo) {
-				err = eh.Errorf("edge kind %d: %w", kind, ErrBadSnapshot)
+				err = eb.Build().Uint8("kind", kind).Errorf("edge kind: %w", ErrBadSnapshot)
 				return
 			}
 			by, e := r.hash()
@@ -385,7 +386,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 				return
 			}
 			if !g.HasNode(src) || !g.HasNode(dest) {
-				err = eh.Errorf("edge %v->%v references unknown node: %w", src, dest, ErrBadSnapshot)
+				err = eb.Build().Stringer("src", src).Stringer("dest", dest).Errorf("edge references an unknown node: %w", ErrBadSnapshot)
 				return
 			}
 			// Edge kinds always reflect endpoint liveness in engine
@@ -395,12 +396,12 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 			switch t.EdgeKindE(kind) {
 			case t.EdgeKindLive:
 				if anyDeleted {
-					err = eh.Errorf("live edge %v->%v with tombstoned endpoint: %w", src, dest, ErrBadSnapshot)
+					err = eb.Build().Stringer("src", src).Stringer("dest", dest).Errorf("live edge has a tombstoned endpoint: %w", ErrBadSnapshot)
 					return
 				}
 			case t.EdgeKindDeleted:
 				if !anyDeleted {
-					err = eh.Errorf("deleted-kind edge %v->%v with both endpoints live: %w", src, dest, ErrBadSnapshot)
+					err = eb.Build().Stringer("src", src).Stringer("dest", dest).Errorf("deleted-kind edge has both endpoints live: %w", ErrBadSnapshot)
 					return
 				}
 			}
@@ -408,7 +409,7 @@ func DecodeSnapshot(data []byte) (g *PushoutGraph, err error) {
 		}
 	}
 	if r.pos != len(r.data) {
-		err = eh.Errorf("%d trailing bytes: %w", len(r.data)-r.pos, ErrBadSnapshot)
+		err = eb.Build().Int("trailing", len(r.data)-r.pos).Errorf("snapshot has trailing bytes: %w", ErrBadSnapshot)
 		return
 	}
 	if !g.nodes.Contains(t.RootNodeID) {

@@ -1,4 +1,4 @@
-package windowhost
+package launcher
 
 import (
 	"testing"
@@ -15,6 +15,7 @@ func mkTopicManifest(id string, display string, topics ...app.TopicT) (m app.Man
 		Version: "0.1.0",
 		Display: display,
 		Topics:  topics,
+		Summary: "fixture summary",
 		Surface: app.SurfaceWindowed,
 	}
 	return
@@ -103,8 +104,8 @@ func TestGroupByTopic_TieBrokenByIdWhenDisplayIdentical(t *testing.T) {
 
 func TestFilterManifests_EmptyQueryReturnsInput(t *testing.T) {
 	in := []app.Manifest{mkTopicManifest("a", "A", app.TopicData)}
-	assert.Equal(t, in, filterManifests(in, launcherFilter{query: ""}))
-	assert.Equal(t, in, filterManifests(in, launcherFilter{query: "   \t "}))
+	assert.Equal(t, in, filterManifests(in, filterT{query: ""}, nil))
+	assert.Equal(t, in, filterManifests(in, filterT{query: "   \t "}, nil))
 }
 
 func TestFilterManifests_CaseInsensitiveDisplayMatch(t *testing.T) {
@@ -112,7 +113,7 @@ func TestFilterManifests_CaseInsensitiveDisplayMatch(t *testing.T) {
 		mkTopicManifest("a", "SQL Playground", app.TopicSql),
 		mkTopicManifest("b", "Log viewer", app.TopicRuntime),
 	}
-	assert.Equal(t, []string{"SQL Playground"}, displaysOf(filterManifests(in, launcherFilter{query: "playGROUND"})))
+	assert.Equal(t, []string{"SQL Playground"}, displaysOf(filterManifests(in, filterT{query: "playGROUND"}, nil)))
 }
 
 func TestFilterManifests_TopicMatchSurfacesEveryAppOnThatSubject(t *testing.T) {
@@ -125,7 +126,7 @@ func TestFilterManifests_TopicMatchSurfacesEveryAppOnThatSubject(t *testing.T) {
 	}
 	assert.Equal(t,
 		[]string{"Go dependency explorer", "Go packages"},
-		displaysOf(filterManifests(in, launcherFilter{query: "code"})))
+		displaysOf(filterManifests(in, filterT{query: "code"}, nil)))
 }
 
 func TestFilterManifests_KeywordMatchesWhatTheNameDoesNot(t *testing.T) {
@@ -136,21 +137,21 @@ func TestFilterManifests_KeywordMatchesWhatTheNameDoesNot(t *testing.T) {
 	in := []app.Manifest{m, mkTopicManifest("other", "Fibscope", app.TopicData)}
 
 	for _, q := range []string{"cpu", "htop", "process"} {
-		assert.Equal(t, []string{"imztop"}, displaysOf(filterManifests(in, launcherFilter{query: q})),
+		assert.Equal(t, []string{"imztop"}, displaysOf(filterManifests(in, filterT{query: q}, nil)),
 			"keyword %q must reach the app", q)
 	}
 }
 
 func TestFilterManifests_NoMatchReturnsEmpty(t *testing.T) {
 	in := []app.Manifest{mkTopicManifest("a", "Alpha", app.TopicData)}
-	assert.Empty(t, filterManifests(in, launcherFilter{query: "zzzz"}))
+	assert.Empty(t, filterManifests(in, filterT{query: "zzzz"}, nil))
 }
 
 func TestFilterManifests_IdNotMatched(t *testing.T) {
 	// Every id contains "github", so matching on it would return the whole
 	// registry for a common substring.
 	in := []app.Manifest{mkTopicManifest("github.com/stergiotis/boxer/apps/x", "Alpha", app.TopicData)}
-	assert.Empty(t, filterManifests(in, launcherFilter{query: "stergiotis"}))
+	assert.Empty(t, filterManifests(in, filterT{query: "stergiotis"}, nil))
 }
 
 // --- the battery query model (ADR-0164 §SD2) --------------------------------
@@ -164,11 +165,11 @@ func TestFilterManifests_RegexTokenMatches(t *testing.T) {
 	// Anchors, alternation, and wildcards are the point of the battery: the
 	// elision the retired subsequence tier guessed at is now written down.
 	assert.Equal(t, []string{"Go dependency explorer"},
-		displaysOf(filterManifests(in, launcherFilter{query: `g.*dep`})))
+		displaysOf(filterManifests(in, filterT{query: `g.*dep`}, nil)))
 	assert.Equal(t, []string{"Go dependency explorer", "Terrain scope"},
-		displaysOf(filterManifests(in, launcherFilter{query: `explorer|scope`})))
+		displaysOf(filterManifests(in, filterT{query: `explorer|scope`}, nil)))
 	assert.Equal(t, []string{"Log viewer"},
-		displaysOf(filterManifests(in, launcherFilter{query: `^log`})))
+		displaysOf(filterManifests(in, filterT{query: `^log`}, nil)))
 }
 
 func TestFilterManifests_SubsequenceNoLongerMatches(t *testing.T) {
@@ -176,7 +177,7 @@ func TestFilterManifests_SubsequenceNoLongerMatches(t *testing.T) {
 	// a plain token is a substring pattern, never an elision. Guarding it so
 	// a future "helpful" fuzzy tier has to argue with a test first.
 	in := []app.Manifest{mkTopicManifest("a", "Go dependency explorer", app.TopicCode)}
-	assert.Empty(t, filterManifests(in, launcherFilter{query: "gdep"}))
+	assert.Empty(t, filterManifests(in, filterT{query: "gdep"}, nil))
 }
 
 func TestFilterManifests_SpaceMeansAnd(t *testing.T) {
@@ -187,11 +188,11 @@ func TestFilterManifests_SpaceMeansAnd(t *testing.T) {
 	// Every token must hit some field — and the fields differ per token, so
 	// "code" (a topic) AND "explorer" (the display name) is satisfiable.
 	assert.Equal(t, []string{"Go dependency explorer"},
-		displaysOf(filterManifests(in, launcherFilter{query: "code explorer"})))
+		displaysOf(filterManifests(in, filterT{query: "code explorer"}, nil)))
 	// Order across tokens carries no meaning, unlike a single substring.
 	assert.Equal(t, []string{"Go dependency explorer"},
-		displaysOf(filterManifests(in, launcherFilter{query: "dependency go"})))
-	assert.Empty(t, filterManifests(in, launcherFilter{query: "go zzzz"}))
+		displaysOf(filterManifests(in, filterT{query: "dependency go"}, nil)))
+	assert.Empty(t, filterManifests(in, filterT{query: "go zzzz"}, nil))
 }
 
 func TestFilterManifests_UncompilablePatternDegradesToLiteral(t *testing.T) {
@@ -200,7 +201,7 @@ func TestFilterManifests_UncompilablePatternDegradesToLiteral(t *testing.T) {
 	m := mkTopicManifest("a", "quantile(0.99) inspector", app.TopicData)
 	in := []app.Manifest{m, mkTopicManifest("b", "Log viewer", app.TopicRuntime)}
 	assert.Equal(t, []string{"quantile(0.99) inspector"},
-		displaysOf(filterManifests(in, launcherFilter{query: "quantile("})))
+		displaysOf(filterManifests(in, filterT{query: "quantile("}, nil)))
 
 	b := launcherBattery("quantile(")
 	require.Len(t, b.Patterns, 1)
@@ -219,7 +220,7 @@ func TestFilterManifests_RanksDisplayOverTopicOverKeyword(t *testing.T) {
 	}
 	assert.Equal(t,
 		[]string{"Code volume", "Go packages", "Repo explorer"},
-		displaysOf(filterManifests(in, launcherFilter{query: "code"})))
+		displaysOf(filterManifests(in, filterT{query: "code"}, nil)))
 }
 
 func TestFilterManifests_TiesBreakByDisplayThenId(t *testing.T) {
@@ -230,7 +231,7 @@ func TestFilterManifests_TiesBreakByDisplayThenId(t *testing.T) {
 		mkTopicManifest("c", "Charlie", app.TopicData),
 		mkTopicManifest("a", "Same", app.TopicData),
 	}
-	hits := filterManifests(in, launcherFilter{query: "a"})
+	hits := filterManifests(in, filterT{query: "a"}, nil)
 	assert.Equal(t, []string{"Charlie", "Same", "Same"}, displaysOf(hits))
 	assert.Equal(t, []app.AppIdT{"c", "a", "z"},
 		[]app.AppIdT{hits[0].Id, hits[1].Id, hits[2].Id})
@@ -264,7 +265,7 @@ func TestFilterManifests_FacetOnlyFilterKeepsInputOrder(t *testing.T) {
 		mkTopicManifest("g", "Gamma", app.TopicGeo),
 	}
 	assert.Equal(t, []string{"Charlie", "Alpha"},
-		displaysOf(filterManifests(in, launcherFilter{topics: topicFilterT(0).toggledAt(ci)})))
+		displaysOf(filterManifests(in, filterT{topics: topicFilterT(0).toggledAt(ci)}, nil)))
 }
 
 func TestScoreManifest_EmptyBatteryQualifiesNothing(t *testing.T) {
@@ -277,11 +278,27 @@ func TestScoreManifest_EmptyBatteryQualifiesNothing(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestTopicSuffix(t *testing.T) {
-	assert.Equal(t, "", topicSuffix(mkTopicManifest("a", "A")))
-	assert.Equal(t, "code", topicSuffix(mkTopicManifest("a", "A", app.TopicCode)))
-	assert.Equal(t, "code · topology",
-		topicSuffix(mkTopicManifest("a", "A", app.TopicCode, app.TopicTopology)))
+// TestTopicLabel_RendersWithoutChangingTheVocabulary replaces the old
+// topicSuffix test. That function appended an app's topics to its row label in
+// the flattened search view, because the section header no longer carried them
+// — a job ADR-0214's summary line does better, so it is gone.
+//
+// What remains worth pinning is §SD10's split: the label is presentation, the
+// token is the contract. A label that leaked back into the wire would break
+// `--launch has(topics, 'observability')` and the introspection column with
+// it, so the test asserts both halves rather than the spelling of any one
+// label.
+func TestTopicLabel_RendersWithoutChangingTheVocabulary(t *testing.T) {
+	for _, tp := range app.AllTopics {
+		label := topicLabel(tp)
+		assert.NotEmpty(t, label, "%s: every registered topic needs a label", tp)
+		assert.Equal(t, string(tp), tp.String(),
+			"%s: the token is the wire value and must not follow the label", tp)
+	}
+	// An unregistered topic cannot reach a rendered row through a validated
+	// manifest; falling back to the token is what keeps it debuggable if one
+	// ever does.
+	assert.Equal(t, "not-a-topic", topicLabel(app.TopicT("not-a-topic")))
 }
 
 func TestSortManifestsByDisplay_DisplayThenId(t *testing.T) {
@@ -378,7 +395,7 @@ func TestFilterManifests_KindFilterAppliesWithoutAQuery(t *testing.T) {
 	}
 	hidden := kindFilterT(0).toggled(app.KindDemo)
 	assert.Equal(t, []string{"Plain app", "An applet"},
-		displaysOf(filterManifests(in, launcherFilter{kinds: hidden})))
+		displaysOf(filterManifests(in, filterT{kinds: hidden}, nil)))
 }
 
 func TestFilterManifests_KindAndQueryCompose(t *testing.T) {
@@ -388,7 +405,7 @@ func TestFilterManifests_KindAndQueryCompose(t *testing.T) {
 	}
 	hidden := kindFilterT(0).toggled(app.KindDemo)
 	assert.Equal(t, []string{"Widget inspector"},
-		displaysOf(filterManifests(in, launcherFilter{query: "widget", kinds: hidden})),
+		displaysOf(filterManifests(in, filterT{query: "widget", kinds: hidden}, nil)),
 		"the query matches both; the kind filter must still remove one")
 }
 
@@ -535,8 +552,8 @@ func TestFilterManifests_TopicChipsNarrowWithoutAQuery(t *testing.T) {
 		mkTopicManifest("b", "Terrain scope", app.TopicGeo),
 	}
 	ci, _ := topicIndex(app.TopicCode)
-	f := launcherFilter{topics: topicFilterT(0).toggledAt(ci)}
-	assert.Equal(t, []string{"Go packages"}, displaysOf(filterManifests(in, f)))
+	f := filterT{topics: topicFilterT(0).toggledAt(ci)}
+	assert.Equal(t, []string{"Go packages"}, displaysOf(filterManifests(in, f, nil)))
 }
 
 func TestFilterManifests_AllThreeAxesCompose(t *testing.T) {
@@ -549,7 +566,7 @@ func TestFilterManifests_AllThreeAxesCompose(t *testing.T) {
 	geo := mkTopicManifest("c", "Go terrain", app.TopicGeo)
 
 	ci, _ := topicIndex(app.TopicCode)
-	f := launcherFilter{
+	f := filterT{
 		query:  "go",
 		kinds:  kindFilterT(0).toggled(app.KindDemo),
 		topics: topicFilterT(0).toggledAt(ci),
@@ -557,15 +574,15 @@ func TestFilterManifests_AllThreeAxesCompose(t *testing.T) {
 	// "go" matches all three; the demo is hidden by kind, the geo entry by
 	// topic. Only the applet survives.
 	assert.Equal(t, []string{"Go packages"},
-		displaysOf(filterManifests([]app.Manifest{code, demo, geo}, f)))
+		displaysOf(filterManifests([]app.Manifest{code, demo, geo}, f, nil)))
 }
 
 func TestLauncherFilter_IsInert(t *testing.T) {
-	assert.True(t, launcherFilter{}.isInert())
-	assert.True(t, launcherFilter{query: "  \t "}.isInert(), "a whitespace query restricts nothing")
-	assert.False(t, launcherFilter{query: "x"}.isInert())
-	assert.False(t, launcherFilter{kinds: kindFilterT(0).toggled(app.KindDemo)}.isInert())
-	assert.False(t, launcherFilter{topics: topicFilterT(1)}.isInert())
+	assert.True(t, filterT{}.isInert())
+	assert.True(t, filterT{query: "  \t "}.isInert(), "a whitespace query restricts nothing")
+	assert.False(t, filterT{query: "x"}.isInert())
+	assert.False(t, filterT{kinds: kindFilterT(0).toggled(app.KindDemo)}.isInert())
+	assert.False(t, filterT{topics: topicFilterT(1)}.isInert())
 }
 
 func TestEmptyResultHint_NamesWhichFilterIsResponsible(t *testing.T) {

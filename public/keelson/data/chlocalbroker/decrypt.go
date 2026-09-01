@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // OpenDatasetPlaintext serves the decryption of a sealed dataset
@@ -21,21 +21,21 @@ import (
 func (inst *Service) OpenDatasetPlaintext(ref adhocdata.Ref) (rc adhocdata.PlaintextI, err error) {
 	key, ok := inst.keys.LookupDatasetKey(ref.Handle)
 	if !ok {
-		return nil, eh.Errorf("chlocalbroker: no key registered for dataset %q", ref.Handle)
+		return nil, eb.Build().Str("handle", ref.Handle).Errorf("chlocalbroker: no key registered for dataset")
 	}
 	f, err := os.Open(ref.Path)
 	if err != nil {
-		return nil, eh.Errorf("chlocalbroker: open dataset %q: %w", ref.Handle, err)
+		return nil, eb.Build().Str("handle", ref.Handle).Errorf("chlocalbroker: open dataset: %w", err)
 	}
 	st, err := f.Stat()
 	if err != nil {
 		_ = f.Close()
-		return nil, eh.Errorf("chlocalbroker: stat dataset %q: %w", ref.Handle, err)
+		return nil, eb.Build().Str("handle", ref.Handle).Errorf("chlocalbroker: stat dataset: %w", err)
 	}
 	ar, err := adhocdata.NewSeekableReader(f, st.Size(), key)
 	if err != nil {
 		_ = f.Close()
-		return nil, eh.Errorf("chlocalbroker: decrypt reader %q: %w", ref.Handle, err)
+		return nil, eb.Build().Str("handle", ref.Handle).Errorf("chlocalbroker: decrypt reader: %w", err)
 	}
 	return &datasetReadCloser{SeekableReader: ar, c: f}, nil
 }

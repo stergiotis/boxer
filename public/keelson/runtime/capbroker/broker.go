@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // BrokerAppId is the synthetic AppId the broker registers under on the bus.
@@ -84,7 +85,7 @@ func NewBroker(inst *inprocbus.Inst, log zerolog.Logger, policy GrantPolicyI) (b
 	})
 	b.unsub, err = b.busClient.Subscribe(RequestSubject, b.handleRequest)
 	if err != nil {
-		err = eh.Errorf("broker: subscribe %s: %w", RequestSubject, err)
+		err = eb.Build().Str("requestSubject", RequestSubject).Errorf("broker: subscribe: %w", err)
 		return
 	}
 	return

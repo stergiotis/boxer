@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/fibonacci"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/identity/tagmint"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 )
 
 // The claims live in package state, so tests that claim must not reuse a
@@ -53,8 +54,9 @@ func TestClaimRefusesADuplicateValue(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tagmint.Claim("tagmintTestBAgain", tvTestB, 10)
 	require.Error(t, err, "ids under one tag value are one id space")
-	assert.Contains(t, err.Error(), "tagmintTestB", "the error names the first claimant")
-	assert.Contains(t, err.Error(), "tagmint_test.go", "and where it claimed")
+	f := ebtest.Fields(t, err)
+	assert.Equal(t, "tagmintTestB", f["claimant"], "the error names the first claimant")
+	assert.Contains(t, f["claimedAt"], "tagmint_test.go", "and where it claimed")
 }
 
 func TestClaimRefusesADuplicateName(t *testing.T) {
@@ -74,7 +76,7 @@ func TestClaimRefusesAValueTooNarrowForTheDeclaredCardinality(t *testing.T) {
 
 	_, err = tagmint.Claim("tagmintTestTooMany", cl.TagValueMinIncl+7, cl.MaxBodyIncl+1)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "fewer than")
+	assert.Contains(t, err.Error(), "fewer")
 
 	// One below the class ceiling fits, and claims the value for good.
 	_, err = tagmint.Claim("tagmintTestFits", cl.TagValueMinIncl+7, cl.MaxBodyIncl)
@@ -98,7 +100,7 @@ func TestRuntimeMintIsReservedByAClaim(t *testing.T) {
 
 	_, err := tagmint.Claim("tagmintTestStealsTheReservation", tagmint.RuntimeMintTagValue, 10)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "runtimeMint")
+	assert.Contains(t, ebtest.Text(t, err), "runtimeMint")
 }
 
 // The two constants are the split this decision rests on: 32 bits of tag, 32

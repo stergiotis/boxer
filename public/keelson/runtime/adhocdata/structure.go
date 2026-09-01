@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // maxColumnNameLen bounds one structure identifier — a top-level column
@@ -116,7 +117,7 @@ func chTypeFor(dt arrow.DataType, nullable bool, colName string) (chType string,
 func arrayTypeFor(dt arrow.DataType, colName string) (chType string, err error) {
 	ll, ok := dt.(arrow.ListLikeType)
 	if !ok {
-		return "", eh.Errorf("adhocdata: column %q: list type %s exposes no element field", colName, dt)
+		return "", eb.Build().Str("colName", colName).Stringer("dataType", dt).Errorf("adhocdata: column: list type exposes no element field")
 	}
 	elem := ll.ElemField()
 	inner, err := chTypeFor(elem.Type, elem.Nullable, colName)
@@ -132,11 +133,11 @@ func arrayTypeFor(dt arrow.DataType, colName string) (chType string, err error) 
 func tupleTypeFor(dt arrow.DataType, colName string) (chType string, err error) {
 	st, ok := dt.(*arrow.StructType)
 	if !ok {
-		return "", eh.Errorf("adhocdata: column %q: struct type assertion failed", colName)
+		return "", eb.Build().Str("colName", colName).Errorf("adhocdata: column: struct type assertion failed")
 	}
 	fields := st.Fields()
 	if len(fields) == 0 {
-		return "", eh.Errorf("adhocdata: column %q: an empty struct has no ClickHouse Tuple representation", colName)
+		return "", eb.Build().Str("colName", colName).Errorf("adhocdata: column: an empty struct has no ClickHouse Tuple representation")
 	}
 	var b strings.Builder
 	b.WriteString("Tuple(")
@@ -165,7 +166,7 @@ func tupleTypeFor(dt arrow.DataType, colName string) (chType string, err error) 
 func mapTypeFor(dt arrow.DataType, colName string) (chType string, err error) {
 	mt, ok := dt.(*arrow.MapType)
 	if !ok {
-		return "", eh.Errorf("adhocdata: column %q: map type assertion failed", colName)
+		return "", eb.Build().Str("colName", colName).Errorf("adhocdata: column: map type assertion failed")
 	}
 	key, kErr := chTypeFor(mt.KeyType(), false, colName)
 	if kErr != nil {
@@ -214,13 +215,13 @@ func scalarTypeFor(dt arrow.DataType, colName string) (chType string, err error)
 	case arrow.FIXED_SIZE_BINARY:
 		fsb, ok := dt.(*arrow.FixedSizeBinaryType)
 		if !ok {
-			return "", eh.Errorf("adhocdata: column %q: fixed-size binary type assertion failed", colName)
+			return "", eb.Build().Str("colName", colName).Errorf("adhocdata: column: fixed-size binary type assertion failed")
 		}
 		chType = "FixedString(" + strconv.Itoa(fsb.ByteWidth) + ")"
 	case arrow.TIMESTAMP:
 		ts, ok := dt.(*arrow.TimestampType)
 		if !ok {
-			return "", eh.Errorf("adhocdata: column %q: timestamp type assertion failed", colName)
+			return "", eb.Build().Str("colName", colName).Errorf("adhocdata: column: timestamp type assertion failed")
 		}
 		var prec string
 		switch ts.Unit {
@@ -229,7 +230,7 @@ func scalarTypeFor(dt arrow.DataType, colName string) (chType string, err error)
 		case arrow.Nanosecond:
 			prec = "9"
 		default:
-			return "", eh.Errorf("adhocdata: column %q: timestamp unit must be microsecond or nanosecond", colName)
+			return "", eb.Build().Str("colName", colName).Errorf("adhocdata: column: timestamp unit must be microsecond or nanosecond")
 		}
 		// A UTC zone round-trips as an explicit tz; an empty zone is
 		// timezone-naive and maps to a bare DateTime64(N). Fabricating a UTC
@@ -242,10 +243,10 @@ func scalarTypeFor(dt arrow.DataType, colName string) (chType string, err error)
 		case "":
 			chType = "DateTime64(" + prec + ")"
 		default:
-			return "", eh.Errorf("adhocdata: column %q: timestamp timezone must be UTC or empty (naive), got %q", colName, ts.TimeZone)
+			return "", eb.Build().Str("colName", colName).Str("timeZone", ts.TimeZone).Errorf("adhocdata: column timestamp timezone must be UTC or empty (naive)")
 		}
 	default:
-		return "", eh.Errorf("adhocdata: column %q: arrow type %s is not in the supported set", colName, dt)
+		return "", eb.Build().Str("colName", colName).Stringer("dataType", dt).Errorf("adhocdata: column: arrow type is not in the supported set")
 	}
 	return
 }
@@ -257,10 +258,10 @@ func scalarTypeFor(dt arrow.DataType, colName string) (chType string, err error)
 // leeway columnar schema carries passes unchanged.
 func checkColumnName(name, col string) (err error) {
 	if name == "" {
-		return eh.Errorf("adhocdata: column %q: a column or nested field name may not be empty", col)
+		return eb.Build().Str("col", col).Errorf("adhocdata: column: a column or nested field name may not be empty")
 	}
 	if len(name) > maxColumnNameLen {
-		return eh.Errorf("adhocdata: column %q: name %q exceeds %d bytes", col, name, maxColumnNameLen)
+		return eb.Build().Str("col", col).Str("name", name).Int("maxColumnNameLen", maxColumnNameLen).Errorf("adhocdata: column name is longer than the limit")
 	}
 	return nil
 }

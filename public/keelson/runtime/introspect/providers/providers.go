@@ -147,6 +147,10 @@ func appsTable(rs []app.Registration) *introspect.Table {
 		String("version", func(i int) string { return m(i).Version }).
 		String("display", func(i int) string { return m(i).Display }).
 		String("title", func(i int) string { return m(i).WindowTitle() }).
+		// The launcher's row subtitle (ADR-0214 §SD4): what the app does.
+		// Required for windowed apps, so an empty value here is a headless
+		// app rather than an unfilled field.
+		String("summary", func(i int) string { return m(i).Summary }).
 		String("icon", func(i int) string { return m(i).Icon }).
 		StringList("topics", func(i int) []string { return topicStrings(m(i).Topics) }).
 		StringList("keywords", func(i int) []string { return m(i).Keywords }).

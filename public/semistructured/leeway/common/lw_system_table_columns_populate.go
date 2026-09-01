@@ -1,7 +1,7 @@
 package common
 
 import (
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"hash/fnv"
@@ -132,7 +132,7 @@ func PopulateSchemaTable(entity *InEntitySystemTableColumns, ir *IntermediateTab
 
 			err = entity.CommitEntity()
 			if err != nil {
-				err = eh.Errorf("unable to commit entity for column %s at index %d: %w", name, globalIndex, err)
+				err = eb.Build().Stringer("name", name).Uint32("globalIndex", globalIndex).Errorf("unable to commit the entity for this column: %w", err)
 				return
 			}
 		}

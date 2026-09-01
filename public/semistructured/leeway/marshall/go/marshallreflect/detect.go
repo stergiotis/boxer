@@ -145,7 +145,7 @@ func DetectContract(readers *SectionReaders, i int, lookup LookupI, c mappingpla
 	}
 	for _, section := range c.Sections() {
 		if sr, ok := readers.sections[section]; !ok || sr.attrs == nil || sr.membs == nil {
-			err = eb.Build().Str("kind", c.Kind).Str("section", section).Errorf("SectionReaders has no reader for section %s, which kind %s claims", section, c.Kind)
+			err = eb.Build().Str("kind", c.Kind).Str("section", section).Errorf("SectionReaders has no reader for a section this kind claims")
 			return
 		}
 	}
@@ -260,7 +260,7 @@ func (inst *SectionReaders) ReadComponent[T any](i int, lookup LookupI, opts ...
 	case mappingplan.PresenceAbsent:
 		return
 	case mappingplan.PresenceApproximate:
-		err = eb.Build().Str("kind", c.Kind).Int("row", i).Errorf("row carries kind %s but does not conform to it — a slot holds more attributes than the DTO admits; decode it with Unmarshal to see which", c.Kind)
+		err = eb.Build().Str("kind", c.Kind).Int("row", i).Errorf("row carries a kind it does not conform to — a slot holds more attributes than the DTO admits; decode it with Unmarshal to see which")
 		return
 	}
 

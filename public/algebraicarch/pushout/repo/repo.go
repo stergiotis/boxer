@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
@@ -168,26 +169,26 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 		h := applied[i]
 		framed, gerr := opts.Storage.GetEnvelope(ctx, h)
 		if gerr != nil {
-			err = eh.Errorf("applied %s has no envelope: %w", h, errors.Join(ErrCorruptStore, gerr))
+			err = eb.Build().Stringer("patchHash", h).Errorf("applied has no envelope: %w", errors.Join(ErrCorruptStore, gerr))
 			return
 		}
 		env, codecName, derr := opts.Codecs.Decode(framed)
 		if derr != nil {
-			err = eh.Errorf("applied %s: %w", h, errors.Join(ErrCorruptStore, derr))
+			err = eb.Build().Stringer("patchHash", h).Errorf("applied: %w", errors.Join(ErrCorruptStore, derr))
 			return
 		}
 		if env.Patch.Hash != h {
-			err = eh.Errorf("envelope for %s carries patch %s: %w", h, env.Patch.Hash, ErrCorruptStore)
+			err = eb.Build().Stringer("patchHash", h).Stringer("hash", env.Patch.Hash).Errorf("the stored envelope carries a different patch than the key it is filed under: %w", ErrCorruptStore)
 			return
 		}
 		for _, dep := range env.Patch.Dependencies {
 			if _, ok := r0.appliedSet[dep]; !ok {
-				err = eh.Errorf("applied %s precedes its dependency %s: %w", h, dep, ErrCorruptStore)
+				err = eb.Build().Stringer("patchHash", h).Stringer("dep", dep).Errorf("applied precedes its dependency: %w", ErrCorruptStore)
 				return
 			}
 		}
 		if aerr := env.Patch.Apply(r0.g); aerr != nil {
-			err = eh.Errorf("replay %s: %w", h, errors.Join(ErrCorruptStore, aerr))
+			err = eb.Build().Stringer("patchHash", h).Errorf("replay: %w", errors.Join(ErrCorruptStore, aerr))
 			return
 		}
 		r0.appliedSet[h] = struct{}{}
@@ -276,7 +277,7 @@ func (inst *Repo) Record(ctx context.Context, author, message string, changes []
 			break
 		}
 		if attempt > 16 {
-			err = eh.Errorf("applied patch %s: %w", p.Hash, ErrIdentityExhausted)
+			err = eb.Build().Stringer("hash", p.Hash).Errorf("applied patch: %w", ErrIdentityExhausted)
 			return
 		}
 		p = patch.NewPatch(author, message, deps, shiftPlaceholderIndexes(changes, attempt<<32))
@@ -319,7 +320,7 @@ func (inst *Repo) ApplyEnvelope(ctx context.Context, framed []byte) (h t.PatchHa
 	}
 	for _, dep := range env.Patch.Dependencies {
 		if _, ok := inst.appliedSet[dep]; !ok {
-			err = eh.Errorf("patch %s needs %s: %w", h, dep, ErrMissingDependency)
+			err = eb.Build().Stringer("patchHash", h).Stringer("dep", dep).Errorf("patch needs a dependency that is not applied: %w", ErrMissingDependency)
 			return
 		}
 	}
@@ -340,7 +341,7 @@ func (inst *Repo) ApplyEnvelope(ctx context.Context, framed []byte) (h t.PatchHa
 func (inst *Repo) commitPatchLocked(ctx context.Context, p *patch.Patch, framed []byte, info PatchInfo) (err error) {
 	next := inst.g.Clone()
 	if aerr := p.Apply(next); aerr != nil {
-		err = eh.Errorf("apply %s: %w", p.Hash, aerr)
+		err = eb.Build().Stringer("hash", p.Hash).Errorf("apply: %w", aerr)
 		return
 	}
 	if err = inst.st.PutEnvelope(ctx, p.Hash, framed); err != nil {
@@ -384,7 +385,7 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	}
 	idx := slices.Index(inst.applied, h)
 	if idx < 0 {
-		err = eh.Errorf("patch %s: %w", h, ErrNotApplied)
+		err = eb.Build().Stringer("patchHash", h).Errorf("patch: %w", ErrNotApplied)
 		return
 	}
 	for _, other := range inst.applied {
@@ -397,7 +398,7 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 			return
 		}
 		if slices.Contains(oInfo.Patch.Dependencies, h) {
-			err = eh.Errorf("patch %s is required by %s: %w", h, other, ErrDependentExists)
+			err = eb.Build().Stringer("patchHash", h).Stringer("requiredBy", other).Errorf("patch is required by another: %w", ErrDependentExists)
 			return
 		}
 	}
@@ -409,10 +410,10 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	next := inst.g.Clone()
 	if uerr := info.Patch.Unapply(next); uerr != nil {
 		if errors.Is(uerr, patch.ErrRetentionPermanent) {
-			err = eh.Errorf("unrecord %s: %w", h, errors.Join(ErrRetentionBlocked, uerr))
+			err = eb.Build().Stringer("patchHash", h).Errorf("unrecord: %w", errors.Join(ErrRetentionBlocked, uerr))
 			return
 		}
-		err = eh.Errorf("unrecord %s: %w", h, uerr)
+		err = eb.Build().Stringer("patchHash", h).Errorf("unrecord: %w", uerr)
 		return
 	}
 	newApplied := slices.Delete(slices.Clone(inst.applied), idx, idx+1)
@@ -639,7 +640,7 @@ func (inst *Repo) patchInfo(ctx context.Context, h t.PatchHash) (info PatchInfo,
 		return
 	}
 	if env.Patch.Hash != h {
-		err = eh.Errorf("envelope for %s carries patch %s: %w", h, env.Patch.Hash, ErrCorruptStore)
+		err = eb.Build().Stringer("patchHash", h).Stringer("hash", env.Patch.Hash).Errorf("the stored envelope carries a different patch than the key it is filed under: %w", ErrCorruptStore)
 		return
 	}
 	info = PatchInfo{Patch: env.Patch, Producer: env.Producer, Timestamp: env.Timestamp, Codec: codecName}
@@ -669,7 +670,7 @@ func (inst *Repo) View(ctx context.Context, fn func(v ViewI) error) (err error) 
 		return
 	}
 	if n := inst.g.DirtyRepCount(); n != 0 {
-		err = eh.Errorf("pushoutgraph at rest has %d dirty pseudo-edge components — engine bug", n)
+		err = eb.Build().Int("components", n).Errorf("pushoutgraph at rest has dirty pseudo-edge components — engine bug")
 		return
 	}
 	err = fn(&view{r: inst, ctx: ctx})

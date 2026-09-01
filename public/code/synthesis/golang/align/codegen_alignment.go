@@ -15,6 +15,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 const ignoreCommentMarker = "betteralign:ignore"
@@ -38,7 +39,7 @@ func AlignAndFormat(src []byte, targetPath, buildTags string) (out []byte, err e
 	var targetAbs string
 	targetAbs, err = filepath.Abs(targetPath)
 	if err != nil {
-		err = eh.Errorf("resolve abs path %q: %w", targetPath, err)
+		err = eb.Build().Str("targetPath", targetPath).Errorf("resolve abs path: %w", err)
 		return
 	}
 	pkgDir := filepath.Dir(targetAbs)
@@ -59,21 +60,21 @@ func AlignAndFormat(src []byte, targetPath, buildTags string) (out []byte, err e
 	var pkgs []*packages.Package
 	pkgs, err = packages.Load(cfg, ".")
 	if err != nil {
-		err = eh.Errorf("load package %q: %w", pkgDir, err)
+		err = eb.Build().Str("pkgDir", pkgDir).Errorf("load package: %w", err)
 		return
 	}
 	if len(pkgs) == 0 {
-		err = eh.Errorf("no package loaded for %q", pkgDir)
+		err = eb.Build().Str("pkgDir", pkgDir).Errorf("no package loaded for that directory")
 		return
 	}
 
 	pkg, file := findOverlayFile(pkgs, targetAbs)
 	if pkg == nil || file == nil {
-		err = eh.Errorf("file %q not found in loaded package(s); %s", targetAbs, joinPackageErrors(pkgs))
+		err = eb.Build().Str("target", targetAbs).Str("packageErrors", joinPackageErrors(pkgs)).Errorf("file not found in the loaded packages")
 		return
 	}
 	if pkg.TypesInfo == nil || pkg.TypesSizes == nil {
-		err = eh.Errorf("type info/sizes missing for package containing %q", targetAbs)
+		err = eb.Build().Str("target", targetAbs).Errorf("type info/sizes missing for the package containing the target")
 		return
 	}
 	if len(pkg.Errors) > 0 {
@@ -81,7 +82,7 @@ func AlignAndFormat(src []byte, targetPath, buildTags string) (out []byte, err e
 		for _, e := range pkg.Errors {
 			msgs = append(msgs, e.Error())
 		}
-		err = eh.Errorf("type-check errors in package containing %q: %s", targetAbs, strings.Join(msgs, "; "))
+		err = eb.Build().Str("target", targetAbs).Strs("errors", msgs).Errorf("type-check errors in the package containing the target")
 		return
 	}
 
@@ -93,7 +94,7 @@ func AlignAndFormat(src []byte, targetPath, buildTags string) (out []byte, err e
 	var dFile *dst.File
 	dFile, err = dec.DecorateFile(file)
 	if err != nil {
-		err = eh.Errorf("decorate %q: %w", targetAbs, err)
+		err = eb.Build().Str("targetAbs", targetAbs).Errorf("decorate: %w", err)
 		return
 	}
 
@@ -141,7 +142,7 @@ func AlignAndFormat(src []byte, targetPath, buildTags string) (out []byte, err e
 
 	var buf bytes.Buffer
 	if err = decorator.Fprint(&buf, dFile); err != nil {
-		err = eh.Errorf("dst print %q: %w", targetAbs, err)
+		err = eb.Build().Str("targetAbs", targetAbs).Errorf("dst print: %w", err)
 		out = src
 		return
 	}
@@ -169,20 +170,20 @@ func WriteAligned(targetPath string, src []byte) (err error) {
 	var abs string
 	abs, err = filepath.Abs(targetPath)
 	if err != nil {
-		err = eh.Errorf("resolve %q: %w", targetPath, err)
+		err = eb.Build().Str("targetPath", targetPath).Errorf("resolve: %w", err)
 		return
 	}
 	dir := filepath.Dir(abs)
 	var tags string
 	tags, err = FindModuleBuildTags(dir)
 	if err != nil {
-		err = eh.Errorf("find build tags for %q: %w", abs, err)
+		err = eb.Build().Str("path", abs).Errorf("unable to find build tags: %w", err)
 		return
 	}
 	var aligned []byte
 	aligned, err = AlignAndFormat(src, abs, tags)
 	if err != nil {
-		err = eh.Errorf("align %q: %w", abs, err)
+		err = eb.Build().Str("abs", abs).Errorf("align: %w", err)
 		return
 	}
 	// Keep whatever mode the target already carries. os.WriteFile applied its
@@ -200,7 +201,7 @@ func WriteAligned(targetPath string, src []byte) (err error) {
 	var tmp *os.File
 	tmp, err = os.CreateTemp(dir, "."+filepath.Base(abs)+".tmp*")
 	if err != nil {
-		err = eh.Errorf("create temp beside %q: %w", abs, err)
+		err = eb.Build().Str("abs", abs).Errorf("create temp beside: %w", err)
 		return
 	}
 	tmpName := tmp.Name()
@@ -211,21 +212,21 @@ func WriteAligned(targetPath string, src []byte) (err error) {
 	}()
 	if _, err = tmp.Write(aligned); err != nil {
 		_ = tmp.Close()
-		err = eh.Errorf("write %q: %w", tmpName, err)
+		err = eb.Build().Str("tmpName", tmpName).Errorf("write: %w", err)
 		return
 	}
 	// CreateTemp makes the file 0600.
 	if err = tmp.Chmod(mode); err != nil {
 		_ = tmp.Close()
-		err = eh.Errorf("chmod %q: %w", tmpName, err)
+		err = eb.Build().Str("tmpName", tmpName).Errorf("chmod: %w", err)
 		return
 	}
 	if err = tmp.Close(); err != nil {
-		err = eh.Errorf("close %q: %w", tmpName, err)
+		err = eb.Build().Str("tmpName", tmpName).Errorf("close: %w", err)
 		return
 	}
 	if err = os.Rename(tmpName, abs); err != nil {
-		err = eh.Errorf("replace %q: %w", abs, err)
+		err = eb.Build().Str("abs", abs).Errorf("replace: %w", err)
 		return
 	}
 	return
@@ -250,7 +251,7 @@ func FindModuleBuildTags(start string) (tags string, err error) {
 		}
 		parent := filepath.Dir(d)
 		if parent == d {
-			return "", eh.Errorf("no go.mod ancestor of %q", start)
+			return "", eb.Build().Str("start", start).Errorf("no go.mod ancestor")
 		}
 		d = parent
 	}

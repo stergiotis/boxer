@@ -38,6 +38,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Capability broker",
 	Title:    "Capability broker",
+	Summary:  "Request filesystem and clipboard grants through the broker",
 	Icon:     icons.PhLockKey,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"capability", "broker", "permission", "grant"},

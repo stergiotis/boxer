@@ -152,7 +152,7 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) begin(nk naming.StylableName, or
 		return
 	}
 	if maxId := inst.tag.GetMaxPossibleIdIncl(); ordinal > maxId {
-		err = eb.Build().Stringer("nk", nk).Uint64("ordinal", ordinal.Value()).Uint64("maxOrdinal", maxId.Value()).Uint32("tagValue", inst.tv.Value()).Errorf("ordinal does not fit below the registry's tag — the tag's width class holds ordinals up to %d", maxId.Value())
+		err = eb.Build().Stringer("nk", nk).Uint64("ordinal", ordinal.Value()).Uint64("maxOrdinal", maxId.Value()).Uint32("tagValue", inst.tv.Value()).Errorf("ordinal does not fit below the registry's tag — the tag's width class holds fewer ordinals")
 		return
 	}
 	lu := inst.lookup
@@ -178,7 +178,7 @@ func (inst *HumanReadableNaturalKeyRegistry[C]) begin(nk naming.StylableName, or
 		return
 	}
 	if other, taken := inst.byOrdinal.Get(ordinal); taken {
-		err = eb.Build().Stringer("nk", nk).Stringer("heldBy", other).Uint64("ordinal", ordinal.Value()).Str("origin", origin).Errorf("ordinal %d is already held by %q — an ordinal names one membership for the lifetime of the data", ordinal.Value(), other)
+		err = eb.Build().Stringer("nk", nk).Stringer("heldBy", other).Uint64("ordinal", ordinal.Value()).Str("origin", origin).Errorf("the ordinal is already held — an ordinal names one membership for the lifetime of the data")
 		return
 	}
 	inst.byOrdinal.UpsertSingle(ordinal, nk)

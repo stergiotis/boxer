@@ -2,6 +2,7 @@ package extbin
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -50,8 +51,8 @@ func TestHost_NotFound_CarriesInstallHint(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a not-found error")
 	}
-	if !strings.Contains(err.Error(), "brew install xyz") {
-		t.Errorf("error should carry the install hint; got: %v", err)
+	if got := ebtest.Fields(t, err)["installHint"]; got != "brew install xyz" {
+		t.Errorf("error should carry the install hint; got %v", got)
 	}
 }
 

@@ -312,7 +312,7 @@ func (inst *File) readFixed(p []byte, off, end int64) (n int, err error) {
 		b, ok := inst.blocks[seq]
 		if !ok {
 			return n, eb.Build().Uint32("seq", seq).Uint32("blocks", inst.e.row.Blocks).
-				Errorf("a block of %s is missing from the snapshot", inst.name)
+				Str("path", inst.name).Errorf("a block is missing from the snapshot")
 		}
 		start := int64(seq) * bs
 		lo := max(off-start, 0)
@@ -376,13 +376,13 @@ func (inst *FS) content(e *entry) ([]byte, error) {
 	if uint32(len(seqs)) != e.row.Blocks {
 		return nil, eb.Build().Str("path", e.name).
 			Uint32("want", e.row.Blocks).Int("got", len(seqs)).
-			Errorf("%s has %d of %d blocks in the snapshot", e.name, len(seqs), e.row.Blocks)
+			Errorf("the file has fewer blocks in the snapshot than it declares")
 	}
 	out := make([]byte, 0, e.row.Size)
 	for i, seq := range seqs {
 		if uint32(i) != seq {
 			return nil, eb.Build().Int("seq", i).Str("path", e.name).
-				Errorf("a block of %s is missing from the snapshot", e.name)
+				Errorf("a block is missing from the snapshot")
 		}
 		out = append(out, rows[seq]...)
 	}

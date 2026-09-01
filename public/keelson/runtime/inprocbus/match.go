@@ -75,7 +75,7 @@ func ValidatePattern(pattern string) (err error) {
 		}
 		for _, r := range pt {
 			if !isValidTokenChar(r) {
-				err = eb.Build().Str("pattern", pattern).Errorf("pattern: invalid char %q in token %q", string(r), pt)
+				err = eb.Build().Str("pattern", pattern).Str("char", string(r)).Str("token", pt).Errorf("pattern: invalid char in token")
 				return
 			}
 		}
@@ -97,12 +97,12 @@ func ValidateSubject(subject string) (err error) {
 			return
 		}
 		if st == "*" || st == ">" {
-			err = eb.Build().Str("subject", subject).Errorf("subject: wildcard %q not allowed", st)
+			err = eb.Build().Str("subject", subject).Str("token", st).Errorf("subject: wildcard is not allowed")
 			return
 		}
 		for _, r := range st {
 			if !isValidTokenChar(r) {
-				err = eb.Build().Str("subject", subject).Errorf("subject: invalid char %q in token %q", string(r), st)
+				err = eb.Build().Str("subject", subject).Str("char", string(r)).Str("token", st).Errorf("subject: invalid char in token")
 				return
 			}
 		}

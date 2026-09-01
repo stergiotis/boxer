@@ -27,11 +27,12 @@ import (
 )
 
 var _ = time.Time{}
+var _ = log.Logger
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:251
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:291
 
 type MembershipPackJsonShared1 struct {
 	ValueMixedLowCardVerbatim                       *array.List
@@ -284,7 +285,7 @@ func (inst *MembershipPackJsonShared1) GetNumberOfMemberItemsByAttrLowCardVerbat
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:869
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:930
 
 type ReadAccessJsonPlainEntityIdAttributes struct {
 	ValueBlake3hash       *array.Binary
@@ -498,7 +499,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessJsonTaggedSymbolAttributes)(nil
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1087
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1148
 
 func (inst *ReadAccessJsonPlainEntityIdAttributes) Reset() {
 	inst.ValueBlake3hash = nil
@@ -532,7 +533,7 @@ func (inst *ReadAccessJsonTaggedSymbolAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1161
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1222
 
 var _ runtime.ReleasableI = (*ReadAccessJsonPlainEntityIdAttributes)(nil)
 
@@ -578,7 +579,7 @@ func (inst *ReadAccessJsonTaggedSymbolAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1240
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1301
 
 func (inst *ReadAccessJsonPlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueBlake3hash != nil {
@@ -625,7 +626,7 @@ func (inst *ReadAccessJsonTaggedSymbolAttributes) Len() (nEntities int) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1292
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1353
 
 func (inst *ReadAccessJsonPlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexBlake3hash, arrow.BINARY, rec, &inst.ValueBlake3hash, array.NewBinaryData)
@@ -723,7 +724,7 @@ func (inst *ReadAccessJsonPlainEntityIdAttributes) GetAttrValueBlake3hash(entity
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1976
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2037
 
 func (inst *ReadAccessJsonTaggedBoolAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
@@ -754,7 +755,7 @@ func (inst *ReadAccessJsonTaggedInt64Attributes) GetNumberOfAttributes(entityIdx
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2143
 
 type ReadAccessJsonTaggedBool struct {
 	Attributes  *ReadAccessJsonTaggedBoolAttributes
@@ -1482,7 +1483,7 @@ func (inst *ReadAccessJsonTaggedEmptyArray) GetSectionMembershipSpec() common.Me
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2528
 
 type ReadAccessJson struct {
 	EntityId    *ReadAccessJsonPlainEntityIdAttributes

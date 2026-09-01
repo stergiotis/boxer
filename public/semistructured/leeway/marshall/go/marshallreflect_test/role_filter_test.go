@@ -12,8 +12,10 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
@@ -135,7 +137,7 @@ func TestRole_SecondaryMembershipDoesNotSelect(t *testing.T) {
 	var audited []rfAudited
 	err := marshallreflect.Unmarshal(readers, &audited, nil, classifier)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "at least 1")
+	assert.EqualValues(t, 1, ebtest.Fields(t, err)["min"], "the required minimum is reported")
 }
 
 // Detect must reach the same conclusion as the decode — otherwise a row could

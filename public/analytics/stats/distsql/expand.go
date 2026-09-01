@@ -200,7 +200,7 @@ func rejectUnsupportedClauses(pr *nanopass.ParseResult, stmt *grammar1.SelectStm
 		{"QUALIFY", asRuleCtx(stmt.QualifyClause())},
 	} {
 		if c.node != nil {
-			err = eb.Build().Str("clause", c.name).Errorf("descriptiveStatistics: %s has no honest home across the expansion's UNION ALL branches — drop it (v1)", c.name)
+			err = eb.Build().Str("clause", c.name).Errorf("descriptiveStatistics: this clause has no honest home across the expansion's UNION ALL branches — drop it (v1)")
 			return
 		}
 	}
@@ -237,7 +237,7 @@ func groupByKeyTexts(pr *nanopass.ParseResult, stmt *grammar1.SelectStmtContext)
 	upper := strings.ToUpper(nanopass.NodeText(pr, gb))
 	for _, special := range []string{"CUBE", "ROLLUP", "GROUPING"} {
 		if strings.Contains(upper, special) {
-			err = eb.Build().Str("form", special).Errorf("descriptiveStatistics: GROUP BY %s is not supported (v1) — the series label cannot fold its subtotal rows", special)
+			err = eb.Build().Str("form", special).Errorf("descriptiveStatistics: GROUP BY is not supported (v1) — the series label cannot fold its subtotal rows")
 			return
 		}
 	}

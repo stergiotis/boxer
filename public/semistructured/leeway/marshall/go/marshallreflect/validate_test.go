@@ -3,8 +3,10 @@ package marshallreflect_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
 
@@ -43,7 +45,7 @@ func TestValidate_NilDML(t *testing.T) {
 func TestValidate_MissingSectionGetter(t *testing.T) {
 	err := marshallreflect.Validate[validateMissingSectionDrone](&recordingDML{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "GetSectionBaz")
+	require.Contains(t, fieldList(t, err, "problems"), "GetSectionBaz")
 }
 
 // TestValidate_ChannelMethodMismatch reports the channel's missing
@@ -52,7 +54,7 @@ func TestValidate_MissingSectionGetter(t *testing.T) {
 func TestValidate_ChannelMethodMismatch(t *testing.T) {
 	err := marshallreflect.Validate[validateBadChannelDrone](&recordingDML{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "AddMembershipHighCardRefP")
+	require.Contains(t, fieldList(t, err, "problems"), "AddMembershipHighCardRefP")
 }
 
 // panickingDML satisfies the entity frame but panics from inside a method the
@@ -71,7 +73,7 @@ func TestMarshal_MissingMethodIsAnError(t *testing.T) {
 	rows := []validateMissingSectionDrone{{Id: 1, NaturalKey: []byte("k"), Val: "v"}}
 	err := marshallreflect.Marshal(&recordingDML{}, rows, marshallreflect.MapLookup{"m": 1})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "GetSectionBaz")
+	assert.Equal(t, "GetSectionBaz", ebtest.Fields(t, err)["method"])
 }
 
 // The same backstop on the RowComposer entry points.
@@ -84,7 +86,7 @@ func TestRowComposer_MissingMethodIsAnError(t *testing.T) {
 	require.NoError(t, c.BeginRow(validateMissingSectionDrone{Id: 1, NaturalKey: []byte("k"), Val: "v"}))
 	err := c.CommitRow()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "GetSectionBaz")
+	assert.Equal(t, "GetSectionBaz", ebtest.Fields(t, err)["method"])
 }
 
 // A panic that is NOT a contract violation must pass through untouched — the

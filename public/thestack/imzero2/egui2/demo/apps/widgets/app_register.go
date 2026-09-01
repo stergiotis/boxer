@@ -18,6 +18,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Widget gallery",
 	Title:    "Widget gallery",
+	Summary:  "Browse every registered widget demo with its source",
 	Icon:     icons.PhSquaresFour,
 	Topics:   []app.TopicT{app.TopicUi},
 	Keywords: []string{"gallery", "widgets", "showcase", "demo"},

@@ -18,6 +18,13 @@ import (
 // docMD assembles a minimal applet document. The type/status keys keep the
 // help-book walker's documentation-standard conformance check quiet.
 func docMD(front string, body string) *fstest.MapFile {
+	// summary is required (ADR-0214 §SD4), and almost no test here is about
+	// it, so the helper supplies one unless the caller's own frontmatter
+	// already does. That keeps the summary rule's own cases explicit and
+	// every other case unchanged.
+	if !strings.Contains(front, "summary:") {
+		front = front + "\nsummary: \"Fixture applet for parser tests\""
+	}
 	return &fstest.MapFile{Data: []byte("---\ntype: reference\nstatus: draft\n" + front + "\n---\n\n# Heading\n\nProse.\n\n" + body + "\n")}
 }
 

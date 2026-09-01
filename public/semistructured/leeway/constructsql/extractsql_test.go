@@ -5,11 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -231,8 +233,9 @@ func TestRefChannelNeedsAnId(t *testing.T) {
 func TestUnresolvableSectionNamesWhatWasSearched(t *testing.T) {
 	_, err := expandExtract(t, "SELECT LW_GET('nosuch', 'x') FROM events")
 	require.ErrorContains(t, err, "no table in scope carries that section")
-	require.ErrorContains(t, err, extractTable)
-	require.ErrorContains(t, err, "symbol")
+	f := ebtest.Fields(t, err)
+	assert.Contains(t, f["tables"], extractTable, "the error names what was searched")
+	assert.Contains(t, f["sectionsFound"], "symbol", "the error names what those tables do carry")
 }
 
 // TestExtractionIsAnOrdinaryExpression covers the difference from the

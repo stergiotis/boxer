@@ -929,6 +929,33 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 				}
 			}
 		}
+		// A channel declared single-instance (ADR-0213) has no cardinality
+		// column to drain — its arity is a write-time contract instead:
+		// exactly one membership per attribute, checked when the attribute
+		// completes (after the ambient-membership replay, which runs first).
+		for cc, cp := range membershipIRH.IterateColumnProps() {
+			for i := 0; i < cp.Length(); i++ {
+				role := cp.Roles[i]
+				spec, isIdentity := common.GetMembershipSpecByMembershipRole(role)
+				if !isIdentity {
+					continue
+				}
+				if common.SingleMembershipSpecs(cc.UseAspects)&spec == 0 {
+					continue
+				}
+				err = inst.composeFieldRelatedCode(structFieldOperationStoreContainerLength, cc, cp, i)
+				if err != nil {
+					return
+				}
+				_, err = fmt.Fprintf(b, `	if l != 1 {
+		inst.AppendError(eb.Build().Str("section", %q).Str("channel", %q).Int("count", l).Errorf("%%w", runtime.ErrSingleMembershipViolated))
+	}
+`, cc.SectionName.String(), role.String())
+				if err != nil {
+					return
+				}
+			}
+		}
 		_, err = b.WriteString(`}
 `)
 		if err != nil {

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // readDirSorted returns dir's children from fsys, sorted via
@@ -21,7 +21,7 @@ import (
 func readDirSorted(fsys fs.FS, dir string) (entries []fs.DirEntry, err error) {
 	entries, err = fs.ReadDir(fsys, dir)
 	if err != nil {
-		err = eh.Errorf("read dir %q: %w", dir, err)
+		err = eb.Build().Str("dir", dir).Errorf("read dir: %w", err)
 		return
 	}
 	sortDirEntries(entries)

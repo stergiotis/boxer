@@ -618,10 +618,6 @@ The QOC options above carry the rankings; notes below record nuance.
 
 ## Deferred
 
-- **Explicit role configuration** (SD2). Role binding is by
-  `PlainItemTypeE` and column order; a schema with several same-typed
-  columns cannot elect which one is the role — the leading `EntityId` is the
-  Key and the rest pass through, with no way to name a different one.
 - **Pass-through of `Transaction`/`Opaque` plain columns** (SD2). Every
   other plain-item type passes through today; these two carry
   streaming-group / transaction semantics the store glue does not model and
@@ -719,7 +715,7 @@ SD6 corrected in place 2026-08-10 (see Updates). The decision in force:
 generated, append-only store composing leeway, the read-through cache and
 ClickHouse — SD1–SD9 as written, with all four slices delivered and the two
 consumer adapters (pushout `StorageI` passing `repo/storagetest`, the CQRS
-ledger example) as the acceptance evidence. Open items (explicit roles, CAS,
+ledger example) as the acceptance evidence. Open items (CAS,
 carrier/explode ReadRow coverage, a streaming executor, negative caching)
 remain recorded under Deferred.
 
@@ -954,6 +950,150 @@ ladingmeta, ladingdata); the fixtures are in `recordstore/example`
 (`TestGenerateAllVerbatimSharedSectionAllowed`,
 `TestGenerateRejectsSharedVerbatimSlot`,
 `TestGenerateVerbatimSameNameAcrossSectionsAllowed`).
+
+### 2026-08-30 — SD2's explicit role configuration lands: `gen.Input.Roles`
+
+The deferral SD2 recorded — role binding by `PlainItemTypeE` and column
+order alone, with no way to elect among several same-typed columns — is
+lifted. `gen.Input` gains an optional `Roles{Key, Order, Lifecycle}` field
+naming the role columns by their leeway names as authored in the
+`TableDesc`. Each field overrides only its own role; an empty field keeps
+that role's positional default, so the zero value is exactly the positional
+binding and every existing store regenerates byte-identically (verified over
+example, widget, sharedsection, cqrsexample, pushoutstore,
+dimension/provenance, sysmfacts, persiststore, meshdemo, ladingmeta,
+ladingdata, ladingpolicy).
+
+- Validation is at generation time: a declared name must resolve to a plain
+  column, fit the role's gates (Key: an EntityId column deriving to
+  uint64/string; Order: the EntityTimestamp lane; Lifecycle: a u8
+  EntityLifecycle column), and no two roles may bind one column. A role
+  column the declaration demotes becomes an ordinary pass-through envelope
+  field — including the reserved-name collision gate, so a demoted column
+  named `ts` is refused rather than colliding with the entity's fixed `Ts`.
+- The derived DDL defaults follow the declaration: `ORDER BY` binds to the
+  declared Key and Order names (`Input.tableOptions`), not to the positional
+  candidates.
+- Unchanged and worth knowing: a component DTO's plain bindings
+  (`lw:",id"`, `lw:",ts"`) resolve by column *name*, and the store decode
+  backfills `ent.ID`/`ent.Ts` only into fields bound to columns literally
+  named `id`/`ts` — the role declaration does not re-point that coupling.
+
+Fixtures: `recordstore/example/gen_roles_test.go`
+(`TestGenerateDeclaredRolesElectColumns`,
+`TestGeneratePartialRolesKeepPositionalDefaults`, and the refusal cases).
+The Deferred bullet this lifts is removed above.
+
+### 2026-08-30 — the Order role accepts a plain uint64 column, via the explicit declaration
+
+SD2 fixed Order to the z64 timestamp lane because `Replay`'s range SQL and
+the decode assumed it. Both assumptions are now per-regime: an Order bound
+through `Roles.Order` to a plain column deriving to `uint64` — any envelope
+item type, e.g. a consumer's sequential `EntityId` — generates the **u64
+regime**: verb signatures carry `uint64` (`Begin`, `Delete`,
+`Ingest<Kind>`, `Replay` with `recordstore.ReplayOptsU64`, the cache view's
+`MarkStaleIfOlder`), the entity field is `Ord uint64`, the `Replay` range
+SQL compares plain integers, and the decode reads the column directly. The
+regime is reachable **only** through the declaration: positional binding
+stays on the timestamp lane, and a schema whose EntityTimestamp column
+derives to uint64 is refused with a pointer at `Roles.Order`. `Latest`'s
+`ORDER BY … DESC LIMIT 1 BY` and `Scan`'s `(Order, Key)` ordering are
+type-agnostic and unchanged; `SeqTs`/`SeqOf` and `ReplayOpts` remain the
+timestamp-lane vocabulary; timestamp stores regenerate byte-identically.
+
+- **The contract is unchanged**: Order values must stay strictly monotonic
+  per key — the caller's obligation, exactly as on the timestamp lane. For
+  tagged id streams (ADR-0106 fibonacci ids) that means a **single writer
+  stream per key per table**: cross-tag numeric order follows code bit
+  patterns and carries no time or causal meaning (ADR-0106 Consequences,
+  Negative), so a key written under two tags can order a later row before
+  an earlier one — `Latest` would then shadow the newer writer permanently.
+- The cache view's version gate reinterprets the Order as `int64`; within
+  one writer stream per key (the same condition as above) the per-key
+  order survives the reinterpretation.
+- `Replay`'s zero `fromOrder` / zero `To` mean unbounded, so an Order
+  vocabulary must start above 0.
+- The component decode's `,ts`-bound plain backfill: under the u64 regime a
+  column named `ts` is either the Order itself (backfilled from `Ord`) or
+  an ordinary pass-through whose promoted envelope field carries the value
+  (`Ts` is not a reserved entity field there).
+- `pushoutstore` stays on synthetic nanos (`SeqTs`/`SeqOf`, `nextTs`):
+  moving its Order to a u64 column changes the physical schema of a durable
+  table — `VerifySchema` on every existing deployment would refuse, and the
+  adapter's contract has no migration step — so the cut is not clean and is
+  deliberately not taken.
+
+Fixtures: `recordstore/example` `seq` store (`GetSeqSchemaInManipulator` —
+Key `id`, Order the second EntityId `eid`, declared via `Roles`;
+`TestSeqStoreU64OrderRoundTrip` runs Latest / Replay bounds / Scan / state
+view over clickhouse-local) and `gen_roles_test.go`
+(`TestGenerateRolesU64OrderSignatures`,
+`TestGeneratePositionalU64OrderRefused`).
+
+### 2026-08-30 — the tombstone becomes first-class: a configurable pair, with the u8 marker as its default binding
+
+SD4's state view read the tombstone off one hard-wired `u8` Lifecycle
+column. The marker is now a **pair** bound at store construction —
+`<Store>StoreConfig.TombstoneDetect func(*<Store>Entity) bool` (the read
+half: `GetLive`, on the store and the cache views, reads a detected row as
+absent) and `TombstoneWrite func(*<Store>EntityBuilder)` (the write half:
+`Delete` opens an entity frame at the given key and Order and hands the
+builder over to compose the marker row). The pair may consult or write any
+entity content — envelope fields or component attributes — not one `u8`
+column. The existing `u8` behaviour is the pair's **default binding**, so
+every current store keeps its semantics; `Entity.IsTombstone` stays emitted
+on role-bearing stores as that default, documented as such. The pair comes
+whole: the constructor panics on a lone half, because a `Delete` writing
+what the detect does not recognise would resurrect on read.
+
+- **Where the pair binds — construction, not generation.** A
+  generation-time pair would be Go source injected as strings into the
+  emitted store, unable to name the generated entity type it runs over;
+  a construction-time pair is typed against `<Store>Entity` /
+  `<Store>EntityBuilder` and testable. `Delete` stays a verb (not demoted
+  to "the caller appends what its predicate recognises") so the deletion
+  keeps its one-call write-through and cache-invalidation path; its body
+  is the demotion, internalized.
+- **Schemas without the u8 role get the view by declaration:**
+  `gen.Input.TombstoneView` emits Delete/GetLive (and the cache twins) for
+  a role-less schema; the constructor then requires the pair. Refused on a
+  schema that binds the role (the view exists already). Stores that bind
+  neither stay exactly as before — no view, byte-identical output
+  (cqrsexample's close-as-domain-event stance is untouched).
+- **Interpretation runs Go-side and cannot push down.** `GetLive` needs
+  only the newest row per key, so a Go predicate is exactly sufficient
+  there; it is not expressible to SQL, so `Scan` verbs and hand-written
+  SQL keep their own discipline. Corollary: a marker row is an ordinary
+  row — a Scan whose Filter it satisfies returns it, so marker content
+  should be chosen outside what the store's scans select.
+- **A configured pair retires the u8 column as the marker**: `Delete`'s
+  builder frame writes `LifecycleLive` like any Begin, and only the pair
+  decides. The column stays ordinary envelope data.
+- **Canonform / signing warning (CS-2-adjacent).** An attribute-shaped
+  marker is canonform *content* — it moves the record digest — where the
+  old `u8` envelope column was erased with the plains (ADR-0201 SD1/SD6).
+  A kind that will carry signed, persisted history must fix its tombstone
+  binding **before** history persists; switching later changes what its
+  digests cover.
+- **ReplacingMergeTree is the per-table compaction lever, not the state
+  view.** `TableOptions.Engine` (ADR-0102, per store via `gen.Input.DDL`)
+  may select `ReplacingMergeTree(ver[, is_deleted])`: a u64 Order column
+  composes as `ver`; `is_deleted` must be a **physical column**, so an
+  RMT-mode table materializes its marker as a real (u8-role-like) column —
+  a predicate over array content cannot serve it. RMT collapses to the
+  newest version at merge time, background and eventual, so reads keep the
+  `LIMIT 1 BY` / detect discipline regardless of engine. Never put RMT
+  under an append-only history table (collapsing destroys what `Replay`
+  exists to read), and RMT purge is compaction of superseded versions, not
+  erasure — erasure remains the vault-side `ALTER … DELETE` path.
+
+Fixtures: the `seq` store (role-less `TombstoneView` + pair, over the u64
+Order — `TestSeqStoreU64OrderRoundTrip`,
+`TestSeqStoreRequiresTombstonePair`) and
+`TestDeviceStoreCustomTombstonePair` (a role-bearing store overriding the
+pair: the u8 column stays Live, the pair marks). Default-binding behaviour
+is pinned by the pre-existing device / widget / pushoutstore suites, which
+pass unchanged over the regenerated stores.
 
 ## References
 

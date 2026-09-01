@@ -128,7 +128,7 @@ func expandHasTag(x string, tagValueArg string) (r string, err error) {
 	tv, convErr := strconv.ParseUint(trimmed, 10, 64)
 	if convErr == nil {
 		if tv == 0 || tv > uint64(identifier.MaxTagValue) {
-			err = eb.Build().Uint64("tagValue", tv).Errorf("%s: constant tag value out of the valid domain [1, 4294967295]", NameHasTag)
+			err = eb.Build().Uint64("tagValue", tv).Errorf(NameHasTag + ": constant tag value out of the valid domain [1, 4294967295]")
 			return
 		}
 		code, nBits := fibonaccicode.EncodeFibonacciCode(tv - 1)

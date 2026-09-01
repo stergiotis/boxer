@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // OwnerKindE distinguishes the two provenance classes ownership analysis
@@ -440,7 +441,7 @@ func (inst *OwnershipAnalyzer) blameFile(ctx context.Context, git *GitRunner, co
 	var curHash string
 	for line, iterErr := range git.RunLines(ctx, "blame", "--porcelain", "-w", "-M", "--", path) {
 		if iterErr != nil {
-			err = eh.Errorf("blame failed for %q: %w", path, iterErr)
+			err = eb.Build().Str("path", path).Errorf("blame failed: %w", iterErr)
 			return
 		}
 		if isBlameHeaderLine(line) {

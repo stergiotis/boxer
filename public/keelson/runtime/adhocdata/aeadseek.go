@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // SeekableReader is a random-access reader over a BXAD stream's
@@ -52,7 +53,7 @@ type aeadOpener interface {
 // first touched.
 func NewSeekableReader(ra io.ReaderAt, size int64, key []byte) (inst *SeekableReader, err error) {
 	if len(key) != KeySize {
-		err = eh.Errorf("adhocdata: key must be %d bytes, got %d", KeySize, len(key))
+		err = eb.Build().Int("want", KeySize).Int("got", len(key)).Errorf("adhocdata: key has the wrong length")
 		return
 	}
 	aead, err := newGCM(key)
@@ -74,7 +75,7 @@ func NewSeekableReader(ra io.ReaderAt, size int64, key []byte) (inst *SeekableRe
 	nFull := (t - minCt) / fullCt
 	finalPlain := t - nFull*fullCt - minCt
 	if finalPlain < 0 || finalPlain > cs {
-		err = eh.Errorf("adhocdata: ciphertext size %d does not fit the chunk geometry", size)
+		err = eb.Build().Int64("size", size).Errorf("adhocdata: ciphertext size does not fit the chunk geometry")
 		return
 	}
 	inst = &SeekableReader{
@@ -104,11 +105,11 @@ func (inst *SeekableReader) Seek(offset int64, whence int) (pos int64, err error
 	case io.SeekEnd:
 		pos = inst.plainSize + offset
 	default:
-		err = eh.Errorf("adhocdata: seek: invalid whence %d", whence)
+		err = eb.Build().Int("whence", whence).Errorf("adhocdata: seek: invalid whence")
 		return
 	}
 	if pos < 0 {
-		err = eh.Errorf("adhocdata: seek: negative position %d", pos)
+		err = eb.Build().Int64("pos", pos).Errorf("adhocdata: seek: negative position")
 		pos = inst.pos
 		return
 	}
@@ -155,19 +156,19 @@ func (inst *SeekableReader) load(idx int64) (err error) {
 	}
 	ctLen := int64(binary.LittleEndian.Uint32(lenBuf[:]))
 	if ctLen != wantPlain+tagSize {
-		return eh.Errorf("adhocdata: chunk %d length %d, geometry wants %d", idx, ctLen, wantPlain+tagSize)
+		return eb.Build().Int64("chunk", idx).Int64("length", ctLen).Int64("want", wantPlain+tagSize).Errorf("adhocdata: chunk length does not match the geometry")
 	}
 	if int64(cap(inst.ctBuf)) < ctLen {
 		inst.ctBuf = make([]byte, ctLen)
 	}
 	ct := inst.ctBuf[:ctLen]
 	if _, err = inst.ra.ReadAt(ct, diskOff+lenPrefixSize); err != nil {
-		return eh.Errorf("adhocdata: read chunk %d: %w", idx, err)
+		return eb.Build().Int64("idx", idx).Errorf("adhocdata: read chunk: %w", err)
 	}
 	nonce := makeNonce(uint64(idx), final)
 	plain, err := inst.aead.Open(inst.plain[:0], nonce[:], ct, inst.aad)
 	if err != nil {
-		return eh.Errorf("adhocdata: authenticate chunk %d: %w", idx, err)
+		return eb.Build().Int64("idx", idx).Errorf("adhocdata: authenticate chunk: %w", err)
 	}
 	inst.plain = plain
 	inst.chunk = idx

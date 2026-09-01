@@ -205,7 +205,7 @@ func resolvePlan(row any) (rowVal reflect.Value, plan *mappingplan.Plan, groups 
 		rowVal = rowVal.Elem()
 	}
 	if rowVal.Kind() != reflect.Struct {
-		err = eb.Build().Str("type", reflect.TypeOf(row).String()).Errorf("row must be a struct (or *struct), got %s", rowVal.Kind())
+		err = eb.Build().Str("type", reflect.TypeOf(row).String()).Stringer("kind", rowVal.Kind()).Errorf("row must be a struct (or *struct)")
 		return
 	}
 	r, rerr := resolveForType(rowVal.Type())

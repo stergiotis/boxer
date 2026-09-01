@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Shipped vs executed
+summary: "Compare machine code shipped against code actually run"
 icon: "🔬"
 endpoint: introspection
 tabs: [table]

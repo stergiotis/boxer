@@ -73,7 +73,7 @@ func (inst *Client) QueryTSVE(ctx context.Context, sql string) (rows []string, e
 	}
 	if resp.StatusCode != http.StatusOK {
 		err = eb.Build().Int("status", resp.StatusCode).Str("sql", truncate(sql, 600)).
-			Errorf("clickhouse rejected the query: %s", truncate(string(body), 400))
+			Str("body", truncate(string(body), 400)).Errorf("clickhouse rejected the query")
 		return
 	}
 

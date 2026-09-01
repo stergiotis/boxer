@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DefaultDebounce is how long a captured width is held before it is
@@ -130,7 +131,7 @@ func New(store StoreI, opts Opts) (inst *Resolver, err error) {
 		return
 	}
 	if opts.Debounce < 0 {
-		err = eh.Errorf("colwidth: New: negative debounce %s", opts.Debounce)
+		err = eb.Build().Stringer("debounce", opts.Debounce).Errorf("colwidth: New: negative debounce")
 		return
 	}
 	if opts.Debounce == 0 {
@@ -140,7 +141,7 @@ func New(store StoreI, opts Opts) (inst *Resolver, err error) {
 		opts.MaxEntries = DefaultMaxEntries
 	}
 	if opts.MaxPoints != 0 && opts.MaxPoints < opts.MinPoints {
-		err = eh.Errorf("colwidth: New: MaxPoints %v below MinPoints %v", opts.MaxPoints, opts.MinPoints)
+		err = eb.Build().Float64("maxPoints", opts.MaxPoints).Float64("minPoints", opts.MinPoints).Errorf("colwidth: New: MaxPoints below MinPoints")
 		return
 	}
 	inst = &Resolver{
@@ -405,7 +406,7 @@ func (inst *Resolver) Flush(now time.Time) (written int, err error) {
 		if werr != nil {
 			// Report the first failure and stop; the rest stay dirty and
 			// are retried, so nothing is dropped on the floor.
-			err = eh.Errorf("colwidth: flush %s/%s: %w", k.Tier, k.ColumnKey, werr)
+			err = eb.Build().Str("tier", k.Tier).Str("columnKey", k.ColumnKey).Errorf("colwidth: flush failed: %w", werr)
 			return
 		}
 		e.dirty = false
@@ -430,7 +431,7 @@ func (inst *Resolver) Clear(tableTag string, col Column) (err error) {
 	} {
 		delete(inst.byKey, k)
 		if derr := inst.store.DeleteColumnWidth(inst.opts.AppId, k.Tier, k.Scope, k.ColumnKey); derr != nil {
-			err = eh.Errorf("colwidth: clear %s/%s: %w", k.Tier, k.ColumnKey, derr)
+			err = eb.Build().Str("tier", k.Tier).Str("columnKey", k.ColumnKey).Errorf("colwidth: clear failed: %w", derr)
 			return
 		}
 	}

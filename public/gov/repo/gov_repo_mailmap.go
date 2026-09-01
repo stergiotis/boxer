@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Mailmap canonicalizes git author and co-author identities per the gitmailmap
@@ -208,7 +208,7 @@ func LoadMailmap(ctx context.Context, git *GitRunner) (mm *Mailmap, err error) {
 		if errors.Is(readErr, fs.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, eh.Errorf("unable to read .mailmap at %q: %w", toplevel, readErr)
+		return nil, eb.Build().Str("toplevel", toplevel).Errorf("unable to read .mailmap: %w", readErr)
 	}
 	return ParseMailmap(string(content)), nil
 }

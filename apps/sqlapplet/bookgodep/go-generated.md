@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Generated vs hand-written
+summary: "Compare generated against hand-written lines per directory"
 icon: "🖊"
 endpoint: introspection
 tabs: [chart, table]

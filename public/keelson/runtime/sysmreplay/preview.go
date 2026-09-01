@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // The load preview (ADR-0197 §SD10, second query).
@@ -71,14 +72,14 @@ func (inst *Reader) Preview(ctx context.Context, w Window, bucket time.Duration)
 		if !ok {
 			rec.Release()
 			points = nil
-			err = eh.Errorf("sysmreplay: preview bucket column is %s, not int64", rec.Column(0).DataType())
+			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("sysmreplay: preview bucket column is not int64")
 			return
 		}
 		vals, ok := rec.Column(1).(*array.Float64)
 		if !ok {
 			rec.Release()
 			points = nil
-			err = eh.Errorf("sysmreplay: preview value column is %s, not float64", rec.Column(1).DataType())
+			err = eb.Build().Stringer("dataType", rec.Column(1).DataType()).Errorf("sysmreplay: preview value column is not float64")
 			return
 		}
 		for i := range int(rec.NumRows()) {

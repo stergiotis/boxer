@@ -17,6 +17,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -65,7 +66,7 @@ func (inst *LocalExecutor) run(ctx context.Context, sql string, outputFormat str
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
-		err = eh.Errorf("clickhouse local failed: %w; stderr: %s", err, stderr.String())
+		err = eb.Build().Str("stderr", stderr.String()).Errorf("clickhouse local failed: %w", err)
 		return
 	}
 	stdout = out.Bytes()
@@ -123,7 +124,7 @@ func (inst *LocalExecutor) queryArrowBuffered(ctx context.Context, sql string) (
 				r.Release()
 			}
 			records = nil
-			err = eh.Errorf("read arrow record %d: %w", i, err)
+			err = eb.Build().Int("record", i).Errorf("read arrow record: %w", err)
 			return
 		}
 		rec.Retain()

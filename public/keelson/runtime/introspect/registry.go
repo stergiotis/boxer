@@ -4,7 +4,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Registry holds introspection table providers keyed by table name.
@@ -25,12 +25,12 @@ func NewRegistry() *Registry {
 func (r *Registry) Register(p Provider) (err error) {
 	name := p.Name()
 	if !validTableName(name) {
-		return eh.Errorf("introspect: invalid table name %q", name)
+		return eb.Build().Str("name", name).Errorf("introspect: invalid table name")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.byName[name]; exists {
-		return eh.Errorf("introspect: table %q already registered", name)
+		return eb.Build().Str("name", name).Errorf("introspect: table already registered")
 	}
 	r.byName[name] = p
 	return

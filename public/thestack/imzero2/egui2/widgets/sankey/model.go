@@ -20,6 +20,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Mode selects how a diagram's stage index and within-stage order are
@@ -218,36 +219,36 @@ func (d Diagram) validate() (index map[string]int, order []int, err error) {
 	index = make(map[string]int, len(d.Nodes))
 	for i, n := range d.Nodes {
 		if n.ID == "" {
-			return nil, nil, eh.Errorf("node %d has an empty id", i)
+			return nil, nil, eb.Build().Int("node", i).Errorf("node has an empty id")
 		}
 		if _, dup := index[n.ID]; dup {
-			return nil, nil, eh.Errorf("duplicate node id %q", n.ID)
+			return nil, nil, eb.Build().Str("id", n.ID).Errorf("duplicate node id")
 		}
 		if d.Mode == ModeAlluvial && n.Stage < 0 {
-			return nil, nil, eh.Errorf("node %q has stage %d; alluvial stages must be >= 0", n.ID, n.Stage)
+			return nil, nil, eb.Build().Str("id", n.ID).Int("stage", n.Stage).Errorf("node has a negative stage; alluvial stages must be >= 0")
 		}
 		index[n.ID] = i
 	}
 	for i, l := range d.Links {
 		si, okS := index[l.Source]
 		if !okS {
-			return nil, nil, eh.Errorf("link %d references unknown source %q", i, l.Source)
+			return nil, nil, eb.Build().Int("link", i).Str("source", l.Source).Errorf("link references an unknown source")
 		}
 		ti, okT := index[l.Target]
 		if !okT {
-			return nil, nil, eh.Errorf("link %d references unknown target %q", i, l.Target)
+			return nil, nil, eb.Build().Int("link", i).Str("target", l.Target).Errorf("link references an unknown target")
 		}
 		if si == ti {
-			return nil, nil, eh.Errorf("link %d is a self-link on %q", i, l.Source)
+			return nil, nil, eb.Build().Int("link", i).Str("source", l.Source).Errorf("link is a self-link")
 		}
 		if math.IsNaN(l.Value) || math.IsInf(l.Value, 0) || l.Value <= 0 {
-			return nil, nil, eh.Errorf("link %d (%s->%s) has value %v; values must be finite and > 0",
-				i, l.Source, l.Target, l.Value)
+			return nil, nil, eb.Build().Int("link", i).Str("source", l.Source).Str("target", l.Target).Float64("value", l.Value).
+				Errorf("link values must be finite and > 0")
 		}
 		if d.Mode == ModeAlluvial {
 			if got := d.Nodes[ti].Stage - d.Nodes[si].Stage; got != 1 {
-				return nil, nil, eh.Errorf("link %d (%s->%s) spans %d stages; alluvial links must join adjacent stages",
-					i, l.Source, l.Target, got)
+				return nil, nil, eb.Build().Int("link", i).Str("source", l.Source).Str("target", l.Target).Int("stages", got).
+					Errorf("alluvial links must join adjacent stages")
 			}
 		}
 	}
@@ -293,8 +294,8 @@ func (d Diagram) topoOrder(index map[string]int) ([]int, error) {
 	// Name a concrete edge inside the cycle: both ends are unsettled.
 	for i, l := range d.Links {
 		if indeg[index[l.Source]] > 0 && indeg[index[l.Target]] > 0 {
-			return nil, eh.Errorf("link %d (%s->%s) lies on a cycle; flow diagrams are acyclic (ADR-0159 SD6)",
-				i, l.Source, l.Target)
+			return nil, eb.Build().Int("link", i).Str("source", l.Source).Str("target", l.Target).
+				Errorf("link lies on a cycle; flow diagrams are acyclic (ADR-0159 SD6)")
 		}
 	}
 	return nil, eh.Errorf("the graph contains a cycle")

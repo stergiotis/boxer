@@ -15,6 +15,7 @@ package pipelineview
 
 import (
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 )
 
@@ -248,7 +249,7 @@ func (p Pipeline) Validate() error {
 			return
 		}
 		if _, dup := stages[st.ID]; dup {
-			dupErr = eh.Errorf("duplicate stage id %q", st.ID)
+			dupErr = eb.Build().Str("id", st.ID).Errorf("duplicate stage id")
 			return
 		}
 		stages[st.ID] = st
@@ -265,10 +266,10 @@ func (p Pipeline) Validate() error {
 			return eh.Errorf("endpoint with empty ID")
 		}
 		if _, dup := stages[ep.ID]; dup {
-			return eh.Errorf("endpoint id collides with stage id %q", ep.ID)
+			return eb.Build().Str("id", ep.ID).Errorf("endpoint id collides with stage id")
 		}
 		if _, dup := endpoints[ep.ID]; dup {
-			return eh.Errorf("duplicate endpoint id %q", ep.ID)
+			return eb.Build().Str("id", ep.ID).Errorf("duplicate endpoint id")
 		}
 		endpoints[ep.ID] = ep
 	}
@@ -283,31 +284,31 @@ func (p Pipeline) Validate() error {
 	checkRef := func(r Ref, source bool) error {
 		switch {
 		case r.Stage != "" && r.Endpoint != "":
-			return eh.Errorf("ref names both stage %q and endpoint %q", r.Stage, r.Endpoint)
+			return eb.Build().Str("stage", r.Stage).Str("endpoint", r.Endpoint).Errorf("ref names both stage and endpoint")
 		case r.Endpoint != "":
 			if r.Port != "" {
-				return eh.Errorf("endpoint ref %q carries a port", r.Endpoint)
+				return eb.Build().Str("endpoint", r.Endpoint).Errorf("endpoint ref carries a port")
 			}
 			if _, ok := endpoints[r.Endpoint]; !ok {
-				return eh.Errorf("unknown endpoint %q", r.Endpoint)
+				return eb.Build().Str("endpoint", r.Endpoint).Errorf("unknown endpoint")
 			}
 		case r.Stage != "":
 			st, ok := stages[r.Stage]
 			if !ok {
-				return eh.Errorf("unknown stage %q", r.Stage)
+				return eb.Build().Str("stage", r.Stage).Errorf("unknown stage")
 			}
 			if r.Port == "" {
 				return nil // implicit primary anchor
 			}
 			cl, ok := portClass(st, r.Port)
 			if !ok {
-				return eh.Errorf("stage %q has no port %q", r.Stage, r.Port)
+				return eb.Build().Str("stage", r.Stage).Str("port", r.Port).Errorf("stage has no port")
 			}
 			if source && cl != PortDiagnostic && cl != PortArtifact {
-				return eh.Errorf("port %q.%q is not an output class", r.Stage, r.Port)
+				return eb.Build().Str("stage", r.Stage).Str("port", r.Port).Errorf("port is not an output class")
 			}
 			if !source && cl != PortConfig {
-				return eh.Errorf("port %q.%q is not an input class", r.Stage, r.Port)
+				return eb.Build().Str("stage", r.Stage).Str("port", r.Port).Errorf("port is not an input class")
 			}
 		default:
 			return eh.Errorf("empty ref")
@@ -322,11 +323,12 @@ func (p Pipeline) Validate() error {
 			return err
 		}
 		if e.From.IsEndpoint() && e.To.IsEndpoint() {
-			return eh.Errorf("endpoint-to-endpoint edge %q -> %q", e.From.Endpoint, e.To.Endpoint)
+			return eb.Build().Str("from", e.From.Endpoint).Str("to", e.To.Endpoint).Errorf("endpoint-to-endpoint edge is not supported")
 		}
 		if !e.From.IsEndpoint() && !e.To.IsEndpoint() && (e.From.Port != "" || e.To.Port != "") {
-			return eh.Errorf("stage-to-stage edge on named ports (%q.%q -> %q.%q) is not supported; route it through an endpoint",
-				e.From.Stage, e.From.Port, e.To.Stage, e.To.Port)
+			return eb.Build().Str("fromStage", e.From.Stage).Str("fromPort", e.From.Port).
+				Str("toStage", e.To.Stage).Str("toPort", e.To.Port).
+				Errorf("stage-to-stage edge on named ports is not supported; route it through an endpoint")
 		}
 	}
 	return nil

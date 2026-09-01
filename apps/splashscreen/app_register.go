@@ -32,6 +32,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Splash screen",
 	Title:    "splash",
+	Summary:  "Show the build, version and third-party licence notices",
 	Icon:     icons.PhSparkle,
 	Topics:   []app.TopicT{app.TopicAbout},
 	Keywords: []string{"about", "licence", "license", "notice", "version"},

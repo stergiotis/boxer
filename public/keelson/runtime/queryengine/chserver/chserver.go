@@ -143,8 +143,7 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		// The backstop of ADR-0145 §SD4. Whatever placed this run, this
 		// engine was not told it may see sealed plaintext, so it does not
 		// execute — and says which of the two facts is missing.
-		err = eb.Build().Str("endpoint", inst.endpoint).
-			Errorf("chserver: refusing a confined run: %s is not declared as allowed to see sealed data", inst.endpoint)
+		err = eb.Build().Str("endpoint", inst.endpoint).Errorf("chserver: refusing a confined run: this endpoint is not declared as allowed to see sealed data")
 		return
 	}
 	if len(req.Inputs) > 0 {
@@ -222,7 +221,7 @@ func (inst *Engine) queryString(req queryengine.Request) (qs url.Values, err err
 		if _, reserved := reservedKeys[key]; reserved || strings.HasPrefix(key, chhttp.ParamPrefix) {
 			qs = nil
 			err = eb.Build().Str("setting", key).
-				Errorf("chserver: setting %q is owned by this adapter and must not be set by the caller", key)
+				Errorf("chserver: this setting is owned by the adapter and must not be set by the caller")
 			return
 		}
 		qs.Set(key, value)
@@ -259,7 +258,7 @@ func errorFromResponse(resp *http.Response) (err error) {
 	if detail == "" {
 		detail = "(empty response body)"
 	}
-	err = bld.Errorf("clickhouse http %d: %s", resp.StatusCode, detail)
+	err = bld.Errorf("clickhouse http %d: %s", resp.StatusCode, detail) //boxer:lint disable=CS013 reason="play/play_diagnostics.go classifies on this exact prefix; the message is a cross-component contract"
 	return
 }
 

@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Topology drift
+summary: "Compare declared components against what is running"
 icon: "⚖"
 endpoint: introspection
 tabs: [table, detail]

@@ -3,6 +3,7 @@ package persist
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Client adapts an app.BusI into the app.StorageI surface by translating
@@ -52,16 +53,16 @@ func (inst *Client) Get(key string) (value []byte, found bool, err error) {
 	subject := SubjectFor(inst.alias, key, OpGet)
 	raw, rerr := inst.bus.Request(subject, nil)
 	if rerr != nil {
-		err = eh.Errorf("persist: get %s: %w", subject, rerr)
+		err = eb.Build().Str("subject", subject).Errorf("persist: get: %w", rerr)
 		return
 	}
 	r, perr := UnmarshalReply(raw)
 	if perr != nil {
-		err = eh.Errorf("persist: get %s: %w", subject, perr)
+		err = eb.Build().Str("subject", subject).Errorf("persist: get: %w", perr)
 		return
 	}
 	if r.Error != "" {
-		err = eh.Errorf("persist: get %s: %s", subject, r.Error)
+		err = eb.Build().Str("subject", subject).Str("reason", r.Error).Errorf("persist: get rejected")
 		return
 	}
 	value = r.Value
@@ -76,16 +77,16 @@ func (inst *Client) Set(key string, value []byte) (err error) {
 	subject := SubjectFor(inst.alias, key, OpSet)
 	raw, rerr := inst.bus.Request(subject, value)
 	if rerr != nil {
-		err = eh.Errorf("persist: set %s: %w", subject, rerr)
+		err = eb.Build().Str("subject", subject).Errorf("persist: set: %w", rerr)
 		return
 	}
 	r, perr := UnmarshalReply(raw)
 	if perr != nil {
-		err = eh.Errorf("persist: set %s: %w", subject, perr)
+		err = eb.Build().Str("subject", subject).Errorf("persist: set: %w", perr)
 		return
 	}
 	if r.Error != "" {
-		err = eh.Errorf("persist: set %s: %s", subject, r.Error)
+		err = eb.Build().Str("subject", subject).Str("reason", r.Error).Errorf("persist: set rejected")
 		return
 	}
 	return
@@ -99,16 +100,16 @@ func (inst *Client) Delete(key string) (err error) {
 	subject := SubjectFor(inst.alias, key, OpDelete)
 	raw, rerr := inst.bus.Request(subject, nil)
 	if rerr != nil {
-		err = eh.Errorf("persist: delete %s: %w", subject, rerr)
+		err = eb.Build().Str("subject", subject).Errorf("persist: delete: %w", rerr)
 		return
 	}
 	r, perr := UnmarshalReply(raw)
 	if perr != nil {
-		err = eh.Errorf("persist: delete %s: %w", subject, perr)
+		err = eb.Build().Str("subject", subject).Errorf("persist: delete: %w", perr)
 		return
 	}
 	if r.Error != "" {
-		err = eh.Errorf("persist: delete %s: %s", subject, r.Error)
+		err = eb.Build().Str("subject", subject).Str("reason", r.Error).Errorf("persist: delete rejected")
 		return
 	}
 	return

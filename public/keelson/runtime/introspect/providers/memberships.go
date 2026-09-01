@@ -10,7 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmvocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -227,6 +227,6 @@ func (MembershipLookup) LookupMembership(name string) (id uint64, err error) {
 		id = uint64(e.GetId())
 		return
 	}
-	err = eh.Errorf("providers: no membership named %q in any registered vocabulary; keelson('memberships') lists them", name)
+	err = eb.Build().Str("name", name).Errorf("providers: no registered vocabulary carries this membership; keelson('memberships') lists them")
 	return
 }

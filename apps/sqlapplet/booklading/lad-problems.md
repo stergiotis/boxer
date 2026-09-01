@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Problems
+summary: "List entries the walk could not read, with errors"
 icon: "⚠️"
 endpoint: default
 tabs: [table]

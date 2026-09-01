@@ -232,7 +232,7 @@ func (inst Input) Generate() (err error) {
 		ExternallyProvisioned: externallyProvisioned,
 	}.Generate()
 	if err != nil {
-		err = eh.Errorf("storegen: generate %s store: %w", inst.StoreName, err)
+		err = eb.Build().Str("storeName", inst.StoreName).Errorf("storegen: generate store: %w", err)
 	}
 	return
 }
@@ -261,8 +261,7 @@ func (inst Input) checkComponentPackages() (err error) {
 		}
 		if got := f.Name.Name; got != inst.PackageName {
 			err = eb.Build().Str("component", path).Str("componentPackage", got).
-				Str("packageName", inst.PackageName).
-				Errorf("storegen: component declares package %q but the store is generated as package %q — the emitted codec keeps the component's own package clause, so the two would land in one directory as two packages", got, inst.PackageName)
+				Str("packageName", inst.PackageName).Errorf("storegen: the component and the generated store declare different packages — the emitted codec keeps the component's own package clause, so the two would land in one directory as two packages")
 			return
 		}
 	}

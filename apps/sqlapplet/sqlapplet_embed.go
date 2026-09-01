@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // EmbedConfig carries the host-supplied collaborators NewEmbedded needs.
@@ -96,7 +96,7 @@ func NewEmbedded(def *AppletDef, cfg EmbedConfig) (inner *play.PlayApp, err erro
 	}
 	for alias, handle := range cfg.Bindings {
 		if bErr := inner.BindDataset(alias, handle); bErr != nil {
-			return nil, eh.Errorf("sqlapplet %s: bind dataset %q: %w", def.Slug, alias, bErr)
+			return nil, eb.Build().Str("slug", def.Slug).Str("alias", alias).Errorf("sqlapplet: bind dataset: %w", bErr)
 		}
 	}
 	// nil storage: an applet's buffer is its committed definition — nothing
@@ -116,7 +116,7 @@ func resolveClientConfig(def *AppletDef, endpointURL string) (cfg play.ClientCon
 	case EndpointIntrospection:
 		cfg.URL = introspect.LocalQueryEndpoint()
 		if cfg.URL == "" {
-			err = eh.Errorf("sqlapplet %s: introspection endpoint unavailable (KEELSON_INTROSPECT_ENABLE, chlocal)", def.Slug)
+			err = eb.Build().Str("slug", def.Slug).Errorf("sqlapplet: introspection endpoint unavailable (KEELSON_INTROSPECT_ENABLE, chlocal)")
 			return
 		}
 	default:

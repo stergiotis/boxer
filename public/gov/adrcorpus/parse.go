@@ -35,7 +35,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Adr is one row of the `adr` table: the decision-lifecycle facts from
@@ -93,7 +93,7 @@ func ParseDir(dir string) (adrs []Adr, err error) {
 	var entries []os.DirEntry
 	entries, err = os.ReadDir(dir)
 	if err != nil {
-		return nil, eh.Errorf("unable to read adr dir %q: %w", dir, err)
+		return nil, eb.Build().Str("dir", dir).Errorf("unable to read adr dir: %w", err)
 	}
 	today := time.Now().Format("2006-01-02")
 	for _, e := range entries {
@@ -119,7 +119,7 @@ func parseFile(path, numStr, slug, today string) (a Adr, err error) {
 	var src []byte
 	src, err = os.ReadFile(path)
 	if err != nil {
-		return a, eh.Errorf("unable to read adr %q: %w", path, err)
+		return a, eb.Build().Str("path", path).Errorf("unable to read adr: %w", err)
 	}
 	a.Num, _ = strconv.Atoi(numStr)
 	a.Slug = slug

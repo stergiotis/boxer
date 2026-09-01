@@ -2,7 +2,7 @@ package sysmreplay
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
@@ -35,8 +35,9 @@ func coLen(kind string, arrs ...arr) (n int, err error) {
 	for _, a := range arrs[1:] {
 		if a.n != n {
 			n = 0
-			err = eh.Errorf("sysmreplay: misaligned %s row: %s has %d entries but %s has %d — index i must name the same item in every array",
-				kind, arrs[0].name, arrs[0].n, a.name, a.n)
+			err = eb.Build().Str("kind", kind).Str("array", arrs[0].name).Int("entries", arrs[0].n).
+				Str("otherArray", a.name).Int("otherEntries", a.n).
+				Errorf("sysmreplay: misaligned row — index i must name the same item in every array")
 			return
 		}
 	}

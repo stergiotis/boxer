@@ -46,6 +46,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // defaultEngine is empty on purpose: an empty clause makes the store apply the
@@ -133,7 +134,7 @@ func readVault(c *cli.Context) (corpus capmapcorpus.Corpus, dir string, err erro
 		}
 	}
 	if corpus, err = capmapcorpus.ParseDir(dir); err != nil {
-		return corpus, dir, eh.Errorf("unable to read vault %q: %w", dir, err)
+		return corpus, dir, eb.Build().Str("dir", dir).Errorf("unable to read vault: %w", err)
 	}
 	return corpus, dir, nil
 }
@@ -218,7 +219,7 @@ func actionLoad(c *cli.Context) (err error) {
 		return err
 	}
 	if len(corpus.Competences) == 0 {
-		return eh.Errorf("vault %q holds no competences; refusing to ingest an empty corpus", dir)
+		return eb.Build().Str("dir", dir).Errorf("vault holds no competences; refusing to ingest an empty corpus")
 	}
 
 	ctx := context.Background()
@@ -235,7 +236,7 @@ func actionLoad(c *cli.Context) (err error) {
 			return eh.Errorf("unable to build the store for --setup-table: %w", sErr)
 		}
 		if err = store.SetupTable(ctx, c.String("engine")); err != nil {
-			return eh.Errorf("unable to set up %s.%s: %w", database, table, err)
+			return eb.Build().Str("database", database).Str("table", table).Errorf("unable to set up the table: %w", err)
 		}
 	}
 
@@ -275,7 +276,7 @@ func actionDump(c *cli.Context) (err error) {
 	if len(corpus.Competences) == 0 {
 		// Writing an empty vault over a directory the operator named is the
 		// one outcome nobody wants from a typo'd --table.
-		return eh.Errorf("%s holds no competences; refusing to write an empty vault to %q", qualified, out)
+		return eb.Build().Str("source", qualified).Str("out", out).Errorf("the source holds no competences; refusing to write an empty vault")
 	}
 	stats, err := capmapcorpus.WriteVault(corpus, out)
 	if err != nil {
@@ -302,10 +303,10 @@ func checkOutputDir(dir string, force bool) (err error) {
 		if os.IsNotExist(rErr) {
 			return nil
 		}
-		return eh.Errorf("unable to inspect %q: %w", dir, rErr)
+		return eb.Build().Str("dir", dir).Errorf("unable to inspect: %w", rErr)
 	}
 	if len(entries) > 0 && !force {
-		return eh.Errorf("%q is not empty; a dump adds files and removes none, so its contents would mix with the corpus being written — empty it, name another, or pass --force", dir)
+		return eb.Build().Str("dir", dir).Errorf("the target directory is not empty; a dump adds files and removes none, so its contents would mix with the corpus being written — empty it, name another, or pass --force")
 	}
 	return nil
 }

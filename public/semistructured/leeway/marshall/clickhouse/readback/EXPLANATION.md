@@ -98,8 +98,9 @@ attr2 (`MC_lv = 0`) is correctly skipped.
 
 **Aligned fast path.** When every attribute carries exactly one membership on `R`
 (`MC_R ≡ [1,1,…]`), `arrayCumSum(MC_R) = [1,2,…,A]` so `a = p`. This is the common DTO case, and
-the generator may emit `indexOf(M_R, L)` directly when it can prove alignment (Invariant I5,
-§Invariants; detection is an open problem, §Trade-offs).
+the generator emits `indexOf(M_R, L)` directly when the schema proves alignment: the channel is
+declared single-instance (ADR-0213's section use-aspects), in which case `MC_R` has no column at
+all — its absence is the proof (Invariant I5, §Invariants; §Trade-offs).
 
 ### Level 2 — attribute index → value
 
@@ -292,10 +293,12 @@ CI-friendly variant when no server is present.
   and prune nothing. The schema-side design (an aspect mapping to
   `INDEX … TYPE bloom_filter(p) GRANULARITY g`) is open; see ADR-0066's 2026-06-09 update for
   the verified eligibility matrix.
-- **Fast-path detection.** Proving `MC_R ≡ 1` at generation time (to emit bare `indexOf`) needs a
-  schema signal — a section use-aspect asserting single-membership uniformity, or a per-channel
-  invariant on the `Plan`. Open; until then the safe `leeway_attr_of_member` form is emitted
-  unconditionally.
+- **Fast-path detection.** Proving `MC_R ≡ 1` at generation time (to emit bare `indexOf`) needs
+  a schema signal, and the signal exists: the ADR-0213 single-membership use-aspects, one per
+  channel, under which the cardinality column is omitted and its absence is the licence
+  (`lwextract`). The generator emits the fast form exactly for declared channels; an undeclared
+  schema keeps the safe general form, and a card column missing WITHOUT the declaration stays a
+  conformance error rather than a licence.
 
 ## Further reading
 

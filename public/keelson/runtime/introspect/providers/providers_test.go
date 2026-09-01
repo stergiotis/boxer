@@ -109,11 +109,13 @@ func TestAppsTableRendersLaunchAndWorkingset(t *testing.T) {
 	rs := []app.Registration{
 		{Manifest: app.Manifest{
 			Id: "test.plain", Display: "Plain", Surface: app.SurfaceWindowed,
-			Topics: []app.TopicT{app.TopicRuntime},
+			Summary: "fixture summary",
+			Topics:  []app.TopicT{app.TopicRuntime},
 		}},
 		{Manifest: app.Manifest{
 			Id: "test.stateful", Display: "Stateful", Surface: app.SurfaceWindowed,
-			Topics: []app.TopicT{app.TopicRuntime}, LaunchKind: "testLaunch", Workingset: true,
+			Summary: "fixture summary",
+			Topics:  []app.TopicT{app.TopicRuntime}, LaunchKind: "testLaunch", Workingset: true,
 		}},
 	}
 	for _, r := range rs {
@@ -144,10 +146,12 @@ func TestAppsTableRendersRegistrationMode(t *testing.T) {
 	rs := []app.Registration{
 		{Manifest: app.Manifest{
 			Id: "test.factory", Display: "Factory", Surface: app.SurfaceWindowed,
+			Summary:    "fixture summary",
 			LaunchKind: "testLaunch", Workingset: true,
 		}},
 		{Manifest: app.Manifest{
 			Id: "test.singleton", Display: "Singleton", Surface: app.SurfaceWindowed,
+			Summary:    "fixture summary",
 			LaunchKind: "testLaunch", Workingset: true,
 		}, Singleton: true},
 	}
@@ -168,6 +172,7 @@ func TestAppsTableRendersClassification(t *testing.T) {
 	rs := []app.Registration{
 		{Manifest: app.Manifest{
 			Id: "test.multi", Display: "Multi", Surface: app.SurfaceWindowed,
+			Summary:  "fixture summary",
 			Topics:   []app.TopicT{app.TopicCode, app.TopicTopology},
 			Keywords: []string{"deps", "imports"},
 			Kind:     app.KindApplet,

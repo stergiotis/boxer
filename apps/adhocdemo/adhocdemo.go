@@ -36,6 +36,7 @@ const itemsDoc = "---\n" +
 	"type: reference\n" +
 	"status: draft\n" +
 	"title: Ad-hoc items\n" +
+	"summary: \"Query an ad-hoc dataset bound by its embedding host\"\n" +
 	"icon: \"\U0001F4E6\"\n" +
 	"endpoint: introspection\n" +
 	"datasets: [items]\n" +

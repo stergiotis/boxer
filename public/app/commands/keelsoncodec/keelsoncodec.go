@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/factswrapper"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 	"github.com/urfave/cli/v2"
 )
@@ -54,7 +55,7 @@ func NewCliCommand() *cli.Command {
 				case "anchor":
 					_, gerr = marshallgen.Generate(inputPath, outputPath, marshallgen.NoOpWrapper{}, marshallgen.EmitOpts{})
 				default:
-					return eh.Errorf("unknown target %q (want facts|anchor)", target)
+					return eb.Build().Str("target", target).Errorf("unknown target (want facts|anchor)")
 				}
 				if gerr != nil {
 					log.Error().Err(gerr).Str("input", inputPath).Msg("keelsoncodec: generation failed")
@@ -64,7 +65,7 @@ func NewCliCommand() *cli.Command {
 				log.Info().Str("output", outputPath).Str("target", target).Msg("keelsoncodec: wrote codec")
 			}
 			if failed > 0 {
-				return eh.Errorf("keelsoncodec: %d of %d input(s) failed", failed, len(inputs))
+				return eb.Build().Int("failed", failed).Int("inputs", len(inputs)).Errorf("keelsoncodec: some inputs failed")
 			}
 			return
 		},

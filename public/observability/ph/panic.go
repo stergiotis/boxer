@@ -1,6 +1,7 @@
 package ph
 
 import (
+	"fmt"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -17,7 +18,7 @@ func ConvertPanicToError(panicErr any) error {
 		// TODO attach regular stack trace to e
 		return eb.Build().WithoutStack().Strs("stacktrace", trace).Errorf("recovering from panic: %w", e)
 	} else {
-		return eb.Build().WithoutStack().Strs("stacktrace", trace).Errorf("recovering from panic: %+v", panicErr)
+		return eb.Build().WithoutStack().Strs("stacktrace", trace).Str("panic", fmt.Sprintf("%+v", panicErr)).Errorf("recovering from panic")
 	}
 }
 func PanicHandler(exitCode int, afterPanic func(), ensure func()) {

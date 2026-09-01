@@ -210,7 +210,7 @@ type NoopTaskApi struct{}
 var _ TaskApiI = (*NoopTaskApi)(nil)
 
 func (inst *NoopTaskApi) Spawn(_ context.Context, opts SpawnOpts) (h HandleI, err error) {
-	err = eb.Build().Str("kind", opts.Kind).Errorf("task api: not available (no host wiring) kind=%s", opts.Kind)
+	err = eb.Build().Str("kind", opts.Kind).Errorf("task api: not available (no host wiring)")
 	return
 }
 func (inst *NoopTaskApi) WatchAll(_ ObserverI) (unsubscribe func(), err error) {
@@ -218,7 +218,7 @@ func (inst *NoopTaskApi) WatchAll(_ ObserverI) (unsubscribe func(), err error) {
 	return
 }
 func (inst *NoopTaskApi) RequestCancel(id TaskIdT, _ string) (err error) {
-	err = eb.Build().Str("taskId", string(id)).Errorf("task api: not available (no host wiring) taskId=%s", string(id))
+	err = eb.Build().Str("taskId", string(id)).Errorf("task api: not available (no host wiring)")
 	return
 }
 func (inst *NoopTaskApi) ListInflight() (entries []InflightSnapshotEntry, err error) {

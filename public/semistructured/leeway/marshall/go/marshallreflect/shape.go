@@ -228,7 +228,7 @@ func classifyReflectType(rt reflect.Type) (s goplan.FieldShape, err error) {
 		// with `,explode` (ADR-0113 D1; mirrors the AST classifier). Carriers
 		// are scalar-only: one marshalltypes.X per attribute.
 		if elem.Kind() == reflect.Struct && elem.PkgPath() == marshalltypesPkgPath {
-			err = eb.Build().Str("carrier", elem.Name()).Errorf("slice carriers (`[]marshalltypes.%s`) were removed with `,explode` (ADR-0113 D1) — a carrier is a scalar `marshalltypes.%s`, one per attribute", elem.Name(), elem.Name())
+			err = eb.Build().Str("carrier", elem.Name()).Errorf("slice carriers were removed with `,explode` (ADR-0113 D1) — a carrier is a scalar `marshalltypes.<T>`, one per attribute")
 			return
 		}
 		// []option.Option[T] forbidden.

@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // runevents.go reads the trail back as rows (ADR-0191 §SD7): one flattened
@@ -191,17 +192,17 @@ func parseRunEventRows(raw []byte) (rows []factsstore.RunEventRow, err error) {
 		}
 		parts := strings.Split(line, "\t")
 		if len(parts) != 7 {
-			err = eh.Errorf("chstore: run events: expected 7 columns, got %d (line=%q)", len(parts), line)
+			err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: run events: expected 7 columns")
 			return
 		}
 		tsMs, perr := strconv.ParseInt(parts[1], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: run events: parse ts %q: %w", parts[1], perr)
+			err = eb.Build().Str("ts", parts[1]).Errorf("chstore: run events: parse ts: %w", perr)
 			return
 		}
 		instance, perr := strconv.ParseUint(parts[4], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: run events: parse instance_key %q: %w", parts[4], perr)
+			err = eb.Build().Str("instanceKey", parts[4]).Errorf("chstore: run events: parse instance_key: %w", perr)
 			return
 		}
 		rows = append(rows, factsstore.RunEventRow{

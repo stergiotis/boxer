@@ -306,8 +306,7 @@ func (inst *Client) postSQL(ctx context.Context, sql string, params map[string]s
 		// panel, a CLI — render Error() and would otherwise show a bare
 		// "non-200" with the one useful sentence stripped out. Truncated in
 		// the message; the field keeps it whole for the log sink.
-		err = eb.Build().Int("status", resp.StatusCode).Str("response", string(bodyBytes)).
-			Errorf("chclient post: non-200: %s", truncateForMessage(bodyBytes))
+		err = eb.Build().Int("status", resp.StatusCode).Str("response", string(bodyBytes)).Errorf("chclient post: non-200: %s", truncateForMessage(bodyBytes)) //boxer:lint disable=CS013 reason="the excerpt is deliberately truncated for the message; the response field keeps it whole"
 		return
 	}
 	body = resp.Body

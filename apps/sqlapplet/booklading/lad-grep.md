@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Search content
+summary: "Grep stored text blocks with real line numbers"
 icon: "🧵"
 endpoint: default
 tabs: [table]

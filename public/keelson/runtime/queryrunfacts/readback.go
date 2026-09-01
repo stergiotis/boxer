@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
@@ -211,7 +212,7 @@ type membershipIds struct{}
 func (membershipIds) LookupMembership(name string) (id uint64, err error) {
 	e, err := vocab.NkRegistry.Lookup(naming.StylableName(name))
 	if err != nil {
-		return 0, eh.Errorf("queryrunfacts: no membership named %q in the runtime vocabulary: %w", name, err)
+		return 0, eb.Build().Str("name", name).Errorf("queryrunfacts: membership is not in the runtime vocabulary: %w", err)
 	}
 	return e.GetId().Value(), nil
 }
@@ -361,7 +362,7 @@ ORDER BY count DESC`,
 func prepare(sql string, table string) (out string, err error) {
 	database, _, qualified := strings.Cut(table, ".")
 	if !qualified || database == "" {
-		return "", eh.Errorf("queryrunfacts: %q is not a database-qualified table", table)
+		return "", eb.Build().Str("table", table).Errorf("queryrunfacts: table is not database-qualified")
 	}
 	resolver := lwsql.NewResolver(passes.NewStaticSchemaProvider(
 		map[string][]string{table: factsColumnNames()}))
@@ -373,7 +374,7 @@ func prepare(sql string, table string) (out string, err error) {
 	} {
 		out, err = pass.Apply(env.NewEnvironment(), out)
 		if err != nil {
-			return "", eh.Errorf("queryrunfacts: %s: %w", pass.Name, err)
+			return "", eb.Build().Str("pass", pass.Name).Errorf("queryrunfacts: readback pass failed: %w", err)
 		}
 	}
 	return out, nil
@@ -418,19 +419,18 @@ func SurfaceVersionSql() (sql string) {
 // caller that already has an HTTP path to the endpoint.
 func CheckSurfaceVersion(raw []byte, queryErr error) (err error) {
 	if queryErr != nil {
-		return eh.Errorf(
-			"queryrunfacts: this server carries no leeway SQL read surface (%s), which the history query expands into; install it with `boxer leeway sqlsurface install`: %w",
-			lwsqlsurface.VersionFunctionName, queryErr)
+		return eb.Build().Str("versionFunction", lwsqlsurface.VersionFunctionName).Errorf(
+			"queryrunfacts: this server carries no leeway SQL read surface, which the history query expands into; install it with `boxer leeway sqlsurface install`: %w",
+			queryErr)
 	}
 	got, pErr := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
 	if pErr != nil {
-		return eh.Errorf("queryrunfacts: %s() answered %q, which is not a version: %w",
-			lwsqlsurface.VersionFunctionName, strings.TrimSpace(string(raw)), pErr)
+		return eb.Build().Str("versionFunction", lwsqlsurface.VersionFunctionName).Str("answer", strings.TrimSpace(string(raw))).
+			Errorf("queryrunfacts: the version function's answer is not a version: %w", pErr)
 	}
 	if got != uint64(lwsqlsurface.Version) {
-		return eh.Errorf(
-			"queryrunfacts: this server carries leeway SQL read surface v%d and this build emits v%d; reconcile them with `boxer leeway sqlsurface install`",
-			got, lwsqlsurface.Version)
+		return eb.Build().Uint64("serverVersion", got).Int("buildVersion", lwsqlsurface.Version).Errorf(
+			"queryrunfacts: this server's leeway SQL read surface version and the one this build emits differ; reconcile them with `boxer leeway sqlsurface install`")
 	}
 	return nil
 }
@@ -449,7 +449,7 @@ func ParseHistoryRows(raw []byte) (rows []HistoryRow, err error) {
 		}
 		parts := strings.Split(line, "\t")
 		if len(parts) != historyRowColumns {
-			err = eh.Errorf("queryrunfacts: history row: expected %d columns, got %d (line=%q)", historyRowColumns, len(parts), line)
+			err = eb.Build().Int("want", historyRowColumns).Int("got", len(parts)).Str("line", line).Errorf("queryrunfacts: history row has the wrong column count")
 			return
 		}
 		var row HistoryRow
@@ -459,7 +459,7 @@ func ParseHistoryRows(raw []byte) (rows []HistoryRow, err error) {
 			}
 			v, perr := strconv.ParseUint(parts[i], 10, 64)
 			if perr != nil {
-				err = eh.Errorf("queryrunfacts: history row: column %d %q: %w", i, parts[i], perr)
+				err = eb.Build().Int("column", i).Str("raw", parts[i]).Errorf("queryrunfacts: history row: parse column: %w", perr)
 			}
 			return v
 		}
@@ -479,7 +479,7 @@ func ParseHistoryRows(raw []byte) (rows []HistoryRow, err error) {
 		}
 		excCode, perr := strconv.ParseInt(parts[17], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("queryrunfacts: history row: exception code %q: %w", parts[17], perr)
+			err = eb.Build().Str("exceptionCode", parts[17]).Errorf("queryrunfacts: history row: parse exception code: %w", perr)
 			return
 		}
 		row.Ts = time.Unix(int64(tsSec), 0).UTC()

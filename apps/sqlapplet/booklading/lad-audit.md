@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Block audit
+summary: "Verify stored block digests against what the walker wrote"
 icon: "🔏"
 endpoint: default
 tabs: [table]

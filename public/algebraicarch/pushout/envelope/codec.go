@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // CodecI is a pure wire serialization for EnvelopeV1. Implementations do
@@ -64,7 +65,7 @@ func Frame(codecName string, payload []byte) (framed []byte, err error) {
 // payload aliases the input.
 func Unframe(framed []byte) (codecName string, payload []byte, err error) {
 	if len(framed) < len(frameMagic) || string(framed[:len(frameMagic)]) != frameMagic {
-		err = eh.Errorf("missing %q magic: %w", frameMagic, ErrBadFrame)
+		err = eb.Build().Str("frameMagic", frameMagic).Errorf("missing magic: %w", ErrBadFrame)
 		return
 	}
 	rest := framed[len(frameMagic):]
@@ -83,7 +84,7 @@ func Unframe(framed []byte) (codecName string, payload []byte, err error) {
 
 func checkCodecName(name string) (err error) {
 	if len(name) == 0 || len(name) > maxCodecNameLen {
-		err = eh.Errorf("name %q length %d (want 1..%d): %w", name, len(name), maxCodecNameLen, ErrCodecName)
+		err = eb.Build().Str("name", name).Int("length", len(name)).Int("max", maxCodecNameLen).Errorf("codec name length is out of range: %w", ErrCodecName)
 		return
 	}
 	for i := 0; i < len(name); i++ {
@@ -111,7 +112,7 @@ func NewRegistry(codecs ...CodecI) (reg *Registry, err error) {
 			return
 		}
 		if _, dup := r.codecs[name]; dup {
-			err = eh.Errorf("duplicate codec %q: %w", name, ErrCodecName)
+			err = eb.Build().Str("name", name).Errorf("duplicate codec: %w", ErrCodecName)
 			return
 		}
 		r.codecs[name] = c
@@ -124,7 +125,7 @@ func NewRegistry(codecs ...CodecI) (reg *Registry, err error) {
 func (inst *Registry) Lookup(name string) (c CodecI, err error) {
 	c, ok := inst.codecs[name]
 	if !ok {
-		err = eh.Errorf("codec %q: %w", name, ErrUnknownCodec)
+		err = eb.Build().Str("name", name).Errorf("codec: %w", ErrUnknownCodec)
 	}
 	return
 }

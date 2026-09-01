@@ -5,6 +5,7 @@ import (
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // appletMaxHistory bounds each lane's result-history ring. Applets hide the
@@ -129,7 +130,7 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 
 func (inst *appletApp) Frame(ctx app.FrameContextI) (err error) {
 	if inst.inner == nil {
-		err = eh.Errorf("sqlapplet %s: Frame called before Mount", inst.def.Slug)
+		err = eb.Build().Str("slug", inst.def.Slug).Errorf("sqlapplet: Frame called before Mount")
 		return
 	}
 	if inst.binder != nil {
@@ -214,7 +215,7 @@ func attenuateTabs(inner *play.PlayApp, def *AppletDef, logger zerolog.Logger) (
 					return
 				}
 				if zErr := inner.Tabs().SetZone(sel.ID, zone); zErr != nil {
-					err = eh.Errorf("sqlapplet %s: %w", def.Slug, zErr)
+					err = eb.Build().Str("slug", def.Slug).Errorf("sqlapplet: %w", zErr)
 					return
 				}
 			}
@@ -222,7 +223,7 @@ func attenuateTabs(inner *play.PlayApp, def *AppletDef, logger zerolog.Logger) (
 				continue
 			}
 			if err = inner.BindTab(sel.ID, sel.Node); err != nil {
-				err = eh.Errorf("sqlapplet %s: %w", def.Slug, err)
+				err = eb.Build().Str("slug", def.Slug).Errorf("sqlapplet: %w", err)
 				return
 			}
 		}

@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // WriteWorkingset lands one boxer.facts row tagged KindWorkingset
@@ -93,7 +94,7 @@ func (inst *Store) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, 
 	}
 	parts := strings.Split(raw, "\t")
 	if len(parts) != 3 {
-		err = eh.Errorf("chstore: latest workingset: unexpected row shape: %q", raw)
+		err = eb.Build().Str("row", raw).Errorf("chstore: latest workingset: unexpected row shape")
 		return
 	}
 	if parts[2] == "1" {
@@ -348,7 +349,7 @@ func parseListWorkingsetsRows(raw []byte) (rows []factsstore.WorkingsetRow, err 
 		}
 		parts := strings.Split(line, "\t")
 		if len(parts) != 8 {
-			err = eh.Errorf("chstore: list workingsets: expected 8 columns, got %d (line=%q)", len(parts), line)
+			err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: list workingsets: expected 8 columns")
 			return
 		}
 		// cfg_hex needs no unescaping: hex digits carry no backslash.
@@ -359,12 +360,12 @@ func parseListWorkingsetsRows(raw []byte) (rows []factsstore.WorkingsetRow, err 
 		}
 		tileKey, perr := strconv.ParseUint(parts[4], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: list workingsets: parse tile_key %q: %w", parts[4], perr)
+			err = eb.Build().Str("tileKey", parts[4]).Errorf("chstore: list workingsets: parse tile_key: %w", perr)
 			return
 		}
 		tsSec, perr := strconv.ParseInt(parts[7], 10, 64)
 		if perr != nil {
-			err = eh.Errorf("chstore: list workingsets: parse ts %q: %w", parts[7], perr)
+			err = eb.Build().Str("ts", parts[7]).Errorf("chstore: list workingsets: parse ts: %w", perr)
 			return
 		}
 		rows = append(rows, factsstore.WorkingsetRow{

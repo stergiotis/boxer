@@ -14,6 +14,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "Log emitter",
 	Title:    "Log emitter",
+	Summary:  "Emit log lines at each level to exercise the log path",
 	Icon:     icons.PhPaperPlaneTilt,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicObservability},
 	Keywords: []string{"log", "emit", "zerolog", "levels"},

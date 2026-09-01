@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
@@ -41,7 +42,7 @@ func TestBeginRefusesAnOrdinalAlreadyHeld(t *testing.T) {
 
 	_, err := reg.Begin("latecomer", 5)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "holder", "the error names who holds it")
+	assert.Contains(t, ebtest.Text(t, err), "holder", "the error names who holds it")
 }
 
 // The same registration re-run from its own call site is idempotent (review

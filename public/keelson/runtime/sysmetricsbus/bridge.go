@@ -3,6 +3,7 @@ package sysmetricsbus
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Bridge relays messages on subject from src to dst — it subscribes on one bus
@@ -32,7 +33,7 @@ func Bridge(src, dst app.BusI, subject string) (stop func(), err error) {
 		_ = dst.Publish(m.Subject, m.Payload)
 	})
 	if err != nil {
-		err = eh.Errorf("sysmetricsbus: bridge subscribe %q: %w", subject, err)
+		err = eb.Build().Str("subject", subject).Errorf("sysmetricsbus: bridge subscribe: %w", err)
 		return
 	}
 	return

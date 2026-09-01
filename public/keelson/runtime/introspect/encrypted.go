@@ -5,7 +5,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // EncryptedEntry is the registry provider for one ad-hoc encrypted
@@ -69,7 +69,7 @@ func (e *EncryptedEntry) Revision() uint64 {
 // broker's decrypt path, not the in-process snapshot path. Returning an
 // error keeps the HTTP source and any accidental snapshot honest.
 func (e *EncryptedEntry) Snapshot(Projection) (arrow.RecordBatch, error) {
-	return nil, eh.Errorf("introspect: %q is an ad-hoc dataset; it streams through the broker, not Snapshot", e.name)
+	return nil, eb.Build().Str("name", e.name).Errorf("introspect: the table is an ad-hoc dataset; it streams through the broker, not Snapshot")
 }
 
 // Update swaps the dataset's schema, structure, file, and revision in

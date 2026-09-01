@@ -6,7 +6,7 @@ import (
 
 	"lukechampine.com/blake3"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
@@ -38,7 +38,7 @@ const naturalKeyDomain = "capmap.competence"
 func NormalizeSlug(raw string) (slug string, err error) {
 	var sn naming.StylableName
 	if sn, err = naming.MakeStylableName(strings.TrimSpace(raw)); err != nil {
-		return "", eh.Errorf("unable to normalize slug %q: %w", raw, err)
+		return "", eb.Build().Str("raw", raw).Errorf("unable to normalize slug: %w", err)
 	}
 	return string(sn), nil
 }
@@ -97,7 +97,7 @@ func slugForPath(path string) (slug string, err error) {
 		raw = filepath.Base(filepath.Dir(path))
 	}
 	if slug, err = NormalizeSlug(raw); err != nil {
-		return "", eh.Errorf("unable to derive slug for %q: %w", path, err)
+		return "", eb.Build().Str("path", path).Errorf("unable to derive a slug: %w", err)
 	}
 	return slug, nil
 }

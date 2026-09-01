@@ -18,6 +18,7 @@ var manifest = app.Manifest{
 	Version: "0.1.0",
 	Display: "imzrt",
 	Title:   "imzrt",
+	Summary: "Watch frame timings, latency and render telemetry live",
 	// Phosphor pulse — the runtime-heartbeat metaphor; distinct from imztop's
 	// PhGauge (the system-monitor metaphor) so the two siblings read apart.
 	Icon:     icons.PhPulse,

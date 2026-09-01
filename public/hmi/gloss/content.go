@@ -76,7 +76,7 @@ func (inst *simpleGloss) Affinities() []string { return inst.affinities }
 func (inst *simpleGloss) Bind(params map[string]string) (InstanceI, error) {
 	if inst.refuseParam != "" {
 		if v, set := params[inst.refuseParam]; set {
-			return nil, eb.Build().Str("mediaType", inst.mediaType).Errorf("%s=%q is reserved and not supported yet by %s", inst.refuseParam, v, inst.mediaType)
+			return nil, eb.Build().Str("mediaType", inst.mediaType).Errorf("%s=%q is reserved and not supported yet by %s", inst.refuseParam, v, inst.mediaType) //boxer:lint disable=CS013 reason="Bind's message becomes Diagnostic.Reason, which catalog.go renders"
 		}
 	}
 	return &simpleInstance{g: inst, params: params}, nil

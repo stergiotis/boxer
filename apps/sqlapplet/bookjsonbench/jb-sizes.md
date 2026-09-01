@@ -5,6 +5,7 @@ status: stable
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-08-24
 title: JSONBench storage by arm
+summary: "Compare JSONBench on-disk cost across trial arms"
 icon: "📐"
 tabs: [table]
 ---

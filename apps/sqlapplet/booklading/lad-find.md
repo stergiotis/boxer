@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Find files
+summary: "Match snapshot files by path, extension and size"
 icon: "🔎"
 endpoint: default
 tabs: [table, detail@side]

@@ -127,7 +127,7 @@ func (s *attrSubColumns) add(elemField, column, ctOverride string, shape FieldSh
 		column = "value"
 	}
 	if prev, dup := s.usedCols[column]; dup {
-		err = ctx.Str("column", column).Str("first", prev).Errorf("sub-column appears on two %s fields", s.noun)
+		err = ctx.Str("column", column).Str("first", prev).Errorf("sub-column appears on two %s fields", s.noun) //boxer:lint disable=CS013 reason="noun/place fill a grammatical slot, not a data slot — see attrSubColumns"
 		return
 	}
 	s.usedCols[column] = elemField
@@ -150,7 +150,7 @@ func (s *attrSubColumns) add(elemField, column, ctOverride string, shape FieldSh
 		}
 	}
 	if isRoaring {
-		err = ctx.Errorf("*roaring.Bitmap not supported %s — no stable element index to zip with the co-containers; use []T", s.place)
+		err = ctx.Errorf("*roaring.Bitmap not supported %s — no stable element index to zip with the co-containers; use []T", s.place) //boxer:lint disable=CS013 reason="noun/place fill a grammatical slot, not a data slot — see attrSubColumns"
 		return
 	}
 	if isSlice {
@@ -238,16 +238,16 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			// (`membership-card > 1`), possibly on heterogeneous channels
 			// (ADR-0109 (a)). The channel is per-field.
 			if pt.Flags.Unit || pt.Flags.HasConst || pt.Flags.CanonicalType != "" {
-				err = ctx.Errorf("`%s` field takes only a channel flag (no unit / const / ct=)", TupleMembershipMarker)
+				err = ctx.Errorf("`" + TupleMembershipMarker + "` field takes only a channel flag (no unit / const / ct=)")
 				return
 			}
 			if isRoaring {
-				err = ctx.Errorf("`%s` field cannot be a *roaring.Bitmap — use a scalar or a `[]T` for a repeated membership", TupleMembershipMarker)
+				err = ctx.Errorf("`" + TupleMembershipMarker + "` field cannot be a *roaring.Bitmap — use a scalar or a `[]T` for a repeated membership")
 				return
 			}
 			ch := pt.Flags.Channel
 			if ch.UsesCarrier() {
-				err = ctx.Str("channel", ch.String()).Errorf("`%s` cannot use a carrier / parametrized channel — its identity is per-row carrier data, not an element field; use a verbatim or ref channel", TupleMembershipMarker)
+				err = ctx.Str("channel", ch.String()).Errorf("`" + TupleMembershipMarker + "` cannot use a carrier / parametrized channel — its identity is per-row carrier data, not an element field; use a verbatim or ref channel")
 				return
 			}
 			// Type ↔ channel: a verbatim channel embeds the literal name
@@ -257,16 +257,16 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			switch goType {
 			case "string", "[]byte":
 				if !ch.EmbedsLiteralName() {
-					err = ctx.Str("channel", ch.String()).Errorf("`%s` on a string / []byte field requires an explicit verbatim channel flag (`,verbatim` / `,lowCardVerbatim` / `,highCardVerbatim`) — the literal name embeds on the wire; a ref channel takes a uint64 id", TupleMembershipMarker)
+					err = ctx.Str("channel", ch.String()).Errorf("`" + TupleMembershipMarker + "` on a string / []byte field requires an explicit verbatim channel flag (`,verbatim` / `,lowCardVerbatim` / `,highCardVerbatim`) — the literal name embeds on the wire; a ref channel takes a uint64 id")
 					return
 				}
 			case "uint64":
 				if !ch.NeedsKindVar() {
-					err = ctx.Str("channel", ch.String()).Errorf("`%s` on a uint64 field requires a ref channel flag (`,lowCardRef` / `,highCardRef`) — the id is carried directly; a verbatim channel takes a string / []byte name", TupleMembershipMarker)
+					err = ctx.Str("channel", ch.String()).Errorf("`" + TupleMembershipMarker + "` on a uint64 field requires a ref channel flag (`,lowCardRef` / `,highCardRef`) — the id is carried directly; a verbatim channel takes a string / []byte name")
 					return
 				}
 			default:
-				err = ctx.Str("goType", goType).Errorf("`%s` field must be a string / []byte (verbatim) or uint64 (ref) value, or a `[]T` of them", TupleMembershipMarker)
+				err = ctx.Str("goType", goType).Errorf("`" + TupleMembershipMarker + "` field must be a string / []byte (verbatim) or uint64 (ref) value, or a `[]T` of them")
 				return
 			}
 			memberships = append(memberships, mappingplan.TupleMembership{
@@ -290,7 +290,7 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			return
 		}
 		if pt.Flags.Channel != mappingplan.MembershipChannelLowCardRef {
-			err = ctx.Str("flag", pt.Flags.Channel.String()).Errorf("channel flag belongs on the `%s` field, not on a tuple value field", TupleMembershipMarker)
+			err = ctx.Str("flag", pt.Flags.Channel.String()).Errorf("channel flag belongs on the `" + TupleMembershipMarker + "` field, not on a tuple value field")
 			return
 		}
 		if err = subs.add(e.GoFieldName, pt.Column, pt.Flags.CanonicalType, e.Shape); err != nil {
@@ -299,7 +299,7 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 	}
 
 	if len(memberships) == 0 {
-		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs at least one `%s` field carrying a per-attribute membership", TupleMembershipMarker)
+		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs at least one `" + TupleMembershipMarker + "` field carrying a per-attribute membership")
 		return
 	}
 	if len(subs.values) == 0 {

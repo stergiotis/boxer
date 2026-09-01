@@ -41,12 +41,12 @@ var ShapeCheckPass = nanopass.LiftBodyPass(ShapeCheckPassName, shapeCheckImpl, n
 func shapeCheckImpl(sql string) (result string, err error) {
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ShapeCheckPassName, err)
+		err = eb.Build().Errorf(ShapeCheckPassName+": %w", err)
 		return
 	}
 	scopes, err := nanopass.BuildScopes(pr, "")
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ShapeCheckPassName, err)
+		err = eb.Build().Errorf(ShapeCheckPassName+": %w", err)
 		return
 	}
 	for _, root := range scopes {
@@ -56,7 +56,7 @@ func shapeCheckImpl(sql string) (result string, err error) {
 			err = CheckOutputColumns(names)
 		}
 		if err != nil {
-			err = eb.Build().Errorf("%s: %w", ShapeCheckPassName, err)
+			err = eb.Build().Errorf(ShapeCheckPassName+": %w", err)
 			return
 		}
 	}

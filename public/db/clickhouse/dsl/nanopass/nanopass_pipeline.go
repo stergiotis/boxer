@@ -186,7 +186,7 @@ const (
 func (p Pass) Run(sql string) (result string, err error) {
 	e, body, err := env.Extract(sql)
 	if err != nil {
-		err = eh.Errorf("Run %s: %w", p.Name, err)
+		err = eb.Build().Str("name", p.Name).Errorf("Run: %w", err)
 		return
 	}
 	newBody, applyErr := p.applyWithProps(e, body)
@@ -199,7 +199,7 @@ func (p Pass) Run(sql string) (result string, err error) {
 	}
 	result, err = e.Integrate(newBody)
 	if err != nil {
-		err = eh.Errorf("Run %s: %w", p.Name, err)
+		err = eb.Build().Str("name", p.Name).Errorf("Run: %w", err)
 	}
 	return
 }

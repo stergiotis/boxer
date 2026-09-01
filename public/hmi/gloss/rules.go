@@ -93,7 +93,7 @@ func (inst *Catalog) CompileRule(token string, pattern string, source string) (r
 // mime.ParseMediaType. BindToken is the same plus the catalog checks.
 func ParseToken(token string) (mediaType string, params map[string]string, err error) {
 	if !strings.Contains(token, "/") {
-		err = eb.Build().Str("token", token).Errorf("not a media type (no slash): %q", token)
+		err = eb.Build().Str("token", token).Errorf("not a media type (no slash)")
 		return
 	}
 	mediaType, params, err = mime.ParseMediaType(token)
@@ -115,11 +115,11 @@ func (inst *Catalog) BindToken(token string) (mediaType string, params map[strin
 	}
 	g, ok := inst.byType[mt]
 	if !ok {
-		err = eb.Build().Str("mediaType", mt).Errorf("unknown media type %q — known: %s", mt, inst.knownTypes())
+		err = eb.Build().Str("mediaType", mt).Str("known", inst.knownTypes()).Errorf("unknown media type")
 		return
 	}
 	if reason := checkParams(g, params); reason != "" {
-		err = eb.Build().Str("mediaType", mt).Errorf("%s", reason)
+		err = eb.Build().Str("mediaType", mt).Errorf("%s", reason) //boxer:lint disable=CS013 reason="checkParams returns the whole diagnostic sentence, which catalog.go also renders as Diagnostic.Reason"
 		return
 	}
 	instance, err = g.Bind(params)

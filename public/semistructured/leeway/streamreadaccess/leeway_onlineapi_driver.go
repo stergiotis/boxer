@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/rs/zerolog/log"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -766,7 +766,7 @@ func (inst *Driver) newCardCursor(rec arrow.RecordBatch, cardArrowIdx int, entit
 		// Falling back to card=1 here mis-slices every multi-element attribute
 		// and produces silently wrong output (review F-4); surface an error so
 		// the malformed batch is rejected rather than mis-decoded.
-		inst.handleError(eh.Errorf("cardinality column %d is %s, expected a Uint64 list", cardArrowIdx, cardInner.DataType()))
+		inst.handleError(eb.Build().Int("column", cardArrowIdx).Stringer("dataType", cardInner.DataType()).Errorf("cardinality column is not a Uint64 list"))
 		return cardCursor{}
 	}
 	return cardCursor{
@@ -1029,7 +1029,10 @@ func (inst *Driver) emitMemberships(sink SinkI, rec arrow.RecordBatch, entityIdx
 // frame of one attribute — what BeginTags announces: no membership columns →
 // 0; membership columns without cardinality support → one tag per column;
 // otherwise the sum of the attribute's per-role cardinalities, read from the
-// precomputed slots rather than the Uint64 inner array.
+// precomputed slots, plus one per channel that has no cardinality lane — a
+// channel declared single-instance (ADR-0213) beside carded ones carries
+// exactly one membership per attribute, and emitSectionTags emits it through
+// the same per-attribute fallback this counts.
 func (inst *Driver) sectionTagCount(sec *sectionLayout, memberSlots []attrCardSlot) (n int) {
 	if len(sec.memberCols) == 0 {
 		return
@@ -1045,6 +1048,14 @@ func (inst *Driver) sectionTagCount(sec *sectionLayout, memberSlots []attrCardSl
 	}
 	for _, s := range memberSlots {
 		n += s.card
+	}
+	for _, mc := range sec.memberCols {
+		if mc.paramsOnly {
+			continue
+		}
+		if _, found := memberSlotForRole(sec, memberSlots, mc.role); !found {
+			n++
+		}
 	}
 	return
 }
@@ -1158,7 +1169,7 @@ func (inst *Driver) emitOneMembership(ms MembershipSinkI, rec arrow.RecordBatch,
 	default:
 		// Honour the driver's no-panic contract: an unknown role (e.g. written
 		// by a future binary) is surfaced as an error, not a crash (review F-4).
-		inst.handleError(eh.Errorf("unimplemented column role: %s", mc.role))
+		inst.handleError(eb.Build().Stringer("role", mc.role).Errorf("unimplemented column role"))
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DefaultHeartbeatThresholdMs is the no-emission gap after which an
@@ -147,7 +148,7 @@ func (inst *Supervisor) Start() (err error) {
 		inst.unsubWatch()
 		inst.unsubWatch = nil
 		inst.started.Store(false)
-		err = eh.Errorf("supervisor: subscribe %s: %w", inst.listSubject, err)
+		err = eb.Build().Str("listSubject", inst.listSubject).Errorf("supervisor: subscribe: %w", err)
 		return
 	}
 

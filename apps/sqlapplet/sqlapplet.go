@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
 
@@ -67,9 +68,15 @@ type TabSel struct {
 
 // AppletDef is one parsed applet document, ready to mint.
 type AppletDef struct {
-	Slug     string
-	BookID   string
-	Title    string
+	Slug   string
+	BookID string
+	Title  string
+	// Summary is the document's required frontmatter `summary:` — the one
+	// line the launcher renders beneath the title (ADR-0214 §SD4). Required
+	// at parse rather than defaulted from the document's leading prose: that
+	// paragraph is written to open a document, and the launcher needs the
+	// line that tells this applet from the others in its book.
+	Summary  string
 	Icon     string
 	Tabs     []TabSel // nil = auto (all result panels; accept/reject decides at render)
 	Endpoint EndpointE
@@ -232,7 +239,7 @@ func scanFences(src []byte) (fences []fence) {
 func ParseBook(bookID string, fsys fs.FS) (defs []*AppletDef, errs []error) {
 	book, err := help.NewBook(app.AppIdT(appletIdPrefix+"book/"+bookID), fsys)
 	if err != nil {
-		errs = append(errs, eh.Errorf("sqlapplet: book %q: %w", bookID, err))
+		errs = append(errs, eb.Build().Str("bookID", bookID).Errorf("sqlapplet: book: %w", err))
 		return
 	}
 	docs := book.Docs()
@@ -339,11 +346,17 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `title` is required", bookID, path)
 		return
 	}
+	summary, _ := fm["summary"].(string)
+	if summary == "" {
+		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `summary` is required", bookID, path)
+		return
+	}
 	def = &AppletDef{
-		Slug:   slug,
-		BookID: bookID,
-		Title:  title,
-		SQL:    sql,
+		Slug:    slug,
+		BookID:  bookID,
+		Title:   title,
+		Summary: summary,
+		SQL:     sql,
 		// Cloned: the runtime-store path parses a document off the bus, and
 		// a def outlives the request buffer it was read from.
 		Source: bytes.Clone(src),

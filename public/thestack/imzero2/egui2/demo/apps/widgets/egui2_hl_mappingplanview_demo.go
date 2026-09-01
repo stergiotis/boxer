@@ -3,7 +3,7 @@ package widgets
 import (
 	"encoding/json"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -96,7 +96,7 @@ func (l idLookup) LookupMembership(name string) (uint64, error) {
 	if id, ok := l[name]; ok {
 		return id, nil
 	}
-	return 0, eh.Errorf("membership %q not in lookup", name)
+	return 0, eb.Build().Str("name", name).Errorf("membership not in lookup")
 }
 
 // recompute rebuilds the plan from the model and produces the dock's output

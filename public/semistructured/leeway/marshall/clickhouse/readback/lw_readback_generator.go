@@ -55,6 +55,7 @@ type Generator struct {
 	plain   map[string]colInfo                       // plain item name -> column
 	value   map[string]map[string]colInfo            // section -> sub-column -> value column
 	support map[string]map[common.ColumnRoleE]string // section -> role -> escaped physical column
+	singles map[string]common.MembershipSpecE        // section -> channels declared single-instance (ADR-0213)
 }
 
 type colInfo struct {
@@ -72,6 +73,7 @@ func NewGenerator(ir *InformationRetrieval, resolver MembershipResolver) *Genera
 		plain:    make(map[string]colInfo, 8),
 		value:    make(map[string]map[string]colInfo, 16),
 		support:  make(map[string]map[common.ColumnRoleE]string, 16),
+		singles:  make(map[string]common.MembershipSpecE, 16),
 	}
 	for r := range ir.IterateAll() {
 		cc := r.ColumnContext
@@ -81,6 +83,9 @@ func NewGenerator(ir *InformationRetrieval, resolver MembershipResolver) *Genera
 			continue
 		}
 		sec := string(cc.SectionName)
+		if _, seen := g.singles[sec]; !seen {
+			g.singles[sec] = common.SingleMembershipSpecs(cc.UseAspects)
+		}
 		if r.Role == common.ColumnRoleValue {
 			if g.value[sec] == nil {
 				g.value[sec] = make(map[string]colInfo, 4)
@@ -270,11 +275,12 @@ type fieldLocators struct {
 
 // lanes renders the locators as lwextract's view of them.
 //
-// Card is always populated: locate errors when the schema lacks the
-// cardinality column, so this generator never takes lwextract's
-// one-membership-per-attribute fast path. That is deliberate — a Plan
-// reaching a schema without the column is a conformance failure worth
-// reporting, not a shape to silently optimise.
+// Card is empty exactly when the schema DECLARES the channel
+// single-instance (ADR-0213) — the licence for lwextract's
+// one-membership-per-attribute fast path (readback invariant I5). A card
+// column merely missing from an undeclared schema stays a locate error: a
+// Plan reaching such a schema is a conformance failure worth reporting,
+// not a shape to silently optimise.
 func (inst fieldLocators) lanes() lwextract.Lanes {
 	return lwextract.Lanes{
 		Value:  inst.vinfo.col,
@@ -340,8 +346,13 @@ func (g *Generator) locate(f *mappingplan.TaggedField) (loc fieldLocators, err e
 	}
 	loc.cardCol, ok = g.support[sec][roles.card]
 	if !ok {
-		err = eb.Build().Str("section", sec).Stringer("role", roles.card).Errorf("membership cardinality column not found in schema")
-		return
+		// Absence is the declaration when the schema states it (ADR-0213):
+		// the channel carries exactly one membership per attribute, the
+		// fast form is licensed, and there is no lane to require.
+		if g.singles[sec]&loc.spec == 0 {
+			err = eb.Build().Str("section", sec).Stringer("role", roles.card).Errorf("membership cardinality column not found in schema")
+			return
+		}
 	}
 
 	switch vinfo.subType {

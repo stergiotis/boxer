@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope"
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/exchange"
@@ -70,11 +71,11 @@ func (inst *pushoutBackend) NewRepo(actor string, path string) (r RepoI) {
 func (inst *pushoutBackend) Clone(ctx context.Context, src RepoI, destPath string, destActor string) (dest RepoI, audit string, err error) {
 	srcRepo, ok := src.(*PushoutRepo)
 	if !ok {
-		err = eh.Errorf("pushout-native cannot clone from a %T", src)
+		err = eb.Build().Type("source", src).Errorf("pushout-native cannot clone from this source type")
 		return
 	}
 	if srcRepo.eng == nil {
-		err = eh.Errorf("clone source %s is not initialised", srcRepo.path)
+		err = eb.Build().Str("path", srcRepo.path).Errorf("clone source is not initialised")
 		return
 	}
 	d := &PushoutRepo{actor: destActor, path: destPath, clock: inst.clock}
@@ -426,7 +427,7 @@ func changesForResolution(v repo.ViewI, cells []KVLine) (changes []patch.Change,
 			continue
 		}
 		if _, exists := byPath[c.Path]; !exists {
-			err = eh.Errorf("cell %q: %w", c.Path, ErrCellCreateWhileConflicted)
+			err = eb.Build().Str("path", c.Path).Errorf("cell: %w", ErrCellCreateWhileConflicted)
 			return
 		}
 	}
@@ -587,7 +588,7 @@ func (inst *PushoutRepo) Apply(ctx context.Context, env PatchEnvelope) (audit st
 func (inst *PushoutRepo) Push(ctx context.Context, dest RepoI) (audit string, err error) {
 	other, ok := dest.(*PushoutRepo)
 	if !ok {
-		err = eh.Errorf("pushout-native Push requires pushout-native destination, got %T", dest)
+		err = eb.Build().Type("dest", dest).Errorf("pushout-native Push requires a pushout-native destination")
 		return
 	}
 	if inst.eng == nil || other.eng == nil {
@@ -608,7 +609,7 @@ func (inst *PushoutRepo) Push(ctx context.Context, dest RepoI) (audit string, er
 func (inst *PushoutRepo) Pull(ctx context.Context, src RepoI) (audit string, hadConflict bool, err error) {
 	other, ok := src.(*PushoutRepo)
 	if !ok {
-		err = eh.Errorf("pushout-native Pull requires pushout-native source, got %T", src)
+		err = eb.Build().Type("source", src).Errorf("pushout-native Pull requires a pushout-native source")
 		return
 	}
 	if inst.eng == nil || other.eng == nil {

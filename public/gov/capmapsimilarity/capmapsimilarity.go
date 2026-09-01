@@ -58,6 +58,7 @@ import (
 	"github.com/stergiotis/boxer/public/ea"
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
@@ -205,7 +206,7 @@ func Rank(corpus capmapcorpus.Corpus, opts Options) (res Result, err error) {
 		}
 		for _, i := range candidates {
 			if own[i], err = measure(enc, texts[i]); err != nil {
-				return res, eh.Errorf("unable to compress %q: %w", comps[i].Slug, err)
+				return res, eb.Build().Str("slug", comps[i].Slug).Errorf("unable to compress: %w", err)
 			}
 		}
 	}
@@ -228,7 +229,7 @@ func Rank(corpus capmapcorpus.Corpus, opts Options) (res Result, err error) {
 			local, n, wErr := rankAgainst(i, candidates[pos+1:], texts, own, eligible, opts.Threshold)
 			mu.Lock()
 			if wErr != nil && firstErr == nil {
-				firstErr = eh.Errorf("unable to rank %q: %w", comps[i].Slug, wErr)
+				firstErr = eb.Build().Str("slug", comps[i].Slug).Errorf("unable to rank: %w", wErr)
 			}
 			pairs = append(pairs, local...)
 			compared += n

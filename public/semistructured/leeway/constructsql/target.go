@@ -184,7 +184,7 @@ func shapeCheckTargetImpl(sql string, columns passes.SchemaProviderI, defaultDat
 	result = sql
 	pr, err := nanopass.Parse(sql)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ShapeCheckTargetPassName, err)
+		err = eb.Build().Errorf(ShapeCheckTargetPassName+": %w", err)
 		return
 	}
 	ins := pr.InsertStmt()
@@ -195,7 +195,7 @@ func shapeCheckTargetImpl(sql string, columns passes.SchemaProviderI, defaultDat
 	colSeq, n, found := columns.GetColumns(db, table)
 	if !found || n == 0 {
 		err = eb.Build().Str("database", db).Str("table", table).
-			Errorf("%s: the INSERT target is not in the bound schema — there is nothing to verify the SELECT against", ShapeCheckTargetPassName)
+			Errorf(ShapeCheckTargetPassName + ": the INSERT target is not in the bound schema — there is nothing to verify the SELECT against")
 		return
 	}
 	byFold := make(map[string]string, n)
@@ -211,7 +211,7 @@ func shapeCheckTargetImpl(sql string, columns passes.SchemaProviderI, defaultDat
 		for _, l := range listed {
 			if _, known := byFold[foldPhysical(l)]; !known {
 				err = eb.Build().Str("column", l).Str("table", tableLabel(db, table)).
-					Errorf("%s: the column list names a column the target does not carry", ShapeCheckTargetPassName)
+					Errorf(ShapeCheckTargetPassName + ": the column list names a column the target does not carry")
 				return
 			}
 		}
@@ -219,39 +219,39 @@ func shapeCheckTargetImpl(sql string, columns passes.SchemaProviderI, defaultDat
 
 	scopes, err := nanopass.BuildScopes(pr, defaultDatabase)
 	if err != nil {
-		err = eb.Build().Errorf("%s: %w", ShapeCheckTargetPassName, err)
+		err = eb.Build().Errorf(ShapeCheckTargetPassName+": %w", err)
 		return
 	}
 	for _, root := range scopes {
 		var names []string
 		names, err = outputNames(pr, root)
 		if err != nil {
-			err = eb.Build().Errorf("%s: %w", ShapeCheckTargetPassName, err)
+			err = eb.Build().Errorf(ShapeCheckTargetPassName+": %w", err)
 			return
 		}
 		for i, name := range names {
 			targetName, known := byFold[foldPhysical(name)]
 			if !known {
 				err = eb.Build().Str("column", name).Str("table", tableLabel(db, table)).
-					Errorf("%s: the SELECT outputs a column the target does not carry", ShapeCheckTargetPassName)
+					Errorf(ShapeCheckTargetPassName + ": the SELECT outputs a column the target does not carry")
 				return
 			}
 			if listed != nil {
 				if i >= len(listed) {
 					err = eb.Build().Int("outputs", len(names)).Int("listed", len(listed)).
-						Errorf("%s: the SELECT outputs more columns than the column list names — the positional mapping cannot hold", ShapeCheckTargetPassName)
+						Errorf(ShapeCheckTargetPassName + ": the SELECT outputs more columns than the column list names — the positional mapping cannot hold")
 					return
 				}
 				if foldPhysical(listed[i]) != foldPhysical(name) {
 					err = eb.Build().Int("position", i+1).Str("output", name).Str("listed", listed[i]).Str("resolves", targetName).
-						Errorf("%s: output and column list disagree at this position — the INSERT maps positionally, so this writes a value into a column the statement does not say it writes", ShapeCheckTargetPassName)
+						Errorf(ShapeCheckTargetPassName + ": output and column list disagree at this position — the INSERT maps positionally, so this writes a value into a column the statement does not say it writes")
 					return
 				}
 			}
 		}
 		if listed != nil && len(names) < len(listed) {
 			err = eb.Build().Int("outputs", len(names)).Int("listed", len(listed)).
-				Errorf("%s: the column list names more columns than the SELECT outputs", ShapeCheckTargetPassName)
+				Errorf(ShapeCheckTargetPassName + ": the column list names more columns than the SELECT outputs")
 			return
 		}
 	}

@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: History of a path
+summary: "Follow one path across every snapshot of a mount"
 icon: "🕰"
 endpoint: default
 tabs: [table, timeline]

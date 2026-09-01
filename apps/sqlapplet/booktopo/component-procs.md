@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Component processes
+summary: "Group marked processes by component, with resources"
 icon: "⚙"
 endpoint: introspection
 tabs: [table, detail]

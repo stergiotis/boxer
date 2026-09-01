@@ -57,7 +57,7 @@ func (inst *TableValidator) validateNames(names []naming.StylableName, nameType 
 			}
 			has := d.Has(string(name2))
 			if has {
-				err = eb.Build().Stringer("column", name).Stringer("namingStyle", s).Stringer("columnNameStyled", name2).Errorf("found duplicate %s name, must be unique in all naming styles", nameType)
+				err = eb.Build().Stringer("column", name).Stringer("namingStyle", s).Stringer("columnNameStyled", name2).Str("nameType", nameType).Errorf("found duplicate name, must be unique in all naming styles")
 				return
 			}
 		}
@@ -65,7 +65,7 @@ func (inst *TableValidator) validateNames(names []naming.StylableName, nameType 
 			d.Add(string(naming.ConvertNameStyle(name, s)))
 		}
 		if !matchesNamingStyle {
-			err = eb.Build().Stringer("column", name).Strs("possibleNames", possibleNames).Errorf("found %s name that does not follow any of the supported naming conventions", nameType)
+			err = eb.Build().Stringer("column", name).Strs("possibleNames", possibleNames).Str("nameType", nameType).Errorf("found name that does not follow any of the supported naming conventions")
 			return
 		}
 	}
@@ -146,6 +146,13 @@ func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 		addErr(eb.Build().Stringer("section", section.Name).Errorf("section aspects are not valid"))
 	} else if e := useaspects2.CheckFamilyExclusivity(section.UseAspects); e != nil {
 		addErr(eb.Build().Stringer("section", section.Name).Errorf("section use aspects violate family exclusivity: %w", e))
+	}
+	// A single-membership declaration (ADR-0213) names a channel; without
+	// that channel in the section's MembershipSpec it declares a layout of a
+	// lane that does not exist.
+	if orphan := SingleMembershipSpecs(section.UseAspects) & ^section.MembershipSpec; orphan != 0 {
+		addErr(eb.Build().Stringer("section", section.Name).Stringer("channels", orphan).
+			Errorf("single-membership declaration without its membership channel — add the channel to the section's membership spec or drop the declaration"))
 	}
 	addErr(inst.validateNamesTypes(section.ValueColumnNames, section.ValueColumnTypes))
 	n := len(section.ValueColumnNames)

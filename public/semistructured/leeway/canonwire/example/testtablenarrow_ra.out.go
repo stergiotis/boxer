@@ -27,11 +27,12 @@ import (
 )
 
 var _ = time.Time{}
+var _ = log.Logger
 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeMembershipPacks
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:251
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:291
 
 type MembershipPackTestTableNarrowText struct {
 	ValueLowCardRef            *array.List
@@ -352,7 +353,7 @@ func (inst *MembershipPackTestTableNarrowGeo) GetNumberOfMemberItemsByAttrLowCar
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:869
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:930
 
 type ReadAccessTestTableNarrowPlainEntityIdAttributes struct {
 	ValueId       *array.Uint64
@@ -544,7 +545,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessTestTableNarrowTaggedTextAttrib
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1087
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1148
 
 func (inst *ReadAccessTestTableNarrowPlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
@@ -582,7 +583,7 @@ func (inst *ReadAccessTestTableNarrowTaggedTextAttributes) Reset() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1161
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1222
 
 var _ runtime.ReleasableI = (*ReadAccessTestTableNarrowPlainEntityIdAttributes)(nil)
 
@@ -626,7 +627,7 @@ func (inst *ReadAccessTestTableNarrowTaggedTextAttributes) Release() {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1240
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1301
 
 func (inst *ReadAccessTestTableNarrowPlainEntityIdAttributes) Len() (nEntities int) {
 	if inst.ValueId != nil {
@@ -659,7 +660,7 @@ func (inst *ReadAccessTestTableNarrowTaggedTextAttributes) Len() (nEntities int)
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1292
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1353
 
 func (inst *ReadAccessTestTableNarrowPlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
@@ -848,7 +849,7 @@ func (inst *ReadAccessTestTableNarrowPlainEntityTimestampAttributes) GetAttrValu
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1976
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2037
 
 func (inst *ReadAccessTestTableNarrowTaggedGeoAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueLat.ValueOffsets(int(entityIdx))
@@ -864,7 +865,7 @@ func (inst *ReadAccessTestTableNarrowTaggedTextAttributes) GetNumberOfAttributes
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeSectionClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2082
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2143
 
 type ReadAccessTestTableNarrowTaggedGeo struct {
 	Attributes  *ReadAccessTestTableNarrowTaggedGeoAttributes
@@ -1043,7 +1044,7 @@ func (inst *ReadAccessTestTableNarrowTaggedText) GetSectionMembershipSpec() comm
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
-// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2467
+// ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2528
 
 type ReadAccessTestTableNarrow struct {
 	EntityId        *ReadAccessTestTableNarrowPlainEntityIdAttributes

@@ -98,13 +98,13 @@ func subFormatTagE(guid []byte) (tag uint16, err error) {
 	if [12]byte(guid[4:16]) != ksDataFormatSubtypeSuffix {
 		return 0, eb.Build().
 			Str("subFormat", guidString(guid)).
-			Errorf("sub-format guid %s is not a ksdataformat subtype", guidString(guid))
+			Errorf("sub-format guid is not a ksdataformat subtype")
 	}
 	v := binary.LittleEndian.Uint32(guid[0:4])
 	if v > uint32(^uint16(0)) {
 		return 0, eb.Build().
 			Str("subFormat", guidString(guid)).
-			Errorf("sub-format guid %s does not name a 16-bit format tag", guidString(guid))
+			Errorf("sub-format guid does not name a 16-bit format tag")
 	}
 	return uint16(v), nil
 }
@@ -137,6 +137,5 @@ func validateSampleFormatE(enc EncodingE, bits uint16) (err error) {
 	}
 	return eb.Build().
 		Str("encoding", enc.String()).
-		Uint16("bitsPerSample", bits).
-		Errorf("unsupported width of %d bits for %s samples", bits, enc)
+		Uint16("bitsPerSample", bits).Stringer("enc", enc).Errorf("unsupported sample width for this encoding")
 }

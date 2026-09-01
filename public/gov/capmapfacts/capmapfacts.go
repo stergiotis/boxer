@@ -48,6 +48,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"lukechampine.com/blake3"
 )
@@ -116,15 +117,15 @@ func BuildRecords(corpus capmapcorpus.Corpus, now time.Time) (records []arrow.Re
 	for i := range corpus.Competences {
 		encodeCompetence(ent, corpus.Competences[i], now)
 		if cErr := ent.CommitEntity(); cErr != nil {
-			return nil, stats, eh.Errorf("unable to commit competence %q: %w", corpus.Competences[i].Slug, cErr)
+			return nil, stats, eb.Build().Str("slug", corpus.Competences[i].Slug).Errorf("unable to commit competence: %w", cErr)
 		}
 		stats.Competences++
 	}
 	for i := range corpus.Relations {
 		encodeRelation(ent, corpus.Relations[i], now)
 		if cErr := ent.CommitEntity(); cErr != nil {
-			return nil, stats, eh.Errorf("unable to commit relation %q -> %q: %w",
-				corpus.Relations[i].SourceSlug, corpus.Relations[i].Target, cErr)
+			return nil, stats, eb.Build().Str("sourceSlug", corpus.Relations[i].SourceSlug).Str("target", corpus.Relations[i].Target).
+				Errorf("unable to commit relation: %w", cErr)
 		}
 		stats.Relations++
 	}
@@ -159,7 +160,7 @@ func Ingest(ctx context.Context, corpus capmapcorpus.Corpus, sink RecordSinkI, t
 		}
 	}()
 	if err = sink.InsertArrow(ctx, table, records); err != nil {
-		return stats, eh.Errorf("unable to insert %d capmap rows into %s: %w", stats.Rows, table, err)
+		return stats, eb.Build().Int("rows", stats.Rows).Str("table", table).Errorf("unable to insert capmap rows: %w", err)
 	}
 	return stats, nil
 }

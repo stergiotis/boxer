@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 const (
@@ -97,12 +98,12 @@ func (inst *tzCatalogue) lookup(name string) (id uint16, err error) {
 		return
 	}
 	if _, loadErr := time.LoadLocation(name); loadErr != nil {
-		err = eh.Errorf("timerangepicker: unknown tz %q: %w", name, loadErr)
+		err = eb.Build().Str("name", name).Errorf("timerangepicker: unknown tz: %w", loadErr)
 		return
 	}
 	next := len(inst.byID)
 	if next >= 1<<16 {
-		err = eh.Errorf("timerangepicker: tz catalogue full (%d entries)", next)
+		err = eb.Build().Int("entries", next).Errorf("timerangepicker: tz catalogue is full")
 		return
 	}
 	id = uint16(next)
@@ -129,12 +130,12 @@ func (inst *tzCatalogue) location(id uint16) (loc *time.Location, err error) {
 	}
 	name, ok := inst.name(id)
 	if !ok {
-		err = eh.Errorf("timerangepicker: unknown TzID %d", id)
+		err = eb.Build().Uint16("id", id).Errorf("timerangepicker: unknown TzID")
 		return
 	}
 	loc, err = time.LoadLocation(name)
 	if err != nil {
-		err = eh.Errorf("timerangepicker: load %q: %w", name, err)
+		err = eb.Build().Str("name", name).Errorf("timerangepicker: load: %w", err)
 		return
 	}
 	return
@@ -147,7 +148,7 @@ func (inst *tzCatalogue) ianaName(id uint16) (name string, err error) {
 	}
 	resolved, ok := inst.name(id)
 	if !ok {
-		err = eh.Errorf("timerangepicker: unknown TzID %d", id)
+		err = eb.Build().Uint16("id", id).Errorf("timerangepicker: unknown TzID")
 		return
 	}
 	name = resolved

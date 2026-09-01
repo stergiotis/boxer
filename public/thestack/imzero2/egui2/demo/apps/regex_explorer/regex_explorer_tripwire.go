@@ -29,6 +29,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // tripwireCase is one triple-tuple for engine-fidelity comparison: a
@@ -194,12 +195,12 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 		pattern := tc.effective()
 		goMatches, goErr := inst.tripwireGoMatches(pattern, tc.Haystack)
 		if goErr != nil {
-			err = eh.Errorf("tripwire[%d=%s]: Go compile: %w", i, tc.Name, goErr)
+			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: Go compile: %w", goErr)
 			return
 		}
 		chMatches, chErr := inst.tripwireCHMatches(ctx, alloc, pattern, tc.Haystack)
 		if chErr != nil {
-			err = eh.Errorf("tripwire[%d=%s]: ClickHouse: %w", i, tc.Name, chErr)
+			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: ClickHouse: %w", chErr)
 			return
 		}
 
@@ -211,7 +212,7 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 		// mismatched result, so it is reported as a drift on its own.
 		vsAccepted, vsErr := inst.tripwireVectorScanAccepts(ctx, alloc, pattern, tc.Haystack)
 		if vsErr != nil {
-			err = eh.Errorf("tripwire[%d=%s]: VectorScan: %w", i, tc.Name, vsErr)
+			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: VectorScan: %w", vsErr)
 			return
 		}
 		if !vsAccepted {
@@ -296,12 +297,12 @@ func (inst *App) tripwireCHMatches(ctx context.Context, alloc memory.Allocator, 
 	col := rec.Column(0)
 	list, ok := col.(*array.List)
 	if !ok {
-		err = eh.Errorf("tripwire unexpected column type %T", col)
+		err = eb.Build().Type("col", col).Errorf("tripwire unexpected column type")
 		return
 	}
 	inner, ok := list.ListValues().(*array.String)
 	if !ok {
-		err = eh.Errorf("tripwire inner column type %T", list.ListValues())
+		err = eb.Build().Type("array", list.ListValues()).Errorf("tripwire inner column type")
 		return
 	}
 	offsets := list.Offsets()

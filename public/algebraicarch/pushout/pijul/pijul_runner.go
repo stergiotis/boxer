@@ -13,6 +13,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // RunnerI is the lower-level CLI-verb seam used by the text
@@ -99,7 +100,7 @@ func (inst *cliRunner) runCmd(ctx context.Context, dir string, name string, args
 	cmd, cerr := extbin.Pijul.Command(cctx, extbin.Opts{Dir: dir}, args...)
 	if cerr != nil {
 		audit = fmt.Sprintf("%s\n[ERROR] %v", cmdStr, cerr)
-		err = eh.Errorf("command failed: %s: %w", cmdStr, cerr)
+		err = eb.Build().Str("command", cmdStr).Errorf("command failed: %w", cerr)
 		return
 	}
 	var outBuf, errBuf bytes.Buffer
@@ -119,14 +120,14 @@ func (inst *cliRunner) runCmd(ctx context.Context, dir string, name string, args
 		}
 	case errors.Is(cctx.Err(), context.DeadlineExceeded):
 		audit = fmt.Sprintf("%s\n[TIMEOUT %s]", cmdStr, timeout)
-		err = eh.Errorf("command timed out after %s: %s", timeout, cmdStr)
+		err = eb.Build().Stringer("timeout", timeout).Str("command", cmdStr).Errorf("command timed out")
 	default:
 		audit = fmt.Sprintf("%s\n[ERROR] %v\n%s", cmdStr, rerr, errBuf.String())
 		var ee *exec.ExitError
 		if errors.As(rerr, &ee) {
 			exitErr = ee
 		}
-		err = eh.Errorf("command failed: %s\nstderr: %s: %w", cmdStr, errBuf.String(), rerr)
+		err = eb.Build().Str("command", cmdStr).Str("stderr", errBuf.String()).Errorf("command failed: %w", rerr)
 	}
 	return
 }
@@ -201,10 +202,10 @@ func (inst *cliRunner) Log(ctx context.Context, repoDir string) (entries []LogEn
 		entries, err = ParseLogJSON(outBuf.Bytes())
 	case errors.Is(cctx.Err(), context.DeadlineExceeded):
 		audit = fmt.Sprintf("%s\n[TIMEOUT %s]", cmdStr, timeout)
-		err = eh.Errorf("pijul log timed out after %s", timeout)
+		err = eb.Build().Stringer("timeout", timeout).Errorf("pijul log timed out")
 	default:
 		audit = fmt.Sprintf("%s\n[ERROR] %v\n%s", cmdStr, rerr, errBuf.String())
-		err = eh.Errorf("pijul log error: %s: %w", errBuf.String(), rerr)
+		err = eb.Build().Str("stderr", errBuf.String()).Errorf("pijul log failed: %w", rerr)
 	}
 	return
 }
@@ -249,10 +250,10 @@ func (inst *cliRunner) Credit(ctx context.Context, repoDir string, file string) 
 		raw = outBuf.String()
 	case errors.Is(cctx.Err(), context.DeadlineExceeded):
 		audit = fmt.Sprintf("%s\n[TIMEOUT %s]", cmdStr, timeout)
-		err = eh.Errorf("pijul credit timed out after %s", timeout)
+		err = eb.Build().Stringer("timeout", timeout).Errorf("pijul credit timed out")
 	default:
 		audit = fmt.Sprintf("%s\n[ERROR] %v\n%s", cmdStr, rerr, errBuf.String())
-		err = eh.Errorf("pijul credit error: %s: %w", errBuf.String(), rerr)
+		err = eb.Build().Str("stderr", errBuf.String()).Errorf("pijul credit failed: %w", rerr)
 	}
 	return
 }
@@ -280,11 +281,11 @@ func (inst *cliRunner) LatestChangeFile(ctx context.Context, repoDir string) (pa
 		return
 	})
 	if werr != nil {
-		err = eh.Errorf("walk changes dir %s: %w", changeDir, werr)
+		err = eb.Build().Str("changeDir", changeDir).Errorf("walk changes dir: %w", werr)
 		return
 	}
 	if patchPath == "" {
-		err = eh.Errorf("no binary patch file found in %s", changeDir)
+		err = eb.Build().Str("changeDir", changeDir).Errorf("no binary patch file found")
 	}
 	return
 }

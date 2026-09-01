@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Go dependency overview
+summary: "Report what the dependency graph collected, and its size"
 icon: "📦"
 endpoint: introspection
 tabs: [table]

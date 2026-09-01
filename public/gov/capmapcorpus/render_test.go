@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 )
 
 // roundTripVault carries every shape the renderer has to put back: a
@@ -140,7 +141,7 @@ func TestWriteVaultRefusesTwoCompetencesOnOnePath(t *testing.T) {
 	}
 	_, err := capmapcorpus.WriteVault(corpus, t.TempDir())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "same.md")
+	assert.Contains(t, ebtest.Text(t, err), "same.md")
 }
 
 // The emitted stanza is the vault's dialect, not boxer's: the marker file keeps

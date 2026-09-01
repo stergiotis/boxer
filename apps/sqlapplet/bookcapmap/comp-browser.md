@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Competence browser
+summary: "Read the competence hierarchy with each note in full"
 icon: "🔍"
 endpoint: introspection
 tabs: ["treemap:nodes", "detail@side", "table@bottom", "network@bottom"]

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 type FirefightKindE uint8
@@ -75,7 +76,7 @@ func (inst *FirefightAnalyzer) compilePatterns() (patterns []classifiedPattern, 
 		var re *regexp.Regexp
 		re, err = regexp.Compile(p)
 		if err != nil {
-			err = eh.Errorf("unable to compile pattern %q: %w", p, err)
+			err = eb.Build().Str("pattern", p).Errorf("unable to compile the pattern: %w", err)
 			return
 		}
 		patterns = append(patterns, classifiedPattern{re: re, kind: e.kind})

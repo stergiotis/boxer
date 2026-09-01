@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Module inventory
+summary: "Rank every module by machine code it put in the binary"
 icon: "📦"
 endpoint: introspection
 tabs: [table]

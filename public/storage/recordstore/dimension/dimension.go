@@ -18,6 +18,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DescriptorSink is the store-shaped seam a Store writes descriptors through and
@@ -91,7 +92,7 @@ func (inst *Store[D]) Reference(ctx context.Context, key []byte, describe func()
 	inst.emitting = true
 	defer func() { inst.emitting = false }()
 	if err = inst.sink.Emit(ctx, uint64(id), describe()); err != nil {
-		err = eh.Errorf("emit dimension descriptor %d: %w", uint64(id), err)
+		err = eb.Build().Uint64("id", uint64(id)).Errorf("emit dimension descriptor: %w", err)
 		if inst.retryEmit == nil {
 			inst.retryEmit = make(map[identifier.TaggedId]struct{}, 1)
 		}

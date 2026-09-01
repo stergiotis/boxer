@@ -192,7 +192,7 @@ func buildEvRealRowmarshallError() (out errkind.Error) {
 		Str("user", "alice").
 		Uint64("attempt", 3).
 		Errorf("ingest failed: schema mismatch")
-	wrapped := eh.Errorf("commit %s: %w", "card-v1", leaf)
+	wrapped := eh.Errorf("commit card-v1: %w", leaf)
 	fixedTs := time.Unix(0, 1_700_000_000_000_000_000).UTC()
 	out = errkind.FromBoxerError(
 		0xDEADBEEF_0001,

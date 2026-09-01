@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Subject taxonomy this service binds (ADR-0028 §SD1).
@@ -481,7 +482,7 @@ func (inst *Service) poolFor(name string) (p *chlocalpool.Pool, err error) {
 	poolLog := inst.log.With().Str("pool", name).Logger()
 	candidate, createErr := chlocalpool.New(poolCfg, poolLog)
 	if createErr != nil {
-		err = eh.Errorf("chlocalbroker: create pool %q: %w", name, createErr)
+		err = eb.Build().Str("name", name).Errorf("chlocalbroker: create pool: %w", createErr)
 		return
 	}
 

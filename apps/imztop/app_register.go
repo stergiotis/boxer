@@ -15,6 +15,7 @@ var manifest = app.Manifest{
 	Version: "0.1.0",
 	Display: "imztop",
 	Title:   "imztop",
+	Summary: "Watch live processes with CPU and memory usage",
 	// Phosphor gauge — the system-monitor metaphor; rendered from the
 	// Phosphor icon font registered at carousel startup (ADR-0044).
 	Icon:     icons.PhGauge,

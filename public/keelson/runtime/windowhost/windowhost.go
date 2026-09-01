@@ -2,9 +2,7 @@ package windowhost
 
 import (
 	"slices"
-	"sort"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -13,7 +11,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -22,7 +19,6 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
 // DebugRender, when set to a non-empty value, logs every window-body
@@ -210,215 +206,16 @@ type Inst struct {
 	// only inside Frame: render-thread only, like searchText below.
 	activeKey WindowKeyT
 
-	// searchText backs the launcher search box (rendered both at the
-	// top of the Apps ▾ menu and at the top of the empty-state pane).
-	// Single shared field so typing in either surface filters the
-	// other on the next frame: the menu and the pane are mutually
-	// exclusive at any one moment, but a session that drifts between
-	// them (open an app → empty-state hidden; close all → empty-state
-	// returns; reopen menu) sees its previous query persist instead of
-	// being randomly wiped.
+	// launcher renders every launcher surface: the empty-state pane and the
+	// Apps ▾ menu (ADR-0214 §SD2). The query, the facet filters and the
+	// selection live on it rather than here — they used to be host fields
+	// shared by two render paths that had drifted into unequal abilities, and
+	// moving them behind one component is what makes that drift unexpressible.
 	//
-	// Mutated only inside the render loop (TextEdit.SendRespVal writes
-	// after StateManager.Sync). Reads outside the render loop need no
-	// lock because the host is single-threaded by contract; if that
-	// invariant ever loosens, fold this into a per-Inst mu-guarded
-	// snapshot.
-	searchText string
-
-	// searchHl is the search box's regexedit highlight-job cache
-	// (ADR-0164 §SD4). One per box: two boxes sharing an Edit would
-	// evict each other's job every frame. Render-thread confined, like
-	// the searchText buffer it colours.
-	searchHl regexedit.Edit
-
-	// kindShown backs the launcher's provenance toggles (ADR-0158
-	// §SD5/§SD6): the controls that answer "show me the demos" now that
-	// provenance is no longer a browse section. One entry per app.AllKinds
-	// member, positionally — not indexed by the enum value, so the toggles
-	// do not silently depend on KindE staying contiguous from zero.
-	//
-	// It is a []bool rather than the kindFilterT mask the filter actually
-	// wants because Checkbox.SendRespVal needs a stable address to write
-	// into, and that write is *deferred* to StateManager.Sync — after the
-	// frame body has run. Comparing a local before/after inside the body
-	// would therefore never observe a change, and the toggle would be a
-	// silent no-op. Binding straight to a persistent field is the working
-	// pattern; kindFilter() derives the mask each frame.
-	//
-	// Shared by the Apps ▾ menu and the empty-state pane for the same
-	// reason searchText is, and mutated on the render thread only.
-	kindShown []bool
-
-	// topicFilter restricts the browse view to a chosen set of topics
-	// (ADR-0158 §SD6). Held as the mask itself rather than as a []bool
-	// mirror because its chips are SelectableLabels, whose click response
-	// is read within the frame — the deferred-write problem that shapes
-	// kindShown does not arise here.
-	topicFilter topicFilterT
-}
-
-// topicFilterT is the set of topics the launcher restricts the view to, as
-// a bitmask over app.AllTopics *positions* (TopicT is a string, so position
-// is what a mask can address; it also means the mask never depends on the
-// tokens themselves).
-//
-// The zero value selects nothing and means **no restriction** — the
-// opposite polarity to [kindFilterT], which stores what is hidden. That is
-// deliberate rather than an inconsistency: the two axes are used with
-// different gestures. There are three kinds, you normally want all of them,
-// and the useful action is "hide the demos" — so a hidden-set is the
-// natural store. There are nine topics, you normally want one, and the
-// useful action is "show me only code" — so a selected-set is. Both
-// conventions make the zero value inert, which is the property that
-// matters for an untouched host.
-type topicFilterT uint32
-
-// topicIndex resolves a topic to its position in app.AllTopics.
-func topicIndex(t app.TopicT) (idx int, ok bool) {
-	for i, x := range app.AllTopics {
-		if x == t {
-			idx = i
-			ok = true
-			return
-		}
-	}
-	return
-}
-
-// isInert reports whether the filter restricts nothing.
-func (inst topicFilterT) isInert() (ok bool) {
-	ok = inst == 0
-	return
-}
-
-// selectedAt reports whether the topic at position idx is selected.
-func (inst topicFilterT) selectedAt(idx int) (ok bool) {
-	ok = inst&(1<<idx) != 0
-	return
-}
-
-// toggledAt returns the filter with position idx flipped.
-func (inst topicFilterT) toggledAt(idx int) (out topicFilterT) {
-	out = inst ^ (1 << idx)
-	return
-}
-
-// shows reports whether topic t passes. An inert filter passes everything,
-// which is what makes "nothing selected" mean "no restriction".
-func (inst topicFilterT) shows(t app.TopicT) (ok bool) {
-	if inst.isInert() {
-		ok = true
-		return
-	}
-	idx, known := topicIndex(t)
-	if !known {
-		return
-	}
-	ok = inst.selectedAt(idx)
-	return
-}
-
-// showsAny reports whether a manifest carries at least one passing topic —
-// the manifest-level question, since a manifest may carry several.
-func (inst topicFilterT) showsAny(topics []app.TopicT) (ok bool) {
-	if inst.isInert() {
-		ok = true
-		return
-	}
-	if slices.ContainsFunc(topics, inst.shows) {
-		ok = true
-		return
-	}
-	return
-}
-
-// launcherFilter is the launcher's whole filter state (ADR-0158 §SD6) in
-// one value: the query string, the provenance toggles, and the topic chips.
-// Both surfaces resolve through it, which is what keeps the Apps ▾ menu and
-// the empty-state pane from drifting apart.
-type launcherFilter struct {
-	query  string
-	kinds  kindFilterT
-	topics topicFilterT
-}
-
-// isInert reports whether the filter would remove nothing.
-func (inst launcherFilter) isInert() (ok bool) {
-	ok = strings.TrimSpace(inst.query) == "" &&
-		!inst.kinds.hidesAnything() &&
-		inst.topics.isInert()
-	return
-}
-
-// admits applies the two facet axes — kind and topic — to one manifest.
-// Split out because the query axis is scored rather than boolean, so the
-// two halves of the filter no longer read as one condition.
-func (inst launcherFilter) admits(m app.Manifest) (ok bool) {
-	ok = inst.kinds.shows(m.Kind) && inst.topics.showsAny(m.Topics)
-	return
-}
-
-// kindFilterT is the set of app.KindE values the launcher **hides**.
-//
-// Storing the hidden set rather than the shown one is deliberate on two
-// counts: the zero value hides nothing, so an untouched host shows
-// everything and needs no initialisation; and "every kind hidden" stays
-// distinguishable from "nothing configured yet", which a shown-set mask
-// with a zero-means-all convention could not express.
-type kindFilterT uint8
-
-// shows reports whether a manifest of kind k survives the filter.
-func (inst kindFilterT) shows(k app.KindE) (ok bool) {
-	ok = inst&(1<<k) == 0
-	return
-}
-
-// toggled returns the filter with k's visibility flipped.
-func (inst kindFilterT) toggled(k app.KindE) (out kindFilterT) {
-	out = inst ^ (1 << k)
-	return
-}
-
-// hidesAnything reports whether the filter is doing something — used to
-// tell "your query matched nothing" apart from "your toggles hid it".
-func (inst kindFilterT) hidesAnything() (ok bool) {
-	ok = inst != 0
-	return
-}
-
-// kindFilter derives the filter value from the per-kind toggle state. A
-// host whose toggles were never initialised — the zero Inst, which tests
-// construct — yields the inert filter, so "uninitialised" shows everything
-// rather than hiding everything.
-func (inst *Inst) kindFilter() (f kindFilterT) {
-	if len(inst.kindShown) != len(app.AllKinds) {
-		return
-	}
-	for i, k := range app.AllKinds {
-		if !inst.kindShown[i] {
-			f = f.toggled(k)
-		}
-	}
-	return
-}
-
-// kindLabel is a toggle's user-facing label: the plural of the kind, since
-// the toggle governs a set. Kept here rather than on app.KindE because it is
-// presentation — the introspection column wants the singular wire form that
-// KindE.String gives, and the two should not drift into one another.
-func kindLabel(k app.KindE) (s string) {
-	switch k {
-	case app.KindApp:
-		s = "Apps"
-	case app.KindApplet:
-		s = "Applets"
-	case app.KindDemo:
-		s = "Demos"
-	default:
-		s = k.String()
-	}
-	return
+	// nil is tolerated: a host constructed without one renders an empty-state
+	// pane that says so, which is what the screenshot-tour path and the
+	// windowhost's own tests get.
+	launcher launcherI
 }
 
 // NewInst constructs a WindowHost backed by registry. logger is used
@@ -548,7 +345,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	}
 	m, ok := inst.registry.LookupManifest(appId)
 	if !ok {
-		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered id=%s", string(appId))
+		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered")
 		return
 	}
 	if kind == "" && len(cfg) > 0 {
@@ -1360,345 +1157,60 @@ func windowDefaultSize(h app.SurfaceHints) (w, height float32) {
 	return
 }
 
-// manifestGroup is one launcher section: a topic and the manifests that
-// carry it. Used by both the Apps menu and the empty-state pane so the two
-// surfaces stay in sync.
-//
-// Sections are views, not homes (ADR-0158 §SD3): a manifest appears in every
-// section whose topic it declares, so the groups' Manifests slices
-// deliberately overlap. There is no catch-all bucket — Manifest.Validate
-// refuses a windowed app with no topics, so the only manifests that fall out
-// of every section are headless ones, which have no window to open anyway.
-type manifestGroup struct {
-	Topic     app.TopicT
-	Manifests []app.Manifest
+// OpenOrRaiseApp opens appId or raises its existing window, discarding the
+// window key and the opened flag. It exists so *Inst satisfies the launcher's
+// host interface (ADR-0214 §SD3) structurally, without either package naming
+// the other's types: the launcher declares what it needs of a host in
+// app-level terms, and this is the host answering in those terms.
+func (inst *Inst) OpenOrRaiseApp(appId app.AppIdT) (err error) {
+	_, _, err = inst.OpenOrRaise(appId)
+	return
 }
 
-// groupByTopic sections manifests by topic, in app.AllTopics order, keeping
-// only the sections `only` admits. Empty sections are omitted rather than
-// rendered blank, so the browse view shows only topics the process actually
-// has apps for. Within a section manifests
-// sort by Display then Id, so two apps sharing a label still order stably.
-//
-// Ordering comes from the vocabulary rather than from a launcher-local list:
-// the old preferredCategoryOrder had to cope with categories it had never
-// heard of, which a closed vocabulary makes impossible.
-func groupByTopic(manifests []app.Manifest, only topicFilterT) (groups []manifestGroup) {
-	if len(manifests) == 0 {
-		return
-	}
-	byTopic := make(map[app.TopicT][]app.Manifest, len(app.AllTopics))
-	for _, m := range manifests {
-		for _, t := range m.Topics {
-			byTopic[t] = append(byTopic[t], m)
-		}
-	}
-	groups = make([]manifestGroup, 0, len(app.AllTopics))
-	for _, t := range app.AllTopics {
-		// The chips drop whole sections, not just manifests. Filtering
-		// only at the manifest level would leave a two-topic app visible
-		// under its *unselected* topic as well, since a manifest that
-		// passes the filter is still sectioned under everything it carries.
-		if !only.shows(t) {
-			continue
-		}
-		ms := byTopic[t]
-		if len(ms) == 0 {
-			continue
-		}
-		sortManifestsByDisplay(ms)
-		groups = append(groups, manifestGroup{Topic: t, Manifests: ms})
+// OpenAppIds reports which apps currently hold a window, for the launcher's
+// "open" badge. Duplicates are possible and meaningful to nobody here — two
+// windows of one app are still one "open" — so callers build a set.
+func (inst *Inst) OpenAppIds() (ids []app.AppIdT) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	ids = make([]app.AppIdT, 0, len(inst.windows))
+	for _, w := range inst.windows {
+		ids = append(ids, w.manifest.Id)
 	}
 	return
 }
 
-// filterManifests returns the subset of manifests passing the launcher's
-// whole filter state (ADR-0158 §SD6): provenance toggles, topic chips, and
-// the query string. It is the one function both surfaces resolve through,
-// so the Apps ▾ menu and the empty-state pane cannot disagree.
+// launcherI is the launcher surface the host renders when no window is open,
+// and delegates its Apps ▾ menu to (ADR-0214 §SD2). Declared here rather than
+// taken as the concrete type so this package keeps compiling against a fake
+// in its own tests, and so the seam names exactly what the host asks of it.
 //
-// An inert filter returns the input slice unchanged, so callers can treat
-// "no filter" and "filter matches everything" identically. Kind and topic
-// are applied even when the query is empty: the chips and toggles govern
-// the sectioned browse view too, not just search hits.
-//
-// The query is a pattern battery (ADR-0164 §SD2, see windowhost_search.go),
-// scored per manifest. Ordering therefore depends on whether one was typed:
-// with a query the result is **ranked** (score descending, then Display,
-// then Id); without one it follows the input, and the caller sections and
-// sorts it. Both paths return a fresh slice unless the filter is inert.
-func filterManifests(manifests []app.Manifest, f launcherFilter) (hits []app.Manifest) {
-	if f.isInert() {
-		hits = manifests
-		return
-	}
-	b := launcherBattery(f.query)
-	if b.IsZero() {
-		hits = make([]app.Manifest, 0, len(manifests))
-		for _, m := range manifests {
-			if !f.admits(m) {
-				continue
-			}
-			hits = append(hits, m)
-		}
-		return
-	}
-	scored := make([]manifestHit, 0, len(manifests))
-	for _, m := range manifests {
-		if !f.admits(m) {
-			continue
-		}
-		score, ok := scoreManifest(m, &b)
-		if !ok {
-			continue
-		}
-		scored = append(scored, manifestHit{m: m, score: score})
-	}
-	sortManifestHits(scored)
-	hits = make([]app.Manifest, len(scored))
-	for i := range scored {
-		hits[i] = scored[i].m
-	}
-	return
+// The launcher package is the implementing side: it must not import
+// windowhost, because windowhost imports it (§SD3).
+type launcherI interface {
+	Render(ids *c.WidgetIdStack)
+	RenderMenu(ids *c.WidgetIdStack)
 }
 
-// renderEmptyState draws the "no apps open" pane shown when no
-// windows are active. A search box sits at the top of the pane; an
-// empty query renders the per-Category sections (matching the Apps
-// menu's ordering — Runtime, Tools, Demos, …, Other), and a non-empty
-// query flattens the pane into a single list of apps whose Display or
-// Category contains the typed substring (case-insensitive). The
-// search field is the only launcher input surface; the Apps ▾ menu
-// has no in-bar search affordance — see RenderAppsMenu for the
-// rationale.
+// SetLauncher installs the launcher surface. Optional — a host without one
+// renders an empty-state pane that says the launcher is unavailable, which is
+// what the screenshot-tour path gets and what the host's own tests run with.
+func (inst *Inst) SetLauncher(l launcherI) {
+	inst.launcher = l
+}
+
+// renderEmptyState draws the pane shown when no window is open. Since
+// ADR-0214 §SD2 that is the launcher component itself rather than a second,
+// differently-abled browse surface: the pane and the menu had drifted into
+// "the one that can search" and "the one that is reachable", and the fix is
+// that there is now one component with one state value.
 func (inst *Inst) renderEmptyState(ids *c.WidgetIdStack) {
-	c.Label("No applications open.").Send()
-	c.Label("Pick one below, or use the Apps " + icons.PhCaretDown + " menu in the top bar.").Send()
-	c.AddSpace(styletokens.GapItems(inst.density))
-	manifests := inst.registry.AllManifests()
-	if len(manifests) == 0 {
-		c.Label("(no apps registered)").Send()
+	if inst.launcher == nil {
+		c.Label("No applications open.").Send()
+		c.Label("(launcher unavailable — no launcher was wired into this host)").Send()
 		return
 	}
-	// Search box with a small top/bottom inner margin so the input
-	// doesn't crash into the helper labels above or the section
-	// header below. PaddingTight is the IDS token for chrome
-	// breathing room.
-	pad := styletokens.PaddingTight(inst.density)
-	for range c.Frame(ids.PrepareStr("empty-state-search-frame")).
-		InnerMarginSides(0, 0, pad, pad).
-		KeepIter() {
-		for range c.Horizontal().KeepIter() {
-			// regexedit is the same box the help nav and play's snippet
-			// filter use (ADR-0164 §SD4), in the token mode that lexes
-			// each whitespace-separated pattern independently — so an
-			// unclosed group in one token cannot mis-colour the next.
-			searchId := ids.PrepareStr("empty-state-search")
-			inst.searchHl.Prepare(searchId, inst.searchText, false, regexedit.ModeTokens).
-				HintText("Search apps (regex, space = AND)").
-				DesiredWidth(360).
-				SendRespVal(&inst.searchText)
-			if inst.searchText != "" {
-				if c.Button(ids.PrepareStr("empty-state-search-clear"), c.Atoms().Text("×").Keep()).
-					SendResp().HasPrimaryClicked() {
-					inst.searchText = ""
-				}
-			}
-		}
-	}
-	inst.renderKindToggles(ids, "empty-state")
-	inst.renderTopicChips(ids)
-	query := strings.TrimSpace(inst.searchText)
-	// The chips and toggles apply to the sectioned browse too, so filter
-	// before sectioning rather than only on the search path (ADR-0158 §SD6).
-	browse := launcherFilter{kinds: inst.kindFilter(), topics: inst.topicFilter}
-	visible := filterManifests(manifests, browse)
-	for range c.ScrollArea().Vscroll(true).KeepIter() {
-		if query == "" {
-			groups := groupByTopic(visible, inst.topicFilter)
-			if len(groups) == 0 {
-				c.Label(inst.emptyResultHint()).Send()
-				return
-			}
-			for gi, g := range groups {
-				if gi > 0 {
-					c.AddSpace(styletokens.GapSections(inst.density))
-				}
-				c.Label(g.Topic.String()).Send()
-				c.Separator().Horizontal().Send()
-				for _, m := range g.Manifests {
-					inst.renderEmptyStateEntry(ids, g.Topic.String(), m, false)
-				}
-			}
-			return
-		}
-		hits := filterManifests(visible, launcherFilter{query: query})
-		renderSearchNotes(launcherBattery(query), len(hits), len(visible))
-		if len(hits) == 0 {
-			c.Label(inst.emptyResultHint()).Send()
-			return
-		}
-		// Already ranked by filterManifests — score first, Display for
-		// ties — so no re-sort here; sorting by Display would discard the
-		// ranking the battery just produced.
-		for _, m := range hits {
-			inst.renderEmptyStateEntry(ids, "hits", m, true)
-		}
-	}
-}
-
-// renderSearchNotes draws the two lines that describe what the battery
-// did: how selective it was, and whether any token silently stopped
-// being a regex.
-//
-// The selectivity readout is a bare count, not the byte-share progress
-// bar the help and snippet boxes carry. There the sections a battery
-// selects vary hugely in size, so a count would misreport how much
-// corpus a query actually admits; here every hit is one app-sized thing
-// and the count *is* the honest number.
-func renderSearchNotes(b search.Battery, nHits int, nTotal int) {
-	for rt := range c.RichTextLabel(strconv.Itoa(nHits) + " of " + strconv.Itoa(nTotal) + " apps") {
-		rt.Small().Weak()
-	}
-	for pi := range b.Patterns {
-		if b.Patterns[pi].Literal {
-			// Surfaced rather than silent (ADR-0164 §SD2): a half-typed
-			// `quantile(` keeps matching as text, and the user is told
-			// that is what happened.
-			for rt := range c.RichTextLabel("some tokens are not valid regexps and match literally") {
-				rt.Small().Weak()
-			}
-			break
-		}
-	}
-}
-
-// emptyResultHint distinguishes "nothing matched what you typed" from
-// "your own toggles hid it". Without the second wording a user who has
-// switched Demos off sees a bare "(no matches)" and reasonably concludes
-// the app is gone rather than filtered — the failure mode that makes
-// hide-toggles annoying elsewhere.
-func (inst *Inst) emptyResultHint() (s string) {
-	switch {
-	case !inst.topicFilter.isInert() && inst.kindFilter().hidesAnything():
-		s = "(no matches — a topic filter and hidden kinds are both active)"
-	case !inst.topicFilter.isInert():
-		s = "(no matches — filtered to selected topics)"
-	case inst.kindFilter().hidesAnything():
-		s = "(no matches — some kinds are hidden)"
-	default:
-		s = "(no matches)"
-	}
-	return
-}
-
-// renderTopicChips draws the topic filter (ADR-0158 §SD6): one selectable
-// chip per vocabulary member, wrapping, with none selected meaning no
-// restriction. Selecting a chip narrows the browse view to that section;
-// selecting several unions them.
-//
-// Only the vocabulary members some registered app actually carries get a
-// chip — a chip that can only ever yield an empty view is a dead control.
-// SelectableLabel reports its click within the frame, so unlike the pane's
-// kind checkboxes this needs no persistent mirror to write into.
-func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
-	manifests := inst.registry.AllManifests()
-	present := make(map[app.TopicT]struct{}, len(app.AllTopics))
-	for _, m := range manifests {
-		for _, t := range m.Topics {
-			present[t] = struct{}{}
-		}
-	}
-	for range c.HorizontalWrapped().KeepIter() {
-		c.Label("Topics:").Send()
-		for i, t := range app.AllTopics {
-			if _, has := present[t]; !has {
-				continue
-			}
-			if c.SelectableLabel(ids.PrepareStr("topic-chip-"+t.String()),
-				inst.topicFilter.selectedAt(i), t.String()).
-				SendResp().HasPrimaryClicked() {
-				inst.topicFilter = inst.topicFilter.toggledAt(i)
-			}
-		}
-		if !inst.topicFilter.isInert() {
-			// An explicit reset: with several chips on, clicking each one
-			// off again is tedious, and "no chips" is not otherwise
-			// reachable in one gesture.
-			if c.Button(ids.PrepareStr("topic-chip-clear"), c.Atoms().Text(icons.PhX+" Clear").Keep()).
-				SendResp().HasPrimaryClicked() {
-				inst.topicFilter = 0
-			}
-		}
-	}
-}
-
-// ensureKindShown lazily initialises the toggle state to "everything
-// shown". Lazy rather than done in NewInst so a zero Inst — and any future
-// constructor — cannot start out hiding every app.
-func (inst *Inst) ensureKindShown() {
-	if len(inst.kindShown) == len(app.AllKinds) {
-		return
-	}
-	inst.kindShown = make([]bool, len(app.AllKinds))
-	for i := range inst.kindShown {
-		inst.kindShown[i] = true
-	}
-}
-
-// renderKindToggles draws the provenance filter (ADR-0158 §SD5): one
-// checkbox per kind, all on by default. These exist because §SD3 retired
-// "Applets" and "Demos" as browse sections — provenance is a filter over a
-// subject-organised list, not a place an app lives — and without them that
-// retirement would simply delete two views people use.
-//
-// scope keys the widget ids so the pane and the menu can both draw the same
-// toggles without deriving the same ids.
-func (inst *Inst) renderKindToggles(ids *c.WidgetIdStack, scope string) {
-	inst.ensureKindShown()
-	for range c.Horizontal().KeepIter() {
-		c.Label("Show:").Send()
-		for i, k := range app.AllKinds {
-			c.Checkbox(ids.PrepareStr("kind-"+scope+"-"+k.String()), inst.kindShown[i], kindLabel(k)).
-				SendRespVal(&inst.kindShown[i])
-		}
-	}
-}
-
-// renderEmptyStateEntry draws one app row inside the empty-state pane,
-// mirroring renderAppsMenuEntry's contract. withCategory appends an
-// em-dashed topic suffix — only meaningful in the flattened search-hit
-// view, where the section header no longer carries that information.
-//
-// section keys the widget id alongside the app id. Under ADR-0158 §SD3 one
-// manifest renders in every section whose topic it declares, so the app id
-// alone no longer identifies a row: two sections would derive the same
-// button id, and a duplicate id resolves to one shared response — clicking
-// either row would open whichever the id stack landed on.
-func (inst *Inst) renderEmptyStateEntry(ids *c.WidgetIdStack, section string, m app.Manifest, withTopics bool) {
-	label := m.WindowTitle()
-	if label == "" {
-		label = string(m.Id)
-	}
-	if withTopics {
-		if suffix := topicSuffix(m); suffix != "" {
-			label = label + " — " + suffix
-		}
-	}
-	btnId := ids.PrepareStr("empty-open-" + section + "-" + string(m.Id))
-	if !c.Button(btnId, c.Atoms().Text(label).Keep()).
-		SendResp().HasPrimaryClicked() {
-		return
-	}
-	inst.logger.Info().
-		Str("id", string(m.Id)).
-		Msg("windowhost: empty-state click detected; opening window")
-	_, oErr := inst.Open(m.Id)
-	if oErr != nil {
-		inst.logger.Warn().Err(oErr).
-			Str("id", string(m.Id)).
-			Msg("windowhost: open from empty-state failed")
-	}
+	inst.launcher.Render(ids)
 }
 
 // windowhostDebugRender mirrors DebugRender.Get() != "" at init time.
@@ -1770,153 +1282,25 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 	}
 }
 
-// RenderAppsMenu draws an "Apps ▾" menu listing every registered app,
-// grouped into per-topic submenus in app.AllTopics order (ADR-0158 §SD3;
-// an app carrying two topics appears under both). Clicking an entry calls
-// Open(id) for that app; the new window appears on the next frame. Entries
-// within a topic sort by Display.
+// RenderAppsMenu draws the shell's top-bar "Apps ▾" menu.
 //
-// ids is the caller's stack; the menu uses derived ids for the per-entry
-// buttons. Place inside a MenuBar (typically the carousel's top PanelTop),
-// alongside File / Layout menus.
+// A delegate since ADR-0214 §SD2: the launcher owns every launcher surface,
+// and this method exists so the shell chrome keeps one call site. What the
+// menu holds also changed — recents plus a door to the launcher, instead of a
+// submenu per topic over every registered app. The reasoning is in the
+// launcher package's menu.go; the short version is that a menu cannot hold a
+// search box, and at this corpus size a cascade without one is unusable.
 //
-// The menu deliberately has no in-bar search field. egui's menu_button
-// closes on any click outside a menu Button (TextEdit focus clicks
-// included), and lifting the field into the menu bar added chrome clutter
-// for a rarely-used affordance. Search lives in the empty-state pane
-// instead (see renderEmptyState), backed by the same inst.searchText
-// buffer so future surfaces hook into the same filter state.
-//
-// The kind toggles are a different matter and do appear here, as a "Show"
-// submenu of plain Buttons rather than the pane's checkboxes — same
-// constraint, different resolution. The menu is the *only* launcher
-// surface once a window is open, so a filter reachable solely from the
-// pane could not be undone without closing everything; and a Button is
-// exactly the widget the menu tolerates. The cost is that the menu closes
-// on the click, so changing two toggles means opening it twice. That is
-// acceptable for a mode switch, and it is why the label reports state
-// ("✔ Demos") rather than relying on the user remembering it.
+// ids is the caller's stack. Place inside a MenuBar (typically the shell's
+// top PanelTop), alongside the File / Layout menus.
 func (inst *Inst) RenderAppsMenu(ids *c.WidgetIdStack) {
-	for range c.MenuButton(c.Atoms().Text("Apps").Keep()).KeepIter() {
-		manifests := inst.registry.AllManifests()
-		if len(manifests) == 0 {
-			c.Label("(no apps registered)").Send()
-			return
+	if inst.launcher == nil {
+		for range c.MenuButton(c.Atoms().Text("Apps").Keep()).KeepIter() {
+			c.Label("(launcher unavailable)").Send()
 		}
-		inst.renderKindMenu(ids)
-		c.Separator().Horizontal().Send()
-		// The menu carries no topic chips: its per-topic submenus already
-		// *are* the topic axis, and a chip row that hid submenus would be
-		// two controls for one thing. It still honours a selection made in
-		// the pane, so the two surfaces agree about what is on screen.
-		visible := filterManifests(manifests, launcherFilter{kinds: inst.kindFilter(), topics: inst.topicFilter})
-		groups := groupByTopic(visible, inst.topicFilter)
-		if len(groups) == 0 {
-			c.Label(inst.emptyResultHint()).Send()
-			return
-		}
-		for _, g := range groups {
-			for range c.MenuButton(c.Atoms().Text(g.Topic.String()).Keep()).KeepIter() {
-				for _, m := range g.Manifests {
-					inst.renderAppsMenuEntry(ids, g.Topic.String(), m, false)
-				}
-			}
-		}
-	}
-}
-
-// renderKindMenu draws the provenance filter as a "Show" submenu of
-// state-reporting Buttons — the menu-side counterpart of the pane's
-// renderKindToggles, sharing inst.kindFilter so the two never disagree.
-// See RenderAppsMenu for why this is Buttons and not checkboxes.
-func (inst *Inst) renderKindMenu(ids *c.WidgetIdStack) {
-	inst.ensureKindShown()
-	for range c.MenuButton(c.Atoms().Text("Show").Keep()).KeepIter() {
-		for i, k := range app.AllKinds {
-			mark := icons.PhCheck + " "
-			if !inst.kindShown[i] {
-				// An en-space, not a plain space: it advances the same
-				// width as the check mark, so the labels stay aligned
-				// whether or not their kind is shown.
-				mark = "\u2002 "
-			}
-			btnId := ids.PrepareStr("kindmenu-" + k.String())
-			if c.Button(btnId, c.Atoms().Text(mark+kindLabel(k)).Keep()).
-				SendResp().HasPrimaryClicked() {
-				// A Button response is read within the frame, unlike the
-				// pane checkbox's deferred write, so this flip is direct.
-				inst.kindShown[i] = !inst.kindShown[i]
-			}
-		}
-	}
-}
-
-// renderAppsMenuEntry draws one menu entry for the given manifest.
-// Factored out of RenderAppsMenu so the per-entry click dispatch is
-// reusable across topic submenus and the flat search-hit list. When
-// withTopics is true the manifest's topics are appended to the button
-// label as an em-dashed suffix — only meaningful in the flattened search
-// view, where the submenu chrome no longer carries that information.
-//
-// section keys the widget id alongside the app id, for the ADR-0158 §SD3
-// reason spelled out on renderEmptyStateEntry: one manifest renders under
-// every topic it declares, so the app id alone no longer identifies a row.
-func (inst *Inst) renderAppsMenuEntry(ids *c.WidgetIdStack, section string, m app.Manifest, withTopics bool) {
-	label := m.WindowTitle()
-	if label == "" {
-		label = string(m.Id)
-	}
-	if withTopics {
-		if suffix := topicSuffix(m); suffix != "" {
-			label = label + " — " + suffix
-		}
-	}
-	btnId := ids.PrepareStr("open-" + section + "-" + string(m.Id))
-	if !c.Button(btnId, c.Atoms().Text(label).Keep()).
-		SendResp().HasPrimaryClicked() {
 		return
 	}
-	inst.logger.Info().
-		Str("id", string(m.Id)).
-		Msg("windowhost: apps-menu click detected; opening window")
-	_, err := inst.Open(m.Id)
-	if err != nil {
-		inst.logger.Warn().Err(err).
-			Str("id", string(m.Id)).
-			Msg("windowhost: open from menu failed")
-	}
-}
-
-// topicSuffix renders a manifest's topics as a compact label suffix for the
-// flattened search views, where no section header says what an entry is
-// about. Joined with a middot rather than a comma: the list is short, and a
-// comma reads as part of the app name when it follows one.
-func topicSuffix(m app.Manifest) (s string) {
-	if len(m.Topics) == 0 {
-		return
-	}
-	parts := make([]string, 0, len(m.Topics))
-	for _, t := range m.Topics {
-		parts = append(parts, t.String())
-	}
-	s = strings.Join(parts, " · ")
-	return
-}
-
-// sortManifestsByDisplay reorders the slice in place by Display
-// (then Id for ties) — the same comparator groupByCategory uses
-// inside each bucket. Hoisted so the flat search-hit path can apply
-// the same ordering without duplicating the closure.
-func sortManifestsByDisplay(manifests []app.Manifest) {
-	sort.SliceStable(manifests, func(i, j int) (less bool) {
-		di, dj := manifests[i].Display, manifests[j].Display
-		if di == dj {
-			less = manifests[i].Id < manifests[j].Id
-			return
-		}
-		less = di < dj
-		return
-	})
+	inst.launcher.RenderMenu(ids)
 }
 
 // frameCtxColWidth adds the ADR-0151 column-width capability to a window's

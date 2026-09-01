@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 )
 
@@ -57,7 +58,7 @@ func TestRawAndTypedContributionsAreExclusive(t *testing.T) {
 	require.NoError(t, typedFirst.StartKind("Label"))
 	err := typedFirst.MarkRaw()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Label", "the error names what is already on the entity")
+	assert.Equal(t, "Label", ebtest.Fields(t, err)["kind"], "the error names what is already on the entity")
 	assert.False(t, typedFirst.IsRaw())
 
 	var rawFirst runtime.DeferredSectionBuffer
@@ -80,8 +81,9 @@ func TestFlushAttributesAFailingContribution(t *testing.T) {
 	err := buf.Flush(nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, boom)
-	assert.Contains(t, err.Error(), "Label")
-	assert.Contains(t, err.Error(), "symbol")
+	txt := ebtest.Text(t, err)
+	assert.Contains(t, txt, "Label")
+	assert.Contains(t, txt, "symbol")
 }
 
 // A failed contribution must not leave its section open: the entity commit

@@ -33,7 +33,7 @@ func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error
 		return res, eh.Errorf("adhocdata: decode publish reply: %w", err)
 	}
 	if !rep.OK {
-		return res, eh.Errorf("adhocdata: publish rejected: %s", rep.Error)
+		return res, eb.Build().Str("reason", rep.Error).Errorf("adhocdata: publish rejected")
 	}
 	return PublishResult{Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows, Bytes: rep.Bytes}, nil
 }
@@ -57,7 +57,7 @@ func ResolveRequest(bus app.BusI, alias string) (res ResolveResult, err error) {
 		return res, eh.Errorf("adhocdata: decode resolve reply: %w", err)
 	}
 	if !rep.OK {
-		return res, eh.Errorf("adhocdata: resolve rejected: %s", rep.Error)
+		return res, eb.Build().Str("reason", rep.Error).Errorf("adhocdata: resolve rejected")
 	}
 	return ResolveResult{
 		Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
@@ -96,7 +96,7 @@ func ResolveVerifyRequest(bus app.BusI, alias string, boundHandle string) (res R
 			err = eb.Build().Str("alias", alias).Errorf("adhocdata: resolve: %w", ErrNoLiveDataset)
 			return
 		}
-		err = eh.Errorf("adhocdata: resolve rejected: %s", rep.Error)
+		err = eb.Build().Str("reason", rep.Error).Errorf("adhocdata: resolve rejected")
 		return
 	}
 	res = ResolveResult{
@@ -121,7 +121,7 @@ func RetractRequest(bus app.BusI, handle string) (err error) {
 		return eh.Errorf("adhocdata: decode retract reply: %w", err)
 	}
 	if !rep.OK {
-		return eh.Errorf("adhocdata: retract rejected: %s", rep.Error)
+		return eb.Build().Str("reason", rep.Error).Errorf("adhocdata: retract rejected")
 	}
 	return nil
 }

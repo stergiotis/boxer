@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: CPU flamegraph
+summary: "Draw the CPU capture as a flamegraph"
 icon: "🌋"
 endpoint: introspection
 tabs: [icicle, table, detail]

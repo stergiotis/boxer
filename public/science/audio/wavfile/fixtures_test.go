@@ -305,12 +305,12 @@ func TestReadRejects(t *testing.T) {
 		{
 			name:  "unsupported format tag",
 			raw:   riffContainer(appendChunk(appendChunk(nil, "fmt ", fmtBody(0x0011, 2, 48000, 4)), "data", make([]byte, 16))),
-			error: "0x0011",
+			error: "unsupported wave format tag",
 		},
 		{
 			name:  "unsupported extensible sub-format",
 			raw:   riffContainer(appendChunk(appendChunk(nil, "fmt ", fmtBodyExtensible(2, 48000, 16, 16, subFormatGUID(0x0011))), "data", make([]byte, 16))),
-			error: "0x0011",
+			error: "unsupported wave format tag",
 		},
 		{
 			name:  "sub-format guid is not a ksdataformat subtype",
@@ -320,7 +320,7 @@ func TestReadRejects(t *testing.T) {
 		{
 			name:  "unsupported bit depth",
 			raw:   riffContainer(appendChunk(appendChunk(nil, "fmt ", fmtBody(formatTagPCM, 2, 48000, 64)), "data", make([]byte, 16))),
-			error: "unsupported width of 64 bits",
+			error: "unsupported sample width",
 		},
 		{
 			name:  "not a riff container",

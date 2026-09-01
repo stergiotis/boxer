@@ -14,9 +14,11 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
@@ -121,8 +123,9 @@ func TestArity_ContainerCollisionIsRefused(t *testing.T) {
 	var got []aeSliceReader
 	err := marshallreflect.Unmarshal(readers, &got, nil)
 	require.Error(t, err, "two attributes on a [0..1] slot must not silently concatenate")
-	require.ErrorContains(t, err, "symbolArray")
-	require.ErrorContains(t, err, "health")
+	f := ebtest.Fields(t, err)
+	assert.Equal(t, "symbolArray", f["section"], "the error names the slot")
+	assert.Equal(t, "health", f["membership"])
 	require.NotContains(t, got, aeSliceReader{}, "no row is appended on failure")
 }
 
@@ -138,7 +141,7 @@ func TestArity_OptionCollisionIsRefused(t *testing.T) {
 	var got []aeOptionReader
 	err := marshallreflect.Unmarshal(readers, &got, nil)
 	require.Error(t, err, "an Option must not silently decode as absent when its slot collides")
-	require.ErrorContains(t, err, "health")
+	assert.Equal(t, "health", ebtest.Fields(t, err)["membership"])
 }
 
 func TestArity_ScalarCollisionNamesTheSlot(t *testing.T) {
@@ -155,9 +158,10 @@ func TestArity_ScalarCollisionNamesTheSlot(t *testing.T) {
 	require.Error(t, err)
 	// The pre-M2a message was "expected exactly one occurrence per row", which
 	// named neither the slot nor the cause.
-	require.ErrorContains(t, err, "symbol")
-	require.ErrorContains(t, err, "health")
-	require.ErrorContains(t, err, "Health", "the projecting DTO field is named")
+	f := ebtest.Fields(t, err)
+	assert.Equal(t, "symbol", f["section"], "the error names the slot")
+	assert.Equal(t, "health", f["membership"])
+	assert.Contains(t, f["fields"], "Health", "the projecting DTO field is named")
 }
 
 // A single attribute on the slot still decodes — the gate rejects surplus, not
@@ -205,5 +209,5 @@ func TestArity_MandatoryScalarMissingSlot(t *testing.T) {
 	var got []aeScalarReader
 	err := marshallreflect.Unmarshal(readers, &got, nil)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "at least 1")
+	assert.EqualValues(t, 1, ebtest.Fields(t, err)["min"], "the required minimum is reported")
 }

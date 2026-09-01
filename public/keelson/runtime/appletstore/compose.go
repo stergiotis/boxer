@@ -19,9 +19,16 @@ import (
 // buffer was authored against). Title is required; a buffer containing a
 // fence-opening line is refused rather than silently producing a document
 // that re-parses differently.
-func ComposeAppletDoc(title string, icon string, endpoint string, sql string) (doc []byte, err error) {
+func ComposeAppletDoc(title string, summary string, icon string, endpoint string, sql string) (doc []byte, err error) {
 	if strings.TrimSpace(title) == "" {
 		err = eh.Errorf("appletstore: applet title is required")
+		return
+	}
+	// Required for the same reason the parser requires it (ADR-0214 §SD4): a
+	// composed document that omits it mints an app the launcher can list but
+	// not describe, and the author is the only one who can write the line.
+	if strings.TrimSpace(summary) == "" {
+		err = eh.Errorf("appletstore: applet summary is required")
 		return
 	}
 	sql = strings.TrimSpace(sql)
@@ -38,6 +45,8 @@ func ComposeAppletDoc(title string, icon string, endpoint string, sql string) (d
 	var b strings.Builder
 	b.WriteString("---\ntype: reference\naudience: end-user\nstatus: draft\ntitle: ")
 	b.WriteString(strconv.Quote(title))
+	b.WriteString("\nsummary: ")
+	b.WriteString(strconv.Quote(strings.TrimSpace(summary)))
 	b.WriteString("\n")
 	if icon != "" {
 		b.WriteString("icon: ")

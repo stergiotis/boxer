@@ -95,6 +95,27 @@ const (
 
 	AspectSectionMembershipsAllPrimary   AspectE = 45 // every membership in this tagged-value section defines an attribute's identity
 	AspectSectionMembershipsAllSecondary AspectE = 46 // every membership in this tagged-value section annotates an existing attribute
+
+	// Single-membership declarations, one independent boolean per membership
+	// channel (ADR-0213): every attribute of the section carries EXACTLY ONE
+	// membership on the declared channel. The declaration is a writable
+	// schema statement of the layout the read side already knows how to
+	// exploit — the channel's <role>card column is omitted, the flattened
+	// membership array is co-indexed with the value array, and the bare
+	// `value[indexOf(ident, lit)]` form is licensed (ADR-0066/ADR-0181's
+	// structural fast path). The DML enforces the arity at write time.
+	// Meaningful only with the matching channel in the section's
+	// MembershipSpec; the table validator rejects a declaration without its
+	// channel.
+
+	AspectSectionSingleMembershipHighCardRef                            AspectE = 47
+	AspectSectionSingleMembershipHighCardVerbatim                       AspectE = 48
+	AspectSectionSingleMembershipHighCardRefParametrized                AspectE = 49
+	AspectSectionSingleMembershipLowCardRef                             AspectE = 50
+	AspectSectionSingleMembershipLowCardVerbatim                        AspectE = 51
+	AspectSectionSingleMembershipLowCardRefParametrized                 AspectE = 52
+	AspectSectionSingleMembershipMixedLowCardRefHighCardParameters      AspectE = 53
+	AspectSectionSingleMembershipMixedLowCardVerbatimHighCardParameters AspectE = 54
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -147,6 +168,14 @@ var AllAspects = []AspectE{
 	AspectTlpRed,
 	AspectSectionMembershipsAllPrimary,
 	AspectSectionMembershipsAllSecondary,
+	AspectSectionSingleMembershipHighCardRef,
+	AspectSectionSingleMembershipHighCardVerbatim,
+	AspectSectionSingleMembershipHighCardRefParametrized,
+	AspectSectionSingleMembershipLowCardRef,
+	AspectSectionSingleMembershipLowCardVerbatim,
+	AspectSectionSingleMembershipLowCardRefParametrized,
+	AspectSectionSingleMembershipMixedLowCardRefHighCardParameters,
+	AspectSectionSingleMembershipMixedLowCardVerbatimHighCardParameters,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -250,6 +279,22 @@ func (inst AspectE) String() string {
 		return "section-memberships-all-primary"
 	case AspectSectionMembershipsAllSecondary:
 		return "section-memberships-all-secondary"
+	case AspectSectionSingleMembershipHighCardRef:
+		return "single-membership-high-card-ref"
+	case AspectSectionSingleMembershipHighCardVerbatim:
+		return "single-membership-high-card-verbatim"
+	case AspectSectionSingleMembershipHighCardRefParametrized:
+		return "single-membership-high-card-ref-parametrized"
+	case AspectSectionSingleMembershipLowCardRef:
+		return "single-membership-low-card-ref"
+	case AspectSectionSingleMembershipLowCardVerbatim:
+		return "single-membership-low-card-verbatim"
+	case AspectSectionSingleMembershipLowCardRefParametrized:
+		return "single-membership-low-card-ref-parametrized"
+	case AspectSectionSingleMembershipMixedLowCardRefHighCardParameters:
+		return "single-membership-mixed-low-card-ref"
+	case AspectSectionSingleMembershipMixedLowCardVerbatimHighCardParameters:
+		return "single-membership-mixed-low-card-verbatim"
 	}
 	return InvalidAspectEnumValueString
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -266,8 +267,8 @@ func TestCompleteHTTPErrorProbesModels(t *testing.T) {
 	})
 	_, err := c.Complete(context.Background(), userReq("typo-model"))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "model not found")
-	assert.Contains(t, err.Error(), "404")
+	assert.Contains(t, ebtest.Text(t, err), "model not found")
+	assert.Contains(t, ebtest.Text(t, err), "404")
 	assert.True(t, modelsHit, "classifyHttpError must probe /models on 404")
 }
 
@@ -278,7 +279,7 @@ func TestCompleteHTTPErrorNonJSON(t *testing.T) {
 	})
 	_, err := c.Complete(context.Background(), userReq("m"))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "500")
+	assert.Contains(t, ebtest.Text(t, err), "500")
 }
 
 // --- ListModels -------------------------------------------------------------
@@ -303,7 +304,7 @@ func TestListModelsNonOKIsError(t *testing.T) {
 	models, err := c.ListModels(context.Background())
 	require.Error(t, err)
 	assert.Nil(t, models)
-	assert.Contains(t, err.Error(), "401")
+	assert.Contains(t, ebtest.Text(t, err), "401")
 }
 
 // --- LoadGeminiApiKey -------------------------------------------------------

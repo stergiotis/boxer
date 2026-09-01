@@ -176,7 +176,7 @@ The premise extends from the runtime to the code itself: much of a codebase
 is measurable — profiles, coverage, lint and design-review findings,
 authorship and provenance — and the bet is that it should be measured
 continuously and recorded as data, not sampled in one-off reports. Opt-in
-continuous profiling is a build tag away, review findings land as JSON
+continuous profiling is a runtime flag away, review findings land as JSON
 artifacts, and provenance is queryable from the history.
 
 - **Buys:** the pipeline is exercised end to end before any external workload
@@ -210,16 +210,17 @@ performance as a heroic exception.
   must carry its justification.
 - **Enacted by:** the SoA wire-format pivot
   ([ADR-0089](../adr/0089-rowdml-serialization-clickhouse-native-ingestion.md)),
-  the commitment to ClickHouse as the columnar engine, the opt-in
-  continuous-profiling build tag, the `unsafeperf` package.
+  the commitment to ClickHouse as the columnar engine, the flag-gated
+  profiling capture ([ADR-0212](../adr/0212-split-pprof-http-listener.md)),
+  the `unsafeperf` package.
 
 ### P6 — One architect, machine-checked
 
 Boxer is developed by one architect with substantial AI assistance under
 recorded governance: no third-party contributions, per-commit provenance in
-git trailers, and correctness carried by a machine-checkable mesh — build
-tags, linters, golden files, conformance suites, server-truth harnesses —
-rather than by reviewer headcount. The premise reads a shift in software
+git trailers, and correctness carried by a machine-checkable mesh — build-tag
+governance, linters, golden files, conformance suites, server-truth harnesses
+— rather than by reviewer headcount. The premise reads a shift in software
 economics: when assisted authorship is cheap, verification and recorded
 intent become the scarce assets, so the project invests in those (the ADR
 corpus, the lint tiers) rather than in review capacity it does not have.
@@ -285,9 +286,12 @@ the integrated stack; they are argued in their ADRs, not here.
 Consequences that land on a consumer regardless of which premise attracted
 them:
 
-- Every `go build` / `go test` / `go vet` needs the repository's build tags
-  ([README § Building](../../README.md#building)); without them, packages
-  fail with misleading `undefined` errors.
+- Every `go build` / `go test` / `go vet` should carry the repository's build
+  tags to match CI ([README § Building](../../README.md#building)). The set has
+  been empty since ADR-0212 retired the last one, so a consumer needs none;
+  reading [`./tags`](../../tags) rather than hardcoding its contents is what
+  keeps a future one from being missed
+  ([ENGINEERING_PRACTICES §3](../ENGINEERING_PRACTICES.md#3-build-tag-discipline)).
 - House idioms replace ecosystem defaults: structured error building and
   handling (`eb` / `eh`) instead of `fmt.Errorf` chains; house caching, bus,
   and app-runtime layers.

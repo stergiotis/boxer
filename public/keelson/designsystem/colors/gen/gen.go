@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/ipboundary"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/palette"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Config controls a generator invocation.
@@ -189,7 +190,7 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		} {
 			err = os.WriteFile(w.path, []byte(w.content), 0o644)
 			if err != nil {
-				err = eh.Errorf("write %s: %w", w.path, err)
+				err = eb.Build().Str("path", w.path).Errorf("write: %w", err)
 				return
 			}
 			res.Wrote = append(res.Wrote, w.path)
@@ -368,11 +369,11 @@ func runCVD(tokens []palette.Token) (failures []string) {
 func verifyFile(path, want string) (err error) {
 	got, err := os.ReadFile(path)
 	if err != nil {
-		err = eh.Errorf("verify: read %s: %w", path, err)
+		err = eb.Build().Str("path", path).Errorf("verify: read: %w", err)
 		return
 	}
 	if string(got) != want {
-		err = eh.Errorf("verify: %s drift — re-run ./boxer.sh designsystem colors gen", path)
+		err = eb.Build().Str("path", path).Errorf("verify: generated file drift — re-run ./boxer.sh designsystem colors gen")
 		return
 	}
 	return
@@ -399,6 +400,6 @@ func findRepoRoot() (root string, err error) {
 		}
 		d = parent
 	}
-	err = eh.Errorf("could not locate repo root (go.mod not found above %s)", here)
+	err = eb.Build().Str("from", here).Errorf("could not locate the repo root (no go.mod above)")
 	return
 }

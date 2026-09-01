@@ -49,6 +49,7 @@ import (
 	cli "github.com/urfave/cli/v2"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 )
 
@@ -170,7 +171,7 @@ func parseSASLMechanism(s string) (m pkafka.SASLMechanismE, err error) {
 	case "OAUTHBEARER":
 		m = pkafka.SASLMechanismOAuthBearer
 	default:
-		err = eh.Errorf("unsupported --sasl-mechanism %q (try PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or none)", s)
+		err = eb.Build().Str("mechanism", s).Errorf("unsupported --sasl-mechanism (try PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or none)")
 	}
 	return
 }
@@ -214,12 +215,12 @@ func buildTLS(c *cli.Context) (enabled bool, cfg *tls.Config, err error) {
 		var caPEM []byte
 		caPEM, err = os.ReadFile(caFile)
 		if err != nil {
-			err = eh.Errorf("read --tls-ca-file %q: %w", caFile, err)
+			err = eb.Build().Str("caFile", caFile).Errorf("read --tls-ca-file: %w", err)
 			return
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(caPEM) {
-			err = eh.Errorf("--tls-ca-file %q contains no PEM certificates", caFile)
+			err = eb.Build().Str("caFile", caFile).Errorf("--tls-ca-file contains no PEM certificates")
 			return
 		}
 		cfg.RootCAs = pool
@@ -464,7 +465,7 @@ func runProduce(c *cli.Context) (err error) {
 	case "netstring":
 		err = produceNetstrings(c, writer, topic, keyDelim)
 	default:
-		err = eh.Errorf("invalid --input-mode %q (try lines, netstring)", mode)
+		err = eb.Build().Str("mode", mode).Errorf("invalid --input-mode (try lines, netstring)")
 	}
 	return
 }
@@ -549,7 +550,7 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 	if readErr != nil {
 		if errors.Is(readErr, io.EOF) {
 			if len(lenStr) > 0 {
-				err = eh.Errorf("unexpected EOF after %q (missing ':')", lenStr)
+				err = eb.Build().Str("lenStr", lenStr).Errorf("unexpected EOF after the length prefix (missing ':')")
 				return
 			}
 			// clean EOF — no more frames
@@ -562,16 +563,16 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 	var n int
 	n, err = strconv.Atoi(lenStr)
 	if err != nil {
-		err = eh.Errorf("invalid netstring length %q: %w", lenStr, err)
+		err = eb.Build().Str("lenStr", lenStr).Errorf("invalid netstring length: %w", err)
 		return
 	}
 	if n < 0 {
-		err = eh.Errorf("invalid netstring length %d (must be non-negative)", n)
+		err = eb.Build().Int("length", n).Errorf("invalid netstring length (must be non-negative)")
 		return
 	}
 	value = make([]byte, n)
 	if _, err = io.ReadFull(r, value); err != nil {
-		err = eh.Errorf("read netstring value (%d bytes): %w", n, err)
+		err = eb.Build().Int("length", n).Errorf("read netstring value: %w", err)
 		return
 	}
 	var term byte
@@ -581,7 +582,7 @@ func readNetstring(r *bufio.Reader) (value []byte, ok bool, err error) {
 		return
 	}
 	if term != ',' {
-		err = eh.Errorf("invalid netstring terminator: expected ',', got %q", term)
+		err = eb.Build().Str("terminator", string(term)).Errorf("invalid netstring terminator; expected ','")
 		return
 	}
 	ok = true
@@ -676,7 +677,7 @@ func parseOffset(s string) (off kgo.Offset, err error) {
 		var n int64
 		n, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			err = eh.Errorf("invalid offset %q: %w", s, err)
+			err = eb.Build().Str("offset", s).Errorf("invalid offset: %w", err)
 			return
 		}
 		off = kgo.NewOffset().At(n)
@@ -702,7 +703,7 @@ func makeRecordWriter(c *cli.Context) (fn formatter, err error) {
 	case "netstring":
 		fn = netstringWriter
 	default:
-		err = eh.Errorf("invalid --output-mode %q (try format, cbor, netstring)", mode)
+		err = eb.Build().Str("mode", mode).Errorf("invalid --output-mode (try format, cbor, netstring)")
 	}
 	return
 }

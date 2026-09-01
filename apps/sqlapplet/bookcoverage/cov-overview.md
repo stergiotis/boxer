@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Coverage overview
+summary: "Count covered and total statements for this build"
 icon: "🎯"
 endpoint: introspection
 tabs: [table]

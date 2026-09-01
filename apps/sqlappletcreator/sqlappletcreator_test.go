@@ -98,6 +98,7 @@ func TestSubmitComposesAndSaves(t *testing.T) {
 		sql:      "SELECT 1",
 		slug:     "my-applet",
 		title:    "My Applet",
+		summary:  "Count the things this applet counts",
 		icon:     "🧩",
 		endpoint: appletcreatecfg.EndpointIntrospection,
 	}
@@ -193,7 +194,7 @@ func (f *fakeFsBus) Request(subject string, payload []byte) (reply []byte, err e
 
 func TestExportComposesAndWritesFile(t *testing.T) {
 	bus := &fakeFsBus{grant: true}
-	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", icon: "📄"}
+	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", summary: "Export fixture applet", icon: "📄"}
 	inst.export()
 
 	require.Eventually(t, func() bool {
@@ -216,7 +217,7 @@ func TestExportComposesAndWritesFile(t *testing.T) {
 
 func TestExportCancelledSurfaces(t *testing.T) {
 	bus := &fakeFsBus{grant: false, grantReason: "cancelled"}
-	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "x", title: "X"}
+	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 1", slug: "x", title: "X", summary: "Export fixture applet"}
 	inst.export()
 
 	require.Eventually(t, func() bool {
@@ -254,7 +255,7 @@ func TestExportGuardsEmptyTitle(t *testing.T) {
 // instantly, so only the requested duration can show the difference.
 func TestExportWaitsLongEnoughForAPerson(t *testing.T) {
 	bus := &fakeFsBus{grant: true}
-	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", icon: "📄"}
+	inst := &App{bus: bus, log: zerolog.Nop(), sql: "SELECT 9", slug: "exp-applet", title: "Exp Applet", summary: "Export fixture applet", icon: "📄"}
 	inst.export()
 
 	require.Eventually(t, func() bool {
@@ -292,7 +293,7 @@ func TestExport_RunsOnTheManifestCapsAlone(t *testing.T) {
 	defer fs.Close()
 
 	busC := bus.NewClient(app.AppIdT(manifest.Id), manifest.Caps)
-	inst := &App{bus: busC, log: zerolog.Nop(), sql: "SELECT 7", slug: "caps-check", title: "Caps Check", icon: "📄"}
+	inst := &App{bus: busC, log: zerolog.Nop(), sql: "SELECT 7", slug: "caps-check", title: "Caps Check", summary: "Export fixture applet", icon: "📄"}
 
 	path := filepath.Join(t.TempDir(), "caps-check.md")
 	inst.export()

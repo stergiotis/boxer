@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Capability subjects (request/reply, CBOR, audited — ADR-0134 SD2, the
@@ -95,7 +96,7 @@ func DecodeEvent(subject string, payload []byte) (ev Event, err error) {
 	case SubjectEventRetracted:
 		ev.Op = EventOpRetracted
 	default:
-		err = eh.Errorf("adhocdata: unknown event subject %q", subject)
+		err = eb.Build().Str("subject", subject).Errorf("adhocdata: unknown event subject")
 		return
 	}
 	ev.Handle = w.Handle

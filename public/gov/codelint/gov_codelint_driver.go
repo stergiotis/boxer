@@ -41,6 +41,7 @@ func NewDefaultLinter() (inst *Linter) {
 	inst.Register(NewRuleCS010())
 	inst.Register(NewRuleCS011())
 	inst.Register(NewRuleCS012())
+	inst.Register(NewRuleCS013())
 	return
 }
 
@@ -51,6 +52,9 @@ func (inst *Linter) Register(r RuleI) {
 // Run executes every registered rule against the supplied packages and
 // yields findings as they are produced. Suppression directives are
 // applied before yielding.
+//
+// Test-support packages are skipped for every rule — see
+// IsTestSupportPackage.
 func (inst *Linter) Run(pkgs []*packages.Package) iter.Seq2[Finding, error] {
 	return func(yield func(Finding, error) bool) {
 		for _, r := range inst.rules {
@@ -59,6 +63,9 @@ func (inst *Linter) Run(pkgs []*packages.Package) iter.Seq2[Finding, error] {
 			sev := r.DefaultSeverity()
 			for _, pkg := range pkgs {
 				if pkg.Types == nil || pkg.TypesInfo == nil {
+					continue
+				}
+				if IsTestSupportPackage(pkg.Name) {
 					continue
 				}
 				diags, perr := runAnalyzer(analyzer, pkg)
@@ -87,6 +94,7 @@ func (inst *Linter) Run(pkgs []*packages.Package) iter.Seq2[Finding, error] {
 						Line:     int32(pos.Line),
 						Col:      int32(pos.Column),
 						Message:  d.Message,
+						Fix:      soleReplacement(d),
 					}
 					if !yield(f, nil) {
 						return
@@ -95,6 +103,21 @@ func (inst *Linter) Run(pkgs []*packages.Package) iter.Seq2[Finding, error] {
 			}
 		}
 	}
+}
+
+// soleReplacement renders a diagnostic's suggested fix as replacement text,
+// for the single-edit case a rule uses when it can rewrite one expression. A
+// fix spanning several edits has no single text to show and is reported as a
+// finding without one, rather than as a partial suggestion someone might paste.
+func soleReplacement(d analysis.Diagnostic) (text string) {
+	if len(d.SuggestedFixes) != 1 {
+		return
+	}
+	edits := d.SuggestedFixes[0].TextEdits
+	if len(edits) != 1 {
+		return
+	}
+	return string(edits[0].NewText)
 }
 
 // runAnalyzer builds a per-package analysis.Pass and invokes the analyzer.

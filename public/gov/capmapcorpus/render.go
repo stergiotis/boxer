@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Rendering a corpus back to a vault — the inverse of [ParseDir], and what
@@ -118,7 +119,7 @@ func RenderCompetence(comp Competence, rels []Relation) (out []byte, err error) 
 
 	stanza, mErr := yaml.Marshal(fm)
 	if mErr != nil {
-		return nil, eh.Errorf("unable to render frontmatter for %q: %w", comp.Slug, mErr)
+		return nil, eb.Build().Str("slug", comp.Slug).Errorf("unable to render frontmatter: %w", mErr)
 	}
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -234,10 +235,10 @@ func WriteVault(corpus Corpus, dir string) (stats WriteStats, err error) {
 		}
 		full := filepath.Join(dir, rel)
 		if mkErr := os.MkdirAll(filepath.Dir(full), 0o755); mkErr != nil {
-			return stats, eh.Errorf("unable to create directory for %q: %w", rel, mkErr)
+			return stats, eb.Build().Str("rel", rel).Errorf("unable to create the directory: %w", mkErr)
 		}
 		if wErr := os.WriteFile(full, content, 0o644); wErr != nil {
-			return stats, eh.Errorf("unable to write %q: %w", rel, wErr)
+			return stats, eb.Build().Str("rel", rel).Errorf("unable to write: %w", wErr)
 		}
 		stats.Files++
 		if filepath.Base(rel) == markerFileName {
@@ -271,7 +272,7 @@ func vaultPaths(corpus Corpus) (paths map[string]string, err error) {
 			rel = stored
 		}
 		if prev, dup := claimed[rel]; dup {
-			return nil, eh.Errorf("capmapcorpus: %q and %q both map to vault path %q", prev, comp.Slug, rel)
+			return nil, eb.Build().Str("prev", prev).Str("slug", comp.Slug).Str("rel", rel).Errorf("capmapcorpus: two competences map to one vault path")
 		}
 		claimed[rel] = comp.Slug
 		paths[comp.Slug] = rel

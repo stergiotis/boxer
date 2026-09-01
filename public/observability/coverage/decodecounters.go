@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Format constants of the coverage counter-data file, version 1 (ADR-0169
@@ -40,7 +41,7 @@ func DecodeCounters(data []byte) (snap *covsnap.CounterSnapshot, err error) {
 		return
 	}
 	if version > counterFileVersion {
-		return nil, eh.Errorf("coverage counter blob has unknown version %d (decoder is pinned to %d)", version, counterFileVersion)
+		return nil, eb.Build().Uint32("version", version).Uint32("pinnedVersion", counterFileVersion).Errorf("coverage counter blob has an unknown version")
 	}
 	snap = &covsnap.CounterSnapshot{}
 	var hash []byte
@@ -87,7 +88,7 @@ func DecodeCounters(data []byte) (snap *covsnap.CounterSnapshot, err error) {
 		}
 		err = decodeCounterSegment(r, flavor, bigEndian != 0, seg == 0, snap)
 		if err != nil {
-			return nil, eh.Errorf("coverage counter segment %d: %w", seg, err)
+			return nil, eb.Build().Uint32("seg", seg).Errorf("coverage counter segment: %w", err)
 		}
 	}
 	return
@@ -137,7 +138,7 @@ func decodeCounterSegment(r *byteReader, flavor uint8, bigEndian bool, keepArgs 
 	// Each function record is at least three values; guard against a corrupt
 	// count before growing the slice from it.
 	if fcnEntries > uint64(r.remaining()) {
-		return eh.Errorf("corrupt function count %d exceeds remaining %d bytes", fcnEntries, r.remaining())
+		return eb.Build().Uint64("functionCount", fcnEntries).Int("remaining", r.remaining()).Errorf("corrupt function count exceeds the bytes remaining")
 	}
 	readVal := func() (v uint32, err error) {
 		switch flavor {
@@ -159,7 +160,7 @@ func decodeCounterSegment(r *byteReader, flavor uint8, bigEndian bool, keepArgs 
 			}
 			return
 		}
-		return 0, eh.Errorf("unknown counter flavor %d", flavor)
+		return 0, eb.Build().Uint8("flavor", flavor).Errorf("unknown counter flavor")
 	}
 	for i := range fcnEntries {
 		var numCtrs, pkgIdx, funcIdx uint32
@@ -176,7 +177,7 @@ func decodeCounterSegment(r *byteReader, flavor uint8, bigEndian bool, keepArgs 
 			return
 		}
 		if uint64(numCtrs) > uint64(r.remaining()) {
-			return eh.Errorf("function record %d: corrupt counter count %d exceeds remaining %d bytes", i, numCtrs, r.remaining())
+			return eb.Build().Uint64("record", i).Uint32("counterCount", numCtrs).Int("remaining", r.remaining()).Errorf("corrupt counter count exceeds the bytes remaining")
 		}
 		fc := covsnap.FuncCounters{
 			PkgIdx:   pkgIdx,
@@ -215,7 +216,7 @@ func decodeArgsTable(strTab []byte, argsTab []byte) (args map[string]string, err
 			return
 		}
 		if int(idx) >= len(strs) {
-			return "", eh.Errorf("args table string index %d out of range (table has %d entries)", idx, len(strs))
+			return "", eb.Build().Uint64("index", idx).Int("entries", len(strs)).Errorf("args table string index is out of range")
 		}
 		return strs[idx], nil
 	}

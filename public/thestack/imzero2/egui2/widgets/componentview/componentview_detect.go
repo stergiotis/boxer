@@ -98,7 +98,7 @@ func (inst *Binder) Add(b Binding) (err error) {
 	}
 	for _, existing := range inst.bindings {
 		if existing.kind == b.kind {
-			return eb.Build().Str("kind", string(b.kind)).Errorf("component kind %s is already bound", b.kind)
+			return eb.Build().Str("kind", string(b.kind)).Errorf("component kind is already bound")
 		}
 	}
 	// Two component kinds may share one DTO type — the same shape rendered two

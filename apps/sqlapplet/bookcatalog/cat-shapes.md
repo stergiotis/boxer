@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Leeway schema hierarchy
+summary: "Trace which leeway tables share a schema shape"
 icon: "🪢"
 endpoint: default
 tabs: [sankey, table]

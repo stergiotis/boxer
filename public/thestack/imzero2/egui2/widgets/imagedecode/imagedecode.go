@@ -38,6 +38,7 @@ import (
 	_ "image/png"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DefaultMaxPixels bounds a decode at 64 megapixels — comfortably past
@@ -67,26 +68,27 @@ func DecodeRGBA8(data []byte, maxPixels int) (pixels []uint32, widthPx uint32, h
 		return
 	}
 	if cfg.Width <= 0 || cfg.Height <= 0 {
-		err = eh.Errorf("%s image has empty bounds (%dx%d)", format, cfg.Width, cfg.Height)
+		err = eb.Build().Str("format", format).Int("width", cfg.Width).Int("height", cfg.Height).Errorf("image has empty bounds")
 		return
 	}
 	// int64 throughout: on a 32-bit build the product of two plausible
 	// int32 dimensions overflows, and an overflowed product compares
 	// happily against any bound.
 	if maxPixels > 0 && int64(cfg.Width)*int64(cfg.Height) > int64(maxPixels) {
-		err = eh.Errorf("%s image is %dx%d (%d pixels), over the %d-pixel budget",
-			format, cfg.Width, cfg.Height, int64(cfg.Width)*int64(cfg.Height), maxPixels)
+		err = eb.Build().Str("format", format).Int("width", cfg.Width).Int("height", cfg.Height).
+			Int64("pixels", int64(cfg.Width)*int64(cfg.Height)).Int("budget", maxPixels).
+			Errorf("image is over the pixel budget")
 		return
 	}
 	img, _, decErr := image.Decode(bytes.NewReader(data))
 	if decErr != nil {
-		err = eh.Errorf("unable to decode %s image: %w", format, decErr)
+		err = eb.Build().Str("format", format).Errorf("unable to decode image: %w", decErr)
 		return
 	}
 	pixels, widthPx, heightPx = Pack(img)
 	if widthPx == 0 || heightPx == 0 {
 		pixels = nil
-		err = eh.Errorf("%s image decoded to empty bounds", format)
+		err = eb.Build().Str("format", format).Errorf("image decoded to empty bounds")
 		return
 	}
 	return

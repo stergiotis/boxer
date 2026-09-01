@@ -502,7 +502,7 @@ func (inst *Client) fetchColumnNames(ctx context.Context, db string, table strin
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(raw))).Errorf("system.columns http %d", resp.StatusCode)
+		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(raw))).Errorf("system.columns http")
 		return
 	}
 	raw, rerr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))

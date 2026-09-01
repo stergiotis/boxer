@@ -1,11 +1,13 @@
 package marshallreflect_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 )
@@ -26,5 +28,12 @@ type badScalarOnU32Array struct {
 func TestValidate_ScalarArityAgainstContainerSection(t *testing.T) {
 	err := marshallreflect.Validate[badScalarOnU32Array](anchor.NewInEntityTestTable(memory.NewGoAllocator(), 1))
 	require.Error(t, err)
-	require.ErrorContains(t, err, "BeginAttribute takes 0 arg(s), want 1")
+	require.Contains(t, fieldList(t, err, "problems"), "BeginAttribute takes 0 arg(s), want 1")
+}
+
+// fieldList renders a []string error field as one string, so a test can assert
+// on a substring of one entry without pinning the entry's exact wording.
+func fieldList(t *testing.T, err error, key string) (s string) {
+	t.Helper()
+	return fmt.Sprint(ebtest.Fields(t, err)[key])
 }

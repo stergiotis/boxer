@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Go architecture
+summary: "Draw the quotient graph of apps and public subsystems"
 icon: "🏛"
 endpoint: introspection
 tabs: [table, network, detail]

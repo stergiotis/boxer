@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/apps/jsonbench/jsonmap"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func jsonmapIngestCommand() *cli.Command {
@@ -134,7 +135,7 @@ func runJsonmapIngest(cCtx *cli.Context) (err error) {
 func tierFilesFrom(dir string, offset int, n int) (out []string, err error) {
 	matches, err := filepath.Glob(filepath.Join(dir, "file_*.json.gz"))
 	if err != nil {
-		err = eh.Errorf("glob %s: %w", dir, err)
+		err = eb.Build().Str("dir", dir).Errorf("glob: %w", err)
 		return
 	}
 	sort.Strings(matches)
@@ -292,7 +293,7 @@ func (inst *jsonmapIngester) add(ctx context.Context, raw []byte, doc map[string
 
 	err = inst.ent.CommitEntity()
 	if err != nil {
-		err = eh.Errorf("commit entity %d: %w", inst.docs, err)
+		err = eb.Build().Uint64("docs", inst.docs).Errorf("commit entity: %w", err)
 		return
 	}
 	inst.held++
@@ -315,7 +316,7 @@ func addVerbatimPath[T any](add func([]byte, []byte) T, t shredded) (err error) 
 	var params []byte
 	params, err = formatParams(t.params)
 	if err != nil {
-		err = eh.Errorf("path %s: %w", t.path, err)
+		err = eb.Build().Str("path", t.path).Errorf("path: %w", err)
 		return
 	}
 	add([]byte(t.path), params)

@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Runtime environment
+summary: "Query the env-var registry with the values in force"
 icon: "🌡"
 endpoint: introspection
 tabs: [table, detail]

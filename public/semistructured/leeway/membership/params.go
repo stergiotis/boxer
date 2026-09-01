@@ -66,7 +66,7 @@ const (
 // is a real corpus property (a JSON array longer than MaxParamsIndex+1
 // elements), not a programming error, so producers are expected to count and
 // report it the way they count undecodable documents.
-var ErrParamsIndexOutOfRange = eh.Errorf("membership params index exceeds %d", MaxParamsIndex)
+var ErrParamsIndexOutOfRange = eh.Errorf("membership params index exceeds the maximum")
 
 // ErrParamsMalformed reports a blob that is not in canonical form.
 var ErrParamsMalformed = eh.Errorf("membership params blob is malformed")
@@ -133,7 +133,7 @@ func DecodeParams(raw []byte) (idx []uint64, err error) {
 	for i := range n {
 		off := i * ParamsStride
 		if i > 0 && raw[off-1] != ParamsSeparator {
-			err = eb.Build().Int("position", i).Int("offset", off-1).Errorf("expected a %q separator: %w", ParamsSeparator, ErrParamsMalformed)
+			err = eb.Build().Int("position", i).Int("offset", off-1).Errorf("expected a \""+string(ParamsSeparator)+"\" separator: %w", ErrParamsMalformed)
 			idx = nil
 			return
 		}

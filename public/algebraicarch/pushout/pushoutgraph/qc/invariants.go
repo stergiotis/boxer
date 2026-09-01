@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/algo"
 	t "github.com/stergiotis/boxer/public/algebraicarch/pushout/pushoutgraph/types"
@@ -56,18 +57,18 @@ func checkNodePartition(g t.InspectableI) []error {
 	// No node in both sets.
 	for id := range g.AllLiveNodes() {
 		if g.IsDeleted(id) {
-			errs = append(errs, eh.Errorf("node %v in both live and deleted sets", id))
+			errs = append(errs, eb.Build().Stringer("id", id).Errorf("node in both live and deleted sets"))
 		}
 	}
 
 	// Every edge endpoint must be in one of the sets.
 	for src := range g.ForwardEdgeSources() {
 		if !g.IsLive(src) && !g.IsDeleted(src) {
-			errs = append(errs, eh.Errorf("edge source %v not in any node set", src))
+			errs = append(errs, eb.Build().Stringer("src", src).Errorf("edge source not in any node set"))
 		}
 		for e := range g.ForwardEdges(src) {
 			if !g.IsLive(e.Dest) && !g.IsDeleted(e.Dest) {
-				errs = append(errs, eh.Errorf("edge dest %v (from %v) not in any node set", e.Dest, src))
+				errs = append(errs, eb.Build().Stringer("dest", e.Dest).Stringer("src", src).Errorf("edge dest not in any node set"))
 			}
 		}
 	}
@@ -106,14 +107,14 @@ func checkEdgeSymmetry(g t.InspectableI) []error {
 	// Forward → backward: every forward edge should have a matching back-edge.
 	for k := range fwdSet {
 		if _, ok := bwdSet[k]; !ok {
-			errs = append(errs, eh.Errorf("forward edge %v->%v (%s) has no matching back-edge", k.src, k.dest, k.kind))
+			errs = append(errs, eb.Build().Stringer("src", k.src).Stringer("dest", k.dest).Stringer("kind", k.kind).Errorf("forward edge has no matching back-edge"))
 		}
 	}
 
 	// Backward → forward: every back-edge should have a matching forward edge.
 	for k := range bwdSet {
 		if _, ok := fwdSet[k]; !ok {
-			errs = append(errs, eh.Errorf("back-edge %v->%v (%s) has no matching forward edge", k.src, k.dest, k.kind))
+			errs = append(errs, eb.Build().Stringer("src", k.src).Stringer("dest", k.dest).Stringer("kind", k.kind).Errorf("back-edge has no matching forward edge"))
 		}
 	}
 	return errs
@@ -132,15 +133,15 @@ func checkEdgeKindConsistency(g t.InspectableI) []error {
 			switch e.Kind {
 			case t.EdgeKindLive:
 				if !srcLive || !destLive {
-					errs = append(errs, eh.Errorf("live edge %v->%v but endpoints not both live (src_live=%v, dest_live=%v)", src, e.Dest, srcLive, destLive))
+					errs = append(errs, eb.Build().Stringer("src", src).Stringer("dest", e.Dest).Bool("srcLive", srcLive).Bool("destLive", destLive).Errorf("live edge endpoints are not both live"))
 				}
 			case t.EdgeKindDeleted:
 				if !srcDel && !destDel {
-					errs = append(errs, eh.Errorf("deleted edge %v->%v but neither endpoint is deleted", src, e.Dest))
+					errs = append(errs, eb.Build().Stringer("src", src).Stringer("dest", e.Dest).Errorf("deleted edge has no deleted endpoint"))
 				}
 			case t.EdgeKindPseudo:
 				if !srcLive || !destLive {
-					errs = append(errs, eh.Errorf("pseudo-edge %v->%v but endpoints not both live (src_live=%v, dest_live=%v)", src, e.Dest, srcLive, destLive))
+					errs = append(errs, eb.Build().Stringer("src", src).Stringer("dest", e.Dest).Bool("srcLive", srcLive).Bool("destLive", destLive).Errorf("pseudo-edge endpoints are not both live"))
 				}
 			}
 		}
@@ -153,12 +154,12 @@ func checkDeletedPartitionCoverage(g t.InspectableI) []error {
 	var errs []error
 	for id := range g.AllDeletedNodes() {
 		if !g.DeletedPartitionContains(id) {
-			errs = append(errs, eh.Errorf("deleted node %v not in DeletedPartition", id))
+			errs = append(errs, eb.Build().Stringer("id", id).Errorf("deleted node not in DeletedPartition"))
 		}
 	}
 	for id := range g.AllLiveNodes() {
 		if g.DeletedPartitionContains(id) {
-			errs = append(errs, eh.Errorf("live node %v found in DeletedPartition", id))
+			errs = append(errs, eb.Build().Stringer("id", id).Errorf("live node found in DeletedPartition"))
 		}
 	}
 	return errs
@@ -167,7 +168,7 @@ func checkDeletedPartitionCoverage(g t.InspectableI) []error {
 // Invariant 6: No dirty reps remain after ResolvePseudoEdges.
 func checkNoDirtyReps(g t.InspectableI) []error {
 	if g.DirtyRepCount() > 0 {
-		return []error{eh.Errorf("%d dirty reps remain unresolved", g.DirtyRepCount())}
+		return []error{eb.Build().Int("dirtyReps", g.DirtyRepCount()).Errorf("dirty reps remain unresolved")}
 	}
 	return nil
 }
@@ -178,7 +179,7 @@ func checkPseudoEdgeMinimality(g t.InspectableI) []error {
 	for src := range g.ForwardEdgeSources() {
 		for e := range g.ForwardEdges(src) {
 			if e.Kind == t.EdgeKindPseudo && g.HasLiveEdgeTo(src, e.Dest) {
-				errs = append(errs, eh.Errorf("pseudo-edge %v->%v duplicates a live edge", src, e.Dest))
+				errs = append(errs, eb.Build().Stringer("src", src).Stringer("dest", e.Dest).Errorf("pseudo-edge duplicates a live edge"))
 			}
 		}
 	}
@@ -194,7 +195,7 @@ func checkPseudoEdgeReachability(g t.InspectableI) []error {
 				continue
 			}
 			if !canReachThroughDeleted(g, src, e.Dest) {
-				errs = append(errs, eh.Errorf("pseudo-edge %v->%v not justified by path through deleted nodes", src, e.Dest))
+				errs = append(errs, eb.Build().Stringer("src", src).Stringer("dest", e.Dest).Errorf("pseudo-edge not justified by path through deleted nodes"))
 			}
 		}
 	}
@@ -258,7 +259,7 @@ func checkPseudoEdgeCompleteness(g t.InspectableI) []error {
 					}
 				}
 				if !hasPseudo {
-					errs = append(errs, eh.Errorf("missing pseudo-edge %v->%v (connected through deleted component rep=%v)", src, dest, rep))
+					errs = append(errs, eb.Build().Stringer("src", src).Stringer("dest", dest).Stringer("rep", rep).Errorf("missing pseudo-edge for a pair connected through a deleted component"))
 				}
 			}
 		}
@@ -306,12 +307,12 @@ func checkPseudoEdgeIdempotence(g t.InspectableI) []error {
 	var errs []error
 	for p := range before {
 		if _, ok := after[p]; !ok {
-			errs = append(errs, eh.Errorf("pseudo-edge %v->%v removed by redundant ResolvePseudoEdges", p.src, p.dest))
+			errs = append(errs, eb.Build().Stringer("src", p.src).Stringer("dest", p.dest).Errorf("pseudo-edge removed by a redundant ResolvePseudoEdges"))
 		}
 	}
 	for p := range after {
 		if _, ok := before[p]; !ok {
-			errs = append(errs, eh.Errorf("pseudo-edge %v->%v added by redundant ResolvePseudoEdges", p.src, p.dest))
+			errs = append(errs, eb.Build().Stringer("src", p.src).Stringer("dest", p.dest).Errorf("pseudo-edge added by a redundant ResolvePseudoEdges"))
 		}
 	}
 	return errs
@@ -326,7 +327,7 @@ func checkReasonTrackingConsistency(g t.InspectableI) []error {
 	for rep := range g.DeletedPartitionRepresentatives() {
 		for pe := range g.ReasonPseudoEdgesForRep(rep) {
 			if g.PseudoEdgeReasonCount(pe[0], pe[1]) == 0 {
-				errs = append(errs, eh.Errorf("ReasonPseudoEdges[%v] references pseudo-edge %v->%v but PseudoEdgeReasons has no entry", rep, pe[0], pe[1]))
+				errs = append(errs, eb.Build().Stringer("rep", rep).Stringer("src", pe[0]).Stringer("dest", pe[1]).Errorf("ReasonPseudoEdges references a pseudo-edge that PseudoEdgeReasons has no entry for"))
 			}
 		}
 	}
@@ -337,7 +338,7 @@ func checkReasonTrackingConsistency(g t.InspectableI) []error {
 			if e.Kind == t.EdgeKindPseudo {
 				pe := [2]t.NodeID{src, e.Dest}
 				if g.PseudoEdgeReasonCount(pe[0], pe[1]) == 0 {
-					errs = append(errs, eh.Errorf("pseudo-edge %v->%v in graph but not tracked in PseudoEdgeReasons", src, e.Dest))
+					errs = append(errs, eb.Build().Stringer("src", src).Stringer("dest", e.Dest).Errorf("pseudo-edge in the graph is not tracked in PseudoEdgeReasons"))
 				}
 			}
 		}
@@ -353,7 +354,7 @@ func checkReasonTrackingConsistency(g t.InspectableI) []error {
 			}
 		}
 		if !found {
-			errs = append(errs, eh.Errorf("PseudoEdgeReasons has %v->%v but no pseudo-edge in graph", pe[0], pe[1]))
+			errs = append(errs, eb.Build().Stringer("src", pe[0]).Stringer("dest", pe[1]).Errorf("PseudoEdgeReasons entry has no pseudo-edge in graph"))
 		}
 	}
 
@@ -381,7 +382,7 @@ func checkLiveSubgraphConnectivity(g t.InspectableI) []error {
 	var errs []error
 	for id := range g.AllLiveNodes() {
 		if _, ok := reachable[id]; !ok {
-			errs = append(errs, eh.Errorf("live node %v unreachable from root", id))
+			errs = append(errs, eb.Build().Stringer("id", id).Errorf("live node unreachable from root"))
 		}
 	}
 	return errs
@@ -409,7 +410,7 @@ func checkConflictConsistency(g t.InspectableI) []error {
 
 	var errs []error
 	if isLinear && breaking > 0 {
-		errs = append(errs, eh.Errorf("LinearOrder succeeded but DetectConflicts reports %d linearity-breaking conflicts", breaking))
+		errs = append(errs, eb.Build().Int("breaking", breaking).Errorf("LinearOrder succeeded but DetectConflicts reports linearity-breaking conflicts"))
 	}
 	if !isLinear && breaking == 0 {
 		errs = append(errs, eh.Errorf("LinearOrder()==nil but DetectConflicts reports no order/cycle/orphan conflict — conflict detector is incomplete for this graph"))
@@ -424,12 +425,12 @@ func checkTombstoneDeleters(g t.InspectableI) []error {
 	var errs []error
 	for id := range g.AllDeletedNodes() {
 		if g.NodeDeleterCount(id) == 0 {
-			errs = append(errs, eh.Errorf("deleted node %v has no recorded deleter", id))
+			errs = append(errs, eb.Build().Stringer("id", id).Errorf("deleted node has no recorded deleter"))
 		}
 	}
 	for id := range g.AllLiveNodes() {
 		if g.NodeDeleterCount(id) != 0 {
-			errs = append(errs, eh.Errorf("live node %v has %d recorded deleters", id, g.NodeDeleterCount(id)))
+			errs = append(errs, eb.Build().Stringer("nodeID", id).Int("deleters", g.NodeDeleterCount(id)).Errorf("live node has recorded deleters"))
 		}
 	}
 	return errs

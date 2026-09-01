@@ -41,7 +41,7 @@ func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
 		rowVal := reflect.ValueOf(rows[i])
 		err = marshalRow(dmlVal, rowVal, r.plan, r.groups, lookup)
 		if err != nil {
-			err = eb.Build().Int("row", i).Errorf("row %d: %w", i, err)
+			err = eb.Build().Int("row", i).Errorf("marshal row: %w", err)
 			return
 		}
 	}
@@ -531,7 +531,7 @@ func recoverContract(err *error) {
 func mustCall(recv reflect.Value, name string, args ...reflect.Value) (rets []reflect.Value) {
 	m := recv.MethodByName(name)
 	if !m.IsValid() {
-		panic(contractPanic{eb.Build().Str("method", name).Str("recv", recv.Type().String()).Errorf("target DML does not have method %s — call Validate[T](dml) to preflight the whole write contract", name)})
+		panic(contractPanic{eb.Build().Str("method", name).Str("recv", recv.Type().String()).Errorf("target DML does not have this method — call Validate[T](dml) to preflight the whole write contract")})
 	}
 	rets = m.Call(args)
 	return

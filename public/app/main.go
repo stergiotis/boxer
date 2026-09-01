@@ -62,6 +62,11 @@ import (
 	// their BOXER_GODEP_* specs would be invisible to `boxer env list`. The
 	// CLI already links x/tools for wasmsurvey, so it costs no dependency.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep"
+	// The launcher registers its ranking knob at init (ADR-0214 §SD8) and is
+	// linked only by the graphical host, which this binary is not — without
+	// this its BOXER_LAUNCHER_* spec would be invisible to `boxer env list`
+	// and absent from doc/env-vars.md.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/launcher"
 	_ "github.com/stergiotis/boxer/public/llm/openaichat"
 	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 )

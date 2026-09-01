@@ -12,6 +12,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Worker wraps one clickhouse-local subprocess. The pool spawns
@@ -103,7 +104,7 @@ func newWorker(ctx context.Context, p *Pool) (w *Worker, err error) {
 				_, _ = cmd.Process.Wait()
 			}
 		}()
-		err = eh.Errorf("chlocalpool: spawn timed out after %s", cfg.SpawnTimeout)
+		err = eb.Build().Stringer("timeout", cfg.SpawnTimeout).Errorf("chlocalpool: spawn timed out")
 		return
 	case <-ctx.Done():
 		go func() {
@@ -172,7 +173,7 @@ func (inst *Worker) Wait() (err error) {
 		if waitErr != nil {
 			tail := inst.stderr.Bytes()
 			if len(tail) > 0 {
-				inst.waitErr = eh.Errorf("chlocalpool: worker exit: %w (stderr: %q)", waitErr, string(tail))
+				inst.waitErr = eb.Build().Str("stderr", string(tail)).Errorf("chlocalpool: worker exit: %w", waitErr)
 			} else {
 				inst.waitErr = eh.Errorf("chlocalpool: worker exit: %w", waitErr)
 			}
@@ -236,7 +237,7 @@ func (inst *Worker) Close() (err error) {
 		// Cleanup tmpdir.
 		if inst.tmpdir != "" {
 			if rmErr := os.RemoveAll(inst.tmpdir); rmErr != nil {
-				inst.closeErr = eh.Errorf("chlocalpool: rm tmpdir %s: %w", inst.tmpdir, rmErr)
+				inst.closeErr = eb.Build().Str("tmpdir", inst.tmpdir).Errorf("chlocalpool: rm tmpdir: %w", rmErr)
 			}
 		}
 		// Notify pool last so the live count drops after cleanup.

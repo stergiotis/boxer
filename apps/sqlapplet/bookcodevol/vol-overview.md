@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Code volume overview
+summary: "Split this binary between first-party and foreign code"
 icon: "⚖"
 endpoint: introspection
 tabs: [table]

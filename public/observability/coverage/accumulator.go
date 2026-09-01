@@ -5,7 +5,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DefaultRestateEvery is the default full re-statement period in ticks: at
@@ -77,7 +77,7 @@ func (inst *Accumulator) Fold(snap *covsnap.CounterSnapshot, sampledAtUnixMs int
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if snap.MetaHash != inst.meta.Hash {
-		return nil, eh.Errorf("counter snapshot meta hash %x does not match the accumulator's build %x", snap.MetaHash, inst.meta.Hash)
+		return nil, eb.Build().Hex("snapshotMetaHash", snap.MetaHash[:]).Hex("buildMetaHash", inst.meta.Hash[:]).Errorf("counter snapshot meta hash does not match the accumulator's build")
 	}
 	inst.seq++
 	full := inst.seq == 1 || inst.seq%inst.restateEvery == 0
@@ -88,10 +88,10 @@ func (inst *Accumulator) Fold(snap *covsnap.CounterSnapshot, sampledAtUnixMs int
 	for _, fc := range snap.Funcs {
 		_, fn, ok := inst.meta.LookupFunc(fc.PkgIdx, fc.FuncIdx)
 		if !ok {
-			return nil, eh.Errorf("counter snapshot references unknown function (%d,%d)", fc.PkgIdx, fc.FuncIdx)
+			return nil, eb.Build().Uint32("pkgIdx", fc.PkgIdx).Uint32("funcIdx", fc.FuncIdx).Errorf("counter snapshot references an unknown function")
 		}
 		if len(fc.Counters) != len(fn.Units) {
-			return nil, eh.Errorf("counter snapshot has %d counters for function (%d,%d) with %d units", len(fc.Counters), fc.PkgIdx, fc.FuncIdx, len(fn.Units))
+			return nil, eb.Build().Int("counters", len(fc.Counters)).Uint32("pkgIdx", fc.PkgIdx).Uint32("funcIdx", fc.FuncIdx).Int("units", len(fn.Units)).Errorf("counter snapshot has a different number of counters than the function has units")
 		}
 		nonzero := uint32(0)
 		for _, c := range fc.Counters {

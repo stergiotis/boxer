@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -155,5 +156,5 @@ func TestExecOnPool_InvalidInputTableNameRejected(t *testing.T) {
 	require.NoError(t, err, "bus request itself succeeds; the rejection surfaces via rep.Err()")
 	require.NotNil(t, rep)
 	require.Error(t, rep.Err())
-	assert.Contains(t, rep.Err().Error(), "invalid input table name")
+	assert.Contains(t, ebtest.Text(t, rep.Err()), "invalid input table name")
 }

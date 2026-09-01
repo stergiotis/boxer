@@ -17,6 +17,7 @@ var manifest = runtimeapp.Manifest{
 	Version:  "0.1.0",
 	Display:  "IDS showcase",
 	Title:    "IDS token catalogue",
+	Summary:  "Browse the design-system tokens: spacing, density, colour",
 	Icon:     icons.PhPalette,
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicUi},
 	Keywords: []string{"design system", "tokens", "ids", "spacing", "density"},

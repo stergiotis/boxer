@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // EnvVaultDirName names the corpus location. Quoted back at the operator when
@@ -40,7 +41,7 @@ var envVaultDir = env.NewPath(env.Spec{
 func ResolveVault() (vaultDir string, err error) {
 	if vaultDir = envVaultDir.Get(); vaultDir != "" {
 		if !isDir(vaultDir) {
-			return "", eh.Errorf("%s is set to %q, which is not a directory", EnvVaultDirName, vaultDir)
+			return "", eb.Build().Str("value", vaultDir).Errorf(EnvVaultDirName + " is not set to a directory")
 		}
 		return vaultDir, nil
 	}
@@ -51,8 +52,7 @@ func ResolveVault() (vaultDir string, err error) {
 	if found, ok := findVaultAbove(wd); ok {
 		return found, nil
 	}
-	return "", eh.Errorf("no %s directory found at or above %q; set %s to point at one",
-		conventionalVaultDir, wd, EnvVaultDirName)
+	return "", eb.Build().Str("conventionalVaultDir", conventionalVaultDir).Str("wd", wd).Str("envVaultDirName", EnvVaultDirName).Errorf("no vault directory found at or above the working directory; set the env var to point at one")
 }
 
 // findVaultAbove walks from start to the filesystem root looking for the

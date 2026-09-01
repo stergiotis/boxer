@@ -12,6 +12,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	anchor "github.com/stergiotis/boxer/public/semistructured/leeway/anchor"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
@@ -241,5 +242,5 @@ func TestBinder_MissingSectionReaderIsReported(t *testing.T) {
 
 	b := cvtBinder(t)
 	_, err := b.Detect(readers, 0)
-	require.ErrorContains(t, err, "symbol")
+	require.Equal(t, "symbol", ebtest.Fields(t, err)["section"])
 }

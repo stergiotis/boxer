@@ -20,6 +20,7 @@ func TestManifestsToArrowIPC_SchemaAndRowCount(t *testing.T) {
 			Title:   "Foo Title",
 			Icon:    "F",
 			Surface: runtimeapp.SurfaceWindowed,
+			Summary: "fixture summary",
 			SurfaceHints: runtimeapp.SurfaceHints{
 				PreferredWidth:  800,
 				PreferredHeight: 600,
@@ -49,7 +50,11 @@ func TestManifestsToArrowIPC_SchemaAndRowCount(t *testing.T) {
 	// `kind`, so the column count rose by one and positions after field 5
 	// shifted. The schema's documented positional stability was broken
 	// deliberately — the column it stabilised is the one that went away.
-	assert.Equal(t, 14, int(rec.NumCols()))
+	//
+	// 15 since ADR-0214 §SD4 added `summary`. That one went on the END
+	// rather than beside display/title, so every position above still holds
+	// — the asserted field indices below are the check that it did.
+	assert.Equal(t, 15, int(rec.NumCols()))
 
 	// Sorted by Id — "github.com/example/bar" sorts before "...foo".
 	idCol := rec.Column(0).(arrowStringView)
@@ -73,6 +78,12 @@ func TestManifestsToArrowIPC_SchemaAndRowCount(t *testing.T) {
 
 	surfaceCol := rec.Column(7).(arrowStringView)
 	assert.Equal(t, "headless", surfaceCol.Value(0))
+
+	// Field 14 = summary, appended last (ADR-0214 §SD4). Empty for the
+	// fixture manifests, which is what a headless app carries — the field is
+	// required for windowed apps only.
+	summaryCol := rec.Column(14).(arrowStringView)
+	assert.Equal(t, "", summaryCol.Value(0))
 	assert.Equal(t, "windowed", surfaceCol.Value(1))
 }
 
@@ -119,6 +130,7 @@ func TestRenderManifestsAscii_ContainsRows(t *testing.T) {
 			Id:      "github.com/example/foo",
 			Display: "Foo",
 			Surface: runtimeapp.SurfaceWindowed,
+			Summary: "fixture summary",
 			Topics:  []runtimeapp.TopicT{runtimeapp.TopicRuntime},
 		},
 	}

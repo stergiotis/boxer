@@ -141,8 +141,7 @@ func resolveLaunchSql(whereExpr string) (apps []app.AppI, err error) {
 		return
 	}
 	if !ok {
-		err = eb.Build().Str("expectedPath", chlocalpool.DefaultBinaryPath).
-			Errorf("launch sql: `clickhouse local` is required to evaluate --launch but clickhouse was not found at %s nor on $PATH", chlocalpool.DefaultBinaryPath)
+		err = eb.Build().Str("expectedPath", chlocalpool.DefaultBinaryPath).Errorf("launch sql: `clickhouse local` is required to evaluate --launch, but it was not found at the expected path nor on $PATH")
 		return
 	}
 	for line := range strings.SplitSeq(strings.TrimRight(stdout.String(), "\n"), "\n") {

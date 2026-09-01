@@ -26,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/adrcorpus"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/urfave/cli/v2"
 )
 
@@ -100,7 +101,7 @@ func buildArtifacts(c *cli.Context, outDir string, withContent bool) (adrs []adr
 	adrs = adrcorpus.Aggregate(adrs, refs)
 	subs = adrcorpus.AllSubtasks(adrs)
 	if err = os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, nil, nil, tables, eh.Errorf("unable to create out dir %q: %w", outDir, err)
+		return nil, nil, nil, tables, eb.Build().Str("outDir", outDir).Errorf("unable to create out dir: %w", err)
 	}
 	tables = ArrowTables{
 		Adr:     filepath.Join(outDir, adrArrowName),
@@ -188,7 +189,7 @@ func actionQuery(c *cli.Context) error {
 		return err
 	}
 	if !ok {
-		return eh.Errorf("clickhouse not found (looked at %s and $PATH); install it or run `boxer adr build` and query the Arrow files yourself", chlocalpool.DefaultBinaryPath)
+		return eb.Build().Str("defaultBinaryPath", chlocalpool.DefaultBinaryPath).Errorf("clickhouse not found at the default path nor on $PATH; install it or run `boxer adr build` and query the Arrow files yourself")
 	}
 	return nil
 }

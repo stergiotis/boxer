@@ -4103,6 +4103,14 @@ func (inst TextEditFluid) CaptureTab() TextEditFluid {
 	return inst
 }
 
+func (inst TextEditFluid) CaptureKeys(mask uint64) TextEditFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(TextEditMethodIdCaptureKeys))
+	r.WriteUint64(mask)
+
+	return inst
+}
+
 func (inst TextEditFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(TextEditMethodIdBuild))

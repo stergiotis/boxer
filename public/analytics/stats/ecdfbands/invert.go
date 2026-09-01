@@ -57,11 +57,11 @@ func criticalValueAndBandsCtx(
 		ctx = context.Background()
 	}
 	if n <= 0 {
-		err = eh.Errorf("n must be positive, got %d", n)
+		err = eb.Build().Int("n", n).Errorf("n must be positive")
 		return
 	}
 	if alpha <= 0 || alpha >= 1 {
-		err = eh.Errorf("alpha must lie strictly inside (0, 1), got %v", alpha)
+		err = eb.Build().Float64("alpha", alpha).Errorf("alpha must lie strictly inside (0, 1)")
 		return
 	}
 	if math.IsNaN(alpha) {
@@ -82,7 +82,7 @@ func criticalValueAndBandsCtx(
 
 	family := bandFamilyDispatch(method)
 	if family == nil {
-		err = eh.Errorf("unknown BandMethodE %d", method)
+		err = eb.Build().Uint8("method", uint8(method)).Errorf("unknown BandMethodE")
 		return
 	}
 
@@ -114,7 +114,7 @@ func invertCriticalValue(
 	target := 1 - alpha
 	cLo, cHi := family.criticalValueBracket(n, alpha)
 	if !(cLo < cHi) {
-		err = eh.Errorf("%s: empty bracket (%v, %v)", family.name(), cLo, cHi)
+		err = eb.Build().Str("family", family.name()).Float64("low", cLo).Float64("high", cHi).Errorf("empty bracket")
 		return
 	}
 
@@ -131,7 +131,7 @@ func invertCriticalValue(
 	done := 0
 	eval := func(cAt float64) (p float64, err error) {
 		if err = ctx.Err(); err != nil {
-			err = eh.Errorf("ecdf band inversion cancelled after %d/%d evals: %w", done, total, err)
+			err = eb.Build().Int("done", done).Int("total", total).Errorf("ecdf band inversion cancelled: %w", err)
 			return
 		}
 		family.boundaries(n, cAt, lower, upper)

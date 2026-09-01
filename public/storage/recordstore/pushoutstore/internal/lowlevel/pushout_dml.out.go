@@ -107,7 +107,7 @@ func CreateSchemaPushoutTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
 
 type InEntityPushoutTable struct {
 	errs               []error
@@ -195,7 +195,7 @@ var InEntityPushoutTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -210,7 +210,7 @@ func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -225,7 +225,7 @@ func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntityPushoutTable) setLifecycle(lifecycle2 uint8) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {

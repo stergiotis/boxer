@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchrequest"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // RequestOpen asks the window host to open targetAppId's window over the
@@ -51,7 +52,7 @@ func RequestOpen(bus app.BusI, targetAppId app.AppIdT, configKind string, config
 		return
 	}
 	if rep.Reason != "" {
-		err = eh.Errorf("windowhost: open refused: %s", rep.Reason)
+		err = eb.Build().Str("reason", rep.Reason).Errorf("windowhost: open refused")
 		return
 	}
 	windowKey = rep.WindowKey

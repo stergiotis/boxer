@@ -43,7 +43,7 @@ func CreateSchemaPlace() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1411
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
 
 type InEntityPlace struct {
 	allocator             memory.Allocator
@@ -114,7 +114,7 @@ var InEntityPlaceSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1606
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
 
 func (inst *InEntityPlace) SetId(id0 uint64) *InEntityPlace {
 	if inst.state != runtime.EntityStateInEntity {

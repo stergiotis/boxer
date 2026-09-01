@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,6 +14,7 @@ func TestManifest_Validate_OK(t *testing.T) {
 		Id:      "org.test.ok",
 		Display: "OK",
 		Topics:  []TopicT{TopicRuntime},
+		Summary: "fixture summary",
 		Surface: SurfaceWindowed,
 	}
 	err := m.Validate()
@@ -47,7 +49,7 @@ func TestManifest_Validate_EmptyDisplay(t *testing.T) {
 	err := m.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty Display")
-	assert.Contains(t, err.Error(), "org.test.x")
+	assert.Equal(t, "org.test.x", ebtest.Fields(t, err)["id"])
 }
 
 func TestManifest_Validate_UnspecifiedSurface(t *testing.T) {
@@ -58,7 +60,7 @@ func TestManifest_Validate_UnspecifiedSurface(t *testing.T) {
 	err := m.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Surface must be set")
-	assert.Contains(t, err.Error(), "org.test.x")
+	assert.Equal(t, "org.test.x", ebtest.Fields(t, err)["id"])
 }
 
 func TestManifest_Validate_WorkingsetNeedsLaunchKind(t *testing.T) {
@@ -66,13 +68,14 @@ func TestManifest_Validate_WorkingsetNeedsLaunchKind(t *testing.T) {
 		Id:         "org.test.x",
 		Display:    "X",
 		Surface:    SurfaceWindowed,
+		Summary:    "fixture summary",
 		Topics:     []TopicT{TopicRuntime},
 		Workingset: true,
 	}
 	err := m.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Workingset requires a non-empty LaunchKind")
-	assert.Contains(t, err.Error(), "org.test.x")
+	assert.Equal(t, "org.test.x", ebtest.Fields(t, err)["id"])
 }
 
 func TestManifest_Validate_WorkingsetWithLaunchKind_OK(t *testing.T) {
@@ -80,6 +83,7 @@ func TestManifest_Validate_WorkingsetWithLaunchKind_OK(t *testing.T) {
 		Id:         "org.test.x",
 		Display:    "X",
 		Surface:    SurfaceWindowed,
+		Summary:    "fixture summary",
 		Topics:     []TopicT{TopicRuntime},
 		LaunchKind: "xLaunch",
 		Workingset: true,
@@ -93,6 +97,7 @@ func TestManifest_Validate_LaunchKindWithoutWorkingset_OK(t *testing.T) {
 		Id:         "org.test.x",
 		Display:    "X",
 		Surface:    SurfaceWindowed,
+		Summary:    "fixture summary",
 		Topics:     []TopicT{TopicRuntime},
 		LaunchKind: "xLaunch",
 	}
@@ -203,7 +208,7 @@ func TestManifest_Validate_WindowedNeedsTopics(t *testing.T) {
 	err := m.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "declares no Topics")
-	assert.Contains(t, err.Error(), "org.test.x")
+	assert.Equal(t, "org.test.x", ebtest.Fields(t, err)["id"])
 }
 
 func TestManifest_Validate_HeadlessNeedsNoTopics(t *testing.T) {
@@ -222,12 +227,13 @@ func TestManifest_Validate_UnregisteredTopicRefused(t *testing.T) {
 		Id:      "org.test.x",
 		Display: "X",
 		Surface: SurfaceWindowed,
+		Summary: "fixture summary",
 		Topics:  []TopicT{TopicRuntime, TopicT("nonsense")},
 	}
 	err := m.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unregistered topic")
-	assert.Contains(t, err.Error(), "nonsense")
+	assert.Equal(t, "nonsense", ebtest.Fields(t, err)["topic"])
 }
 
 func TestManifest_Validate_InvalidKindRefused(t *testing.T) {
@@ -235,6 +241,7 @@ func TestManifest_Validate_InvalidKindRefused(t *testing.T) {
 		Id:      "org.test.x",
 		Display: "X",
 		Surface: SurfaceWindowed,
+		Summary: "fixture summary",
 		Topics:  []TopicT{TopicRuntime},
 		Kind:    KindE(99),
 	}
@@ -250,6 +257,7 @@ func TestManifest_Validate_KeywordsUngoverned(t *testing.T) {
 		Id:       "org.test.x",
 		Display:  "X",
 		Surface:  SurfaceWindowed,
+		Summary:  "fixture summary",
 		Topics:   []TopicT{TopicRuntime},
 		Keywords: []string{"cpu", "HTOP", "not a topic", "runtime"},
 	}

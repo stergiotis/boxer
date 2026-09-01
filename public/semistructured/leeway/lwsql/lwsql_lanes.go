@@ -79,6 +79,13 @@ type Channel struct {
 	// Verbatim says how a membership is spelled: verbatim channels carry
 	// the name itself, ref channels carry a registry id.
 	Verbatim bool
+	// SingleMembership says the schema DECLARES this channel
+	// single-instance — every attribute carries exactly one membership
+	// (ADR-0213), recovered from the use-aspects the physical column names
+	// encode. It is what turns an empty Card from "not in the listing" into
+	// the proof lwextract's fast form requires: a caller may forward
+	// Card == "" to lwextract exactly when this is set.
+	SingleMembership bool
 	// Param is the physical high-cardinality parameter lane of a MIXED
 	// channel, co-indexed with Ident and counted by the same Card. Empty on
 	// the four simple channels, which have no such lane — so its presence is
@@ -105,14 +112,15 @@ var extractChannels = []struct {
 	ident    common.ColumnRoleE
 	card     common.ColumnRoleE
 	param    common.ColumnRoleE
+	spec     common.MembershipSpecE
 	verbatim bool
 }{
-	{"low-card-ref", common.ColumnRoleLowCardRef, common.ColumnRoleLowCardRefCardinality, "", false},
-	{"low-card-verbatim", common.ColumnRoleLowCardVerbatim, common.ColumnRoleLowCardVerbatimCardinality, "", true},
-	{"high-card-ref", common.ColumnRoleHighCardRef, common.ColumnRoleHighCardRefCardinality, "", false},
-	{"high-card-verbatim", common.ColumnRoleHighCardVerbatim, common.ColumnRoleHighCardVerbatimCardinality, "", true},
-	{"low-card-ref-high-card-params", common.ColumnRoleMixedLowCardRef, common.ColumnRoleMixedLowCardRefCardinality, common.ColumnRoleMixedRefHighCardParameters, false},
-	{"low-card-verbatim-high-card-params", common.ColumnRoleMixedLowCardVerbatim, common.ColumnRoleMixedLowCardVerbatimCardinality, common.ColumnRoleMixedVerbatimHighCardParameters, true},
+	{"low-card-ref", common.ColumnRoleLowCardRef, common.ColumnRoleLowCardRefCardinality, "", common.MembershipSpecLowCardRef, false},
+	{"low-card-verbatim", common.ColumnRoleLowCardVerbatim, common.ColumnRoleLowCardVerbatimCardinality, "", common.MembershipSpecLowCardVerbatim, true},
+	{"high-card-ref", common.ColumnRoleHighCardRef, common.ColumnRoleHighCardRefCardinality, "", common.MembershipSpecHighCardRef, false},
+	{"high-card-verbatim", common.ColumnRoleHighCardVerbatim, common.ColumnRoleHighCardVerbatimCardinality, "", common.MembershipSpecHighCardVerbatim, true},
+	{"low-card-ref-high-card-params", common.ColumnRoleMixedLowCardRef, common.ColumnRoleMixedLowCardRefCardinality, common.ColumnRoleMixedRefHighCardParameters, common.MembershipSpecMixedLowCardRefHighCardParameters, false},
+	{"low-card-verbatim-high-card-params", common.ColumnRoleMixedLowCardVerbatim, common.ColumnRoleMixedLowCardVerbatimCardinality, common.ColumnRoleMixedVerbatimHighCardParameters, common.MembershipSpecMixedLowCardVerbatimHighCardParameters, true},
 }
 
 // ExtractLanesFor reports the section's lanes on the given table. ok is
@@ -152,10 +160,11 @@ func (inst *Resolver) ExtractLanesFor(dbName string, tableName string, section s
 			continue
 		}
 		c := Channel{
-			Name:     ch.name,
-			Ident:    ident,
-			Card:     si.roles[ch.card], // absent is meaningful: one membership per attribute
-			Verbatim: ch.verbatim,
+			Name:             ch.name,
+			Ident:            ident,
+			Card:             si.roles[ch.card], // absent alone is NOT proof — SingleMembership is (ADR-0213)
+			Verbatim:         ch.verbatim,
+			SingleMembership: si.single&ch.spec != 0,
 		}
 		if ch.param != "" {
 			// Guarded rather than looked up unconditionally: the simple
@@ -213,7 +222,7 @@ func (inst ExtractLanes) ValueColumnFor(subColumn string) (col ValueColumn, err 
 			col = inst.Values[0]
 		default:
 			err = eb.Build().Str("section", inst.Section).Str("candidates", strings.Join(inst.ValueNames(), ", ")).
-				Errorf("section has more than one value column; name the one to read with col:<%s>", strings.Join(inst.ValueNames(), "|"))
+				Errorf("section has more than one value column; name the one to read with col:<name>")
 		}
 		return
 	}
@@ -226,7 +235,7 @@ func (inst ExtractLanes) ValueColumnFor(subColumn string) (col ValueColumn, err 
 	}
 	err = eb.Build().Str("section", inst.Section).Str("subColumn", subColumn).
 		Str("candidates", strings.Join(inst.ValueNames(), ", ")).
-		Errorf("no such value column in section; it has %s", strings.Join(inst.ValueNames(), ", "))
+		Errorf("no such value column in section")
 	return
 }
 
@@ -242,7 +251,7 @@ func (inst ExtractLanes) ChannelFor(name string) (ch Channel, err error) {
 			ch = inst.Channels[0]
 		default:
 			err = eb.Build().Str("section", inst.Section).Str("candidates", strings.Join(inst.ChannelNames(), ", ")).
-				Errorf("section carries more than one membership channel; name the one to read with chan:<%s>", strings.Join(inst.ChannelNames(), "|"))
+				Errorf("section carries more than one membership channel; name the one to read with chan:<name>")
 		}
 		return
 	}
@@ -254,7 +263,7 @@ func (inst ExtractLanes) ChannelFor(name string) (ch Channel, err error) {
 		}
 	}
 	err = eb.Build().Str("section", inst.Section).Str("channel", name).Str("candidates", strings.Join(inst.ChannelNames(), ", ")).
-		Errorf("section does not carry that membership channel; it carries %s", strings.Join(inst.ChannelNames(), ", "))
+		Errorf("section does not carry that membership channel")
 	return
 }
 

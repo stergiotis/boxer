@@ -3,6 +3,7 @@ type: reference
 audience: end-user
 status: draft
 title: Code volume map
+summary: "Map the binary's machine code as nested rectangles"
 icon: "🗺"
 endpoint: introspection
 tabs: [treemap, table]

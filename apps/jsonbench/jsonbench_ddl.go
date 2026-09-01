@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 func ddlCommand() *cli.Command {
@@ -38,7 +39,7 @@ func runDdl(cCtx *cli.Context) (err error) {
 	// A guard, not a courtesy: this command drops databases, and the live
 	// facts store must never be a target.
 	if db == "boxer" {
-		err = eh.Errorf("refusing to target the live facts database %q", db)
+		err = eb.Build().Str("db", db).Errorf("refusing to target the live facts database")
 		return
 	}
 	cfg := chstore.Config{
@@ -64,7 +65,7 @@ func runDdl(cCtx *cli.Context) (err error) {
 	if cCtx.Bool("drop") {
 		err = cli0.Exec(ctx, "DROP DATABASE IF EXISTS "+db)
 		if err != nil {
-			err = eh.Errorf("drop database %s: %w", db, err)
+			err = eb.Build().Str("db", db).Errorf("drop database: %w", err)
 			return
 		}
 	}

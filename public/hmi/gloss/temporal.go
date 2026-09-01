@@ -147,7 +147,7 @@ func (durationGloss) Affinities() []string { return nil }
 func (inst durationGloss) Bind(params map[string]string) (InstanceI, error) {
 	unit, ok := params[ParamUnit]
 	if !ok {
-		return nil, eb.Build().Str("mediaType", MediaTypeDuration).Errorf("%s requires %s=%s|%s|%s|%s|%s|%s (the stored unit)", MediaTypeDuration, ParamUnit, UnitNanosecond, UnitMicrosecond, UnitMillisecond, UnitSecond, UnitMinute, UnitHour)
+		return nil, eb.Build().Str("mediaType", MediaTypeDuration).Errorf(MediaTypeDuration + " requires " + ParamUnit + "=" + UnitNanosecond + "|" + UnitMicrosecond + "|" + UnitMillisecond + "|" + UnitSecond + "|" + UnitMinute + "|" + UnitHour + " (the stored unit)")
 	}
 	return &durationInstance{params: params, perUnitNs: timeUnitNs[unit]}, nil
 }

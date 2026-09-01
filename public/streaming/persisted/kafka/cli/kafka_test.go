@@ -32,6 +32,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	cli "github.com/urfave/cli/v2"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 )
 
@@ -345,7 +346,7 @@ func TestReadNetstring_ErrorPaths(t *testing.T) {
 			r := bufio.NewReader(bytes.NewReader([]byte(tc.in)))
 			_, _, err := readNetstring(r)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.errSubstr)
+			assert.Contains(t, ebtest.Text(t, err), tc.errSubstr)
 		})
 	}
 }
