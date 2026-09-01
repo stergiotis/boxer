@@ -6,7 +6,7 @@ date: 2026-06-12
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Engineering selection: **Architecture A** (see Decision); the front-matter `status` stays `proposed` until data-protection counsel signs off on OQ1 (destroyed-nonce commitment anonymisation) and OQ5 (audit-record retention). Pre-acceptance, this ADR is maintained in place (Tier 1) as a snapshot of current understanding — there is no code yet; dated `## Updates` entries begin once there is shipped behaviour to record.
+> **Status: proposed — pre-human-review.** Engineering selection: **Architecture A** (see Decision); the front-matter `status` stays `proposed` until data-protection counsel signs off on OQ1 (destroyed-nonce commitment anonymisation) and OQ5 (audit-record retention). Pre-acceptance, the body is maintained in place (Tier 1) as a snapshot of current understanding; shipped behaviour (so far only SD8) is recorded under `## Updates`.
 
 > **Disclaimer.** This document is engineering-grade legal context assembled from primary sources to inform an architectural decision. It is not legal advice. The author is not a lawyer. Verify with qualified counsel before treating any specific position here as compliant.
 
@@ -178,7 +178,7 @@ The cost is twofold: every controller must run the vault, and the vault is a new
 
 **Architecture A — PII-segregation by design** (vault-by-design, no cooperative purge).
 
-Scope: greenfield deployment, multi-actor from day one, single-controller-per-tenant, dual regulatory target (GDPR + FADP). The vault is realised as a **Leeway facts table in ClickHouse** (see [ADR-0018](./0018-leeway-card-json-canonical-format.md) for fact-shape conventions); per-occurrence 256-bit nonces back the commitment scheme (SD6). The `ForgetSubject` / `ForgetRefs` operations (SD9) shred the subject's at-rest key (SD12) and delete the matching vault rows under SD11's CH-mutation-finality contract. Destruction of the per-occurrence nonces — which exist nowhere but the deleted rows — is the load-bearing anonymisation step on the GDPR axis; the same step clears FADP Art 32(2)(c) and Art 6(4) a fortiori under BGE 136 II 508's effort test.
+Scope: greenfield deployment, multi-actor from day one, single-controller-per-tenant, dual regulatory target (GDPR + FADP); a federation of controllers replicating tokens to each other is out of this ADR's scope — the downstream dewmdm design (hackathon_2026 ADR-0006) extends it and owes its own role/transfer analysis. The vault is realised as a **Leeway facts table in ClickHouse** (see [ADR-0018](./0018-leeway-card-json-canonical-format.md) for fact-shape conventions); per-occurrence 256-bit nonces back the commitment scheme (SD6). The `ForgetSubject` / `ForgetRefs` operations (SD9) shred the subject's at-rest key (SD12) and delete the matching vault rows under SD11's CH-mutation-finality contract. Destruction of the per-occurrence nonces — which exist nowhere but the deleted rows — is the load-bearing anonymisation step on the GDPR axis; the same step clears FADP Art 32(2)(c) and Art 6(4) a fortiori under BGE 136 II 508's effort test.
 
 Architecture B (cooperative purge) and Architecture C (layered) are **not adopted**. With a greenfield corpus there is no legacy PII inside patch envelopes to reach back to, so C3 (retroactive coverage) is not engaged; A alone satisfies GDPR Art 17 + Art 25 under the destroyed-nonce reading of WP216 (subject to OQ1), and FADP Art 32(2)(c) + Art 6(4) + Art 7 under the landscape retained in ADR-0027. The SD4 / SD7 subsidiary decisions are marked *inapplicable* for traceability.
 
@@ -234,6 +234,8 @@ These decisions become live when an architecture is selected. They are sketched 
   2. *Rotation is an illusion.* Commitments live inside hashed patch content; re-issuing them under a new salt would change patch bytes and break the identity invariant this ADR holds load-bearing. A salt, once used, is unrotatable for everything already recorded — the variant's maintenance story contradicts the system invariant.
   3. *All-of-actor granularity.* Salt destruction anonymises every commitment the actor ever recorded; forgetting one subject's one attribute would collaterally destroy binding verifiability for all the actor's other rows. With per-occurrence nonces the erasure unit equals the vault row.
   4. *Actor ≠ subject.* The salt is keyed to the recording actor, but erasure requests arrive keyed by data subject (GDPR Art 17; FADP Art 32(2)(c)); the secret's scope does not match the right's scope (SD5).
+
+  These kill-reasons apply equally to any deterministic per-field commitment under a shared or "rotated" MAC key: rotation cannot re-mint immutable tokens, and a key shared for cross-node equality is a key every node can dictionary-attack. Recorded so the variant is not re-derived downstream under another name.
 
   Cost accepted: 32 extra bytes per row, and no equality joins over committed fields — deliberately, since that join structure is the privacy leak; a consumer with a legitimate need for equality matching on a PII field takes it to the vault side under access control, not to the commitments. A side benefit under the Swiss relative approach (Zurich HG190107-O): peers hold neither value nor nonce for *any* row, so what they hold is non-personal data for them from the moment of recording, not only after erasure.
 
@@ -299,15 +301,22 @@ before flipping the front-matter `status` to `accepted`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
-for the edit-policy tiers; pre-acceptance, this ADR is maintained Tier-1 (in place).
+for the edit-policy tiers; pre-acceptance, the body is maintained Tier-1 (in place) and implementation status lands in `## Updates`.
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-09-02 — implementation status
+
+- **SD8 shipped** — `PushoutGraph.SweepTombstones` purges tombstoned content
+  past a retention horizon from the in-memory graph only; envelopes in storage
+  retain `Change.Content` (there is no `StorageI` delete verb). The vault
+  remains the Art 17 mechanism; the sweep is Art 5(1)(e) storage limitation
+  at most.
+- **SD2, SD3, SD5, SD6, SD9, SD10, SD12 unimplemented** — no `Vault`, nonce,
+  commitment or `Forget*` symbols exist in the tree; `pijul/EXPLANATION.md`
+  describes Architecture A in the conditional for that reason.
+- **OQ1 / OQ5 still counsel-gated** — the front-matter `status` stays
+  `proposed`.
 
 ## References
 
@@ -343,5 +352,5 @@ In-repo code:
 - `public/algebraicarch/pushout/pijul/EXPLANATION.md` — package overview
 - `public/algebraicarch/pushout/pijul/pijul_pushout_backend.go` — current `Unrecord` implementation
 - `public/algebraicarch/pushout/pushoutgraph/store/pushoutgraph.go` — pushoutgraph data structure, `SweepTombstones`
-- `public/algebraicarch/pushout/pushoutgraph/patch/patch.go` — patch construction, `ComputeHash` (provenance outside the hash)
+- `public/algebraicarch/pushout/pushoutgraph/patch/patch.go` — patch construction; `ComputeHash` in `patch/identityform.go` (provenance outside the hash, ADR-0209)
 - `public/algebraicarch/pushout/envelope/envelope.go` — envelope codec (`Producer` / `Timestamp` outside the hash)

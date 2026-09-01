@@ -1,17 +1,17 @@
 ---
 type: adr
-status: proposed
+status: deferred
 date: 2026-05-12
 # reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
-
-The decision is deferred pending design dialogue on the subsidiary decisions
-(SD1–SD10) and open questions (OQ1–OQ6) below. The engineering recommendation
-appears at the end of the Design space section but is not the Decision; the
-Decision section is intentionally empty until those resolve.
+*2026-09-02 — deferred.* The Decision section has been intentionally empty
+since 2026-05, pending design dialogue on the subsidiary decisions (SD1–SD10)
+and open questions (OQ1–OQ6) below; this ADR is kept as the design record
+(ADR-0025 SD4/SD7 and `pijul/EXPLANATION.md` cite it). The engineering
+recommendation appears at the end of the Design space section but is not the
+Decision.
 
 # ADR-0039: Antiquing Architecture for the Pushout VCS
 
@@ -23,8 +23,10 @@ implements a patch-theory version control system in which patches are
 content-addressed and propagated peer-to-peer via Push/Pull. The package's
 [`public/algebraicarch/pushout/pijul/EXPLANATION.md`](../../public/algebraicarch/pushout/pijul/EXPLANATION.md)
 adopts the framing of Pijul (and Joe Neeman's `ojo` prototype): files are
-objects in a category, merges are categorical pushouts, and patches commute
-when they don't depend on each other.
+objects in a category and merges are framed as pushouts after Mimram &
+Di Giusto; boxer computes none explicitly (commutation of independent
+patches is property-tested: `TestProperty_MixedPatchesCommuteOnFullState`,
+`pushoutgraph/store/commutativity_test.go`).
 
 That framing names a specific operation — **antiquing** — that boxer's current
 implementation does not perform. Joe Neeman's
@@ -462,8 +464,11 @@ questions.
 
 ## Status
 
-Proposed — awaiting design dialogue on SD1–SD10 and OQ1–OQ6, then review by a
-code owner of [`public/algebraicarch/pushout`](../../public/algebraicarch/pushout).
+Deferred (2026-09-02). Trigger: resolution of the SD1–SD10 / OQ1–OQ6 design
+dialogue, or a future ADR that reintroduces a compensating-patch path (see the
+2026-05-17 update) — either moves this ADR to `accepted` after review by a
+code owner of [`public/algebraicarch/pushout`](../../public/algebraicarch/pushout),
+or motivates a successor.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

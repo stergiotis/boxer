@@ -42,6 +42,7 @@ revisit first if the repo ever takes external contributions.
 | [codestat.yaml](../.github/workflows/codestat.yaml) | weekly cron (Mon 06:00 UTC) | inline | `scc` line counts split human vs. LLM, dependency inventory, authorship attribution |
 | [codeql.yaml](../.github/workflows/codeql.yaml) | weekly cron (Tue 05:37 UTC) | GitHub CodeQL action | CodeQL security scan of the Go tree, built with the repo's build tags |
 | [scorecard.yaml](../.github/workflows/scorecard.yaml) | weekly cron (Tue 07:20 UTC), branch-protection changes | OSSF `scorecard-action` | supply-chain posture score, uploaded as SARIF to code scanning |
+| [formal-pushout.yaml](../.github/workflows/formal-pushout.yaml) | — | `npm run check` + `npm run findings` in [verification/formal/algebraicarch/pushout](../verification/formal/algebraicarch/pushout/README.md) | Quint typecheck + witness runs, Apalache bounded verifies, TLC liveness and the expected-violation counterexamples for the pushout protocol specs; ~15 min |
 
 Splitting CI per concern is the convention in larger Go projects
 (Kubernetes, etcd, Cockroach). Smaller Go projects more often consolidate
