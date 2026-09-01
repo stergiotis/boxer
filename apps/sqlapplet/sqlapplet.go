@@ -24,7 +24,6 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 )
@@ -263,7 +262,7 @@ func ParseBook(bookID string, fsys fs.FS) (defs []*AppletDef, errs []error) {
 func parseDoc(bookID string, book help.BookI, info help.DocInfo) (def *AppletDef, err error) {
 	src, ok := book.Source(info.Path)
 	if !ok {
-		err = eh.Errorf("sqlapplet: %s/%s: source unavailable", bookID, info.Path)
+		err = eb.Build().Str("bookID", bookID).Str("path", info.Path).Errorf("sqlapplet: source unavailable")
 		return
 	}
 	def, err = ParseDocSource(bookID, info.Path, src)
@@ -292,12 +291,12 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 				}
 			case "bands":
 				if bands != nil {
-					err = eh.Errorf("sqlapplet: %s/%s: more than one `sql bands` fence", bookID, path)
+					err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: more than one `sql bands` fence")
 					return
 				}
 				bands = f
 			default:
-				err = eh.Errorf("sqlapplet: %s/%s: unknown `sql` fence role %q (known: bands)", bookID, path, f.Role)
+				err = eb.Build().Str("bookID", bookID).Str("path", path).Str("role", f.Role).Errorf("sqlapplet: unknown `sql` fence role (known: bands)")
 				return
 			}
 		case "md", "markdown":
@@ -306,31 +305,31 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 				// A prose example that happens to be markdown — not a directive.
 			case "preamble":
 				if preamble != nil {
-					err = eh.Errorf("sqlapplet: %s/%s: more than one `md preamble` fence", bookID, path)
+					err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: more than one `md preamble` fence")
 					return
 				}
 				preamble = f
 			default:
-				err = eh.Errorf("sqlapplet: %s/%s: unknown `%s` fence role %q (known: preamble)", bookID, path, f.Lang, f.Role)
+				err = eb.Build().Str("bookID", bookID).Str("path", path).Str("lang", f.Lang).Str("role", f.Role).Errorf("sqlapplet: unknown fence role (known: preamble)")
 				return
 			}
 		}
 	}
 	if primary == nil {
 		if bands != nil || preamble != nil {
-			err = eh.Errorf("sqlapplet: %s/%s: aux fence without a buffer (no role-less `sql` fence)", bookID, path)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: aux fence without a buffer (no role-less `sql` fence)")
 		}
 		// No fences at all: a prose page, not an applet.
 		return
 	}
 	sql := strings.TrimSpace(primary.Text)
 	if sql == "" {
-		err = eh.Errorf("sqlapplet: %s/%s: empty sql buffer", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: empty sql buffer")
 		return
 	}
 	slug := strings.TrimSuffix(path, ".md")
 	if !slugPattern.MatchString(slug) {
-		err = eh.Errorf("sqlapplet: %s/%s: slug %q must match %s", bookID, path, slug, slugPattern.String())
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Str("slug", slug).Str("pattern", slugPattern.String()).Errorf("sqlapplet: slug must match the required pattern")
 		return
 	}
 	doc := markdown.Parse(src)
@@ -343,12 +342,12 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	// explicit authoring decision.
 	title, _ := fm["title"].(string)
 	if title == "" {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `title` is required", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `title` is required")
 		return
 	}
 	summary, _ := fm["summary"].(string)
 	if summary == "" {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `summary` is required", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `summary` is required")
 		return
 	}
 	def = &AppletDef{
@@ -370,7 +369,7 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	if icon, has := fm["icon"]; has {
 		s, isStr := icon.(string)
 		if !isStr {
-			err = eh.Errorf("sqlapplet: %s/%s: frontmatter `icon` must be a string", bookID, path)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `icon` must be a string")
 			return
 		}
 		def.Icon = s
@@ -398,12 +397,12 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	// surprise — the conservative direction with the corpus as the gate.
 	pr, perr := nanopass.Parse(sql)
 	if perr != nil {
-		err = eh.Errorf("sqlapplet: %s/%s: buffer does not parse (cannot classify, ADR-0132 §SD5/§SD6): %w", bookID, path, perr)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: buffer does not parse (cannot classify, ADR-0132 §SD5/§SD6): %w", perr)
 		return
 	}
 	class, _, cerr := analysis.ClassifyQuerySecurity(pr)
 	if cerr != nil {
-		err = eh.Errorf("sqlapplet: %s/%s: classify: %w", bookID, path, cerr)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: classify: %w", cerr)
 		return
 	}
 	def.Class = class
@@ -431,7 +430,7 @@ func parseEndpoint(bookID string, path string, v any) (ep EndpointE, err error) 
 	}
 	s, isStr := v.(string)
 	if !isStr {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `endpoint` must be a string", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `endpoint` must be a string")
 		return
 	}
 	switch s {
@@ -440,7 +439,7 @@ func parseEndpoint(bookID string, path string, v any) (ep EndpointE, err error) 
 	case "introspection":
 		ep = EndpointIntrospection
 	default:
-		err = eh.Errorf("sqlapplet: %s/%s: unknown endpoint %q (known: default, introspection)", bookID, path, s)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Str("endpoint", s).Errorf("sqlapplet: unknown endpoint (known: default, introspection)")
 	}
 	return
 }
@@ -456,19 +455,19 @@ func parseTabs(bookID string, path string, v any) (tabs []TabSel, err error) {
 		if s == "auto" || s == "" {
 			return
 		}
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `tabs` must be \"auto\" or a list, got %q", bookID, path, s)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Str("tabs", s).Errorf("sqlapplet: frontmatter `tabs` must be \"auto\" or a list")
 		return
 	}
 	list, isList := v.([]any)
 	if !isList {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `tabs` must be \"auto\" or a list", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `tabs` must be \"auto\" or a list")
 		return
 	}
 	seen := make(map[string]struct{}, len(list))
 	for _, item := range list {
 		entry, isStr := item.(string)
 		if !isStr {
-			err = eh.Errorf("sqlapplet: %s/%s: `tabs` entries must be strings", bookID, path)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: `tabs` entries must be strings")
 			return
 		}
 		sel := TabSel{ID: entry}
@@ -476,8 +475,8 @@ func parseTabs(bookID string, path string, v any) (tabs []TabSel, err error) {
 			sel.ID = head
 			sel.Zone = zone
 			if _, known := tabZones[sel.Zone]; !known {
-				err = eh.Errorf("sqlapplet: %s/%s: `tabs` entry %q names zone %q; the zones a document may place a pane in are body, side and bottom",
-					bookID, path, entry, sel.Zone)
+				err = eb.Build().Str("bookID", bookID).Str("path", path).Str("entry", entry).Str("zone", sel.Zone).
+					Errorf("sqlapplet: a `tabs` entry names an unknown zone; the zones a document may place a pane in are body, side and bottom")
 				return
 			}
 		}
@@ -485,16 +484,16 @@ func parseTabs(bookID string, path string, v any) (tabs []TabSel, err error) {
 			sel.ID = id
 			sel.Node = node
 			if sel.Node == "" {
-				err = eh.Errorf("sqlapplet: %s/%s: `tabs` entry %q has an empty node binding", bookID, path, entry)
+				err = eb.Build().Str("bookID", bookID).Str("path", path).Str("entry", entry).Errorf("sqlapplet: `tabs` entry has an empty node binding")
 				return
 			}
 		}
 		if _, known := resultTabIDs[sel.ID]; !known {
-			err = eh.Errorf("sqlapplet: %s/%s: `tabs` entry %q is not a result panel", bookID, path, entry)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Str("entry", entry).Errorf("sqlapplet: `tabs` entry is not a result panel")
 			return
 		}
 		if _, dup := seen[sel.ID]; dup {
-			err = eh.Errorf("sqlapplet: %s/%s: `tabs` lists %q twice", bookID, path, sel.ID)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Str("entry", sel.ID).Errorf("sqlapplet: `tabs` lists an entry twice")
 			return
 		}
 		seen[sel.ID] = struct{}{}
@@ -513,22 +512,22 @@ func parseDatasets(bookID string, path string, v any) (datasets []string, err er
 	}
 	list, isList := v.([]any)
 	if !isList {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `datasets` must be a list", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `datasets` must be a list")
 		return
 	}
 	seen := make(map[string]struct{}, len(list))
 	for _, item := range list {
 		alias, isStr := item.(string)
 		if !isStr {
-			err = eh.Errorf("sqlapplet: %s/%s: `datasets` entries must be strings", bookID, path)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: `datasets` entries must be strings")
 			return
 		}
 		if len(alias) > 64 || !datasetAliasPattern.MatchString(alias) {
-			err = eh.Errorf("sqlapplet: %s/%s: `datasets` alias %q is not a bare identifier", bookID, path, alias)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Str("alias", alias).Errorf("sqlapplet: `datasets` alias is not a bare identifier")
 			return
 		}
 		if _, dup := seen[alias]; dup {
-			err = eh.Errorf("sqlapplet: %s/%s: `datasets` lists %q twice", bookID, path, alias)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Str("alias", alias).Errorf("sqlapplet: `datasets` lists an alias twice")
 			return
 		}
 		seen[alias] = struct{}{}
@@ -548,12 +547,12 @@ func parseDatasetsHint(bookID string, path string, v any, datasets []string) (hi
 	}
 	s, isStr := v.(string)
 	if !isStr {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `datasets_hint` must be a string", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `datasets_hint` must be a string")
 		return
 	}
 	hint = strings.TrimSpace(s)
 	if hint != "" && len(datasets) == 0 {
-		err = eh.Errorf("sqlapplet: %s/%s: `datasets_hint` without `datasets` never renders", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: `datasets_hint` without `datasets` never renders")
 		return
 	}
 	return
@@ -572,23 +571,23 @@ func parseTopics(bookID string, path string, v any) (topics []app.TopicT, err er
 	}
 	list, isList := v.([]any)
 	if !isList {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `topics` must be a list", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `topics` must be a list")
 		return
 	}
 	seen := make(map[app.TopicT]struct{}, len(list))
 	for _, item := range list {
 		name, isStr := item.(string)
 		if !isStr {
-			err = eh.Errorf("sqlapplet: %s/%s: `topics` entries must be strings", bookID, path)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: `topics` entries must be strings")
 			return
 		}
 		t, known := app.ParseTopic(name)
 		if !known {
-			err = eh.Errorf("sqlapplet: %s/%s: `topics` names %q, which is not a registered topic (ADR-0158 §SD1)", bookID, path, name)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Str("topic", name).Errorf("sqlapplet: `topics` names an unregistered topic (ADR-0158 §SD1)")
 			return
 		}
 		if _, dup := seen[t]; dup {
-			err = eh.Errorf("sqlapplet: %s/%s: `topics` lists %q twice", bookID, path, name)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Str("topic", name).Errorf("sqlapplet: `topics` lists a topic twice")
 			return
 		}
 		seen[t] = struct{}{}
@@ -608,23 +607,23 @@ func parseKeywords(bookID string, path string, v any) (keywords []string, err er
 	}
 	list, isList := v.([]any)
 	if !isList {
-		err = eh.Errorf("sqlapplet: %s/%s: frontmatter `keywords` must be a list", bookID, path)
+		err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: frontmatter `keywords` must be a list")
 		return
 	}
 	seen := make(map[string]struct{}, len(list))
 	for _, item := range list {
 		kw, isStr := item.(string)
 		if !isStr {
-			err = eh.Errorf("sqlapplet: %s/%s: `keywords` entries must be strings", bookID, path)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: `keywords` entries must be strings")
 			return
 		}
 		kw = strings.TrimSpace(kw)
 		if kw == "" {
-			err = eh.Errorf("sqlapplet: %s/%s: `keywords` has an empty entry", bookID, path)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Errorf("sqlapplet: `keywords` has an empty entry")
 			return
 		}
 		if _, dup := seen[kw]; dup {
-			err = eh.Errorf("sqlapplet: %s/%s: `keywords` lists %q twice", bookID, path, kw)
+			err = eb.Build().Str("bookID", bookID).Str("path", path).Str("keyword", kw).Errorf("sqlapplet: `keywords` lists a keyword twice")
 			return
 		}
 		seen[kw] = struct{}{}

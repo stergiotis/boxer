@@ -67,7 +67,7 @@ func runResults(cCtx *cli.Context) (err error) {
 		return
 	}
 	if len(arms) == 0 {
-		err = eh.Errorf("no arm-* directories under %s", runDir)
+		err = eb.Build().Str("runDir", runDir).Errorf("no arm-* directories found")
 		return
 	}
 
@@ -103,7 +103,7 @@ func runResults(cCtx *cli.Context) (err error) {
 			f64.BeginAttributeSingle(r.seconds).AddMembershipLowCardRef(MembBenchSeconds.GetId().Value()).EndAttribute()
 			f64.EndSection()
 			if err = ent.CommitEntity(); err != nil {
-				err = eh.Errorf("commit timing %s/%s/%d: %w", arm, r.query, r.try, err)
+				err = eb.Build().Str("arm", arm).Str("query", r.query).Int("try", r.try).Errorf("unable to commit a timing row: %w", err)
 				return
 			}
 			timings++
@@ -123,7 +123,7 @@ func runResults(cCtx *cli.Context) (err error) {
 			i64.BeginAttributeSingle(m.value).AddMembershipLowCardRef(MembBenchMetricValue.GetId().Value()).EndAttribute()
 			i64.EndSection()
 			if err = ent.CommitEntity(); err != nil {
-				err = eh.Errorf("commit size %s/%s: %w", arm, m.name, err)
+				err = eb.Build().Str("arm", arm).Str("metric", m.name).Errorf("unable to commit a size row: %w", err)
 				return
 			}
 			sizes++

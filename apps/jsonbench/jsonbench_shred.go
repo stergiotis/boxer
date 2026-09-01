@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 )
 
@@ -132,7 +132,7 @@ func formatParams(params []int) (raw []byte, err error) {
 	idx := make([]uint64, len(params))
 	for i, p := range params {
 		if p < 0 {
-			err = eh.Errorf("negative array index %d at position %d", p, i)
+			err = eb.Build().Int("index", p).Int("position", i).Errorf("negative array index")
 			return
 		}
 		idx[i] = uint64(p)

@@ -184,7 +184,7 @@ func captureLookup(name string) func(ctx context.Context, report bgjob.Reporter)
 		var buf bytes.Buffer
 		err = p.WriteTo(&buf, 0)
 		if err != nil {
-			err = eh.Errorf("write %s profile: %w", name, err)
+			err = eb.Build().Str("name", name).Errorf("write profile: %w", err)
 			return
 		}
 		raw = buf.Bytes()

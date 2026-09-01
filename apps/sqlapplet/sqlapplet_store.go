@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // StoreAppId is the synthetic identity the applet store service registers
@@ -161,7 +162,7 @@ func (inst *StoreService) mint(def *AppletDef) (err error) {
 	if err = inst.reg.RegisterFactory(m, func() (a app.AppI, ctorErr error) {
 		live := inst.lookup(slug)
 		if live == nil {
-			ctorErr = eh.Errorf("sqlapplet: stored applet %q has no live definition", slug)
+			ctorErr = eb.Build().Str("slug", slug).Errorf("sqlapplet: stored applet has no live definition")
 			return
 		}
 		a = &appletApp{def: live, m: m}
