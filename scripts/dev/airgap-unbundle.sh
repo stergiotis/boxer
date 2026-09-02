@@ -61,6 +61,10 @@ airgap_step "write boxer-airgap.env"
     airgap_go_env_lines "$go_tc" single
     if [ "$scope" = full ]; then
         airgap_cargo_env_lines "$rust_tc" "$cargo_home"
+        # The vendored crates live at rust/vendor — under neither CARGO_HOME nor
+        # the crate root, the two prefixes rust-repro-env.sh remaps by default —
+        # so without this the render head embeds the unpack path (ADR-0215).
+        echo "export RUST_REPRO_ROOT=\"$repo\""
     fi
     # Point the imzero2 headless encoder at the bundled static ffmpeg (both the
     # lane probe and the stream encoder read this). Omitted when none was
@@ -104,7 +108,8 @@ airgap_preflight_services clickhouse ollama
 [ "$mode" = no-build ] && {
     echo "=== no-build: provisioned. To build: ==="
     echo "    source boxer-airgap.env"
-    echo "    go build -tags \"\$(tr -d '\\n' < tags)\" -o app ./public/app"
+    echo "    source scripts/dev/go-build-env.sh"
+    echo "    go build \$BOXER_GO_FLAGS -tags \"\$BOXER_GO_TAGS\" -o app ./public/app"
     [ "$scope" = full ] && echo "    ( cd rust/imzero2 && ./build_rust_headless.sh )"
     exit 0
 }
@@ -112,11 +117,17 @@ airgap_preflight_services clickhouse ollama
 # ---- build ------------------------------------------------------------------
 # shellcheck disable=SC1091
 source "$repo/boxer-airgap.env"
+# The one Go build environment (ADR-0215), sourced AFTER the env file so its
+# GOTOOLCHAIN=local is respected rather than overwritten by the go.mod pin.
+# shellcheck disable=SC1091
+source "$repo/scripts/dev/go-build-env.sh"
 
 airgap_step "build Go: app (aggregate CLI)"
-go build -tags "$tags" -o "$repo/app" ./public/app
+# shellcheck disable=SC2086 # deliberate word splitting of BOXER_GO_FLAGS
+go build $BOXER_GO_FLAGS -tags "$tags" -o "$repo/app" ./public/app
 airgap_step "build Go: imzero2 host (tags + binary_log, per build_go.sh)"
-go build -tags "$tags,binary_log" -o "$repo/rust/imzero2/main_go" ./public/thestack/cmd/imzero2/
+# shellcheck disable=SC2086 # deliberate word splitting of BOXER_GO_FLAGS
+go build $BOXER_GO_FLAGS -tags "$tags,binary_log" -o "$repo/rust/imzero2/main_go" ./public/thestack/cmd/imzero2/
 
 if [ "$scope" = full ]; then
     airgap_step "build Rust: imzero2 headless render host (offline)"

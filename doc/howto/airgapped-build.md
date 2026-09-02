@@ -171,8 +171,9 @@ The bundle script self-checks the **Go** vendor by building `./public/app` and
 the imzero2 Go host offline before packing — the step most people skip. The
 unbundler writes `boxer-airgap.env` (an offline-configured `GOROOT`/`PATH`, plus
 `GOTOOLCHAIN=local`, `GOPROXY=off`, `GOSUMDB=off`, `GOFLAGS=-mod=vendor`, and in
-`full` scope the Rust toolchain and a `CARGO_HOME` with the vendored-sources
-config; plus `BOXER_TINYGO` and a `PATH` entry when the bundle carries a tinygo).
+`full` scope the Rust toolchain, a `CARGO_HOME` with the vendored-sources
+config and `RUST_REPRO_ROOT` so the path remapping covers the vendored crates; plus
+`BOXER_TINYGO` and a `PATH` entry when the bundle carries a tinygo).
 `source boxer-airgap.env` in any later shell to get the toolchains back.
 
 ## Verification
@@ -207,8 +208,9 @@ dynamically linked (see Notes below).
 
 ```bash
 source boxer-airgap.env
+source scripts/dev/go-build-env.sh     # after the env file: keeps GOTOOLCHAIN=local
 ./app dev entry-points                 # the aggregate CLI runs
-go build -tags "$(tr -d '\n' < tags)" -o /dev/null ./public/app   # rebuilds offline
+go build $BOXER_GO_FLAGS -tags "$BOXER_GO_TAGS" -o /dev/null ./public/app   # rebuilds offline
 ```
 
 `full` scope additionally produces `rust/imzero2/target/headless/release/imzero2`;
@@ -217,6 +219,16 @@ go build -tags "$(tr -d '\n' < tags)" -o /dev/null ./public/app   # rebuilds off
 
 ## Notes and limits
 
+- **Airgapped builds reproduce against each other, not against an online
+  build.** Two targets provisioning one bundle produce byte-identical
+  binaries, given the same C-compiler presence
+  ([ENGINEERING_PRACTICES §7](../ENGINEERING_PRACTICES.md#7-reproducible-builds)).
+  They cannot match a build of the same commit from a connected checkout:
+  the bundle is a `git archive` export, so `-buildvcs=auto` embeds no VCS
+  stamp; `-mod=vendor` leaves the module hashes out of the embedded build
+  info; and vendored crate paths remap differently from registry paths.
+  Compare an airgapped binary with another airgapped binary, or with the
+  `go-only` bundle's prebuilt head, which the pack host built the same way.
 - **`GOTOOLCHAIN=local` is load-bearing.** `go.mod` declares `go 1.27.0`;
   without `GOTOOLCHAIN=local` the `go` command tries to *download* a matching
   toolchain when the running one differs. The env file sets it. (Until

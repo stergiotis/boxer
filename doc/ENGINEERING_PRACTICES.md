@@ -280,23 +280,58 @@ projects (Kubernetes, OpenTelemetry, GitHub itself). Many repos delegate
 license enforcement to external tools (`fossa-cli`, `licensed`); the in-tree
 policy gate here is less common.
 
-## 7. Reproducibility of native artifacts
+## 7. Reproducible builds
 
-[scripts/ci/h3_wasm_parity.sh](../scripts/ci/h3_wasm_parity.sh) rebuilds the
-Rust crate at [rust/h3bridge](../rust/h3bridge) targeting
-`wasm32-unknown-unknown` with a pinned `CONST_RANDOM_SEED`, optionally
-passes the output through `wasm-strip` and `wasm-opt`, and byte-compares
-against the committed
-[h3.wasm artifact](../public/science/geo/h3/internal/h3o_wasm/h3.wasm).
+Two builds of one commit are meant to be byte-identical regardless of
+machine, checkout path, user or wall clock, given the pinned toolchains
+([ADR-0215](./adr/0215-retire-mimalloc-reproducible-builds.md)). The recipe
+lives in two sourced files rather than in each build script, so no two
+scripts can disagree:
 
-The check skips gracefully on machines without the Rust toolchain (cargo or
-the wasm target absent), so local lint stays green for contributors not
-touching the bridge; CI is the enforcer. Drift exits non-zero with a diff of
-section headers when `wasm-objdump` is available.
+- [scripts/dev/go-build-env.sh](../scripts/dev/go-build-env.sh) — the tags,
+  `-trimpath -buildvcs=auto`, `CGO_ENABLED=0`, and `GOTOOLCHAIN` pinned to
+  the go.mod version unless the caller set one. Every Go build site sources
+  it, the airgap unbundler included.
+- [scripts/dev/rust-repro-env.sh](../scripts/dev/rust-repro-env.sh) — the
+  `--remap-path-prefix` pair for the registry and the crate root, beside
+  `--locked` on every cargo invocation and patch-level `rust-toolchain` pins.
+
+What is enforced and what has only been measured are different things, and
+the difference matters when the property is quoted:
+
+- **Gated in CI:** the committed h3 wasm blob.
+  [scripts/ci/h3_wasm_parity.sh](../scripts/ci/h3_wasm_parity.sh) rebuilds
+  [rust/h3bridge](../rust/h3bridge) for `wasm32-unknown-unknown` with a
+  pinned `CONST_RANDOM_SEED`, passes it through `wasm-strip` and `wasm-opt`,
+  and byte-compares against the committed
+  [h3.wasm artifact](../public/science/geo/h3/internal/h3o_wasm/h3.wasm).
+  It skips on machines without the toolchain, so local lint stays green for
+  contributors not touching the bridge; the lint workflow installs what it
+  needs and is the enforcer.
+- **Measured, not gated:** the Go host and the Rust render heads. ADR-0215
+  records byte-identical rebuilds of each on one machine; no CI job builds
+  them twice and compares. A regression here is found by the next person who
+  checks, not by the pipeline.
+
+The scope of the claim has two edges:
+
+- **The C-compiler environment is an input.** `blake3` compiles assembly when
+  a host C compiler is present and falls back to pure Rust when none is, so
+  "same toolchain" includes "same C-compiler presence".
+- **An airgapped build reproduces against another airgapped build**, not
+  against a connected one. The bundle is a `git archive` export with no VCS
+  stamp, `-mod=vendor` omits module hashes from the embedded build info, and
+  vendored crate paths remap differently from registry paths. It also ships
+  whichever Go SDK the packing host had, so the toolchain is pinned by the
+  bundle rather than by go.mod. Details in
+  [How to build air-gapped § Notes and limits](./howto/airgapped-build.md#notes-and-limits).
 
 Byte-equality drift checks on embedded native artifacts are uncommon outside
-reproducible-build communities (Bazel ecosystems, Bitcoin Core). The
-local-skip / CI-enforce split keeps contribution friction low.
+reproducible-build communities (Bazel ecosystems, Bitcoin Core); reproducible
+host binaries are a stated goal in Go (`-trimpath`) and Rust
+(`--remap-path-prefix`, the nightly `trim-paths` profile) but few application
+repos pin the recipe in one sourced file. The local-skip / CI-enforce split
+keeps contribution friction low.
 
 ## 8. Documentation architecture
 

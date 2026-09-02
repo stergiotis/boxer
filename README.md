@@ -52,6 +52,8 @@ go test  -tags="$(cat ./tags)" ./...
 go vet   -tags="$(cat ./tags)" ./...
 ```
 
+Shipped binaries are built one way, from a sourced environment file rather than per-script flags, so that two builds of one commit come out byte-identical across machines, paths and clocks ([ADR-0215](doc/adr/0215-retire-mimalloc-reproducible-builds.md)). `source scripts/dev/go-build-env.sh` before a `go build` you intend to ship or compare, and `scripts/dev/rust-repro-env.sh` before a `cargo build`. The property is measured for the Go host and the Rust render heads and enforced in CI only for the committed h3 wasm blob; what it covers and what it does not, including the air-gapped case, is in [ENGINEERING_PRACTICES §7](doc/ENGINEERING_PRACTICES.md#7-reproducible-builds).
+
 The file has been empty since `boxer_enable_profiling` — which compiled out the pprof capture paths — was retired in favour of splitting the HTTP listener into its own package, so that a binary pays for `net/http` only if it imports one ([ADR-0212](doc/adr/0212-split-pprof-http-listener.md)). Before that, and until Go 1.27, the set carried `goexperiment.jsonv2`, without which the build failed outright with misleading *undefined identifier* errors; `encoding/json/v2` graduated and that tag is retired too.
 
 ## Documentation

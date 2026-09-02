@@ -101,11 +101,12 @@ compares.
 tags, `-trimpath -buildvcs=auto`, `CGO_ENABLED=0`, and `GOTOOLCHAIN` pinned to
 exactly the go.mod version *unless the caller already set one* — the airgap
 environment exports `GOTOOLCHAIN=local` because it ships a single toolchain and
-must not reach the network, and that setting is respected. All five build sites
+must not reach the network, and that setting is respected. All six build sites
 (`boxer.sh`, `generate.sh`, `scripts/dev/build.sh`, `scripts/dev/generate.sh`,
-`scripts/dev/lading-demo.sh`) source it. `-buildvcs` stays on as `auto` — for
-one commit with a clean tree
-the stamp is constant, and it is the only provenance the binary carries;
+`scripts/dev/lading-demo.sh`, `scripts/dev/airgap-unbundle.sh`) source it — the
+unbundler after its own env file, so the pin defers to `local`. `-buildvcs`
+stays on as `auto` — for one commit with a clean tree the stamp is constant,
+and it is the only provenance the binary carries;
 `true` would be a hard error inside a `git archive` export like the airgap
 tarball.
 
@@ -166,3 +167,15 @@ less.
   say; if it drifts, rebuild with `scripts/dev/build_h3_wasm.sh` and commit.
 - The lint workflow now installs a Rust toolchain and two apt packages, so it is
   slower and needs network on the runner.
+- **An airgapped build reproduces against another airgapped build, not against
+  a connected one.** The bundle is a `git archive` export, so `-buildvcs=auto`
+  stamps nothing; `-mod=vendor` leaves the `h1:` module hashes out of the
+  embedded build info (measured: the same `-trimpath` build differs by build
+  mode alone); and `cargo vendor` lays crates out in a vendor tree beside the crate, which
+  is under neither prefix SD2 remaps — the unbundler's env file sets
+  `RUST_REPRO_ROOT` to the unpack root so that path is covered too. The
+  bundle also ships the packing host's Go SDK rather than the go.mod pin, so
+  two bundles packed on different hosts may carry different compilers.
+- **Nothing gates the Go host or the render heads.** The byte-identical
+  rebuilds above were measured once, on one machine; only the h3 blob has a CI
+  parity check. A two-build-and-compare job is the obvious next gate.
