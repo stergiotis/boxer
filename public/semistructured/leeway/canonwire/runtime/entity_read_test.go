@@ -708,3 +708,117 @@ func TestEntityRoundTripProperty(t *testing.T) {
 		require.Equal(rt, hex.EncodeToString(first.Bytes()), hex.EncodeToString(second.Bytes()))
 	})
 }
+
+// A slot's attributes must agree in shape at write time: mixing a
+// discriminator-carrying attribute with a bare one, or two membership-group
+// counts, is refused by SlotWriter.Add rather than flushed as bytes
+// VerifyCanonical rejects.
+func TestSlotShapeIsUniformAtWrite(t *testing.T) {
+	mk := func(disc bool) Attr {
+		aw, err := NewAttributeWriter(1, 1)
+		require.NoError(t, err)
+		aw.Begin()
+		aw.Membership(0, mappingplan.MembershipChannelLowCardRef, 1, nil, nil)
+		aw.BeginValue().WriteUint(7)
+		aw.EndValue()
+		if disc {
+			aw.Discriminator(0)
+		}
+		a, err := aw.End()
+		require.NoError(t, err)
+		return a
+	}
+	var b bytes.Buffer
+	ew, err := NewEntityWriter()
+	require.NoError(t, err)
+	ew.Begin()
+	s := ew.Slot("s")
+	s.Add(mk(false))
+	s.Add(mk(true))
+	err = ew.Flush(&b)
+	require.ErrorIs(t, err, ErrNotCanonical)
+	require.ErrorContains(t, err, "differ in shape")
+
+	// Two membership-group counts in one slot are refused the same way.
+	mkGroups := func(nGroups int) Attr {
+		aw, err := NewAttributeWriter(0, nGroups)
+		require.NoError(t, err)
+		aw.Begin()
+		for g := range nGroups {
+			aw.Membership(g, mappingplan.MembershipChannelLowCardRef, uint64(g+1), nil, nil)
+		}
+		a, err := aw.End()
+		require.NoError(t, err)
+		return a
+	}
+	ew.Begin()
+	s = ew.Slot("g")
+	s.Add(mkGroups(2))
+	s.Add(mkGroups(3))
+	err = ew.Flush(&b)
+	require.ErrorIs(t, err, ErrNotCanonical)
+}
+
+// The discriminator trails the values (SD5): reading it earlier is refused,
+// so a misplaced read cannot silently take the first uint value for the
+// discriminator.
+func TestDiscriminatorPositionGuarded(t *testing.T) {
+	var b bytes.Buffer
+	ew, err := NewEntityWriter()
+	require.NoError(t, err)
+	aw, err := NewAttributeWriter(1, 1)
+	require.NoError(t, err)
+	ew.Begin()
+	aw.Begin()
+	aw.Membership(0, mappingplan.MembershipChannelLowCardRef, 1, nil, nil)
+	aw.BeginValue().WriteUint(7)
+	aw.EndValue()
+	aw.Discriminator(1)
+	a, err := aw.End()
+	require.NoError(t, err)
+	ew.Slot("s").Add(a)
+	require.NoError(t, ew.Flush(&b))
+
+	er := NewEntityReader(NewCborReader(b.Bytes()))
+	er.Begin()
+	_, _, ok := er.NextSlot()
+	require.True(t, ok)
+	ar := er.Attributes()
+	require.True(t, ar.Begin(1, 1))
+	require.Equal(t, 1, ar.NextGroup())
+	ar.Membership()
+	require.NoError(t, er.Err())
+	ar.Discriminator() // the value is still unread
+	require.ErrorContains(t, er.Err(), "before the values were consumed")
+}
+
+// End verifies the caller consumed exactly the slot's values: an unread value
+// is an error at the attribute, not a misparse downstream.
+func TestAttributeEndChecksValuesConsumed(t *testing.T) {
+	var b bytes.Buffer
+	ew, err := NewEntityWriter()
+	require.NoError(t, err)
+	aw, err := NewAttributeWriter(1, 1)
+	require.NoError(t, err)
+	ew.Begin()
+	aw.Begin()
+	aw.Membership(0, mappingplan.MembershipChannelLowCardRef, 1, nil, nil)
+	aw.BeginValue().WriteUint(7)
+	aw.EndValue()
+	a, err := aw.End()
+	require.NoError(t, err)
+	ew.Slot("s").Add(a)
+	require.NoError(t, ew.Flush(&b))
+
+	er := NewEntityReader(NewCborReader(b.Bytes()))
+	er.Begin()
+	_, _, ok := er.NextSlot()
+	require.True(t, ok)
+	ar := er.Attributes()
+	require.False(t, ar.Begin(1, 1))
+	require.Equal(t, 1, ar.NextGroup())
+	ar.Membership()
+	require.NoError(t, er.Err())
+	ar.End() // the value was never read
+	require.ErrorContains(t, er.Err(), "values left unread")
+}

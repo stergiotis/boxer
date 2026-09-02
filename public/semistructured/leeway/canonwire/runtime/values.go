@@ -53,8 +53,19 @@ func (c *CborReader) ReadF64() float64 { return c.ReadFloat64() }
 func (c *CborWriter) WriteTemporal(t time.Time) {
 	// Go normalizes a Time so that Nanosecond is in [0, 1e9) and Unix is the
 	// floor second, which is the pre-epoch behaviour the form asks for.
-	secs := t.Unix()
-	nanos := int64(t.Nanosecond())
+	c.WriteTemporalParts(t.Unix(), int64(t.Nanosecond()))
+}
+
+// WriteTemporalParts writes the tag 1001 item from an already-split instant:
+// floor seconds and nanoseconds in [0, 1e9). It is the one implementation of
+// the RFC 9581 emission — canonform derives the parts from raw lanes and
+// writes through here, so the wire and the quotient cannot drift on this
+// rule.
+func (c *CborWriter) WriteTemporalParts(secs int64, nanos int64) {
+	if nanos < 0 || nanos > 999_999_999 {
+		c.failValue(eb.Build().Int64("nanoseconds", nanos).Errorf("nanoseconds must be in [0, 999999999]: %w", ErrOutOfRange))
+		return
+	}
 	c.Tag(TagExtendedTime)
 	if nanos == 0 {
 		c.MapHead(1)
@@ -109,12 +120,14 @@ func (c *CborReader) ReadTemporal() (t time.Time) {
 	return time.Unix(secs, nanos).UTC()
 }
 
-// writePrefixContent writes the RFC 9164 §3.2 prefix content:
+// WritePrefixContent writes the RFC 9164 §3.2 prefix content:
 // [prefix-length, address bytes with the bits beyond the prefix zeroed and
 // trailing zero bytes omitted]. Host bits are not content — a prefix travels
 // masked, so an unmasked netip.Prefix does not survive the round trip
-// unchanged.
-func (c *CborWriter) writePrefixContent(addr []byte, bits int) {
+// unchanged. It is the one implementation of the masking rule — canonform
+// applies its IPv4-mapped reduction first and writes through here, so the
+// wire and the quotient cannot drift on it. The caller writes the tag.
+func (c *CborWriter) WritePrefixContent(addr []byte, bits int) {
 	if bits < 0 || bits > len(addr)*8 {
 		c.failValue(eb.Build().Int("bits", bits).Int("addrLen", len(addr)).Errorf("prefix length exceeds the address width: %w", ErrOutOfRange))
 		return
@@ -186,7 +199,7 @@ func (c *CborWriter) WriteIPv4Prefix(p netip.Prefix) {
 	}
 	b := a.As4()
 	c.Tag(TagIPv4)
-	c.writePrefixContent(b[:], p.Bits())
+	c.WritePrefixContent(b[:], p.Bits())
 }
 
 // WriteIPv6Prefix writes an IPv6 prefix under RFC 9164 tag 54, with no
@@ -203,7 +216,7 @@ func (c *CborWriter) WriteIPv6Prefix(p netip.Prefix) {
 	}
 	b := a.As16()
 	c.Tag(TagIPv6)
-	c.writePrefixContent(b[:], p.Bits())
+	c.WritePrefixContent(b[:], p.Bits())
 }
 
 // WritePrefix writes a prefix under the tag its family selects.
@@ -240,14 +253,14 @@ func (c *CborWriter) WriteIPv6Raw(v [16]byte) {
 // one prefix-length byte.
 func (c *CborWriter) WriteIPv4PrefixRaw(v [5]byte) {
 	c.Tag(TagIPv4)
-	c.writePrefixContent(v[:4], int(v[4]))
+	c.WritePrefixContent(v[:4], int(v[4]))
 }
 
 // WriteIPv6PrefixRaw writes an IPv6 CIDR lane value — sixteen address bytes
 // and one prefix-length byte.
 func (c *CborWriter) WriteIPv6PrefixRaw(v [17]byte) {
 	c.Tag(TagIPv6)
-	c.writePrefixContent(v[:16], int(v[16]))
+	c.WritePrefixContent(v[:16], int(v[16]))
 }
 
 // readAddrBytes reads a tagged address's byte string and checks its width.

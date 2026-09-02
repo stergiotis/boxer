@@ -63,6 +63,15 @@ type Attr struct {
 	end       int32
 	cardStart int32
 	cardLen   int32
+
+	// Shape, set by AttributeWriter.End: the item's outer element count and
+	// its membership-group count. SlotWriter.Add enforces they are uniform
+	// per slot (SD5: the discriminator is uniform, and a slot's co-section
+	// count is fixed) so the writer cannot assemble what VerifyCanonical
+	// rejects. Zero on an Attr built elsewhere, which the check treats as
+	// unshaped and lets pass.
+	nElems  int32
+	nGroups int32
 }
 
 // CompareAttributes orders two attributes of the same slot as ADR-0210 SD3
@@ -405,9 +414,11 @@ func (inst *AttributeWriter) End() (attr Attr, err error) {
 			MembershipCount: uint32(total),
 			Cards:           inst.cards,
 		},
-		Item: item,
-		Memb: item[headLen:membEnd],
-		Vals: item[membEnd:],
+		Item:    item,
+		Memb:    item[headLen:membEnd],
+		Vals:    item[membEnd:],
+		nElems:  int32(nElems),
+		nGroups: int32(inst.nGroups),
 	}
 
 	return

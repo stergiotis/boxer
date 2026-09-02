@@ -21,9 +21,15 @@ import (
 //     groups — the SD5 discriminator is uniform per slot, and the co-section
 //     count is a property of the slot;
 //   - a slot's attributes are non-decreasing under CompareAttributes;
-//   - a set (tag 258) holds elements strictly increasing bytewise;
+//   - a set (tag 258) holds elements non-decreasing bytewise, duplicates kept
+//     (SD3);
 //   - every head is in the deterministic subset, which the CborReader enforces
-//     as it reads.
+//     as it reads, floats included;
+//   - value interiors are what the writer produces: temporal and network tags
+//     are decoded typed (map shape and key order, nanoseconds in range, masked
+//     prefix, omitted trailing zero bytes), text is valid UTF-8, a simple
+//     value is one of the two bools (or null as a whole value), a tag is one
+//     of 258 / 1001 / 52 / 54, and a map is no value form at all.
 //
 // The value cardinalities CompareAttributes needs are derived from the value
 // forms rather than from a table, by DeriveCardinality — the same function
@@ -115,7 +121,7 @@ func verifyPlains(r *CborReader) {
 			return
 		}
 		for range nCols {
-			r.Skip()
+			verifyValue(r)
 			if r.err != nil {
 				return
 			}
@@ -304,15 +310,15 @@ func verifyMembershipList(r *CborReader, n int) {
 }
 
 // verifyValue consumes one value of an attribute and returns its cardinality
-// under the SD3 rule. A set's elements are checked to be sorted on the way
-// past.
+// under the SD3 rule, with the interior validated: containers descend into
+// their elements, and every scalar goes through verifyScalar.
 func verifyValue(r *CborReader) (card uint64) {
 	if r.err != nil {
 		return
 	}
 	// The cardinality is read off the heads by the same helper the encoder
-	// uses; the walk below only has to consume the value and check the one
-	// ordering a set carries.
+	// uses; the walk below consumes the value and checks what the heads do
+	// not carry.
 	card, err := DeriveCardinality(r.b[r.pos:])
 	if err != nil {
 		r.fail(eb.Build().Int("pos", r.pos).Errorf("unable to derive the value's cardinality: %w", err))
@@ -327,34 +333,111 @@ func verifyValue(r *CborReader) (card uint64) {
 		r.Skip() // records the truncation
 		return 0
 	}
-	if mt == MajorTypeTag {
-		tag := r.ReadTag()
-		if r.err != nil {
-			return 0
+	switch mt {
+	case MajorTypeArray:
+		// An `h` array: elements in stored order, each a scalar form.
+		n := r.ReadArrayHead()
+		for range n {
+			verifyScalar(r)
+			if r.err != nil {
+				return 0
+			}
 		}
-		if tag == TagSet {
+	case MajorTypeTag:
+		if peekTag(r) == TagSet {
+			r.ReadTag()
 			verifySetElements(r)
 			if r.err != nil {
 				return 0
 			}
 			return
 		}
+		verifyScalar(r)
+	default:
+		verifyScalar(r)
 	}
-	// Every other form — a scalar, an `h` array, a tagged temporal or network
-	// value whose tag was just consumed — is consumed whole by Skip, which
-	// validates every head it passes.
-	r.Skip()
 	if r.err != nil {
 		return 0
 	}
 	return
 }
 
+// verifyScalar consumes one scalar value form (SD3) and validates its
+// interior the way the typed decode path would: a temporal or network tag is
+// decoded typed (shape, key order, nanosecond range, masked prefix), text is
+// checked for UTF-8, a float's width by the reader's head validation. What
+// the writer never produces is refused: a simple value other than the two
+// bools, a tag the form does not use, a container where a scalar belongs.
+func verifyScalar(r *CborReader) {
+	if r.err != nil {
+		return
+	}
+	mt, ok := r.PeekMajor()
+	if !ok {
+		r.Skip() // records the truncation
+		return
+	}
+	switch mt {
+	case MajorTypeUint, MajorTypeNeg, MajorTypeBytes:
+		r.Skip()
+	case MajorTypeText:
+		r.ReadText()
+	case MajorTypeSimple:
+		ib := r.b[r.pos]
+		switch {
+		case isFloatAI(ib & 0x1f):
+			r.Skip() // skip validates the float's canonical width and NaN
+		case ib == SimpleTrue || ib == SimpleFalse:
+			r.Skip()
+		default:
+			r.fail(eb.Build().Int("pos", r.pos).Uint8("initialByte", ib).Errorf("simple value is not a scalar form of the wire: %w", ErrNotCanonical))
+		}
+	case MajorTypeTag:
+		switch peekTag(r) {
+		case TagExtendedTime:
+			r.ReadTemporal()
+		case TagIPv4, TagIPv6:
+			verifyNetwork(r)
+		default:
+			r.fail(eb.Build().Int("pos", r.pos).Errorf("tag is not a value form of the wire: %w", ErrNotCanonical))
+		}
+	default:
+		r.fail(eb.Build().Int("pos", r.pos).Uint8("major", byte(mt)>>5).Errorf("not a scalar value form of the wire: %w", ErrNotCanonical))
+	}
+}
+
+// peekTag returns the tag number at the reader's position without consuming
+// anything; 0 (never a form tag) when the position does not hold a
+// well-formed tag head.
+func peekTag(r *CborReader) uint64 {
+	p := NewCborReader(r.b[r.pos:])
+	mt, arg := p.ReadHead()
+	if p.Err() != nil || mt != MajorTypeTag {
+		return 0
+	}
+	return arg
+}
+
+// verifyNetwork consumes one tag 52/54 item through the typed readers, which
+// refuse what the writer would not have produced: a wrong address length, an
+// unmasked prefix, a kept trailing zero byte, an out-of-range prefix length.
+// The payload's major type tells an address (bytes) from a prefix (array).
+func verifyNetwork(r *CborReader) {
+	p := NewCborReader(r.b[r.pos:])
+	p.ReadTag()
+	if mt, ok := p.PeekMajor(); ok && mt == MajorTypeArray {
+		r.ReadPrefix()
+		return
+	}
+	r.ReadAddr()
+}
+
 // verifySetElements walks the array a tag 258 wraps, requiring its elements to
 // be non-decreasing bytewise, which is what makes a set's bytes canonical
 // (SD3). Equal adjacent elements are duplicates and are admissible: a set is a
 // co-container of the section's arrays, so its length is content and the form
-// keeps the duplicates rather than changing it.
+// keeps the duplicates rather than changing it. Each element's interior is
+// validated like any other scalar.
 func verifySetElements(r *CborReader) {
 	n := r.ReadArrayHead()
 	if r.err != nil {
@@ -363,10 +446,12 @@ func verifySetElements(r *CborReader) {
 	var prev []byte
 	have := false
 	for i := range n {
-		e := r.ReadItemBytes()
+		start := r.pos
+		verifyScalar(r)
 		if r.err != nil {
 			return
 		}
+		e := r.since(start)
 		if have && bytes.Compare(prev, e) > 0 {
 			r.fail(eb.Build().Int("pos", r.pos).Int("index", i).Errorf("set elements are not sorted bytewise: %w", ErrNotCanonical))
 			return

@@ -49,6 +49,11 @@ type AttributeReader struct {
 	prevMemb   []byte
 	haveMemb   bool
 	begun      bool
+	// valsStart is the reader position where the attribute's values begin —
+	// set the moment the last membership of the last group is read, -1 before.
+	// It is what lets Discriminator and End verify the caller consumed exactly
+	// nCols values, which the wire does not carry.
+	valsStart int
 }
 
 // NewAttributeReader returns a reader over r.
@@ -75,6 +80,7 @@ func (inst *AttributeReader) reset() {
 	inst.prevMemb = nil
 	inst.haveMemb = false
 	inst.begun = false
+	inst.valsStart = -1
 }
 
 // Err returns the underlying reader's first error.
@@ -142,7 +148,31 @@ func (inst *AttributeReader) Begin(nCols int, nGroups int) (hasDiscriminator boo
 	inst.prevMemb = nil
 	inst.haveMemb = false
 	inst.begun = true
+	inst.valsStart = -1
 	return
+}
+
+// markValsStart records where the values begin once every membership group
+// and membership has been read.
+func (inst *AttributeReader) markValsStart() {
+	if inst.groupsRead == inst.nGroups && inst.membRead == inst.nMemb {
+		inst.valsStart = inst.r.pos
+	}
+}
+
+// valuesEnd walks the nCols values from valsStart on a probe reader and
+// returns the position just past them; -1 on a malformed value (recorded as
+// the reader's error).
+func (inst *AttributeReader) valuesEnd() (end int) {
+	p := NewCborReader(inst.r.b[inst.valsStart:])
+	for range inst.nCols {
+		p.Skip()
+	}
+	if err := p.Err(); err != nil {
+		inst.r.fail(eb.Build().Int("pos", inst.valsStart).Errorf("unable to walk the attribute's values: %w", err))
+		return -1
+	}
+	return inst.valsStart + p.Pos()
 }
 
 // NextGroup opens the next membership group, in signature order, and returns
@@ -175,6 +205,7 @@ func (inst *AttributeReader) NextGroup() (nMemberships int) {
 	inst.haveMemb = false
 	inst.inGroup = true
 	inst.groupsRead++
+	inst.markValsStart()
 	return n
 }
 
@@ -208,6 +239,7 @@ func (inst *AttributeReader) Membership() (ch mappingplan.MembershipChannel, ref
 	inst.prevMemb = item
 	inst.haveMemb = true
 	inst.membRead++
+	inst.markValsStart()
 	return
 }
 
@@ -228,6 +260,16 @@ func (inst *AttributeReader) Discriminator() (d uint64) {
 	}
 	if inst.discRead {
 		r.fail(eb.Build().Int("pos", r.pos).Errorf("discriminator read twice: %w", ErrOutOfRange))
+		return
+	}
+	if inst.valsStart < 0 {
+		r.fail(eb.Build().Int("pos", r.pos).Errorf("discriminator read before the memberships: %w", ErrOutOfRange))
+		return
+	}
+	if want := inst.valuesEnd(); r.err != nil || r.pos != want {
+		if r.err == nil {
+			r.fail(eb.Build().Int("pos", r.pos).Int("valuesEnd", want).Errorf("discriminator read before the values were consumed; it trails them: %w", ErrOutOfRange))
+		}
 		return
 	}
 	d = r.ReadUint()
@@ -262,5 +304,14 @@ func (inst *AttributeReader) End() {
 	}
 	if inst.hasDisc && !inst.discRead {
 		r.fail(eb.Build().Int("pos", r.pos).Errorf("attribute closed with its discriminator unread: %w", ErrOutOfRange))
+		return
+	}
+	// The values are read by the caller, so their count is verified by
+	// position: the caller must stand exactly past the nCols values (the
+	// discriminator's own position was verified when it was read).
+	if !inst.hasDisc && inst.valsStart >= 0 {
+		if want := inst.valuesEnd(); r.err == nil && r.pos != want {
+			r.fail(eb.Build().Int("pos", r.pos).Int("valuesEnd", want).Errorf("attribute closed with values left unread or overread: %w", ErrOutOfRange))
+		}
 	}
 }
