@@ -487,6 +487,30 @@ Findings of an adversarial review, closed without moving any canonical byte
   them. The actual guard — item type, column count, per-value typed reads —
   is unchanged.
 
+### 2026-09-02 — fixed-width text generates
+
+The three generators now accept fixed-width text (`sxN`); it had been refused
+since the review found the emitted `array.FixedSizeString` never existed. No
+wire byte changes: the SD3 value form was always "text, padding kept", and the
+encoder read such a column from its FixedSizeBinary lane. What changed sits at
+the seams:
+
+- The generated dml builders append through `runtime.AppendFixedText`, which
+  enforces the width with ClickHouse INSERT semantics — a shorter value is
+  zero-padded (the padding is stored content and reads back), a longer one is
+  refused onto the entity's error collection instead of panicking inside the
+  fixed-size Arrow builder. `yxN` needs none of this: its Go type is `[N]byte`.
+- The generated decoder reads the column with `ReadTextStringFixed(N)`,
+  refusing any other length — the encoder always writes exactly N bytes, so a
+  different length is a value no writer produced (the SD2 sentence "the typed
+  reads catch a width mismatch value by value" made literal for this lane).
+- Stated for completeness: `sxN` and `s` are distinct slot keys, as `u8` and
+  `u64` are — SD2 keys are the canonical-type strings verbatim; only the
+  ADR-0201 quotient erases the width.
+- A `fixedtable` golden (sx4 scalar, sx3 array, yx4 scalar) pins the lane;
+  the marshall front-ends still refuse `,ct=sxN` (their plain-column mapping
+  keys on the Go type; deferred until wired).
+
 ## References
 
 - [ADR-0201](./0201-leeway-canonical-record-form.md) — the quotient form this

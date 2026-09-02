@@ -474,3 +474,16 @@ func TestIntegerRoundTripProperty(t *testing.T) {
 		}
 	})
 }
+
+// ReadTextStringFixed enforces the fixed-width text lane's byte length.
+func TestReadTextStringFixed(t *testing.T) {
+	item, err := hex.DecodeString("6461626364") // "abcd"
+	require.NoError(t, err)
+	r := NewCborReader(item)
+	require.Equal(t, "abcd", r.ReadTextStringFixed(4))
+	require.NoError(t, r.Err())
+
+	r = NewCborReader(item)
+	r.ReadTextStringFixed(5)
+	require.ErrorIs(t, r.Err(), ErrOutOfRange)
+}

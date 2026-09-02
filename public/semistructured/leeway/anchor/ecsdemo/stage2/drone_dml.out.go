@@ -86,7 +86,7 @@ func CreateSchemaDroneTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
 
 type InEntityDroneTable struct {
 	errs                  []error
@@ -163,7 +163,7 @@ var InEntityDroneTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityDroneTable) SetId(id0 uint64) *InEntityDroneTable {
 	if inst.state != runtime.EntityStateInEntity {

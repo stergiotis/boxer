@@ -46,7 +46,7 @@ func CreateSchemaChannelTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
 
 type InEntityChannelTable struct {
 	allocator             memory.Allocator
@@ -123,7 +123,7 @@ var InEntityChannelTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityChannelTable) SetId(id0 uint64) *InEntityChannelTable {
 	if inst.state != runtime.EntityStateInEntity {

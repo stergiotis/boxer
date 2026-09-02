@@ -603,7 +603,12 @@ func valueReadCall(ct canonicaltypes.PrimitiveAstNodeI) (call string, fixedWidth
 			}
 		case canonicaltypes.BaseTypeStringUtf8:
 			// A fixed-width `s` lands on Go's string here as it does on the
-			// write side; the padding rides in the string.
+			// write side; the padding rides in the string, and the reader
+			// enforces the width the encoder always writes (it reads such a
+			// column from a FixedSizeBinary array).
+			if n.WidthModifier == canonicaltypes.WidthModifierFixed {
+				return fmt.Sprintf("ReadTextStringFixed(%d)", n.Width), 0, nil
+			}
 			return "ReadTextString()", 0, nil
 		case canonicaltypes.BaseTypeStringBytes:
 			if n.WidthModifier == canonicaltypes.WidthModifierFixed {
