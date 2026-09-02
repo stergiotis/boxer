@@ -28,3 +28,24 @@ func TestGenerateNetworkType(t *testing.T) {
 		require.Equal(t, c.want, b.String(), "sig %s", c.sig)
 	}
 }
+
+// The fixed-width lanes: sxN and yxN both land on FixedSizeBinary(N),
+// containers wrapped in a list.
+func TestGenerateFixedWidthStringType(t *testing.T) {
+	gen := NewTechnologySpecificCodeGenerator()
+	b := &strings.Builder{}
+	gen.SetCodeBuilder(b)
+	p := canonicaltypes.NewParser()
+	cases := []struct{ sig, want string }{
+		{"sx4", "&arrow.FixedSizeBinaryType{ByteWidth: 4}"},
+		{"yx32", "&arrow.FixedSizeBinaryType{ByteWidth: 32}"},
+		{"sx3h", "arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 3})"},
+		{"yx4m", "arrow.ListOfNonNullable(&arrow.FixedSizeBinaryType{ByteWidth: 4})"},
+	}
+	for _, c := range cases {
+		b.Reset()
+		ct := p.MustParsePrimitiveTypeAst(c.sig)
+		require.NoError(t, gen.GenerateType(ct), "sig %s", c.sig)
+		require.Equal(t, c.want, b.String(), "sig %s", c.sig)
+	}
+}

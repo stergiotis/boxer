@@ -43,6 +43,10 @@ var m1F32 = []float32{0, float32(math.Copysign(0, -1)), 1, -1, 1.5, 0.1, float32
 // overflow int64.
 var m1Ms = []int64{0, 1, -1, 999, 1000, -1000, 1_700_000_000_000, -8_000_000_000_000}
 var m1Blob4 = [][]byte{{0, 0, 0, 0}, {1, 2, 3, 4}, {0xff, 0, 0, 1}, {0, 0, 0, 1}}
+
+// m1Text4 holds four-byte, valid-UTF-8 values (an `s` lane refuses ill-formed
+// text), zero-padding included — the shape a FixedString(4) read produces.
+var m1Text4 = []string{"abcd", "ab\x00\x00", "zzzz", "a\x00\x00b"}
 var m1Refs = []uint64{1, 2, 7, 23, 24, 1 << 40, math.MaxUint64}
 
 func drawAttrCount(rt *rapid.T) int { return rapid.IntRange(1, 4).Draw(rt, "attrs") }
@@ -90,9 +94,10 @@ func listFsb(width int, perEntity ...[][]byte) arrow.Array {
 	return lb.NewArray()
 }
 
-// yx4 is the fixed-width four-byte string type (`yx4`), which ctabb does not
-// abbreviate.
+// yx4 / sx4 are the fixed-width four-byte string types, which ctabb does not
+// abbreviate (widths are parameters).
 var yx4 = canonicaltypes.StringAstNode{BaseType: canonicaltypes.BaseTypeStringBytes, WidthModifier: canonicaltypes.WidthModifierFixed, Width: 4}
+var sx4 = canonicaltypes.StringAstNode{BaseType: canonicaltypes.BaseTypeStringUtf8, WidthModifier: canonicaltypes.WidthModifierFixed, Width: 4}
 
 // --- widths: the value survives the declaration (SD2/SD3) ---
 
@@ -152,6 +157,16 @@ func TestPropertyWidthWidening(t *testing.T) {
 				return listBin(ss)
 			},
 			func() arrow.Array { return listFsb(4, blobs) }, refs)
+		// s → sx: the text twin of the same erasure.
+		texts := make([]string, n)
+		textBlobs := make([][]byte, n)
+		for i := range n {
+			texts[i] = rapid.SampledFrom(m1Text4).Draw(rt, "text4")
+			textBlobs[i] = []byte(texts[i])
+		}
+		widthPair(t, rt, ctabb.S, sx4,
+			func() arrow.Array { return listBin(texts) },
+			func() arrow.Array { return listFsb(4, textBlobs) }, refs)
 	})
 }
 

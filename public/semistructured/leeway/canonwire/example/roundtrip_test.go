@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cwruntime "github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
+	dmlrt "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	rartime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
@@ -730,4 +731,149 @@ func TestRoundTripChannelTable(t *testing.T) {
 	require.NoError(t, enc2.EncodeAll(&second))
 	require.Equal(t, first.Bytes(), second.Bytes())
 	require.Equal(t, channelTableLines(raFirst), channelTableLines(raSecond))
+}
+
+// ------------------------------------------------------------- fixed table
+
+// fixedTableLines renders the three fixed-width sections per entity.
+func fixedTableLines(ra *ReadAccessFixedTable) (perEntity []string) {
+	n := ra.GetNumberOfEntities()
+	perEntity = make([]string, 0, n)
+	for e := range n {
+		idx := rartime.EntityIdx(e)
+		var sb bytes.Buffer
+		fmt.Fprintf(&sb, "id=%d\n", ra.EntityId.GetAttrValueId(idx))
+		lines := make([]string, 0, 4)
+		for a := range int(ra.Code.Attributes.GetNumberOfAttributes(idx)) {
+			ai := rartime.AttributeIdx(a)
+			lines = append(lines, fmt.Sprintf("code c=%q m=%v",
+				ra.Code.Attributes.GetAttrValueC(idx, ai),
+				seqLines(ra.Code.Memberships.GetMembValueLowCardRef(idx, ai))))
+		}
+		for a := range int(ra.Codes.Attributes.GetNumberOfAttributes(idx)) {
+			ai := rartime.AttributeIdx(a)
+			lines = append(lines, fmt.Sprintf("codes cs=%v m=%v",
+				seqLines(ra.Codes.Attributes.GetAttrValueCs(idx, ai)),
+				seqLines(ra.Codes.Memberships.GetMembValueLowCardRef(idx, ai))))
+		}
+		for a := range int(ra.Hash.Attributes.GetNumberOfAttributes(idx)) {
+			ai := rartime.AttributeIdx(a)
+			lines = append(lines, fmt.Sprintf("hash h=%v m=%v",
+				ra.Hash.Attributes.GetAttrValueH(idx, ai),
+				seqLines(ra.Hash.Memberships.GetMembValueLowCardRef(idx, ai))))
+		}
+		slices.Sort(lines)
+		fmt.Fprintf(&sb, "%v", lines)
+		perEntity = append(perEntity, sb.String())
+	}
+	return
+}
+
+// writeFixedTable drives the fixed-width lanes with exact-width values: an
+// sx4 scalar, an sx3 array (three elements, one repeated), a yx4 scalar.
+func writeFixedTable(t *testing.T, dml *InEntityFixedTable) {
+	t.Helper()
+	secCode := dml.GetSectionCode()
+	secCodes := dml.GetSectionCodes()
+	secHash := dml.GetSectionHash()
+	for i := range roundTripEntities {
+		ent := dml.BeginEntity()
+		ent.SetId(uint64(i))
+		secCode.BeginAttribute(fmt.Sprintf("c%03d", i)).
+			AddMembershipLowCardRef(uint64(i) + 1).
+			EndAttribute()
+		secCodes.BeginAttribute().
+			AddToContainer("abc").
+			AddToContainer("xyz").
+			AddToContainer("abc").
+			AddMembershipLowCardRef(7).
+			EndAttribute()
+		secHash.BeginAttribute([4]byte{byte(i), 0xff, 0, 1}).
+			AddMembershipLowCardRef(9).
+			EndAttribute()
+		require.NoError(t, ent.CheckErrors())
+		require.NoError(t, ent.CommitEntity())
+	}
+}
+
+func TestRoundTripFixedTable(t *testing.T) {
+	src := NewInEntityFixedTable(memory.DefaultAllocator, 128)
+	writeFixedTable(t, src)
+
+	raFirst := NewReadAccessFixedTable()
+	transfer(t, src.TransferRecords, raFirst.LoadFromRecord)
+
+	enc, err := NewCanonWireEncoderFixedTable(raFirst, nil)
+	require.NoError(t, err)
+	var first bytes.Buffer
+	require.NoError(t, enc.EncodeAll(&first))
+	n, err := cwruntime.VerifyCanonicalSequence(first.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, roundTripEntities, n)
+	requireCoreDetSequence(t, first.Bytes())
+
+	dst := NewInEntityFixedTable(memory.DefaultAllocator, 128)
+	dec, err := NewCanonWireDecoderFixedTable(dst, nil)
+	require.NoError(t, err)
+	decoded, err := dec.DecodeAll(first.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, roundTripEntities, decoded)
+
+	raSecond := NewReadAccessFixedTable()
+	transfer(t, dst.TransferRecords, raSecond.LoadFromRecord)
+	require.Equal(t, raFirst.GetNumberOfEntities(), raSecond.GetNumberOfEntities())
+
+	enc2, err := NewCanonWireEncoderFixedTable(raSecond, nil)
+	require.NoError(t, err)
+	var second bytes.Buffer
+	require.NoError(t, enc2.EncodeAll(&second))
+	require.Equal(t, first.Bytes(), second.Bytes())
+	require.Equal(t, fixedTableLines(raFirst), fixedTableLines(raSecond))
+}
+
+// A shorter value is zero-padded to the column's width on write (ClickHouse
+// INSERT semantics); the padding is stored content — it reads back and it
+// round-trips byte-stably.
+func TestFixedTextPadding(t *testing.T) {
+	src := NewInEntityFixedTable(memory.DefaultAllocator, 8)
+	ent := src.BeginEntity()
+	ent.SetId(1)
+	src.GetSectionCode().BeginAttribute("ab").
+		AddMembershipLowCardRef(1).
+		EndAttribute()
+	require.NoError(t, ent.CheckErrors())
+	require.NoError(t, ent.CommitEntity())
+
+	ra := NewReadAccessFixedTable()
+	transfer(t, src.TransferRecords, ra.LoadFromRecord)
+	require.Equal(t, "ab\x00\x00", ra.Code.Attributes.GetAttrValueC(0, 0))
+
+	enc, err := NewCanonWireEncoderFixedTable(ra, nil)
+	require.NoError(t, err)
+	var first bytes.Buffer
+	require.NoError(t, enc.EncodeAll(&first))
+	dst := NewInEntityFixedTable(memory.DefaultAllocator, 8)
+	dec, err := NewCanonWireDecoderFixedTable(dst, nil)
+	require.NoError(t, err)
+	_, err = dec.DecodeAll(first.Bytes())
+	require.NoError(t, err)
+	ra2 := NewReadAccessFixedTable()
+	transfer(t, dst.TransferRecords, ra2.LoadFromRecord)
+	enc2, err := NewCanonWireEncoderFixedTable(ra2, nil)
+	require.NoError(t, err)
+	var second bytes.Buffer
+	require.NoError(t, enc2.EncodeAll(&second))
+	require.Equal(t, first.Bytes(), second.Bytes())
+}
+
+// A longer value is refused through the DML error path — CheckErrors reports
+// it instead of arrow-go panicking inside the fixed-size builder.
+func TestFixedTextTooLong(t *testing.T) {
+	src := NewInEntityFixedTable(memory.DefaultAllocator, 8)
+	ent := src.BeginEntity()
+	ent.SetId(1)
+	src.GetSectionCode().BeginAttribute("abcde").
+		AddMembershipLowCardRef(1).
+		EndAttribute()
+	require.ErrorIs(t, ent.CheckErrors(), dmlrt.ErrFixedWidthExceeded)
 }

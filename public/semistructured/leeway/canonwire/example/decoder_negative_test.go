@@ -290,3 +290,26 @@ func TestJsonWithoutTaggerCollapsesAmbiguity(t *testing.T) {
 			raSecond.Bool.Attributes.GetNumberOfAttributes(idx))
 	}
 }
+
+// TestDecoderFixedTextWidthRefused: an sx column's text must be exactly the
+// declared width — the encoder reads it from a FixedSizeBinary array, so a
+// different length is a value no writer produced (ADR-0210 SD2's typed reads).
+func TestDecoderFixedTextWidthRefused(t *testing.T) {
+	item := buildEntity(t, func(w *cwruntime.CborWriter) {
+		w.ArrayHead(3)
+		w.WriteUint(cwruntime.Version)
+		w.MapHead(0)
+		w.MapHead(1)
+		w.WriteTextString(CanonWireSignatureFixedTableCode) // "sx4"
+		w.ArrayHead(1)
+		w.ArrayHead(2)
+		w.ArrayHead(1)
+		w.WriteMembership(mappingplan.MembershipChannelLowCardRef, 5, nil, nil)
+		w.WriteTextString("abc") // three bytes in a four-byte slot
+	})
+	dec, err := NewCanonWireDecoderFixedTable(NewInEntityFixedTable(memory.DefaultAllocator, 8), nil)
+	require.NoError(t, err)
+	_, err = dec.DecodeEntity(item)
+	require.ErrorIs(t, err, cwruntime.ErrOutOfRange)
+	require.ErrorContains(t, err, "fixed width")
+}
