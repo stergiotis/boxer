@@ -32,24 +32,40 @@ func expandComponent(t *testing.T, sql string) (out string) {
 	return
 }
 
-// TestComponentExpansionMatchesTheGolden pins what the MdDoc component read
-// ships (ADR-0189 M4, the sysmfacts pattern): the projection is emitted and
-// the kind's conformance filter reaches the WHERE — without it the read would
-// be a first-match rather than an exact one (ADR-0066). This is the read
-// mdedit's send-to-play launch query stands on.
+// componentKinds is every kind the store publishes, in the order the golden
+// lists them. A kind added to the store and not here is a kind the golden
+// cannot speak for — TestEveryKindIsInTheGolden says so.
+var componentKinds = []string{"MdDoc", "MdHeading", "MdCodeBlock", "MdLink", "MdEmphasis", "MdTag"}
+
+func TestEveryKindIsInTheGolden(t *testing.T) {
+	var published []string
+	for kind := range mddocfacts.MddocComponentSQL.Kinds {
+		published = append(published, kind)
+	}
+	assert.ElementsMatch(t, componentKinds, published)
+}
+
+// TestComponentExpansionMatchesTheGolden pins what each component read ships
+// (ADR-0189 M4, the sysmfacts pattern): the projection is emitted and the
+// kind's conformance filter reaches the WHERE — without it the read would be
+// a first-match rather than an exact one (ADR-0066). The MdDoc block is the
+// read mdedit's send-to-play launch query stands on; the item kinds are what
+// the markdown how-to's graph, backlink and tag queries stand on.
 func TestComponentExpansionMatchesTheGolden(t *testing.T) {
 	var sb strings.Builder
 	sb.WriteString("# The mddoc component read surface, expanded (ADR-0189).\n")
 	sb.WriteString("#\n")
-	sb.WriteString("# One authored component read and what the client-side LW_COMPONENT\n")
-	sb.WriteString("# pass ships. The WHERE is the kind's conformance filter, injected.\n")
+	sb.WriteString("# One authored component read per kind and what the client-side\n")
+	sb.WriteString("# LW_COMPONENT pass ships. The WHERE is the kind's conformance filter, injected.\n")
 	sb.WriteString("#\n")
 	sb.WriteString("# Regenerate with " + componentRegenEnvVar + "=1 go test ./public/semistructured/markdown/mddocfacts/...\n")
 
-	authored := "SELECT LW_COMPONENT('MdDoc') AS c FROM boxer.facts"
-	sb.WriteString("\n## MdDoc\n")
-	sb.WriteString("-- authored\n" + authored + "\n")
-	sb.WriteString("-- expanded\n" + expandComponent(t, authored) + "\n")
+	for _, kind := range componentKinds {
+		authored := "SELECT LW_COMPONENT('" + kind + "') AS c FROM boxer.facts"
+		sb.WriteString("\n## " + kind + "\n")
+		sb.WriteString("-- authored\n" + authored + "\n")
+		sb.WriteString("-- expanded\n" + expandComponent(t, authored) + "\n")
+	}
 	got := sb.String()
 
 	if os.Getenv(componentRegenEnvVar) != "" {
