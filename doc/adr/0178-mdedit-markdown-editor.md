@@ -658,6 +658,167 @@ Three consequences worth naming, none of which change what the pane does:
 The reparse still renumbers every node on every edit that changes the text —
 that has not changed, and it is why the key column exists at all.
 
+### 2026-09-01 — find leaves its checkbox; Enter walks the matches
+
+M3 shipped find behind a checkbox in the state row. The checkbox is gone: the
+query field is now always in the bar, with a clear button, the case toggle,
+navigation and the count readout beside it — the empty query already meant
+"not finding", so the toggle was a second way to say the same thing, and the
+field being visible is what makes find discoverable. Replace stays behind a
+toggle in the group, because its two buttons rewrite the buffer and a row of
+rewrite gestures should be asked for rather than ambient. The bar reflows
+around this: row one is document gestures and formatting, row two view state
+and readouts, and the replace row appears third when asked for.
+
+The "Enter to advance" deferral in §Alternatives is closed: its trigger — a
+key channel — arrived as [ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md)'s
+focus-scoped capture, and the query field now captures Enter alone
+(`textEdit.captureKeys`, this repo's first use of it outside the widget
+packages). Enter steps forward, Shift+Enter back — the mask matches the key
+alone and the modifier is read from the capture — and the step deliberately
+does NOT pull focus into the source, or the second Enter would type a newline
+into the document; the painted matches and the preview scroll show the
+landing. Ctrl+F stays deferred on a different trigger: the ADR-0177 key
+vocabulary has no letter keys, and a capture mask consumes the bare key, so
+capturing `F` would eat every `f` typed.
+
+### 2026-09-01 — view modes: Split, Source, Read
+
+A segmented control leads the state row: Split is M0's layout and the zero
+value, Source renders the editor alone in the central region, Read the
+preview alone. Each mode only ever SKIPS panels and lets the central region
+absorb what they released — no width math changes, because §Decision 6's
+derive-every-frame sizing means nothing retained can clamp. What a mode hides
+goes legibly with it: the formatting bar and the replace row follow the
+editor (rewriting text the reader cannot see is a trap), while the find
+query, its count and its navigation stay in Read mode — the preview scroll
+half of `gotoMatch` still works, and the colour job the hidden editor would
+consume is simply not built. The outline stays in every mode; in Source mode
+it still navigates the caret. The mode is session-scoped on purpose:
+persisting a layout preference would spend a persist key on low-value state.
+
+### 2026-09-01 — heading numbering from the outline
+
+The outline pane gained a numbering pair: Renumber inserts or refreshes
+numeric section prefixes ("## 2.1 Title") across the whole document, Clear
+removes them — the way back, since the rewrite is a rebind outside the
+editor's undo (M3's standing caveat, restated in the tooltips). The numbers
+come from `Doc.Headings()` — the same set the outline and preview render, so
+they match the tree the reader is looking at by construction: the same
+nesting rule for skipped levels, setext headings included (the source lexer
+deliberately reads those as prose), nothing inside fences. `ByteOffset`
+pointing at the heading TEXT is exactly the splice point, so no marker
+hunting. A prefix must contain a dot and end in a space ("1. ", "2.3 "), so a
+title starting with a bare year survives Clear; one starting with a decimal
+("3.14 constants") does not — the accepted edge of any textual convention,
+stated at the button. The gesture is stashed and applied at the top of the
+NEXT frame: the outline renders after the source pane, and a rebind issued
+after the editor's emit would miss the frame's databinding override. Slugs
+move with the text, so collapse state and anchors move too.
+
+### 2026-09-01 — LLM transformations
+
+mdedit gained an env-gated transform surface — a prompt picker, a bgjob-run
+one-shot completion, and a preview-then-apply result pane. The decisions live
+in [ADR-0216](./0216-mdedit-llm-transformations.md): the sibling package
+owning the LLM dependency, the embedded prompt-book format, the endpoint
+gate, and why apply refuses a buffer that moved. On this ADR's side of the
+line: the result pane is a bottom panel declared before the side panels, both
+for full width and so an Apply's rebind precedes the editor's emit in the
+same frame; and the clipboard export machinery grew a non-checkpointing
+variant, because copying a transformation result is not exporting the
+document and must not clear the dirty badge.
+
+### 2026-09-02 — the bar names the file
+
+Contract 7's "the app is never told which file it has" is revised at its
+recorded seam: the Powerbox now widens `DialogReply` with the file's
+BASENAME ([ADR-0026](./0026-app-runtime-and-capability-subjects.md) Update
+2026-09-02), taken as a deliberate broker decision rather than on an app's
+way past. The bar's "file bound" badge becomes the save target's name, an
+opened-but-unbound document shows the name it was opened from, and the
+statuses say "opened notes.md" / "saved out.md". Still true: the path stays
+inside the broker (no directory, no location); a silent save through the
+kept handle learns no name and must not clobber the one its dialog gave; and
+the names are not persisted — like the handles they describe, they die with
+the window. The suggested-filename derivation is unchanged, and the reason
+it was never echoed back still stands — the difference is that the badge now
+carries the broker's truth instead of nothing.
+
+### 2026-09-02 — the buffer follows the file on disk
+
+While an opened document is UNMODIFIED, the buffer follows the file: an
+external write reloads it (a checkpoint move, not an edit), so mdedit reads
+well beside a pipeline or another editor. The moment the buffer holds
+unsaved edits the follow goes passive — a "changed on disk" badge, never a
+reload — and a deleted or renamed-away file is a "gone on disk" badge with
+the buffer untouched. Save as gives it a new home.
+
+The mechanics revise two of M4's economies. The read handle is now KEPT
+instead of closed after the read: it is what the file is followed through —
+the broker watches the file for it (the read-handle watch seam, ADR-0026
+Update 2026-09-02) and re-reads ride it; if the follow cannot start, the
+close-immediately economy returns. And the app-side flow is the capdemo
+ordering plus three rules of its own: the event handler only files mu-guarded
+flags (the pump's publishes are synchronous — blocking it stalls the broker);
+a ~250 ms debounce coalesces the burst a save is made of into one re-read,
+single-flighted beside — not inside — the file-gesture slot, so Open and
+Save stay usable during a reload; and disk-equals-checkpoint is read as "not
+a foreign change", which is what keeps the app's own save from reloading
+itself (an identical external write is indistinguishable and equally
+harmless). One sequencing rule is load-bearing: uuids are stable per
+(app, path, op), so re-opening the SAME file mints the same uuid — the old
+handle's teardown runs ahead of the new dialog in the open goroutine, and
+Unmount tears down synchronously (bounded) because the host closing the bus
+client silences no broker-side pump.
+
+One host constraint surfaced here: repaint is reactive, so a disk change
+arriving with no input would sit unseen. While — and only while — a follow
+is active, the frame keeps a low-rate `RequestRepaintAfter` tick alive; the
+tick lives in the render body rather than the drain so the whole follow
+state machine stays drivable from plain tests. Deferred: a follow on/off
+toggle (always-on until someone asks), and re-arming a stale "changed on
+disk" badge when hand-reverting edits makes the buffer clean again without a
+new disk event.
+
+### 2026-09-02 — the files pane: load from lading snapshots
+
+A toggleable side pane browses the lading snapshot store (ADR-0198) through
+the fsbrowser widget — this app is its third host after tally and play
+(ADR-0200) — and activating a file loads it into the buffer. The source is a
+pinned snapshot, so the contract differs from Open at every point a reader
+could confuse them, and each is stated where it shows: the loaded document is
+NOT file-bound (Save as gives it a home), there is no follow (a snapshot
+cannot change), and the badge names `mount:path @ latest` under a tooltip
+stating the snapshot contract rather than the Powerbox one. The load rides
+the same two-click dirty guard as Open — the arming is factored into a
+shared `confirmReplace` — and a size gate refuses rather than truncates.
+
+Plumbing is deliberately tally's, copied rather than shared: `storeConn` and
+the `lane` are app-local there by ADR-0200's own design, and the trim is
+real (mounts and files, never audits or sizes). The connection is lazy and
+its failure is a hint inside the pane; listings read on the render thread
+through `ladingview.Locked` (the batch-shaped trade ADR-0198 records);
+loads leave the frame on a lane and LAND in the render body's drain, before
+the source pane — the same emit-ordering rule every buffer rebind here obeys.
+The send-to-play pipeline keeps its own one-shot connection rather than
+sharing this one: a generated store is single-goroutine, and sharing the
+executor across the send goroutine and this pane's reads would cross that
+line unguarded for the price of one HTTP connect. Ships latest-snapshot-only;
+a snapshot picker is deferred — snapshot archaeology is tally's job.
+
+### 2026-09-02 — send to play
+
+A "Send to play" button persists the document as a `boxer.facts` row and
+opens the playground on a query that reads it back, rendered as markdown in
+play's Detail pane. The decisions — the mddoc vocabulary and kind, the
+neutral package pair, the launch-query handover and its identity rules —
+live in [ADR-0217](./0217-mdedit-send-to-play-mddoc-facts.md). On this ADR's
+side of the line: the manifest grows one cap (Pub on `windowhost.open`, the
+cap-list test updated), the pipeline is one goroutine draining into the
+status line like every other gesture here, and mdedit gains its first — and
+indirect — ClickHouse dependency, entirely inside that goroutine.
+
 ## References
 
 - [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline

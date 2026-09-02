@@ -69,18 +69,24 @@ const (
 	outlineFallbackPaneH = float32(360)
 )
 
-// Hover help for the two outline-wide controls, stated at the button rather
+// Hover help for the outline-wide controls, stated at the button rather
 // than in a block of prose.
 const (
 	tipOutlineExpandAll   = "Open every section."
 	tipOutlineCollapseAll = "Close every section, leaving the top-level headings. Collapsing is per section and lasts as long as the window."
+
+	tipOutlineRenumber = "Insert or refresh numeric section prefixes on every heading (\"2.1 Title\"), numbered by this outline's own nesting. Rewrites heading text from outside the editor — not an edit its undo describes — and heading slugs and anchors move with it. Clear numbers is the way back."
+
+	tipOutlineStripNumbers = "Remove the numeric section prefixes Renumber inserts. A heading title that itself starts with a dotted number (\"3.14 constants\") loses it too."
 )
 
 // The outline's own bar buttons, built once — identical retained bytes across
 // frames intern to one blob.
 var (
-	atomsOutlineExpand   = c.Atoms().Text(icons.PhArrowsOutSimple).Keep()
-	atomsOutlineCollapse = c.Atoms().Text(icons.PhArrowsInSimple).Keep()
+	atomsOutlineExpand       = c.Atoms().Text(icons.PhArrowsOutSimple).Keep()
+	atomsOutlineCollapse     = c.Atoms().Text(icons.PhArrowsInSimple).Keep()
+	atomsOutlineRenumber     = c.Atoms().Text(icons.PhListNumbers).Keep()
+	atomsOutlineStripNumbers = c.Atoms().Text(icons.PhEraser).Keep()
 )
 
 // The count chip's colours, from the design-system roles rather than literals
@@ -478,12 +484,15 @@ func (inst *App) buildOutline() {
 	inst.outlineState.Bind(inst.outline.tree())
 }
 
-// renderOutlineControls draws the expand/collapse-all pair.
+// renderOutlineControls draws the expand/collapse-all pair and the numbering
+// pair.
 //
-// They exist because collapsing does: reopening a document folded down to its
-// top level is one click per section otherwise, and there is no keyboard route
-// to the outline to do it with (ADR-0177's focus-scoped keys are not wired to
-// this pane).
+// Expand and collapse exist because collapsing does: reopening a document
+// folded down to its top level is one click per section otherwise, and there
+// is no keyboard route to the outline to do it with (ADR-0177's focus-scoped
+// keys are not wired to this pane). The numbering pair lives here because the
+// numbers it writes are this pane's own nesting made visible — with the
+// accepted cost that the command is unreachable while the outline is hidden.
 func (inst *App) renderOutlineControls() {
 	for range c.Horizontal().KeepIter() {
 		expand, collapse := false, false
@@ -500,6 +509,29 @@ func (inst *App) renderOutlineControls() {
 			inst.outlineState.ExpandAll()
 		case collapse:
 			inst.outlineCollapseAll()
+		}
+
+		// Numbering rewrites the buffer, so the click is stashed rather than
+		// applied: this pane renders after the source pane, and a rebind here
+		// would miss the frame's databinding override (mdedit_number.go).
+		// Only when the editor renders — the gesture edits, and read mode
+		// suppresses edits.
+		if inst.editorVisible() {
+			renumber, strip := false, false
+			for range c.HoverText(tipOutlineRenumber).KeepIter() {
+				renumber = c.Button(inst.ids.PrepareStr("ol-renumber"), atomsOutlineRenumber).
+					Small().SendResp().HasPrimaryClicked()
+			}
+			for range c.HoverText(tipOutlineStripNumbers).KeepIter() {
+				strip = c.Button(inst.ids.PrepareStr("ol-numbers-clear"), atomsOutlineStripNumbers).
+					Small().SendResp().HasPrimaryClicked()
+			}
+			switch {
+			case renumber:
+				inst.numberAction = numberActRenumber
+			case strip:
+				inst.numberAction = numberActStrip
+			}
 		}
 	}
 }

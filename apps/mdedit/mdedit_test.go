@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 )
@@ -294,6 +295,7 @@ func TestDrainAsync_ExportCheckpointsWhatLanded(t *testing.T) {
 	inst := &App{src: "hello world", saved: ""}
 	inst.exportDone = true
 	inst.exportedText = "hello"
+	inst.exportCheckpoint = true
 
 	inst.drainAsync()
 
@@ -308,6 +310,29 @@ func TestDrainAsync_ExportCheckpointsWhatLanded(t *testing.T) {
 	}
 	if inst.exportDone {
 		t.Error("the completion must be consumed, or it reapplies every frame")
+	}
+}
+
+// TestDrainAsync_ResultCopyDoesNotCheckpoint is the other half of the
+// exportCheckpoint flag: copying a transformation RESULT rides the same
+// clipboard machinery but never was the buffer, so it must not clear the
+// dirty badge.
+func TestDrainAsync_ResultCopyDoesNotCheckpoint(t *testing.T) {
+	inst := &App{src: "the document", saved: ""}
+	inst.exportDone = true
+	inst.exportedText = "an llm result"
+	inst.exportCheckpoint = false
+
+	inst.drainAsync()
+
+	if inst.saved != "" {
+		t.Errorf("a result copy must not checkpoint: got %q", inst.saved)
+	}
+	if !inst.dirty() {
+		t.Error("the document stays modified")
+	}
+	if inst.status != "copied to clipboard" {
+		t.Errorf("status: got %q", inst.status)
 	}
 }
 
@@ -452,7 +477,6 @@ func TestEnsureLex_CachesUntilTheTextChanges(t *testing.T) {
 // about the document changed.
 func TestEnsureHighlight_RebuildsWhenTheMatchSetMoves(t *testing.T) {
 	inst := &App{src: "alpha beta alpha beta alpha\n"}
-	inst.find.show = true
 	inst.find.query = "beta"
 	inst.refreshDerived()
 
@@ -467,14 +491,14 @@ func TestEnsureHighlight_RebuildsWhenTheMatchSetMoves(t *testing.T) {
 
 	// Stepping to the other match moves the key, because which match is
 	// current decides which one is painted in the warmer tone.
-	inst.gotoMatch(1)
+	inst.gotoMatch(1, true)
 	inst.refreshDerived()
 	assert.NotEqual(t, first, inst.hlKey)
 
-	// Closing the bar drops the overlay entirely.
-	inst.find.show = false
+	// Clearing the query drops the overlay entirely.
+	inst.find.query = ""
 	inst.refreshDerived()
-	assert.False(t, inst.hlStyledOk, "a closed find bar paints nothing")
+	assert.False(t, inst.hlStyledOk, "a cleared query paints nothing")
 	assert.True(t, inst.hlJobOk, "the colours stay — only the overlay goes")
 }
 
@@ -670,16 +694,17 @@ func TestManifestRegisters(t *testing.T) {
 	assert.Equal(t, app.SurfaceWindowed, got.Surface)
 }
 
-// TestManifestDeclaresExactlyTheThreeBrokerSubjects pins the app's standing
-// authority. It was one subject through M3 and is three from M4, and the list
-// is asserted exactly rather than by presence: a cap the app never exercises
-// is the §SD10 gate's other failure mode, so growth has to be deliberate
-// enough to edit a test for.
-func TestManifestDeclaresExactlyTheThreeBrokerSubjects(t *testing.T) {
+// TestManifestDeclaresExactlyTheFourSubjects pins the app's standing
+// authority. One subject through M3, three from M4, four with send-to-play —
+// and the list is asserted exactly rather than by presence: a cap the app
+// never exercises is the §SD10 gate's other failure mode, so growth has to be
+// deliberate enough to edit a test for.
+func TestManifestDeclaresExactlyTheFourSubjects(t *testing.T) {
 	want := []string{
 		clipboardbroker.SubjectWrite,
 		fsbroker.SubjectDialogRead,
 		fsbroker.SubjectDialogWrite,
+		windowhost.OpenSubject,
 	}
 	got := make([]string, 0, len(manifest.Caps))
 	for _, c := range manifest.Caps {
@@ -723,4 +748,46 @@ func TestDrainAsync_NothingPendingIsANoop(t *testing.T) {
 	if inst.dirty() {
 		t.Error("an idle drain must not disturb the checkpoint")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// View modes
+// ---------------------------------------------------------------------------
+
+// TestViewModeVisibility is the truth table everything mode-gated hangs off:
+// the format bar and replace row follow editorVisible, the preview and its
+// scroll follow previewVisible, and split is the zero value so a fresh window
+// opens editing.
+func TestViewModeVisibility(t *testing.T) {
+	cases := []struct {
+		mode    viewModeE
+		editor  bool
+		preview bool
+	}{
+		{viewSplit, true, true},
+		{viewSource, true, false},
+		{viewRead, false, true},
+	}
+	for _, tc := range cases {
+		inst := &App{viewMode: tc.mode}
+		assert.Equal(t, tc.editor, inst.editorVisible(), "editorVisible in mode %d", tc.mode)
+		assert.Equal(t, tc.preview, inst.previewVisible(), "previewVisible in mode %d", tc.mode)
+	}
+	assert.Equal(t, viewSplit, (&App{}).viewMode, "a fresh window opens in the split")
+}
+
+// TestViewModeRead_SkipsTheColourJob pins the refreshDerived gate: with the
+// editor hidden its colour job has no consumer, and the first frame back must
+// rebuild rather than trust a job built against an older buffer.
+func TestViewModeRead_SkipsTheColourJob(t *testing.T) {
+	inst := &App{src: "alpha beta\n", viewMode: viewRead}
+	inst.find.query = "beta"
+	inst.refreshDerived()
+	assert.False(t, inst.hlKeyOk, "read mode must not build the editor's colour job")
+	require.Len(t, inst.find.matches, 1, "matching still runs — the count readout needs it")
+
+	inst.viewMode = viewSplit
+	inst.refreshDerived()
+	assert.True(t, inst.hlJobOk, "the first frame back rebuilds the job")
+	assert.True(t, inst.hlStyledOk, "and the match overlay with it")
 }

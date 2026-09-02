@@ -109,11 +109,10 @@ func mdTourInit(ids *c.WidgetIdStack) (state any) {
 	// the title. Focus is not requested: the scene wants the caret placed, not
 	// the editor made the focused widget.
 	inst.requestCaret(0, 0, false)
-	// …and an open find bar with a query that hits twice, so the capture
-	// carries M3's two tones — the current match and the rest — and would show
-	// a regression in the colour-section split as a background bleeding across
-	// the prose around a match.
-	inst.find.show = true
+	// …and a find query that hits twice, so the capture carries M3's two tones
+	// — the current match and the rest — and would show a regression in the
+	// colour-section split as a background bleeding across the prose around a
+	// match. The query alone is the whole gesture: find has no on/off.
 	inst.find.query = tourQuery
 	return inst
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
 // manifest is the per-process AppI descriptor. Static; every newApp() returns
@@ -65,6 +66,11 @@ var manifest = app.Manifest{
 			Pattern:   fsbroker.SubjectDialogWrite,
 			Direction: app.CapDirectionPub,
 			Reason:    "mdedit: Save — raise the save picker; later saves reuse the granted handle",
+		},
+		{
+			Pattern:   windowhost.OpenSubject,
+			Direction: app.CapDirectionPub,
+			Reason:    "mdedit: Send to play — open the playground on the document persisted as a boxer.facts row",
 		},
 	},
 	PersistedKeys: []string{docKey},
