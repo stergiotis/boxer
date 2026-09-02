@@ -788,3 +788,296 @@ func TestPropertyJsonContentSensitivity(t *testing.T) {
 			hex.EncodeToString(encodeJsonBatch(rt, mutated, identityOrder)))
 	})
 }
+
+// ------------------------------------------------------------- channel_table
+
+// The channel table covers the five membership channels the other property
+// tables leave out: the mixed ref carrier, both high-card single carriers and
+// both per-row-blob parametrized carriers (SD4 "all eight cells", jointly
+// with the tables above).
+
+type chPair struct {
+	params []byte
+	ref    uint64
+}
+
+type chMrefAttr struct {
+	membs []chPair
+	v     uint64
+}
+type chHrefAttr struct {
+	refs []uint64
+	v    int64
+}
+type chHverbAttr struct {
+	verbs [][]byte
+	v     string
+}
+type chLparamAttr struct {
+	blobs [][]byte
+	v     []byte
+}
+type chHparamAttr struct {
+	blobs [][]byte
+	v     float64
+}
+
+type chEntity struct {
+	mref   []chMrefAttr
+	href   []chHrefAttr
+	hverb  []chHverbAttr
+	lparam []chLparamAttr
+	hparam []chHparamAttr
+	id     uint64
+}
+
+func drawChannelBatch(rt *rapid.T) (ents []chEntity) {
+	n := rapid.IntRange(1, 6).Draw(rt, "entities")
+	ents = make([]chEntity, 0, n)
+	count := func(label string) int { return rapid.IntRange(0, 3).Draw(rt, label) }
+	for range n {
+		e := chEntity{id: drawU64(rt, "id")}
+		for range count("mrefCount") {
+			a := chMrefAttr{v: drawU64(rt, "mrefV")}
+			for range count("mrefMembs") {
+				a.membs = append(a.membs, chPair{ref: drawU64(rt, "mrefRef"), params: drawBytes(rt, "mrefParams")})
+			}
+			e.mref = append(e.mref, a)
+		}
+		for range count("hrefCount") {
+			a := chHrefAttr{v: rapid.SampledFrom(propI64).Draw(rt, "hrefV")}
+			for range count("hrefMembs") {
+				a.refs = append(a.refs, drawU64(rt, "hrefRef"))
+			}
+			e.href = append(e.href, a)
+		}
+		for range count("hverbCount") {
+			a := chHverbAttr{v: drawString(rt, "hverbV")}
+			for range count("hverbMembs") {
+				a.verbs = append(a.verbs, drawBytes(rt, "hverbVerb"))
+			}
+			e.hverb = append(e.hverb, a)
+		}
+		for range count("lparamCount") {
+			a := chLparamAttr{v: drawBytes(rt, "lparamV")}
+			for range count("lparamMembs") {
+				a.blobs = append(a.blobs, drawBytes(rt, "lparamBlob"))
+			}
+			e.lparam = append(e.lparam, a)
+		}
+		for range count("hparamCount") {
+			a := chHparamAttr{v: rapid.SampledFrom(propF64).Draw(rt, "hparamV")}
+			for range count("hparamMembs") {
+				a.blobs = append(a.blobs, drawBytes(rt, "hparamBlob"))
+			}
+			e.hparam = append(e.hparam, a)
+		}
+		ents = append(ents, e)
+	}
+	return
+}
+
+func encodeChannelBatch(t require.TestingT, ents []chEntity, sh shuffle) (raw []byte) {
+	dml := NewInEntityChannelTable(memory.DefaultAllocator, 128)
+	secMref := dml.GetSectionMref()
+	secHref := dml.GetSectionHref()
+	secHverb := dml.GetSectionHverb()
+	secLparam := dml.GetSectionLparam()
+	secHparam := dml.GetSectionHparam()
+	for i := range ents {
+		e := &ents[i]
+		ent := dml.BeginEntity()
+		ent.SetId(e.id)
+		for _, a := range sh(len(e.mref)) {
+			x := &e.mref[a]
+			at := secMref.BeginAttribute(x.v)
+			for _, k := range sh(len(x.membs)) {
+				at.AddMembershipMixedLowCardRefP(x.membs[k].ref, x.membs[k].params)
+			}
+			at.EndAttributeP()
+		}
+		for _, a := range sh(len(e.href)) {
+			x := &e.href[a]
+			at := secHref.BeginAttribute(x.v)
+			for _, k := range sh(len(x.refs)) {
+				at.AddMembershipHighCardRefP(x.refs[k])
+			}
+			at.EndAttributeP()
+		}
+		for _, a := range sh(len(e.hverb)) {
+			x := &e.hverb[a]
+			at := secHverb.BeginAttribute(x.v)
+			for _, k := range sh(len(x.verbs)) {
+				at.AddMembershipHighCardVerbatimP(x.verbs[k])
+			}
+			at.EndAttributeP()
+		}
+		for _, a := range sh(len(e.lparam)) {
+			x := &e.lparam[a]
+			at := secLparam.BeginAttribute(x.v)
+			for _, k := range sh(len(x.blobs)) {
+				at.AddMembershipLowCardRefParametrizedP(x.blobs[k])
+			}
+			at.EndAttributeP()
+		}
+		for _, a := range sh(len(e.hparam)) {
+			x := &e.hparam[a]
+			at := secHparam.BeginAttribute(x.v)
+			for _, k := range sh(len(x.blobs)) {
+				at.AddMembershipHighCardRefParametrizedP(x.blobs[k])
+			}
+			at.EndAttributeP()
+		}
+		require.NoError(t, ent.CheckErrors())
+		require.NoError(t, ent.CommitEntity())
+	}
+	ra := NewReadAccessChannelTable()
+	loadBatch(t, dml.TransferRecords, ra.LoadFromRecord)
+	enc, err := NewCanonWireEncoderChannelTable(ra, nil)
+	require.NoError(t, err)
+	var buf bytes.Buffer
+	require.NoError(t, enc.EncodeAll(&buf))
+	return buf.Bytes()
+}
+
+func cloneChannelBatch(ents []chEntity) (out []chEntity) {
+	out = make([]chEntity, len(ents))
+	for i := range ents {
+		e := ents[i]
+		e.mref = make([]chMrefAttr, len(ents[i].mref))
+		for j := range ents[i].mref {
+			a := ents[i].mref[j]
+			a.membs = append([]chPair(nil), a.membs...)
+			e.mref[j] = a
+		}
+		e.href = make([]chHrefAttr, len(ents[i].href))
+		for j := range ents[i].href {
+			a := ents[i].href[j]
+			a.refs = append([]uint64(nil), a.refs...)
+			e.href[j] = a
+		}
+		e.hverb = make([]chHverbAttr, len(ents[i].hverb))
+		for j := range ents[i].hverb {
+			a := ents[i].hverb[j]
+			a.verbs = append([][]byte(nil), a.verbs...)
+			e.hverb[j] = a
+		}
+		e.lparam = make([]chLparamAttr, len(ents[i].lparam))
+		for j := range ents[i].lparam {
+			a := ents[i].lparam[j]
+			a.blobs = append([][]byte(nil), a.blobs...)
+			e.lparam[j] = a
+		}
+		e.hparam = make([]chHparamAttr, len(ents[i].hparam))
+		for j := range ents[i].hparam {
+			a := ents[i].hparam[j]
+			a.blobs = append([][]byte(nil), a.blobs...)
+			e.hparam[j] = a
+		}
+		out[i] = e
+	}
+	return
+}
+
+func TestPropertyChannelTableRoundTrip(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		ents := drawChannelBatch(rt)
+		first := encodeChannelBatch(rt, ents, identityOrder)
+		n, err := cwruntime.VerifyCanonicalSequence(first)
+		require.NoError(rt, err)
+		require.Equal(rt, len(ents), n)
+
+		dst := NewInEntityChannelTable(memory.DefaultAllocator, 128)
+		dec, err := NewCanonWireDecoderChannelTable(dst, nil)
+		require.NoError(rt, err)
+		decoded, err := dec.DecodeAll(first)
+		require.NoError(rt, err)
+		require.Equal(rt, len(ents), decoded)
+
+		ra := NewReadAccessChannelTable()
+		loadBatch(rt, dst.TransferRecords, ra.LoadFromRecord)
+		enc, err := NewCanonWireEncoderChannelTable(ra, nil)
+		require.NoError(rt, err)
+		var second bytes.Buffer
+		require.NoError(rt, enc.EncodeAll(&second))
+		require.Equal(rt, hex.EncodeToString(first), hex.EncodeToString(second.Bytes()))
+	})
+}
+
+func TestPropertyChannelTablePermutationInvariance(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		ents := drawChannelBatch(rt)
+		a := encodeChannelBatch(rt, ents, shuffleFromSeed(rapid.Uint64().Draw(rt, "seedA")))
+		b := encodeChannelBatch(rt, ents, shuffleFromSeed(rapid.Uint64().Draw(rt, "seedB")))
+		require.Equal(rt, hex.EncodeToString(a), hex.EncodeToString(b))
+	})
+}
+
+func TestPropertyChannelTableContentSensitivity(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		ents := drawChannelBatch(rt)
+		type site func(out []chEntity)
+		sites := make([]site, 0, 8)
+		for i := range ents {
+			for j := range ents[i].mref {
+				sites = append(sites, func(out []chEntity) { out[i].mref[j].v ^= 1 })
+				for k := range ents[i].mref[j].membs {
+					sites = append(sites, func(out []chEntity) { out[i].mref[j].membs[k].ref ^= 1 })
+					sites = append(sites, func(out []chEntity) {
+						m := &out[i].mref[j].membs[k]
+						m.params = append(append([]byte(nil), m.params...), 0x7f)
+					})
+				}
+			}
+			for j := range ents[i].href {
+				sites = append(sites, func(out []chEntity) { out[i].href[j].v ^= 1 })
+				for k := range ents[i].href[j].refs {
+					sites = append(sites, func(out []chEntity) { out[i].href[j].refs[k] ^= 1 })
+				}
+			}
+			for j := range ents[i].hverb {
+				sites = append(sites, func(out []chEntity) { out[i].hverb[j].v += "!" })
+				for k := range ents[i].hverb[j].verbs {
+					sites = append(sites, func(out []chEntity) {
+						out[i].hverb[j].verbs[k] = append(append([]byte(nil), out[i].hverb[j].verbs[k]...), 0x7f)
+					})
+				}
+			}
+			for j := range ents[i].lparam {
+				sites = append(sites, func(out []chEntity) {
+					out[i].lparam[j].v = append(append([]byte(nil), out[i].lparam[j].v...), 0x7f)
+				})
+				for k := range ents[i].lparam[j].blobs {
+					sites = append(sites, func(out []chEntity) {
+						out[i].lparam[j].blobs[k] = append(append([]byte(nil), out[i].lparam[j].blobs[k]...), 0x7f)
+					})
+				}
+			}
+			for j := range ents[i].hparam {
+				sites = append(sites, func(out []chEntity) {
+					v := out[i].hparam[j].v
+					for _, c := range propF64 {
+						if math.Float64bits(c) != math.Float64bits(v) {
+							out[i].hparam[j].v = c
+							return
+						}
+					}
+				})
+				for k := range ents[i].hparam[j].blobs {
+					sites = append(sites, func(out []chEntity) {
+						out[i].hparam[j].blobs[k] = append(append([]byte(nil), out[i].hparam[j].blobs[k]...), 0x7f)
+					})
+				}
+			}
+		}
+		if len(sites) == 0 {
+			rt.Skip("the drawn batch carries no attribute to mutate")
+		}
+		pick := rapid.IntRange(0, len(sites)-1).Draw(rt, "site")
+		mutated := cloneChannelBatch(ents)
+		sites[pick](mutated)
+		require.NotEqual(rt,
+			hex.EncodeToString(encodeChannelBatch(rt, ents, identityOrder)),
+			hex.EncodeToString(encodeChannelBatch(rt, mutated, identityOrder)))
+	})
+}

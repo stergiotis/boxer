@@ -445,6 +445,48 @@ Accepted 2026-08-28.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-09-02 — the table-free checker validates value interiors; the writers refuse more
+
+Findings of an adversarial review, closed without moving any canonical byte
+(the goldens pin that):
+
+- **`VerifyCanonical` checked less than every typed decoder refuses.** It
+  validated heads and orderings but skipped value interiors, so bytes could
+  pass `leeway canonwire verify` and still be refused by every generated
+  decoder — a "verified" store that does not decode. It now descends: a
+  temporal or network tag is decoded typed (map shape and key order,
+  nanoseconds in range, masked prefix with trailing zero bytes omitted), text
+  must be UTF-8, a simple value must be one of the two bools (or `null` as a
+  whole value), a tag must be one of 258/1001/52/54, and a map is no value
+  form of the wire at all.
+- **The shared CBOR writer refuses text that is not well-formed UTF-8**
+  (RFC 8949 §2), restoring writer/reader symmetry — the strict reader always
+  refused it. Recorded with rationale in ADR-0201's update of the same date,
+  since the writer is shared.
+- **The runtime writer and reader enforce more of SD3/SD5 at their seams.**
+  `SlotWriter.Add` refuses an attribute whose shape differs from its slot's
+  first (a discriminator where the others carry none, another
+  membership-group count), so trusted generated code can no longer assemble
+  an item `VerifyCanonical` rejects. `AttributeReader` verifies by position
+  that the caller consumed exactly the slot's values: a discriminator read
+  before the values, or an `End` with values unread, is an error at the
+  attribute instead of a misparse downstream.
+- **A limit is stated that SD3/SD5 imply but the Negatives did not spell
+  out:** in a co-section group whose member sections carry the *same* CT
+  group, the wire tells the sections apart by declaration order only, and no
+  tagger/dispatcher hook exists at that level — a target table declaring them
+  in another order receives their contents swapped, silently. This is the
+  intra-slot analogue of the QOC's C3 trade and of the name-only-sections
+  negative. `leeway canonwire table slots` now reports such slots
+  (`EqualGroupCoSections`), so the coupling is visible at design time.
+- **The generated `CanonWirePlainGroup*` constants are gone.** Their comments
+  promised a decoder-construction equality check that SD2 explicitly decided
+  against ("there is no construction-time comparison"); nothing ever read
+  them. The actual guard — item type, column count, per-value typed reads —
+  is unchanged.
+
 ## References
 
 - [ADR-0201](./0201-leeway-canonical-record-form.md) — the quotient form this

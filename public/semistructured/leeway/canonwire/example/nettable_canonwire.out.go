@@ -26,7 +26,7 @@ var (
 ///////////////////////////////////////////////////////////////////
 // code generator
 // canonwire.(*GoClassBuilder).ComposeCodec
-// ./public/semistructured/leeway/canonwire/lw_cw_generator.go:210
+// ./public/semistructured/leeway/canonwire/lw_cw_generator.go:209
 
 // The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
@@ -35,17 +35,6 @@ var (
 
 // CanonWireSignatureNetTableNet keys the slot of section net.
 const CanonWireSignatureNetTableNet = "v-vc-w-wc"
-
-// The plain sections' CT groups. A plain section is keyed on the wire by its
-// item type, which is fixed leeway vocabulary (ADR-0210 SD2, fork 1); its group
-// is emitted so a decoder can check the two tables agree on the types before it
-// reads a single entity.
-
-// CanonWirePlainGroupNetTableEntityId is the entity-id plain section's CT group.
-const CanonWirePlainGroupNetTableEntityId = "u64"
-
-// CanonWirePlainGroupNetTableEntityTimestamp is the entity-timestamp plain section's CT group.
-const CanonWirePlainGroupNetTableEntityTimestamp = "z32"
 
 // CanonWireSlotNetTableE names the table's tagged slots.
 //

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
@@ -35,18 +34,6 @@ func composeCanonWireSlotSuffix(slotOrdinal int, sectionNames []naming.StylableN
 	if suffix == "" {
 		suffix = fmt.Sprintf("Slot%02d", slotOrdinal)
 	}
-	return
-}
-
-// composeCanonWirePlainSuffix names a plain section by its item type, which is
-// fixed leeway vocabulary rather than a table-authored name (ADR-0210 SD2).
-func composeCanonWirePlainSuffix(itemType common.PlainItemTypeE) (suffix string, err error) {
-	name := naming.MustBeValidStylableName(itemType.String())
-	if !name.IsValid() {
-		err = eb.Build().Stringer("plainItemType", itemType).Errorf("plain item type has no usable name")
-		return
-	}
-	suffix = name.Convert(naming.UpperCamelCase).String()
 	return
 }
 
@@ -91,14 +78,6 @@ func (inst *DefaultGoClassNamer) ComposeCanonWireSignatureConstName(tableName na
 		return
 	}
 	return "CanonWireSignature" + suffix, nil
-}
-
-func (inst *DefaultGoClassNamer) ComposeCanonWirePlainGroupConstName(tableName naming.StylableName, itemType common.PlainItemTypeE) (constName string, err error) {
-	suffix, err := composeCanonWirePlainSuffix(itemType)
-	if err != nil {
-		return
-	}
-	return "CanonWirePlainGroup" + suffix, nil
 }
 
 func (inst *MultiTablePerPackageClassNamer) ComposeCanonWireEncoderClassName(tableName naming.StylableName) (className string, err error) {
@@ -156,15 +135,4 @@ func (inst *MultiTablePerPackageClassNamer) ComposeCanonWireSignatureConstName(t
 		return
 	}
 	return "CanonWireSignature" + tableName.Convert(naming.UpperCamelCase).String() + suffix, nil
-}
-
-func (inst *MultiTablePerPackageClassNamer) ComposeCanonWirePlainGroupConstName(tableName naming.StylableName, itemType common.PlainItemTypeE) (constName string, err error) {
-	if err = checkTableName(tableName); err != nil {
-		return
-	}
-	suffix, err := composeCanonWirePlainSuffix(itemType)
-	if err != nil {
-		return
-	}
-	return "CanonWirePlainGroup" + tableName.Convert(naming.UpperCamelCase).String() + suffix, nil
 }

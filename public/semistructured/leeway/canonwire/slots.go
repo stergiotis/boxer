@@ -54,8 +54,10 @@ type Slot struct {
 // ItemType, not by Group (ADR-0210 SD2, fork 1).
 type PlainSlot struct {
 	ItemType common.PlainItemTypeE
-	// Group is the plain section's CT group, for the decoder-construction
-	// equality check; it is not on the wire.
+	// Group is the plain section's CT group. It is not on the wire and no
+	// construction-time comparison reads it (SD2: the decoder's typed reads
+	// catch a width mismatch value by value); it keys the stable column
+	// order and feeds the `table slots` report.
 	Group string
 	// ColumnOrder maps a key position to an index into Names / ColumnTypes.
 	ColumnOrder []int

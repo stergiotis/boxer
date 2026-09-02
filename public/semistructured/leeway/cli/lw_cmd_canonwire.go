@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config"
@@ -205,8 +206,9 @@ type canonWireSlotReport struct {
 }
 
 // canonWirePlainReport is one plain slot. It is keyed on the wire by its item
-// type (ADR-0210 §SD2, fork 1); the group is carried for the decoder's
-// construction-time equality check and never travels.
+// type (ADR-0210 §SD2, fork 1); the group never travels and no
+// construction-time comparison reads it — it is reported here so tooling can
+// compare two tables' plain shapes by eye.
 type canonWirePlainReport struct {
 	ItemType string
 	Group    string
@@ -222,6 +224,13 @@ type canonWireSlotsReport struct {
 	// DispatcherI, so this list is the answer to "does this table need a
 	// dispatch plugin".
 	Ambiguous []string
+	// EqualGroupCoSections are the co-section slots in which two or more
+	// member sections carry the same CT group. Inside such a slot the wire
+	// tells the equal-group sections apart by declaration order only, with no
+	// tagger/dispatcher hook: a target table declaring them in another order
+	// receives their contents swapped, silently (ADR-0210 §Negatives). Each
+	// entry is `signature: section, section`.
+	EqualGroupCoSections []string
 }
 
 // canonWireSlots reduces a CBOR table description to its wire slots.
@@ -267,6 +276,27 @@ func canonWireSlots(r io.Reader, tableName string) (rep canonWireSlotsReport, er
 		})
 	}
 	rep.Ambiguous = tbl.Ambiguous()
+	for i := range tbl.Slots {
+		slot := &tbl.Slots[i]
+		if len(slot.Sections) < 2 {
+			continue
+		}
+		byGroup := make(map[string][]string, len(slot.Sections))
+		for _, sec := range slot.Sections {
+			byGroup[sec.Group] = append(byGroup[sec.Group], string(sec.Name))
+		}
+		var names []string
+		for _, sameGroup := range byGroup {
+			if len(sameGroup) > 1 {
+				names = append(names, sameGroup...)
+			}
+		}
+		if names != nil {
+			slices.Sort(names)
+			rep.EqualGroupCoSections = append(rep.EqualGroupCoSections, slot.Signature+": "+strings.Join(names, ", "))
+		}
+	}
+	slices.Sort(rep.EqualGroupCoSections)
 	return
 }
 
