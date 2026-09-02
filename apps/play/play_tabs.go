@@ -7,7 +7,6 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/config/env"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -126,7 +125,7 @@ func (inst *TabRegistry) validate(spec TabSpec, replaceIdx int) (err error) {
 			return
 		}
 		if inst.specs[i].DockID == spec.DockID {
-			err = eh.Errorf("tab %q: DockID %d already taken by %q", spec.ID, spec.DockID, inst.specs[i].ID)
+			err = eb.Build().Str("tab", spec.ID).Uint64("dockID", spec.DockID).Str("takenBy", inst.specs[i].ID).Errorf("tab DockID is already taken")
 			return
 		}
 	}
@@ -135,7 +134,7 @@ func (inst *TabRegistry) validate(spec TabSpec, replaceIdx int) (err error) {
 
 func (inst *TabRegistry) mutable(op string) (err error) {
 	if inst.frozen {
-		err = eh.Errorf("tab registry: %s after the first Render — customize between construction and mounting", op)
+		err = eb.Build().Str("op", op).Errorf("tab registry: mutated after the first Render — customize between construction and mounting")
 	}
 	return
 }

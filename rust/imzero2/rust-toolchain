@@ -9,5 +9,12 @@
 # in Cargo.toml (1.94, measured for the since-removed h3o 0.10 and kept — the
 # note there has the details). Do not lower this below that floor without
 # checking the airgap bundle's Rust compile (scripts/dev/airgap-bundle.sh) first.
-channel = "1.96"  # Avoid specifying a patch version here; see https://github.com/emilk/eframe_template/issues/145
+# The PATCH is part of the pin, deliberately (ADR-0215). rustc codegen changes
+# between patch releases, and two of this repo's artifacts are byte-compared
+# against a committed blob (h3.wasm, and hackathon's email kernel) — a floating
+# patch makes those gates go red on a schedule nobody controls. The eframe
+# template advises against a patch pin
+# (https://github.com/emilk/eframe_template/issues/145) for a crate that just
+# wants to compile; a crate whose output is hash-checked wants the opposite.
+channel = "1.96.1"
 components = [ "rustfmt", "clippy" ]

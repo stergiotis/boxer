@@ -538,7 +538,7 @@ func TestCS013_FlagsNonWrapVerbs(t *testing.T) {
 	require.Len(t, findings, 6, "expected 6 unsuppressed CS013 findings (suppressed one omitted)")
 	for _, f := range findings {
 		assert.Equal(t, "CS013", f.RuleId)
-		assert.Equal(t, codelint.FindingSeverityWarn, f.Severity)
+		assert.Equal(t, codelint.FindingSeverityError, f.Severity)
 		assert.Contains(t, f.Path, "bad.go")
 	}
 

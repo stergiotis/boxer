@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
 )
 
 // RegisterHostSql makes every SQL registration a host owes play, against the
@@ -100,7 +101,13 @@ func RegisterComponents(r *componentsql.Registry) (err error) {
 	// lives in boxer.facts rather than behind an fs*() macro; registering it
 	// is what lets a statement name a mount by its declared name
 	// (ADR-0200 §SD6).
-	return r.Register(ladingpolicy.PolicyComponentSQL)
+	if err = r.Register(ladingpolicy.PolicyComponentSQL); err != nil {
+		return
+	}
+	// Markdown documents sent from mdedit ("send to play"): the launch query
+	// mdedit opens this playground with reads the row back through
+	// LW_COMPONENT('MdDoc').
+	return r.Register(mddocfacts.MddocComponentSQL)
 }
 
 // RegisterVocabulary publishes every SQL function this build declares into one

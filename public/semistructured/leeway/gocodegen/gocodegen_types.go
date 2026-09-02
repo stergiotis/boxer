@@ -42,7 +42,6 @@ type GoClassNamerCanonWireI interface {
 	ComposeCanonWireSlotEnumName(tableName naming.StylableName) (enumName string, err error)
 	ComposeCanonWireSlotConstName(tableName naming.StylableName, slotOrdinal int, sectionNames []naming.StylableName) (constName string, err error)
 	ComposeCanonWireSignatureConstName(tableName naming.StylableName, slotOrdinal int, sectionNames []naming.StylableName) (constName string, err error)
-	ComposeCanonWirePlainGroupConstName(tableName naming.StylableName, itemType common.PlainItemTypeE) (constName string, err error)
 }
 
 type GoClassNamerI interface {

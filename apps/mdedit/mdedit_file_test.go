@@ -118,7 +118,12 @@ func TestFile_OpenLoadsTheChosenFile(t *testing.T) {
 	assert.Equal(t, body, inst.src)
 	assert.False(t, inst.dirty(), "a freshly opened document is at its checkpoint")
 	assert.True(t, inst.rebindSrc, "a buffer the app loaded needs the databinding override")
-	assert.Equal(t, "opened", inst.status)
+	assert.Equal(t, "opened notes.md", inst.status)
+	// The broker names the file — basename only, never the path.
+	assert.Equal(t, "notes.md", inst.readName)
+	label, _, show := inst.fileBadge()
+	assert.True(t, show)
+	assert.Equal(t, "notes.md", label)
 	// Opening does NOT bind the document for saving: the broker mints read and
 	// write handles separately and refuses a write on a read handle, so the
 	// first Save still has to ask.
@@ -144,6 +149,7 @@ func TestFile_SaveAsksOnceThenStaysQuiet(t *testing.T) {
 	assert.Equal(t, "# First\n", string(got))
 	assert.False(t, inst.dirty())
 	require.True(t, inst.fileBound(), "the granted handle must be kept for later saves")
+	assert.Equal(t, "out.md", inst.boundName, "the dialog names the save target")
 
 	// Second save: no dialog is raised at all. If one were, Pending() would
 	// hold it and the drain below would time out instead.
@@ -157,6 +163,8 @@ func TestFile_SaveAsksOnceThenStaysQuiet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "# Second\n", string(got))
 	assert.False(t, inst.dirty())
+	assert.Equal(t, "out.md", inst.boundName,
+		"a silent save learns no name and must not clear the one the dialog gave")
 }
 
 // TestFile_SaveAsRebindsToTheNewFile — the explicit gesture always asks, and
@@ -460,4 +468,196 @@ func TestFile_OpenDoesNotAskOnACleanDocument(t *testing.T) {
 	resolveOnce(t, svc, path)
 	drainFile(t, inst)
 	assert.Equal(t, "# Next\n", inst.src)
+}
+
+// ---------------------------------------------------------------------------
+// Follow-the-file, against the real broker and real inotify
+// ---------------------------------------------------------------------------
+
+// openAndFollow drives an Open through the real broker and asserts the
+// follow armed.
+func openAndFollow(t *testing.T, inst *App, svc *fsbroker.Service, path string) {
+	t.Helper()
+	inst.openFile()
+	resolveOnce(t, svc, path)
+	drainFile(t, inst)
+	require.True(t, inst.followActive, "an opened file is followed")
+}
+
+// drainFollowUntil pumps the render-thread drain the way idle frames would,
+// until cond holds or the deadline passes.
+func drainFollowUntil(t *testing.T, inst *App, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		inst.drainFollow()
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("follow: %s did not happen in time", what)
+}
+
+// TestFile_FollowReloadsACleanBuffer is the feature's happy path: the file
+// changes on disk, the buffer holds no edits, so the buffer follows and the
+// checkpoint moves with it.
+func TestFile_FollowReloadsACleanBuffer(t *testing.T) {
+	inst, svc, cleanup := newFileSetup(t)
+	defer cleanup()
+
+	path := filepath.Join(t.TempDir(), "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("# v1\n"), 0o644))
+	openAndFollow(t, inst, svc, path)
+
+	require.NoError(t, os.WriteFile(path, []byte("# v2\n"), 0o644))
+	drainFollowUntil(t, inst, "reload", func() bool { return inst.src == "# v2\n" })
+
+	assert.False(t, inst.dirty(), "a followed reload is a checkpoint, not an edit")
+	assert.True(t, inst.rebindSrc, "a reload is a rebind the editor must be told about")
+	assert.False(t, inst.diskChanged)
+	assert.Equal(t, "reloaded from disk", inst.status)
+}
+
+// TestFile_FollowRespectsADirtyBuffer: with unsaved edits the follow goes
+// passive — a badge, never a reload.
+func TestFile_FollowRespectsADirtyBuffer(t *testing.T) {
+	inst, svc, cleanup := newFileSetup(t)
+	defer cleanup()
+
+	path := filepath.Join(t.TempDir(), "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("# v1\n"), 0o644))
+	openAndFollow(t, inst, svc, path)
+
+	inst.src = "# v1\n\ntyped meanwhile\n" // the reader typed
+	require.True(t, inst.dirty())
+
+	require.NoError(t, os.WriteFile(path, []byte("# v2\n"), 0o644))
+	drainFollowUntil(t, inst, "changed-on-disk badge", func() bool { return inst.diskChanged })
+
+	assert.Equal(t, "# v1\n\ntyped meanwhile\n", inst.src, "unsaved edits are never overwritten")
+	assert.True(t, inst.dirty())
+}
+
+// TestFile_FollowTreatsRenameReplaceAsAChange — the common editor save
+// (write a temp file, move it over the target) must arrive as a change, not
+// orphan the watch.
+func TestFile_FollowTreatsRenameReplaceAsAChange(t *testing.T) {
+	inst, svc, cleanup := newFileSetup(t)
+	defer cleanup()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("# v1\n"), 0o644))
+	openAndFollow(t, inst, svc, path)
+
+	stage := filepath.Join(dir, "notes.md.tmp")
+	require.NoError(t, os.WriteFile(stage, []byte("# v2\n"), 0o644))
+	require.NoError(t, os.Rename(stage, path))
+
+	drainFollowUntil(t, inst, "reload after rename-replace", func() bool { return inst.src == "# v2\n" })
+	assert.False(t, inst.diskGone, "a change supersedes any transient gone")
+}
+
+// TestFile_FollowSaveEchoIsNotAForeignChange: the app's own save fires a
+// watch event too; disk matching the checkpoint must read as "not a change".
+func TestFile_FollowSaveEchoIsNotAForeignChange(t *testing.T) {
+	inst, svc, cleanup := newFileSetup(t)
+	defer cleanup()
+
+	path := filepath.Join(t.TempDir(), "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("# v1\n"), 0o644))
+	openAndFollow(t, inst, svc, path)
+
+	inst.src = "# v1 edited\n"
+	inst.saveFile(false)
+	resolveOnce(t, svc, path)
+	drainFile(t, inst)
+	require.False(t, inst.dirty())
+
+	// Give the echo time to arrive, debounce, re-read and settle: the badge
+	// must never latch and the buffer must hold what was saved.
+	time.Sleep(2 * followDebounce)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		inst.drainFollow()
+		require.False(t, inst.diskChanged, "our own save is not a foreign change")
+		require.Equal(t, "# v1 edited\n", inst.src)
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestFile_FollowReportsADeletedFile: gone is a badge, never a buffer wipe.
+func TestFile_FollowReportsADeletedFile(t *testing.T) {
+	inst, svc, cleanup := newFileSetup(t)
+	defer cleanup()
+
+	path := filepath.Join(t.TempDir(), "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("# v1\n"), 0o644))
+	openAndFollow(t, inst, svc, path)
+
+	require.NoError(t, os.Remove(path))
+	drainFollowUntil(t, inst, "gone badge", func() bool { return inst.diskGone })
+	assert.Equal(t, "# v1\n", inst.src, "deletion never touches the buffer")
+}
+
+// TestFile_SecondOpenEndsTheFirstFollow: the old handle is unwatched and
+// CLOSED before the new dialog — sequenced, because uuids are stable per
+// (app, path, op) and a late close would destroy a re-grant of the same file.
+func TestFile_SecondOpenEndsTheFirstFollow(t *testing.T) {
+	inst, svc, cleanup := newFileSetup(t)
+	defer cleanup()
+
+	dir := t.TempDir()
+	first := filepath.Join(dir, "a.md")
+	second := filepath.Join(dir, "b.md")
+	require.NoError(t, os.WriteFile(first, []byte("# a\n"), 0o644))
+	require.NoError(t, os.WriteFile(second, []byte("# b\n"), 0o644))
+
+	openAndFollow(t, inst, svc, first)
+	inst.mu.Lock()
+	firstHandle := inst.follow.handle
+	inst.mu.Unlock()
+	require.NotEmpty(t, firstHandle)
+
+	openAndFollow(t, inst, svc, second)
+	assert.Equal(t, "# b\n", inst.src)
+
+	inst.mu.Lock()
+	secondHandle := inst.follow.handle
+	inst.mu.Unlock()
+	require.NotEqual(t, firstHandle, secondHandle)
+
+	// The first handle is dead: closed broker-side and its cap revoked, so a
+	// read through it must fail one way or the other.
+	body, err := inst.bus.RequestWithTimeout(firstHandle+opRead, nil, time.Second)
+	if err == nil {
+		reason, isErr := readReplyError(body)
+		require.True(t, isErr, "the first handle must refuse after the second open")
+		assert.Contains(t, reason, "unknown handle")
+	}
+}
+
+// TestFile_UnmountClosesTheFollowHandle: the broker-side pump is not stopped
+// by the bus client going away, so Unmount must close explicitly.
+func TestFile_UnmountClosesTheFollowHandle(t *testing.T) {
+	inst, svc, cleanup := newFileSetup(t)
+	defer cleanup()
+
+	path := filepath.Join(t.TempDir(), "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("# v1\n"), 0o644))
+	openAndFollow(t, inst, svc, path)
+
+	inst.mu.Lock()
+	handle := inst.follow.handle
+	inst.mu.Unlock()
+
+	require.NoError(t, inst.Unmount(nil))
+
+	body, err := inst.bus.RequestWithTimeout(handle+opRead, nil, time.Second)
+	if err == nil {
+		reason, isErr := readReplyError(body)
+		require.True(t, isErr, "the handle must be closed by Unmount")
+		assert.Contains(t, reason, "unknown handle")
+	}
 }

@@ -4,7 +4,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -211,7 +210,7 @@ func attenuateTabs(inner *play.PlayApp, def *AppletDef, logger zerolog.Logger) (
 			if sel.Zone != "" {
 				zone, known := tabZones[sel.Zone]
 				if !known {
-					err = eh.Errorf("sqlapplet %s: tab %q names unknown zone %q", def.Slug, sel.ID, sel.Zone)
+					err = eb.Build().Str("slug", def.Slug).Str("id", sel.ID).Str("zone", sel.Zone).Errorf("sqlapplet: tab names unknown zone")
 					return
 				}
 				if zErr := inner.Tabs().SetZone(sel.ID, zone); zErr != nil {

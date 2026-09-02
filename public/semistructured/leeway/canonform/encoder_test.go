@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -197,7 +198,7 @@ func digestsOf(t *testing.T, tbl *common.TableDesc, ir *common.IntermediateTable
 	t.Helper()
 	d, err := streamreadaccess.NewDriver(tbl, ir, streamreadaccess.DefaultFormatters())
 	require.NoError(t, err)
-	enc, err := NewEncoder(tbl, ir, opts)
+	enc, err := NewEncoder(ir, opts)
 	require.NoError(t, err)
 	require.NoError(t, d.DriveRecordBatch(enc, rec))
 	require.NoError(t, enc.Err())
@@ -310,7 +311,7 @@ func TestAnchorGoldens(t *testing.T) {
 		if bi == 0 {
 			opts.Digester = NewRecordingDigester(NewBlake3Digester(), &leaves, &record)
 		}
-		enc, err := NewEncoder(&tbl, ir, opts)
+		enc, err := NewEncoder(ir, opts)
 		require.NoError(t, err)
 		if bi == 0 {
 			// Capture the first entity only: stop recording after it.
@@ -335,7 +336,7 @@ func TestAnchorGoldens(t *testing.T) {
 				}
 				return nil
 			}
-			enc, err = NewEncoder(&tbl, ir, opts)
+			enc, err = NewEncoder(ir, opts)
 			require.NoError(t, err)
 		}
 		require.NoError(t, d.DriveRecordBatch(enc, rec))
@@ -471,9 +472,9 @@ func TestPlainsRule(t *testing.T) {
 	c := digestsOf(t, &tbl, ir, oneSectionBatch(t, ir, conv, otherTs), Options{})
 	require.Equal(t, hexs(a[0]), hexs(b[0]), "the entity id is excluded by default")
 	require.NotEqual(t, hexs(a[0]), hexs(c[0]), "every other plain (here the timestamp) is included by default")
-	a2 := digestsOf(t, &tbl, ir, oneSectionBatch(t, ir, conv, base), Options{IncludeEntityId: true})
-	b2 := digestsOf(t, &tbl, ir, oneSectionBatch(t, ir, conv, otherId), Options{IncludeEntityId: true})
-	require.NotEqual(t, hexs(a2[0]), hexs(b2[0]), "IncludeEntityId opts the id in")
+	a2 := digestsOf(t, &tbl, ir, oneSectionBatch(t, ir, conv, base), Options{Plains: PlainsMask{IncludeEntityId: true}})
+	b2 := digestsOf(t, &tbl, ir, oneSectionBatch(t, ir, conv, otherId), Options{Plains: PlainsMask{IncludeEntityId: true}})
+	require.NotEqual(t, hexs(a2[0]), hexs(b2[0]), "PlainsMask.IncludeEntityId opts the id in")
 	require.NotEqual(t, hexs(a[0]), hexs(a2[0]))
 }
 
@@ -650,10 +651,222 @@ func TestScalarVectors(t *testing.T) {
 }
 
 func TestTextLaneRefused(t *testing.T) {
-	tbl, ir, _ := oneSection(t, "i64", ctabb.I64)
-	enc, err := NewEncoder(&tbl, ir, Options{})
+	_, ir, _ := oneSection(t, "i64", ctabb.I64)
+	enc, err := NewEncoder(ir, Options{})
 	require.NoError(t, err)
 	enc.BeginBatch()
 	_, _ = enc.WriteString("3")
 	require.Error(t, enc.Err())
+}
+
+// Arrow nulls are refused on every value lane (SD3, 2026-09-01 update):
+// leeway has no null — absence is non-persistence — and accepting one would
+// collide with the value-less-section form, whose CBOR null means "present
+// with no value". Every value position (scalar, array/set element, plain)
+// funnels through writeScalar, so the gate is pinned once per lane kind.
+func TestNullValuesRefused(t *testing.T) {
+	refuse := func(arr arrow.Array, ct canonicaltypes.PrimitiveAstNodeI) {
+		t.Helper()
+		var b bytes.Buffer
+		c, err := runtime.NewCborWriter(&b)
+		require.NoError(t, err)
+		require.ErrorContains(t, writeScalar(c, arr, 0, ct), "null values are not part of the form")
+	}
+	u := array.NewUint64Builder(pool)
+	u.AppendNull()
+	refuse(u.NewArray(), ctabb.U64)
+	f := array.NewFloat64Builder(pool)
+	f.AppendNull()
+	refuse(f.NewArray(), ctabb.F64)
+	s := array.NewStringBuilder(pool)
+	s.AppendNull()
+	refuse(s.NewArray(), ctabb.S)
+	ts := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
+	ts.AppendNull()
+	refuse(ts.NewArray(), ctabb.Z64)
+}
+
+// Text strings must be well-formed UTF-8 (RFC 8949 §2); non-UTF-8 bytes on an
+// `s` lane are refused rather than digested — they belong on a `y` lane,
+// where the same bytes are content.
+func TestInvalidUtf8TextRefused(t *testing.T) {
+	sb := array.NewStringBuilder(pool)
+	sb.Append("a\xffb")
+	var buf bytes.Buffer
+	c, err := runtime.NewCborWriter(&buf)
+	require.NoError(t, err)
+	require.NoError(t, writeScalar(c, sb.NewArray(), 0, ctabb.S))
+	require.ErrorContains(t, c.Err(), "not valid UTF-8")
+
+	bb := array.NewBinaryBuilder(pool, arrow.BinaryTypes.Binary)
+	bb.Append([]byte("a\xffb"))
+	buf.Reset()
+	c2, err := runtime.NewCborWriter(&buf)
+	require.NoError(t, err)
+	require.NoError(t, writeScalar(c2, bb.NewArray(), 0, ctabb.Y))
+	require.NoError(t, c2.Err())
+	require.Equal(t, "4361ff62", hexs(buf.Bytes()))
+}
+
+// eidKidTable is the identity-vs-integrity shape (ADR-0201, 2026-09-01 mask
+// update): two entity-id plains — an identity that should be content and a
+// key that should not — plus one tagged section.
+func eidKidTable(t *testing.T) (tbl common.TableDesc, ir *common.IntermediateTableRepresentation, conv common.NamingConventionI) {
+	return buildTable(t, func(manip *common.TableManipulator) {
+		manip.SetTableName("split")
+		manip.PlainValueColumn(common.PlainItemTypeEntityId, "eid", ctabb.U64)
+		manip.PlainValueColumn(common.PlainItemTypeEntityId, "kid", ctabb.U64)
+		sec := manip.TaggedValueSection("notes").
+			AddSectionMembership(common.MembershipSpecLowCardRef)
+		sec.TaggedValueColumn("v", ctabb.U64)
+	})
+}
+
+func eidKidBatch(t *testing.T, ir *common.IntermediateTableRepresentation, conv common.NamingConventionI, eid, kid uint64) arrow.RecordBatch {
+	t.Helper()
+	return buildBatch(t, ir, conv, 1, func(t *testing.T, cc common.IntermediateColumnContext, role common.ColumnRoleE, phy string) arrow.Array {
+		switch {
+		case cc.Scope != common.IntermediateColumnScopeTagged && strings.Contains(phy, "eid"):
+			return plainU64(eid)
+		case cc.Scope != common.IntermediateColumnScopeTagged && strings.Contains(phy, "kid"):
+			return plainU64(kid)
+		case role == common.ColumnRoleValue:
+			return listU64([]uint64{42})
+		case role == common.ColumnRoleLowCardRef:
+			return listU64([]uint64{7})
+		case role == common.ColumnRoleLowCardRefCardinality:
+			return listU64([]uint64{1})
+		}
+		t.Fatalf("fixture does not know how to build column %s (role %s)", phy, role)
+		return nil
+	})
+}
+
+// The plains mask: item-type and name exclusions select the digest's domain,
+// and the eid-in/kid-out split is expressible (ADR-0201, 2026-09-01 update).
+func TestPlainsMask(t *testing.T) {
+	// Item-type exclusion: with the timestamp masked, a timestamp edit stops
+	// moving the digest; unmasked it moves (TestPlainsRule pins that).
+	tbl, ir, conv := oneSection(t, "i64", ctabb.I64)
+	base := oneSectionData{id: 1, ts: 5e9, refs: [][]uint64{{7}}, values: func() arrow.Array { return listI64([]int64{3}) }}
+	otherTs := base
+	otherTs.ts = 6e9
+	mask := Options{Plains: PlainsMask{ExcludeItemTypes: []common.PlainItemTypeE{common.PlainItemTypeEntityTimestamp}}}
+	a := digestsOf(t, &tbl, ir, oneSectionBatch(t, ir, conv, base), mask)
+	b := digestsOf(t, &tbl, ir, oneSectionBatch(t, ir, conv, otherTs), mask)
+	require.Equal(t, hexs(a[0]), hexs(b[0]), "a masked item type is not content")
+	plain := digestsOf(t, &tbl, ir, oneSectionBatch(t, ir, conv, base), Options{})
+	require.NotEqual(t, hexs(a[0]), hexs(plain[0]), "masking an included plain is a different domain, hence a different digest")
+
+	// The split: entity id opted in, the key column excluded by name.
+	tbl2, ir2, conv2 := eidKidTable(t)
+	split := Options{Plains: PlainsMask{
+		IncludeEntityId: true,
+		ExcludeNames:    []naming.StylableName{"kid"},
+	}}
+	d0 := digestsOf(t, &tbl2, ir2, eidKidBatch(t, ir2, conv2, 1, 100), split)
+	dEid := digestsOf(t, &tbl2, ir2, eidKidBatch(t, ir2, conv2, 2, 100), split)
+	dKid := digestsOf(t, &tbl2, ir2, eidKidBatch(t, ir2, conv2, 1, 200), split)
+	require.NotEqual(t, hexs(d0[0]), hexs(dEid[0]), "eid is content under the split")
+	require.Equal(t, hexs(d0[0]), hexs(dKid[0]), "kid is not content under the split")
+
+	// Without the split both entity-id columns move together, in both gates.
+	all := Options{Plains: PlainsMask{IncludeEntityId: true}}
+	require.NotEqual(t,
+		hexs(digestsOf(t, &tbl2, ir2, eidKidBatch(t, ir2, conv2, 1, 100), all)[0]),
+		hexs(digestsOf(t, &tbl2, ir2, eidKidBatch(t, ir2, conv2, 1, 200), all)[0]))
+	require.Equal(t,
+		hexs(digestsOf(t, &tbl2, ir2, eidKidBatch(t, ir2, conv2, 1, 100), Options{})[0]),
+		hexs(digestsOf(t, &tbl2, ir2, eidKidBatch(t, ir2, conv2, 2, 200), Options{})[0]))
+}
+
+// A mask that names something the table does not declare is a construction
+// error, never a silently widened digest domain.
+func TestPlainsMaskValidation(t *testing.T) {
+	_, ir, _ := oneSection(t, "i64", ctabb.I64)
+	_, err := NewEncoder(ir, Options{Plains: PlainsMask{ExcludeNames: []naming.StylableName{"nope"}}})
+	require.ErrorContains(t, err, "no plain column of the excluded name")
+	_, err = NewEncoder(ir, Options{Plains: PlainsMask{ExcludeItemTypes: []common.PlainItemTypeE{common.PlainItemTypeTransaction}}})
+	require.ErrorContains(t, err, "no plain section of the excluded item type")
+	_, err = NewEncoder(ir, Options{Plains: PlainsMask{ExcludeItemTypes: []common.PlainItemTypeE{common.PlainItemTypeEntityId}}})
+	require.ErrorContains(t, err, "gated by IncludeEntityId")
+}
+
+func TestPlainsMaskCanonicalString(t *testing.T) {
+	require.Equal(t, `plains-mask/v1 entity-id=out exclude-types=[] exclude-names=[]`, PlainsMask{}.CanonicalString())
+	m1 := PlainsMask{
+		IncludeEntityId:  true,
+		ExcludeItemTypes: []common.PlainItemTypeE{common.PlainItemTypeTransaction, common.PlainItemTypeEntityTimestamp},
+		ExcludeNames:     []naming.StylableName{"kid", "aux", "kid"},
+	}
+	m2 := PlainsMask{
+		IncludeEntityId:  true,
+		ExcludeItemTypes: []common.PlainItemTypeE{common.PlainItemTypeEntityTimestamp, common.PlainItemTypeTransaction},
+		ExcludeNames:     []naming.StylableName{"aux", "kid"},
+	}
+	require.Equal(t, m1.CanonicalString(), m2.CanonicalString(), "the canonical form is normalized: order- and duplicate-insensitive")
+	require.Equal(t, `plains-mask/v1 entity-id=in exclude-types=[entity-timestamp,transaction] exclude-names=["aux","kid"]`, m1.CanonicalString())
+}
+
+type unpinnableClassifier struct{}
+
+func (unpinnableClassifier) Classify(sec membershiprole.SectionContext, mv membership.MembershipValue) (membershiprole.MembershipRoleE, membershiprole.ParamTreatmentE) {
+	return membershiprole.MembershipRolePrimary, membershiprole.ParamTreatmentIdentity
+}
+
+// FormPin names everything a stored digest is a function of; an unpinnable
+// classifier is refused rather than silently omitted.
+func TestFormPin(t *testing.T) {
+	_, ir, _ := oneSection(t, "i64", ctabb.I64)
+	enc, err := NewEncoder(ir, Options{})
+	require.NoError(t, err)
+	pin, err := enc.FormPin()
+	require.NoError(t, err)
+	require.Equal(t, `canonform/v1 digester=keyed-blake3-256/v1/32 plains-mask/v1 entity-id=out exclude-types=[] exclude-names=[] classifier=all-primary`, pin)
+
+	enc2, err := NewEncoder(ir, Options{Classifier: membershiprole.PathPrefixClassifier{}})
+	require.NoError(t, err)
+	pin2, err := enc2.FormPin()
+	require.NoError(t, err)
+	require.Contains(t, pin2, `classifier=path-prefix(prefix="/")`)
+
+	enc3, err := NewEncoder(ir, Options{Classifier: unpinnableClassifier{}})
+	require.NoError(t, err)
+	_, err = enc3.FormPin()
+	require.ErrorContains(t, err, "PinnableI")
+}
+
+// The SD3 refusals, exercised directly: 128-bit integers, bit strings, the
+// zoned temporal types, and an Arrow array the type expects nothing of. Each
+// refusal is an error, never silently truncated or skipped content.
+func TestSd3Refusals(t *testing.T) {
+	u64arr := plainU64(1)
+	refuse := func(arr arrow.Array, ct canonicaltypes.PrimitiveAstNodeI, msg string) {
+		t.Helper()
+		var b bytes.Buffer
+		c, err := runtime.NewCborWriter(&b)
+		require.NoError(t, err)
+		require.ErrorContains(t, writeScalar(c, arr, 0, ct), msg)
+	}
+	u128 := canonicaltypes.MachineNumericTypeAstNode{BaseType: canonicaltypes.BaseTypeMachineNumericUnsigned, Width: 128}
+	refuse(u64arr, u128, "numeric width not supported")
+	bits := canonicaltypes.StringAstNode{BaseType: canonicaltypes.BaseTypeStringBool, WidthModifier: canonicaltypes.WidthModifierFixed, Width: 8}
+	boolArr := func() arrow.Array {
+		bb := array.NewBooleanBuilder(pool)
+		bb.Append(true)
+		return bb.NewArray()
+	}()
+	refuse(boolArr, bits, "bit strings not supported")
+	zonedDt := canonicaltypes.TemporalTypeAstNode{BaseType: canonicaltypes.BaseTypeTemporalZonedDatetime, Width: 64}
+	zonedT := canonicaltypes.TemporalTypeAstNode{BaseType: canonicaltypes.BaseTypeTemporalZonedTime, Width: 64}
+	tsArr := func() arrow.Array {
+		tb := array.NewTimestampBuilder(pool, &arrow.TimestampType{Unit: arrow.Nanosecond})
+		tb.Append(arrow.Timestamp(1))
+		return tb.NewArray()
+	}()
+	refuse(tsArr, zonedDt, "temporal base type not supported")
+	refuse(tsArr, zonedT, "temporal base type not supported")
+	// An Arrow lane the canonical type has no rule for.
+	refuse(u64arr, ctabb.S, "not supported for a text column")
+	refuse(u64arr, ctabb.V, "network value")
 }

@@ -107,6 +107,33 @@ err = eb.Build().Str("path", path).Errorf("open config: %w", err)
 err = eb.Build().Str("path", path).Errorf("config: open config: %w", err)
 ```
 
+### When a value has to stay in the message
+
+Codelint `CS013` enforces the `%w`-only rule at error severity: a format
+directive other than `%w` in an `eh` / `eb` message fails the build. Four shapes
+legitimately keep theirs, and each carries a per-line
+`//boxer:lint disable=CS013 reason="…"` naming which one it is:
+
+*   **The message crosses a text-only boundary.** An HTTP response body, a wire
+    reply's error string, a GUI panel that renders `err.Error()`. The far side
+    reads a string and cannot reach the payload, so a value that moves to a
+    field is a value it no longer sees.
+*   **The directive fills a grammatical slot, not a data slot.** A `%s` holding
+    "tuple element" or "nested" so one message serves two callers. Removing it
+    leaves a sentence with no subject.
+*   **The message carries a remedy the reader copies.** A refusal ending
+    `wrap it: toDateTime64(ts, 3)` is only useful with the real column name in
+    it; a placeholder there is not valid SQL.
+*   **Another component matches on the message.** Search before rewording:
+    `strings.Contains(err.Error(), …)` over an error from elsewhere in the tree
+    is invisible from the call site, and the test that covers the producer keeps
+    passing when the consumer breaks.
+
+Everything else moves. Where a test asserted the value inside `Error()`, read
+the field instead — `ebtest.Fields` pins one value under a named key, and
+`ebtest.Text` renders message-plus-fields for a case table that only needs the
+error to *mention* something.
+
 ## Control Flow
 *   **Conditionals:** Use `if val { ... } else { ... }` for binary conditions.
 *   **Guard Clauses:** Prefer early exits/returns to reduce nesting depth.

@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -302,7 +303,7 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}) {
 	features := fe.Results()
 	nRows := len(features)
 	if nRows < projectionMinRows {
-		inst.fail(cancel, eh.Errorf("projection: too few rows (%d, need ≥%d)", nRows, projectionMinRows))
+		inst.fail(cancel, eb.Build().Int("rows", nRows).Int("need", projectionMinRows).Errorf("projection: too few rows"))
 		return
 	}
 

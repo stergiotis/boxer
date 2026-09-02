@@ -30,6 +30,11 @@ type SlotWriter struct {
 	signature string
 	ent       *EntityWriter
 	attrs     []Attr
+	// The shape of the entity's first attribute in this slot; every later one
+	// must match (SD5: the discriminator is uniform per slot, the co-section
+	// count is a property of the slot).
+	nElems  int32
+	nGroups int32
 }
 
 // Signature returns the slot's key.
@@ -40,10 +45,20 @@ func (inst *SlotWriter) Len() int { return len(inst.attrs) }
 
 // Add takes a finished attribute, copying its bytes and cardinalities into the
 // entity's arenas. attr may therefore be the Attr an AttributeWriter is about
-// to overwrite on its next Begin.
+// to overwrite on its next Begin. An attribute whose shape differs from the
+// slot's first — a discriminator where the others carry none, a different
+// membership-group count — is refused: the writer must not assemble an item
+// VerifyCanonical rejects.
 func (inst *SlotWriter) Add(attr Attr) {
 	e := inst.ent
 	if e.err != nil {
+		return
+	}
+	if len(inst.attrs) == 0 {
+		inst.nElems = attr.nElems
+		inst.nGroups = attr.nGroups
+	} else if attr.nElems != inst.nElems || attr.nGroups != inst.nGroups {
+		e.fail(eb.Build().Str("signature", inst.signature).Int32("elements", attr.nElems).Int32("want", inst.nElems).Int32("groups", attr.nGroups).Int32("wantGroups", inst.nGroups).Errorf("attributes of one slot differ in shape; the discriminator is uniform per slot and the co-section count is fixed: %w", ErrNotCanonical))
 		return
 	}
 	start := int32(len(e.arena))

@@ -787,7 +787,10 @@ if ((needs_binary && !DRY)); then
 		log "building the boxer CLI into $(rel "$BIN") (LADINGDEMO_BUILD=0 to reuse)"
 		# The repo's build tags are not optional: without them packages fail to
 		# compile with misleading "undefined" errors (AGENTS.md).
-		(cd "$root" && go build -buildvcs=true -tags "$(tr -d '\n' <"$root/tags")" \
+		# shellcheck source=/dev/null
+		source "$root/scripts/dev/go-build-env.sh"
+		# shellcheck disable=SC2086 # deliberate word splitting of the flag list
+		(cd "$root" && go build $BOXER_GO_FLAGS -tags "$BOXER_GO_TAGS" \
 			-o "$BIN" ./public/app) || die "go build failed"
 	fi
 	[[ -x "$BIN" ]] || die "no boxer binary at $(rel "$BIN") — unset LADINGDEMO_BUILD to build one"

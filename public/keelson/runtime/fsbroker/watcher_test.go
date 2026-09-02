@@ -191,7 +191,45 @@ func TestService_Watch_PollFallbackCreateEvent(t *testing.T) {
 	assert.Equal(t, "p.txt", ev.Name)
 }
 
-func TestService_Watch_RejectedOnReadHandle(t *testing.T) {
+// resolveDialog drives one fs.dialog.{op} request over the given subject,
+// resolves it against path, and returns the granted reply.
+func resolveDialog(t *testing.T, svc *fsbroker.Service, appBus *inprocbus.Client, subject string, op string, path string) (dr fsbroker.DialogReply) {
+	t.Helper()
+	type res struct {
+		reply []byte
+		err   error
+	}
+	resultCh := make(chan res, 1)
+	go func() {
+		reply, err := appBus.Request(subject, nil)
+		resultCh <- res{reply, err}
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if all := svc.Pending(); len(all) == 1 && all[0].Op == op {
+			_, err := svc.Resolve(all[0].Id, path)
+			require.NoError(t, err)
+			r := <-resultCh
+			require.NoError(t, r.err)
+			dr, err = fsbroker.UnmarshalDialogReply(r.reply)
+			require.NoError(t, err)
+			require.True(t, dr.Granted)
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("no %s dialog pending after 2s", op)
+	return
+}
+
+// TestService_Watch_OnReadHandleFollowsTheFile is the read-handle watch seam:
+// a file granted via fs.dialog.read may be watched, the stream carries only
+// THAT file's events (Name scrubbed to "" — the watched object is the file),
+// sibling churn leaks nothing, and a rename-replace save — the common editor
+// write — arrives as RenameTo rather than orphaning the watch. Runs on the
+// app's own dialog cap only, so it also proves the narrow event-Sub cap
+// Resolve grants on read handles is sufficient to subscribe.
+func TestService_Watch_OnReadHandleFollowsTheFile(t *testing.T) {
 	inst := inprocbus.NewInst(zerolog.Nop())
 	inst.SetRequestTimeout(time.Second)
 	svc, err := fsbroker.NewService(inst, zerolog.Nop())
@@ -206,42 +244,108 @@ func TestService_Watch_RejectedOnReadHandle(t *testing.T) {
 	path := filepath.Join(tmp, "f.txt")
 	require.NoError(t, os.WriteFile(path, []byte("x"), 0o644))
 
-	// Get a read-mode handle.
-	type res struct {
-		reply []byte
-		err   error
-	}
-	resultCh := make(chan res, 1)
-	go func() {
-		reply, err := appBus.Request(fsbroker.SubjectDialogRead, nil)
-		resultCh <- res{reply, err}
-	}()
-	deadline := time.Now().Add(time.Second)
-	var pending fsbroker.PendingRequest
-	for time.Now().Before(deadline) {
-		all := svc.Pending()
-		if len(all) == 1 {
-			pending = all[0]
-			break
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	require.Equal(t, "read", pending.Op)
-	_, err = svc.Resolve(pending.Id, path)
-	require.NoError(t, err)
-	r := <-resultCh
-	require.NoError(t, r.err)
-	dr, err := fsbroker.UnmarshalDialogReply(r.reply)
-	require.NoError(t, err)
-	require.True(t, dr.Granted)
+	dr := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogRead, "read", path)
 
-	// Try to watch a read-mode handle — broker should reject.
+	// Subscribe BEFORE starting the watch (the capdemo ordering) — this is
+	// the subscribe the narrow Sub cap has to cover.
+	col := newEventCollector(t, appBus, dr.HandleSubjectPrefix+"."+fsbroker.HandleEventOp)
+	defer col.stop()
+
+	watchReply, err := appBus.Request(dr.HandleSubjectPrefix+".watch", nil)
+	require.NoError(t, err)
+	wr, err := fsbroker.UnmarshalWatchReply(watchReply)
+	require.NoError(t, err)
+	require.True(t, wr.Started, "read-handle watch should start: %s", wr.Reason)
+	assert.Equal(t, dr.HandleSubjectPrefix+"."+fsbroker.HandleEventOp, wr.EventSubject)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Sibling churn first: none of it may reach the stream — the grant is
+	// one file, not its directory.
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "sibling.txt"), []byte("s"), 0o644))
+
+	// An in-place write to the watched file: Modify, addressing the watched
+	// object itself (empty Name).
+	require.NoError(t, os.WriteFile(path, []byte("xy"), 0o644))
+	ev := col.waitFor(t, fsbroker.WatchEventModify, "", 2*time.Second)
+	assert.Empty(t, ev.Name, "the event addresses the watched file itself")
+
+	// A rename-replace save: write a temp sibling, move it over the target.
+	// The parent-directory watch sees it as RenameTo carrying the file's
+	// name; an inode-bound watch would have been orphaned here.
+	stage := filepath.Join(tmp, "f.txt.tmp")
+	require.NoError(t, os.WriteFile(stage, []byte("xyz"), 0o644))
+	require.NoError(t, os.Rename(stage, path))
+	col.waitFor(t, fsbroker.WatchEventRenameTo, "", 2*time.Second)
+
+	// Nothing named a sibling ever surfaced.
+	col.mu.Lock()
+	defer col.mu.Unlock()
+	for _, got := range col.events {
+		assert.Empty(t, got.Name, "a file watch must not leak sibling names: %+v", got)
+	}
+}
+
+// TestService_Watch_RejectedOnWriteHandle keeps the refusal coverage the
+// read-handle seam narrowed: write and bundle handles still cannot watch.
+func TestService_Watch_RejectedOnWriteHandle(t *testing.T) {
+	inst := inprocbus.NewInst(zerolog.Nop())
+	inst.SetRequestTimeout(time.Second)
+	svc, err := fsbroker.NewService(inst, zerolog.Nop())
+	require.NoError(t, err)
+	defer svc.Close()
+
+	appBus := inst.NewClient("test.writewatch", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogWrite, Direction: app.CapDirectionPub},
+	})
+
+	path := filepath.Join(t.TempDir(), "out.txt")
+	dr := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogWrite, "write", path)
+
 	reply, err := appBus.Request(dr.HandleSubjectPrefix+".watch", nil)
 	require.NoError(t, err)
 	rejected, err := fsbroker.UnmarshalDialogReply(reply)
 	require.NoError(t, err)
 	assert.False(t, rejected.Granted)
 	assert.Contains(t, rejected.Reason, "not opened for watch")
+}
+
+// TestService_ReadAndWriteHandlesOnSamePathAreDistinct pins the uuid-mint
+// disambiguation: the op is in the hash, so a read grant and a write grant
+// on the SAME file coexist — before it, the second Resolve overwrote the
+// first handle, flipping its mode underneath the earlier grant.
+func TestService_ReadAndWriteHandlesOnSamePathAreDistinct(t *testing.T) {
+	inst := inprocbus.NewInst(zerolog.Nop())
+	inst.SetRequestTimeout(time.Second)
+	svc, err := fsbroker.NewService(inst, zerolog.Nop())
+	require.NoError(t, err)
+	defer svc.Close()
+
+	appBus := inst.NewClient("test.samepath", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+		{Pattern: fsbroker.SubjectDialogWrite, Direction: app.CapDirectionPub},
+	})
+
+	path := filepath.Join(t.TempDir(), "doc.md")
+	require.NoError(t, os.WriteFile(path, []byte("body"), 0o644))
+
+	readGrant := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogRead, "read", path)
+	writeGrant := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogWrite, "write", path)
+	require.NotEqual(t, readGrant.HandleSubjectPrefix, writeGrant.HandleSubjectPrefix,
+		"two dialog kinds on one path must not share a handle")
+
+	// Both handles live: the read still answers after the write grant, and
+	// closing the write leaves the read untouched.
+	body, err := appBus.Request(readGrant.HandleSubjectPrefix+".read", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("body"), body)
+
+	_, err = appBus.Request(writeGrant.HandleSubjectPrefix+".close", nil)
+	require.NoError(t, err)
+
+	body, err = appBus.Request(readGrant.HandleSubjectPrefix+".read", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("body"), body, "closing the write handle must not destroy the read handle")
 }
 
 func TestService_Watch_UnwatchStopsStream(t *testing.T) {

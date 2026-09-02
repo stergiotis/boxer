@@ -51,6 +51,20 @@ Editors and LSP read it the same way — export `GOFLAGS=-tags=<contents of
 ./tags>` so gopls resolves symbols. Details:
 [ENGINEERING_PRACTICES §3 — Build-tag discipline](./doc/ENGINEERING_PRACTICES.md#3-build-tag-discipline).
 
+**Building an artifact? Source the build environment.** Two files hold every
+flag a shipped binary depends on, so no two build scripts can disagree
+([ADR-0215](./doc/adr/0215-retire-mimalloc-reproducible-builds.md)):
+
+- [scripts/dev/go-build-env.sh](./scripts/dev/go-build-env.sh) — tags,
+  `-trimpath -buildvcs=auto`, `CGO_ENABLED=0`, `GOTOOLCHAIN` pinned to go.mod.
+- [scripts/dev/rust-repro-env.sh](./scripts/dev/rust-repro-env.sh) — the
+  `--remap-path-prefix` pair, beside `--locked` on every cargo invocation.
+
+**`fast_alloc` / mimalloc is retired — do not reintroduce it.** Its C sources
+compile `__DATE__, __TIME__` into the binary, so every build carried a wall
+clock and no release artifact could ever be byte-reproducible. The manifest note
+where the feature used to be has the measurement.
+
 **Check module drift with `go mod tidy --diff`**, not `tidy` followed by
 `git diff` — the `--diff` form reports drift without mutating `go.mod` / `go.sum`.
 

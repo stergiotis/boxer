@@ -5,9 +5,11 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+	"unicode/utf8"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/unsafeperf"
 )
 
@@ -157,7 +159,15 @@ func (c *CborWriter) WriteBytes(b []byte) {
 	c.Write(b)
 }
 
+// WriteText writes a text string. RFC 8949 §2 requires text strings to be
+// valid UTF-8, and §4.2 determinism presupposes well-formedness, so bytes
+// that are not UTF-8 are refused (the mirror of ReadText); they belong on a
+// byte-string lane.
 func (c *CborWriter) WriteText(b []byte) {
+	if !utf8.Valid(b) {
+		c.failValue(eb.Build().Int("len", len(b)).Errorf("text string is not valid UTF-8: %w", ErrOutOfRange))
+		return
+	}
 	c.Head(MajorTypeText, uint64(len(b)))
 	c.Write(b)
 }

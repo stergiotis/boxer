@@ -140,11 +140,11 @@ func tierFilesFrom(dir string, offset int, n int) (out []string, err error) {
 	}
 	sort.Strings(matches)
 	if offset < 0 || n <= 0 {
-		err = eh.Errorf("invalid shard: offset %d, files %d", offset, n)
+		err = eb.Build().Int("offset", offset).Int("files", n).Errorf("invalid shard")
 		return
 	}
 	if len(matches) < offset+n {
-		err = eh.Errorf("shard needs files %d..%d, %s holds %d", offset+1, offset+n, dir, len(matches))
+		err = eb.Build().Int("from", offset+1).Int("to", offset+n).Str("dir", dir).Int("have", len(matches)).Errorf("the shard needs more files than the directory holds")
 		return
 	}
 	out = matches[offset : offset+n]

@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/similarity/compression/stylometry"
 	"github.com/stergiotis/boxer/public/analytics/stats"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Caps (ADR-0175 §SD4). The sweep is quadratic in section count, so it is
@@ -134,20 +135,21 @@ func (inst *Analysis) Quantile(ncd float64) (q float64) {
 // matrix, because a hole would be indistinguishable from a low score.
 func analyze(srcA string, srcB string, minSectionBytes int) (res *Analysis, err error) {
 	if len(srcA) > maxPaneBytes || len(srcB) > maxPaneBytes {
-		err = eh.Errorf("document too large: %d / %d bytes, limit is %d per document",
-			len(srcA), len(srcB), maxPaneBytes)
+		err = eb.Build().Int("bytesA", len(srcA)).Int("bytesB", len(srcB)).Int("limit", maxPaneBytes).
+			Errorf("document too large")
 		return
 	}
 	secA, dropA := keepAtLeast(splitSections(srcA), minSectionBytes)
 	secB, dropB := keepAtLeast(splitSections(srcB), minSectionBytes)
 	if len(secA) == 0 || len(secB) == 0 {
-		err = eh.Errorf("nothing to compare: %d and %d sections reach the %d-byte floor (%d and %d were below it)",
-			len(secA), len(secB), minSectionBytes, dropA, dropB)
+		err = eb.Build().Int("sectionsA", len(secA)).Int("sectionsB", len(secB)).Int("floorBytes", minSectionBytes).
+			Int("droppedA", dropA).Int("droppedB", dropB).
+			Errorf("nothing to compare: too few sections reach the length floor")
 		return
 	}
 	if len(secA) > maxSectionsPerDoc || len(secB) > maxSectionsPerDoc {
-		err = eh.Errorf("too many sections: %d and %d, limit is %d per document — raise the section-length floor to merge short sections out of the sweep",
-			len(secA), len(secB), maxSectionsPerDoc)
+		err = eb.Build().Int("sectionsA", len(secA)).Int("sectionsB", len(secB)).Int("limit", maxSectionsPerDoc).
+			Errorf("too many sections — raise the section-length floor to merge short sections out of the sweep")
 		return
 	}
 
@@ -200,7 +202,7 @@ func (inst *Analysis) sweep(enc compression.CompressorI) (err error) {
 	for j, sb := range inst.SecB {
 		colLen[j], err = sim.MeasureCompressedLength(sb.Text, "")
 		if err != nil {
-			err = eh.Errorf("unable to measure section B%d: %w", j, err)
+			err = eb.Build().Int("sectionB", j).Errorf("unable to measure a section of B: %w", err)
 			return
 		}
 	}
@@ -210,14 +212,14 @@ func (inst *Analysis) sweep(enc compression.CompressorI) (err error) {
 		var x uint64
 		x, err = sim.MeasureCompressedLength(sa.Text, "")
 		if err != nil {
-			err = eh.Errorf("unable to measure section A%d: %w", i, err)
+			err = eb.Build().Int("sectionA", i).Errorf("unable to measure a section of A: %w", err)
 			return
 		}
 		for j, sb := range inst.SecB {
 			var xy uint64
 			xy, err = sim.MeasureCompressedLength(sa.Text, sb.Text)
 			if err != nil {
-				err = eh.Errorf("unable to measure section pair A%d/B%d: %w", i, j, err)
+				err = eb.Build().Int("sectionA", i).Int("sectionB", j).Errorf("unable to measure a section pair: %w", err)
 				return
 			}
 			inst.Ncd[i*cols+j] = compression.CalculateNormalizedCompressionDistance(xy, x, colLen[j])

@@ -8,6 +8,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -378,7 +379,7 @@ func TestNodeLaneRefusesEmptySQL(t *testing.T) {
 
 	view := lane.demand(compiledNode{SQL: "", NodeID: "flows"})
 	require.Error(t, view.err)
-	require.Contains(t, view.err.Error(), "flows", "the error names the node, not the SQL")
+	require.Equal(t, "flows", ebtest.Fields(t, view.err)["nodeID"], "the error names the node, not the SQL")
 	require.Contains(t, view.err.Error(), "not in this buffer")
 	require.False(t, view.loading)
 	require.Nil(t, view.rec)

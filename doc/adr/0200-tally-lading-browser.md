@@ -544,6 +544,15 @@ and it is not made here.
 asserting on the readouts: the waveform is painter output and the headless
 client cannot capture it, the same gap `waveform-scene.sh` has.
 
+### 2026-09-02 — the widget's third host
+
+mdedit grew a files pane over the snapshot store: fsbrowser's third host
+after this app and play's Files tab. Nothing here changes — it composes §SD2's
+widget with the ladingadapter/ladingview seams as designed, copying tally's
+app-local `storeConn`/`lane` plumbing rather than sharing it (their
+app-local-by-design status stands). Recorded in
+[ADR-0178](./0178-mdedit-markdown-editor.md)'s Updates.
+
 ## References
 
 - [ADR-0198](./0198-fs-snapshot-store.md) and

@@ -535,6 +535,89 @@ signing explanation raises. Whether to add it, and whether the classifier and
 mask should instead be frozen into the form version, is left to the first
 consumer that needs it; the package is alpha and the API may move.
 
+### 2026-09-01 — nulls and ill-formed UTF-8 are refused; ref 0 is a placeholder
+
+Two inputs the form never defined are now refusals, found by an adversarial
+review of the package:
+
+- **An Arrow null value**, on every lane (scalar, array or set element,
+  plain). SD3 had no null rule and SD6 reserves CBOR `null` for value-less
+  sections, so a null in a single-value-column attribute was byte-identical
+  to a value-less attribute with the same memberships — a leaf-digest
+  collision between different content. Leeway itself has no null: absence is
+  non-persistence (empty arrays are not persisted either), so a null in a
+  batch — a ClickHouse `Nullable(...)` Arrow result, typically — is
+  malformed input, not content.
+- **Text that is not well-formed UTF-8.** RFC 8949 §2 requires
+  well-formedness and §4.2 determinism presupposes it; SD3's departure from
+  dCBOR is about §2.7 normalization only. Without the refusal an `s` column
+  holding non-UTF-8 bytes (ClickHouse `String` does not enforce UTF-8)
+  produced a digest over an item no conforming decoder accepts and no second
+  implementation can be checked against. The check lives in the shared CBOR
+  writer (`canonwire/runtime.CborWriter.WriteText`), whose strict reader
+  already refused such text, so the canonical wire gains the same
+  writer/reader symmetry. Bytes that are not UTF-8 belong on a `y` lane.
+
+Neither refusal changes any byte of the form over valid input; the goldens
+are unmoved.
+
+One assumption is recorded rather than changed: the encoder drops driver
+placeholders before classification (SD5) via `membership.IsPlaceholder`,
+which treats a ref-channel membership of `Ref == 0` with empty params as a
+placeholder. Registry id 0 is therefore reserved: a registry that assigned it
+to a real membership would find that membership erased from every digest.
+
+### 2026-09-01 — the plains mask exists, and the digest's inputs are pinnable
+
+The mask the 2026-08-29 entry left to the first consumer is built, for the
+consumer that entry anticipated (a record whose lifecycle-shaped plains must
+stay out of its identity). `Options.IncludeEntityId` folded into it:
+
+- `Options.Plains` is a declarative `PlainsMask` — `IncludeEntityId` (the SD1
+  class gate, unchanged default), `ExcludeItemTypes`, `ExcludeNames`. Name
+  granularity is what makes the identity-versus-integrity split expressible:
+  two entity-id columns can be split into one that is content and one that is
+  not (`IncludeEntityId: true` + the key column in `ExcludeNames`).
+- The mask is validated against the table's IR at construction — an exclusion
+  naming nothing the table declares is an error, so a typo cannot silently
+  widen the digest's domain — and the zero value reproduces the pre-mask
+  behaviour byte-for-byte (the goldens pin that).
+- Declarative rather than a callback so it can be rendered canonically:
+  `PlainsMask.CanonicalString()` is sorted, deduplicated and versioned.
+
+SD5's consequence "two parties must agree on the classifier as they must on
+the mask" now has an operational surface (the CS-2 concern the signing
+explanation raises): `membershiprole.PinnableI` is an optional classifier
+capability (`Pin() string`; `PathPrefixClassifier` implements it), `DigesterI`
+gained `Name()`, and `Encoder.FormPin()` renders the digest's full non-record
+domain — form version, digester name and size, mask canonical form,
+classifier pin — refusing a classifier that is not pinnable. A consumer that
+stores digests stores the pin beside them.
+
+### 2026-09-02 — M1 delivered
+
+The invariance suite §Milestones deferred is in
+(`canonform/property_test.go`, `pgregory.net/rapid`): equal digests under
+width widenings (`u8→u64`, `i32→i64`, `f32→f64`, `z32→z64`, `y→yx` at full
+width), section renames and aspect toggles, attribute / membership /
+set-element permutations and set duplicates, and membership-channel
+cardinality flips; secondary-membership edits and all-secondary attributes
+inert under `PathPrefixClassifier`; distinct digests for value and
+primary-membership edits; the strict-decode → `CoreDetEncOptions` re-encode
+self-check over every emitted attribute and entity item of a random batch;
+and the anti-materialization check the verification plan names (value bytes
+reach the leaf hashers only, every leaf write precedes the entity item).
+
+The two goldens M0 left open are in too: a `boxer.facts` sample
+(`canonform_facts_gold.out.txt`, digesting the facts schema under the default
+options and under the identity-in/integrity-key-out mask, each with its
+`FormPin`), and the anchor digests under `PathPrefixClassifier`
+(`canonform_anchor_pathprefix_gold.out.txt`) — which pin, deliberately, that
+today's anchor memberships all classify primary, so those digests coincide
+with the nil-classifier golden until a fixture gains a secondary-shaped
+membership. SD3's refusals now each have a direct test, including the two
+added on 2026-09-01 (nulls, ill-formed UTF-8).
+
 ## References
 
 - [ADR-0018](./0018-leeway-card-json-canonical-format.md) — card-JSON: the

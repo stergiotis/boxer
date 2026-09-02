@@ -198,12 +198,12 @@ func RegisterBook(id string, fsys fs.FS, topics []app.TopicT) (err error) {
 		return
 	}
 	if len(topics) == 0 {
-		err = eh.Errorf("sqlapplet: RegisterBook: book %q declares no default topics (ADR-0158 §SD7)", id)
+		err = eb.Build().Str("id", id).Errorf("sqlapplet: RegisterBook: book declares no default topics (ADR-0158 §SD7)")
 		return
 	}
 	for _, t := range topics {
 		if !t.IsRegistered() {
-			err = eh.Errorf("sqlapplet: RegisterBook: book %q declares unregistered topic %q", id, t)
+			err = eb.Build().Str("id", id).Stringer("topic", t).Errorf("sqlapplet: RegisterBook: book declares unregistered topic")
 			return
 		}
 	}
@@ -247,14 +247,14 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 		// in it fail Validate with "declares no Topics", which names the
 		// symptom and not the cause.
 		if len(b.topics) == 0 {
-			errs = append(errs, eh.Errorf("sqlapplet: book %q has no default topics (ADR-0158 §SD7)", b.id))
+			errs = append(errs, eb.Build().Str("id", b.id).Errorf("sqlapplet: book has no default topics (ADR-0158 §SD7)"))
 			continue
 		}
 		defs, perrs := ParseBook(b.id, b.fsys)
 		errs = append(errs, perrs...)
 		for _, def := range defs {
 			if prior, dup := seen[def.Slug]; dup {
-				errs = append(errs, eh.Errorf("sqlapplet: slug %q in book %q already minted from book %q", def.Slug, def.BookID, prior))
+				errs = append(errs, eb.Build().Str("slug", def.Slug).Str("bookID", def.BookID).Str("prior", prior).Errorf("sqlapplet: the slug in this book was already minted from another book"))
 				continue
 			}
 			seen[def.Slug] = def.BookID
@@ -267,7 +267,7 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 			}
 			m := manifestFor(def, b.fsys)
 			if verr := m.Validate(); verr != nil {
-				errs = append(errs, eh.Errorf("sqlapplet: %s/%s: manifest: %w", def.BookID, def.Slug, verr))
+				errs = append(errs, eb.Build().Str("bookID", def.BookID).Str("slug", def.Slug).Errorf("sqlapplet: manifest: %w", verr))
 				continue
 			}
 			defCopy := def
@@ -275,7 +275,7 @@ func mintBooks(reg *app.Registry, logger zerolog.Logger, snapshot []registeredBo
 				a = &appletApp{def: defCopy, m: m}
 				return
 			}); rerr != nil {
-				errs = append(errs, eh.Errorf("sqlapplet: %s/%s: register: %w", def.BookID, def.Slug, rerr))
+				errs = append(errs, eb.Build().Str("bookID", def.BookID).Str("slug", def.Slug).Errorf("sqlapplet: register: %w", rerr))
 				continue
 			}
 			minted++

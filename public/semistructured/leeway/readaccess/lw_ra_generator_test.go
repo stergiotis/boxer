@@ -1,6 +1,7 @@
 package readaccess
 
 import (
+	"errors"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -236,6 +237,11 @@ func TestGoClassBuilderSample(t *testing.T) {
 		var wellFormed bool
 		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingConvention)
 		var _ = sourceCode
+		if errors.Is(err, common.ErrNotImplemented) {
+			// A refusal (fixed-width text, zoned temporal) is a legitimate
+			// outcome for a random table, not a generator failure.
+			continue
+		}
 		unittest.NoError(t, err)
 		if !wellFormed && testing.Verbose() {
 			// Into the test's temp dir, never the package dir: a `.go` file

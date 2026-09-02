@@ -1,6 +1,11 @@
 package canonwire
 
 import (
+	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"go/types"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -10,9 +15,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/tools/go/packages"
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang/align"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -130,6 +137,53 @@ func networkSampleTableDesc() (tbl common.TableDesc, err error) {
 		sec.TaggedValueColumn("ipv6", ctabb.W)
 		sec.TaggedValueColumn("ipv4_cidr", ctabb.Vc)
 		sec.TaggedValueColumn("ipv6_cidr", ctabb.Wc)
+	}
+	return manip.BuildTableDesc()
+}
+
+// channelTableDesc covers the membership channels the other golden tables do
+// not: the mixed ref carrier, both high-card single carriers and both
+// parametrized carriers (per-row blob, ADR-0210 SD4 "all eight cells"). One
+// standalone section per channel, each with its own value type, so every
+// signature is unambiguous and the codec needs no dispatcher.
+func channelTableDesc() (tbl common.TableDesc, err error) {
+	var manip *common.TableManipulator
+	manip, err = common.NewTableManipulator()
+	if err != nil {
+		err = eh.Errorf("unable to create table manipulator")
+		return
+	}
+	var hintsId encodingaspects2.AspectSet
+	hintsId, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)
+	if err != nil {
+		err = eh.Errorf("unable to encode hints: %w", err)
+		return
+	}
+	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "id", ctabb.U64, hintsId, valueaspects.EmptyAspectSet)
+	{
+		sec := manip.TaggedValueSection("mref").
+			AddSectionMembership(common.MembershipSpecMixedLowCardRefHighCardParameters)
+		sec.TaggedValueColumn("a", ctabb.U64)
+	}
+	{
+		sec := manip.TaggedValueSection("href").
+			AddSectionMembership(common.MembershipSpecHighCardRef)
+		sec.TaggedValueColumn("b", ctabb.I64)
+	}
+	{
+		sec := manip.TaggedValueSection("hverb").
+			AddSectionMembership(common.MembershipSpecHighCardVerbatim)
+		sec.TaggedValueColumn("c", ctabb.S)
+	}
+	{
+		sec := manip.TaggedValueSection("lparam").
+			AddSectionMembership(common.MembershipSpecLowCardRefParametrized)
+		sec.TaggedValueColumn("d", ctabb.Y)
+	}
+	{
+		sec := manip.TaggedValueSection("hparam").
+			AddSectionMembership(common.MembershipSpecHighCardRefParametrized)
+		sec.TaggedValueColumn("e", ctabb.F64)
 	}
 	return manip.BuildTableDesc()
 }
@@ -366,6 +420,12 @@ func TestGenerateCanonWireNetTable(t *testing.T) {
 	generateGoldens(t, "nettable", "net_table", tblDesc)
 }
 
+func TestGenerateCanonWireChannelTable(t *testing.T) {
+	tblDesc, err := channelTableDesc()
+	require.NoError(t, err)
+	generateGoldens(t, "channeltable", "channel_table", tblDesc)
+}
+
 func TestGenerateCanonWireJson(t *testing.T) {
 	tblDesc, err := jsonTableDesc()
 	require.NoError(t, err)
@@ -524,10 +584,72 @@ func TestGeneratedAcceptMasksMatchSpecs(t *testing.T) {
 // random tables from the shared manipulator, asserting the generated source is
 // well-formed. A table the readaccess generator itself refuses is skipped —
 // there would be no accessors for the encoder to call.
+// typeCheckImporter resolves imports from a pre-loaded dependency graph.
+type typeCheckImporter map[string]*types.Package
+
+func (m typeCheckImporter) Import(path string) (*types.Package, error) {
+	if p, ok := m[path]; ok {
+		return p, nil
+	}
+	return nil, eb.Build().Str("path", path).Errorf("import is not in the pre-loaded dependency graph")
+}
+
+// loadTypeCheckGraph loads the example package's full dependency graph once, so
+// every fuzz sample can be type-checked as a synthetic package against the
+// real imports. Syntax well-formedness alone once let a generator emit
+// references to symbols that did not exist; the type check is what catches
+// that class.
+func loadTypeCheckGraph(t *testing.T) typeCheckImporter {
+	t.Helper()
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedTypes | packages.NeedImports | packages.NeedDeps,
+	}
+	if tags, rerr := os.ReadFile(filepath.Join("..", "..", "..", "..", "tags")); rerr == nil {
+		cfg.BuildFlags = []string{"-tags=" + strings.TrimSpace(string(tags))}
+	}
+	pkgs, err := packages.Load(cfg, "github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/example")
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+	require.Empty(t, pkgs[0].Errors)
+	m := make(typeCheckImporter, 256)
+	var walk func(p *packages.Package)
+	walk = func(p *packages.Package) {
+		if _, ok := m[p.PkgPath]; ok {
+			return
+		}
+		m[p.PkgPath] = p.Types
+		for _, imp := range p.Imports {
+			walk(imp)
+		}
+	}
+	walk(pkgs[0])
+	return m
+}
+
+// typeCheckGenerated parses the generated readaccess, dml and canonwire
+// sources as one package and type-checks it against the pre-loaded graph,
+// collecting every error rather than stopping at the first.
+func typeCheckGenerated(t *testing.T, imp typeCheckImporter, srcs map[string][]byte) (err error) {
+	t.Helper()
+	fset := token.NewFileSet()
+	files := make([]*ast.File, 0, len(srcs))
+	for name, src := range srcs {
+		f, perr := parser.ParseFile(fset, name, src, 0)
+		require.NoError(t, perr)
+		files = append(files, f)
+	}
+	var errs []error
+	conf := types.Config{Importer: imp, Error: func(e error) { errs = append(errs, e) }}
+	_, _ = conf.Check("example", fset, files, nil)
+	err = errors.Join(errs...)
+	return
+}
+
 func TestCanonWireGoClassBuilderSample(t *testing.T) {
 	seed1, seed2 := rand.Uint64(), rand.Uint64()
 	t.Logf("randomized test seed: %d %d (rand.NewPCG)", seed1, seed2)
 	rnd := rand.New(rand.NewPCG(seed1, seed2))
+	imp := loadTypeCheckGraph(t)
 	manip, err := common.NewTableManipulator()
 	require.NoError(t, err)
 
@@ -535,6 +657,7 @@ func TestCanonWireGoClassBuilderSample(t *testing.T) {
 	require.NoError(t, err)
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	raDriver := readaccess.NewGoCodeGeneratorDriver(conv, tech, true)
+	dmlDriver := dml.NewGoCodeGeneratorDriver(conv, tech)
 	driver := NewGoCodeGeneratorDriver(conv, tech)
 
 	const tableRowConfig = common.TableRowConfigMultiAttributesPerRow
@@ -554,13 +677,16 @@ func TestCanonWireGoClassBuilderSample(t *testing.T) {
 		tblDesc, err = manip.BuildTableDesc()
 		require.NoError(t, err)
 		tableName := naming.MustBeValidStylableName("testtable")
-		if _, _, raErr := raDriver.GenerateGoClasses("example", tableName, tblDesc, tableRowConfig, namer); raErr != nil {
+		raSrc, _, raErr := raDriver.GenerateGoClasses("example", tableName, tblDesc, tableRowConfig, namer)
+		if raErr != nil {
 			// The encoder calls accessors that would not exist: a canonical
 			// type the readaccess generator refuses is out of scope here, not
 			// a failure of this generator.
 			skipped++
 			continue
 		}
+		dmlSrc, _, dmlErr := dmlDriver.GenerateGoClasses("example", tableName, tblDesc, tableRowConfig, namer)
+		require.NoError(t, dmlErr)
 		var sourceCode []byte
 		var wellFormed bool
 		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", tableName, tblDesc, tableRowConfig, namer)
@@ -575,6 +701,14 @@ func TestCanonWireGoClassBuilderSample(t *testing.T) {
 			}
 		}
 		require.True(t, wellFormed)
+		// The three generators' outputs must type-check as one package: this
+		// is the check that catches an emitted reference to a symbol that
+		// does not exist, which format.Source cannot see.
+		require.NoError(t, typeCheckGenerated(t, imp, map[string][]byte{
+			"sample_ra.go":        raSrc,
+			"sample_dml.go":       dmlSrc,
+			"sample_canonwire.go": sourceCode,
+		}))
 	}
 	if skipped == n {
 		t.Skipf("all %d random tables carry canonical types the readaccess generator refuses", n)

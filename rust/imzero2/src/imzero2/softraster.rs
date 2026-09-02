@@ -56,7 +56,8 @@
 //! 179 MiB) beats sixteen without it (0.76 ms, 406 MiB).
 //!
 //! Roughly 15 MiB per worker, most of it per-thread allocator arenas (imzero2
-//! runs mimalloc) plus the in-flight per-primitive raster each worker holds.
+//! runs the system allocator) plus the in-flight per-primitive raster each worker
+//! holds.
 //! Going 4 → 16 workers buys ~1.5 ms of p99 for ~180 MiB and ~2 ms more CPU per
 //! frame, and nothing at all on p50 — which is why the default is four rather
 //! than half the hardware threads. Raise it with

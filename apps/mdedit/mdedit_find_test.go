@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
@@ -107,14 +109,13 @@ func TestMatchAtOrAfter(t *testing.T) {
 // of the document on every keystroke.
 func TestEnsureMatches_KeepsTheReaderWhereTheyWere(t *testing.T) {
 	inst := &App{src: "one two one two one twain"}
-	inst.find.show = true
 	inst.find.query = "two"
 	inst.ensureMatches()
 	require.Len(t, inst.find.matches, 2)
 
 	// Move to the second match, then extend the query so the first one drops
 	// out of the list. The bar must stay on what is still nearby, not reset.
-	inst.gotoMatch(1)
+	inst.gotoMatch(1, true)
 	inst.find.query = "twa"
 	inst.ensureMatches()
 	require.Len(t, inst.find.matches, 1)
@@ -123,23 +124,21 @@ func TestEnsureMatches_KeepsTheReaderWhereTheyWere(t *testing.T) {
 	assert.Equal(t, "twa", inst.src[m.Start:m.Stop])
 }
 
-func TestEnsureMatches_ClosedBarHoldsNothing(t *testing.T) {
+func TestEnsureMatches_EmptyQueryHoldsNothing(t *testing.T) {
 	inst := &App{src: "cat cat"}
-	inst.find.show = true
 	inst.find.query = "cat"
 	inst.ensureMatches()
 	require.Len(t, inst.find.matches, 2)
 
-	inst.find.show = false
+	inst.find.query = ""
 	inst.ensureMatches()
-	assert.Empty(t, inst.find.matches, "a closed bar must not keep a stale match list")
+	assert.Empty(t, inst.find.matches, "a cleared query must not keep a stale match list")
 }
 
 // TestEnsureMatches_FollowsTheBuffer covers the gate's third input: an edit
 // invalidates the list even though the query did not move.
 func TestEnsureMatches_FollowsTheBuffer(t *testing.T) {
 	inst := &App{src: "cat"}
-	inst.find.show = true
 	inst.find.query = "cat"
 	inst.ensureMatches()
 	require.Len(t, inst.find.matches, 1)
@@ -316,11 +315,10 @@ func TestReplaceSpans_LongerReplacementDoesNotShiftLaterSpans(t *testing.T) {
 
 func TestReplaceCurrent_RewritesOneAndStaysInPlace(t *testing.T) {
 	inst := &App{src: "cat cat cat"}
-	inst.find.show = true
 	inst.find.query = "cat"
 	inst.find.replacement = "dog"
 	inst.ensureMatches()
-	inst.gotoMatch(1)
+	inst.gotoMatch(1, true)
 
 	inst.replaceCurrent()
 
@@ -350,11 +348,10 @@ func TestReplaceCurrent_RewritesOneAndStaysInPlace(t *testing.T) {
 // wrote.
 func TestReplaceCurrent_ResumesPastWhatItWrote(t *testing.T) {
 	inst := &App{src: "cat cat"}
-	inst.find.show = true
 	inst.find.query = "cat"
 	inst.find.replacement = "cats"
 	inst.ensureMatches()
-	inst.gotoMatch(0)
+	inst.gotoMatch(0, true)
 
 	inst.replaceCurrent()
 	inst.ensureMatches()
@@ -367,7 +364,6 @@ func TestReplaceCurrent_ResumesPastWhatItWrote(t *testing.T) {
 
 func TestReplaceCurrent_WithNoMatchDoesNothing(t *testing.T) {
 	inst := &App{src: "unchanged"}
-	inst.find.show = true
 	inst.find.query = "absent"
 	inst.find.replacement = "x"
 	inst.ensureMatches()
@@ -380,7 +376,6 @@ func TestReplaceCurrent_WithNoMatchDoesNothing(t *testing.T) {
 
 func TestReplaceAll(t *testing.T) {
 	inst := &App{src: "cat CAT cat"}
-	inst.find.show = true
 	inst.find.query = "cat"
 	inst.find.replacement = "dog"
 	inst.find.matchCase = true
@@ -395,7 +390,6 @@ func TestReplaceAll(t *testing.T) {
 
 func TestReplaceAll_Folded(t *testing.T) {
 	inst := &App{src: "cat CAT Cat"}
-	inst.find.show = true
 	inst.find.query = "cat"
 	inst.find.replacement = "dog"
 	inst.ensureMatches()
@@ -425,12 +419,11 @@ func TestRebindBuffer_NoopOnAnIdenticalBuffer(t *testing.T) {
 // neither caret nor selection and the reader would see nothing happen.
 func TestGotoMatch_SelectsTheMatchAndTakesFocus(t *testing.T) {
 	inst := &App{src: "one cat two cat"}
-	inst.find.show = true
 	inst.find.query = "cat"
 	inst.ensureMatches()
 	require.Len(t, inst.find.matches, 2)
 
-	inst.gotoMatch(1)
+	inst.gotoMatch(1, true)
 
 	require.True(t, inst.pendingCaretOk)
 	assert.Equal(t, caretRequest{Start: 12, Stop: 15, Focus: true}, inst.pendingCaret)
@@ -445,12 +438,11 @@ func TestGotoMatch_SelectsTheMatchAndTakesFocus(t *testing.T) {
 func TestGotoMatch_ScrollsThePreviewToTheMatchSection(t *testing.T) {
 	inst := &App{src: headingDoc}
 	inst.doc = markdown.Parse([]byte(headingDoc))
-	inst.find.show = true
 	inst.find.query = "body two"
 	inst.ensureMatches()
 	require.Len(t, inst.find.matches, 1)
 
-	inst.gotoMatch(0)
+	inst.gotoMatch(0, true)
 
 	assert.Equal(t, "second", inst.pendingScroll)
 	assert.Equal(t, "", inst.caretSlug,
@@ -462,8 +454,48 @@ func TestGotoMatch_ScrollsThePreviewToTheMatchSection(t *testing.T) {
 // match 0 to go to.
 func TestGotoMatch_WithNoMatchesIsANoop(t *testing.T) {
 	inst := &App{src: "prose"}
-	inst.gotoMatch(0)
+	inst.gotoMatch(0, true)
 	assert.False(t, inst.pendingCaretOk)
+}
+
+// TestGotoMatch_WithoutFocusLeavesTheField pins the Enter path's half of the
+// ADR-0130 focus rule: stepping from inside the query field must not pull
+// focus into the source, or the second Enter would type a newline into the
+// document instead of stepping again.
+func TestGotoMatch_WithoutFocusLeavesTheField(t *testing.T) {
+	inst := &App{src: "one cat two cat"}
+	inst.find.query = "cat"
+	inst.ensureMatches()
+	require.Len(t, inst.find.matches, 2)
+
+	inst.gotoMatch(1, false)
+
+	require.True(t, inst.pendingCaretOk)
+	assert.False(t, inst.pendingCaret.Focus)
+}
+
+// TestFindKeyDelta maps the captured keys the query field eats to match steps.
+// The capture mask matches Enter ALONE (ADR-0177 SD5), so Shift+Enter arrives
+// as Enter with the shift bit set — the mapping is where the two part ways.
+func TestFindKeyDelta(t *testing.T) {
+	cases := []struct {
+		name  string
+		key   c.CapturedKey
+		delta int
+		ok    bool
+	}{
+		{"enter advances", c.CapturedKey{Code: keycodes.Enter}, 1, true},
+		{"shift+enter goes back", c.CapturedKey{Code: keycodes.Enter, Mods: 1}, -1, true},
+		{"ctrl+enter still steps", c.CapturedKey{Code: keycodes.Enter, Mods: 2}, 1, true},
+		{"another key steps nothing", c.CapturedKey{Code: keycodes.Escape}, 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			delta, ok := findKeyDelta(tc.key)
+			assert.Equal(t, tc.ok, ok)
+			assert.Equal(t, tc.delta, delta)
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +504,6 @@ func TestGotoMatch_WithNoMatchesIsANoop(t *testing.T) {
 
 func TestFindSummary(t *testing.T) {
 	inst := &App{src: "cat cat cat"}
-	inst.find.show = true
 	assert.Equal(t, "", inst.findSummary(), "no query, nothing to report")
 
 	inst.find.query = "absent"
@@ -481,7 +512,7 @@ func TestFindSummary(t *testing.T) {
 
 	inst.find.query = "cat"
 	inst.ensureMatches()
-	inst.gotoMatch(1)
+	inst.gotoMatch(1, true)
 	assert.Equal(t, "2 of 3", inst.findSummary())
 }
 
@@ -499,7 +530,6 @@ func TestTourQueryMatchesTheScene(t *testing.T) {
 // matches would say the highlighting is complete when it is not.
 func TestFindSummary_SaysWhenThePaintingIsBounded(t *testing.T) {
 	inst := &App{src: strings.Repeat("a ", maxPaintedMatches+50)}
-	inst.find.show = true
 	inst.find.query = "a"
 	inst.ensureMatches()
 	require.Greater(t, len(inst.find.matches), maxPaintedMatches)

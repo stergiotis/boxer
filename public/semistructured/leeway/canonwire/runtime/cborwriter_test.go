@@ -166,3 +166,18 @@ func TestErrIsSticky(t *testing.T) {
 	require.NoError(t, c.Err())
 	require.Equal(t, "01", hex.EncodeToString(b.Bytes()))
 }
+
+// Text strings must be valid UTF-8 (RFC 8949 §2); the writer refuses what
+// ReadText refuses, so the wire stays writer/reader symmetric.
+func TestWriteTextRefusesInvalidUtf8(t *testing.T) {
+	var b bytes.Buffer
+	c, err := NewCborWriter(&b)
+	require.NoError(t, err)
+	c.WriteText([]byte{0x61, 0xff, 0x62})
+	require.ErrorIs(t, c.Err(), ErrOutOfRange)
+	require.Equal(t, 0, b.Len())
+
+	c.Reset(&b)
+	c.WriteTextString("aµb")
+	require.NoError(t, c.Err())
+}

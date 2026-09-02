@@ -26,6 +26,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 )
 
 // dirtyListener records whether anything was reported.
@@ -187,5 +188,5 @@ func TestSLLFallbackIsLoadBearing(t *testing.T) {
 func TestSyntaxErrorsStillReport(t *testing.T) {
 	_, err := nanopass.Parse("SELECT FROM WHERE")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "syntax error")
+	assert.Contains(t, ebtest.Text(t, err), "syntax error")
 }

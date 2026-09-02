@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmreplay"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
 
@@ -82,7 +83,7 @@ func NewStoreSource(ctx context.Context, opts StoreSourceOptions) (inst *StoreSo
 	}
 	client := chclient.New(cfg, nil)
 	if perr := client.Ping(ctx); perr != nil {
-		err = eh.Errorf("imztop: replay needs ClickHouse at %s: %w", cfg.URL, perr)
+		err = eb.Build().Str("url", cfg.URL).Errorf("imztop: replay needs ClickHouse: %w", perr)
 		return
 	}
 	exec, err := storeexec.New(client, nil)
@@ -93,9 +94,10 @@ func NewStoreSource(ctx context.Context, opts StoreSourceOptions) (inst *StoreSo
 	store := sysmfacts.NewSysmetricsStore(exec, nil, sysmfacts.SysmetricsStoreConfig{})
 	if verr := store.VerifySchema(ctx); verr != nil {
 		store.Close()
-		err = eh.Errorf("imztop: no stored metric history at %s — %s does not match the store, "+
+		err = eb.Build().Str("url", cfg.URL).Errorf("imztop: no stored metric history — "+
+			sysmfacts.SysmetricsTableName+" does not match the store, "+
 			"which is what an installation that has never run `sysmetricsd --tee` looks like: %w",
-			cfg.URL, sysmfacts.SysmetricsTableName, verr)
+			verr)
 		return
 	}
 	// The same executor the store was built on, so coverage and replay cannot

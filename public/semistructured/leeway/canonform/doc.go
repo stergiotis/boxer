@@ -23,7 +23,7 @@
 // lane — the form needs the exact Float32, not its rendering) and
 // CoSectionTagSinkI capabilities, and is driven like any other sink:
 //
-//	enc, _ := canonform.NewEncoder(&tblDesc, ir, canonform.Options{})
+//	enc, _ := canonform.NewEncoder(ir, canonform.Options{})
 //	err := driver.DriveRecordBatch(enc, rec)
 //	// enc.NumRecords() digests of enc.DigestSize() bytes each, enc.RecordDigest(i)
 //

@@ -2869,7 +2869,7 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 	}
 	imports := containers.NewHashSet[string](32)
 
-	for _, cp := range ir.IterateColumnProps() {
+	for cc, cp := range ir.IterateColumnProps() {
 		for i, ct := range cp.CanonicalType {
 			var imp []string
 			_, _, imp, err = codegen.GenerateGoCode(ct, cp.EncodingHints[i])
@@ -2877,8 +2877,12 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 				err = eb.Build().Stringer("canonicalType", ct).Errorf("unable to generate go code for canonical type: %w", err)
 				return
 			}
-			if _, ok := netipAccessor(ct); ok {
-				// The GetAttrValue<Col>Addr / <Col>Prefix accessor emitted for this column needs net/netip.
+			if _, ok := netipAccessor(ct); ok && cc.Scope == common.IntermediateColumnScopeTagged && cp.Roles[i] == common.ColumnRoleValue {
+				// The GetAttrValue<Col>Addr / <Col>Prefix accessor needs
+				// net/netip — and it is emitted only for a tagged section's
+				// scalar network value columns, so the import must be gated
+				// the same way (a plain network column has no accessor and
+				// would leave the import unused).
 				imp = append(imp, "net/netip")
 			}
 			for _, im := range imp {

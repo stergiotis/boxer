@@ -90,6 +90,10 @@ func TestService_DialogRead_ResolveGrantsHandleAndReads(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, reply.Granted)
 	require.Equal(t, fsbroker.HandleSubjectPrefix+handleUuid, reply.HandleSubjectPrefix)
+	// The one fact about the file's identity the Powerbox reveals: the
+	// basename, never the path.
+	assert.Equal(t, "hello.txt", reply.DisplayName)
+	assert.NotContains(t, reply.DisplayName, string(filepath.Separator))
 
 	// Now read via the granted handle subject. The app's caps must have
 	// been augmented by Resolve so this Publish doesn't trip
@@ -123,6 +127,7 @@ func TestService_DialogRead_Cancel(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, reply.Granted)
 	assert.Contains(t, reply.Reason, "cancel")
+	assert.Empty(t, reply.DisplayName, "a denial names nothing")
 }
 
 func TestService_Resolve_UnknownRequest(t *testing.T) {
@@ -188,6 +193,8 @@ func TestService_DialogWrite_ResolveGrantsHandleAndWrites(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, reply.Granted)
 	require.Equal(t, fsbroker.HandleSubjectPrefix+handleUuid, reply.HandleSubjectPrefix)
+	assert.Equal(t, "out.structdto", reply.DisplayName,
+		"a write grant names its file too — the save target's title")
 
 	// Write via the granted handle subject; the ack is a DialogReply so the
 	// app can tell success (Granted) from a filesystem error (Reason).

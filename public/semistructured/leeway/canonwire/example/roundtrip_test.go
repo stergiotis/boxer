@@ -11,11 +11,41 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/stretchr/testify/require"
 
 	cwruntime "github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/runtime"
 	rartime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
+
+// requireCoreDetSequence strict-decodes every entity item of a CBOR sequence
+// with the fxamacker library and re-encodes it under CoreDetEncOptions,
+// requiring byte equality — the check against an implementation this
+// repository does not own (the ADR-0201 M1 pattern, applied to whole wire
+// items rather than only value forms).
+func requireCoreDetSequence(t *testing.T, b []byte) {
+	t.Helper()
+	em, err := cbor.CoreDetEncOptions().EncMode()
+	require.NoError(t, err)
+	dm, err := cbor.DecOptions{DupMapKey: cbor.DupMapKeyEnforcedAPF}.DecMode()
+	require.NoError(t, err)
+	rest := b
+	n := 0
+	for len(rest) > 0 {
+		var probe any
+		after, uerr := cbor.UnmarshalFirst(rest, &probe)
+		require.NoError(t, uerr)
+		item := rest[:len(rest)-len(after)]
+		var v any
+		require.NoError(t, dm.Unmarshal(item, &v))
+		again, merr := em.Marshal(v)
+		require.NoError(t, merr)
+		require.Equal(t, item, again, "re-encoding under CoreDetEncOptions must reproduce the entity item")
+		rest = after
+		n++
+	}
+	require.Greater(t, n, 0)
+}
 
 // The round-trip suite of ADR-0210 M2: dml → batch → Encoder → bytes₁ →
 // Decoder → batch → Encoder → bytes₂, with bytes₁ == bytes₂ and the two
@@ -193,6 +223,7 @@ func TestRoundTripTestTable(t *testing.T) {
 	n, err := cwruntime.VerifyCanonicalSequence(first.Bytes())
 	require.NoError(t, err)
 	require.Equal(t, roundTripEntities, n)
+	requireCoreDetSequence(t, first.Bytes())
 
 	dst := NewInEntityTestTable(memory.DefaultAllocator, 128)
 	dec, err := NewCanonWireDecoderTestTable(dst, nil)
@@ -287,6 +318,7 @@ func TestRoundTripNetTable(t *testing.T) {
 	n, err := cwruntime.VerifyCanonicalSequence(first.Bytes())
 	require.NoError(t, err)
 	require.Equal(t, roundTripEntities, n)
+	requireCoreDetSequence(t, first.Bytes())
 
 	dst := NewInEntityNetTable(memory.DefaultAllocator, 128)
 	dec, err := NewCanonWireDecoderNetTable(dst, nil)
@@ -412,6 +444,7 @@ func TestRoundTripPlace(t *testing.T) {
 	n, err := cwruntime.VerifyCanonicalSequence(first.Bytes())
 	require.NoError(t, err)
 	require.Equal(t, roundTripEntities, n)
+	requireCoreDetSequence(t, first.Bytes())
 
 	dst := NewInEntityPlace(memory.DefaultAllocator, 128)
 	dec, err := NewCanonWireDecoderPlace(dst, nil)
@@ -552,6 +585,7 @@ func TestRoundTripJson(t *testing.T) {
 	n, err := cwruntime.VerifyCanonicalSequence(first.Bytes())
 	require.NoError(t, err)
 	require.Equal(t, roundTripEntities, n)
+	requireCoreDetSequence(t, first.Bytes())
 
 	dst := NewInEntityJson(memory.DefaultAllocator, 128)
 	dec, err := NewCanonWireDecoderJson(dst, CanonWireOrdinalDispatcherJson{})
@@ -570,4 +604,130 @@ func TestRoundTripJson(t *testing.T) {
 	require.NoError(t, enc2.EncodeAll(&second))
 	require.Equal(t, first.Bytes(), second.Bytes())
 	require.Equal(t, jsonLines(raFirst), jsonLines(raSecond))
+}
+
+// ------------------------------------------------------------ channel table
+
+// channelTableLines renders every attribute of every channel section. The
+// parametrized channels are compared on their params blob: a per-row blob has
+// no rendered label (membership.Renderer shows RenderRef(0) for it), so the
+// blob is the identity to assert on.
+func channelTableLines(ra *ReadAccessChannelTable) (perEntity []string) {
+	n := ra.GetNumberOfEntities()
+	perEntity = make([]string, 0, n)
+	for e := range n {
+		idx := rartime.EntityIdx(e)
+		var sb bytes.Buffer
+		fmt.Fprintf(&sb, "id=%d\n", ra.EntityId.GetAttrValueId(idx))
+		lines := make([]string, 0, 8)
+		for a := range int(ra.Mref.Attributes.GetNumberOfAttributes(idx)) {
+			ai := rartime.AttributeIdx(a)
+			lines = append(lines, fmt.Sprintf("mref a=%d m=%v",
+				ra.Mref.Attributes.GetAttrValueA(idx, ai),
+				seq2Lines(ra.Mref.Memberships.GetMembValueLowCardRefHighCardParams(idx, ai))))
+		}
+		for a := range int(ra.Href.Attributes.GetNumberOfAttributes(idx)) {
+			ai := rartime.AttributeIdx(a)
+			lines = append(lines, fmt.Sprintf("href b=%d m=%v",
+				ra.Href.Attributes.GetAttrValueB(idx, ai),
+				seqLines(ra.Href.Memberships.GetMembValueHighCardRef(idx, ai))))
+		}
+		for a := range int(ra.Hverb.Attributes.GetNumberOfAttributes(idx)) {
+			ai := rartime.AttributeIdx(a)
+			lines = append(lines, fmt.Sprintf("hverb c=%q m=%v",
+				ra.Hverb.Attributes.GetAttrValueC(idx, ai),
+				seqLines(ra.Hverb.Memberships.GetMembValueHighCardVerbatim(idx, ai))))
+		}
+		for a := range int(ra.Lparam.Attributes.GetNumberOfAttributes(idx)) {
+			ai := rartime.AttributeIdx(a)
+			lines = append(lines, fmt.Sprintf("lparam d=%v m=%v",
+				ra.Lparam.Attributes.GetAttrValueD(idx, ai),
+				seqLines(ra.Lparam.Memberships.GetMembValueLowCardRefParametrized(idx, ai))))
+		}
+		for a := range int(ra.Hparam.Attributes.GetNumberOfAttributes(idx)) {
+			ai := rartime.AttributeIdx(a)
+			lines = append(lines, fmt.Sprintf("hparam e=%v m=%v",
+				ra.Hparam.Attributes.GetAttrValueE(idx, ai),
+				seqLines(ra.Hparam.Memberships.GetMembValueHighCardRefParametrized(idx, ai))))
+		}
+		slices.Sort(lines)
+		fmt.Fprintf(&sb, "%v", lines)
+		perEntity = append(perEntity, sb.String())
+	}
+	return
+}
+
+// writeChannelTable drives every channel the other golden tables leave out:
+// the mixed ref carrier, both high-card single carriers and both parametrized
+// carriers, each with more than one membership per attribute so the wire's
+// per-group sort is exercised.
+func writeChannelTable(t *testing.T, dml *InEntityChannelTable) {
+	t.Helper()
+	secMref := dml.GetSectionMref()
+	secHref := dml.GetSectionHref()
+	secHverb := dml.GetSectionHverb()
+	secLparam := dml.GetSectionLparam()
+	secHparam := dml.GetSectionHparam()
+	for i := range roundTripEntities {
+		ent := dml.BeginEntity()
+		ent.SetId(uint64(i))
+		secMref.BeginAttribute(uint64(i)*11).
+			AddMembershipMixedLowCardRef(uint64(i)+1, []byte("p1")).
+			AddMembershipMixedLowCardRef(uint64(i)+1, []byte("p0")).
+			EndAttribute()
+		secHref.BeginAttribute(-int64(i)).
+			AddMembershipHighCardRef(9).
+			AddMembershipHighCardRef(2).
+			EndAttribute()
+		secHverb.BeginAttribute(fmt.Sprintf("s%d", i)).
+			AddMembershipHighCardVerbatim([]byte("zz")).
+			AddMembershipHighCardVerbatim([]byte("aa")).
+			EndAttribute()
+		secLparam.BeginAttribute([]byte{0x01, byte(i)}).
+			AddMembershipLowCardRefParametrized([]byte("k=10")).
+			AddMembershipLowCardRefParametrized([]byte("k=2")).
+			EndAttribute()
+		if i%2 == 0 {
+			secHparam.BeginAttribute(float64(i) + 0.5).
+				AddMembershipHighCardRefParametrized([]byte("q")).
+				EndAttribute()
+		}
+		require.NoError(t, ent.CheckErrors())
+		require.NoError(t, ent.CommitEntity())
+	}
+}
+
+func TestRoundTripChannelTable(t *testing.T) {
+	src := NewInEntityChannelTable(memory.DefaultAllocator, 128)
+	writeChannelTable(t, src)
+
+	raFirst := NewReadAccessChannelTable()
+	transfer(t, src.TransferRecords, raFirst.LoadFromRecord)
+
+	enc, err := NewCanonWireEncoderChannelTable(raFirst, nil)
+	require.NoError(t, err)
+	var first bytes.Buffer
+	require.NoError(t, enc.EncodeAll(&first))
+	n, err := cwruntime.VerifyCanonicalSequence(first.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, roundTripEntities, n)
+	requireCoreDetSequence(t, first.Bytes())
+
+	dst := NewInEntityChannelTable(memory.DefaultAllocator, 128)
+	dec, err := NewCanonWireDecoderChannelTable(dst, nil)
+	require.NoError(t, err)
+	decoded, err := dec.DecodeAll(first.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, roundTripEntities, decoded)
+
+	raSecond := NewReadAccessChannelTable()
+	transfer(t, dst.TransferRecords, raSecond.LoadFromRecord)
+	require.Equal(t, raFirst.GetNumberOfEntities(), raSecond.GetNumberOfEntities())
+
+	enc2, err := NewCanonWireEncoderChannelTable(raSecond, nil)
+	require.NoError(t, err)
+	var second bytes.Buffer
+	require.NoError(t, enc2.EncodeAll(&second))
+	require.Equal(t, first.Bytes(), second.Bytes())
+	require.Equal(t, channelTableLines(raFirst), channelTableLines(raSecond))
 }

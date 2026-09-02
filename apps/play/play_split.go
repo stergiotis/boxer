@@ -104,7 +104,7 @@ func splitGraph(sql string) (res splitResult, err error) {
 		return
 	}
 	if nonSet > 1 {
-		err = eh.Errorf("splitGraph: multi-statement buffers are not supported by the query graph (%d statements); write a SET prelude plus one statement", nonSet)
+		err = eb.Build().Int("statements", nonSet).Errorf("splitGraph: multi-statement buffers are not supported by the query graph; write a SET prelude plus one statement")
 		return
 	}
 	stmt := stmts[sinkIdx]
@@ -237,9 +237,9 @@ func checkClientInputs(res splitResult) (err error) {
 		if _, ok := findSplitNode(res, n.Client.Input); ok {
 			continue
 		}
-		err = eh.Errorf("splitGraph: CTE %q: `%s` reads %q, which is not a CTE of this query — "+
-			"lift it into the query's own WITH clause so the graph can show what is computed where",
-			string(n.ID), n.Client.Spec.Name, string(n.Client.Input))
+		err = eb.Build().Str("cte", string(n.ID)).Str("call", n.Client.Spec.Name).Str("reads", string(n.Client.Input)).
+			Errorf("splitGraph: a client call reads something that is not a CTE of this query — " +
+				"lift it into the query's own WITH clause so the graph can show what is computed where")
 		return
 	}
 	return
@@ -273,15 +273,15 @@ func checkClientLeaves(res splitResult) (err error) {
 				// selecting from it, which is what SQL habit suggests. Bind a
 				// pane to the CTE instead — the panels read nodes, not only
 				// the sink.
-				return eh.Errorf("splitGraph: the final SELECT reads %q, which is computed client-side "+
-					"by %s and is never sent to ClickHouse (ADR-0163 §SD4). Bind a pane to the %q CTE "+
-					"instead of selecting from it — in the Graph tab, or by naming it as a panel's channel",
-					string(dep), call.Spec.Name, string(dep))
+				return eb.Build().Str("cte", string(dep)).Str("call", call.Spec.Name).
+					Errorf("splitGraph: the final SELECT reads a CTE that is computed client-side " +
+						"and is never sent to ClickHouse (ADR-0163 §SD4). Bind a pane to that CTE " +
+						"instead of selecting from it — in the Graph tab, or by naming it as a panel's channel")
 			}
-			return eh.Errorf("splitGraph: CTE %q reads %q, which is computed client-side by %s and is "+
-				"never sent to ClickHouse (ADR-0163 §SD4). A client call is a terminal leaf: nothing "+
-				"downstream can read it. Bind a pane to %q, or move the SQL that reads it upstream of the call",
-				string(n.ID), string(dep), call.Spec.Name, string(dep))
+			return eb.Build().Str("cte", string(n.ID)).Str("reads", string(dep)).Str("call", call.Spec.Name).
+				Errorf("splitGraph: a CTE reads something computed client-side that is " +
+					"never sent to ClickHouse (ADR-0163 §SD4). A client call is a terminal leaf: nothing " +
+					"downstream can read it. Bind a pane to it, or move the SQL that reads it upstream of the call")
 		}
 	}
 	return

@@ -44,7 +44,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
@@ -88,9 +90,13 @@ var (
 
 // Hover help for the bar.
 const (
-	tipFind = "Find and replace inside the document. Matches are painted in the source pane; the current one is the warmer colour."
+	tipFind = "Find inside the document. Matches are painted in the source pane; the current one is the warmer colour."
 
-	tipFindQuery = "Text to find. Matching is literal — no regular expressions, no whole-word option."
+	tipFindQuery = "Text to find. Matching is literal — no regular expressions, no whole-word option. Enter goes to the next match, Shift+Enter to the previous one."
+
+	tipFindClear = "Clear the query. The matches and their painting go with it."
+
+	tipReplaceToggle = "Show the replace row. Kept behind a toggle because its buttons rewrite the buffer."
 
 	tipFindCase = "Match case. With it off, letters fold both ways, including accented and non-Latin ones."
 
@@ -119,24 +125,33 @@ type matchSpan struct {
 // findState is everything the bar owns. Kept as one field on App rather than
 // nine, so the milestone's state is as separable as its file is.
 type findState struct {
-	show        bool
 	query       string
 	replacement string
 	matchCase   bool
+
+	// showReplace reveals the replace row. Find itself has no toggle — the
+	// query field is always in the bar and an empty query means "not finding"
+	// — but replace stays behind one: its two buttons rewrite the buffer, and
+	// a row of rewrite gestures should be asked for rather than ambient.
+	showReplace bool
+
+	// queryFieldId is the query TextEdit's widget id from the last frame, the
+	// handle its captured keys are read back under. Zero until the field has
+	// rendered once.
+	queryFieldId uint64
 
 	// matches is every occurrence in document order, and idx which of them is
 	// current. idx is meaningless when matches is empty.
 	matches []matchSpan
 	idx     int
 
-	// forSrc / forQuery / forCase / forShow are the inputs the match list was
-	// computed from — the same text-keyed gate shape the lex and the preview
-	// use, widened to the two other things a match depends on. have separates
+	// forSrc / forQuery / forCase are the inputs the match list was computed
+	// from — the same text-keyed gate shape the lex and the preview use,
+	// widened to the other things a match depends on. have separates
 	// "computed, no matches" from "not computed".
 	forSrc   string
 	forQuery string
 	forCase  bool
-	forShow  bool
 	have     bool
 
 	// resumeAt is a byte offset the next recompute must resume from, set by a
@@ -277,13 +292,13 @@ func stepIndex(idx, n, delta int) (next int) {
 // where to resume, past what it wrote. Otherwise the current match's own start
 // keeps the bar roughly where the reader was looking, so typing another
 // character into the query does not throw them back to the top of the
-// document. And with no current match — the bar has just been opened — the
-// caret is where the reader is, which is a better place to start than byte
-// zero.
+// document. And with no current match — the first character of a query has
+// just been typed — the caret is where the reader is, which is a better place
+// to start than byte zero.
 func (inst *App) ensureMatches() {
 	f := &inst.find
 	if f.have && f.forSrc == inst.src && f.forQuery == f.query &&
-		f.forCase == f.matchCase && f.forShow == f.show {
+		f.forCase == f.matchCase {
 		return
 	}
 	anchor := 0
@@ -298,9 +313,9 @@ func (inst *App) ensureMatches() {
 	}
 	f.resumeAtOk = false
 
-	f.forSrc, f.forQuery, f.forCase, f.forShow, f.have =
-		inst.src, f.query, f.matchCase, f.show, true
-	if !f.show || f.query == "" {
+	f.forSrc, f.forQuery, f.forCase, f.have =
+		inst.src, f.query, f.matchCase, true
+	if f.query == "" {
 		f.matches, f.idx = nil, 0
 		return
 	}
@@ -510,17 +525,21 @@ func (inst *App) rebindBuffer(next string) (changed bool) {
 // itself, and there is no byte-range-to-rect channel to do it from outside
 // (ADR-0130, 2026-08-08). Taking the preview to the match's section is the one
 // thing this app CAN do to show the reader where they were sent.
-func (inst *App) gotoMatch(idx int) {
+//
+// Focus is the caller's judgment, the ADR-0130 rule restated: an unfocused
+// TextEdit paints neither caret nor selection, so a CLICK on the navigation
+// buttons means "take me there" and passes true — but stepping with Enter from
+// inside the query field must NOT pull focus out from under the keys doing the
+// stepping, so the key path passes false and the painted matches show the
+// landing.
+func (inst *App) gotoMatch(idx int, focus bool) {
 	f := &inst.find
 	if len(f.matches) == 0 {
 		return
 	}
 	f.idx = idx
 	m := f.matches[idx]
-	// Focus, because this gesture means "take me there" and an unfocused
-	// TextEdit paints neither caret nor selection — the ADR-0130 rule that
-	// find-as-you-type passes false and a commit passes true.
-	inst.requestCaret(m.Start, m.Stop, true)
+	inst.requestCaret(m.Start, m.Stop, focus)
 	if inst.doc != nil {
 		// Deliberately not touching caretSlug, for the reason the outline
 		// click records: the caret has not moved yet, and claiming its new
@@ -528,6 +547,24 @@ func (inst *App) gotoMatch(idx int) {
 		// and drag the preview back.
 		inst.pendingScroll = headingSlugAt(inst.src, inst.doc.Headings(), m.Start)
 	}
+}
+
+// findKeyMask is what the query field eats while focused: Enter alone. The
+// mask matches the key regardless of modifiers and CONSUMES it, which is
+// exactly right here — a single-line TextEdit has no use for Enter of its own,
+// and consuming it keeps the field focused while the reader walks the matches.
+var findKeyMask = keycodes.MaskOf(keycodes.Enter)
+
+// findKeyDelta maps one captured key on the query field to a match step:
+// Enter advances, Shift+Enter goes back, anything else steps nothing.
+func findKeyDelta(k c.CapturedKey) (delta int, ok bool) {
+	if k.Code != keycodes.Enter {
+		return 0, false
+	}
+	if k.Shift() {
+		return -1, true
+	}
+	return 1, true
 }
 
 // ---------------------------------------------------------------------------
@@ -558,24 +595,54 @@ func (inst *App) findSummary() (s string) {
 	return b.String()
 }
 
-// renderFindBar draws the third row of the action bar. Callers own the
-// enclosing horizontal layout.
+// renderFindRow draws the find group inside the bar's state row: the query
+// field, its clear button, the case toggle, navigation, the count readout and
+// the replace-row toggle. Callers own the enclosing horizontal layout.
+//
+// The group is always in the bar rather than behind a checkbox (M3 shipped it
+// behind one): the empty query already means "not finding", so a separate
+// on/off was a second way to say the same thing — and the field being visible
+// is what makes find discoverable at all.
 //
 // Every button acts through the helpers above rather than editing state here,
 // so the whole of what find and replace DO is testable without a frame.
-func (inst *App) renderFindBar() {
+func (inst *App) renderFindRow() {
 	f := &inst.find
+	for range c.HoverText(tipFind).KeepIter() {
+		c.Label(icons.PhMagnifyingGlass).Selectable(false).Send()
+	}
+	// Last frame's Enter presses, applied before the field re-renders. Several
+	// can arrive in one frame (key repeat), and each steps once — WITHOUT
+	// focus, so the caret walks the source while the keys stay in the field.
+	if f.queryFieldId != 0 {
+		for _, k := range c.CurrentApplicationState.StateManager.GetCapturedKeys(widgethandle.Make(f.queryFieldId)) {
+			if delta, ok := findKeyDelta(k); ok {
+				inst.gotoMatch(stepIndex(f.idx, len(f.matches), delta), false)
+			}
+		}
+	}
 	for range c.HoverText(tipFindQuery).KeepIter() {
-		c.TextEdit(inst.ids.PrepareStr("find-query"), f.query, false).
+		te := c.TextEdit(inst.ids.PrepareStr("find-query"), f.query, false).
 			DesiredWidth(findFieldWidthPx).
 			HintText(hintFindQuery).
-			SendRespVal(&f.query)
+			CaptureKeys(uint64(findKeyMask))
+		f.queryFieldId = te.Id()
+		te.SendRespVal(&f.query)
 	}
-	for range c.HoverText(tipReplaceWith).KeepIter() {
-		c.TextEdit(inst.ids.PrepareStr("find-replacement"), f.replacement, false).
-			DesiredWidth(findFieldWidthPx).
-			HintText(hintReplaceWith).
-			SendRespVal(&f.replacement)
+	// The clear button renders only while there is something to clear. The
+	// override is not optional: the databinding lands a frame late, so without
+	// it the frontend's cached text wins at the next Sync and the query comes
+	// straight back (the fsbrowser filter idiom).
+	if f.query != "" {
+		cleared := false
+		for range c.HoverText(tipFindClear).KeepIter() {
+			cleared = c.Button(inst.ids.PrepareStr("find-clear"), atomsFindClear).
+				Frame(false).Small().SendResp().HasPrimaryClicked()
+		}
+		if cleared {
+			f.query = ""
+			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&f.query)
+		}
 	}
 	for range c.HoverText(tipFindCase).KeepIter() {
 		c.Checkbox(inst.ids.PrepareStr("find-case"), f.matchCase, "Aa").
@@ -596,11 +663,35 @@ func (inst *App) renderFindBar() {
 		if prev {
 			delta = -1
 		}
-		inst.gotoMatch(stepIndex(f.idx, len(f.matches), delta))
+		inst.gotoMatch(stepIndex(f.idx, len(f.matches), delta), true)
 	}
 
 	if s := inst.findSummary(); s != "" {
 		c.Label(s).Send()
+	}
+
+	// The toggle goes with the editor: in read mode the replace row it reveals
+	// is suppressed, so a control promising it would be a lie. The flag itself
+	// is left alone — the row comes back with the editor.
+	if inst.editorVisible() {
+		for range c.HoverText(tipReplaceToggle).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("find-replace-toggle"), atomsReplaceToggle).
+				Selected(f.showReplace).SendResp().HasPrimaryClicked() {
+				f.showReplace = !f.showReplace
+			}
+		}
+	}
+}
+
+// renderReplaceRow draws the replace row, present only while its toggle in
+// the find group is on. Callers own the enclosing horizontal layout.
+func (inst *App) renderReplaceRow() {
+	f := &inst.find
+	for range c.HoverText(tipReplaceWith).KeepIter() {
+		c.TextEdit(inst.ids.PrepareStr("find-replacement"), f.replacement, false).
+			DesiredWidth(findFieldWidthPx).
+			HintText(hintReplaceWith).
+			SendRespVal(&f.replacement)
 	}
 
 	replaceOne, replaceEvery := false, false
@@ -625,12 +716,10 @@ func (inst *App) renderFindBar() {
 
 // Button labels, built once — identical retained bytes intern to one blob.
 var (
-	atomsFindPrev   = c.Atoms().Text(icons.PhCaretLeft).Keep()
-	atomsFindNext   = c.Atoms().Text(icons.PhCaretRight).Keep()
-	atomsReplaceOne = c.Atoms().Text("Replace").Keep()
-	atomsReplaceAll = c.Atoms().Text("Replace all").Keep()
+	atomsFindPrev      = c.Atoms().Text(icons.PhCaretLeft).Keep()
+	atomsFindNext      = c.Atoms().Text(icons.PhCaretRight).Keep()
+	atomsFindClear     = c.Atoms().Text(icons.PhX).Keep()
+	atomsReplaceToggle = c.Atoms().Text(icons.PhArrowsLeftRight).Keep()
+	atomsReplaceOne    = c.Atoms().Text("Replace").Keep()
+	atomsReplaceAll    = c.Atoms().Text("Replace all").Keep()
 )
-
-// findToggleLabel is the checkbox in the row above, kept here so the bar's
-// vocabulary lives with the bar.
-const findToggleLabel = icons.PhMagnifyingGlass + " Find"

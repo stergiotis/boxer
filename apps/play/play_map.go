@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
@@ -682,12 +682,12 @@ func viewportFromParams(params map[string]string) (b mercBox, w, h uint32, err e
 	get := func(name SignalID) (v uint32, gErr error) {
 		raw, found := params["param_"+string(name)]
 		if !found {
-			gErr = eh.Errorf("served raster result lacks the %s param", name)
+			gErr = eb.Build().Str("param", name).Errorf("the served raster result lacks a required param")
 			return
 		}
 		u, pErr := strconv.ParseUint(raw, 10, 32)
 		if pErr != nil {
-			gErr = eh.Errorf("served %s = %q is not a UInt32: %w", name, raw, pErr)
+			gErr = eb.Build().Str("param", name).Str("value", raw).Errorf("the served param value is not a UInt32: %w", pErr)
 			return
 		}
 		v = uint32(u)
@@ -747,7 +747,7 @@ func (inst *MapDriver) repack(rec arrow.RecordBatch, served map[string]string, f
 // padded/truncated defensively so the texture upload always matches.
 func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error) {
 	if rec.NumCols() < 4 {
-		err = eh.Errorf("raster query must SELECT 4 columns (r,g,b,a); got %d", rec.NumCols())
+		err = eb.Build().Int64("columns", rec.NumCols()).Errorf("raster query must SELECT 4 columns (r,g,b,a)")
 		return
 	}
 	ra, ok1 := rec.Column(0).(*array.Uint8)
@@ -755,9 +755,10 @@ func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error)
 	ba, ok3 := rec.Column(2).(*array.Uint8)
 	aa, ok4 := rec.Column(3).(*array.Uint8)
 	if !ok1 || !ok2 || !ok3 || !ok4 {
-		err = eh.Errorf("raster columns must be UInt8 (got %s, %s, %s, %s)",
-			rec.Column(0).DataType(), rec.Column(1).DataType(),
-			rec.Column(2).DataType(), rec.Column(3).DataType())
+		err = eb.Build().
+			Stringer("column0", rec.Column(0).DataType()).Stringer("column1", rec.Column(1).DataType()).
+			Stringer("column2", rec.Column(2).DataType()).Stringer("column3", rec.Column(3).DataType()).
+			Errorf("raster columns must be UInt8")
 		return
 	}
 	n := int(w) * int(h)

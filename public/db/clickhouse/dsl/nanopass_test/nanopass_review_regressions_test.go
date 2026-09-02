@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,7 +104,7 @@ func TestRegressionLexerErrorRejected(t *testing.T) {
 func TestRegressionParseErrorHasPosition(t *testing.T) {
 	_, err := nanopass.Parse("SELECT FROM WHERE")
 	require.Error(t, err)
-	assert.Regexp(t, `\d+:\d+`, err.Error())
+	assert.Regexp(t, `\d+:\d+`, ebtest.Text(t, err), "the parser errors carry a position")
 }
 
 // H4: double negation must not produce a "--" prefix (SQL line comment).

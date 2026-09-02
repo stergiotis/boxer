@@ -5,6 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -153,7 +154,7 @@ func TestAttenuateTabsRefusesAnUnknownZone(t *testing.T) {
 	inner := play.NewLivePlayApp(nil, "", appletMaxHistory, nil)
 	err := attenuateTabs(inner, &AppletDef{Slug: "bad", Tabs: []TabSel{{ID: "table", Zone: "basement"}}}, zerolog.Nop())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "basement")
+	assert.Equal(t, "basement", ebtest.Fields(t, err)["zone"], "the error names the unknown zone")
 }
 
 // The zones a document may name are play's, and the two it may not name are

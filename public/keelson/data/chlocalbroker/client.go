@@ -141,9 +141,9 @@ func ExecOnPool(ctx context.Context, bus app.BusI, poolName string, req ExecRequ
 	}
 	if !decoded.OK {
 		if decoded.Stderr != "" {
-			rep.err = eb.Build().Str("error", decoded.Error).Str("stderr", decoded.Stderr).Errorf("chlocalbroker: the local engine reported an error")
+			rep.err = eb.Build().Str("stderr", decoded.Stderr).Errorf("chlocalbroker: %s (stderr: %s)", decoded.Error, decoded.Stderr) //boxer:lint disable=CS013 reason="the local engine's own diagnostic; play classifies on ClickHouse text like UNKNOWN_TABLE through err.Error()"
 		} else {
-			rep.err = eb.Build().Str("reason", decoded.Error).Errorf("chlocalbroker: the local engine reported an error")
+			rep.err = eb.Build().Errorf("chlocalbroker: %s", decoded.Error) //boxer:lint disable=CS013 reason="the local engine's own diagnostic; play classifies on ClickHouse text like UNKNOWN_TABLE through err.Error()"
 		}
 	}
 	return

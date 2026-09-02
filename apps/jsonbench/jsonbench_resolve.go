@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 
@@ -82,7 +83,7 @@ func runResolve(cCtx *cli.Context) (err error) {
 		var resolved string
 		resolved, err = pass.Run(stmt)
 		if err != nil {
-			err = eh.Errorf("resolve %.60s…: %w", stmt, err)
+			err = eb.Build().Str("statement", stmt).Errorf("unable to resolve the statement: %w", err)
 			return
 		}
 		out = append(out, resolved)
@@ -93,7 +94,7 @@ func runResolve(cCtx *cli.Context) (err error) {
 			Strs("candidates", d.Candidates).Msg("unresolved column handle")
 	}
 	if len(bad) > 0 && cCtx.Bool("strict") {
-		err = eh.Errorf("%d column handle(s) did not resolve", len(bad))
+		err = eb.Build().Int("unresolved", len(bad)).Errorf("some column handles did not resolve")
 		return
 	}
 	fmt.Println(strings.Join(out, ";\n") + ";")

@@ -20,10 +20,10 @@ type (
 	HomogenousArrayIdx                           int
 	SetIdx                                       int
 	MembershipHighCardRefIdx                     int
-	MembershipHighCardRefParameterizedIdx        int
+	MembershipHighCardRefParametrizedIdx         int
 	MembershipHighCardVerbatimIdx                int
 	MembershipLowCardRefIdx                      int
-	MembershipLowCardRefParameterizedIdx         int
+	MembershipLowCardRefParametrizedIdx          int
 	MembershipLowCardVerbatimIdx                 int
 	MembershipMixedLowCardRefIdx                 int
 	MembershipMixedRefHighCardParametersIdx      int

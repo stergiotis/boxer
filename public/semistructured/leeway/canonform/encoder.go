@@ -2,9 +2,9 @@ package canonform
 
 import (
 	"bytes"
-	"hash"
 	"slices"
 	"sort"
+	"strconv"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -28,10 +28,9 @@ type Options struct {
 	// (content) or secondary (annotation, not encoded). nil means every
 	// membership is primary.
 	Classifier membershiprole.ClassifierI
-	// IncludeEntityId opts the entity-id plains into the record item. Every
-	// other plain item type is always included; the id is excluded by default
-	// because a content hash that becomes the id cannot contain it.
-	IncludeEntityId bool
+	// Plains selects which plain values are content. The zero value keeps
+	// every plain except the entity id (SD1); see PlainsMask.
+	Plains PlainsMask
 	// Digester supplies the leaf and record hashers; nil selects the keyed
 	// BLAKE3 default (NewBlake3Digester).
 	Digester DigesterI
@@ -69,6 +68,9 @@ type Encoder struct {
 	coGroupColSections map[naming.Key][]naming.StylableName
 	layouts            map[string]*valueLayout
 	plainKeys          map[naming.StylableName][]byte
+	// Per plain value column (by nominal name): whether it is content under
+	// Options.Plains — resolved once against the IR at construction.
+	plainInclude map[naming.StylableName]bool
 
 	// batch
 	recordDigests []byte
@@ -85,9 +87,6 @@ type Encoder struct {
 	curLayout      *valueLayout
 	inCoGroup      bool
 	coGroupKey     naming.Key
-
-	// plain section
-	curPlainInclude bool
 
 	// attribute
 	cols    []colView
@@ -157,19 +156,22 @@ type scratchRange struct {
 
 // NewEncoder prepares an encoder for the table the driver will read. ir is
 // the same IR the driver is constructed with; it is consulted once, to learn
-// which section owns each value column of a co-section group.
-func NewEncoder(tblDesc *common.TableDesc, ir *common.IntermediateTableRepresentation, opts Options) (inst *Encoder, err error) {
+// which section owns each value column of a co-section group and which plain
+// columns Options.Plains selects.
+func NewEncoder(ir *common.IntermediateTableRepresentation, opts Options) (inst *Encoder, err error) {
 	if ir == nil {
 		err = eh.Errorf("canonform: the encoder needs the table's intermediate representation")
 		return
 	}
-	_ = tblDesc
 	dig := opts.Digester
 	if dig == nil {
 		dig = NewBlake3Digester()
 	}
 	if dig.Size() <= 0 {
 		err = eh.Errorf("canonform: digester reports a non-positive digest size")
+		return
+	}
+	if err = opts.Plains.validate(ir); err != nil {
 		return
 	}
 	inst = &Encoder{
@@ -179,6 +181,20 @@ func NewEncoder(tblDesc *common.TableDesc, ir *common.IntermediateTableRepresent
 		coGroupColSections: make(map[naming.Key][]naming.StylableName, 4),
 		layouts:            make(map[string]*valueLayout, 16),
 		plainKeys:          make(map[naming.StylableName][]byte, 8),
+		plainInclude:       make(map[naming.StylableName]bool, 8),
+	}
+	for _, p := range ir.PlainValueDesc {
+		if p == nil {
+			continue
+		}
+		for _, cp := range []*common.IntermediateColumnProps{p.Scalar, p.NonScalarHomogenousArray, p.NonScalarSet} {
+			if cp == nil {
+				continue
+			}
+			for _, name := range cp.Names {
+				inst.plainInclude[name] = opts.Plains.includes(p.ItemType, name)
+			}
+		}
 	}
 	if inst.cw, err = runtime.NewCborWriter(nil); err != nil {
 		inst = nil
@@ -223,10 +239,6 @@ func (inst *Encoder) NumRecords() int { return inst.nRecords }
 func (inst *Encoder) RecordDigest(i int) []byte {
 	return inst.recordDigests[i*inst.size : (i+1)*inst.size]
 }
-
-// RecordDigests returns all digests of the current batch, concatenated,
-// DigestSize bytes each. Same aliasing rule as RecordDigest.
-func (inst *Encoder) RecordDigests() []byte { return inst.recordDigests }
 
 // Err returns the first error the encoder met since the last BeginBatch; the
 // driver also surfaces it through the End* return values.
@@ -347,13 +359,11 @@ func (s *chunkSorter) Swap(i, j int) {
 // --- plain sections ---
 
 func (inst *Encoder) BeginPlainSection(itemType common.PlainItemTypeE, valueNames []naming.StylableName, valueCanonicalTypes []canonicaltypes.PrimitiveAstNodeI, nAttrs int) {
-	inst.curPlainInclude = itemType != common.PlainItemTypeEntityId || inst.opts.IncludeEntityId
 	inst.curSectionName = ""
 	inst.curLayout = nil
 }
 
 func (inst *Encoder) EndPlainSection() (err error) {
-	inst.curPlainInclude = false
 	return inst.err
 }
 
@@ -622,8 +632,15 @@ func (inst *Encoder) writeSet(cw *runtime.CborWriter, v *view, elem canonicaltyp
 
 func (inst *Encoder) BeginColumn(colAddr streamreadaccess.PhysicalColumnAddr, name naming.StylableName, canonicalType canonicaltypes.PrimitiveAstNodeI, valueSemantics valueaspects.AspectSet) {
 	if inst.curLayout == nil && inst.curSectionName == "" {
-		// Plain section.
-		if !inst.curPlainInclude {
+		// Plain section: the per-column verdict was resolved against the IR
+		// at construction (Options.Plains).
+		inc, known := inst.plainInclude[name]
+		if !known {
+			inst.fail(eb.Build().Str("name", string(name)).Errorf("canonform: driven plain column is not in the IR"))
+			inst.curCol = nil
+			return
+		}
+		if !inc {
 			inst.curCol = nil
 			return
 		}
@@ -724,7 +741,29 @@ func (inst *Encoder) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim str
 	inst.addMember(membership.IdentityPerRowName, 0, verbatim, params)
 }
 
-// LeafHasher returns a fresh leaf hasher of the configured digester — for
-// callers that want to digest an attribute item of their own making with the
-// same keying (tests, second implementations).
-func (inst *Encoder) LeafHasher() hash.Hash { return inst.dig.NewLeaf() }
+// ClassifierPinAllPrimary is the pin of the nil classifier: every membership
+// is primary (ADR-0201 SD5).
+const ClassifierPinAllPrimary = "all-primary"
+
+// FormPin renders the identity of everything a digest from this encoder is a
+// function of beyond the record itself: the form version, the digester, the
+// plains mask and the classifier (ADR-0201 SD5/SD7). A consumer that stores
+// digests stores this string beside them; two parties agree on digests only
+// if they agree on the pin. It fails when the classifier does not implement
+// membershiprole.PinnableI — an unpinnable classifier yields digests whose
+// domain cannot be named, which is exactly what a digest-storing consumer
+// must not build on.
+func (inst *Encoder) FormPin() (pin string, err error) {
+	cpin := ClassifierPinAllPrimary
+	if c := inst.opts.Classifier; c != nil {
+		p, ok := c.(membershiprole.PinnableI)
+		if !ok {
+			err = eb.Build().Errorf("canonform: the classifier does not implement membershiprole.PinnableI, so digests computed under it cannot be pinned")
+			return
+		}
+		cpin = p.Pin()
+	}
+	pin = "canonform/v1 digester=" + inst.dig.Name() + "/" + strconv.Itoa(inst.size) +
+		" " + inst.opts.Plains.CanonicalString() + " classifier=" + cpin
+	return
+}

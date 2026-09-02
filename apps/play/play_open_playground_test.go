@@ -145,7 +145,7 @@ func TestRequestOpenPlayground_RefusalSurfaces(t *testing.T) {
 	inst.openPlayMu.Lock()
 	defer inst.openPlayMu.Unlock()
 	assert.Contains(t, inst.openPlayErr, "refused")
-	assert.Contains(t, inst.openPlayErr, "accepts no launch config")
+	assert.Contains(t, inst.openPlayErr, "open refused", "the panel shows the message; windowhost's reason is now a field")
 }
 
 func TestRequestOpenPlayground_TransportErrorSurfaces(t *testing.T) {
@@ -196,5 +196,5 @@ func TestRequestSaveApplet_RefusalSurfaces(t *testing.T) {
 	inst.saveAppletMu.Lock()
 	defer inst.saveAppletMu.Unlock()
 	assert.Contains(t, inst.saveAppletErr, "refused")
-	assert.Contains(t, inst.saveAppletErr, "accepts no launch config")
+	assert.Contains(t, inst.saveAppletErr, "open refused", "the panel shows the message; windowhost's reason is now a field")
 }

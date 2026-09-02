@@ -238,7 +238,7 @@ func TestParseDocErrors(t *testing.T) {
 		errPart string
 	}{
 		{"unknown_role", "a.md", "title: A", "```sql wat\nSELECT 1\n```\n" + sqlFence, "unknown `sql` fence role"},
-		{"unknown_md_role", "a.md", "title: A", "```md epilogue\nhi\n```\n" + sqlFence, "unknown `md` fence role"},
+		{"unknown_md_role", "a.md", "title: A", "```md epilogue\nhi\n```\n" + sqlFence, "unknown fence role"},
 		{"bands_without_buffer", "a.md", "title: A", "```sql bands\nSELECT 1\n```", "aux fence without a buffer"},
 		{"preamble_without_buffer", "a.md", "title: A", "```md preamble\nhi\n```", "aux fence without a buffer"},
 		{"double_bands", "a.md", "title: A", sqlFence + "\n```sql bands\nSELECT 1\n```\n```sql bands\nSELECT 2\n```", "more than one"},

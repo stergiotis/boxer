@@ -31,6 +31,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
@@ -138,7 +139,7 @@ func (s *server) renderLoop() func() error {
 			} else {
 				pollFrames++
 				if pollFrames > maxPollFrames {
-					active.resultCh <- renderResult{err: eh.Errorf("svg export produced no file at %s within %d frames", tmpPath, maxPollFrames)}
+					active.resultCh <- renderResult{err: eb.Build().Str("tmpPath", tmpPath).Int("maxPollFrames", maxPollFrames).Errorf("svg export produced no file within the frame budget")}
 					active = nil
 				}
 			}

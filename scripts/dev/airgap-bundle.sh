@@ -119,7 +119,7 @@ esac
 tags="$(tr -d '\n' < "$repo/tags")"
 # The render head THIS repo ships, in both scopes: rust/imzero2/build_rust_headless.sh
 # is what the unbundler runs (full scope) and what produced the prebuilt binary
-# (go-only), and it builds `headless_wgpu,fast_alloc`. Declared here rather than
+# (go-only), and it builds `headless_wgpu`. Declared here rather than
 # taken from the library default, which is the lean head hackathon2026 uses — the
 # difference decides whether the target is told it needs a Vulkan ICD and a C
 # compiler, and boxer's answer is yes to both.
@@ -127,7 +127,7 @@ tags="$(tr -d '\n' < "$repo/tags")"
 # Keep this in step with build_rust_headless.sh. The offline verify below compiles
 # THIS string, so a drift between the two shows up as a verify that tested
 # something other than what the target will build.
-AIRGAP_IMZERO2_FEATURES="${AIRGAP_IMZERO2_FEATURES:-headless_wgpu,fast_alloc}"
+AIRGAP_IMZERO2_FEATURES="${AIRGAP_IMZERO2_FEATURES:-headless_wgpu}"
 # No menu here: the unbundler runs a fixed build script rather than taking a head
 # argument, so this bundle offers exactly the one head above. hackathon2026's
 # bundle is where the selectable menu lives.
@@ -204,7 +204,7 @@ if [ "$scope" = full ]; then
     # primitive hackathon2026 uses, so the toolchain pinning, the graded failure
     # and the timing report do not exist in two versions.
     #
-    # This now compiles `headless_wgpu,fast_alloc`, i.e. what build_rust_headless.sh
+    # This now compiles `headless_wgpu`, i.e. what build_rust_headless.sh
     # actually builds on the target. It previously compiled a hardcoded `headless`,
     # so the verify was testing a feature set the bundle does not ship — the check
     # passed while saying nothing about the binary the target would produce.

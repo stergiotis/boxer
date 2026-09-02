@@ -346,3 +346,56 @@ func TestVerifyCanonicalAndSequenceDisagreeOnTrailingBytes(t *testing.T) {
 	require.ErrorIs(t, err, ErrVersion)
 	require.Equal(t, 1, n)
 }
+
+// entityWithValue frames one hex-encoded value as the single value column of
+// one attribute (empty memberships) in one slot of an otherwise empty entity
+// item, so a vector can probe VerifyCanonical's value-interior checks.
+func entityWithValue(t *testing.T, valueHex string) []byte {
+	t.Helper()
+	v, err := hex.DecodeString(valueHex)
+	require.NoError(t, err)
+	// [1, {}, {"u64": [[[], <value>]]}]
+	item, err := hex.DecodeString("8301a0a1637536348182" + "80")
+	require.NoError(t, err)
+	return append(item, v...)
+}
+
+// VerifyCanonical validates value interiors: bytes every typed decoder
+// refuses must not verify, and bytes the writer produces must. Each refused
+// vector is one the pre-deepening checker accepted.
+func TestVerifyCanonicalValueInteriors(t *testing.T) {
+	refuse := []struct {
+		name string
+		hex  string
+	}{
+		{"temporal with zero nanoseconds present", "d903e9a201002800"},
+		{"temporal with keys out of canonical order", "d903e9a228010100"},
+		{"temporal with nanoseconds out of range", "d903e9a20100281a3b9aca00"},
+		{"prefix with a kept trailing zero byte", "d8348208420a00"},
+		{"prefix with set host bits", "d8348208420aff"},
+		{"text that is not UTF-8", "6361ff62"},
+		{"the undefined simple value", "f7"},
+		{"a map is no value form", "a10102"},
+		{"a tag the form does not use", "d8184100"},
+		{"a nested container where a scalar belongs", "818100"},
+	}
+	for _, tc := range refuse {
+		require.Error(t, VerifyCanonical(entityWithValue(t, tc.hex)), tc.name)
+	}
+	accept := []struct {
+		name string
+		hex  string
+	}{
+		{"pre-epoch temporal with nanoseconds", "d903e9a20120281a3b8b87c0"},
+		{"masked truncated prefix", "d8348208410a"},
+		{"text", "6161"},
+		{"negative zero stays a float on the wire", "f98000"},
+		{"bool", "f5"},
+		{"null is the cardinality-0 value form", "f6"},
+		{"a set keeps duplicates", "d90102820303"},
+		{"an array of temporal elements", "81d903e9a1011a6553f100"},
+	}
+	for _, tc := range accept {
+		require.NoError(t, VerifyCanonical(entityWithValue(t, tc.hex)), tc.name)
+	}
+}

@@ -7,4 +7,8 @@
 set -ev
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
-cargo build --release --no-default-features --features headless_svg,fast_alloc --target-dir target/headless_svg
+# Byte-reproducible output: path remapping, and --locked below so the graph
+# is the committed one (ADR-0215).
+# shellcheck source=/dev/null
+source "$here/../../scripts/dev/rust-repro-env.sh"
+cargo build --release --locked --no-default-features --features headless_svg --target-dir target/headless_svg

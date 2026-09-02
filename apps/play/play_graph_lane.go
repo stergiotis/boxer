@@ -9,7 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // play_graph_lane.go is ADR-0097 slice 3b: the suspending async execution lane
@@ -114,7 +114,7 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 	// The last-good result is deliberately NOT served alongside the error: the
 	// demand is for a different node, and its rows are not this one's.
 	if strings.TrimSpace(c.SQL) == "" {
-		view.err = eh.Errorf("no SQL to run for node %q: it is not in this buffer", string(c.NodeID))
+		view.err = eb.Build().Str("nodeID", string(c.NodeID)).Errorf("no SQL to run for that node: it is not in this buffer")
 		return
 	}
 

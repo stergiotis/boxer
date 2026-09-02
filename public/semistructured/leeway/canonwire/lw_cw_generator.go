@@ -116,12 +116,11 @@ type slotPlan struct {
 
 // plainPlan is one plain section, keyed on the wire by its item type.
 type plainPlan struct {
-	itemType   common.PlainItemTypeE
-	itemConst  string
-	raField    string
-	groupConst string
-	group      string
-	columns    []columnPlan
+	itemType  common.PlainItemTypeE
+	itemConst string
+	raField   string
+	group     string
+	columns   []columnPlan
 	// setter is the entity builder's plain setter, Set<ItemType>; it takes the
 	// whole section at once, containers as slices.
 	setter string
@@ -334,10 +333,6 @@ func buildTablePlan(tableName naming.StylableName, tblDesc *common.TableDesc, cl
 			raField:   naming.MustBeValidStylableName(p.ItemType.String()).Convert(naming.UpperCamelCase).String(),
 			group:     p.Group,
 		}
-		if pp.groupConst, err = clsNamer.ComposeCanonWirePlainGroupConstName(tableName, p.ItemType); err != nil {
-			err = eh.Errorf("unable to compose the plain group constant name: %w", err)
-			return nil, err
-		}
 		for _, ci := range p.ColumnOrder {
 			var col columnPlan
 			col, err = buildColumnPlan(p.Names[ci], p.ColumnTypes[ci], hints[ci], "scratchPlain"+pp.raField)
@@ -492,8 +487,10 @@ func elementGoTypeName(ct canonicaltypes.PrimitiveAstNodeI, hints encodingaspect
 //
 // The refusals are the ADR's: 128-bit integers, bit strings, and the zoned
 // temporal types `d` and `t`, none of which any lane in this repository
-// carries. They are also exactly what the readaccess generator refuses, so a
-// table this rejects has no accessors to call either.
+// carries. The generator fuzz type-checks the generated readaccess, dml and
+// canonwire sources as one package, so a divergence between the three
+// generators' accepted surfaces fails there rather than at a consumer's
+// build.
 func valueWriteCall(ct canonicaltypes.PrimitiveAstNodeI) (call string, err error) {
 	switch n := canonicaltypes.DemoteToScalarPrim(ct).(type) {
 	case canonicaltypes.MachineNumericTypeAstNode:
@@ -656,25 +653,11 @@ func emitSlotKeys(b *strings.Builder, plan *tablePlan) (err error) {
 			return
 		}
 	}
-	if len(plan.plains) > 0 {
-		_, err = b.WriteString(`
-// The plain sections' CT groups. A plain section is keyed on the wire by its
-// item type, which is fixed leeway vocabulary (ADR-0210 SD2, fork 1); its group
-// is emitted so a decoder can check the two tables agree on the types before it
-// reads a single entity.
-`)
-		if err != nil {
-			return
-		}
-	}
-	for i := range plan.plains {
-		p := &plan.plains[i]
-		_, err = fmt.Fprintf(b, "\n// %s is the %s plain section's CT group.\nconst %s = %q\n",
-			p.groupConst, p.itemType, p.groupConst, p.group)
-		if err != nil {
-			return
-		}
-	}
+	// A plain section is keyed on the wire by its item type, fixed leeway
+	// vocabulary (ADR-0210 SD2, fork 1); the wire carries no plain group and
+	// there is no construction-time comparison — the decoder's typed reads
+	// check every value against the target column's width — so no group
+	// constants are emitted.
 	return
 }
 

@@ -33,6 +33,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/mdedit/transform"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -131,6 +132,10 @@ const (
 	tipStats = "Words, characters and a reading estimate over the PROSE only — fenced code bodies, markers, URLs, table rules and frontmatter are excluded, since none of them are read at prose speed. The estimate divides by 200 words a minute, a round convention rather than a measurement of anyone."
 
 	hintEmpty = "Write markdown here, or paste a document with Ctrl+V. The preview on the right updates as you type."
+
+	tipModeSplit  = "Source beside preview — the editing layout."
+	tipModeSource = "Source only, full width. The preview pauses; the outline stays, since it navigates the caret."
+	tipModeRead   = "Preview only, full width. The editor is hidden and the formatting and replace gestures go with it. Find still counts matches and takes the preview to them."
 )
 
 // Bar button labels, built once — identical retained bytes across frames
@@ -141,6 +146,34 @@ var (
 	atomsSave   = c.Atoms().Text(icons.PhFloppyDisk + " Save").Keep()
 	atomsSaveAs = c.Atoms().Text("Save as…").Keep()
 )
+
+// viewModeE selects which of the two panes render. A mode is a deliberate
+// gesture, unlike the outline's width-driven hiding, so what a mode removes
+// (the format bar, the replace row) disappears legibly with it.
+type viewModeE uint8
+
+const (
+	// viewSplit is the editing layout: source beside preview. The zero value,
+	// so a fresh window opens in it. Session-scoped on purpose — persisting a
+	// layout preference would spend a persist key on low-value state.
+	viewSplit viewModeE = iota
+	// viewSource is the editor alone, full width.
+	viewSource
+	// viewRead is the preview alone, full width — the reading mode.
+	viewRead
+)
+
+// viewModes is the segmented control, in render order.
+var viewModes = []struct {
+	key   string
+	mode  viewModeE
+	tip   string
+	atoms typed.RetainedFffiHolderTyped[c.AtomsS]
+}{
+	{"mode-split", viewSplit, tipModeSplit, c.Atoms().Text(icons.PhColumns + " Split").Keep()},
+	{"mode-source", viewSource, tipModeSource, c.Atoms().Text(icons.PhPencilSimple + " Source").Keep()},
+	{"mode-read", viewRead, tipModeRead, c.Atoms().Text(icons.PhBookOpen + " Read").Keep()},
+}
 
 // App is the per-window mdedit instance.
 type App struct {
@@ -194,6 +227,10 @@ type App struct {
 	// be wide enough — see App.outlineVisible.
 	showOutline bool
 
+	// viewMode is which panes render — see viewModeE. Session-scoped: a fresh
+	// window opens in the split.
+	viewMode viewModeE
+
 	// The outline pane's state (see mdedit_outline.go). outline is the
 	// hierarchy, rebuilt whenever outlineDoc stops matching the current parse;
 	// outlineState is the tree widget's own expansion and selection, and the
@@ -219,9 +256,11 @@ type App struct {
 	paneW float32
 	paneH float32
 
-	// winW is the window's inner width, from a probe taken before the panels
-	// claim it. It drives the source/preview split.
+	// winW / winH are the window's inner size, from a probe taken before the
+	// panels claim it. The width drives the source/preview split, the height
+	// the transform result pane.
 	winW float32
+	winH float32
 
 	// rowPx is the measured monospace row height and rowFontPt the size it
 	// describes, so a density change re-seeds rather than carrying the old
@@ -259,6 +298,10 @@ type App struct {
 	// find is the find-and-replace bar's own state (M3).
 	find findState
 
+	// xform is the LLM transformation surface's state (see
+	// mdedit_transform.go). Absent from the UI unless its env gate is open.
+	xform transformState
+
 	// rebindSrc marks a buffer this app rewrote rather than the reader typed,
 	// so renderSource knows to drop the editor's cached copy after the emit.
 	// A flag rather than a direct call because the override has to happen
@@ -282,6 +325,31 @@ type App struct {
 	// app's own store beside the file rather than instead of it.
 	writeHandle string
 
+	// readName / boundName are the basenames the broker named in dialog
+	// replies: the file the document was opened from, and the file it saves
+	// to. Names only — never paths — and, like the handles they describe,
+	// deliberately not persisted: they die with the window.
+	readName  string
+	boundName string
+
+	// followActive says the opened file is being followed on disk, and
+	// diskChanged / diskGone are what following found while the buffer held
+	// unsaved edits. Render-thread only; the cross-goroutine half lives in
+	// follow (mdedit_follow.go), under mu.
+	followActive bool
+	diskChanged  bool
+	diskGone     bool
+	follow       followState
+
+	// readFromSnapshot marks readName as a lading-snapshot source rather than
+	// a Powerbox-named file — the badge tooltip says which contract applies.
+	readFromSnapshot bool
+
+	// showFiles is the files pane's toggle and files its state
+	// (mdedit_files.go).
+	showFiles bool
+	files     filesState
+
 	// stats is the word / character / reading-time readout, recomputed with
 	// the spans.
 	stats docStats
@@ -296,6 +364,12 @@ type App struct {
 	// character".
 	pendingCaret   caretRequest
 	pendingCaretOk bool
+
+	// numberAction is the outline's stashed numbering gesture, applied at the
+	// top of the NEXT frame — the outline renders after the source pane, so a
+	// rebind issued from its buttons would miss the frame's databinding
+	// override (see mdedit_number.go).
+	numberAction numberActionE
 
 	// status is the one-line report under the action bar.
 	status string
@@ -315,6 +389,12 @@ type App struct {
 	exportDone   bool
 	exportErr    error
 	exportedText string
+	// exportCheckpoint marks a clipboard write that exports the DOCUMENT and
+	// so advances the dirty checkpoint on success. Copying a transformation
+	// result rides the same machinery with this false — that text never was
+	// the buffer, and moving `saved` for it would clear the dirty badge over
+	// nothing.
+	exportCheckpoint bool
 
 	persisting    bool
 	persistDone   bool
@@ -331,6 +411,11 @@ type App struct {
 	fileBusy bool
 	fileDone bool
 	fileRes  fileResult
+
+	// One in-flight send-to-play at a time (mdedit_sendplay.go).
+	sending  bool
+	sendDone bool
+	sendErr  error
 }
 
 // caretRequest is a caret position the app asks the editor to take, in BYTE
@@ -362,6 +447,14 @@ func newApp() (inst *App) {
 		ids:    c.NewWidgetIdStack(),
 		logger: log.Logger,
 	}
+	// The lading connection is lane-owned: the lane releases what it holds
+	// when invalidated, superseded or closed, so nobody else may close it
+	// (the lane's own contract).
+	inst.files.conn.dispose = func(sc *storeConn) {
+		if sc != nil {
+			sc.close()
+		}
+	}
 	return
 }
 
@@ -372,6 +465,10 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.store = ctx.Storage()
+	// The transform surface's env gate, resolved once: no endpoint or no
+	// model means the surface never renders (ADR-0120 §SD3's shape).
+	inst.xform.cfg, inst.xform.enabled = transform.ConfigFromEnv()
+	inst.xform.host = transform.EndpointHost(inst.xform.cfg.Endpoint)
 	if inst.store != nil {
 		go inst.restore()
 	}
@@ -385,6 +482,22 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 // costs the close one request timeout — the trade the other way loses the
 // document.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
+	// End the follow first, synchronously but bounded: the broker-side watch
+	// pump is NOT stopped by the host closing this app's bus client — cap
+	// revocation silences no pump — so the close must be explicit, and a
+	// goroutine started here would race that client teardown.
+	inst.mu.Lock()
+	f := inst.follow
+	inst.follow = followState{}
+	inst.mu.Unlock()
+	teardownFollow(inst.bus, f.handle, f.unsub)
+
+	// The files pane's lanes: cancel what runs, release the connection the
+	// conn lane owns (its dispose closes the stores).
+	inst.files.load.close()
+	inst.files.mounts.close()
+	inst.files.conn.close()
+
 	if inst.store == nil || inst.src == inst.persistedSrc {
 		return
 	}
@@ -411,8 +524,20 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 func (inst *App) renderBody() {
 	inst.drainAsync()
+	inst.drainTransform()
+	inst.drainFollow()
+	inst.drainSnapshotLoad()
+	// The host repaints reactively; while a follow is live, a low-rate tick
+	// keeps frames — and so the drain above — coming for a disk change that
+	// arrives with no input to wake the window.
+	if inst.followActive {
+		c.RequestRepaintAfter(followTickSecs)
+	}
 	inst.clearDiscardConfirm()
 	inst.refreshDerived()
+	// Last frame's outline numbering gesture, applied while the parse above
+	// still describes the buffer and before any pane has read either.
+	inst.applyPendingNumbering()
 	// Before any pane reads pendingScroll, so a caret move and an outline
 	// click in the same frame resolve in that order — the click wins, which is
 	// the one the reader just made.
@@ -421,8 +546,11 @@ func (inst *App) renderBody() {
 
 	// Probe the window before anything claims it, so the split below is a
 	// share of the whole rather than of whatever is left.
-	if w, _, ok := c.CapturePaneSize(inst.paneProbeSeq("window")); ok && w > 0 {
+	if w, h, ok := c.CapturePaneSize(inst.paneProbeSeq("window")); ok && w > 0 {
 		inst.winW = w
+		if h > 0 {
+			inst.winH = h
+		}
 	}
 
 	for range c.PanelTopInside(inst.ids.PrepareStr("bar")).KeepIter() {
@@ -436,22 +564,57 @@ func (inst *App) renderBody() {
 	// them.
 	inst.refreshDerived()
 
+	// The transform result pane spans the window bottom, declared before the
+	// side panels for two reasons: full width (a rendered result wants room),
+	// and ORDER — an Apply click in it rebinds the buffer, and the rebind's
+	// databinding override only lands if the editor's emit comes after it in
+	// the same frame.
+	if inst.transformPaneOpen() {
+		for range c.PanelBottomInside(inst.ids.PrepareStr("xformpane")).
+			ExactSize(inst.transformPaneHeight()).KeepIter() {
+			inst.renderTransformPane()
+		}
+	}
+
 	// Panels must be declared before the central region claims what is left.
 	// renderSource owns its own scroll area so its pane probe measures the
 	// panel rather than the scrolled content.
-	for range c.PanelLeftInside(inst.ids.PrepareStr("sourcepane")).
-		ExactSize(inst.sourceWidth()).KeepIter() {
-		inst.renderSource()
+	//
+	// Each view mode only ever SKIPS panels and lets the central region absorb
+	// what they released — no width math changes per mode, because every pane
+	// derives from the measured window each frame rather than retaining a
+	// size, which is what makes mode switching safe (see sourceSplitFrac).
+	if inst.viewMode == viewSplit {
+		for range c.PanelLeftInside(inst.ids.PrepareStr("sourcepane")).
+			ExactSize(inst.sourceWidth()).KeepIter() {
+			inst.renderSource()
+		}
 	}
 	// The outline is declared before the central region too, so its click can
-	// still reach the preview in the same frame.
+	// still reach the preview in the same frame. It stays in every mode — in
+	// the source-only one it still navigates the caret.
 	if inst.outlineVisible() {
 		for range c.PanelRightInside(inst.ids.PrepareStr("outlinepane")).
 			ExactSize(inst.outlineWidth()).KeepIter() {
 			inst.renderOutline()
 		}
 	}
+	// The files pane sits inward of the outline (a later right panel lands
+	// left of an earlier one), beside the preview it feeds.
+	if inst.filesVisible() {
+		for range c.PanelRightInside(inst.ids.PrepareStr("filespane")).
+			ExactSize(inst.filesWidth()).KeepIter() {
+			inst.renderFiles()
+		}
+	}
 	for range c.PanelCentralInside().KeepIter() {
+		if !inst.previewVisible() {
+			// Source-only: the editor takes the central region and with it the
+			// full remainder. renderSource is pane-agnostic — it probes
+			// whatever pane it renders in.
+			inst.renderSource()
+			continue
+		}
 		// Hscroll for the same reason as the source pane: markdown holds
 		// things that do not wrap — a wide table, a long fenced line — and an
 		// unscrollable horizontal axis would push their width back out into
@@ -466,21 +629,17 @@ func (inst *App) renderBody() {
 // Panes
 // ---------------------------------------------------------------------------
 
-// renderBar draws the two action rows: formatting on top, document state
-// below. Callers own the enclosing panel.
+// renderBar draws the action rows: document gestures and formatting on top,
+// view state and readouts below, and the replace row under those while its
+// toggle is on. Callers own the enclosing panel.
 func (inst *App) renderBar() {
-	// Row one — formatting. A click's snippet is stashed rather than applied:
-	// it has to reach the TextEdit as a builder method on the widget itself,
-	// which renders later in this same frame.
+	// Row one — document gestures, then formatting. A format click's snippet
+	// is stashed rather than applied: it has to reach the TextEdit as a
+	// builder method on the widget itself, which renders later in this same
+	// frame.
 	for range c.HorizontalTop().KeepIter() {
-		if snippet := inst.renderFormatBar(); snippet != "" {
-			inst.pendingInsert = snippet
-		}
-	}
-
-	for range c.HorizontalTop().KeepIter() {
-		// File row (M4). Every button renders unconditionally and drops the
-		// click while something is in flight, for the same reason the copy
+		// File gestures (M4). Every button renders unconditionally and drops
+		// the click while something is in flight, for the same reason the copy
 		// button below does — and more so here, since a file dialog is open
 		// for as long as a person takes to decide.
 		openClicked, saveClicked, saveAsClicked := false, false, false
@@ -504,12 +663,15 @@ func (inst *App) renderBar() {
 			}
 		}
 
-		// Whether there is a file, never which one — the broker hands over a
-		// handle and keeps the path, so naming it would be a guess.
-		if inst.fileBound() {
-			badge.New(inst.ids.PrepareStr("file"), "file bound").
-				Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).
-				Tooltip(tipFileBound).Send()
+		// Send-to-play (mdedit_sendplay.go). Rendered unconditionally like
+		// its neighbours; ClickHouse being unreachable surfaces in the
+		// status, the same posture tally takes.
+		sendClicked := false
+		for range c.HoverText(tipSendPlay).KeepIter() {
+			sendClicked = c.Button(inst.ids.PrepareStr("sendplay"), atomsSendPlay).SendResp().HasPrimaryClicked()
+		}
+		if sendClicked && !inst.sendInFlight() {
+			inst.sendToPlay()
 		}
 
 		// The button renders unconditionally. Dropping it from the tree while
@@ -523,14 +685,38 @@ func (inst *App) renderBar() {
 			inst.exportClipboard()
 		}
 
-		label, tone := "no changes", badge.ToneNeutral
-		if inst.dirty() {
-			label, tone = "modified", badge.ToneWarning
+		// The formatting bar edits through the editor, so it goes with it: a
+		// mode that hides the pane hides the gestures aimed at it, and the
+		// disappearance is legible because the mode was a deliberate click.
+		if inst.editorVisible() {
+			c.AddSpace(styletokens.GapInline(styletokens.DensityStandard))
+			if snippet := inst.renderFormatBar(); snippet != "" {
+				inst.pendingInsert = snippet
+			}
 		}
-		badge.New(inst.ids.PrepareStr("dirty"), label).
-			Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).
-			Tooltip(tipDirty).Send()
 
+		// The transform surface, only when its env gate is open — with it
+		// unset nothing here renders, probes or hints (mdedit_transform.go).
+		if inst.xform.enabled {
+			c.AddSpace(styletokens.GapInline(styletokens.DensityStandard))
+			inst.renderTransformPicker()
+		}
+	}
+
+	// Row two — view state on the left, readouts on the right: the mode
+	// segment, the outline toggle, the find group, then the badges, the prose
+	// readout and the status line.
+	for range c.HorizontalTop().KeepIter() {
+		// The segmented mode control leads the row because it governs what
+		// everything to its right applies to.
+		for _, m := range viewModes {
+			for range c.HoverText(m.tip).KeepIter() {
+				if c.Button(inst.ids.PrepareStr(m.key), m.atoms).
+					Selected(inst.viewMode == m.mode).SendResp().HasPrimaryClicked() {
+					inst.viewMode = m.mode
+				}
+			}
+		}
 		// The outline toggle names its own count, so the button says what
 		// turning it on would show. It renders even when the window is too
 		// narrow to honour it — a control that disappears at some width is
@@ -545,9 +731,40 @@ func (inst *App) renderBar() {
 				SendRespVal(&inst.showOutline)
 		}
 
-		for range c.HoverText(tipFind).KeepIter() {
-			c.Checkbox(inst.ids.PrepareStr("find"), inst.find.show, findToggleLabel).
-				SendRespVal(&inst.find.show)
+		for range c.HoverText(tipFiles).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("files"), inst.showFiles, filesToggleLabel).
+				SendRespVal(&inst.showFiles)
+		}
+
+		inst.renderFindRow()
+
+		// Which file, never where — the broker names the basename in its
+		// dialog replies and keeps the path (ADR-0026 §SD7).
+		if label, tip, show := inst.fileBadge(); show {
+			badge.New(inst.ids.PrepareStr("file"), label).
+				Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).
+				Tooltip(tip).Send()
+		}
+
+		label, tone := "no changes", badge.ToneNeutral
+		if inst.dirty() {
+			label, tone = "modified", badge.ToneWarning
+		}
+		badge.New(inst.ids.PrepareStr("dirty"), label).
+			Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).
+			Tooltip(tipDirty).Send()
+
+		// What the follow found while it could not act (mdedit_follow.go):
+		// the disk moved under unsaved edits, or the file went away.
+		if inst.diskChanged {
+			badge.New(inst.ids.PrepareStr("disk"), "changed on disk").
+				Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).
+				Tooltip(tipDiskChanged).Send()
+		}
+		if inst.diskGone {
+			badge.New(inst.ids.PrepareStr("disk-gone"), "gone on disk").
+				Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).
+				Tooltip(tipDiskGone).Send()
 		}
 
 		for range c.HoverText(tipStats).KeepIter() {
@@ -559,14 +776,20 @@ func (inst *App) renderBar() {
 		}
 	}
 
-	// Row three — find and replace, present only when asked for. Unlike the
-	// outline it has no width floor to meet: it is a row rather than a column,
-	// so a narrow window wraps it instead of starving a pane.
-	if inst.find.show {
+	// Row three — replace, present only while its toggle in the find group is
+	// on AND the editor renders: rewriting text the reader cannot see is a
+	// trap, so read mode suppresses the row without disturbing its toggle.
+	// Unlike the outline it has no width floor to meet: it is a row rather
+	// than a column, so a narrow window wraps it instead of starving a pane.
+	if inst.find.showReplace && inst.editorVisible() {
 		for range c.HorizontalTop().KeepIter() {
-			inst.renderFindBar()
+			inst.renderReplaceRow()
 		}
 	}
+
+	// Transient — a running transformation's progress and cancel, gone the
+	// frame the run ends.
+	inst.renderTransformProgress()
 }
 
 // statsLine renders the readout. Reading time is omitted below a minute rather
@@ -599,7 +822,14 @@ func (inst *App) refreshDerived() {
 	inst.syncDoc()
 	inst.ensureLex()
 	inst.ensureMatches()
-	inst.ensureHighlight()
+	// The colour job's only consumer is the editor, so a mode that hides it
+	// skips the build — typing a find query in read mode then costs nothing
+	// here. The gate inside ensureHighlight keeps the return path honest: if
+	// anything moved while the editor was hidden, the key comparison rebuilds
+	// on the first frame it is back.
+	if inst.editorVisible() {
+		inst.ensureHighlight()
+	}
 }
 
 // ensureLex lexes the buffer once per change, for the two consumers that read
@@ -628,11 +858,10 @@ func (inst *App) ensureLex() {
 // prose run it sits in. Which match is current is in it for the same reason:
 // the current one is painted differently, so moving to the next rebuilds both.
 type highlightKey struct {
-	src     string
-	query   string
-	fold    bool
-	showing bool
-	idx     int
+	src   string
+	query string
+	fold  bool
+	idx   int
 }
 
 // ensureHighlight builds the editor's colour job and the find overlay riding
@@ -648,7 +877,7 @@ type highlightKey struct {
 func (inst *App) ensureHighlight() {
 	key := highlightKey{
 		src: inst.src, query: inst.find.query, fold: !inst.find.matchCase,
-		showing: inst.find.show, idx: inst.find.idx,
+		idx: inst.find.idx,
 	}
 	if inst.hlKeyOk && inst.hlKey == key {
 		return
@@ -846,6 +1075,21 @@ func (inst *App) dirty() (yes bool) {
 	return
 }
 
+// editorVisible reports whether the current view mode renders the editor.
+// Everything that edits the buffer through the editor — the format bar, the
+// replace row — gates on it, so a mode never leaves a gesture pointing at a
+// pane that is not there.
+func (inst *App) editorVisible() (yes bool) {
+	yes = inst.viewMode != viewRead
+	return
+}
+
+// previewVisible reports whether the current view mode renders the preview.
+func (inst *App) previewVisible() (yes bool) {
+	yes = inst.viewMode != viewSource
+	return
+}
+
 // syncDoc reparses the preview when the buffer no longer matches what the
 // current document was parsed from.
 //
@@ -912,26 +1156,33 @@ func (inst *App) persistInFlight() (busy bool) {
 	return
 }
 
-// exportClipboard starts a clipboard write for the current buffer. The request
-// runs off the render thread on purpose: bus.Request blocks until the broker
-// answers or the request times out, so a host running without a clipboard
-// service would otherwise freeze the frame for the whole timeout.
+// exportClipboard starts a clipboard write for the current buffer — the
+// document export, which checkpoints on success.
 func (inst *App) exportClipboard() {
+	inst.copyToClipboard(inst.src, true)
+}
+
+// copyToClipboard starts a clipboard write. The request runs off the render
+// thread on purpose: bus.Request blocks until the broker answers or the
+// request times out, so a host running without a clipboard service would
+// otherwise freeze the frame for the whole timeout. checkpoint says whether a
+// success advances `saved` — see exportCheckpoint.
+func (inst *App) copyToClipboard(text string, checkpoint bool) {
 	if inst.bus == nil {
 		inst.status = "clipboard unavailable"
 		return
 	}
-	snapshot := inst.src
 	inst.mu.Lock()
 	inst.exporting = true
 	inst.mu.Unlock()
 	go func() {
-		_, err := inst.bus.Request(clipboardbroker.SubjectWrite, []byte(snapshot))
+		_, err := inst.bus.Request(clipboardbroker.SubjectWrite, []byte(text))
 		inst.mu.Lock()
 		inst.exporting = false
 		inst.exportDone = true
 		inst.exportErr = err
-		inst.exportedText = snapshot
+		inst.exportedText = text
+		inst.exportCheckpoint = checkpoint
 		inst.mu.Unlock()
 	}()
 }
@@ -986,11 +1237,14 @@ func (inst *App) restore() {
 func (inst *App) drainAsync() {
 	inst.mu.Lock()
 	expDone, expErr, expText := inst.exportDone, inst.exportErr, inst.exportedText
+	expCheckpoint := inst.exportCheckpoint
 	inst.exportDone = false
 	perDone, perErr, perText := inst.persistDone, inst.persistErr, inst.persistedText
 	inst.persistDone = false
 	fileDone, fileRes := inst.fileDone, inst.fileRes
 	inst.fileDone = false
+	sendDone, sendErr := inst.sendDone, inst.sendErr
+	inst.sendDone = false
 	inst.mu.Unlock()
 
 	if fileDone {
@@ -1006,7 +1260,10 @@ func (inst *App) drainAsync() {
 			// The checkpoint is what actually landed on the clipboard, not
 			// what the buffer holds now — the reader may have typed while the
 			// request was in flight, and that typing is genuinely unsaved.
-			inst.saved = expText
+			// Only a DOCUMENT export checkpoints; a result copy does not.
+			if expCheckpoint {
+				inst.saved = expText
+			}
 			inst.status = "copied to clipboard"
 		}
 	}
@@ -1016,6 +1273,14 @@ func (inst *App) drainAsync() {
 			inst.logger.Warn().Err(perErr).Msg("mdedit: persist failed")
 		} else {
 			inst.persistedSrc = perText
+		}
+	}
+	if sendDone {
+		if sendErr != nil {
+			inst.status = "send to play failed: " + sendErr.Error()
+			inst.logger.Warn().Err(sendErr).Msg("mdedit: send to play failed")
+		} else {
+			inst.status = "sent to play"
 		}
 	}
 }

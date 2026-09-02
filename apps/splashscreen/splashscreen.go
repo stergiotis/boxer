@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/vcs"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
@@ -79,7 +80,7 @@ func loadAssets() {
 		w := b.Dx()
 		h := b.Dy()
 		if w <= 0 || h <= 0 {
-			splashErr = eh.Errorf("splash png has empty bounds %dx%d", w, h)
+			splashErr = eb.Build().Int("width", w).Int("height", h).Errorf("splash png has empty bounds")
 			return
 		}
 		// Map luminance through an IDS sequential palette via a 256-entry LUT.

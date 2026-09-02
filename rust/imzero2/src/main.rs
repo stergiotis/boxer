@@ -7,12 +7,11 @@ use imzero2::cli::flags;
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-// `fast_alloc` is on in every shipped build; a build that leaves it off falls
-// back to the system allocator so the graph carries no C toolchain dependency
-// (ADR-0205 M6).
-#[cfg(all(not(feature = "dhat-heap"), feature = "fast_alloc"))]
-#[global_allocator] // copied from egui_demo_app
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc; // Much faster allocator, can give 20% speedups: https://github.com/emilk/egui/pull/7029
+// Outside `dhat-heap` there is no global allocator: the system one serves every
+// shipped build. mimalloc was here until ADR-0215 retired it — its C sources
+// bake `__DATE__, __TIME__` into the binary, so nothing carrying it could ever
+// be byte-reproducible. It was worth roughly what egui measured (emilk/egui#7029);
+// a binary nobody can re-derive is worth less.
 
 fn setup_tracing() {
     let subscriber = tracing_subscriber::fmt()

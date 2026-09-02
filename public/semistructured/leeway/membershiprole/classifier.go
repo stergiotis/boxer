@@ -53,3 +53,14 @@ func (inst SectionContext) HasUseAspect(target useaspects.AspectE) (has bool) {
 type ClassifierI interface {
 	Classify(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE, paramTreatment ParamTreatmentE)
 }
+
+// PinnableI is an optional capability of a ClassifierI: a stable identity
+// string for a consumer whose output is a function of the classifier and
+// outlives the process — the canonform digest is the first (ADR-0201 SD5:
+// "a consumer that stores digests must pin its classifier the way it pins
+// the form version"). The string must cover the classifier's configuration
+// and change whenever its classification behaviour changes; two classifiers
+// with equal pins must classify identically.
+type PinnableI interface {
+	Pin() string
+}

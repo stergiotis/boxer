@@ -8,13 +8,15 @@ package mdedit
 // whoever uses this.
 //
 // **The app never learns the path.** `DialogReply` carries a handle subject
-// prefix and nothing else; `handle.path` stays inside the broker
+// prefix and — since the Powerbox widening ADR-0178 had recorded as a
+// deferral — the file's BASENAME; `handle.path` stays inside the broker
 // ([ADR-0026](../../doc/adr/0026-app-runtime-and-capability-subjects.md) §SD7).
-// So the editor cannot title itself after the file, cannot show a directory,
-// and cannot tell the reader which of two documents they are looking at. It
-// knows only whether it HAS a file. The name it puts in the save dialog is a
-// suggestion it made up; the user may have typed something else entirely, and
-// echoing it back afterwards would be a guess presented as a fact.
+// So the editor can now title what it has open and tell two documents apart,
+// while still never seeing a directory or a location. The name is the
+// broker's own truth (`filepath.Base` of the resolved path), not an echo of
+// the suggestion this app put in the save dialog — the user may have typed
+// something else entirely, and echoing the suggestion back would be a guess
+// presented as a fact.
 //
 // **A read handle can never write.** The broker refuses it by mode, by design,
 // so opening a document does not give the app anywhere to save it. The first
@@ -74,7 +76,9 @@ const (
 
 	tipSaveAs = "Save to a different file, and bind the document to that one from now on."
 
-	tipFileBound = "Whether this document has a file to save to. The editor is not told which file — the Powerbox hands it a handle, never a path — so it can say that there is one, and not which."
+	tipFileBound = "The file this document saves to, by name only. The Powerbox reveals the basename and keeps the path, so the badge can say which file — never where it lives."
+
+	tipFileRead = "The file this document was opened from, by name only — the Powerbox reveals the basename and keeps the path. Opening does not bind for saving; the first Save still asks where."
 )
 
 // fileOpE distinguishes what a finished file goroutine was doing, so the drain
@@ -100,6 +104,11 @@ type fileResult struct {
 	saved string
 	// handle is the write-handle prefix to reuse for later saves.
 	handle string
+	// displayName is the basename the broker named in the dialog reply —
+	// which file, never where. Set only when a dialog actually ran: a silent
+	// save through the existing handle learns nothing new about the name and
+	// must not clobber it.
+	displayName string
 	// cancelled separates "the user pressed Cancel" from "it failed". One is
 	// not an error and must not be logged or coloured like one.
 	cancelled bool
@@ -110,7 +119,12 @@ type fileResult struct {
 	// the binding there would throw away a file that is still perfectly good
 	// because the reader changed their mind about saving elsewhere.
 	dropHandle bool
-	err        error
+	// followOk says the opened file is now being followed on disk
+	// (mdedit_follow.go); followErr is why not. Following is an enhancement,
+	// not the gesture — its failure never fails the open.
+	followOk  bool
+	followErr error
+	err       error
 }
 
 // ---------------------------------------------------------------------------
@@ -125,18 +139,22 @@ type fileResult struct {
 // does not remember it as "the filename" afterwards — it is what this app
 // asked for, not what the user chose.
 func suggestedFileName(headings []markdown.HeadingInfo) (name string) {
-	title := ""
-	for _, h := range headings {
-		if h.Text != "" {
-			title = h.Text
-			break
-		}
-	}
-	base := sanitiseFileBase(title)
+	base := sanitiseFileBase(firstHeadingText(headings))
 	if base == "" {
 		return defaultFileName
 	}
 	return base + ".md"
+}
+
+// firstHeadingText is the document's working title: the first heading that
+// has text, or "".
+func firstHeadingText(headings []markdown.HeadingInfo) (title string) {
+	for _, h := range headings {
+		if h.Text != "" {
+			return h.Text
+		}
+	}
+	return ""
 }
 
 // sanitiseFileBase reduces a heading to something that can be a basename:
@@ -245,20 +263,31 @@ func (inst *App) openFile() {
 		inst.status = "no bus wired — cannot open a file"
 		return
 	}
-	if inst.dirty() && !inst.confirmDiscard {
-		inst.confirmDiscard = true
-		inst.confirmDiscardSrc = inst.src
-		inst.status = "unsaved changes — Open again to discard them"
+	if !inst.confirmReplace("Open again to discard them") {
 		return
 	}
-	inst.confirmDiscard = false
 	if !inst.beginFile("choose a file to open…") {
 		return
 	}
+	// Snapshot and clear the current follow on the render thread; its bus
+	// teardown runs FIRST in the goroutine below, ahead of the dialog —
+	// handle uuids are stable per (app, path, op), so re-opening the same
+	// file mints the same uuid, and a close landing after the new grant
+	// would destroy it.
+	inst.followActive = false
+	inst.diskChanged = false
+	inst.diskGone = false
+	inst.mu.Lock()
+	prevFollow := inst.follow
+	inst.follow = followState{}
+	inst.mu.Unlock()
+
 	bus := inst.bus
 	go func() {
 		res := fileResult{op: fileOpOpen}
 		defer func() { inst.finishFile(res) }()
+
+		teardownFollow(bus, prevFollow.handle, prevFollow.unsub)
 
 		reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, dialogTimeout)
 		if err != nil {
@@ -274,24 +303,34 @@ func (inst *App) openFile() {
 			res.cancelled = true
 			return
 		}
-		// The handle is closed as soon as the bytes are in hand. The broker
-		// revokes its cap on close, and nothing here reads twice — leaving it
-		// open would grow the app's authority for the rest of the session in
-		// exchange for a round-trip it never makes.
-		defer func() {
-			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
-		}()
+		res.displayName = dr.DisplayName
 
 		body, rerr := bus.RequestWithTimeout(dr.HandleSubjectPrefix+opRead, nil, transferTimeout)
 		if rerr != nil {
 			res.err = rerr
+			// The read failed but the grant stands; close it rather than
+			// leaving standing authority behind a failed gesture.
+			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
 			return
 		}
 		if reason, isErr := readReplyError(body); isErr {
 			res.err = errFile(reason)
+			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
 			return
 		}
 		res.text = string(body)
+
+		// The handle is KEPT — the departure from M4's close-after-read —
+		// because it is what the file is followed through: the broker
+		// watches the file for this handle and re-reads ride it. If the
+		// follow cannot start, the old economy returns: nothing will read
+		// twice, so the handle goes back.
+		if ferr := inst.startFollow(dr.HandleSubjectPrefix); ferr != nil {
+			res.followErr = ferr
+			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+opClose, nil, transferTimeout)
+			return
+		}
+		res.followOk = true
 	}()
 }
 
@@ -341,6 +380,7 @@ func (inst *App) saveFile(chooseFile bool) {
 				return
 			}
 			res.handle = dr.HandleSubjectPrefix
+			res.displayName = dr.DisplayName
 		}
 
 		ack, werr := bus.RequestWithTimeout(res.handle+opWrite, []byte(snapshot), transferTimeout)
@@ -400,8 +440,10 @@ func (inst *App) applyFileResult(res fileResult) {
 			inst.status = "save failed: " + res.err.Error()
 			if res.dropHandle {
 				// The broker refused the write, so the binding is no longer
-				// somewhere to save. Every other failure leaves it alone.
+				// somewhere to save — and its name goes with it. Every other
+				// failure leaves both alone.
 				inst.writeHandle = ""
+				inst.boundName = ""
 			}
 		}
 		inst.logger.Warn().Err(res.err).Msg("mdedit: file operation failed")
@@ -421,11 +463,30 @@ func (inst *App) applyFileResult(res fileResult) {
 		// The caret has nowhere meaningful to be in a document the reader has
 		// not seen; the top is where they will start reading.
 		inst.requestCaret(0, 0, false)
+		inst.readName = res.displayName
+		inst.readFromSnapshot = false
+		inst.followActive = res.followOk
+		if res.followErr != nil {
+			// The open stands; only the following half is missing. Worth a
+			// log line, not a red status.
+			inst.logger.Warn().Err(res.followErr).Msg("mdedit: file follow unavailable")
+		}
 		inst.status = "opened"
+		if res.displayName != "" {
+			inst.status = "opened " + res.displayName
+		}
 	case fileOpSave:
 		inst.writeHandle = res.handle
+		// Only a dialog names the file; a silent save through the existing
+		// handle carries no name and must not clear the one the dialog gave.
+		if res.displayName != "" {
+			inst.boundName = res.displayName
+		}
 		inst.saved = res.saved
 		inst.status = "saved"
+		if inst.boundName != "" {
+			inst.status = "saved " + inst.boundName
+		}
 	}
 }
 
@@ -435,11 +496,49 @@ func (inst *App) fileBound() (yes bool) {
 	return inst.writeHandle != ""
 }
 
-// clearDiscardConfirm disarms Open's two-click confirmation. Called once a
+// fileBadge resolves the bar's file badge. The strongest claim wins: the save
+// target when the document is bound, else the source it was loaded from —
+// a Powerbox-named file or a snapshot entry, each under the tooltip that
+// states its contract. Names only, never paths, either way.
+func (inst *App) fileBadge() (label, tip string, show bool) {
+	switch {
+	case inst.fileBound():
+		label = inst.boundName
+		if label == "" {
+			// Bound before the broker named files (or the name was lost with
+			// a restore); the fact still deserves its badge.
+			label = "file bound"
+		}
+		return label, tipFileBound, true
+	case inst.readName != "" && inst.readFromSnapshot:
+		return inst.readName, tipFileSnapshot, true
+	case inst.readName != "":
+		return inst.readName, tipFileRead, true
+	}
+	return "", "", false
+}
+
+// confirmReplace is the shared two-click guard for every gesture that
+// REPLACES the buffer — Open, and a snapshot load: on a modified document the
+// first click refuses and says so (hint completes the sentence "unsaved
+// changes — …"), a second click straight after means it. Two clicks rather
+// than a dialog for the reason openFile's comment records.
+func (inst *App) confirmReplace(hint string) (ok bool) {
+	if inst.dirty() && !inst.confirmDiscard {
+		inst.confirmDiscard = true
+		inst.confirmDiscardSrc = inst.src
+		inst.status = "unsaved changes — " + hint
+		return false
+	}
+	inst.confirmDiscard = false
+	return true
+}
+
+// clearDiscardConfirm disarms the two-click confirmation. Called once a
 // frame from the render body, so the arming only survives a click made
 // straight after the refusal: an armed confirmation that outlived a keystroke
-// or another gesture would turn a later, unrelated Open into a silent discard,
-// which is the failure the confirmation exists to prevent.
+// or another gesture would turn a later, unrelated replace into a silent
+// discard, which is the failure the confirmation exists to prevent.
 //
 // The buffer's own text is the discriminator rather than a timer — the reader
 // having typed since is what makes the warning stale, not how long they took

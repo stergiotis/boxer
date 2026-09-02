@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/timeseries/damp"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/matrixprofile"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/mssmooth"
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -102,7 +103,7 @@ func TestSplitClientInputMustBeALiftedNode(t *testing.T) {
 SELECT 1`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a CTE of this query")
-	assert.Contains(t, err.Error(), "inner", "the error names the input it could not find")
+	assert.Contains(t, ebtest.Text(t, err), "inner", "the error names the input it could not find")
 	assert.Contains(t, err.Error(), "lift it", "and says what to do")
 }
 
@@ -407,7 +408,7 @@ func TestTsCallRefusesPastTheCeiling(t *testing.T) {
 	defer in.Release()
 	_, err := call.Apply(in, nil, memory.NewGoAllocator())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "4-row ceiling", "the refusal names the limit")
+	assert.Equal(t, "4", ebtest.Fields(t, err)["ceiling"], "the refusal names the limit")
 }
 
 // A null in the value column ends the read with a reason. Skipping it would

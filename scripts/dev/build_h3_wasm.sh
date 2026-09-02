@@ -40,7 +40,26 @@ fi
 # both rustup (~/.rustup/toolchains/*/lib/rustlib/wasm32-unknown-unknown)
 # and Fedora (/usr/lib/rustlib/wasm32-unknown-unknown) installs, and does
 # not need write access to invoke rustc with tempdirs.
-sysroot=$(rustc --print sysroot 2>/dev/null || true)
+# rustup picks a toolchain from the CURRENT DIRECTORY, and this script builds
+# from the repo root with --manifest-path, so rust/h3bridge/rust-toolchain.toml
+# would be ignored — the pin would silently do nothing. Name the channel on the
+# command line instead. cd-ing into the crate would also work but is NOT
+# equivalent: cargo then passes rustc a relative source path instead of an
+# absolute one, which changes the bytes this artifact is byte-compared against.
+tc=""
+if command -v rustup >/dev/null 2>&1; then
+    ch=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$crate_dir/rust-toolchain.toml" | head -1)
+    if [ -n "$ch" ]; then
+        rustup toolchain list 2>/dev/null | grep -q "^$ch" \
+            || { echo "ERROR: $crate_dir pins rustc $ch, which is not installed." >&2
+                 echo "  rustup toolchain install $ch --target wasm32-unknown-unknown" >&2
+                 exit 1; }
+        tc="+$ch"
+    fi
+fi
+
+# shellcheck disable=SC2086 # $tc is one optional word
+sysroot=$(rustc $tc --print sysroot 2>/dev/null || true)
 if [ -z "$sysroot" ] || [ ! -d "$sysroot/lib/rustlib/wasm32-unknown-unknown" ]; then
     echo "ERROR: wasm32-unknown-unknown stdlib not installed." >&2
     echo "  Under rustup:  rustup target add wasm32-unknown-unknown" >&2
@@ -61,14 +80,17 @@ fi
 # so the release wasm is byte-reproducible across machines.
 export CONST_RANDOM_SEED="boxer-h3-fixed-seed"
 
-# Remap absolute source paths out of the panic/debug strings baked into the
-# artifact: registry sources land under /cargo, workspace sources under
-# /build. Without this the blob carries the building user's $CARGO_HOME and
-# checkout path, and byte-parity across machines is impossible.
-export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=$PWD=/build"
+# Remap absolute source paths out of the panic strings baked into the artifact:
+# registry sources land under /cargo, checkout sources under /build. Without
+# this the blob carries the building user's $CARGO_HOME and checkout path, and
+# byte-parity across machines is impossible. The flags live in one file so this
+# script and scripts/ci/h3_wasm_parity.sh cannot drift apart.
+# shellcheck source=/dev/null
+source "$here/rust-repro-env.sh"
 
-echo "=== cargo build --release --target wasm32-unknown-unknown ==="
-cargo build \
+echo "=== cargo $tc build --release --target wasm32-unknown-unknown ==="
+# shellcheck disable=SC2086 # $tc is one optional word
+cargo $tc build \
     --release \
     --locked \
     --target wasm32-unknown-unknown \
@@ -99,7 +121,8 @@ cp "$tmp" "$dst"
 echo "=== wrote $dst ($(wc -c < "$dst") bytes) ==="
 
 echo "=== cargo run --bin emit_golden ==="
-cargo run \
+# shellcheck disable=SC2086 # $tc is one optional word
+cargo $tc run \
     --locked \
     --manifest-path "$crate_dir/Cargo.toml" \
     --bin emit_golden

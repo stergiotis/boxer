@@ -156,7 +156,7 @@ func tierFiles(dir string, n int) (out []string, err error) {
 	}
 	sort.Strings(matches)
 	if len(matches) < n {
-		err = eh.Errorf("tier needs %d files, %s holds %d", n, dir, len(matches))
+		err = eb.Build().Int("need", n).Str("dir", dir).Int("have", len(matches)).Errorf("the tier needs more files than the directory holds")
 		return
 	}
 	out = matches[:n]

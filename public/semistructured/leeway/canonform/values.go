@@ -49,11 +49,13 @@ func scalarOf(ct canonicaltypes.PrimitiveAstNodeI) canonicaltypes.PrimitiveAstNo
 // writeScalar writes element i of arr as the canonical form of a value of
 // canonical type ct (ADR-0201 SD3). The Arrow array decides how the value is
 // read; ct decides what it means (text vs. bytes, temporal, network). An
-// Arrow null writes CBOR null.
+// Arrow null is refused: leeway has no null — absence is non-persistence —
+// so a null in a batch is malformed input, not content (ADR-0201 SD3,
+// 2026-09-01 update). Accepting it would collide with the value-less-section
+// form, whose CBOR null means "present with no value".
 func writeScalar(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicaltypes.PrimitiveAstNodeI) (err error) {
 	if arr.IsNull(i) {
-		cw.WriteNull()
-		return
+		return eb.Build().Stringer("canonicalType", ct).Stringer("arrowType", arr.DataType()).Errorf("canonform: null values are not part of the form")
 	}
 	switch n := ct.(type) {
 	case canonicaltypes.MachineNumericTypeAstNode:
@@ -218,18 +220,9 @@ func writeTemporal(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicalt
 	default:
 		return eb.Build().Stringer("canonicalType", ct).Stringer("arrowType", arr.DataType()).Errorf("canonform: Arrow array type not supported for a temporal column")
 	}
-	cw.Tag(runtime.TagExtendedTime)
-	if nanos == 0 {
-		cw.MapHead(1)
-		cw.WriteUint(1)
-		cw.WriteInt(secs)
-		return
-	}
-	cw.MapHead(2)
-	cw.WriteUint(1)
-	cw.WriteInt(secs)
-	cw.WriteInt(-9)
-	cw.WriteUint(uint64(nanos))
+	// One implementation of the RFC 9581 emission, shared with the canonical
+	// wire (runtime.WriteTemporal drives it from a time.Time).
+	cw.WriteTemporalParts(secs, nanos)
 	return
 }
 
@@ -296,26 +289,10 @@ func writeNetwork(cw *runtime.CborWriter, arr arrow.Array, i int, ct canonicalty
 		cw.WriteBytes(addr[:addrLen])
 		return
 	}
-	if prefix > addrLen*8 {
-		return eb.Build().Int("prefix", prefix).Int("addrLen", addrLen).Errorf("canonform: prefix length exceeds the address width")
-	}
-	// RFC 9164 §3.2 encoder rules: zero the bits beyond the prefix, then omit
-	// trailing zero bytes.
-	full := prefix / 8
-	if rem := prefix % 8; rem != 0 {
-		addr[full] &= byte(0xff << (8 - rem))
-		full++
-	}
-	for k := full; k < addrLen; k++ {
-		addr[k] = 0
-	}
-	end := full
-	for end > 0 && addr[end-1] == 0 {
-		end--
-	}
-	cw.ArrayHead(2)
-	cw.WriteUint(uint64(prefix))
-	cw.WriteBytes(addr[:end])
+	// One implementation of the RFC 9164 §3.2 masking rule (zero the bits
+	// beyond the prefix, omit trailing zero bytes), shared with the canonical
+	// wire; the quotient's own IPv4-mapped reduction happened above.
+	cw.WritePrefixContent(addr[:addrLen], prefix)
 	return
 }
 

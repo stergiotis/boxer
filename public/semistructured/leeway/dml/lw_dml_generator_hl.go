@@ -81,6 +81,12 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		err = eh.Errorf("unable to write package name %w", err)
 		return
 	}
+	// eb is consumed only by per-tagged-section emissions; see the matching
+	// condition in ComposeGoImports.
+	ebImport := "\t\"github.com/stergiotis/boxer/public/observability/eh/eb\"\n"
+	if len(ir.TaggedValueDesc) == 0 {
+		ebImport = ""
+	}
 	_, err = fmt.Fprintf(s, `
 import (
 	"github.com/apache/arrow-go/v18/arrow"
@@ -88,9 +94,8 @@ import (
 	_ "github.com/apache/arrow-go/v18/arrow/ipc"
 	_ "github.com/apache/arrow-go/v18/arrow/math"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
-`, inst.builderPkg.Alias, inst.builderPkg.ImportPath)
+%s	"github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
+`, inst.builderPkg.Alias, inst.builderPkg.ImportPath, ebImport)
 	if err != nil {
 		err = eh.Errorf("unable to write imports %w", err)
 		return
