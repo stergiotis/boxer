@@ -1,10 +1,12 @@
 package mdedit
 
-// Send-to-play (its own ADR records the flow): the document is persisted as
-// one MdDoc row in `boxer.facts` through the facts-bound record store, and
-// play is opened on a launch query that selects exactly that row back, with
-// the content column glossed `text/markdown` so the Detail pane renders it as
-// a document (ADR-0123/0186).
+// Send-to-play (its own ADR records the flow): the document is persisted in
+// `boxer.facts` through the facts-bound record store — the MdDoc row plus its
+// heading, code, link, emphasis, tag and frontmatter rows, the same rows the
+// markdown ingestor writes — and play is opened on a launch query that
+// selects exactly the document row back, with the content column glossed
+// `text/markdown` so the Detail pane renders it as a document
+// (ADR-0123/0186).
 //
 // Persisting rather than merely displaying is the point of the gesture: a
 // sent document is a fact with a timestamp, a hash and a name, so "what did I
@@ -19,11 +21,7 @@ package mdedit
 
 import (
 	"context"
-	"encoding/binary"
-	"encoding/hex"
 	"time"
-
-	"lukechampine.com/blake3"
 
 	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
@@ -45,33 +43,6 @@ const (
 )
 
 var atomsSendPlay = c.Atoms().Text("Send to play").Keep()
-
-// buildMdDocRow is the pure half of the send: the row for this buffer at this
-// moment. Id hashes (content, ts) so every send is its own row — the launch
-// filter key — while NaturalKey hashes the content alone, so identical text
-// is the same entity across sends.
-func buildMdDocRow(src, title, fileName string, words int, ts time.Time) (row mddocfacts.MdDoc) {
-	contentHash := blake3.Sum256([]byte(src))
-
-	idh := blake3.New(8, nil)
-	_, _ = idh.Write([]byte(src))
-	var tsb [8]byte
-	binary.LittleEndian.PutUint64(tsb[:], uint64(ts.UnixNano()))
-	_, _ = idh.Write(tsb[:])
-
-	row = mddocfacts.MdDoc{
-		Id:          binary.LittleEndian.Uint64(idh.Sum(nil)),
-		NaturalKey:  contentHash[:],
-		Ts:          ts,
-		Kind:        "mdDoc",
-		Title:       title,
-		FileName:    fileName,
-		Content:     src,
-		ContentHash: hex.EncodeToString(contentHash[:]),
-		Words:       uint64(words),
-	}
-	return
-}
 
 // playLaunchSQL is the query the play window opens with: the one row this
 // send wrote, its content glossed as markdown for the Detail pane. The
@@ -126,18 +97,17 @@ func (inst *App) sendToPlay() {
 	inst.status = "sending to play…"
 
 	// Snapshots, taken on the render thread: the goroutine touches no App
-	// state until it reports back through the guarded fields.
+	// state until it reports back through the guarded fields. The title and
+	// the word count are the extractor's, taken off the same bytes.
 	src := inst.src
-	title := firstHeadingText(inst.headings())
 	fileName := inst.boundName
 	if fileName == "" {
 		fileName = inst.readName
 	}
-	words := inst.stats.Words
 	bus := inst.bus
 
 	go func() {
-		err := sendDocToPlay(bus, src, title, fileName, words)
+		err := sendDocToPlay(bus, src, fileName)
 		inst.mu.Lock()
 		inst.sending = false
 		inst.sendDone = true
@@ -146,9 +116,9 @@ func (inst *App) sendToPlay() {
 	}()
 }
 
-// sendDocToPlay is the pipeline: one row in, one play window out. Pure with
-// respect to App state.
-func sendDocToPlay(bus app.BusI, src, title, fileName string, words int) (err error) {
+// sendDocToPlay is the pipeline: one document's rows in, one play window
+// out. Pure with respect to App state.
+func sendDocToPlay(bus app.BusI, src, fileName string) (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sendPlayTimeout)
 	defer cancel()
 
@@ -166,8 +136,8 @@ func sendDocToPlay(bus app.BusI, src, title, fileName string, words int) (err er
 		return
 	}
 
-	row := buildMdDocRow(src, title, fileName, words, time.Now())
-	if err = store.IngestMdDoc(row.Ts, []mddocfacts.MdDoc{row}); err != nil {
+	rows, err := store.IngestDocument([]byte(src), fileName, time.Now().UTC())
+	if err != nil {
 		return
 	}
 	if _, err = store.Flush(ctx); err != nil {
@@ -175,7 +145,7 @@ func sendDocToPlay(bus app.BusI, src, title, fileName string, words int) (err er
 	}
 
 	cfg := playlaunch.PlayLaunch{
-		Sql:     playLaunchSQL(row.Id),
+		Sql:     playLaunchSQL(rows.Doc.Id),
 		AutoRun: true,
 		Tab:     "detail",
 	}

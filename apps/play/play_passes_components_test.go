@@ -17,7 +17,7 @@ func TestRegisterComponents_KindRoster(t *testing.T) {
 	r := componentsql.NewRegistry()
 	require.NoError(t, RegisterComponents(r))
 	kinds := r.Kinds()
-	for _, kind := range []string{"SysMem", "LadingMount", "MdDoc"} {
+	for _, kind := range []string{"SysMem", "LadingMount", "MdDoc", "MdHeading", "MdLink", "MdTag"} {
 		assert.Contains(t, kinds, kind)
 	}
 }

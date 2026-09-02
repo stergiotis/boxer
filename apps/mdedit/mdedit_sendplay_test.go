@@ -7,43 +7,35 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mddocfacts"
+	"github.com/stergiotis/boxer/public/semistructured/markdown/mdextract"
 )
 
 // ---------------------------------------------------------------------------
-// The row
+// The rows
 // ---------------------------------------------------------------------------
 
-func TestBuildMdDocRow(t *testing.T) {
+// TestSendWritesTheIngestorsRows pins that a send stores what the markdown
+// ingestor stores — the document row plus its items — through the one row
+// builder both share, so a document sent from here and one ingested from a
+// vault read the same in play.
+func TestSendWritesTheIngestorsRows(t *testing.T) {
+	src := "---\ntags: [a]\n---\n# Title\n\nbody with [[Other]] and **bold**\n"
 	ts := time.Unix(1_700_000_000, 0).UTC()
-	row := buildMdDocRow("# Title\n\nbody\n", "Title", "notes.md", 2, ts)
+	rows := mddocfacts.BuildRows([]byte(src), "notes.md", ts, mdextract.Extract([]byte(src)))
 
-	assert.Equal(t, "mdDoc", row.Kind)
-	assert.Equal(t, "Title", row.Title)
-	assert.Equal(t, "notes.md", row.FileName)
-	assert.Equal(t, "# Title\n\nbody\n", row.Content)
-	assert.Equal(t, uint64(2), row.Words)
-	assert.Equal(t, ts, row.Ts)
-	assert.Len(t, row.NaturalKey, 32, "the natural key is the blake3-256 of the content")
-	assert.Len(t, row.ContentHash, 64, "hex of the same digest")
-	assert.NotZero(t, row.Id)
-}
-
-// TestBuildMdDocRow_IdentityRules pins the two-level identity: the natural
-// key is the CONTENT (identical text is the same entity across sends), while
-// the id also hashes the send time (every send is its own row — the launch
-// filter key).
-func TestBuildMdDocRow_IdentityRules(t *testing.T) {
-	t1 := time.Unix(1_700_000_000, 0).UTC()
-	t2 := t1.Add(time.Minute)
-
-	a := buildMdDocRow("same text", "", "", 2, t1)
-	b := buildMdDocRow("same text", "", "", 2, t2)
-	c := buildMdDocRow("other text", "", "", 2, t1)
-
-	assert.Equal(t, a.NaturalKey, b.NaturalKey, "identical content is the same entity")
-	assert.NotEqual(t, a.Id, b.Id, "each send is its own row")
-	assert.NotEqual(t, a.NaturalKey, c.NaturalKey)
-	assert.Equal(t, a.ContentHash, b.ContentHash)
+	assert.Equal(t, "mdDoc", rows.Doc.Kind)
+	assert.Equal(t, "Title", rows.Doc.Title, "the extractor's first heading is the title")
+	assert.Equal(t, "notes.md", rows.Doc.FileName)
+	assert.Equal(t, src, rows.Doc.Content)
+	assert.Len(t, rows.Doc.NaturalKey, 32, "the natural key is the blake3-256 of the content")
+	assert.NotZero(t, rows.Doc.Id, "the launch filter key")
+	assert.Len(t, rows.Headings, 1)
+	assert.Len(t, rows.Links, 1)
+	assert.Len(t, rows.Emphases, 1)
+	assert.Len(t, rows.Tags, 1)
+	require.NotNil(t, rows.Frontmatter)
 }
 
 // ---------------------------------------------------------------------------
