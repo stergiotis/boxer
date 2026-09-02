@@ -1,0 +1,10 @@
+# default options
+pin canonform/v1 digester=keyed-blake3-256/v1/32 plains-mask/v1 entity-id=out exclude-types=[] exclude-names=[] classifier=all-primary
+00 6fbca28d95f11d7415aa24b6a9d6f6dac2a49b925f44e6c9655810f24213efbe
+01 e13d495dc2a0eaa15a9f2f8fc0f219757b084d1b34ff09157c07bae5a7f5b025
+02 ebff134972bb4271988225c0e4e177c61a4149c8b0155c340132917577cbc03f
+# identity in, integrity key and lifecycle out
+pin canonform/v1 digester=keyed-blake3-256/v1/32 plains-mask/v1 entity-id=in exclude-types=[entity-lifecycle] exclude-names=["naturalKey"] classifier=all-primary
+00 e967815859d020d5ad626405695743c9cf69210931e031883515f9d9c6fff12e
+01 e14a03629a20d6fd22d84c75a5d62265cf5cf3b062a25abf8b85e69dfa6fa848
+02 c5a96bf21200af8d1fe132a8eb581095be690d2db8062ddfc35c461455eb0eeb

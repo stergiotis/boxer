@@ -22,6 +22,11 @@ type DigesterI interface {
 	NewRecord() hash.Hash
 	// Size is the digest length in bytes, the same for both levels.
 	Size() int
+	// Name identifies the hash construction and its keying, for storing
+	// beside digests (Encoder.FormPin). It must change whenever the digests
+	// change — a different function, key or context string is a different
+	// name.
+	Name() string
 }
 
 // The context strings the default digester derives its two keys from name the
@@ -69,6 +74,10 @@ func (inst *Blake3Digester) NewRecord() hash.Hash {
 }
 func (inst *Blake3Digester) Size() int { return Blake3DigestSize }
 
+// Name names keyed BLAKE3-256 under the v1 context strings
+// (ContextLeafV1 / ContextRecordV1), whose derived keys a golden pins.
+func (inst *Blake3Digester) Name() string { return "keyed-blake3-256/v1" }
+
 // NewRecordingDigester wraps a digester so that every byte written to a leaf
 // hasher is also copied to leaves and every byte written to a record hasher to
 // records (either may be nil). The digests are unchanged. This is how tests
@@ -93,6 +102,9 @@ func (inst *recordingDigester) NewRecord() hash.Hash {
 }
 
 func (inst *recordingDigester) Size() int { return inst.inner.Size() }
+
+// Name is the inner digester's: recording changes no digest.
+func (inst *recordingDigester) Name() string { return inst.inner.Name() }
 
 // teeHash forwards every write to an extra writer; Sum / Size / Reset come
 // from the embedded hasher unchanged.
