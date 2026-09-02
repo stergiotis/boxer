@@ -115,6 +115,17 @@ rustup toolchain with the wasm target, plus `wabt` and `binaryen`. Without those
 last two the h3 gate cannot reproduce the committed blob — it is the output of
 `wasm-strip` + `wasm-opt -Oz` — and skips.
 
+**SD8 — A parity gate builds the hosts twice.**
+[scripts/ci/repro_build_parity.sh](../../scripts/ci/repro_build_parity.sh)
+copies the tree to two paths of different lengths, builds `./public/app` and
+`rust/imzero2 --features headless` in each with cold caches, and byte-compares
+the pairs. Two paths, because every drift in §Context was a leaked path and a
+same-path rebuild is blind to that class; cold caches, because a warm GOCACHE
+would reduce the second Go build to a re-link. The lean head is the one
+compared: it is the smallest graph that still runs the `build.rs` codegen where
+the `OUT_DIR` leak lived. `lint.sh` runs it after the crate's own check, so the
+registry is warm and the cost is the two builds themselves.
+
 ## Options considered
 
 **O1 — Keep mimalloc, neutralise the macros.** `-Wno-builtin-macro-redefined
@@ -176,6 +187,8 @@ less.
   `RUST_REPRO_ROOT` to the unpack root so that path is covered too. The
   bundle also ships the packing host's Go SDK rather than the go.mod pin, so
   two bundles packed on different hosts may carry different compilers.
-- **Nothing gates the Go host or the render heads.** The byte-identical
-  rebuilds above were measured once, on one machine; only the h3 blob has a CI
-  parity check. A two-build-and-compare job is the obvious next gate.
+- **The gate compares two builds on one machine.** It catches leaked paths,
+  clocks and cache-dependent output; it cannot catch a difference between two
+  machines' C toolchains (the blake3 case above) or a runner whose Go SDK
+  differs from the pin. Cross-machine parity is what the airgap prebuilt and a
+  release rebuild would show, and nothing checks that yet.

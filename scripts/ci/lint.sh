@@ -286,6 +286,22 @@ else
     step_end fail
 fi
 
+step_begin "repro_build_parity"
+# Builds ./public/app and the lean Rust render head twice each, from two copies
+# of the tree at two different paths into cold caches, and byte-compares
+# (ADR-0215). Until this step existed the reproducibility of the shipped hosts
+# was a property measured once on one machine, and the h3 blob above was the
+# only artifact anything checked. ~7 min cold, the bulk of it the two Rust
+# builds; the Rust pair skips gracefully without cargo, like the steps above.
+if out=$("$here/repro_build_parity.sh" 2>&1); then
+    echo "$out"
+    step_end pass
+else
+    echo "$out"
+    rc=1
+    step_end fail
+fi
+
 step_begin "gofmt"
 # Go formatting enforcement — plain `gofmt`, the baseline §9 defers to. It is
 # the Go counterpart of the rustfmt step below, and closes the gap
