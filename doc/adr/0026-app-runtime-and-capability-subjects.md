@@ -1004,6 +1004,50 @@ A `WindowTitle()` helper on `Manifest` composes the displayed string as `"{Icon}
 
 Runtime-tree path references in this ADR were swept from `public/thestack/runtime/...` to `public/keelson/runtime/...` as part of the keelson namespace introduction ([ADR-0035](./0035-keelson-namespace-introduction.md)). The decision recorded here (AppI/Manifest/Registry, cap-as-subject, §SD7 fsbroker, §SD10 capslock cross-check) is unchanged; only path strings reflect the new location. Per ADR-0026's own identity rule, `Manifest.Id` strings were also rewritten to match the new import paths: runtime-side AppIs (logviewer) follow the `keelson/runtime/...` paths; standalone apps moved to `apps/<name>/` (Step 5: imztop, capdemo, capinspector) follow the `apps/...` paths. Historical fact rows tagged by old AppIds are orphaned, accepted because the runtime is pre-stable. `status` and `reviewed-date` are deliberately not re-stamped. The capslock-check binary at `public/app/commands/capslock/` is preserved as a thin shim; the cross-check library lives at `public/keelson/security/capslock/`.
 
+### 2026-09-02 — §SD7: the dialog reply names the file (basename only)
+
+`fsbroker.DialogReply` gains `DisplayName`: the BASENAME of the resolved
+path, on read and write grants alike. This is the deliberate Powerbox
+widening [ADR-0178](./0178-mdedit-markdown-editor.md) recorded as a deferral
+("widening `DialogReply` with a display name is a Powerbox decision and not
+one an app should make on its way past") — an editor can now title what it
+has open and tell two documents apart. What does NOT change: the path stays
+inside the broker, the name is `filepath.Base` of the user's actual selection
+(never an echo of the app's `SuggestedName` hint), and a denial names
+nothing. Wire: a new `dialogDisplayName` vdd membership; sparse CBOR decodes
+its absence to `""`, so replies from before the field stay decodable.
+
+### 2026-09-02 — §SD7: a read handle may watch its own file; handle uuids widen to (app, path, op)
+
+Two related changes to the handle model, driven by mdedit's follow-the-file:
+
+**`fs.handle.{uuid}.watch` is now legal on a `HandleModeRead` handle**, and
+means "watch this file". The broker watches the file's PARENT directory
+through the existing backends — inotify binds the inode, and the common
+editor save is a rename-replace that would orphan a file-bound watch — and
+filters the stream to the granted file broker-side, scrubbing the name to
+`""` (the event addresses the watched object). The filter is capability
+posture, not an optimisation: the app holds no path, and a read grant on one
+file must not stream sibling names. `Recursive` is forced off (a file has no
+subtree). Write and bundle handles still refuse. To make the subscribe
+possible under the grant model, `Resolve` gives read handles a second,
+narrow cap — Sub on exactly `fs.handle.{uuid}.event` — beside the Pub
+wildcard; both are revoked on close.
+
+**`mintHandleUuid` now hashes the dialog op beside (appId, path).** Without
+it, a read grant and a write grant on the SAME file minted one uuid, and the
+second `Resolve` overwrote the first handle entry — the mode flipped
+underneath the earlier grant, and closing either destroyed both (plus any
+watch riding the read handle). Stability narrows from (app, path) to
+(app, path, op); a re-grant of the same kind still reuses its uuid, so the
+"prior cap covers the new handle" property this function exists for holds
+within each dialog kind. A test pins the disambiguation.
+
+Deferred, recorded here rather than built: broker-side reaping of watches
+whose owning client is gone. Cap revocation does not stop a watch pump, so
+an app that keeps a read handle must close it explicitly on unmount — mdedit
+does — and a crashed app's watch lives until the broker closes.
+
 ## References
 
 - [ADR-0057](0057-demo-registry-and-drivers.md) — Demo registry pattern that `app.Registry` generalises.

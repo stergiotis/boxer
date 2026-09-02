@@ -35,12 +35,14 @@ import (
 var (
 	kindDialogApproved      uint64
 	kindDialogHandleSubject uint64
+	kindDialogDisplayName   uint64
 	kindReason              uint64
 )
 
 func init() {
 	kindDialogApproved = vdd.MembDialogApproved.GetId().Value()
 	kindDialogHandleSubject = vdd.MembDialogHandleSubject.GetId().Value()
+	kindDialogDisplayName = vdd.MembDialogDisplayName.GetId().Value()
 	kindReason = vdd.MembReason.GetId().Value()
 	buscodec.Register[DialogReply](dialogReplyBusCodec)
 }
@@ -107,6 +109,7 @@ type DialogReplyColumns struct {
 
 	Approved            []bool
 	HandleSubjectPrefix []string
+	DisplayName         []string
 	Reason              []string
 }
 
@@ -125,6 +128,7 @@ func (c *DialogReplyColumns) Append(row DialogReply) {
 	c.At = append(c.At, row.At)
 	c.Approved = append(c.Approved, row.Approved)
 	c.HandleSubjectPrefix = append(c.HandleSubjectPrefix, row.HandleSubjectPrefix)
+	c.DisplayName = append(c.DisplayName, row.DisplayName)
 	c.Reason = append(c.Reason, row.Reason)
 }
 
@@ -137,6 +141,7 @@ func (c *DialogReplyColumns) Row(i int) (row DialogReply) {
 	row.At = c.At[i]
 	row.Approved = c.Approved[i]
 	row.HandleSubjectPrefix = c.HandleSubjectPrefix[i]
+	row.DisplayName = c.DisplayName[i]
 	row.Reason = c.Reason[i]
 	return
 }
@@ -259,6 +264,9 @@ func DialogReplyBuildEntities[
 		stringArraySecAttr_HandleSubjectPrefix := stringArraySec.BeginAttributeSingle(c.HandleSubjectPrefix[i])
 		stringArraySecAttr_HandleSubjectPrefix.AddMembershipLowCardRefP(kindDialogHandleSubject)
 		stringArraySecAttr_HandleSubjectPrefix.EndAttributeP()
+		stringArraySecAttr_DisplayName := stringArraySec.BeginAttributeSingle(c.DisplayName[i])
+		stringArraySecAttr_DisplayName.AddMembershipLowCardRefP(kindDialogDisplayName)
+		stringArraySecAttr_DisplayName.EndAttributeP()
 		stringArraySec.EndSection()
 		// --- textArray. ---
 		textArraySec := dml.GetSectionTextArray()
@@ -302,6 +310,9 @@ func DialogReplyEmitSectionStringArray[
 	stringArraySecAttr_HandleSubjectPrefix := stringArraySec.BeginAttributeSingle(row.HandleSubjectPrefix)
 	stringArraySecAttr_HandleSubjectPrefix.AddMembershipLowCardRefP(kindDialogHandleSubject)
 	stringArraySecAttr_HandleSubjectPrefix.EndAttributeP()
+	stringArraySecAttr_DisplayName := stringArraySec.BeginAttributeSingle(row.DisplayName)
+	stringArraySecAttr_DisplayName.AddMembershipLowCardRefP(kindDialogDisplayName)
+	stringArraySecAttr_DisplayName.EndAttributeP()
 	return
 }
 
@@ -462,6 +473,9 @@ func DialogReplyFillFromArrow[
 		var stringArrayHandleSubjectPrefixVal string
 		var stringArrayHandleSubjectPrefixCount int
 		var stringArrayHandleSubjectPrefixLastAttr int64
+		var stringArrayDisplayNameVal string
+		var stringArrayDisplayNameCount int
+		var stringArrayDisplayNameLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -477,6 +491,17 @@ func DialogReplyFillFromArrow[
 						return
 					}
 					stringArrayHandleSubjectPrefixVal = val
+				case kindDialogDisplayName:
+					if stringArrayDisplayNameLastAttr != attrJ+1 {
+						stringArrayDisplayNameLastAttr = attrJ + 1
+						stringArrayDisplayNameCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "dialogDisplayName").Str("field", "DisplayName").Errorf("slot stringArray@dialogDisplayName (field DisplayName) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayDisplayNameVal = val
 				}
 			}
 		}
@@ -485,6 +510,11 @@ func DialogReplyFillFromArrow[
 			return
 		}
 		c.HandleSubjectPrefix = append(c.HandleSubjectPrefix, stringArrayHandleSubjectPrefixVal)
+		if stringArrayDisplayNameCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "dialogDisplayName").Int("got", stringArrayDisplayNameCount).Errorf("slot stringArray@dialogDisplayName (field DisplayName) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDisplayNameCount)
+			return
+		}
+		c.DisplayName = append(c.DisplayName, stringArrayDisplayNameVal)
 		// --- textArray. ---
 		var textArrayReasonVal string
 		var textArrayReasonCount int
@@ -570,6 +600,9 @@ func DialogReplyReadRow[
 	var stringArrayHandleSubjectPrefixVal string
 	var stringArrayHandleSubjectPrefixCount int
 	var stringArrayHandleSubjectPrefixLastAttr int64
+	var stringArrayDisplayNameVal string
+	var stringArrayDisplayNameCount int
+	var stringArrayDisplayNameLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -585,6 +618,17 @@ func DialogReplyReadRow[
 					return
 				}
 				stringArrayHandleSubjectPrefixVal = val
+			case kindDialogDisplayName:
+				if stringArrayDisplayNameLastAttr != attrJ+1 {
+					stringArrayDisplayNameLastAttr = attrJ + 1
+					stringArrayDisplayNameCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "dialogDisplayName").Str("field", "DisplayName").Errorf("slot stringArray@dialogDisplayName (field DisplayName) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayDisplayNameVal = val
 			}
 		}
 	}
@@ -594,6 +638,14 @@ func DialogReplyReadRow[
 	}
 	if stringArrayHandleSubjectPrefixCount == 1 {
 		row.HandleSubjectPrefix = stringArrayHandleSubjectPrefixVal
+		present = true
+	}
+	if stringArrayDisplayNameCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "dialogDisplayName").Int("got", stringArrayDisplayNameCount).Errorf("slot stringArray@dialogDisplayName (field DisplayName) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDisplayNameCount)
+		return
+	}
+	if stringArrayDisplayNameCount == 1 {
+		row.DisplayName = stringArrayDisplayNameVal
 		present = true
 	}
 	// --- textArray. ---

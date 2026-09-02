@@ -45,6 +45,13 @@ type DialogReply struct {
 	// caps cover on approval. Empty on denial.
 	HandleSubjectPrefix string `lw:"dialogHandleSubject,stringArray"`
 
+	// DisplayName is the basename of the resolved path — the one fact
+	// about the file's identity the broker reveals (never the path).
+	// Empty on denial, and on replies encoded before the field existed:
+	// the sparse codec decodes an absent column to the zero value, which
+	// is what keeps old payloads decodable.
+	DisplayName string `lw:"dialogDisplayName,stringArray"`
+
 	// Reason is the rationale (denial reason or broker error). Empty
 	// on a successful approval.
 	Reason string `lw:"reason,textArray"`

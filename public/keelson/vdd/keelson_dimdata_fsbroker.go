@@ -77,4 +77,12 @@ var (
 	// zero on poller-backed watches.
 	MembWatchEventCookie = KeelsonHrNkRegistry.MustBegin("watchEventCookie", 31).
 				MustAddRestriction("u32Array", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+
+	// MembDialogDisplayName is the basename of the resolved path — the one
+	// fact about the file's identity the Powerbox reveals on approval. The
+	// path itself stays inside the broker (ADR-0026 §SD7); this is the
+	// deliberate widening ADR-0178 recorded as a deferral ("widening
+	// DialogReply with a display name is a Powerbox decision").
+	MembDialogDisplayName = KeelsonHrNkRegistry.MustBegin("dialogDisplayName", 149).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )

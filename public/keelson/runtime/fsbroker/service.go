@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -94,8 +95,10 @@ const (
 	HandleModeWrite       HandleModeE = 2
 	HandleModeBundle      HandleModeE = 3
 	// HandleModeWatch marks a handle as eligible for fs.handle.{uuid}.watch
-	// streaming notifications. Read/write are not permitted on watch handles
-	// (and vice versa); the picker selects the directory to observe.
+	// streaming notifications on a DIRECTORY the picker selected. Read/write
+	// are not permitted on watch handles. The reverse is narrower: a
+	// HandleModeRead handle may also watch — its own file, filtered
+	// broker-side (see handleWatch) — while write/bundle handles cannot.
 	HandleModeWatch HandleModeE = 4
 )
 
@@ -106,7 +109,13 @@ const (
 type DialogReply struct {
 	Granted             bool   `json:"granted"`
 	HandleSubjectPrefix string `json:"handleSubjectPrefix,omitempty"`
-	Reason              string `json:"reason,omitempty"`
+	// DisplayName is the BASENAME of the resolved path — the one fact about
+	// the file's identity the Powerbox reveals, so an editor can title what
+	// it has open. The path itself stays inside the broker (ADR-0026 §SD7):
+	// the name says which file among the ones the user picked, never where
+	// anything lives. Empty on denial.
+	DisplayName string `json:"displayName,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 // PendingRequest describes one dialog awaiting user selection. The host's
@@ -246,7 +255,7 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 	}
 	delete(inst.pending, reqId)
 	mode := modeFor(p.op)
-	handleUuid = mintHandleUuid(p.appId, path)
+	handleUuid = mintHandleUuid(p.appId, path, p.op)
 	inst.handles[handleUuid] = &handle{
 		uuid:    handleUuid,
 		path:    path,
@@ -261,8 +270,8 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 		dir := app.CapDirectionPub
 		if mode == HandleModeWatch {
 			// Watch handles also need Sub on .event so the app can
-			// subscribe to the broker-published event stream. Read /
-			// write / bundle stay Pub-only — they're request-reply.
+			// subscribe to the broker-published event stream. Write /
+			// bundle stay Pub-only — they're request-reply.
 			dir = app.CapDirectionBoth
 		}
 		client.AddCap(app.SubjectFilter{
@@ -270,12 +279,28 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 			Direction: dir,
 			Reason:    "granted via fs.dialog." + p.op,
 		})
+		if mode == HandleModeRead {
+			// A read handle may watch its own file (handleWatch accepts
+			// it), so the app also needs Sub — on exactly the event
+			// subject, not the whole prefix: the request-reply ops stay
+			// Pub through the wildcard above, and widening it to Both
+			// would let the app eavesdrop its own request stream for
+			// nothing.
+			client.AddCap(app.SubjectFilter{
+				Pattern:   HandleSubjectPrefix + handleUuid + "." + HandleEventOp,
+				Direction: app.CapDirectionSub,
+				Reason:    "watch events for the file granted via fs.dialog." + p.op,
+			})
+		}
 	} else {
 		inst.log.Warn().Str("appId", string(p.appId)).Msg("fsbroker: resolve: no client to grant handle cap")
 	}
 	err = inst.replyDialog(p.replySubject, DialogReply{
 		Granted:             true,
 		HandleSubjectPrefix: HandleSubjectPrefix + handleUuid,
+		// The broker's own truth, not an echo of the app's SuggestedName —
+		// the user may have typed something else in the picker.
+		DisplayName: filepath.Base(path),
 	})
 	return
 }
@@ -458,15 +483,18 @@ func (inst *Service) handleClose(reply string, uuid string) {
 	_ = inst.busClient.Publish(reply, nil)
 }
 
-// revokeHandleCap strips the per-handle cap from the owning app's bus
-// client. No-op when the client is gone. Mirrors the AddCap performed in
-// Resolve.
+// revokeHandleCap strips the per-handle caps from the owning app's bus
+// client. No-op when the client is gone. Mirrors the AddCaps performed in
+// Resolve — the wildcard, and the read-handle event Sub (RemoveCap is
+// idempotent by pattern, so a handle that never had the second loses
+// nothing).
 func (inst *Service) revokeHandleCap(appId app.AppIdT, uuid string) {
 	client, ok := inst.inst.ClientByAppId(appId)
 	if !ok {
 		return
 	}
 	client.RemoveCap(HandleSubjectPrefix + uuid + ".>")
+	client.RemoveCap(HandleSubjectPrefix + uuid + "." + HandleEventOp)
 }
 
 func (inst *Service) replyError(replySubject, reason string) {
@@ -520,26 +548,42 @@ func mintRequestId(sender app.AppIdT, op string) (id string) {
 	return
 }
 
-// mintHandleUuid is stable across the (appId, path) tuple within a session
-// — re-resolving the same path for the same app yields the same uuid, so
-// the app's prior cap covers the new handle.
-func mintHandleUuid(appId app.AppIdT, path string) (uuid string) {
+// mintHandleUuid is stable across the (appId, path, op) tuple within a
+// session — re-resolving the same path for the same app AND the same dialog
+// kind yields the same uuid, so the app's prior cap covers the new handle.
+//
+// The op is in the hash because two dialog kinds on the SAME file must not
+// share a uuid: without it, opening a file and then saving to it minted one
+// uuid whose handle entry the second Resolve overwrote — the mode flipped
+// underneath the first grant, and closing either destroyed both (plus any
+// watch riding the read handle). Stability narrows from (app, path) to
+// (app, path, op); nothing relied on the wider form, since a re-grant of the
+// same kind still reuses its uuid.
+func mintHandleUuid(appId app.AppIdT, path string, op string) (uuid string) {
 	h := blake3.New(8, nil)
 	_, _ = h.Write([]byte(appId))
 	_, _ = h.Write([]byte{0})
 	_, _ = h.Write([]byte(path))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(op))
 	uuid = hex.EncodeToString(h.Sum(nil))
 	return
 }
 
-// handleWatch starts a streaming watch on the handle's path. Rejected when
-// the handle was not minted via fs.dialog.watch (HandleModeWatch). On
-// success the broker replies with a WatchReply naming the event subject
-// and spawns a pump goroutine that publishes each backend event to
-// fs.handle.{uuid}.event. Idempotent at the handle level — a second watch
-// request for an already-watching handle replies Started=false.
+// handleWatch starts a streaming watch on the handle's path. Two modes may
+// watch: a HandleModeWatch handle (minted via fs.dialog.watch — the user
+// picked a DIRECTORY to observe) watches its path as granted, and a
+// HandleModeRead handle watches ITS OWN FILE — the seam that lets an editor
+// follow the document it has open. The file case routes through
+// fileWatchBackend: the parent directory is watched and the stream is
+// filtered to the one file broker-side, because the app holds no path and a
+// read grant must not leak sibling names. On success the broker replies with
+// a WatchReply naming the event subject and spawns a pump goroutine that
+// publishes each backend event to fs.handle.{uuid}.event. Idempotent at the
+// handle level — a second watch request for an already-watching handle
+// replies Started=false.
 func (inst *Service) handleWatch(msg *app.Msg, h *handle) {
-	if h.mode != HandleModeWatch {
+	if h.mode != HandleModeWatch && h.mode != HandleModeRead {
 		inst.replyError(msg.Reply, "handle not opened for watch")
 		return
 	}
@@ -558,7 +602,13 @@ func (inst *Service) handleWatch(msg *app.Msg, h *handle) {
 		})
 		return
 	}
-	backend, backendName, err := pickBackend(h.path, req)
+	var backend watcherBackendI
+	var backendName string
+	if h.mode == HandleModeRead {
+		backend, backendName, err = newFileWatchBackend(h.path, req)
+	} else {
+		backend, backendName, err = pickBackend(h.path, req)
+	}
 	if err != nil {
 		inst.replyError(msg.Reply, "watch: "+err.Error())
 		return

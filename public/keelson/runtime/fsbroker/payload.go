@@ -19,6 +19,7 @@ func MarshalDialogReply(r DialogReply) (b []byte, err error) {
 	wire := dialogreply.DialogReply{
 		Approved:            r.Granted,
 		HandleSubjectPrefix: r.HandleSubjectPrefix,
+		DisplayName:         r.DisplayName,
 		Reason:              r.Reason,
 	}
 	b, err = buscodec.Encode(wire)
@@ -39,6 +40,7 @@ func UnmarshalDialogReply(b []byte) (r DialogReply, err error) {
 	r = DialogReply{
 		Granted:             wire.Approved,
 		HandleSubjectPrefix: wire.HandleSubjectPrefix,
+		DisplayName:         wire.DisplayName,
 		Reason:              wire.Reason,
 	}
 	return

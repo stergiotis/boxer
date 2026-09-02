@@ -514,6 +514,82 @@ func (inst *inotifyWatcher) emit(ev WatchEvent) {
 	}
 }
 
+// fileWatchBackend adapts a directory backend to a single-FILE watch: it
+// watches filepath.Dir(path) through the normal pickBackend routing and
+// forwards only the events addressing filepath.Base(path), with Name
+// scrubbed to "" (the documented "event addresses the watched root"
+// semantics — the watched object IS the file). The scrub-and-filter is
+// mandatory, not an optimisation: the app holds no path, and a read grant on
+// one file must not stream sibling names past the Powerbox.
+//
+// Watching the parent rather than the file's own inode is load-bearing too:
+// the common editor save is a rename-replace (write a temp file, move it
+// over the target), which orphans an inode-bound watch while the path lives
+// on. From the parent the same save is a RenameTo carrying the file's name.
+type fileWatchBackend struct {
+	inner watcherBackendI
+	base  string
+	out   chan WatchEvent
+}
+
+// newFileWatchBackend builds the wrapper. Recursive is forced off — a file
+// has no subtree, and honouring it would only widen what the filter must
+// then suppress.
+func newFileWatchBackend(path string, req WatchRequest) (b watcherBackendI, name string, err error) {
+	req.Recursive = false
+	inner, name, err := pickBackend(filepath.Dir(path), req)
+	if err != nil {
+		return
+	}
+	b = &fileWatchBackend{
+		inner: inner,
+		base:  filepath.Base(path),
+		out:   make(chan WatchEvent, 256),
+	}
+	return
+}
+
+var _ watcherBackendI = (*fileWatchBackend)(nil)
+
+func (inst *fileWatchBackend) Start() (err error) {
+	err = inst.inner.Start()
+	if err != nil {
+		return
+	}
+	go inst.forward()
+	return
+}
+
+func (inst *fileWatchBackend) Stop() {
+	inst.inner.Stop()
+}
+
+func (inst *fileWatchBackend) Events() (ch <-chan WatchEvent) {
+	ch = inst.out
+	return
+}
+
+// forward filters the parent-directory stream down to the one file. Overflow
+// and Closed always pass — losing events, or losing the parent directory, is
+// losing the file's stream too. The send blocks rather than dropping: the
+// inner channel is the bounded stage, and its emit already substitutes an
+// Overflow when the consumer stalls.
+func (inst *fileWatchBackend) forward() {
+	defer close(inst.out)
+	for ev := range inst.inner.Events() {
+		switch ev.Kind {
+		case WatchEventOverflow, WatchEventClosed:
+			ev.Name = ""
+		default:
+			if ev.Name != inst.base {
+				continue
+			}
+			ev.Name = ""
+		}
+		inst.out <- ev
+	}
+}
+
 // pollerWatcher polls path on a fixed interval and diffs the result
 // against a snapshot to synthesise Create/Delete/Modify. Auto-selected
 // for inotify-blind filesystems (proc/sysfs/NFS/FUSE/CIFS); forced via
