@@ -47,7 +47,7 @@ required-features = ["headless"]
 # EGUI_INSPECTION env var opens the port (see the `inspection` feature note
 # below). Headless builds pass `--no-default-features`, so they never pick it
 # up — and could not, since `inspection` pulls in the eframe-only `desktop`.
-default = ["desktop", "inspection", "fast_alloc"]
+default = ["desktop", "inspection"]
 # egui-wgpu is pulled in transitively by eframe under `desktop`; declare it on
 # the feature too so `entry.rs` can name `egui_wgpu::wgpu::PresentMode` when
 # mapping the `-vsync` flag onto the wgpu swapchain (eframe 0.35 dropped the
@@ -120,14 +120,13 @@ headless_svg = []
 # the puffin profiler server (main.rs, under `--features puffin`). See
 # doc/howto/egui-mcp.md.
 inspection = ["desktop", "eframe?/inspection"]
-# The mimalloc global allocator (main.rs), on by default and in every build
-# script, so this gate changes no shipped build. It exists to be left OFF: the
-# `libmimalloc-sys` build script needs a C toolchain for the target, and it is
-# one of exactly two crates that stop `--target x86_64-unknown-linux-musl` from
-# checking (the other was `ring`, which left with ADR-0204 M4). Without it the
-# appliance graph is pure Rust and needs no cross C compiler at all. See
-# ADR-0205 M6.
-fast_alloc = ["dep:mimalloc"]
+# `fast_alloc` (the mimalloc global allocator) was RETIRED in ADR-0215 — do not
+# reintroduce it. mimalloc's own C sources compile `__DATE__, __TIME__` into the
+# binary (`c_src/mimalloc/v2/src/options.c:222`), which put a wall clock in every
+# release artifact: two builds of the same tree five minutes apart differed in
+# 94 543 bytes. No allocator is worth an unreproducible binary, and dropping it
+# also finishes what ADR-0205 M6 started — `libmimalloc-sys` was the last crate
+# blocking `--target x86_64-unknown-linux-musl`.
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
 wayland = ["eframe?/wayland"]
@@ -199,7 +198,6 @@ byteorder = "1.5.0"
 puffin_http = {version = "0.17.0", optional = true }
 puffin = {version = "0.20.0", optional = true }
 profiling = "1.0.17"
-mimalloc = { version = "0.1.48", optional = true }
 dhat = { version = "0.3.3", optional = true }
 memmap2 = "0.9.9"
 rand = "0.10.2"

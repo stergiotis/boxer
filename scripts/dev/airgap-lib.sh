@@ -441,7 +441,7 @@ airgap_cargo_env_lines() {  # <rust_tc_bin_parent> <cargo_home>
 # NOTE the default here is only a conservative fallback. Each bundler DECLARES its
 # own, because the two repos genuinely build different heads: boxer's
 # rust/imzero2/build_rust_headless.sh — which its unbundler runs in both scopes —
-# builds `headless_wgpu,fast_alloc`, while hackathon's flow builds `headless`.
+# builds `headless_wgpu`, while hackathon's flow builds `headless`.
 # Getting this wrong is not cosmetic: it decides whether the operator is told to
 # supply a Vulkan ICD and a C compiler.
 AIRGAP_IMZERO2_FEATURES="${AIRGAP_IMZERO2_FEATURES:-headless}"
@@ -451,7 +451,7 @@ AIRGAP_IMZERO2_FEATURES="${AIRGAP_IMZERO2_FEATURES:-headless}"
 #
 # WHY A MENU IS POSSIBLE AT ALL. `cargo vendor` has no feature or target filter:
 # it materializes every entry in Cargo.lock, all 560 of them, including `wgpu`,
-# `ash`, `eframe`, `winit`, `mimalloc` and `egui_software_backend`. So a bundle
+# `ash`, `eframe`, `winit` and `egui_software_backend`. So a bundle
 # that ships the Rust toolchain and the vendor tree already carries the crates for
 # EVERY head — the choice of head is not a property of the payload, it is a
 # decision the target can make at provision time. What the pack adds is the
@@ -478,10 +478,14 @@ AIRGAP_IMZERO2_HEADS="${AIRGAP_IMZERO2_HEADS:-headless headless_soft headless_wg
 #           renders to a window through eframe and never enables headless_raster,
 #           so the encoder lane is absent there.
 #   wgpu    the build carries wgpu, so it needs a Vulkan loader + ICD at runtime.
-#   cc      a C toolchain (and pkg-config) at BUILD time. Two independent causes:
-#           the wgpu/eframe graph, which pulls `wayland-sys` and probes with
-#           pkg-config; and mimalloc via `fast_alloc`, which `default` carries.
-#           Either one alone is enough, which is why this is not folded into wgpu.
+#   cc      a C toolchain (and pkg-config) at BUILD time. One cause since
+#           ADR-0215 retired `fast_alloc`: the wgpu/eframe graph, which pulls
+#           `wayland-sys` and probes with pkg-config. Kept as its own capability
+#           rather than folded into wgpu, because a second cause can come back
+#           the way mimalloc was one — and because `blake3` compiles assembly
+#           when a C compiler is present, falling back to pure Rust when it is
+#           not, so the lean heads still build without one (re-verified
+#           2026-09-01 with CC=/nonexistent).
 #
 # Measured on 2026-08-25 with `cargo tree` plus release builds run with CC and
 # CXX pointed at a nonexistent binary:
@@ -501,7 +505,7 @@ airgap_render_head_caps() {  # <feature-string>
         caps="raster"; known=1 ;; esac
     case "$f" in *,headless_wgpu,*|*,desktop,*|*,default,*)
         caps="$caps wgpu"; known=1 ;; esac
-    case "$f" in *,headless_wgpu,*|*,desktop,*|*,default,*|*,fast_alloc,*)
+    case "$f" in *,headless_wgpu,*|*,desktop,*|*,default,*)
         caps="$caps cc"; known=1 ;; esac
     # Bare `headless` implies none of the three, but it IS a known set — so it
     # must not fall through to `unknown`.
@@ -1002,9 +1006,10 @@ airgap_preflight_ffmpeg() {  # <ffmpeg-path>
 # the result was a deploy contract wrong in both directions at once:
 #
 #   * the C compiler + pkg-config check ran for `--scope full` and blamed
-#     `libmimalloc-sys` — a crate that is NOT in the graph the airgap flow
-#     builds. mimalloc sits behind imzero2's `fast_alloc`, which lives only in
-#     `default`, and every airgap build passes `--no-default-features`. Measured:
+#     `libmimalloc-sys` — a crate that was not in the graph the airgap flow
+#     builds even then (mimalloc sat behind `fast_alloc`, which lived only in
+#     `default`, and every airgap build passes `--no-default-features`), and
+#     which ADR-0215 has since removed from the repo entirely. Measured:
 #     `--features headless` and `--features headless_soft` both build and LINK
 #     with CC=/nonexistent, producing a binary whose entire dynamic contract is
 #     libc/libm/libgcc_s/ld.so.

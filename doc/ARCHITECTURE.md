@@ -105,7 +105,7 @@ environment variables. The Go side does not know which one it got.
 
 | Build (`rust/imzero2`) | Host loop | Who rasterizes | What it needs on the box | Build script |
 | --- | --- | --- | --- | --- |
-| `desktop` (default, with `inspection`, `fast_alloc`) | eframe + winit window | GPU via wgpu | a display server, a GPU or GL/Vulkan driver | [`build_rust.sh`](../rust/imzero2/build_rust.sh) |
+| `desktop` (default, with `inspection`) | eframe + winit window | GPU via wgpu | a display server, a GPU or GL/Vulkan driver | [`build_rust.sh`](../rust/imzero2/build_rust.sh) |
 | `headless_wgpu` | WebSocket carrier | GPU via wgpu, offscreen texture + readback | Vulkan loader + ICD (a real GPU, or Mesa's lavapipe); `ffmpeg` for a video lane | [`build_rust_headless.sh`](../rust/imzero2/build_rust_headless.sh) |
 | `headless_soft` | WebSocket carrier | CPU, `egui_software_backend` on a rayon pool | four shared libraries; `ffmpeg` for a video lane | [`build_rust_headless_soft.sh`](../rust/imzero2/build_rust_headless_soft.sh) |
 | `headless` | WebSocket carrier, mesh lane only | nobody on the box — the browser's WebGL2 painter | nothing beyond the binary | [`build_rust_headless_mesh.sh`](../rust/imzero2/build_rust_headless_mesh.sh) |
@@ -161,12 +161,12 @@ folded into the port.
 Why this matters beyond tidiness: `ring` and `libmimalloc-sys` were the only
 two crates in the headless closure that compile C, and exactly the two that
 stopped a static musl build (340 of 348 crates checked clean without a musl C
-compiler, 2026-08-22, ADR-0203 §Context). `mimalloc` sits behind a `fast_alloc`
-feature ([ADR-0206 §SD4](./adr/0206-gokrazy-appliance-image.md)) and
-`ring` left with the map port, so `cargo check --target
-x86_64-unknown-linux-musl --no-default-features --features headless_soft` now
-passes with `fast_alloc` off (ADR-0204 M4, 2026-08-23): no C toolchain stands
-between the headless host and a static musl appliance. The images in §2.4
+compiler, 2026-08-22, ADR-0203 §Context). `ring` left with the map port
+(ADR-0204 M4, 2026-08-23), and `libmimalloc-sys` left with the allocator itself
+([ADR-0215](./adr/0215-retire-mimalloc-reproducible-builds.md)) — so
+`--no-default-features --features headless_soft` needs no feature juggling to
+clear the way any more. No C toolchain stands between the headless host and a
+static musl appliance. The images in §2.4
 still ship a glibc closure beside the Rust host; a musl-static image is
 ADR-0206 M4, not yet built.
 

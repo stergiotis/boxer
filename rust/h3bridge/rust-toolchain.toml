@@ -2,7 +2,13 @@
 # (e.g., Fedora's system cargo) it is ignored; see scripts/dev/build_h3_wasm.sh
 # for the toolchain-presence checks that apply to both installs.
 [toolchain]
-channel = "stable"
+# 1.96.1, not `stable`: the committed public/science/geo/h3/internal/h3o_wasm/h3.wasm
+# was produced by this exact rustc (its panic strings carry /rustc/31fca3adb…),
+# and scripts/ci/h3_wasm_parity.sh byte-compares a rebuild against it. Under
+# `stable` every rustc release silently invalidated the blob — measured on the
+# sibling wasm kernel, where 1.96.1 and 1.98.0 differ in both size and hash.
+# Move this in the same commit that rebuilds h3.wasm (scripts/dev/build_h3_wasm.sh).
+channel = "1.96.1"
 components = ["rustfmt", "clippy"]
 targets = ["wasm32-unknown-unknown"]
 profile = "minimal"

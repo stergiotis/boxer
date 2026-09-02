@@ -10,6 +10,9 @@ cleanup() {
     exit $rv
 }
 trap 'cleanup' EXIT
-go build -buildvcs=true -tags "$(cat "$here/tags" | tr -d "\n")" -o "$appfile" ./public/app 1>&2
+# shellcheck source=/dev/null
+source "$here/scripts/dev/go-build-env.sh"
+# shellcheck disable=SC2086 # deliberate word splitting of the flag list
+go build $BOXER_GO_FLAGS -tags "$BOXER_GO_TAGS" -o "$appfile" ./public/app 1>&2
 cd - &> /dev/null
 "$appfile" --logFormat console "$@"

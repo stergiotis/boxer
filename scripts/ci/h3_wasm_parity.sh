@@ -32,9 +32,26 @@ if ! command -v cargo >/dev/null 2>&1; then
     exit 0
 fi
 
-sysroot=$(rustc --print sysroot 2>/dev/null || true)
+# The pinned channel, named on the command line for the same reason
+# scripts/dev/build_h3_wasm.sh does it: rustup reads rust-toolchain.toml from the
+# CWD, and both scripts build from the repo root with --manifest-path. A pin the
+# build script honours and this one ignores would compare two compilers' output.
+tc=""
+if command -v rustup >/dev/null 2>&1; then
+    ch=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$crate_dir/rust-toolchain.toml" | head -1)
+    if [ -n "$ch" ]; then
+        if ! rustup toolchain list 2>/dev/null | grep -q "^$ch"; then
+            echo "h3_wasm_parity: skipped (pinned toolchain $ch not installed)"
+            exit 0
+        fi
+        tc="+$ch"
+    fi
+fi
+
+# shellcheck disable=SC2086 # $tc is one optional word
+sysroot=$(rustc $tc --print sysroot 2>/dev/null || true)
 if [ -z "$sysroot" ] || [ ! -d "$sysroot/lib/rustlib/wasm32-unknown-unknown" ]; then
-    echo "h3_wasm_parity: skipped (wasm32-unknown-unknown target not installed)"
+    echo "h3_wasm_parity: skipped (wasm32-unknown-unknown target not installed${ch:+ for $ch})"
     exit 0
 fi
 
@@ -57,11 +74,14 @@ trap 'rm -rf "$tmpdir"' EXIT
 # See scripts/dev/build_h3_wasm.sh for why this seed is pinned.
 export CONST_RANDOM_SEED="boxer-h3-fixed-seed"
 
-# Path remap must match scripts/dev/build_h3_wasm.sh, or parity drifts on
-# every machine whose $CARGO_HOME or checkout path differs from the builder's.
-export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=$PWD=/build"
+# Path remap, from the same file scripts/dev/build_h3_wasm.sh sources — parity
+# would drift on every machine whose $CARGO_HOME or checkout path differs from
+# the builder's, and two copies of these flags would drift on their own.
+# shellcheck source=/dev/null
+source "$here/../dev/rust-repro-env.sh"
 
-cargo build \
+# shellcheck disable=SC2086 # $tc is one optional word
+cargo $tc build \
     --release \
     --locked \
     --target wasm32-unknown-unknown \

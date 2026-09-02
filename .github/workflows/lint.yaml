@@ -24,6 +24,20 @@ jobs:
           cache-dependency-path: 'go.sum'
       - name: Setup
         run: ./scripts/ci/install.sh
+      # The Rust gates inside lint.sh — h3_wasm_parity and rust_imzero2_check —
+      # skip silently when their toolchain is absent, and nothing here installed
+      # one, so "CI is the enforcer" was not true of either: the byte-parity
+      # check for the committed h3.wasm had never run. wabt and binaryen matter
+      # as much as rustc: the committed blob is the OUTPUT of wasm-strip +
+      # wasm-opt -Oz, so without them the gate cannot reproduce it and skips.
+      - name: Install the pinned Rust toolchain and wasm tooling
+        run: |
+          set -euo pipefail
+          ch=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust/h3bridge/rust-toolchain.toml | head -1)
+          [ -n "$ch" ] || { echo "no channel pin in rust/h3bridge/rust-toolchain.toml" >&2; exit 1; }
+          rustup toolchain install "$ch" --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends wabt binaryen
       - name: Lint
         run: ./scripts/ci/lint.sh
       - name: Lint workflows

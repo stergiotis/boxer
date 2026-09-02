@@ -23,7 +23,10 @@ tags=$(cat tags | tr -d $'\n')
 # generate.sh scripts invoked further down build their own binary.
 app=$(mktemp)
 trap 'rm -f -- "$app"' EXIT
-go build -buildvcs=true -tags "$tags" -o "$app" ./public/app
+# shellcheck source=/dev/null
+source "$here/scripts/dev/go-build-env.sh"
+# shellcheck disable=SC2086 # deliberate word splitting of the flag list
+go build $BOXER_GO_FLAGS -tags "$tags" -o "$app" ./public/app
 run() { "$app" --logFormat console "$@"; }
 
 # 1. egui2gen — FFFI2 Rust + Go bindings + API reference doc.

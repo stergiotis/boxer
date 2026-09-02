@@ -10,4 +10,10 @@ set -ev
 #                                    (doc/howto/egui-mcp.md)
 #   `puffin`     (added below)     — profiler + loopback server on :8585,
 #                                    gated by IMZERO2_PUFFIN (ADR-0195)
-cargo build --release --features "puffin${IMZERO2_BUILD_FEATURES:+ $IMZERO2_BUILD_FEATURES}"
+here=$(dirname "$(readlink -f "$BASH_SOURCE")")
+cd "$here"
+# Byte-reproducible output: path remapping, and --locked so the graph is the
+# committed one (ADR-0215).
+# shellcheck source=/dev/null
+source "$here/../../scripts/dev/rust-repro-env.sh"
+cargo build --release --locked --features "puffin${IMZERO2_BUILD_FEATURES:+ $IMZERO2_BUILD_FEATURES}"

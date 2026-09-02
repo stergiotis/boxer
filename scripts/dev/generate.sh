@@ -40,7 +40,10 @@ cleanup() {
 }
 trap cleanup EXIT
 echo "generate: building ./public/app …" 1>&2
-go build -buildvcs=true -tags "$tags" -o "$appfile" ./public/app 1>&2
+# shellcheck source=/dev/null
+source "$(dirname "$(readlink -f "$BASH_SOURCE")")/go-build-env.sh"
+# shellcheck disable=SC2086 # deliberate word splitting of the flag list
+go build $BOXER_GO_FLAGS -tags "$tags" -o "$appfile" ./public/app 1>&2
 boxer() { "$appfile" --logFormat console "$@"; }
 
 # egui2gen — FFFI2 Rust + Go bindings + API reference doc.
