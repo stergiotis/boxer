@@ -1,6 +1,7 @@
 package membershiprole
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
@@ -44,6 +45,12 @@ type PathPrefixClassifier struct {
 }
 
 var _ ClassifierI = PathPrefixClassifier{}
+var _ PinnableI = PathPrefixClassifier{}
+
+// Pin identifies the classifier and its one configuration knob (PinnableI).
+func (inst PathPrefixClassifier) Pin() string {
+	return "path-prefix(prefix=" + strconv.Quote(inst.effectivePrefix()) + ")"
+}
 
 func (inst PathPrefixClassifier) Classify(sec SectionContext, mv membership.MembershipValue) (role MembershipRoleE, paramTreatment ParamTreatmentE) {
 	role = inst.classifyRole(sec, mv)
