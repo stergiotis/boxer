@@ -61,13 +61,22 @@ func networkValueText(arr arrow.Array, idx int, ct canonicaltypes.NetworkTypeAst
 }
 
 // valueText is the text lane's read of one element: the address for a network
-// column, arrow's own rendering for everything else. The ValueFormatter still
-// sees the result and can replace it — what it receives is the value written
-// out, never an encoding artefact of how the value is carried.
+// column, the UTF-8 bytes for a fixed-width text column, arrow's own
+// rendering for everything else. The ValueFormatter still sees the result and
+// can replace it — what it receives is the value written out, never an
+// encoding artefact of how the value is carried.
 func valueText(arr arrow.Array, idx int, ct canonicaltypes.PrimitiveAstNodeI) (text string) {
 	if nt, isNet := ct.(canonicaltypes.NetworkTypeAstNode); isNet {
 		if s, ok := networkValueText(arr, idx, nt); ok {
 			return s
+		}
+	}
+	// A fixed-width text column (`sxN`) rides a FixedSizeBinary array, whose
+	// ValueStr is base64; the value is text, padding included (ADR-0201 SD3).
+	if st, isStr := ct.(canonicaltypes.StringAstNode); isStr &&
+		st.BaseType == canonicaltypes.BaseTypeStringUtf8 && st.WidthModifier == canonicaltypes.WidthModifierFixed {
+		if fsb, ok := arr.(*array.FixedSizeBinary); ok {
+			return string(fsb.Value(idx))
 		}
 	}
 	return arr.ValueStr(idx)
