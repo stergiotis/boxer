@@ -112,6 +112,25 @@ func (inst *GoClassBuilder) composeFieldRelatedCodeAll(op structFieldOperationE,
 	}
 	return
 }
+
+// fixedTextWidth reports N for a fixed-width text column (`sxN`, container
+// modifiers included) and 0 for every other type. Such a column's Go argument
+// is a plain string of any length while its FixedSizeBinary builder insists
+// on exactly N bytes, so its appends go through runtime.AppendFixedText.
+func fixedTextWidth(ct canonicaltypes2.PrimitiveAstNodeI) int {
+	switch n := ct.(type) {
+	case canonicaltypes2.StringAstNode:
+		if n.BaseType == canonicaltypes2.BaseTypeStringUtf8 && n.WidthModifier == canonicaltypes2.WidthModifierFixed {
+			return int(n.Width)
+		}
+	case *canonicaltypes2.StringAstNode:
+		if n.BaseType == canonicaltypes2.BaseTypeStringUtf8 && n.WidthModifier == canonicaltypes2.WidthModifierFixed {
+			return int(n.Width)
+		}
+	}
+	return 0
+}
+
 func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc common.IntermediateColumnContext, cp *common.IntermediateColumnProps, i int) (err error) {
 	b := inst.builder
 	pkg := inst.builderPkg.Alias
@@ -229,7 +248,18 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 			err = ErrUnhandledSubType
 		}
 	case structFieldOperationAppendScalar:
-		if mayError {
+		if w := fixedTextWidth(ct); w > 0 {
+			// sxN: the width is enforced with ClickHouse INSERT semantics —
+			// a bare Append would panic on any other length.
+			_, err = fmt.Fprintf(b, `	if err := runtime.AppendFixedText(inst.%sFieldBuilder%03d, %s, %d); err != nil {
+		inst.AppendError(err)
+	}
+`, prefix, idx, argName, w)
+			if !ct.IsScalar() {
+				_, err = fmt.Fprintf(b, `	inst.%sContainerLength%03d++
+`, prefix, idx)
+			}
+		} else if mayError {
 			_, err = fmt.Fprintf(b, `	{
 		err := inst.%sFieldBuilder%03d.Append(%s%s%s)
 		inst.AppendError(err)
@@ -293,7 +323,26 @@ func (inst *GoClassBuilder) composeFieldRelatedCode(op structFieldOperationE, cc
 		_, err = fmt.Fprintf(b, `	inst.%s = %s
 `, plainFieldName, argName)
 	case structFieldOperationPlainAppend:
-		if ct.IsScalar() {
+		if w := fixedTextWidth(ct); w > 0 {
+			if ct.IsScalar() {
+				_, err = fmt.Fprintf(b, `	if err := runtime.AppendFixedText(inst.%sFieldBuilder%03d, inst.%s, %d); err != nil {
+		inst.AppendError(err)
+	}
+`, prefix, idx, plainFieldName, w)
+			} else {
+				_, err = fmt.Fprintf(b, `	inst.%sListBuilder%03d.Append(true)
+`, prefix, idx)
+				if err != nil {
+					return
+				}
+				_, err = fmt.Fprintf(b, `	for _, v := range inst.%s {
+		if err := runtime.AppendFixedText(inst.%sFieldBuilder%03d, v, %d); err != nil {
+			inst.AppendError(err)
+		}
+	}
+`, plainFieldName, prefix, idx, w)
+			}
+		} else if ct.IsScalar() {
 			_, err = fmt.Fprintf(b, `	inst.%sFieldBuilder%03d.Append(%sinst.%s%s)
 `, prefix, idx, arrowConversionPrefix, plainFieldName, arrowConversionSuffix)
 		} else {

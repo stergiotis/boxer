@@ -368,6 +368,23 @@ func (c *CborReader) ReadTextString() string {
 	return string(b)
 }
 
+// ReadTextStringFixed reads a text string of exactly width bytes. It is the
+// read form of the fixed-width `sx<N>` lane: the encoder reads such a column
+// from a FixedSizeBinary array, so it always writes exactly N bytes, and a
+// different length is a value the writer would not have produced (the SD2
+// promise that the typed reads catch a width mismatch value by value).
+func (c *CborReader) ReadTextStringFixed(width int) string {
+	b := c.ReadText()
+	if c.err != nil {
+		return ""
+	}
+	if len(b) != width {
+		c.fail(eb.Build().Int("pos", c.pos).Int("len", len(b)).Int("want", width).Errorf("text string is not the fixed width the column declares: %w", ErrOutOfRange))
+		return ""
+	}
+	return string(b)
+}
+
 // readCount consumes a head of major type want and returns its argument as an
 // element count, refusing counts that cannot be present in the remaining
 // bytes — one byte is the smallest item, so a count above the bytes left is

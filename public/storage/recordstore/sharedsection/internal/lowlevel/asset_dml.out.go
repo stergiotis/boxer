@@ -35,7 +35,7 @@ func CreateSchemaAssetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
 
 type InEntityAssetTable struct {
 	errs               []error
@@ -100,7 +100,7 @@ var InEntityAssetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityAssetTable) setId(id0 uint64) *InEntityAssetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -115,7 +115,7 @@ func (inst *InEntityAssetTable) setId(id0 uint64) *InEntityAssetTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityAssetTable) setTimestamp(ts1 time.Time) *InEntityAssetTable {
 	if inst.state != runtime.EntityStateInEntity {

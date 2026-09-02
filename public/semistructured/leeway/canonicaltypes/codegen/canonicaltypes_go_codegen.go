@@ -85,10 +85,12 @@ func generateStringType(baseType canonicaltypes.BaseTypeStringE, widthModifier c
 				zeroValueLiteral = fmt.Sprintf("[%d]byte{}", width)
 			}
 			// Fixed-width UTF-8 (sxN): Go has no fixed-width string type, so it
-			// maps to the plain `string` set above. This is a deliberate
-			// cross-technology divergence — ClickHouse enforces the width via
-			// FixedString(N), Go does not (review B-5). u128/256 (no Go builtin)
-			// is handled distinctly and errors below.
+			// maps to the plain `string` set above. The width is enforced
+			// where the value meets the column: the generated dml builders
+			// append through runtime.AppendFixedText (pad shorter, refuse
+			// longer — ClickHouse INSERT semantics), and the canonwire
+			// decoder refuses any other length. u128/256 (no Go builtin) is
+			// handled distinctly and errors below.
 		default:
 			err = common.ErrNotImplemented
 		}

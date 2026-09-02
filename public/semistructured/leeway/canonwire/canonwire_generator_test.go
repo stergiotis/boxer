@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/code/synthesis/golang/align"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	canonicaltypes2 "github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
@@ -184,6 +185,45 @@ func channelTableDesc() (tbl common.TableDesc, err error) {
 		sec := manip.TaggedValueSection("hparam").
 			AddSectionMembership(common.MembershipSpecHighCardRefParametrized)
 		sec.TaggedValueColumn("e", ctabb.F64)
+	}
+	return manip.BuildTableDesc()
+}
+
+// fixedTableDesc covers the fixed-width lanes: an sx4 scalar, an sx3 array
+// and a yx4 scalar (no other golden carries a fixed-width column through the
+// codecs). One standalone section per column, distinct value types, so every
+// signature is unambiguous.
+func fixedTableDesc() (tbl common.TableDesc, err error) {
+	var manip *common.TableManipulator
+	manip, err = common.NewTableManipulator()
+	if err != nil {
+		err = eh.Errorf("unable to create table manipulator")
+		return
+	}
+	var hintsId encodingaspects2.AspectSet
+	hintsId, err = encodingaspects2.EncodeAspects(encodingaspects2.AspectDeltaEncoding, encodingaspects2.AspectLightGeneralCompression)
+	if err != nil {
+		err = eh.Errorf("unable to encode hints: %w", err)
+		return
+	}
+	sx4 := canonicaltypes2.StringAstNode{BaseType: canonicaltypes2.BaseTypeStringUtf8, WidthModifier: canonicaltypes2.WidthModifierFixed, Width: 4}
+	sx3h := canonicaltypes2.StringAstNode{BaseType: canonicaltypes2.BaseTypeStringUtf8, WidthModifier: canonicaltypes2.WidthModifierFixed, Width: 3, ScalarModifier: canonicaltypes2.ScalarModifierHomogenousArray}
+	yx4 := canonicaltypes2.StringAstNode{BaseType: canonicaltypes2.BaseTypeStringBytes, WidthModifier: canonicaltypes2.WidthModifierFixed, Width: 4}
+	manip.AddPlainValueItem(common.PlainItemTypeEntityId, "id", ctabb.U64, hintsId, valueaspects.EmptyAspectSet)
+	{
+		sec := manip.TaggedValueSection("code").
+			AddSectionMembership(common.MembershipSpecLowCardRef)
+		sec.TaggedValueColumn("c", sx4)
+	}
+	{
+		sec := manip.TaggedValueSection("codes").
+			AddSectionMembership(common.MembershipSpecLowCardRef)
+		sec.TaggedValueColumn("cs", sx3h)
+	}
+	{
+		sec := manip.TaggedValueSection("hash").
+			AddSectionMembership(common.MembershipSpecLowCardRef)
+		sec.TaggedValueColumn("h", yx4)
 	}
 	return manip.BuildTableDesc()
 }
@@ -418,6 +458,12 @@ func TestGenerateCanonWireNetTable(t *testing.T) {
 	tblDesc, err := networkSampleTableDesc()
 	require.NoError(t, err)
 	generateGoldens(t, "nettable", "net_table", tblDesc)
+}
+
+func TestGenerateCanonWireFixedTable(t *testing.T) {
+	tblDesc, err := fixedTableDesc()
+	require.NoError(t, err)
+	generateGoldens(t, "fixedtable", "fixed_table", tblDesc)
 }
 
 func TestGenerateCanonWireChannelTable(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 )
 
@@ -210,6 +211,18 @@ func resolveCanonicalOverride(goFieldName, ctStr, goType string, isSlice, isRoar
 	out, err = canonicaltypes.NewParser().ParsePrimitiveTypeAst(ctStr)
 	if err != nil {
 		err = eb.Build().Str("field", goFieldName).Str("ct", ctStr).Errorf("parse `,ct=` canonical: %w", err)
+		return
+	}
+	// deferred: fixed-width text (`,ct=sxN`) would pass the relabel check —
+	// its Go shape is a plain string — but the marshall lanes map a plain
+	// string column to array.String while the physical type is
+	// FixedSizeBinary (plaincol keys on the Go type), so accepting it here
+	// would panic on read. Refused until the marshall side is wired; the
+	// generated dml/readaccess/canonwire lane supports sxN.
+	if st, isStr := out.(canonicaltypes.StringAstNode); isStr &&
+		st.BaseType == canonicaltypes.BaseTypeStringUtf8 && st.WidthModifier == canonicaltypes.WidthModifierFixed {
+		out = nil
+		err = eb.Build().Str("field", goFieldName).Str("ct", ctStr).Errorf("`,ct=` fixed-width text is not wired for the marshall lanes: %w", common.ErrNotImplemented)
 		return
 	}
 	ovGoType, ovIsSlice, ovIsRoaring, derr := mappingplan.DeriveGoShape(out)

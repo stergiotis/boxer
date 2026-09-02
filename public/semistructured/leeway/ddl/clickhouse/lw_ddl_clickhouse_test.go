@@ -85,3 +85,24 @@ func TestGenerateNetworkType(t *testing.T) {
 		require.Equal(t, c.want, b.String(), "sig %s", c.sig)
 	}
 }
+
+// The fixed-width lanes: sxN and yxN both land on FixedString(N), containers
+// wrapped in Array(...).
+func TestGenerateFixedWidthStringType(t *testing.T) {
+	gen := NewTechnologySpecificCodeGenerator()
+	b := &strings.Builder{}
+	gen.SetCodeBuilder(b)
+	p := canonicaltypes.NewParser()
+	cases := []struct{ sig, want string }{
+		{"sx4", "FixedString(4)"},
+		{"yx32", "FixedString(32)"},
+		{"sx3h", "Array(FixedString(3))"},
+		{"yx4m", "Array(FixedString(4))"},
+	}
+	for _, c := range cases {
+		b.Reset()
+		ct := p.MustParsePrimitiveTypeAst(c.sig)
+		require.NoError(t, gen.GenerateType(ct), "sig %s", c.sig)
+		require.Equal(t, c.want, b.String(), "sig %s", c.sig)
+	}
+}
