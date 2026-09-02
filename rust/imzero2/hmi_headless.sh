@@ -50,16 +50,12 @@ for _a in "$@"; do
 done
 set -- "${_sbx_args[@]}"
 
-resolve_noto() {
-    local family="$1" want="$2" line file fam
-    command -v fc-match >/dev/null 2>&1 || return 0
-    line=$(fc-match -f '%{file}\t%{family}\n' "$family" 2>/dev/null) || return 0
-    file="${line%%$'\t'*}"; fam="${line#*$'\t'}"
-    [[ "$fam" == *"$want"* && -f "$file" ]] && printf '%s' "$file"
-}
-MAIN_FONT="${MAIN_FONT:-$(resolve_noto 'Noto Sans' 'Noto Sans')}"
-PHOSPHOR_FONT="${PHOSPHOR_FONT:-$here/assets/fonts/phosphor/Phosphor.ttf}"
-FALLBACK_FONT="${FALLBACK_FONT:-$(resolve_noto 'Noto Sans Mono CJK JP' 'CJK')}"
+# Same font resolution as the windowed launcher, from the same file: the
+# headless carrier streams the same UI, so a face missing here is the same
+# ragged frame — seen in a browser instead of a window. Sourcing it also picks
+# up the monospace face this launcher used to omit.
+. "$here/font-resolve.sh"
+imzero2_resolve_fonts
 
 export IMZERO2_HEADLESS_LISTEN="${IMZERO2_HEADLESS_LISTEN:-127.0.0.1:8089}"
 export IMZERO2_HEADLESS_FPS="${IMZERO2_HEADLESS_FPS:-30}"
@@ -184,9 +180,7 @@ cmd=("$here/main_go" --logFormat=console --logLevel=info imzero2 demo
     --clientBinary "$rust_bin"
     --clientInitialMainWindowWidth "$WINDOW_W"
     --clientInitialMainWindowHeight "$WINDOW_H")
-[ -n "$MAIN_FONT" ]     && cmd+=(--mainFontTTF "$MAIN_FONT")
-[ -n "$PHOSPHOR_FONT" ] && cmd+=(--phosphorFontTTF "$PHOSPHOR_FONT")
-[ -n "$FALLBACK_FONT" ] && cmd+=(--fallbackFontTTF "$FALLBACK_FONT")
+cmd+=("${IMZERO2_FONT_ARGS[@]}")
 cmd+=($launch "$@")
 
 if [ "$SANDBOX" != 1 ]; then
