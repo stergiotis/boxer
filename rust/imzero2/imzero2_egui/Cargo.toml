@@ -19,7 +19,7 @@ path = "src/lib.rs"
 # values back to imzero2, so a version seam here is a type seam there. See the
 # note on `egui` in ../Cargo.toml for why the requirement is a caret and not an
 # open range.
-egui = "0.35"
+egui = "0.36"
 
 [lints]
 workspace = true
