@@ -128,6 +128,14 @@ something else:
   in `mrhp`. Nothing is lost by carrying it in one lane only — so here you have
   a genuine choice, and it is a modelling one.
 
+The markdown frontmatter row (ADR-0218, proposed) is the first case taken
+deliberately in a package that also has a generated store: the leaves ride the
+mixed channel on a row of their own, written through the entity builder's
+`Raw()`, beside the document row the store writes — because `Raw()` and
+`Add<Kind>()` are exclusive per entity, a hand-written channel cannot share a
+row with a component. That split is the shape to copy when a kind has both a
+schematised half and an open-world half (2026-09-02).
+
 If you are adding a kind, that second case is the decision to make
 deliberately: **is this identity a membership discriminator, or an attribute
 value?** Discriminator means attribution is part of the row's membership
