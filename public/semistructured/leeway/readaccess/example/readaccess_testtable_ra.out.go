@@ -6,7 +6,7 @@ import (
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:67
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:74
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -23,10 +23,11 @@ import (
 	///////////////////////////////////////////////////////////////////
 	// code generator
 	// readaccess.(*GeneratorDriver).GenerateGoClasses
-	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:101
+	// ./public/semistructured/leeway/readaccess/lw_ra_generator_hl.go:111
 )
 
 var _ = time.Time{}
+var _ = log.Logger
 
 ///////////////////////////////////////////////////////////////////
 // code generator

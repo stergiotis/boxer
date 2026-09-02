@@ -1,6 +1,7 @@
 package dml
 
 import (
+	"errors"
 	"math/rand/v2"
 	"testing"
 
@@ -191,6 +192,11 @@ func TestGoClassBuilderSample(t *testing.T) {
 		require.NoError(t, err)
 		var wellFormed bool
 		sourceCode, wellFormed, err = driver.GenerateGoClasses("example", naming.MustBeValidStylableName("testtable"), tblDesc, tableRowConfig, namingStyle)
+		if errors.Is(err, common.ErrNotImplemented) {
+			// A refusal (fixed-width text, zoned temporal) is a legitimate
+			// outcome for a random table, not a generator failure.
+			continue
+		}
 		unittest.NoError(t, err)
 		require.True(t, wellFormed)
 		checkCodeInvariants(sourceCode, t)

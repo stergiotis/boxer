@@ -64,6 +64,13 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		}
 		return
 	}
+	// The fat-runtime introspection methods (GetSectionName, use-aspect and
+	// membership-spec getters, the fatruntime interface assertions) are
+	// emitted once per tagged section, and they are the only consumers of
+	// naming, common, useaspects and fatruntime — a plains-only table emits
+	// none of them, so those imports follow the same condition. Positions are
+	// kept so the committed goldens do not move.
+	fatIntrospection := inst.fatRuntime && len(ir.TaggedValueDesc) > 0
 	gocodegen.EmitGeneratingCodeLocation(s)
 	for _, imp := range []string{
 		"iter",
@@ -76,6 +83,9 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		"github.com/stergiotis/boxer/public/observability/eh/eb",
 		"github.com/rs/zerolog/log",
 	} {
+		if !fatIntrospection && strings.HasSuffix(imp, "/naming") {
+			continue
+		}
 		err = addImport(imp)
 		if err != nil {
 			err = eh.Errorf("unable to write imports %w", err)
@@ -83,7 +93,7 @@ func (inst *GeneratorDriver) GenerateGoClasses(packageName string, tableName nam
 		}
 	}
 
-	if inst.fatRuntime {
+	if fatIntrospection {
 		for _, imp := range []string{
 			"github.com/stergiotis/boxer/public/semistructured/leeway/common",
 			"github.com/stergiotis/boxer/public/semistructured/leeway/naming",

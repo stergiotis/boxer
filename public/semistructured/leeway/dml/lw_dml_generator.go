@@ -2071,15 +2071,28 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 			}
 		}
 	}
+	// The generated per-section CheckErrors (slices.Concat, errors.Join) and
+	// every generated eb.Build() site — the wrong-state guard, the co-group
+	// count check, the single-membership violation — are emitted once per
+	// tagged section. A plains-only table emits none of those calls, so the
+	// three imports they need must follow the same condition or they come
+	// out unused (the eb import is emitted by the driver, in the same
+	// position it always held, under the same condition).
+	hasTagged := len(ir.TaggedValueDesc) > 0
 	for _, im := range []string{"slices", "github.com/stergiotis/boxer/public/observability/eh"} {
+		if im == "slices" && !hasTagged {
+			continue
+		}
 		_, err = fmt.Fprintf(b, "\t%q\n", im)
 		if err != nil {
 			return
 		}
 	}
-	_, err = fmt.Fprintf(b, "\t%q\n", "errors")
-	if err != nil {
-		return
+	if hasTagged {
+		_, err = fmt.Fprintf(b, "\t%q\n", "errors")
+		if err != nil {
+			return
+		}
 	}
 	return
 }

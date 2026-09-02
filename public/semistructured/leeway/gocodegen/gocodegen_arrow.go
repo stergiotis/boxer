@@ -46,6 +46,15 @@ func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 			err = eb.Build().Stringer("baseType", ctt.BaseType).Errorf("unhandled base type")
 			return
 		}
+	case canonicaltypes2.StringAstNode:
+		// A fixed-width byte string (yxN) is backed by FixedSizeBinary whose
+		// Value(i) is a []byte view; the Go-native type is [N]byte, so the
+		// same slice-to-array conversion the network shapes use applies.
+		// Fixed-width text is refused in CanonicalTypeToArrowBaseClassName.
+		if ctt.WidthModifier == canonicaltypes2.WidthModifierFixed && ctt.BaseType == canonicaltypes2.BaseTypeStringBytes {
+			prefix = fmt.Sprintf("[%d]byte(", ctt.Width)
+			suffix = ")"
+		}
 	case canonicaltypes2.NetworkTypeAstNode:
 		// An IPv4 host is an array.Uint32 whose Value(i) is already the uint32 Go
 		// type — no conversion. Every other network shape is a FixedSizeBinary:
@@ -53,10 +62,6 @@ func ArrowTypeToGoType(ct canonicaltypes2.PrimitiveAstNodeI, hints encodingaspec
 		// type is a packed [ByteWidth]byte (see codegen.generateNetworkType), so
 		// convert the slice to the fixed-size array. The width matches by
 		// construction, so the Go 1.20+ slice-to-array conversion cannot panic.
-		// deferred: fixed-width byte strings (StringAstNode + WidthModifierFixed +
-		// BaseTypeStringBytes) share the FixedSizeBinary backing and a [width]byte
-		// Go type, so they need this same conversion; wire it in when that path is
-		// exercised end-to-end (no ctabb abbreviation / golden covers it today).
 		if !isIPv4Host(ctt) {
 			prefix = fmt.Sprintf("[%d]byte(", ctt.ByteWidth())
 			suffix = ")"
@@ -158,7 +163,25 @@ func CanonicalTypeToArrowBaseClassName(ct canonicaltypes2.PrimitiveAstNodeI, enc
 		case canonicaltypes2.WidthModifierNone:
 			break
 		case canonicaltypes2.WidthModifierFixed:
-			name = "FixedSize" + name
+			switch ctt.BaseType {
+			case canonicaltypes2.BaseTypeStringBytes:
+				// The Arrow physical type of a fixed-width lane is
+				// FixedSizeBinary (see ddl/arrow); Arrow has no fixed-size
+				// string or boolean array.
+				name = "FixedSizeBinary"
+			case canonicaltypes2.BaseTypeStringUtf8:
+				// deferred: fixed-width text (sxN) shares the FixedSizeBinary
+				// backing but its Go-native type is `string`, and the
+				// getter/builder glue for that pair is not wired; refusing
+				// keeps the generators from emitting code that cannot compile.
+				err = eb.Build().Stringer("canonicalType", ct).Errorf("fixed-width text columns are not wired for generated code: %w", common.ErrNotImplemented)
+				return
+			default:
+				// A fixed-width bool is a bit string, unimplemented on every
+				// lane (ADR-0201 SD3).
+				err = eb.Build().Stringer("canonicalType", ct).Errorf("bit strings are not implemented: %w", common.ErrNotImplemented)
+				return
+			}
 		}
 	case canonicaltypes2.MachineNumericTypeAstNode:
 		switch ctt.BaseType {
