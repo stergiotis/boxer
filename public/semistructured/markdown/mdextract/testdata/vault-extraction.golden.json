@@ -1,0 +1,669 @@
+[
+  {
+    "File": "alpha.md",
+    "Doc": {
+      "Title": "Alpha",
+      "Words": 27,
+      "Frontmatter": {
+        "Leaves": [
+          {
+            "Path": "/status",
+            "Params": null,
+            "Kind": 0,
+            "S": "active",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/tags",
+            "Params": null,
+            "Kind": 0,
+            "S": "project, alpha",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          }
+        ],
+        "Aliases": null,
+        "Dropped": 0,
+        "Err": ""
+      },
+      "Headings": [
+        {
+          "Ordinal": 0,
+          "Line": 6,
+          "Level": 1,
+          "Text": "Alpha",
+          "Slug": "alpha",
+          "Anchor": "",
+          "Parent": -1,
+          "Path": null
+        },
+        {
+          "Ordinal": 1,
+          "Line": 10,
+          "Level": 2,
+          "Text": "Setup steps",
+          "Slug": "setup",
+          "Anchor": "setup",
+          "Parent": 0,
+          "Path": [
+            "Alpha"
+          ]
+        },
+        {
+          "Ordinal": 2,
+          "Line": 21,
+          "Level": 3,
+          "Text": "Notes",
+          "Slug": "notes",
+          "Anchor": "",
+          "Parent": 1,
+          "Path": [
+            "Alpha",
+            "Setup steps"
+          ]
+        },
+        {
+          "Ordinal": 3,
+          "Line": 25,
+          "Level": 2,
+          "Text": "Status",
+          "Slug": "status",
+          "Anchor": "",
+          "Parent": 0,
+          "Path": [
+            "Alpha"
+          ]
+        }
+      ],
+      "CodeBlocks": [
+        {
+          "Ordinal": 0,
+          "Line": 15,
+          "Section": 1,
+          "Language": "go",
+          "Info": "go title=\"main.go\"",
+          "Content": "package main\n\nfunc main() {}\n",
+          "Lines": 3
+        }
+      ],
+      "Links": [
+        {
+          "Ordinal": 0,
+          "Line": 8,
+          "Section": 0,
+          "Kind": 0,
+          "Target": "index",
+          "Fragment": "",
+          "Text": "",
+          "External": false
+        },
+        {
+          "Ordinal": 1,
+          "Line": 8,
+          "Section": 0,
+          "Kind": 0,
+          "Target": "projects/beta",
+          "Fragment": "",
+          "Text": "",
+          "External": false
+        },
+        {
+          "Ordinal": 2,
+          "Line": 23,
+          "Section": 2,
+          "Kind": 0,
+          "Target": "Alpha",
+          "Fragment": "",
+          "Text": "",
+          "External": false
+        },
+        {
+          "Ordinal": 3,
+          "Line": 23,
+          "Section": 2,
+          "Kind": 2,
+          "Target": "projects/beta.md",
+          "Fragment": "goals",
+          "Text": "beta",
+          "External": false
+        }
+      ],
+      "Emphases": [
+        {
+          "Ordinal": 0,
+          "Line": 8,
+          "Section": 0,
+          "Style": 1,
+          "Text": "key"
+        },
+        {
+          "Ordinal": 1,
+          "Line": 8,
+          "Section": 0,
+          "Style": 0,
+          "Text": "key"
+        }
+      ],
+      "Tags": [
+        {
+          "Ordinal": 0,
+          "Line": 0,
+          "Section": -1,
+          "Source": 1,
+          "Tag": "project"
+        },
+        {
+          "Ordinal": 1,
+          "Line": 0,
+          "Section": -1,
+          "Source": 1,
+          "Tag": "alpha"
+        }
+      ]
+    }
+  },
+  {
+    "File": "broken-frontmatter.md",
+    "Doc": {
+      "Title": "Still Parsed",
+      "Words": 9,
+      "Frontmatter": {
+        "Leaves": null,
+        "Aliases": null,
+        "Dropped": 0,
+        "Err": "yaml: line 1: did not find expected ',' or ']'"
+      },
+      "Headings": [
+        {
+          "Ordinal": 0,
+          "Line": 5,
+          "Level": 1,
+          "Text": "Still Parsed",
+          "Slug": "still-parsed",
+          "Anchor": "",
+          "Parent": -1,
+          "Path": null
+        }
+      ],
+      "CodeBlocks": null,
+      "Links": [
+        {
+          "Ordinal": 0,
+          "Line": 7,
+          "Section": 0,
+          "Kind": 0,
+          "Target": "Alpha",
+          "Fragment": "",
+          "Text": "",
+          "External": false
+        }
+      ],
+      "Emphases": null,
+      "Tags": null
+    }
+  },
+  {
+    "File": "index.md",
+    "Doc": {
+      "Title": "Vault Index",
+      "Words": 46,
+      "Frontmatter": {
+        "Leaves": [
+          {
+            "Path": "/aliases/_",
+            "Params": [
+              0
+            ],
+            "Kind": 0,
+            "S": "Home",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/aliases/_",
+            "Params": [
+              1
+            ],
+            "Kind": 0,
+            "S": "Start Here",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/created",
+            "Params": null,
+            "Kind": 4,
+            "S": "2024-03-01",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "2024-03-01T00:00:00Z"
+          },
+          {
+            "Path": "/draft",
+            "Params": null,
+            "Kind": 3,
+            "S": "",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/extra",
+            "Params": null,
+            "Kind": 6,
+            "S": "",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/notes",
+            "Params": null,
+            "Kind": 5,
+            "S": "",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/rating",
+            "Params": null,
+            "Kind": 2,
+            "S": "",
+            "I": 0,
+            "F": 4.5,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/reviewers/_/name",
+            "Params": [
+              0
+            ],
+            "Kind": 0,
+            "S": "Ada",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/reviewers/_/roles/_",
+            "Params": [
+              0,
+              0
+            ],
+            "Kind": 0,
+            "S": "lead",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/reviewers/_/roles/_",
+            "Params": [
+              0,
+              1
+            ],
+            "Kind": 0,
+            "S": "editor",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/reviewers/_/name",
+            "Params": [
+              1
+            ],
+            "Kind": 0,
+            "S": "Grace",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/reviewers/_/roles",
+            "Params": [
+              1
+            ],
+            "Kind": 7,
+            "S": "",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/tags/_",
+            "Params": [
+              0
+            ],
+            "Kind": 0,
+            "S": "hub",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/tags/_",
+            "Params": [
+              1
+            ],
+            "Kind": 0,
+            "S": "meta/structure",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          },
+          {
+            "Path": "/title",
+            "Params": null,
+            "Kind": 0,
+            "S": "Vault Index",
+            "I": 0,
+            "F": 0,
+            "B": false,
+            "T": "0001-01-01T00:00:00Z"
+          }
+        ],
+        "Aliases": [
+          "Home",
+          "Start Here"
+        ],
+        "Dropped": 0,
+        "Err": ""
+      },
+      "Headings": [
+        {
+          "Ordinal": 0,
+          "Line": 19,
+          "Level": 1,
+          "Text": "Vault Index",
+          "Slug": "vault-index",
+          "Anchor": "",
+          "Parent": -1,
+          "Path": null
+        },
+        {
+          "Ordinal": 1,
+          "Line": 24,
+          "Level": 2,
+          "Text": "Reading list",
+          "Slug": "reading-list",
+          "Anchor": "",
+          "Parent": 0,
+          "Path": [
+            "Vault Index"
+          ]
+        }
+      ],
+      "CodeBlocks": [
+        {
+          "Ordinal": 0,
+          "Line": 35,
+          "Section": 1,
+          "Language": "sql",
+          "Info": "sql",
+          "Content": "SELECT 1\n",
+          "Lines": 1
+        }
+      ],
+      "Links": [
+        {
+          "Ordinal": 0,
+          "Line": 21,
+          "Section": 0,
+          "Kind": 0,
+          "Target": "Alpha",
+          "Fragment": "",
+          "Text": "",
+          "External": false
+        },
+        {
+          "Ordinal": 1,
+          "Line": 21,
+          "Section": 0,
+          "Kind": 0,
+          "Target": "projects/beta",
+          "Fragment": "",
+          "Text": "the beta project",
+          "External": false
+        },
+        {
+          "Ordinal": 2,
+          "Line": 21,
+          "Section": 0,
+          "Kind": 0,
+          "Target": "Alpha",
+          "Fragment": "Setup steps",
+          "Text": "",
+          "External": false
+        },
+        {
+          "Ordinal": 3,
+          "Line": 26,
+          "Section": 1,
+          "Kind": 2,
+          "Target": "https://clickhouse.com/docs",
+          "Fragment": "arrays",
+          "Text": "ClickHouse docs",
+          "External": true
+        },
+        {
+          "Ordinal": 4,
+          "Line": 27,
+          "Section": 1,
+          "Kind": 4,
+          "Target": "https://example.org/page",
+          "Fragment": "",
+          "Text": "",
+          "External": true
+        },
+        {
+          "Ordinal": 5,
+          "Line": 28,
+          "Section": 1,
+          "Kind": 3,
+          "Target": "assets/my diagram.png",
+          "Fragment": "",
+          "Text": "diagram",
+          "External": false
+        },
+        {
+          "Ordinal": 6,
+          "Line": 29,
+          "Section": 1,
+          "Kind": 1,
+          "Target": "Alpha",
+          "Fragment": "Setup steps",
+          "Text": "",
+          "External": false
+        }
+      ],
+      "Emphases": [
+        {
+          "Ordinal": 0,
+          "Line": 21,
+          "Section": 0,
+          "Style": 0,
+          "Text": "vault"
+        },
+        {
+          "Ordinal": 1,
+          "Line": 22,
+          "Section": 0,
+          "Style": 1,
+          "Text": "setup"
+        },
+        {
+          "Ordinal": 2,
+          "Line": 31,
+          "Section": 1,
+          "Style": 2,
+          "Text": "highlighted"
+        },
+        {
+          "Ordinal": 3,
+          "Line": 31,
+          "Section": 1,
+          "Style": 3,
+          "Text": "struck"
+        }
+      ],
+      "Tags": [
+        {
+          "Ordinal": 0,
+          "Line": 31,
+          "Section": 1,
+          "Source": 0,
+          "Tag": "hub"
+        },
+        {
+          "Ordinal": 1,
+          "Line": 31,
+          "Section": 1,
+          "Source": 0,
+          "Tag": "meta/structure"
+        },
+        {
+          "Ordinal": 2,
+          "Line": 0,
+          "Section": -1,
+          "Source": 1,
+          "Tag": "hub"
+        },
+        {
+          "Ordinal": 3,
+          "Line": 0,
+          "Section": -1,
+          "Source": 1,
+          "Tag": "meta/structure"
+        }
+      ]
+    }
+  },
+  {
+    "File": "plain.md",
+    "Doc": {
+      "Title": "",
+      "Words": 11,
+      "Frontmatter": null,
+      "Headings": null,
+      "CodeBlocks": null,
+      "Links": null,
+      "Emphases": null,
+      "Tags": null
+    }
+  },
+  {
+    "File": "projects/beta.md",
+    "Doc": {
+      "Title": "Beta",
+      "Words": 22,
+      "Frontmatter": null,
+      "Headings": [
+        {
+          "Ordinal": 0,
+          "Line": 1,
+          "Level": 1,
+          "Text": "Beta",
+          "Slug": "beta",
+          "Anchor": "",
+          "Parent": -1,
+          "Path": null
+        },
+        {
+          "Ordinal": 1,
+          "Line": 5,
+          "Level": 2,
+          "Text": "Heading without content",
+          "Slug": "heading-without-content",
+          "Anchor": "",
+          "Parent": 0,
+          "Path": [
+            "Beta"
+          ]
+        },
+        {
+          "Ordinal": 2,
+          "Line": 8,
+          "Level": 2,
+          "Text": "Goals",
+          "Slug": "goals",
+          "Anchor": "",
+          "Parent": 0,
+          "Path": [
+            "Beta"
+          ]
+        }
+      ],
+      "CodeBlocks": null,
+      "Links": [
+        {
+          "Ordinal": 0,
+          "Line": 3,
+          "Section": 0,
+          "Kind": 0,
+          "Target": "Alpha",
+          "Fragment": "",
+          "Text": "the alpha project",
+          "External": false
+        },
+        {
+          "Ordinal": 1,
+          "Line": 3,
+          "Section": 0,
+          "Kind": 0,
+          "Target": "Home",
+          "Fragment": "",
+          "Text": "",
+          "External": false
+        }
+      ],
+      "Emphases": [
+        {
+          "Ordinal": 0,
+          "Line": 10,
+          "Section": 2,
+          "Style": 1,
+          "Text": "Italic"
+        },
+        {
+          "Ordinal": 1,
+          "Line": 10,
+          "Section": 2,
+          "Style": 0,
+          "Text": "bold"
+        }
+      ],
+      "Tags": [
+        {
+          "Ordinal": 0,
+          "Line": 10,
+          "Section": 2,
+          "Source": 0,
+          "Tag": "alpha"
+        }
+      ]
+    }
+  }
+]
