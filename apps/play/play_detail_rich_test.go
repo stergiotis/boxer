@@ -202,6 +202,56 @@ func TestBuildRichEntryArtifacts(t *testing.T) {
 	})
 }
 
+// A CBOR cell's block face: one walk, the highlighted job, and the line
+// count of the *notation* — the bytes it came from have no lines at all.
+func TestBuildRichEntryCbor(t *testing.T) {
+	// [1, [2, 3], {"a": 4}]
+	item := string([]byte{0x83, 0x01, 0x82, 0x02, 0x03, 0xa1, 0x61, 0x61, 0x04})
+
+	t.Run("well-formed", func(t *testing.T) {
+		d, _ := richDeclFor("x@application/cbor")
+		e := buildRichEntry(d, item)
+		require.Empty(t, e.reason)
+		assert.True(t, e.hasJob)
+		assert.Positive(t, e.lines)
+	})
+
+	t.Run("malformed degrades rather than declines", func(t *testing.T) {
+		d, _ := richDeclFor("x@application/cbor")
+		e := buildRichEntry(d, item[:4])
+		assert.Empty(t, e.reason, "the failure is rendered, not a reason")
+		assert.True(t, e.hasJob)
+	})
+
+	t.Run("the declaration's sequence parameter reaches the options", func(t *testing.T) {
+		d, _ := richDeclFor("x@application/cbor;sequence=1")
+		require.Empty(t, d.Reason)
+		assert.True(t, richCborOptions(d).Sequence)
+
+		plain, _ := richDeclFor("x@application/cbor")
+		assert.False(t, richCborOptions(plain).Sequence)
+		assert.True(t, richCborOptions(plain).TagComments, "the block face names known tags")
+	})
+
+	t.Run("oversized declines like any other text cell", func(t *testing.T) {
+		d, _ := richDeclFor("x@application/cbor")
+		e := buildRichEntry(d, strings.Repeat("\x00", richMaxTextBytes+1))
+		assert.Contains(t, e.reason, "over the")
+		assert.False(t, e.hasJob)
+	})
+}
+
+// The card reserves height from the rendered artifact where there is one:
+// indented JSON and CBOR notation both come from a one-line source.
+func TestRichEntryLinesAreTheRenderedSource(t *testing.T) {
+	d, _ := richDeclFor("x@application/json")
+	e := buildRichEntry(d, `{"a":1,"b":[2,3]}`)
+	require.True(t, e.hasJob)
+	assert.Greater(t, e.lines, 1, "the source is one line; the indented rendering is not")
+	assert.Equal(t, 1, countLines("no newline"))
+	assert.Equal(t, 2, countLines("one\ntwo"))
+}
+
 // Malformed JSON still highlights — the pretty-printer falls back to the
 // source rather than dropping the cell.
 func TestRichIndentJSONFallsBack(t *testing.T) {

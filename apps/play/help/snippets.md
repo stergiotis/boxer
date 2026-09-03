@@ -453,8 +453,8 @@ draws whatever the selection points at. Table-free; runs against any server.
 Declared, never sniffed: nothing renders as markdown unless it says so. The
 backticks are not optional — unquoted, both the `@` and the `/` are syntax
 errors, which is the point of choosing them. Known types are `text/markdown`,
-`text/plain`, `application/json`, `application/sql`, `text/x-go`, `image/png`,
-`image/jpeg` and `image/gif`. A type outside that set, or a typo in one, renders
+`text/plain`, `application/json`, `application/sql`, `text/x-go`,
+`application/cbor`, `image/png`, `image/jpeg` and `image/gif`. A type outside that set, or a typo in one, renders
 the cell plainly and says why rather than pretending. A column with an `@` but
 no `/` — `dot_done@success`, an email address — is an ordinary column and is
 left alone.

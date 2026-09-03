@@ -11,6 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
+	"github.com/stergiotis/boxer/public/semistructured/cbor/diag"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -109,7 +110,7 @@ func mediaTypeOnly(token string) string {
 func hasBlockFace(mediaType string) bool {
 	switch mediaType {
 	case gloss.MediaTypeMarkdown, gloss.MediaTypePlain, gloss.MediaTypeJSON,
-		gloss.MediaTypeSQL, gloss.MediaTypeGo,
+		gloss.MediaTypeSQL, gloss.MediaTypeGo, gloss.MediaTypeCBOR,
 		gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
 		return true
 	}
@@ -149,9 +150,14 @@ func cellRaw(rec arrow.RecordBatch, col int, row int64) (raw string, ok bool) {
 // is live, selected by the declaration's media type — unless reason is set,
 // in which case none are and the cell falls back to a truncated label.
 type richEntry struct {
-	doc      *markdown.Doc
-	job      typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	hasJob   bool
+	doc    *markdown.Doc
+	job    typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	hasJob bool
+	// lines is the line count of the *rendered* source behind job, which is
+	// not the line count of the cell's text: indented JSON and CBOR
+	// diagnostic notation both come from a source that is usually one line.
+	// It is what the card reserves height from.
+	lines    int
 	pixels   []uint32
 	widthPx  uint32
 	heightPx uint32
@@ -275,14 +281,25 @@ func buildRichEntry(d gloss.Declaration, raw string) *richEntry {
 		// c.Label breaks the FFFI wire mid-frame.
 		e.text = utfsafe.EnsureUTF8(raw)
 	case gloss.MediaTypeJSON:
-		e.job = codeview.BuildJson(richIndentJSON(raw))
-		e.hasJob = true
+		src := richIndentJSON(raw)
+		e.job = codeview.BuildJson(src)
+		e.hasJob, e.lines = true, countLines(src)
 	case gloss.MediaTypeSQL:
-		e.job = codeview.BuildSql(utfsafe.EnsureUTF8(raw))
-		e.hasJob = true
+		src := utfsafe.EnsureUTF8(raw)
+		e.job = codeview.BuildSql(src)
+		e.hasJob, e.lines = true, countLines(src)
 	case gloss.MediaTypeGo:
-		e.job = codeview.BuildGo(utfsafe.EnsureUTF8(raw))
-		e.hasJob = true
+		src := utfsafe.EnsureUTF8(raw)
+		e.job = codeview.BuildGo(src)
+		e.hasJob, e.lines = true, countLines(src)
+	case gloss.MediaTypeCBOR:
+		// One walk serves both the highlighted job and the line count; a
+		// malformed item is not a reason here but a rendering — diag prints
+		// what parsed, the failure as an error span and the remainder as
+		// hex, which is the whole point of showing a person the bytes.
+		spans, _ := diag.Print([]byte(raw), richCborOptions(d))
+		e.job = codeview.BuildCborDiagSpans(spans)
+		e.hasJob, e.lines = true, countSpanLines(spans)
 	case gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
 		pixels, w, h, err := imagedecode.DecodeRGBA8([]byte(raw), richMaxImagePixels)
 		if err != nil {
@@ -304,6 +321,33 @@ func richIndentJSON(raw string) string {
 		return utfsafe.EnsureUTF8(raw)
 	}
 	return utfsafe.EnsureUTF8(buf.String())
+}
+
+// richCborOptions is the block rendering a declared CBOR cell asks for. It
+// comes from the bound instance where there is one, so the pretty face and
+// the cell's compact face cannot disagree about `;sequence`; a declaration
+// that did not bind (Reason set) never reaches here.
+func richCborOptions(d gloss.Declaration) diag.Options {
+	if inst, ok := d.Instance.(gloss.CborOptionsI); ok {
+		return inst.Options(false)
+	}
+	return diag.Options{TagComments: true}
+}
+
+// countLines is the height estimate's line count: the card reserves a row
+// per line, and a source with no trailing newline still has a last line.
+func countLines(src string) int {
+	return strings.Count(src, "\n") + 1
+}
+
+// countSpanLines is countLines over spans, so the notation is not
+// concatenated a second time only to be counted.
+func countSpanLines(spans []diag.Span) int {
+	n := 1
+	for i := range spans {
+		n += strings.Count(spans[i].Text, "\n")
+	}
+	return n
 }
 
 // renderRichCell draws one declared cell: a caption line naming the column and
@@ -513,7 +557,7 @@ func (inst *richCellCache) renderBody(key richKey, d gloss.Declaration, e *richE
 		}
 	case gloss.MediaTypePlain:
 		c.Label(e.text).Wrap().Send()
-	case gloss.MediaTypeJSON, gloss.MediaTypeSQL, gloss.MediaTypeGo:
+	case gloss.MediaTypeJSON, gloss.MediaTypeSQL, gloss.MediaTypeGo, gloss.MediaTypeCBOR:
 		if !e.hasJob {
 			return
 		}
@@ -631,7 +675,14 @@ func (inst *PlayApp) cardBlock(gc *glossColumn, key richKey, text string, kind g
 			}
 		}}
 	}
-	lines := min(strings.Count(text, "\n")+1, cardBlockMaxLines)
+	// The rendered artifact's line count where the entry knows it (the code
+	// views render an indented or pretty-printed source, not the cell's
+	// text); the text's own otherwise.
+	srcLines := e.lines
+	if srcLines == 0 {
+		srcLines = countLines(text)
+	}
+	lines := min(srcLines, cardBlockMaxLines)
 	return leewaywidgets.CellBlock{Height: float32(lines)*cardBlockLineHeight + cardBlockPad, Render: func() {
 		// PushId keeps the ScrollArea's egui id apart from a sibling block's
 		// in the same cell; the vertical scroll takes what the estimate

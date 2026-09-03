@@ -438,6 +438,53 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-09-03 — `application/cbor`, the content family's binary member
+
+The catalog gains `application/cbor`, registered after ADR-0123's eight so the
+pinned prefix of the default order does not move. Its block face is the
+pretty-printer of [ADR-0219](./0219-play-canonical-record-identity.md) §SD6 —
+RFC 8949 §8 diagnostic notation, indented, with the tags it knows named — bound
+in `play_detail_rich.go` beside the JSON, SQL and Go code views, since the
+printer already emits categorised spans and `codeview` already turns spans into
+a `CodeViewJob`. Its inline face is the compact notation of the same walk.
+
+The catalog reaches this before any column does: SD6's widget shows the two
+canonical identities of a leeway row and nothing else, and the bytes a person
+wants next are in a column — a pushout patch, a stored `canonform` item, a bus
+payload. `[<type> · <size>]` is what those cells said before.
+
+Three things the entry decided, worth keeping:
+
+**The inline face walks the item, up to a kilobyte.** An inline face has no
+cache behind it: it runs for every visible cell of the column on every frame,
+and the walk plus its output is garbage each time. The image family's answer to
+that is a descriptor — type and size, no decode — and a descriptor is the
+honest face for a megabyte. But a descriptor is also nearly useless in a grid,
+and a short CBOR item is a few hundred bytes and a few microseconds. The bound
+is therefore on the *input*: under it the cell shows the notation, over it the
+descriptor, and the Detail block face — cached per (row, column), and already
+bounded by the pane's 1 MiB text limit — renders the item in full either way.
+
+**`sequence` is a parameter, off by default.** Bytes after the first item are a
+truncation far more often than they are an RFC 8742 sequence, and a face that
+quietly rendered both would hide the failure it exists to show. `;sequence=1`
+opts in; it is read once in `Bind` and reaches both faces through one
+`Options`, so a column's compact cell and its pretty block cannot disagree
+about what its bytes mean.
+
+**No affinity.** Nothing in the ADR-0182 vocabularies says "these bytes are
+CBOR" the way `sem:json*` says a column is JSON, and being a `Binary` column
+does not make a column one — sixteen bytes are sixteen bytes, the finding
+`gloss/ipaddr` recorded for plain results. So it binds by alias, by `gloss(…)`
+or by rule only. `;encoding=` is declared and refused as it is on the images:
+the column must hold the bytes, not a hex or base64 spelling of them.
+
+One incidental fix rides along. A card block's reserved height counted the
+newlines in the *cell's text*, which for a code view is the wrong string —
+indented JSON and CBOR notation both come from a source that is usually one
+line, so every such block reserved one line and leaned on its scroll area.
+The entry now carries the line count of the rendering it actually shows.
+
 ### 2026-09-01 — the quantity family reaches the nautical quantities, and the catalog opens
 
 Two changes, one of them structural.

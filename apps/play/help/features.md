@@ -466,7 +466,8 @@ from the result's column names:
   columns are grouped by name prefix into pinned / relations / data / meta sections.
   A glossed column ([Glosses](#glosses)) renders through its gloss here: a
   block face where the gloss has one — markdown, highlighted JSON / SQL / Go,
-  a decoded image, a hyperlink, a tagged id split into tag and counter with
+  CBOR diagnostic notation, a decoded image, a hyperlink, a tagged id split
+  into tag and counter with
   Copy buttons — else its one-line face under a caption naming the column and
   the media type. A declaration the catalog cannot honour shows the plain
   first line and says why. On the leeway card, values pass through their
@@ -773,8 +774,8 @@ The result-side sibling of Vocabulary (ADR-0186). A **gloss** is a named way of
 showing a value — a temperature with its unit, a Unix epoch as a moment, a span
 as `1m 05s`, a card number masked with its Luhn verdict, a value masked to six
 bullets, a URL as a link, a byte count in KiB, a fibonacci-tagged id split into
-its tag and counter, and the ADR-0123 content types
-(markdown, code, images) as one family. Every gloss
+its tag and counter, a CBOR item as diagnostic notation, and the ADR-0123
+content types (markdown, code, images) as one family. Every gloss
 has a one-line face for the Table grids and, some, a block face for Detail —
 in the ad-hoc pane and, stacked under the row's other values, in the leeway
 card.
@@ -844,6 +845,27 @@ and array / set (`h`, `m`) spellings, so:
 
 A value the gloss cannot read as an address keeps its plain rendering in the
 error tone rather than inventing one.
+
+`application/cbor` is the content family's binary member. A column holding
+CBOR bytes — a canonform record, a canonwire entity item, a pushout patch —
+reads as a hex blob otherwise; the gloss shows RFC 8949 §8 diagnostic
+notation instead. In Detail it is the pretty rendering, highlighted and
+indented, one element per line inside a container that does not fit the line,
+with the tags it knows named in a comment; in a Table cell it is the compact
+one-line notation. `;sequence=1` reads the cell as an RFC 8742 sequence of
+items rather than one item — without it, bytes after the first item are
+reported as the truncation they usually are.
+
+A malformed item is shown rather than hidden: what parsed is rendered, the
+failure is an error comment naming the byte it stopped at, and the remainder
+follows as hex — the cell shows the compact form of that in the error tone,
+which is what makes the bad row findable in a grid of good ones. The column
+must hold the bytes themselves; a hex or base64 source has no support yet and
+`;encoding=` is refused rather than guessed at. Past a kilobyte a cell shows
+the type and size, as an image cell does, and the full notation waits in
+Detail. There is no affinity — no aspect says "these bytes are CBOR", and
+being a `Binary` column does not make a column one — so bind it by alias,
+by `gloss(…)`, or by rule.
 
 The tab shows the **catalog** (each gloss with its accepted value kinds,
 parameters, a sample rendering, its affinities, and two Insert buttons —
