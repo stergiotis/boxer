@@ -51,8 +51,12 @@ and the right one for a send log. The store never provisions:
 surfaces that as a status line (ADR-0184 §SD2's posture, restated at the new
 call site).
 
-**SD3 — the handover is a launch query, not shipped bytes.** mdedit ingests
-one row, flushes, and opens play via `windowhost.open` with
+**SD3 — two gestures over one pipeline; the handover is a launch query, not
+shipped bytes.** The bar offers "Upload to boxer.facts" — the persistence
+half alone: ingest, flush, and the row's id in the status line for whoever
+wants to query it by hand — and "Send to play", which is the same upload
+plus its first view. For the view, mdedit opens play via `windowhost.open`
+with
 
 ```sql
 SELECT gloss(tupleElement(LW_COMPONENT('MdDoc'), 'Content'), 'text/markdown', 'label', 'doc')
@@ -79,21 +83,24 @@ the host is a test failure, not a silently dark query surface. mdedit's
 manifest grows exactly one cap: Pub on `windowhost.open`, with the cap-list
 tripwire test updated (the growth-is-deliberate rule).
 
-**SD5 — the whole pipeline runs off the render thread, bounded.** Connect
+**SD5 — a whole gesture runs off the render thread, bounded.** Connect
 (`chclient.ConfigFromEnv` — the registered `CLICKHOUSE_*` variables, no new
-env surface), ping, verify, ingest, flush, launch: one goroutine, one
-timeout, failures into the status line. The button renders unconditionally
-and drops clicks while a send is in flight — the house rule — rather than
-hiding when ClickHouse is unconfigured, the same posture tally takes.
+env surface), ping, verify, ingest, flush and — for send-to-play only — the
+launch: one goroutine, one timeout, failures into the status line prefixed
+by which gesture failed. Only the launch half touches the bus, so an upload
+works in a host with none. Both buttons render unconditionally and drop
+clicks while a gesture is in flight — the house rule — rather than hiding
+when ClickHouse is unconfigured, the same posture tally takes.
 
 ## Consequences
 
 - `boxer.facts` gains its second generated-store kind family and the tree its
   second facts-bound store; the explanation doc's "worked example" singular
   becomes a pattern with two instances.
-- The sent document is retained in ClickHouse under the facts TTL/lifecycle
-  regime — a deliberate property (it is the point), worth knowing when the
-  buffer holds something that should not persist: send is a publish.
+- The uploaded document is retained in ClickHouse under the facts
+  TTL/lifecycle regime — a deliberate property (it is the point), worth
+  knowing when the buffer holds something that should not persist: upload,
+  with or without the play window, is a publish.
 - The launch query depends on play binding its column-name resolver (the
   friendly `"id:id"` handle) and registering the component — both are
   standing wiring, both now test-pinned.

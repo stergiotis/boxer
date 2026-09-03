@@ -807,17 +807,20 @@ executor across the send goroutine and this pane's reads would cross that
 line unguarded for the price of one HTTP connect. Ships latest-snapshot-only;
 a snapshot picker is deferred — snapshot archaeology is tally's job.
 
-### 2026-09-02 — send to play
+### 2026-09-02 — upload to boxer.facts, and send to play
 
-A "Send to play" button persists the document as a `boxer.facts` row and
-opens the playground on a query that reads it back, rendered as markdown in
-play's Detail pane. The decisions — the mddoc vocabulary and kind, the
-neutral package pair, the launch-query handover and its identity rules —
-live in [ADR-0217](./0217-mdedit-send-to-play-mddoc-facts.md). On this ADR's
-side of the line: the manifest grows one cap (Pub on `windowhost.open`, the
-cap-list test updated), the pipeline is one goroutine draining into the
-status line like every other gesture here, and mdedit gains its first — and
-indirect — ClickHouse dependency, entirely inside that goroutine.
+Two buttons over one pipeline: "Upload to boxer.facts" persists the document
+as a fact row (the row's id lands in the status line, for querying it by
+hand), and "Send to play" is the same upload plus the playground opened on a
+query that reads the row back, rendered as markdown in play's Detail pane.
+The decisions — the mddoc vocabulary and kind, the neutral package pair, the
+launch-query handover and its identity rules — live in
+[ADR-0217](./0217-mdedit-send-to-play-mddoc-facts.md). On this ADR's side of
+the line: the manifest grows one cap (Pub on `windowhost.open`, used only by
+the play half — an upload needs no bus at all; the cap-list test updated),
+each gesture is one goroutine draining into the status line like every other
+gesture here, and mdedit gains its first — and indirect — ClickHouse
+dependency, entirely inside that goroutine.
 
 ## References
 

@@ -412,10 +412,14 @@ type App struct {
 	fileDone bool
 	fileRes  fileResult
 
-	// One in-flight send-to-play at a time (mdedit_sendplay.go).
-	sending  bool
-	sendDone bool
-	sendErr  error
+	// One in-flight upload/send gesture at a time (mdedit_sendplay.go).
+	// sendGesture names what ran (for the failure line) and sendMsg is the
+	// success status, both composed in the goroutine.
+	sending     bool
+	sendDone    bool
+	sendErr     error
+	sendGesture string
+	sendMsg     string
 }
 
 // caretRequest is a caret position the app asks the editor to take, in BYTE
@@ -663,15 +667,24 @@ func (inst *App) renderBar() {
 			}
 		}
 
-		// Send-to-play (mdedit_sendplay.go). Rendered unconditionally like
-		// its neighbours; ClickHouse being unreachable surfaces in the
-		// status, the same posture tally takes.
-		sendClicked := false
+		// Upload and send-to-play (mdedit_sendplay.go): the persistence
+		// gesture alone, and the same plus a play window on the row. Both
+		// rendered unconditionally like their neighbours; ClickHouse being
+		// unreachable surfaces in the status, the same posture tally takes.
+		uploadClicked, sendClicked := false, false
+		for range c.HoverText(tipUpload).KeepIter() {
+			uploadClicked = c.Button(inst.ids.PrepareStr("upload"), atomsUpload).SendResp().HasPrimaryClicked()
+		}
 		for range c.HoverText(tipSendPlay).KeepIter() {
 			sendClicked = c.Button(inst.ids.PrepareStr("sendplay"), atomsSendPlay).SendResp().HasPrimaryClicked()
 		}
-		if sendClicked && !inst.sendInFlight() {
-			inst.sendToPlay()
+		if !inst.sendInFlight() {
+			switch {
+			case sendClicked:
+				inst.sendDoc(true)
+			case uploadClicked:
+				inst.sendDoc(false)
+			}
 		}
 
 		// The button renders unconditionally. Dropping it from the tree while
@@ -1244,6 +1257,7 @@ func (inst *App) drainAsync() {
 	fileDone, fileRes := inst.fileDone, inst.fileRes
 	inst.fileDone = false
 	sendDone, sendErr := inst.sendDone, inst.sendErr
+	sendGesture, sendMsg := inst.sendGesture, inst.sendMsg
 	inst.sendDone = false
 	inst.mu.Unlock()
 
@@ -1277,10 +1291,10 @@ func (inst *App) drainAsync() {
 	}
 	if sendDone {
 		if sendErr != nil {
-			inst.status = "send to play failed: " + sendErr.Error()
-			inst.logger.Warn().Err(sendErr).Msg("mdedit: send to play failed")
+			inst.status = sendGesture + " failed: " + sendErr.Error()
+			inst.logger.Warn().Err(sendErr).Str("gesture", sendGesture).Msg("mdedit: document gesture failed")
 		} else {
-			inst.status = "sent to play"
+			inst.status = sendMsg
 		}
 	}
 }
