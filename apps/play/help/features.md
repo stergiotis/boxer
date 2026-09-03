@@ -440,6 +440,19 @@ the binding was made and shows the column's spec line. A **Raw cells** toggle
 on the toolbar switches every gloss off for the session. Both grids honour the
 glosses; the per-attribute grid applies them to a list column's items.
 
+For a leeway-shaped result the **Leeway display** bar has a **Canonical
+hashes** toggle (ADR-0219). On, the per-DB-row grid appends two columns after
+the data: every row's **canonform** digest — its content identity, the same
+for two rows whose content is the same whatever their column widths, aspects,
+section names or attribute order — and its **canonwire** fingerprint — its
+wire identity, the same only for two rows that are the same record. Both are
+computed for the whole result by a background job; cells read `…` until it
+lands, show the first sixteen hex characters, and carry the full value on
+hover. Two rows with equal canonform digests and different canonwire
+fingerprints differ only in something the content identity erases. The Detail
+pane shows the same two values for the selected row, with a copy button and
+the CBOR behind them.
+
 ### Detail
 
 A structured card for the row selected in the Table tab. The card picks its rendering
@@ -459,6 +472,19 @@ from the result's column names:
   first line and says why. On the leeway card, values pass through their
   column's gloss too, and a column whose gloss has a block face gets it there
   as well, stacked under the inline line.
+
+On the leeway card, an **identity** strip above the card shows the row's two
+canonical identities (ADR-0219): the **canonform** digest (ADR-0201, keyed
+BLAKE3 over the content form — hover it for the pin naming the classifier,
+plains mask and digester it is a function of) and the **canonwire**
+fingerprint (keyed BLAKE3 over the lossless wire item of ADR-0210, with the
+item's byte length and whether the table-free checker accepts it). Each has a
+**copy** button. A **CBOR** disclosure, closed by default, renders the items
+both were computed from in RFC 8949 diagnostic notation — the canonform
+attribute items and entity item as a sequence, and the canonwire entity item —
+with the positions labelled (`/ version /`, `/ plains /`, `/ tagged /`, the
+plain item types, `/ memberships /`) and a compact / expanded toggle. The same
+notation is what `boxer.sh cbor diagnostics --pretty` prints on a terminal.
 
 Above either card, when the selected row carries one or more **datetime attributes**,
 a compact **timeline** plots them on a shared UTC axis. Each attribute is one legend
