@@ -553,6 +553,33 @@ app-local `storeConn`/`lane` plumbing rather than sharing it (their
 app-local-by-design status stands). Recorded in
 [ADR-0178](./0178-mdedit-markdown-editor.md)'s Updates.
 
+### 2026-09-03 — the quick filter is a regex over the subtree, run by the store
+
+The widget's quick filter was a case-insensitive substring of the entry's
+name, over the one directory listed. It is now one case-insensitive RE2
+pattern over the io/fs path of every entry under the current directory, at
+any depth, `/` the separator, typed in the regexedit box (ADR-0164 §SD4,
+single-pattern mode — a space is a space, because paths carry them). A
+pattern that does not compile degrades to a quoted literal and the box says
+so, ADR-0164 §SD2's shape. While a filter is set both modes show the matches
+as one list, each row named by its path under the current directory.
+
+Where the pattern runs is the file system's choice, through a seam rather
+than a walk: `fsmatch.FS` (`public/fs/fsmatch`) is "the entries under this
+directory whose path matches this RE2", one call. The lading adapter answers
+it with one query — `match()` over the path column inside the `startsWith`
+range the key gives, the same shape as the Find tab's SQL and the book's
+`lad-find` chapter — and `ladingview.Locked` forwards it under the guard, so
+every host over a snapshot (this app, mdedit's files pane) filters a subtree
+at the cost of one directory listing. A file system without the seam is
+walked from the widget's cached listings, a bounded number of reads per
+frame, which is what play's Files tab (a query result as a tree) and the
+demo's plain tree get. Both
+paths stop at a cap and say so: a filter narrows, and a pattern matching
+thousands of paths is one to refine, not scroll. `fs.Glob` stays a walk
+(ADR-0198 §SD8's reasoning — a glob in RE2 is a divergence nobody would
+see); the seam is for a pattern that already is RE2 on both sides.
+
 ## References
 
 - [ADR-0198](./0198-fs-snapshot-store.md) and

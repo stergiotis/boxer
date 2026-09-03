@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
@@ -67,8 +68,12 @@ func Render(in Input) (res Result) {
 			c.Label("No file system").Send()
 			return
 		}
-		switch in.Mode {
-		case ModeOutline:
+		// A filter flattens: both modes show the subtree's matches as a
+		// list, each row named by its path under the current directory.
+		switch {
+		case st.matcher() != nil:
+			in.renderList(st, density, &res)
+		case in.Mode == ModeOutline:
 			in.renderOutline(st, density, &res)
 		default:
 			in.renderList(st, density, &res)
@@ -125,12 +130,18 @@ func (in Input) renderBreadcrumb(st *State, density styletokens.DensityE) (navig
 }
 
 // renderFilter draws the quick filter. The TextEdit binds to the State's own
-// field — a stable pointer, because the databinding lands a frame late.
+// field — a stable pointer, because the databinding lands a frame late. The
+// box is the regexedit input in single-pattern mode (ADR-0164 §SD4): the
+// whole buffer is one regex over the path, so a space is a space, not AND —
+// paths carry spaces. The lexer only paints; [State.matcher] decides what
+// compiles, and the literal fallback is said, not hidden (ADR-0015). The
+// search's standing — how many matches, whether the cap cut them — is last
+// frame's, since the search runs in the list below.
 func (in Input) renderFilter(st *State, density styletokens.DensityE) {
 	for range c.Horizontal().KeepIter() {
 		c.Label(icons.PhFunnelSimple).Selectable(false).Send()
-		c.TextEdit(in.Ids.PrepareStr("filter"), st.filter, false).
-			HintText("filter names").
+		st.filterHl.Prepare(in.Ids.PrepareStr("filter"), st.filter, false, regexedit.ModeSingle).
+			HintText("filter paths (regex)").
 			DesiredWidth(filterWidth).
 			SendRespVal(&st.filter)
 		if st.filter != "" {
@@ -140,9 +151,37 @@ func (in Input) renderFilter(st *State, density styletokens.DensityE) {
 				c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&st.filter)
 			}
 		}
+		if st.FilterLiteral() {
+			for rt := range c.RichTextLabel("not a regex, matching literally") {
+				rt.Small().Weak()
+			}
+		}
+		if note := st.searchStatus(); note != "" {
+			for rt := range c.RichTextLabel(note) {
+				rt.Small().Weak()
+			}
+		}
 		c.AddSpace(styletokens.GapInline(density))
 		c.Label(st.filterSummary()).Selectable(false).Send()
 	}
+}
+
+// searchStatus is the filter's standing in words, empty with no filter.
+func (st *State) searchStatus() string {
+	if st.matcher() == nil || st.found.key == "" {
+		return ""
+	}
+	s := &st.found
+	n := min(len(s.rows), searchLimit)
+	switch {
+	case !s.done:
+		return itoa(n) + " so far…"
+	case s.more:
+		return "first " + itoa(n) + " — narrow the pattern"
+	case n == 1:
+		return "1 match"
+	}
+	return itoa(n) + " matches"
 }
 
 func (st *State) filterSummary() string {
@@ -186,13 +225,32 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 		}
 	}
 
-	l := st.read(in.FS, st.Dir())
-	rows := st.view(l, in.ShowHidden, st.rows[:0])
+	var rows []Entry
+	searching := st.matcher() != nil
+	if searching {
+		var s *searchT
+		rows, s = st.search(in.FS, in.ShowHidden, walkReadsPerFrame, st.rows[:0])
+		if !s.done {
+			c.RequestRepaint()
+		}
+		if s.err != nil {
+			c.Label("Cannot search " + st.Dir() + ": " + s.err.Error()).Selectable(false).Send()
+			res.Err = s.err
+		}
+	} else {
+		l := st.read(in.FS, st.Dir())
+		rows = st.view(l, in.ShowHidden, st.rows[:0])
+		if l.err != nil {
+			c.Label("Cannot read " + st.Dir() + ": " + l.err.Error()).Selectable(false).Send()
+			res.Err = l.err
+		}
+	}
 	st.rows = rows
 	res.Rows = rows
-	if l.err != nil {
-		c.Label("Cannot read " + st.Dir() + ": " + l.err.Error()).Selectable(false).Send()
-		res.Err = l.err
+	name := nameCell
+	if searching {
+		dir := st.Dir()
+		name = func(e Entry) { nameCellAs(e, relTo(dir, e.Path)) }
 	}
 
 	clickedRow, activatedRow := -1, -1
@@ -229,7 +287,7 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 				activatedRow = i
 			}
 			et.BeginCells(uint64(i), 0)
-			in.paddedCell(e, 0, density, func(e Entry) { nameCell(e) })
+			in.paddedCell(e, 0, density, name)
 			et.EndCells()
 			et.BeginCells(uint64(i), 1)
 			in.paddedCell(e, 1, density, sizeCell)
@@ -418,9 +476,13 @@ func (in Input) paddedCell(e Entry, col int, density styletokens.DensityE, body 
 // the measurement; in outline mode the two nestings stacked and the name
 // column ran six points low, far enough that the cell clip took the descenders
 // off the directory names.
-func nameCell(e Entry) {
+func nameCell(e Entry) { nameCellAs(e, e.Name) }
+
+// nameCellAs is nameCell with the text chosen by the caller: a search row
+// shows its path under the directory searched rather than its base name.
+func nameCellAs(e Entry, text string) {
 	c.Label(glyphFor(e)).Selectable(false).Send()
-	c.Label(e.Name).Selectable(false).Truncate().Send()
+	c.Label(text).Selectable(false).Truncate().Send()
 }
 
 func sizeCell(e Entry) {

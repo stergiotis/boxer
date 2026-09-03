@@ -6,13 +6,17 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/fs/fsmatch"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
@@ -113,10 +117,11 @@ type Input struct {
 
 // Result is what one Render reports.
 type Result struct {
-	// Rows is what was shown: the filtered, sorted listing in list mode, one
-	// entry per outline node in outline mode. Indices below refer to it. The
-	// slice is the State's scratch and is valid until the next Render; a host
-	// that keeps entries copies them.
+	// Rows is what was shown: the sorted listing in list mode, one entry per
+	// outline node in outline mode, and in either mode the search rows — the
+	// subtree's matches, sorted — while a filter is set. Indices below refer
+	// to it. The slice is the State's scratch and is valid until the next
+	// Render; a host that keeps entries copies them.
 	Rows []Entry
 	// Clicked is the row clicked this frame, -1 for none.
 	Clicked int
@@ -149,6 +154,17 @@ type State struct {
 
 	cache    map[string]*listing
 	cacheKey string
+
+	// filter, compiled: filterSrc is the trimmed text filterRe was built
+	// from, filterLiteral whether that text failed to compile and matches
+	// as a quoted literal instead (ADR-0164 §SD2's degradation). filterHl
+	// is the filter box's highlight-job cache (regexedit); render-thread
+	// confined like the text it colours.
+	filterSrc     string
+	filterRe      *regexp.Regexp
+	filterLiteral bool
+	filterHl      regexedit.Edit
+	found         searchT
 
 	// list-mode scratch and the key capture's id
 	keyFrameID      uint64
@@ -215,9 +231,42 @@ func (st *State) Up() bool {
 	return true
 }
 
-// Filter is the quick filter text; SetFilter replaces it.
+// Filter is the quick filter text; SetFilter replaces it. The text is one
+// case-insensitive RE2 pattern matched anywhere in the io/fs path of every
+// entry under the current directory, at any depth ("src/util/u.go", "/" the
+// separator, no leading slash), so `^src/` keeps a subtree and `\.go$` an
+// extension wherever it is. A pattern that does not compile matches as a
+// literal substring instead (ADR-0164 §SD2), and [State.FilterLiteral]
+// reports that it did. Where the pattern runs is [State.search]'s concern.
 func (st *State) Filter() string     { return st.filter }
 func (st *State) SetFilter(s string) { st.filter = s }
+
+// FilterLiteral reports whether the filter text failed to compile as a
+// regex and is matching as a quoted literal.
+func (st *State) FilterLiteral() bool {
+	st.matcher()
+	return st.filterLiteral
+}
+
+// matcher returns the compiled filter, nil for an empty one, rebuilding
+// only when the text changed since the previous call.
+func (st *State) matcher() *regexp.Regexp {
+	src := strings.TrimSpace(st.filter)
+	if src == "" {
+		st.filterSrc, st.filterRe, st.filterLiteral = "", nil, false
+		return nil
+	}
+	if src == st.filterSrc && st.filterRe != nil {
+		return st.filterRe
+	}
+	re, err := regexp.Compile("(?i)" + src)
+	st.filterLiteral = err != nil
+	if err != nil {
+		re = regexp.MustCompile("(?i)" + regexp.QuoteMeta(src))
+	}
+	st.filterSrc, st.filterRe = src, re
+	return re
+}
 
 // Sort is the current order; SetSort replaces it.
 func (st *State) Sort() (by SortByE, desc bool) { return st.sortBy, st.sortDesc }
@@ -278,6 +327,7 @@ func (st *State) SetCursor(p string) { st.cursor = p }
 // shows. The selection and the directory stay.
 func (st *State) Invalidate() {
 	st.cache = nil
+	st.found = searchT{}
 	st.ensure()
 }
 
@@ -348,28 +398,158 @@ func joinPath(dir, name string) string {
 }
 
 // view filters and sorts a listing into dst: hidden names out unless asked
-// for, the quick filter as a case-insensitive substring of the name,
-// directories first, then the chosen order.
+// for, the quick filter as a regex over the entry's path (see
+// [State.Filter]), directories first, then the chosen order. A directory
+// whose path does not match is out along with its subtree, in both modes.
 func (st *State) view(l *listing, showHidden bool, dst []Entry) []Entry {
 	dst = dst[:0]
 	if l == nil {
 		return dst
 	}
-	needle := strings.ToLower(strings.TrimSpace(st.filter))
+	re := st.matcher()
 	for _, e := range l.entries {
 		if !showHidden && strings.HasPrefix(e.Name, ".") {
 			continue
 		}
-		if needle != "" && !strings.Contains(strings.ToLower(e.Name), needle) {
+		if re != nil && !re.MatchString(e.Path) {
 			continue
 		}
 		dst = append(dst, e)
 	}
-	sortEntries(dst, st.sortBy, st.sortDesc)
+	sortEntries(dst, st.sortBy, st.sortDesc, false)
 	return dst
 }
 
-func sortEntries(es []Entry, by SortByE, desc bool) {
+// searchLimit caps what a filter shows, and walkMaxDirs what a walk reads
+// for it: a filter is for narrowing, and a pattern that matches thousands
+// of paths is one the user refines rather than scrolls. walkReadsPerFrame
+// bounds the walk's uncached directory reads per frame, so a plain tree the
+// file system cannot search itself is walked across frames rather than
+// within one.
+const (
+	searchLimit       = 2000
+	walkMaxDirs       = 4096
+	walkReadsPerFrame = 32
+)
+
+// searchT is what a non-empty filter shows: the entries under the current
+// directory whose path matches, in the order found. The file system
+// answers in one call when it can ([fsmatch.FS] — a snapshot store runs the
+// pattern in ClickHouse); otherwise the cached listings are walked
+// breadth-first, budgeted per frame, and done is false until the walk ends.
+// key names what the rows are for; a different key starts over.
+type searchT struct {
+	key  string
+	rows []Entry
+	more bool
+	done bool
+	err  error
+
+	// the walk, when there is one: directories still to read, how many
+	// were, and the next row's ordinal.
+	walking bool
+	pending []string
+	dirs    int
+	next    int
+}
+
+// search advances the filter's search for the current directory and returns
+// its rows sorted into dst. The file system's own match is tried first and
+// answers in one call; the walk reads at most budget uncached directories
+// per call and is resumed by the next one. Only called with a non-empty
+// filter.
+func (st *State) search(fsys fs.FS, showHidden bool, budget int, dst []Entry) (rows []Entry, s *searchT) {
+	st.ensure()
+	re := st.matcher()
+	s = &st.found
+	key := strings.Join([]string{st.cacheKey, st.Dir(), st.filterSrc, strconv.FormatBool(showHidden)}, "\x00")
+	if s.key != key {
+		*s = searchT{key: key, pending: []string{st.Dir()}}
+	}
+	if !s.done && !s.walking {
+		if m, ok := fsys.(fsmatch.FS); ok {
+			matches, more, err := m.MatchPaths(st.Dir(), re.String(), showHidden, searchLimit)
+			if err == nil || !errors.Is(err, errors.ErrUnsupported) {
+				s.done, s.more, s.err = true, more, err
+				s.rows = s.rows[:0]
+				for i, m := range matches {
+					s.rows = append(s.rows, entryOfMatch(m, i))
+				}
+			}
+		}
+		if !s.done {
+			s.walking = true
+		}
+	}
+	for s.walking && !s.done && budget > 0 {
+		dir := s.pending[0]
+		s.pending = s.pending[1:]
+		if _, cached := st.cache[dir]; !cached {
+			budget--
+		}
+		l := st.read(fsys, dir)
+		s.dirs++
+		if l.err != nil {
+			if s.dirs == 1 {
+				s.err = l.err
+			}
+		} else {
+			for _, e := range l.entries {
+				if !showHidden && strings.HasPrefix(e.Name, ".") {
+					continue
+				}
+				if e.IsDir {
+					s.pending = append(s.pending, e.Path)
+				}
+				if re.MatchString(e.Path) {
+					e.Ord = s.next
+					s.next++
+					s.rows = append(s.rows, e)
+				}
+			}
+		}
+		if len(s.pending) == 0 {
+			s.done = true
+		} else if s.dirs >= walkMaxDirs || len(s.rows) >= searchLimit {
+			s.done, s.more = true, true
+			s.pending = s.pending[:0]
+		}
+	}
+	rows = append(dst[:0], s.rows...)
+	if len(rows) > searchLimit {
+		rows = rows[:searchLimit]
+	}
+	sortEntries(rows, st.sortBy, st.sortDesc, true)
+	return
+}
+
+// entryOfMatch is an [Entry] for a match the file system answered. The
+// ordinal is the match's index: unique across the answer, which is what the
+// row's widget ids need, and stable while the answer is.
+func entryOfMatch(m fsmatch.Match, ord int) Entry {
+	e := Entry{Name: path.Base(m.Path), Path: m.Path, Ord: ord}
+	if m.Info != nil {
+		e.Mode = m.Info.Mode()
+		e.IsDir = e.Mode.IsDir()
+		e.IsSymlink = e.Mode&fs.ModeSymlink != 0
+		e.Size = m.Info.Size()
+		e.ModTime = m.Info.ModTime()
+	}
+	return e
+}
+
+// relTo is p as a search row shows it: relative to the directory searched.
+func relTo(dir, p string) string {
+	if dir == "." || dir == "" {
+		return p
+	}
+	return strings.TrimPrefix(p, dir+"/")
+}
+
+// sortEntries orders a view: directories first, then the column, then the
+// name — or the whole path, which is what search rows from several
+// directories order by.
+func sortEntries(es []Entry, by SortByE, desc bool, byPath bool) {
 	slices.SortStableFunc(es, func(a, b Entry) int {
 		// Directories first, whatever the column and the direction.
 		if a.IsDir != b.IsDir {
@@ -386,9 +566,13 @@ func sortEntries(es []Entry, by SortByE, desc bool) {
 			c = a.ModTime.Compare(b.ModTime)
 		}
 		if c == 0 {
-			c = cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+			an, bn := a.Name, b.Name
+			if byPath {
+				an, bn = a.Path, b.Path
+			}
+			c = cmp.Compare(strings.ToLower(an), strings.ToLower(bn))
 			if c == 0 {
-				c = cmp.Compare(a.Name, b.Name)
+				c = cmp.Compare(an, bn)
 			}
 		}
 		if desc {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/stergiotis/boxer/public/fs/fsmatch"
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadapter"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
@@ -513,4 +514,57 @@ func TestAChunkedReadIsOneQueryPerBlockRange(t *testing.T) {
 	assert.LessOrEqual(t, queries, blocks,
 		"at most one block query per block; got %d for %d blocks read in %d chunks", queries, blocks, chunks)
 	assert.Less(t, queries, chunks, "a query per chunk is the failure this test exists for")
+}
+
+func matchPaths(ms []fsmatch.Match) (out []string) {
+	for _, m := range ms {
+		out = append(out, m.Path)
+	}
+	return
+}
+
+// TestMatchPathsRunsThePatternInOneQuery is the push-down seam: the subtree
+// under a directory filtered by RE2 in ClickHouse, paths and pattern in the
+// view's own namespace.
+func TestMatchPathsRunsThePatternInOneQuery(t *testing.T) {
+	src := source()
+	src["a/.hid/z.txt"] = &fstest.MapFile{Data: []byte("z"), Mode: 0o644, ModTime: time.Unix(1_700_000_011, 0)}
+	h := seedFrom(t, src)
+	fsys := h.open(t)
+
+	got, more, err := fsys.MatchPaths(".", `(?i)\.TXT$`, true, 0)
+	require.NoError(t, err)
+	assert.False(t, more)
+	assert.Equal(t, []string{"a/.hid/z.txt", "a/b.txt", "a/up.txt", "link.txt"}, matchPaths(got), "every depth, path order, the case fold honoured")
+	assert.NotZero(t, got[2].Info.Mode()&fs.ModeSymlink, "a symlink is reported as recorded")
+	assert.Equal(t, int64(1), got[0].Info.Size())
+
+	got, _, err = fsys.MatchPaths(".", `\.txt$`, false, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a/b.txt", "a/up.txt", "link.txt"}, matchPaths(got), "hidden false leaves out a dot-segment below the directory")
+
+	got, more, err = fsys.MatchPaths("a", `.`, true, 2)
+	require.NoError(t, err)
+	assert.True(t, more, "the cap cut the answer")
+	assert.Equal(t, []string{"a/.hid", "a/.hid/z.txt"}, matchPaths(got), "the first of the subtree in path order; the directory itself is not an entry")
+
+	got, _, err = fsys.MatchPaths("a/c", `tiny`, true, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a/c/tiny"}, matchPaths(got))
+
+	sub, err := fsys.Sub("a")
+	require.NoError(t, err)
+	ms, ok := sub.(fsmatch.FS)
+	require.True(t, ok, "a Sub carries the seam")
+	got, _, err = ms.MatchPaths(".", `^c/`, true, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"c/d.bin", "c/tiny"}, matchPaths(got), "a Sub's paths and pattern are relative to its root")
+	got, _, err = ms.MatchPaths("c", `^c/t`, false, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"c/tiny"}, matchPaths(got))
+
+	_, _, err = fsys.MatchPaths(".", `(`, true, 0)
+	assert.Error(t, err, "an invalid pattern is the server's error, returned")
+	_, _, err = fsys.MatchPaths("../x", "a", true, 0)
+	assert.ErrorIs(t, err, fs.ErrInvalid)
 }

@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/fs/fsmatch"
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
@@ -125,6 +126,7 @@ var (
 	_ fs.GlobFS     = (*FS)(nil)
 	_ fs.ReadLinkFS = (*FS)(nil)
 	_ fs.SubFS      = (*FS)(nil)
+	_ fsmatch.FS    = (*FS)(nil)
 )
 
 // entry is one decoded row, with the path it was read under.
@@ -269,6 +271,65 @@ func (inst *FS) Glob(pattern string) ([]string, error) {
 		return []string{pattern}, nil
 	}
 	return fs.Glob(struct{ fs.FS }{inst}, pattern)
+}
+
+// MatchPaths lists the entries under dir whose path matches pattern, in one
+// query: `match()` over the path column inside a `startsWith` range on the
+// same key — the push-down [fsmatch.FS] describes, and the reason a browser
+// over a snapshot filters a subtree at the cost of one directory listing
+// rather than one per directory. pattern is RE2, which ClickHouse's match()
+// and Go's regexp share; an invalid one is the server's error, returned.
+// Paths are this FS's own (a Sub's are relative to its root), and so is what
+// the pattern sees.
+func (inst *FS) MatchPaths(dir, pattern string, hidden bool, limit int) (matches []fsmatch.Match, more bool, err error) {
+	if !fs.ValidPath(dir) {
+		return nil, false, pathErr("match", dir, fs.ErrInvalid)
+	}
+	full := inst.full(dir)
+	col := ladingschema.ColNaturalKey
+	// rel is the path as this FS names it; under is the path below dir —
+	// both are the stored path with a prefix cut off, 1-based as ClickHouse
+	// counts.
+	rel := col
+	if inst.prefix != "" {
+		rel = fmt.Sprintf("substring(%s, %d)", col, len(inst.prefix)+2)
+	}
+	under := rel
+	preds := make([]string, 0, 3)
+	if full == "." {
+		preds = append(preds, col+" != '.'")
+	} else {
+		preds = append(preds, fmt.Sprintf("startsWith(%s, %s)", col, ladingschema.QuoteLiteral(full+"/")))
+		under = fmt.Sprintf("substring(%s, %d)", col, len(full)+2)
+	}
+	preds = append(preds, fmt.Sprintf("match(%s, %s)", rel, ladingschema.QuoteLiteral(pattern)))
+	if !hidden {
+		preds = append(preds, fmt.Sprintf("NOT arrayExists(s -> startsWith(s, '.'), splitByChar('/', %s))", under))
+	}
+	n := 0
+	if limit > 0 {
+		n = limit + 1
+	}
+	rows, err := inst.scan(strings.Join(preds, " AND "), n)
+	if err != nil {
+		return nil, false, pathErr("match", dir, err)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
+	if limit > 0 && len(rows) > limit {
+		rows, more = rows[:limit], true
+	}
+	matches = make([]fsmatch.Match, 0, len(rows))
+	for _, r := range rows {
+		if _, hit := inst.entries[r.name]; !hit {
+			inst.entries[r.name] = r
+		}
+		name := r.name
+		if inst.prefix != "" {
+			name = strings.TrimPrefix(name, inst.prefix+"/")
+		}
+		matches = append(matches, fsmatch.Match{Path: name, Info: infoOf(r)})
+	}
+	return
 }
 
 // Sub returns the subtree rooted at dir as a file system of its own. It shares

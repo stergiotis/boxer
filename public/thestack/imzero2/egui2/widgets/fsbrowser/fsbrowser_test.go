@@ -3,6 +3,8 @@ package fsbrowser
 import (
 	"errors"
 	"io/fs"
+	"regexp"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/fs/fsmatch"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
@@ -61,13 +64,165 @@ func TestViewHidesDotNamesSortsDirsFirstAndFilters(t *testing.T) {
 
 	st.SetFilter("RE")
 	rows = st.view(st.read(fsys, "."), false, nil)
-	assert.Equal(t, []string{"readme.md"}, names(rows), "the filter is a case-insensitive substring of the name")
+	assert.Equal(t, []string{"readme.md"}, names(rows), "a plain word is a case-insensitive match anywhere in the path")
 	st.SetFilter("")
 
 	st.SetSort(SortBySize, true)
 	rows = st.view(st.read(fsys, "."), false, nil)
 	assert.Equal(t, []string{"zeta", "src", "empty", "docs", "big.bin", "readme.md"}, names(rows),
 		"descending flips within each group and directories stay first")
+}
+
+func TestFilterIsARegexOverThePath(t *testing.T) {
+	var st State
+	fsys := fixture()
+
+	st.SetFilter(`\.md$`)
+	rows := st.view(st.read(fsys, "."), false, nil)
+	assert.Equal(t, []string{"readme.md"}, names(rows), "an anchored extension pattern")
+	assert.False(t, st.FilterLiteral())
+
+	st.SetFilter("^SRC/U")
+	rows = st.view(st.read(fsys, "src"), false, nil)
+	assert.Equal(t, []string{"util"}, names(rows), "the pattern sees the path from the root with / between segments, case-insensitively")
+
+	st.SetFilter("md$|^big")
+	rows = st.view(st.read(fsys, "."), false, nil)
+	assert.Equal(t, []string{"big.bin", "readme.md"}, names(rows), "alternation; the sort still holds")
+
+	st.SetFilter("read(")
+	rows = st.view(st.read(fsys, "."), false, nil)
+	assert.Empty(t, names(rows), "a pattern that does not compile matches as a literal")
+	assert.True(t, st.FilterLiteral(), "and says so")
+	st.SetFilter("big.")
+	rows = st.view(st.read(fsys, "."), false, nil)
+	assert.Equal(t, []string{"big.bin"}, names(rows))
+	assert.False(t, st.FilterLiteral(), "the flag clears once the text compiles again")
+
+	st.SetFilter("  ")
+	rows = st.view(st.read(fsys, "."), false, nil)
+	assert.Len(t, rows, 6, "whitespace is no filter")
+	assert.False(t, st.FilterLiteral())
+}
+
+func paths(es []Entry) (out []string) {
+	for _, e := range es {
+		out = append(out, e.Path)
+	}
+	return
+}
+
+// matchFS is a file system that answers the filter itself, counting the
+// calls, so a test can tell push-down from a walk.
+type matchFS struct {
+	fstest.MapFS
+	calls int
+	err   error
+}
+
+func (m *matchFS) MatchPaths(dir, pattern string, hidden bool, limit int) (out []fsmatch.Match, more bool, err error) {
+	m.calls++
+	if m.err != nil {
+		return nil, false, m.err
+	}
+	re := regexp.MustCompile(pattern)
+	err = fs.WalkDir(m.MapFS, dir, func(p string, d fs.DirEntry, werr error) error {
+		if werr != nil || p == dir {
+			return werr
+		}
+		if !hidden && strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !re.MatchString(p) {
+			return nil
+		}
+		if limit > 0 && len(out) == limit {
+			more = true
+			return fs.SkipAll
+		}
+		info, _ := d.Info()
+		out = append(out, fsmatch.Match{Path: p, Info: info})
+		return nil
+	})
+	return
+}
+
+func TestFilterSearchesTheSubtreeByWalking(t *testing.T) {
+	var st State
+	fsys := fixture()
+
+	st.SetFilter(`\.go$`)
+	rows, s := st.search(fsys, false, 1, nil)
+	assert.False(t, s.done, "one uncached read per call: the root alone is not the answer")
+	assert.True(t, s.walking)
+	for !s.done {
+		rows, s = st.search(fsys, false, 1, nil)
+	}
+	assert.Equal(t, []string{"src/main.go", "src/util/u.go"}, paths(rows), "matches at any depth, in path order")
+	assert.False(t, s.more)
+	assert.Equal(t, []int{0, 1}, []int{rows[0].Ord, rows[1].Ord}, "search rows carry their own ordinals")
+
+	rows, s = st.search(fsys, false, 1, nil)
+	assert.True(t, s.done, "the same key is the same answer, not another walk")
+	assert.Len(t, rows, 2)
+
+	st.SetFilter("keep")
+	rows, s = st.search(fsys, false, 100, nil)
+	assert.True(t, s.done)
+	assert.Empty(t, rows, "a dot-name is hidden, below the root as at it")
+	rows, _ = st.search(fsys, true, 100, nil)
+	assert.Equal(t, []string{"empty/.keep"}, paths(rows), "unless hidden names are shown")
+
+	st.SetDir("src")
+	st.SetFilter("u\\.go$")
+	rows, _ = st.search(fsys, false, 100, nil)
+	assert.Equal(t, []string{"src/util/u.go"}, paths(rows), "under the current directory, through a directory the pattern does not name")
+	assert.Equal(t, "util/u.go", relTo(st.Dir(), rows[0].Path), "and shown relative to it")
+
+	st.SetFilter("^zeta")
+	rows, _ = st.search(fsys, false, 100, nil)
+	assert.Empty(t, rows, "the search is rooted at the current directory")
+}
+
+func TestFilterIsPushedDownWhenTheFileSystemCanRunIt(t *testing.T) {
+	var st State
+	m := &matchFS{MapFS: fixture()}
+
+	st.SetFilter(`\.GO$`)
+	rows, s := st.search(m, false, 0, nil)
+	assert.True(t, s.done, "one call answers, whatever the budget")
+	assert.False(t, s.walking)
+	assert.Equal(t, 1, m.calls)
+	assert.Equal(t, []string{"src/main.go", "src/util/u.go"}, paths(rows), "the file system got the compiled pattern, case fold included")
+	assert.True(t, rows[0].ModTime.After(rows[1].ModTime) || !rows[0].ModTime.IsZero(), "rows carry the info the answer had")
+
+	st.search(m, false, 0, nil)
+	assert.Equal(t, 1, m.calls, "a repeated frame is not a repeated query")
+	st.SetFilter("main")
+	st.search(m, false, 0, nil)
+	assert.Equal(t, 2, m.calls, "a changed pattern is")
+
+	st.Invalidate()
+	st.search(m, false, 0, nil)
+	assert.Equal(t, 3, m.calls, "Invalidate drops the answer with the listings")
+
+	m.err = errors.ErrUnsupported
+	st.SetFilter("u\\.go$")
+	rows, s = st.search(m, false, 100, nil)
+	assert.True(t, s.walking, "ErrUnsupported is the cue to walk")
+	assert.True(t, s.done)
+	assert.NoError(t, s.err)
+	assert.Equal(t, []string{"src/util/u.go"}, paths(rows))
+
+	m.err = errors.New("server gone")
+	st.SetFilter("main")
+	rows, s = st.search(m, false, 100, nil)
+	assert.True(t, s.done)
+	assert.ErrorContains(t, s.err, "server gone", "any other failure is reported, not walked around")
+	assert.Empty(t, rows)
 }
 
 func TestNavigationClearsTheSelection(t *testing.T) {

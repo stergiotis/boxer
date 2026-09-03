@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"sync"
 
+	"github.com/stergiotis/boxer/public/fs/fsmatch"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -48,6 +49,7 @@ var _ fs.FS = (*Locked)(nil)
 var _ fs.ReadDirFS = (*Locked)(nil)
 var _ fs.StatFS = (*Locked)(nil)
 var _ fs.ReadFileFS = (*Locked)(nil)
+var _ fsmatch.FS = (*Locked)(nil)
 
 func (l *Locked) Open(name string) (f fs.File, err error) {
 	l.g.Lock()
@@ -75,6 +77,20 @@ func (l *Locked) ReadFile(name string) ([]byte, error) {
 	l.g.Lock()
 	defer l.g.Unlock()
 	return fs.ReadFile(l.fsys, name)
+}
+
+// MatchPaths forwards the push-down seam under the lock. A view whose file
+// system has none answers [errors.ErrUnsupported], which is a consumer's cue
+// to walk; the assertion has to be answered at call time because Locked
+// wraps any fs.FS.
+func (l *Locked) MatchPaths(dir, pattern string, hidden bool, limit int) ([]fsmatch.Match, bool, error) {
+	m, ok := l.fsys.(fsmatch.FS)
+	if !ok {
+		return nil, false, errors.ErrUnsupported
+	}
+	l.g.Lock()
+	defer l.g.Unlock()
+	return m.MatchPaths(dir, pattern, hidden, limit)
 }
 
 // lockedFile serialises the reads a caller makes through a handle after Open

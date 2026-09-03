@@ -27,6 +27,21 @@
 // writes: the browser has no notion of copy, move, rename or delete, which is
 // what makes it safe over a read-only store and over a capability grant.
 //
+// The quick filter is one case-insensitive RE2 pattern over the io/fs path
+// of every entry under the current directory, at any depth, "/" the
+// separator — `^src/` keeps a subtree, `\.go$` an extension wherever it is
+// — typed in the regexedit box (ADR-0164 §SD4). Text that does not compile
+// matches as a literal substring and the box says so. While a filter is
+// set both modes show the matches as one list, each row named by its path
+// under the current directory; a directory that matches is a row that can
+// be entered. Where the pattern runs is the file system's choice: one that
+// implements [fsmatch.FS] answers in one call — the lading adapter hands
+// the pattern to ClickHouse's match() over the path column — and any other
+// is walked from the cached listings, a bounded number of directory reads
+// per frame, so a large plain tree fills in over frames rather than
+// stalling one. Both stop at a cap and say so; a filter narrows, and a
+// pattern matching thousands of paths is one to refine.
+//
 // # Modes
 //
 // [ModeList] shows the current directory's children in an etable — directories
