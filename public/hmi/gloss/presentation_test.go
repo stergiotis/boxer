@@ -158,7 +158,7 @@ func TestDefaultOrderPresentation(t *testing.T) {
 		MediaTypeTemperature, MediaTypeLength, MediaTypeVelocity, MediaTypePlaneAngle, MediaTypeCoordinate,
 		MediaTypeEpoch, MediaTypeDuration,
 		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeIPAddr, MediaTypeRaw,
-	}, order[8:])
+	}, order[9:])
 }
 
 // AcceptedKinds is the catalog listing's "accepts:" line: probed once per

@@ -176,6 +176,8 @@ func TestDefaultOrder(t *testing.T) {
 	assert.Equal(t, []string{
 		MediaTypeMarkdown, MediaTypePlain, MediaTypeJSON, MediaTypeSQL, MediaTypeGo,
 		MediaTypePNG, MediaTypeJPEG, MediaTypeGIF,
-	}, order[:8])
+		// Past ADR-0123's eight; a later content type appends here.
+		MediaTypeCBOR,
+	}, order[:9])
 	assert.Contains(t, order, MediaTypeRaw)
 }

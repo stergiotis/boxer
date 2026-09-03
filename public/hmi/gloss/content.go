@@ -151,5 +151,8 @@ func contentFamily() []GlossI {
 		image(MediaTypePNG, "decoded image (block); type and size (inline)"),
 		image(MediaTypeJPEG, "decoded image (block); type and size (inline)"),
 		image(MediaTypeGIF, "decoded image (block); type and size (inline)"),
+		// Past ADR-0123's eight, so it registers after them and the pinned
+		// prefix of the default order does not move.
+		&cborGloss{},
 	}
 }
