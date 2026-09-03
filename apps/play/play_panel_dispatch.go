@@ -16,6 +16,7 @@ type channelInput struct {
 	rec    arrow.RecordBatch
 	schema *arrow.Schema
 	sig    SignalEnvI
+	result ResultID // the ResultID of rec; zero for a synthetic input
 }
 
 // dispatchPanel runs the channel negotiation (SD6): for each declared channel it
@@ -53,7 +54,7 @@ func dispatchPanel(p PanelI, inputs map[ChannelID]channelInput, emit SignalEmitt
 			}
 			continue // an optional channel that can't be filled is simply absent
 		}
-		filled[spec.ID] = ChannelResult{Node: in.node, Rec: in.rec, Claim: claim}
+		filled[spec.ID] = ChannelResult{Node: in.node, Rec: in.rec, Claim: claim, Result: in.result}
 	}
 	p.Render(filled, emit)
 	return ""

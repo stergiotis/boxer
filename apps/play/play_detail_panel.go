@@ -66,6 +66,7 @@ func (inst detailPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 		}
 		return
 	}
+	inst.app.detailResult = main.Result
 	inst.app.renderDetailPane(main.Rec, dc.schema, dc.row)
 }
 

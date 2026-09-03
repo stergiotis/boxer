@@ -39,5 +39,6 @@ func (inst tablePanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig 
 func (inst tablePanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
 	main := filled[chMain]
 	row, _ := main.Claim.(int64)
+	inst.app.tableResult = main.Result
 	inst.app.renderTableBody(main.Rec, main.Rec.Schema(), main.Rec.NumRows(), row, emit)
 }

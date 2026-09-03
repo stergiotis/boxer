@@ -76,7 +76,7 @@ func TestQueryStoreExecuteRows(t *testing.T) {
 	store.Execute("SELECT n FROM t", nil, "")
 	waitNotLoading(t, store)
 
-	rec, _, numRows, loading, _, summary, executed, err := store.Snapshot()
+	rec, _, numRows, loading, _, summary, executed, err, _ := store.Snapshot()
 	if rec != nil {
 		defer rec.Release()
 	}
@@ -115,7 +115,7 @@ func TestQueryStoreZeroBatchKeepsSchema(t *testing.T) {
 	store.Execute("SELECT n FROM t WHERE 0", nil, "")
 	waitNotLoading(t, store)
 
-	rec, schema, numRows, _, _, _, _, err := store.Snapshot()
+	rec, schema, numRows, _, _, _, _, err, _ := store.Snapshot()
 	if rec != nil {
 		rec.Release()
 		t.Error("rec should be nil for a zero-batch result")
@@ -145,7 +145,7 @@ func TestQueryStoreErrorStatus(t *testing.T) {
 	store.Execute("SELECT bad", nil, "")
 	waitNotLoading(t, store)
 
-	rec, _, _, _, _, _, _, err := store.Snapshot()
+	rec, _, _, _, _, _, _, err, _ := store.Snapshot()
 	if rec != nil {
 		rec.Release()
 		t.Error("rec should be nil on error")
@@ -177,7 +177,7 @@ func TestQueryStoreCloseDropsLateFinish(t *testing.T) {
 	waitNotLoading(t, store)
 	srv.Close()
 
-	rec, schema, _, _, _, _, _, _ := store.Snapshot()
+	rec, schema, _, _, _, _, _, _, _ := store.Snapshot()
 	if rec != nil {
 		rec.Release()
 		t.Error("a closed store must not resurrect a late result")

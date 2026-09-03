@@ -28,13 +28,13 @@ func TestActiveSnapshotObservesIntermediateNode(t *testing.T) {
 	// Observe the intermediate: the first snapshot demands its fused SQL on
 	// the intermediate lane (non-blocking; the result lands async).
 	app.observedNode = "recent"
-	rec, _, _, _, _, _, _, _ := app.activeSnapshot()
+	rec, _, _, _, _, _, _, _, _ := app.activeSnapshot()
 	if rec != nil {
 		rec.Release()
 	}
 	waitLaneReady(t, app.intermediateLane, "SELECT n FROM t")
 
-	rec, _, numRows, loading, _, _, _, err := app.activeSnapshot()
+	rec, _, numRows, loading, _, _, _, err, _ := app.activeSnapshot()
 	require.NoError(t, err)
 	require.False(t, loading)
 	require.NotNil(t, rec)
@@ -43,7 +43,7 @@ func TestActiveSnapshotObservesIntermediateNode(t *testing.T) {
 	require.Equal(t, 1, *hits, "the intermediate's fused SQL executed once")
 
 	// Re-snapshotting the same observed node is a memo hit (no new wire call).
-	r2, _, _, _, _, _, _, _ := app.activeSnapshot()
+	r2, _, _, _, _, _, _, _, _ := app.activeSnapshot()
 	if r2 != nil {
 		r2.Release()
 	}
@@ -52,7 +52,7 @@ func TestActiveSnapshotObservesIntermediateNode(t *testing.T) {
 	// Observing the sink goes to the main lane (which never ran here), and never
 	// re-hits the intermediate lane.
 	app.observedNode = mainNodeID
-	r3, _, _, _, _, _, _, _ := app.activeSnapshot()
+	r3, _, _, _, _, _, _, _, _ := app.activeSnapshot()
 	if r3 != nil {
 		r3.Release()
 	}
@@ -78,7 +78,7 @@ func TestActiveSnapshotReportsIntermediateLaneLoading(t *testing.T) {
 	}
 	app.observedNode = "recent"
 
-	rec, _, _, loading, _, _, _, _ := app.activeSnapshot()
+	rec, _, _, loading, _, _, _, _, _ := app.activeSnapshot()
 	require.Nil(t, rec, "first fetch still in flight — no result yet")
 	require.True(t, loading, "the active snapshot reports the intermediate lane's in-flight fetch")
 	require.False(t, graph.MainLoading(),

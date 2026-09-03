@@ -73,6 +73,7 @@ type laneView struct {
 	params      map[string]string // served signal values (read-only)
 	key         string            // compiledNode.key() of the served result
 	fingerprint uint64
+	id          ResultID // the served result's ResultID (zero: nothing served)
 	summary     Summary
 	executedAt  time.Time     // when the served result's execution finished
 	elapsed     time.Duration // its wall-clock
@@ -148,6 +149,7 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 		view.params = inst.result.params
 		view.key = inst.result.key
 		view.fingerprint = inst.result.fingerprint
+		view.id = inst.result.id
 		view.summary = inst.result.summary
 		view.executedAt = inst.result.executedAt
 		view.elapsed = inst.result.elapsed
@@ -300,6 +302,7 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	inst.result = &nodeResult{
 		rec: rec, schema: schema, sql: c.SQL, params: c.Params, key: demandKey,
 		fingerprint: fingerprintRecord(rec),
+		id:          nextResultID(),
 		summary:     summary,
 		executedAt:  time.Now(),
 		elapsed:     time.Since(start),

@@ -61,8 +61,11 @@ type TabFrame struct {
 	Summary  Summary
 	Executed time.Time
 	Err      error
-	Sig      SignalEnvI
-	Emit     SignalEmitterI
+	// Result identifies the delivered result Rec belongs to (ADR-0219 SD8):
+	// the key for a per-result cache. Zero until a result lands.
+	Result ResultID
+	Sig    SignalEnvI
+	Emit   SignalEmitterI
 }
 
 // TabSpec declares one dock tab. ID is the stable human slug ("table",
@@ -598,7 +601,9 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderPreviewTab) }
 		case "table":
 			spec.Panel = tablePanel{app: inst}
-			spec.Render = func(f *TabFrame) { inst.renderTableTab(f.Rec, f.Schema, f.NumRows, f.Loading, f.Err, f.Executed) }
+			spec.Render = func(f *TabFrame) {
+				inst.renderTableTab(f.Rec, f.Schema, f.NumRows, f.Loading, f.Err, f.Executed, f.Result)
+			}
 		case "projection":
 			spec.Panel = projectionPanel{app: inst}
 			spec.Render = func(f *TabFrame) { inst.renderProjectionTab(f.Rec, f.Loading, f.Err, f.Executed) }
@@ -742,7 +747,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) { inst.renderDocsTab() }
 		case "detail":
 			spec.Panel = detailPanel{app: inst}
-			spec.Render = func(f *TabFrame) { inst.renderDetailTab(f.Rec, f.Schema, f.Executed) }
+			spec.Render = func(f *TabFrame) { inst.renderDetailTab(f.Rec, f.Schema, f.Executed, f.Result) }
 		}
 		if err := reg.Add(spec); err != nil {
 			// The defs are a static table; a duplicate here is a
