@@ -39,6 +39,7 @@ type QueryStore struct {
 	record   arrow.RecordBatch
 	schema   *arrow.Schema
 	numRows  int64
+	resultID ResultID // minted by finish; see ResultID
 	err      error
 	elapsed  time.Duration
 	summary  Summary
@@ -113,13 +114,15 @@ func (inst *QueryStore) IsLoading() bool { return inst.isLoading.Load() }
 // read under the same lock as executed, so the pair is consistent: feed this
 // loading to the FSM mirror rather than a separate IsLoading() call, which
 // could observe the post-finish flag against this pre-finish snapshot.
-func (inst *QueryStore) Snapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+// id is the ResultID of the served result — the cache key a pane should
+// prefer over executed, which it moves in step with.
+func (inst *QueryStore) Snapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error, id ResultID) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	if inst.record != nil {
 		inst.record.Retain()
 	}
-	return inst.record, inst.schema, inst.numRows, inst.loading, inst.elapsed, inst.summary, inst.executed, inst.err
+	return inst.record, inst.schema, inst.numRows, inst.loading, inst.elapsed, inst.summary, inst.executed, inst.err, inst.resultID
 }
 
 // SQL returns the SQL text of the run that produced the current Snapshot
@@ -314,6 +317,7 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 	inst.executed = time.Now()
 	inst.executedSQL = sql
 	inst.loading = false
+	inst.resultID = nextResultID()
 
 	entry := HistoryEntry{
 		SQL:       sql,

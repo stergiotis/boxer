@@ -227,7 +227,7 @@ func TestActiveSnapshotResolvesIntermediateSignals(t *testing.T) {
 	app.graph.setSignalRaw("x", "9")
 	app.frameSig = app.graph.signals()
 
-	rec, _, _, _, _, _, _, _ := app.activeSnapshot()
+	rec, _, _, _, _, _, _, _, _ := app.activeSnapshot()
 	if rec != nil {
 		rec.Release()
 	}

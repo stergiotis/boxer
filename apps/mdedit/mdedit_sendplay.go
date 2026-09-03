@@ -1,13 +1,15 @@
 package mdedit
 
 // Upload and send-to-play (ADR-0217): two gestures over one pipeline. Upload
-// persists the document as one MdDoc row in `boxer.facts` through the
-// facts-bound record store — a fact with a timestamp, a hash and a name, so
-// "what did I upload and when" is a query, and re-uploading identical text is
-// visibly the same entity (the natural key is the content hash). Send-to-play
-// is the upload plus a view of it: play opened on a launch query that selects
-// exactly that row back, the content column glossed `text/markdown` so the
-// Detail pane renders it as a document (ADR-0123/0186).
+// persists the document in `boxer.facts` through the facts-bound record
+// store — the MdDoc row plus its heading, code, link, emphasis, tag and
+// frontmatter rows, the same rows the markdown ingestor writes — so "what
+// did I upload and when" is a query, and re-uploading identical text is
+// visibly the same entity (the natural key is the content hash).
+// Send-to-play is the upload plus a view of it: play opened on a launch
+// query that selects exactly the document row back, with the content column
+// glossed `text/markdown` so the Detail pane renders it as a document
+// (ADR-0123/0186).
 //
 // Each gesture runs whole on one goroutine off the render thread (the
 // tally/sysmetricsd shape): connect, verify, ingest, flush — and, for
@@ -19,11 +21,7 @@ package mdedit
 
 import (
 	"context"
-	"encoding/binary"
-	"encoding/hex"
 	"time"
-
-	"lukechampine.com/blake3"
 
 	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
@@ -42,42 +40,15 @@ const (
 	// gesture.
 	sendPlayTimeout = 30 * time.Second
 
-	tipUpload = "Persist the document as a boxer.facts row (kind mdDoc): a fact with a timestamp, content hash and name, queryable afterwards — uploading identical text again is the same entity. Needs a reachable ClickHouse (CLICKHOUSE_ENDPOINT) with the facts schema provisioned."
+	tipUpload = "Persist the document as boxer.facts rows: the mdDoc row plus its extracted heading, code, link, emphasis, tag and frontmatter items — the markdown ingestor's shape, so it queries the same way a vault does. Needs a reachable ClickHouse (CLICKHOUSE_ENDPOINT) with the facts schema provisioned."
 
-	tipSendPlay = "Upload to boxer.facts AND open the SQL playground on a query that reads the row back — the content renders as markdown in play's Detail pane."
+	tipSendPlay = "Upload to boxer.facts AND open the SQL playground on a query that reads the document row back — the content renders as markdown in play's Detail pane."
 )
 
 var (
 	atomsUpload   = c.Atoms().Text("Upload to boxer.facts").Keep()
 	atomsSendPlay = c.Atoms().Text("Send to play").Keep()
 )
-
-// buildMdDocRow is the pure half of the send: the row for this buffer at this
-// moment. Id hashes (content, ts) so every send is its own row — the launch
-// filter key — while NaturalKey hashes the content alone, so identical text
-// is the same entity across sends.
-func buildMdDocRow(src, title, fileName string, words int, ts time.Time) (row mddocfacts.MdDoc) {
-	contentHash := blake3.Sum256([]byte(src))
-
-	idh := blake3.New(8, nil)
-	_, _ = idh.Write([]byte(src))
-	var tsb [8]byte
-	binary.LittleEndian.PutUint64(tsb[:], uint64(ts.UnixNano()))
-	_, _ = idh.Write(tsb[:])
-
-	row = mddocfacts.MdDoc{
-		Id:          binary.LittleEndian.Uint64(idh.Sum(nil)),
-		NaturalKey:  contentHash[:],
-		Ts:          ts,
-		Kind:        "mdDoc",
-		Title:       title,
-		FileName:    fileName,
-		Content:     src,
-		ContentHash: hex.EncodeToString(contentHash[:]),
-		Words:       uint64(words),
-	}
-	return
-}
 
 // playLaunchSQL is the query the play window opens with: the one row this
 // send wrote, its content glossed as markdown for the Detail pane. The
@@ -138,20 +109,19 @@ func (inst *App) sendDoc(openPlay bool) {
 	inst.status = gesture + "…"
 
 	// Snapshots, taken on the render thread: the goroutine touches no App
-	// state until it reports back through the guarded fields.
+	// state until it reports back through the guarded fields. The title and
+	// the word count are the extractor's, taken off the same bytes.
 	src := inst.src
-	title := firstHeadingText(inst.headings())
 	fileName := inst.boundName
 	if fileName == "" {
 		fileName = inst.readName
 	}
-	words := inst.stats.Words
 	bus := inst.bus
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), sendPlayTimeout)
 		defer cancel()
-		id, err := uploadDoc(ctx, src, title, fileName, words)
+		id, err := uploadDoc(ctx, src, fileName)
 		msg := "uploaded to boxer.facts · id " + utoa(id)
 		if err == nil && openPlay {
 			err = openInPlay(bus, id)
@@ -167,10 +137,11 @@ func (inst *App) sendDoc(openPlay bool) {
 	}()
 }
 
-// uploadDoc is the persistence half: one MdDoc row in, its id out — the key
-// a launch query (or a hand-written one) selects it by. Pure with respect to
-// App state.
-func uploadDoc(ctx context.Context, src, title, fileName string, words int) (id uint64, err error) {
+// uploadDoc is the persistence half: one document's rows in — the MdDoc row
+// plus its extracted items, via the same IngestDocument the markdown
+// ingestor uses — and the document row's id out, the key a launch query (or
+// a hand-written one) selects it by. Pure with respect to App state.
+func uploadDoc(ctx context.Context, src, fileName string) (id uint64, err error) {
 	client := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err = client.Ping(ctx); err != nil {
 		return
@@ -185,14 +156,14 @@ func uploadDoc(ctx context.Context, src, title, fileName string, words int) (id 
 		return
 	}
 
-	row := buildMdDocRow(src, title, fileName, words, time.Now())
-	if err = store.IngestMdDoc(row.Ts, []mddocfacts.MdDoc{row}); err != nil {
+	rows, err := store.IngestDocument([]byte(src), fileName, time.Now().UTC())
+	if err != nil {
 		return
 	}
 	if _, err = store.Flush(ctx); err != nil {
 		return
 	}
-	id = row.Id
+	id = rows.Doc.Id
 	return
 }
 

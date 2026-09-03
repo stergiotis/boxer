@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/keelsonddl"
 	"github.com/stergiotis/boxer/public/app/commands/key"
 	"github.com/stergiotis/boxer/public/app/commands/ladingfs"
+	"github.com/stergiotis/boxer/public/app/commands/markdown"
 	"github.com/stergiotis/boxer/public/app/commands/protogen"
 	"github.com/stergiotis/boxer/public/app/commands/queryrunsd"
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
@@ -125,6 +126,7 @@ func mainC() (exitCode int) {
 			runtimecodegen.NewCliCommand(),
 			keelsonddl.NewCliCommand(),
 			ladingfs.NewCliCommand(),
+			markdown.NewCliCommand(),
 			sample.NewCliCommand(),
 			swisstopo.NewCliCommand(),
 			sysmetricsd.NewCliCommand(),

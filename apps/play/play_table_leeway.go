@@ -106,6 +106,7 @@ type tableDisplayOpts struct {
 	showMembership    bool // reveal the ref / verbatim / parametrized membership columns
 	hideEmptySections bool // suppress tagged sections with no attribute on the current page
 	rawCells          bool // ADR-0186: bypass every gloss and show the plain rendering
+	showHashes        bool // ADR-0219: append the canonform / canonwire identity columns
 }
 
 // leewayColumnClasses returns the per-Arrow-column leeway classification for the
@@ -283,6 +284,11 @@ func (inst *PlayApp) renderTableOptionsBar() {
 				c.Checkbox(ids.PrepareStr("table-hide-empty-sections"),
 					inst.tableOpts.hideEmptySections, "Hide empty sections").
 					SendRespVal(&inst.tableOpts.hideEmptySections)
+			}
+			for range c.HoverText("Appends two columns: every row's canonform digest (its content identity) and canonwire fingerprint (its wire identity), computed for the whole result in the background. The Detail pane shows the same values for the selected row, with the CBOR behind them.").KeepIter() {
+				c.Checkbox(ids.PrepareStr("table-show-hashes"),
+					inst.tableOpts.showHashes, "Canonical hashes").
+					SendRespVal(&inst.tableOpts.showHashes)
 			}
 		}
 	}

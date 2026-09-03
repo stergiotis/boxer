@@ -296,8 +296,8 @@ scripts can disagree:
   `--remap-path-prefix` pair for the registry and the crate root, beside
   `--locked` on every cargo invocation and patch-level `rust-toolchain` pins.
 
-What is enforced and what has only been measured are different things, and
-the difference matters when the property is quoted:
+What is enforced and what is only implied by a shared recipe are different
+things, and the difference matters when the property is quoted:
 
 - **Gated in CI:** the committed h3 wasm blob.
   [scripts/ci/h3_wasm_parity.sh](../scripts/ci/h3_wasm_parity.sh) rebuilds
@@ -308,10 +308,13 @@ the difference matters when the property is quoted:
   It skips on machines without the toolchain, so local lint stays green for
   contributors not touching the bridge; the lint workflow installs what it
   needs and is the enforcer.
-- **Measured, not gated:** the Go host and the Rust render heads. ADR-0215
-  records byte-identical rebuilds of each on one machine; no CI job builds
-  them twice and compares. A regression here is found by the next person who
-  checks, not by the pipeline.
+- **Gated in CI:** the Go host and the lean Rust render head.
+  [scripts/ci/repro_build_parity.sh](../scripts/ci/repro_build_parity.sh)
+  builds each twice, from two copies of the tree at paths of different
+  lengths into cold caches, and byte-compares the pair. Two paths rather than
+  one checkout twice, because every drift ADR-0215 found was a leaked path,
+  which a same-path rebuild cannot see. The other render heads share the
+  recipe and are not separately compared.
 
 The scope of the claim has two edges:
 

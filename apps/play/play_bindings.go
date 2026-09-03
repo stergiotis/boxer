@@ -224,6 +224,7 @@ func (inst *PlayApp) frameFor(tabID string, base *TabFrame) (f TabFrame) {
 	f.Executed = v.executedAt
 	f.Elapsed = v.elapsed
 	f.Summary = v.summary
+	f.Result = v.id
 	return
 }
 

@@ -14,6 +14,11 @@ import (
 // componentPaths is the DTO set the store is generated over.
 var componentPaths = []string{
 	"./mddoc_dto.go",
+	"./mdheading_dto.go",
+	"./mdcode_dto.go",
+	"./mdlink_dto.go",
+	"./mdemphasis_dto.go",
+	"./mdtag_dto.go",
 }
 
 // TestGenerateMddocStore (re)generates the facts-bound document store in

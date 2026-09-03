@@ -214,6 +214,23 @@ func (inst *PlayApp) RenderDefaultDetailContent(rec arrow.RecordBatch, schema *a
 
 	switch {
 	case leeway:
+		// The typed per-component report (ADR-0075's play consumer) sits
+		// above the card: the components the row carries, of the kinds play
+		// registers, each decoded through the read contract. It draws
+		// nothing for a row that carries none, and the card below stays
+		// the complete, generic view either way. Like the timeline strip it
+		// is a fixed-height block above the self-scrolling card, so it needs
+		// no ScrollArea of its own.
+		if inst.components.render(rec, row) {
+			c.Separator().Horizontal().Send()
+		}
+		// The canonical-identity strip (ADR-0219 SD5): the row's canonform
+		// digest and canonwire fingerprint, with the CBOR items behind a
+		// disclosure. Computed once per (result, row); a fixed-height block
+		// like the two above it.
+		if inst.identity.render(inst, rec, row, inst.detailResult) {
+			c.Separator().Horizontal().Send()
+		}
 		if cardReady {
 			inst.cards.Render()
 		}

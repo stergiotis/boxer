@@ -94,6 +94,9 @@ type ChannelResult struct {
 	Node  NodeID
 	Rec   arrow.RecordBatch
 	Claim ChannelClaim
+	// Result identifies the delivered result Rec belongs to (ADR-0219 SD8):
+	// the key for a panel's per-result cache.
+	Result ResultID
 }
 
 // PanelI is the panel contract (ADR-0097 SD6/SD7, amended slice 4): a panel
@@ -253,6 +256,7 @@ type nodeResult struct {
 	key         string            // compiledNode.key() — the memo identity
 	fingerprint uint64
 	revision    uint64
+	id          ResultID // minted when the result is installed; see ResultID
 	summary     Summary
 	executedAt  time.Time     // when the execution finished (zero = never ran)
 	elapsed     time.Duration // wall-clock of the execution
@@ -812,7 +816,7 @@ func (inst *queryGraph) MainHistory() []HistoryEntry { return inst.mainLane.Hist
 
 // MainSnapshot returns the `main` node's current result + metadata. The caller
 // MUST Release the returned record (nil-safe), exactly as for QueryStore.Snapshot.
-func (inst *queryGraph) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+func (inst *queryGraph) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error, id ResultID) {
 	return inst.mainLane.Snapshot()
 }
 

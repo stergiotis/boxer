@@ -365,7 +365,21 @@ type PlayApp struct {
 	lastRunScope   runScopeE
 	cards          *CardDriver
 	detailTimeline *DetailTimeline
-	projector      *Projector
+	// components is the Detail pane's typed per-component report over play's
+	// registered component kinds (play_detail_components.go), drawn above
+	// the leeway card for a facts-shaped row.
+	components *componentDetail
+	// identity is the Detail pane's canonical-identity strip (ADR-0219 SD5,
+	// play_detail_identity.go); identityJob the Table pane's background
+	// digest job over the whole result (SD7, play_table_identity.go).
+	identity    *identityDetail
+	identityJob *identityJob
+	// tableResult / detailResult are the ResultIDs of the results the Table
+	// and Detail panels are rendering this frame, set by the panels before
+	// their bodies run (a bound tab renders its own node's result).
+	tableResult  ResultID
+	detailResult ResultID
+	projector    *Projector
 	// experiments backs the Experiments tool pane: a leeway sink playground
 	// over the fixture or the current result.
 	experiments *experimentsDriver
@@ -1094,6 +1108,8 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
+	inst.components = newComponentDetail(mk())
+	inst.identity = newIdentityDetail(mk())
 	// The Experiments pane's card emitters get a stack on a DIFFERENT base
 	// salt, not merely a different instance. PrepareSeq maps its argument
 	// through makeHighEntropy alone and Derive XORs it with the enclosing
@@ -1142,6 +1158,8 @@ func (inst *PlayApp) Close() {
 	if inst.projector != nil {
 		inst.projector.Detach()
 	}
+	inst.components.release()
+	inst.identityJob.stop()
 	if inst.intermediateLane != nil {
 		inst.intermediateLane.close()
 	}
@@ -1246,7 +1264,7 @@ func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
 // fused SQL supersedes the in-flight run), last-good retained — and the lane
 // view maps into the snapshot tuple. The caller MUST Release the returned
 // record (nil-safe), exactly as for MainSnapshot.
-func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error, id ResultID) {
 	split := inst.currentSplit
 	if inst.observedNode != "" && inst.observedNode != split.Sink && len(split.Nodes) > 0 {
 		if node, ok := findSplitNode(split, inst.observedNode); ok {
@@ -1259,7 +1277,7 @@ func (inst *PlayApp) activeSnapshot() (rec arrow.RecordBatch, schema *arrow.Sche
 			if view.rec != nil {
 				numRows = view.rec.NumRows()
 			}
-			return view.rec, view.schema, numRows, view.loading, view.elapsed, view.summary, view.executedAt, view.err
+			return view.rec, view.schema, numRows, view.loading, view.elapsed, view.summary, view.executedAt, view.err, view.id
 		}
 	}
 	return inst.graph.MainSnapshot()
@@ -1291,9 +1309,10 @@ func (inst *PlayApp) activeTruncation() (reason string) {
 // unlike the render-thread-only activeSnapshot (which observes the intermediate
 // lane and per-frame split state). The caller MUST Release the returned record
 // (nil-safe); rec is nil until the first result lands, with loading/err then
-// reflecting the lane state. See doc/howto/play-pluggable-detail.md for the
+// reflecting the lane state. id is the result's ResultID, read under the same
+// lock as everything else here. See doc/howto/play-pluggable-detail.md for the
 // companion body/tab seams.
-func (inst *PlayApp) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error) {
+func (inst *PlayApp) MainSnapshot() (rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, elapsed time.Duration, summary Summary, executed time.Time, err error, id ResultID) {
 	if inst.graph == nil {
 		return
 	}
@@ -1367,7 +1386,7 @@ func (inst *PlayApp) render() error {
 	// state syncs (selection clamp, pager configure, projector
 	// invalidate) must run here, before any tab body executes, so the
 	// values the tab callees observe are consistent.
-	rec, schema, numRows, loading, elapsed, summary, executed, err := inst.activeSnapshot()
+	rec, schema, numRows, loading, elapsed, summary, executed, err, resultID := inst.activeSnapshot()
 	if rec != nil {
 		defer rec.Release()
 	}
@@ -1472,7 +1491,7 @@ func (inst *PlayApp) render() error {
 			frame := TabFrame{
 				Rec: rec, Schema: schema, NumRows: numRows,
 				Loading: loading, Elapsed: elapsed, Summary: summary,
-				Executed: executed, Err: err,
+				Executed: executed, Err: err, Result: resultID,
 				Sig: inst.frameSig, Emit: inst.sigEmit,
 			}
 			// Every zone runs through the same reorder: a fresh leaf
@@ -1935,7 +1954,7 @@ func (inst *PlayApp) autoShotTick() {
 		// (a failed run has no record; scripted captures of the Diagnostics
 		// tab's failure states still need the shot to fire).
 		if inst.didAutoRun && !inst.graph.MainLoading() {
-			rec, _, _, _, _, _, _, err := inst.graph.MainSnapshot()
+			rec, _, _, _, _, _, _, err, _ := inst.graph.MainSnapshot()
 			if rec != nil {
 				rec.Release()
 			}
@@ -2854,7 +2873,7 @@ func (inst *PlayApp) renderHistoryTab() {
 // intermediate loads on its own lane, and gating the spinner on the main lane
 // showed "0 rows" during its first fetch (review finding). Same for the
 // Projection/Timeline/Schema tabs below.
-func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, err error, executed time.Time) {
+func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, err error, executed time.Time, result ResultID) {
 	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
@@ -2907,7 +2926,7 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	c.AddSpace(pad)
 	c.Separator().Send()
 	dispatchPanel(tablePanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.resolvedTabNode("table"), rec: rec, schema: schema, sig: inst.frameSig},
+		chMain: {node: inst.resolvedTabNode("table"), rec: rec, schema: schema, sig: inst.frameSig, result: result},
 	}, inst.sigEmit)
 }
 
@@ -3116,7 +3135,7 @@ func (inst *PlayApp) demandKanbanLanes() (rec arrow.RecordBatch, schema *arrow.S
 // fallback adds one), so the dock tab must NOT add an outer ScrollArea —
 // wrapping the self-scrolling card table hands it unbounded height and crops its
 // tail (tagged) sections.
-func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema, executed time.Time) {
+func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema, executed time.Time, result ResultID) {
 	if rec == nil {
 		for rt := range c.RichTextLabel("Run a query, then select a row to see its detail.") {
 			rt.Small().Weak()
@@ -3125,7 +3144,7 @@ func (inst *PlayApp) renderDetailTab(rec arrow.RecordBatch, schema *arrow.Schema
 	}
 	inst.richCells.noteExecuted(executed)
 	reject := dispatchPanel(detailPanel{app: inst}, map[ChannelID]channelInput{
-		chMain: {node: inst.resolvedTabNode("detail"), rec: rec, schema: schema, sig: inst.frameSig},
+		chMain: {node: inst.resolvedTabNode("detail"), rec: rec, schema: schema, sig: inst.frameSig, result: result},
 	}, nil)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {
@@ -3203,6 +3222,16 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// (not the display position) so revealing/hiding a column never shifts
 	// another column's cell identity.
 	visCols := inst.visibleTableCols(rec, schema, pageStart, pageEnd)
+	// The synthetic identity columns (ADR-0219 SD7) sit after the Arrow
+	// columns at positions len(visCols)+1+k; their sentinel indices take part
+	// in the column-set change detection below and in nothing that indexes
+	// an Arrow-keyed cache. The job that fills them starts here, once per
+	// result, and the cells poll it.
+	synth := inst.identitySynthCols(schema)
+	var idJob *identityJob
+	if len(synth) > 0 {
+		idJob = inst.ensureIdentityJob(rec, inst.tableResult)
+	}
 
 	// egui_table draws cell content flush to the cell edge ("Does not add any
 	// margins to cells" — egui_table's own docs say to add them yourself). We
@@ -3229,10 +3258,16 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// resizable the binding reports our own width straight back for it and
 	// nothing is ever captured.
 	cols := inst.masterColumnKeys(schema, visCols)
+	for k := range synth {
+		cols = append(cols, identityColumnKey(identityColKindE(k)))
+	}
 	resolved := make([]float64, 0, len(cols))
 	resolved = append(resolved, masterRowNumColWidth)
 	for _, arrowCol := range visCols {
 		resolved = append(resolved, float64(inst.colWidths[arrowCol]))
+	}
+	for range synth {
+		resolved = append(resolved, float64(identityColWidth(cellPadX)))
 	}
 	if inst.colWidthRes != nil {
 		// Font size 0: play has no single text size to attribute a width to,
@@ -3256,7 +3291,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// that test every Run measured the drag away — tableColsChanged compares
 	// the *Schema pointer, and a Run always returns a fresh one, so a re-fit
 	// fires even for a repeat of the same query.
-	refit := inst.tableColsChanged(schema, visCols)
+	refit := inst.tableColsChanged(schema, append(append([]int(nil), visCols...), synth...))
 	if refit && inst.colWidthRes != nil {
 		// Tell the resolver the crate is about to choose these widths. The
 		// read-back lags, so the fit's result lands a report *after* refit
@@ -3274,6 +3309,16 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			Resizable(true).
 			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
 		if refit && resolved[i+1] == float64(inst.colWidths[arrowCol]) {
+			col = col.AutoSizeThisFrame(true)
+		}
+		col.Send()
+	}
+	for k := range synth {
+		pos := len(visCols) + 1 + k
+		col := c.EtColumn(float32(resolved[pos])).
+			Resizable(true).
+			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
+		if refit && resolved[pos] == float64(identityColWidth(cellPadX)) {
 			col = col.AutoSizeThisFrame(true)
 		}
 		col.Send()
@@ -3372,6 +3417,25 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			})
 		}
 	}
+	for k, sentinel := range synth {
+		kind := identityColKindE(k)
+		colPos := uint32(len(visCols) + 1 + k)
+		if vis, _ := et.ColVisible(colPos); !vis {
+			continue
+		}
+		for range et.Headers(0, colPos) {
+			inst.headerCell(uint64(sentinel)+1, cellPadX, func() {
+				for range c.HoverText(kind.hover()).KeepIter() {
+					for rt := range c.RichTextLabel(kind.name()) {
+						rt.Strong().Monospace()
+					}
+				}
+				for rt := range c.RichTextLabel("hex") {
+					rt.Small().Weak().Monospace()
+				}
+			})
+		}
+	}
 
 	// Cells: every cell is a frameless selectable button so clicking anywhere
 	// on a row selects it (not just the "#" column). Button ids use a
@@ -3422,6 +3486,20 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				}
 				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone, link, !refit) {
 					emit.Emit(signalSelection, absRow)
+				}
+			}
+		}
+		for k, sentinel := range synth {
+			colPos := uint32(len(visCols) + 1 + k)
+			if vis, _ := et.ColVisible(colPos); !vis {
+				continue
+			}
+			text, hover := idJob.cell(identityColKindE(k), absRow)
+			for range et.Cells(local, colPos) {
+				for range c.HoverText(hover).KeepIter() {
+					if inst.selectableCell(rowBase+uint64(sentinel)+1, cellPadX, text, text == "…", selected, false, true, gloss.ToneNeutral, "", !refit) {
+						emit.Emit(signalSelection, absRow)
+					}
 				}
 			}
 		}

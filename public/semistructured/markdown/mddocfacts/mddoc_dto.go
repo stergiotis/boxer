@@ -17,8 +17,10 @@ type MdDoc struct {
 	// Title is the document's first heading text, "" when it has none.
 	Title string `lw:"mddocTitle,stringArray,unit"`
 
-	// FileName is the fs Powerbox display name — a basename, never a path —
-	// or "" for a scratch document.
+	// FileName is the document's display name: from an editor, the fs
+	// Powerbox name — a basename — or "" for a scratch document; from the
+	// vault ingestor, the path relative to the directory ingested, forward
+	// slashes, so a `[[folder/note]]` target matches it.
 	FileName string `lw:"mddocFileName,stringArray,unit"`
 
 	// Content is the markdown source, verbatim.
