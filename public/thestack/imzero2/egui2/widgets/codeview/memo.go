@@ -56,6 +56,9 @@ const (
 	// token (ADR-0164 §SD2) — a third lexing of the same source that
 	// must not share a key with the other two.
 	langRegexTokens
+	// langCborDiag keys a rendering of CBOR bytes; its src is the option
+	// fingerprint plus the raw bytes, not text (ADR-0219 §SD6).
+	langCborDiag
 )
 
 // memoKey identifies one prepared result. src is part of the key rather than a
