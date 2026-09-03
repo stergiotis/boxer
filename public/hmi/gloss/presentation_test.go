@@ -157,7 +157,7 @@ func TestDefaultOrderPresentation(t *testing.T) {
 	assert.Equal(t, []string{
 		MediaTypeTemperature, MediaTypeLength, MediaTypeVelocity, MediaTypePlaneAngle, MediaTypeCoordinate,
 		MediaTypeEpoch, MediaTypeDuration,
-		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeIPAddr, MediaTypeRaw,
+		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeIPAddr, MediaTypeRegexp, MediaTypeRaw,
 	}, order[9:])
 }
 

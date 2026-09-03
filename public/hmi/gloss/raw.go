@@ -31,6 +31,7 @@ func presentationFamily() []GlossI {
 		maskedGloss(),
 		urlGloss(),
 		ipAddrGloss(),
+		regexpGloss(),
 		rawGloss(),
 	}
 }
