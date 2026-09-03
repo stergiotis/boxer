@@ -224,6 +224,13 @@ func (inst *PlayApp) RenderDefaultDetailContent(rec arrow.RecordBatch, schema *a
 		if inst.components.render(rec, row) {
 			c.Separator().Horizontal().Send()
 		}
+		// The canonical-identity strip (ADR-0219 SD5): the row's canonform
+		// digest and canonwire fingerprint, with the CBOR items behind a
+		// disclosure. Computed once per (result, row); a fixed-height block
+		// like the two above it.
+		if inst.identity.render(inst, rec, row, inst.detailResult) {
+			c.Separator().Horizontal().Send()
+		}
 		if cardReady {
 			inst.cards.Render()
 		}

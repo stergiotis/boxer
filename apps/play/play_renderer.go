@@ -369,6 +369,9 @@ type PlayApp struct {
 	// registered component kinds (play_detail_components.go), drawn above
 	// the leeway card for a facts-shaped row.
 	components *componentDetail
+	// identity is the Detail pane's canonical-identity strip (ADR-0219 SD5,
+	// play_detail_identity.go).
+	identity *identityDetail
 	// tableResult / detailResult are the ResultIDs of the results the Table
 	// and Detail panels are rendering this frame, set by the panels before
 	// their bodies run (a bound tab renders its own node's result).
@@ -1104,6 +1107,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.components = newComponentDetail(mk())
+	inst.identity = newIdentityDetail(mk())
 	// The Experiments pane's card emitters get a stack on a DIFFERENT base
 	// salt, not merely a different instance. PrepareSeq maps its argument
 	// through makeHighEntropy alone and Derive XORs it with the enclosing
