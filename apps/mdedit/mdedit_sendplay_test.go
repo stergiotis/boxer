@@ -61,9 +61,15 @@ func TestUtoa(t *testing.T) {
 	assert.Equal(t, "18446744073709551615", utoa(^uint64(0)), "the full uint64 range — ids are hashes")
 }
 
-// TestSendToPlay_RequiresABus keeps the gesture honest in a bus-less harness.
+// TestSendToPlay_RequiresABus keeps the launch half honest in a bus-less
+// harness. The upload half deliberately does NOT require one — it goes to
+// ClickHouse directly — so only the play gesture refuses here.
 func TestSendToPlay_RequiresABus(t *testing.T) {
 	inst := &App{src: "# Doc\n"}
-	inst.sendToPlay()
+	inst.sendDoc(true)
 	require.Contains(t, inst.status, "no bus")
+	inst.mu.Lock()
+	sending := inst.sending
+	inst.mu.Unlock()
+	require.False(t, sending, "a refused gesture claims no in-flight slot")
 }
