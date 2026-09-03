@@ -370,8 +370,10 @@ type PlayApp struct {
 	// the leeway card for a facts-shaped row.
 	components *componentDetail
 	// identity is the Detail pane's canonical-identity strip (ADR-0219 SD5,
-	// play_detail_identity.go).
-	identity *identityDetail
+	// play_detail_identity.go); identityJob the Table pane's background
+	// digest job over the whole result (SD7, play_table_identity.go).
+	identity    *identityDetail
+	identityJob *identityJob
 	// tableResult / detailResult are the ResultIDs of the results the Table
 	// and Detail panels are rendering this frame, set by the panels before
 	// their bodies run (a bound tab renders its own node's result).
@@ -1157,6 +1159,7 @@ func (inst *PlayApp) Close() {
 		inst.projector.Detach()
 	}
 	inst.components.release()
+	inst.identityJob.stop()
 	if inst.intermediateLane != nil {
 		inst.intermediateLane.close()
 	}
@@ -3219,6 +3222,16 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// (not the display position) so revealing/hiding a column never shifts
 	// another column's cell identity.
 	visCols := inst.visibleTableCols(rec, schema, pageStart, pageEnd)
+	// The synthetic identity columns (ADR-0219 SD7) sit after the Arrow
+	// columns at positions len(visCols)+1+k; their sentinel indices take part
+	// in the column-set change detection below and in nothing that indexes
+	// an Arrow-keyed cache. The job that fills them starts here, once per
+	// result, and the cells poll it.
+	synth := inst.identitySynthCols(schema)
+	var idJob *identityJob
+	if len(synth) > 0 {
+		idJob = inst.ensureIdentityJob(rec, inst.tableResult)
+	}
 
 	// egui_table draws cell content flush to the cell edge ("Does not add any
 	// margins to cells" — egui_table's own docs say to add them yourself). We
@@ -3245,10 +3258,16 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// resizable the binding reports our own width straight back for it and
 	// nothing is ever captured.
 	cols := inst.masterColumnKeys(schema, visCols)
+	for k := range synth {
+		cols = append(cols, identityColumnKey(identityColKindE(k)))
+	}
 	resolved := make([]float64, 0, len(cols))
 	resolved = append(resolved, masterRowNumColWidth)
 	for _, arrowCol := range visCols {
 		resolved = append(resolved, float64(inst.colWidths[arrowCol]))
+	}
+	for range synth {
+		resolved = append(resolved, float64(identityColWidth(cellPadX)))
 	}
 	if inst.colWidthRes != nil {
 		// Font size 0: play has no single text size to attribute a width to,
@@ -3272,7 +3291,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// that test every Run measured the drag away — tableColsChanged compares
 	// the *Schema pointer, and a Run always returns a fresh one, so a re-fit
 	// fires even for a repeat of the same query.
-	refit := inst.tableColsChanged(schema, visCols)
+	refit := inst.tableColsChanged(schema, append(append([]int(nil), visCols...), synth...))
 	if refit && inst.colWidthRes != nil {
 		// Tell the resolver the crate is about to choose these widths. The
 		// read-back lags, so the fit's result lands a report *after* refit
@@ -3290,6 +3309,16 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			Resizable(true).
 			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
 		if refit && resolved[i+1] == float64(inst.colWidths[arrowCol]) {
+			col = col.AutoSizeThisFrame(true)
+		}
+		col.Send()
+	}
+	for k := range synth {
+		pos := len(visCols) + 1 + k
+		col := c.EtColumn(float32(resolved[pos])).
+			Resizable(true).
+			RangeMinMax(inst.colDragMinWidth(), colDragMaxWidth)
+		if refit && resolved[pos] == float64(identityColWidth(cellPadX)) {
 			col = col.AutoSizeThisFrame(true)
 		}
 		col.Send()
@@ -3388,6 +3417,25 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			})
 		}
 	}
+	for k, sentinel := range synth {
+		kind := identityColKindE(k)
+		colPos := uint32(len(visCols) + 1 + k)
+		if vis, _ := et.ColVisible(colPos); !vis {
+			continue
+		}
+		for range et.Headers(0, colPos) {
+			inst.headerCell(uint64(sentinel)+1, cellPadX, func() {
+				for range c.HoverText(kind.hover()).KeepIter() {
+					for rt := range c.RichTextLabel(kind.name()) {
+						rt.Strong().Monospace()
+					}
+				}
+				for rt := range c.RichTextLabel("hex") {
+					rt.Small().Weak().Monospace()
+				}
+			})
+		}
+	}
 
 	// Cells: every cell is a frameless selectable button so clicking anywhere
 	// on a row selects it (not just the "#" column). Button ids use a
@@ -3438,6 +3486,20 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				}
 				if inst.selectableCell(rowBase+uint64(arrowCol)+1, cellPadX, text, false, selected, false, leftAlign, tone, link, !refit) {
 					emit.Emit(signalSelection, absRow)
+				}
+			}
+		}
+		for k, sentinel := range synth {
+			colPos := uint32(len(visCols) + 1 + k)
+			if vis, _ := et.ColVisible(colPos); !vis {
+				continue
+			}
+			text, hover := idJob.cell(identityColKindE(k), absRow)
+			for range et.Cells(local, colPos) {
+				for range c.HoverText(hover).KeepIter() {
+					if inst.selectableCell(rowBase+uint64(sentinel)+1, cellPadX, text, text == "…", selected, false, true, gloss.ToneNeutral, "", !refit) {
+						emit.Emit(signalSelection, absRow)
+					}
 				}
 			}
 		}
