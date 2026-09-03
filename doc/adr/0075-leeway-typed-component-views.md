@@ -314,6 +314,53 @@ wire, and a `string` field is not defensively copied out of the Arrow buffer
 repeated paging, so retaining the record while releasing the RA readers is
 sound here.
 
+### 2026-09-02 — play's Detail pane hosts the report, over play's registered kinds
+
+The "demo-only, by direction" refinement in Status is superseded: the Detail
+pane now draws the typed per-component report above the generic card
+(`apps/play/play_detail_components.go`). What differs from the Consumers
+sketch, and why:
+
+- **No toggle.** The report and the card are shown together, report first,
+  as the demo lays them out. A row carrying none of play's kinds draws no
+  report, so the pane looks as it did for every result that is not a facts
+  row. A toggle would hide the one view that is always complete.
+- **The roster is play's SQL roster.** The kinds bound for detection are
+  exactly the kinds `RegisterComponents` publishes to `LW_COMPONENT`
+  (`playComponentStores`, pinned to the registry by
+  `TestPlayComponentStores_MatchRegistry`), under the same names. Explicit
+  wiring, for the reason ADR-0189 §SD7 gives: a registry filled by import
+  knows a different set in every binary.
+- **Ids come from the stores' baked snapshots.** Each generated store's
+  `<Store>MembershipIds` map — what its codec and Scan filters were
+  generated from — feeds one `Binder` per store, so the reflect read and
+  the SQL read cannot disagree about an id, and two stores' vocabularies are
+  never merged into one lookup.
+- **One generic renderer, not bespoke widgets.** Every bound kind renders
+  through a `fieldview` outline of its decoded DTO. The seed renderers
+  (badge, gauge, chips) stay in the demo; a fact-component that wants a
+  widget of its own registers a `RendererI` for its kind, which the open
+  registry always allowed. The `lw:` tag decides whether a `[]byte` is
+  bytes or a list of small numbers, since Go's type cannot.
+- **Rows are read through the generated facts read access, aligned by
+  name.** The read access binds by position, and a play result is whatever
+  a person typed. The driver maps every reader slot to a result column by
+  physical name — the IR walk that numbered the slots is replayed over the
+  facts schema to name them (`factsPhysicalColumns`), and
+  `TestComponentDetail_PhysicalColumnsMatchDDLOrder` pins the two to each
+  other. A result lacking any facts column is not a facts row and draws
+  nothing; a permuted projection reads correctly
+  (`TestComponentDetail_AlignsByName`). Nothing is inferred.
+- **Cost stays per row.** The read access is loaded once per record and
+  released with it, components are decoded once per (record, row), and the
+  report is drawn from the cache each frame — the "fine for one selected
+  record, not for bulk" consequence holds as stated.
+
+Verified by unit tests over a `boxer.facts` record built through the
+generated DML (one `SysMem` row, one `MdDoc` row): each row detects exactly
+its own kind and decodes to the DTO it was written from. A live check
+against a ClickHouse endpoint has not been done in this change.
+
 ## References
 
 - ECS background and the json stage-1 detect/unmarshal: `anchor/ecsdemo/EXPLANATION.md`,

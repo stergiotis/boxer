@@ -365,7 +365,11 @@ type PlayApp struct {
 	lastRunScope   runScopeE
 	cards          *CardDriver
 	detailTimeline *DetailTimeline
-	projector      *Projector
+	// components is the Detail pane's typed per-component report over play's
+	// registered component kinds (play_detail_components.go), drawn above
+	// the leeway card for a facts-shaped row.
+	components *componentDetail
+	projector  *Projector
 	// experiments backs the Experiments tool pane: a leeway sink playground
 	// over the fixture or the current result.
 	experiments *experimentsDriver
@@ -1094,6 +1098,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
+	inst.components = newComponentDetail(mk())
 	// The Experiments pane's card emitters get a stack on a DIFFERENT base
 	// salt, not merely a different instance. PrepareSeq maps its argument
 	// through makeHighEntropy alone and Derive XORs it with the enclosing
@@ -1142,6 +1147,7 @@ func (inst *PlayApp) Close() {
 	if inst.projector != nil {
 		inst.projector.Detach()
 	}
+	inst.components.release()
 	if inst.intermediateLane != nil {
 		inst.intermediateLane.close()
 	}
