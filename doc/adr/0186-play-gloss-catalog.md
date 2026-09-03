@@ -438,6 +438,70 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-09-03 — `gloss/regexp`, and the explorer on a tether
+
+A twelfth presentation gloss: `gloss/regexp` shows a stored RE2 pattern as a
+pattern. A rule table's match column, a router's dispatch column, a redaction
+policy — all hold patterns that nobody re-reads until one of them stops
+matching, and in a grid they are indistinguishable from prose.
+
+**The inline face is the pattern with a verdict.** The pattern itself (first
+line, capped) and, when Go's engine refuses it, a `✗` in the error tone: the
+summary widget's compile dot written out, so a broken pattern is findable in
+a column of working ones. A valid pattern is toneless on purpose — most
+stored patterns compile, and a column painted green says nothing, so the tone
+is spent on the exception. The verdict is on the whole pattern and the
+display on its first line, since a pattern laid out over lines must not be
+judged on the part that fits a cell. Compilation is bounded on the input, as
+`application/cbor`'s walk is: past a kilobyte the cell shows the pattern
+without claiming a verdict, because compilation is not linear in the pattern
+and an inline face has no cache behind it.
+
+**The block face is two halves.** The pattern parsed and highlighted —
+`codeview.BuildRegex` over `regexhighlight`, group parens coloured by nesting
+depth — and under it the `regexsummary` level-1 row with its own pattern
+display suppressed, leaving the magnifying glass, the compile dot and the
+toggle that opens the `regex_explorer` body in a bezier-tethered window
+seeded with this cell's pattern. So the cell answers "what does this pattern
+say" in place and "what does it match" a click away, with the explorer's
+haystack, its Test / List / Replace tabs and its clickhouse-local lane along
+for the ride; play hands the widget its bus, and without one the Go-side
+preview still works. Seeding is one-way (ADR-0046): editing the pattern in
+the explorer does not write back to the result. Both Detail paths get it, and
+the card row reserves the anchor's line on top of the highlighted source or
+the toggle would be clipped out of the cell it belongs to.
+
+Two things fell out of it. The widget retains what it is seeded with, for the
+life of the process, where a cell's raw string is a view of the Arrow buffer
+that is good for the frame — so the cache keeps a copy and the anchor seeds
+from that, pinned by a pointer-identity assertion rather than a comment.
+And `codeview`'s regex builders had only editor consumers until now —
+`regexedit`, on ADR-0130's per-keystroke seam, where the pattern is a buffer
+being typed into. A result cell is the read-only case those builders' doc
+comments describe: `BuildRegex` re-lexes on every call, which is why the job
+is built once into the `(row, column)` entry cache rather than per frame.
+
+**No affinity**, for the reason `application/cbor` recorded a paragraph
+earlier: nothing in the ADR-0182 vocabularies says a text column holds a
+pattern — `sem:machine-readable` covers half a schema — so it binds by alias,
+by `gloss(…)` or by rule.
+
+**play declares one more capability**, as it did for the clipboard when
+`gloss/taggedid` landed: the explorer's clickhouse-local pool
+(`regexsummary.ChLocalCapPattern`, exported from `regex_explorer` for this,
+since a widget carries no manifest of its own). Wiring the bus without it
+gets as far as the broker and no further — every tab in the inspector, and
+the tripwire that compares Go's RE2 against libre2, is denied with the reason
+in the status bar. The count assertion in `play_caps_test.go` moves
+deliberately, which is what that assertion is for.
+
+Verified through the headless tour: `02_table_regexp` captures the grid with
+its valid and refused patterns, then the Detail block face on a selected row,
+then the explorer window opened from the anchor with the tether drawn to it.
+The toggle is clicked by coordinate — it is a glyph in a `Frame` and carries
+no accessibility name to resolve by, which is a gap in the anchor affordance
+rather than in this gloss.
+
 ### 2026-09-03 — `application/cbor`, the content family's binary member
 
 The catalog gains `application/cbor`, registered after ADR-0123's eight so the

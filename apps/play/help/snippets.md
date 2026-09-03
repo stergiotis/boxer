@@ -478,7 +478,8 @@ SELECT
 A **gloss** is a named way of showing a value (ADR-0186): a temperature with
 its unit, a Unix epoch as a moment, a span as `1m 05s`, a card number masked
 with its Luhn verdict, a value masked to six bullets, a URL as a link, a byte
-count in KiB, an IP address written out. Glosses render in the **Table** grids
+count in KiB, an IP address written out, a regular expression with the
+verdict its engine gives it. Glosses render in the **Table** grids
 (one line, sometimes toned) and in **Detail** (a block where the gloss has
 one). Three ways to reach one, in precedence order:
 
@@ -515,6 +516,7 @@ SELECT number AS n,
        'https://example.com/' || toString(number) AS `link@gloss/url`,
        toIPv4('192.0.2.' || toString(number)) AS `host@gloss/ipaddr`,
        toIPv6('2001:db8::' || toString(number)) AS `peer@gloss/ipaddr`,
+       ['^(\\d{3})-(\\d{4})$', '\\w+@\\w+\\.\\w+', '\\d{3}-(\\d{4}'][1 + number % 3] AS `rule@gloss/regexp`,
        20 + number * 1.7 AS `oops@gloss/temperature;unti=C`
 FROM numbers(12)
 ```
@@ -525,6 +527,13 @@ tag value, code width, counter — with **Copy id** and **Copy hex** buttons.
 Swap the expression for `toUInt64(4294967296)` to see the other half of the
 contract: a `UInt64` carrying no fibonacci comma is not a tagged id, and shows
 plain in the warning tone rather than pretending to split.
+
+Every third `rule` is missing its closing paren and says so — `✗`, in the
+error tone; the other two are toneless, because a column of green would say
+nothing. In **Detail** the pattern is highlighted, and the magnifying glass
+under it opens the regex explorer in a tethered window, seeded with the row's
+pattern: paste a haystack in and see what it matches, in Go and in
+clickhouse-local. Nothing typed there flows back to the result.
 
 `host` and `peer` are declared here because this is a plain result: it carries
 column names and Arrow types, and neither says an address is an address. Turn

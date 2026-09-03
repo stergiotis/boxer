@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
 
@@ -246,6 +247,11 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Pattern:   adhocdata.SubjectPublish,
 				Direction: app.CapDirectionPub,
 				Reason:    "publish the generated timeseries fixture as ad-hoc datasets (ADR-0163 §SD7)",
+			},
+			{
+				Pattern:   regexsummary.ChLocalCapPattern,
+				Direction: app.CapDirectionPub,
+				Reason:    "gloss/regexp's block face embeds the regex explorer, whose match, list and replace tabs run on clickhouse-local (ADR-0186 Update 2026-09-03)",
 			},
 			{
 				Pattern:   clipboardbroker.SubjectWrite,

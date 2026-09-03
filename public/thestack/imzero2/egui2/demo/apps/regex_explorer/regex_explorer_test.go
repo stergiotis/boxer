@@ -79,7 +79,7 @@ func setupTestBus(t *testing.T) (caller runtimeapp.BusI) {
 	})
 
 	caller = bus.NewClient("test.regex_explorer", []runtimeapp.SubjectFilter{
-		{Pattern: chLocalCapPattern, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
+		{Pattern: ChLocalCapPattern, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
 	})
 	return
 }

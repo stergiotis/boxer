@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
@@ -104,13 +105,16 @@ func mediaTypeOnly(token string) string {
 }
 
 // hasBlockFace reports whether this pane binds a block face to the media
-// type. Everything else — the `gloss/*` family — shows its inline face,
-// wrapped, under the caption; gloss/url is the one presentation gloss with
-// a face of its own (a hyperlink), handled by name where the faces render.
+// type — one built once per (row, column) and held in the cache. The rest of
+// the `gloss/*` family shows its inline face, wrapped, under the caption;
+// gloss/url and gloss/taggedid are the two presentation glosses with a face
+// of their own and nothing to cache (a hyperlink, a split spelled out),
+// handled by name where the faces render.
 func hasBlockFace(mediaType string) bool {
 	switch mediaType {
 	case gloss.MediaTypeMarkdown, gloss.MediaTypePlain, gloss.MediaTypeJSON,
 		gloss.MediaTypeSQL, gloss.MediaTypeGo, gloss.MediaTypeCBOR,
+		gloss.MediaTypeRegexp,
 		gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
 		return true
 	}
@@ -292,6 +296,17 @@ func buildRichEntry(d gloss.Declaration, raw string) *richEntry {
 		src := utfsafe.EnsureUTF8(raw)
 		e.job = codeview.BuildGo(src)
 		e.hasJob, e.lines = true, countLines(src)
+	case gloss.MediaTypeRegexp:
+		// The pattern itself, run through regexhighlight's RE2 lexer by
+		// codeview — group parens coloured by nesting depth, and the two
+		// byte-level certainties (a trailing `\`, an unopened `)`) in the
+		// error colour. Cloned rather than aliased: the anchor row below the
+		// view seeds the explorer with this string and the widget retains it
+		// for the life of the process, where raw is good for the frame only
+		// (cellRaw).
+		src := strings.Clone(utfsafe.EnsureUTF8(raw))
+		e.job = codeview.BuildRegex(src)
+		e.hasJob, e.lines, e.text = true, countLines(src), src
 	case gloss.MediaTypeCBOR:
 		// One walk serves both the highlighted job and the line count; a
 		// malformed item is not a reason here but a rendering — diag prints
@@ -421,6 +436,9 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 			return
 		}
 		inst.richCells.renderBody(key, d, e)
+		if mediaTypeOnly(d.MediaType) == gloss.MediaTypeRegexp {
+			inst.renderRegexpAnchor("detail-"+strconv.Itoa(col), d.Label, e.text)
+		}
 	}
 }
 
@@ -557,7 +575,8 @@ func (inst *richCellCache) renderBody(key richKey, d gloss.Declaration, e *richE
 		}
 	case gloss.MediaTypePlain:
 		c.Label(e.text).Wrap().Send()
-	case gloss.MediaTypeJSON, gloss.MediaTypeSQL, gloss.MediaTypeGo, gloss.MediaTypeCBOR:
+	case gloss.MediaTypeJSON, gloss.MediaTypeSQL, gloss.MediaTypeGo, gloss.MediaTypeCBOR,
+		gloss.MediaTypeRegexp:
 		if !e.hasJob {
 			return
 		}
@@ -593,6 +612,37 @@ func (inst *richCellCache) renderImage(key richKey, e *richEntry, maxW, maxH uin
 		uint8(c.FitAspectMaxE), boxW, boxH,
 		uint8(c.FilterLinearE), c.TintNoneRgba, pixels).
 		Send()
+}
+
+// regexpAnchorHeight is what the anchor row under a highlighted pattern
+// occupies: one line carrying the magnifying glass, the compile-status dot
+// and the toggle glyph. A card row declares its height before its faces are
+// laid out, so an underestimate clips the toggle out of the cell it belongs
+// to — measured against a rendered row, like the tagged-id block's parts.
+const regexpAnchorHeight = 24.0
+
+// renderRegexpAnchor draws the second half of gloss/regexp's block face. The
+// codeview above it already shows the pattern, highlighted, so the
+// regexsummary row is emitted with its own pattern display suppressed: what
+// is left is the affordance — the magnifying glass, the compile-status dot,
+// and the toggle that opens the regex explorer in a window tethered to this
+// cell by a bezier and seeded with this cell's pattern.
+//
+// The explorer is the standalone regex_explorer body, so its haystack, its
+// Test / List / Replace tabs and its clickhouse-local lane come along; the
+// bus is what that lane runs on, and without one the Go-side preview still
+// works. Seeding is one-way — editing the pattern in the explorer does not
+// write back to the result.
+//
+// label names the window ("regex: <label>"). scope must be unique per cell:
+// two pattern columns in one pane would otherwise share one toggle and one
+// explorer. pattern must be a string of our own, not a cell's raw view of
+// the Arrow buffer — the widget retains what it is seeded with.
+func (inst *PlayApp) renderRegexpAnchor(scope string, label string, pattern string) {
+	regexsummary.New(label).
+		Bus(inst.bus).
+		ShowPattern(false).
+		Render(inst.ids.PrepareStr("play-regexp-"+scope), pattern)
 }
 
 // firstLineOf is the fallback rendering for text that could not be rendered
@@ -683,13 +733,25 @@ func (inst *PlayApp) cardBlock(gc *glossColumn, key richKey, text string, kind g
 		srcLines = countLines(text)
 	}
 	lines := min(srcLines, cardBlockMaxLines)
-	return leewaywidgets.CellBlock{Height: float32(lines)*cardBlockLineHeight + cardBlockPad, Render: func() {
+	height := float32(lines)*cardBlockLineHeight + cardBlockPad
+	// gloss/regexp's face is the highlighted pattern *and* the explorer's
+	// anchor, so the row reserves the anchor's line as well.
+	anchored := mt == gloss.MediaTypeRegexp
+	if anchored {
+		height += regexpAnchorHeight
+	}
+	return leewaywidgets.CellBlock{Height: height, Render: func() {
 		// PushId keeps the ScrollArea's egui id apart from a sibling block's
 		// in the same cell; the vertical scroll takes what the estimate
 		// missed, and AutoShrink lets a short face stop short.
 		for range c.PushId(inst.ids.PrepareStr(scope)).KeepIter() {
 			for range c.ScrollArea().Vscroll(true).AutoShrink(false, true).KeepIter() {
 				inst.richCells.renderBody(key, d, e)
+			}
+			if anchored {
+				// Outside the scroll area: the anchor is the cell's
+				// affordance, not part of the pattern that scrolls under it.
+				inst.renderRegexpAnchor("card-"+key.String(), gc.label, e.text)
 			}
 		}
 	}}

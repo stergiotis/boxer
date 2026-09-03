@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -238,6 +239,37 @@ func TestBuildRichEntryCbor(t *testing.T) {
 		e := buildRichEntry(d, strings.Repeat("\x00", richMaxTextBytes+1))
 		assert.Contains(t, e.reason, "over the")
 		assert.False(t, e.hasJob)
+	})
+}
+
+// A pattern cell's block face: the highlighted pattern, and a copy of it
+// for the explorer anchor to seed from. The copy is the point — utfsafe
+// hands valid UTF-8 straight back, and raw aliases the Arrow buffer, which
+// the regexsummary widget outlives.
+func TestBuildRichEntryRegexp(t *testing.T) {
+	t.Run("highlights and keeps the pattern", func(t *testing.T) {
+		d, _ := richDeclFor("x@gloss/regexp")
+		pattern := `^(\d{3})-(\d{4})$`
+		e := buildRichEntry(d, pattern)
+		require.Empty(t, e.reason)
+		assert.True(t, e.hasJob)
+		assert.Equal(t, pattern, e.text)
+		assert.Equal(t, 1, e.lines)
+		// Pointer identity, not assert.NotEqual: reflect.DeepEqual follows a
+		// *uint8 to the byte it points at, and both patterns start '^'.
+		assert.False(t, unsafe.StringData(pattern) == unsafe.StringData(e.text),
+			"the seeded pattern outlives the record, so it must not alias it")
+	})
+
+	t.Run("a pattern that does not compile still highlights", func(t *testing.T) {
+		d, _ := richDeclFor("x@gloss/regexp")
+		e := buildRichEntry(d, `\d{3}-(\d{4}`)
+		assert.Empty(t, e.reason, "the lexer is not the validity authority")
+		assert.True(t, e.hasJob)
+	})
+
+	t.Run("the pane binds it a block face", func(t *testing.T) {
+		assert.True(t, hasBlockFace(gloss.MediaTypeRegexp))
 	})
 }
 

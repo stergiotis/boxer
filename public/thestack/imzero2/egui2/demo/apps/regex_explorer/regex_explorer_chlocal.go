@@ -24,9 +24,16 @@ import (
 // other consumers (separate accounting, watchdog, future cache).
 const chLocalPoolName = "regex_explorer"
 
-// chLocalCapPattern is the SubjectFilter pattern the app declares in
+// ChLocalCapPattern is the SubjectFilter pattern the app declares in
 // its Manifest.Caps — see app_register.go.
-const chLocalCapPattern = chlocalbroker.SubjectExecPrefix + chLocalPoolName
+//
+// Exported because the standalone app is not the only host: a widget that
+// embeds [EmbeddedApp] carries no manifest of its own, so the capability
+// has to be declared by whichever app hosts the widget. Without it the
+// explorer's ClickHouse tabs and its SD1 tripwire are denied by the
+// broker, with the reason in the status bar — the honest degradation, but
+// only the grant makes them work.
+const ChLocalCapPattern = chlocalbroker.SubjectExecPrefix + chLocalPoolName
 
 // executeArrowStreamViaBus publishes the query on
 // ch.local.exec.regex_explorer via the supplied BusI, ingests the

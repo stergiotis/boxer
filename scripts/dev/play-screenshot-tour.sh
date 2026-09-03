@@ -150,6 +150,25 @@ SELECT number AS n,
 FROM numbers(12)"
 }
 
+scene_02_table_regexp() {
+	desc="Table + Detail — gloss/regexp (ADR-0186): stored RE2 patterns with the verdict Go's engine gives them inline, and in Detail the pattern highlighted (group parens by nesting depth) with the anchor that opens the regex explorer tethered to the cell"
+	# Table-free. Every third pattern is missing its closing paren, so the
+	# cell carries a ✗ in the error tone — the verdict is the reason to gloss
+	# a pattern at all, and a column of valid ones stays toneless.
+	senv=(BOXER_PLAY_FOCUS_TABLE=1)
+	sql="SELECT ['phone','email','broken'][1 + number % 3] AS kind,
+       ['^(\\\\d{3})-(\\\\d{4})\$', '\\\\w+@\\\\w+\\\\.\\\\w+', '\\\\d{3}-(\\\\d{4}'][1 + number % 3] AS \`rule@gloss/regexp\`
+FROM numbers(9)"
+	# The grid first, then the `email` row selected — its pattern carries a
+	# class, a group-free alternation of escapes and a quantifier, which is
+	# what makes the highlighter's categories visible in one line.
+	steps='{"do":"capture","text":"02_table_regexp","settleMs":600}
+{"do":"click","name":"email","nth":0}
+{"do":"capture","text":"02_table_regexp_detail","settleMs":600}
+{"do":"click","x":1392,"y":778,"comment":"the anchor toggle under the highlighted pattern; a glyph in a Frame, so it carries no accessibility name to resolve by"}
+{"do":"capture","text":"02_table_regexp_explorer","settleMs":900}'
+}
+
 scene_02_table_taggedid() {
 	desc="Table + Detail — gloss/taggedid (ADR-0186): a fibonacci-tagged id (ADR-0106) shown as tag value and counter in hex, and spelled out in Detail with Copy buttons; a UInt64 carrying no comma is refused in the warning tone"
 	# Table-free. The three id columns are tag value 12 (a 6-bit code, so

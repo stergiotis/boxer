@@ -212,11 +212,16 @@ posture as `distsummary` and `fieldview`.
 - **Pattern propagation is read-only host → inspector.** Edits
   inside the inspector never write back to the host's pattern.
   Hosts can rely on this when reasoning about their own state.
-- **Bus is optional.** When no `BusI` is attached, the embedded
-  explorer's clickhouse-local-backed tabs (extractAll,
-  replaceRegexpAll, multiMatchAllIndices) return the NoopBus error
-  shape; the Go-side preview and the cheatsheet still work. The
-  level-1 row is unaffected by bus state.
+- **Bus is optional, and a bus is not the whole grant.** When no
+  `BusI` is attached, the embedded explorer's clickhouse-local-backed
+  tabs (extractAll, replaceRegexpAll, multiMatchAllIndices) return the
+  NoopBus error shape; the Go-side preview and the cheatsheet still
+  work. The level-1 row is unaffected by bus state. A bus *with* no
+  capability behind it fails one step later, in the broker: this
+  widget carries no manifest, so the hosting app must declare
+  [`ChLocalCapPattern`](./regexsummary.go) in its own `Manifest.Caps`
+  or every request — including the SD1 tripwire's — is denied, with the
+  reason in the inspector's status bar.
 
 ## Trade-offs
 
@@ -269,6 +274,8 @@ posture as `distsummary` and `fieldview`.
 ## Composition example
 
 ```go
+// The host app declares regexsummary.ChLocalCapPattern in its
+// Manifest.Caps; without it the bus is wired and the broker refuses.
 r := regexsummary.New("user-search-regex").
     Bus(ctx.Bus()).                          // optional — enables CH-backed tabs
     Provenance(inspector.Provenance{

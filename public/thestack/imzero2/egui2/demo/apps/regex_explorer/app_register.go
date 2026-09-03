@@ -28,7 +28,7 @@ var manifest = runtimeapp.Manifest{
 	},
 	Caps: []runtimeapp.SubjectFilter{
 		{
-			Pattern:   chLocalCapPattern,
+			Pattern:   ChLocalCapPattern,
 			Direction: runtimeapp.CapDirectionPub,
 			Reason:    "interactive regex evaluation via clickhouse-local",
 			Sticky:    true,

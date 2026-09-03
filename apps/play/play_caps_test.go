@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
 
@@ -163,10 +164,11 @@ func TestPlayApp_RestorePersistedSql_EmptyValue_KeepsDefault(t *testing.T) {
 
 func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
-	// Five declared Caps: fs dialog + chlocalbroker pool for the time-range
+	// Six declared Caps: fs dialog + chlocalbroker pool for the time-range
 	// evaluator + windowhost.open for the Save-as-applet launch (ADR-0135
 	// §SD7) + adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7) +
-	// clipboard.write for the Copy buttons. The applet-store save cap moved
+	// clipboard.write for the Copy buttons + the regex explorer's own
+	// chlocalbroker pool, which gloss/regexp's block face embeds. The applet-store save cap moved
 	// out with the O4 authoring form (now apps/sqlappletcreator); the
 	// fs.handle.> wildcard came out once the broker's dynamic per-handle
 	// grant was shown to be sufficient.
@@ -174,7 +176,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// The count is asserted on purpose: a capability is an authority this app
 	// is granted, so adding one has to be a deliberate edit here rather than
 	// something that rides along with a feature.
-	require.Len(t, m.Caps, 5)
+	require.Len(t, m.Caps, 6)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
@@ -198,6 +200,12 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// CanCopy gates the affordance on the bus, not on the grant, so an
 	// undeclared cap fails silently. Declared, it is audited on every use.
 	assert.Contains(t, patterns, clipboardbroker.SubjectWrite)
+	// The regex explorer's pool, separate from the time-range evaluator's:
+	// each consumer gets an isolated chlocalbroker pool, and the widget that
+	// embeds the explorer (gloss/regexp's block face) carries no manifest of
+	// its own, so the grant has to be declared here or every tab in the
+	// inspector window is denied.
+	assert.Contains(t, patterns, regexsummary.ChLocalCapPattern)
 	assert.NotContains(t, patterns, appletstore.SubjectSave)
 	// PersistedKeys → host-injected runtime.persist.play.> cap. Both keys
 	// are read-only now (ADR-0148 §SD8): the buffers are saved as a

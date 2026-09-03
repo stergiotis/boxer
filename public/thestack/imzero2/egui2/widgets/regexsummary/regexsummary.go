@@ -57,6 +57,13 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 )
 
+// ChLocalCapPattern is the capability an app hosting this widget must
+// declare in its Manifest.Caps for the inspector's ClickHouse tabs — and
+// its SD1 tripwire — to run: the widget carries no manifest of its own,
+// and a bus without the grant is a bus whose every request the broker
+// denies. Hosts that want the Go-side preview only can leave it out.
+const ChLocalCapPattern = regex_explorer.ChLocalCapPattern
+
 // defaultPatternMaxLen is the default truncation cap for the level-1
 // inline pattern display. 32 keeps the row narrow enough to sit beside
 // a typical label without forcing the host's Horizontal to wrap, while

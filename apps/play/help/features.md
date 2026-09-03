@@ -774,7 +774,8 @@ The result-side sibling of Vocabulary (ADR-0186). A **gloss** is a named way of
 showing a value — a temperature with its unit, a Unix epoch as a moment, a span
 as `1m 05s`, a card number masked with its Luhn verdict, a value masked to six
 bullets, a URL as a link, a byte count in KiB, a fibonacci-tagged id split into
-its tag and counter, a CBOR item as diagnostic notation, and the ADR-0123
+its tag and counter, a CBOR item as diagnostic notation, a regular expression
+highlighted with the verdict its engine gives it, and the ADR-0123
 content types (markdown, code, images) as one family. Every gloss
 has a one-line face for the Table grids and, some, a block face for Detail —
 in the ad-hoc pane and, stacked under the row's other values, in the leeway
@@ -866,6 +867,27 @@ the type and size, as an image cell does, and the full notation waits in
 Detail. There is no affinity — no aspect says "these bytes are CBOR", and
 being a `Binary` column does not make a column one — so bind it by alias,
 by `gloss(…)`, or by rule.
+
+`gloss/regexp` shows a stored pattern as a pattern. A rule table's match
+column, a router's dispatch column, a redaction policy: patterns nobody
+re-reads until one of them stops matching, and in a grid indistinguishable
+from prose. The cell shows the pattern with the verdict Go's RE2 engine gives
+it — a `✗` in the error tone when it no longer compiles, and nothing when it
+does, so the colour is spent on the exception rather than on the column. Past
+a kilobyte the verdict is dropped rather than recomputed every frame; a
+pattern that long was not written by hand.
+
+In Detail the pattern is parsed and highlighted — group parens coloured by
+nesting depth, so a nested pattern's brackets pair up by eye — and under it
+sits a magnifying glass, the compile dot and a toggle. The toggle opens the
+**regex explorer** in a window tethered to the cell by a bezier and seeded
+with that cell's pattern: a haystack to test against, the captures it takes,
+the List and Replace tabs, and the same clickhouse-local lane the standalone
+explorer runs on, so a pattern can be tried against the engine that will
+actually run it. Editing the pattern in the explorer changes nothing in the
+result — the window is a bench, not an editor for the row. It has no
+affinity: nothing in a spec line says a text column holds a pattern, so
+declare it or rule it.
 
 The tab shows the **catalog** (each gloss with its accepted value kinds,
 parameters, a sample rendering, its affinities, and two Insert buttons —
