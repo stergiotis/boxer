@@ -42,6 +42,13 @@ type CardDriver struct {
 	usable  bool                           // false if the schema is not leeway-shaped
 	table   *common.TableDesc              // reconstructed leeway schema, nil when not leeway-shaped
 	classes []streamreadaccess.ColumnClass // per-Arrow-column leeway classification, nil when not leeway-shaped
+	// The recipe a second driver over the same schema needs (ADR-0219 SD1):
+	// the IR the driver was built with and the classification it resolved
+	// column names under. A Driver is not goroutine-safe, so a background
+	// job builds its own through NewDetachedDriver rather than sharing.
+	ir        *common.IntermediateTableRepresentation
+	conv      common.NamingConventionFwdI
+	rowConfig common.TableRowConfigE
 }
 
 // NewCardDriver returns an empty driver. EnsureFor must be called before the
@@ -80,6 +87,8 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	inst.usable = false
 	inst.table = nil
 	inst.classes = nil
+	inst.ir = nil
+	inst.conv = nil
 
 	nFields := schema.NumFields()
 	colNames := make([]string, 0, nFields)
@@ -125,6 +134,9 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		return false
 	}
 	inst.driver = driver
+	inst.ir = ir
+	inst.conv = cl.Convention
+	inst.rowConfig = cl.RowConfig
 	inst.emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, leewaywidgets.ColorPaletteViridis, nil)
 	// Deferred rendering: Render walks the record in two steps (Prepare buffers,
 	// Render draws) so the Detail timeline can read the per-section digests
@@ -143,6 +155,28 @@ func (inst *CardDriver) Driver() *streamreadaccess.Driver {
 		return nil
 	}
 	return inst.driver
+}
+
+// IR returns the intermediate representation the current driver was built
+// from, or nil when the schema is not leeway-shaped. It is what a second
+// sink over the same result — the canonical-form encoders (ADR-0219) —
+// is constructed with, so it and the card agree on every column.
+func (inst *CardDriver) IR() *common.IntermediateTableRepresentation {
+	if !inst.usable {
+		return nil
+	}
+	return inst.ir
+}
+
+// NewDetachedDriver builds a second Driver over the current schema for a
+// caller that will drive it off the render thread (ADR-0219 SD7): the same
+// table, IR, naming convention and row config as Driver, and nothing shared
+// with it. nil when the schema is not leeway-shaped.
+func (inst *CardDriver) NewDetachedDriver() (d *streamreadaccess.Driver, err error) {
+	if !inst.usable {
+		return nil, nil
+	}
+	return streamreadaccess.NewDriverFromSchema(inst.table, inst.ir, streamreadaccess.DefaultFormatters(), inst.schema, inst.conv, inst.rowConfig)
 }
 
 // TableDesc returns the leeway schema reconstructed from the current result's
