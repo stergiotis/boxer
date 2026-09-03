@@ -151,9 +151,18 @@ func (p *Plot) PlotAreaPrev() (x float32, y float32, w float32, h float32, ok bo
 //
 // The use it exists for is viewport-aware decimation — a caller holding more
 // samples than the axis has pixels reduces to what the range can show, which
-// it cannot do without knowing the range. ok is false until the plot has
-// rendered once (declare the full series on that first frame) and for a
-// degenerate range, so a caller never divides by a zero span.
+// it cannot do without knowing the range. A caller placing its own ticks
+// (SetupAxisTicks) wants it for the same reason: the labelling it declares is
+// a labelling of the viewport.
+//
+// ok is false until the plot has rendered once (declare the full series on
+// that first frame) and for a degenerate range, so a caller never divides by
+// a zero span. What it is NOT gated on is hasRange: that flag records a
+// SetupAxisLimits call, not the existence of a range. End settles and
+// sanitizes rng every frame whatever put it there, so an axis left to the
+// autofit, moved by a gesture, or driven through SetupAxisLinks has a range
+// exactly as real as a pinned one — and those are the axes this readback is
+// for. Gating on the flag answered !ok forever for all three.
 func (p *Plot) AxisRangePrev(axis AxisE) (vmin float64, vmax float64, ok bool) {
 	if p == nil || p.st == nil || !p.st.prevOk {
 		return 0, 0, false
@@ -162,7 +171,7 @@ func (p *Plot) AxisRangePrev(axis AxisE) (vmin float64, vmax float64, ok bool) {
 	if axis == AxisY1 {
 		ax = &p.st.y
 	}
-	if !ax.hasRange || !(ax.rng.Max > ax.rng.Min) {
+	if !(ax.rng.Max > ax.rng.Min) {
 		return 0, 0, false
 	}
 	return ax.rng.Min, ax.rng.Max, true

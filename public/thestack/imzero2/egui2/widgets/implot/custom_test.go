@@ -165,3 +165,44 @@ func TestPixelReadbacksNilSafe(t *testing.T) {
 		t.Error("nil receiver PlotAreaPrev ok")
 	}
 }
+
+func TestAxisRangePrevUnpinnedAxis(t *testing.T) {
+	// The range a readback caller needs is the settled one, whoever settled
+	// it. An axis left to the autofit — no SetupAxisLimits, so hasRange stays
+	// false — has a range as real as a pinned one once the plot has rendered,
+	// and a caller placing its own ticks against it must get it. Gating on
+	// hasRange left such an axis on the default locator forever.
+	p := newTestPlot()
+	p.st.prevOk = true
+	p.st.y.rng = Range{0, 7.3}
+	lo, hi, ok := p.AxisRangePrev(AxisY1)
+	if !ok {
+		t.Fatal("AxisRangePrev !ok for an autofit axis")
+	}
+	if lo != 0 || hi != 7.3 {
+		t.Errorf("AxisRangePrev = %v..%v, want 0..7.3", lo, hi)
+	}
+	if p.st.y.hasRange {
+		t.Error("the autofit path must not set hasRange; the test would prove nothing")
+	}
+	// A pinned axis is unaffected.
+	p.st.x.rng = Range{10, 20}
+	p.st.x.hasRange = true
+	if lo, hi, ok := p.AxisRangePrev(AxisX1); !ok || lo != 10 || hi != 20 {
+		t.Errorf("AxisRangePrev(X1) = %v..%v ok=%v, want 10..20 ok", lo, hi, ok)
+	}
+	// The two remaining gates still hold.
+	p.st.y.rng = Range{5, 5}
+	if _, _, ok := p.AxisRangePrev(AxisY1); ok {
+		t.Error("AxisRangePrev ok for a degenerate range")
+	}
+	p.st.prevOk = false
+	p.st.y.rng = Range{0, 7.3}
+	if _, _, ok := p.AxisRangePrev(AxisY1); ok {
+		t.Error("AxisRangePrev ok before the first render")
+	}
+	var nilP *Plot
+	if _, _, ok := nilP.AxisRangePrev(AxisY1); ok {
+		t.Error("nil receiver AxisRangePrev ok")
+	}
+}
