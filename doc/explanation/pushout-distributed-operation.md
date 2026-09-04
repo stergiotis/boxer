@@ -3,7 +3,7 @@ type: explanation
 audience: package maintainer, demonstrator author
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-06-12
+reviewed-date: 2026-09-04
 ---
 
 > **Scope.** Synthesis of a design dialogue
@@ -97,7 +97,9 @@ skew:
   to unrecord the final deleter (`ErrRetentionBlocked`) while an
   unswept one still can — which is intended and test-pinned. Sync
   cannot resurrect purged content (set difference runs over applied
-  sets, so an applied patch is never re-shipped).
+  sets, so an applied patch is never re-shipped). What a purge
+  protects, and how little is left to protect under a data vault, is
+  [pushout-sweep-and-purge-durability.md](./pushout-sweep-and-purge-durability.md).
 
   Two boundaries to be honest about. First, *durability*: on the same
   store the horizon survives crash/restart. The purge **result** is
