@@ -44,12 +44,18 @@ import (
 // path the adapter cannot produce and cannot address, so it is refused at
 // insert rather than found later.
 func FinishStatements(p Profile) (stmts []string, err error) {
+	return Layout{}.FinishStatements(p)
+}
+
+// FinishStatements is [FinishStatements] for a store whose tables live in
+// the layout's database.
+func (inst Layout) FinishStatements(p Profile) (stmts []string, err error) {
 	naturalKey, err := PhysicalPlainName("naturalKey")
 	if err != nil {
 		return
 	}
-	meta := DatabaseName + "." + TableNameMeta
-	snap := DatabaseName + "." + TableNameSnap
+	meta := inst.MetaTable()
+	snap := inst.SnapTable()
 
 	stmts = []string{
 		// The tree columns. `dir` depends on `name`, which ClickHouse allows
@@ -73,7 +79,7 @@ func FinishStatements(p Profile) (stmts []string, err error) {
 	// query the fs() expansion runs on every read, and answering it from the
 	// entry table would scan every path of every snapshot to find the root
 	// rows.
-	snapDDL, err := composeSnapTable(p)
+	snapDDL, err := inst.composeSnapTable(p)
 	if err != nil {
 		return
 	}
@@ -92,8 +98,8 @@ func FinishStatements(p Profile) (stmts []string, err error) {
 	// here is that a root row written that way arrives in fssnap with its
 	// commit record intact.
 	stmts = append(stmts, fmt.Sprintf(
-		`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.%s_mv TO %s AS SELECT * FROM %s WHERE %s = '.'`,
-		DatabaseName, TableNameSnap, snap, meta, naturalKey))
+		`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.%s TO %s AS SELECT * FROM %s WHERE %s = '.'`,
+		inst.DatabaseName(), inst.SnapView(), snap, meta, naturalKey))
 	return
 }
 
@@ -113,11 +119,17 @@ func FinishStatements(p Profile) (stmts []string, err error) {
 // composition `fssnap` has always used, and lading.Verify is what checks the
 // result against the decode.
 func CreateTableStatements(p Profile) (stmts []string, err error) {
+	return Layout{}.CreateTableStatements(p)
+}
+
+// CreateTableStatements is [CreateTableStatements] for a store whose tables
+// live in the layout's database.
+func (inst Layout) CreateTableStatements(p Profile) (stmts []string, err error) {
 	// The database prelude the generated EnsureTable emits for a qualified
 	// table reference. Dropping it with EnsureTable would have left the first
 	// provisioning of a fresh server creating a table in a database that is
 	// not there.
-	stmts = []string{"CREATE DATABASE IF NOT EXISTS " + DatabaseName}
+	stmts = []string{"CREATE DATABASE IF NOT EXISTS " + inst.DatabaseName()}
 	for _, t := range []struct {
 		name string
 		opts *clickhouse.TableOptions
@@ -131,7 +143,7 @@ func CreateTableStatements(p Profile) (stmts []string, err error) {
 			return
 		}
 		var sql string
-		sql, err = composeCreateTable(DatabaseName+"."+t.name, td, t.opts)
+		sql, err = composeCreateTable(inst.DatabaseName()+"."+t.name, td, t.opts)
 		if err != nil {
 			err = eb.Build().Str("name", t.name).Errorf("compose: %w", err)
 			return
@@ -148,12 +160,12 @@ func CreateTableStatements(p Profile) (stmts []string, err error) {
 // only to provision a table would carry ingest verbs nothing may call. The
 // columns are the same descriptor the other two use, so the view's `SELECT *`
 // lines up column for column.
-func composeSnapTable(p Profile) (sql string, err error) {
+func (inst Layout) composeSnapTable(p Profile) (sql string, err error) {
 	td, err := TableDesc(TableNameSnap)
 	if err != nil {
 		return
 	}
-	sql, err = composeCreateTable(DatabaseName+"."+TableNameSnap, td, SnapTableOptions(p))
+	sql, err = composeCreateTable(inst.SnapTable(), td, SnapTableOptions(p))
 	if err != nil {
 		err = eb.Build().Str("tableNameSnap", TableNameSnap).Errorf("compose: %w", err)
 	}

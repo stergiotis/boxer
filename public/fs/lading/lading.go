@@ -68,9 +68,25 @@ type Stores struct {
 // row per snapshot and every path of every snapshot: "the newest snapshot of
 // this mount" is a question the entry table can only answer by scanning it.
 func SnapshotIndex(exec recordstore.ExecutorI) *ladingmeta.MetaStore {
+	return SnapshotIndexIn(exec, ladingschema.Layout{})
+}
+
+// SnapshotIndexIn is [SnapshotIndex] over the layout's snapshot index.
+func SnapshotIndexIn(exec recordstore.ExecutorI, layout ladingschema.Layout) *ladingmeta.MetaStore {
 	return ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{
-		Table: ladingschema.DatabaseName + "." + ladingschema.TableNameSnap,
+		Table: layout.SnapTable(),
 	})
+}
+
+// NewStores opens the entry and block stores over the layout's tables. It is
+// the constructor a consumer whose store is not in the default database
+// uses, so the two table overrides cannot drift apart; a caller in the
+// default layout may still build the pair by hand with empty configs. The
+// stores are the caller's to Close.
+func NewStores(exec recordstore.ExecutorI, layout ladingschema.Layout) (st Stores) {
+	st.Meta = ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{Table: layout.MetaTable()})
+	st.Data = ladingdata.NewDataStore(exec, nil, ladingdata.DataStoreConfig{Table: layout.DataTable()})
+	return
 }
 
 // Provision creates the store's tables and finishes them: the tree columns,
@@ -88,7 +104,13 @@ func SnapshotIndex(exec recordstore.ExecutorI) *ladingmeta.MetaStore {
 // stores' EnsureTable, whose DDL is rendered at code-generation time and so
 // carries one fixed granularity — see [ladingschema.CreateTableStatements].
 func Provision(ctx context.Context, exec recordstore.ExecutorI, p ladingschema.Profile) (err error) {
-	creates, err := ladingschema.CreateTableStatements(p)
+	return ProvisionIn(ctx, exec, ladingschema.Layout{}, p)
+}
+
+// ProvisionIn is [Provision] for a store whose tables live in the layout's
+// database.
+func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout ladingschema.Layout, p ladingschema.Profile) (err error) {
+	creates, err := layout.CreateTableStatements(p)
 	if err != nil {
 		return
 	}
@@ -100,7 +122,7 @@ func Provision(ctx context.Context, exec recordstore.ExecutorI, p ladingschema.P
 		}
 	}
 
-	stmts, err := ladingschema.FinishStatements(p)
+	stmts, err := layout.FinishStatements(p)
 	if err != nil {
 		return
 	}
@@ -131,11 +153,17 @@ func Provision(ctx context.Context, exec recordstore.ExecutorI, p ladingschema.P
 // shape, and the decode is positional — so drift fails late, or for a
 // same-typed column swap, silently.
 func Verify(ctx context.Context, exec recordstore.ExecutorI) (err error) {
-	meta := ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{})
+	return VerifyIn(ctx, exec, ladingschema.Layout{})
+}
+
+// VerifyIn is [Verify] for a store whose tables live in the layout's
+// database.
+func VerifyIn(ctx context.Context, exec recordstore.ExecutorI, layout ladingschema.Layout) (err error) {
+	st := NewStores(exec, layout)
+	meta, data := st.Meta, st.Data
 	defer meta.Close()
-	data := ladingdata.NewDataStore(exec, nil, ladingdata.DataStoreConfig{})
 	defer data.Close()
-	snap := SnapshotIndex(exec)
+	snap := SnapshotIndexIn(exec, layout)
 	defer snap.Close()
 
 	for _, t := range []struct {
@@ -156,7 +184,7 @@ func Verify(ctx context.Context, exec recordstore.ExecutorI) (err error) {
 		}
 	}
 
-	err = verifyFinished(ctx, exec)
+	err = verifyFinished(ctx, exec, layout)
 	return
 }
 
@@ -172,10 +200,10 @@ var treeColumns = []string{"name", "dir", "depth", "ext"}
 // It reads `system.columns` and `system.tables` rather than DESCRIBE, because
 // what is being asked is whether an ALTER and a CREATE ran, not what a reader
 // would see.
-func verifyFinished(ctx context.Context, exec recordstore.ExecutorI) (err error) {
+func verifyFinished(ctx context.Context, exec recordstore.ExecutorI, layout ladingschema.Layout) (err error) {
 	missing, err := scalarStrings(ctx, exec, fmt.Sprintf(
 		`SELECT arrayJoin(arrayFilter(c -> NOT has(groupArray(name), c), %s)) FROM system.columns WHERE database = %s AND table = %s AND default_kind = 'MATERIALIZED'`,
-		sqlStringArray(treeColumns), ladingschema.QuoteLiteral(ladingschema.DatabaseName), ladingschema.QuoteLiteral(ladingschema.TableNameMeta)))
+		sqlStringArray(treeColumns), ladingschema.QuoteLiteral(layout.DatabaseName()), ladingschema.QuoteLiteral(ladingschema.TableNameMeta)))
 	if err != nil {
 		err = eh.Errorf("read materialized columns of "+ladingschema.TableNameMeta+": %w", err)
 		return
@@ -186,16 +214,16 @@ func verifyFinished(ctx context.Context, exec recordstore.ExecutorI) (err error)
 		return
 	}
 
-	view := ladingschema.TableNameSnap + "_mv"
+	view := layout.SnapView()
 	found, err := scalarStrings(ctx, exec, fmt.Sprintf(
 		`SELECT name FROM system.tables WHERE database = %s AND name = %s AND engine = 'MaterializedView'`,
-		ladingschema.QuoteLiteral(ladingschema.DatabaseName), ladingschema.QuoteLiteral(view)))
+		ladingschema.QuoteLiteral(layout.DatabaseName()), ladingschema.QuoteLiteral(view)))
 	if err != nil {
 		err = eb.Build().Str("view", view).Errorf("read materialized view: %w", err)
 		return
 	}
 	if len(found) == 0 {
-		err = eb.Build().Str("view", ladingschema.DatabaseName+"."+view).
+		err = eb.Build().Str("view", layout.DatabaseName()+"."+view).
 			Errorf("the snapshot view is missing; nothing would commit a snapshot — run Provision")
 	}
 	return

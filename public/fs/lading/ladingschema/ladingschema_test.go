@@ -136,3 +136,44 @@ func firstLine(s string) string {
 	}
 	return s
 }
+
+// A layout moves every qualified name a store's DDL carries — the database
+// prelude, the three tables, the view and its target — and nothing else. The
+// default layout must render byte for byte what the unqualified functions
+// render, since every existing caller goes through those.
+func TestLayoutMovesTheDatabaseAndNothingElse(t *testing.T) {
+	moved := ladingschema.Layout{Database: "elsewhere"}
+	for _, tc := range []struct {
+		name string
+		def  func(ladingschema.Profile) ([]string, error)
+		in   func(ladingschema.Profile) ([]string, error)
+	}{
+		{"create", ladingschema.CreateTableStatements, moved.CreateTableStatements},
+		{"finish", ladingschema.FinishStatements, moved.FinishStatements},
+	} {
+		defStmts, err := tc.def(ladingschema.ProfileCorpus)
+		require.NoError(t, err)
+		zeroStmts, err := ladingschema.Layout{}.CreateTableStatements(ladingschema.ProfileCorpus)
+		if tc.name == "finish" {
+			zeroStmts, err = ladingschema.Layout{}.FinishStatements(ladingschema.ProfileCorpus)
+		}
+		require.NoError(t, err)
+		assert.Equal(t, defStmts, zeroStmts, "%s: the zero layout is the default", tc.name)
+
+		inStmts, err := tc.in(ladingschema.ProfileCorpus)
+		require.NoError(t, err)
+		require.Len(t, inStmts, len(defStmts), "%s: a layout adds or drops no statement", tc.name)
+		all := strings.Join(inStmts, "\n")
+		assert.NotContains(t, all, ladingschema.DatabaseName+".",
+			"%s: no table of the moved store may resolve to the default database", tc.name)
+		for i := range defStmts {
+			assert.Equal(t,
+				strings.ReplaceAll(defStmts[i], ladingschema.DatabaseName, "elsewhere"), inStmts[i],
+				"%s: statement %d differs by more than the database", tc.name, i)
+		}
+	}
+	assert.Equal(t, "elsewhere.fsmeta", moved.MetaTable())
+	assert.Equal(t, "elsewhere.fsdata", moved.DataTable())
+	assert.Equal(t, "elsewhere.fssnap", moved.SnapTable())
+	assert.Equal(t, ladingschema.DatabaseName, ladingschema.Layout{}.DatabaseName())
+}

@@ -45,13 +45,18 @@ type Snapshot struct {
 // time, so a row can outlive its expiry on disk, and a reader that ignored
 // that would hand back a snapshot whose entries may already be gone.
 func Snapshots(ctx context.Context, exec recordstore.ExecutorI, mount identifier.TaggedId) (out []Snapshot, err error) {
+	return SnapshotsIn(ctx, exec, ladingschema.Layout{}, mount)
+}
+
+// SnapshotsIn is [Snapshots] over a store in the layout's database.
+func SnapshotsIn(ctx context.Context, exec recordstore.ExecutorI, layout ladingschema.Layout, mount identifier.TaggedId) (out []Snapshot, err error) {
 	if exec == nil {
 		return nil, eh.Errorf("no executor")
 	}
 	if !mount.IsValid() {
 		return nil, eh.Errorf("mount id is not a valid tagged id")
 	}
-	st := lading.SnapshotIndex(exec)
+	st := lading.SnapshotIndexIn(exec, layout)
 	defer st.Close()
 	pred := fmt.Sprintf("%s = %d AND %s", ladingschema.ColID, mount.Value(), ladingschema.NotExpired)
 	for ent, serr := range st.ScanLadingSnapshot(ctx, recordstore.ScanOpts{ExtraPredicate: pred}) {
@@ -87,10 +92,15 @@ func Snapshots(ctx context.Context, exec recordstore.ExecutorI, mount identifier
 // One pass over the index, which is one row per snapshot rather than one per
 // path of every snapshot.
 func Mounts(ctx context.Context, exec recordstore.ExecutorI) (mounts []identifier.TaggedId, err error) {
+	return MountsIn(ctx, exec, ladingschema.Layout{})
+}
+
+// MountsIn is [Mounts] over a store in the layout's database.
+func MountsIn(ctx context.Context, exec recordstore.ExecutorI, layout ladingschema.Layout) (mounts []identifier.TaggedId, err error) {
 	if exec == nil {
 		return nil, eh.Errorf("no executor")
 	}
-	st := lading.SnapshotIndex(exec)
+	st := lading.SnapshotIndexIn(exec, layout)
 	defer st.Close()
 
 	seen := map[identifier.TaggedId]struct{}{}
@@ -119,7 +129,12 @@ func Mounts(ctx context.Context, exec recordstore.ExecutorI) (mounts []identifie
 // "Newest complete" is one thing, not two: an incomplete walk has no root row,
 // so it is not in the index and cannot be picked here.
 func Latest(ctx context.Context, exec recordstore.ExecutorI, mount identifier.TaggedId) (snap Snapshot, found bool, err error) {
-	all, err := Snapshots(ctx, exec, mount)
+	return LatestIn(ctx, exec, ladingschema.Layout{}, mount)
+}
+
+// LatestIn is [Latest] over a store in the layout's database.
+func LatestIn(ctx context.Context, exec recordstore.ExecutorI, layout ladingschema.Layout, mount identifier.TaggedId) (snap Snapshot, found bool, err error) {
+	all, err := SnapshotsIn(ctx, exec, layout, mount)
 	if err != nil || len(all) == 0 {
 		return
 	}

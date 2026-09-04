@@ -85,7 +85,14 @@ const NamingStyle = naming.LowerSpinalCase
 // be re-crawled. Two repositories have now paid that, which is the argument
 // for a consumer claiming here before it writes rows rather than after.
 //
-// The next free value is 2178336.
+// **…336 through …338 are taken** by shadow-boxer: …336 is reserved for its
+// `starfacts` vocabulary (its ADR-0004, proposed), …337 is its `shantyfacts`
+// vocabulary and …338 the tag its shanty music library's lading mount is
+// minted under (its ADR-0005, proposed) — a mount id is a tagged id the
+// application supplies (ADR-0198 §SD3), and a claim of its own is what keeps
+// a mount's body from colliding with a membership ordinal under one tag.
+//
+// The next free value is 2178339.
 var TagValueClaim = tagmint.MustClaim("lading", 2178315, MaxExpectedMemberships)
 
 // MaxExpectedMemberships is what this vocabulary tells the mint it will need.
