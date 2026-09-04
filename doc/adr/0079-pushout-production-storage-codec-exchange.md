@@ -466,6 +466,61 @@ Negative section.
 The layering sketch under *Decision* still reads `jsonv1` as the codec
 `envelope` ships. Read it as `cbor1`; the seam it illustrates is unchanged.
 
+## Update — 2026-09-04: batch ingest verb; clone cost
+
+**Problem.** Ingesting a history through `Repo.ApplyEnvelope` one
+envelope at a time costs one full pushoutgraph clone per patch (the SD1
+clone-and-swap transaction), so a fresh clone of *n* patches is
+O(*n* × state) — quadratic — while `Open`'s replay of the same log is
+linear, because it applies in place. Measured on a 4000-patch chain
+history with an I/O-free storage, the per-envelope path took two
+orders of magnitude longer than a full replay at `Open`; on the
+filestore, three fsyncs per patch came on top. The verb also rejects
+an envelope whose dependency has not yet been applied
+(`ErrMissingDependency`), which makes every caller responsible for
+delivering envelopes in a causal order — `exchange` relies on the
+sender's log order for this.
+
+**Decision.** Add `Repo.ApplyEnvelopes`, a batch verb that accepts
+envelopes in any order. It decodes the batch, drops duplicates,
+topologically sorts the rest over the dependency edges (a dependency
+counts as satisfied when it is applied or is itself an earlier batch
+member; ties break in bytewise hash order, so the resulting log order
+is a function of the set, not of the input order), and reports
+envelopes with an unsatisfiable dependency as *pending* instead of
+failing the batch. The applicable subset then runs the SD1 tail once:
+one clone, every apply, every envelope write, one retention save, the
+log appends in sorted order, one in-memory swap. A decode failure or a
+patch the pushoutgraph rejects fails the batch before any write. A
+storage failure mid-batch is crash-equivalent as for every verb: the
+appends go in dependency order, so whatever prefix reached the log is
+dependency-closed and `Open`'s replay accepts it.
+
+Storage gains an optional extension, `BatchAppenderI`, whose
+`AppendAppliedBatch` has the semantics of consecutive `AppendApplied`
+calls; the filestore implements it as one write plus one fsync, and
+`storagetest` checks the equivalence on stores that offer it. Stores
+without it are driven through `AppendApplied` in a loop.
+
+Independently, `PushoutGraph.Clone` no longer sorts: it iterated the
+sorted accessors (`NodeSet.Items`, `MultiMap.Sources`) although a copy
+needs no order, and the sort was a quarter of the clone in profiles.
+The deleted-node partition is now copied verbatim (`UnionFind.Clone`)
+rather than rebuilt through `Add`/`Union`, which had elected
+representatives by iteration order. Every verb pays the clone, so
+`Record` benefits as well.
+
+**Effect.** On the same 4000-patch history and machine, in-memory
+storage: batch ingest ran in about the time of a full replay at
+`Open`, against seconds for the per-envelope loop; shuffling the input
+changed nothing. On the filestore the batch verb's remaining cost is
+the per-envelope atomic write (two fsyncs each); a batched envelope
+put — write all, fsync the directory once — is the next step if it
+matters, and is not part of this update. `exchange.Pull`/`Push` still
+apply one envelope at a time; moving them onto the batch verb (and a
+batch method on `AcceptorI`) is deferred until the transport work under
+OQ-1 settles what a round carries.
+
 ## Open questions
 
 - **OQ-1 — sync at scale.** Full-list exchange is O(history) per

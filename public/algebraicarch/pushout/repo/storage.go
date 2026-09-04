@@ -85,3 +85,15 @@ type StorageI interface {
 
 	Close() error
 }
+
+// BatchAppenderI is an optional StorageI extension the engine uses
+// when present: AppendAppliedBatch appends hs to the log in order and
+// is durable when it returns. The contract is that of len(hs)
+// consecutive AppendApplied calls, so a crash mid-batch may persist a
+// proper prefix of hs (and a torn trailing entry is dropped as usual);
+// the engine hands over batches in dependency order so every such
+// prefix is dependency-closed. Implementations without it are driven
+// through AppendApplied one hash at a time.
+type BatchAppenderI interface {
+	AppendAppliedBatch(ctx context.Context, hs []t.PatchHash) error
+}

@@ -187,6 +187,41 @@ func (inst *Store) AppendApplied(ctx context.Context, h t.PatchHash) (err error)
 	return
 }
 
+// AppendAppliedBatch implements repo.BatchAppenderI: one O_APPEND write
+// and one fsync for the whole batch. A crash mid-write leaves a prefix
+// of whole lines plus at most one torn line, which LoadApplied drops.
+func (inst *Store) AppendAppliedBatch(ctx context.Context, hs []t.PatchHash) (err error) {
+	if len(hs) == 0 {
+		return
+	}
+	f, oerr := os.OpenFile(inst.appliedPath(), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if oerr != nil {
+		err = eh.Errorf("open applied log: %w", oerr)
+		return
+	}
+	var sb strings.Builder
+	sb.Grow(len(hs) * 65)
+	for _, h := range hs {
+		sb.WriteString(hex.EncodeToString(h[:]))
+		sb.WriteByte('\n')
+	}
+	_, werr := f.WriteString(sb.String())
+	serr := f.Sync()
+	cerr := f.Close()
+	if werr != nil {
+		err = eh.Errorf("append applied log: %w", werr)
+		return
+	}
+	if serr != nil {
+		err = eh.Errorf("fsync applied log: %w", serr)
+		return
+	}
+	if cerr != nil {
+		err = eh.Errorf("close applied log: %w", cerr)
+	}
+	return
+}
+
 func (inst *Store) ReplaceApplied(ctx context.Context, hs []t.PatchHash) (err error) {
 	var sb strings.Builder
 	for _, h := range hs {

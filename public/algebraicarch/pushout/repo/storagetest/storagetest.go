@@ -140,6 +140,48 @@ func CheckAppliedLog(ctx context.Context, open OpenFunc, location string) (err e
 	return
 }
 
+// CheckAppliedLogBatch: for stores implementing repo.BatchAppenderI, a
+// batch append is observationally equal to the same appends one at a
+// time — order kept, interleaving with single appends, empty batch a
+// no-op. Stores without the extension pass trivially.
+func CheckAppliedLogBatch(ctx context.Context, open OpenFunc, location string) (err error) {
+	st, err := open(location)
+	if err != nil {
+		return eh.Errorf("open: %w", err)
+	}
+	defer st.Close()
+	ba, ok := st.(repo.BatchAppenderI)
+	if !ok {
+		return
+	}
+	if err = st.AppendApplied(ctx, h(1)); err != nil {
+		return eh.Errorf("append: %w", err)
+	}
+	if err = ba.AppendAppliedBatch(ctx, nil); err != nil {
+		return eh.Errorf("empty batch: %w", err)
+	}
+	if err = ba.AppendAppliedBatch(ctx, []t.PatchHash{h(2), h(3), h(4)}); err != nil {
+		return eh.Errorf("batch: %w", err)
+	}
+	if err = st.AppendApplied(ctx, h(5)); err != nil {
+		return eh.Errorf("append after batch: %w", err)
+	}
+	got, err := st.LoadApplied(ctx)
+	if err != nil {
+		return eh.Errorf("load: %w", err)
+	}
+	want := []t.PatchHash{h(1), h(2), h(3), h(4), h(5)}
+	if len(got) != len(want) {
+		return eh.Errorf("load = %d entries, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return eh.Errorf("load order mismatch at %d: %v", i, got)
+		}
+	}
+	return
+}
+
 // CheckSnapshot: absent on fresh, save/load round-trip, replace.
 func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
@@ -277,6 +319,7 @@ func Run(tt *testing.T, open OpenFunc) {
 	}{
 		{"Envelopes", CheckEnvelopes},
 		{"AppliedLog", CheckAppliedLog},
+		{"AppliedLogBatch", CheckAppliedLogBatch},
 		{"Snapshot", CheckSnapshot},
 		{"Retention", CheckRetention},
 		{"ReopenDurability", CheckReopenDurability},
