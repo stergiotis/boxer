@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"encoding/hex"
 	"fmt"
+	"iter"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -182,6 +183,18 @@ func (inst *NodeSet) Len() (n int) {
 	return
 }
 
+// All iterates the members in map order — unsorted, for consumers such
+// as Clone that need every member and no order. Items is the sorted form.
+func (inst *NodeSet) All() iter.Seq[NodeID] {
+	return func(yield func(NodeID) bool) {
+		for id := range inst.m {
+			if !yield(id) {
+				return
+			}
+		}
+	}
+}
+
 func (inst *NodeSet) Items() (out []NodeID) {
 	out = make([]NodeID, 0, len(inst.m))
 	for id := range inst.m {
@@ -251,6 +264,19 @@ func (inst *MultiMap) HasLiveEdgeTo(src, dest NodeID) (b bool) {
 		}
 	}
 	return
+}
+
+// All iterates (source, edges) in map order — unsorted; the edge slice
+// is the map's own and must not be retained or mutated. Sources is the
+// sorted form.
+func (inst *MultiMap) All() iter.Seq2[NodeID, []Edge] {
+	return func(yield func(NodeID, []Edge) bool) {
+		for src, es := range inst.m {
+			if !yield(src, es) {
+				return
+			}
+		}
+	}
 }
 
 func (inst *MultiMap) Sources() (out []NodeID) {

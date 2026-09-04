@@ -1150,7 +1150,10 @@ func (inst *PushoutGraph) Clone() *PushoutGraph {
 	ng.nodes = t.NewNodeSet()
 	ng.contents = make(map[t.NodeID][]byte)
 
-	for _, id := range inst.nodes.Items() {
+	// Unsorted iteration throughout: a copy needs every member and no
+	// order, and the sorted accessors (Items/Sources) cost an O(n log n)
+	// sort per call that dominated Clone in profiles.
+	for id := range inst.nodes.All() {
 		ng.nodes.Add(id)
 	}
 	for id, content := range inst.contents {
@@ -1158,33 +1161,23 @@ func (inst *PushoutGraph) Clone() *PushoutGraph {
 		copy(c, content)
 		ng.contents[id] = c
 	}
-	for _, id := range inst.deletedNodes.Items() {
+	for id := range inst.deletedNodes.All() {
 		ng.deletedNodes.Add(id)
 	}
 	// Copy edges.
-	for _, src := range inst.edges.Sources() {
-		for _, e := range inst.edges.Get(src) {
+	for src, es := range inst.edges.All() {
+		for _, e := range es {
 			ng.edges.Add(src, e)
 		}
 	}
-	for _, dest := range inst.backEdges.Sources() {
-		for _, be := range inst.backEdges.Get(dest) {
+	for dest, bes := range inst.backEdges.All() {
+		for _, be := range bes {
 			ng.backEdges.Add(dest, be)
 		}
 	}
-	// Copy partition.
-	ng.deletedPartition = t.NewUnionFind()
-	for _, id := range inst.deletedNodes.Items() {
-		ng.deletedPartition.Add(id)
-	}
-	for _, id := range inst.deletedNodes.Items() {
-		if inst.deletedPartition.Contains(id) {
-			rep := inst.deletedPartition.Find(id)
-			if ng.deletedPartition.Contains(rep) {
-				ng.deletedPartition.Union(id, rep)
-			}
-		}
-	}
+	// Copy the partition verbatim so representatives — the keys of
+	// reasonPseudoEdges and dirtyReps below — stay the same nodes.
+	ng.deletedPartition = inst.deletedPartition.Clone()
 	// Copy pseudo-edge reasons.
 	ng.reasonPseudoEdges = make(map[t.NodeID][]pseudoEdge)
 	for rep, pes := range inst.reasonPseudoEdges {

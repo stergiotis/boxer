@@ -1,6 +1,9 @@
 package types
 
-import "slices"
+import (
+	"maps"
+	"slices"
+)
 
 // UnionFind implements a disjoint-set data structure for tracking connected
 // components of deleted nodes. Used for pseudo-edge resolution.
@@ -23,6 +26,18 @@ func (inst *UnionFind) Add(id NodeID) {
 		inst.parent[id] = id
 		inst.rank[id] = 0
 	}
+}
+
+// Clone returns an independent copy with the same parent pointers and
+// ranks, so every Find answers exactly as on the original. Rebuilding a
+// copy through Add/Union would elect representatives by union order and
+// could disagree with the original's rep-keyed bookkeeping.
+func (inst *UnionFind) Clone() (out *UnionFind) {
+	out = &UnionFind{
+		parent: maps.Clone(inst.parent),
+		rank:   maps.Clone(inst.rank),
+	}
+	return
 }
 
 func (inst *UnionFind) Remove(id NodeID) {
