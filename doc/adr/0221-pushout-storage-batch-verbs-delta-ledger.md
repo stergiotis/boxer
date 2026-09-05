@@ -13,20 +13,18 @@ date: 2026-09-05
 ## Context
 
 [ADR-0220](./0220-pushout-storage-capabilities-and-retention-mode.md)
-let a store declare what it persists, and named the store shape the
-downstream dewmdm design wants: structured rows, no frames, no
-snapshot (hackathon_2026 ADR-0007, Updates 2026-09-05). Reading the
-seam from that shape's side found four places where the API still
-assumed a directory of files, each costing a round trip or a rewrite
-that an append-only or row store does not need:
+let a store declare what it persists, and named the store shape an
+append-only, structured backend wants: rows, no frames, no snapshot.
+Reading the seam from that shape's side found four places where the
+API still assumed a directory of files, each costing a round trip or a
+rewrite that an append-only or row store does not need:
 
 - **Half-batched writes.** `AppendAppliedBatch` made the log append one
   write, but `Repo.ApplyEnvelopes` (ADR-0079 update 2026-09-04) still
   put envelopes one `PutEnvelope` at a time. On ClickHouse that is one
-  synchronous insert and one part per patch — the part-pressure risk
-  the downstream soak (hackathon_2026 ADR-0007 OQ1) names as its
-  primary engineering risk. ADR-0079's own update called a batched put
-  "the next step".
+  synchronous insert and one part per patch — part pressure, the
+  primary engineering risk of a MergeTree-backed store. ADR-0079's own
+  update called a batched put "the next step".
 - **Recovery was n point reads.** `Open` fetched every envelope to
   replay through `GetEnvelope`. A store that disclaims snapshots
   replays its whole history that way, one round trip per patch, while
@@ -217,4 +215,3 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0220](./0220-pushout-storage-capabilities-and-retention-mode.md) — capabilities, the purge-carrying ledger, retention modes.
 - [ADR-0079](./0079-pushout-production-storage-codec-exchange.md) — the storage seam; update 2026-09-04 (`ApplyEnvelopes`) and OQ-1.
 - [ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md) — the recordstore adapter (S3).
-- hackathon_2026 `doc/workspace/sprint1/storagei-layer-design.md` §2.13 — the downstream reading that found the four idioms.
