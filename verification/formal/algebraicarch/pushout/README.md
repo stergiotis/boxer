@@ -72,11 +72,13 @@ runs the same scripts on `ubuntu-24.04`.
 | `erasure_dilemma.qnt` | 2 nodes, 2 patches, erasure that destroys the envelope | `EnvelopeAvailable` | simulation | depth 6 | **violated** (expected) | `findings` |
 | `erasure_vault.qnt` | vault-by-design (ADR-0025): values in a non-propagated vault, patches carry references | `Safe` (= `EnvelopeAvailable` ∧ `PersonalDataErased`) | Apalache | depth 10 | `NoError`, 35 s | `verify:vault` |
 | | | `Safe` | simulation | 20 000 × depth 12 | no violation, 2 s | `sweep` |
-| `crash_recovery.qnt` | one repo's record + unrecord write orderings, `Open` recovery, crash between any two steps | `Safety` (7 invariants, see below) | Apalache | depth 12 | `NoError`, 221 s | `verify:crash` |
+| `crash_recovery.qnt` | one repo's record + unrecord + sweep write orderings, `Open` recovery, crash between any two steps; a const-parameterised core instantiated with both purge carriers (ledger + snapshots) | `Safety` (9 invariants, see below) | simulation | depth 14 | `[ok]` | `sweep` |
+| `crash_recovery.qnt` (`--main=crash_recovery_ledger_only`) | the same core with snapshots off — the append-only / structured store shape | `Safety` | simulation | depth 14 | `[ok]` | `sweep` |
 | | | `Safety` | simulation | 20 000 × depth 14 | no violation, 3 s | `sweep` |
 | | | 5 witness runs (crash windows) | `quint test` | — | pass | `test` |
 | `crash_recovery_unsafe.qnt` | counterfactual: record's writes swapped (append before put) | `NoCorruption` | simulation | depth 6 | **violated** (expected) | `findings` |
 | `crash_recovery_unsafe_snapshot.qnt` | counterfactual: snapshot trusted and the log's positional suffix replayed, instead of coverage-based replay | `RecoveryCorrect` | simulation | depth 6 | **violated** (expected) | `findings` |
+| `crash_recovery_unsafe_purge.qnt` | counterfactual: the core with neither purge carrier (no ledger, no snapshots) — a returned `Sweep` is undone by recovery | `PurgeDurable` | simulation | depth 6 | **violated** (expected) | `findings` |
 | `convergence.qnt` | record / offer / deliver over a reliable carrier | `DepClosed` | Apalache | depth 12 | `NoError`, 85 s | `verify:convergence` |
 | | | `DepClosed` | simulation | 20 000 × depth 18 | no violation, 6 s | `sweep` |
 | | | bounded liveness witness | `quint test` | — | pass | `test` |
@@ -114,6 +116,7 @@ or Apalache tuning.
 | `crash_recovery.qnt`   | The single-repo durability layer: the record + unrecord commit ack-orderings + `Open` recovery, with a crash possible between any two steps. |
 | `crash_recovery_unsafe.qnt` | Counterfactual (record writes swapped) — shows put-before-append is what makes recovery total. |
 | `crash_recovery_unsafe_snapshot.qnt` | Counterfactual (snapshot trusted, positional suffix replay) — shows coverage-based replay is what makes unrecord atomic. |
+| `crash_recovery_unsafe_purge.qnt` | Counterfactual (no retention ledger, no snapshots) — shows the ledger's purge flag is what makes a returned sweep durable (ADR-0220). |
 | `convergence.qnt` | Liveness model (record / offer / deliver, reliable carrier) with a bounded witness and an Apalache-checked `DepClosed`; the readable source for the TLA⁺ below. |
 | `convergence.tla` + `.cfg` | TLC-native companion: `<>[]FullyReplicated` holds under weak fairness (`convergence.cfg`) and is violated without it (`convergence_nofair.cfg`). Needs `tla2tools.jar`. |
 | `frontier_reconcile.qnt` | The ADR-0079 OQ-1 optimization: frontier (DAG-head) exchange + dep walk, checked complete vs full-list exchange (Apalache + the powerset theorem). |

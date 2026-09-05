@@ -40,7 +40,24 @@
 //   unrMemCommit    -> in-memory commit (tail of repo.Repo.Unrecord)
 //   checkpoint      -> repo.Repo.Checkpoint
 //   crash           -> power loss + repo.Open recovery (coverage = isSubset)
-module crash_recovery {
+//   sweep           -> repo.Repo.Sweep: ONE durable write (the retention
+//                      ledger when the store keeps one, else a snapshot
+//                      when it keeps those, else nothing), then commit
+//
+// PURGES (ADR-0220). A Sweep destroys tombstone content; the purge is the
+// one fact about the graph that is NOT a function of the applied set, so
+// replaying envelopes un-does it. The model abstracts a purge to the
+// patch whose content was purged, and carries three purge sets: volatile
+// memPurged, the durable ledgerPurged (the retention ledger's purge
+// flags), and snapPurged inside the snapshot. Two constants select the
+// store shape: LedgerEnabled (Capabilities.RetentionLedger) and
+// SnapshotsEnabled (Capabilities.Snapshots). PurgeDurable is the claim
+// that recovery reproduces memPurged; crash_recovery_unsafe_purge.qnt
+// instantiates the core with both carriers off and shows it fail.
+module crash_recovery_core {
+  const LedgerEnabled: bool
+  const SnapshotsEnabled: bool
+
   type Patch = int
 
   pure val Patches: Set[Patch] = Set(1, 2, 3)
@@ -75,15 +92,26 @@ module crash_recovery {
     if (snapUsable(hasS, snapA, log)) snapS.union(listToSet(log).exclude(listToSet(snapA)))
     else listToSet(log)
 
+  // The purge set Open reconstructs: whatever a usable snapshot carries,
+  // plus whatever the ledger carries, restricted to what is applied.
+  pure def recoveredPurged(hasS: bool, snapA: List[Patch], snapP: Set[Patch],
+                           ledgerP: Set[Patch], log: List[Patch], recovered: Set[Patch]): Set[Patch] =
+    (if (snapUsable(hasS, snapA, log)) snapP else Set())
+      .union(if (LedgerEnabled) ledgerP else Set())
+      .intersect(recovered)
+
   // ---- Durable storage (survives a crash) --------------------------
   var envStore: Set[Patch]      // PutEnvelope'd, content-addressed; KEPT across unrecord
   var appliedLog: List[Patch]   // AppendApplied / ReplaceApplied, apply order
   var snapApplied: List[Patch]  // snapshot's Applied list
   var snapState: Set[Patch]     // snapshot's pushoutgraph state (abstracted to its applied set)
   var hasSnap: bool             // a snapshot exists
+  var snapPurged: Set[Patch]    // purge markers inside the snapshot
+  var ledgerPurged: Set[Patch]  // purge flags in the retention ledger
 
   // ---- Volatile in-memory (lost on crash) --------------------------
   var memApplied: Set[Patch]    // Repo.appliedSet
+  var memPurged: Set[Patch]     // patches whose content a Sweep purged
   var opKind: int               // 0 none, 1 record, 2 unrecord
   var opPhase: int              // step within the in-flight verb (1..3)
   var opPatch: Patch            // the verb's target patch
@@ -98,6 +126,7 @@ module crash_recovery {
     snapState' = Set(), hasSnap' = false, memApplied' = Set(),
     opKind' = 0, opPhase' = 0, opPatch' = 0,
     pendingApplied' = List(), pendingState' = Set(), corrupt' = false,
+    snapPurged' = Set(), ledgerPurged' = Set(), memPurged' = Set(),
   }
 
   // ===== RECORD pipeline =====
@@ -110,6 +139,7 @@ module crash_recovery {
     envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
     snapState' = snapState, hasSnap' = hasSnap, memApplied' = memApplied,
     pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+    snapPurged' = snapPurged, ledgerPurged' = ledgerPurged, memPurged' = memPurged,
   }
 
   action putEnv = all {
@@ -118,6 +148,7 @@ module crash_recovery {
     appliedLog' = appliedLog, snapApplied' = snapApplied, snapState' = snapState,
     hasSnap' = hasSnap, memApplied' = memApplied, opKind' = opKind, opPatch' = opPatch,
     pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+    snapPurged' = snapPurged, ledgerPurged' = ledgerPurged, memPurged' = memPurged,
   }
 
   action appendLog = all {
@@ -126,6 +157,7 @@ module crash_recovery {
     envStore' = envStore, snapApplied' = snapApplied, snapState' = snapState,
     hasSnap' = hasSnap, memApplied' = memApplied, opKind' = opKind, opPatch' = opPatch,
     pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+    snapPurged' = snapPurged, ledgerPurged' = ledgerPurged, memPurged' = memPurged,
   }
 
   action memCommit = all {
@@ -135,6 +167,7 @@ module crash_recovery {
     envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
     snapState' = snapState, hasSnap' = hasSnap,
     pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+    snapPurged' = snapPurged, ledgerPurged' = ledgerPurged, memPurged' = memPurged,
   }
 
   // ===== UNRECORD pipeline =====
@@ -144,21 +177,29 @@ module crash_recovery {
   action unrecordBegin(p: Patch): bool = all {
     opKind == 0,
     memApplied.contains(p),
+    not(memPurged.contains(p)),
     not(memApplied.exists(q => depsOf(q).contains(p))),
     opKind' = 2, opPhase' = 1, opPatch' = p,
     pendingApplied' = removeAll(appliedLog, p),
     pendingState'   = memApplied.exclude(Set(p)),
     envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
     snapState' = snapState, hasSnap' = hasSnap, memApplied' = memApplied, corrupt' = corrupt,
+    snapPurged' = snapPurged, ledgerPurged' = ledgerPurged, memPurged' = memPurged,
   }
 
-  // SaveSnapshot of the post-unrecord state (DURABLE).
+  // SaveSnapshot of the post-unrecord state (DURABLE) — a no-op step
+  // over a store without snapshots (the engine skips the write).
   action unrSaveSnapshot = all {
     opKind == 2, opPhase == 1,
-    hasSnap' = true, snapApplied' = pendingApplied, snapState' = pendingState, opPhase' = 2,
+    hasSnap' = (hasSnap or SnapshotsEnabled),
+    snapApplied' = (if (SnapshotsEnabled) pendingApplied else snapApplied),
+    snapState' = (if (SnapshotsEnabled) pendingState else snapState),
+    snapPurged' = (if (SnapshotsEnabled) memPurged else snapPurged),
+    opPhase' = 2,
     envStore' = envStore, appliedLog' = appliedLog, memApplied' = memApplied,
     opKind' = opKind, opPatch' = opPatch,
     pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+    ledgerPurged' = ledgerPurged, memPurged' = memPurged,
   }
 
   // ReplaceApplied with newApplied (DURABLE) -- the unrecord COMMIT POINT.
@@ -168,6 +209,7 @@ module crash_recovery {
     envStore' = envStore, snapApplied' = snapApplied, snapState' = snapState,
     hasSnap' = hasSnap, memApplied' = memApplied, opKind' = opKind, opPatch' = opPatch,
     pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+    snapPurged' = snapPurged, ledgerPurged' = ledgerPurged, memPurged' = memPurged,
   }
 
   // in-memory commit (volatile). Envelope is kept: envStore unchanged.
@@ -178,12 +220,39 @@ module crash_recovery {
     pendingApplied' = List(), pendingState' = Set(),
     envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
     snapState' = snapState, hasSnap' = hasSnap, corrupt' = corrupt,
+    snapPurged' = snapPurged, ledgerPurged' = ledgerPurged, memPurged' = memPurged,
   }
 
   // Checkpoint: snapshot the current stable state (no op in flight).
   action checkpoint = all {
     opKind == 0,
-    hasSnap' = true, snapApplied' = appliedLog, snapState' = memApplied,
+    hasSnap' = (hasSnap or SnapshotsEnabled),
+    snapApplied' = (if (SnapshotsEnabled) appliedLog else snapApplied),
+    snapState' = (if (SnapshotsEnabled) memApplied else snapState),
+    snapPurged' = (if (SnapshotsEnabled) memPurged else snapPurged),
+    envStore' = envStore, appliedLog' = appliedLog, memApplied' = memApplied,
+    opKind' = opKind, opPhase' = opPhase, opPatch' = opPatch,
+    pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
+    ledgerPurged' = ledgerPurged, memPurged' = memPurged,
+  }
+
+  // ===== SWEEP =====
+
+  // Sweep purges p's content (p applied, not yet purged) with ONE durable
+  // write before the volatile commit: the ledger if the store keeps one,
+  // else the snapshot if it keeps those, else nothing durable at all.
+  // Modelled as a single step because the engine's write is one call and
+  // a crash before it is "never happened", after it "happened".
+  action sweep(p: Patch): bool = all {
+    opKind == 0,
+    memApplied.contains(p),
+    not(memPurged.contains(p)),
+    memPurged' = memPurged.union(Set(p)),
+    ledgerPurged' = (if (LedgerEnabled) memPurged.union(Set(p)) else ledgerPurged),
+    hasSnap' = (hasSnap or (not(LedgerEnabled) and SnapshotsEnabled)),
+    snapApplied' = (if (not(LedgerEnabled) and SnapshotsEnabled) appliedLog else snapApplied),
+    snapState' = (if (not(LedgerEnabled) and SnapshotsEnabled) memApplied else snapState),
+    snapPurged' = (if (not(LedgerEnabled) and SnapshotsEnabled) memPurged.union(Set(p)) else snapPurged),
     envStore' = envStore, appliedLog' = appliedLog, memApplied' = memApplied,
     opKind' = opKind, opPhase' = opPhase, opPatch' = opPatch,
     pendingApplied' = pendingApplied, pendingState' = pendingState, corrupt' = corrupt,
@@ -195,10 +264,13 @@ module crash_recovery {
     corrupt'    = (logHasDup(appliedLog)
                    or not(replayNeedsEnv(hasSnap, snapApplied, appliedLog).subseteq(envStore))),
     memApplied' = recoveredSet(hasSnap, snapApplied, snapState, appliedLog),
+    memPurged'  = recoveredPurged(hasSnap, snapApplied, snapPurged, ledgerPurged, appliedLog,
+                                  recoveredSet(hasSnap, snapApplied, snapState, appliedLog)),
     opKind' = 0, opPhase' = 0, opPatch' = 0,
     pendingApplied' = List(), pendingState' = Set(),
     envStore' = envStore, appliedLog' = appliedLog, snapApplied' = snapApplied,
     snapState' = snapState, hasSnap' = hasSnap,
+    snapPurged' = snapPurged, ledgerPurged' = ledgerPurged,
   }
 
   action step =
@@ -206,7 +278,7 @@ module crash_recovery {
     any {
       recordBegin(p), putEnv, appendLog, memCommit,
       unrecordBegin(p), unrSaveSnapshot, unrReplaceLog, unrMemCommit,
-      checkpoint, crash,
+      checkpoint, sweep(p), crash,
     }
 
   // ===== SAFETY INVARIANTS =====
@@ -242,6 +314,20 @@ module crash_recovery {
   val RecoveryCorrect =
     recoveredSet(hasSnap, snapApplied, snapState, appliedLog) == listToSet(appliedLog)
 
+  // Purges only ever cover applied patches.
+  val PurgedApplied = memPurged.subseteq(memApplied)
+
+  // THE PURGE-DURABILITY RESULT: with no verb in flight, a crash right now
+  // would reconstruct exactly the purge set in memory — a Sweep that has
+  // returned cannot un-happen. Holds when the store keeps a ledger (the
+  // ADR-0220 guarantee) and, as it happens, when it keeps only snapshots
+  // (every snapshot write carries memPurged); fails with neither carrier
+  // — crash_recovery_unsafe_purge.qnt.
+  val PurgeDurable =
+    (opKind == 0) implies
+      (recoveredPurged(hasSnap, snapApplied, snapPurged, ledgerPurged, appliedLog,
+                       recoveredSet(hasSnap, snapApplied, snapState, appliedLog)) == memPurged)
+
   val Safety = and {
     NoCorruption,
     LoggedImpliesStored,
@@ -250,6 +336,8 @@ module crash_recovery {
     StableConsistency,
     SnapshotConsistent,
     RecoveryCorrect,
+    PurgedApplied,
+    PurgeDurable,
   }
 
   // ===== WITNESS RUNS =====
@@ -294,4 +382,42 @@ module crash_recovery {
       .then(unrecordBegin(2)).then(unrSaveSnapshot).then(unrReplaceLog)
       .then(crash)
       .expect(memApplied == Set(1, 3) and appliedLog == List(1, 3) and not(corrupt))
+
+  // A purged patch is permanent: unrecord is refused past the sweep.
+  run purgedIsPermanentTest =
+    init
+      .then(recordBegin(1)).then(putEnv).then(appendLog).then(memCommit)
+      .then(recordBegin(2)).then(putEnv).then(appendLog).then(memCommit)
+      .then(sweep(2))
+      .expect(not(memApplied.exists(q => q == 2 and not(memPurged.contains(q)))))
+}
+
+// The shipped shape: a store with both carriers (filestore, pushoutstore).
+module crash_recovery {
+  import crash_recovery_core(LedgerEnabled = true, SnapshotsEnabled = true).*
+
+  // PURGE DURABILITY — a sweep, then a crash with NO snapshot ever written
+  // (a sweep over a ledger store writes only the ledger): the purge comes
+  // back from the ledger alone. Lives here rather than in the core because
+  // it is exactly what the counterfactual instance must NOT satisfy.
+  run sweepDurableAfterCrashTest =
+    init
+      .then(recordBegin(1)).then(putEnv).then(appendLog).then(memCommit)
+      .then(recordBegin(2)).then(putEnv).then(appendLog).then(memCommit)
+      .then(sweep(2))
+      .then(crash)
+      .expect(memPurged == Set(2) and memApplied == Set(1, 2) and not(corrupt))
+}
+
+// A ledger without snapshots — the append-only / structured store shape
+// ADR-0220 admits. Same invariants, checked by the same scripts.
+module crash_recovery_ledger_only {
+  import crash_recovery_core(LedgerEnabled = true, SnapshotsEnabled = false).*
+
+  run sweepDurableAfterCrashLedgerOnlyTest =
+    init
+      .then(recordBegin(1)).then(putEnv).then(appendLog).then(memCommit)
+      .then(sweep(1))
+      .then(crash)
+      .expect(memPurged == Set(1) and memApplied == Set(1) and not(corrupt) and not(hasSnap))
 }
