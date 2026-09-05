@@ -9,7 +9,8 @@
 // match behaviour fails either way. Envelope byte-equality is checked
 // only for stores that claim ExactEnvelopeBytes; a store that
 // re-encodes is exercised through the engine's own tests instead, since
-// this suite's envelope fixtures are opaque bytes. The batch verbs
+// this suite's default envelope fixtures are opaque bytes; RunWith
+// takes decodable ones and a logical equality for such a store. The batch verbs
 // (PutEnvelopes, LoadEnvelopes, AppendAppliedBatch) are checked against
 // their one-by-one counterparts, and the retention ledger is checked as
 // what it is since ADR-0221 — a set folded from deltas.
@@ -34,6 +35,62 @@ import (
 
 // OpenFunc opens (creating on first use) a store at location.
 type OpenFunc func(location string) (repo.StorageI, error)
+
+// Fixtures are the envelopes the suite writes and reads. The default
+// (a zero Fixtures) uses opaque frames and byte equality, which is all
+// a store that claims ExactEnvelopeBytes needs. A store that re-encodes
+// on read cannot accept opaque bytes, so its conformance run supplies
+// decodable envelopes and a logical equality — typically "decodes to
+// the same hash, producer and timestamp" — through RunWith; without
+// them the envelope checks are skipped for such a store.
+type Fixtures struct {
+	// Envelopes are distinct, decodable envelopes with their hashes;
+	// at least four are needed. Alternate, when set, is a second frame
+	// of the SAME hash that a logical equality must tell apart from
+	// Framed (e.g. a different producer), for the first-write-wins
+	// check.
+	Envelopes []FixtureEnvelope
+	// Equal decides whether a stored envelope is the one put. Nil means
+	// byte equality.
+	Equal func(got, want []byte) bool
+}
+
+// FixtureEnvelope is one decodable envelope for the suite.
+type FixtureEnvelope struct {
+	Hash      t.PatchHash
+	Framed    []byte
+	Alternate []byte
+}
+
+// opaque is the default fixture set: PXE1-looking frames that no codec
+// decodes, distinguished by one byte, with an alternate per hash.
+func opaque() (fx Fixtures) {
+	for b := byte(1); b <= 4; b++ {
+		fx.Envelopes = append(fx.Envelopes, FixtureEnvelope{
+			Hash:      h(b),
+			Framed:    []byte("PXE1\x05opaq1" + string([]byte{b})),
+			Alternate: []byte("OTHER" + string([]byte{b})),
+		})
+	}
+	return
+}
+
+func (inst Fixtures) orOpaque() (fx Fixtures) {
+	fx = inst
+	if len(fx.Envelopes) == 0 {
+		fx = opaque()
+	}
+	if fx.Equal == nil {
+		fx.Equal = bytes.Equal
+	}
+	return
+}
+
+// usable reports whether these fixtures can drive the envelope checks
+// against st: a re-encoding store needs decodable fixtures.
+func (inst Fixtures) usable(st repo.StorageI) bool {
+	return st.Capabilities().ExactEnvelopeBytes || len(inst.Envelopes) > 0
+}
 
 func h(b byte) (out t.PatchHash) {
 	for i := range out {
@@ -72,48 +129,56 @@ func retentionSetEqual(got, want []repo.RetentionEntry) bool {
 // have to be decodable envelopes, which this suite does not carry; the
 // engine's own tests over such a store are its conformance gate.
 func CheckEnvelopes(ctx context.Context, open OpenFunc, location string) (err error) {
+	return CheckEnvelopesWith(ctx, open, location, Fixtures{})
+}
+
+// CheckEnvelopesWith is CheckEnvelopes over the given fixtures.
+func CheckEnvelopesWith(ctx context.Context, open OpenFunc, location string, fx Fixtures) (err error) {
 	st, err := open(location)
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
 	defer st.Close()
-	if !st.Capabilities().ExactEnvelopeBytes {
+	if !fx.usable(st) {
 		return
 	}
+	fx = fx.orOpaque()
+	e1, absent := fx.Envelopes[0], h(9)
 
-	data := []byte("PXE1\x05opaq1\x00\x01\x02")
-	if err = st.PutEnvelope(ctx, h(1), data); err != nil {
+	if err = st.PutEnvelope(ctx, e1.Hash, e1.Framed); err != nil {
 		return eh.Errorf("put: %w", err)
 	}
-	if err = st.PutEnvelope(ctx, h(1), data); err != nil {
+	if err = st.PutEnvelope(ctx, e1.Hash, e1.Framed); err != nil {
 		return eh.Errorf("idempotent re-put: %w", err)
 	}
-	got, err := st.GetEnvelope(ctx, h(1))
+	got, err := st.GetEnvelope(ctx, e1.Hash)
 	if err != nil {
 		return eh.Errorf("get: %w", err)
 	}
-	if !bytes.Equal(got, data) {
-		return eh.Errorf("get returned %q, want %q", got, data)
+	if !fx.Equal(got, e1.Framed) {
+		return eh.Errorf("get returned %q, want %q", got, e1.Framed)
 	}
-	ok, err := st.HasEnvelope(ctx, h(1))
+	ok, err := st.HasEnvelope(ctx, e1.Hash)
 	if err != nil || !ok {
 		return eh.Errorf("has(present) = %v, %v", ok, err)
 	}
-	ok, err = st.HasEnvelope(ctx, h(2))
+	ok, err = st.HasEnvelope(ctx, absent)
 	if err != nil || ok {
 		return eh.Errorf("has(absent) = %v, %v", ok, err)
 	}
-	if _, err2 := st.GetEnvelope(ctx, h(2)); !errors.Is(err2, repo.ErrEnvelopeNotFound) {
+	if _, err2 := st.GetEnvelope(ctx, absent); !errors.Is(err2, repo.ErrEnvelopeNotFound) {
 		return eh.Errorf("get(absent): want ErrEnvelopeNotFound, got %v", err2)
 	}
 	// First write wins: a different payload for the same hash must not
 	// replace the original (envelopes are immutable).
-	if err = st.PutEnvelope(ctx, h(1), []byte("OTHER")); err != nil {
-		return eh.Errorf("re-put different bytes: %w", err)
-	}
-	got, err = st.GetEnvelope(ctx, h(1))
-	if err != nil || !bytes.Equal(got, data) {
-		return eh.Errorf("envelope mutated by re-put: %q, %v", got, err)
+	if e1.Alternate != nil {
+		if err = st.PutEnvelope(ctx, e1.Hash, e1.Alternate); err != nil {
+			return eh.Errorf("re-put different bytes: %w", err)
+		}
+		got, err = st.GetEnvelope(ctx, e1.Hash)
+		if err != nil || !fx.Equal(got, e1.Framed) {
+			return eh.Errorf("envelope mutated by re-put: %q, %v", got, err)
+		}
 	}
 	return
 }
@@ -328,43 +393,53 @@ func CheckRetention(ctx context.Context, open OpenFunc, location string) (err er
 // batch load in request order, duplicates within a batch, first-write-
 // wins across a batch, and a missing hash ending the load with
 // ErrEnvelopeNotFound. Skipped for a store that disclaims
-// ExactEnvelopeBytes, like CheckEnvelopes.
+// ExactEnvelopeBytes unless fixtures are supplied, like CheckEnvelopes.
 func CheckEnvelopeBatch(ctx context.Context, open OpenFunc, location string) (err error) {
+	return CheckEnvelopeBatchWith(ctx, open, location, Fixtures{})
+}
+
+// CheckEnvelopeBatchWith is CheckEnvelopeBatch over the given fixtures.
+func CheckEnvelopeBatchWith(ctx context.Context, open OpenFunc, location string, fx Fixtures) (err error) {
 	st, err := open(location)
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
 	defer st.Close()
-	if !st.Capabilities().ExactEnvelopeBytes {
+	if !fx.usable(st) {
 		return
 	}
-	frame := func(b byte) []byte { return []byte("PXE1\x05opaq1" + string([]byte{b})) }
-	if err = st.PutEnvelope(ctx, h(1), frame(1)); err != nil {
+	fx = fx.orOpaque()
+	if len(fx.Envelopes) < 4 {
+		return eh.Errorf("fixtures: %d envelopes, need at least 4", len(fx.Envelopes))
+	}
+	e1, e2, e3 := fx.Envelopes[0], fx.Envelopes[1], fx.Envelopes[2]
+	absent := h(9)
+	byHash := map[t.PatchHash][]byte{e1.Hash: e1.Framed, e2.Hash: e2.Framed, e3.Hash: e3.Framed}
+	if err = st.PutEnvelope(ctx, e1.Hash, e1.Framed); err != nil {
 		return eh.Errorf("put: %w", err)
 	}
 	if err = st.PutEnvelopes(ctx, nil); err != nil {
 		return eh.Errorf("empty batch put: %w", err)
 	}
 	batch := []repo.Envelope{
-		{Hash: h(1), Framed: []byte("OTHER")}, // first write wins across a batch
-		{Hash: h(2), Framed: frame(2)},
-		{Hash: h(3), Framed: frame(3)},
-		{Hash: h(3), Framed: frame(3)}, // duplicate within a batch
+		{Hash: e2.Hash, Framed: e2.Framed},
+		{Hash: e3.Hash, Framed: e3.Framed},
+		{Hash: e3.Hash, Framed: e3.Framed}, // duplicate within a batch
+	}
+	if e1.Alternate != nil {
+		batch = append([]repo.Envelope{{Hash: e1.Hash, Framed: e1.Alternate}}, batch...) // first write wins across a batch
 	}
 	if err = st.PutEnvelopes(ctx, batch); err != nil {
 		return eh.Errorf("batch put: %w", err)
 	}
-	for _, c := range []struct {
-		hash t.PatchHash
-		want []byte
-	}{{h(1), frame(1)}, {h(2), frame(2)}, {h(3), frame(3)}} {
-		got, gerr := st.GetEnvelope(ctx, c.hash)
-		if gerr != nil || !bytes.Equal(got, c.want) {
-			return eh.Errorf("get after batch put: %q, %v (want %q)", got, gerr, c.want)
+	for hash, want := range byHash {
+		got, gerr := st.GetEnvelope(ctx, hash)
+		if gerr != nil || !fx.Equal(got, want) {
+			return eh.Errorf("get after batch put: %q, %v (want %q)", got, gerr, want)
 		}
 	}
 	// Batch load in request order (not hash order), with a repeat.
-	req := []t.PatchHash{h(3), h(1), h(2), h(1)}
+	req := []t.PatchHash{e3.Hash, e1.Hash, e2.Hash, e1.Hash}
 	i := 0
 	for env, lerr := range st.LoadEnvelopes(ctx, req) {
 		if lerr != nil {
@@ -373,7 +448,7 @@ func CheckEnvelopeBatch(ctx context.Context, open OpenFunc, location string) (er
 		if i >= len(req) {
 			return eh.Errorf("batch load yielded more than requested")
 		}
-		if env.Hash != req[i] || !bytes.Equal(env.Framed, frame(req[i][0])) {
+		if env.Hash != req[i] || !fx.Equal(env.Framed, byHash[req[i]]) {
 			return eh.Errorf("batch load position %d: got %v %q, want %v", i, env.Hash, env.Framed, req[i])
 		}
 		i++
@@ -389,12 +464,12 @@ func CheckEnvelopeBatch(ctx context.Context, open OpenFunc, location string) (er
 	// the hashes before it.
 	seen := 0
 	var final error
-	for env, lerr := range st.LoadEnvelopes(ctx, []t.PatchHash{h(2), h(9), h(3)}) {
+	for env, lerr := range st.LoadEnvelopes(ctx, []t.PatchHash{e2.Hash, absent, e3.Hash}) {
 		if lerr != nil {
 			final = lerr
 			break
 		}
-		if env.Hash != h(2) {
+		if env.Hash != e2.Hash {
 			return eh.Errorf("batch load with a miss: unexpected %v before the miss", env.Hash)
 		}
 		seen++
@@ -403,7 +478,7 @@ func CheckEnvelopeBatch(ctx context.Context, open OpenFunc, location string) (er
 		return eh.Errorf("batch load with a miss: seen=%d err=%v (want 1, ErrEnvelopeNotFound)", seen, final)
 	}
 	// Early break is allowed.
-	for range st.LoadEnvelopes(ctx, []t.PatchHash{h(1), h(2)}) {
+	for range st.LoadEnvelopes(ctx, []t.PatchHash{e1.Hash, e2.Hash}) {
 		break
 	}
 	return
@@ -413,16 +488,23 @@ func CheckEnvelopeBatch(ctx context.Context, open OpenFunc, location string) (er
 // after reopening the same location — the property crash recovery
 // stands on.
 func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) (err error) {
+	return CheckReopenDurabilityWith(ctx, open, location, Fixtures{})
+}
+
+// CheckReopenDurabilityWith is CheckReopenDurability over the given
+// fixtures.
+func CheckReopenDurabilityWith(ctx context.Context, open OpenFunc, location string, fx Fixtures) (err error) {
 	st, err := open(location)
 	if err != nil {
 		return eh.Errorf("open #1: %w", err)
 	}
-	// The fixture is opaque bytes, which a re-encoding store cannot
-	// accept; it is put only where byte-equality is claimed (SD5), and
-	// the read below is gated the same way.
-	data := []byte("ENVELOPE-BYTES")
-	if st.Capabilities().ExactEnvelopeBytes {
-		if err = st.PutEnvelope(ctx, h(7), data); err != nil {
+	// A re-encoding store cannot accept opaque bytes: without decodable
+	// fixtures the envelope half is skipped (the rest still runs).
+	envelopes := fx.usable(st)
+	fx = fx.orOpaque()
+	e := fx.Envelopes[3]
+	if envelopes {
+		if err = st.PutEnvelope(ctx, e.Hash, e.Framed); err != nil {
 			return err
 		}
 	}
@@ -445,9 +527,9 @@ func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) 
 	}
 	defer st2.Close()
 	caps := st2.Capabilities()
-	if caps.ExactEnvelopeBytes {
-		got, err := st2.GetEnvelope(ctx, h(7))
-		if err != nil || !bytes.Equal(got, data) {
+	if envelopes {
+		got, err := st2.GetEnvelope(ctx, e.Hash)
+		if err != nil || !fx.Equal(got, e.Framed) {
 			return eh.Errorf("envelope did not survive reopen: %q, %v", got, err)
 		}
 	}
@@ -478,18 +560,30 @@ func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) 
 // location under t.TempDir().
 func Run(tt *testing.T, open OpenFunc) {
 	tt.Helper()
+	RunWith(tt, open, Fixtures{})
+}
+
+// RunWith is Run with decodable envelope fixtures — the way a store
+// that disclaims ExactEnvelopeBytes gets its envelope checks.
+func RunWith(tt *testing.T, open OpenFunc, fx Fixtures) {
+	tt.Helper()
 	ctx := context.Background()
+	with := func(f func(context.Context, OpenFunc, string, Fixtures) error) func(context.Context, OpenFunc, string) error {
+		return func(ctx context.Context, open OpenFunc, location string) error {
+			return f(ctx, open, location, fx)
+		}
+	}
 	checks := []struct {
 		name  string
 		check func(context.Context, OpenFunc, string) error
 	}{
-		{"Envelopes", CheckEnvelopes},
-		{"EnvelopeBatch", CheckEnvelopeBatch},
+		{"Envelopes", with(CheckEnvelopesWith)},
+		{"EnvelopeBatch", with(CheckEnvelopeBatchWith)},
 		{"AppliedLog", CheckAppliedLog},
 		{"AppliedLogBatch", CheckAppliedLogBatch},
 		{"Snapshot", CheckSnapshot},
 		{"Retention", CheckRetention},
-		{"ReopenDurability", CheckReopenDurability},
+		{"ReopenDurability", with(CheckReopenDurabilityWith)},
 	}
 	for _, c := range checks {
 		tt.Run(c.name, func(tt *testing.T) {
