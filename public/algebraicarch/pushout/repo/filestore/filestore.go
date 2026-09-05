@@ -187,8 +187,8 @@ func (inst *Store) AppendApplied(ctx context.Context, h t.PatchHash) (err error)
 	return
 }
 
-// AppendAppliedBatch implements repo.BatchAppenderI: one O_APPEND write
-// and one fsync for the whole batch. A crash mid-write leaves a prefix
+// AppendAppliedBatch is one O_APPEND write and one fsync for the whole
+// batch. A crash mid-write leaves a prefix
 // of whole lines plus at most one torn line, which LoadApplied drops.
 func (inst *Store) AppendAppliedBatch(ctx context.Context, hs []t.PatchHash) (err error) {
 	if len(hs) == 0 {
@@ -322,6 +322,9 @@ func (inst *Store) SaveRetention(ctx context.Context, entries []repo.RetentionEn
 		sb.WriteString(strconv.FormatUint(e.Node.Index, 10))
 		sb.WriteByte(' ')
 		sb.WriteString(strconv.FormatInt(e.UnixNano, 10))
+		if e.Purged {
+			sb.WriteString(" purged")
+		}
 		sb.WriteByte('\n')
 	}
 	err = writeAtomic(inst.retentionPath(), []byte(sb.String()))
@@ -345,8 +348,8 @@ func (inst *Store) LoadRetention(ctx context.Context) (entries []repo.RetentionE
 			continue
 		}
 		fields := strings.Split(line, " ")
-		if len(fields) != 3 {
-			err = eb.Build().Int("line", i+1).Int("fields", len(fields)).Errorf("retention ledger line wants 3 fields")
+		if len(fields) != 3 && !(len(fields) == 4 && fields[3] == "purged") {
+			err = eb.Build().Int("line", i+1).Int("fields", len(fields)).Errorf("retention ledger line wants 3 fields, or 4 with a trailing 'purged'")
 			return
 		}
 		var e repo.RetentionEntry
@@ -366,10 +369,14 @@ func (inst *Store) LoadRetention(ctx context.Context) (entries []repo.RetentionE
 			return
 		}
 		e.UnixNano = nanos
+		e.Purged = len(fields) == 4
 		entries = append(entries, e)
 	}
 	return
 }
+
+// Capabilities: the filestore persists everything the seam offers.
+func (inst *Store) Capabilities() repo.Capabilities { return repo.AllCapabilities() }
 
 func (inst *Store) Close() (err error) {
 	err = releaseLock(inst.lockFile)

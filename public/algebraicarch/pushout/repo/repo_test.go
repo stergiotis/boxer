@@ -295,6 +295,13 @@ func (f *faultStore) AppendApplied(ctx context.Context, h t.PatchHash) error {
 	return f.StorageI.AppendApplied(ctx, h)
 }
 
+func (f *faultStore) AppendAppliedBatch(ctx context.Context, hs []t.PatchHash) error {
+	if f.failAppend {
+		return errInjected
+	}
+	return f.StorageI.AppendAppliedBatch(ctx, hs)
+}
+
 func (f *faultStore) ReplaceApplied(ctx context.Context, hs []t.PatchHash) error {
 	if f.failReplace {
 		return errInjected
@@ -348,7 +355,7 @@ func TestRepo_StorageFaultsAreCrashEquivalent(tt *testing.T) {
 		{"Unrecord/ReplaceApplied", func(f *faultStore) { f.failReplace = true }, func(tt *testing.T, r *repo.Repo, hDel t.PatchHash, _ t.NodeID) error {
 			return r.Unrecord(ctx, hDel)
 		}},
-		{"Sweep/SaveSnapshot", func(f *faultStore) { f.failSnap = true }, func(tt *testing.T, r *repo.Repo, _ t.PatchHash, _ t.NodeID) error {
+		{"Sweep/SaveRetention", func(f *faultStore) { f.failRetention = true }, func(tt *testing.T, r *repo.Repo, _ t.PatchHash, _ t.NodeID) error {
 			_, err := r.Sweep(ctx, time.Unix(2_000_000_000, 0).UTC(), 0)
 			return err
 		}},

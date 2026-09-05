@@ -20,16 +20,26 @@ import (
 )
 
 // memStore is a StorageI with no I/O, for benchmarks that isolate
-// engine cost from fsync cost. It deliberately does NOT implement
-// repo.BatchAppenderI, so it also exercises the per-hash fallback.
+// engine cost from fsync cost, and for the semantics tests: its
+// Capabilities are settable so one double can play every store shape.
 type memStore struct {
 	env     map[t.PatchHash][]byte
 	applied []t.PatchHash
 	snap    *repo.Snapshot
 	ret     []repo.RetentionEntry
+	caps    repo.Capabilities
 }
 
-func newMemStore() *memStore { return &memStore{env: map[t.PatchHash][]byte{}} }
+func newMemStore() *memStore {
+	return &memStore{env: map[t.PatchHash][]byte{}, caps: repo.AllCapabilities()}
+}
+
+func (m *memStore) Capabilities() repo.Capabilities { return m.caps }
+
+func (m *memStore) AppendAppliedBatch(_ context.Context, hs []t.PatchHash) error {
+	m.applied = append(m.applied, hs...)
+	return nil
+}
 
 func (m *memStore) PutEnvelope(_ context.Context, h t.PatchHash, b []byte) error {
 	if _, ok := m.env[h]; !ok {
@@ -57,6 +67,9 @@ func (m *memStore) AppendApplied(_ context.Context, h t.PatchHash) error {
 }
 
 func (m *memStore) ReplaceApplied(_ context.Context, hs []t.PatchHash) error {
+	if !m.caps.ReplaceApplied {
+		return repo.ErrUnsupported
+	}
 	m.applied = slices.Clone(hs)
 	return nil
 }
@@ -66,7 +79,9 @@ func (m *memStore) LoadApplied(_ context.Context) ([]t.PatchHash, error) {
 }
 
 func (m *memStore) SaveSnapshot(_ context.Context, s repo.Snapshot) error {
-	m.snap = &s
+	if m.caps.Snapshots {
+		m.snap = &s
+	}
 	return nil
 }
 
@@ -78,7 +93,9 @@ func (m *memStore) LoadSnapshot(_ context.Context) (repo.Snapshot, bool, error) 
 }
 
 func (m *memStore) SaveRetention(_ context.Context, e []repo.RetentionEntry) error {
-	m.ret = e
+	if m.caps.RetentionLedger {
+		m.ret = e
+	}
 	return nil
 }
 
@@ -304,10 +321,9 @@ func TestRepo_ApplyEnvelopesRejectedPatchFailsBatchBeforeWrite(tt *testing.T) {
 	}
 }
 
-// A storage fault inside ApplyEnvelopes is crash-equivalent on both
-// log-append paths: the batched one (filestore implements
-// BatchAppenderI) and the per-hash fallback (faultStore embeds the
-// interface and so hides the extension).
+// A storage fault inside ApplyEnvelopes is crash-equivalent: the
+// batched log append fails before the in-memory commit, and reopen
+// reproduces the pre-batch state.
 func TestRepo_ApplyEnvelopesStorageFaultIsCrashEquivalent(tt *testing.T) {
 	ctx := context.Background()
 	src := openTest(tt, tt.TempDir())

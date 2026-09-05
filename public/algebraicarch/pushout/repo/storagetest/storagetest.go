@@ -3,6 +3,14 @@
 // requirement is also a Check* function returning an error so suites
 // can be meta-tested against deliberately broken stores.
 //
+// The suite follows the store's declared [repo.Capabilities]: every
+// claimed capability gets its positive check and every disclaimed one
+// gets the matching negative check, so a declaration that does not
+// match behaviour fails either way. Envelope byte-equality is checked
+// only for stores that claim ExactEnvelopeBytes; a store that
+// re-encodes is exercised through the engine's own tests instead, since
+// this suite's envelope fixtures are opaque bytes.
+//
 // Implementors: the factory you pass to Run must open a store over the
 // given location string, and OPENING THE SAME LOCATION AGAIN after
 // Close must observe everything previously written — the suite checks
@@ -39,12 +47,16 @@ func retentionSetEqual(got, want []repo.RetentionEntry) bool {
 	if len(got) != len(want) {
 		return false
 	}
-	m := make(map[t.NodeID]int64, len(got))
+	type stamp struct {
+		nanos  int64
+		purged bool
+	}
+	m := make(map[t.NodeID]stamp, len(got))
 	for _, e := range got {
-		m[e.Node] = e.UnixNano
+		m[e.Node] = stamp{e.UnixNano, e.Purged}
 	}
 	for _, e := range want {
-		if v, ok := m[e.Node]; !ok || v != e.UnixNano {
+		if v, ok := m[e.Node]; !ok || v != (stamp{e.UnixNano, e.Purged}) {
 			return false
 		}
 	}
@@ -52,13 +64,19 @@ func retentionSetEqual(got, want []repo.RetentionEntry) bool {
 }
 
 // CheckEnvelopes: put/get/has round-trip, idempotent re-put,
-// first-write-wins immutability, ErrEnvelopeNotFound on miss.
+// first-write-wins immutability, ErrEnvelopeNotFound on miss. Skipped
+// for a store that disclaims ExactEnvelopeBytes: its fixtures would
+// have to be decodable envelopes, which this suite does not carry; the
+// engine's own tests over such a store are its conformance gate.
 func CheckEnvelopes(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
 	defer st.Close()
+	if !st.Capabilities().ExactEnvelopeBytes {
+		return
+	}
 
 	data := []byte("PXE1\x05opaq1\x00\x01\x02")
 	if err = st.PutEnvelope(ctx, h(1), data); err != nil {
@@ -123,6 +141,17 @@ func CheckAppliedLog(ctx context.Context, open OpenFunc, location string) (err e
 		return eh.Errorf("load order mismatch: %v", got)
 	}
 	replaced := []t.PatchHash{h(1), h(3)}
+	if !st.Capabilities().ReplaceApplied {
+		// Disclaimed: the store must refuse, and the log must be intact.
+		if rerr := st.ReplaceApplied(ctx, replaced); !errors.Is(rerr, repo.ErrUnsupported) {
+			return eh.Errorf("ReplaceApplied disclaimed but returned %v (want ErrUnsupported)", rerr)
+		}
+		got, err = st.LoadApplied(ctx)
+		if err != nil || len(got) != 3 {
+			return eh.Errorf("refused replace changed the log: %v, %v", got, err)
+		}
+		return
+	}
 	if err = st.ReplaceApplied(ctx, replaced); err != nil {
 		return eh.Errorf("replace: %w", err)
 	}
@@ -140,27 +169,22 @@ func CheckAppliedLog(ctx context.Context, open OpenFunc, location string) (err e
 	return
 }
 
-// CheckAppliedLogBatch: for stores implementing repo.BatchAppenderI, a
-// batch append is observationally equal to the same appends one at a
-// time — order kept, interleaving with single appends, empty batch a
-// no-op. Stores without the extension pass trivially.
+// CheckAppliedLogBatch: a batch append is observationally equal to the
+// same appends one at a time — order kept, interleaving with single
+// appends, empty batch a no-op.
 func CheckAppliedLogBatch(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
 	defer st.Close()
-	ba, ok := st.(repo.BatchAppenderI)
-	if !ok {
-		return
-	}
 	if err = st.AppendApplied(ctx, h(1)); err != nil {
 		return eh.Errorf("append: %w", err)
 	}
-	if err = ba.AppendAppliedBatch(ctx, nil); err != nil {
+	if err = st.AppendAppliedBatch(ctx, nil); err != nil {
 		return eh.Errorf("empty batch: %w", err)
 	}
-	if err = ba.AppendAppliedBatch(ctx, []t.PatchHash{h(2), h(3), h(4)}); err != nil {
+	if err = st.AppendAppliedBatch(ctx, []t.PatchHash{h(2), h(3), h(4)}); err != nil {
 		return eh.Errorf("batch: %w", err)
 	}
 	if err = st.AppendApplied(ctx, h(5)); err != nil {
@@ -182,7 +206,9 @@ func CheckAppliedLogBatch(ctx context.Context, open OpenFunc, location string) (
 	return
 }
 
-// CheckSnapshot: absent on fresh, save/load round-trip, replace.
+// CheckSnapshot: absent on fresh, save/load round-trip, replace. A
+// store that disclaims Snapshots must accept saves and still report
+// none.
 func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
@@ -196,6 +222,12 @@ func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err err
 	snapA := repo.Snapshot{Applied: []t.PatchHash{h(1), h(2)}, PushoutGraph: []byte("GRG1-bytes-A")}
 	if err = st.SaveSnapshot(ctx, snapA); err != nil {
 		return eh.Errorf("save: %w", err)
+	}
+	if !st.Capabilities().Snapshots {
+		if _, ok, err2 := st.LoadSnapshot(ctx); err2 != nil || ok {
+			return eh.Errorf("Snapshots disclaimed but a save was returned: ok:%v err:%v", ok, err2)
+		}
+		return
 	}
 	got, ok, err := st.LoadSnapshot(ctx)
 	if err != nil || !ok {
@@ -215,8 +247,9 @@ func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err err
 	return
 }
 
-// CheckRetention: absent on fresh, save/load set round-trip, and
-// whole-ledger replace (not append).
+// CheckRetention: absent on fresh, save/load set round-trip with the
+// purged flag, and whole-ledger replace (not append). A store that
+// disclaims RetentionLedger must accept saves and still report none.
 func CheckRetention(ctx context.Context, open OpenFunc, location string) (err error) {
 	st, err := open(location)
 	if err != nil {
@@ -228,9 +261,16 @@ func CheckRetention(ctx context.Context, open OpenFunc, location string) (err er
 	if err != nil || len(got) != 0 {
 		return eh.Errorf("fresh load = %v, %v (want empty, nil)", got, err)
 	}
-	want := []repo.RetentionEntry{{Node: nid(1, 0), UnixNano: 100}, {Node: nid(2, 7), UnixNano: 200}}
+	want := []repo.RetentionEntry{{Node: nid(1, 0), UnixNano: 100}, {Node: nid(2, 7), UnixNano: 200, Purged: true}}
 	if err = st.SaveRetention(ctx, want); err != nil {
 		return eh.Errorf("save: %w", err)
+	}
+	if !st.Capabilities().RetentionLedger {
+		got, err = st.LoadRetention(ctx)
+		if err != nil || len(got) != 0 {
+			return eh.Errorf("RetentionLedger disclaimed but a save was returned: %v, %v", got, err)
+		}
+		return
 	}
 	got, err = st.LoadRetention(ctx)
 	if err != nil {
@@ -267,9 +307,14 @@ func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) 
 	if err != nil {
 		return eh.Errorf("open #1: %w", err)
 	}
+	// The fixture is opaque bytes, which a re-encoding store cannot
+	// accept; it is put only where byte-equality is claimed (SD5), and
+	// the read below is gated the same way.
 	data := []byte("ENVELOPE-BYTES")
-	if err = st.PutEnvelope(ctx, h(7), data); err != nil {
-		return err
+	if st.Capabilities().ExactEnvelopeBytes {
+		if err = st.PutEnvelope(ctx, h(7), data); err != nil {
+			return err
+		}
 	}
 	if err = st.AppendApplied(ctx, h(7)); err != nil {
 		return err
@@ -289,21 +334,32 @@ func CheckReopenDurability(ctx context.Context, open OpenFunc, location string) 
 		return eh.Errorf("open #2: %w", err)
 	}
 	defer st2.Close()
-	got, err := st2.GetEnvelope(ctx, h(7))
-	if err != nil || !bytes.Equal(got, data) {
-		return eh.Errorf("envelope did not survive reopen: %q, %v", got, err)
+	caps := st2.Capabilities()
+	if caps.ExactEnvelopeBytes {
+		got, err := st2.GetEnvelope(ctx, h(7))
+		if err != nil || !bytes.Equal(got, data) {
+			return eh.Errorf("envelope did not survive reopen: %q, %v", got, err)
+		}
 	}
 	applied, err := st2.LoadApplied(ctx)
 	if err != nil || len(applied) != 1 || applied[0] != h(7) {
 		return eh.Errorf("applied log did not survive reopen: %v, %v", applied, err)
 	}
 	snap, ok, err := st2.LoadSnapshot(ctx)
-	if err != nil || !ok || len(snap.Applied) != 1 {
-		return eh.Errorf("snapshot did not survive reopen: %+v ok:%v err:%v", snap, ok, err)
+	if caps.Snapshots {
+		if err != nil || !ok || len(snap.Applied) != 1 {
+			return eh.Errorf("snapshot did not survive reopen: %+v ok:%v err:%v", snap, ok, err)
+		}
+	} else if err != nil || ok {
+		return eh.Errorf("Snapshots disclaimed but a snapshot survived reopen: ok:%v err:%v", ok, err)
 	}
 	ret, err := st2.LoadRetention(ctx)
-	if err != nil || len(ret) != 1 || ret[0].Node != nid(7, 3) || ret[0].UnixNano != 999 {
-		return eh.Errorf("retention ledger did not survive reopen: %v, %v", ret, err)
+	if caps.RetentionLedger {
+		if err != nil || len(ret) != 1 || ret[0].Node != nid(7, 3) || ret[0].UnixNano != 999 {
+			return eh.Errorf("retention ledger did not survive reopen: %v, %v", ret, err)
+		}
+	} else if err != nil || len(ret) != 0 {
+		return eh.Errorf("RetentionLedger disclaimed but a ledger survived reopen: %v, %v", ret, err)
 	}
 	return
 }

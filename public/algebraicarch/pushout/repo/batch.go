@@ -44,8 +44,8 @@ type PendingEnvelope struct {
 //
 // The applicable subset commits all-or-nothing in memory: one clone of
 // the pushoutgraph takes every apply, then the envelopes are persisted,
-// then the log entries are appended in the sorted order — via
-// BatchAppenderI when the storage offers it — and only then does the
+// then the log entries are appended in the sorted order — one
+// AppendAppliedBatch — and only then does the
 // clone become the repo state. An undecodable envelope or a patch the
 // pushoutgraph rejects fails the batch before any write. A storage
 // failure is crash-equivalent, as for every verb: what reached the log
@@ -173,21 +173,12 @@ func (inst *Repo) ApplyEnvelopes(ctx context.Context, framed [][]byte) (report B
 			return
 		}
 	}
-	if tombstones {
+	if tombstones && inst.writesLedger() {
 		if err = inst.saveRetentionLocked(ctx, next); err != nil {
 			return
 		}
 	}
-	if ba, ok := inst.st.(BatchAppenderI); ok {
-		err = ba.AppendAppliedBatch(ctx, order)
-	} else {
-		for _, h := range order {
-			if err = inst.st.AppendApplied(ctx, h); err != nil {
-				break
-			}
-		}
-	}
-	if err != nil {
+	if err = inst.st.AppendAppliedBatch(ctx, order); err != nil {
 		return
 	}
 	inst.g = next

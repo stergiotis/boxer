@@ -34,7 +34,8 @@ import (
 //   - snapshot / retention: keys "snapshot" / "retention", whole value
 //     as one row per save, latest-wins via Latest. The retention ledger
 //     rides three aligned arrays (hash, index, nanos), one element per
-//     entry.
+//     entry; its purged subset rides a second row of the same shape
+//     under "purges", written in the same insert.
 //
 // Durability: every mutating method Commits and Flushes before returning
 // (one synchronous Arrow insert per operation) — durable-on-return over
@@ -58,7 +59,17 @@ const (
 	logKey       = "log"
 	snapshotKey  = "snapshot"
 	retentionKey = "retention"
+	// purgesKey carries the purged subset of the retention ledger as a
+	// second row of the same Retention shape (node, index, swept-at
+	// nanos), so the purge flag needs no DTO change; LoadRetention joins
+	// the two rows on node id.
+	purgesKey = "purges"
 )
+
+// Capabilities: rows are append-only underneath, but every seam
+// operation is realised — snapshots and the ledger latest-wins, the
+// log via tombstone reset, envelopes byte-exact.
+func (inst *Storage) Capabilities() repo.Capabilities { return repo.AllCapabilities() }
 
 // Open builds the adapter over an executor and ensures the table exists.
 // Reopening the same location (executor state) resumes durably: the
@@ -237,6 +248,42 @@ func (inst *Storage) AppendApplied(ctx context.Context, h types.PatchHash) (err 
 	return
 }
 
+// AppendAppliedBatch: one row per hash under consecutive sequence
+// numbers, shipped in one Flush — a single insert, so a crash leaves
+// either none or all of the batch (bounded by max_insert_block_size as
+// for ReplaceApplied).
+func (inst *Storage) AppendAppliedBatch(ctx context.Context, hs []types.PatchHash) (err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if len(hs) == 0 {
+		return
+	}
+	defer func() {
+		if err != nil {
+			inst.st.DiscardPending()
+		}
+	}()
+	for _, h := range hs {
+		var ts time.Time
+		ts, err = inst.nextTs(ctx, logKey)
+		if err != nil {
+			return
+		}
+		b := inst.st.Begin(logKey, ts)
+		b.AddLogEntry(LogEntry{ID: logKey, Hash: hexOfHash(h)})
+		err = b.Commit()
+		if err != nil {
+			err = eh.Errorf("append applied batch commit: %w", err)
+			return
+		}
+	}
+	err = inst.flush(ctx)
+	if err != nil {
+		err = eh.Errorf("append applied batch flush: %w", err)
+	}
+	return
+}
+
 func (inst *Storage) ReplaceApplied(ctx context.Context, hs []types.PatchHash) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -381,27 +428,38 @@ func (inst *Storage) LoadSnapshot(ctx context.Context) (snap repo.Snapshot, ok b
 func (inst *Storage) SaveRetention(ctx context.Context, entries []repo.RetentionEntry) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	ts, err := inst.nextTs(ctx, retentionKey)
-	if err != nil {
-		return
-	}
-	ret := Retention{
-		ID:      retentionKey,
-		Hashes:  make([]string, 0, len(entries)),
-		Indices: make([]uint64, 0, len(entries)),
-		Times:   make([]int64, 0, len(entries)),
-	}
+	defer func() {
+		if err != nil {
+			inst.st.DiscardPending()
+		}
+	}()
+	ret := Retention{ID: retentionKey}
+	purges := Retention{ID: purgesKey}
 	for _, e := range entries {
 		ret.Hashes = append(ret.Hashes, hexOfHash(e.Node.Patch))
 		ret.Indices = append(ret.Indices, e.Node.Index)
 		ret.Times = append(ret.Times, e.UnixNano)
+		if e.Purged {
+			purges.Hashes = append(purges.Hashes, hexOfHash(e.Node.Patch))
+			purges.Indices = append(purges.Indices, e.Node.Index)
+			purges.Times = append(purges.Times, e.UnixNano)
+		}
 	}
-	b := inst.st.Begin(retentionKey, ts)
-	b.AddRetention(ret)
-	err = b.Commit()
-	if err != nil {
-		err = eh.Errorf("save retention commit: %w", err)
-		return
+	// Two rows, one insert: the ledger and its purged subset land
+	// together or not at all.
+	for _, row := range []Retention{ret, purges} {
+		var ts time.Time
+		ts, err = inst.nextTs(ctx, row.ID)
+		if err != nil {
+			return
+		}
+		b := inst.st.Begin(row.ID, ts)
+		b.AddRetention(row)
+		err = b.Commit()
+		if err != nil {
+			err = eh.Errorf("save retention commit: %w", err)
+			return
+		}
 	}
 	err = inst.flush(ctx)
 	if err != nil {
@@ -413,9 +471,29 @@ func (inst *Storage) SaveRetention(ctx context.Context, entries []repo.Retention
 func (inst *Storage) LoadRetention(ctx context.Context) (entries []repo.RetentionEntry, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	ent, found, err := inst.st.Latest(ctx, retentionKey)
+	purged := make(map[types.NodeID]struct{})
+	if perr := inst.loadRetentionRow(ctx, purgesKey, func(id types.NodeID, _ int64) {
+		purged[id] = struct{}{}
+	}); perr != nil {
+		err = perr
+		return
+	}
+	err = inst.loadRetentionRow(ctx, retentionKey, func(id types.NodeID, nanos int64) {
+		_, p := purged[id]
+		entries = append(entries, repo.RetentionEntry{Node: id, UnixNano: nanos, Purged: p})
+	})
 	if err != nil {
-		err = eh.Errorf("load retention: %w", err)
+		entries = nil
+	}
+	return
+}
+
+// loadRetentionRow reads the latest Retention row under key and calls
+// visit per aligned element; a missing row visits nothing.
+func (inst *Storage) loadRetentionRow(ctx context.Context, key string, visit func(id types.NodeID, nanos int64)) (err error) {
+	ent, found, err := inst.st.Latest(ctx, key)
+	if err != nil {
+		err = eb.Build().Str("key", key).Errorf("load retention: %w", err)
 		return
 	}
 	if !found || !ent.Retention.Has {
@@ -423,20 +501,16 @@ func (inst *Storage) LoadRetention(ctx context.Context) (entries []repo.Retentio
 	}
 	ret := ent.Retention.Val
 	if len(ret.Hashes) != len(ret.Indices) || len(ret.Hashes) != len(ret.Times) {
-		err = eb.Build().Int("hashes", len(ret.Hashes)).Int("indices", len(ret.Indices)).Int("times", len(ret.Times)).Errorf("retention ledger arrays are misaligned")
+		err = eb.Build().Str("key", key).Int("hashes", len(ret.Hashes)).Int("indices", len(ret.Indices)).Int("times", len(ret.Times)).Errorf("retention ledger arrays are misaligned")
 		return
 	}
 	for i := range ret.Hashes {
 		var h types.PatchHash
 		h, err = hashFromHex(ret.Hashes[i])
 		if err != nil {
-			entries = nil
 			return
 		}
-		entries = append(entries, repo.RetentionEntry{
-			Node:     types.NodeID{Patch: h, Index: ret.Indices[i]},
-			UnixNano: ret.Times[i],
-		})
+		visit(types.NodeID{Patch: h, Index: ret.Indices[i]}, ret.Times[i])
 	}
 	return
 }

@@ -968,6 +968,23 @@ func (inst *PushoutGraph) SweepTombstones(now time.Time, horizon time.Duration) 
 	return
 }
 
+// PurgeContent re-applies a durable purge marker to a tombstoned node:
+// the content bytes are dropped and the node reads as
+// NodeContentStatusPurged, exactly as SweepTombstones left it. It is
+// the recovery half of the retention ledger's purge flag (ADR-0220):
+// a full replay re-runs the delete and re-materialises the content,
+// and this puts the sweep's result back. A node that is not tombstoned
+// is left alone and reported false.
+func (inst *PushoutGraph) PurgeContent(id t.NodeID) (purged bool) {
+	if !inst.deletedNodes.Contains(id) {
+		return
+	}
+	delete(inst.contents, id)
+	inst.contentPurged[id] = struct{}{}
+	purged = true
+	return
+}
+
 // SeedTombstoneStamps overlays durable retention times onto the in-memory
 // tombstoneAt working copy: for every currently-tombstoned node present in
 // ledger, its stamp is replaced with the durable value; tombstones absent

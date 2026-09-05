@@ -78,7 +78,17 @@ func (m *repoMachine) cleanup() {
 
 func newRepoMachine(tb *testing.T, rt *rapid.T) *repoMachine {
 	m := &repoMachine{tb: tb, ctx: context.Background(), clock: newSMClock()}
-	m.backend = NewPushoutBackendWithClock(m.clock.Now)
+	// The store shape and retention mode are drawn per fleet (ADR-0220):
+	// with or without snapshots, hygiene or compliance. Every oracle
+	// below must hold for each — Guarantees is the predictor.
+	backend := NewPushoutBackendWithClock(m.clock.Now)
+	if rapid.Bool().Draw(rt, "compliance") {
+		backend.WithRetention(repo.RetentionCompliance)
+	}
+	if rapid.Bool().Draw(rt, "noSnapshots") {
+		backend.WithoutSnapshots()
+	}
+	m.backend = backend
 	// One root dir per property invocation, removed in cleanup() —
 	// rapid's shrinker re-runs the property thousands of times, and
 	// leaking three repo trees per run exhausts the tmpfs.
@@ -238,6 +248,11 @@ func (m *repoMachine) sweep(rt *rapid.T) {
 	report, err := pr.Sweep(m.ctx, now, horizon)
 	if err != nil {
 		rt.Fatalf("sweep on %s: %v", pr.Actor(), err)
+	}
+	if g := pr.Engine().Guarantees(); report.Durable != g.RetentionDurable || !g.RetentionDurable {
+		// The filestore keeps a ledger in every shape drawn above, so the
+		// purge is always durable and the report must say so.
+		rt.Fatalf("sweep on %s: Durable=%v, Guarantees.RetentionDurable=%v", pr.Actor(), report.Durable, g.RetentionDurable)
 	}
 	verr := pr.Engine().View(m.ctx, func(v repo.ViewI) error {
 		g := v.Graph()

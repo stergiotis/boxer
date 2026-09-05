@@ -37,7 +37,9 @@ var ErrCellCreateWhileConflicted = errors.New("cannot create a cell while the pu
 // retention — live in the engine; this file only translates cells to
 // changes and views back to cells.
 type pushoutBackend struct {
-	clock func() time.Time
+	clock       func() time.Time
+	retention   repo.RetentionMode
+	noSnapshots bool // wrap the filestore so it keeps no snapshots (test shape)
 }
 
 var _ BackendI = (*pushoutBackend)(nil)
@@ -61,8 +63,23 @@ func (inst *pushoutBackend) Name() (n string) {
 	return
 }
 
+// WithRetention sets the engine retention mode every repo of this
+// backend opens with (default RetentionHygiene).
+func (inst *pushoutBackend) WithRetention(mode repo.RetentionMode) *pushoutBackend {
+	inst.retention = mode
+	return inst
+}
+
+// WithoutSnapshots makes every repo open over a filestore that keeps no
+// snapshots — the append-only store shape, recovered by full replay.
+// A test knob; production repos keep the filestore as it is.
+func (inst *pushoutBackend) WithoutSnapshots() *pushoutBackend {
+	inst.noSnapshots = true
+	return inst
+}
+
 func (inst *pushoutBackend) NewRepo(actor string, path string) (r RepoI) {
-	r = &PushoutRepo{actor: actor, path: path, clock: inst.clock}
+	r = &PushoutRepo{actor: actor, path: path, clock: inst.clock, retention: inst.retention, noSnapshots: inst.noSnapshots}
 	return
 }
 
@@ -78,7 +95,7 @@ func (inst *pushoutBackend) Clone(ctx context.Context, src RepoI, destPath strin
 		err = eb.Build().Str("path", srcRepo.path).Errorf("clone source is not initialised")
 		return
 	}
-	d := &PushoutRepo{actor: destActor, path: destPath, clock: inst.clock}
+	d := &PushoutRepo{actor: destActor, path: destPath, clock: inst.clock, retention: inst.retention, noSnapshots: inst.noSnapshots}
 	if _, err = d.Init(ctx); err != nil {
 		return
 	}
@@ -96,10 +113,26 @@ func (inst *pushoutBackend) Clone(ctx context.Context, src RepoI, destPath strin
 // visualisations) reach the engine's read API via Engine().View — the
 // engine's internals are not exposed.
 type PushoutRepo struct {
-	actor string
-	path  string
-	clock func() time.Time
-	eng   *repo.Repo
+	actor       string
+	path        string
+	clock       func() time.Time
+	retention   repo.RetentionMode
+	noSnapshots bool
+	eng         *repo.Repo
+}
+
+// noSnapshotStore is the filestore with snapshots switched off: saves
+// are discarded, loads report none, and Capabilities says so.
+type noSnapshotStore struct{ repo.StorageI }
+
+func (noSnapshotStore) SaveSnapshot(context.Context, repo.Snapshot) error { return nil }
+func (noSnapshotStore) LoadSnapshot(context.Context) (repo.Snapshot, bool, error) {
+	return repo.Snapshot{}, false, nil
+}
+func (inst noSnapshotStore) Capabilities() repo.Capabilities {
+	c := inst.StorageI.Capabilities()
+	c.Snapshots = false
+	return c
 }
 
 var _ RepoI = (*PushoutRepo)(nil)
@@ -144,20 +177,25 @@ func NewEnvelopeRegistry() (reg *envelope.Registry, err error) {
 // Init opens — or RECOVERS — the repo at <path>/.pushout. An existing
 // store is recovered, not reset.
 func (inst *PushoutRepo) Init(ctx context.Context) (audit string, err error) {
-	st, err := filestore.Open(filepath.Join(inst.path, ".pushout"))
+	fst, err := filestore.Open(filepath.Join(inst.path, ".pushout"))
 	if err != nil {
 		return
+	}
+	var st repo.StorageI = fst
+	if inst.noSnapshots {
+		st = noSnapshotStore{fst}
 	}
 	reg, err := NewEnvelopeRegistry()
 	if err != nil {
 		return
 	}
 	eng, err := repo.Open(ctx, repo.Options{
-		Storage:  st,
-		Codecs:   reg,
-		Wire:     WireCodecName,
-		Producer: inst.actor,
-		Clock:    inst.clock,
+		Storage:   st,
+		Codecs:    reg,
+		Wire:      WireCodecName,
+		Producer:  inst.actor,
+		Clock:     inst.clock,
+		Retention: inst.retention,
 	})
 	if err != nil {
 		return

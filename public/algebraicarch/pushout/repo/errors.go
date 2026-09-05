@@ -29,6 +29,13 @@ var (
 	// ErrEnvelopeNotFound: the storage holds no envelope for the hash.
 	// StorageI implementations wrap this sentinel.
 	ErrEnvelopeNotFound = errors.New("envelope not found")
+	// ErrUnsupported: the verb is ruled out by the store's Capabilities
+	// or by Options.Retention — Unrecord over a store without
+	// ReplaceApplied, Sweep under RetentionNone.
+	ErrUnsupported = errors.New("verb not supported by this store or retention mode")
+	// ErrCapability: Open refused because Options.Retention needs a
+	// capability the store does not declare; the message names it.
+	ErrCapability = errors.New("store lacks a capability the retention mode requires")
 	// ErrCorruptStore: recovery found storage violating engine
 	// guarantees (missing envelope for an applied hash, dependency
 	// applied out of order, undecodable persisted envelope). Refuse to

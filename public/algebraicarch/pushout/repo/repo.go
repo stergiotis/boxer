@@ -5,6 +5,9 @@
 // only — domain adapters (e.g. the pijul KV demo) translate their nouns
 // into changes and read back through [Repo.View].
 //
+// What a consumer can rely on is [Repo.Guarantees], derived at Open
+// from the store's [Capabilities] and [Options.Retention].
+//
 // Concurrency: verbs take an exclusive lock and are transactional
 // (clone-and-swap in memory; snapshot-before-log-before-commit on
 // disk); reads run under a shared lock and never mutate. Time enters
@@ -66,17 +69,92 @@ type RecoveredEvent struct {
 	Applied      int  // total applied patches after recovery
 	FromSnapshot bool // snapshot prefix was usable
 	Replayed     int  // envelopes replayed on top
+	// PurgesRestored counts purge markers re-applied from the retention
+	// ledger after replay. Zero over a store without a ledger means
+	// "unknown": consult Guarantees.RetentionDurable, and re-sweep.
+	PurgesRestored int
+}
+
+// RetentionMode is the deployment's expectation of Sweep, chosen in
+// Options and validated against the store's Capabilities at Open. The
+// zero value is RetentionHygiene, which matches the engine's behaviour
+// over every store before the mode existed.
+type RetentionMode uint8
+
+const (
+	// RetentionHygiene: Sweep runs; whether its purges survive a
+	// restart depends on the store, and SweepReport.Durable says which.
+	// The mode for deployments where purged content is not sensitive —
+	// e.g. patches carry vault tokens rather than personal data.
+	RetentionHygiene RetentionMode = iota
+	// RetentionNone: Sweep is refused with ErrUnsupported and the
+	// retention ledger is never written.
+	RetentionNone
+	// RetentionCompliance: Sweep's purges must survive a restart. Open
+	// refuses (ErrCapability) a store without Capabilities.RetentionLedger,
+	// and Sweep fails rather than return a non-durable purge.
+	RetentionCompliance
+)
+
+func (inst RetentionMode) String() (s string) {
+	switch inst {
+	case RetentionHygiene:
+		s = "hygiene"
+	case RetentionNone:
+		s = "none"
+	case RetentionCompliance:
+		s = "compliance"
+	default:
+		s = "unknown"
+	}
+	return
+}
+
+// RecoveryKindE says how the next Open of this store may rebuild the
+// graph.
+type RecoveryKindE uint8
+
+const (
+	// RecoveryFullReplay: every envelope in the log is decoded and
+	// applied; open time and the patch cache grow with history.
+	RecoveryFullReplay RecoveryKindE = iota
+	// RecoveryFromSnapshot: a covered snapshot, when one exists (Close
+	// and Checkpoint write them), is restored and only the rest replayed.
+	RecoveryFromSnapshot
+)
+
+// Guarantees is what a consumer can rely on from this repo, derived
+// once at Open from the store's Capabilities and Options.Retention. It
+// is the consumer-facing contract; capabilities and modes are the
+// engine's and the store's business.
+type Guarantees struct {
+	// SweepAllowed: Sweep is a verb here (Options.Retention is not
+	// RetentionNone).
+	SweepAllowed bool
+	// RetentionDurable: tombstone stamps and Sweep's purge markers
+	// survive a crash or restart on this store. False means a restart
+	// resets horizons and re-materialises purged content; a deployment
+	// that wants purges back must re-sweep after every Open.
+	RetentionDurable bool
+	// UnrecordSupported: the store can rewrite the log, so Unrecord is
+	// a verb here.
+	UnrecordSupported bool
+	// Recovery: whether the next Open can use a snapshot. Correctness
+	// does not depend on it; open time and memory do.
+	Recovery RecoveryKindE
 }
 
 // Options configures Open. Storage, Codecs, Wire, and Producer are
-// required; Clock defaults to time.Now.
+// required; Clock defaults to time.Now; Retention defaults to
+// RetentionHygiene.
 type Options struct {
-	Storage  StorageI
-	Codecs   *envelope.Registry
-	Wire     string // codec name used for locally recorded envelopes
-	Producer string
-	Clock    func() time.Time
-	Hooks    Hooks
+	Storage   StorageI
+	Codecs    *envelope.Registry
+	Wire      string // codec name used for locally recorded envelopes
+	Producer  string
+	Clock     func() time.Time
+	Hooks     Hooks
+	Retention RetentionMode
 }
 
 // Repo is one participant's repository.
@@ -89,6 +167,8 @@ type Repo struct {
 	producer string
 	clock    func() time.Time
 	hooks    Hooks
+	caps     Capabilities
+	mode     RetentionMode
 
 	g          *store.PushoutGraph
 	applied    []t.PatchHash
@@ -133,14 +213,23 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 	if opts.Clock == nil {
 		opts.Clock = time.Now
 	}
+	caps := opts.Storage.Capabilities()
+	if opts.Retention == RetentionCompliance && !caps.RetentionLedger {
+		err = eb.Build().Str("mode", opts.Retention.String()).Str("capability", "RetentionLedger").Errorf("open: %w", ErrCapability)
+		return
+	}
 
 	applied, err := opts.Storage.LoadApplied(ctx)
 	if err != nil {
 		return
 	}
-	snap, haveSnap, err := opts.Storage.LoadSnapshot(ctx)
-	if err != nil {
-		return
+	var snap Snapshot
+	haveSnap := false
+	if caps.Snapshots {
+		snap, haveSnap, err = opts.Storage.LoadSnapshot(ctx)
+		if err != nil {
+			return
+		}
 	}
 
 	r0 := &Repo{
@@ -150,6 +239,8 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 		producer:   opts.Producer,
 		clock:      opts.Clock,
 		hooks:      opts.Hooks,
+		caps:       caps,
+		mode:       opts.Retention,
 		appliedSet: make(map[t.PatchHash]struct{}, len(applied)),
 		meta:       make(map[t.PatchHash]PatchInfo),
 	}
@@ -215,35 +306,54 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 	}
 	r0.applied = slices.Clone(applied)
 
-	// Seed replay-stable retention horizons from the durable ledger, then
+	// Seed replay-stable retention state from the durable ledger, then
 	// persist the reconciled set. Full replay re-stamped tombstoneAt to
-	// replay time, so without this the horizon would reset on every
-	// snapshot-less or non-prefix open (ADR-0079). The reconcile adopts the
-	// ledger's stamp where present, keeps the decode/replay stamp for
-	// tombstones new to the ledger, and drops entries for nodes no longer
-	// tombstoned — writing back only when something changed.
-	retEntries, lerr := opts.Storage.LoadRetention(ctx)
-	if lerr != nil {
-		err = lerr
-		return
-	}
-	ledger := make(map[t.NodeID]time.Time, len(retEntries))
-	for _, e := range retEntries {
-		ledger[e.Node] = time.Unix(0, e.UnixNano)
-	}
-	r0.g.SeedTombstoneStamps(ledger)
-	if retentionChanged(r0.g, ledger) {
-		if serr := r0.saveRetentionLocked(ctx, r0.g); serr != nil {
-			err = serr
+	// replay time and re-materialised swept content, so without this the
+	// horizon would reset and purges would un-happen on every
+	// snapshot-less or uncovered-snapshot open (ADR-0079, ADR-0220). The
+	// reconcile adopts the ledger's stamp where present, keeps the
+	// decode/replay stamp for tombstones new to the ledger, re-applies
+	// the ledger's purge markers, and drops entries for nodes no longer
+	// tombstoned — writing back only when something changed. Under
+	// RetentionNone the ledger is neither read nor written.
+	purgesRestored := 0
+	if caps.RetentionLedger && opts.Retention != RetentionNone {
+		retEntries, lerr := opts.Storage.LoadRetention(ctx)
+		if lerr != nil {
+			err = lerr
 			return
+		}
+		ledger := make(map[t.NodeID]time.Time, len(retEntries))
+		purged := make(map[t.NodeID]struct{})
+		for _, e := range retEntries {
+			ledger[e.Node] = time.Unix(0, e.UnixNano)
+			if e.Purged {
+				purged[e.Node] = struct{}{}
+			}
+		}
+		r0.g.SeedTombstoneStamps(ledger)
+		for id := range purged {
+			if r0.g.NodeContentStatus(id) == t.NodeContentStatusPurged {
+				continue // the snapshot already carried it
+			}
+			if r0.g.PurgeContent(id) {
+				purgesRestored++
+			}
+		}
+		if retentionChanged(r0.g, ledger, purged) {
+			if serr := r0.saveRetentionLocked(ctx, r0.g); serr != nil {
+				err = serr
+				return
+			}
 		}
 	}
 
 	if r0.hooks.OnRecovered != nil {
 		r0.hooks.OnRecovered(RecoveredEvent{
-			Applied:      len(applied),
-			FromSnapshot: fromSnapshot,
-			Replayed:     replayed,
+			Applied:        len(applied),
+			FromSnapshot:   fromSnapshot,
+			Replayed:       replayed,
+			PurgesRestored: purgesRestored,
 		})
 	}
 	r = r0
@@ -262,6 +372,18 @@ func isSubset(sub, full []t.PatchHash) bool {
 		}
 	}
 	return true
+}
+
+// Guarantees returns the consumer-facing contract of this repo, fixed
+// at Open. See [Guarantees].
+func (inst *Repo) Guarantees() (g Guarantees) {
+	g.SweepAllowed = inst.mode != RetentionNone
+	g.RetentionDurable = inst.caps.RetentionLedger && inst.mode != RetentionNone
+	g.UnrecordSupported = inst.caps.ReplaceApplied
+	if inst.caps.Snapshots {
+		g.Recovery = RecoveryFromSnapshot
+	}
+	return
 }
 
 // Record builds a patch from the changes (computing dependencies from
@@ -372,7 +494,7 @@ func (inst *Repo) commitPatchLocked(ctx context.Context, p *patch.Patch, framed 
 	// before the commit point (AppendApplied) so the horizon is durable
 	// before the verb acks. A failure fails the verb; the orphan envelope
 	// and any orphan ledger entry are harmless — recovery reconciles.
-	if patchTombstones(p) {
+	if patchTombstones(p) && inst.writesLedger() {
 		if err = inst.saveRetentionLocked(ctx, next); err != nil {
 			return
 		}
@@ -400,12 +522,16 @@ func (inst *Repo) commitPatchLocked(ctx context.Context, p *patch.Patch, framed 
 // two leaves a snapshot of the log minus the target beside the old log;
 // Open restores that snapshot (its set is covered by the log) and
 // replays the target's kept envelope, so the unrecord rolls back without
-// a full replay — a full replay would re-materialise content an earlier
-// Sweep purged, because purge markers live only in snapshots.
+// a full replay. Over a store without snapshots the ledger's purge
+// markers are re-applied after the replay instead (ADR-0220 SD2).
 func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if err = inst.checkOpenLocked(); err != nil {
+		return
+	}
+	if !inst.caps.ReplaceApplied {
+		err = eb.Build().Str("capability", "ReplaceApplied").Errorf("unrecord: %w", ErrUnsupported)
 		return
 	}
 	idx := slices.Index(inst.applied, h)
@@ -443,13 +569,17 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	}
 	newApplied := slices.Delete(slices.Clone(inst.applied), idx, idx+1)
 
-	if err = inst.saveSnapshotLocked(ctx, next, newApplied); err != nil {
-		return
+	if inst.caps.Snapshots {
+		if err = inst.saveSnapshotLocked(ctx, next, newApplied); err != nil {
+			return
+		}
 	}
 	// Unrecord can resurrect a node (dropping its tombstoneAt), so refresh
 	// the ledger before the commit point (ReplaceApplied).
-	if err = inst.saveRetentionLocked(ctx, next); err != nil {
-		return
+	if inst.writesLedger() {
+		if err = inst.saveRetentionLocked(ctx, next); err != nil {
+			return
+		}
 	}
 	if err = inst.st.ReplaceApplied(ctx, newApplied); err != nil {
 		return
@@ -468,26 +598,49 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 // SweepReport describes one retention sweep.
 type SweepReport struct {
 	Purged []t.NodeID
+	// Durable: the purge markers reached the retention ledger before the
+	// verb returned, so they survive a restart. Equal to
+	// Guarantees.RetentionDurable; reported per sweep so a caller that
+	// logs the sweep logs the truth beside it.
+	Durable bool
 }
 
-// Sweep destroys tombstone content older than now-horizon and makes the
-// purge DURABLE before returning: the swept state is snapshotted to
-// storage first, then committed in memory. A sweep that purges nothing
-// performs no disk write. The snapshot is the only durable carrier of
-// purge markers (the retention ledger holds stamps, not purges), which
-// is why Open must never discard a snapshot the log covers.
+// Sweep destroys tombstone content older than now-horizon. Under
+// RetentionNone it is refused. Otherwise the purge is persisted in ONE
+// durable write before it is committed in memory, so a fault or crash
+// leaves either "never happened" or "happened": the retention ledger
+// (carrying the purge markers) when the store keeps one, else a
+// snapshot when the store keeps those, else nothing — the purge then
+// lives until the next restart, and Durable says so. A sweep that
+// purges nothing performs no disk write. Under RetentionCompliance the
+// store is known to keep the ledger (Open checked), so Durable is
+// always true there; under RetentionHygiene it reports the store's
+// truth. The snapshot is not refreshed by a sweep over a ledger store;
+// recovery restores the older snapshot and re-applies the ledger's
+// purges on top.
 func (inst *Repo) Sweep(ctx context.Context, now time.Time, horizon time.Duration) (report SweepReport, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if err = inst.checkOpenLocked(); err != nil {
 		return
 	}
+	if inst.mode == RetentionNone {
+		err = eb.Build().Str("mode", inst.mode.String()).Errorf("sweep: %w", ErrUnsupported)
+		return
+	}
+	report.Durable = inst.caps.RetentionLedger
 	next := inst.g.Clone()
 	count, purged := next.SweepTombstones(now, horizon)
 	if count == 0 {
 		return
 	}
-	if err = inst.saveSnapshotLocked(ctx, next, inst.applied); err != nil {
+	switch {
+	case inst.caps.RetentionLedger:
+		err = inst.saveRetentionLocked(ctx, next)
+	case inst.caps.Snapshots:
+		err = inst.saveSnapshotLocked(ctx, next, inst.applied)
+	}
+	if err != nil {
 		return
 	}
 	inst.g = next
@@ -499,10 +652,15 @@ func (inst *Repo) Sweep(ctx context.Context, now time.Time, horizon time.Duratio
 }
 
 // Checkpoint persists a snapshot of the current state, bounding the
-// replay work of the next Open. Safe to call at any time.
+// replay work of the next Open. Safe to call at any time; a no-op over
+// a store that does not keep snapshots.
 func (inst *Repo) Checkpoint(ctx context.Context) (err error) {
 	inst.mu.RLock()
 	if err = inst.checkOpenLocked(); err != nil {
+		inst.mu.RUnlock()
+		return
+	}
+	if !inst.caps.Snapshots {
 		inst.mu.RUnlock()
 		return
 	}
@@ -528,16 +686,33 @@ func (inst *Repo) saveSnapshotLocked(ctx context.Context, g *store.PushoutGraph,
 	return
 }
 
+// writesLedger reports whether this repo maintains the retention
+// ledger: the store keeps one and the mode has not switched retention
+// off.
+func (inst *Repo) writesLedger() bool {
+	return inst.caps.RetentionLedger && inst.mode != RetentionNone
+}
+
 // saveRetentionLocked persists the durable retention ledger from the
-// GIVEN pushoutgraph's tombstone stamps. Called on tombstone-changing commits
-// and at Open so a full replay cannot reset retention horizons (ADR-0079).
+// GIVEN pushoutgraph's tombstone stamps and purge markers. Called on
+// tombstone-changing commits, on Sweep, and at Open so a full replay can
+// neither reset retention horizons nor un-purge (ADR-0079, ADR-0220).
 func (inst *Repo) saveRetentionLocked(ctx context.Context, g *store.PushoutGraph) (err error) {
+	err = inst.st.SaveRetention(ctx, retentionEntries(g))
+	return
+}
+
+// retentionEntries is the ledger form of g's retention state.
+func retentionEntries(g *store.PushoutGraph) (entries []RetentionEntry) {
 	stamps := g.TombstoneStamps()
-	entries := make([]RetentionEntry, 0, len(stamps))
+	entries = make([]RetentionEntry, 0, len(stamps))
 	for id, when := range stamps {
-		entries = append(entries, RetentionEntry{Node: id, UnixNano: when.UnixNano()})
+		entries = append(entries, RetentionEntry{
+			Node:     id,
+			UnixNano: when.UnixNano(),
+			Purged:   g.NodeContentStatus(id) == t.NodeContentStatusPurged,
+		})
 	}
-	err = inst.st.SaveRetention(ctx, entries)
 	return
 }
 
@@ -553,16 +728,21 @@ func patchTombstones(p *patch.Patch) bool {
 	return false
 }
 
-// retentionChanged reports whether g's current tombstone stamps differ
-// from the loaded ledger (a node added, dropped, or re-stamped), so Open
-// rewrites the ledger only when the reconcile actually changed it.
-func retentionChanged(g *store.PushoutGraph, ledger map[t.NodeID]time.Time) bool {
+// retentionChanged reports whether g's current retention state differs
+// from the loaded ledger (a node added, dropped, re-stamped, or purged
+// where the ledger did not say so), so Open rewrites the ledger only
+// when the reconcile actually changed it.
+func retentionChanged(g *store.PushoutGraph, ledger map[t.NodeID]time.Time, purged map[t.NodeID]struct{}) bool {
 	current := g.TombstoneStamps()
 	if len(current) != len(ledger) {
 		return true
 	}
 	for id, when := range current {
 		if lw, ok := ledger[id]; !ok || !lw.Equal(when) {
+			return true
+		}
+		_, ledgerPurged := purged[id]
+		if ledgerPurged != (g.NodeContentStatus(id) == t.NodeContentStatusPurged) {
 			return true
 		}
 	}
@@ -577,9 +757,13 @@ func (inst *Repo) Close(ctx context.Context) (err error) {
 	if inst.closed {
 		return
 	}
-	data, eerr := inst.g.EncodeSnapshot()
-	if eerr == nil {
-		eerr = inst.st.SaveSnapshot(ctx, Snapshot{Applied: slices.Clone(inst.applied), PushoutGraph: data})
+	var eerr error
+	if inst.caps.Snapshots {
+		var data []byte
+		data, eerr = inst.g.EncodeSnapshot()
+		if eerr == nil {
+			eerr = inst.st.SaveSnapshot(ctx, Snapshot{Applied: slices.Clone(inst.applied), PushoutGraph: data})
+		}
 	}
 	cerr := inst.st.Close()
 	inst.closed = true
@@ -616,11 +800,7 @@ func (inst *Repo) RetentionStamps(ctx context.Context) (entries []RetentionEntry
 	if err = inst.checkOpenLocked(); err != nil {
 		return
 	}
-	stamps := inst.g.TombstoneStamps()
-	entries = make([]RetentionEntry, 0, len(stamps))
-	for id, when := range stamps {
-		entries = append(entries, RetentionEntry{Node: id, UnixNano: when.UnixNano()})
-	}
+	entries = retentionEntries(inst.g)
 	slices.SortFunc(entries, func(a, b RetentionEntry) int { return t.CompareNodeID(a.Node, b.Node) })
 	return
 }
