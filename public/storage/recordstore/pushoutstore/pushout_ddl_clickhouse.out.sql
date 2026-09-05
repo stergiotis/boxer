@@ -75,7 +75,18 @@ CREATE TABLE IF NOT EXISTS pushout (
 	"tv:retTime:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:retTime:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:retTime:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
-	"tv:retTime:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
+	"tv:retTime:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:retOp:value:val:u16h:4:::0::data" Array(UInt16) CODEC(ZSTD(3)),
+	"tv:retOp:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
+	"tv:retOp:lr:lr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:retOp:lv:lv:y:124:::0::data" Array(LowCardinality(String)) CODEC(ZSTD(3)),
+	"tv:retOp:lmr:lmr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),
+	"tv:retOp:mrhp:mrhp:y:4:::0::data" Array(String) CODEC(ZSTD(3)),
+	"tv:retOp:len:len:u64:4D:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:retOp:hrcard:hrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:retOp:lrcard:lrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:retOp:lvcard:lvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
+	"tv:retOp:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
 ) ENGINE = MergeTree()
 ORDER BY ("id:id:s:4::0:", "ts:ts:z64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1

@@ -16,6 +16,7 @@ const (
 	kindPushoutRetHash uint64 = 1
 	kindPushoutRetIdx  uint64 = 2
 	kindPushoutRetTime uint64 = 3
+	kindPushoutRetOp   uint64 = 4
 )
 
 // retentionRetHashAttrI is the InAttr-side view of the retHash section. P-variants only —
@@ -66,6 +67,22 @@ type retentionRetTimeSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// retentionRetOpAttrI is the InAttr-side view of the retOp section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type retentionRetOpAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	AddToContainerP(value uint16)
+	EndAttributeP()
+}
+
+// retentionRetOpSecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type retentionRetOpSecI[Attr any, Ent any] interface {
+	BeginAttribute() Attr
+	EndSection() Ent
+}
+
 // retentionEntityI is the entity-builder surface retentionAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -80,11 +97,14 @@ type retentionEntityI[
 	RetIndexSec retentionRetIndexSecI[RetIndexAttr, Ent],
 	RetTimeAttr retentionRetTimeAttrI,
 	RetTimeSec retentionRetTimeSecI[RetTimeAttr, Ent],
+	RetOpAttr retentionRetOpAttrI,
+	RetOpSec retentionRetOpSecI[RetOpAttr, Ent],
 	Ent any,
 ] interface {
 	GetSectionRetHash() RetHashSec
 	GetSectionRetIndex() RetIndexSec
 	GetSectionRetTime() RetTimeSec
+	GetSectionRetOp() RetOpSec
 }
 
 // retentionEmitSectionRetHash writes this kind's retHash attributes into an
@@ -147,6 +167,26 @@ func retentionEmitSectionRetTime[
 	return
 }
 
+// retentionEmitSectionRetOp writes this kind's retOp attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func retentionEmitSectionRetOp[
+	RetOpAttr retentionRetOpAttrI,
+	RetOpSec retentionRetOpSecI[RetOpAttr, Ent],
+	Ent any,
+](retOpSec RetOpSec, row Retention) (err error) {
+	if len(row.Ops) > 0 {
+		retOpSecAttr_Ops := retOpSec.BeginAttribute()
+		for _, v := range row.Ops {
+			retOpSecAttr_Ops.AddToContainerP(v)
+		}
+		retOpSecAttr_Ops.AddMembershipLowCardRefP(kindPushoutRetOp)
+		retOpSecAttr_Ops.EndAttributeP()
+	}
+	return
+}
+
 // retentionAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -157,11 +197,14 @@ func retentionAddSections[
 	RetIndexSec retentionRetIndexSecI[RetIndexAttr, Ent],
 	RetTimeAttr retentionRetTimeAttrI,
 	RetTimeSec retentionRetTimeSecI[RetTimeAttr, Ent],
+	RetOpAttr retentionRetOpAttrI,
+	RetOpSec retentionRetOpSecI[RetOpAttr, Ent],
 	Ent any,
 	DML retentionEntityI[
 		RetHashAttr, RetHashSec,
 		RetIndexAttr, RetIndexSec,
 		RetTimeAttr, RetTimeSec,
+		RetOpAttr, RetOpSec,
 		Ent,
 	],
 ](dml DML, row Retention) (err error) {
@@ -186,6 +229,13 @@ func retentionAddSections[
 		return
 	}
 	retTimeSec.EndSection()
+	// --- retOp. ---
+	retOpSec := dml.GetSectionRetOp()
+	err = retentionEmitSectionRetOp(retOpSec, row)
+	if err != nil {
+		return
+	}
+	retOpSec.EndSection()
 	return
 }
 
@@ -222,6 +272,17 @@ type retentionRetTimeMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// retentionRetOpAttrsReadI is the Attributes-side view of the retOp section.
+type retentionRetOpAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint16]
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// retentionRetOpMembsReadI is the Memberships-side view of the retOp section.
+type retentionRetOpMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // retentionReadRow reads row i as one optional Retention component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A slot carrying more
@@ -237,6 +298,8 @@ func retentionReadRow[
 	RetIndexMembs retentionRetIndexMembsReadI,
 	RetTimeAttrs retentionRetTimeAttrsReadI,
 	RetTimeMembs retentionRetTimeMembsReadI,
+	RetOpAttrs retentionRetOpAttrsReadI,
+	RetOpMembs retentionRetOpMembsReadI,
 ](
 	i int,
 	retHashAttrs RetHashAttrs,
@@ -245,6 +308,8 @@ func retentionReadRow[
 	retIndexMembs RetIndexMembs,
 	retTimeAttrs RetTimeAttrs,
 	retTimeMembs RetTimeMembs,
+	retOpAttrs RetOpAttrs,
+	retOpMembs RetOpMembs,
 ) (row Retention, present bool, err error) {
 	// --- retHash. ---
 	var retHashHashesSlice []string
@@ -325,6 +390,33 @@ func retentionReadRow[
 	}
 	if retTimeTimesSlice != nil {
 		row.Times = retTimeTimesSlice
+		present = true
+	}
+	// --- retOp. ---
+	var retOpOpsSlice []uint16
+	var retOpOpsCount int
+	var retOpOpsLastAttr int64
+	nretOp := retOpAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nretOp; attrJ++ {
+		for membID := range retOpMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindPushoutRetOp:
+				if retOpOpsLastAttr != attrJ+1 {
+					retOpOpsLastAttr = attrJ + 1
+					retOpOpsCount++
+				}
+				for v := range retOpAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					retOpOpsSlice = append(retOpOpsSlice, v)
+				}
+			}
+		}
+	}
+	if retOpOpsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "retOp").Str("membership", "pushoutRetOp").Int("got", retOpOpsCount).Errorf("slot retOp@pushoutRetOp (field Ops) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", retOpOpsCount)
+		return
+	}
+	if retOpOpsSlice != nil {
+		row.Ops = retOpOpsSlice
 		present = true
 	}
 	return

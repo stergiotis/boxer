@@ -288,6 +288,13 @@ func (f *faultStore) PutEnvelope(ctx context.Context, h t.PatchHash, framed []by
 	return f.StorageI.PutEnvelope(ctx, h, framed)
 }
 
+func (f *faultStore) PutEnvelopes(ctx context.Context, envs []repo.Envelope) error {
+	if f.failPut {
+		return errInjected
+	}
+	return f.StorageI.PutEnvelopes(ctx, envs)
+}
+
 func (f *faultStore) AppendApplied(ctx context.Context, h t.PatchHash) error {
 	if f.failAppend {
 		return errInjected
@@ -316,11 +323,11 @@ func (f *faultStore) SaveSnapshot(ctx context.Context, snap repo.Snapshot) error
 	return f.StorageI.SaveSnapshot(ctx, snap)
 }
 
-func (f *faultStore) SaveRetention(ctx context.Context, entries []repo.RetentionEntry) error {
+func (f *faultStore) UpdateRetention(ctx context.Context, delta repo.RetentionDelta) error {
 	if f.failRetention {
 		return errInjected
 	}
-	return f.StorageI.SaveRetention(ctx, entries)
+	return f.StorageI.UpdateRetention(ctx, delta)
 }
 
 // Every mutating verb, failed at every storage write it performs, must
@@ -355,7 +362,7 @@ func TestRepo_StorageFaultsAreCrashEquivalent(tt *testing.T) {
 		{"Unrecord/ReplaceApplied", func(f *faultStore) { f.failReplace = true }, func(tt *testing.T, r *repo.Repo, hDel t.PatchHash, _ t.NodeID) error {
 			return r.Unrecord(ctx, hDel)
 		}},
-		{"Sweep/SaveRetention", func(f *faultStore) { f.failRetention = true }, func(tt *testing.T, r *repo.Repo, _ t.PatchHash, _ t.NodeID) error {
+		{"Sweep/UpdateRetention", func(f *faultStore) { f.failRetention = true }, func(tt *testing.T, r *repo.Repo, _ t.PatchHash, _ t.NodeID) error {
 			_, err := r.Sweep(ctx, time.Unix(2_000_000_000, 0).UTC(), 0)
 			return err
 		}},

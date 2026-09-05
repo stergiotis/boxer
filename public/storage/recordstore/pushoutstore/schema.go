@@ -1,13 +1,16 @@
 // Package pushoutstore adapts a generated recordstore to the pushout
-// repo.StorageI persistence seam (ADR-0100 S3, ADR-0079): envelopes,
-// the applied log, the snapshot and the retention ledger persist as
-// append-only rows of one ClickHouse fact table keyed by a string
-// namespace ("env/<hex>", "log", "snapshot", "retention").
+// repo.StorageI persistence seam (ADR-0100 S3, ADR-0079, ADR-0221):
+// envelopes, the applied log, the snapshot and the retention ledger
+// persist as append-only rows of one ClickHouse fact table keyed by a
+// string namespace ("env/<hex>", "log", "snapshot", "retention").
 //
-// The applied log needs no generation marker: ReplaceApplied appends a
-// state-view tombstone on the log key followed by the new entries — all
-// in one Arrow insert — and LoadApplied replays the key keeping only the
-// entries after the last tombstone.
+// Neither the applied log nor the retention ledger needs a generation
+// marker: ReplaceApplied appends a state-view tombstone on the log key
+// followed by the new entries — all in one Arrow insert — and
+// LoadApplied replays the key keeping only the entries after the last
+// tombstone. The ledger is one delta row per UpdateRetention, folded on
+// read, and compacted the same way: a tombstone followed by one full
+// row, in one insert.
 package pushoutstore
 
 import (
@@ -63,6 +66,7 @@ func loadPushoutSchema(manip common.TableManipulatorFluidI) {
 
 	u64Arr := canonicaltypes.PromoteScalarPrim(ctabb.U64, canonicaltypes.ScalarModifierHomogenousArray)
 	i64Arr := canonicaltypes.PromoteScalarPrim(ctabb.I64, canonicaltypes.ScalarModifierHomogenousArray)
+	u16Arr := canonicaltypes.PromoteScalarPrim(ctabb.U16, canonicaltypes.ScalarModifierHomogenousArray)
 	section("envBlob", ctabb.Y)          // Envelope.Framed (PXE1 bytes)
 	section("logHash", ctabb.S)          // LogEntry.Hash (hex, high-card)
 	section("snapPushoutGraph", ctabb.Y) // Snapshot.PushoutGraph (opaque)
@@ -70,4 +74,5 @@ func loadPushoutSchema(manip common.TableManipulatorFluidI) {
 	section("retHash", ctabb.Sh)         // Retention node patch hashes
 	section("retIndex", u64Arr)          // Retention node indices
 	section("retTime", i64Arr)           // Retention first-observed-deleted nanos
+	section("retOp", u16Arr)             // Retention delta op per element (RetentionOp*, ADR-0221)
 }

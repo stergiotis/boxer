@@ -32,19 +32,14 @@ func (inst *Endpoint) Applied(ctx context.Context) ([]t.PatchHash, error) {
 	return inst.r.Applied(ctx)
 }
 
-func (inst *Endpoint) Envelopes(ctx context.Context, hs []t.PatchHash) (out [][]byte, err error) {
-	out = make([][]byte, 0, len(hs))
-	for _, h := range hs {
-		framed, gerr := inst.r.EncodedEnvelope(ctx, h)
-		if gerr != nil {
-			err = gerr
-			return
-		}
-		out = append(out, framed)
-	}
-	return
+func (inst *Endpoint) Envelopes(ctx context.Context, hs []t.PatchHash) ([][]byte, error) {
+	return inst.r.EncodedEnvelopes(ctx, hs)
 }
 
 func (inst *Endpoint) ApplyEnvelope(ctx context.Context, framed []byte) (t.PatchHash, bool, error) {
 	return inst.r.ApplyEnvelope(ctx, framed)
+}
+
+func (inst *Endpoint) ApplyEnvelopes(ctx context.Context, framed [][]byte) (repo.BatchReport, error) {
+	return inst.r.ApplyEnvelopes(ctx, framed)
 }

@@ -7,12 +7,14 @@
 // with carrier choice.
 //
 // v1 protocol: full applied-list exchange. The local side computes the
-// set difference, fetches/ships the missing envelopes IN THE SENDER'S
-// APPLY ORDER (dependencies precede dependents by the engine's log
-// invariant), and applies them one by one. Duplicates are not errors
-// (apply is idempotent); the first real error stops the run and the
-// returned Stats describe what landed. Smarter reconciliation
-// (frontiers, set sketches) is ADR-0079 OQ-1;
+// set difference, fetches/ships the missing envelopes, and applies them
+// as ONE batch through repo.ApplyEnvelopes (ADR-0221): the batch is
+// sorted by dependency on the applying side, so the carrier owes no
+// delivery order, and the whole batch is one storage write. Duplicates
+// are not errors (apply is idempotent). An envelope whose dependency
+// the peer never announced is reported pending, and the run ends with
+// repo.ErrMissingDependency and Stats describing what landed. Smarter
+// reconciliation (frontiers, set sketches) is ADR-0079 OQ-1;
 // doc/explanation/pushout-distributed-operation.md maps that design
 // space and the deployment topologies.
 //
@@ -43,8 +45,15 @@ type PeerI interface {
 
 // AcceptorI is the write side of a remote repo. ApplyEnvelope mirrors
 // repo.ApplyEnvelope semantics: idempotent, dependency-gated.
+// ApplyEnvelopes mirrors repo.ApplyEnvelopes: any order, one batch,
+// pending reported in the BatchReport rather than as an error — a
+// transport must carry the report back intact (Applied, Duplicates and
+// Pending with their Missing lists). Push uses the batch verb; the
+// single verb remains for transports and callers that ship one at a
+// time.
 type AcceptorI interface {
 	ApplyEnvelope(ctx context.Context, framed []byte) (h t.PatchHash, applied bool, err error)
+	ApplyEnvelopes(ctx context.Context, framed [][]byte) (report repo.BatchReport, err error)
 }
 
 // Stats describes one sync run.
@@ -53,6 +62,26 @@ type Stats struct {
 	Shipped    int // envelopes transferred before stopping
 	Applied    int // envelopes that newly applied
 	Duplicates int // envelopes the destination already had
+	Pending    int // envelopes left unapplied for want of a dependency the peer never announced
+}
+
+// account folds a batch report into stats and turns a pending
+// remainder into the dependency-rejection sentinel, so a transport or
+// caller that inspected errors.Is(err, repo.ErrMissingDependency)
+// before the batch verb still does.
+func account(stats *Stats, report repo.BatchReport) (err error) {
+	stats.Applied += len(report.Applied)
+	stats.Duplicates += len(report.Duplicates)
+	stats.Pending += len(report.Pending)
+	if len(report.Pending) > 0 {
+		first := report.Pending[0]
+		b := eb.Build().Stringer("patchHash", first.Hash).Int("pending", len(report.Pending))
+		if len(first.Missing) > 0 {
+			b = b.Stringer("dep", first.Missing[0])
+		}
+		err = b.Errorf("the peer shipped a patch whose dependency it never announced: %w", repo.ErrMissingDependency)
+	}
+	return
 }
 
 // Pull fetches everything from has that into lacks and applies it.
@@ -78,22 +107,12 @@ func Pull(ctx context.Context, into *repo.Repo, from PeerI) (stats Stats, err er
 		err = eb.Build().Int("returned", len(envs)).Int("requested", len(missing)).Errorf("peer returned a different envelope count than requested")
 		return
 	}
-	for _, framed := range envs {
-		if err = ctx.Err(); err != nil {
-			return
-		}
-		stats.Shipped++
-		_, applied, aerr := into.ApplyEnvelope(ctx, framed)
-		if aerr != nil {
-			err = aerr
-			return
-		}
-		if applied {
-			stats.Applied++
-		} else {
-			stats.Duplicates++
-		}
+	stats.Shipped = len(envs)
+	report, err := into.ApplyEnvelopes(ctx, envs)
+	if err != nil {
+		return
 	}
+	err = account(&stats, report)
 	return
 }
 
@@ -110,27 +129,19 @@ func Push(ctx context.Context, from *repo.Repo, peer PeerI, acc AcceptorI) (stat
 	}
 	missing := minus(ours, theirs)
 	stats.Missing = len(missing)
-	for _, h := range missing {
-		if err = ctx.Err(); err != nil {
-			return
-		}
-		framed, gerr := from.EncodedEnvelope(ctx, h)
-		if gerr != nil {
-			err = gerr
-			return
-		}
-		stats.Shipped++
-		_, applied, aerr := acc.ApplyEnvelope(ctx, framed)
-		if aerr != nil {
-			err = aerr
-			return
-		}
-		if applied {
-			stats.Applied++
-		} else {
-			stats.Duplicates++
-		}
+	if len(missing) == 0 {
+		return
 	}
+	envs, err := from.EncodedEnvelopes(ctx, missing)
+	if err != nil {
+		return
+	}
+	stats.Shipped = len(envs)
+	report, err := acc.ApplyEnvelopes(ctx, envs)
+	if err != nil {
+		return
+	}
+	err = account(&stats, report)
 	return
 }
 

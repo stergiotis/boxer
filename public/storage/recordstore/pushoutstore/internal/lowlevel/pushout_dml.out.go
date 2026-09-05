@@ -100,6 +100,17 @@ func CreateSchemaPushoutTable() (schema *arrow.Schema) {
 		/* 074 */ arrow.Field{Name: "tv:retTime:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 075 */ arrow.Field{Name: "tv:retTime:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 		/* 076 */ arrow.Field{Name: "tv:retTime:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 077 */ arrow.Field{Name: "tv:retOp:value:val:u16h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint16)},
+		/* 078 */ arrow.Field{Name: "tv:retOp:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 079 */ arrow.Field{Name: "tv:retOp:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 080 */ arrow.Field{Name: "tv:retOp:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 081 */ arrow.Field{Name: "tv:retOp:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 082 */ arrow.Field{Name: "tv:retOp:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 083 */ arrow.Field{Name: "tv:retOp:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 084 */ arrow.Field{Name: "tv:retOp:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 085 */ arrow.Field{Name: "tv:retOp:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 086 */ arrow.Field{Name: "tv:retOp:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 087 */ arrow.Field{Name: "tv:retOp:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -123,13 +134,15 @@ type InEntityPushoutTable struct {
 	section02State     runtime.EntityStateE
 	section03Inst      *InEntityPushoutTableSectionRetIndex
 	section03State     runtime.EntityStateE
-	section04Inst      *InEntityPushoutTableSectionRetTime
+	section04Inst      *InEntityPushoutTableSectionRetOp
 	section04State     runtime.EntityStateE
-	section05Inst      *InEntityPushoutTableSectionSnapApplied
+	section05Inst      *InEntityPushoutTableSectionRetTime
 	section05State     runtime.EntityStateE
-	section06Inst      *InEntityPushoutTableSectionSnapPushoutGraph
+	section06Inst      *InEntityPushoutTableSectionSnapApplied
 	section06State     runtime.EntityStateE
-	activeSections     *[7]bool
+	section07Inst      *InEntityPushoutTableSectionSnapPushoutGraph
+	section07State     runtime.EntityStateE
+	activeSections     *[8]bool
 	ambientHighCardRef []uint64
 	plainId0           string
 
@@ -169,7 +182,7 @@ func (inst *InEntityPushoutTable) setActiveSections(idxs []int) {
 		inst.activeSections = nil
 		return
 	}
-	var mask [7]bool
+	var mask [8]bool
 	for _, i := range idxs {
 		if i >= 0 && i < len(mask) {
 			mask[i] = true
@@ -187,9 +200,10 @@ var InEntityPushoutTableSectionIndices = map[string]int{
 	"logHash":          1,
 	"retHash":          2,
 	"retIndex":         3,
-	"retTime":          4,
-	"snapApplied":      5,
-	"snapPushoutGraph": 6,
+	"retOp":            4,
+	"retTime":          5,
+	"snapApplied":      6,
+	"snapPushoutGraph": 7,
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -283,9 +297,10 @@ func (inst *InEntityPushoutTable) initSections(builder *array.RecordBuilder) {
 	inst.section01Inst = NewInEntityPushoutTableSectionLogHash(builder, inst)
 	inst.section02Inst = NewInEntityPushoutTableSectionRetHash(builder, inst)
 	inst.section03Inst = NewInEntityPushoutTableSectionRetIndex(builder, inst)
-	inst.section04Inst = NewInEntityPushoutTableSectionRetTime(builder, inst)
-	inst.section05Inst = NewInEntityPushoutTableSectionSnapApplied(builder, inst)
-	inst.section06Inst = NewInEntityPushoutTableSectionSnapPushoutGraph(builder, inst)
+	inst.section04Inst = NewInEntityPushoutTableSectionRetOp(builder, inst)
+	inst.section05Inst = NewInEntityPushoutTableSectionRetTime(builder, inst)
+	inst.section06Inst = NewInEntityPushoutTableSectionSnapApplied(builder, inst)
+	inst.section07Inst = NewInEntityPushoutTableSectionSnapPushoutGraph(builder, inst)
 }
 func (inst *InEntityPushoutTable) beginSections() {
 	if mask := inst.activeSections; mask != nil {
@@ -310,6 +325,9 @@ func (inst *InEntityPushoutTable) beginSections() {
 		if mask[6] {
 			inst.section06Inst.beginSection()
 		}
+		if mask[7] {
+			inst.section07Inst.beginSection()
+		}
 		return
 	}
 	inst.section00Inst.beginSection()
@@ -319,6 +337,7 @@ func (inst *InEntityPushoutTable) beginSections() {
 	inst.section04Inst.beginSection()
 	inst.section05Inst.beginSection()
 	inst.section06Inst.beginSection()
+	inst.section07Inst.beginSection()
 }
 func (inst *InEntityPushoutTable) resetSections() {
 	inst.section00Inst.resetSection()
@@ -328,6 +347,7 @@ func (inst *InEntityPushoutTable) resetSections() {
 	inst.section04Inst.resetSection()
 	inst.section05Inst.resetSection()
 	inst.section06Inst.resetSection()
+	inst.section07Inst.resetSection()
 }
 func (inst *InEntityPushoutTable) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
@@ -338,6 +358,7 @@ func (inst *InEntityPushoutTable) CheckErrors() (err error) {
 	err = errors.Join(err, inst.section04Inst.CheckErrors())
 	err = errors.Join(err, inst.section05Inst.CheckErrors())
 	err = errors.Join(err, inst.section06Inst.CheckErrors())
+	err = errors.Join(err, inst.section07Inst.CheckErrors())
 
 	return
 }
@@ -353,14 +374,17 @@ func (inst *InEntityPushoutTable) GetSectionRetHash() *InEntityPushoutTableSecti
 func (inst *InEntityPushoutTable) GetSectionRetIndex() *InEntityPushoutTableSectionRetIndex {
 	return inst.section03Inst
 }
-func (inst *InEntityPushoutTable) GetSectionRetTime() *InEntityPushoutTableSectionRetTime {
+func (inst *InEntityPushoutTable) GetSectionRetOp() *InEntityPushoutTableSectionRetOp {
 	return inst.section04Inst
 }
-func (inst *InEntityPushoutTable) GetSectionSnapApplied() *InEntityPushoutTableSectionSnapApplied {
+func (inst *InEntityPushoutTable) GetSectionRetTime() *InEntityPushoutTableSectionRetTime {
 	return inst.section05Inst
 }
-func (inst *InEntityPushoutTable) GetSectionSnapPushoutGraph() *InEntityPushoutTableSectionSnapPushoutGraph {
+func (inst *InEntityPushoutTable) GetSectionSnapApplied() *InEntityPushoutTableSectionSnapApplied {
 	return inst.section06Inst
+}
+func (inst *InEntityPushoutTable) GetSectionSnapPushoutGraph() *InEntityPushoutTableSectionSnapPushoutGraph {
+	return inst.section07Inst
 }
 func (inst *InEntityPushoutTable) beginEntity() *InEntityPushoutTable {
 	switch inst.state {
@@ -412,7 +436,7 @@ func (inst *InEntityPushoutTable) validateEntity() {
 		state := inst.section04Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "retTime").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "retOp").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -420,12 +444,20 @@ func (inst *InEntityPushoutTable) validateEntity() {
 		state := inst.section05Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "snapApplied").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "retTime").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
 	{
 		state := inst.section06Inst.state
+		switch state {
+		case runtime.EntityStateInAttribute:
+			inst.AppendError(eb.Build().Str("section", "snapApplied").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			break
+		}
+	}
+	{
+		state := inst.section07Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
 			inst.AppendError(eb.Build().Str("section", "snapPushoutGraph").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
@@ -1888,6 +1920,359 @@ func (inst *InEntityPushoutTableSectionRetIndexInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
 func (inst *InEntityPushoutTableSectionRetIndexInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityPushoutTableSectionRetOp struct {
+	errs                           []error
+	inAttr                         *InEntityPushoutTableSectionRetOpInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityPushoutTable
+	homogenousArrayFieldBuilder077 *array.Uint16Builder
+	homogenousArrayListBuilder077  *array.ListBuilder
+}
+
+func NewInEntityPushoutTableSectionRetOp(builder *array.RecordBuilder, parent *InEntityPushoutTable) (inst *InEntityPushoutTableSectionRetOp) {
+	inst = &InEntityPushoutTableSectionRetOp{}
+	inAttr := NewInEntityPushoutTableSectionRetOpInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder077 = builder.Field(77).(*array.ListBuilder).ValueBuilder().(*array.Uint16Builder)
+	inst.homogenousArrayListBuilder077 = builder.Field(77).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityPushoutTableSectionRetOp) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityPushoutTableSectionRetOp) BeginAttribute() *InEntityPushoutTableSectionRetOpInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityPushoutTableSectionRetOp) BeginAttributeSingle(value77 uint16) *InEntityPushoutTableSectionRetOpInAttr {
+	return inst.BeginAttribute().AddToContainer(value77)
+}
+
+type InEntityPushoutTableSectionRetOpAttr struct {
+	Value []uint16
+}
+
+func (inst *InEntityPushoutTableSectionRetOp) Add(attr InEntityPushoutTableSectionRetOpAttr) *InEntityPushoutTableSectionRetOpInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityPushoutTableSectionRetOp) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityPushoutTableSectionRetOp) EndSection() *InEntityPushoutTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityPushoutTableSectionRetOp) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityPushoutTableSectionRetOp) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityPushoutTableSectionRetOp) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityPushoutTableSectionRetOp) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityPushoutTableSectionRetOpInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityPushoutTableSectionRetOp
+	homogenousArrayFieldBuilder077        *array.Uint16Builder
+	homogenousArrayListBuilder077         *array.ListBuilder
+	membershipFieldBuilder078             *array.Uint64Builder
+	membershipListBuilder078              *array.ListBuilder
+	membershipFieldBuilder079             *array.Uint64Builder
+	membershipListBuilder079              *array.ListBuilder
+	membershipFieldBuilder080             *array.BinaryBuilder
+	membershipListBuilder080              *array.ListBuilder
+	membershipFieldBuilder081             *array.Uint64Builder
+	membershipListBuilder081              *array.ListBuilder
+	membershipFieldBuilder082             *array.BinaryBuilder
+	membershipListBuilder082              *array.ListBuilder
+	homogenousArraySupportFieldBuilder083 *array.Uint64Builder
+	homogenousArraySupportListBuilder083  *array.ListBuilder
+	membershipSupportFieldBuilder084      *array.Uint64Builder
+	membershipSupportListBuilder084       *array.ListBuilder
+	membershipSupportFieldBuilder085      *array.Uint64Builder
+	membershipSupportListBuilder085       *array.ListBuilder
+	membershipSupportFieldBuilder086      *array.Uint64Builder
+	membershipSupportListBuilder086       *array.ListBuilder
+	membershipSupportFieldBuilder087      *array.Uint64Builder
+	membershipSupportListBuilder087       *array.ListBuilder
+
+	membershipContainerLength078 int
+
+	membershipContainerLength079 int
+
+	membershipContainerLength080 int
+
+	membershipContainerLength081 int
+
+	membershipContainerLength082 int
+
+	homogenousArrayContainerLength077 int
+}
+
+func NewInEntityPushoutTableSectionRetOpInAttr(builder *array.RecordBuilder, parent *InEntityPushoutTableSectionRetOp) (inst *InEntityPushoutTableSectionRetOpInAttr) {
+	inst = &InEntityPushoutTableSectionRetOpInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder077 = builder.Field(77).(*array.ListBuilder).ValueBuilder().(*array.Uint16Builder)
+	inst.homogenousArrayListBuilder077 = builder.Field(77).(*array.ListBuilder)
+	inst.membershipFieldBuilder078 = builder.Field(78).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder078 = builder.Field(78).(*array.ListBuilder)
+	inst.membershipFieldBuilder079 = builder.Field(79).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder079 = builder.Field(79).(*array.ListBuilder)
+	inst.membershipFieldBuilder080 = builder.Field(80).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder080 = builder.Field(80).(*array.ListBuilder)
+	inst.membershipFieldBuilder081 = builder.Field(81).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder081 = builder.Field(81).(*array.ListBuilder)
+	inst.membershipFieldBuilder082 = builder.Field(82).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder082 = builder.Field(82).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder083 = builder.Field(83).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder083 = builder.Field(83).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder084 = builder.Field(84).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder084 = builder.Field(84).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder085 = builder.Field(85).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder085 = builder.Field(85).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder086 = builder.Field(86).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder086 = builder.Field(86).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder087 = builder.Field(87).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder087 = builder.Field(87).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder077.Append(true)
+	inst.membershipListBuilder078.Append(true)
+	inst.membershipListBuilder079.Append(true)
+	inst.membershipListBuilder080.Append(true)
+	inst.membershipListBuilder081.Append(true)
+	inst.membershipListBuilder082.Append(true)
+	inst.homogenousArrayContainerLength077 = 0
+	inst.membershipContainerLength078 = 0
+	inst.membershipContainerLength079 = 0
+	inst.membershipContainerLength080 = 0
+	inst.membershipContainerLength081 = 0
+	inst.membershipContainerLength082 = 0
+	inst.homogenousArraySupportListBuilder083.Append(true)
+	inst.membershipSupportListBuilder084.Append(true)
+	inst.membershipSupportListBuilder085.Append(true)
+	inst.membershipSupportListBuilder086.Append(true)
+	inst.membershipSupportListBuilder087.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddToContainer(value77 uint16) *InEntityPushoutTableSectionRetOpInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder077.Append(value77)
+	inst.homogenousArrayContainerLength077++
+	return inst
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddToContainerP(value77 uint16) {
+	inst.AddToContainer(value77)
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddMembershipHighCardRef(hr78 uint64) *InEntityPushoutTableSectionRetOpInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder078.Append(hr78)
+	inst.membershipContainerLength078++
+	return inst
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddMembershipHighCardRefP(hr78 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder078.Append(hr78)
+	inst.membershipContainerLength078++
+	return
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddMembershipLowCardRef(lr79 uint64) *InEntityPushoutTableSectionRetOpInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder079.Append(lr79)
+	inst.membershipContainerLength079++
+	return inst
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddMembershipLowCardRefP(lr79 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder079.Append(lr79)
+	inst.membershipContainerLength079++
+	return
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddMembershipLowCardVerbatim(lv80 []byte) *InEntityPushoutTableSectionRetOpInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder080.Append(lv80)
+	inst.membershipContainerLength080++
+	return inst
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddMembershipLowCardVerbatimP(lv80 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder080.Append(lv80)
+	inst.membershipContainerLength080++
+	return
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddMembershipMixedLowCardRef(lmr81 uint64, mrhp82 []byte) *InEntityPushoutTableSectionRetOpInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder081.Append(lmr81)
+	inst.membershipFieldBuilder082.Append(mrhp82)
+	inst.membershipContainerLength081++
+	inst.membershipContainerLength082++
+	return inst
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AddMembershipMixedLowCardRefP(lmr81 uint64, mrhp82 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder081.Append(lmr81)
+	inst.membershipFieldBuilder082.Append(mrhp82)
+	inst.membershipContainerLength081++
+	inst.membershipContainerLength082++
+	return
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength078
+	inst.membershipContainerLength078 = 0
+	inst.membershipSupportFieldBuilder084.Append(uint64(l))
+	l = inst.membershipContainerLength079
+	inst.membershipContainerLength079 = 0
+	inst.membershipSupportFieldBuilder085.Append(uint64(l))
+	l = inst.membershipContainerLength080
+	inst.membershipContainerLength080 = 0
+	inst.membershipSupportFieldBuilder086.Append(uint64(l))
+	l = inst.membershipContainerLength081
+	inst.membershipContainerLength081 = 0
+	inst.membershipSupportFieldBuilder087.Append(uint64(l))
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength077
+	inst.homogenousArrayContainerLength077 = 0
+	inst.homogenousArraySupportFieldBuilder083.Append(uint64(l))
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) EndSection() *InEntityPushoutTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) EndAttribute() *InEntityPushoutTableSectionRetOp {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityPushoutTableSectionRetOpInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityPushoutTableSectionRetOpInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 

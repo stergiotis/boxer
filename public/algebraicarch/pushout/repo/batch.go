@@ -153,8 +153,8 @@ func (inst *Repo) ApplyEnvelopes(ctx context.Context, framed [][]byte) (report B
 		return
 	}
 
-	// Transactional tail, batched: one clone, n applies, n envelope
-	// writes, one retention save, the log appends, one in-memory swap.
+	// Transactional tail, batched: one clone, n applies, one envelope
+	// write, one retention delta, one log append, one in-memory swap.
 	next := inst.g.Clone()
 	tombstones := false
 	for _, h := range order {
@@ -165,16 +165,15 @@ func (inst *Repo) ApplyEnvelopes(ctx context.Context, framed [][]byte) (report B
 		}
 		tombstones = tombstones || patchTombstones(p)
 	}
+	envs := make([]Envelope, 0, len(order))
 	for _, h := range order {
-		if err = ctx.Err(); err != nil {
-			return
-		}
-		if err = inst.st.PutEnvelope(ctx, h, members[h].framed); err != nil {
-			return
-		}
+		envs = append(envs, Envelope{Hash: h, Framed: members[h].framed})
+	}
+	if err = inst.st.PutEnvelopes(ctx, envs); err != nil {
+		return
 	}
 	if tombstones && inst.writesLedger() {
-		if err = inst.saveRetentionLocked(ctx, next); err != nil {
+		if err = inst.saveRetentionLocked(ctx, inst.g, next); err != nil {
 			return
 		}
 	}
@@ -186,11 +185,9 @@ func (inst *Repo) ApplyEnvelopes(ctx context.Context, framed [][]byte) (report B
 	for _, h := range order {
 		inst.appliedSet[h] = struct{}{}
 	}
-	inst.metaMu.Lock()
 	for _, h := range order {
-		inst.meta[h] = members[h].info
+		inst.hist.remember(h, members[h].info)
 	}
-	inst.metaMu.Unlock()
 	report.Applied = order
 	if inst.hooks.OnApplied != nil {
 		for _, h := range order {

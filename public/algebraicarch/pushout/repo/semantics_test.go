@@ -34,7 +34,7 @@ func (s noSnapshotStore) Capabilities() repo.Capabilities {
 // shape whose only purge carrier is the snapshot.
 type noLedgerStore struct{ repo.StorageI }
 
-func (noLedgerStore) SaveRetention(context.Context, []repo.RetentionEntry) error { return nil }
+func (noLedgerStore) UpdateRetention(context.Context, repo.RetentionDelta) error { return nil }
 func (noLedgerStore) LoadRetention(context.Context) ([]repo.RetentionEntry, error) {
 	return nil, nil
 }

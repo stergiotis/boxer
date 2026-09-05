@@ -4,7 +4,7 @@
 //
 //	<root>/applied.txt          one 64-hex hash per line, apply order
 //	<root>/snapshot.bin         repo.Snapshot (own framing, see below)
-//	<root>/retention.txt        one "<64-hex> <index> <unixnano>" per line
+//	<root>/retention.txt        one "<64-hex> <index> <unixnano>[ purged]" per line
 //	<root>/changes/<hh>/<hash>  framed envelopes, sharded by first byte
 //	<root>/lock                 advisory inter-process lock (see lock_unix.go)
 //
@@ -13,7 +13,10 @@
 // place, and the directory fsynced (atomic replace). Log appends use
 // O_APPEND + fsync; LoadApplied drops a torn trailing line — the engine
 // never acknowledged that append. ReplaceApplied rewrites the whole log
-// atomically via the same temp+rename path.
+// atomically via the same temp+rename path, and so does UpdateRetention:
+// the ledger is one file, so a delta is folded into the set in memory
+// and the file replaced — the whole-value write is this store's
+// implementation choice, not the seam's contract (ADR-0221).
 //
 // The layout stays human-debuggable on purpose: envelopes are framed
 // cbor1 by default and the applied log is a text file.
@@ -25,6 +28,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/fs"
+	"iter"
 	"os"
 	"path/filepath"
 	"slices"
@@ -85,6 +89,16 @@ func (inst *Store) envelopePath(h t.PatchHash) string {
 // writeAtomic writes data to path via temp file + fsync + rename +
 // directory fsync.
 func writeAtomic(path string, data []byte) (err error) {
+	if err = writeAtomicNoDirSync(path, data); err != nil {
+		return
+	}
+	err = syncDir(filepath.Dir(path))
+	return
+}
+
+// writeAtomicNoDirSync is writeAtomic without the final directory
+// fsync, for a batch that syncs each directory once at the end.
+func writeAtomicNoDirSync(path string, data []byte) (err error) {
 	dir := filepath.Dir(path)
 	if err = os.MkdirAll(dir, 0o755); err != nil {
 		return eh.Errorf("mkdir: %w", err)
@@ -109,7 +123,6 @@ func writeAtomic(path string, data []byte) (err error) {
 	if err = os.Rename(tmpName, path); err != nil {
 		return eh.Errorf("rename: %w", err)
 	}
-	err = syncDir(dir)
 	return
 }
 
@@ -138,6 +151,39 @@ func (inst *Store) PutEnvelope(ctx context.Context, h t.PatchHash, framed []byte
 	}
 	err = writeAtomic(path, framed)
 	return
+}
+
+// PutEnvelopes writes each new envelope through the temp+fsync+rename
+// path but fsyncs each shard directory once at the end, so a batch of
+// n envelopes costs n file fsyncs plus at most 256 directory fsyncs
+// rather than 2n. A crash mid-batch leaves any subset durable — the
+// contract's "consecutive PutEnvelope" shape.
+func (inst *Store) PutEnvelopes(ctx context.Context, envs []repo.Envelope) (err error) {
+	dirs := make(map[string]struct{})
+	for _, e := range envs {
+		if err = ctx.Err(); err != nil {
+			return
+		}
+		path := inst.envelopePath(e.Hash)
+		if _, serr := os.Stat(path); serr == nil {
+			continue // first write wins
+		}
+		if err = writeAtomicNoDirSync(path, e.Framed); err != nil {
+			return
+		}
+		dirs[filepath.Dir(path)] = struct{}{}
+	}
+	for dir := range dirs {
+		if err = syncDir(dir); err != nil {
+			return
+		}
+	}
+	return
+}
+
+// LoadEnvelopes is one file read per hash, in request order.
+func (inst *Store) LoadEnvelopes(ctx context.Context, hs []t.PatchHash) iter.Seq2[repo.Envelope, error] {
+	return repo.LoadEnvelopesOneByOne(ctx, inst, hs)
 }
 
 func (inst *Store) GetEnvelope(ctx context.Context, h t.PatchHash) (framed []byte, err error) {
@@ -308,12 +354,15 @@ func (inst *Store) LoadSnapshot(ctx context.Context) (snap repo.Snapshot, ok boo
 
 func (inst *Store) retentionPath() string { return filepath.Join(inst.root, "retention.txt") }
 
-// SaveRetention atomically replaces the retention ledger. Entries are
-// written sorted by node id (deterministic, debuggable); an empty slice
-// writes an empty file.
-func (inst *Store) SaveRetention(ctx context.Context, entries []repo.RetentionEntry) (err error) {
-	sorted := make([]repo.RetentionEntry, len(entries))
-	copy(sorted, entries)
+// UpdateRetention folds the delta into the ledger read from disk and
+// atomically replaces the file. Entries are written sorted by node id
+// (deterministic, debuggable); an empty set writes an empty file.
+func (inst *Store) UpdateRetention(ctx context.Context, delta repo.RetentionDelta) (err error) {
+	current, err := inst.LoadRetention(ctx)
+	if err != nil {
+		return
+	}
+	sorted := repo.ApplyRetentionDelta(current, delta)
 	slices.SortFunc(sorted, func(a, b repo.RetentionEntry) int { return t.CompareNodeID(a.Node, b.Node) })
 	var sb strings.Builder
 	for _, e := range sorted {

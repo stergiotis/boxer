@@ -174,8 +174,7 @@ type Repo struct {
 	applied    []t.PatchHash
 	appliedSet map[t.PatchHash]struct{}
 
-	metaMu sync.Mutex
-	meta   map[t.PatchHash]PatchInfo // lazy cache over storage envelopes
+	hist *history // decoded patch metadata; see history.go for its contract
 
 	closed bool
 }
@@ -242,7 +241,7 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 		caps:       caps,
 		mode:       opts.Retention,
 		appliedSet: make(map[t.PatchHash]struct{}, len(applied)),
-		meta:       make(map[t.PatchHash]PatchInfo),
+		hist:       newHistory(opts.Storage, opts.Codecs),
 	}
 
 	fromSnapshot := false
@@ -263,59 +262,87 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 	}
 	r0.g.SetClock(opts.Clock)
 
-	replayed := 0
+	// Pass 1 — the log's shape, and what must be replayed: every entry
+	// the snapshot does not cover, in log order.
+	seen := make(map[t.PatchHash]struct{}, len(applied))
+	toReplay := make([]t.PatchHash, 0, len(applied)-len(covered))
 	for _, h := range applied {
-		if err = ctx.Err(); err != nil {
-			return
-		}
-		if _, dup := r0.appliedSet[h]; dup {
+		if _, dup := seen[h]; dup {
 			err = eb.Build().Stringer("patchHash", h).Errorf("applied log lists a patch twice: %w", ErrCorruptStore)
 			return
 		}
-		if _, ok := covered[h]; ok {
-			r0.appliedSet[h] = struct{}{}
-			continue
+		seen[h] = struct{}{}
+		if _, ok := covered[h]; !ok {
+			toReplay = append(toReplay, h)
 		}
-		framed, gerr := opts.Storage.GetEnvelope(ctx, h)
-		if gerr != nil {
-			err = eb.Build().Stringer("patchHash", h).Errorf("applied has no envelope: %w", errors.Join(ErrCorruptStore, gerr))
+	}
+
+	// Pass 2 — one batch read of the envelopes to replay (a store that
+	// can answers it in one round trip), applied in log order. The
+	// applied set is advanced through the log as the replay goes, so
+	// "dependencies precede dependents" is checked against exactly the
+	// entries before each one, covered entries included.
+	replayed := 0
+	pos := 0 // index into applied of the next entry not yet accounted for
+	for env, lerr := range opts.Storage.LoadEnvelopes(ctx, toReplay) {
+		if lerr != nil {
+			err = eb.Build().Stringer("patchHash", env.Hash).Errorf("applied has no envelope: %w", errors.Join(ErrCorruptStore, lerr))
 			return
 		}
-		env, codecName, derr := opts.Codecs.Decode(framed)
+		if err = ctx.Err(); err != nil {
+			return
+		}
+		for pos < len(applied) && applied[pos] != env.Hash {
+			if _, ok := covered[applied[pos]]; !ok {
+				err = eb.Build().Stringer("patchHash", env.Hash).Stringer("expected", applied[pos]).Errorf("store yielded envelopes out of request order: %w", ErrCorruptStore)
+				return
+			}
+			r0.appliedSet[applied[pos]] = struct{}{}
+			pos++
+		}
+		if pos == len(applied) {
+			err = eb.Build().Stringer("patchHash", env.Hash).Errorf("store yielded an envelope that was not requested: %w", ErrCorruptStore)
+			return
+		}
+		info, derr := r0.hist.decode(env.Hash, env.Framed)
 		if derr != nil {
-			err = eb.Build().Stringer("patchHash", h).Errorf("applied: %w", errors.Join(ErrCorruptStore, derr))
+			err = eb.Build().Stringer("patchHash", env.Hash).Errorf("applied: %w", errors.Join(ErrCorruptStore, derr))
 			return
 		}
-		if env.Patch.Hash != h {
-			err = eb.Build().Stringer("patchHash", h).Stringer("hash", env.Patch.Hash).Errorf("the stored envelope carries a different patch than the key it is filed under: %w", ErrCorruptStore)
-			return
-		}
-		for _, dep := range env.Patch.Dependencies {
+		for _, dep := range info.Patch.Dependencies {
 			if _, ok := r0.appliedSet[dep]; !ok {
-				err = eb.Build().Stringer("patchHash", h).Stringer("dep", dep).Errorf("applied precedes its dependency: %w", ErrCorruptStore)
+				err = eb.Build().Stringer("patchHash", env.Hash).Stringer("dep", dep).Errorf("applied precedes its dependency: %w", ErrCorruptStore)
 				return
 			}
 		}
-		if aerr := env.Patch.Apply(r0.g); aerr != nil {
-			err = eb.Build().Stringer("patchHash", h).Errorf("replay: %w", errors.Join(ErrCorruptStore, aerr))
+		if aerr := info.Patch.Apply(r0.g); aerr != nil {
+			err = eb.Build().Stringer("patchHash", env.Hash).Errorf("replay: %w", errors.Join(ErrCorruptStore, aerr))
 			return
 		}
-		r0.appliedSet[h] = struct{}{}
-		r0.meta[h] = PatchInfo{Patch: env.Patch, Producer: env.Producer, Timestamp: env.Timestamp, Codec: codecName}
+		r0.appliedSet[env.Hash] = struct{}{}
+		r0.hist.remember(env.Hash, info)
 		replayed++
+		pos++
+	}
+	if replayed != len(toReplay) {
+		err = eb.Build().Int("requested", len(toReplay)).Int("yielded", replayed).Errorf("store yielded fewer envelopes than the applied log names: %w", ErrCorruptStore)
+		return
+	}
+	for ; pos < len(applied); pos++ {
+		r0.appliedSet[applied[pos]] = struct{}{}
 	}
 	r0.applied = slices.Clone(applied)
 
 	// Seed replay-stable retention state from the durable ledger, then
-	// persist the reconciled set. Full replay re-stamped tombstoneAt to
-	// replay time and re-materialised swept content, so without this the
-	// horizon would reset and purges would un-happen on every
-	// snapshot-less or uncovered-snapshot open (ADR-0079, ADR-0220). The
-	// reconcile adopts the ledger's stamp where present, keeps the
+	// persist the reconciliation as one delta. Full replay re-stamped
+	// tombstoneAt to replay time and re-materialised swept content, so
+	// without this the horizon would reset and purges would un-happen on
+	// every snapshot-less or uncovered-snapshot open (ADR-0079, ADR-0220).
+	// The reconcile adopts the ledger's stamp where present, keeps the
 	// decode/replay stamp for tombstones new to the ledger, re-applies
 	// the ledger's purge markers, and drops entries for nodes no longer
-	// tombstoned — writing back only when something changed. Under
-	// RetentionNone the ledger is neither read nor written.
+	// tombstoned — writing only the difference, and only when there is
+	// one. Under RetentionNone the ledger is neither read nor written.
 	purgesRestored := 0
 	if caps.RetentionLedger && opts.Retention != RetentionNone {
 		retEntries, lerr := opts.Storage.LoadRetention(ctx)
@@ -340,8 +367,8 @@ func Open(ctx context.Context, opts Options) (r *Repo, err error) {
 				purgesRestored++
 			}
 		}
-		if retentionChanged(r0.g, ledger, purged) {
-			if serr := r0.saveRetentionLocked(ctx, r0.g); serr != nil {
+		if delta := DiffRetention(retEntries, retentionEntries(r0.g)); !delta.IsEmpty() {
+			if serr := opts.Storage.UpdateRetention(ctx, delta); serr != nil {
 				err = serr
 				return
 			}
@@ -495,7 +522,7 @@ func (inst *Repo) commitPatchLocked(ctx context.Context, p *patch.Patch, framed 
 	// before the verb acks. A failure fails the verb; the orphan envelope
 	// and any orphan ledger entry are harmless — recovery reconciles.
 	if patchTombstones(p) && inst.writesLedger() {
-		if err = inst.saveRetentionLocked(ctx, next); err != nil {
+		if err = inst.saveRetentionLocked(ctx, inst.g, next); err != nil {
 			return
 		}
 	}
@@ -505,9 +532,7 @@ func (inst *Repo) commitPatchLocked(ctx context.Context, p *patch.Patch, framed 
 	inst.g = next
 	inst.applied = append(inst.applied, p.Hash)
 	inst.appliedSet[p.Hash] = struct{}{}
-	inst.metaMu.Lock()
-	inst.meta[p.Hash] = info
-	inst.metaMu.Unlock()
+	inst.hist.remember(p.Hash, info)
 	return
 }
 
@@ -539,19 +564,14 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 		err = eb.Build().Stringer("patchHash", h).Errorf("patch: %w", ErrNotApplied)
 		return
 	}
-	for _, other := range inst.applied {
-		if other == h {
-			continue
-		}
-		oInfo, ierr := inst.patchInfo(ctx, other)
-		if ierr != nil {
-			err = ierr
-			return
-		}
-		if slices.Contains(oInfo.Patch.Dependencies, h) {
-			err = eb.Build().Stringer("patchHash", h).Stringer("requiredBy", other).Errorf("patch is required by another: %w", ErrDependentExists)
-			return
-		}
+	requiredBy, derr := inst.hist.dependents(ctx, h, inst.applied)
+	if derr != nil {
+		err = derr
+		return
+	}
+	if len(requiredBy) > 0 {
+		err = eb.Build().Stringer("patchHash", h).Stringer("requiredBy", requiredBy[0]).Int("dependents", len(requiredBy)).Errorf("patch is required by another: %w", ErrDependentExists)
+		return
 	}
 	info, err := inst.patchInfo(ctx, h)
 	if err != nil {
@@ -577,7 +597,7 @@ func (inst *Repo) Unrecord(ctx context.Context, h t.PatchHash) (err error) {
 	// Unrecord can resurrect a node (dropping its tombstoneAt), so refresh
 	// the ledger before the commit point (ReplaceApplied).
 	if inst.writesLedger() {
-		if err = inst.saveRetentionLocked(ctx, next); err != nil {
+		if err = inst.saveRetentionLocked(ctx, inst.g, next); err != nil {
 			return
 		}
 	}
@@ -636,7 +656,7 @@ func (inst *Repo) Sweep(ctx context.Context, now time.Time, horizon time.Duratio
 	}
 	switch {
 	case inst.caps.RetentionLedger:
-		err = inst.saveRetentionLocked(ctx, next)
+		err = inst.saveRetentionLocked(ctx, inst.g, next)
 	case inst.caps.Snapshots:
 		err = inst.saveSnapshotLocked(ctx, next, inst.applied)
 	}
@@ -693,12 +713,21 @@ func (inst *Repo) writesLedger() bool {
 	return inst.caps.RetentionLedger && inst.mode != RetentionNone
 }
 
-// saveRetentionLocked persists the durable retention ledger from the
-// GIVEN pushoutgraph's tombstone stamps and purge markers. Called on
-// tombstone-changing commits, on Sweep, and at Open so a full replay can
-// neither reset retention horizons nor un-purge (ADR-0079, ADR-0220).
-func (inst *Repo) saveRetentionLocked(ctx context.Context, g *store.PushoutGraph) (err error) {
-	err = inst.st.SaveRetention(ctx, retentionEntries(g))
+// saveRetentionLocked persists the change in retention state between
+// the committed pushoutgraph prev and the about-to-be-committed next as
+// ONE RetentionDelta (ADR-0221) — an upsert per tombstone whose stamp or
+// purge flag differs, a removal per tombstone next no longer has. Called
+// on tombstone-changing commits and on Sweep so a full replay can neither
+// reset retention horizons nor un-purge (ADR-0079, ADR-0220). An empty
+// delta performs no write. The diff walks every tombstone of both
+// graphs; a graph that reports the tombstones a verb touched would make
+// it O(changed) without touching the seam.
+func (inst *Repo) saveRetentionLocked(ctx context.Context, prev, next *store.PushoutGraph) (err error) {
+	delta := DiffRetention(retentionEntries(prev), retentionEntries(next))
+	if delta.IsEmpty() {
+		return
+	}
+	err = inst.st.UpdateRetention(ctx, delta)
 	return
 }
 
@@ -722,27 +751,6 @@ func retentionEntries(g *store.PushoutGraph) (entries []RetentionEntry) {
 func patchTombstones(p *patch.Patch) bool {
 	for _, c := range p.Changes {
 		if c.Kind == patch.ChangeKindDeleteNode {
-			return true
-		}
-	}
-	return false
-}
-
-// retentionChanged reports whether g's current retention state differs
-// from the loaded ledger (a node added, dropped, re-stamped, or purged
-// where the ledger did not say so), so Open rewrites the ledger only
-// when the reconcile actually changed it.
-func retentionChanged(g *store.PushoutGraph, ledger map[t.NodeID]time.Time, purged map[t.NodeID]struct{}) bool {
-	current := g.TombstoneStamps()
-	if len(current) != len(ledger) {
-		return true
-	}
-	for id, when := range current {
-		if lw, ok := ledger[id]; !ok || !lw.Equal(when) {
-			return true
-		}
-		_, ledgerPurged := purged[id]
-		if ledgerPurged != (g.NodeContentStatus(id) == t.NodeContentStatusPurged) {
 			return true
 		}
 	}
@@ -817,7 +825,31 @@ func (inst *Repo) EncodedEnvelope(ctx context.Context, h t.PatchHash) (framed []
 	return
 }
 
+// EncodedEnvelopes returns the framed envelope bytes for hs, in request
+// order, through the store's batch read — the shipping side of a sync
+// round. Works for unrecorded patches too.
+func (inst *Repo) EncodedEnvelopes(ctx context.Context, hs []t.PatchHash) (framed [][]byte, err error) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if err = inst.checkOpenLocked(); err != nil {
+		return
+	}
+	framed = make([][]byte, 0, len(hs))
+	for env, lerr := range inst.st.LoadEnvelopes(ctx, hs) {
+		if lerr != nil {
+			framed = nil
+			err = lerr
+			return
+		}
+		framed = append(framed, env.Framed)
+	}
+	return
+}
+
 // PatchInfo returns the logical envelope for h (applied or merely seen).
+// The envelopes in storage are the system of record: the call may read
+// and decode from storage, so it can fail with a storage error and is
+// not O(1) — see history.go for what the engine keeps in memory.
 func (inst *Repo) PatchInfo(ctx context.Context, h t.PatchHash) (info PatchInfo, err error) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
@@ -828,30 +860,10 @@ func (inst *Repo) PatchInfo(ctx context.Context, h t.PatchHash) (info PatchInfo,
 	return
 }
 
-// patchInfo serves from the meta cache, lazily decoding from storage on
-// miss (snapshot-covered history is not decoded at Open). Guarded by
-// metaMu so it is callable under either engine lock.
+// patchInfo is the in-engine form of PatchInfo, callable under either
+// engine lock.
 func (inst *Repo) patchInfo(ctx context.Context, h t.PatchHash) (info PatchInfo, err error) {
-	inst.metaMu.Lock()
-	defer inst.metaMu.Unlock()
-	if cached, ok := inst.meta[h]; ok {
-		info = cached
-		return
-	}
-	framed, err := inst.st.GetEnvelope(ctx, h)
-	if err != nil {
-		return
-	}
-	env, codecName, err := inst.reg.Decode(framed)
-	if err != nil {
-		return
-	}
-	if env.Patch.Hash != h {
-		err = eb.Build().Stringer("patchHash", h).Stringer("hash", env.Patch.Hash).Errorf("the stored envelope carries a different patch than the key it is filed under: %w", ErrCorruptStore)
-		return
-	}
-	info = PatchInfo{Patch: env.Patch, Producer: env.Producer, Timestamp: env.Timestamp, Codec: codecName}
-	inst.meta[h] = info
+	info, err = inst.hist.lookup(ctx, h)
 	return
 }
 

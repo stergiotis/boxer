@@ -252,6 +252,26 @@ func NewMembershipPackPushoutTableShared1RetTime() (inst *MembershipPackPushoutT
 	return
 }
 
+func NewMembershipPackPushoutTableShared1RetOp() (inst *MembershipPackPushoutTableShared1) {
+	inst = &MembershipPackPushoutTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 78
+	inst.ColumnIndexHighCardRefAccel = 84
+	inst.ColumnIndexLowCardRef = 79
+	inst.ColumnIndexLowCardRefAccel = 85
+	inst.ColumnIndexLowCardVerbatim = 80
+	inst.ColumnIndexLowCardVerbatimAccel = 86
+	inst.ColumnIndexMixedLowCardRef = 81
+	inst.ColumnIndexMixedLowCardRefAccel = 87
+	inst.ColumnIndexMixedRefHighCardParameters = 82
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 87
+	return
+}
+
 func (inst *MembershipPackPushoutTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRef)
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRefElements)
@@ -524,6 +544,14 @@ type ReadAccessPushoutTableTaggedRetIndexAttributes struct {
 	ColumnIndexHomogenousArray uint32
 }
 
+type ReadAccessPushoutTableTaggedRetOpAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint16
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
 type ReadAccessPushoutTableTaggedRetTimeAttributes struct {
 	ValueValue                 *array.List
 	ColumnIndexValue           uint32
@@ -759,6 +787,40 @@ func (inst *ReadAccessPushoutTableTaggedRetIndexAttributes) SetColumnIndices(ind
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedRetIndexAttributes)(nil)
 
+func NewReadAccessPushoutTableTaggedRetOpAttributes() (inst *ReadAccessPushoutTableTaggedRetOpAttributes) {
+	inst = &ReadAccessPushoutTableTaggedRetOpAttributes{}
+	inst.ColumnIndexValue = 77
+	inst.ColumnIndexHomogenousArray = 83
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessPushoutTableTaggedRetOpAttributes.ColumnIndexValue",
+		"ReadAccessPushoutTableTaggedRetOpAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedRetOpAttributes)(nil)
+
 func NewReadAccessPushoutTableTaggedRetTimeAttributes() (inst *ReadAccessPushoutTableTaggedRetTimeAttributes) {
 	inst = &ReadAccessPushoutTableTaggedRetTimeAttributes{}
 	inst.ColumnIndexValue = 66
@@ -899,6 +961,14 @@ func (inst *ReadAccessPushoutTableTaggedRetIndexAttributes) Reset() {
 	}
 }
 
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
 func (inst *ReadAccessPushoutTableTaggedRetTimeAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
@@ -968,6 +1038,14 @@ func (inst *ReadAccessPushoutTableTaggedRetHashAttributes) Release() {
 var _ runtime.ReleasableI = (*ReadAccessPushoutTableTaggedRetIndexAttributes)(nil)
 
 func (inst *ReadAccessPushoutTableTaggedRetIndexAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessPushoutTableTaggedRetOpAttributes)(nil)
+
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
@@ -1044,6 +1122,13 @@ func (inst *ReadAccessPushoutTableTaggedRetHashAttributes) Len() (nEntities int)
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetIndexAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
@@ -1130,6 +1215,18 @@ func (inst *ReadAccessPushoutTableTaggedRetHashAttributes) LoadFromRecord(rec ru
 
 func (inst *ReadAccessPushoutTableTaggedRetIndexAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT16, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint16Data)
 	if err != nil {
 		return
 	}
@@ -1328,6 +1425,39 @@ func (inst *ReadAccessPushoutTableTaggedRetTimeAttributes) GetAttrValueSingleOrD
 	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
 	return
 }
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint16] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint16) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint16, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "retOp").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint16) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
 func (inst *ReadAccessPushoutTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue string) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
@@ -1374,6 +1504,10 @@ func (inst *ReadAccessPushoutTableTaggedRetIndexAttributes) GetNumberOfAttribute
 	return
 }
 func (inst *ReadAccessPushoutTableTaggedRetTimeAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessPushoutTableTaggedRetOpAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
 	return
 }
@@ -1432,6 +1566,13 @@ type ReadAccessPushoutTableTaggedRetTime struct {
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedRetTime)(nil)
 
+type ReadAccessPushoutTableTaggedRetOp struct {
+	Attributes  *ReadAccessPushoutTableTaggedRetOpAttributes
+	Memberships *MembershipPackPushoutTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessPushoutTableTaggedRetOp)(nil)
+
 func NewReadAccessPushoutTableTaggedEnvBlob() (inst *ReadAccessPushoutTableTaggedEnvBlob) {
 	inst = &ReadAccessPushoutTableTaggedEnvBlob{}
 	inst.Attributes = NewReadAccessPushoutTableTaggedEnvBlobAttributes()
@@ -1478,6 +1619,13 @@ func NewReadAccessPushoutTableTaggedRetTime() (inst *ReadAccessPushoutTableTagge
 	inst = &ReadAccessPushoutTableTaggedRetTime{}
 	inst.Attributes = NewReadAccessPushoutTableTaggedRetTimeAttributes()
 	inst.Memberships = NewMembershipPackPushoutTableShared1RetTime()
+	return
+}
+
+func NewReadAccessPushoutTableTaggedRetOp() (inst *ReadAccessPushoutTableTaggedRetOp) {
+	inst = &ReadAccessPushoutTableTaggedRetOp{}
+	inst.Attributes = NewReadAccessPushoutTableTaggedRetOpAttributes()
+	inst.Memberships = NewMembershipPackPushoutTableShared1RetOp()
 	return
 }
 
@@ -1530,6 +1678,13 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) SetColumnIndices(indices []uint
 	return
 }
 
+func (inst *ReadAccessPushoutTableTaggedRetOp) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
@@ -1567,6 +1722,12 @@ func (inst *ReadAccessPushoutTableTaggedRetIndex) GetColumnIndices() (columnIndi
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetTime) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
@@ -1614,6 +1775,12 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetColumnIndexFieldNames() (fie
 	return
 }
 
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
@@ -1645,6 +1812,11 @@ func (inst *ReadAccessPushoutTableTaggedRetIndex) Release() {
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetTime) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOp) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
@@ -1747,6 +1919,20 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) LoadFromRecord(rec runtime.Reco
 	return
 }
 
+func (inst *ReadAccessPushoutTableTaggedRetOp) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
@@ -1782,6 +1968,11 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) Len() (nEntities int) {
 	return
 }
 
+func (inst *ReadAccessPushoutTableTaggedRetOp) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) GetAttributes() *ReadAccessPushoutTableTaggedEnvBlobAttributes {
 	return inst.Attributes
 }
@@ -1810,6 +2001,10 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetAttributes() *ReadAccessPush
 	return inst.Attributes
 }
 
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetAttributes() *ReadAccessPushoutTableTaggedRetOpAttributes {
+	return inst.Attributes
+}
+
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) GetMemberships() *MembershipPackPushoutTableShared1 {
 	return inst.Memberships
 }
@@ -1835,6 +2030,10 @@ func (inst *ReadAccessPushoutTableTaggedRetIndex) GetMemberships() *MembershipPa
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetTime) GetMemberships() *MembershipPackPushoutTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetMemberships() *MembershipPackPushoutTableShared1 {
 	return inst.Memberships
 }
 
@@ -1880,6 +2079,12 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionName() naming.Stylabl
 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessPushoutTableTaggedRetTime)(nil)
 
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetSectionName() naming.StylableName {
+	return "ret-op"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessPushoutTableTaggedRetOp)(nil)
+
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
@@ -1905,6 +2110,10 @@ func (inst *ReadAccessPushoutTableTaggedRetIndex) GetSectionUseAspects() useaspe
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
@@ -1936,6 +2145,10 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionStreamingGroup() nami
 	return "data"
 }
 
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
 func (inst *ReadAccessPushoutTableTaggedEnvBlob) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
@@ -1961,6 +2174,10 @@ func (inst *ReadAccessPushoutTableTaggedRetIndex) GetSectionCoSectionGroup() nam
 }
 
 func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
@@ -1992,6 +2209,10 @@ func (inst *ReadAccessPushoutTableTaggedRetTime) GetSectionMembershipSpec() comm
 	return 0b111001
 }
 
+func (inst *ReadAccessPushoutTableTaggedRetOp) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b111001
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses
@@ -2008,6 +2229,7 @@ type ReadAccessPushoutTable struct {
 	RetHash          *ReadAccessPushoutTableTaggedRetHash
 	RetIndex         *ReadAccessPushoutTableTaggedRetIndex
 	RetTime          *ReadAccessPushoutTableTaggedRetTime
+	RetOp            *ReadAccessPushoutTableTaggedRetOp
 }
 
 func NewReadAccessPushoutTable() (inst *ReadAccessPushoutTable) {
@@ -2022,6 +2244,7 @@ func NewReadAccessPushoutTable() (inst *ReadAccessPushoutTable) {
 	inst.RetHash = NewReadAccessPushoutTableTaggedRetHash()
 	inst.RetIndex = NewReadAccessPushoutTableTaggedRetIndex()
 	inst.RetTime = NewReadAccessPushoutTableTaggedRetTime()
+	inst.RetOp = NewReadAccessPushoutTableTaggedRetOp()
 	return
 }
 
@@ -2036,6 +2259,7 @@ func (inst *ReadAccessPushoutTable) Release() {
 	runtime.ReleaseIfNotNil(inst.RetHash)
 	runtime.ReleaseIfNotNil(inst.RetIndex)
 	runtime.ReleaseIfNotNil(inst.RetTime)
+	runtime.ReleaseIfNotNil(inst.RetOp)
 }
 
 func (inst *ReadAccessPushoutTable) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -2109,6 +2333,13 @@ func (inst *ReadAccessPushoutTable) LoadFromRecord(rec runtime.RecordI) (err err
 			return
 		}
 	}
+	if inst.RetOp != nil {
+		err = inst.RetOp.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "pushout-table").Str("fieldName", "RetOp").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
 	return
 }
 
@@ -2144,6 +2375,9 @@ func (inst *ReadAccessPushoutTable) SetColumnIndices(indices []uint32) (rest []u
 	if inst.RetTime != nil {
 		rest = inst.RetTime.SetColumnIndices(rest)
 	}
+	if inst.RetOp != nil {
+		rest = inst.RetOp.SetColumnIndices(rest)
+	}
 	return
 }
 
@@ -2178,6 +2412,9 @@ func (inst *ReadAccessPushoutTable) GetColumnIndices() (columnIndices []uint32) 
 	if inst.RetTime != nil {
 		columnIndices = slices.Concat(columnIndices, inst.RetTime.GetColumnIndices())
 	}
+	if inst.RetOp != nil {
+		columnIndices = slices.Concat(columnIndices, inst.RetOp.GetColumnIndices())
+	}
 	return
 }
 
@@ -2211,6 +2448,9 @@ func (inst *ReadAccessPushoutTable) GetColumnIndexFieldNames() (fieldNames []str
 	}
 	if inst.RetTime != nil {
 		fieldNames = slices.Concat(fieldNames, inst.RetTime.GetColumnIndexFieldNames())
+	}
+	if inst.RetOp != nil {
+		fieldNames = slices.Concat(fieldNames, inst.RetOp.GetColumnIndexFieldNames())
 	}
 	return
 }

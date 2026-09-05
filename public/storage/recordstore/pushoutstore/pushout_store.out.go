@@ -82,6 +82,7 @@ var PushoutMembershipIds = map[string]map[string]uint64{
 		"pushoutRetHash": 1,
 		"pushoutRetIdx":  2,
 		"pushoutRetTime": 3,
+		"pushoutRetOp":   4,
 	},
 }
 
@@ -406,6 +407,8 @@ func (inst *PushoutEntityBuilder) endSection(section string) error {
 		inst.store.dml.GetSectionRetIndex().EndSection()
 	case "retTime":
 		inst.store.dml.GetSectionRetTime().EndSection()
+	case "retOp":
+		inst.store.dml.GetSectionRetOp().EndSection()
 	}
 	return nil
 }
@@ -518,6 +521,9 @@ func (inst *PushoutEntityBuilder) AddRetention(row Retention) *PushoutEntityBuil
 	})
 	inst.buf.Enqueue("retTime", "Retention", func() error {
 		return retentionEmitSectionRetTime(inst.store.dml.GetSectionRetTime(), row)
+	})
+	inst.buf.Enqueue("retOp", "Retention", func() error {
+		return retentionEmitSectionRetOp(inst.store.dml.GetSectionRetOp(), row)
 	})
 	inst.ent.Retention = option.Some(row)
 	return inst
@@ -1032,7 +1038,7 @@ const (
 	pushoutScanEnvelopeFilter  = "has(\"tv:envBlob:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:envBlob:lr:lr:u64:1247:::0::data\", 1) = 1"
 	pushoutScanLogEntryFilter  = "has(\"tv:logHash:lr:lr:u64:1247:::0::data\", 1) AND countEqual(\"tv:logHash:lr:lr:u64:1247:::0::data\", 1) = 1"
 	pushoutScanSnapshotFilter  = "has(\"tv:snapPushoutGraph:lr:lr:u64:1247:::0::data\", 2) AND countEqual(\"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:snapPushoutGraph:lr:lr:u64:1247:::0::data\", 2) = 1"
-	pushoutScanRetentionFilter = "(has(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) OR has(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) OR has(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3)) AND countEqual(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) <= 1 AND countEqual(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3) <= 1"
+	pushoutScanRetentionFilter = "(has(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) OR has(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) OR has(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3) OR has(\"tv:retOp:lr:lr:u64:1247:::0::data\", 4)) AND countEqual(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) <= 1 AND countEqual(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3) <= 1 AND countEqual(\"tv:retOp:lr:lr:u64:1247:::0::data\", 4) <= 1"
 )
 
 // ScanEnvelope iterates the entities whose rows carry a conforming Envelope
@@ -1279,10 +1285,10 @@ var PushoutComponentSQL = componentsql.Set{
 			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:snapApplied:value:val:sh:4:::0::data\", \"tv:snapApplied:len:len:u64:4D:::0::data\", \"tv:snapApplied:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:snapApplied:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:snapPushoutGraph:value:val:y:4:::0::data\", \"tv:snapPushoutGraph:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:snapPushoutGraph:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Applied Array(String), PushoutGraph String)')",
 		},
 		"Retention": {
-			Presence:   "(has(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) OR has(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) OR has(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3))",
-			Validator:  "countEqual(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) <= 1 AND countEqual(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3) <= 1",
+			Presence:   "(has(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) OR has(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) OR has(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3) OR has(\"tv:retOp:lr:lr:u64:1247:::0::data\", 4))",
+			Validator:  "countEqual(\"tv:retHash:lr:lr:u64:1247:::0::data\", 1) <= 1 AND countEqual(\"tv:retIndex:lr:lr:u64:1247:::0::data\", 2) <= 1 AND countEqual(\"tv:retTime:lr:lr:u64:1247:::0::data\", 3) <= 1 AND countEqual(\"tv:retOp:lr:lr:u64:1247:::0::data\", 4) <= 1",
 			Filter:     pushoutScanRetentionFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:retHash:value:val:sh:4:::0::data\", \"tv:retHash:len:len:u64:4D:::0::data\", \"tv:retHash:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:retHash:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:retIndex:value:val:u64h:4:::0::data\", \"tv:retIndex:len:len:u64:4D:::0::data\", \"tv:retIndex:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:retIndex:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:retTime:value:val:i64h:4:::0::data\", \"tv:retTime:len:len:u64:4D:::0::data\", \"tv:retTime:lr:lr:u64:1247:::0::data\", 3, LW_RAGGED_PARENT_IDS(\"tv:retTime:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Hashes Array(String), Indices Array(UInt64), Times Array(Int64))')",
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:retHash:value:val:sh:4:::0::data\", \"tv:retHash:len:len:u64:4D:::0::data\", \"tv:retHash:lr:lr:u64:1247:::0::data\", 1, LW_RAGGED_PARENT_IDS(\"tv:retHash:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:retIndex:value:val:u64h:4:::0::data\", \"tv:retIndex:len:len:u64:4D:::0::data\", \"tv:retIndex:lr:lr:u64:1247:::0::data\", 2, LW_RAGGED_PARENT_IDS(\"tv:retIndex:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:retTime:value:val:i64h:4:::0::data\", \"tv:retTime:len:len:u64:4D:::0::data\", \"tv:retTime:lr:lr:u64:1247:::0::data\", 3, LW_RAGGED_PARENT_IDS(\"tv:retTime:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:retOp:value:val:u16h:4:::0::data\", \"tv:retOp:len:len:u64:4D:::0::data\", \"tv:retOp:lr:lr:u64:1247:::0::data\", 4, LW_RAGGED_PARENT_IDS(\"tv:retOp:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Hashes Array(String), Indices Array(UInt64), Times Array(Int64), Ops Array(UInt16))')",
 		},
 	},
 }
@@ -1348,7 +1354,8 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 	retHashR := lowlevel.NewReadAccessPushoutTableTaggedRetHash()
 	retIndexR := lowlevel.NewReadAccessPushoutTableTaggedRetIndex()
 	retTimeR := lowlevel.NewReadAccessPushoutTableTaggedRetTime()
-	readers := []pushoutSectionReaderI{idR, tsR, lcR, envBlobR, logHashR, snapAppliedR, snapPushoutGraphR, retHashR, retIndexR, retTimeR}
+	retOpR := lowlevel.NewReadAccessPushoutTableTaggedRetOp()
+	readers := []pushoutSectionReaderI{idR, tsR, lcR, envBlobR, logHashR, snapAppliedR, snapPushoutGraphR, retHashR, retIndexR, retTimeR, retOpR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1409,7 +1416,7 @@ func decodePushoutRecord(rec arrow.RecordBatch) (ents []*PushoutEntity, err erro
 			}
 		}
 		{
-			row, ok, e := retentionReadRow(i, retHashR.GetAttributes(), retHashR.GetMemberships(), retIndexR.GetAttributes(), retIndexR.GetMemberships(), retTimeR.GetAttributes(), retTimeR.GetMemberships())
+			row, ok, e := retentionReadRow(i, retHashR.GetAttributes(), retHashR.GetMemberships(), retIndexR.GetAttributes(), retIndexR.GetMemberships(), retTimeR.GetAttributes(), retTimeR.GetMemberships(), retOpR.GetAttributes(), retOpR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read retention component: %w", e)
 				return

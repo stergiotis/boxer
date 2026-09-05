@@ -3,6 +3,10 @@ package pushoutstore
 import (
 	"context"
 	"encoding/hex"
+	"iter"
+	"maps"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,11 +35,14 @@ import (
 //     followed by the new entries — one Flush, one Arrow insert, so
 //     readers observe the old or the new log, never a mixture — and
 //     LoadApplied keeps the entries after the last tombstone.
-//   - snapshot / retention: keys "snapshot" / "retention", whole value
-//     as one row per save, latest-wins via Latest. The retention ledger
-//     rides three aligned arrays (hash, index, nanos), one element per
-//     entry; its purged subset rides a second row of the same shape
-//     under "purges", written in the same insert.
+//   - snapshot: key "snapshot", whole value as one row per save,
+//     latest-wins via Latest.
+//   - retention ledger: key "retention", one row per UpdateRetention
+//     carrying the delta as four aligned arrays (hash, index, nanos,
+//     op); LoadRetention folds the rows after the last state-view
+//     tombstone. Every defaultCompactEvery deltas UpdateRetention writes a
+//     tombstone plus one full row instead — one insert — so a replay of
+//     the ledger stays bounded (ADR-0221).
 //
 // Durability: every mutating method Commits and Flushes before returning
 // (one synchronous Arrow insert per operation) — durable-on-return over
@@ -51,6 +58,12 @@ type Storage struct {
 	st   *PushoutStore
 	pc   *PushoutCache[struct{}]
 	seqs map[string]uint64 // next per-key ts sequence, lazily derived
+	// ledger mirrors the folded retention ledger once loaded (nil until
+	// then) so a delta can be applied and a compaction written without
+	// re-reading; retRows counts delta rows since the last compaction.
+	ledger       map[types.NodeID]repo.RetentionEntry
+	retRows      int
+	compactEvery int // delta rows between compactions; defaultCompactEvery
 }
 
 var _ repo.StorageI = (*Storage)(nil)
@@ -59,12 +72,21 @@ const (
 	logKey       = "log"
 	snapshotKey  = "snapshot"
 	retentionKey = "retention"
-	// purgesKey carries the purged subset of the retention ledger as a
-	// second row of the same Retention shape (node, index, swept-at
-	// nanos), so the purge flag needs no DTO change; LoadRetention joins
-	// the two rows on node id.
-	purgesKey = "purges"
 )
+
+// Retention delta ops, one per aligned element of a Retention row.
+const (
+	RetentionOpUpsert       uint16 = 0 // set the entry, content present
+	RetentionOpUpsertPurged uint16 = 1 // set the entry, content purged
+	RetentionOpRemove       uint16 = 2 // drop the entry (Times unused)
+)
+
+// defaultCompactEvery is how many delta rows a ledger accumulates before
+// UpdateRetention folds them into one tombstone-plus-full-row insert.
+const defaultCompactEvery = 32
+
+// loadEnvelopesChunk bounds the IN list of one LoadEnvelopes query.
+const loadEnvelopesChunk = 512
 
 // Capabilities: rows are append-only underneath, but every seam
 // operation is realised — snapshots and the ledger latest-wins, the
@@ -87,7 +109,7 @@ func Open(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocato
 		err = eh.Errorf("open pushout storage: %w", err)
 		return
 	}
-	inst = &Storage{st: st, pc: NewPushoutCache[struct{}](st, cacheCfg), seqs: make(map[string]uint64)}
+	inst = &Storage{st: st, pc: NewPushoutCache[struct{}](st, cacheCfg), seqs: make(map[string]uint64), compactEvery: defaultCompactEvery}
 	return
 }
 
@@ -186,6 +208,137 @@ func (inst *Storage) PutEnvelope(ctx context.Context, h types.PatchHash, framed 
 	err = inst.flush(ctx)
 	if err != nil {
 		err = eh.Errorf("put envelope flush: %w", err)
+	}
+	return
+}
+
+// PutEnvelopes finds which envelopes the store lacks with one keyed
+// scan per chunk, buffers exactly those, and ships them in ONE Flush —
+// one Arrow insert, one part — instead of one query and one insert per
+// envelope. First-write-wins is decided per key by that scan; a
+// duplicate within the batch is skipped after the first.
+func (inst *Storage) PutEnvelopes(ctx context.Context, envs []repo.Envelope) (err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	defer func() {
+		if err != nil {
+			inst.st.DiscardPending()
+		}
+	}()
+	seen := make(map[types.PatchHash]struct{}, len(envs))
+	hashes := make([]types.PatchHash, 0, len(envs))
+	for _, e := range envs {
+		if _, dup := seen[e.Hash]; dup {
+			continue
+		}
+		seen[e.Hash] = struct{}{}
+		hashes = append(hashes, e.Hash)
+	}
+	present := make(map[types.PatchHash]struct{}, len(hashes))
+	for start := 0; start < len(hashes); start += loadEnvelopesChunk {
+		if err = ctx.Err(); err != nil {
+			return
+		}
+		end := min(start+loadEnvelopesChunk, len(hashes))
+		var have map[types.PatchHash][]byte
+		have, err = inst.scanEnvelopesLocked(ctx, hashes[start:end])
+		if err != nil {
+			err = eh.Errorf("put envelopes existence check: %w", err)
+			return
+		}
+		for h := range have {
+			present[h] = struct{}{}
+		}
+	}
+	buffered := 0
+	clear(seen)
+	for _, e := range envs {
+		if _, dup := seen[e.Hash]; dup {
+			continue
+		}
+		seen[e.Hash] = struct{}{}
+		if _, ok := present[e.Hash]; ok {
+			continue
+		}
+		key := envKey(e.Hash)
+		b := inst.st.Begin(key, recordstore.SeqTs(1))
+		b.AddEnvelope(Envelope{ID: key, Framed: e.Framed})
+		err = b.Commit()
+		if err != nil {
+			err = eh.Errorf("put envelopes commit: %w", err)
+			return
+		}
+		buffered++
+	}
+	if buffered == 0 {
+		return
+	}
+	err = inst.flush(ctx)
+	if err != nil {
+		err = eh.Errorf("put envelopes flush: %w", err)
+	}
+	return
+}
+
+// LoadEnvelopes reads the requested envelopes in chunks of one keyed
+// scan each (an IN list over the key column) and yields them in request
+// order; a hash the table lacks ends the sequence with
+// repo.ErrEnvelopeNotFound after the ones before it.
+func (inst *Storage) LoadEnvelopes(ctx context.Context, hs []types.PatchHash) iter.Seq2[repo.Envelope, error] {
+	return func(yield func(repo.Envelope, error) bool) {
+		inst.mu.Lock()
+		defer inst.mu.Unlock()
+		for start := 0; start < len(hs); start += loadEnvelopesChunk {
+			end := min(start+loadEnvelopesChunk, len(hs))
+			chunk := hs[start:end]
+			framed, err := inst.scanEnvelopesLocked(ctx, chunk)
+			if err != nil {
+				yield(repo.Envelope{Hash: chunk[0]}, err)
+				return
+			}
+			for _, h := range chunk {
+				b, ok := framed[h]
+				if !ok {
+					yield(repo.Envelope{Hash: h}, eb.Build().Str("patchHash", hexOfHash(h)).Errorf("load envelopes: %w", repo.ErrEnvelopeNotFound))
+					return
+				}
+				if !yield(repo.Envelope{Hash: h, Framed: b}, nil) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// scanEnvelopesLocked fetches the envelopes of hs with one scan.
+func (inst *Storage) scanEnvelopesLocked(ctx context.Context, hs []types.PatchHash) (framed map[types.PatchHash][]byte, err error) {
+	var sb strings.Builder
+	sb.WriteString(PushoutColKey)
+	sb.WriteString(" IN (")
+	for i, h := range hs {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('\'')
+		sb.WriteString(envKey(h)) // "env/" + hex: no quoting hazard
+		sb.WriteByte('\'')
+	}
+	sb.WriteByte(')')
+	framed = make(map[types.PatchHash][]byte, len(hs))
+	for ent, serr := range inst.st.ScanEnvelope(ctx, recordstore.ScanOpts{ExtraPredicate: sb.String()}) {
+		if serr != nil {
+			err = eh.Errorf("load envelopes scan: %w", serr)
+			return
+		}
+		if !ent.Envelope.Has || !strings.HasPrefix(ent.ID, "env/") {
+			continue
+		}
+		var h types.PatchHash
+		h, err = hashFromHex(strings.TrimPrefix(ent.ID, "env/"))
+		if err != nil {
+			return
+		}
+		framed[h] = ent.Envelope.Val.Framed
 	}
 	return
 }
@@ -425,45 +578,69 @@ func (inst *Storage) LoadSnapshot(ctx context.Context) (snap repo.Snapshot, ok b
 
 // --- retention ledger. ---
 
-func (inst *Storage) SaveRetention(ctx context.Context, entries []repo.RetentionEntry) (err error) {
+// UpdateRetention appends the delta as one row — or, every compactEvery
+// deltas (defaultCompactEvery), a state-view tombstone plus one full row of the folded ledger
+// in the same insert, so LoadRetention never replays more than that
+// many rows. The in-memory mirror is updated only after the flush
+// succeeded: a failed update leaves both the table and the mirror as
+// they were.
+func (inst *Storage) UpdateRetention(ctx context.Context, delta repo.RetentionDelta) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	if delta.IsEmpty() {
+		return
+	}
 	defer func() {
 		if err != nil {
 			inst.st.DiscardPending()
 		}
 	}()
-	ret := Retention{ID: retentionKey}
-	purges := Retention{ID: purgesKey}
-	for _, e := range entries {
-		ret.Hashes = append(ret.Hashes, hexOfHash(e.Node.Patch))
-		ret.Indices = append(ret.Indices, e.Node.Index)
-		ret.Times = append(ret.Times, e.UnixNano)
-		if e.Purged {
-			purges.Hashes = append(purges.Hashes, hexOfHash(e.Node.Patch))
-			purges.Indices = append(purges.Indices, e.Node.Index)
-			purges.Times = append(purges.Times, e.UnixNano)
-		}
+	if err = inst.ensureLedgerLocked(ctx); err != nil {
+		return
 	}
-	// Two rows, one insert: the ledger and its purged subset land
-	// together or not at all.
-	for _, row := range []Retention{ret, purges} {
+	next := make(map[types.NodeID]repo.RetentionEntry, len(inst.ledger)+len(delta.Upsert))
+	maps.Copy(next, inst.ledger)
+	for _, e := range delta.Upsert {
+		next[e.Node] = e
+	}
+	for _, id := range delta.Remove {
+		delete(next, id)
+	}
+	compact := inst.retRows+1 >= inst.compactEvery
+	var row Retention
+	if compact {
 		var ts time.Time
-		ts, err = inst.nextTs(ctx, row.ID)
+		ts, err = inst.nextTs(ctx, retentionKey)
 		if err != nil {
 			return
 		}
-		b := inst.st.Begin(row.ID, ts)
-		b.AddRetention(row)
-		err = b.Commit()
-		if err != nil {
-			err = eh.Errorf("save retention commit: %w", err)
+		if err = inst.st.Delete(retentionKey, ts); err != nil {
+			err = eh.Errorf("compact retention tombstone: %w", err)
 			return
 		}
+		row = fullRetentionRow(next)
+	} else {
+		row = deltaRetentionRow(delta)
 	}
-	err = inst.flush(ctx)
+	ts, err := inst.nextTs(ctx, retentionKey)
 	if err != nil {
-		err = eh.Errorf("save retention flush: %w", err)
+		return
+	}
+	b := inst.st.Begin(retentionKey, ts)
+	b.AddRetention(row)
+	if err = b.Commit(); err != nil {
+		err = eh.Errorf("update retention commit: %w", err)
+		return
+	}
+	if err = inst.flush(ctx); err != nil {
+		err = eh.Errorf("update retention flush: %w", err)
+		return
+	}
+	inst.ledger = next
+	if compact {
+		inst.retRows = 1
+	} else {
+		inst.retRows++
 	}
 	return
 }
@@ -471,46 +648,119 @@ func (inst *Storage) SaveRetention(ctx context.Context, entries []repo.Retention
 func (inst *Storage) LoadRetention(ctx context.Context) (entries []repo.RetentionEntry, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	purged := make(map[types.NodeID]struct{})
-	if perr := inst.loadRetentionRow(ctx, purgesKey, func(id types.NodeID, _ int64) {
-		purged[id] = struct{}{}
-	}); perr != nil {
-		err = perr
+	if err = inst.ensureLedgerLocked(ctx); err != nil {
 		return
 	}
-	err = inst.loadRetentionRow(ctx, retentionKey, func(id types.NodeID, nanos int64) {
-		_, p := purged[id]
-		entries = append(entries, repo.RetentionEntry{Node: id, UnixNano: nanos, Purged: p})
-	})
-	if err != nil {
-		entries = nil
+	entries = make([]repo.RetentionEntry, 0, len(inst.ledger))
+	for _, e := range inst.ledger {
+		entries = append(entries, e)
 	}
 	return
 }
 
-// loadRetentionRow reads the latest Retention row under key and calls
-// visit per aligned element; a missing row visits nothing.
-func (inst *Storage) loadRetentionRow(ctx context.Context, key string, visit func(id types.NodeID, nanos int64)) (err error) {
-	ent, found, err := inst.st.Latest(ctx, key)
-	if err != nil {
-		err = eb.Build().Str("key", key).Errorf("load retention: %w", err)
+// ensureLedgerLocked folds the retention key's rows into the mirror on
+// first use: a state-view tombstone resets the fold, every other row
+// applies its ops in element order.
+func (inst *Storage) ensureLedgerLocked(ctx context.Context) (err error) {
+	if inst.ledger != nil {
 		return
 	}
-	if !found || !ent.Retention.Has {
+	ledger := make(map[types.NodeID]repo.RetentionEntry)
+	rows := 0
+	for row, rerr := range inst.st.Replay(ctx, retentionKey, recordstore.SeqTs(0), recordstore.ReplayOpts{}) {
+		if rerr != nil {
+			err = eh.Errorf("load retention: %w", rerr)
+			return
+		}
+		if row.Lifecycle == recordstore.LifecycleTombstone {
+			clear(ledger)
+			rows = 0
+			continue
+		}
+		if !row.Retention.Has {
+			continue
+		}
+		rows++
+		if err = foldRetentionRow(ledger, row.Retention.Val); err != nil {
+			return
+		}
+	}
+	inst.ledger = ledger
+	inst.retRows = rows
+	return
+}
+
+// foldRetentionRow applies one Retention row's ops to ledger.
+func foldRetentionRow(ledger map[types.NodeID]repo.RetentionEntry, ret Retention) (err error) {
+	n := len(ret.Hashes)
+	if len(ret.Indices) != n || len(ret.Times) != n || (len(ret.Ops) != 0 && len(ret.Ops) != n) {
+		err = eb.Build().Int("hashes", n).Int("indices", len(ret.Indices)).Int("times", len(ret.Times)).Int("ops", len(ret.Ops)).Errorf("retention ledger arrays are misaligned")
 		return
 	}
-	ret := ent.Retention.Val
-	if len(ret.Hashes) != len(ret.Indices) || len(ret.Hashes) != len(ret.Times) {
-		err = eb.Build().Str("key", key).Int("hashes", len(ret.Hashes)).Int("indices", len(ret.Indices)).Int("times", len(ret.Times)).Errorf("retention ledger arrays are misaligned")
-		return
-	}
-	for i := range ret.Hashes {
+	for i := range n {
 		var h types.PatchHash
 		h, err = hashFromHex(ret.Hashes[i])
 		if err != nil {
 			return
 		}
-		visit(types.NodeID{Patch: h, Index: ret.Indices[i]}, ret.Times[i])
+		id := types.NodeID{Patch: h, Index: ret.Indices[i]}
+		op := RetentionOpUpsert
+		if len(ret.Ops) != 0 {
+			op = ret.Ops[i]
+		}
+		switch op {
+		case RetentionOpUpsert, RetentionOpUpsertPurged:
+			ledger[id] = repo.RetentionEntry{Node: id, UnixNano: ret.Times[i], Purged: op == RetentionOpUpsertPurged}
+		case RetentionOpRemove:
+			delete(ledger, id)
+		default:
+			err = eb.Build().Int("op", int(op)).Int("element", i).Errorf("retention ledger row carries an unknown op")
+			return
+		}
+	}
+	return
+}
+
+func upsertOp(e repo.RetentionEntry) uint16 {
+	if e.Purged {
+		return RetentionOpUpsertPurged
+	}
+	return RetentionOpUpsert
+}
+
+// deltaRetentionRow is the row form of one delta: upserts then removals.
+func deltaRetentionRow(delta repo.RetentionDelta) (row Retention) {
+	row.ID = retentionKey
+	for _, e := range delta.Upsert {
+		row.Hashes = append(row.Hashes, hexOfHash(e.Node.Patch))
+		row.Indices = append(row.Indices, e.Node.Index)
+		row.Times = append(row.Times, e.UnixNano)
+		row.Ops = append(row.Ops, upsertOp(e))
+	}
+	for _, id := range delta.Remove {
+		row.Hashes = append(row.Hashes, hexOfHash(id.Patch))
+		row.Indices = append(row.Indices, id.Index)
+		row.Times = append(row.Times, 0)
+		row.Ops = append(row.Ops, RetentionOpRemove)
+	}
+	return
+}
+
+// fullRetentionRow is the row form of a whole ledger — a compaction —
+// in CompareNodeID order so the row is deterministic.
+func fullRetentionRow(ledger map[types.NodeID]repo.RetentionEntry) (row Retention) {
+	row.ID = retentionKey
+	ids := make([]types.NodeID, 0, len(ledger))
+	for id := range ledger {
+		ids = append(ids, id)
+	}
+	slices.SortFunc(ids, types.CompareNodeID)
+	for _, id := range ids {
+		e := ledger[id]
+		row.Hashes = append(row.Hashes, hexOfHash(id.Patch))
+		row.Indices = append(row.Indices, id.Index)
+		row.Times = append(row.Times, e.UnixNano)
+		row.Ops = append(row.Ops, upsertOp(e))
 	}
 	return
 }

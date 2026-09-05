@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -28,6 +29,9 @@ type memStore struct {
 	snap    *repo.Snapshot
 	ret     []repo.RetentionEntry
 	caps    repo.Capabilities
+	// Call counts, so tests can pin which seam verb the engine used.
+	puts, batchPuts, gets, batchLoads int
+	deltas                            []repo.RetentionDelta
 }
 
 func newMemStore() *memStore {
@@ -42,13 +46,41 @@ func (m *memStore) AppendAppliedBatch(_ context.Context, hs []t.PatchHash) error
 }
 
 func (m *memStore) PutEnvelope(_ context.Context, h t.PatchHash, b []byte) error {
+	m.puts++
 	if _, ok := m.env[h]; !ok {
 		m.env[h] = b
 	}
 	return nil
 }
 
+func (m *memStore) PutEnvelopes(_ context.Context, envs []repo.Envelope) error {
+	m.batchPuts++
+	for _, e := range envs {
+		if _, ok := m.env[e.Hash]; !ok {
+			m.env[e.Hash] = e.Framed
+		}
+	}
+	return nil
+}
+
+func (m *memStore) LoadEnvelopes(ctx context.Context, hs []t.PatchHash) iter.Seq2[repo.Envelope, error] {
+	m.batchLoads++
+	return func(yield func(repo.Envelope, error) bool) {
+		for _, h := range hs {
+			b, ok := m.env[h]
+			if !ok {
+				yield(repo.Envelope{Hash: h}, repo.ErrEnvelopeNotFound)
+				return
+			}
+			if !yield(repo.Envelope{Hash: h, Framed: b}, nil) {
+				return
+			}
+		}
+	}
+}
+
 func (m *memStore) GetEnvelope(_ context.Context, h t.PatchHash) ([]byte, error) {
+	m.gets++
 	b, ok := m.env[h]
 	if !ok {
 		return nil, repo.ErrEnvelopeNotFound
@@ -92,9 +124,10 @@ func (m *memStore) LoadSnapshot(_ context.Context) (repo.Snapshot, bool, error) 
 	return *m.snap, true, nil
 }
 
-func (m *memStore) SaveRetention(_ context.Context, e []repo.RetentionEntry) error {
+func (m *memStore) UpdateRetention(_ context.Context, delta repo.RetentionDelta) error {
+	m.deltas = append(m.deltas, delta)
 	if m.caps.RetentionLedger {
-		m.ret = e
+		m.ret = repo.ApplyRetentionDelta(m.ret, delta)
 	}
 	return nil
 }
@@ -451,5 +484,79 @@ func BenchmarkIngest_ApplyEnvelopes_1000(b *testing.B) {
 		if _, err := r.ApplyEnvelopes(ctx, envs); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// TestSeamUsage_BatchVerbsAndDeltas pins the ADR-0221 cost shape at the
+// seam: a batch ingest is one PutEnvelopes and one AppendAppliedBatch;
+// a full-replay Open is one LoadEnvelopes and no GetEnvelope; every
+// ledger write is a delta whose size is the change, not the ledger.
+func TestSeamUsage_BatchVerbsAndDeltas(tt *testing.T) {
+	ctx := context.Background()
+	src := newMemStore()
+	r, err := repo.Open(ctx, memOptions(tt, src))
+	if err != nil {
+		tt.Fatal(err)
+	}
+	hashes := chainHistory(tt, r, 60)
+	envs := make([][]byte, 0, len(hashes))
+	for _, h := range hashes {
+		framed, gerr := r.EncodedEnvelope(ctx, h)
+		if gerr != nil {
+			tt.Fatal(gerr)
+		}
+		envs = append(envs, framed)
+	}
+	// Every delete-bearing Record wrote one delta of exactly one
+	// upsert: the ledger was never rewritten whole.
+	for i, d := range src.deltas {
+		if len(d.Upsert) != 1 || len(d.Remove) != 0 {
+			tt.Fatalf("delta %d is not one upsert: %+v", i, d)
+		}
+	}
+	if len(src.deltas) == 0 {
+		tt.Fatal("chain history recorded no deletes")
+	}
+
+	dst := newMemStore()
+	r2, err := repo.Open(ctx, memOptions(tt, dst))
+	if err != nil {
+		tt.Fatal(err)
+	}
+	report, err := r2.ApplyEnvelopes(ctx, envs)
+	if err != nil {
+		tt.Fatal(err)
+	}
+	if len(report.Applied) != len(hashes) {
+		tt.Fatalf("applied %d of %d", len(report.Applied), len(hashes))
+	}
+	if dst.batchPuts != 1 || dst.puts != 0 {
+		tt.Fatalf("batch ingest used PutEnvelopes %d times and PutEnvelope %d times; want 1 and 0", dst.batchPuts, dst.puts)
+	}
+	if len(dst.deltas) != 1 {
+		tt.Fatalf("batch ingest wrote %d ledger deltas; want 1", len(dst.deltas))
+	}
+	if err = r2.Close(ctx); err != nil {
+		tt.Fatal(err)
+	}
+
+	// Full replay (the store keeps no snapshot) is one batch read.
+	dst.caps.Snapshots = false
+	dst.snap = nil
+	dst.batchLoads, dst.gets = 0, 0
+	r3, err := repo.Open(ctx, memOptions(tt, dst))
+	if err != nil {
+		tt.Fatal(err)
+	}
+	if dst.batchLoads != 1 || dst.gets != 0 {
+		tt.Fatalf("full replay used LoadEnvelopes %d times and GetEnvelope %d times; want 1 and 0", dst.batchLoads, dst.gets)
+	}
+	applied, err := r3.Applied(ctx)
+	if err != nil || len(applied) != len(hashes) {
+		tt.Fatalf("replayed %d of %d: %v", len(applied), len(hashes), err)
+	}
+	// Reconciling an up-to-date ledger writes nothing.
+	if n := len(dst.deltas); n != 1 {
+		tt.Fatalf("open over an up-to-date ledger wrote %d deltas; want 0", n-1)
 	}
 }
