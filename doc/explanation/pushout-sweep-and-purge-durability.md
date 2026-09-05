@@ -87,23 +87,28 @@ un-happens: the content is back in the graph, visible to reads and
 renders, and resurrectable by unrecord. The controller's record and
 the replica's state now disagree.
 
-The engine closes this with two rules on the storage seam:
+The engine closes this with two rules on the storage seam
+([ADR-0220](../adr/0220-pushout-storage-capabilities-and-retention-mode.md)):
 
-1. **Sweep persists before it acknowledges.** The swept graph is
-   snapshotted, together with the applied set it corresponds to,
-   before `Sweep` returns. The snapshot is the only durable carrier of
-   purge markers.
-2. **Recovery never discards a snapshot the log covers.** Coverage is
-   a *subset* test, not a prefix test: independent patches commute, so
-   any snapshot whose applied set is contained in the log can be
-   restored and the remaining log entries replayed on top. A prefix
-   rule would throw away the snapshot written mid-unrecord and replay
-   from empty, re-materialising what an earlier sweep purged.
+1. **Sweep persists before it acknowledges, in one write.** The purge
+   markers are written to the *retention ledger* before `Sweep`
+   returns. Over a store that keeps snapshots but no ledger the swept
+   graph is snapshotted instead; over a store that keeps neither, the
+   purge lives until the next restart and the sweep reports so
+   (`SweepReport.Durable`). One write, so a fault leaves the purge
+   either done or never started.
+2. **Recovery re-applies the ledger's purges after replay.** Whatever
+   recovery rebuilt — a full replay, or a snapshot the log covers with
+   the rest replayed on top — the ledger's markers are applied last,
+   dropping the content again. Coverage is a *subset* test, not a
+   prefix test: independent patches commute, so any snapshot whose
+   applied set is contained in the log can be restored. The snapshot is
+   therefore an accelerator only; a store may keep none.
 
 A companion rule covers the horizon rather than the purge. A
 tombstone's stamp is replica-local time that replay would reset to
-replay time, so the pending horizon is mirrored to a *retention
-ledger* that recovery re-seeds. Without it a replica that restarted
+replay time, so the pending horizon is mirrored to the same retention
+ledger, which recovery re-seeds. Without it a replica that restarted
 faster than its horizon could defer a purge indefinitely.
 
 Purge durability is therefore a guarantee about the materialised
