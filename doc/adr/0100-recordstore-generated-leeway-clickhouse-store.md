@@ -497,7 +497,7 @@ pre-S3 sketch differed in two places, corrected below):
 | `LoadApplied()` | `Replay("log", 0)`, keeping entries after the **last tombstone** | no generation marker needed — the state-view tombstone is the log reset |
 | `ReplaceApplied(hs)` | `Delete("log", seqTs)` (tombstone) + new entries, **one** `Flush` | a single Arrow insert: readers observe the old or the new log, never a mixture |
 | `SaveSnapshot` / `LoadSnapshot` | append one row + `Latest` | prefix-gating stays in the engine |
-| `SaveRetention` / `LoadRetention` | the whole ledger as one row of three aligned arrays (hash, index, nanos) + `Latest` | whole-set replace needs no generation pattern either |
+| `SaveRetention` / `LoadRetention` | the whole ledger as one row of three aligned arrays (hash, index, nanos) + `Latest` | whole-set replace needs no generation pattern either. *Superseded 2026-09-05 (boxer ADR-0221): `UpdateRetention` appends one delta row — four aligned arrays, the fourth an op — and `LoadRetention` folds the key's rows after its last state-view tombstone; every 32 deltas the adapter writes that tombstone plus one full row in one insert. `PutEnvelopes` is one keyed scan plus one insert per batch; `LoadEnvelopes` one keyed scan per chunk of 512.* |
 
 Durability: honest only over a durable engine (MergeTree with synchronous
 inserts), not `ENGINE = Memory`; every mutating method flushes before

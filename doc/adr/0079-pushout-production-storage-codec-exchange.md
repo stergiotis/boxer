@@ -521,6 +521,20 @@ apply one envelope at a time; moving them onto the batch verb (and a
 batch method on `AcceptorI`) is deferred until the transport work under
 OQ-1 settles what a round carries.
 
+## Update — 2026-09-05: the seam batched on both sides; the ledger as deltas
+
+Both "next steps" above landed the next day, with the ledger's
+whole-set replace, under
+[ADR-0221](./0221-pushout-storage-batch-verbs-delta-ledger.md):
+`StorageI.PutEnvelopes` and `LoadEnvelopes` (the filestore fsyncs each
+shard directory once per batch; the recordstore adapter is one keyed
+scan plus one insert per batch, and one keyed scan per chunk to read),
+`SaveRetention` replaced by `UpdateRetention(RetentionDelta)`, and
+`exchange.AcceptorI.ApplyEnvelopes` with `Pull`/`Push` shipping one
+batch. `BatchAppenderI` had already gone under ADR-0220. What a round
+carries is still OQ-1's question; the batch verbs only make one round
+one write.
+
 ## Open questions
 
 - **OQ-1 — sync at scale.** Full-list exchange is O(history) per

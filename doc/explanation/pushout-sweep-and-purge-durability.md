@@ -191,15 +191,21 @@ is refused at `Open` rather than surprised at recovery.
 The storage seam persists four things: envelopes, the applied log,
 the retention ledger, and the snapshot. The ledger carries the two
 facts a replay cannot rebuild — tombstone stamps and purge markers —
-and the snapshot is an accelerator, nothing more. A backend declares
+and is written as deltas, one per verb that changed it, so an
+append-only backend appends a row rather than rewriting the set; the
+snapshot is an accelerator, nothing more. A backend declares
 what it persists, and the conformance suite checks the declaration
 both ways: a claimed capability must work, a disclaimed one must
 visibly not.
 
 - **A backend without snapshots** declares so. Recovery replays the
-  log in full and re-applies the ledger's purges on top; nothing is
-  lost. The costs are linear recovery time and a patch cache that holds
-  the whole decoded history rather than being lazy.
+  log in full — one batch read of the applied set
+  (`StorageI.LoadEnvelopes`, [ADR-0221](../adr/0221-pushout-storage-batch-verbs-delta-ledger.md))
+  — and re-applies the ledger's purges on top; nothing is lost. The
+  costs are linear recovery time and, with the shipped history
+  component, the whole decoded history held in memory for the life of
+  the handle; a bounded one can replace it without changing what the
+  repo promises.
 - **A backend without a retention ledger** declares so and can only be
   opened under `RetentionHygiene` or `RetentionNone`. `Sweep` still
   runs and still reports `Durable == false`; the purge lives until the

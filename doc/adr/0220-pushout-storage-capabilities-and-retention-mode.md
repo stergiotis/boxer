@@ -156,7 +156,7 @@ asserts on the store's dynamic type. Four flags:
 | Capability | Meaning when true | Meaning when false |
 | --- | --- | --- |
 | `Snapshots` | `SaveSnapshot` persists and `LoadSnapshot` returns it | both are advisory; the engine never calls them, and recovery always replays the log in full |
-| `RetentionLedger` | `SaveRetention`/`LoadRetention` persist stamps **and purge markers** (SD2) | the ledger is never written; stamps reset to replay time on recovery and purges do not outlive the process |
+| `RetentionLedger` | `UpdateRetention`/`LoadRetention` (`SaveRetention` until [ADR-0221](./0221-pushout-storage-batch-verbs-delta-ledger.md), which made the write a delta) persist stamps **and purge markers** (SD2) | the ledger is never written; stamps reset to replay time on recovery and purges do not outlive the process |
 | `ReplaceApplied` | `ReplaceApplied` is atomic and durable | `Unrecord` is refused with `ErrUnsupported` |
 | `ExactEnvelopeBytes` | `GetEnvelope` returns the bytes put | it returns a re-encoding with the same identity; the read-side hash check is the guard, and the conformance suite skips byte-equality |
 
@@ -354,6 +354,16 @@ awaiting review by the pushout code owner.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-09-05 — ADR-0221 reshapes the verbs, not the flags
+
+The ledger write became a delta (`UpdateRetention`) and the envelope
+verbs gained batch forms (`PutEnvelopes`, `LoadEnvelopes`); the four
+capabilities, the retention modes, `Guarantees`, and every decision
+above are unchanged. A `Sweep` is still exactly one durable write — now
+a delta carrying only the purge markers it set.
 
 ## References
 
