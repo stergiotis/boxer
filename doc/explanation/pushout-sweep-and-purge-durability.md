@@ -3,7 +3,7 @@ type: explanation
 audience: package maintainer, storage-backend author, data-protection reviewer
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-09-04
+reviewed-date: 2026-09-05
 ---
 
 # Sweep and purge durability under a data vault
@@ -147,28 +147,61 @@ irreversible in the vault's own store. That sweep has no snapshot, no
 replay, and no purge-durability question, because a vault row that is
 gone cannot be re-derived from anything.
 
+## What a consumer sees
+
+A consumer never reasons about carriers. It chooses a **retention
+mode** when it opens the repo and reads back **guarantees**
+([ADR-0220](../adr/0220-pushout-storage-capabilities-and-retention-mode.md)):
+
+| `Options.Retention` | Meaning | When `Open` refuses |
+| --- | --- | --- |
+| `RetentionHygiene` (the default) | `Sweep` runs; whether its purges survive a restart is the store's truth, reported per sweep | never |
+| `RetentionNone` | `Sweep` is refused and the retention ledger is never touched | never |
+| `RetentionCompliance` | `Sweep`'s purges must survive a restart | over a store that keeps no retention ledger |
+
+`Repo.Guarantees()` then answers four questions, fixed for the life of
+the handle:
+
+- **`SweepAllowed`** — is `Sweep` a verb here?
+- **`RetentionDurable`** — do tombstone stamps and purge markers survive
+  a crash or restart? False means a restart resets horizons and brings
+  purged content back; a deployment that wants the permanence property
+  must re-sweep after every `Open`.
+- **`UnrecordSupported`** — can the store rewrite the log?
+- **`Recovery`** — may the next `Open` use a snapshot, or does it always
+  replay?
+
+Every verb reports what it did in its result, not only in a hook:
+`SweepReport.Durable` equals `RetentionDurable`, and
+`RecoveredEvent.PurgesRestored` counts the markers recovery re-applied.
+
+For the two deployment shapes above this reads as: a vaulted
+deployment opens under the default, may run over a store without
+snapshots, and loses nothing it cares about if `RetentionDurable` is
+false; a raw-content deployment opens under `RetentionCompliance` and
+is refused at `Open` rather than surprised at recovery.
+
 ## Consequences for a storage backend
 
 The storage seam persists four things: envelopes, the applied log,
-the retention ledger, and the snapshot. Only the snapshot is an
-accelerator, and only one fact in it — the purge set — is not a
-function of the other three. That yields two honest positions for a
-backend that does not want to store snapshots:
+the retention ledger, and the snapshot. The ledger carries the two
+facts a replay cannot rebuild — tombstone stamps and purge markers —
+and the snapshot is an accelerator, nothing more. A backend declares
+what it persists, and the conformance suite checks the declaration
+both ways: a claimed capability must work, a disclaimed one must
+visibly not.
 
-- **Under a vault, drop them.** Recovery replays the log in full;
-  the purge set resets to empty; nothing of compliance value is lost.
-  The costs are linear recovery time and a patch cache that holds the
-  whole decoded history rather than being lazy. `Sweep` will
-  acknowledge a purge that the next restart undoes, so the backend
-  should say so, and a deployment that wants the permanence property
-  must re-sweep after recovery.
-- **Without a vault, the purge set needs its own durable carrier.**
-  The natural shape is an additive one beside the retention ledger:
-  one record per purged node, written before `Sweep` acknowledges,
-  re-applied by recovery after replay. With that carrier the snapshot
-  holds nothing that cannot be rebuilt and becomes optional
-  everywhere. This is a seam change and belongs in an ADR; it is
-  recorded here only as the property a backend would rely on.
+- **A backend without snapshots** declares so. Recovery replays the
+  log in full and re-applies the ledger's purges on top; nothing is
+  lost. The costs are linear recovery time and a patch cache that holds
+  the whole decoded history rather than being lazy.
+- **A backend without a retention ledger** declares so and can only be
+  opened under `RetentionHygiene` or `RetentionNone`. `Sweep` still
+  runs and still reports `Durable == false`; the purge lives until the
+  next restart.
+- **A backend that re-encodes envelopes** (rows rather than frames)
+  declares that too; identity is unaffected because the hash is over
+  the canonical item, and the engine re-checks it on every read.
 
 Either way the envelopes keep the bytes. A deployment that needs the
 bytes gone from a replica's disk needs the vault; no sweep, durable or
@@ -181,8 +214,10 @@ not, reaches them.
 - A purged node stays in the topology; only its content is gone.
   Pseudo-edges and the live subgraph do not depend on tombstone
   content.
-- `Sweep` writes its purge markers durably before it returns, and
-  recovery uses any snapshot whose applied set the log contains.
+- `Sweep` makes exactly one durable write before it returns — the
+  retention ledger where the store keeps one — and recovery re-applies
+  the ledger's purge markers after replay, on top of any snapshot whose
+  applied set the log contains.
 - The pending horizon survives recovery on the same store through the
   retention ledger; a fresh clone starts its horizon at clone time.
 - Under a vault, no personal data is inside patch identity, so no
@@ -199,11 +234,10 @@ not, reaches them.
   which keeps sync clock-free at the cost of replicas purging at
   different moments. The observable divergence is that one replica
   refuses an unrecord another still accepts.
-- **The snapshot as the purge carrier.** Making the accelerator carry
-  a non-derivable fact couples an optimisation to a correctness rule.
-  It is the smallest change that made purges durable; its price is
-  that a backend cannot treat snapshots as optional until the purge
-  set has another carrier.
+- **One ledger for two facts.** Stamps and purge markers share the
+  retention ledger, so a backend declares one capability rather than
+  two, at the price that a store cannot keep stamps durable while
+  letting purges lapse. No deployment has asked for that split.
 
 ## Further reading
 
