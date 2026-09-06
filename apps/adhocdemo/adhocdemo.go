@@ -21,6 +21,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -64,6 +65,15 @@ type App struct {
 	pendingRev    uint64
 	pendingNotify bool
 	statusErr     string
+
+	// The tree half (ADR-0222 §SD7), under the same lock: the mount the
+	// published tree lives in — held so a republish writes another snapshot
+	// of it rather than minting a second mount — and what the button shows.
+	treeMount identifier.TaggedId
+	treeGen   int
+	treeBusy  bool
+	treeNote  string
+	treeErr   string
 }
 
 var _ app.AppI = (*App)(nil)
@@ -143,6 +153,25 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 			}
 			if handle != "" {
 				c.Label(fmt.Sprintf("handle %s · rev %d · %d rows", handle, revision, rows)).Send()
+			}
+			c.Separator().Vertical().Send()
+			// The tree half: the same computation as a file tree rather
+			// than as rows, published into the lading store and browsed in
+			// tally (ADR-0222). Off the render thread — it walks a tree and
+			// writes rows.
+			treeBusy, treeNote, treeErr := inst.treeState()
+			label := "Publish tree & browse in tally"
+			if treeBusy {
+				label = "Publishing tree…"
+			}
+			if c.Button(inst.ids.PrepareStr("publish-tree"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked() && !treeBusy {
+				go inst.publishTree()
+			}
+			if treeNote != "" {
+				c.Label(treeNote).Send()
+			}
+			if treeErr != "" {
+				c.Label("tree: " + treeErr).Send()
 			}
 		}
 	}

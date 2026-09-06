@@ -13,10 +13,12 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/rs/zerolog"
+
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
+	tallylaunch "github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
@@ -814,7 +816,19 @@ type PlayApp struct {
 	openPlayMu   sync.Mutex
 	openPlayBusy bool
 	openPlayErr  string
-	pickedSql    *string
+
+	// openTallyMu guards the Open in tally request state (ADR-0222 §SD6),
+	// the same pattern. tallyOffer* memoise whether the current buffer is
+	// one tally could browse, because answering that parses the statement
+	// and the toolbar asks once a frame.
+	openTallyMu    sync.Mutex
+	openTallyBusy  bool
+	openTallyErr   string
+	tallyOfferSql  string
+	tallyOfferSeen bool
+	tallyOfferOK   bool
+
+	pickedSql *string
 }
 
 // SetCapabilities is the host-side seam for wiring the runtime's M2
@@ -2112,6 +2126,43 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			}
 			if openErr != "" {
 				for rt := range c.RichTextLabel("Open failed: " + openErr) {
+					rt.Small().Weak()
+				}
+			}
+		}
+
+		// Open in tally — the mirror of tally's own "Open in play"
+		// (ADR-0222 §SD6). Offered when the buffer names a lading macro,
+		// because that is what makes its rows describe files a browser can
+		// show; a buffer over anything else has nothing for tally to browse.
+		// Off the frame goroutine, the Open in Playground rule.
+		if inst.offerOpenInTally(inst.sql) {
+			c.Separator().Vertical().Send()
+			inst.openTallyMu.Lock()
+			tallyBusy := inst.openTallyBusy
+			tallyErr := inst.openTallyErr
+			inst.openTallyMu.Unlock()
+			if tallyBusy {
+				c.Label("Opening…").Send()
+			} else {
+				for range c.HoverText("Browse this query's rows as files: tally opens on the paths it returns, with preview, recorded attributes and history for the one you select.").KeepIter() {
+					if c.Button(ids.PrepareStr("openTally"), c.Atoms().Text("Open in tally").Keep()).
+						SendResp().HasPrimaryClicked() {
+						sql := inst.sql
+						go func() {
+							inst.requestOpenTally(tallylaunch.TallyLaunch{
+								At:       time.Now().UTC(),
+								Sql:      sql,
+								SqlLabel: "from play",
+								Tab:      tallylaunch.TabResults,
+								Target:   "A",
+							})
+						}()
+					}
+				}
+			}
+			if tallyErr != "" {
+				for rt := range c.RichTextLabel("Open failed: " + tallyErr) {
 					rt.Small().Weak()
 				}
 			}

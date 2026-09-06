@@ -18,10 +18,10 @@ var manifest = app.Manifest{
 	Version:      "0.1.0",
 	Display:      "Ad-hoc dataset demo",
 	Title:        "Ad-hoc dataset demo",
-	Summary:      "Load an ad-hoc Arrow dataset and query it in place",
+	Summary:      "Publish ad-hoc data — rows to query in place, a tree to browse in tally",
 	Icon:         icons.PhDatabase,
 	Topics:       []app.TopicT{app.TopicData},
-	Keywords:     []string{"dataset", "ad-hoc", "arrow", "upload"},
+	Keywords:     []string{"dataset", "ad-hoc", "arrow", "upload", "tree", "lading"},
 	Kind:         app.KindDemo,
 	Surface:      app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 900, PreferredHeight: 700},
@@ -50,7 +50,7 @@ var manifest = app.Manifest{
 		{
 			Pattern:   windowhost.OpenSubject,
 			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: Open in Playground — reopen the applet buffer in a full play window (ADR-0135 §SD7)",
+			Reason:    "adhocdemo: Open in Playground — reopen the applet buffer in a full play window (ADR-0135 §SD7); and open tally on the published ad-hoc tree (ADR-0222 §SD7)",
 		},
 	},
 }

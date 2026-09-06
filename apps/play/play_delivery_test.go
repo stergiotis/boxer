@@ -3,9 +3,10 @@ package play
 import (
 	"testing"
 
-	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 )
 
 // Editor-delivery seam tests (ADR-0097 slice-6 D5 Update, 2026-07-17): the

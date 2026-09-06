@@ -3,6 +3,8 @@ package play
 import (
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
+	tallylaunch "github.com/stergiotis/boxer/apps/tally/launchcfg"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -215,4 +217,65 @@ func (inst *PlayApp) BindTab(tabID string, cteName string) (err error) {
 	}
 	inst.bindTab(tabID, NodeID(cteName))
 	return
+}
+
+// requestOpenTally asks the window host for a tally window on the buffer's
+// rows (ADR-0222 §SD6) — tally's "Open in play" mirrored. Blocks on the bus
+// round-trip, so call it from a goroutine off the frame loop, the
+// requestOpenPlayground rule. The outcome lands in openTallyErr for the
+// toolbar to surface; a re-click while a request is in flight is dropped.
+func (inst *PlayApp) requestOpenTally(cfg tallylaunch.TallyLaunch) {
+	inst.openTallyMu.Lock()
+	if inst.openTallyBusy {
+		inst.openTallyMu.Unlock()
+		return
+	}
+	inst.openTallyBusy = true
+	inst.openTallyErr = ""
+	inst.openTallyMu.Unlock()
+	err := inst.openTally(cfg)
+	inst.openTallyMu.Lock()
+	inst.openTallyBusy = false
+	if err != nil {
+		inst.openTallyErr = err.Error()
+	}
+	inst.openTallyMu.Unlock()
+}
+
+// openTally is the blocking body of requestOpenTally. Ad-hoc dataset aliases
+// are NOT rewritten into the buffer here, unlike the playground hand-off: a
+// dataset lives on this process's introspection plane and tally reads the
+// ClickHouse server, so a buffer naming one has no endpoint that could answer
+// it — which is why offerOpenInTally gates on the statement naming a lading
+// macro in the first place.
+func (inst *PlayApp) openTally(cfg tallylaunch.TallyLaunch) (err error) {
+	if inst.bus == nil {
+		err = eh.Errorf("play: open in tally: no bus wired")
+		return
+	}
+	cfgBytes, err := buscodec.Encode(cfg)
+	if err != nil {
+		err = eh.Errorf("play: encode tally launch config: %w", err)
+		return
+	}
+	if _, err = windowhost.RequestOpen(inst.bus, tallylaunch.AppId, tallylaunch.Kind, cfgBytes); err != nil {
+		err = eh.Errorf("play: open in tally: %w", err)
+		return
+	}
+	return
+}
+
+// offerOpenInTally reports whether the buffer is one tally could browse: a
+// statement naming a lading macro, whose rows therefore describe files in a
+// snapshot. Memoised on the buffer, because it parses and the toolbar asks
+// once a frame.
+func (inst *PlayApp) offerOpenInTally(sql string) (offer bool) {
+	if inst.bus == nil {
+		return false
+	}
+	if inst.tallyOfferSql != sql || !inst.tallyOfferSeen {
+		inst.tallyOfferSql, inst.tallyOfferSeen = sql, true
+		inst.tallyOfferOK = len(ladingsql.References(sql)) > 0
+	}
+	return inst.tallyOfferOK
 }

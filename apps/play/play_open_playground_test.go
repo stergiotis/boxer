@@ -1,9 +1,8 @@
 package play
 
 import (
-	"time"
-
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/apps/sqlappletcreator/appletcreatecfg"
+	tallylaunch "github.com/stergiotis/boxer/apps/tally/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/launchreply"
@@ -32,6 +32,7 @@ type fakeOpenBus struct {
 var _ app.BusI = (*fakeOpenBus)(nil)
 
 func (f *fakeOpenBus) Publish(subject string, payload []byte) (err error) { return }
+
 func (f *fakeOpenBus) Subscribe(subject string, handler app.MsgHandlerFunc) (unsubscribe func(), err error) {
 	return
 }
@@ -197,4 +198,93 @@ func TestRequestSaveApplet_RefusalSurfaces(t *testing.T) {
 	defer inst.saveAppletMu.Unlock()
 	assert.Contains(t, inst.saveAppletErr, "refused")
 	assert.Contains(t, inst.saveAppletErr, "open refused", "the panel shows the message; windowhost's reason is now a field")
+}
+
+// Open in tally (ADR-0222 §SD6) — tally's own "Open in play" mirrored. The
+// offer is gated on the buffer naming a lading macro, because that is what
+// makes its rows describe files a browser can show.
+func TestOfferOpenInTallyGatesOnALadingBuffer(t *testing.T) {
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "", nil)
+	// No bus: nothing to open a window through, so nothing is offered even
+	// for a buffer that would otherwise qualify.
+	assert.False(t, inst.offerOpenInTally("SELECT path FROM fs(0xF5F5019800020001, 12345)"))
+
+	inst = newOpenTestApp(t, &fakeOpenBus{})
+	assert.True(t, inst.offerOpenInTally("SELECT path FROM fs(0xF5F5019800020001, 12345)"))
+	// A mount id that is not a tagged id is not a lading reference — the
+	// macro would refuse it at expansion, so there is nothing to browse.
+	assert.False(t, inst.offerOpenInTally("SELECT path FROM fs(1, 2)"))
+	assert.True(t, inst.offerOpenInTally("SELECT * FROM fssnap('*')"))
+	assert.False(t, inst.offerOpenInTally("SELECT 1"))
+	assert.False(t, inst.offerOpenInTally("SELECT * FROM boxer.facts"))
+	// A dataset lives on this process's introspection plane and tally reads
+	// the ClickHouse server, so a buffer naming one has no endpoint that
+	// could answer it.
+	assert.False(t, inst.offerOpenInTally("SELECT * FROM keelson('h')"))
+}
+
+// The answer is memoised on the buffer — the toolbar asks once a frame and
+// answering parses — but it still tracks what the buffer became.
+func TestOfferOpenInTallyMemoisesOnTheBuffer(t *testing.T) {
+	inst := newOpenTestApp(t, &fakeOpenBus{})
+	require.True(t, inst.offerOpenInTally("SELECT path FROM fs(0xF5F5019800020001, 12345)"))
+	assert.Equal(t, "SELECT path FROM fs(0xF5F5019800020001, 12345)", inst.tallyOfferSql)
+	assert.False(t, inst.offerOpenInTally("SELECT 1"))
+	assert.True(t, inst.offerOpenInTally("SELECT path FROM fs(0xF5F5019800020001, 12345)"))
+}
+
+func TestRequestOpenTally_ComposesRequestNamingTally(t *testing.T) {
+	bus := &fakeOpenBus{reply: launchreply.LaunchReply{WindowKey: 11}}
+	inst := newOpenTestApp(t, bus)
+
+	cfg := tallylaunch.TallyLaunch{
+		Sql:      "SELECT path FROM fs(0xF5F5019800020001, 12345)",
+		SqlLabel: "from play",
+		Tab:      tallylaunch.TabResults,
+		Target:   "A",
+	}
+	inst.requestOpenTally(cfg)
+
+	inst.openTallyMu.Lock()
+	defer inst.openTallyMu.Unlock()
+	assert.Empty(t, inst.openTallyErr)
+	assert.False(t, inst.openTallyBusy)
+	assert.Equal(t, windowhost.OpenSubject, bus.gotSubject)
+
+	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
+	require.NoError(t, err)
+	assert.Equal(t, tallylaunch.AppId, req.TargetAppId)
+	assert.Equal(t, tallylaunch.Kind, req.ConfigKind)
+	sent, err := buscodec.Decode[tallylaunch.TallyLaunch](req.Config)
+	require.NoError(t, err)
+	assert.Equal(t, cfg.Sql, sent.Sql)
+	assert.Equal(t, cfg.SqlLabel, sent.SqlLabel)
+	assert.Equal(t, tallylaunch.TabResults, sent.Tab)
+}
+
+// A buffer naming an ad-hoc dataset is NOT rewritten to handle form on this
+// path, unlike the playground hand-off: tally reads the server, where a
+// handle does not resolve either. The offer gate is what keeps such a buffer
+// away from here; the op does not paper over it.
+func TestRequestOpenTally_DoesNotRewriteDatasetAliases(t *testing.T) {
+	bus := &fakeOpenBus{reply: launchreply.LaunchReply{WindowKey: 12}}
+	client := NewClient(ClientConfig{URL: "http://example.invalid"}, nil)
+	inst := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 4), "", nil)
+	inst.SetCapabilities(bus, nil, zerolog.Nop())
+	require.NoError(t, inst.BindDataset("items", "adhoc_deadbeef01234567"))
+
+	inst.requestOpenTally(tallylaunch.TallyLaunch{Sql: "SELECT * FROM keelson('items')"})
+
+	req, err := buscodec.Decode[launchrequest.LaunchRequest](bus.gotPayload)
+	require.NoError(t, err)
+	sent, err := buscodec.Decode[tallylaunch.TallyLaunch](req.Config)
+	require.NoError(t, err)
+	assert.Contains(t, sent.Sql, "keelson('items')")
+}
+
+func TestOpenTallyWithoutABusIsAnError(t *testing.T) {
+	inst := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "", nil)
+	err := inst.openTally(tallylaunch.TallyLaunch{Sql: "SELECT path FROM fs(0xF5F5019800020001, 12345)"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no bus wired")
 }
