@@ -135,6 +135,56 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-09-06 — The brush strip announces itself (adds SD19, refines SD16)
+
+**Built.** Verified in the widget gallery.
+
+SD16's case for putting the brush on its own strip rested partly on the
+affordance being "visible rather than remembered" — the argument against
+modifier-drag. The strip as built did not hold up that half of the claim: an
+unbrushed strip painted as a bare panel-coloured band under the axis, which
+reads as a gap in the layout rather than as a control. The gesture was as
+undiscoverable as the modifier-drag it beat, just cheaper to explain.
+
+- **SD19 — An unbrushed strip shows the gesture, and answers hover.** A rail
+  along the axis at mid-height with an upright cap at each end and the caption
+  `Visuals.BrushHintText` centred over a break in it; on hover, a wash of the
+  range accent over the track plus a guide rule at the pointer, in the same ink
+  a committed bound is painted in.
+
+**Why a rail and not a texture or a border.** The three candidates were a
+dotted grip, a frame around the track, and a slider-style rail. A frame says
+"this is a region" and stops there. A grip texture says "grab", which is the
+wrong verb — nothing here is grabbed and dragged, a range is swept out. The
+rail with end caps says where the sweep may start and stop, which is the one
+thing the user cannot guess, and it is a shape read fluently from every slider
+they have used.
+
+**Why the guide rule is the edge colour.** It previews the bound a press would
+place, so it should be that bound, one gesture early. Painted over the range
+fill rather than under it: inside an existing range is exactly where "where
+would this press land" is worth asking.
+
+**What yields, and in what order.** The affordance is chrome, so it gives way
+to everything else on the strip. It paints only on an interactive strip that is
+neither brushed nor being brushed — a read-only timeline advertises no drag,
+and a committed range is its own explanation. The caption then drops (the rail
+stays, spanning the axis whole) on a strip too short to centre it, an axis too
+narrow to leave rail either side of it, or an empty `BrushHintText`. The
+ladder is `computeBrushHintLayout`, split from the paint so it is testable the
+way the gesture machine is, without a renderer.
+
+**Not built: a "learned" state.** Suppressing the caption after the user's
+first successful brush was considered and dropped. It makes the widget's
+appearance depend on history nothing else can see, and the caption is already
+shown only when the track is empty — which is the state in which the user needs
+telling.
+
+**Compatibility.** Three additive `Visuals` fields (`BrushHintColor`,
+`BrushHoverColor`, `BrushHintText`) and no change to the gesture, the callback,
+or the strip's height. A caller that wants the old bare track sets
+`BrushHintText` to `""` and both new colours to a transparent value.
+
 ### 2026-08-28 — Offset axis and locked view (adds SD17, for ADR-0208 SD8)
 
 - **SD17 — An offset axis, the same widget.** ✓ `WithOffsetAxis(unit)` makes

@@ -148,7 +148,27 @@ func (inst *Timeline) renderBrushStrip(tm layout.TickMap, vl verticalLayout, vie
 		}
 	}
 
+	// The affordance layers (§SD19), ordered so nothing the user is doing is
+	// covered by something they might do. Hover reads last frame's flags, like
+	// every other input here; a frame's lag on a highlight is not visible.
+	//
+	// All of it is gated on interaction: a strip that cannot be dragged must
+	// not advertise a drag, and a read-only timeline renders the plain track
+	// it did before the hint existed.
+	hovered := inst.interactionEnabled && resp.HasHovered()
+	if inst.interactionEnabled && !inst.brushing && !inst.brushHas {
+		inst.paintBrushHint(vl)
+	}
+	if hovered && !inst.brushing {
+		inst.paintBrushHoverWash(vl)
+	}
 	inst.paintBrushStrip(tm, vl, viewMinMS, viewMaxMS)
+	if hovered && !inst.brushing {
+		// Over the range fill: the guide answers "where would this press
+		// land", and inside an existing range is exactly where that is worth
+		// asking.
+		inst.paintBrushHoverGuide(vl, x, xOK)
+	}
 
 	strip := c.PaintCanvas(inst.ids.PrepareStr(brushCanvasIdKey), vl.axisEndPx, inst.visuals.BrushStripH).
 		Background(inst.visuals.BrushTrackColor)
@@ -308,6 +328,146 @@ func (inst *Timeline) paintBrushStrip(tm layout.TickMap, vl verticalLayout, view
 
 // brushEdgeWidthPx is the vertical rule at each end of the brushed range.
 const brushEdgeWidthPx float32 = 1.5
+
+// The resting affordance (ADR-0043 §SD19).
+//
+// An empty brush strip used to paint as a bare panel-coloured band, which
+// reads as a gap in the layout rather than as a control — the option's own
+// premise was that the affordance is "visible rather than remembered", and a
+// blank row is neither. The strip now carries a slider-like rail with a cap at
+// each end of the axis and a caption between them, plus a hover state that
+// previews where a press would anchor.
+//
+// It is chrome, so it yields: the rail and caption paint only on an unbrushed,
+// unbrushing, interactive strip, and both degrade rather than crowd when the
+// space for them is not there.
+
+// defaultBrushHintText is the caption on an unbrushed strip. It names the
+// gesture and its result, in that order, because the gesture is the part the
+// user has to guess.
+const defaultBrushHintText = "drag to select a range"
+
+const (
+	// brushHintFontSize sits one step under the tick labels' 11 px: the hint
+	// is read once, the axis is read continuously, and the smaller of the two
+	// should be the one that stops being looked at.
+	brushHintFontSize float32 = 9
+	// brushHintCharWidthPx is tooltipCharWidthPx scaled to the hint's font —
+	// the same ASCII-only estimate, for the same reason (egui's text
+	// measurement is not surfaced through FFFI2). It only decides whether the
+	// caption is dropped, so an over-estimate costs a caption and never a
+	// clipped one.
+	brushHintCharWidthPx float32 = 5.3
+	brushHintRailWidthPx float32 = 1
+	// brushHintCapHeightPx is the upright at each end of the rail. It is what
+	// makes the rail read as a bounded track rather than as a rule someone
+	// drew across the strip.
+	brushHintCapHeightPx float32 = 6
+	// brushHintGapPx is the clear space the rail leaves either side of the
+	// caption, so the text is framed rather than struck through.
+	brushHintGapPx float32 = 6
+	// brushHintMinStripH drops the caption on a strip too short to centre it
+	// without touching both edges. The rail still paints — it needs one row of
+	// pixels, and a caller who shrank the strip still wants it to look like a
+	// track.
+	brushHintMinStripH float32 = 12
+	// brushHintMinFreePx is the rail that must survive on each side of the
+	// caption. Below it the two stubs read as decoration flanking a label
+	// instead of as one track interrupted by one, so the caption goes and the
+	// rail spans the axis whole.
+	brushHintMinFreePx float32 = 24
+	// brushHoverGuideWidthPx matches the canvas crosshair above it: the guide
+	// answers the same question on the same pointer, and a heavier rule would
+	// claim to be a bound that has been placed.
+	brushHoverGuideWidthPx float32 = 1
+)
+
+// brushHintLayout is one frame of resting-affordance geometry: a rail along
+// the axis at mid-height, broken over [gapX0, gapX1] for the caption. The gap
+// is empty (gapX0 == gapX1) when there is no caption, which is also what text
+// == "" says — both are checked so a caller reading one field cannot draw the
+// wrong conclusion from the other.
+type brushHintLayout struct {
+	railY        float32
+	x0, x1       float32
+	capX0, capX1 float32
+	gapX0, gapX1 float32
+	capH         float32
+	textX        float32
+	text         string
+}
+
+// computeBrushHintLayout arranges the rail, its caps and the caption within
+// the strip. ok is false when there is no axis to draw along.
+//
+// Split out from the paint so the degradation ladder — caption, then rail
+// alone — is testable without a renderer, the way the gesture machine is.
+func computeBrushHintLayout(vl verticalLayout, stripH float32, text string) (l brushHintLayout, ok bool) {
+	if stripH <= 0 || vl.axisEndPx <= vl.axisStartPx {
+		return
+	}
+	l.x0, l.x1 = vl.axisStartPx, vl.axisEndPx
+	l.railY = stripH / 2
+	// The caps are inset by half a stroke so neither is clipped in half
+	// against the canvas bounds; axisEndPx is the canvas width exactly.
+	inset := brushHintRailWidthPx / 2
+	l.capX0, l.capX1 = l.x0+inset, l.x1-inset
+	l.capH = min(brushHintCapHeightPx, stripH)
+	mid := (l.x0 + l.x1) / 2
+	l.gapX0, l.gapX1 = mid, mid
+	ok = true
+	if text == "" || stripH < brushHintMinStripH {
+		return
+	}
+	half := float32(len(text))*brushHintCharWidthPx/2 + brushHintGapPx
+	if mid-half-l.x0 < brushHintMinFreePx || l.x1-(mid+half) < brushHintMinFreePx {
+		return
+	}
+	l.gapX0, l.gapX1 = mid-half, mid+half
+	l.textX, l.text = mid, text
+	return
+}
+
+// paintBrushHint draws the resting affordance. Callers gate it; it does not
+// consult the gesture state itself.
+func (inst *Timeline) paintBrushHint(vl verticalLayout) {
+	l, ok := computeBrushHintLayout(vl, inst.visuals.BrushStripH, inst.visuals.BrushHintText)
+	if !ok {
+		return
+	}
+	col := inst.visuals.BrushHintColor
+	if l.gapX0 > l.x0 {
+		c.PaintLine(l.x0, l.railY, l.gapX0, l.railY, col, brushHintRailWidthPx).Send()
+	}
+	if l.x1 > l.gapX1 {
+		c.PaintLine(l.gapX1, l.railY, l.x1, l.railY, col, brushHintRailWidthPx).Send()
+	}
+	capY0, capY1 := l.railY-l.capH/2, l.railY+l.capH/2
+	c.PaintLine(l.capX0, capY0, l.capX0, capY1, col, brushHintRailWidthPx).Send()
+	c.PaintLine(l.capX1, capY0, l.capX1, capY1, col, brushHintRailWidthPx).Send()
+	if l.text != "" {
+		c.PaintText(l.textX, l.railY, anchorCenter, anchorCenter, l.text, brushHintFontSize, col).Send()
+	}
+}
+
+// paintBrushHoverWash tints the track while the pointer is over it. Painted
+// under the range fill so a committed range stays the brighter of the two.
+func (inst *Timeline) paintBrushHoverWash(vl verticalLayout) {
+	if vl.axisEndPx <= vl.axisStartPx {
+		return
+	}
+	c.PaintRectFilled(vl.axisStartPx, 0, vl.axisEndPx, inst.visuals.BrushStripH, 0,
+		inst.visuals.BrushHoverColor).Send()
+}
+
+// paintBrushHoverGuide previews the bound a press would place, in the same ink
+// as a committed edge — the guide is that edge, one gesture early.
+func (inst *Timeline) paintBrushHoverGuide(vl verticalLayout, x float32, xOK bool) {
+	if !xOK || x < vl.axisStartPx || x > vl.axisEndPx {
+		return
+	}
+	c.PaintLine(x, 0, x, inst.visuals.BrushStripH, inst.visuals.BrushEdgeColor, brushHoverGuideWidthPx).Send()
+}
 
 // brushAlpha re-alphas an IDS token, keeping its RGB. The palette's semantic
 // tokens are opaque by design, and the brush needs translucency so the layers

@@ -324,3 +324,101 @@ func TestBrush_ClearAndNotifyFiresOnce(t *testing.T) {
 		t.Fatalf("listener: got %v, want exactly one not-ok call", *oks)
 	}
 }
+
+// The resting affordance (§SD19). Only its layout is testable without a
+// renderer, which is the part that decides whether the caption is shown at
+// all — the paint calls it feeds are a fixed sequence over these numbers.
+
+func hintLayout(t *testing.T, axisStart, axisEnd, stripH float32, text string) (l brushHintLayout, ok bool) {
+	t.Helper()
+	return computeBrushHintLayout(
+		verticalLayout{axisStartPx: axisStart, axisEndPx: axisEnd}, stripH, text)
+}
+
+func TestBrushHint_RailSpansAxisAndCapsStayInBounds(t *testing.T) {
+	l, ok := hintLayout(t, brushAxisStart, brushAxisEnd, 14, defaultBrushHintText)
+	if !ok {
+		t.Fatal("a strip with an axis must produce a hint layout")
+	}
+	if l.x0 != brushAxisStart || l.x1 != brushAxisEnd {
+		t.Fatalf("rail must span the axis, got [%v,%v]", l.x0, l.x1)
+	}
+	if l.railY != 7 {
+		t.Fatalf("rail must sit at mid-height, got %v", l.railY)
+	}
+	// axisEndPx is the canvas width exactly; a cap drawn on it would lose half
+	// its stroke off the right edge.
+	if l.capX0 <= l.x0 || l.capX1 >= l.x1 {
+		t.Fatalf("caps must be inset from the canvas bounds, got %v / %v", l.capX0, l.capX1)
+	}
+	if l.capH > 14 {
+		t.Fatalf("cap must fit the strip, got %v", l.capH)
+	}
+}
+
+func TestBrushHint_CaptionCentredWithClearRailEitherSide(t *testing.T) {
+	l, ok := hintLayout(t, brushAxisStart, brushAxisEnd, 14, defaultBrushHintText)
+	if !ok {
+		t.Fatal("expected a layout")
+	}
+	if l.text != defaultBrushHintText {
+		t.Fatalf("a wide strip must carry the caption, got %q", l.text)
+	}
+	mid := float32(brushAxisStart+brushAxisEnd) / 2
+	if l.textX != mid {
+		t.Fatalf("caption must be centred on the axis, got %v want %v", l.textX, mid)
+	}
+	if !(l.gapX0 < mid && mid < l.gapX1) {
+		t.Fatalf("rail break must straddle the caption, got [%v,%v]", l.gapX0, l.gapX1)
+	}
+	if l.gapX0-l.x0 < brushHintMinFreePx || l.x1-l.gapX1 < brushHintMinFreePx {
+		t.Fatalf("rail stubs too short: [%v,%v] in [%v,%v]", l.gapX0, l.gapX1, l.x0, l.x1)
+	}
+}
+
+// The caption is the part that yields; the rail is not. Each of these is a way
+// the space for it can run out, and none of them may leave a half-drawn track.
+func TestBrushHint_CaptionDropsButRailSurvives(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		start, end, hgt float32
+		text            string
+	}{
+		{"axis too narrow", 100, 240, 14, defaultBrushHintText},
+		{"strip too short", brushAxisStart, brushAxisEnd, brushHintMinStripH - 1, defaultBrushHintText},
+		{"caller cleared the text", brushAxisStart, brushAxisEnd, 14, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l, ok := hintLayout(t, tc.start, tc.end, tc.hgt, tc.text)
+			if !ok {
+				t.Fatal("the rail must still be laid out")
+			}
+			if l.text != "" {
+				t.Fatalf("caption must be dropped, got %q", l.text)
+			}
+			if l.gapX0 != l.gapX1 {
+				t.Fatalf("with no caption the rail must be unbroken, got a gap [%v,%v]", l.gapX0, l.gapX1)
+			}
+			if l.x0 != tc.start || l.x1 != tc.end {
+				t.Fatalf("rail must still span the axis, got [%v,%v]", l.x0, l.x1)
+			}
+		})
+	}
+}
+
+func TestBrushHint_NoAxisNoHint(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		start, end, hgt float32
+	}{
+		{"zero-width axis", 100, 100, 14},
+		{"inverted axis", 200, 100, 14},
+		{"zero-height strip", brushAxisStart, brushAxisEnd, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, ok := hintLayout(t, tc.start, tc.end, tc.hgt, defaultBrushHintText); ok {
+				t.Fatal("expected no layout")
+			}
+		})
+	}
+}

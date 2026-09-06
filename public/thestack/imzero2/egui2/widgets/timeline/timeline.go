@@ -139,6 +139,22 @@ type Visuals struct {
 	BrushFillColor        color.Color
 	BrushPendingFillColor color.Color
 	BrushEdgeColor        color.Color
+	// BrushHintColor inks the resting affordance — the rail, its end caps and
+	// the caption drawn on an unbrushed strip (ADR-0043 §SD19). It is a
+	// disabled-text tone on purpose: the hint has to be legible enough to be
+	// read once and quiet enough to be ignored afterwards, on a row that sits
+	// directly under the tick labels.
+	BrushHintColor color.Color
+	// BrushHoverColor washes the whole track while the pointer is over it.
+	// Hover is the moment the strip has to answer "is this a control", so the
+	// wash is a state change the eye catches rather than a legible tint.
+	BrushHoverColor color.Color
+	// BrushHintText is the caption on an unbrushed strip. Empty drops it —
+	// the rail and caps still paint — as does a strip too short or an axis too
+	// narrow to carry it (see computeBrushHintLayout). It lives here rather
+	// than behind an Option because the only reasons to change it are
+	// presentational: localising it, or shortening it for a cramped panel.
+	BrushHintText string
 
 	// Flat event fills — used for interval bars and raw rug marks when
 	// intensity is NOT the encoded dimension (see WithIntensityEncoding).
@@ -227,6 +243,13 @@ func DefaultVisuals() (v Visuals) {
 	v.BrushFillColor = brushAlpha(styletokens.InfoDefault.AsHex(), 0x40)
 	v.BrushPendingFillColor = brushAlpha(styletokens.InfoDefault.AsHex(), 0x70)
 	v.BrushEdgeColor = color.Hex(styletokens.InfoDefault.AsHex()).Keep()
+	// The affordance layer (§SD19). Disabled-text for the resting hint, and a
+	// low-alpha wash of the same accent the range uses for hover — hovering is
+	// a promise about what a drag would paint, so it should be that colour and
+	// nothing else.
+	v.BrushHintColor = color.Hex(styletokens.NeutralTextDisabled.AsHex()).Keep()
+	v.BrushHoverColor = brushAlpha(styletokens.InfoDefault.AsHex(), 0x1c)
+	v.BrushHintText = defaultBrushHintText
 	// Flat fills for the intensity-off path: the soft accent for the larger
 	// bar areas, the brighter info hue for the thin 1-px rug marks that need
 	// more punch to read. Both sit at IDS lightness ~0.80 — high contrast
