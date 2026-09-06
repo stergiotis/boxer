@@ -327,3 +327,47 @@ raster's one visible cost against a painted map; at ~1 ms it is no longer a
 frame's worth of work, while painting would still be ~85 KB and ~10k triangles
 every frame. The reduction is bit-identical to the pass it replaces, pinned by
 hashes taken before the split.
+
+## Update (2026-09-06) — the projection is the reader's pick, Equal Earth beside it
+
+§SD2 fixed the projection at Natural Earth. It stays the default and the fixed
+camera stays a non-goal, but the projection itself is now a picker: Natural
+Earth, or the equal-area Equal Earth (Šavrič, Patterson, Jenny 2018).
+
+Why a second one. A choropleth is read by area as much as by colour, and
+Natural Earth is a compromise projection — it distorts area, most at high
+latitudes, so Russia, Canada and Greenland claim more of the reader's attention
+than their values do. Equal Earth draws every country in proportion to its true
+area, which is the reading a "which countries, roughly how much" pane wants
+when the fills are being compared. It is also a closed polynomial form, the
+property §SD2 chose Natural Earth for and rejected Robinson over; Mollweide
+needs a Newton solve for its auxiliary latitude, and Web Mercator fails the
+area argument above by more than Natural Earth does, not less.
+
+What changed:
+
+- The atlas keeps the asset's lon/lat rings and projects lazily per projection,
+  memoized on the process-wide atlas (`Atlas.Projected`). Country order and
+  ring order are preserved, so a `CountryIdx`, the resolver, the outer/hole
+  roles and every caller's `map[CountryIdx]float64` mean the same thing under
+  either projection — a switch is geometry-only. Cost: the source coordinates
+  stay resident (~170 KB) and each projection actually drawn adds ~85 KB.
+- The cached raster geometry is keyed on the projection as well as the output
+  size, so a switch rebuilds it — the size-change path, not the recolour — and
+  skips the resize debounce, since a switch is a click rather than a drag.
+- The aspect is per projection (`Projection.Aspect()`, replacing the
+  package-level `ProjectionAspect`), so the canvas and raster heights follow
+  the pick: Equal Earth is the flatter of the two, 2.05 against 1.92.
+- Play's World toolbar and the widgets-tour demo each carry a picker. The pick
+  is widget state, so it does not survive a restart; persisting it is deferred
+  with the rest of §SD7.
+
+Adding a third projection is a forward pair (x, y) plus a table entry in
+`projection.go`; extent, aspect, atlas and raster all follow. The table's shape
+— x from (λ, φ), y from φ alone — admits pseudocylindrical projections only, so
+a curved-parallel equal-area projection such as Hammer would need a wider entry
+than it is worth here. Two tests carry the load the formulas cannot:
+`TestProjectionExtent` scans every parallel for the bulge the analytic world
+extent assumes away (a vertex outside the normalized box would index outside
+the raster), and `TestEqualEarthIsEqualArea` pins the property Equal Earth is
+offered for, with Natural Earth as the arm that must fail it.

@@ -21,7 +21,8 @@ import (
 // distinct values resolve against the widget's atlas; the value column
 // defaults to the first numeric column, switchable via a combo. Duplicate
 // country rows: last wins, counted in the status line — the pane never
-// aggregates on the user's behalf (GROUP BY is the SQL author's tool).
+// aggregates on the user's behalf (GROUP BY is the SQL author's tool). The
+// projection is a toolbar pick over what the widget offers (ADR-0114 §SD2).
 
 const (
 	// worldDetectMaxRows / worldDetectMaxDistinct bound the detection sample:
@@ -168,16 +169,18 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 	valueCol := inst.effectiveValueCol(numeric)
 	inst.extract(rec, schema, countryCol, valueCol, atlas)
 
-	// Toolbar: the country column and the value picker only. The map sizes
-	// itself to the pane and rasterizes at that width; the removed raster-width
-	// slider changed texture resolution, not on-screen size, so it read as a
-	// no-op.
+	// Toolbar: the country column, the value picker and the projection picker.
+	// The map sizes itself to the pane and rasterizes at that width; the
+	// removed raster-width slider changed texture resolution, not on-screen
+	// size, so it read as a no-op.
 	for range c.Horizontal().KeepIter() {
 		c.Label("country: " + schema.Field(countryCol).Name).Send()
 		if len(numeric) > 0 {
 			c.Separator().Vertical().Send()
 			inst.renderValueCombo(schema, numeric)
 		}
+		c.Separator().Vertical().Send()
+		inst.renderProjectionCombo()
 	}
 	// Status on its own row — sharing the toolbar row clips it against the
 	// Detail split at common pane widths.
@@ -259,6 +262,28 @@ func (inst *WorldDriver) renderValueCombo(schema *arrow.Schema, numeric []int) {
 				Selected(inst.valueCol == ci).
 				SendResp().HasPrimaryClicked() {
 				inst.valueCol = ci
+			}
+		}
+	}
+}
+
+// renderProjectionCombo is the projection picker. The state lives in the
+// widget, which re-rasterizes on the switch. Natural Earth is the default
+// look; Equal Earth is the pick when the fills are read by area, since it
+// does not inflate the high-latitude countries against the tropical ones.
+func (inst *WorldDriver) renderProjectionCombo() {
+	cur := inst.widget.Projection()
+	for range c.ComboBox(inst.ids.PrepareStr("world-projection"),
+		c.WidgetText().Text("projection").Keep(),
+		c.WidgetText().Text(cur.String()).Keep()).
+		KeepIter() {
+		for i, p := range worldmap.Projections {
+			if c.Button(inst.ids.PrepareSeq(uint64(0x6000+i)),
+				c.Atoms().Text(p.String()).Keep()).
+				Frame(false).
+				Selected(p == cur).
+				SendResp().HasPrimaryClicked() {
+				inst.widget.SetProjection(p)
 			}
 		}
 	}

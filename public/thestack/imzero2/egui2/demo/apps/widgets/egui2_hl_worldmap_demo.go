@@ -12,9 +12,9 @@ import (
 //
 // Synthetic per-country values (an arbitrary 0–100 index keyed by ISO code,
 // NOT real statistics) resolved through the widget's atlas and rendered as a
-// choropleth. Controls flip between graded values and presence-only mode and
-// scrub the on-screen map width; hover shows the country readout, matching what
-// the play World tab does with a query result.
+// choropleth. Controls flip between graded values and presence-only mode,
+// switch the projection, and scrub the on-screen map width; hover shows the
+// country readout, matching what the play World tab does with a query result.
 // =============================================================================
 
 type worldmapDemoState struct {
@@ -43,10 +43,10 @@ func init() {
 		Flags:    registry.DemoFlagNeedsLargeArea,
 		Kind:     registry.DemoKindUX,
 		Description: "Schematic world choropleth (ADR-0114): Natural Earth 110m outlines, " +
-			"Natural Earth projection, Go-side scanline rasterization into a content-versioned " +
-			"texture painted into a canvas, colormap legend, O(1) hover hit-testing with a " +
-			"concave-painter outline on the hovered country. Synthetic values keyed by ISO code " +
-			"and country name; presence mode fills membership without a legend.",
+			"a switchable projection (Natural Earth or equal-area Equal Earth), Go-side scanline " +
+			"rasterization into a content-versioned texture painted into a canvas, colormap legend, " +
+			"O(1) hover hit-testing with a concave-painter outline on the hovered country. Synthetic " +
+			"values keyed by ISO code and country name; presence mode fills membership without a legend.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			state = &worldmapDemoState{width: 900}
 			return
@@ -86,6 +86,28 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 		if c.Checkbox(ids.PrepareStr("wm-presence"), st.presence, "presence only").
 			SendRespVal(&st.presence).HasChanged() {
 			st.applied = false
+		}
+		c.AddSpace(gapSections())
+		// Projection picker: the map re-rasterizes on the switch (the raster
+		// geometry is keyed on the outlines), and the aspect-derived height
+		// changes with it — Equal Earth is the flatter of the two.
+		c.Label("Projection:").Send()
+		c.AddSpace(padInner())
+		cur := st.widget.Projection()
+		for range c.ComboBox(ids.PrepareStr("wm-projection"),
+			c.WidgetText().Text("projection").Keep(),
+			c.WidgetText().Text(cur.String()).Keep()).KeepIter() {
+			for i, p := range worldmap.Projections {
+				selected := p == cur
+				if c.Button(ids.PrepareSeq(uint64(0x3C0000+i)),
+					c.Atoms().Text(p.String()).Keep()).
+					Selected(selected).
+					FrameWhenInactive(!selected).
+					Frame(true).
+					SendResp().HasPrimaryClicked() {
+					st.widget.SetProjection(p)
+				}
+			}
 		}
 	}
 	c.Separator().Horizontal().Send()

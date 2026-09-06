@@ -360,6 +360,17 @@ FROM (
 GROUP BY country
 ORDER BY flights DESC"
 	settle=3000
+	# The pair is the point: the same fills under both projections (ADR-0114
+	# §SD2 and its 2026-09-06 update). The combo is reached by role+value —
+	# egui leaves a ComboBox's accessible name empty, as scene 05 notes — and
+	# Escape closes the popup, which would otherwise cover the map the second
+	# shot is for. Equal Earth is the flatter of the two, so the pane's map
+	# also loses height between the captures.
+	steps='{"do":"capture","text":"06_world_choropleth","settleMs":600}
+{"do":"click","role":"combo_box","value":"Natural Earth","settleMs":400}
+{"do":"click","name":"Equal Earth","settleMs":500}
+{"do":"key","text":"Escape","settleMs":400}
+{"do":"capture","text":"06_world_equal_earth","settleMs":1500}'
 }
 
 scene_07_kanban() {

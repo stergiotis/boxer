@@ -26,12 +26,17 @@ type CountryIdx int32
 
 const NoCountry CountryIdx = -1
 
+// geoPt is a ring vertex as the asset carries it: degrees, unprojected. The
+// atlas keeps the source coordinates because the projection is switchable —
+// projected geometry is derived per projection (see Atlas.Projected).
+type geoPt struct{ Lon, Lat float64 }
+
 // projPt is a ring vertex in normalized projection space (see projectNorm).
 type projPt struct{ X, Y float32 }
 
 // Country is one admin-0 feature: identity fields as shipped upstream (the
 // `_EH` ISO variants — empty when upstream has none, e.g. Northern Cyprus)
-// plus the projected outline rings. Rings concatenate every ring of every
+// plus the unprojected outline rings. Rings concatenate every ring of every
 // member polygon; the rasterizer's even-odd rule makes outer/hole/member
 // distinctions irrelevant (members are disjoint, holes alternate parity).
 type Country struct {
@@ -40,16 +45,15 @@ type Country struct {
 	A2    string // ISO 3166-1 alpha-2 (upstream ISO_A2_EH); "" when absent
 	A3    string // ISO 3166-1 alpha-3 (upstream ISO_A3_EH); "" when absent
 
-	rings [][]projPt
+	geo [][]geoPt
 	// ringHole marks, per ring, whether it is an interior ring (a hole) of its
 	// member polygon rather than an outer boundary. The rasterizer ignores it
 	// — even-odd needs no such distinction — but a painter overlay does: a
 	// filled polygon has no hole support, so a hole must be outlined and never
 	// filled. Exactly one ring in the vendored asset is a hole (South Africa's
-	// Lesotho enclave).
+	// Lesotho enclave). Projection preserves ring count and order, so this
+	// indexes Projected.Rings in parallel.
 	ringHole []bool
-	// bbox in normalized projection space: minX, minY, maxX, maxY.
-	bbox [4]float32
 }
 
 // Label is the human-facing form used in readouts: "Name (A3)" when a code
@@ -61,10 +65,67 @@ func (inst *Country) Label() string {
 	return inst.Name
 }
 
-// Atlas is the parsed country set plus the resolver's key table.
+// Atlas is the parsed country set plus the resolver's key table. Geometry is
+// held unprojected; Projected derives (and caches) the outlines under one
+// projection.
 type Atlas struct {
 	Countries []Country
 	byKey     map[string]CountryIdx
+	// projected memoizes one Projected per projection. Every widget shares the
+	// process-wide atlas, so the builders must be safe to call concurrently.
+	projected [projectionCount]func() *Projected
+}
+
+// projCountry is one country's outline under one projection.
+type projCountry struct {
+	rings [][]projPt
+	// bbox in normalized projection space: minX, minY, maxX, maxY.
+	bbox [4]float32
+}
+
+// Projected is the atlas geometry under one projection: the same countries in
+// the same order, so a CountryIdx indexes Atlas.Countries and this alike.
+type Projected struct {
+	Projection Projection
+	countries  []projCountry
+}
+
+// Projected returns the atlas outlines under p, projecting on first use and
+// caching per projection (~85 KB each for the vendored asset). An unknown
+// projection falls back to the default rather than failing.
+func (inst *Atlas) Projected(p Projection) *Projected {
+	if !p.Valid() {
+		p = ProjectionNaturalEarth
+	}
+	return inst.projected[p]()
+}
+
+// Rings returns one country's outline rings in normalized projection space,
+// in the atlas's ring order (parallel to Country.ringHole). A CountryIdx
+// outside the atlas — NoCountry included — yields no rings.
+func (inst *Projected) Rings(idx CountryIdx) [][]projPt {
+	if idx < 0 || int(idx) >= len(inst.countries) {
+		return nil
+	}
+	return inst.countries[idx].rings
+}
+
+// project builds the projected geometry for one projection.
+func (inst *Atlas) project(p Projection) *Projected {
+	out := &Projected{Projection: p, countries: make([]projCountry, len(inst.Countries))}
+	for ci := range inst.Countries {
+		rings := make([][]projPt, len(inst.Countries[ci].geo))
+		for ri, gr := range inst.Countries[ci].geo {
+			pr := make([]projPt, len(gr))
+			for j, g := range gr {
+				x, y := projectNorm(p, g.Lon, g.Lat)
+				pr[j] = projPt{X: float32(x), Y: float32(y)}
+			}
+			rings[ri] = pr
+		}
+		out.countries[ci] = projCountry{rings: rings, bbox: ringsBBox(rings)}
+	}
+	return out
 }
 
 // aliases maps additional uppercase spellings to the upstream alpha-3 code.
@@ -141,9 +202,8 @@ func loadAtlas() (*Atlas, error) {
 			Name:     f.Properties.Name,
 			A2:       cleanIso(f.Properties.IsoA2E),
 			A3:       cleanIso(f.Properties.IsoA3E),
-			rings:    rings,
+			geo:      rings,
 			ringHole: holes,
-			bbox:     ringsBBox(rings),
 		}
 		idx := CountryIdx(len(a.Countries))
 		a.Countries = append(a.Countries, ct)
@@ -156,6 +216,10 @@ func loadAtlas() (*Atlas, error) {
 		if idx, ok := a.byKey[a3]; ok {
 			a.addKey(alias, idx)
 		}
+	}
+	for i := range a.projected {
+		p := Projection(i)
+		a.projected[i] = sync.OnceValue(func() *Projected { return a.project(p) })
 	}
 	return a, nil
 }
@@ -196,26 +260,26 @@ func (inst *Atlas) Resolve(s string) (idx CountryIdx, ok bool) {
 	return
 }
 
-// decodeRings flattens a Polygon or MultiPolygon into projected rings, plus
-// the parallel outer/hole roles (see Country.ringHole).
-func decodeRings(g neGeometry) ([][]projPt, []bool, error) {
+// decodeRings flattens a Polygon or MultiPolygon into lon/lat rings, plus the
+// parallel outer/hole roles (see Country.ringHole).
+func decodeRings(g neGeometry) ([][]geoPt, []bool, error) {
 	switch g.Type {
 	case "Polygon":
 		var poly [][][2]float64
 		if err := json.Unmarshal(g.Coordinates, &poly); err != nil {
 			return nil, nil, err
 		}
-		rings, holes := projectPoly(nil, nil, poly)
+		rings, holes := appendPoly(nil, nil, poly)
 		return rings, holes, nil
 	case "MultiPolygon":
 		var mp [][][][2]float64
 		if err := json.Unmarshal(g.Coordinates, &mp); err != nil {
 			return nil, nil, err
 		}
-		var rings [][]projPt
+		var rings [][]geoPt
 		var holes []bool
 		for _, poly := range mp {
-			rings, holes = projectPoly(rings, holes, poly)
+			rings, holes = appendPoly(rings, holes, poly)
 		}
 		return rings, holes, nil
 	default:
@@ -223,20 +287,19 @@ func decodeRings(g neGeometry) ([][]projPt, []bool, error) {
 	}
 }
 
-// projectPoly appends one GeoJSON polygon's rings. Ring 0 of a polygon is its
+// appendPoly appends one GeoJSON polygon's rings. Ring 0 of a polygon is its
 // outer boundary and the rest are holes — the only place that distinction is
 // still visible, so it is recorded here rather than re-derived by winding.
-func projectPoly(dstR [][]projPt, dstH []bool, poly [][][2]float64) ([][]projPt, []bool) {
+func appendPoly(dstR [][]geoPt, dstH []bool, poly [][][2]float64) ([][]geoPt, []bool) {
 	for i, ring := range poly {
 		if len(ring) < 4 { // degenerate (GeoJSON rings repeat the first point)
 			continue
 		}
-		pr := make([]projPt, len(ring))
+		gr := make([]geoPt, len(ring))
 		for j, ll := range ring {
-			x, y := projectNorm(ll[0], ll[1])
-			pr[j] = projPt{X: float32(x), Y: float32(y)}
+			gr[j] = geoPt{Lon: ll[0], Lat: ll[1]}
 		}
-		dstR = append(dstR, pr)
+		dstR = append(dstR, gr)
 		dstH = append(dstH, i > 0)
 	}
 	return dstR, dstH

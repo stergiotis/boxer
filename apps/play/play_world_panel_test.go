@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 )
 
 // worldRec builds a two-column (string, float64) record for detection and
@@ -44,6 +45,27 @@ func testWorldDriver(t *testing.T) *WorldDriver {
 		t.Fatal("world atlas failed to load")
 	}
 	return d
+}
+
+// The projection picker drives widget state, not panel state: the toolbar
+// combo offers whatever the widget package ships and hands the pick straight
+// to the widget, so the map's raster and aspect follow. Natural Earth stays
+// the default a fresh driver draws.
+func TestWorldProjectionPicker(t *testing.T) {
+	d := testWorldDriver(t)
+	if got := d.widget.Projection(); got != worldmap.ProjectionNaturalEarth {
+		t.Fatalf("fresh driver draws %s, want the Natural Earth default", got)
+	}
+	if len(worldmap.Projections) < 2 {
+		t.Fatalf("the picker offers %d projection(s) — nothing to switch between",
+			len(worldmap.Projections))
+	}
+	for _, p := range worldmap.Projections {
+		d.widget.SetProjection(p)
+		if got := d.widget.Projection(); got != p {
+			t.Errorf("picked %s, widget draws %s", p, got)
+		}
+	}
 }
 
 func TestWorldPanelAccept(t *testing.T) {

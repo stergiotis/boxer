@@ -2,7 +2,8 @@
 // embedded Natural Earth 110m admin-0 asset, filled by a per-country value
 // through a colormap, drawn Go-side into a content-versioned texture
 // (ADR-0114). Fixed camera — the whole world at once; deliberately no pan, no
-// zoom, no tiles.
+// zoom, no tiles. The projection is the caller's pick (SetProjection): Natural
+// Earth, or Equal Earth when the reading needs country areas to be comparable.
 //
 // The widget is data-agnostic: callers resolve their own strings via
 // Atlas.Resolve and hand a map[CountryIdx]float64 to SetValues.
@@ -61,6 +62,13 @@ type Widget struct {
 	scopeKey string
 	atlas    *Atlas
 	loadErr  error
+
+	// projection is the caller's pick (SetProjection); pa is the atlas
+	// geometry under it, resolved lazily so the zero Widget is usable. The
+	// zero value of Projection is the default, so a caller that never asks
+	// gets Natural Earth.
+	projection Projection
+	pa         *Projected
 
 	// Style knobs, settable before the first Render. Colors are 0xRRGGBBAA.
 	SeaRGBA      uint32
@@ -184,6 +192,41 @@ func (inst *Widget) setRasterWidth(px float64) {
 // PixelWidth returns the current target raster width (for binding a control).
 func (inst *Widget) PixelWidth() float64 { return float64(inst.wantW) }
 
+// SetProjection switches the projection the outlines are drawn under. The
+// raster geometry is a function of (outlines, size), so this drops it and
+// re-rasterizes at once rather than through the resize debounce — a projection
+// change is a click, not a drag. The raster height follows the new aspect; the
+// values, the palette and the hover state are unaffected. An unknown value
+// falls back to the default (see Atlas.Projected).
+func (inst *Widget) SetProjection(p Projection) {
+	if !p.Valid() {
+		p = ProjectionNaturalEarth
+	}
+	if p == inst.projection {
+		return
+	}
+	inst.projection = p
+	inst.pa = nil
+	inst.wantH = inst.heightFor(inst.wantW)
+	inst.dirty = true
+}
+
+// Projection returns the projection currently drawn (for binding a picker).
+func (inst *Widget) Projection() Projection { return inst.projection }
+
+// projected resolves the atlas geometry for the current projection, projecting
+// it on first use. The result is cached in the process-wide atlas, so a
+// projection flipped back to costs one map read.
+func (inst *Widget) projected() *Projected {
+	if inst.atlas == nil {
+		return nil
+	}
+	if inst.pa == nil || inst.pa.Projection != inst.projection {
+		inst.pa = inst.atlas.Projected(inst.projection)
+	}
+	return inst.pa
+}
+
 // SetDisplayHeight caps the map's on-screen height in points; the width then
 // follows the projection aspect. Pass 0 (the default) to let the height follow
 // the pane width instead. Display size is independent of the raster resolution
@@ -232,7 +275,7 @@ func (inst *Widget) canvasBox(paneW float32) (w, h int) {
 	}
 	if h > capH {
 		h = capH
-		w = min(max(int(float64(h)*ProjectionAspect()), minCanvasW), maxCanvasW)
+		w = min(max(int(float64(h)*inst.projection.Aspect()), minCanvasW), maxCanvasW)
 	}
 	return
 }
@@ -488,10 +531,11 @@ func (inst *Widget) paintHighlight(w, h int) {
 		return
 	}
 	ct := &inst.atlas.Countries[inst.hovered]
+	rings := inst.projected().Rings(inst.hovered)
 	fw, fh := float32(w), float32(h)
 	fill := color.Hex(inst.HighlightFillRGBA)
 	stroke := color.Hex(inst.HighlightStrokeRGBA)
-	for i, ring := range ct.rings {
+	for i, ring := range rings {
 		// GeoJSON rings repeat their first point to close. The polyline needs
 		// that repeat, the fill does not: a duplicated vertex is a zero-length
 		// edge for the ear clipper and for the closed outline it draws.
@@ -565,14 +609,14 @@ func (inst *Widget) renderReadout() {
 }
 
 func (inst *Widget) heightFor(w int) int {
-	return max(int(float64(w)/ProjectionAspect()), 1)
+	return max(int(float64(w)/inst.projection.Aspect()), 1)
 }
 
 // rasterizeNow repaints the texture at (w × h) from the current values and
 // bumps the content version. Only the size-derived half is expensive, and it
-// survives a data change: at an unchanged size this is a recolour of a cached
-// geometry, not a re-rasterization. The output buffer is reused too, so a
-// value change allocates only the fill table.
+// survives a data change: at an unchanged size and projection this is a
+// recolour of a cached geometry, not a re-rasterization. The output buffer is
+// reused too, so a value change allocates only the fill table.
 func (inst *Widget) rasterizeNow(w, h int) {
 	fills := make([]uint32, len(inst.atlas.Countries))
 	for i := range fills {
@@ -587,8 +631,9 @@ func (inst *Widget) rasterizeNow(w, h int) {
 			fills[i] = inst.cm.At(inst.values[i])
 		}
 	}
-	if inst.geom == nil || inst.geom.w != w || inst.geom.h != h {
-		inst.geom = buildRasterGeometry(inst.atlas, w, h)
+	pa := inst.projected()
+	if inst.geom == nil || inst.geom.w != w || inst.geom.h != h || inst.geom.proj != pa.Projection {
+		inst.geom = buildRasterGeometry(pa, w, h)
 		inst.rgba = make([]uint32, w*h)
 		inst.index = inst.geom.index
 	}

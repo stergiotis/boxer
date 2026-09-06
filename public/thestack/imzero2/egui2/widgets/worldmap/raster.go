@@ -52,6 +52,9 @@ type mixedPixel struct {
 // reused across every value, palette and column change.
 type rasterGeometry struct {
 	w, h int
+	// proj is the projection the outlines were taken from — the other half of
+	// the cache key, alongside the output size.
+	proj Projection
 	// index is the per-pixel country — the hit-test buffer, and the fill key
 	// for every pixel whose subsamples agree.
 	index []CountryIdx
@@ -62,8 +65,8 @@ type rasterGeometry struct {
 }
 
 // buildRasterGeometry runs the scanline fill, the border walk and the
-// subsample reduction for an (w × h) output.
-func buildRasterGeometry(atlas *Atlas, w, h int) *rasterGeometry {
+// subsample reduction for an (w × h) output of one projection's geometry.
+func buildRasterGeometry(pa *Projected, w, h int) *rasterGeometry {
 	w2 := w * ssFactor
 	h2 := h * ssFactor
 	idx2 := make([]CountryIdx, w2*h2)
@@ -71,17 +74,18 @@ func buildRasterGeometry(atlas *Atlas, w, h int) *rasterGeometry {
 		idx2[i] = NoCountry
 	}
 	var xs []float64 // scanline crossing scratch, reused across rings
-	for ci := range atlas.Countries {
-		xs = fillCountry(idx2, w2, h2, &atlas.Countries[ci], CountryIdx(ci), xs)
+	for ci := range pa.countries {
+		xs = fillCountry(idx2, w2, h2, &pa.countries[ci], CountryIdx(ci), xs)
 	}
 	mask2 := make([]uint8, w2*h2)
-	for ci := range atlas.Countries {
-		strokeCountry(mask2, w2, h2, &atlas.Countries[ci])
+	for ci := range pa.countries {
+		strokeCountry(mask2, w2, h2, &pa.countries[ci])
 	}
 
 	inst := &rasterGeometry{
 		w:     w,
 		h:     h,
+		proj:  pa.Projection,
 		index: make([]CountryIdx, w*h),
 		cover: make([]uint8, w*h),
 	}
@@ -194,8 +198,8 @@ func fillOf(style rasterStyle, ci CountryIdx) uint32 {
 // rasterize renders the atlas at (w × h) in one shot, building the geometry and
 // throwing it away. Callers that re-render on data changes should keep a
 // rasterGeometry and call resolve instead.
-func rasterize(atlas *Atlas, w, h int, style rasterStyle) (rgba []uint32, index []CountryIdx) {
-	g := buildRasterGeometry(atlas, w, h)
+func rasterize(pa *Projected, w, h int, style rasterStyle) (rgba []uint32, index []CountryIdx) {
+	g := buildRasterGeometry(pa, w, h)
 	rgba = make([]uint32, w*h)
 	g.resolve(rgba, style)
 	return rgba, g.index
@@ -231,7 +235,7 @@ func majorityIdx(cand []CountryIdx) CountryIdx {
 // the even-odd rule with half-open edges (y1 <= yc < y2), sampling at pixel
 // centers. Later countries overwrite earlier ones; upstream admin-0 features
 // are disjoint so ordering is immaterial.
-func fillCountry(idx2 []CountryIdx, w2, h2 int, ct *Country, ci CountryIdx, xs []float64) []float64 {
+func fillCountry(idx2 []CountryIdx, w2, h2 int, ct *projCountry, ci CountryIdx, xs []float64) []float64 {
 	yLo := int(math.Floor(float64(ct.bbox[1])*float64(h2) - 0.5))
 	yHi := int(math.Ceil(float64(ct.bbox[3])*float64(h2) - 0.5))
 	if yLo < 0 {
@@ -283,7 +287,7 @@ func fillCountry(idx2 []CountryIdx, w2, h2 int, ct *Country, ci CountryIdx, xs [
 // coverage mask (a DDA line walk, 1 subpixel wide — ~0.5 output px, softened
 // by the downsample). Shared borders are marked by both neighbours onto the
 // same subpixels, so they don't double-darken.
-func strokeCountry(mask2 []uint8, w2, h2 int, ct *Country) {
+func strokeCountry(mask2 []uint8, w2, h2 int, ct *projCountry) {
 	fw := float64(w2)
 	fh := float64(h2)
 	for _, ring := range ct.rings {
