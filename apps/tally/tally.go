@@ -47,6 +47,7 @@ const (
 	dockTabFind     uint64 = 7
 	dockTabDu       uint64 = 8
 	dockTabProblems uint64 = 9
+	dockTabResults  uint64 = 10
 
 	mountsPaneWidth float32 = 300
 	connectTimeout          = 2 * time.Minute
@@ -58,6 +59,12 @@ type paneIDE uint8
 const (
 	paneIDA paneIDE = iota
 	paneIDB
+	// paneIDR is the Results pane (ADR-0222 §SD4): a browser over the rows
+	// a passed query returned. It is a pane like the other two — its mount,
+	// snapshot and selection track the selected row — so Preview, Info,
+	// History and "Open in play" describe it without knowing it is one.
+	paneIDR
+	paneCount = iota
 )
 
 // App is one tally window.
@@ -71,10 +78,31 @@ type App struct {
 	mounts    lane[[]mountRow]
 	mountRows []mountRow
 
-	panes       [2]pane
-	target      paneIDE // which pane the Mounts clicks address
+	panes       [paneCount]pane
+	target      paneIDE // which pane the Mounts clicks address (A or B)
+	focus       paneIDE // which pane the lower tabs describe (A, B or R)
 	syncBrowse  bool
 	diffThisDir bool
+
+	// The passed query and what it returned (ADR-0222 §SD3): the buffer a
+	// launch config carried, the label it named the result with, and the
+	// lane that runs it. resultFS is the tree the Results pane browses,
+	// rebuilt when the lane answers.
+	querySql   string
+	queryLabel string
+	resultLane lane[resultSet]
+	resultSet  resultSet
+	resultFS   *resultFS
+	resultKey  string
+
+	// pendingDockActivate raises a dock tab on the next dock send (0 =
+	// none): what a launch config's Tab asks for. Consumed once, inside the
+	// dock scope, the way play does it.
+	pendingDockActivate uint64
+	// raisedTab is the last tab this window raised, so the workingset can
+	// report one. The dock's own focus lives on the Rust side and is not
+	// readable from here.
+	raisedTab uint64
 
 	preview lane[previewContent]
 	info    lane[[]infoRow]
@@ -139,7 +167,11 @@ type pane struct {
 	fsKey        viewKey
 	fsErr        error
 	selected     string // the one selected file, for Preview / Info / History
-	navigated    bool   // this frame
+	// pendingSel is a selection a launch config asked for, applied once the
+	// pane has listed its directory: the widget drops the selection when its
+	// cache key first arrives, so it cannot be set before the first render.
+	pendingSel string
+	navigated  bool // this frame
 	// paneH is the last height this pane's probe answered with; the browser
 	// is sized to it. Held across frames: the probe is a frame late and
 	// absent on the frame the tab comes back.
@@ -163,6 +195,9 @@ func newApp() (inst *App) {
 	}
 	inst.panes[paneIDA].followLatest = true
 	inst.panes[paneIDB].followLatest = true
+	// The Results pane is never on "latest": its location is whichever
+	// snapshot the selected row came from.
+	inst.panes[paneIDR].mode = fsbrowser.ModeOutline
 	// The preview lane is the only owner of an open recording: it closes the
 	// one it replaces, so browsing away from a track releases its staged
 	// bytes, its decoders and the output device.
@@ -218,6 +253,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.duFilesLane.close()
 	inst.problemsLane.close()
 	inst.auditLane.close()
+	inst.resultLane.close()
 	inst.components.close()
 	inst.mounts.close()
 	if sc, done, _, _ := inst.conn.demand("connect", nil); done && sc != nil {
@@ -326,9 +362,19 @@ func (inst *App) renderBody() {
 			continue
 		}
 		for dock := range c.DockArea(inst.ids.PrepareStr("tally-dock")) {
+			if inst.pendingDockActivate != 0 {
+				dock.ActivateTab(inst.pendingDockActivate)
+				inst.pendingDockActivate = 0
+			}
 			// Bottom leaf first so it spans the window, then pane B to the
 			// right of pane A in what is left above it (the imztop shape).
-			root := dock.InitRoot(dockTabBrowseA)
+			// A window carrying a query gets its Results tab beside pane A:
+			// it is a browser over a tree, not a report under one.
+			rootTabs := []uint64{dockTabBrowseA}
+			if inst.querySql != "" {
+				rootTabs = append(rootTabs, dockTabResults)
+			}
+			root := dock.InitRoot(rootTabs...)
 			_ = dock.Split(root, c.DockBelow, 0.6, dockTabPreview, dockTabInfo, dockTabHistory, dockTabDiff, dockTabFind, dockTabDu, dockTabProblems)
 			_ = dock.Split(root, c.DockRight, 0.5, dockTabBrowseB)
 			for range dock.Tab(dockTabBrowseA, "Pane A") {
@@ -336,6 +382,14 @@ func (inst *App) renderBody() {
 			}
 			for range dock.Tab(dockTabBrowseB, "Pane B") {
 				inst.renderPane(sc, paneIDB)
+			}
+			// The Results tab exists only while the window carries a query:
+			// an empty pane offering nothing is chrome, and the window that
+			// was opened without one never asked for it.
+			if inst.querySql != "" {
+				for range dock.Tab(dockTabResults, "Results") {
+					inst.renderResults(sc)
+				}
 			}
 			for range dock.Tab(dockTabPreview, "Preview") {
 				if inst.lazyBody(dockTabPreview, "Preview") {
@@ -607,8 +661,11 @@ func (inst *App) renderMounts(sc *storeConn) {
 }
 
 func (id paneIDE) String() string {
-	if id == paneIDB {
+	switch id {
+	case paneIDB:
 		return "B"
+	case paneIDR:
+		return "R"
 	}
 	return "A"
 }
@@ -724,8 +781,9 @@ func (inst *App) renderPane(sc *storeConn, id paneIDE) {
 	}
 	p.navigated = res.Navigated
 	if res.Clicked >= 0 || res.Activated >= 0 || res.Navigated {
-		inst.target = id
+		inst.focus, inst.target = id, id
 	}
+	inst.applyPendingSelection(p, res)
 	// The preview follows the single selected file; a directory selection or
 	// a multi-selection shows nothing.
 	sel := p.st.Selection()
@@ -743,6 +801,20 @@ func (inst *App) renderPane(sc *storeConn, id paneIDE) {
 	}
 }
 
+// applyPendingSelection consumes a launch config's selection once the pane
+// has actually listed something. A path the listing does not carry leaves the
+// pane unselected — the config said where to look, and a file that is not
+// there is not a reason to refuse the window.
+func (inst *App) applyPendingSelection(p *pane, res fsbrowser.Result) {
+	if p.pendingSel == "" || res.Err != nil {
+		return
+	}
+	if e, found := entryOf(res.Rows, p.pendingSel); found && !e.IsDir {
+		p.st.SelectOnly(p.pendingSel)
+	}
+	p.pendingSel = ""
+}
+
 func entryOf(rows []fsbrowser.Entry, p string) (e fsbrowser.Entry, ok bool) {
 	for i := range rows {
 		if rows[i].Path == p {
@@ -752,8 +824,10 @@ func entryOf(rows []fsbrowser.Entry, p string) (e fsbrowser.Entry, ok bool) {
 	return
 }
 
-// focusPane is the pane the lower tabs describe: the target pane.
-func (inst *App) focusPane() *pane { return inst.activePane() }
+// focusPane is the pane the lower tabs describe. It follows whichever pane
+// was last interacted with, including the Results pane — where target, which
+// the Mounts pane addresses, only ever names a browse pane.
+func (inst *App) focusPane() *pane { return &inst.panes[inst.focus] }
 
 func (inst *App) renderPreview(sc *storeConn) {
 	p := inst.focusPane()

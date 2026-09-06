@@ -120,3 +120,20 @@ var (
 	MembTallyLaunchTarget = KeelsonHrNkRegistry.MustBegin("tallyLaunchTarget", 148).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
+
+// What a caller asks tally to look at (ADR-0222 §SD2): the selected file in
+// each pane, the dock tab to raise, and a path-set query with the label its
+// results pane carries. Appended to the tallyLaunch cohort above, which
+// carries where the window is; these carry what is shown there.
+var (
+	MembTallyLaunchSelA = KeelsonHrNkRegistry.MustBegin("tallyLaunchSelA", 150).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchSelB = KeelsonHrNkRegistry.MustBegin("tallyLaunchSelB", 151).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchTab = KeelsonHrNkRegistry.MustBegin("tallyLaunchTab", 152).
+				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchSql = KeelsonHrNkRegistry.MustBegin("tallyLaunchSql", 153).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembTallyLaunchSqlLabel = KeelsonHrNkRegistry.MustBegin("tallyLaunchSqlLabel", 154).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+)

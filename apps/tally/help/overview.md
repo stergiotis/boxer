@@ -39,7 +39,23 @@ memory that has no name, and it is released the moment you select something
 else. There is no sound if the host has no audio device — the playhead still
 moves, and the reason is under the waveform.
 
+**Results** appears when another app opened this window on a query. It is a
+browser like the panes above it, over the files that query returned rather
+than over a directory: the tree is built from the paths in the rows, and
+selecting one shows it in Preview and Info as any other file. A result whose
+rows come from more than one snapshot puts each snapshot under its own
+segment, so a path says which one it came from. The query runs once, when the
+window opens, and only if it is provably a read — this app never writes, and a
+query that arrives from somewhere else is checked rather than trusted.
+
+*Open in play* goes the other way: the pane's directory as a query you can
+edit, the mount and snapshot pinned as literals. play offers *Open in tally*
+for the reverse trip whenever its buffer reads a snapshot.
+
 Snapshots are taken outside the app: `boxer fs snapshot --mount <id> <dir>`,
-or `ladingingest.Snapshot` from Go. The `lading` sqlapplet book carries the
-same questions as SQL — ledger, find, content search, history, diff, du,
-problems, audit — for anything this browser does not show.
+or `ladingingest.Snapshot` from Go. An app can also publish a tree it computed
+as a short-lived mount and open this browser on it (`ladingadhoc.Publish`),
+which is what the ad-hoc dataset demo's second button does. The `lading`
+sqlapplet book carries the same questions as SQL — ledger, find, content
+search, history, diff, du, problems, audit — for anything this browser does
+not show.

@@ -152,3 +152,8 @@
 147	tally-launch-sync	12884902035
 148	tally-launch-target	12884902036
 149	dialog-display-name	12884902037
+150	tally-launch-sel-a	12884902038
+151	tally-launch-sel-b	12884902039
+152	tally-launch-tab	12884902040
+153	tally-launch-sql	12884902041
+154	tally-launch-sql-label	12884902042
