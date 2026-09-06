@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 )
@@ -173,13 +174,25 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 	// The map sizes itself to the pane and rasterizes at that width; the
 	// removed raster-width slider changed texture resolution, not on-screen
 	// size, so it read as a no-op.
-	for range c.Horizontal().KeepIter() {
+	//
+	// HorizontalTop, and gaps rather than vertical Separators. The two go
+	// together: `Horizontal` centres each item against a row whose height
+	// grows as the taller combos land in it, so the label/combo pairs drift
+	// downward across the row; top alignment puts them back on one line. But a
+	// vertical rule sizes itself to the available height, which is unbounded
+	// inside the leaf's ScrollArea, and a top-aligned row then inherits that
+	// height and pushes the status line, the legend and the map off the pane.
+	// Dropping the rules for gaps is what makes the top alignment usable — and
+	// the row ends up shorter than the centred one it replaces. The worldmap
+	// widget's own legend row avoids the same rule for the same reason.
+	gap := styletokens.GapSections(styletokens.ActiveDensity())
+	for range c.HorizontalTop().KeepIter() {
 		c.Label("country: " + schema.Field(countryCol).Name).Send()
 		if len(numeric) > 0 {
-			c.Separator().Vertical().Send()
+			c.AddSpace(gap)
 			inst.renderValueCombo(schema, numeric)
 		}
-		c.Separator().Vertical().Send()
+		c.AddSpace(gap)
 		inst.renderProjectionCombo()
 	}
 	// Status on its own row — sharing the toolbar row clips it against the
