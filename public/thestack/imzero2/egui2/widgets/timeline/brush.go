@@ -156,8 +156,8 @@ func (inst *Timeline) renderBrushStrip(tm layout.TickMap, vl verticalLayout, vie
 	// not advertise a drag, and a read-only timeline renders the plain track
 	// it did before the hint existed.
 	hovered := inst.interactionEnabled && resp.HasHovered()
-	if inst.interactionEnabled && !inst.brushing && !inst.brushHas {
-		inst.paintBrushHint(vl)
+	if inst.interactionEnabled {
+		inst.paintBrushHint(vl, inst.brushHintText())
 	}
 	if hovered && !inst.brushing {
 		inst.paintBrushHoverWash(vl)
@@ -338,9 +338,9 @@ const brushEdgeWidthPx float32 = 1.5
 // each end of the axis and a caption between them, plus a hover state that
 // previews where a press would anchor.
 //
-// It is chrome, so it yields: the rail and caption paint only on an unbrushed,
-// unbrushing, interactive strip, and both degrade rather than crowd when the
-// space for them is not there.
+// It is chrome, so it yields: nothing of it paints on a non-interactive strip,
+// the caption goes once a range is on the track, and the rail degrades rather
+// than crowds when the space for it is not there.
 
 // defaultBrushHintText is the caption on an unbrushed strip. It names the
 // gesture and its result, in that order, because the gesture is the part the
@@ -428,10 +428,26 @@ func computeBrushHintLayout(vl verticalLayout, stripH float32, text string) (l b
 	return
 }
 
+// brushHintText is the caption for this frame: the configured one on an empty
+// track, none once a range is on it.
+//
+// The rail is not part of this. A range explains what it is, not what the strip
+// is — and on a strip whose range was set programmatically, it does not even
+// explain itself, because the user never made the gesture it is the result of.
+// The rail is what says the range sits on a track that goes further, and that
+// the track is theirs to sweep again.
+func (inst *Timeline) brushHintText() (text string) {
+	if inst.brushing || inst.brushHas {
+		return
+	}
+	text = inst.visuals.BrushHintText
+	return
+}
+
 // paintBrushHint draws the resting affordance. Callers gate it; it does not
 // consult the gesture state itself.
-func (inst *Timeline) paintBrushHint(vl verticalLayout) {
-	l, ok := computeBrushHintLayout(vl, inst.visuals.BrushStripH, inst.visuals.BrushHintText)
+func (inst *Timeline) paintBrushHint(vl verticalLayout, text string) {
+	l, ok := computeBrushHintLayout(vl, inst.visuals.BrushStripH, text)
 	if !ok {
 		return
 	}

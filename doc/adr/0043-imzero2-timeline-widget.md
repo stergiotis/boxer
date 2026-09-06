@@ -135,6 +135,36 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-09-06 — The rail outlives a committed range (refines SD19)
+
+**Built.** Found by looking at what SD19 actually did to imztop's availability
+strip, which was the second caller and got none of it.
+
+SD19 gated the whole resting affordance on an idle track, on the reasoning that
+"a committed range is its own explanation". That is true of a range the user
+swept. It is false of one they did not: `imztop`'s availability strip mirrors
+the replay session's window onto the brush every frame — including a window the
+jog buttons set — so the strip is *never* idle, and the affordance SD19 added
+for it never painted once. What the strip showed was a coloured block in a dark
+band, which explains neither where it came from nor that it can be replaced.
+
+The split is now between the two halves of the affordance rather than between
+two states of the track:
+
+- The **caption** still yields to a range. It names a gesture, and a track that
+  already carries its result does not need the gesture named under it.
+- The **rail and its caps** paint whenever the strip is interactive, under the
+  fill. They are not about the range; they are what says the range sits on a
+  track that runs further, and that the track is the user's to sweep again.
+
+That is the reading a slider gets for free — the groove is visible either side
+of the handle — and the one the strip was missing.
+
+**No new fields, no new gate.** `brushHintText` returns the empty caption for a
+brushed or brushing strip and `computeBrushHintLayout` already lays out a rail
+without one, so the degradation ladder is the path that was there for a narrow
+axis.
+
 ### 2026-09-06 — The brush strip announces itself (adds SD19, refines SD16)
 
 **Built.** Verified in the widget gallery.

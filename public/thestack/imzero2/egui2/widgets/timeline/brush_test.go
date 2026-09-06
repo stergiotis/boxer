@@ -422,3 +422,39 @@ func TestBrushHint_NoAxisNoHint(t *testing.T) {
 		})
 	}
 }
+
+// The rail outlives a committed range and the caption does not — the split
+// imztop's availability strip turns on, where the replay window is mirrored
+// onto the brush every frame and the strip is never idle.
+func TestBrushHint_CaptionYieldsToARangeButTheRailDoesNot(t *testing.T) {
+	inst, _, _ := brushFixture(t)
+	if got := inst.brushHintText(); got != defaultBrushHintText {
+		t.Fatalf("an empty track must carry the caption, got %q", got)
+	}
+
+	// Set programmatically, as a caller mirroring an external range does: the
+	// user never made this gesture, so the strip still has to say it is one.
+	inst.SetBrush(brushViewMinMS, brushViewMinMS+10_000)
+	if got := inst.brushHintText(); got != "" {
+		t.Fatalf("a range on the track must drop the caption, got %q", got)
+	}
+	l, ok := computeBrushHintLayout(brushTestLayout(), 14, inst.brushHintText())
+	if !ok || l.x0 != brushAxisStart || l.x1 != brushAxisEnd {
+		t.Fatalf("the rail must still span the axis under a range, got [%v,%v] ok=%v", l.x0, l.x1, ok)
+	}
+
+	inst.ClearBrush()
+	if got := inst.brushHintText(); got != defaultBrushHintText {
+		t.Fatalf("clearing must bring the caption back, got %q", got)
+	}
+}
+
+// Mid-gesture the pending fill is the thing to follow; a caption under it is
+// noise.
+func TestBrushHint_CaptionDropsWhileGestureInFlight(t *testing.T) {
+	inst, _, _ := brushFixture(t)
+	inst.driveBrush(true, 200)
+	if got := inst.brushHintText(); got != "" {
+		t.Fatalf("a gesture in flight must drop the caption, got %q", got)
+	}
+}
