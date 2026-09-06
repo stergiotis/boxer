@@ -277,7 +277,37 @@ Filters run at the *source*, so what they exclude never reaches this process.
 `WithSubdir` roots the walk inside what rclone serves. **`Close` is not
 optional**: it shuts the pipe and reaps the process.
 
-## 8. Retire a mount
+## 8. Publish a scratch tree and browse it
+
+An app that has computed something tree-shaped — a rendered bundle, a
+generated corpus, a set of files it fetched — publishes it as a short-lived
+mount and opens the browser on it
+([ADR-0222](../adr/0222-tally-composition-surface.md)):
+
+```go
+res, err := ladingadhoc.Publish(ctx, exec, ladingadhoc.PublishInput{
+    FS:        tree,          // any io/fs.FS
+    Name:      "my scratch tree",
+    Publisher: string(ManifestId),
+    Mount:     held,          // zero mints one; a held id republishes into it
+})
+```
+
+`res.Mount` and `res.Snap` are the location to point a `tallyLaunch` config
+at. Everything in this document then applies to the published tree: it
+previews, diffs, `du`s and answers the same SQL as a recorded mount.
+
+Two properties worth knowing before reaching for it. The mount carries an
+ad-hoc tag rather than yours, so `ladingadhoc.Visibility()` scopes a reader to
+published trees and nothing else — at the cost that a tag names a space rather
+than a list, so `fs('*')` is refused under it and a query must name its mount.
+And publishing is a publish: the rows are in ClickHouse for the retention
+class whether or not anyone opens a window, so a tree with something in it
+that should not persist is one to think about first. Repeated publishes pass
+the held mount id back rather than minting a second mount, which is what keeps
+a button someone presses twice from leaving two mounts in the list.
+
+## 9. Retire a mount
 
 Retention is declarative, so the normal answer is to do nothing — rows expire
 and whole parts drop. When you need it gone sooner, a per-mount purge is one
@@ -292,7 +322,7 @@ DELETE FROM boxer.fsmeta WHERE "id:id:u64:47::0:" = <mount>;
 Resolve the physical column name with `ladingschema.PhysicalPlainName("id")`
 rather than typing it.
 
-## 9. What does not work, and why
+## 10. What does not work, and why
 
 Collected here rather than discovered later. Each was measured, and most are
 somebody else's limit rather than the store's.
