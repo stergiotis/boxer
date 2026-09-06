@@ -45,9 +45,28 @@ func brushFixture(t *testing.T) (inst *Timeline, got *[]BrushRange, seen *[]bool
 	return inst, &ranges, &flags
 }
 
-// drive runs one frame of the gesture machine.
-func (inst *Timeline) driveBrush(down bool, x float32) {
-	_ = inst.advanceBrush(brushTestMap(), down, x, true, brushViewMinMS, brushViewMaxMS)
+// The gesture machine reads egui's own response flags rather than
+// reconstructing edges from the button-down bit, so a driven frame is the flag
+// set egui would deliver for that phase of a gesture. egui sets `clicked` or
+// `drag_stopped` on a release, never both — which is why there is no frame
+// here that carries the two together outside the test that pins the ordering.
+const (
+	brushFramePress   = c.IsPointerButtonDownResponseFlags
+	brushFrameDrag    = c.IsPointerButtonDownResponseFlags | c.DraggedResponseFlags
+	brushFrameRelease = c.DragStoppedResponseFlags
+	brushFrameClick   = c.PrimaryClickedResponseFlags
+	brushFrameIdle    = c.NilResponseFlags
+)
+
+// driveBrush runs one frame of the gesture machine with a usable cursor.
+func (inst *Timeline) driveBrush(flags c.ResponseFlagsE, x float32) {
+	inst.advanceBrush(brushTestMap(), flags, x, true, brushViewMinMS, brushViewMaxMS)
+}
+
+// driveBrushBlind runs one frame with no usable cursor position — the pointer
+// left the strip, or none has been seen.
+func (inst *Timeline) driveBrushBlind(flags c.ResponseFlagsE) {
+	inst.advanceBrush(brushTestMap(), flags, 0, false, brushViewMinMS, brushViewMaxMS)
 }
 
 func TestBrush_DisabledByDefault(t *testing.T) {
@@ -71,9 +90,9 @@ func TestBrush_EnabledByOption(t *testing.T) {
 func TestBrush_DragCommitsRange(t *testing.T) {
 	inst, got, oks := brushFixture(t)
 
-	inst.driveBrush(true, 200)  // press at +100 px → +6 s
-	inst.driveBrush(true, 400)  // drag to +300 px → +18 s
-	inst.driveBrush(false, 400) // release
+	inst.driveBrush(brushFramePress, 200) // press at +100 px → +6 s
+	inst.driveBrush(brushFrameDrag, 400)  // drag to +300 px → +18 s
+	inst.driveBrush(brushFrameRelease, 400)
 
 	r, ok := inst.Brush()
 	if !ok {
@@ -97,9 +116,9 @@ func TestBrush_DragCommitsRange(t *testing.T) {
 func TestBrush_RightToLeftNormalises(t *testing.T) {
 	inst, _, _ := brushFixture(t)
 
-	inst.driveBrush(true, 600)
-	inst.driveBrush(true, 300)
-	inst.driveBrush(false, 300)
+	inst.driveBrush(brushFramePress, 600)
+	inst.driveBrush(brushFrameDrag, 300)
+	inst.driveBrush(brushFrameRelease, 300)
 
 	r, ok := inst.Brush()
 	if !ok {
@@ -124,8 +143,8 @@ func TestBrush_ClickClears(t *testing.T) {
 		t.Fatal("SetBrush should have committed a range")
 	}
 
-	inst.driveBrush(true, 500)
-	inst.driveBrush(false, 500) // release without travel
+	inst.driveBrush(brushFramePress, 500)
+	inst.driveBrush(brushFrameClick, 500) // egui called the release a click
 
 	if _, ok := inst.Brush(); ok {
 		t.Error("a click must clear the brush")
@@ -135,17 +154,65 @@ func TestBrush_ClickClears(t *testing.T) {
 	}
 }
 
-// TestBrush_SubThresholdTravelClears covers a shaky click rather than a
-// deliberate drag.
-func TestBrush_SubThresholdTravelClears(t *testing.T) {
+// TestBrush_NoLocalTravelThreshold pins the one behaviour that moved when the
+// machine started reading egui's edges: click-vs-drag is egui's call, and the
+// widget no longer second-guesses it with a pixel count of its own. A gesture
+// egui reports as a drag commits however short it was — and the shaky clicks
+// the old threshold existed to absorb now arrive as `clicked` instead, which
+// clears (see TestBrush_ClickClears).
+func TestBrush_NoLocalTravelThreshold(t *testing.T) {
 	inst, _, oks := brushFixture(t)
 
-	inst.driveBrush(true, 500)
-	inst.driveBrush(true, 501) // 1 px, under brushMinDragPx
-	inst.driveBrush(false, 501)
+	inst.driveBrush(brushFramePress, 500)
+	inst.driveBrush(brushFrameDrag, 501) // 1 px — egui still called it a drag
+	inst.driveBrush(brushFrameRelease, 501)
+
+	r, ok := inst.Brush()
+	if !ok {
+		t.Fatal("a gesture egui reports as a drag must commit")
+	}
+	// 1 px is 60 ms on this fixture's axis, which is a real range.
+	if r.ToMS-r.FromMS != 60 {
+		t.Errorf("range: got %d ms, want 60", r.ToMS-r.FromMS)
+	}
+	if len(*oks) != 1 || !(*oks)[0] {
+		t.Fatalf("listener: got %v, want one ok call", *oks)
+	}
+}
+
+// TestBrush_ZeroTravelDragClears covers the drag egui reports for a press held
+// still past its click timeout: real by egui's reckoning, but it describes no
+// range, so it clears rather than committing an empty one that would map to an
+// empty replay window.
+func TestBrush_ZeroTravelDragClears(t *testing.T) {
+	inst, _, oks := brushFixture(t)
+	inst.SetBrush(brushViewMinMS+1_000, brushViewMinMS+2_000)
+
+	inst.driveBrush(brushFramePress, 500)
+	inst.driveBrush(brushFrameDrag, 500)
+	inst.driveBrush(brushFrameRelease, 500)
 
 	if _, ok := inst.Brush(); ok {
-		t.Error("travel under the threshold must not commit")
+		t.Error("a drag that described no range must clear")
+	}
+	if len(*oks) != 1 || (*oks)[0] {
+		t.Fatalf("listener: got %v, want one not-ok call", *oks)
+	}
+}
+
+// TestBrush_FastClickClears is the case that used to need a special path: a
+// press and release inside one frame — every synthesised click, and a quick
+// human one — is never seen as button-down at all, so the machine observes
+// nothing but egui's click edge. It now takes the same branch a slow click
+// does.
+func TestBrush_FastClickClears(t *testing.T) {
+	inst, _, oks := brushFixture(t)
+	inst.SetBrush(brushViewMinMS+1_000, brushViewMinMS+2_000)
+
+	inst.driveBrush(brushFrameClick, 500)
+
+	if _, ok := inst.Brush(); ok {
+		t.Error("a click the machine never saw press must still clear")
 	}
 	if len(*oks) != 1 || (*oks)[0] {
 		t.Fatalf("listener: got %v, want one not-ok call", *oks)
@@ -158,9 +225,9 @@ func TestBrush_SubThresholdTravelClears(t *testing.T) {
 func TestBrush_ClampsToView(t *testing.T) {
 	inst, _, _ := brushFixture(t)
 
-	_ = inst.advanceBrush(brushTestMap(), true, brushAxisStart-500, true, brushViewMinMS, brushViewMaxMS)
-	_ = inst.advanceBrush(brushTestMap(), true, brushAxisEnd+500, true, brushViewMinMS, brushViewMaxMS)
-	_ = inst.advanceBrush(brushTestMap(), false, brushAxisEnd+500, true, brushViewMinMS, brushViewMaxMS)
+	inst.driveBrush(brushFramePress, brushAxisStart-500)
+	inst.driveBrush(brushFrameDrag, brushAxisEnd+500)
+	inst.driveBrush(brushFrameRelease, brushAxisEnd+500)
 
 	r, ok := inst.Brush()
 	if !ok {
@@ -178,19 +245,19 @@ func TestBrush_ClampsToView(t *testing.T) {
 func TestBrush_InFlightDoesNotDisturbTheCommitted(t *testing.T) {
 	inst, _, _ := brushFixture(t)
 
-	inst.driveBrush(true, 200)
-	inst.driveBrush(true, 400)
-	inst.driveBrush(false, 400)
+	inst.driveBrush(brushFramePress, 200)
+	inst.driveBrush(brushFrameDrag, 400)
+	inst.driveBrush(brushFrameRelease, 400)
 	first, _ := inst.Brush()
 
-	inst.driveBrush(true, 700) // a new gesture begins
-	inst.driveBrush(true, 900)
+	inst.driveBrush(brushFramePress, 700) // a new gesture begins
+	inst.driveBrush(brushFrameDrag, 900)
 	mid, ok := inst.Brush()
 	if !ok || mid != first {
 		t.Errorf("committed range changed mid-gesture: %+v -> %+v", first, mid)
 	}
 
-	inst.driveBrush(false, 900)
+	inst.driveBrush(brushFrameRelease, 900)
 	final, _ := inst.Brush()
 	if final == first {
 		t.Error("the finished gesture should have replaced the range")
@@ -203,10 +270,10 @@ func TestBrush_InFlightDoesNotDisturbTheCommitted(t *testing.T) {
 func TestBrush_MissingCursorHoldsTheGesture(t *testing.T) {
 	inst, _, _ := brushFixture(t)
 
-	_ = inst.advanceBrush(brushTestMap(), true, 300, true, brushViewMinMS, brushViewMaxMS)
-	_ = inst.advanceBrush(brushTestMap(), true, 600, true, brushViewMinMS, brushViewMaxMS)
+	inst.driveBrush(brushFramePress, 300)
+	inst.driveBrush(brushFrameDrag, 600)
 	// Pointer left the strip: no usable x this frame.
-	_ = inst.advanceBrush(brushTestMap(), true, 0, false, brushViewMinMS, brushViewMaxMS)
+	inst.driveBrushBlind(brushFrameDrag)
 	if !inst.brushing {
 		t.Fatal("losing the cursor must not abort the gesture")
 	}
@@ -214,7 +281,7 @@ func TestBrush_MissingCursorHoldsTheGesture(t *testing.T) {
 		t.Errorf("pending end moved on a sample-less frame: %d", inst.brushCurMS-brushViewMinMS)
 	}
 
-	_ = inst.advanceBrush(brushTestMap(), false, 0, false, brushViewMinMS, brushViewMaxMS)
+	inst.driveBrushBlind(brushFrameRelease)
 	if _, ok := inst.Brush(); !ok {
 		t.Error("the gesture should still commit what it had")
 	}
@@ -224,7 +291,7 @@ func TestBrush_MissingCursorHoldsTheGesture(t *testing.T) {
 // position is unknown cannot seed an anchor.
 func TestBrush_PressWithoutCursorIsIgnored(t *testing.T) {
 	inst, _, _ := brushFixture(t)
-	_ = inst.advanceBrush(brushTestMap(), true, 0, false, brushViewMinMS, brushViewMaxMS)
+	inst.driveBrushBlind(brushFramePress)
 	if inst.brushing {
 		t.Error("a press with no cursor must not start a gesture")
 	}
@@ -259,9 +326,9 @@ func TestBrush_NilListenerIsSafe(t *testing.T) {
 	inst := New(c.NewWidgetIdStack(), "brush-nil", nil,
 		WithContainerWidth(1200), WithBrush(nil))
 
-	inst.driveBrush(true, 200)
-	inst.driveBrush(true, 400)
-	inst.driveBrush(false, 400)
+	inst.driveBrush(brushFramePress, 200)
+	inst.driveBrush(brushFrameDrag, 400)
+	inst.driveBrush(brushFrameRelease, 400)
 
 	if _, ok := inst.Brush(); !ok {
 		t.Error("a nil listener must not stop the brush tracking")
@@ -285,27 +352,48 @@ func TestBrush_PaintIsInertOutsideTheView(t *testing.T) {
 	inst.paintBrushStrip(brushTestMap(), vl, brushViewMinMS, brushViewMaxMS)
 }
 
-// TestBrush_SettledReportsGestureEnd pins the flag renderBrushStrip uses to
-// tell a click it already handled from one the press-sampling never saw. A
-// fast click — every synthesised one — presses and releases inside a frame, so
-// the machine observes nothing and the widget must fall back to egui's click
-// edge. Without the flag that fallback would fire a second time on every
-// gesture the machine did handle.
-func TestBrush_SettledReportsGestureEnd(t *testing.T) {
-	inst, _, _ := brushFixture(t)
-	tm := brushTestMap()
+// TestBrush_OneGestureEndsOnce is what the retired `settled` flag used to
+// guarantee by hand: a gesture tells the listener once, whatever the ending
+// frame carries. egui never sets `clicked` and `drag_stopped` together, so the
+// frame below is not one it would send — the point is that the switch resolves
+// it to a single branch rather than firing both, and that a run of idle frames
+// after an ending adds nothing.
+func TestBrush_OneGestureEndsOnce(t *testing.T) {
+	inst, _, oks := brushFixture(t)
 
-	if settled := inst.advanceBrush(tm, true, 200, true, brushViewMinMS, brushViewMaxMS); settled {
-		t.Error("a press does not settle a gesture")
+	inst.driveBrush(brushFramePress, 200)
+	inst.driveBrush(brushFrameDrag, 400)
+	inst.driveBrush(brushFrameClick|brushFrameRelease, 400)
+	inst.driveBrush(brushFrameIdle, 400)
+	inst.driveBrush(brushFrameIdle, 400)
+
+	if len(*oks) != 1 {
+		t.Fatalf("listener: got %d calls %v, want exactly one", len(*oks), *oks)
 	}
-	if settled := inst.advanceBrush(tm, true, 400, true, brushViewMinMS, brushViewMaxMS); settled {
-		t.Error("a drag does not settle a gesture")
+	if inst.brushing {
+		t.Error("the gesture must be over")
 	}
-	if settled := inst.advanceBrush(tm, false, 400, true, brushViewMinMS, brushViewMaxMS); !settled {
-		t.Error("a release settles the gesture")
+}
+
+// TestBrush_LostEndingStillEndsTheGesture drives the safety net: a gesture
+// whose ending edge never arrives (the button is simply no longer down on the
+// strip) must settle anyway, or the pending fill paints for the rest of the
+// session.
+func TestBrush_LostEndingStillEndsTheGesture(t *testing.T) {
+	inst, _, oks := brushFixture(t)
+
+	inst.driveBrush(brushFramePress, 200)
+	inst.driveBrush(brushFrameDrag, 400)
+	inst.driveBrush(brushFrameIdle, 400) // no click, no drag_stopped
+
+	if inst.brushing {
+		t.Fatal("a gesture with no ending edge must not stay in flight")
 	}
-	if settled := inst.advanceBrush(tm, false, 400, true, brushViewMinMS, brushViewMaxMS); settled {
-		t.Error("an idle frame settles nothing")
+	if _, ok := inst.Brush(); !ok {
+		t.Error("what the gesture had should still commit")
+	}
+	if len(*oks) != 1 || !(*oks)[0] {
+		t.Fatalf("listener: got %v, want one ok call", *oks)
 	}
 }
 
@@ -453,7 +541,7 @@ func TestBrushHint_CaptionYieldsToARangeButTheRailDoesNot(t *testing.T) {
 // noise.
 func TestBrushHint_CaptionDropsWhileGestureInFlight(t *testing.T) {
 	inst, _, _ := brushFixture(t)
-	inst.driveBrush(true, 200)
+	inst.driveBrush(brushFramePress, 200)
 	if got := inst.brushHintText(); got != "" {
 		t.Fatalf("a gesture in flight must drop the caption, got %q", got)
 	}

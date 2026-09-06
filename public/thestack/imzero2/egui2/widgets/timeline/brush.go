@@ -29,12 +29,6 @@ import (
 // canvas's.
 const brushCanvasIdKey = "brush-strip"
 
-// brushMinDragPx is how far a gesture must travel before it commits a range.
-// Below it the gesture reads as a click, which clears the brush — a
-// zero-width range is not a selection anyone means to make, and it would map
-// to an empty replay window.
-const brushMinDragPx = 3.0
-
 // BrushRange is a committed brush selection, in epoch milliseconds UTC.
 // FromMS < ToMS always: the gesture is normalised, so dragging right-to-left
 // gives the same range as left-to-right.
@@ -130,22 +124,9 @@ func (inst *Timeline) renderBrushStrip(tm layout.TickMap, vl verticalLayout, vie
 	handle := widgethandle.Make(inst.ids.PrepareStr(brushCanvasIdKey).Derive())
 
 	resp := stateMgr.GetResponse(handle)
-	down := resp.HasIsPointerButtonDown()
 	x, xOK := inst.brushCursorX(stateMgr, handle, vl)
 	if inst.interactionEnabled {
-		settled := inst.advanceBrush(tm, down, x, xOK, viewMinMS, viewMaxMS)
-		// A click the press-sampling never saw. The button-down flag is read
-		// once per frame, so a press and release inside one frame — a fast
-		// click, and every synthesised one — leaves the state machine having
-		// observed nothing at all. egui's own click edge is not sampled that
-		// way: it is set on the release of a gesture that stayed under the
-		// drag threshold, which is exactly the gesture that should clear.
-		//
-		// Gated on `settled` so a slow click, which the machine did see, does
-		// not clear twice and fire the listener twice.
-		if !settled && !inst.brushing && resp.HasPrimaryClicked() {
-			inst.clearBrushAndNotify()
-		}
+		inst.advanceBrush(tm, resp, x, xOK, viewMinMS, viewMaxMS)
 	}
 
 	// The affordance layers (§SD19), ordered so nothing the user is doing is
@@ -213,54 +194,71 @@ func (inst *Timeline) brushCursorX(stateMgr *c.StateManager, handle widgethandle
 	return
 }
 
-// advanceBrush runs the press → drag → release state machine. It reports
-// whether a gesture finished on this frame, so the caller can tell a click it
-// already handled from one it never observed.
-func (inst *Timeline) advanceBrush(tm layout.TickMap, down bool, x float32, xOK bool, viewMinMS, viewMaxMS int64) (settled bool) {
+// advanceBrush runs the press → drag → release machine for one frame.
+//
+// The two ways a gesture ends are egui's own edges, not something reconstructed
+// here: `clicked` on a release that stayed under the drag threshold, and
+// `drag_stopped` on one that did not. egui sets exactly one of them, so the
+// order below is a statement about which is which rather than a tie-break.
+//
+// The press itself is still sampled from `is_pointer_button_down_on`, because
+// the anchor has to be where the user pressed. `drag_started` arrives only once
+// the pointer has travelled past the drag threshold, and anchoring there would
+// silently shorten every range by that much.
+func (inst *Timeline) advanceBrush(tm layout.TickMap, resp c.ResponseFlagsE, x float32, xOK bool, viewMinMS, viewMaxMS int64) {
 	clampMS := func(ms int64) int64 {
 		return min(max(ms, viewMinMS), viewMaxMS)
 	}
+	down := resp.HasIsPointerButtonDown()
 	switch {
+	case resp.HasPrimaryClicked():
+		// A click clears, and it does so whether or not the press was ever
+		// observed: the flag is edge-triggered by egui, so a press and release
+		// inside one frame — a fast click, and every synthesised one — lands
+		// here exactly like a slow one the machine watched go down.
+		inst.brushing = false
+		inst.clearBrushAndNotify()
+	case resp.HasDragStopped():
+		inst.brushing = false
+		inst.commitBrush()
 	case down && !inst.brushing:
 		if !xOK {
 			return
 		}
 		inst.brushing = true
-		inst.brushAnchorX = x
 		inst.brushAnchorMS = clampMS(tm.MapXToMS(float64(x)))
 		inst.brushCurMS = inst.brushAnchorMS
-	case down && inst.brushing:
+	case down:
 		if !xOK {
 			return
 		}
-		inst.brushCurX = x
 		inst.brushCurMS = clampMS(tm.MapXToMS(float64(x)))
-	case !down && inst.brushing:
+	case inst.brushing:
+		// Neither edge arrived, but the button is no longer down on the strip.
+		// Nothing observed should reach here; it is here so a lost edge ends
+		// the gesture instead of leaving the pending fill painted forever.
 		inst.brushing = false
 		inst.commitBrush()
-		settled = true
 	}
-	return
 }
 
 // commitBrush turns the finished gesture into a range, or into a clear when it
-// never travelled far enough to mean one.
+// does not describe one.
+//
+// There is no pixel threshold to apply. egui already decided this gesture was a
+// drag rather than a click — the same decision, from the same threshold, that
+// keeps a pan on the main canvas from landing a selection — so a second one
+// here could only disagree with it.
 func (inst *Timeline) commitBrush() {
-	travelled := float64(inst.brushCurX - inst.brushAnchorX)
-	if travelled < 0 {
-		travelled = -travelled
-	}
-	if travelled < brushMinDragPx {
-		inst.clearBrushAndNotify()
-		return
-	}
 	from, to := inst.brushAnchorMS, inst.brushCurMS
 	if from > to {
 		from, to = to, from
 	}
 	if from == to {
-		// Sub-millisecond travel at a coarse zoom: pixels moved but the range
-		// rounds to nothing, which is a clear rather than an empty selection.
+		// The drag was real but the range is not: sub-millisecond travel at a
+		// coarse zoom, or a press held still past egui's click timeout. Either
+		// way it is a clear rather than an empty selection, which would map to
+		// an empty replay window.
 		inst.clearBrushAndNotify()
 		return
 	}

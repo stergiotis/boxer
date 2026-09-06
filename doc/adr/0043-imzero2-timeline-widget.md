@@ -135,6 +135,49 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-09-06 — The brush gesture reads egui's edges (refines SD16)
+
+**Built.** Verified in the widget gallery, whose synthesised clicks are the case
+this used to get wrong.
+
+SD16's state machine sampled `is_pointer_button_down_on` once a frame and
+reconstructed press → drag → release from it. Three things came out of that
+choice, and all three were work egui had already done:
+
+- A local `brushMinDragPx` decided click-vs-drag. egui decides that too, from
+  its own threshold, and it is the *same* decision that keeps a pan on the main
+  canvas from landing a selection. Having two meant they could disagree, and
+  they did: a 4 px sweep on the strip committed a range while a 4 px drag on
+  the canvas was a click.
+- A press and release inside one frame was never observed at all, so the strip
+  had to consult `clicked` as a fallback — the 2026-08-18 finding below.
+- That fallback then needed a `settled` flag to stop it firing a second time on
+  a gesture the machine had already ended.
+
+The machine now takes egui's two ending edges directly: `clicked` clears,
+`drag_stopped` commits. egui sets exactly one of them on a release, so the
+ordering in the switch is a statement about which is which rather than a
+tie-break, and the `settled` flag, the fallback it guarded and the local
+threshold are all gone. A fast click takes the same branch a slow one does.
+`waveform`'s minimap was already driving off these flags; this is the brush
+catching up.
+
+**The press is still sampled.** `drag_started` arrives only once the pointer has
+travelled past the drag threshold, so anchoring there would silently shorten
+every range by that much. The anchor comes from the first frame the button is
+seen down on the strip, which is where the user actually pressed; only the
+endings moved.
+
+**A gesture with no ending edge still ends.** Nothing observed reaches it, but
+the machine settles a gesture whose button is no longer down and which carried
+neither edge — a lost ending would otherwise leave the pending fill painted for
+the rest of the session.
+
+**Behaviour that changed, and it is the point.** A short gesture egui calls a
+drag now commits the short range it describes instead of being discarded by a
+second opinion; a shaky one egui calls a click still clears. Where the two
+verdicts used to differ, egui's is now the only one.
+
 ### 2026-09-06 — The rail outlives a committed range (refines SD19)
 
 **Built.** Found by looking at what SD19 actually did to imztop's availability

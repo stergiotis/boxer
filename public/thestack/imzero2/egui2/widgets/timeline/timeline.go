@@ -599,9 +599,12 @@ type Timeline struct {
 	// anchor/cur are the two ends as it is made; from/to/has are the
 	// committed result. They are separate because a gesture in flight must
 	// not overwrite the range the user last settled on until it finishes.
+	//
+	// Only the two ends in milliseconds are held. The gesture's pixel travel
+	// used to be kept alongside them to decide click-vs-drag; egui decides
+	// that now (see advanceBrush), so there is nothing left to measure in
+	// screen space.
 	brushing      bool
-	brushAnchorX  float32
-	brushCurX     float32
 	brushAnchorMS int64
 	brushCurMS    int64
 	brushFromMS   int64
