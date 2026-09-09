@@ -17,6 +17,22 @@ status: draft
 
 # Lessons from Kubernetes' architecture
 
+**Kubernetes in data-engineering terms.** Kubernetes runs programs on a fleet
+of machines, but its shape is closer to a data system than to a scheduler. At
+its centre is one database of typed records, each written as a small YAML or
+JSON document with a `spec` that says what should exist — "three copies of
+this container image, with this much memory" — and a `status` that says what
+does. Users and programs alike write those records through one REST API;
+nothing else is an interface. Around the database run many small workers,
+called controllers, each subscribed to a change stream on one record type,
+each doing the same thing forever: read the current records, compare desired
+to actual, take a step that closes the gap, repeat. Starting a container,
+assigning it to a machine, or opening a network port is what a controller
+does *after* reading a record, never a command anyone sends directly. The
+consequence for a data engineer is that a whole cluster is a table you can
+query, a change stream you can subscribe to, and a set of idempotent
+consumers you can add to — and that "deploy" means "insert a row".
+
 Kubernetes is usually read as a container orchestrator. Read from this
 repository's premises — data outlives the behaviour attached to it, logic is a
 system that matches shapes in the data and emits more data
@@ -215,7 +231,7 @@ rather than bent onto it.
 ## 9. Grown or planned
 
 The retrospective by the original designers (Burns, Grant, Oppenheimer,
-Brewer, Wilkes, 2016; §11 Sources) settles which of the properties above were
+Brewer, Wilkes, 2016; §12 Sources) settles which of the properties above were
 designed and which accreted. Kubernetes is the third system of a lineage. Borg
 had a master that "knows the semantics of every API operation"; Omega replaced
 it with a passive Paxos store, optimistic concurrency and all logic in clients
@@ -286,7 +302,78 @@ of them costs.
   the conventions; it should not adopt the number of kinds that made them
   necessary.
 
-## 11. Sources
+## 11. Glossary
+
+Terms as this note uses them. Several have looser meanings elsewhere; the
+definitions here are the ones the lessons above depend on.
+
+- **Record.** One typed document in the store — in Kubernetes an *object*
+  with `metadata`, `spec` and `status`. The unit of identity, versioning,
+  authorisation and watch.
+- **Desired state / observed state.** What a writer declared should be true
+  (`spec`), and what a system reported is true (`status`). Kept on the same
+  record, written by different parties, distinguishable by kind rather than
+  by convention.
+- **Controller, reconciliation, control loop.** A non-terminating process
+  that reads records, compares desired to observed, takes one step that
+  narrows the difference, and repeats. Kubernetes' word for it is
+  *controller*; the act is *reconciliation*.
+- **Edge-triggered.** Logic that acts on the *change* — an event, a message,
+  a transition — and therefore depends on receiving every change exactly
+  once, in order. A missed, duplicated or reordered event leaves the system
+  in a state nothing will correct, because nothing later re-examines the
+  current values. A command bus is edge-triggered; so is a handler that
+  updates a counter on each message.
+- **Level-triggered.** Logic that acts on the *current value* — the records
+  as they are now — and treats events only as a hint about where to look.
+  Any event may be lost, duplicated, coalesced or delivered late without
+  changing the result, because the next pass reads the level again. The
+  price is that every pass must be safe to repeat (idempotent) and must
+  tolerate never reaching a stable state (§3). The two words come from
+  digital electronics, where an edge-triggered circuit responds to a signal's
+  transition and a level-triggered one to its steady value.
+- **Entity-component-system (ECS).** The data-oriented design in which an
+  *entity* is an identity, a *component* is a typed piece of data attached
+  to it, and a *system* is logic that matches entities by the components
+  they carry and produces or updates components. Read this way, a Kubernetes
+  object is an entity, its spec, status, labels and annotations are
+  components, and each controller is a system. Data outlives the behaviour
+  attached to it.
+- **Control plane / data plane.** In this note, not two subsystems but two
+  roles of records in one store: the records systems read to decide *whether
+  and how* to run (grants, schema, desired state), and the records they
+  produce and carry. The control plane is where the non-monotone operations —
+  revocation, deletion, reconfiguration — are sequenced; the data plane can
+  be unidirectional and replayed freely.
+- **Monotone.** A computation whose output only grows as its input grows;
+  more facts never retract an earlier conclusion. Monotone logic over an
+  append-only store needs no coordination (the CALM result of Hellerstein
+  and Alvaro), which is why level-triggered reconciliation scales. Deletion,
+  revocation and "exactly one" constraints are the non-monotone residue.
+- **Idempotent.** Applying an operation twice yields the same result as
+  applying it once. Classical CQRS demanded it of commands so that retries
+  under at-least-once delivery were safe; a level-triggered design demands
+  it of the reconciliation step, because the step runs again on every pass.
+- **Pure derivation / referential transparency.** Output that is a function
+  of declared inputs and nothing else — no hidden state, no clock, no
+  external call. A query over an append-only log at a known position is
+  pure; a status a controller can only produce from its own memory is not.
+- **Version, frontier.** A name for a state of the store. Kubernetes uses an
+  opaque per-resource `resourceVersion` (§4). A content-addressed log uses a
+  *frontier*: the set of latest entries nothing else depends on, whose
+  digest names the whole downward-closed set.
+- **Field manager, ownership.** The writer that last asserted a field's
+  value, tracked per field in `managedFields` (§5). A *conflict* is an
+  attempt by one manager to change a field another manager claims.
+- **Admission.** The single point on the write path, after authorisation and
+  before persistence, where mutating (normalising) and then validating
+  logic runs on a record (§6). Reads never pass through it.
+- **First-class conflict.** A disagreement between concurrent writers that
+  is represented as a value with named resolutions — a conflict status, a
+  conflict node in a graph — rather than resolved silently by last-writer-
+  wins or rejected as an error.
+
+## 12. Sources
 
 Public documentation only, retrieved 2026-09-09:
 
