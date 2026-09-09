@@ -137,3 +137,12 @@ var (
 	MembTallyLaunchSqlLabel = KeelsonHrNkRegistry.MustBegin("tallyLaunchSqlLabel", 154).
 				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
+
+// MembTallyLaunchDatabase is which store the window reads (ADR-0222 Updates
+// 2026-09-09): the database the lading tables live in, a ladingschema.Layout
+// by another spelling. Empty is the default store, so every config written
+// before the member existed decodes to what it meant. Symbol section: a
+// deployment has a handful of databases, and a caller names one it already
+// knows.
+var MembTallyLaunchDatabase = KeelsonHrNkRegistry.MustBegin("tallyLaunchDatabase", 155).
+	MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()

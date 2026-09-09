@@ -68,13 +68,13 @@ type resultSet struct {
 // selected them, and the anchor otherwise — so a query over one pinned
 // snapshot need not carry them, and one over `fs('*')` places its rows
 // correctly when it does.
-func runPathSet(ctx context.Context, exec recordstore.ExecutorI, sql string, anchor location, label func(identifier.TaggedId) string) (out resultSet, err error) {
+func runPathSet(ctx context.Context, exec recordstore.ExecutorI, cfg ladingsql.Config, sql string, anchor location, label func(identifier.TaggedId) string) (out resultSet, err error) {
 	if kind := analysis.ClassifyStatementKind(sql); kind != analysis.KindReadOnly {
 		err = eb.Build().Str("kind", kind.String()).
 			Errorf("the query is not provably read-only, so this window will not run it")
 		return
 	}
-	expanded, err := ladingsql.Expand(infoVisibility, sql)
+	expanded, err := ladingsql.Expand(cfg, sql)
 	if err != nil {
 		return
 	}
@@ -402,7 +402,7 @@ func (inst *App) renderResults(sc *storeConn) {
 		key += "@" + anchor.key()
 	}
 	rs, done, qerr, busy := inst.resultLane.demand(key, func(ctx context.Context) (resultSet, error) {
-		return runPathSet(ctx, sc.exec, inst.querySql, anchor, inst.mountLabel)
+		return runPathSet(ctx, sc.exec, sc.sql, inst.querySql, anchor, inst.mountLabel)
 	})
 	if busy {
 		c.RequestRepaint()

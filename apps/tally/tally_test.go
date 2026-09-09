@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -247,7 +248,7 @@ func TestComponentProbes(t *testing.T) {
 	}}))
 	mount := identifier.TaggedId(4322952322827452417)
 	snap := time.Unix(0, 1755723885967744578)
-	probes := componentProbes(reg, mount, snap, "a/b.txt")
+	probes := componentProbes(ladingschema.Layout{}, reg, mount, snap, "a/b.txt")
 	kinds := make([]string, 0, len(probes))
 	for _, p := range probes {
 		kinds = append(kinds, p.kind)

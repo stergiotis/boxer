@@ -35,13 +35,11 @@ func infoSQL(mount identifier.TaggedId, snap time.Time, p string) string {
 		mount.Value(), snap.UnixNano(), ladingschema.QuoteLiteral(p))
 }
 
-var infoVisibility = ladingsql.Config{Visibility: ladingsql.VisibleAll{}}
-
 // loadInfo runs the entry query off the render thread and flattens the one
 // row into attribute/value pairs. A path with no row (a directory the walker
 // never stat'ed, a name that does not exist) is an empty table, not an error.
-func loadInfo(ctx context.Context, exec recordstore.ExecutorI, mount identifier.TaggedId, snap time.Time, p string) (rows []infoRow, err error) {
-	sql, err := ladingsql.Expand(infoVisibility, infoSQL(mount, snap, p))
+func loadInfo(ctx context.Context, exec recordstore.ExecutorI, cfg ladingsql.Config, mount identifier.TaggedId, snap time.Time, p string) (rows []infoRow, err error) {
+	sql, err := ladingsql.Expand(cfg, infoSQL(mount, snap, p))
 	if err != nil {
 		return
 	}

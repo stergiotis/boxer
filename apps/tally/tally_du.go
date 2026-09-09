@@ -119,10 +119,10 @@ func (inst *App) renderDu(sc *storeConn) {
 	dir := p.st.Dir()
 	key := loc.key() + "|" + dir
 	res, done, derr, busy := inst.duLane.demand(key, func(ctx context.Context) (tableResult, error) {
-		return runTable(ctx, sc.exec, duSQL(loc, dir))
+		return runTable(ctx, sc.exec, sc.sql, duSQL(loc, dir))
 	})
 	files, fdone, ferr, fbusy := inst.duFilesLane.demand(key, func(ctx context.Context) (tableResult, error) {
-		return runTable(ctx, sc.exec, duFilesSQL(loc, dir))
+		return runTable(ctx, sc.exec, sc.sql, duFilesSQL(loc, dir))
 	})
 	if busy || fbusy {
 		c.RequestRepaint()

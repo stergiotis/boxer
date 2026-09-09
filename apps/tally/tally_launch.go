@@ -8,19 +8,22 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // composeLaunch is the window as a launch config (ADR-0200 §SD9, ADR-0222
-// §SD2): the two panes' locations and selections, the sync flag, the target
-// pane, the raised tab, and the query this window was opened with. A pane
-// that follows latest records no snapshot, so a restore follows latest too.
+// §SD2): the store it reads, the two panes' locations and selections, the
+// sync flag, the target pane, the raised tab, and the query this window was
+// opened with. A pane that follows latest records no snapshot, so a restore
+// follows latest too.
 func (inst *App) composeLaunch() (cfg launchcfg.TallyLaunch) {
 	a, b := &inst.panes[paneIDA], &inst.panes[paneIDB]
 	cfg = launchcfg.TallyLaunch{
 		At:       time.Now().UTC(),
+		Database: inst.layout.Database,
 		MountA:   mountText(a.mount),
 		SnapA:    snapText(a),
 		DirA:     a.st.Dir(),
@@ -104,11 +107,14 @@ func snapText(p *pane) string {
 	return p.snap.UTC().Format(time.RFC3339Nano)
 }
 
-// applyLaunch seeds the window from a launch config: mounts by hex id,
-// snapshots pinned when given, directories, sync and target. A field that
-// does not parse is left at its default rather than refusing the whole
-// config — the window still opens, on what it can read.
+// applyLaunch seeds the window from a launch config: the store's database,
+// mounts by hex id, snapshots pinned when given, directories, sync and
+// target. A field that does not parse is left at its default rather than
+// refusing the whole config — the window still opens, on what it can read.
+// The database is the exception in kind, not in handling: it is read before
+// the connection opens, and a name with no store behind it fails there.
 func (inst *App) applyLaunch(cfg launchcfg.TallyLaunch) {
+	inst.layout = ladingschema.Layout{Database: strings.TrimSpace(cfg.Database)}
 	apply := func(p *pane, mount, snap, dir, sel string) {
 		if id, ok := parseMountText(mount); ok {
 			p.mount = id

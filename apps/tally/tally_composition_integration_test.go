@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -16,8 +17,12 @@ import (
 
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadhoc"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingingest"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 )
 
 // The path-set half of ADR-0222 against a real store: publish a tree, run a
@@ -26,7 +31,7 @@ import (
 func TestPathSetOverAPublishedTree_LiveServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	sc, err := connect(ctx)
+	sc, err := connect(ctx, ladingschema.Layout{})
 	if err != nil {
 		t.Skipf("no store: %v", err)
 	}
@@ -50,7 +55,7 @@ func TestPathSetOverAPublishedTree_LiveServer(t *testing.T) {
 	sql := fmt.Sprintf(
 		"SELECT path, mount, snap, is_dir FROM fs(0x%X, %d) WHERE ext = '.md' ORDER BY path",
 		pub.Mount.Value(), pub.Snap.UnixNano())
-	rs, err := runPathSet(ctx, sc.exec, sql, location{}, nil)
+	rs, err := runPathSet(ctx, sc.exec, sc.sql, sql, location{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, rs.rows, "two markdown files in the published tree")
 	assert.Zero(t, rs.dropped, "the query selected mount and snap, so nothing is unplaced")
@@ -84,7 +89,7 @@ func TestPathSetOverAPublishedTree_LiveServer(t *testing.T) {
 	// A query that returns directories says so through `is_dir` — which the
 	// surface projects as a UInt8, not a boolean — and they become
 	// directories in the tree rather than leaves that pretend to be files.
-	whole, err := runPathSet(ctx, sc.exec, fmt.Sprintf(
+	whole, err := runPathSet(ctx, sc.exec, sc.sql, fmt.Sprintf(
 		"SELECT path, mount, snap, is_dir FROM fs(0x%X, %d) WHERE path != '.' ORDER BY path",
 		pub.Mount.Value(), pub.Snap.UnixNano()), location{}, nil)
 	require.NoError(t, err)
@@ -97,9 +102,88 @@ func TestPathSetOverAPublishedTree_LiveServer(t *testing.T) {
 	assert.Contains(t, whole.summary("tree"), "3 directories")
 
 	// And the same read refuses when it is not provably one.
-	_, err = runPathSet(ctx, sc.exec, "ALTER TABLE "+ladingschema.DatabaseName+"."+ladingschema.TableNameMeta+" DELETE WHERE 1", location{}, nil)
+	_, err = runPathSet(ctx, sc.exec, sc.sql, "ALTER TABLE "+ladingschema.DatabaseName+"."+ladingschema.TableNameMeta+" DELETE WHERE 1", location{}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not provably read-only")
+}
+
+// A store outside the default database (ADR-0222 Updates 2026-09-09): a
+// window opened with the layout's database lists the mount, expands its
+// macros over the layout's tables, resolves the query's rows through the
+// snapshot in it, and reads the mount's name from the facts table beside it.
+// The default connection sees none of it — the two stores are disjoint.
+func TestPathSetOverAnotherLayout_LiveServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	layout := ladingschema.Layout{Database: "tally_layout_test"}
+	probe, err := connect(ctx, ladingschema.Layout{})
+	if err != nil {
+		t.Skipf("no store: %v", err)
+	}
+	defer probe.close()
+	exec := probe.exec
+	require.NoError(t, lading.ProvisionIn(ctx, exec, layout, ladingschema.ProfileCorpus))
+	t.Cleanup(func() {
+		require.NoError(t, exec.Exec(context.Background(), "DROP DATABASE IF EXISTS "+layout.DatabaseName()))
+	})
+	// The facts table beside the store is chstore's to author (ADR-0184
+	// §SD2); the same DDL, pointed at the layout's database.
+	ddl, err := chstore.ComposeSetupSQL(chstore.Config{Database: layout.DatabaseName(), Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for _, stmt := range strings.Split(ddl, ";\n") {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		require.NoError(t, exec.Exec(ctx, stmt))
+	}
+
+	mount := identifier.TaggedId(0x3bfe363bcf148007)
+	stores := lading.NewStores(exec, layout)
+	defer stores.Meta.Close()
+	defer stores.Data.Close()
+	walk, err := ladingingest.Snapshot(ctx, fstest.MapFS{
+		"music/a/one.txt": &fstest.MapFile{Data: []byte("one\n"), Mode: 0o644},
+		"music/b/two.txt": &fstest.MapFile{Data: []byte("two\n"), Mode: 0o644},
+	}, mount, ladingingest.DefaultPolicy(), stores)
+	require.NoError(t, err)
+
+	sc, err := connect(ctx, layout)
+	require.NoError(t, err)
+	defer sc.close()
+	named := ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{Table: layout.PolicyTable()})
+	require.NoError(t, ladingingest.RecordPolicy(ctx, named, mount, ladingingest.DefaultPolicy(), "layout test mount", "tally-layout-test"))
+	named.Close()
+
+	rows, err := sc.listMounts(ctx)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the layout holds one mount")
+	assert.Equal(t, mount, rows[0].id)
+	assert.Equal(t, "layout test mount", rows[0].name, "the name comes from the facts table beside the store")
+	require.Len(t, rows[0].snapshots, 1)
+
+	sql := fmt.Sprintf("SELECT path, mount, snap FROM fs(0x%X, %d) WHERE NOT is_dir ORDER BY path", mount.Value(), walk.Snap.UnixNano())
+	rs, err := runPathSet(ctx, sc.exec, sc.sql, sql, location{}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 2, rs.rows)
+	tree := newResultFS(func(loc location) (fs.FS, error) {
+		return sc.view(loc.mount, loc.snap)
+	}, rs.leaves, rs.dirs)
+	body, err := fs.ReadFile(tree, "music/b/two.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "two\n", string(body))
+
+	// The default store does not see the layout's mount, and its expansion
+	// does not reach the layout's tables.
+	defaultRows, err := probe.listMounts(ctx)
+	require.NoError(t, err)
+	for _, r := range defaultRows {
+		assert.NotEqual(t, mount, r.id, "the layout's mount leaked into the default listing")
+	}
+	_, err = runPathSet(ctx, probe.exec, probe.sql, sql, location{}, nil)
+	if assert.NoError(t, err) {
+		// The default tables may hold nothing under this id; what matters
+		// is that the rows, if any, did not come from the layout.
+	}
 }
 
 func purgeMount(t *testing.T, sc *storeConn, mount identifier.TaggedId) {

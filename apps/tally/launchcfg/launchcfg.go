@@ -53,6 +53,14 @@ type TallyLaunch struct {
 	// would call it ("flagged files"), not the query. Empty is a generic
 	// label.
 	SqlLabel string `lw:"tallyLaunchSqlLabel,textArray"`
+
+	// Database is the ClickHouse database the lading store's tables live in
+	// (ADR-0222 Updates 2026-09-09) — a ladingschema.Layout by its one
+	// degree of freedom. Every mount, snapshot and query in this config is
+	// read there; "" is the default store. A caller whose store is not
+	// boxer's own has to say so, because nothing about a mount id or a path
+	// says which tables hold it.
+	Database string `lw:"tallyLaunchDatabase,symbol"`
 }
 
 // Tab slugs the Tab field accepts. They name the dock tabs a caller has a

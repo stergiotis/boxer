@@ -4,6 +4,7 @@ package tally
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"io/fs"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ import (
 func TestComponentsOnARealEntry_LiveServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	sc, err := connect(ctx)
+	sc, err := connect(ctx, ladingschema.Layout{})
 	if err != nil {
 		t.Skipf("no store: %v", err)
 	}
@@ -42,7 +43,7 @@ func TestComponentsOnARealEntry_LiveServer(t *testing.T) {
 	snap := mount.snapshots[0].Snap
 
 	kinds := func(p string) (names []string) {
-		hits, herr := loadComponents(ctx, sc.exec, componentsql.Default, mount.id, snap, p)
+		hits, herr := loadComponents(ctx, sc, componentsql.Default, mount.id, snap, p)
 		require.NoError(t, herr)
 		for _, h := range hits {
 			names = append(names, h.kind)

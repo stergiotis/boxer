@@ -1,6 +1,7 @@
 package tally
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 )
 
@@ -52,6 +56,40 @@ func TestLaunchWithAQueryOpensTheResultsTab(t *testing.T) {
 	assert.Equal(t, "SELECT path FROM fs(1, 2)", cfg.Sql)
 }
 
+// The store is part of the launch (ADR-0222 Updates 2026-09-09): a config
+// naming a database opens the window over the layout in it and reports the
+// same database back, and one naming none reads the default store — which is
+// what every config written before the field existed says.
+func TestLaunchDatabaseSelectsTheStore(t *testing.T) {
+	inst := newApp()
+	inst.applyLaunch(launchcfg.TallyLaunch{Database: " shadowboxer ", Target: "A"})
+	assert.Equal(t, "shadowboxer", inst.layout.Database)
+	assert.Equal(t, "shadowboxer.fsmeta", inst.layout.MetaTable())
+	assert.Equal(t, "shadowboxer", inst.composeLaunch().Database)
+	assert.Equal(t, "shadowboxer", sqlConfig(inst.layout).Database)
+
+	inst = newApp()
+	inst.applyLaunch(launchcfg.TallyLaunch{Target: "A"})
+	assert.Empty(t, inst.layout.Database)
+	assert.Equal(t, ladingschema.DatabaseName+".fsmeta", inst.layout.MetaTable())
+	assert.Empty(t, inst.composeLaunch().Database)
+}
+
+// Over another store the buffer handed to play has the macro expanded
+// against the layout's tables, so play — whose expansion is bound to the
+// default store — runs it as it stands.
+func TestOpenInPlayBufferNamesTheLayoutTables(t *testing.T) {
+	layout := ladingschema.Layout{Database: "shadowboxer"}
+	loc := location{mount: identifier.TaggedId(0x3bfe363bcf148002), snap: time.Unix(0, 1_700_000_000_000_000_000).UTC()}
+	expanded, err := ladingsql.Expand(sqlConfig(layout), openInPlaySQL(loc, "music"))
+	require.NoError(t, err)
+	assert.Contains(t, expanded, "FROM shadowboxer.fsmeta")
+	assert.NotContains(t, expanded, "FROM "+ladingschema.DatabaseName+".fsmeta")
+	assert.NotContains(t, expanded, "fs(")
+	assert.True(t, strings.HasPrefix(expanded, "-- tally:"), "the header comment survives the expansion")
+	assert.Equal(t, analysis.KindReadOnly, analysis.ClassifyStatementKind(expanded))
+}
+
 func TestLaunchTabWithoutAQueryIgnoresResults(t *testing.T) {
 	inst := newApp()
 	inst.applyLaunch(launchcfg.TallyLaunch{Tab: launchcfg.TabResults, Target: "A"})
@@ -83,7 +121,7 @@ func TestPathSetRefusesAStatementThatIsNotReadOnly(t *testing.T) {
 		"INSERT INTO boxer.facts SELECT * FROM fs(1, 2)",
 		"DROP TABLE boxer.facts",
 	} {
-		_, err := runPathSet(t.Context(), nil, sql, location{}, nil)
+		_, err := runPathSet(t.Context(), nil, sqlConfig(ladingschema.Layout{}), sql, location{}, nil)
 		require.Error(t, err, "accepted %q", sql)
 		assert.Contains(t, err.Error(), "not provably read-only")
 	}

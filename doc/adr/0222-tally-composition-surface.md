@@ -196,3 +196,41 @@ publish a tree, query it as a launch config would, read a file back through
 the tree the pane browses — which is everything but the render call. That last
 step needs a window and stays manual: open adhocdemo, publish the tree, browse
 it in tally.
+## Updates
+
+### 2026-09-09 — the launch names the store: `tallyLaunchDatabase`
+
+The first caller outside boxer keeps its lading store in a database of its
+own (shadow-boxer's shanty library, under the `ladingschema.Layout` of
+ADR-0198's 2026-09-04 update), and a launch config could not say so: the
+window opened its connection over the default store, so a mount id, a
+snapshot and a path-set query that were all correct named rows the window
+could not see. Nothing about a mount id says which tables hold it.
+
+One member appended to the `tallyLaunch` cohort, `tallyLaunchDatabase`
+(ordinal 155, symbol section): the layout by its one degree of freedom,
+empty for the default store, so every earlier config decodes to what it
+meant. The window reads it before the connection opens, and a database with
+no store in it fails at verify with the database named rather than later as
+an empty mount list. The connection carries the layout through everything
+the window reads — the generated stores, the snapshot index, the policy
+records, the SQL surface's expansion, the component probes — and the
+workingset composes it back, so a restored window reopens on the same
+store. The Mounts pane names the store when it is not the default one.
+
+Two things follow that the body did not have to say while there was one
+store. The mount's declared name is read from the facts table beside the
+store, `Layout.PolicyTable`: a repository that keeps its facts out of the
+default database keeps its policy rows out of it too, and the default
+layout resolves to the baked table, so nothing in boxer's tree changes.
+And *Open in play* expands the macro here before handing the buffer over
+when the store is not the default one, because play's expansion is bound
+once per host to the default store — its pass takes a visibility, not a
+database — so a buffer naming `fs(…)` would read the wrong tables there.
+The expanded statement is longer and reads the layout's tables by name,
+which is what makes it stand on its own.
+
+Not carried: the SFTP path and the rclone command still spell the default
+head, which serves the default store only. Trigger for the rest: an SFTP
+head that takes a layout.
+
