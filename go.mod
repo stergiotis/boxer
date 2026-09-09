@@ -25,7 +25,7 @@ require (
 	github.com/goccy/go-graphviz v0.2.10
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/golangci/gofmt v0.0.0-20251215234548-e7be49a5ab4d
-	github.com/google/capslock v0.3.2
+	github.com/google/capslock v0.3.3
 	github.com/google/pprof v0.0.0-20260709232956-b9395ee17fa0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
@@ -58,7 +58,7 @@ require (
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
-	golang.org/x/tools v0.48.0
+	golang.org/x/tools v0.49.0
 	gonum.org/v1/gonum v0.17.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
@@ -218,12 +218,12 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/nilaway v0.0.0-20260528182042-490362de4fb6 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
-	golang.org/x/mod v0.38.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/mod v0.39.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260708182218-49f421fb7959 // indirect
+	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/vuln v1.3.0 // indirect
