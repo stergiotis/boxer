@@ -62,6 +62,19 @@ func timeArr(t time.Time) (lit string) { return "[" + timeLit(t) + "]" }
 
 func u32Arr(v uint32) (lit string) { return "[" + strconv.FormatUint(uint64(v), 10) + "]" }
 
+// updateSettings is what every update of the job table carries: the
+// server's sequential mode, stated rather than left to the default's
+// dependency analysis. Measured (the background note, 2026-09-09): under
+// `async` a twenty-way race doubles most rounds; under `auto` and `sync`
+// none in hundreds — as long as no heavyweight mutation runs on the table
+// meanwhile, which is why [ExpireSQL] deletes as a lightweight update and
+// nothing here issues an ALTER that rewrites parts.
+const updateSettings = " SETTINGS update_parallel_mode='sync'"
+
+// deleteSettings makes the expiry a patch-part delete rather than the
+// default heavyweight mutation, so it serialises with the updates.
+const deleteSettings = " SETTINGS lightweight_delete_mode='lightweight_update'"
+
 // AlterJobTableSettingsSQL puts the lightweight-update settings on a job
 // table that exists already.
 func AlterJobTableSettingsSQL(layout Layout) (sql string) {
@@ -105,7 +118,7 @@ func ClaimSQL(layout Layout, id string, workerRun string, now time.Time) (sql st
 		", " + col("jobAttempt") + " = [" + elem("jobAttempt") + " + 1]" +
 		" WHERE " + JobColKey + " = " + strLit(id) +
 		" AND " + elem("jobState") + " = " + strLit(StateQueued) +
-		" AND " + elem("jobRunAfter") + " <= " + timeLit(now)
+		" AND " + elem("jobRunAfter") + " <= " + timeLit(now) + updateSettings
 }
 
 // ReadJobPredicate is the ScanOpts.ExtraPredicate that reads one job.
@@ -113,32 +126,24 @@ func ReadJobPredicate(id string) (pred string) {
 	return JobColKey + " = " + strLit(id)
 }
 
-// RunningOfPredicate is the ScanOpts.ExtraPredicate for the jobs a run
-// holds: what a worker re-reads to notice a cancel.
-func RunningOfPredicate(workerRun string) (pred string) {
-	return elem("jobState") + " = " + strLit(StateRunning) +
-		" AND " + elem("jobWorkerRun") + " = " + strLit(workerRun)
-}
-
-// RunningOfAnyPredicate is the ScanOpts.ExtraPredicate for the running
-// jobs held by any of the runs: what the sweep reads once liveness has
-// named the stale ones.
-func RunningOfAnyPredicate(workerRuns []string) (pred string) {
+// HeldPredicate is the ScanOpts.ExtraPredicate for the jobs in one of the
+// states — running, or running with a cancel requested — held by workerRun;
+// an empty run means every holder. What a worker re-reads to notice a
+// cancel, and what the sweep reads once liveness has named the stale runs.
+func HeldPredicate(states []string, workerRun string) (pred string) {
 	var sb strings.Builder
-	sb.WriteString(elem("jobState") + " = " + strLit(StateRunning) + " AND " + elem("jobWorkerRun") + " IN (")
-	for i, r := range workerRuns {
+	sb.WriteString(elem("jobState") + " IN (")
+	for i, s := range states {
 		if i > 0 {
 			sb.WriteString(", ")
 		}
-		sb.WriteString(strLit(r))
+		sb.WriteString(strLit(s))
 	}
 	sb.WriteString(")")
+	if workerRun != "" {
+		sb.WriteString(" AND " + elem("jobWorkerRun") + " = " + strLit(workerRun))
+	}
 	return sb.String()
-}
-
-// RunningPredicate is the ScanOpts.ExtraPredicate for every running job.
-func RunningPredicate() (pred string) {
-	return elem("jobState") + " = " + strLit(StateRunning)
 }
 
 // Transition is one guarded change of a job row (ADR-0223 §SD2). From is
@@ -193,6 +198,7 @@ func TransitionSQL(layout Layout, t Transition) (sql string) {
 	if t.WorkerRun != "" {
 		sb.WriteString(" AND " + elem("jobWorkerRun") + " = " + strLit(t.WorkerRun))
 	}
+	sb.WriteString(updateSettings)
 	return sb.String()
 }
 
@@ -208,6 +214,6 @@ func ExpireSQL(layout Layout, cutoff time.Time) (sql string) {
 		}
 		sb.WriteString(strLit(s))
 	}
-	sb.WriteString(") AND " + elem("jobFinishedAt") + " < " + timeLit(cutoff))
+	sb.WriteString(") AND " + elem("jobFinishedAt") + " < " + timeLit(cutoff) + deleteSettings)
 	return sb.String()
 }

@@ -13,12 +13,12 @@ import (
 // overrides it for a consumer that keeps its tables elsewhere.
 const DatabaseName = "boxer"
 
-// TableNameJob and TableNameEvent are the bare table names; a single
-// lowercase word each, as the generator requires.
-const (
-	TableNameJob   = "watchbill"
-	TableNameEvent = "watchbillevent"
-)
+// TableNameJob is the job table's bare name; a single lowercase word, as
+// the generator requires.
+const TableNameJob = "watchbill"
+
+// TableNameEvent is the event table's bare name.
+const TableNameEvent = "watchbillevent"
 
 // TableRowConfig matches persiststore's: several attributes per row, each
 // in a section of its own.

@@ -29,7 +29,7 @@ var (
 // a change of the claim, so they are pinned verbatim.
 func TestClaimSQL(t *testing.T) {
 	sql := ClaimSQL(testLayout, "j1", "run-a", testNow)
-	assert.Equal(t, `UPDATE wb.watchbill SET "tv:jobState:value:val:s:24:::0::data" = ['running'], "tv:jobWorkerRun:value:val:s:24:::0::data" = ['run-a'], "tv:jobAttempt:value:val:u32:4:::0::data" = ["tv:jobAttempt:value:val:u32:4:::0::data"[1] + 1] WHERE "id:id:s:4::0:" = 'j1' AND "tv:jobState:value:val:s:24:::0::data"[1] = 'queued' AND "tv:jobRunAfter:value:val:z64:4:::0::data"[1] <= fromUnixTimestamp64Nano(1788955200000000000)`, sql)
+	assert.Equal(t, `UPDATE wb.watchbill SET "tv:jobState:value:val:s:24:::0::data" = ['running'], "tv:jobWorkerRun:value:val:s:24:::0::data" = ['run-a'], "tv:jobAttempt:value:val:u32:4:::0::data" = ["tv:jobAttempt:value:val:u32:4:::0::data"[1] + 1] WHERE "id:id:s:4::0:" = 'j1' AND "tv:jobState:value:val:s:24:::0::data"[1] = 'queued' AND "tv:jobRunAfter:value:val:z64:4:::0::data"[1] <= fromUnixTimestamp64Nano(1788955200000000000) SETTINGS update_parallel_mode='sync'`, sql)
 }
 
 func TestQueueSQL(t *testing.T) {
@@ -46,14 +46,15 @@ func TestTransitionSQL(t *testing.T) {
 		ID: "j1", From: []string{StateRunning}, WorkerRun: "run-a", To: StateFailed,
 		SetWorkerRun: true, NewWorkerRun: "", RunAfter: &after, LastError: &msg,
 	})
-	assert.Equal(t, `UPDATE wb.watchbill SET "tv:jobState:value:val:s:24:::0::data" = ['failed'], "tv:jobWorkerRun:value:val:s:24:::0::data" = [''], "tv:jobRunAfter:value:val:z64:4:::0::data" = [fromUnixTimestamp64Nano(1788955260000000000)], "tv:jobLastError:value:val:s:4:::0::data" = ['it\'s broken'] WHERE "id:id:s:4::0:" = 'j1' AND "tv:jobState:value:val:s:24:::0::data"[1] IN ('running') AND "tv:jobWorkerRun:value:val:s:24:::0::data"[1] = 'run-a'`, sql)
+	assert.Equal(t, `UPDATE wb.watchbill SET "tv:jobState:value:val:s:24:::0::data" = ['failed'], "tv:jobWorkerRun:value:val:s:24:::0::data" = [''], "tv:jobRunAfter:value:val:z64:4:::0::data" = [fromUnixTimestamp64Nano(1788955260000000000)], "tv:jobLastError:value:val:s:4:::0::data" = ['it\'s broken'] WHERE "id:id:s:4::0:" = 'j1' AND "tv:jobState:value:val:s:24:::0::data"[1] IN ('running') AND "tv:jobWorkerRun:value:val:s:24:::0::data"[1] = 'run-a' SETTINGS update_parallel_mode='sync'`, sql)
 	plain := TransitionSQL(testLayout, Transition{ID: "j2", To: StateCancel})
-	assert.Equal(t, `UPDATE wb.watchbill SET "tv:jobState:value:val:s:24:::0::data" = ['cancel'] WHERE "id:id:s:4::0:" = 'j2'`, plain)
+	assert.Equal(t, `UPDATE wb.watchbill SET "tv:jobState:value:val:s:24:::0::data" = ['cancel'] WHERE "id:id:s:4::0:" = 'j2' SETTINGS update_parallel_mode='sync'`, plain)
 }
 
 func TestSweepAndExpireSQL(t *testing.T) {
-	assert.Equal(t, `"tv:jobState:value:val:s:24:::0::data"[1] = 'running' AND "tv:jobWorkerRun:value:val:s:24:::0::data"[1] IN ('r1', 'r2')`, RunningOfAnyPredicate([]string{"r1", "r2"}))
-	assert.Equal(t, `DELETE FROM wb.watchbill WHERE "tv:jobState:value:val:s:24:::0::data"[1] IN ('succeeded', 'discarded', 'cancelled', 'abandoned') AND "tv:jobFinishedAt:value:val:z64:4:::0::data"[1] < fromUnixTimestamp64Nano(1788955200000000000)`, ExpireSQL(testLayout, testNow))
+	assert.Equal(t, `"tv:jobState:value:val:s:24:::0::data"[1] IN ('running', 'cancel') AND "tv:jobWorkerRun:value:val:s:24:::0::data"[1] = 'r1'`, HeldPredicate([]string{StateRunning, StateCancel}, "r1"))
+	assert.Equal(t, `"tv:jobState:value:val:s:24:::0::data"[1] IN ('running')`, HeldPredicate([]string{StateRunning}, ""))
+	assert.Equal(t, `DELETE FROM wb.watchbill WHERE "tv:jobState:value:val:s:24:::0::data"[1] IN ('succeeded', 'discarded', 'cancelled', 'abandoned') AND "tv:jobFinishedAt:value:val:z64:4:::0::data"[1] < fromUnixTimestamp64Nano(1788955200000000000) SETTINGS lightweight_delete_mode='lightweight_update'`, ExpireSQL(testLayout, testNow))
 	assert.Equal(t, "ALTER TABLE wb.watchbill MODIFY SETTING enable_block_number_column=1, enable_block_offset_column=1", AlterJobTableSettingsSQL(testLayout))
 }
 

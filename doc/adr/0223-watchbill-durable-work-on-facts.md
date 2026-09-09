@@ -202,6 +202,16 @@ README § House names with this ADR.
   across several servers would need a claim of another shape, and is out
   of scope.
 
+  Two rules keep the property, both measured rather than read (the
+  background note, 2026-09-09, later): every update carries
+  `update_parallel_mode = 'sync'` explicitly rather than trusting the
+  default's dependency analysis, and **no heavyweight mutation runs on the
+  job table** — a mutation rewriting a part under a patch was the one
+  condition found to let two claims both win, with the attempt counter
+  showing the second evaluated against a snapshot from before the first.
+  The expiry therefore deletes as a lightweight update, and the only
+  `ALTER` is a `MODIFY SETTING` at provisioning.
+
 - **SD4 — The lease is the runtime heartbeat.** A `running` row names its
   worker's run id. Liveness is not renewed per job: the runtime already
   writes a `HeartbeatRow` for the run every 30 s (ADR-0026, heartbeat), and
@@ -211,8 +221,9 @@ README § House names with this ADR.
   'running' AND workerRun IN (<runs with no fresh heartbeat>)` — that sets
   `abandoned` or, where attempts remain, `queued` with a `runAfter`, and
   writes the events for the rows it changed; the same sweep deletes
-  finished rows past their expiry with a lightweight `DELETE`, since a
-  `TTL` on a column the update rewrites is not a contract worth relying
+  finished rows past their expiry with a `DELETE` in lightweight-update
+  mode — never the default heavyweight mutation, for §SD3's reason — since
+  a `TTL` on a column the update rewrites is not a contract worth relying
   on. A job that exceeds its own `timeout` in a live worker is cancelled
   by that worker. The join reaches `boxer.facts` from the layout's
   database, which is one server; where the facts store fell back to
@@ -294,7 +305,7 @@ README § House names with this ADR.
 | vdd vocabulary registry | kinds `watchbillJob`, `watchbillEvent` and their memberships, ordinals declared | the registry's golden; every binary that links the store |
 | `hostboot.Options.Services` | gains `Watchbill` | `AllServices()`; the carousel and every hostboot adopter that names its services |
 | Bus subjects | added `watchbill.wake`, `watchbill.changed` | the `Caps` of every enqueuing app's manifest |
-| Environment-variable registry | added `KEELSON_WATCHBILL_POLL`, `_ABANDON_AFTER` | `env gen-docs` |
+| Environment-variable registry | added `KEELSON_WATCHBILL_POLL`, `_ABANDON_AFTER`, `_KEEP` | `env gen-docs` |
 | `keelson()` introspection | gains `watchbill` and `watchbill_event` | the applet book; the introspection provider list |
 | ADR-0038 | Update 2026-06-22 withdrawn by a dated entry | README § House names gains `watchbill` |
 
@@ -367,6 +378,10 @@ README § House names with this ADR.
 - The claim rests on a Beta-tier feature of one server version line. It is
   on by default at 26.8 and measured there; a server line that withdraws
   it takes the claim with it, and the version floor is a surface.
+- The job table admits no heavyweight mutation, ever: an operator's
+  `ALTER … UPDATE` or `DELETE` in its default mode on that table can make
+  two claims win. The rule is stated in the store and enforced by nothing
+  but the store issuing no such statement.
 - One server per watchbill, by construction.
 - Without a reachable ClickHouse there is no queue at all — the posture of
   every durable thing in the house since ADR-0148's Update.
@@ -396,11 +411,16 @@ kind in the same commit.
   `discarded` after the last; the event written only after the update was
   read back as won; the row flushed before `watchbill.changed`; the claim
   and sweep statements against their golden.
-- **Lane: `//go:build integration`.** clickhouse-local: twenty workers race
-  one job and exactly one handler runs, repeated; a worker whose heartbeat
-  stops is swept and its job re-queued; a claim issued with `async_insert`
-  on still wins alone (the claim is not an insert); `keelson('watchbill')`
-  and `keelson('watchbill_event')` answer; every applet chapter executes.
+- **Lane: `//go:build integration`.** Under `clickhouse local`: one job's
+  whole life — a second claim inert, a transition guarded on the wrong run
+  inert, events in order, expiry at and past the cutoff. Against the
+  server the `CLICKHOUSE_*` variables name, skipped when it is not there:
+  twenty workers race one job and exactly one handler runs, repeated; a
+  run that died mid-job is swept and its job re-queued. The race needs the
+  server because `clickhouse local` runs one process per statement and so
+  cannot race anything with itself; the serialising property is the
+  server's. `keelson('watchbill')` and `keelson('watchbill_event')` answer;
+  every applet chapter parses.
 - **What would fail.** Two handlers running one attempt; a message
   published before its row; a `running` row with a stale run id surviving
   two sweeps; a `queued` row read out of priority order; a claim against a

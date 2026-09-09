@@ -146,6 +146,38 @@ check — fine for a local lane's stand-in, not a claim primitive.
 Lightweight update, refreshable views and `ReplacingMergeTree` run under
 `clickhouse local`.
 
+## 2026-09-09, later — the claim under a concurrent mutation
+
+Building the worker found what the twenty-curl probe could not. A Go
+harness racing twenty claimants per round — each an `UPDATE` then its own
+read-back, the worker's exact path — over many rounds against the same
+server (26.8):
+
+| update mode | concurrent statement | rounds | rounds with two winners |
+| --- | --- | --- | --- |
+| `async` | none | 40 | 34 |
+| `auto` | none | 40 | 0 |
+| `sync` | none | 40 | 0 |
+| `auto` | `DELETE` as the default heavyweight mutation | 60 | 0 |
+| `sync` | `DELETE` as the default heavyweight mutation | 60 | 1 |
+| `auto` / `sync` | `DELETE` as a lightweight update | 60 + 200 | 0 |
+| `sync` / `auto` | lightweight `DELETE` and `OPTIMIZE … FINAL` every round | 200 + 200 | 0 |
+
+The worker's own integration test, whose every tick also ran the expiry
+`DELETE` in its default mode, doubled one round in three. In the doubled
+rounds the attempt counter stayed at one: the second update evaluated its
+guard and its expression against a snapshot from before the first, which
+is a lost update, not a lost guard. A heavyweight mutation rewriting the
+part under the patch is the one condition found that produces it.
+
+Two rules follow, and the store encodes both: every update of the job
+table carries `update_parallel_mode = 'sync'` explicitly, and nothing
+issues a heavyweight mutation against it — the expiry deletes with
+`lightweight_delete_mode = 'lightweight_update'`, and the only `ALTER` is a
+`MODIFY SETTING` at provisioning, which rewrites no part. Under those two
+rules, six hundred rounds with forced merges racing the claims produced
+no double.
+
 ## What this changes for the ADR
 
 - **§SD3's settle-and-tie-break is not needed.** Two real compare-and-set
