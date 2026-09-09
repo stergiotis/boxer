@@ -258,6 +258,34 @@ var (
 	// rather than a second use of MembPersistKey so the value reads under
 	// its own name from SQL.
 	MembPersistValue = NkRegistry.MustBegin("runtimePersistValue", 73).End()
+
+	// watchbill (ADR-0223) — the job row and its events on the store-owned
+	// watchbill tables. One membership per attribute, because each is its
+	// own section there: a section of one attribute is what lets a claim
+	// rewrite one array element in place (ADR-0223 §SD3). The owner app and
+	// the requester run reuse MembRuntimeApp and MembRuntimeRun; the worker
+	// run has a membership of its own so the two runs read apart in SQL.
+	MembWatchbillKind          = NkRegistry.MustBegin("watchbillKind", 74).End()
+	MembWatchbillSubject       = NkRegistry.MustBegin("watchbillSubject", 75).End()
+	MembWatchbillQueue         = NkRegistry.MustBegin("watchbillQueue", 76).End()
+	MembWatchbillPriority      = NkRegistry.MustBegin("watchbillPriority", 77).End()
+	MembWatchbillMaxAttempts   = NkRegistry.MustBegin("watchbillMaxAttempts", 78).End()
+	MembWatchbillBackoff       = NkRegistry.MustBegin("watchbillBackoff", 79).End()
+	MembWatchbillBackoffBaseMs = NkRegistry.MustBegin("watchbillBackoffBaseMs", 80).End()
+	MembWatchbillTimeoutMs     = NkRegistry.MustBegin("watchbillTimeoutMs", 81).End()
+	MembWatchbillArgsKind      = NkRegistry.MustBegin("watchbillArgsKind", 82).End()
+	MembWatchbillArgs          = NkRegistry.MustBegin("watchbillArgs", 83).End()
+	MembWatchbillState         = NkRegistry.MustBegin("watchbillState", 84).End()
+	MembWatchbillAttempt       = NkRegistry.MustBegin("watchbillAttempt", 85).End()
+	MembWatchbillRunAfter      = NkRegistry.MustBegin("watchbillRunAfter", 86).End()
+	MembWatchbillWorkerRun     = NkRegistry.MustBegin("watchbillWorkerRun", 87).End()
+	MembWatchbillFinishedAt    = NkRegistry.MustBegin("watchbillFinishedAt", 88).End()
+	MembWatchbillLastError     = NkRegistry.MustBegin("watchbillLastError", 89).End()
+	MembWatchbillEventState    = NkRegistry.MustBegin("watchbillEventState", 90).End()
+	MembWatchbillEventAttempt  = NkRegistry.MustBegin("watchbillEventAttempt", 91).End()
+	MembWatchbillEventWorker   = NkRegistry.MustBegin("watchbillEventWorkerRun", 92).End()
+	MembWatchbillEventError    = NkRegistry.MustBegin("watchbillEventError", 93).End()
+	MembWatchbillEventNote     = NkRegistry.MustBegin("watchbillEventNote", 94).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
