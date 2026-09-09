@@ -28,6 +28,7 @@ import (
 	introspectprovidersgui "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
+	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -100,6 +101,10 @@ type Deps struct {
 	// read-only store on it, so a scan never contends with the writer's
 	// pending buffer.
 	PersistExec recordstore.ExecutorI
+	// Watchbill is the read side of the job table, backing
+	// keelson.watchbill and keelson.watchbill_event (ADR-0223 §SD7). nil
+	// is allowed and leaves both empty rather than absent.
+	Watchbill watchbill.ListerI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -143,6 +148,11 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// with no runinfo all answer with an empty table.
 	if e := introspectproviders.RegisterRunEvents(reg, deps.Facts, deps.PersistExec); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: run-events provider registration failed")
+	}
+	// ADR-0223 §SD7: the job table and its transitions. Registered
+	// unconditionally — a host with no worker answers with empty tables.
+	if e := watchbill.RegisterIntrospect(reg, deps.Watchbill); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: watchbill provider registration failed")
 	}
 	// ADR-0169 §SD5: live coverage tables over the in-process sampler.
 	// Registered unconditionally — nil (an uninstrumented build) answers
