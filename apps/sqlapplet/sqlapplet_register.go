@@ -105,6 +105,14 @@ var bookadrFS embed.FS
 //go:embed booklading
 var bookladingFS embed.FS
 
+// bookwatchbill is the durable-work book (ADR-0223 §SD7): the queue in
+// flight, the failures with their chains, outcomes by kind, abandonments
+// by run, and one job's timeline — over the two `keelson('watchbill*')`
+// tables, so it needs no external ClickHouse.
+//
+//go:embed bookwatchbill
+var bookwatchbillFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -117,6 +125,9 @@ func init() {
 	}
 	if err := RegisterBook("pprof", help.MustSub(bookpprofFS, "bookpprof"), []app.TopicT{app.TopicObservability}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register pprof book")
+	}
+	if err := RegisterBook("watchbill", help.MustSub(bookwatchbillFS, "bookwatchbill"), []app.TopicT{app.TopicRuntime}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register watchbill book")
 	}
 	// TopicCode: the corpus describes what the toolbelt can do, which is the
 	// shape of the repository at a coarser grain than packages. It is not
