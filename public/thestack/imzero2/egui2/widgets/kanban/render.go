@@ -9,6 +9,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
 // moveKind is the one card action a frame can carry (a user can click at most
@@ -34,6 +35,16 @@ const (
 	// header when the target column has no other cards, so it lands in the card
 	// area rather than over the title.
 	emptyColumnHeaderClear float32 = 34
+	// ghostLineHeightRatio spaces the drag ghost's wrapped title lines, as a
+	// multiple of the font size. paintText has no line height of its own —
+	// every line is a separate call — so this stands in for the leading egui
+	// gives a wrapped label, and it is the main font's own: Noto Sans reports
+	// ascent + descent + gap = 1.362 em (measured off its hhea at 12, 13 and
+	// 14 px, where it is that ratio at each). Tighter overlaps a capital with
+	// the descender above it; a host on a different face gets that face's
+	// leading rather than this one, which for a Latin proportional font is
+	// within a few hundredths.
+	ghostLineHeightRatio float32 = 1.362
 )
 
 // showMoveButtons toggles the per-card move footer. Off by default — the
@@ -543,9 +554,66 @@ func updateAndPaintDrag(m *Model, density styletokens.DensityE) {
 		pad := styletokens.PaddingTight(density)
 		c.PaintRectFilled(gx, gy, gx+w, gy+h, styletokens.RoundingMd, color.Hex(styletokens.NeutralBgSurface.AsHex())).Send()
 		c.PaintRectStroke(gx, gy, gx+w, gy+h, styletokens.RoundingMd, accent, styletokens.StrokeStrong).Send()
-		c.PaintText(gx+pad, gy+pad, 0, 0, d.title, styletokens.ScaledPt(styletokens.BodyPt, density), color.Hex(styletokens.NeutralTextPrimary.AsHex())).Send()
+		paintGhostTitle(d.title, gx+pad, gy+pad, w-2*pad, h-2*pad, styletokens.ScaledPt(styletokens.BodyPt, density))
 	}
 	c.PaintAbsoluteOverlay()
+}
+
+// paintGhostTitle draws the drag ghost's title into the box (x, y, availW,
+// availH), broken the way the card it stands for is broken.
+//
+// paintText lays one unwrapped line, so the title used to run straight out
+// through the ghost's right edge: the card underneath wraps at the lane width
+// via LabelAtoms(...).Wrap(), and for as long as the drag lasted the two
+// disagreed. The opcode carries no wrap width to hand the host instead, so the
+// break is decided here, with the painter lane's shared width estimate
+// ([implot.Wrap]).
+//
+// That estimate errs the safe way on the text a card carries: against Noto
+// Sans at 13 px its 0.62 em per rune over-charges a mixed-case title by around
+// a fifth (real advances measure 0.48-0.56 em per rune), so a line breaks a
+// word or so early rather than overflowing. What it under-charges is a run of
+// the widest capitals — W and M measure about 0.93 em — which is why the clip
+// below is not redundant: it, and not the estimate, is what holds the boundary.
+// Clipped, an under-wrapped line loses a few pixels of its last glyph;
+// unclipped it would put the overflow this function exists to stop back on the
+// screen.
+//
+// Lines past what availH holds are dropped and the last one kept carries the
+// rest of the title as an ellipsis, so a long title cannot run out of the
+// bottom edge either.
+func paintGhostTitle(title string, x, y, availW, availH, pt float32) {
+	lines := ghostTitleLines(title, availW, availH, pt)
+	if len(lines) == 0 {
+		return
+	}
+	lineH := pt * ghostLineHeightRatio
+	col := color.Hex(styletokens.NeutralTextPrimary.AsHex())
+	c.PaintClipPush(x, y, x+availW, y+availH).Send()
+	for i, line := range lines {
+		c.PaintText(x, y+float32(i)*lineH, 0 /*left*/, 0 /*top*/, line, pt, col).Send()
+	}
+	c.PaintClipPop().Send()
+}
+
+// ghostTitleLines is paintGhostTitle's decision without its opcodes: the title
+// wrapped to availW, cut to the lines availH has room for, with the rest of the
+// title elided onto the last one.
+func ghostTitleLines(title string, availW, availH, pt float32) (lines []string) {
+	lines = implot.Wrap(title, availW, pt)
+	if len(lines) == 0 {
+		return
+	}
+	n := int(availH / (pt * ghostLineHeightRatio))
+	if n >= len(lines) {
+		return
+	}
+	if n < 1 {
+		n = 1 // one line always draws — a titleless ghost reads as empty
+	}
+	lines[n-1] = implot.Elide(strings.Join(lines[n-1:], " "), availW, pt)
+	lines = lines[:n]
+	return
 }
 
 // --- GroupByParent (swimlanes) ---

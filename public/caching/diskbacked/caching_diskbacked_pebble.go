@@ -95,7 +95,7 @@ func (inst *PebbleStash[K, V]) GetAndRemove(key K) (e caching.StashEntry[V], fou
 	if err != nil {
 		return e, false
 	}
-	defer closer.Close()
+	defer func() { _ = closer.Close() }()
 
 	var rec stashRecord[V]
 	if err := cbor.Unmarshal(valBytes, &rec); err != nil {
@@ -147,7 +147,7 @@ func (inst *PebbleStash[K, V]) evictOne() bool {
 	if err != nil {
 		return false
 	}
-	defer it.Close()
+	defer func() { _ = it.Close() }()
 	if !it.First() {
 		return false
 	}
@@ -182,7 +182,7 @@ func (inst *PebbleStash[K, V]) Clear() {
 	if err != nil {
 		return
 	}
-	defer it.Close()
+	defer func() { _ = it.Close() }()
 	for valid := it.First(); valid; valid = it.Next() {
 		victim := append([]byte(nil), it.Key()...)
 		if err := inst.db.Delete(victim, pebble.NoSync); err == nil {

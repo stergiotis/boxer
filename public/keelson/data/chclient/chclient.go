@@ -127,7 +127,7 @@ func (inst *Client) Ping(ctx context.Context) (err error) {
 		err = eb.Build().Str("url", pingURL).Errorf("chclient ping: do: %w", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		err = eb.Build().Int("status", resp.StatusCode).Errorf("chclient ping: non-200")
 		return
@@ -236,7 +236,7 @@ func (inst *Client) InsertArrow(ctx context.Context, table string, records []arr
 		err = eb.Build().Str("url", fullURL).Errorf("chclient insertArrow: do: %w", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		log.Warn().Str("body", string(bodyBytes)).Int("status", resp.StatusCode).

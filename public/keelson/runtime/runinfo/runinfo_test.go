@@ -12,9 +12,9 @@ import (
 
 func TestInit_AllocatesAndCaches(t *testing.T) {
 	Reset()
-	os.Unsetenv(EnvVar)
+	_ = os.Unsetenv(EnvVar)
 	defer Reset()
-	defer os.Unsetenv(EnvVar)
+	defer func() { _ = os.Unsetenv(EnvVar) }()
 
 	a, err := Init()
 	require.NoError(t, err)
@@ -35,10 +35,10 @@ func TestInit_AllocatesAndCaches(t *testing.T) {
 func TestInit_InheritsExistingEnv(t *testing.T) {
 	Reset()
 	defer Reset()
-	defer os.Unsetenv(EnvVar)
+	defer func() { _ = os.Unsetenv(EnvVar) }()
 
 	preset := "inherited-run-id-1234"
-	os.Setenv(EnvVar, preset)
+	require.NoError(t, os.Setenv(EnvVar, preset))
 
 	a, err := Init()
 	require.NoError(t, err)
@@ -71,9 +71,9 @@ func TestMustGet_PanicsBeforeInit(t *testing.T) {
 // app.AppLogger's tests).
 func TestTagLogger_AddsRunIdField(t *testing.T) {
 	Reset()
-	os.Unsetenv(EnvVar)
+	_ = os.Unsetenv(EnvVar)
 	defer Reset()
-	defer os.Unsetenv(EnvVar)
+	defer func() { _ = os.Unsetenv(EnvVar) }()
 
 	inst, err := Init()
 	require.NoError(t, err)
@@ -91,9 +91,9 @@ func TestTagLogger_AddsRunIdField(t *testing.T) {
 
 func TestInit_CapturesGoAndVcsFields(t *testing.T) {
 	Reset()
-	os.Unsetenv(EnvVar)
+	_ = os.Unsetenv(EnvVar)
 	defer Reset()
-	defer os.Unsetenv(EnvVar)
+	defer func() { _ = os.Unsetenv(EnvVar) }()
 
 	inst, err := Init()
 	require.NoError(t, err)
@@ -110,15 +110,15 @@ func TestInit_CapturesGoAndVcsFields(t *testing.T) {
 
 func TestReset_ClearsSingleton(t *testing.T) {
 	Reset()
-	os.Unsetenv(EnvVar)
+	_ = os.Unsetenv(EnvVar)
 	defer Reset()
-	defer os.Unsetenv(EnvVar)
+	defer func() { _ = os.Unsetenv(EnvVar) }()
 
 	a, err := Init()
 	require.NoError(t, err)
 
 	Reset()
-	os.Unsetenv(EnvVar)
+	_ = os.Unsetenv(EnvVar)
 
 	b, err := Init()
 	require.NoError(t, err)

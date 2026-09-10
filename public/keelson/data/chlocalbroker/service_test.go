@@ -199,7 +199,7 @@ func TestExecOnPool_ConcurrentRequests(t *testing.T) {
 				errCh <- e
 				return
 			}
-			defer rep.Close()
+			defer func() { _ = rep.Close() }()
 			if repErr := rep.Err(); repErr != nil {
 				errCh <- repErr
 				return

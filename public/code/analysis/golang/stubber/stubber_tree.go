@@ -79,7 +79,7 @@ func (tp *TreeProcessor) ProcessTree(ctx context.Context, srcFS fs.FS, pattern s
 		if err != nil {
 			return eb.Build().Str("path", fpath).Errorf("failed to open input file: %w", err)
 		}
-		defer fileIn.Close()
+		defer func() { _ = fileIn.Close() }()
 
 		var buf bytes.Buffer
 		if err := tp.Filter.Process(ctx, fpath, fileIn, &buf); err != nil {

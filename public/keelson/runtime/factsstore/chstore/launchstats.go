@@ -51,7 +51,7 @@ func (inst *Store) AppLaunchStats(ctx context.Context, halfLife time.Duration, l
 		err = eh.Errorf("chstore: app launch stats query: %w", qerr)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	raw, rerr := io.ReadAll(body)
 	if rerr != nil {
 		err = eh.Errorf("chstore: app launch stats read: %w", rerr)

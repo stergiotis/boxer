@@ -143,7 +143,7 @@ func main() {
 	// Create a temporary directory
 	tmpDir, err := os.MkdirTemp("", "gofilter_test")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Write output to file
 	outFile := filepath.Join(tmpDir, "main.go")
@@ -218,7 +218,7 @@ func PublicFunc(p privateA) {}
 	// Compilation check.
 	tmpDir, err := os.MkdirTemp("", "gofilter_deletePrivate")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 	outFile := filepath.Join(tmpDir, "stub.go")
 	err = os.WriteFile(outFile, out.Bytes(), 0644)
 	require.NoError(t, err)

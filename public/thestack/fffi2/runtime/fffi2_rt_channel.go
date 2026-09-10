@@ -43,7 +43,7 @@ var DefaultErrorHandler = func(err error) {
 	log.Error().Err(err).Msg("fffi2 channel error")
 }
 
-var DefaultAllocator = func(l uint32) []byte { return make([]byte, int(l), int(l)) }
+var DefaultAllocator = func(l uint32) []byte { return make([]byte, int(l)) }
 
 func NewInlineIoChannel[U UnmarshallReaderI](unmarshaller U, in *bufio.Reader, out *bufio.Writer, bin binary.ByteOrder, errHandler func(err error), allocateBuffer func(l uint32) []byte) (inst *InlineIoChannel[U]) {
 	if allocateBuffer == nil {

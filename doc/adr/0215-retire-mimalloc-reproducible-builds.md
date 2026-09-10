@@ -126,7 +126,7 @@ compared: it is the smallest graph that still runs the `build.rs` codegen where
 the `OUT_DIR` leak lived. `lint.sh` runs it after the crate's own check, so the
 registry is warm and the cost is the two builds themselves.
 
-## Options considered
+## Alternatives
 
 **O1 — Keep mimalloc, neutralise the macros.** `-Wno-builtin-macro-redefined
 -D__DATE__=… -D__TIME__=…` on that one crate would work; mimalloc uses the
@@ -192,3 +192,11 @@ less.
   machines' C toolchains (the blake3 case above) or a runner whose Go SDK
   differs from the pin. Cross-machine parity is what the airgap prebuilt and a
   release rebuild would show, and nothing checks that yet.
+
+## Status
+
+Proposed (2026-09-01). The change is implemented and the parity gate is in
+`lint.sh`; awaiting review.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

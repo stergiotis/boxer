@@ -96,7 +96,7 @@ func (inst *Store) ListRunEvents(filter factsstore.RunEventFilter) (rows []facts
 		err = eh.Errorf("chstore: run events query: %w", qerr)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	raw, rerr := io.ReadAll(body)
 	if rerr != nil {
 		err = eh.Errorf("chstore: run events read: %w", rerr)

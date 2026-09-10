@@ -421,7 +421,7 @@ func (inst *Service) handleRead(reply string, h *handle) {
 		inst.replyError(reply, "open: "+err.Error())
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	buf := &bytes.Buffer{}
 	// Read at most max+1 bytes. Hitting the extra byte means the file
 	// exceeds the cap, so we refuse rather than buffer an unbounded payload

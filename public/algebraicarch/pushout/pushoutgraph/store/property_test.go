@@ -312,7 +312,7 @@ func TestProperty_RandomMixedSequence(tt *testing.T) {
 		lineCount := 3 + rng.Intn(4)
 		g, _ := makeBasePushoutGraph(lineCount, fmt.Sprintf("mixed_%d", seed))
 
-		var nodeIdx uint64 = uint64(lineCount)
+		nodeIdx := uint64(lineCount)
 		nOps := 5 + rng.Intn(10)
 
 		for op := range nOps {

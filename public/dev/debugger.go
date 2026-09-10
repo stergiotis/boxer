@@ -20,7 +20,7 @@ func getTracerPidLinux() (tpid int, err error) {
 	if err != nil {
 		return -1, eh.Errorf("can't open process status file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	for {
 		var num int

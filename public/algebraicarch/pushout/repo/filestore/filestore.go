@@ -108,7 +108,7 @@ func writeAtomicNoDirSync(path string, data []byte) (err error) {
 		return eh.Errorf("temp file: %w", err)
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // no-op after successful rename
+	defer func() { _ = os.Remove(tmpName) }() // no-op after successful rename
 	if _, err = tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return eh.Errorf("write: %w", err)

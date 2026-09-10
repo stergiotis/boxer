@@ -286,7 +286,7 @@ func loadImage(path string) (img image.Image, err error) {
 		err = eb.Build().Str("path", path).Errorf("open: %w", err)
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	img, _, err = image.Decode(f)
 	if err != nil {
 		err = eb.Build().Str("path", path).Errorf("decode: %w", err)

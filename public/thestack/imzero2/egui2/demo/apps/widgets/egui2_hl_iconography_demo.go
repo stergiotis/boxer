@@ -33,12 +33,9 @@ func demoIconography(ids *c.WidgetIdStack) {
 	}
 
 	for range c.CollapsingHeader(ids.PrepareStr("ic-buttons"), c.WidgetText().Text("icon buttons").Keep()).DefaultOpen(true).KeepIter() {
-		if c.Button(ids.PrepareStr("ic-btn-play"), c.Atoms().Text(icons.IconPlay+" Play").Keep()).SendResp().HasPrimaryClicked() {
-		}
-		if c.Button(ids.PrepareStr("ic-btn-pause"), c.Atoms().Text(icons.IconPause+" Pause").Keep()).SendResp().HasPrimaryClicked() {
-		}
-		if c.Button(ids.PrepareStr("ic-btn-stop"), c.Atoms().Text(icons.IconStop+" Stop").Keep()).SendResp().HasPrimaryClicked() {
-		}
+		c.Button(ids.PrepareStr("ic-btn-play"), c.Atoms().Text(icons.IconPlay+" Play").Keep()).SendResp()
+		c.Button(ids.PrepareStr("ic-btn-pause"), c.Atoms().Text(icons.IconPause+" Pause").Keep()).SendResp()
+		c.Button(ids.PrepareStr("ic-btn-stop"), c.Atoms().Text(icons.IconStop+" Stop").Keep()).SendResp()
 	}
 
 	for range c.CollapsingHeader(ids.PrepareStr("ic-richtext"), c.WidgetText().Text("styled icons").Keep()).DefaultOpen(true).KeepIter() {

@@ -55,9 +55,8 @@ func GoConst(name string) (s string) {
 		}
 		out = append(out, camel.String())
 	}
-	if len(out) > 0 && out[0] == "Neutral" {
-		// Avoid "NeutralBgPanel" → "BgPanel" feels cleaner with explicit role.
-	}
+	// A leading "Neutral" is kept rather than dropped: "NeutralBgPanel" names
+	// its role where "BgPanel" only implies one.
 	s = strings.Join(out, "")
 	return
 }

@@ -162,7 +162,7 @@ func TestRepo_RecordCloseReopen(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	if got := fingerprint(tt, r2); got != want {
 		tt.Fatalf("state diverged across close/reopen:\n got:\n%s\nwant:\n%s", got, want)
 	}
@@ -195,7 +195,7 @@ func TestRepo_FullReplayWithoutSnapshot(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	if got := fingerprint(tt, r2); got != want {
 		tt.Fatalf("full replay diverged:\n got:\n%s\nwant:\n%s", got, want)
 	}
@@ -232,7 +232,7 @@ func TestRepo_UncoveredSnapshotDiscarded(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	if recovered.FromSnapshot {
 		tt.Fatal("a snapshot the log does not cover must be discarded")
 	}
@@ -398,7 +398,7 @@ func TestRepo_StorageFaultsAreCrashEquivalent(tt *testing.T) {
 			if err != nil {
 				tt.Fatal(err)
 			}
-			defer r2.Close(ctx)
+			defer func() { _ = r2.Close(ctx) }()
 			if got := fingerprint(tt, r2); got != want {
 				tt.Fatalf("disk state diverged across failed verb:\n got:\n%s\nwant:\n%s", got, want)
 			}
@@ -429,7 +429,7 @@ func TestRepo_SweepDurableAcrossCrash(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	err = r2.Unrecord(ctx, hDel)
 	if !errors.Is(err, repo.ErrRetentionBlocked) {
 		tt.Fatalf("expected ErrRetentionBlocked after crash-reopen, got %v", err)
@@ -471,7 +471,7 @@ func TestRepo_RetentionHorizonSurvivesFullReplay(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	if rec.FromSnapshot {
 		tt.Fatalf("expected full replay (the bug path), got %+v", rec)
 	}
@@ -520,7 +520,7 @@ func TestRepo_RetentionWriteFaultIsCrashEquivalent(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	if got := fingerprint(tt, r2); got != want {
 		tt.Fatalf("disk state diverged across failed retention write:\n got:\n%s\nwant:\n%s", got, want)
 	}
@@ -529,9 +529,9 @@ func TestRepo_RetentionWriteFaultIsCrashEquivalent(tt *testing.T) {
 func TestRepo_ExchangeSemantics(tt *testing.T) {
 	ctx := context.Background()
 	a := openTest(tt, tt.TempDir())
-	defer a.Close(ctx)
+	defer func() { _ = a.Close(ctx) }()
 	b := openTest(tt, tt.TempDir())
-	defer b.Close(ctx)
+	defer func() { _ = b.Close(ctx) }()
 
 	hA, nA := recordLine(tt, a, t.RootNodeID, "alpha")
 	hB, _ := recordLine(tt, a, nA, "beta")
@@ -582,7 +582,7 @@ func TestRepo_ExchangeSemantics(tt *testing.T) {
 func TestRepo_ErrorTaxonomy(tt *testing.T) {
 	ctx := context.Background()
 	r := openTest(tt, tt.TempDir())
-	defer r.Close(ctx)
+	defer func() { _ = r.Close(ctx) }()
 
 	if _, err := r.Record(ctx, "x", "empty", nil); !errors.Is(err, repo.ErrNoChanges) {
 		tt.Fatalf("ErrNoChanges: %v", err)
@@ -613,7 +613,7 @@ func TestRepo_ErrorTaxonomy(tt *testing.T) {
 func TestRepo_IdentityCollisionShift(tt *testing.T) {
 	ctx := context.Background()
 	r := openTest(tt, tt.TempDir())
-	defer r.Close(ctx)
+	defer func() { _ = r.Close(ctx) }()
 
 	mk := func() []patch.Change {
 		return []patch.Change{{
@@ -638,7 +638,7 @@ func TestRepo_IdentityCollisionShift(tt *testing.T) {
 	// Determinism: an independent repo performing the same sequence
 	// converges on the same shifted identity.
 	r2 := openTest(tt, tt.TempDir())
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	g1, err := r2.Record(ctx, "y", "first", mk())
 	if err != nil {
 		tt.Fatal(err)
@@ -667,7 +667,7 @@ func TestRepo_HooksFire(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r.Close(ctx)
+	defer func() { _ = r.Close(ctx) }()
 	_, nA := recordLine(tt, r, t.RootNodeID, "alpha")
 	hDel := recordDelete(tt, r, nA)
 	if _, err := r.Sweep(ctx, time.Unix(2_000_000_000, 0).UTC(), 0); err != nil {
@@ -738,7 +738,7 @@ func TestRepo_UnrecordCrashBetweenSnapshotAndLogKeepsPurge(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	if got := fingerprint(tt, r2); got != want {
 		tt.Fatalf("crash-reopen diverged (purged content re-materialised?):\n got:\n%s\nwant:\n%s", got, want)
 	}
@@ -813,7 +813,7 @@ func TestRepo_CoveredNonPrefixSnapshotIsUsed(tt *testing.T) {
 	if err != nil {
 		tt.Fatal(err)
 	}
-	defer r2.Close(ctx)
+	defer func() { _ = r2.Close(ctx) }()
 	if !rec.FromSnapshot || rec.Replayed != 1 || rec.Applied != 4 {
 		tt.Fatalf("expected covered snapshot + 1 replay, got %+v", rec)
 	}
@@ -858,9 +858,9 @@ func liveLines(tt testing.TB, r *repo.Repo) (lines []string) {
 func TestRepo_KnownLimitation_RecreationIdentityDivergesAcrossRepos(tt *testing.T) {
 	ctx := context.Background()
 	a := openTest(tt, tt.TempDir())
-	defer a.Close(ctx)
+	defer func() { _ = a.Close(ctx) }()
 	b := openTest(tt, tt.TempDir())
-	defer b.Close(ctx)
+	defer func() { _ = b.Close(ctx) }()
 	mk := func() []patch.Change {
 		return []patch.Change{{
 			Kind: patch.ChangeKindNewNode, NodeID: t.NodeID{Patch: t.PlaceholderHash, Index: 0},

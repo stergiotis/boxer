@@ -164,7 +164,7 @@ func TestBadAllocatorSurfacesAsFailure(t *testing.T) {
 
 	got := u.ReadBytes()
 	require.Error(t, u.Err())
-	assert.True(t, errors.Is(u.Err(), StringAllocationError) || u.Err() == StringAllocationError,
+	assert.True(t, errors.Is(u.Err(), ErrStringAllocation) || u.Err() == ErrStringAllocation,
 		"expected the allocation error, got %v", u.Err())
 	assert.Nil(t, got)
 }

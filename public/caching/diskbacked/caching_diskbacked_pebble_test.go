@@ -84,6 +84,6 @@ func TestPebbleStash_ReopenCountsExisting(t *testing.T) {
 	// Reopen without cleanStart — must scan and seed count to 3.
 	s2, err := NewPebbleStash[string, int](dir, 0, false)
 	require.NoError(t, err)
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 	assert.Equal(t, 3, s2.Len(), "reopened stash must reflect on-disk entries")
 }

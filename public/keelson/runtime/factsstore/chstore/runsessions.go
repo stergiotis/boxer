@@ -53,7 +53,7 @@ func (inst *Store) LifecyclesByRun(ctx context.Context, filter LifecycleFilter) 
 		err = eh.Errorf("chstore: lifecycles by run query: %w", qerr)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	raw, rerr := io.ReadAll(body)
 	if rerr != nil {
 		err = eh.Errorf("chstore: lifecycles by run read: %w", rerr)
@@ -83,7 +83,7 @@ func (inst *Store) LastHeartbeatForRun(ctx context.Context, runId string) (ts ti
 		err = eh.Errorf("chstore: last heartbeat query: %w", qerr)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	raw, rerr := io.ReadAll(body)
 	if rerr != nil {
 		err = eh.Errorf("chstore: last heartbeat read: %w", rerr)
@@ -156,7 +156,7 @@ func (inst *Store) LookupRunStart(ctx context.Context, runId string) (row factss
 		err = eh.Errorf("chstore: lookup run start query: %w", qerr)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	raw, rerr := io.ReadAll(body)
 	if rerr != nil {
 		err = eh.Errorf("chstore: lookup run start read: %w", rerr)

@@ -19,7 +19,6 @@ package caching
 
 import (
 	"encoding/json"
-	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -285,7 +284,7 @@ func TestSpecTraceConformance(t *testing.T) {
 	require.NotEmpty(t, paths, "no committed spec traces — regenerate with `npm run traces` in verification/formal/caching")
 	for _, p := range paths {
 		t.Run(filepath.Base(p), func(t *testing.T) {
-			replaySpecTrace(t, loadSpecTrace(t, fmt.Sprintf("%s", p)))
+			replaySpecTrace(t, loadSpecTrace(t, p))
 		})
 	}
 }

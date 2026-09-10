@@ -672,14 +672,13 @@ func (inst *Detector) Push(v float64) (reading Reading, ok bool) {
 		return
 	}
 
-	var score float64
 	var at int32
 	var exact bool
 	if inst.cfg.Exact {
-		score, at = inst.scoreExact(query)
+		_, at = inst.scoreExact(query)
 		exact = true
 	} else {
-		score, at, exact = inst.scoreDAMP(query)
+		_, at, exact = inst.scoreDAMP(query)
 	}
 	if at < 0 {
 		return
@@ -687,8 +686,9 @@ func (inst *Detector) Push(v float64) (reading Reading, ok bool) {
 
 	// Report the distance recomputed from z-normalized values; the identity the
 	// search runs on loses absolute accuracy as ρ approaches 1, and an exactly
-	// matching pair would otherwise report ~1e-6 rather than 0.
-	score = inst.exactDistance(query, at)
+	// matching pair would otherwise report ~1e-6 rather than 0. The search's own
+	// score is discarded for the same reason.
+	score := inst.exactDistance(query, at)
 	if exact && score > inst.bestSoFar {
 		inst.bestSoFar = score
 	}

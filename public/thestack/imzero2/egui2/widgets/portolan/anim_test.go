@@ -322,7 +322,7 @@ func TestMap_FlyToBounds(t *testing.T) {
 		bounds := LatLngBoundsOf(LL(-1, -1), LL(1, 1))
 		expectedCenter := LL(0, 0)
 		v.SetClock(animSpecT0)
-		v.FlyToBounds(bounds, FitOptions{}, FlyOptions{})
+		require.NoError(t, v.FlyToBounds(bounds, FitOptions{}, FlyOptions{}))
 		// Upstream's map has no zoom here (see the file comment); the port's
 		// fly — to the zoom that fits the bounds — has run its first frame,
 		// which leaves the centre where it started, and that is what the
@@ -337,7 +337,7 @@ func TestMap_FlyToBounds(t *testing.T) {
 		v := specView()
 		v.SetViewAnimated(LL(0, 0), 0, AnimateOptions{Animate: AnimateNo})
 		v.TakeEvents()
-		v.FlyToBounds(bounds, FitOptions{}, FlyOptions{Animate: AnimateNo})
+		require.NoError(t, v.FlyToBounds(bounds, FitOptions{}, FlyOptions{Animate: AnimateNo}))
 		e := v.TakeEvents()
 		require.True(t, e.ZoomEnd, "zoomend")
 		assert.False(t, v.Animating())

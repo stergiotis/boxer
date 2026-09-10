@@ -617,7 +617,7 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 // flattens to nothing, and a table cell holding `[[Page]]` renders blank.
 func flattenInlineText(parent ast.Node, src []byte) (out string) {
 	var buf bytes.Buffer
-	ast.Walk(parent, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+	_ = ast.Walk(parent, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}

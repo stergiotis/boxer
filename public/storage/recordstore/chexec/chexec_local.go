@@ -114,7 +114,7 @@ func (inst *LocalExecutor) queryArrowBuffered(ctx context.Context, sql string) (
 		err = eh.Errorf("decode arrow result: %w", err)
 		return
 	}
-	defer rdr.Close()
+	defer func() { _ = rdr.Close() }()
 	records = make([]arrow.RecordBatch, 0, rdr.NumRecords())
 	for i := 0; i < rdr.NumRecords(); i++ {
 		var rec arrow.RecordBatch

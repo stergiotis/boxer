@@ -46,7 +46,7 @@ func NewSampler(opts SamplerOptions) (inst *Sampler, err error) {
 		return nil, eh.Errorf("unable to decode this binary's coverage meta-data: %w", err)
 	}
 	inst = &Sampler{
-		acc:      NewAccumulator(meta, AccumulatorOptions{RestateEvery: opts.RestateEvery}),
+		acc:      NewAccumulator(meta, AccumulatorOptions(opts)),
 		metaBlob: mbuf.Bytes(),
 	}
 	return

@@ -341,7 +341,7 @@ func (inst *Generator) chat(ctx context.Context, messages []ollamaMessage) (resp
 		err = eh.Errorf("do: %w", err)
 		return
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 
 	respBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {

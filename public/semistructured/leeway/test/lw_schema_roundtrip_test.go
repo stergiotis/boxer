@@ -205,7 +205,8 @@ func TestSmoke(t *testing.T) {
 	tblDesc1.DictionaryEntry = tblDesc2.DictionaryEntry
 	require.NoError(t, err)
 
-	normalizer.Normalize(&tblDesc2)
+	_, _, _, err = normalizer.Normalize(&tblDesc2)
+	require.NoError(t, err)
 	require.EqualValues(t, tblDesc2, tblDesc1)
 	require.Equal(t, tableRowConfig, tableRowConfig2)
 }

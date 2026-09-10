@@ -55,7 +55,7 @@ func TestCardE2e(t *testing.T) {
 		require.NoError(t, err)
 		p := "card_anchor_integration3_test_e2e_gold.out.txt"
 		if rewriteGold {
-			os.WriteFile(p, sink.Bytes(), os.ModePerm)
+			require.NoError(t, os.WriteFile(p, sink.Bytes(), os.ModePerm))
 		} else {
 			require.Equal(t, getTxtContent(p, t), sink.String())
 		}
@@ -90,7 +90,7 @@ func TestCardE2eText(t *testing.T) {
 		require.NoError(t, err)
 		p := fmt.Sprintf("card_anchor_integration3_test_e2etext_gold_%02d.out.txt", i)
 		if rewriteGold {
-			os.WriteFile(p, b.Bytes(), os.ModePerm)
+			require.NoError(t, os.WriteFile(p, b.Bytes(), os.ModePerm))
 		} else {
 			require.Equal(t, getTxtContent(p, t), b.String())
 		}
@@ -127,7 +127,7 @@ func TestCardE2eJson(t *testing.T) {
 		require.NoError(t, err)
 		p := fmt.Sprintf("card_anchor_integration3_test_e2ejson_gold_%02d.out.json", i)
 		if rewriteGold {
-			os.WriteFile(p, b.Bytes(), os.ModePerm)
+			require.NoError(t, os.WriteFile(p, b.Bytes(), os.ModePerm))
 		} else {
 			require.Equal(t, getTxtContent(p, t), b.String())
 		}
@@ -215,7 +215,7 @@ func TestCardE2eSparks(t *testing.T) {
 			require.NotEmpty(t, b.String(), "spark produced no output")
 			p := fmt.Sprintf("card_anchor_integration3_test_e2espark_%s_gold.out.txt", tc.name)
 			if rewriteGold {
-				os.WriteFile(p, b.Bytes(), os.ModePerm)
+				require.NoError(t, os.WriteFile(p, b.Bytes(), os.ModePerm))
 			} else {
 				require.Equal(t, getTxtContent(p, t), b.String())
 			}

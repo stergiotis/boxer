@@ -41,7 +41,7 @@ func NewUnmarshaller(r io.Reader, bin binary.ByteOrder, errHandler func(err erro
 	return &Unmarshaller{
 		r:              r,
 		endianness:     bin,
-		buf:            make([]byte, 8, 8),
+		buf:            make([]byte, 8),
 		errHandler:     errHandler,
 		allocateBuffer: allocateBuffer,
 		read:           0,
@@ -205,7 +205,7 @@ func (inst *Unmarshaller) readBuf(n int) (success bool) {
 	return
 }
 
-var StringAllocationError = errors.New("allocated string buffer does not have correct length")
+var ErrStringAllocation = errors.New("allocated string buffer does not have correct length")
 
 func (inst *Unmarshaller) ReadString() (v string) {
 	b := inst.ReadBytes()
@@ -233,7 +233,7 @@ func (inst *Unmarshaller) readBytesNonEmpty(l uint32) (v []byte) {
 	}
 	v = inst.allocateBuffer(l)
 	if len(v) != int(l) {
-		inst.fail(StringAllocationError)
+		inst.fail(ErrStringAllocation)
 		return nil
 	}
 	u, err := io.ReadFull(inst.r, v)

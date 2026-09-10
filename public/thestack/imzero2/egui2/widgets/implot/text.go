@@ -1,6 +1,9 @@
 package implot
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // Text-width estimation — the lane's shared answer to "how wide will this
 // label be", for layout decisions that have to be made synchronously.
@@ -121,4 +124,74 @@ func isWideRune(r rune) bool {
 		}
 	}
 	return false
+}
+
+// Wrap breaks s into lines that each fit availPx at fontSize: at spaces where
+// it can, inside a word where it must. Newlines in s are honoured as hard
+// breaks, so a two-paragraph string never comes back joined.
+//
+// It is Elide's other half, and lives beside it for the same reason: the lines
+// fit the box they were broken for only because they were budgeted with the
+// estimate the caller sized the box with. Wrapping by character count instead
+// puts a CJK line at twice the width of the Latin line beside it.
+//
+// A word wider than a whole line starts on a fresh line and is broken at rune
+// boundaries — CSS's overflow-wrap: break-word, and what makes it terminate on
+// text with no spaces in it at all. A returned line is never empty, so a single
+// rune wider than availPx still gets a line of its own and overflows it; that is
+// the one case where the fit guarantee does not hold. availPx <= 0 and an empty
+// s return nothing.
+//
+// Runs of spaces inside a paragraph are collapsed to one, which is what a
+// caller wrapping a label wants and a caller wrapping preformatted text does
+// not.
+func Wrap(s string, availPx float32, fontSize float32) (lines []string) {
+	if s == "" || availPx <= 0 {
+		return
+	}
+	spaceW := EstimateRuneWidth(' ', fontSize)
+	for _, para := range strings.Split(s, "\n") {
+		var cur strings.Builder
+		var curW float32
+		flush := func() {
+			lines = append(lines, cur.String())
+			cur.Reset()
+			curW = 0
+		}
+		words := strings.Fields(para)
+		if len(words) == 0 {
+			lines = append(lines, "") // a blank line in s stays a blank line
+			continue
+		}
+		for _, word := range words {
+			if w := EstimateTextWidth(word, fontSize); w <= availPx {
+				if curW > 0 && curW+spaceW+w > availPx {
+					flush()
+				}
+				if curW > 0 {
+					cur.WriteByte(' ')
+					curW += spaceW
+				}
+				cur.WriteString(word)
+				curW += w
+				continue
+			}
+			// Wider than any line can hold: break inside it, from a fresh line.
+			if curW > 0 {
+				flush()
+			}
+			for _, r := range word {
+				rw := EstimateRuneWidth(r, fontSize)
+				if curW > 0 && curW+rw > availPx {
+					flush()
+				}
+				cur.WriteRune(r)
+				curW += rw
+			}
+		}
+		if cur.Len() > 0 {
+			flush()
+		}
+	}
+	return
 }

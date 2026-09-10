@@ -634,7 +634,7 @@ FORMAT TabSeparated`,
 
 	body, err := readClient().Query(context.Background(), sql)
 	require.NoError(t, err)
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	raw, err := io.ReadAll(body)
 	require.NoError(t, err)
 	parts := strings.Split(strings.TrimRight(string(raw), "\n"), "\t")

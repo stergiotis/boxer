@@ -1213,7 +1213,7 @@ func (inst *Unmarshaller) ReadUintptr() (v uintptr) {
 		"stub")
 }
 
-var StringAllocationError = errors.New("allocated string buffer does not have correct length")
+var ErrStringAllocation = errors.New("allocated string buffer does not have correct length")
 
 func (inst *Unmarshaller) ReadString() (v string) { panic("stub") }
 

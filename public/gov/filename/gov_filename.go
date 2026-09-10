@@ -57,13 +57,10 @@ func (inst *Renamer) walkGoFiles(root string) iter.Seq2[string, error] {
 				return nil
 			}
 
-			isGo := strings.HasSuffix(d.Name(), ".go")
-			if isGo {
+			if strings.HasSuffix(d.Name(), ".go") {
 				if !yield(path, nil) {
 					return fs.SkipAll
 				}
-			} else {
-				// Ignore non-go files
 			}
 			return nil
 		})

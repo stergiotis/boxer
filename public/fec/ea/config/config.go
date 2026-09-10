@@ -84,7 +84,9 @@ func (inst *FecConfig) FromContext(nameTransf config.NameTransformFunc, ctx *cli
 	inst.NAnchorBytes = uint8(ctx.Uint(nameTransf("nAnchorBytes")))
 	inst.AnchorMaxHammingDistPerByteIncl = uint8(ctx.Uint(nameTransf("anchorMaxHammingDistIncl")))
 	inst.MaxMessageSize = uint32(ctx.Uint(nameTransf("maxMessageSize")))
-	return inst.Validate(true)
+	// Added to, not replaced by: an unresolvable fecAlgorithm is reported here
+	// and zeroed, so Validate — which only range-checks — cannot see it again.
+	return nMessages + inst.Validate(true)
 }
 
 func (inst *FecConfig) Validate(force bool) (nMessages int) {

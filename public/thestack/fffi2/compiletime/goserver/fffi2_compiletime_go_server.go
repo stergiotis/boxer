@@ -595,9 +595,9 @@ func generateFactoryCode(w io.Writer, factory *ir.BuilderFactoryNode, tracker *c
 	idDefer := ""
 	if factory.Settings.BlockIterator {
 		idVariant = "Stacked"
-		if factory.IdentityArguments.HasId {
-			//	idDefer = "i.PopIdFromStackChecked(v)\n"
-		}
+		// deferred: a stacked builder carrying an id may want
+		// idDefer = "i.PopIdFromStackChecked(v)\n" here. idDefer stays "" until
+		// then, so the template hole emits nothing.
 	}
 	generateIdentityHandling(w, factory.IdentityArguments, tracker, idVariant)
 	generateFactoryArgumentsHandlingPlain(false, w, factory.Arguments.PlainArguments, tracker)

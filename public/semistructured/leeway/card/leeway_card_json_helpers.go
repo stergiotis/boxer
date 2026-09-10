@@ -259,9 +259,8 @@ func (inst *JsonCardEmitter) labelName(mv membership.MembershipValue) (s string)
 // flushEntity emits the buffered byStructure + byAttribute payload for the
 // just-completed entity. Called from EndEntity.
 func (inst *JsonCardEmitter) flushEntity() {
-	if inst.ndjson {
-		// One JSON object per line; the encoder handles the framing.
-	}
+	// ndjson needs nothing here: one JSON object per line, and the encoder
+	// handles the framing.
 	inst.writeToken(jsontext.BeginObject)
 
 	inst.writeToken(jsontext.String("byStructure"))
