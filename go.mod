@@ -21,7 +21,7 @@ require (
 	github.com/fogleman/gg v1.3.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/fxamacker/cbor/v2 v2.9.2
-	github.com/go-text/typesetting v0.3.4
+	github.com/go-text/typesetting v0.3.5
 	github.com/goccy/go-graphviz v0.2.10
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/golangci/gofmt v0.0.0-20251215234548-e7be49a5ab4d
