@@ -22,7 +22,7 @@ func NewMarshaller(w io.Writer, bin binary.ByteOrder, errHandler func(err error)
 	return &Marshaller{
 		w:          w,
 		bin:        bin,
-		buf:        make([]byte, 8, 8),
+		buf:        make([]byte, 8),
 		errHandler: errHandler,
 		written:    0,
 	}

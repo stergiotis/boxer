@@ -457,8 +457,11 @@ func TestSkewKurtosisEdgeCases(t *testing.T) {
 
 	// Valid now
 	s.Push(4)
-	if s.Kurtosis() == 0 && s.Variance() > 0 {
-		// Just checking it calculated *something*
+	if s.Variance() <= 0 {
+		t.Fatal("Variance should be positive for 1,2,3,4")
+	}
+	if s.Kurtosis() == 0 {
+		t.Error("Kurtosis should be computed for N >= 4")
 	}
 }
 func TestMergeHigherMoments(t *testing.T) {

@@ -40,6 +40,7 @@ func TestContentInlineFaces(t *testing.T) {
 	assert.Empty(t, reason)
 	ok, reason = md.Accepts(ValueKindBytes)
 	assert.True(t, ok, "ClickHouse String arrives as Arrow String or Binary; both are text to a content face")
+	assert.Empty(t, reason)
 	ok, reason = md.Accepts(ValueKindNumeric)
 	assert.False(t, ok)
 	assert.Contains(t, reason, "text/markdown expects text or bytes, got numeric")

@@ -138,9 +138,7 @@ func readCPUSteps(sys *sysfs.Reader, cpu int32, numaByCPU map[int32]int32, nodeM
 	if err != nil {
 		return
 	}
-	for _, ca := range caches {
-		steps = append(steps, ca)
-	}
+	steps = append(steps, caches...)
 
 	steps = append(steps, topoStep{
 		kind: sysmsnap.TopoKindCore, osIndex: coreID,

@@ -25,7 +25,7 @@ func NewCliCommand() *cli.Command {
 				},
 				Action: func(context *cli.Context) error {
 					l := context.Uint("length")
-					key := make([]byte, l, l)
+					key := make([]byte, l)
 					var err error
 					_, err = cryptorand.Read(key)
 					if err != nil {

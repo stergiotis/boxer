@@ -148,7 +148,7 @@ func (inst *NGramHist) CalcCodewords(encode EncodeFunc) {
 	cwsNBits := make([]int, 0, len(inst.ns))
 	vs := inst.vs
 	nTotal := uint64(len(vs))
-	for i, _ := range vs {
+	for i := range vs {
 		code, nBits := encode(uint64(i), nTotal)
 		cws = append(cws, fmt.Sprintf("0b%064b", code) /*[:nBits+len("0b")]*/)
 		cwsNBits = append(cwsNBits, nBits)
@@ -190,8 +190,8 @@ func (inst *NGramHist) EncodeNaive(str string, n int) (codewords []string, total
 func (inst *NGramHist) EncodeGreedy(str string, n int) (codewords []string, totalBits int) {
 	vs := inst.vs
 	l := len(str)
-	codewords = make([]string, l, l)
-	neededBits := make([]int, l, l)
+	codewords = make([]string, l)
+	neededBits := make([]int, l)
 	cws := inst.cws
 	cwNBits := inst.cwNBits
 	replaced := 0
@@ -295,7 +295,7 @@ func NewDictCommand() *cli.Command {
 			}
 			nGramN := int(context.Uint("nGramN"))
 			h := NewNGramHist(len(cleaned) * 6)
-			for k, _ := range cleaned {
+			for k := range cleaned {
 				_, _ = fCleaned.WriteString(k)
 				_, _ = fCleaned.WriteString("\n")
 				ts := ngramWindowed(k, nGramN)
