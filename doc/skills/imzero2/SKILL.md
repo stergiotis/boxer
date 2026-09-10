@@ -1575,3 +1575,56 @@ the readbacks (one frame behind, like every canvas register).
   exactly `0:03.000`. The `capture` step needs a **raster-capable** client
   (`headless-soft` or the wgpu build) — a mesh-only appliance build passes
   every assertion and then fails the capture.
+
+## 20. graphview — the live graph widget
+
+The force-directed / hierarchical graph is a Go widget on the painter lane
+(ADR-0224, proposed; package [`widgets/graphview`](../../../public/thestack/imzero2/egui2/widgets/graphview/)),
+the sibling of the `egui_graphs`-backed `c.Graph` binding it is meant to
+replace once its downstream consumers have moved. New graph work targets
+graphview; `c.GraphNode` / `c.GraphEdge` / `c.Graph` and the three
+`FetchGraph*` fetchers stay until then.
+
+```go
+gv := graphview.New(ids, "deps", graphview.Options{
+    Layout: graphview.LayoutForceDirectedCG, NodeClicking: true, NodeSelection: true, LabelsAlways: true,
+})
+// every frame — declare the whole graph, keyed by uint64 ids:
+gv.Render(nodes, edges, w, h)              // or gv.RenderFill(nodes, edges, fallbackW, fallbackH)
+for _, ev := range gv.Events() {          // same frame; the input is one frame old
+    if ev.Kind == graphview.EventKindNodeDoubleClick { recenter(ev.Node) }
+}
+if m := gv.Metrics(); m.Steps > 0 && m.LastDisplacement <= eps { gv.Opts.Force.Paused = true }
+```
+
+What to know before using it:
+
+- **Go owns topology, the widget owns geometry.** Positions survive as long
+  as an id is re-declared; a vanished id drops, a new one is placed beside a
+  neighbour. `gv.Opts` is read every frame, so toggling `Force.Paused` or a
+  layout parameter is an assignment, not a rebuild. The static layouts
+  (random, hierarchical) re-run only on topology change — after changing
+  `Opts.Hier` call `ResetLayout()`.
+- **The fit is a one-shot latch** (ADR-0224 §SD4): the camera frames a fresh
+  layout while it settles, then manual pan / zoom stick. `FitNow()` re-arms
+  it; `Opts.FitToScreen` forces continuous fit. `FastForward(n)` runs n
+  simulation steps before the next paint — the load-frame warm-up for a big
+  graph.
+- **Parameters mean what they meant in egui_graphs**, with two departures:
+  the ideal edge length `k` derives from the canvas area, not the screen, and
+  node labels are a fixed screen point size instead of the node radius. A
+  consumer that tuned `KScale` against tiny labels will want to revisit it.
+- **Input is the canvas recipe** (§16.2): one sense region over the canvas
+  owns click and drag, the canvas owns hover and the R23 wheel; picking is
+  Go-side by radius (nodes, O(n)) and segment distance (edges). Two views
+  under one id stack need distinct keys.
+- **Cost.** One batched marker opcode per (colour, radius), one line or
+  Bézier per edge, one polygon per arrow head, one text per visible label.
+  The force step is O(n²) and splits across cores above 512 nodes; a few
+  thousand nodes animate, tens of thousands do not (ADR-0224 §SD6).
+- **Determinism.** Random placement hashes the node id, so a demo captures
+  stably; the force step is deterministic too because every row is summed by
+  one goroutine in a fixed order.
+
+The gallery demo `egui2_hl_graphview_demo.go` mirrors the `graphs` demo
+feature for feature so the two can be compared while both exist.

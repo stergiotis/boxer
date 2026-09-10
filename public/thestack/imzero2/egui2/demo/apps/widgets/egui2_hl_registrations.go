@@ -118,6 +118,33 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "graphview", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go)",
+		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindUX,
+		Description: "The live graph widget of ADR-0224 (proposed) — the egui_graphs binding's feature set as Go on the painter lane: random, force-directed (with and without centre gravity) and hierarchical layouts, node drag, pan and anchored zoom, click and selection events, parallel edges and self-loops, one-shot fit. Deterministic placement, so the capture is stable.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			state = newGraphviewDemoState(ids)
+			return
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			st := state.(*graphviewDemoState)
+			for range c.CollapsingHeader(ids.PrepareStr("gv-nav"), c.WidgetText().Text("navigation controls").Keep()).KeepIter() {
+				demoGraphviewNav(ids, st)
+			}
+			for range c.CollapsingHeader(ids.PrepareStr("gv-ring"), c.WidgetText().Text("ring (random layout)").Keep()).DefaultOpen(true).KeepIter() {
+				demoGraphviewRing(ids, st)
+			}
+			for range c.CollapsingHeader(ids.PrepareStr("gv-force"), c.WidgetText().Text("tree (force-directed)").Keep()).KeepIter() {
+				demoGraphviewForce(ids, st)
+			}
+			for range c.CollapsingHeader(ids.PrepareStr("gv-hier"), c.WidgetText().Text("tree (hierarchical)").Keep()).KeepIter() {
+				demoGraphviewHier(ids, st)
+			}
+			demoGraphviewEventLog(ids, st)
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "portolan", Category: "Maps & geo", Title: icons.IconGlobe + " portolan (slippy map)",
 		Stage:       [2]float32{1024, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
