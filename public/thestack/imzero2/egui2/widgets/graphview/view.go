@@ -50,6 +50,9 @@ type View struct {
 	batchXs  []float32
 	batchYs  []float32
 	selOrder []uint64
+	arcs     []donutArc
+	arcXs    []float32
+	arcYs    []float32
 }
 
 type dragState struct {
@@ -512,7 +515,7 @@ func (v *View) pickNode(style Style, px, py float32) int32 {
 	best, bestD := int32(-1), float32(math.MaxFloat32)
 	for i := range v.g.ids {
 		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
-		r := v.nodeRadius(style, i) * v.cam.zoom
+		r := v.nodeOuterPx(style, i)
 		r = max(r, pickMinPx)
 		dx, dy := px-sx, py-sy
 		d2 := dx*dx + dy*dy
@@ -546,6 +549,16 @@ func (v *View) pickEdge(style Style, px, py float32) int32 {
 		}
 	}
 	return best
+}
+
+// nodeOuterPx is the node's radius on screen including its donut ring, the
+// extent the pick, the highlight and the label respect.
+func (v *View) nodeOuterPx(style Style, slot int) float32 {
+	r := v.nodeRadius(style, slot) * v.cam.zoom
+	if r >= donutMinInnerPx && !v.g.donut[slot].IsEmpty() {
+		r += style.DonutWidth
+	}
+	return r
 }
 
 func (v *View) nodeRadius(style Style, slot int) float32 {

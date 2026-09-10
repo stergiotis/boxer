@@ -75,6 +75,7 @@ type NodeSpec struct {
 	Label  string
 	Color  color.Color
 	Radius float32 // world units
+	Donut  Donut   // a ring of proportional slices around the node; zero draws none
 }
 
 // EdgeSpec is one directed edge of the frame's declaration. Parallel edges
@@ -190,14 +191,16 @@ type Style struct {
 	Highlight      color.Color // hovered node or edge
 	Selected       color.Color // selected node or edge
 
-	NodeRadius        float32 // world units, default 5
-	NodeStrokeW       float32 // screen pixels; 0 (the default) draws no per-node outline, which keeps a node one batched marker
-	EdgeWidth         float32 // screen pixels, default 1.5
-	TipSize           float32 // arrow head length in screen pixels, default 10
-	LabelFontSize     float32 // screen points, default 12 (ADR-0224 §SD7)
-	EdgeLabelFontSize float32 // screen points, default 10
-	CurveSize         float32 // bulge per parallel-edge order in world units, default 20
-	LoopSize          float32 // self-loop radius as a multiple of the node radius, default 3
+	NodeRadius        float32     // world units, default 5
+	NodeStrokeW       float32     // screen pixels; 0 (the default) draws no per-node outline, which keeps a node one batched marker
+	EdgeWidth         float32     // screen pixels, default 1.5
+	TipSize           float32     // arrow head length in screen pixels, default 10
+	LabelFontSize     float32     // screen points, default 12 (ADR-0224 §SD7)
+	EdgeLabelFontSize float32     // screen points, default 10
+	CurveSize         float32     // bulge per parallel-edge order in world units, default 20
+	LoopSize          float32     // self-loop radius as a multiple of the node radius, default 3
+	DonutWidth        float32     // ring thickness in screen pixels, default 5
+	DonutTrack        color.Color // the unfilled remainder when Donut.Total exceeds the values
 	Monospace         bool
 }
 
@@ -220,6 +223,8 @@ func DefaultStyle() Style {
 		EdgeLabelFontSize: 10,
 		CurveSize:         20,
 		LoopSize:          3,
+		DonutWidth:        5,
+		DonutTrack:        hex(styletokens.NeutralBorderDefault),
 	}
 }
 
@@ -246,7 +251,9 @@ func (inst Style) withDefaults() Style {
 	col(&inst.EdgeLabelColor, d.EdgeLabelColor)
 	col(&inst.Highlight, d.Highlight)
 	col(&inst.Selected, d.Selected)
+	col(&inst.DonutTrack, d.DonutTrack)
 	num(&inst.NodeRadius, d.NodeRadius)
+	num(&inst.DonutWidth, d.DonutWidth)
 	num(&inst.EdgeWidth, d.EdgeWidth)
 	num(&inst.TipSize, d.TipSize)
 	num(&inst.LabelFontSize, d.LabelFontSize)

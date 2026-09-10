@@ -175,6 +175,18 @@ re-derivations of published algorithms and of `egui_graphs`' parameterisation
 (MIT); the package doc names the crate as the source of the parameter
 semantics.
 
+**SD9 — Node donuts are ring sectors on the painter lane.** A node may carry
+a `Donut`: proportional slices drawn as a ring around its disc, clockwise
+from the top, one concave filled polygon per slice through the painter's
+existing concave fill. The caller supplies values and, optionally, colours
+and a total; a total larger than the sum leaves the remainder as a muted
+track, so the same field draws a share breakdown or a progress ring. The
+ring belongs to the node for picking, highlighting and label placement, and
+it is not drawn while the node's own disc is under two pixels on screen —
+at that zoom the ring would dwarf the node and cost a polygon per slice for
+nothing legible. Per-slice hover and click are deferred until a consumer
+needs them; the pick treats the ring as part of the node.
+
 ## Alternatives
 
 - **O1 — keep the binding.** Every quality fix is seam work in three places,
@@ -184,6 +196,10 @@ semantics.
   camera and hit-testing in Rust, so events still need fetchers and every
   feature still crosses the IDL. Killed.
 - **O4 — extend `layeredgraph/view`.** Deferred, see the QOC note.
+- **A dedicated arc or ring-sector paint opcode for donuts.** One IDL node,
+  one Rust apply and a regeneration for a shape the concave fill already
+  draws at the sizes a node ring has. Killed until a profile shows the
+  polygon path costing something.
 - **Random vertex sampling instead of Barnes–Hut.** Faster in the
   published measurements, but stochastic per iteration; see SD6. Killed for
   the interactive widget, open as a warm-up phase for very large graphs.

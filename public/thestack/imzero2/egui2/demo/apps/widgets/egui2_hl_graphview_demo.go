@@ -33,6 +33,8 @@ type graphviewDemoState struct {
 	forceMaxStep float64
 	forceKScale  float64
 	forcePaused  bool
+	forceDonuts  bool
+	forceShares  []float32 // three shares per node, backing the donuts
 
 	hierNodes []graphview.NodeSpec
 	hierEdges []graphview.EdgeSpec
@@ -77,10 +79,31 @@ func newGraphviewDemoState(ids *c.WidgetIdStack) (st *graphviewDemoState) {
 	// edges, one parallel edge and one self-loop to show the curved forms.
 	const n = 5
 	edgeCol := color.Hex(styletokens.NeutralBorderDefault.AsHex())
+	// Each node carries a donut (ADR-0224 §SD9): the shares differ per node,
+	// n2 uses explicit semantic colours, n4 is a partial ring with a Total so
+	// the remainder shows as the track, n5 has none.
+	semantic := color.ColorsFromU32([]uint32{
+		styletokens.SuccessDefault.AsHex(), styletokens.WarningDefault.AsHex(), styletokens.ErrorDefault.AsHex(),
+	})
+	donuts := []graphview.Donut{
+		{Values: []float32{3, 1}},
+		{Values: []float32{5, 3, 2}, Colors: semantic},
+		{Values: []float32{1, 1, 1, 1}},
+		{Values: []float32{35}, Total: 100},
+		{},
+	}
+	// Ringed nodes take a neutral disc so the slices carry the colour; the
+	// plain n5 keeps a categorical fill.
 	for i := range uint64(n) {
+		fill := color.Hex(styletokens.NeutralBgSurface.AsHex())
+		if donuts[i].IsEmpty() {
+			fill = color.Hex(styletokens.QualitativeCycle(int(i)).AsHex())
+		}
 		st.ringNodes = append(st.ringNodes, graphview.NodeSpec{
 			Id: i + 1, Label: fmt.Sprintf("n%d", i+1),
-			Color: color.Hex(styletokens.QualitativeCycle(int(i)).AsHex()),
+			Color:  fill,
+			Radius: 9,
+			Donut:  donuts[i],
 		})
 	}
 	for i := range uint64(n) {
@@ -109,8 +132,13 @@ func (st *graphviewDemoState) rebuildForceGraph() {
 	st.forceNodeSet = st.forceNodeSet[:0]
 	st.forceEdgeSet = st.forceEdgeSet[:0]
 	col := color.Hex(styletokens.InfoDefault.AsHex())
+	st.forceShares = st.forceShares[:0]
 	for i := uint64(1); i <= uint64(st.forceNodes); i++ {
-		st.forceNodeSet = append(st.forceNodeSet, graphview.NodeSpec{Id: i, Label: fmt.Sprintf("#%d", i), Color: col})
+		// Three deterministic shares per node, so the donut option costs no
+		// allocation when toggled and the capture stays stable.
+		h := i*0x9e3779b97f4a7c15 + 0x7f4a7c15
+		st.forceShares = append(st.forceShares, float32(h>>60)+1, float32((h>>56)&15)+1, float32((h>>52)&15)+1)
+		st.forceNodeSet = append(st.forceNodeSet, graphview.NodeSpec{Id: i, Label: fmt.Sprintf("#%d", i), Color: col, Radius: 6})
 		if i >= 2 {
 			st.forceEdgeSet = append(st.forceEdgeSet, graphview.EdgeSpec{From: (i-1)/2 + 1, To: i})
 		}
@@ -142,7 +170,7 @@ func demoGraphviewNav(ids *c.WidgetIdStack, st *graphviewDemoState) {
 }
 
 func demoGraphviewRing(ids *c.WidgetIdStack, st *graphviewDemoState) {
-	c.Label("Random layout. Drag a node, drag the background to pan, Ctrl+wheel to zoom, click to select; the 1→2 pair shows a parallel edge and n3 a self-loop.").Send()
+	c.Label("Random layout. Drag a node, drag the background to pan, Ctrl+wheel to zoom, click to select; the 1→2 pair shows a parallel edge and n3 a self-loop. Each node wears a donut: shares on n1–n3, a 35 % progress ring on n4, none on n5.").Send()
 	st.ring.Render(st.ringNodes, st.ringEdges, demoGraphviewWidth(ids, "gv-ring-pane"), 360)
 	// Readout: the hovered node and where n1 sits in the canvas — the
 	// hover path through R24 and the camera, legible to a headless scene.
@@ -170,6 +198,13 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	c.SliderF64(ids.PrepareStr("gv-force-maxstep"), st.forceMaxStep, 1, 100).Text("max step").SendRespVal(&st.forceMaxStep)
 	c.SliderF64(ids.PrepareStr("gv-force-kscale"), st.forceKScale, 0.1, 5).Text("k scale").SendRespVal(&st.forceKScale)
 	c.Checkbox(ids.PrepareStr("gv-force-paused"), st.forcePaused, "paused").SendRespVal(&st.forcePaused)
+	c.Checkbox(ids.PrepareStr("gv-force-donuts"), st.forceDonuts, "donut rings on every node").SendRespVal(&st.forceDonuts)
+	for i := range st.forceNodeSet {
+		st.forceNodeSet[i].Donut = graphview.Donut{}
+		if st.forceDonuts {
+			st.forceNodeSet[i].Donut = graphview.Donut{Values: st.forceShares[3*i : 3*i+3]}
+		}
+	}
 	for range c.Horizontal().KeepIter() {
 		if c.Button(ids.PrepareStr("gv-force-reset"), c.Atoms().Text("reset layout").Keep()).SendResp().HasPrimaryClicked() {
 			st.force.ResetLayout()

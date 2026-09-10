@@ -17,6 +17,7 @@ type graph struct {
 	label  []string
 	col    []color.Color
 	radius []float32
+	donut  []Donut
 	seen   []uint32 // frame stamp of the last declaration that named the slot
 	pinned []bool   // held by a drag; the force step leaves it alone
 
@@ -65,6 +66,7 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 			g.label = append(g.label, "")
 			g.col = append(g.col, color.Color{})
 			g.radius = append(g.radius, 0)
+			g.donut = append(g.donut, Donut{})
 			g.seen = append(g.seen, 0)
 			g.pinned = append(g.pinned, false)
 			g.newSlots = append(g.newSlots, s)
@@ -73,6 +75,7 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		g.label[s] = sp.Label
 		g.col[s] = sp.Color
 		g.radius[s] = sp.Radius
+		g.donut[s] = sp.Donut
 	}
 	// Drop slots the declaration no longer names. Swap-remove from the back
 	// so every index below the cursor stays valid; a new slot can never be
@@ -160,6 +163,7 @@ func (g *graph) removeSlot(s int) {
 		g.label[s] = g.label[last]
 		g.col[s] = g.col[last]
 		g.radius[s] = g.radius[last]
+		g.donut[s] = g.donut[last]
 		g.seen[s] = g.seen[last]
 		g.pinned[s] = g.pinned[last]
 		g.slot[g.ids[s]] = int32(s)
@@ -170,6 +174,7 @@ func (g *graph) removeSlot(s int) {
 	g.label = g.label[:last]
 	g.col = g.col[:last]
 	g.radius = g.radius[:last]
+	g.donut = g.donut[:last]
 	g.seen = g.seen[:last]
 	g.pinned = g.pinned[:last]
 }

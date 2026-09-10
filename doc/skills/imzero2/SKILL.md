@@ -1627,6 +1627,11 @@ What to know before using it:
 - **Determinism.** Random placement hashes the node id, so a demo captures
   stably; the force step is deterministic too because every row is summed by
   one goroutine in a fixed order.
+- **Donuts.** `NodeSpec.Donut{Values, Colors, Total}` draws a ring of
+  proportional slices around the node (ADR-0224 §SD9): colours default to
+  the qualitative cycle, a `Total` above the sum leaves a muted track (a
+  progress ring), and the ring counts as the node for picking and labels.
+  Rings are skipped while the node disc is under two pixels on screen.
 
 The gallery demo `egui2_hl_graphview_demo.go` mirrors the `graphs` demo
 feature for feature so the two can be compared while both exist.

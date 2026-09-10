@@ -200,13 +200,37 @@ func (v *View) paint(style Style, w, h float32) {
 		}
 	}
 
+	// Donuts: one concave ring sector per slice, skipped when the ring
+	// would be too small to read (ADR-0224 §SD9).
+	for i := range v.g.ids {
+		d := v.g.donut[i]
+		if d.IsEmpty() {
+			continue
+		}
+		rIn := v.nodeRadius(style, i) * v.cam.zoom
+		if rIn < donutMinInnerPx {
+			continue
+		}
+		rOut := rIn + style.DonutWidth
+		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+		v.arcs = donutArcs(d, style.DonutTrack, v.arcs[:0])
+		for _, a := range v.arcs {
+			// A span past half a turn splits in two so the outline never
+			// touches itself.
+			for _, seg := range splitArc(a.a0, a.a1) {
+				v.arcXs, v.arcYs = ringSector(sx, sy, rIn, rOut, seg[0], seg[1], v.arcXs[:0], v.arcYs[:0])
+				c.PaintPolygonFilled(v.arcXs, v.arcYs, a.col).Concave().Send()
+			}
+		}
+	}
+
 	// Highlights and labels.
 	for i := range v.g.ids {
 		id := v.g.ids[i]
 		_, sel := v.selNodes[id]
 		hov := v.hoveredOk && id == v.hoveredId
 		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
-		r := v.nodeRadius(style, i) * v.cam.zoom
+		r := v.nodeOuterPx(style, i)
 		if sel {
 			c.PaintCircleStroke(sx, sy, r+2, style.Selected, styletokens.StrokeStrong).Send()
 		}
@@ -221,6 +245,15 @@ func (v *View) paint(style Style, w, h float32) {
 			txt.Send()
 		}
 	}
+}
+
+// splitArc returns the arc as one span, or two when it exceeds half a turn.
+func splitArc(a0, a1 float32) [][2]float32 {
+	if a1-a0 <= math.Pi {
+		return [][2]float32{{a0, a1}}
+	}
+	mid := (a0 + a1) / 2
+	return [][2]float32{{a0, mid}, {mid, a1}}
 }
 
 func edgeMidpoint(geo edgeGeo) (x, y float32) {
