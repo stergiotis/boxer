@@ -171,7 +171,11 @@ eframe = { version = "0.35", optional = true, default-features = false, features
 # picks up wgpu 30 (which rides on an egui major bump — see Cargo.toml's
 # `egui`/`eframe` deps).
 wgpu = { version = "29.0.1", optional = true }
-egui-wgpu = { version = "0.36.1", optional = true }
+# Ring member (see the `egui` block above): 0.36.1 carries egui 0.36 and wgpu
+# 30, so bumping this line alone splits both graphs. It was bumped alone once,
+# and entry.rs stopped typechecking — `eframe::wgpu::PresentMode` and
+# `egui_wgpu::wgpu::PresentMode` became two types.
+egui-wgpu = { version = "0.35.0", optional = true }
 pollster = { version = "1.0", optional = true }
 # ADR-0024 SD4/SD6/SD7: WebSocket carrier + protobuf wire. The proto
 # contract lives at proto/boxer/imzero2/v1/input.proto; inputproto.rs
@@ -204,7 +208,12 @@ rand = "0.10.2"
 blake3 = "1.8.2"
 egui_extras = { version = "0.35.0", features = ["default", "datepicker", "serde"] }
 jiff = { version = "0.2", default-features = false, features = ["std"] }
-egui_table = "0.10.0"
+# Ring members (see the `egui` block above): the next line of each — egui_table
+# 0.10, egui_dock 0.21, egui_extras 0.36 — is built against egui 0.36 and must
+# wait for the ring to move together. egui_table was bumped alone once; the
+# TableDelegate impls in interpreter.rs then saw egui_table's 0.36 `Ui` and the
+# crate's own 0.35 `Ui` as unrelated types.
+egui_table = "0.9.0"
 egui_dock = "0.20"
 egui_graphs = { version = "0.31", features = ["events"] }
 petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
