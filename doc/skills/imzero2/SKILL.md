@@ -1627,6 +1627,12 @@ What to know before using it:
 - **Determinism.** Random placement hashes the node id, so a demo captures
   stably; the force step is deterministic too because every row is summed by
   one goroutine in a fixed order.
+- **Pins.** `NodeSpec.Pinned` with `PinX/PinY` fixes a node in world units
+  every frame (ADR-0224 §SD10); the force step leaves it alone and a drag
+  moves it for the gesture only — `NodeDragEnd` carries the drop position
+  in `Event.X/Y`, so the caller decides whether its pin follows.
+  `Opts.PinOnDrag` holds dropped nodes widget-side until `UnpinNode`;
+  `PinNode` sets such a hold from code; `IsPinned` reads either kind.
 - **Donuts.** `NodeSpec.Donut{Values, Colors, Total}` draws a ring of
   proportional slices around the node (ADR-0224 §SD9): colours default to
   the qualitative cycle, a `Total` above the sum leaves a muted track (a

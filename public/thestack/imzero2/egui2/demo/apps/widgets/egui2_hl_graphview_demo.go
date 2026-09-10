@@ -35,6 +35,8 @@ type graphviewDemoState struct {
 	forcePaused  bool
 	forceDonuts  bool
 	forceShares  []float32 // three shares per node, backing the donuts
+	forcePinRoot bool
+	forceHold    bool // dropped nodes stay where they were dropped
 
 	hierNodes []graphview.NodeSpec
 	hierEdges []graphview.EdgeSpec
@@ -199,11 +201,20 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	c.SliderF64(ids.PrepareStr("gv-force-kscale"), st.forceKScale, 0.1, 5).Text("k scale").SendRespVal(&st.forceKScale)
 	c.Checkbox(ids.PrepareStr("gv-force-paused"), st.forcePaused, "paused").SendRespVal(&st.forcePaused)
 	c.Checkbox(ids.PrepareStr("gv-force-donuts"), st.forceDonuts, "donut rings on every node").SendRespVal(&st.forceDonuts)
+	c.Checkbox(ids.PrepareStr("gv-force-pinroot"), st.forcePinRoot, "pin the root at the canvas centre (declared pin)").SendRespVal(&st.forcePinRoot)
+	c.Checkbox(ids.PrepareStr("gv-force-hold"), st.forceHold, "dropped nodes stay put (double-click releases)").SendRespVal(&st.forceHold)
+	width := demoGraphviewWidth(ids, "gv-force-pane")
 	for i := range st.forceNodeSet {
 		st.forceNodeSet[i].Donut = graphview.Donut{}
 		if st.forceDonuts {
 			st.forceNodeSet[i].Donut = graphview.Donut{Values: st.forceShares[3*i : 3*i+3]}
 		}
+		st.forceNodeSet[i].Pinned = false
+	}
+	if st.forcePinRoot && len(st.forceNodeSet) > 0 {
+		// The declared pin is re-stated every frame in world units; here the
+		// canvas centre, so it follows a pane resize.
+		st.forceNodeSet[0].Pinned, st.forceNodeSet[0].PinX, st.forceNodeSet[0].PinY = true, width/2, 200
 	}
 	for range c.Horizontal().KeepIter() {
 		if c.Button(ids.PrepareStr("gv-force-reset"), c.Atoms().Text("reset layout").Keep()).SendResp().HasPrimaryClicked() {
@@ -223,10 +234,22 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 		Dt: float32(st.forceDt), Damping: float32(st.forceDamping), Epsilon: float32(st.forceEps),
 		MaxStep: float32(st.forceMaxStep), KScale: float32(st.forceKScale), Paused: st.forcePaused,
 	}
-	st.force.Render(st.forceNodeSet, st.forceEdgeSet, demoGraphviewWidth(ids, "gv-force-pane"), 400)
+	o.PinOnDrag = st.forceHold
+	st.force.Render(st.forceNodeSet, st.forceEdgeSet, width, 400)
+	held := 0
+	for _, ev := range st.force.Events() {
+		if ev.Kind == graphview.EventKindNodeDoubleClick {
+			st.force.UnpinNode(ev.Node)
+		}
+	}
+	for _, n := range st.forceNodeSet {
+		if st.force.IsPinned(n.Id) {
+			held++
+		}
+	}
 	m := st.force.Metrics()
-	c.Label(fmt.Sprintf("nodes=%d edges=%d steps=%d avg displacement=%.4f settled=%v",
-		m.NodeCount, m.EdgeCount, m.Steps, m.LastDisplacement, st.force.IsSettled())).Send()
+	c.Label(fmt.Sprintf("nodes=%d edges=%d pinned=%d steps=%d avg displacement=%.4f settled=%v",
+		m.NodeCount, m.EdgeCount, held, m.Steps, m.LastDisplacement, st.force.IsSettled())).Send()
 }
 
 func demoGraphviewHier(ids *c.WidgetIdStack, st *graphviewDemoState) {

@@ -187,6 +187,18 @@ at that zoom the ring would dwarf the node and cost a polygon per slice for
 nothing legible. Per-slice hover and click are deferred until a consumer
 needs them; the pick treats the ring as part of the node.
 
+**SD10 — Pinned vertices follow d3-force's fixed-position model.** A node is
+fixed either by the caller — `Pinned` with a world position on its
+`NodeSpec`, re-stated every frame like the rest of the declaration — or by
+the widget, which holds a node where the user dropped it when `PinOnDrag`
+is set and until `UnpinNode` releases it; `PinNode` sets such a hold from
+code. The force step leaves fixed nodes where they are, and a drag on a
+declared-pinned node moves it for the gesture only: the node events carry
+the node's world position, so `NodeDragEnd` tells the caller where the user
+left it, and whether the pin follows is the caller's decision, not the
+widget's. A hairline ring marks a fixed node. The static layouts re-place a
+held node on topology change; a declared pin wins over any placement.
+
 ## Alternatives
 
 - **O1 — keep the binding.** Every quality fix is seam work in three places,

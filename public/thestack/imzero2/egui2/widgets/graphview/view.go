@@ -196,6 +196,30 @@ func (v *View) CanvasScreenOrigin() (x, y float32, ok bool) {
 	return v.originX, v.originY, v.originOk
 }
 
+// PinNode holds a node at (x, y) in world units until UnpinNode: the force
+// layout leaves it alone (ADR-0224 §SD10). A pin declared on the NodeSpec
+// takes precedence while it is declared.
+func (v *View) PinNode(id uint64, x, y float32) {
+	if s, ok := v.g.slot[id]; ok {
+		v.g.x[s], v.g.y[s] = x, y
+		v.g.held[s] = true
+	}
+}
+
+// UnpinNode releases a hold set by PinNode or Options.PinOnDrag. A pin
+// declared on the NodeSpec is the caller's to drop.
+func (v *View) UnpinNode(id uint64) {
+	if s, ok := v.g.slot[id]; ok {
+		v.g.held[s] = false
+	}
+}
+
+// IsPinned reports whether the node is fixed by a declared pin or a hold.
+func (v *View) IsPinned(id uint64) bool {
+	s, ok := v.g.slot[id]
+	return ok && v.g.isPinned(int(s))
+}
+
 // SetNodePosition moves a node in world units; a force layout continues
 // from there.
 func (v *View) SetNodePosition(id uint64, x, y float32) {
@@ -258,8 +282,8 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			v.resetPending = false
 			v.hierDone = false
 			v.fs.reset()
-			for i := range v.g.pinned {
-				v.g.pinned[i] = false
+			for i := range v.g.held {
+				v.g.held[i] = false
 			}
 			created = allSlots(n)
 			v.drag = dragState{}
@@ -282,6 +306,9 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			layoutHierarchical(&v.g, hp)
 			v.hierDone = true
 		}
+		// Declared pins win over any placement; the drag in flight keeps its
+		// node where the pointer has it (ADR-0224 §SD10).
+		v.g.applyPins(v.dragSlot())
 
 		// Input, against the previous frame's geometry.
 		v.applyInput(style, px, py, posOk, inside, areaFlags, wheel)
@@ -378,10 +405,10 @@ func (v *View) applyInput(style Style, px, py float32, posOk, inside bool,
 	}
 	if hoverOk != v.hoveredOk || hoverId != v.hoveredId {
 		if v.hoveredOk {
-			v.events = append(v.events, Event{Kind: EventKindNodeHoverLeave, Node: v.hoveredId})
+			v.events = append(v.events, v.nodeEventById(EventKindNodeHoverLeave, v.hoveredId))
 		}
 		if hoverOk {
-			v.events = append(v.events, Event{Kind: EventKindNodeHoverEnter, Node: hoverId})
+			v.events = append(v.events, v.nodeEventById(EventKindNodeHoverEnter, hoverId))
 		}
 		v.hoveredId, v.hoveredOk = hoverId, hoverOk
 	}
@@ -396,7 +423,7 @@ func (v *View) applyInput(style Style, px, py float32, posOk, inside bool,
 		case hitNode >= 0:
 			id := v.g.ids[hitNode]
 			if o.NodeClicking {
-				v.events = append(v.events, Event{Kind: EventKindNodeClick, Node: id})
+				v.events = append(v.events, v.nodeEvent(EventKindNodeClick, hitNode))
 			}
 			if o.NodeSelection {
 				v.toggleNodeSelection(id, o.NodeSelectionMulti)
@@ -414,7 +441,7 @@ func (v *View) applyInput(style Style, px, py float32, posOk, inside bool,
 		}
 	}
 	if posOk && inside && areaFlags.HasDoubleClicked() && hitNode >= 0 && o.NodeClicking {
-		v.events = append(v.events, Event{Kind: EventKindNodeDoubleClick, Node: v.g.ids[hitNode]})
+		v.events = append(v.events, v.nodeEvent(EventKindNodeDoubleClick, hitNode))
 	}
 
 	// Drag: a node when the press lands on one, the camera otherwise. The
@@ -422,10 +449,8 @@ func (v *View) applyInput(style Style, px, py float32, posOk, inside bool,
 	if areaFlags.HasDragStarted() && posOk {
 		v.drag = dragState{active: true, lastX: px, lastY: py}
 		if hitNode >= 0 && !o.NoDragging {
-			id := v.g.ids[hitNode]
-			v.drag.isNode, v.drag.nodeId = true, id
-			v.g.pinned[hitNode] = true
-			v.events = append(v.events, Event{Kind: EventKindNodeDragStart, Node: id})
+			v.drag.isNode, v.drag.nodeId = true, v.g.ids[hitNode]
+			v.events = append(v.events, v.nodeEvent(EventKindNodeDragStart, hitNode))
 		}
 	}
 	if v.drag.active && areaFlags.HasDragged() && posOk {
@@ -433,7 +458,6 @@ func (v *View) applyInput(style Style, px, py float32, posOk, inside bool,
 		v.drag.lastX, v.drag.lastY = px, py
 		if v.drag.isNode {
 			if s, ok := v.g.slot[v.drag.nodeId]; ok {
-				v.g.pinned[s] = true
 				v.g.x[s] += dx / v.cam.zoom
 				v.g.y[s] += dy / v.cam.zoom
 			}
@@ -446,9 +470,11 @@ func (v *View) applyInput(style Style, px, py float32, posOk, inside bool,
 	if v.drag.active && (areaFlags.HasDragStopped() || !areaFlags.HasIsPointerButtonDown()) {
 		if v.drag.isNode {
 			if s, ok := v.g.slot[v.drag.nodeId]; ok {
-				v.g.pinned[s] = false
+				if o.PinOnDrag {
+					v.g.held[s] = true
+				}
+				v.events = append(v.events, v.nodeEvent(EventKindNodeDragEnd, int32(s)))
 			}
-			v.events = append(v.events, Event{Kind: EventKindNodeDragEnd, Node: v.drag.nodeId})
 		}
 		v.drag = dragState{}
 	}
@@ -486,14 +512,37 @@ func zoomAnchor(wheel c.CanvasWheelValue, px, py float32, posOk bool, w, h float
 func (v *View) toggleNodeSelection(id uint64, multi bool) {
 	if _, sel := v.selNodes[id]; sel {
 		delete(v.selNodes, id)
-		v.events = append(v.events, Event{Kind: EventKindNodeDeselect, Node: id})
+		v.events = append(v.events, v.nodeEventById(EventKindNodeDeselect, id))
 		return
 	}
 	if !multi {
 		v.deselectAll()
 	}
 	v.selNodes[id] = struct{}{}
-	v.events = append(v.events, Event{Kind: EventKindNodeSelect, Node: id})
+	v.events = append(v.events, v.nodeEventById(EventKindNodeSelect, id))
+}
+
+// nodeEvent builds a node event carrying the slot's world position.
+func (v *View) nodeEvent(kind EventKindE, slot int32) Event {
+	return Event{Kind: kind, Node: v.g.ids[slot], X: v.g.x[slot], Y: v.g.y[slot]}
+}
+
+// nodeEventById is nodeEvent for an id that may no longer have a slot.
+func (v *View) nodeEventById(kind EventKindE, id uint64) Event {
+	if s, ok := v.g.slot[id]; ok {
+		return v.nodeEvent(kind, s)
+	}
+	return Event{Kind: kind, Node: id}
+}
+
+// dragSlot is the slot of the node under the user's drag, or -1.
+func (v *View) dragSlot() int32 {
+	if v.drag.active && v.drag.isNode {
+		if s, ok := v.g.slot[v.drag.nodeId]; ok {
+			return s
+		}
+	}
+	return -1
 }
 
 func (v *View) toggleEdgeSelection(k [2]uint64, multi bool) {
@@ -511,7 +560,7 @@ func (v *View) toggleEdgeSelection(k [2]uint64, multi bool) {
 
 func (v *View) deselectAll() {
 	for id := range v.SelectedNodes() {
-		v.events = append(v.events, Event{Kind: EventKindNodeDeselect, Node: id})
+		v.events = append(v.events, v.nodeEventById(EventKindNodeDeselect, id))
 	}
 	for k := range v.SelectedEdges() {
 		v.events = append(v.events, Event{Kind: EventKindEdgeDeselect, From: k[0], To: k[1]})

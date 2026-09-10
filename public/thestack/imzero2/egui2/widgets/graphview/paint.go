@@ -233,6 +233,9 @@ func (v *View) paint(style Style, w, h float32) {
 		hov := v.hoveredOk && id == v.hoveredId
 		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
 		r := v.nodeOuterPx(style, i)
+		if v.g.isPinned(i) {
+			c.PaintCircleStroke(sx, sy, r+1, style.PinnedStroke, styletokens.StrokeHair).Send()
+		}
 		if sel {
 			c.PaintCircleStroke(sx, sy, r+2, style.Selected, styletokens.StrokeStrong).Send()
 		}

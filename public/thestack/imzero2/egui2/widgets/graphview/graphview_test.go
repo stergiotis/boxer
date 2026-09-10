@@ -128,11 +128,11 @@ func TestForceStepPushesOverlapApartAndSettles(t *testing.T) {
 	require.True(t, fs.settled(0.5), "centre gravity balances repulsion")
 }
 
-func TestForceStepLeavesPinnedNodesAlone(t *testing.T) {
+func TestForceStepLeavesFixedNodesAlone(t *testing.T) {
 	var g graph
 	g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}}, []EdgeSpec{{From: 1, To: 2}})
 	g.x[g.slot[2]] = 300
-	g.pinned[g.slot[1]] = true
+	g.fixed[g.slot[1]] = true
 	fs := forceState{lastDisp: nan32}
 	fs.step(&g, 500, 500, ForceParams{}.withDefaults(), 0.3)
 	require.Equal(t, float32(0), g.x[g.slot[1]])

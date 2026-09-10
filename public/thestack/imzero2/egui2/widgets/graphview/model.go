@@ -60,10 +60,13 @@ func (inst EventKindE) IsEdge() bool {
 }
 
 // Event is one interaction reported by [View.Events]. Node carries the node
-// id for node kinds; From/To carry the edge for edge kinds.
+// id for node kinds, with X and Y the node's world position at the event —
+// on NodeDragEnd, where the user left it; From/To carry the edge for edge
+// kinds.
 type Event struct {
 	Kind EventKindE
 	Node uint64
+	X, Y float32
 	From uint64
 	To   uint64
 }
@@ -76,6 +79,11 @@ type NodeSpec struct {
 	Color  color.Color
 	Radius float32 // world units
 	Donut  Donut   // a ring of proportional slices around the node; zero draws none
+	// Pinned fixes the node at (PinX, PinY) in world units (ADR-0224 §SD10):
+	// the layout leaves it there and a drag reports where the user took it
+	// without moving the pin — the caller decides whether to follow.
+	Pinned     bool
+	PinX, PinY float32
 }
 
 // EdgeSpec is one directed edge of the frame's declaration. Parallel edges
@@ -176,6 +184,9 @@ type Options struct {
 	// LabelsAlways paints every node label; off, only hovered, selected and
 	// dragged nodes carry one.
 	LabelsAlways bool
+	// PinOnDrag holds a node where the user drops it, out of the force
+	// layout's reach, until UnpinNode releases it (ADR-0224 §SD10).
+	PinOnDrag bool
 
 	Style Style
 }
@@ -201,6 +212,7 @@ type Style struct {
 	LoopSize          float32     // self-loop radius as a multiple of the node radius, default 3
 	DonutWidth        float32     // ring thickness in screen pixels, default 5
 	DonutTrack        color.Color // the unfilled remainder when Donut.Total exceeds the values
+	PinnedStroke      color.Color // hairline ring marking a pinned or held node
 	Monospace         bool
 }
 
@@ -225,6 +237,7 @@ func DefaultStyle() Style {
 		LoopSize:          3,
 		DonutWidth:        5,
 		DonutTrack:        hex(styletokens.NeutralBorderDefault),
+		PinnedStroke:      hex(styletokens.NeutralTextSecondary),
 	}
 }
 
@@ -252,6 +265,7 @@ func (inst Style) withDefaults() Style {
 	col(&inst.Highlight, d.Highlight)
 	col(&inst.Selected, d.Selected)
 	col(&inst.DonutTrack, d.DonutTrack)
+	col(&inst.PinnedStroke, d.PinnedStroke)
 	num(&inst.NodeRadius, d.NodeRadius)
 	num(&inst.DonutWidth, d.DonutWidth)
 	num(&inst.EdgeWidth, d.EdgeWidth)

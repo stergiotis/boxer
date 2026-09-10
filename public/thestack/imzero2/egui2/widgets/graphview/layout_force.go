@@ -33,7 +33,7 @@ func idealEdgeLength(w, h float32, n int, kScale float32) float32 {
 }
 
 // step advances the simulation by one iteration over the canvas w×h and
-// records the average per-node displacement. Pinned nodes accumulate no
+// records the average per-node displacement. Fixed nodes accumulate no
 // motion. centerGravity is 0 for the plain layout.
 func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity float32) {
 	n := g.n()
@@ -149,7 +149,7 @@ func attraction(g *graph, dx, dy []float32, k, eps, cAttract float32) {
 	}
 }
 
-// applyDisplacements moves every unpinned node by disp · dt · damping,
+// applyDisplacements moves every node that is not fixed by disp · dt · damping,
 // clamped to maxStep, and returns the average clamped step length — the
 // settle metric. Non-finite results leave the node where it was.
 func applyDisplacements(g *graph, dx, dy []float32, dt, damping, maxStep float32) float32 {
@@ -157,7 +157,7 @@ func applyDisplacements(g *graph, dx, dy []float32, dt, damping, maxStep float32
 	count := 0
 	scale := dt * damping
 	for i := range g.ids {
-		if g.pinned[i] {
+		if g.fixed[i] {
 			continue
 		}
 		sx, sy := dx[i]*scale, dy[i]*scale

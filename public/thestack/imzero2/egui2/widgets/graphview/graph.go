@@ -19,7 +19,13 @@ type graph struct {
 	radius []float32
 	donut  []Donut
 	seen   []uint32 // frame stamp of the last declaration that named the slot
-	pinned []bool   // held by a drag; the force step leaves it alone
+	// fixed is recomputed every frame: the force step leaves a fixed node
+	// alone. Its sources are a declared pin, a widget-side hold and the drag.
+	fixed   []bool
+	pinDecl []bool // Pinned in this frame's declaration
+	pinX    []float32
+	pinY    []float32
+	held    []bool // held where the user dropped it (Options.PinOnDrag / PinNode)
 
 	eFrom, eTo []int32
 	eLabel     []string
@@ -68,7 +74,11 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 			g.radius = append(g.radius, 0)
 			g.donut = append(g.donut, Donut{})
 			g.seen = append(g.seen, 0)
-			g.pinned = append(g.pinned, false)
+			g.fixed = append(g.fixed, false)
+			g.pinDecl = append(g.pinDecl, false)
+			g.pinX = append(g.pinX, 0)
+			g.pinY = append(g.pinY, 0)
+			g.held = append(g.held, false)
 			g.newSlots = append(g.newSlots, s)
 		}
 		g.seen[s] = g.frame
@@ -76,6 +86,9 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		g.col[s] = sp.Color
 		g.radius[s] = sp.Radius
 		g.donut[s] = sp.Donut
+		g.pinDecl[s] = sp.Pinned
+		g.pinX[s] = sp.PinX
+		g.pinY[s] = sp.PinY
 	}
 	// Drop slots the declaration no longer names. Swap-remove from the back
 	// so every index below the cursor stays valid; a new slot can never be
@@ -165,7 +178,11 @@ func (g *graph) removeSlot(s int) {
 		g.radius[s] = g.radius[last]
 		g.donut[s] = g.donut[last]
 		g.seen[s] = g.seen[last]
-		g.pinned[s] = g.pinned[last]
+		g.fixed[s] = g.fixed[last]
+		g.pinDecl[s] = g.pinDecl[last]
+		g.pinX[s] = g.pinX[last]
+		g.pinY[s] = g.pinY[last]
+		g.held[s] = g.held[last]
 		g.slot[g.ids[s]] = int32(s)
 	}
 	g.ids = g.ids[:last]
@@ -176,8 +193,29 @@ func (g *graph) removeSlot(s int) {
 	g.radius = g.radius[:last]
 	g.donut = g.donut[:last]
 	g.seen = g.seen[:last]
-	g.pinned = g.pinned[:last]
+	g.fixed = g.fixed[:last]
+	g.pinDecl = g.pinDecl[:last]
+	g.pinX = g.pinX[:last]
+	g.pinY = g.pinY[:last]
+	g.held = g.held[:last]
 }
+
+// applyPins moves every declared-pinned node to its pin and recomputes
+// fixed. dragSlot, when non-negative, is the node under the user's drag: it
+// keeps the dragged position this frame so the pin does not snap it back
+// mid-gesture, and it is fixed like the others.
+func (g *graph) applyPins(dragSlot int32) {
+	for i := range g.ids {
+		if g.pinDecl[i] && int32(i) != dragSlot {
+			g.x[i], g.y[i] = g.pinX[i], g.pinY[i]
+		}
+		g.fixed[i] = g.pinDecl[i] || g.held[i] || int32(i) == dragSlot
+	}
+}
+
+// isPinned reports whether slot s is fixed by a pin or a hold, as opposed to
+// only by the drag in flight.
+func (g *graph) isPinned(s int) bool { return g.pinDecl[s] || g.held[s] }
 
 // neighbors yields the undirected neighbour slots of slot s.
 func (g *graph) neighbors(s int32) []int32 {
