@@ -219,7 +219,9 @@ func (v *View) paint(style Style, w, h float32) {
 			// touches itself.
 			for _, seg := range splitArc(a.a0, a.a1) {
 				v.arcXs, v.arcYs = ringSector(sx, sy, rIn, rOut, seg[0], seg[1], v.arcXs[:0], v.arcYs[:0])
-				c.PaintPolygonFilled(v.arcXs, v.arcYs, a.col).Concave().Send()
+				// The concave fill is a raw mesh with no feathering; a hairline
+				// stroke in the slice's own colour is what anti-aliases its edge.
+				c.PaintPolygonFilled(v.arcXs, v.arcYs, a.col).Concave().Stroke(a.col, styletokens.StrokeHair).Send()
 			}
 		}
 	}

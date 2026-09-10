@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
+
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
 func TestReconcileKeepsSurvivingPositionsAndDropsVanished(t *testing.T) {
@@ -210,4 +212,14 @@ func TestForceParamsDefaultsMatchTheBinding(t *testing.T) {
 	p := ForceParams{}.withDefaults()
 	require.Equal(t, ForceParams{Dt: 0.05, Damping: 0.3, Epsilon: 1e-3, MaxStep: 10, KScale: 1, CAttract: 1, CRepulse: 1, CenterGravity: 0.3, Theta: defaultTheta}, p)
 	require.Equal(t, float32(0.02), ForceParams{Dt: 0.02}.withDefaults().Dt, "a set field is kept")
+}
+
+func TestZoomAnchorFallsBackFromTheWheelRowToThePointerToTheCentre(t *testing.T) {
+	nan := float32(math.NaN())
+	ax, ay := zoomAnchor(c.CanvasWheelValue{Zoom: 1.1, HoverX: 10, HoverY: 20}, 300, 400, true, 800, 600)
+	require.Equal(t, [2]float32{10, 20}, [2]float32{ax, ay}, "the row's own hover wins")
+	ax, ay = zoomAnchor(c.CanvasWheelValue{Zoom: 1.1, HoverX: nan, HoverY: nan}, 300, 400, true, 800, 600)
+	require.Equal(t, [2]float32{300, 400}, [2]float32{ax, ay}, "a sense region on top leaves the row's hover NaN; the pointer anchors")
+	ax, ay = zoomAnchor(c.CanvasWheelValue{Zoom: 1.1, HoverX: nan, HoverY: nan}, 0, 0, false, 800, 600)
+	require.Equal(t, [2]float32{400, 300}, [2]float32{ax, ay}, "no pointer at all anchors on the centre")
 }

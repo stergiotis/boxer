@@ -455,8 +455,9 @@ func (v *View) applyInput(style Style, px, py float32, posOk, inside bool,
 
 	// Wheel: anchored zoom and scroll-pan, both scoped to this canvas.
 	if !o.NoZoomAndPan {
-		if z := wheel.Zoom; z > 0 && z != 1 && !isNaN32(wheel.HoverX) {
-			v.cam.zoomAround(z, wheel.HoverX, wheel.HoverY)
+		if z := wheel.Zoom; z > 0 && z != 1 {
+			ax, ay := zoomAnchor(wheel, px, py, posOk, v.lastW, v.lastH)
+			v.cam.zoomAround(z, ax, ay)
 			v.fitPending = false
 		}
 		if wheel.ScrollX != 0 || wheel.ScrollY != 0 {
@@ -465,6 +466,21 @@ func (v *View) applyInput(style Style, px, py float32, posOk, inside bool,
 			v.fitPending = false
 		}
 	}
+}
+
+// zoomAnchor picks the canvas point a wheel zoom keeps fixed: the wheel
+// row's own hover when the canvas reported one, else the pointer the frame
+// resolved, else the canvas centre. The row's hover is NaN whenever another
+// widget is egui's topmost at the pointer — which the sense region over
+// this canvas always is — so the fallbacks carry the common case.
+func zoomAnchor(wheel c.CanvasWheelValue, px, py float32, posOk bool, w, h float32) (ax, ay float32) {
+	switch {
+	case !isNaN32(wheel.HoverX) && !isNaN32(wheel.HoverY):
+		return wheel.HoverX, wheel.HoverY
+	case posOk:
+		return px, py
+	}
+	return w / 2, h / 2
 }
 
 func (v *View) toggleNodeSelection(id uint64, multi bool) {
