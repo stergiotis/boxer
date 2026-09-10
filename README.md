@@ -1,6 +1,8 @@
 # boxer
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/stergiotis/boxer.svg)](https://pkg.go.dev/github.com/stergiotis/boxer) [![Go Report Card](https://goreportcard.com/badge/github.com/stergiotis/boxer)](https://goreportcard.com/report/github.com/stergiotis/boxer)
+[![Go Reference](https://pkg.go.dev/badge/github.com/stergiotis/boxer.svg)](https://pkg.go.dev/github.com/stergiotis/boxer)
+
+Working in this tree, human or agent? [`AGENTS.md`](AGENTS.md) is the router: it carries the few repo-specific things that are easy to miss and points at the authoritative document for everything else.
 
 ## Maturity
 Alpha, incomplete test coverage, unstable, API may still change heavily.
@@ -52,9 +54,11 @@ go test  -tags="$(cat ./tags)" ./...
 go vet   -tags="$(cat ./tags)" ./...
 ```
 
+The file is empty because both of the tags it used to carry were retired: `boxer_enable_profiling`, which compiled out the pprof capture paths, gave way to splitting the HTTP listener into its own package, so that a binary pays for `net/http` only if it imports one ([ADR-0212](doc/adr/0212-split-pprof-http-listener.md)); and `goexperiment.jsonv2`, needed until Go 1.27 and without which the build failed outright with misleading *undefined identifier* errors, went with `encoding/json/v2` graduating.
+
 Shipped binaries are built one way, from a sourced environment file rather than per-script flags, so that two builds of one commit come out byte-identical across machines, paths and clocks ([ADR-0215](doc/adr/0215-retire-mimalloc-reproducible-builds.md)). `source scripts/dev/go-build-env.sh` before a `go build` you intend to ship or compare, and `scripts/dev/rust-repro-env.sh` before a `cargo build`. CI builds the Go host and the lean Rust render head twice, at different paths, and byte-compares them, and checks the committed h3 wasm blob against a rebuild; what the property covers and what it does not, including the air-gapped case, is in [ENGINEERING_PRACTICES §7](doc/ENGINEERING_PRACTICES.md#7-reproducible-builds).
 
-The file has been empty since `boxer_enable_profiling` — which compiled out the pprof capture paths — was retired in favour of splitting the HTTP listener into its own package, so that a binary pays for `net/http` only if it imports one ([ADR-0212](doc/adr/0212-split-pprof-http-listener.md)). Before that, and until Go 1.27, the set carried `goexperiment.jsonv2`, without which the build failed outright with misleading *undefined identifier* errors; `encoding/json/v2` graduated and that tag is retired too.
+[`./boxer.sh`](boxer.sh) is the repository's own entry point: it sources `go-build-env.sh`, builds `./public/app` and runs it. `./boxer.sh --help` lists the command groups — code generation (`egui2gen`, `keelsoncodec`, `protogen`), governance and code analysis (`gov`, `code`), ingestion and stores (`markdown`, `fs`, `datacatalog`), the env-var registry (`env`), and the durable-work worker (`watchbill`).
 
 ## Documentation
 Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs live next to the code they describe:
@@ -63,6 +67,8 @@ Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs l
 * **Architecture decisions** — [`doc/adr/`](doc/adr/) records the *why* behind cross-cutting choices (nanopass discipline, h3 WASM bridge, license gate, Kafka port, leeway membership-role classifier, …).
 * **Changelog** — [`doc/changelog/`](doc/changelog/) compiles window-bounded change summaries, one entry per two-to-four-week window, each opening with a hash-free *window in brief*; [`INDEX.md`](doc/changelog/INDEX.md) is a generated table of contents over the entries.
 * **Per-package docs** — larger subsystems co-locate `TUTORIAL.md` / `HOWTO.md` / `EXPLANATION.md` / reference docs with their source (e.g. [`public/db/clickhouse/dsl/EXPLANATION.md`](public/db/clickhouse/dsl/EXPLANATION.md)).
+* **How-to guides** — [`doc/howto/`](doc/howto/) carries task recipes: ingest a markdown vault and query its graph, snapshot a file tree into ClickHouse, launch apps headlessly, diagnose render jank, adopt boxer's standards downstream.
+* **Trials** — [`doc/trials/`](doc/trials/) holds reproducible measurement protocols in the sea-trials sense: standardized runs repeated against later builds. Each trial's README §0 states the one claim its numbers carry and the condition that claim holds under; the tables under `runs/` are per-arm evidence, not citable figures.
 * **Standards** — [`CODINGSTANDARDS.md`](CODINGSTANDARDS.md) and [`doc/DOCUMENTATION_STANDARD.md`](doc/DOCUMENTATION_STANDARD.md).
 * **Engineering practices** — [`doc/ENGINEERING_PRACTICES.md`](doc/ENGINEERING_PRACTICES.md) catalogues CI workflows, static analysis, build-tag discipline, supply-chain gates, and in-tree governance.
 
@@ -79,8 +85,7 @@ Boxer uses chained file extensions (e.g. `file.docx.pdf.txt`):
 </dl>
 
 ### Folders
-Path specificity increases with depth. Example: `./fec/ea/golay24` —
-`fec` is forward error correction (a [well-known technical term](https://simple.wikipedia.org/wiki/Forward_error_correction)); `ea` is *Eingabe-Ausgabe* (German for input/output, chosen to avoid clashing with stdlib `io`); `golay24` is the specific algorithm.
+Path specificity increases with depth. Example: `public/analytics/timeseries/matrixprofile` — `analytics` is the kind of work, `timeseries` the shape of data it is done on, `matrixprofile` the one algorithm. The same descent reads elsewhere: `public/semistructured/markdown/obsidian`, `public/science/geo/h3`, `public/math/numerical/timeticks`.
 
 Ideally the leaf package name is discriminative enough to drive IDE autocompletion.
 
@@ -92,7 +97,7 @@ and restated in [ADR-0204 §SD1](doc/adr/0204-leaflet-map-core-port.md); it buys
 a name that is discriminative in autocompletion and that does not collide with
 whatever the plain word already means here — `lading` rather than `fs`, because
 a membership named `fsMode` reads as something `io/fs` defines. Packages named
-for a well-known technical term (`fec`, `ea`, `dsl`) keep it; the metaphor is
+for a well-known technical term (`fec`, `dsl`) keep it; the metaphor is
 for the parts that have no such term. New house names belong in this table.
 
 | Name | At sea | In boxer |
@@ -108,7 +113,7 @@ for the parts that have no such term. New house names belong in this table.
 ### Glossary
 <dl>
 <dt>e2e</dt><dd>End-to-end.</dd>
-<dt>ea</dt><dd>Input-output (German abbreviation, to distinguish from core packages).</dd>
+<dt>ea</dt><dd>Input/output; kept distinct from <code>io</code> so the standard library's package stays reachable beside it.</dd>
 <dt>fec</dt><dd>Forward error correction.</dd>
 <dt>inst</dt><dd>Instance (similar to self / this).</dd>
 <dt>vcs</dt><dd>Version control system (git, svn, hg, perforce, …).</dd>
