@@ -98,7 +98,7 @@ func demoCborDiag(ids *c.WidgetIdStack, st *cbordiagDemoState) {
 	for range c.HorizontalTop().KeepIter() {
 		c.Checkbox(ids.PrepareStr("tag-comments"), st.tagComments, "tag comments").SendRespVal(&st.tagComments)
 		c.Checkbox(ids.PrepareStr("float-precision"), st.floatPrecision, "float precision suffix").SendRespVal(&st.floatPrecision)
-		c.Label("width").Send()
+		c.Label("width").Send() // designlint:ignore=L1 (field caption; lowercase matches the checkbox labels beside it)
 		c.DragValueU64(ids.PrepareStr("width"), st.width).SendRespVal(&st.width)
 		st.width = min(max(st.width, 16), 160)
 	}
