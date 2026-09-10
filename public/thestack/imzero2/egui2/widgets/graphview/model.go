@@ -102,7 +102,13 @@ type ForceParams struct {
 	CAttract      float32 // attraction strength, default 1
 	CRepulse      float32 // repulsion strength, default 1
 	CenterGravity float32 // pull toward the canvas centre, LayoutForceDirectedCG only, default 0.3
-	Paused        bool
+	// Theta is the Barnes–Hut opening angle used above a few hundred nodes:
+	// smaller is closer to the exact sum and slower. Default 0.9.
+	Theta float32
+	// Exact forces the O(n²) pair sum at any size — for comparison and
+	// tests, not for graphs a user waits on.
+	Exact  bool
+	Paused bool
 }
 
 func (inst ForceParams) withDefaults() ForceParams {
@@ -119,6 +125,7 @@ func (inst ForceParams) withDefaults() ForceParams {
 	def(&inst.CAttract, 1)
 	def(&inst.CRepulse, 1)
 	def(&inst.CenterGravity, 0.3)
+	def(&inst.Theta, defaultTheta)
 	return inst
 }
 

@@ -208,6 +208,6 @@ func TestDistSegmentAndBezier(t *testing.T) {
 
 func TestForceParamsDefaultsMatchTheBinding(t *testing.T) {
 	p := ForceParams{}.withDefaults()
-	require.Equal(t, ForceParams{Dt: 0.05, Damping: 0.3, Epsilon: 1e-3, MaxStep: 10, KScale: 1, CAttract: 1, CRepulse: 1, CenterGravity: 0.3}, p)
+	require.Equal(t, ForceParams{Dt: 0.05, Damping: 0.3, Epsilon: 1e-3, MaxStep: 10, KScale: 1, CAttract: 1, CRepulse: 1, CenterGravity: 0.3, Theta: defaultTheta}, p)
 	require.Equal(t, float32(0.02), ForceParams{Dt: 0.02}.withDefaults().Dt, "a set field is kept")
 }

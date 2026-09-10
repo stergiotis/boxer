@@ -144,13 +144,24 @@ They are read from the widget after `Render` in the same frame; the input
 they reflect is one frame old, like every canvas register.
 
 **SD6 — Performance posture.** Positions are struct-of-arrays `float32`.
-Repulsion is the full n² form rather than the crate's symmetric pair loop:
-twice the arithmetic, but each row is independent, so it splits across
-goroutines above a node-count threshold and vectorises when a SIMD build is
-available. A `simd` implementation is **deferred** until the build
-environment sets the experiment; a Barnes–Hut approximation is deferred until
-a consumer brings a graph past a few thousand nodes and finds the pick loop
-or the step in a profile.
+Below a few hundred nodes repulsion is the exact full n² form rather than
+the crate's symmetric pair loop: twice the arithmetic, but each row is
+independent, so it splits across goroutines and vectorises when a SIMD
+build is available. Above that threshold repulsion is **Barnes–Hut** over a
+quadtree rebuilt every step, with d3-force's opening angle as the default
+and the walk order fixed, so the result stays deterministic and splits
+across goroutines the same way. The alternatives were weighed and are
+recorded here so they are not re-investigated: Gove's random vertex
+sampling (Computer Graphics Forum 2019; `d3-force-sampled`) is O(n) and
+measured about three times faster than d3's Barnes–Hut at equal readability,
+but it updates a random sample of vertices per iteration, which trades the
+per-frame stability an interactive widget shows and the determinism the
+gallery capture relies on; the fast multipole method (FM³) buys a better
+asymptote at a constant that pays off past the node counts this widget can
+draw legibly; quadtree reuse across iterations (`d3-force-reuse`) is a
+refinement that fits on top of Barnes–Hut later. A `simd` implementation
+of the exact rows is **deferred** until the build environment sets the
+experiment.
 
 **SD7 — Labels are screen-sized.** Node labels paint at a fixed point size
 above the node, monospace optional, rather than at the node's screen radius.
@@ -173,9 +184,9 @@ semantics.
   camera and hit-testing in Rust, so events still need fetchers and every
   feature still crosses the IDL. Killed.
 - **O4 — extend `layeredgraph/view`.** Deferred, see the QOC note.
-- **Barnes–Hut from the start.** The consumers are at tens to hundreds of
-  nodes; the O(n²) step is under a millisecond there. Deferred behind a
-  measurement.
+- **Random vertex sampling instead of Barnes–Hut.** Faster in the
+  published measurements, but stochastic per iteration; see SD6. Killed for
+  the interactive widget, open as a warm-up phase for very large graphs.
 
 ## Consequences
 
@@ -191,7 +202,9 @@ semantics.
 ### Negative
 
 - Two live-graph widgets coexist until migration completes.
-- The step is O(n²); large graphs need the deferred approximation.
+- The Barnes–Hut step is O(n log n) but still a per-frame simulation; tens
+  of thousands of nodes animate at a reduced rate and want a fast-forward
+  then a pause.
 - Node labels change size and placement relative to the binding.
 
 ### Neutral
@@ -202,9 +215,11 @@ semantics.
 ## Verification plan
 
 - **Lane.** Default `go test` for the layouts (hierarchical placement,
-  force-step convergence and displacement bookkeeping, reconcile keeping
-  dragged positions, camera fit), and the gallery demo under the screenshot
-  tour for the painted result.
+  force-step convergence and displacement bookkeeping, the Barnes–Hut
+  approximation against the exact sum, reconcile keeping dragged
+  positions, camera fit), and the gallery demo under the screenshot tour
+  for the painted result. The package benchmark compares the exact rows
+  with the tree at several sizes and is what the threshold was read from.
 - **What would fail.** A layout regression shows in the unit tests; a
   painter or input regression shows in the tour capture and in driving the
   demo with egui-mcp.
@@ -228,3 +243,10 @@ retirement is recorded when they have.
 - `doc/adr-background-work/snarl-port-analysis.md` — the substrate check.
 - Fruchterman & Reingold, *Graph Drawing by Force-directed Placement*,
   Software: Practice and Experience 21(11), 1991.
+- Barnes & Hut, *A hierarchical O(N log N) force-calculation algorithm*,
+  Nature 324, 1986.
+- Gove, *A Random Sampling O(n) Force-calculation Algorithm for Graph
+  Layouts*, Computer Graphics Forum 38(3), 2019 — the alternative weighed in
+  SD6.
+- Hachul & Jünger, *Drawing Large Graphs with a Potential-Field-Based
+  Multilevel Algorithm* (FM³), Graph Drawing 2004.

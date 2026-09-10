@@ -1620,8 +1620,10 @@ What to know before using it:
   under one id stack need distinct keys.
 - **Cost.** One batched marker opcode per (colour, radius), one line or
   Bézier per edge, one polygon per arrow head, one text per visible label.
-  The force step is O(n²) and splits across cores above 512 nodes; a few
-  thousand nodes animate, tens of thousands do not (ADR-0224 §SD6).
+  The force step is exact O(n²) below a few hundred nodes and Barnes–Hut
+  O(n log n) above, both split across cores; a few thousand nodes animate
+  at frame rate, tens of thousands at a reduced one (ADR-0224 §SD6).
+  `Opts.Force.Theta` trades accuracy for speed; `Exact` forces the pair sum.
 - **Determinism.** Random placement hashes the node id, so a demo captures
   stably; the force step is deterministic too because every row is summed by
   one goroutine in a fixed order.

@@ -158,7 +158,7 @@ func demoGraphviewRing(ids *c.WidgetIdStack, st *graphviewDemoState) {
 func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	// The slider binds a stable field (the databinding lands next frame), and
 	// the graph is rebuilt when the rounded count moves.
-	c.SliderF64(ids.PrepareStr("gv-force-n"), st.forceNodesF, 2, 3000).Text("nodes (binary tree)").SendRespVal(&st.forceNodesF)
+	c.SliderF64(ids.PrepareStr("gv-force-n"), st.forceNodesF, 2, 20000).Logarithmic(true).Text("nodes (binary tree)").SendRespVal(&st.forceNodesF)
 	if n := int(st.forceNodesF); n != st.forceNodes && n >= 2 {
 		st.forceNodes = n
 		st.rebuildForceGraph()

@@ -13,6 +13,8 @@ type forceState struct {
 	dx, dy   []float32
 	steps    uint64
 	lastDisp float32
+	tree     quadtree
+	stack    []int32
 }
 
 // parallelMinNodes is the node count from which the repulsion pass splits
@@ -53,9 +55,19 @@ func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity 
 
 	k2 := p.CRepulse * k * k
 	eps2 := p.Epsilon * p.Epsilon
-	if n >= parallelMinNodes && runtime.GOMAXPROCS(0) > 1 {
+	parallel := n >= parallelMinNodes && runtime.GOMAXPROCS(0) > 1
+	switch {
+	case !p.Exact && n >= barnesHutMinNodes:
+		fs.tree.build(g.x, g.y)
+		theta2 := p.Theta * p.Theta
+		if parallel {
+			fs.tree.repulsionBHParallel(g.x, g.y, fs.dx, fs.dy, k2, eps2, theta2)
+		} else {
+			fs.stack = fs.tree.repulsionBH(g.x, g.y, fs.dx, fs.dy, k2, eps2, theta2, 0, n, fs.stack)
+		}
+	case parallel:
 		repulsionParallel(g.x, g.y, fs.dx, fs.dy, k2, eps2)
-	} else {
+	default:
 		repulsionRows(g.x, g.y, fs.dx, fs.dy, k2, eps2, 0, n)
 	}
 	attraction(g, fs.dx, fs.dy, k, p.Epsilon, p.CAttract)
@@ -70,11 +82,13 @@ func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity 
 	fs.steps++
 }
 
-// repulsionRows accumulates the repulsive displacement of rows [lo, hi).
-// Full n² rather than the symmetric pair loop: every row is independent of
-// every other, which is what lets the rows split across goroutines and keeps
-// the inner loop free of scattered writes (ADR-0224 §SD6). The force
-// k²/d applied along delta/d is delta · k²/d², so no square root is needed.
+// repulsionRows accumulates the exact repulsive displacement of rows
+// [lo, hi). Full n² rather than the symmetric pair loop: every row is
+// independent of every other, which is what lets the rows split across
+// goroutines and keeps the inner loop free of scattered writes (ADR-0224
+// §SD6). The force k²/d applied along delta/d is delta · k²/d², so no
+// square root is needed. Above barnesHutMinNodes the quadtree in
+// layout_bh.go replaces this unless ForceParams.Exact asks otherwise.
 func repulsionRows(x, y, dx, dy []float32, k2, eps2 float32, lo, hi int) {
 	n := len(x)
 	for i := lo; i < hi; i++ {
