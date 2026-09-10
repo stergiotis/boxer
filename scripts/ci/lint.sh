@@ -160,6 +160,17 @@ step_begin "gov gate"
 # gofmt and go vet stay above, outside the gate, on purpose: they must still run
 # on a tree too broken to build this binary.
 #
+# `--exclude prompts/` withholds the LLM prompt books (ADR-0216 §SD2) from the
+# doc rules. A prompt document's body IS the system prompt, verbatim, with no
+# surrounding commentary to fence it off, so the doc-standard conventions here
+# would not merely fail to apply — they would change the artifact. DL001 wants a
+# type and a status, and every status it accepts then costs something untrue:
+# draft adds DL004's pre-human-review banner as the prompt's FIRST LINE, stable
+# asserts DL003 review metadata nobody produced, and deprecated / superseded
+# say the corpus is retired. An applet book (ADR-0132) carries the stanza
+# because its payload is fenced SQL and the prose around it really is
+# documentation.
+#
 # Five steps in one process rather than five separate boxer.sh invocations also
 # stops the binary being rebuilt per step (~38s -> ~18s here).
 #
@@ -171,6 +182,7 @@ if out=$("$here/../../boxer.sh" gov gate \
         --tags "$tags" \
         --entry-points-baseline scripts/ci/entry-points-baseline.txt \
         --naming-baseline scripts/ci/naming-baseline.txt \
+        --exclude 'prompts/' \
         2>"$gate_err"); then
     rm -f "$gate_err"
     printf '%s\n' "$out"
