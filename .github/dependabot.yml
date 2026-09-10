@@ -20,11 +20,11 @@ updates:
     open-pull-requests-limit: 10
 
   # The rust/ crates are three independent lockfiles, not a workspace, so each
-  # is listed separately.
+  # is listed separately. imzero2 gets its own entry below: it is the only one
+  # carrying the egui ring, and that ring needs update rules the others do not.
   - package-ecosystem: "cargo"
     directories:
       - "/rust/h3bridge"
-      - "/rust/imzero2"
       - "/rust/watermark"
     schedule:
       interval: "weekly"
@@ -33,3 +33,43 @@ updates:
       default-days: 5
       semver-major-days: 14
     open-pull-requests-limit: 10
+
+  - package-ecosystem: "cargo"
+    directory: "/rust/imzero2"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+    open-pull-requests-limit: 10
+    # The egui ring moves as one commit or not at all: every crate here links
+    # egui itself, so a single crate stepping to the next egui line puts two
+    # copies of egui/emath/epaint/ecolor in the graph and the seam between them
+    # stops typechecking. That is not a theoretical failure — bumping
+    # egui_table and egui-wgpu one at a time is what broke `rust/imzero2` (26
+    # type errors, hmi.sh dead), and each arrived as a one-line manifest diff
+    # with nothing at the call site to warn a reviewer.
+    #
+    # Patch updates within a line still flow; only the ring-breaking step is
+    # withheld, because it is a human decision about the whole ring at once.
+    # Cargo.toml's `egui` block names the crate currently gating the move and
+    # what to do when it releases. wgpu is here because egui-wgpu pins its
+    # major (0.35 → wgpu 29), so it moves with the ring rather than on its own.
+    ignore:
+      - dependency-name: "egui"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "eframe"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "egui_extras"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "egui_table"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "egui_dock"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "egui_graphs"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "egui-wgpu"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "wgpu"
+        update-types: ["version-update:semver-major"]
