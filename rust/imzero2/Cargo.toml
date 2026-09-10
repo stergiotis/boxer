@@ -214,7 +214,7 @@ jiff = { version = "0.2", default-features = false, features = ["std"] }
 # TableDelegate impls in interpreter.rs then saw egui_table's 0.36 `Ui` and the
 # crate's own 0.35 `Ui` as unrelated types.
 egui_table = "0.9.0"
-egui_dock = "0.20"
+egui_dock = "0.21"
 egui_graphs = { version = "0.31", features = ["events"] }
 petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
 png = "0.18"
