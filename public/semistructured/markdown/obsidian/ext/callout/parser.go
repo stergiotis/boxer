@@ -19,7 +19,7 @@ func NewTransformer() parser.ASTTransformer {
 
 func (inst *transformer) Transform(node *ast.Document, reader text.Reader, pc parser.Context) {
 	var blockquotes []*ast.Blockquote
-	ast.Walk(node, func(n ast.Node, entering bool) (status ast.WalkStatus, err error) {
+	_ = ast.Walk(node, func(n ast.Node, entering bool) (status ast.WalkStatus, err error) {
 		if !entering {
 			status = ast.WalkContinue
 			return

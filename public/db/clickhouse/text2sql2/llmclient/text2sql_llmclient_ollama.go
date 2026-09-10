@@ -116,7 +116,7 @@ func (inst *OllamaClient) Chat(ctx context.Context, model string, messages []orc
 			Errorf("ollama request failed: %w", doErr)
 		return
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 
 	respBytes, readErr := io.ReadAll(httpResp.Body)
 	if readErr != nil {
@@ -168,7 +168,7 @@ func (inst *OllamaClient) Ping(ctx context.Context) error {
 	if err != nil {
 		return eb.Build().Str("endpoint", inst.endpoint).Errorf("ping failed: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return eb.Build().
 			Str("endpoint", inst.endpoint).

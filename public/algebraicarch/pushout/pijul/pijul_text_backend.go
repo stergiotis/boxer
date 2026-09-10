@@ -207,7 +207,7 @@ func (inst *pijulTextRepo) Apply(ctx context.Context, env PatchEnvelope) (audit 
 		return
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
+	defer func() { _ = os.Remove(tmpName) }()
 	_, werr := tmp.Write(env.Bytes)
 	cerr := tmp.Close()
 	if werr != nil {

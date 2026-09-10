@@ -65,7 +65,7 @@ func newCliCommandCardInspect() *cli.Command {
 					return eh.Errorf("unable to create file reader: %w", err)
 				}
 			}
-			defer reader.Close()
+			defer func() { _ = reader.Close() }()
 
 			var recordBatch arrow.RecordBatch
 			{

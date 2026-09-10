@@ -40,7 +40,7 @@ func TestRegionDissolve(t *testing.T) {
 	ctx := context.Background()
 	rt, err := h3.NewRuntime(ctx, h3.RuntimeConfig{PoolSize: 1})
 	require.NoError(t, err)
-	defer rt.Close()
+	defer func() { _ = rt.Close() }()
 	h, err := rt.AcquireE(ctx)
 	require.NoError(t, err)
 	defer h.Release()

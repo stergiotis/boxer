@@ -53,7 +53,7 @@ func (inst *Store) RecentLogs(ctx context.Context, filter LogFilter) (rows []fac
 		err = eh.Errorf("chstore: recent logs query: %w", err)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	raw, err := io.ReadAll(body)
 	if err != nil {
 		err = eh.Errorf("chstore: recent logs read: %w", err)

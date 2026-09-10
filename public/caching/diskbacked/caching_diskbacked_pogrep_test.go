@@ -92,7 +92,7 @@ func TestPogrebStash_ReopenPreservesEntries(t *testing.T) {
 	// reflects on-disk entries immediately.
 	s2, err := NewPogrebStash[string, int](dir, 0, false)
 	require.NoError(t, err)
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 	assert.Equal(t, 3, s2.Len(), "reopened stash must reflect on-disk entries")
 
 	e, has := s2.GetAndRemove("b")

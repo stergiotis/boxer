@@ -126,7 +126,7 @@ func TestPool_RoundTrip_SelectOne(t *testing.T) {
 	defer cancel()
 	w, err := pool.Acquire(ctx)
 	require.NoError(t, err)
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	require.NoError(t, w.WriteSQL("SELECT 1", "TabSeparated"))
 	var buf bytes.Buffer
@@ -154,7 +154,7 @@ func TestPool_DifferentFormats(t *testing.T) {
 			defer cancel()
 			w, err := pool.Acquire(ctx)
 			require.NoError(t, err)
-			defer w.Close()
+			defer func() { _ = w.Close() }()
 			require.NoError(t, w.WriteSQL("SELECT 1", tc.format))
 			var buf bytes.Buffer
 			_, err = io.Copy(&buf, w.Stdout())
@@ -173,7 +173,7 @@ func TestPool_BadSQLSurfacesStderr(t *testing.T) {
 	defer cancel()
 	w, err := pool.Acquire(ctx)
 	require.NoError(t, err)
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	require.NoError(t, w.WriteSQL("SELECT * FROM nonexistent_table_x_y_z", "TabSeparated"))
 	_, _ = io.Copy(io.Discard, w.Stdout())
@@ -234,7 +234,7 @@ func TestPool_AcquireRespectsContextCancel(t *testing.T) {
 	bg := context.Background()
 	w, err := pool.Acquire(bg)
 	require.NoError(t, err)
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	// Pool is now saturated. Acquire with a short ctx should bail.
 	ctx, cancel := context.WithTimeout(bg, 200*time.Millisecond)
@@ -257,13 +257,13 @@ func TestPool_OnDemandSpawnWhenIdleDrainedButHeadroomExists(t *testing.T) {
 	// First Acquire takes the warm worker.
 	w1, err := pool.Acquire(ctx)
 	require.NoError(t, err)
-	defer w1.Close()
+	defer func() { _ = w1.Close() }()
 
 	// Acquire again immediately, before refill has a chance to land —
 	// the pool must spawn on demand (idle empty, live < MaxConcurrent).
 	w2, err := pool.Acquire(ctx)
 	require.NoError(t, err)
-	defer w2.Close()
+	defer func() { _ = w2.Close() }()
 
 	waitFor(t, 3*time.Second, func() bool { return pool.Stats().Live >= 2 }, "live≥2 after two acquires")
 	assert.GreaterOrEqual(t, pool.Stats().Acquired, 2)
@@ -280,7 +280,7 @@ func TestPool_RefillReplenishesIdleAfterAcquire(t *testing.T) {
 	defer cancel()
 	w, err := pool.Acquire(ctx)
 	require.NoError(t, err)
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	// After acquire, idle dropped to 1. Refill should restore to 2.
 	waitFor(t, 5*time.Second, func() bool { return pool.Stats().Idle >= 2 }, "idle refilled to MinIdle")
@@ -391,7 +391,7 @@ func TestPool_ConcurrentAcquireRoundTripSafely(t *testing.T) {
 				errCh <- err
 				return
 			}
-			defer w.Close()
+			defer func() { _ = w.Close() }()
 			if err = w.WriteSQL("SELECT 1", "TabSeparated"); err != nil {
 				errCh <- err
 				return

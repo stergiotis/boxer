@@ -58,7 +58,7 @@ func TestQuery_ReturnsBody(t *testing.T) {
 	c := New(Config{URL: srv.URL + "/", User: "default"}, nil)
 	body, err := c.Query(context.Background(), "SELECT 1")
 	require.NoError(t, err)
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	out, _ := io.ReadAll(body)
 	assert.Equal(t, "1\n2\n3\n", string(out))
 }
@@ -119,7 +119,7 @@ func TestQueryParams_BindsOverParamChannel(t *testing.T) {
 		"SELECT * FROM t WHERE name = {q:String} AND id IN {kids:Array(UInt64)}",
 		map[string]string{"q": "peftiev", "kids": "[1,2,3]"})
 	require.NoError(t, err)
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	// The values ride the URL channel; the statement text is untouched, which
 	// is the property that makes user input safe to bind.
 	assert.Equal(t, "peftiev", gotQ)
@@ -143,7 +143,7 @@ func TestQueryParams_EscapesValues(t *testing.T) {
 	body, err := c.QueryParams(context.Background(), "SELECT {q:String}",
 		map[string]string{"q": "a&param_x=1 b/c?d"})
 	require.NoError(t, err)
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	assert.Equal(t, "a&param_x=1 b/c?d", gotQ)
 	assert.Equal(t, 1, fieldCount)
 }
@@ -158,7 +158,7 @@ func TestQueryParams_EmptyMapMatchesQuery(t *testing.T) {
 	c := New(Config{URL: srv.URL + "/", User: "default"}, nil)
 	body, err := c.QueryParams(context.Background(), "SELECT 1", nil)
 	require.NoError(t, err)
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	assert.Empty(t, gotRawQuery)
 }
 

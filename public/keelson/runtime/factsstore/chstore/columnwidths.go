@@ -110,7 +110,7 @@ func (inst *Store) ListColumnWidths(appId app.AppIdT) (rows []factsstore.ColumnW
 		err = eh.Errorf("chstore: list column widths query: %w", qerr)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	raw, rerr := io.ReadAll(body)
 	if rerr != nil {
 		err = eh.Errorf("chstore: list column widths read: %w", rerr)

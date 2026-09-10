@@ -683,15 +683,15 @@ func parseParamDirective(s string) (p ParamDecl, err error) {
 
 func templateCacheKey(tmpl Template) string {
 	h := blake3.New(512/8, nil)
-	h.Write([]byte(tmpl.QueryText))
+	_, _ = h.Write([]byte(tmpl.QueryText))
 	for _, ex := range tmpl.Examples {
-		h.Write([]byte(ex))
+		_, _ = h.Write([]byte(ex))
 	}
 	for _, j := range tmpl.Joins {
-		h.Write([]byte(j))
+		_, _ = h.Write([]byte(j))
 	}
 	for _, q := range tmpl.Quality {
-		h.Write([]byte(q))
+		_, _ = h.Write([]byte(q))
 	}
 	return fmt.Sprintf("%016x", h.Sum(nil))
 }

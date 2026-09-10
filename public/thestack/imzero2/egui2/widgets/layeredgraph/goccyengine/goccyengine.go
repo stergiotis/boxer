@@ -159,7 +159,7 @@ func (e *Engine) renderLaidOutDot(ctx context.Context, m layeredgraph.GraphModel
 	if err != nil {
 		return nil, eh.Errorf("new graph: %w", err)
 	}
-	defer graph.Close()
+	defer func() { _ = graph.Close() }()
 
 	graph.SetRankDir(rankDir(opts.RankDir))
 	if opts.RankSep > 0 {
@@ -243,7 +243,7 @@ func parseLayout(dot []byte, m layeredgraph.GraphModel, opts layeredgraph.Layout
 	if err != nil {
 		return nil, eh.Errorf("reparse laid-out dot: %w", err)
 	}
-	defer g.Close()
+	defer func() { _ = g.Close() }()
 
 	meta := make(map[string]layeredgraph.Node, len(m.Nodes))
 	for _, n := range m.Nodes {

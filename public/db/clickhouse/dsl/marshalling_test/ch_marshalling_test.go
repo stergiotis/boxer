@@ -364,8 +364,8 @@ func TestHomogeneousArrayLen(t *testing.T) {
 	a := marshalling.NewHomogeneousArray(ctabb.U64, 0)
 	assert.Equal(t, 0, a.Len())
 
-	a.AppendScalar(marshalling.NewScalarUint64(1))
-	a.AppendScalar(marshalling.NewScalarUint64(2))
+	require.NoError(t, a.AppendScalar(marshalling.NewScalarUint64(1)))
+	require.NoError(t, a.AppendScalar(marshalling.NewScalarUint64(2)))
 	assert.Equal(t, 2, a.Len())
 }
 

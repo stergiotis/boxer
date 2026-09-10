@@ -699,7 +699,7 @@ func (inst *Store) Count(ctx context.Context) (n uint64, err error) {
 	if err != nil {
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	var raw [32]byte
 	read, _ := body.Read(raw[:])
 	_, err = fmt.Sscanf(strings.TrimSpace(string(raw[:read])), "%d", &n)

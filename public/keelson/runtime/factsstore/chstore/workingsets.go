@@ -85,7 +85,7 @@ func (inst *Store) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, 
 		err = eh.Errorf("chstore: latest workingset query: %w", err)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	buf := make([]byte, 131072)
 	n, _ := body.Read(buf)
 	raw := strings.TrimRight(string(buf[:n]), "\n")
@@ -127,7 +127,7 @@ func (inst *Store) ListWorkingsets() (rows []factsstore.WorkingsetRow, err error
 		err = eh.Errorf("chstore: list workingsets query: %w", qerr)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	// io.ReadAll, not one body.Read into a fixed buffer: this read is
 	// multi-row, and a single Read would truncate silently at whatever the
 	// transport handed over first.

@@ -178,9 +178,7 @@ func mirrorAction(c *cli.Context) (err error) {
 			}
 			mf.TotalBytes += e.bytes
 		}
-		for _, e := range stats.errors {
-			mf.Errors = append(mf.Errors, e)
-		}
+		mf.Errors = append(mf.Errors, stats.errors...)
 	}
 
 	err = saveManifest(dest, &mf)
@@ -328,7 +326,7 @@ func downloadFile(ctx context.Context, client *http.Client, href string, destPat
 		err = eh.Errorf("unable to download: %w", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		err = eb.Build().Int("status", resp.StatusCode).Str("href", href).Errorf("unexpected status: %w", err)
@@ -504,7 +502,7 @@ func fetchStacPage(ctx context.Context, client *http.Client, url string) (data s
 
 		var body []byte
 		body, err = io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			err = eh.Errorf("unable to read STAC response: %w", err)
 			return
@@ -542,7 +540,7 @@ func sha256File(path string) (hexDigest string, err error) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	_, err = io.Copy(h, f)

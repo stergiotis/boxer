@@ -69,7 +69,7 @@ func runClickHouseLocal(t *testing.T, script string) string {
 	if err != nil {
 		t.Skipf("clickhouse-local worker unavailable (binary missing?): %v", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	require.NoError(t, w.WriteSQL(script, "TSV"))
 	out, err := io.ReadAll(w.Stdout())

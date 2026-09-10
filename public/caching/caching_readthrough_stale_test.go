@@ -711,7 +711,7 @@ func TestPartitionedFetch_OnePerPartition(t *testing.T) {
 	f.partitionFn = func(k string) uint64 {
 		// "p0-x" → 0, "p1-x" → 1, ...
 		var p uint64
-		fmt.Sscanf(k, "p%d-", &p)
+		_, _ = fmt.Sscanf(k, "p%d-", &p)
 		return p
 	}
 	f.data["p0-a"], f.data["p0-b"] = 1, 2

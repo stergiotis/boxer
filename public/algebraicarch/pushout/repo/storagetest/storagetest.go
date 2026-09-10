@@ -138,7 +138,7 @@ func CheckEnvelopesWith(ctx context.Context, open OpenFunc, location string, fx 
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 	if !fx.usable(st) {
 		return
 	}
@@ -189,7 +189,7 @@ func CheckAppliedLog(ctx context.Context, open OpenFunc, location string) (err e
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	got, err := st.LoadApplied(ctx)
 	if err != nil || len(got) != 0 {
@@ -245,7 +245,7 @@ func CheckAppliedLogBatch(ctx context.Context, open OpenFunc, location string) (
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 	if err = st.AppendApplied(ctx, h(1)); err != nil {
 		return eh.Errorf("append: %w", err)
 	}
@@ -282,7 +282,7 @@ func CheckSnapshot(ctx context.Context, open OpenFunc, location string) (err err
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	if _, ok, err2 := st.LoadSnapshot(ctx); err2 != nil || ok {
 		return eh.Errorf("fresh snapshot = ok:%v err:%v (want absent)", ok, err2)
@@ -325,7 +325,7 @@ func CheckRetention(ctx context.Context, open OpenFunc, location string) (err er
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 
 	got, err := st.LoadRetention(ctx)
 	if err != nil || len(got) != 0 {
@@ -404,7 +404,7 @@ func CheckEnvelopeBatchWith(ctx context.Context, open OpenFunc, location string,
 	if err != nil {
 		return eh.Errorf("open: %w", err)
 	}
-	defer st.Close()
+	defer func() { _ = st.Close() }()
 	if !fx.usable(st) {
 		return
 	}
@@ -525,7 +525,7 @@ func CheckReopenDurabilityWith(ctx context.Context, open OpenFunc, location stri
 	if err != nil {
 		return eh.Errorf("open #2: %w", err)
 	}
-	defer st2.Close()
+	defer func() { _ = st2.Close() }()
 	caps := st2.Capabilities()
 	if envelopes {
 		got, err := st2.GetEnvelope(ctx, e.Hash)
