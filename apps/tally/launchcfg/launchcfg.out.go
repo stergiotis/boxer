@@ -46,6 +46,7 @@ var (
 	kindTallyLaunchTab      uint64
 	kindTallyLaunchSql      uint64
 	kindTallyLaunchSqlLabel uint64
+	kindTallyLaunchDatabase uint64
 )
 
 func init() {
@@ -62,6 +63,7 @@ func init() {
 	kindTallyLaunchTab = vdd.MembTallyLaunchTab.GetId().Value()
 	kindTallyLaunchSql = vdd.MembTallyLaunchSql.GetId().Value()
 	kindTallyLaunchSqlLabel = vdd.MembTallyLaunchSqlLabel.GetId().Value()
+	kindTallyLaunchDatabase = vdd.MembTallyLaunchDatabase.GetId().Value()
 	buscodec.Register[TallyLaunch](tallyLaunchBusCodec)
 }
 
@@ -138,6 +140,7 @@ type TallyLaunchColumns struct {
 	Tab      []string
 	Sql      []string
 	SqlLabel []string
+	Database []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -166,6 +169,7 @@ func (c *TallyLaunchColumns) Append(row TallyLaunch) {
 	c.Tab = append(c.Tab, row.Tab)
 	c.Sql = append(c.Sql, row.Sql)
 	c.SqlLabel = append(c.SqlLabel, row.SqlLabel)
+	c.Database = append(c.Database, row.Database)
 }
 
 // Row reconstructs entity i as an AoS TallyLaunch record. Inverse of
@@ -188,6 +192,7 @@ func (c *TallyLaunchColumns) Row(i int) (row TallyLaunch) {
 	row.Tab = c.Tab[i]
 	row.Sql = c.Sql[i]
 	row.SqlLabel = c.SqlLabel[i]
+	row.Database = c.Database[i]
 	return
 }
 
@@ -345,6 +350,9 @@ func TallyLaunchBuildEntities[
 		symbolSecAttr_Tab := symbolSec.BeginAttribute(c.Tab[i])
 		symbolSecAttr_Tab.AddMembershipLowCardRefP(kindTallyLaunchTab)
 		symbolSecAttr_Tab.EndAttributeP()
+		symbolSecAttr_Database := symbolSec.BeginAttribute(c.Database[i])
+		symbolSecAttr_Database.AddMembershipLowCardRefP(kindTallyLaunchDatabase)
+		symbolSecAttr_Database.EndAttributeP()
 		symbolSec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
@@ -427,6 +435,9 @@ func TallyLaunchEmitSectionSymbol[
 	symbolSecAttr_Tab := symbolSec.BeginAttribute(row.Tab)
 	symbolSecAttr_Tab.AddMembershipLowCardRefP(kindTallyLaunchTab)
 	symbolSecAttr_Tab.EndAttributeP()
+	symbolSecAttr_Database := symbolSec.BeginAttribute(row.Database)
+	symbolSecAttr_Database.AddMembershipLowCardRefP(kindTallyLaunchDatabase)
+	symbolSecAttr_Database.EndAttributeP()
 	return
 }
 
@@ -773,6 +784,9 @@ func TallyLaunchFillFromArrow[
 		var symbolTabVal string
 		var symbolTabCount int
 		var symbolTabLastAttr int64
+		var symbolDatabaseVal string
+		var symbolDatabaseCount int
+		var symbolDatabaseLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -791,6 +805,13 @@ func TallyLaunchFillFromArrow[
 					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolTabVal = val
+				case kindTallyLaunchDatabase:
+					if symbolDatabaseLastAttr != attrJ+1 {
+						symbolDatabaseLastAttr = attrJ + 1
+						symbolDatabaseCount++
+					}
+					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					symbolDatabaseVal = val
 				}
 			}
 		}
@@ -804,6 +825,11 @@ func TallyLaunchFillFromArrow[
 			return
 		}
 		c.Tab = append(c.Tab, symbolTabVal)
+		if symbolDatabaseCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "tallyLaunchDatabase").Int("got", symbolDatabaseCount).Errorf("slot symbol@tallyLaunchDatabase (field Database) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolDatabaseCount)
+			return
+		}
+		c.Database = append(c.Database, symbolDatabaseVal)
 	}
 	return
 }
@@ -1093,6 +1119,9 @@ func TallyLaunchReadRow[
 	var symbolTabVal string
 	var symbolTabCount int
 	var symbolTabLastAttr int64
+	var symbolDatabaseVal string
+	var symbolDatabaseCount int
+	var symbolDatabaseLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1111,6 +1140,13 @@ func TallyLaunchReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolTabVal = val
+			case kindTallyLaunchDatabase:
+				if symbolDatabaseLastAttr != attrJ+1 {
+					symbolDatabaseLastAttr = attrJ + 1
+					symbolDatabaseCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolDatabaseVal = val
 			}
 		}
 	}
@@ -1128,6 +1164,14 @@ func TallyLaunchReadRow[
 	}
 	if symbolTabCount == 1 {
 		row.Tab = symbolTabVal
+		present = true
+	}
+	if symbolDatabaseCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "tallyLaunchDatabase").Int("got", symbolDatabaseCount).Errorf("slot symbol@tallyLaunchDatabase (field Database) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolDatabaseCount)
+		return
+	}
+	if symbolDatabaseCount == 1 {
+		row.Database = symbolDatabaseVal
 		present = true
 	}
 	return

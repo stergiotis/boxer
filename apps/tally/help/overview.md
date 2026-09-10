@@ -52,6 +52,12 @@ query that arrives from somewhere else is checked rather than trusted.
 edit, the mount and snapshot pinned as literals. play offers *Open in tally*
 for the reverse trip whenever its buffer reads a snapshot.
 
+A window opened by another app may read a store other than the default
+one — the same three tables in another database — and says so above the
+mount list. *Open in play* still works from such a window; the buffer it
+hands over names the store's tables rather than the `fs(…)` macro, so play
+runs it without knowing which store it came from.
+
 Snapshots are taken outside the app: `boxer fs snapshot --mount <id> <dir>`,
 or `ladingingest.Snapshot` from Go. An app can also publish a tree it computed
 as a short-lived mount and open this browser on it (`ladingadhoc.Publish`),

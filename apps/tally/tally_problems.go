@@ -32,7 +32,7 @@ func (inst *App) renderProblems(sc *storeConn) {
 		return
 	}
 	res, done, perr, busy := inst.problemsLane.demand(loc.key(), func(ctx context.Context) (tableResult, error) {
-		return runTable(ctx, sc.exec, problemsSQL(loc))
+		return runTable(ctx, sc.exec, sc.sql, problemsSQL(loc))
 	})
 	if busy {
 		c.RequestRepaint()
@@ -57,7 +57,7 @@ func (inst *App) renderProblems(sc *storeConn) {
 		}
 		if inst.auditArmed == loc.key() {
 			audit, adone, aerr, abusy := inst.auditLane.demand(loc.key(), func(ctx context.Context) (tableResult, error) {
-				return runTable(ctx, sc.exec, auditSQL(loc))
+				return runTable(ctx, sc.exec, sc.sql, auditSQL(loc))
 			})
 			switch {
 			case abusy:

@@ -130,7 +130,7 @@ func (inst *App) renderFind(sc *storeConn) {
 	}
 	sql := f.armedSQL(loc, p.st.Dir())
 	res, done, ferr, busy := inst.findLane.demand(f.armed, func(ctx context.Context) (tableResult, error) {
-		return runTable(ctx, sc.exec, sql)
+		return runTable(ctx, sc.exec, sc.sql, sql)
 	})
 	if busy {
 		c.RequestRepaint()

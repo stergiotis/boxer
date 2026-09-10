@@ -38,6 +38,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
+	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/coverage"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -82,6 +84,10 @@ type Services struct {
 	// Persist is runtime.persist.*, backed by boxer.persiststate when the
 	// facts store reached ClickHouse and by memory otherwise.
 	Persist bool
+	// Watchbill is the process's durable-work worker (ADR-0223 §SD8) over
+	// the persist backend's database. It needs Persist on a live store;
+	// without one the worker is not started.
+	Watchbill bool
 	// ChLocal is ch.local.exec.*: lazily created `clickhouse local` pools
 	// (ADR-0028 §SD9).
 	ChLocal bool
@@ -105,7 +111,7 @@ type Services struct {
 // AllServices is every service on — the carousel's configuration.
 func AllServices() Services {
 	return Services{
-		Fs: true, Persist: true, ChLocal: true, AdhocData: true,
+		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
 	}
 }
@@ -194,6 +200,10 @@ type Runtime struct {
 	// PersistExec the executor behind a store backend, nil otherwise.
 	PersistBackend string
 	PersistExec    recordstore.ExecutorI
+	// Watchbill is the running worker and WatchbillStore its store; both
+	// nil when the service is off or had no store to run over.
+	Watchbill      *watchbill.Worker
+	WatchbillStore *watchbill.SqlStore
 	// Introspect is the shared introspection registry (populated whether or
 	// not the HTTP host serves it).
 	Introspect *introspect.Registry
@@ -372,6 +382,9 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.PersistExec = exec
 			rt.cleanups = append(rt.cleanups, persistSvc.Close)
 		}
+	}
+	if svc.Watchbill {
+		rt.bootWatchbill(ctx)
 	}
 	if svc.ChLocal {
 		chlocalSvc, chErr := chlocalbroker.NewService(rt.Bus, chlocalpool.Config{}, logger)
@@ -578,6 +591,9 @@ func (rt *Runtime) bootIntrospect() {
 	if rt.Tasks != nil {
 		deps.Tasks = rt.Tasks
 	}
+	if rt.WatchbillStore != nil {
+		deps.Watchbill = rt.WatchbillStore
+	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {
 		logger.Warn().Err(ierr).Msg("introspect: table source unavailable")
@@ -624,6 +640,62 @@ func (rt *Runtime) statusSnapshot() (s *runtimestatus.Snapshot) {
 		s.PersistBackend = rt.PersistBackend
 	}
 	return
+}
+
+// bootWatchbill starts the process's worker (ADR-0223 §SD8) over the
+// executor the persist store backend was opened on — the runtime's own
+// database, where the job table lives in the default layout. Without a
+// store backend there is no queue at all, the posture every durable thing
+// in the runtime takes; the failure is logged and the host boots on.
+//
+// The worker runs under a background context and is stopped from the
+// cleanups: a stopped worker leaves its running rows for the next run's
+// sweep, which is what a dead run's rows get too.
+func (rt *Runtime) bootWatchbill(ctx context.Context) {
+	logger := rt.opts.Log
+	if rt.PersistExec == nil {
+		logger.Warn().Msg("watchbill: no store executor; the worker is not started and watchbill.* stays unbound")
+		return
+	}
+	if rt.RunInfo == nil || rt.RunInfo.RunId == "" {
+		logger.Warn().Msg("watchbill: no run id; the worker is not started")
+		return
+	}
+	layout := watchbillstore.Layout{}
+	pctx, cancel := context.WithTimeout(ctx, persistOpenTimeout)
+	err := watchbillstore.ProvisionIn(pctx, rt.PersistExec, layout)
+	cancel()
+	if err != nil {
+		logger.Warn().Err(err).Msg("watchbill: provisioning failed; the worker is not started")
+		return
+	}
+	store := watchbill.NewSqlStore(rt.PersistExec, layout)
+	cfg := watchbill.Config{
+		Store: store, RunId: rt.RunInfo.RunId, Log: logger,
+		Bus: rt.Bus.NewClient(watchbill.WorkerAppId, watchbill.WorkerCaps()),
+	}
+	if l := watchbill.NewRunEventLiveness(rt.Facts); l != nil {
+		cfg.Liveness = l
+	} else {
+		logger.Debug().Msg("watchbill: the facts store reads no heartbeats; abandoned claims are not swept by this run")
+	}
+	worker, err := watchbill.New(cfg)
+	if err != nil {
+		store.Close()
+		logger.Warn().Err(err).Msg("watchbill: worker construction failed")
+		return
+	}
+	if err = worker.Start(context.Background()); err != nil {
+		store.Close()
+		logger.Warn().Err(err).Msg("watchbill: worker start failed")
+		return
+	}
+	rt.Watchbill = worker
+	rt.WatchbillStore = store
+	rt.cleanups = append(rt.cleanups, func() {
+		worker.Stop()
+		store.Close()
+	})
 }
 
 // selectPersistBackend follows the facts-store verdict: a live ClickHouse

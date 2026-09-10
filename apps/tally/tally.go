@@ -17,6 +17,8 @@ import (
 
 	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/apps/tally/launchcfg"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -74,6 +76,10 @@ type App struct {
 	bus     app.BusI
 	density styletokens.DensityE
 
+	// layout is which store this window reads: the database a launch config
+	// named, or the default. Fixed at Mount — the connection is opened over
+	// it — and reported back by the workingset.
+	layout    ladingschema.Layout
 	conn      lane[*storeConn]
 	mounts    lane[[]mountRow]
 	mountRows []mountRow
@@ -235,10 +241,11 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		}
 		inst.applyLaunch(cfg)
 	}
+	layout := inst.layout
 	inst.conn.demand("connect", func(cctx context.Context) (*storeConn, error) {
 		cctx, cancel := context.WithTimeout(cctx, connectTimeout)
 		defer cancel()
-		return connect(cctx)
+		return connect(cctx, layout)
 	})
 	return
 }
@@ -530,7 +537,7 @@ func (inst *App) renderToolbar(sc *storeConn) {
 		c.AddSpace(styletokens.GapInline(inst.density))
 		if c.Button(inst.ids.PrepareStr("tb-open-play"), c.Atoms().Text(icons.PhArrowSquareOut+" Open in play").Keep()).
 			SendResp().HasPrimaryClicked() {
-			inst.openInPlay(p)
+			inst.openInPlay(sc, p)
 		}
 		if c.Button(inst.ids.PrepareStr("tb-copy-path"), c.Atoms().Text(icons.PhLinkSimple+" Copy SFTP path").Keep()).
 			SendResp().HasPrimaryClicked() {
@@ -587,8 +594,15 @@ func (inst *App) copyToClipboard(text string) {
 
 // openInPlay hands the pane's directory to play as a query (ADR-0135): the
 // buffer stands on its own, mount and snapshot pinned as literals.
-func (inst *App) openInPlay(p *pane) {
-	if inst.bus == nil {
+//
+// Over a store outside the default database the macro is expanded here
+// first: play's own expansion is bound once per host to the default store
+// (its pass takes a visibility, not a database), so a buffer naming `fs(…)`
+// would read the wrong tables there. The expanded statement is longer and
+// reads the layout's tables by name, which is what makes it stand on its
+// own.
+func (inst *App) openInPlay(sc *storeConn, p *pane) {
+	if inst.bus == nil || sc == nil {
 		return
 	}
 	loc, ok := inst.locationOf(p)
@@ -596,7 +610,16 @@ func (inst *App) openInPlay(p *pane) {
 		inst.status = "nothing to open: the pane has no snapshot"
 		return
 	}
-	cfg := playlaunch.PlayLaunch{Sql: openInPlaySQL(loc, p.st.Dir()), AutoRun: true}
+	sql := openInPlaySQL(loc, p.st.Dir())
+	if inst.layout.Database != "" {
+		expanded, err := ladingsql.Expand(sc.sql, sql)
+		if err != nil {
+			inst.status = "open in play: " + err.Error()
+			return
+		}
+		sql = expanded
+	}
+	cfg := playlaunch.PlayLaunch{Sql: sql, AutoRun: true}
 	cfgBytes, err := buscodec.Encode(cfg)
 	if err != nil {
 		inst.status = "open in play: " + err.Error()
@@ -611,6 +634,11 @@ func (inst *App) openInPlay(p *pane) {
 // with its snapshots and the follow-latest toggle.
 func (inst *App) renderMounts(sc *storeConn) {
 	c.LabelAtoms(c.Atoms().BeginRichText("Mounts").Strong().End().Keep()).Selectable(false).Send()
+	if inst.layout.Database != "" {
+		// Which store: only said when it is not the default one, because
+		// that is when a reader could be surprised by what is listed.
+		c.Label("store " + inst.layout.DatabaseName()).Selectable(false).Send()
+	}
 	if sc == nil {
 		c.Label(inst.status).Selectable(false).Send()
 		return
@@ -918,7 +946,7 @@ func (inst *App) renderInfo(sc *storeConn) {
 	laneKey := fmt.Sprintf("%x@%d:%s", p.mount.Value(), snap.UnixNano(), p.selected)
 	mount, path := p.mount, p.selected
 	rows, done, ierr, busy := inst.info.demand(laneKey, func(ctx context.Context) ([]infoRow, error) {
-		return loadInfo(ctx, sc.exec, mount, snap, path)
+		return loadInfo(ctx, sc.exec, sc.sql, mount, snap, path)
 	})
 	if busy {
 		c.RequestRepaint()
@@ -959,7 +987,7 @@ func (inst *App) renderComponents(sc *storeConn, mount identifier.TaggedId, snap
 	c.AddSpace(styletokens.GapInline(inst.density) * 2)
 	c.LabelAtoms(c.Atoms().BeginRichText("Components").Strong().End().Keep()).Selectable(false).Send()
 	hits, done, herr, busy := inst.components.demand(laneKey, func(ctx context.Context) ([]componentHit, error) {
-		return loadComponents(ctx, sc.exec, componentsql.Default, mount, snap, path)
+		return loadComponents(ctx, sc, componentsql.Default, mount, snap, path)
 	})
 	switch {
 	case busy:
@@ -973,7 +1001,7 @@ func (inst *App) renderComponents(sc *storeConn, mount identifier.TaggedId, snap
 		for _, h := range hits {
 			c.Label(fmt.Sprintf("%s  ·  %s  ·  %d row(s)", h.kind, h.table, h.rows)).Selectable(false).Send()
 		}
-		c.Label(fmt.Sprintf("%d of %d registered kinds", len(hits), len(componentProbes(componentsql.Default, mount, snap, path)))).Selectable(false).Send()
+		c.Label(fmt.Sprintf("%d of %d registered kinds", len(hits), len(componentProbes(sc.layout, componentsql.Default, mount, snap, path)))).Selectable(false).Send()
 	}
 }
 
@@ -993,7 +1021,7 @@ func (inst *App) renderHistory(sc *storeConn) {
 	laneKey := fmt.Sprintf("%x:%s", p.mount.Value(), target)
 	mount := p.mount
 	res, done, herr, busy := inst.history.demand(laneKey, func(ctx context.Context) (tableResult, error) {
-		return runTable(ctx, sc.exec, historySQL(mount, target))
+		return runTable(ctx, sc.exec, sc.sql, historySQL(mount, target))
 	})
 	if busy {
 		c.RequestRepaint()
@@ -1115,7 +1143,7 @@ func (inst *App) renderDiff(sc *storeConn) {
 	}
 	laneKey := locB.key() + "|" + locA.key() + "|" + dir
 	res, done, derr, busy := inst.diff.demand(laneKey, func(ctx context.Context) (tableResult, error) {
-		return runTable(ctx, sc.exec, diffSQL(locB, locA, dir))
+		return runTable(ctx, sc.exec, sc.sql, diffSQL(locB, locA, dir))
 	})
 	if busy {
 		c.RequestRepaint()

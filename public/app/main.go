@@ -28,6 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/swisstopo"
 	"github.com/stergiotis/boxer/public/app/commands/sysmetricsd"
 	"github.com/stergiotis/boxer/public/app/commands/watch"
+	watchbillcli "github.com/stergiotis/boxer/public/app/commands/watchbill"
 	"github.com/stergiotis/boxer/public/code"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/config/env/envdoc"
@@ -123,6 +124,7 @@ func mainC() (exitCode int) {
 			http.NewCliCommand(),
 			key.NewCliCommand(),
 			queryrunsd.NewCliCommand(),
+			watchbillcli.NewCliCommand(),
 			runtimecodegen.NewCliCommand(),
 			keelsonddl.NewCliCommand(),
 			ladingfs.NewCliCommand(),

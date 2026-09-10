@@ -1,5 +1,7 @@
 package ladingschema
 
+import "github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+
 // Layout is where one lading store's three tables live. The zero value is
 // the default: [DatabaseName], beside the facts table whose shape the tables
 // carry. A consuming repository that keeps its own facts in a database of its
@@ -42,3 +44,13 @@ func (inst Layout) SnapTable() (name string) { return inst.DatabaseName() + "." 
 // SnapView is the unqualified name of the materialised view that fills the
 // snapshot index; [Layout.DatabaseName] qualifies it.
 func (inst Layout) SnapView() (name string) { return TableNameSnap + "_mv" }
+
+// PolicyTable is the qualified name of the facts table beside the store,
+// where a mount's declared policy is recorded (ladingingest.RecordPolicy)
+// and a browser reads the mount's name from. It follows the database for the
+// same reason the three tables do: a repository that keeps its facts out of
+// the default database keeps its policy rows out of it too, and the default
+// layout resolves to the baked policy table.
+func (inst Layout) PolicyTable() (name string) {
+	return inst.DatabaseName() + "." + factsschema.TableName
+}

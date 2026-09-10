@@ -101,10 +101,10 @@ type tableResult struct {
 	rows    [][]string
 }
 
-// runTable expands sql through the store's macros and flattens every row to
-// text. Off the render thread.
-func runTable(ctx context.Context, exec recordstore.ExecutorI, sql string) (out tableResult, err error) {
-	expanded, err := ladingsql.Expand(infoVisibility, sql)
+// runTable expands sql through the store's macros, over the layout cfg
+// spells, and flattens every row to text. Off the render thread.
+func runTable(ctx context.Context, exec recordstore.ExecutorI, cfg ladingsql.Config, sql string) (out tableResult, err error) {
+	expanded, err := ladingsql.Expand(cfg, sql)
 	if err != nil {
 		return
 	}

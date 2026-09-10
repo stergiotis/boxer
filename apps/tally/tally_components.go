@@ -11,7 +11,6 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
-	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // componentHit is one registered kind that names the entry: the kind, the
@@ -48,10 +47,10 @@ func mustPlain(name string) string {
 }
 
 // componentProbes lists the probes for an entry: the store's own entry kinds
-// over boxer.fsmeta first (the root row is two components, ADR-0198 M1), then
-// every kind a host registered in the default component registry
+// over the layout's `fsmeta` first (the root row is two components, ADR-0198
+// M1), then every kind a host registered in the default component registry
 // (ADR-0189) over its own table.
-func componentProbes(reg *componentsql.Registry, mount identifier.TaggedId, snap time.Time, p string) (probes []componentProbe) {
+func componentProbes(layout ladingschema.Layout, reg *componentsql.Registry, mount identifier.TaggedId, snap time.Time, p string) (probes []componentProbe) {
 	where := fmt.Sprintf("%s = %d AND %s = fromUnixTimestamp64Nano(toInt64(%d), 'UTC') AND %s = %s",
 		plainID, mount.Value(), plainTs, snap.UnixNano(), plainNaturalKey, ladingschema.QuoteLiteral(p))
 	add := func(kind, table, presence string) {
@@ -67,7 +66,7 @@ func componentProbes(reg *componentsql.Registry, mount identifier.TaggedId, snap
 	}
 	sort.Strings(metaKinds)
 	for _, k := range metaKinds {
-		add(k, qualifiedTable(ladingmeta.MetaComponentSQL.Table), ladingmeta.MetaComponentSQL.Kinds[k].Presence)
+		add(k, qualifiedTable(layout, ladingmeta.MetaComponentSQL.Table), ladingmeta.MetaComponentSQL.Kinds[k].Presence)
 	}
 	if reg != nil {
 		for _, k := range reg.Kinds() {
@@ -78,30 +77,30 @@ func componentProbes(reg *componentsql.Registry, mount identifier.TaggedId, snap
 			if strings.EqualFold(b.Table, ladingmeta.MetaComponentSQL.Table) {
 				continue // already covered above
 			}
-			add(k, qualifiedTable(b.Table), b.Presence)
+			add(k, qualifiedTable(layout, b.Table), b.Presence)
 		}
 	}
 	return
 }
 
 // qualifiedTable prefixes the store's database when a set names a bare table.
-func qualifiedTable(table string) string {
+func qualifiedTable(layout ladingschema.Layout, table string) string {
 	if strings.Contains(table, ".") {
 		return table
 	}
-	return ladingschema.DatabaseName + "." + table
+	return layout.DatabaseName() + "." + table
 }
 
 // loadComponents runs every probe; a probe whose table or columns do not
 // exist (a set over another shape) is skipped, not fatal. Off the render
 // thread.
-func loadComponents(ctx context.Context, exec recordstore.ExecutorI, reg *componentsql.Registry, mount identifier.TaggedId, snap time.Time, p string) (hits []componentHit, err error) {
-	for _, probe := range componentProbes(reg, mount, snap, p) {
+func loadComponents(ctx context.Context, sc *storeConn, reg *componentsql.Registry, mount identifier.TaggedId, snap time.Time, p string) (hits []componentHit, err error) {
+	for _, probe := range componentProbes(sc.layout, reg, mount, snap, p) {
 		if ctx.Err() != nil {
 			err = ctx.Err()
 			return
 		}
-		n, qerr := countQuery(ctx, exec, probe.sql)
+		n, qerr := countQuery(ctx, sc, probe.sql)
 		if qerr != nil {
 			continue
 		}
@@ -113,8 +112,8 @@ func loadComponents(ctx context.Context, exec recordstore.ExecutorI, reg *compon
 }
 
 // countQuery reads the single count a probe returns.
-func countQuery(ctx context.Context, exec recordstore.ExecutorI, sql string) (n int64, err error) {
-	res, err := runTable(ctx, exec, sql)
+func countQuery(ctx context.Context, sc *storeConn, sql string) (n int64, err error) {
+	res, err := runTable(ctx, sc.exec, sc.sql, sql)
 	if err != nil {
 		return
 	}

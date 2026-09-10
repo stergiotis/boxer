@@ -44,6 +44,7 @@ func TestBookCorporaDropNothing(t *testing.T) {
 		{"bookcodevol", bookcodevolFS},
 		{"bookcatalog", bookcatalogFS},
 		{"bookadr", bookadrFS},
+		{"bookwatchbill", bookwatchbillFS},
 	}
 	seen := 0
 	for _, bk := range books {

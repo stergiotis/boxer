@@ -8,19 +8,24 @@ import (
 
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadapter"
-	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
-	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingview"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // storeConn is the app's connection to one lading store: the executor, the
-// generated stores, and the adapter views it has opened.
+// generated stores, and the adapter views it has opened. Which store is the
+// layout — the database a launch config named, or the default — and every
+// read the window makes goes through it: the generated stores, the snapshot
+// index, the policy records, and the SQL surface's macro expansion, which
+// carries the same database in its own spelling.
 //
 // A generated record store is single-goroutine (ADR-0100), and this app
 // reads through them from the render thread (the browser's directory reads)
@@ -30,6 +35,8 @@ import (
 // batch-shaped.
 type storeConn struct {
 	guard    ladingview.Guard
+	layout   ladingschema.Layout
+	sql      ladingsql.Config
 	client   *chclient.Client
 	exec     recordstore.ExecutorI
 	stores   lading.Stores
@@ -42,9 +49,19 @@ type viewKey struct {
 	snap  int64
 }
 
-// connect pings the env-configured server, verifies the store's shape and
-// opens the generated stores. It is called off the render thread.
-func connect(ctx context.Context) (sc *storeConn, err error) {
+// sqlConfig is the SQL surface's spelling of a layout: the macros expand
+// over the layout's database, and every mount in it is visible — the app
+// runs with the operator's own credentials, and ADR-0200 §SD5 leaves what
+// they may see to the server.
+func sqlConfig(layout ladingschema.Layout) (cfg ladingsql.Config) {
+	return ladingsql.Config{Database: layout.Database, Visibility: ladingsql.VisibleAll{}}
+}
+
+// connect pings the env-configured server, verifies the store's shape in the
+// layout and opens the generated stores over it. It is called off the render
+// thread. A layout naming a database with no store in it fails here, at
+// verify, with the database named — not later, as an empty mount list.
+func connect(ctx context.Context, layout ladingschema.Layout) (sc *storeConn, err error) {
 	client := chclient.New(chclient.ConfigFromEnv(), nil)
 	if err = client.Ping(ctx); err != nil {
 		err = eh.Errorf("ClickHouse not reachable: %w", err)
@@ -55,19 +72,18 @@ func connect(ctx context.Context) (sc *storeConn, err error) {
 		err = eh.Errorf("executor: %w", err)
 		return
 	}
-	if err = lading.Verify(ctx, exec); err != nil {
-		err = eh.Errorf("lading store: %w", err)
+	if err = lading.VerifyIn(ctx, exec, layout); err != nil {
+		err = eb.Build().Str("database", layout.DatabaseName()).Errorf("lading store: %w", err)
 		return
 	}
 	sc = &storeConn{
+		layout:   layout,
+		sql:      sqlConfig(layout),
 		client:   client,
 		exec:     exec,
-		policies: ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{}),
+		policies: ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{Table: layout.PolicyTable()}),
 		views:    make(map[viewKey]*ladingadapter.FS, 8),
-	}
-	sc.stores = lading.Stores{
-		Meta: ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{}),
-		Data: ladingdata.NewDataStore(exec, nil, ladingdata.DataStoreConfig{}),
+		stores:   lading.NewStores(exec, layout),
 	}
 	return
 }
@@ -136,7 +152,7 @@ func (m mountRow) latest() (s ladingadapter.Snapshot, ok bool) {
 func (sc *storeConn) listMounts(ctx context.Context) (rows []mountRow, err error) {
 	sc.guard.Lock()
 	defer sc.guard.Unlock()
-	ids, err := ladingadapter.Mounts(ctx, sc.exec)
+	ids, err := ladingadapter.MountsIn(ctx, sc.exec, sc.layout)
 	if err != nil {
 		return
 	}
@@ -162,7 +178,7 @@ func (sc *storeConn) listMounts(ctx context.Context) (rows []mountRow, err error
 		if n, ok := names[id]; ok {
 			row.name, row.store = n.name, n.store
 		}
-		row.snapshots, err = ladingadapter.Snapshots(ctx, sc.exec, id)
+		row.snapshots, err = ladingadapter.SnapshotsIn(ctx, sc.exec, sc.layout, id)
 		if err != nil {
 			return
 		}

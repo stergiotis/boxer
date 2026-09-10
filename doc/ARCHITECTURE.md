@@ -839,5 +839,7 @@ Companion explanations: [why-boxer](./explanation/why-boxer.md) for the
 premises these shapes enact, [play-architecture](./explanation/play-architecture.md)
 for the query graph, [facts-bound record stores](./explanation/facts-bound-record-stores.md)
 for what a new kind must satisfy, [query-observability](./explanation/query-observability.md)
-for the post-run plane, and the gokrazy [showcase README](../showcase/gokrazy/README.md)
-for booting an image.
+for the post-run plane, [kubernetes-architecture-lessons](./explanation/kubernetes-architecture-lessons.md)
+for what the facts-shaped store shares with, and refuses from, the largest
+record-model deployment in production, and the gokrazy
+[showcase README](../showcase/gokrazy/README.md) for booting an image.

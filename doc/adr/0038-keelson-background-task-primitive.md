@@ -202,6 +202,27 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## Updates
 
+### 2026-09-09 — the River update of 2026-06-22 is withdrawn (ADR-0223)
+
+The optional durable backend recorded on 2026-06-22 — River (open-core) on
+embedded SQLite, with a Postgres driver as the server tier — was never
+built, and the rule that arrived after it ([ADR-0148](./0148-app-workingsets.md)
+Update 2026-07-30) makes its substrate the wrong one: a job file beside
+ClickHouse holding opaque JSON is the shape that update retired
+`runtime.persist` for. [ADR-0223](./0223-watchbill-durable-work-on-facts.md)
+takes River's place with the same split — durable distribution in a table,
+ephemeral progress and cancel on the bus — on the one substrate the house
+keeps: a job row claimed by a conditional lightweight `UPDATE`, an event
+row per transition, and a lease read off the runtime heartbeat. What the
+2026-06-22 entry said keelson must still own itself — the task protocol,
+the estimator, the observer surface, cancellation bridging, capability
+declarations, idempotent handler bodies — is unchanged and is exactly what
+a watchbill run uses: to every observer it is one more task.
+
+`status` and `reviewed-date` are deliberately not re-stamped: O3 is
+unchanged. This records the withdrawal of an additive entry, not a
+revision of the decision.
+
 ### 2026-08-15 — external cancellation is announced, not silent (ADR-0188)
 
 The Spawn-time monitor cascades a parent-context cancel and the host's
