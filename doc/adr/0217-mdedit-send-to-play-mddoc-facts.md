@@ -4,6 +4,9 @@ status: proposed
 date: 2026-09-02
 ---
 
+> **Status: proposed — pre-human-review.** The change is implemented; this
+> record has not been reviewed.
+
 # ADR-0217: send-to-play — markdown documents as a boxer.facts kind
 
 ## Context
@@ -92,6 +95,29 @@ works in a host with none. Both buttons render unconditionally and drop
 clicks while a gesture is in flight — the house rule — rather than hiding
 when ClickHouse is unconfigured, the same posture tally takes.
 
+## Alternatives
+
+- **A bespoke viewer channel between mdedit and play.** Rejected in Context:
+  routing the handover through `boxer.facts` is what makes a send a fact with a
+  timestamp, a hash and a name, and "what did I send and when" a query.
+- **An `adhocdata` Arrow publish over the introspection endpoint**
+  (writingstylescope's handover). Rejected in SD3: it ships content without
+  persisting it, and the persisted half is the one this flow wants kept — the
+  fact row is the feature, the play window its view.
+- **The vocabulary and store in an app package.** Rejected in SD1: play
+  registers the component SQL and mdedit writes rows, so either import would
+  drag the other app's registering `init()` (the ADR-0017 §SD4 hazard).
+- **Registering the component by package `init()`.** Rejected in SD4 —
+  link-set determinism; the wiring site is reviewed and pinned by a kind-roster
+  test instead.
+- **An update-shaped store keyed on the content hash.** Rejected in SD2:
+  append is the shape facts-bound stores support today and the right one for a
+  send log; two-level identity gives the same "this is the same document"
+  reading without mutating a row.
+- **Hiding the buttons when ClickHouse is unconfigured.** Rejected in SD5: both
+  render unconditionally and report the failure in the status line, the same
+  posture tally takes — a control that vanishes teaches nothing about why.
+
 ## Consequences
 
 - `boxer.facts` gains its second generated-store kind family and the tree its
@@ -116,3 +142,11 @@ survives beside the injected conformance filter); pure tests over the row's
 identity rules and the launch SQL; play's kind-roster test. The end-to-end
 path needs a live ClickHouse with the facts DDL applied and stays manual:
 set `CLICKHOUSE_ENDPOINT`, open mdedit in the imzero2 host, Send to play.
+
+## Status
+
+Proposed (2026-09-02). Implemented in the same session as the record; awaiting
+review.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

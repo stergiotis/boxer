@@ -4,6 +4,9 @@ status: proposed
 date: 2026-09-01
 ---
 
+> **Status: proposed — pre-human-review.** The change is implemented; this
+> record has not been reviewed.
+
 # ADR-0216: mdedit — pluggable LLM text transformations behind an env gate
 
 ## Context
@@ -85,6 +88,30 @@ that hit the token ceiling with content already produced is handed over
 marked truncated, not swallowed: the reader sees exactly what they would
 apply, plus the badge saying it may stop mid-thought.
 
+## Alternatives
+
+- **mdedit imports `openaichat` directly.** Rejected in SD1: the network call
+  two packages away is what lets capslock attribute the egress to the transform
+  package instead of smearing it across everything mdedit touches.
+- **A bespoke prompt registry in Go.** Rejected in Context and supplanted by
+  SD2: the applet book ([ADR-0132](./0132-sqlapplet-sql-defined-applets.md))
+  already gives an embedded markdown corpus, filename-base slugs, frontmatter
+  descriptors, an open `Register*` seam and a corpus test — a second mechanism
+  would earn nothing.
+- **A default endpoint or model, so the surface always renders.** Rejected in
+  SD3: a wrong default model is worse than a refusal, so neither has a default —
+  no dead control, and no probing to discover one.
+- **Reusing `GEMINI_API_KEY` or `LLM_API_KEY` as the API key.** Rejected in
+  SD3 — the first is provider-specific, the second a commitdigest CLI alias
+  rather than a registered spec; a sensitive value gets exactly one name per
+  consumer.
+- **Replacing the selection as the completion arrives.** Rejected in SD4: a
+  whole-buffer rebind is invisible to the editor's own undo (ADR-0178 M3's
+  standing caveat), so an unreviewed transformation would be a destructive one.
+- **A retry policy on the client.** Rejected in SD5: the surface is
+  interactive, so the re-click is the retry and a failure should read as a line
+  in the pane rather than as silent backoff.
+
 ## Consequences
 
 - mdedit gains its first env registrations (category `boxer-mdedit`) and its
@@ -108,3 +135,11 @@ context handling); the splice, its staleness refusal and the scope resolution
 are pure functions under table tests in mdedit. The end-to-end path needs a
 live endpoint and stays manual, driven with LM Studio or Ollama via
 `BOXER_MDEDIT_LLM_ENDPOINT`.
+
+## Status
+
+Proposed (2026-09-01). Implemented in the same session as the record; awaiting
+review.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
