@@ -1,7 +1,6 @@
 package carrierclient
 
 import (
-	"os"
 	"bufio"
 	"crypto/rand"
 	"crypto/sha1"
@@ -10,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
