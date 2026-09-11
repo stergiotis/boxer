@@ -204,6 +204,39 @@ widget's. A hairline ring marks a fixed node. The hierarchical layout
 re-places a widget-side pin when it re-runs; a declared pin wins over any
 placement.
 
+**SD11 — Auras are a scalar field per group, contoured on a screen-space
+grid.** A node may name one or more **aura** ids on its `NodeSpec`; nodes
+sharing an id are drawn over one translucent blob, so a grouping that is not
+an edge — a team, a cluster label, a query result — reads at a glance. The
+shape is not a hull. Every visible node emanates a radial ramp on the
+screen — 1 at the centre, linear to 0 at an outer radius that is a multiple
+of the node's on-screen radius plus a small screen-pixel pad — and the ramps
+of one aura accumulate as a complementary product, `a ← a + f − a·f`, on an
+alpha grid of `cellSize` screen pixels over the canvas. A cell belongs to the
+aura where the accumulated value reaches `drawLimit`; with `Overlap` off a
+cell belongs to the single aura with the largest value, ties to the smaller
+id. The mask's iso-line is traced by marching squares **with linear
+interpolation along cell edges**, smoothed, and painted as one concave filled
+polygon per ring with a hairline stroke in the fill colour (the SD9 route),
+beneath edges and nodes, in each aura's `zIndex` order; overlapping auras
+blend by alpha. The field is recomputed whenever a position or the camera
+changes and reused while the layout is settled. The behaviour is a
+re-derivation of the aura feature of ZoomCharts NetChart as measured
+black-box in `doc/adr-background-work/netchart-aura-analysis.md`; the knob
+names `cellSize`, `intensity`, `drawLimit` and `overlap` keep that meaning,
+the constants are this widget's own, and the interpolated contour is a
+deliberate departure — the reference joins cell centres, which turns a lone
+node at a 10 px cell into a rounded square. Auras are paint only: they take
+no part in layout or picking, and the camera fit adds their screen-space
+extent to the node bounds so a fitted graph is not clipped. The legend that
+lists auras and toggles them is **not** graphview's: it is a shared legend
+package under `widgets/`, factored out with the ImPlot port's clickable
+legend rows as its second consumer, and graphview exposes the aura ids and a
+hidden set for it to drive. A hidden aura's nodes stay declared; the caller
+that wants them gone omits them. Polygons with holes — an aura ringing an
+empty pocket — fill the pocket, since the concave fill takes a single outer
+ring.
+
 ## Alternatives
 
 - **O1 — keep the binding.** Every quality fix is seam work in three places,
@@ -217,6 +250,13 @@ placement.
   one Rust apply and a regeneration for a shape the concave fill already
   draws at the sizes a node ring has. Killed until a profile shows the
   polygon path costing something.
+- **Convex or concave hulls per aura.** A hull per group is cheaper than a
+  field, but it cannot express the reference behaviour a consumer expects:
+  overlapping groups blending, a node in two groups pulling both, a group
+  splitting into islands as its nodes drift apart. Killed for SD11.
+- **Cell-centre outlines, as the reference draws them.** Cheaper to trace
+  than an interpolated iso-line, but visibly blocky at the cell sizes the
+  grid needs to stay cheap. Killed for SD11.
 - **Random vertex sampling instead of Barnes–Hut.** Faster in the
   published measurements, but stochastic per iteration; see SD6. Killed for
   the interactive widget, open as a warm-up phase for very large graphs.
@@ -253,6 +293,10 @@ placement.
   positions, camera fit), and the gallery demo under the screenshot tour
   for the painted result. The package benchmark compares the exact rows
   with the tree at several sizes and is what the threshold was read from.
+- **Auras.** Unit tests for the kernel and accumulation against the
+  measured tables in the background analysis, marching squares on synthetic
+  masks, ownership on two-node cases with and without overlap; the force
+  demo grouped by subtree under the screenshot tour for the painted result.
 - **What would fail.** A layout regression shows in the unit tests; a
   painter or input regression shows in the tour capture and in driving the
   demo with egui-mcp.
@@ -274,6 +318,8 @@ retirement is recorded when they have.
 - [ADR-0149](./0149-implot-core-port-painter-lane.md) — the painter-lane port
   this follows.
 - `doc/adr-background-work/snarl-port-analysis.md` — the substrate check.
+- `doc/adr-background-work/netchart-aura-analysis.md` — the black-box
+  measurements SD11 re-derives.
 - Fruchterman & Reingold, *Graph Drawing by Force-directed Placement*,
   Software: Practice and Experience 21(11), 1991.
 - Barnes & Hut, *A hierarchical O(N log N) force-calculation algorithm*,
