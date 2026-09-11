@@ -6,9 +6,9 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/legend"
 )
 
 // End resolves fits, lays the plot out, emits every paint command and the
@@ -129,22 +129,25 @@ func (p *Plot) End() {
 
 	// --- Legend interaction: last frame's flags for each entry's sense
 	// region, read before the draw so a toggle applies this frame. One
-	// entry per distinct label — same-label items share it.
+	// entry per distinct label — same-label items share it. The rows are
+	// the shared legend package's; emitLegend fills in colour and state.
 	st.legendHover = ""
 	sm := c.CurrentApplicationState.StateManager
 	var leg []int
 	if !p.noLegend {
 		leg = legendIndices(p.series)
 	}
+	st.legendItems = st.legendItems[:0]
 	for _, si := range leg {
-		s := &p.series[si]
-		h := widgethandle.Make(p.ids.PrepareStr("legend-" + s.label).Derive())
-		lf := sm.GetResponse(h)
-		if lf.HasPrimaryClicked() {
-			st.hidden[s.label] = !st.hidden[s.label]
+		st.legendItems = append(st.legendItems, legend.Item{Label: p.series[si].label})
+	}
+	if clicked, hovered := legend.Read(sm, p.ids, legendPrefix, st.legendItems); clicked >= 0 || hovered >= 0 {
+		if clicked >= 0 {
+			l := st.legendItems[clicked].Label
+			st.hidden[l] = !st.hidden[l]
 		}
-		if lf.HasHovered() {
-			st.legendHover = s.label
+		if hovered >= 0 {
+			st.legendHover = st.legendItems[hovered].Label
 		}
 	}
 
@@ -635,44 +638,43 @@ const (
 	errCapPx      = 3.0
 )
 
-// emitLegend draws the entry list with color swatches and — when
-// interactive — stamps one sense region per entry; clicks toggle series
-// visibility, hover highlights. leg holds each distinct label's first
-// series index (legendIndices).
+// legendPrefix keys the legend rows' sense regions under the plot's ids.
+const legendPrefix = "legend-"
+
+// legendStyle is the shared legend package dressed in this plot's chrome.
+func legendStyle() legend.Style {
+	return legend.Style{
+		FontSize: tickFontSize, RowHeight: 16, Padding: 6, Swatch: 10, Rounding: 3,
+		Background: color.Hex(colLegendBg), Border: color.Hex(colBorder),
+		Text: color.Hex(colTickLabel), TextHidden: color.Hex(colLegendHidden),
+		Monospace: true, TextWidth: EstimateTextWidth,
+	}
+}
+
+// emitLegend draws the entry list with color swatches through the shared
+// legend package and — when interactive — stamps one sense region per
+// entry; clicks toggle series visibility, hover highlights. leg holds each
+// distinct label's first series index (legendIndices).
 func (p *Plot) emitLegend(leg []int, areaX, areaY float32, interactive bool) {
 	st := p.st
-	widestLabel := float32(0)
-	for _, si := range leg {
-		if w := EstimateTextWidth(p.series[si].label, tickFontSize); w > widestLabel {
-			widestLabel = w
-		}
-	}
 	if len(leg) == 0 {
 		return
 	}
-	const rowH, pad, swatch = 16.0, 6.0, 10.0
-	lw := pad*3 + swatch + widestLabel
-	lh := pad*2 + float32(len(leg))*rowH
-	lx, ly := areaX+8, areaY+8
-	c.PaintRectFilled(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colLegendBg)).Send()
-	c.PaintRectStroke(lx, ly, lx+lw, ly+lh, 3.0, color.Hex(colBorder), styletokens.StrokeHair).Send()
-	for row, si := range leg {
+	items := st.legendItems[:0]
+	for _, si := range leg {
 		s := &p.series[si]
-		ry := ly + pad + float32(row)*rowH
 		colHex := seriesColor(s.slot)
 		if s.colOk {
 			colHex = s.colHex
 		}
-		swCol, txtCol := colHex, colTickLabel
-		if st.hidden[s.label] {
-			swCol = (colHex &^ 0xff) | 0x40
-			txtCol = colLegendHidden
-		}
-		c.PaintRectFilled(lx+pad, ry+(rowH-swatch)/2, lx+pad+swatch, ry+(rowH+swatch)/2, 2.0, color.Hex(swCol)).Send()
-		c.PaintText(lx+pad*2+swatch, ry+rowH/2, 0, 1, s.label, tickFontSize, color.Hex(txtCol)).Monospace().Send()
-		if interactive {
-			c.PaintSenseRegion(p.ids.PrepareStr("legend-"+s.label), lx, ry, lw, rowH).Send()
-		}
+		items = append(items, legend.Item{Label: s.label, Color: color.Hex(colHex), Hidden: st.hidden[s.label]})
+	}
+	st.legendItems = items
+	lst := legendStyle()
+	lx, ly := areaX+8, areaY+8
+	legend.Paint(items, lx, ly, lst)
+	if interactive {
+		legend.EmitSense(p.ids, legendPrefix, items, lx, ly, lst)
 	}
 }
 

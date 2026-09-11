@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/legend"
 )
 
 // Typography and tick geometry — palette-independent (the chrome colors
@@ -72,6 +73,7 @@ type plotState struct {
 	// legend entry and palette slot, as in ImPlot's label→item registry.
 	hidden      map[string]bool
 	legendHover string
+	legendItems []legend.Item // this frame's rows, reused across frames
 	heatCache   map[string]*heatTex
 	imgSent     map[string]uint64
 
