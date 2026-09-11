@@ -1649,8 +1649,9 @@ What to know before using it:
   where a click hides the aura (`EventKindAuraToggle`, `Event.Aura`) —
   `HideAura`/`ShowAura`/`AuraHidden`/`AuraIds` are the same state from
   code. Auras are paint only: no layout or picking, and the fit widens by
-  their extent. The field is recomputed on any move and reused while the
-  layout is settled; the cost per node grows with (aura radius / cell)².
+  their extent. The field is recomputed on a camera, membership or position
+  change and once the simulation has drifted a fraction of a cell, reused
+  otherwise; the cost per node grows with (aura radius / cell)².
 
 The gallery demo `egui2_hl_graphview_demo.go` mirrors the `graphs` demo
 feature for feature so the two can be compared while both exist.

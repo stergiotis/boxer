@@ -219,8 +219,9 @@ id. The mask's iso-line is traced by marching squares **with linear
 interpolation along cell edges**, smoothed, and painted as one concave filled
 polygon per ring with a hairline stroke in the fill colour (the SD9 route),
 beneath edges and nodes, in each aura's `zIndex` order; overlapping auras
-blend by alpha. The field is recomputed whenever a position or the camera
-changes and reused while the layout is settled. The behaviour is a
+blend by alpha. The field is recomputed when the camera, the membership or a
+set position changes, or once the simulation has drifted a fraction of a
+cell, and reused otherwise. The behaviour is a
 re-derivation of the aura feature of ZoomCharts NetChart as measured
 black-box in `doc/adr-background-work/netchart-aura-analysis.md`; the knob
 names `cellSize`, `intensity`, `drawLimit` and `overlap` keep that meaning,

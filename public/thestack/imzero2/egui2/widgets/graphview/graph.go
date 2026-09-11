@@ -263,13 +263,17 @@ func (g *graph) removeSlot(s int) {
 }
 
 // applyPins moves every declared-pinned node to its pin and recomputes
-// fixed. dragSlot, when non-negative, is the node under the user's drag: it
-// keeps the dragged position this frame so the pin does not snap it back
-// mid-gesture, and it is fixed like the others.
-func (g *graph) applyPins(dragSlot int32) {
+// fixed, reporting whether any node moved. dragSlot, when non-negative, is
+// the node under the user's drag: it keeps the dragged position this frame
+// so the pin does not snap it back mid-gesture, and it is fixed like the
+// others.
+func (g *graph) applyPins(dragSlot int32) (moved bool) {
 	g.pinnedCount = 0
 	for i := range g.ids {
 		if g.pinDecl[i] && int32(i) != dragSlot {
+			if g.x[i] != g.pinX[i] || g.y[i] != g.pinY[i] {
+				moved = true
+			}
 			g.x[i], g.y[i] = g.pinX[i], g.pinY[i]
 		}
 		pinned := g.pinDecl[i] || g.held[i]
@@ -278,6 +282,7 @@ func (g *graph) applyPins(dragSlot int32) {
 		}
 		g.fixed[i] = pinned || int32(i) == dragSlot
 	}
+	return
 }
 
 // isPinned reports whether slot s is fixed by a pin or a hold, as opposed to

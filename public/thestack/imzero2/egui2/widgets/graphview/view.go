@@ -58,9 +58,9 @@ type View struct {
 	auraOrder   []int32
 	hiddenAuras map[string]struct{}
 	hiddenVer   uint32
-	auraDirty   bool
-	auraValid   bool
-	auraKey     auraCacheKey
+	auraDirty   bool         // a node moved by other means than the force step
+	auraDrift   float32      // force-step displacement since the last field, world units
+	auraKey     auraCacheKey // what the rings were computed for; zero before the first
 	legendItems []legend.Item
 
 	// scratch
@@ -153,10 +153,9 @@ func (v *View) AuraHidden(id string) bool {
 	return hidden
 }
 
-func (v *View) setAuraHidden(id string, hidden bool) (changed bool) {
-	_, was := v.hiddenAuras[id]
-	if was == hidden {
-		return false
+func (v *View) setAuraHidden(id string, hidden bool) {
+	if _, was := v.hiddenAuras[id]; was == hidden {
+		return
 	}
 	if hidden {
 		v.hiddenAuras[id] = struct{}{}
@@ -164,7 +163,6 @@ func (v *View) setAuraHidden(id string, hidden bool) (changed bool) {
 		delete(v.hiddenAuras, id)
 	}
 	v.hiddenVer++
-	return true
 }
 
 // FastForward advances the force simulation by steps extra iterations
@@ -398,10 +396,9 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			v.pruneSelection()
 		}
 		n := v.g.n()
-		if ap.Enabled {
-			if v.auraSet.build(nodes, &v.g) {
-				v.auraDirty = true
-			}
+		// The table is kept current even with auras off, so AuraIds answers.
+		if v.auraSet.build(nodes, &v.g) {
+			v.auraDirty = true
 		}
 
 		if v.resetPending {
@@ -412,6 +409,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			created = v.g.allSlots()
 			v.drag = dragState{}
 			v.fitRequested = true
+			v.auraDirty = true
 		}
 
 		// Placement of nodes that have none yet.
@@ -434,7 +432,9 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		}
 		// Declared pins win over any placement; the drag in flight keeps its
 		// node where the pointer has it (ADR-0224 §SD10).
-		v.g.applyPins(v.dragSlot())
+		if v.g.applyPins(v.dragSlot()) {
+			v.auraDirty = true
+		}
 
 		// Input, against the previous frame's geometry. A drag that began
 		// this frame fixes its node before the step below can move it.
@@ -444,7 +444,6 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		}
 
 		// Layout.
-		moved := v.drag.active
 		if v.Opts.Layout.IsAnimated() {
 			cg := float32(0)
 			if v.Opts.Layout == LayoutForceDirectedCG {
@@ -458,10 +457,12 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			for range steps {
 				v.fs.step(&v.g, w, h, fp, cg)
 			}
-			// A settled layout still steps, by less than epsilon: not a move
-			// worth a new field.
-			if steps > 0 && !v.fs.settled(fp.Epsilon) {
-				moved = true
+			// The field follows the simulation once the nodes have drifted a
+			// fraction of a cell: a settled layout still steps, by less than
+			// epsilon, and this keeps that from either forcing a field per
+			// frame or accumulating unseen.
+			if steps > 0 && !isNaN32(v.fs.lastDisp) {
+				v.auraDrift += v.fs.lastDisp * float32(steps)
 			}
 		} else {
 			v.ffSteps = 0
@@ -501,7 +502,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			}
 		}
 
-		v.updateAuras(ap, w, h, topoChanged || len(created) > 0 || moved)
+		v.updateAuras(ap, w, h)
 		v.paint(w, h)
 
 		// Interaction surfaces: the area region owns click and drag, the
@@ -849,22 +850,28 @@ func (v *View) auraFitMargin(ap AuraParams) float32 {
 	return max(ext-maxR, 0)
 }
 
+// auraDriftCells is the force-step drift, in cells on screen, past which
+// the rings are recomputed.
+const auraDriftCells = 0.25
+
 // updateAuras recomputes the field and the rings when anything they depend
 // on changed: the camera, the canvas, the parameters, the membership, the
-// hidden set, or a node position (moved, or the dirty flag the setters
-// raise).
-func (v *View) updateAuras(ap AuraParams, w, h float32, moved bool) {
+// hidden set, or a node position — the setters' dirty flag or enough
+// simulation drift. The zero key never matches a real one, since w and h
+// are positive whenever this runs.
+func (v *View) updateAuras(ap AuraParams, w, h float32) {
 	na := len(v.auraSet.ids)
 	if !ap.Enabled || na == 0 {
 		v.auraOrder = v.auraOrder[:0]
-		v.auraValid = false
+		v.auraKey = auraCacheKey{}
 		return
 	}
 	key := auraCacheKey{cam: v.cam, w: w, h: h, params: ap.key(), hash: v.auraSet.hash, hiddenVer: v.hiddenVer}
-	if v.auraValid && !v.auraDirty && !moved && key == v.auraKey {
+	drifted := v.auraDrift*v.cam.zoom >= auraDriftCells*ap.CellSize
+	if !v.auraDirty && !drifted && key == v.auraKey {
 		return
 	}
-	v.auraKey, v.auraValid, v.auraDirty = key, true, false
+	v.auraKey, v.auraDirty, v.auraDrift = key, false, 0
 	v.auraF.compute(&v.g, v.cam, &v.auraSet, v.hiddenAuras, v.style.NodeRadius, w, h, ap)
 	if cap(v.auraRings) < na {
 		v.auraRings = slices.Grow(v.auraRings, na-len(v.auraRings))
@@ -886,7 +893,7 @@ func (v *View) paintAuras() {
 	ap := &v.Opts.Auras
 	for _, k := range v.auraOrder {
 		id := v.auraSet.ids[k]
-		fill := auraFill(int(k), id, ap)
+		fill := ap.fill(int(k), id)
 		lineCol, lineW := fill, float32(styletokens.StrokeHair)
 		if st, ok := ap.Styles[id]; ok && st.Line.Kind() != color.ColorKindNone {
 			lineCol = st.Line
@@ -921,7 +928,7 @@ func (v *View) emitAuraLegend(ap AuraParams) {
 			label = id
 		}
 		v.legendItems = append(v.legendItems, legend.Item{
-			Key: id, Label: label, Color: opaque(auraFill(k, id, &ap)), Hidden: v.AuraHidden(id),
+			Key: id, Label: label, Color: opaque(ap.fill(k, id)), Hidden: v.AuraHidden(id),
 		})
 	}
 	if len(v.legendItems) == 0 {

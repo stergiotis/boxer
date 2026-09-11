@@ -175,3 +175,58 @@ func TestAuraLegendToggleRoundTrips(t *testing.T) {
 	require.False(t, v.AuraHidden("A"))
 	require.Equal(t, uint32(2), v.hiddenVer)
 }
+
+func TestUpdateAurasReusesRingsUntilSomethingChanges(t *testing.T) {
+	v := New(c.NewWidgetIdStack(), "t", Options{Auras: AuraParams{Enabled: true, CellSize: 4}})
+	v.style = v.Opts.Style.withDefaults()
+	nodes := []NodeSpec{{Id: 1, Radius: 20, Auras: []string{"A"}}, {Id: 2, Radius: 20, Auras: []string{"B"}}}
+	v.g.reconcile(nodes, nil)
+	v.g.x[v.g.slot[2]] = 300
+	v.auraSet.build(nodes, &v.g)
+	v.cam = camera{zoom: 1, panX: 100, panY: 200}
+	ap := v.Opts.Auras.withDefaults()
+
+	v.updateAuras(ap, 600, 400)
+	require.Equal(t, []int32{0, 1}, v.auraOrder)
+	require.Equal(t, 1, v.auraRings[0].count())
+	key := v.auraKey
+	first := v.auraRings[0].xs[:1]
+
+	// Nothing changed: the same rings, not recomputed.
+	v.auraRings[0].xs[0] = -1
+	v.updateAuras(ap, 600, 400)
+	require.Equal(t, key, v.auraKey)
+	require.Equal(t, float32(-1), first[0], "rings untouched")
+
+	// Drift below a quarter cell keeps them; past it recomputes.
+	v.auraDrift = 0.5
+	v.updateAuras(ap, 600, 400)
+	require.Equal(t, float32(-1), v.auraRings[0].xs[0])
+	v.auraDrift = 2
+	v.updateAuras(ap, 600, 400)
+	require.NotEqual(t, float32(-1), v.auraRings[0].xs[0])
+	require.Zero(t, v.auraDrift)
+
+	// Hiding an aura changes the key and empties its rings; the order keeps
+	// every aura so the legend still lists it.
+	v.HideAura("A")
+	v.updateAuras(ap, 600, 400)
+	require.NotEqual(t, key, v.auraKey)
+	require.Equal(t, 0, v.auraRings[0].count())
+	require.Equal(t, 1, v.auraRings[1].count())
+
+	// Disabled: no order, and the key resets so re-enabling recomputes.
+	v.updateAuras(AuraParams{}.withDefaults(), 600, 400)
+	require.Empty(t, v.auraOrder)
+	require.Equal(t, auraCacheKey{}, v.auraKey)
+}
+
+func TestApplyPinsReportsMoves(t *testing.T) {
+	var g graph
+	g.reconcile([]NodeSpec{{Id: 1, Pinned: true, PinX: 5, PinY: 6}, {Id: 2}}, nil)
+	require.True(t, g.applyPins(-1), "the first application moves the node onto its pin")
+	require.False(t, g.applyPins(-1), "already there")
+	g.pinX[g.slot[1]] = 7
+	require.True(t, g.applyPins(-1))
+	require.False(t, g.applyPins(g.slot[1]), "the dragged node is left where it is")
+}

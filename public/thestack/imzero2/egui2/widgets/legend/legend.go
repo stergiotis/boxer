@@ -149,7 +149,7 @@ func Paint(items []Item, x, y float32, st Style) (w, h float32) {
 		ry := y + st.Padding + float32(i)*st.RowHeight
 		sw, txt := it.Color, st.Text
 		if it.Hidden {
-			sw, txt = Dimmed(it.Color), st.TextHidden
+			sw, txt = dimmed(it.Color), st.TextHidden
 		}
 		c.PaintRectFilled(x+st.Padding, ry+(st.RowHeight-st.Swatch)/2, x+st.Padding+st.Swatch, ry+(st.RowHeight+st.Swatch)/2, min(st.Rounding, st.Swatch/2), sw).Send()
 		t := c.PaintText(x+st.Padding*2+st.Swatch, ry+st.RowHeight/2, 0, 1, it.Label, st.FontSize, txt)
@@ -194,29 +194,9 @@ func Read(sm *c.StateManager, ids *c.WidgetIdStack, prefix string, items []Item)
 	return
 }
 
-// RowAt is the pure hit-test for a caller that picks Go-side instead of
-// stamping regions: the row under canvas point (px, py) for a legend Paint
-// drew at (x, y), or -1.
-func RowAt(items []Item, x, y, px, py float32, st Style) int {
-	w, h := Measure(items, st)
-	if len(items) == 0 || px < x || px > x+w || py < y || py > y+h {
-		return -1
-	}
-	st = st.withDefaults()
-	rel := py - y - st.Padding
-	if rel < 0 {
-		return -1
-	}
-	row := int(rel / st.RowHeight)
-	if row >= len(items) {
-		return -1
-	}
-	return row
-}
-
-// Dimmed is the swatch colour of a hidden row: the item's colour at a
+// dimmed is the swatch colour of a hidden row: the item's colour at a
 // quarter of full alpha. A colour without a literal value is returned as is.
-func Dimmed(col color.Color) color.Color {
+func dimmed(col color.Color) color.Color {
 	if col.Kind() != color.ColorKindLiteral {
 		return col
 	}

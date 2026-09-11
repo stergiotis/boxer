@@ -379,10 +379,10 @@ func (f *auraField) contours(k int32, out *rings) {
 	}
 }
 
-// auraFill is aura k's fill colour: its style's, else the cycle colour at
-// AuraFillAlpha.
-func auraFill(k int, id string, p *AuraParams) color.Color {
-	if st, ok := p.Styles[id]; ok && st.Fill.Kind() == color.ColorKindLiteral {
+// fill is the fill colour of the aura with id at position k of the id
+// order: its style's, else the cycle colour at AuraFillAlpha.
+func (inst AuraParams) fill(k int, id string) color.Color {
+	if st, ok := inst.Styles[id]; ok && st.Fill.Kind() == color.ColorKindLiteral {
 		return st.Fill
 	}
 	return color.Hex(styletokens.QualitativeCycle(k).AsHex()&^0xff | AuraFillAlpha)
