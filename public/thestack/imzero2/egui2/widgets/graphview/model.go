@@ -51,16 +51,34 @@ const (
 	// EventKindAuraToggle is a legend click that hid or showed an aura
 	// (ADR-0224 §SD11); Event.Aura names it. Not a binding kind.
 	EventKindAuraToggle EventKindE = 12
+	// The kinds below are graphview's own (ADR-0224 §SD12), past the
+	// binding's numbering. A secondary click is the right button or a long
+	// touch. The background kinds fire for a click on empty canvas and
+	// carry the world position of the click in X and Y.
+	EventKindNodeSecondaryClick       EventKindE = 13
+	EventKindEdgeSecondaryClick       EventKindE = 14
+	EventKindEdgeDoubleClick          EventKindE = 15
+	EventKindEdgeHoverEnter           EventKindE = 16
+	EventKindEdgeHoverLeave           EventKindE = 17
+	EventKindBackgroundClick          EventKindE = 18
+	EventKindBackgroundDoubleClick    EventKindE = 19
+	EventKindBackgroundSecondaryClick EventKindE = 20
 )
 
 // IsNode reports whether the kind refers to a node.
 func (inst EventKindE) IsNode() bool {
-	return inst >= EventKindNodeClick && inst <= EventKindNodeHoverLeave
+	return (inst >= EventKindNodeClick && inst <= EventKindNodeHoverLeave) || inst == EventKindNodeSecondaryClick
 }
 
 // IsEdge reports whether the kind refers to an edge.
 func (inst EventKindE) IsEdge() bool {
-	return inst >= EventKindEdgeClick && inst <= EventKindEdgeDeselect
+	return (inst >= EventKindEdgeClick && inst <= EventKindEdgeDeselect) ||
+		(inst >= EventKindEdgeSecondaryClick && inst <= EventKindEdgeHoverLeave)
+}
+
+// IsBackground reports whether the kind is a click on empty canvas.
+func (inst EventKindE) IsBackground() bool {
+	return inst >= EventKindBackgroundClick && inst <= EventKindBackgroundSecondaryClick
 }
 
 // String names the kind as the binding's demo did, for logs and readouts.
@@ -90,23 +108,50 @@ func (inst EventKindE) String() string {
 		return "EdgeDeselect"
 	case EventKindAuraToggle:
 		return "AuraToggle"
+	case EventKindNodeSecondaryClick:
+		return "NodeSecondaryClick"
+	case EventKindEdgeSecondaryClick:
+		return "EdgeSecondaryClick"
+	case EventKindEdgeDoubleClick:
+		return "EdgeDoubleClick"
+	case EventKindEdgeHoverEnter:
+		return "EdgeHoverEnter"
+	case EventKindEdgeHoverLeave:
+		return "EdgeHoverLeave"
+	case EventKindBackgroundClick:
+		return "BackgroundClick"
+	case EventKindBackgroundDoubleClick:
+		return "BackgroundDoubleClick"
+	case EventKindBackgroundSecondaryClick:
+		return "BackgroundSecondaryClick"
 	}
 	return fmt.Sprintf("EventKind(%d)", uint8(inst))
 }
 
 // Event is one interaction reported by [View.Events] (ADR-0224 §SD5). Node
 // carries the node id for node kinds, with X and Y the node's world position
-// at the event — on NodeDragEnd, where the user left it; From/To carry the
-// edge for edge kinds; Aura carries the aura id of an AuraToggle. The fields
-// of the other kinds are zero, as are X and Y on a HoverLeave for a node the
-// declaration has since dropped.
+// at the event — on NodeDragEnd, where the user left it; From, To and Edge
+// carry the edge for edge kinds, Edge being the EdgeSpec.Id or 0; X and Y
+// carry the world position of a background click; Aura carries the aura id
+// of an AuraToggle. The fields of the other kinds are zero, as are X and Y
+// on a HoverLeave for a node the declaration has since dropped.
 type Event struct {
 	Kind EventKindE
 	Node uint64
 	X, Y float32
 	From uint64
 	To   uint64
+	Edge uint64
 	Aura string
+}
+
+// EdgeRef names one edge: its endpoints and its EdgeSpec.Id, 0 when the
+// declaration gave none. Parallel edges of one ordered pair share a ref —
+// and so hover and select together — unless they carry distinct ids.
+type EdgeRef struct {
+	From uint64
+	To   uint64
+	Id   uint64
 }
 
 // NodeSpec is one node of the frame's declaration. A zero Color or Radius
@@ -132,12 +177,21 @@ type NodeSpec struct {
 // between the same ordered pair are drawn as curves of increasing bulge; a
 // From == To edge is a self-loop. A zero Color or Width takes the style
 // default.
+//
+// Id is optional and tells parallel edges apart in events, hover and
+// selection (ADR-0224 §SD13); it need only be unique among the edges of one
+// ordered pair. Length scales the force layout's ideal length for this edge
+// and Strength its pull, both multipliers with 1 (or 0) meaning the default;
+// neither affects the static layouts.
 type EdgeSpec struct {
-	From  uint64
-	To    uint64
-	Label string
-	Color color.Color
-	Width float32 // screen pixels
+	From     uint64
+	To       uint64
+	Id       uint64
+	Label    string
+	Color    color.Color
+	Width    float32 // screen pixels
+	Length   float32
+	Strength float32
 }
 
 // ForceParams tunes the Fruchterman–Reingold step. Zero fields take the
@@ -160,6 +214,12 @@ type ForceParams struct {
 	// tests, not for graphs a user waits on.
 	Exact  bool
 	Paused bool
+	// PauseOnSettle stops stepping once the average displacement is at or
+	// under Epsilon, and resumes when something moves it: a topology
+	// change, a drag, a pin or position set, FastForward, ResetLayout or a
+	// change of these parameters. Saves the per-frame step on a graph that
+	// has come to rest.
+	PauseOnSettle bool
 }
 
 func (inst ForceParams) withDefaults() ForceParams {
@@ -218,6 +278,17 @@ type Options struct {
 	EdgeClicking       bool
 	EdgeSelection      bool
 	EdgeSelectionMulti bool
+	// BackgroundClicking emits the Background* events for clicks on empty
+	// canvas, with the world position (ADR-0224 §SD12).
+	BackgroundClicking bool
+	// RectSelection makes a Shift-drag on the background a rectangle
+	// selection over the nodes (needs NodeSelection): the nodes whose
+	// centres it covers are selected, replacing the selection unless
+	// NodeSelectionMulti adds to it. A plain background drag still pans.
+	RectSelection bool
+	// ZoomMin and ZoomMax bound the camera's zoom; zero takes 0.01 and 100.
+	ZoomMin float32
+	ZoomMax float32
 
 	// FitToScreen re-fits the camera every frame. Off, the camera fits once
 	// while a freshly laid-out graph settles and then latches off so manual
@@ -256,6 +327,7 @@ type Style struct {
 	EdgeLabelColor color.Color
 	Highlight      color.Color // hovered node or edge
 	Selected       color.Color // selected node or edge
+	SelectionBox   color.Color // fill of the rectangle-selection box, default Selected at low alpha
 
 	NodeRadius        float32     // world units, default 5
 	NodeStrokeW       float32     // screen pixels; 0 (the default) draws no per-node outline, which keeps a node one batched marker
@@ -283,6 +355,7 @@ func DefaultStyle() Style {
 		EdgeLabelColor:    hex(styletokens.NeutralTextSecondary),
 		Highlight:         hex(styletokens.NeutralTextPrimary),
 		Selected:          hex(styletokens.WarningDefault),
+		SelectionBox:      color.Hex(styletokens.WarningDefault.AsHex()&^0xff | selectionBoxAlpha),
 		NodeRadius:        5,
 		EdgeWidth:         1.5,
 		TipSize:           10,
@@ -319,6 +392,7 @@ func (inst Style) withDefaults() Style {
 	col(&inst.EdgeLabelColor, d.EdgeLabelColor)
 	col(&inst.Highlight, d.Highlight)
 	col(&inst.Selected, d.Selected)
+	col(&inst.SelectionBox, d.SelectionBox)
 	col(&inst.DonutTrack, d.DonutTrack)
 	col(&inst.PinnedStroke, d.PinnedStroke)
 	num(&inst.NodeRadius, d.NodeRadius)
@@ -333,11 +407,13 @@ func (inst Style) withDefaults() Style {
 }
 
 // Metrics is the per-frame readback the settle logic of a consumer needs.
-// Steps, LastDisplacement and Settled are meaningful for the force layouts
-// only; LastDisplacement is NaN before the first step and 0 when every node
-// was fixed. Settled is the convergence test — average displacement at or
-// under Epsilon — without the paused and static cases View.IsSettled folds
-// in.
+// Steps, LastDisplacement, Settled and Paused are meaningful for the force
+// layouts only; LastDisplacement is NaN before the first step and 0 when
+// every node was fixed. Settled is the convergence test — average
+// displacement at or under Epsilon — without the paused and static cases
+// View.IsSettled folds in; Paused is true under ForceParams.Paused or the
+// PauseOnSettle hold. CameraMoved reports that the last Render changed the
+// camera, by input, a fit or a setter.
 type Metrics struct {
 	NodeCount        uint32
 	EdgeCount        uint32
@@ -345,10 +421,15 @@ type Metrics struct {
 	Steps            uint64
 	LastDisplacement float32
 	Settled          bool
+	Paused           bool
+	CameraMoved      bool
 }
 
 // defaultFitPadding is Options.FitPadding when left zero.
 const defaultFitPadding = 0.1
+
+// selectionBoxAlpha is the alpha of the default rectangle-selection fill.
+const selectionBoxAlpha = 0x40
 
 var nan32 = float32(math.NaN())
 

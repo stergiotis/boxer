@@ -39,10 +39,19 @@ type View struct {
 
 	hoveredId   uint64
 	hoveredOk   bool
-	hoveredEdge int32 // edge index in this frame's edge arrays, or -1
+	hoveredEdge int32   // edge index in this frame's edge arrays, or -1
+	hovEdge     EdgeRef // the hovered edge as last reported, for enter/leave
+	hovEdgeOk   bool
 	selNodes    map[uint64]struct{}
-	selEdges    map[[2]uint64]struct{}
+	selEdges    map[EdgeRef]struct{}
 	drag        dragState
+
+	lastW, lastH float32  // canvas size of the last Render, 0 before it
+	fitIds       []uint64 // FitNodes request, applied at once or on the next Render
+	fitIdsWait   bool
+	autoPaused   bool // ForceParams.PauseOnSettle hold
+	lastForce    ForceParams
+	camMoved     bool
 
 	events   []Event
 	originX  float32 // canvas top-left in screen pixels, from the R24 row
@@ -71,7 +80,7 @@ type View struct {
 	tipXs        [3]float32
 	tipYs        [3]float32
 	selOrder     []uint64
-	selEdgeOrder [][2]uint64
+	selEdgeOrder []EdgeRef
 	arcs         []donutArc
 	arcXs        []float32
 	arcYs        []float32
@@ -88,8 +97,10 @@ type nodeBatch struct {
 
 type dragState struct {
 	active bool
-	isNode bool   // moving a node rather than panning
-	nodeId uint64 // the node, when isNode
+	isNode bool    // moving a node rather than panning
+	isRect bool    // sweeping a selection rectangle rather than panning
+	nodeId uint64  // the node, when isNode
+	x0, y0 float32 // press position in canvas pixels, the rectangle's anchor
 	lastX  float32
 	lastY  float32
 }
@@ -108,9 +119,10 @@ func New(ids *c.WidgetIdStack, key string, opts Options) *View {
 		key:         key,
 		paneKey:     key + "-pane",
 		cam:         camera{zoom: 1},
+		style:       opts.Style.withDefaults(),
 		hoveredEdge: -1,
 		selNodes:    make(map[uint64]struct{}, 8),
-		selEdges:    make(map[[2]uint64]struct{}, 8),
+		selEdges:    make(map[EdgeRef]struct{}, 8),
 		hiddenAuras: make(map[string]struct{}, 4),
 		batchIdx:    make(map[uint64]int32, 8),
 		fs:          forceState{lastDisp: nan32},
@@ -125,6 +137,55 @@ func (v *View) FitNow() { v.fitRequested = true }
 // placed afresh by the layout, widget-side pins are released, the step
 // counter restarts and the camera re-fits.
 func (v *View) ResetLayout() { v.resetPending = true }
+
+// FitNodes frames the given nodes, padded by Options.FitPadding, and
+// releases any pending fit so the framing sticks — the fit-to-subset a
+// "focus" action wants. Unknown ids are skipped; with none known the camera
+// is left alone. Before the first Render the request waits for it, since the
+// canvas size is not known yet.
+func (v *View) FitNodes(ids []uint64) {
+	v.fitIds = append(v.fitIds[:0], ids...)
+	v.fitIdsWait = true
+	if v.lastW > 0 && v.lastH > 0 {
+		v.applyFitNodes(v.lastW, v.lastH)
+	}
+}
+
+func (v *View) applyFitNodes(w, h float32) {
+	v.fitIdsWait = false
+	var minX, minY, maxX, maxY float32
+	found := false
+	for _, id := range v.fitIds {
+		s, ok := v.g.slot[id]
+		if !ok {
+			continue
+		}
+		r := v.nodeRadius(int(s))
+		x, y := v.g.x[s], v.g.y[s]
+		if !found {
+			minX, minY, maxX, maxY = x-r, y-r, x+r, y+r
+			found = true
+			continue
+		}
+		minX = min(minX, x-r)
+		minY = min(minY, y-r)
+		maxX = max(maxX, x+r)
+		maxY = max(maxY, y+r)
+	}
+	if !found {
+		return
+	}
+	v.cam.fit(minX, minY, maxX, maxY, w, h, v.fitPadding())
+	v.fitPending = false
+}
+
+// fitPadding is Options.FitPadding with its default.
+func (v *View) fitPadding() float32 {
+	if p := v.Opts.FitPadding; p > 0 {
+		return p
+	}
+	return defaultFitPadding
+}
 
 // AuraIds yields the aura ids of the last render's declaration in id
 // order, hidden ones included — the rows a legend lists.
@@ -167,7 +228,10 @@ func (v *View) setAuraHidden(id string, hidden bool) {
 
 // FastForward advances the force simulation by steps extra iterations
 // before the next render. A no-op for the static layouts.
-func (v *View) FastForward(steps uint32) { v.ffSteps += steps }
+func (v *View) FastForward(steps uint32) {
+	v.ffSteps += steps
+	v.autoPaused = false
+}
 
 // Events returns the interactions the previous frame's input produced,
 // valid until the next Render.
@@ -182,15 +246,18 @@ func (v *View) Metrics() Metrics {
 		Steps:            v.fs.steps,
 		LastDisplacement: v.fs.lastDisp,
 		Settled:          v.Opts.Layout.IsAnimated() && v.fs.settled(v.Opts.Force.withDefaults().Epsilon),
+		Paused:           v.Opts.Layout.IsAnimated() && (v.Opts.Force.Paused || v.autoPaused),
+		CameraMoved:      v.camMoved,
 	}
 }
 
 // IsSettled reports whether the layout has stopped moving for any reason —
 // the predicate the fit latch waits on: a static layout always, a paused
-// force layout, or a force layout whose average displacement is at or under
-// Epsilon. Metrics.Settled is the convergence test alone.
+// force layout (by Paused or the PauseOnSettle hold), or a force layout
+// whose average displacement is at or under Epsilon. Metrics.Settled is the
+// convergence test alone.
 func (v *View) IsSettled() bool {
-	if !v.Opts.Layout.IsAnimated() || v.Opts.Force.Paused {
+	if !v.Opts.Layout.IsAnimated() || v.Opts.Force.Paused || v.autoPaused {
 		return true
 	}
 	return v.fs.settled(v.Opts.Force.withDefaults().Epsilon)
@@ -202,11 +269,11 @@ func (v *View) HoveredNode() (id uint64, ok bool) {
 }
 
 // HoveredEdge returns the edge under the pointer, as of the previous frame,
-// when no node is. Edge hover has no events; parallel edges of one ordered
-// pair are not told apart.
-func (v *View) HoveredEdge() (from, to uint64, ok bool) {
+// when no node is. Parallel edges of one ordered pair are told apart only
+// by their EdgeSpec.Id.
+func (v *View) HoveredEdge() (ref EdgeRef, ok bool) {
 	if e := v.hoveredEdge; e >= 0 && int(e) < len(v.g.eFrom) {
-		return v.g.ids[v.g.eFrom[e]], v.g.ids[v.g.eTo[e]], true
+		return v.g.edgeRef(e), true
 	}
 	return
 }
@@ -229,19 +296,22 @@ func (v *View) SelectedNodes() iter.Seq[uint64] {
 	}
 }
 
-// SelectedEdges yields the selected edges as (from, to) pairs, ordered. The
+// SelectedEdges yields the selected edges ordered by (from, to, id). The
 // same scratch caveat as SelectedNodes applies.
-func (v *View) SelectedEdges() iter.Seq[[2]uint64] {
-	return func(yield func([2]uint64) bool) {
+func (v *View) SelectedEdges() iter.Seq[EdgeRef] {
+	return func(yield func(EdgeRef) bool) {
 		v.selEdgeOrder = v.selEdgeOrder[:0]
 		for k := range v.selEdges {
 			v.selEdgeOrder = append(v.selEdgeOrder, k)
 		}
-		slices.SortFunc(v.selEdgeOrder, func(a, b [2]uint64) int {
-			if r := cmp.Compare(a[0], b[0]); r != 0 {
+		slices.SortFunc(v.selEdgeOrder, func(a, b EdgeRef) int {
+			if r := cmp.Compare(a.From, b.From); r != 0 {
 				return r
 			}
-			return cmp.Compare(a[1], b[1])
+			if r := cmp.Compare(a.To, b.To); r != 0 {
+				return r
+			}
+			return cmp.Compare(a.Id, b.Id)
 		})
 		for _, k := range v.selEdgeOrder {
 			if !yield(k) {
@@ -249,6 +319,76 @@ func (v *View) SelectedEdges() iter.Seq[[2]uint64] {
 			}
 		}
 	}
+}
+
+// IsNodeSelected reports whether the node is selected.
+func (v *View) IsNodeSelected(id uint64) bool {
+	_, sel := v.selNodes[id]
+	return sel
+}
+
+// IsEdgeSelected reports whether the edge is selected.
+func (v *View) IsEdgeSelected(ref EdgeRef) bool {
+	_, sel := v.selEdges[ref]
+	return sel
+}
+
+// SelectNode adds a node to the selection from code (ADR-0224 §SD12). Like
+// HideAura it reports no event — the caller asked — and it does not enforce
+// single selection: ClearSelection first for that. It reports false, and
+// does nothing, for an id the declaration does not carry.
+func (v *View) SelectNode(id uint64) bool {
+	if _, ok := v.g.slot[id]; !ok {
+		return false
+	}
+	v.selNodes[id] = struct{}{}
+	return true
+}
+
+// DeselectNode removes a node from the selection, silently.
+func (v *View) DeselectNode(id uint64) { delete(v.selNodes, id) }
+
+// SelectEdge adds an edge to the selection from code, with SelectNode's
+// rules. The ref must name an edge of the last declaration, id included.
+func (v *View) SelectEdge(ref EdgeRef) bool {
+	if v.g.findEdge(ref) < 0 {
+		return false
+	}
+	v.selEdges[ref] = struct{}{}
+	return true
+}
+
+// DeselectEdge removes an edge from the selection, silently.
+func (v *View) DeselectEdge(ref EdgeRef) { delete(v.selEdges, ref) }
+
+// ClearSelection empties the node and edge selection, silently.
+func (v *View) ClearSelection() {
+	clear(v.selNodes)
+	clear(v.selEdges)
+}
+
+// Positions yields every declared node's id and world position, in the
+// widget's slot order, which is stable while the declaration is. It is the
+// bulk read a caller saves a layout with; SetNodePosition restores it.
+func (v *View) Positions() iter.Seq2[uint64, [2]float32] {
+	return func(yield func(uint64, [2]float32) bool) {
+		for i, id := range v.g.ids {
+			if !yield(id, [2]float32{v.g.x[i], v.g.y[i]}) {
+				return
+			}
+		}
+	}
+}
+
+// NodeScreenRadius returns the node's radius as painted in the last Render,
+// in canvas pixels, donut ring included — the extent an overlay placed by
+// NodeCanvasPosition should clear.
+func (v *View) NodeScreenRadius(id uint64) (r float32, ok bool) {
+	s, ok := v.g.slot[id]
+	if !ok {
+		return
+	}
+	return v.nodeOuterPx(int(s)), true
 }
 
 // NodePosition returns a node's world position.
@@ -287,7 +427,7 @@ func (v *View) Camera() (zoom, panX, panY float32) {
 // SetCamera sets the view transform and releases a pending fit, so the
 // caller's framing sticks.
 func (v *View) SetCamera(zoom, panX, panY float32) {
-	v.cam.zoom = min(max(zoom, minZoom), maxZoom)
+	v.cam.zoom = v.cam.clamp(zoom)
 	v.cam.panX, v.cam.panY = panX, panY
 	v.fitPending = false
 }
@@ -305,6 +445,7 @@ func (v *View) PinNode(id uint64, x, y float32) {
 		v.g.x[s], v.g.y[s] = x, y
 		v.g.held[s] = true
 		v.auraDirty = true
+		v.autoPaused = false
 	}
 }
 
@@ -313,6 +454,7 @@ func (v *View) PinNode(id uint64, x, y float32) {
 func (v *View) UnpinNode(id uint64) {
 	if s, ok := v.g.slot[id]; ok {
 		v.g.held[s] = false
+		v.autoPaused = false
 	}
 }
 
@@ -329,6 +471,7 @@ func (v *View) SetNodePosition(id uint64, x, y float32) {
 	if s, ok := v.g.slot[id]; ok {
 		v.g.x[s], v.g.y[s] = x, y
 		v.auraDirty = true
+		v.autoPaused = false
 	}
 }
 
@@ -349,13 +492,17 @@ func (v *View) RenderFill(nodes []NodeSpec, edges []EdgeSpec, fallbackW, fallbac
 // pane's size.
 func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 	v.events = v.events[:0]
+	v.camMoved = false
 	if w <= 0 || h <= 0 {
 		return
 	}
+	v.lastW, v.lastH = w, h
 	v.style = v.Opts.Style.withDefaults()
 	fp := v.Opts.Force.withDefaults()
 	hp := v.Opts.Hier.withDefaults()
 	ap := v.Opts.Auras.withDefaults()
+	v.cam.setLimits(v.Opts.ZoomMin, v.Opts.ZoomMax)
+	camBefore := v.cam
 
 	for range c.IdScope(v.ids.PrepareStr(v.key)) {
 		sm := c.CurrentApplicationState.StateManager
@@ -364,6 +511,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		canvasFlags := sm.GetResponse(canvasH)
 		areaFlags := sm.GetResponse(areaH)
 		wheel := sm.GetCanvasWheel(canvasH)
+		mods := sm.GetModifiers()
 
 		// Pointer in canvas pixels: the global pointer against the canvas's
 		// R24 origin, refined by the sense region's own row when it has one
@@ -410,6 +558,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			v.drag = dragState{}
 			v.fitRequested = true
 			v.auraDirty = true
+			v.autoPaused = false
 		}
 
 		// Placement of nodes that have none yet.
@@ -434,39 +583,18 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		// node where the pointer has it (ADR-0224 §SD10).
 		if v.g.applyPins(v.dragSlot()) {
 			v.auraDirty = true
+			v.autoPaused = false
 		}
 
 		// Input, against the previous frame's geometry. A drag that began
 		// this frame fixes its node before the step below can move it.
-		v.applyInput(w, h, px, py, posOk, inside, areaFlags, wheel)
+		v.applyInput(w, h, px, py, posOk, inside, areaFlags, wheel, mods)
 		if s := v.dragSlot(); s >= 0 {
 			v.g.fixed[s] = true
 		}
 
 		// Layout.
-		if v.Opts.Layout.IsAnimated() {
-			cg := float32(0)
-			if v.Opts.Layout == LayoutForceDirectedCG {
-				cg = fp.CenterGravity
-			}
-			steps := v.ffSteps
-			v.ffSteps = 0
-			if !fp.Paused {
-				steps++
-			}
-			for range steps {
-				v.fs.step(&v.g, w, h, fp, cg)
-			}
-			// The field follows the simulation once the nodes have drifted a
-			// fraction of a cell: a settled layout still steps, by less than
-			// epsilon, and this keeps that from either forcing a field per
-			// frame or accumulating unseen.
-			if steps > 0 && !isNaN32(v.fs.lastDisp) {
-				v.auraDrift += v.fs.lastDisp * float32(steps)
-			}
-		} else {
-			v.ffSteps = 0
-		}
+		v.stepLayout(w, h, fp, topoChanged || len(created) > 0)
 
 		// Camera: the one-shot fit latch (ADR-0224 §SD4).
 		refit := v.fitRequested || (!v.everHadNodes && n > 0)
@@ -487,10 +615,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			doFit = true
 		}
 		if doFit {
-			pad := v.Opts.FitPadding
-			if pad <= 0 {
-				pad = defaultFitPadding
-			}
+			pad := v.fitPadding()
 			if minX, minY, maxX, maxY, ok := v.g.bounds(v.style.NodeRadius); ok {
 				v.cam.fit(minX, minY, maxX, maxY, w, h, pad)
 				// Auras reach past the nodes by a screen-space amount; widen
@@ -501,6 +626,11 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 				}
 			}
 		}
+
+		if v.fitIdsWait {
+			v.applyFitNodes(w, h)
+		}
+		v.camMoved = !v.cam.same(camBefore)
 
 		v.updateAuras(ap, w, h)
 		v.paint(w, h)
@@ -520,9 +650,51 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 	}
 }
 
+// stepLayout advances a force layout by this frame's steps: the fast-forward
+// backlog plus one, unless paused by ForceParams.Paused or by the
+// PauseOnSettle hold. wake is a topology change; a drag, FastForward, a
+// parameter change or the setters lift the hold too, and it is taken once
+// the step reports settled.
+func (v *View) stepLayout(w, h float32, fp ForceParams, wake bool) {
+	if !v.Opts.Layout.IsAnimated() {
+		v.ffSteps = 0
+		return
+	}
+	if fp != v.lastForce {
+		v.lastForce = fp
+		v.autoPaused = false
+	}
+	if wake || v.dragSlot() >= 0 {
+		v.autoPaused = false
+	}
+	cg := float32(0)
+	if v.Opts.Layout == LayoutForceDirectedCG {
+		cg = fp.CenterGravity
+	}
+	steps := v.ffSteps
+	v.ffSteps = 0
+	if !fp.Paused && !v.autoPaused {
+		steps++
+	}
+	for range steps {
+		v.fs.step(&v.g, w, h, fp, cg)
+	}
+	// The field follows the simulation once the nodes have drifted a
+	// fraction of a cell: a settled layout still steps, by less than
+	// epsilon, and this keeps that from either forcing a field per
+	// frame or accumulating unseen.
+	if steps > 0 && !isNaN32(v.fs.lastDisp) {
+		v.auraDrift += v.fs.lastDisp * float32(steps)
+	}
+	if fp.PauseOnSettle && steps > 0 && v.fs.settled(fp.Epsilon) {
+		v.autoPaused = true
+	}
+}
+
 // pruneSelection drops selected nodes and edges the declaration no longer
 // carries, silently: a vanished node has no position to report and a
-// Deselect for it would name an id the caller just removed.
+// Deselect for it would name an id the caller just removed. An edge whose
+// endpoints survive but which itself vanished is dropped too.
 func (v *View) pruneSelection() {
 	for id := range v.selNodes {
 		if _, ok := v.g.slot[id]; !ok {
@@ -530,9 +702,7 @@ func (v *View) pruneSelection() {
 		}
 	}
 	for k := range v.selEdges {
-		_, okF := v.g.slot[k[0]]
-		_, okT := v.g.slot[k[1]]
-		if !okF || !okT {
+		if v.g.findEdge(k) < 0 {
 			delete(v.selEdges, k)
 		}
 	}
@@ -541,7 +711,7 @@ func (v *View) pruneSelection() {
 // applyInput turns last frame's registers into hover, selection, drag and
 // camera changes, and queues the events they imply.
 func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
-	areaFlags c.ResponseFlagsE, wheel c.CanvasWheelValue) {
+	areaFlags c.ResponseFlagsE, wheel c.CanvasWheelValue, mods c.ModifiersValue) {
 	o := &v.Opts
 	// The pick under the pointer serves hover, click and drag alike.
 	hitNode, hitEdge := int32(-1), int32(-1)
@@ -576,46 +746,99 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 	if !o.NoHover && !v.drag.active {
 		v.hoveredEdge = hitEdge
 	}
+	edgeOk := v.hoveredEdge >= 0
+	var edgeRef EdgeRef
+	if edgeOk {
+		edgeRef = v.g.edgeRef(v.hoveredEdge)
+	}
+	if edgeOk != v.hovEdgeOk || edgeRef != v.hovEdge {
+		if v.hovEdgeOk {
+			v.events = append(v.events, edgeEvent(EventKindEdgeHoverLeave, v.hovEdge))
+		}
+		if edgeOk {
+			v.events = append(v.events, edgeEvent(EventKindEdgeHoverEnter, edgeRef))
+		}
+		v.hovEdge, v.hovEdgeOk = edgeRef, edgeOk
+	}
 
 	// Click. egui reports the second click of a double-click as a click
 	// too; like the crate, the double-click takes it, so a double-clicked
-	// node does not toggle its selection.
+	// node does not toggle its selection. A secondary click — the right
+	// button, or a long touch — reports beside either and changes nothing.
 	if posOk && inside {
+		dbl := areaFlags.HasDoubleClicked()
+		prim := areaFlags.HasPrimaryClicked()
+		sec := areaFlags.HasSecondaryClicked() || areaFlags.HasLongTouched()
 		switch {
-		case areaFlags.HasDoubleClicked() && hitNode >= 0:
-			if o.NodeClicking {
-				v.events = append(v.events, v.nodeEvent(EventKindNodeDoubleClick, hitNode))
+		case hitNode >= 0:
+			switch {
+			case dbl:
+				if o.NodeClicking {
+					v.events = append(v.events, v.nodeEvent(EventKindNodeDoubleClick, hitNode))
+				}
+			case prim:
+				if o.NodeClicking {
+					v.events = append(v.events, v.nodeEvent(EventKindNodeClick, hitNode))
+				}
+				if o.NodeSelection {
+					v.toggleNodeSelection(v.g.ids[hitNode], o.NodeSelectionMulti)
+				}
 			}
-		case areaFlags.HasPrimaryClicked() && hitNode >= 0:
-			if o.NodeClicking {
-				v.events = append(v.events, v.nodeEvent(EventKindNodeClick, hitNode))
+			if sec && o.NodeClicking {
+				v.events = append(v.events, v.nodeEvent(EventKindNodeSecondaryClick, hitNode))
 			}
-			if o.NodeSelection {
-				v.toggleNodeSelection(v.g.ids[hitNode], o.NodeSelectionMulti)
+		case hitEdge >= 0:
+			ref := v.g.edgeRef(hitEdge)
+			switch {
+			case dbl:
+				if o.EdgeClicking {
+					v.events = append(v.events, edgeEvent(EventKindEdgeDoubleClick, ref))
+				}
+			case prim:
+				if o.EdgeClicking {
+					v.events = append(v.events, edgeEvent(EventKindEdgeClick, ref))
+				}
+				if o.EdgeSelection {
+					v.toggleEdgeSelection(ref, o.EdgeSelectionMulti)
+				}
 			}
-		case areaFlags.HasPrimaryClicked() && hitEdge >= 0:
-			from, to := v.g.ids[v.g.eFrom[hitEdge]], v.g.ids[v.g.eTo[hitEdge]]
-			if o.EdgeClicking {
-				v.events = append(v.events, Event{Kind: EventKindEdgeClick, From: from, To: to})
+			if sec && o.EdgeClicking {
+				v.events = append(v.events, edgeEvent(EventKindEdgeSecondaryClick, ref))
 			}
-			if o.EdgeSelection {
-				v.toggleEdgeSelection([2]uint64{from, to}, o.EdgeSelectionMulti)
+		default:
+			wx, wy := v.cam.toWorld(px, py)
+			bg := func(kind EventKindE) {
+				if o.BackgroundClicking {
+					v.events = append(v.events, Event{Kind: kind, X: wx, Y: wy})
+				}
 			}
-		case areaFlags.HasPrimaryClicked():
-			v.deselectAll()
+			switch {
+			case dbl:
+				bg(EventKindBackgroundDoubleClick)
+			case prim:
+				v.deselectAll()
+				bg(EventKindBackgroundClick)
+			}
+			if sec {
+				bg(EventKindBackgroundSecondaryClick)
+			}
 		}
 	}
 
-	// Drag: a node when the press lands on one, the camera otherwise. The
-	// node is held by id, since slots move when the declaration shrinks.
-	// Either kind releases the fit latch, so the view stops re-framing
-	// under the gesture.
+	// Drag: a node when the press lands on one, a selection rectangle on a
+	// Shift-press over the background, the camera otherwise. The node is
+	// held by id, since slots move when the declaration shrinks. Every kind
+	// releases the fit latch, so the view stops re-framing under the
+	// gesture.
 	if areaFlags.HasDragStarted() && posOk {
-		v.drag = dragState{active: true, lastX: px, lastY: py}
+		v.drag = dragState{active: true, x0: px, y0: py, lastX: px, lastY: py}
 		v.fitPending = false
-		if hitNode >= 0 && !o.NoDragging {
+		switch {
+		case hitNode >= 0 && !o.NoDragging:
 			v.drag.isNode, v.drag.nodeId = true, v.g.ids[hitNode]
 			v.events = append(v.events, v.nodeEvent(EventKindNodeDragStart, hitNode))
+		case o.RectSelection && o.NodeSelection && mods.Shift:
+			v.drag.isRect = true
 		}
 	}
 	// egui reports no drag on the release frame, but the pointer may have
@@ -623,25 +846,31 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 	if v.drag.active && (areaFlags.HasDragged() || areaFlags.HasDragStopped()) && posOk {
 		dx, dy := px-v.drag.lastX, py-v.drag.lastY
 		v.drag.lastX, v.drag.lastY = px, py
-		if v.drag.isNode {
+		switch {
+		case v.drag.isNode:
 			if s, ok := v.g.slot[v.drag.nodeId]; ok {
 				v.g.x[s] += dx / v.cam.zoom
 				v.g.y[s] += dy / v.cam.zoom
 				v.auraDirty = true
 			}
-		} else if !o.NoZoomAndPan {
+		case v.drag.isRect:
+			// The rectangle is (x0, y0)–(lastX, lastY); nothing else moves.
+		case !o.NoZoomAndPan:
 			v.cam.panX += dx
 			v.cam.panY += dy
 		}
 	}
 	if v.drag.active && (areaFlags.HasDragStopped() || !areaFlags.HasIsPointerButtonDown()) {
-		if v.drag.isNode {
+		switch {
+		case v.drag.isNode:
 			if s, ok := v.g.slot[v.drag.nodeId]; ok {
 				if o.PinOnDrag {
 					v.g.held[s] = true
 				}
 				v.events = append(v.events, v.nodeEvent(EventKindNodeDragEnd, s))
 			}
+		case v.drag.isRect:
+			v.rectSelect(v.drag.x0, v.drag.y0, v.drag.lastX, v.drag.lastY, o.NodeSelectionMulti)
 		}
 		v.drag = dragState{}
 	}
@@ -715,17 +944,22 @@ func (v *View) dragSlot() int32 {
 	return -1
 }
 
-func (v *View) toggleEdgeSelection(k [2]uint64, multi bool) {
+func (v *View) toggleEdgeSelection(k EdgeRef, multi bool) {
 	if _, sel := v.selEdges[k]; sel {
 		delete(v.selEdges, k)
-		v.events = append(v.events, Event{Kind: EventKindEdgeDeselect, From: k[0], To: k[1]})
+		v.events = append(v.events, edgeEvent(EventKindEdgeDeselect, k))
 		return
 	}
 	if !multi {
 		v.deselectAll()
 	}
 	v.selEdges[k] = struct{}{}
-	v.events = append(v.events, Event{Kind: EventKindEdgeSelect, From: k[0], To: k[1]})
+	v.events = append(v.events, edgeEvent(EventKindEdgeSelect, k))
+}
+
+// edgeEvent builds an edge event from a ref.
+func edgeEvent(kind EventKindE, k EdgeRef) Event {
+	return Event{Kind: kind, From: k.From, To: k.To, Edge: k.Id}
 }
 
 func (v *View) deselectAll() {
@@ -733,10 +967,33 @@ func (v *View) deselectAll() {
 		v.events = append(v.events, v.nodeEventById(EventKindNodeDeselect, id))
 	}
 	for k := range v.SelectedEdges() {
-		v.events = append(v.events, Event{Kind: EventKindEdgeDeselect, From: k[0], To: k[1]})
+		v.events = append(v.events, edgeEvent(EventKindEdgeDeselect, k))
 	}
 	clear(v.selNodes)
 	clear(v.selEdges)
+}
+
+// rectSelect selects the nodes whose centres the canvas rectangle covers,
+// reporting a Select per node, after a Deselect for the previous selection
+// unless add is set.
+func (v *View) rectSelect(x0, y0, x1, y1 float32, add bool) {
+	minX, maxX := min(x0, x1), max(x0, x1)
+	minY, maxY := min(y0, y1), max(y0, y1)
+	if !add {
+		v.deselectAll()
+	}
+	for i := range v.g.ids {
+		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+		if sx < minX || sx > maxX || sy < minY || sy > maxY {
+			continue
+		}
+		id := v.g.ids[i]
+		if _, sel := v.selNodes[id]; sel {
+			continue
+		}
+		v.selNodes[id] = struct{}{}
+		v.events = append(v.events, v.nodeEvent(EventKindNodeSelect, int32(i)))
+	}
 }
 
 // pickMinPx is the smallest pick radius in screen pixels, so a node zoomed

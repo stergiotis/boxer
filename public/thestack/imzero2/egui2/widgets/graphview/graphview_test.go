@@ -269,7 +269,7 @@ func TestSelectionIsPrunedWithTheDeclaration(t *testing.T) {
 	v.g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}}, []EdgeSpec{{From: 1, To: 2}})
 	v.selNodes[1] = struct{}{}
 	v.selNodes[2] = struct{}{}
-	v.selEdges[[2]uint64{1, 2}] = struct{}{}
+	v.selEdges[EdgeRef{From: 1, To: 2}] = struct{}{}
 	_, changed := v.g.reconcile([]NodeSpec{{Id: 2}}, nil)
 	require.True(t, changed)
 	v.pruneSelection()
@@ -283,11 +283,11 @@ func TestDoubleClickDoesNotToggleSelection(t *testing.T) {
 	v.style = v.Opts.Style.withDefaults()
 	var wheel c.CanvasWheelValue
 	wheel.Zoom = 1
-	v.applyInput(800, 600, 0, 0, true, true, c.PrimaryClickedResponseFlags, wheel)
+	v.applyInput(800, 600, 0, 0, true, true, c.PrimaryClickedResponseFlags, wheel, c.ModifiersValue{})
 	require.Equal(t, []uint64{1}, slices.Collect(v.SelectedNodes()), "the first click selects")
 	v.events = v.events[:0]
 	// egui reports the second click as both a click and a double-click.
-	v.applyInput(800, 600, 0, 0, true, true, c.PrimaryClickedResponseFlags|c.DoubleClickedResponseFlags, wheel)
+	v.applyInput(800, 600, 0, 0, true, true, c.PrimaryClickedResponseFlags|c.DoubleClickedResponseFlags, wheel, c.ModifiersValue{})
 	require.Equal(t, []uint64{1}, slices.Collect(v.SelectedNodes()), "the double-click leaves the selection alone")
 	kinds := make([]EventKindE, 0, len(v.events))
 	for _, ev := range v.events {

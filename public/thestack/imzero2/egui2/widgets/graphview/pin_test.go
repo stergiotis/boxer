@@ -68,15 +68,15 @@ func TestPinOnDragHoldsWhereTheNodeWasDropped(t *testing.T) {
 	wheel.Zoom = 1
 	down := c.IsPointerButtonDownResponseFlags
 	// Press on the node, drag 40 px right, release.
-	v.applyInput(800, 600, 100, 100, true, true, c.DragStartedResponseFlags|down, wheel)
+	v.applyInput(800, 600, 100, 100, true, true, c.DragStartedResponseFlags|down, wheel, c.ModifiersValue{})
 	require.Len(t, v.Events(), 2, "hover enter and drag start")
 	require.Equal(t, EventKindNodeDragStart, v.Events()[1].Kind)
 	v.g.applyPins(v.dragSlot())
 	require.True(t, v.g.fixed[0], "fixed while dragged")
-	v.applyInput(800, 600, 140, 100, true, true, c.DraggedResponseFlags|down, wheel)
+	v.applyInput(800, 600, 140, 100, true, true, c.DraggedResponseFlags|down, wheel, c.ModifiersValue{})
 	v.events = v.events[:0]
 	// The pointer moved another 20 px on the release frame; that motion counts.
-	v.applyInput(800, 600, 160, 100, true, true, c.DragStoppedResponseFlags, wheel)
+	v.applyInput(800, 600, 160, 100, true, true, c.DragStoppedResponseFlags, wheel, c.ModifiersValue{})
 	require.True(t, v.IsPinned(1), "held where it was dropped")
 	require.Equal(t, float32(160), v.g.x[0])
 	var end *Event

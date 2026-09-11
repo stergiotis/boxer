@@ -1619,6 +1619,31 @@ What to know before using it:
   owns click and drag, the canvas owns hover and the R23 wheel; picking is
   Go-side by radius (nodes, O(n)) and segment distance (edges). Two views
   under one id stack need distinct keys.
+- **Events and selection** (ADR-0224 §SD12). Node and edge click,
+  double-click, select, deselect, drag and hover events are gated by the
+  `Node*` / `Edge*` options; `NodeSecondaryClick` / `EdgeSecondaryClick`
+  (right button or long touch) come with clicking, and
+  `BackgroundClicking` adds `Background{Click,DoubleClick,SecondaryClick}`
+  with the world position in `Event.X/Y` — the hook for a context menu or
+  an "add node here". Edge events carry `Event.Edge`, the `EdgeSpec.Id`.
+  `SelectNode` / `SelectEdge` / `DeselectNode` / `DeselectEdge` /
+  `ClearSelection` set the selection from code without events;
+  `IsNodeSelected` / `IsEdgeSelected` read it. `RectSelection` makes a
+  Shift-drag on the background a rectangle over node centres (replacing
+  the selection, or adding under `NodeSelectionMulti`); a plain drag still
+  pans. `FitNodes(ids)` frames a subset at once; `Positions()` is the bulk
+  read for saving a layout, `SetNodePosition` the restore;
+  `Opts.ZoomMin/ZoomMax` bound the camera; `Metrics.CameraMoved` says the
+  last Render changed it.
+- **Edge ids and weights** (ADR-0224 §SD13). `EdgeSpec.Id` tells parallel
+  edges apart in hover, click and selection — `EdgeRef{From, To, Id}` is
+  the key — and `Length` / `Strength` scale one edge's ideal length and
+  pull in the force layout (1 when unset; the static layouts ignore them).
+- **Resting.** `Opts.Force.PauseOnSettle` stops stepping once the average
+  displacement is under `Epsilon` and wakes on a drag, a topology or
+  parameter change, a pin or position set, `FastForward` or `ResetLayout`;
+  `Metrics.Paused` reports either kind of pause. Prefer it to polling
+  `Settled` and flipping `Paused` by hand.
 - **Cost.** One batched marker opcode per (colour, radius), one line or
   Bézier per edge, one polygon per arrow head, one text per visible label.
   The force step is exact O(n²) below a few hundred nodes and Barnes–Hut
@@ -1662,4 +1687,5 @@ zoom factor and `Opts.ZoomSpeed` is an exponent on it; `fitPadding` is a
 fraction of the canvas per side here, not a scale on the graph's diagonal,
 so the same number frames a little tighter; a zero width or height no longer
 means "fill" — use `RenderFill` for that. Edge selection and hover are keyed
-by (from, to), so parallel edges of one pair select together.
+by `EdgeRef{From, To, Id}`: parallel edges of one pair select together
+unless the declaration gives them distinct ids.

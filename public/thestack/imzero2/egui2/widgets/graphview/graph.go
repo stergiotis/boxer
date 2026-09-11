@@ -28,13 +28,17 @@ type graph struct {
 	held    []bool // held where the user dropped it (Options.PinOnDrag / PinNode)
 
 	eFrom, eTo []int32
+	eId        []uint64
 	eLabel     []string
 	eCol       []color.Color
 	eWidth     []float32
-	eOrder     []uint8 // index among parallel edges of the same ordered pair
+	eLen       []float32 // ideal-length multiplier, resolved to 1 when unset
+	eStr       []float32 // attraction multiplier, resolved to 1 when unset
+	eOrder     []uint8   // index among parallel edges of the same ordered pair
 
 	adjStart []int32 // n+1 offsets into adjList
 	adjList  []int32 // undirected neighbours, one entry per edge end
+	adjEdge  []int32 // the edge index behind each adjList entry
 	inDeg    []int32
 
 	frame       uint32
@@ -120,7 +124,7 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		_, okF := g.slot[e.From]
 		_, okT := g.slot[e.To]
 		if okF && okT {
-			hash += mix64(e.From ^ mix64(e.To))
+			hash += mix64(e.From ^ mix64(e.To^mix64(e.Id)))
 		}
 	}
 	topoChanged = hash != g.topoHash || len(created) > 0
@@ -139,6 +143,8 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 			g.eLabel[j] = e.Label
 			g.eCol[j] = e.Color
 			g.eWidth[j] = e.Width
+			g.eLen[j] = posOr1(e.Length)
+			g.eStr[j] = posOr1(e.Strength)
 			j++
 		}
 	}
@@ -162,9 +168,12 @@ func (g *graph) rebuildEdges(edges []EdgeSpec) {
 	n := len(g.ids)
 	g.eFrom = g.eFrom[:0]
 	g.eTo = g.eTo[:0]
+	g.eId = g.eId[:0]
 	g.eLabel = g.eLabel[:0]
 	g.eCol = g.eCol[:0]
 	g.eWidth = g.eWidth[:0]
+	g.eLen = g.eLen[:0]
+	g.eStr = g.eStr[:0]
 	g.eOrder = g.eOrder[:0]
 	clear(g.pairCount)
 	g.inDeg = growTo(g.inDeg, n)
@@ -183,9 +192,12 @@ func (g *graph) rebuildEdges(edges []EdgeSpec) {
 		g.pairCount[key] = order + 1
 		g.eFrom = append(g.eFrom, from)
 		g.eTo = append(g.eTo, to)
+		g.eId = append(g.eId, e.Id)
 		g.eLabel = append(g.eLabel, e.Label)
 		g.eCol = append(g.eCol, e.Color)
 		g.eWidth = append(g.eWidth, e.Width)
+		g.eLen = append(g.eLen, posOr1(e.Length))
+		g.eStr = append(g.eStr, posOr1(e.Strength))
 		g.eOrder = append(g.eOrder, order)
 		g.inDeg[to]++
 		if from != to {
@@ -203,6 +215,7 @@ func (g *graph) rebuildEdges(edges []EdgeSpec) {
 	deg[n] = acc
 	g.adjStart = deg
 	g.adjList = growTo(g.adjList, int(acc))
+	g.adjEdge = growTo(g.adjEdge, int(acc))
 	g.csrCursor = growTo(g.csrCursor, n)
 	cur := g.csrCursor
 	copy(cur, g.adjStart[:n])
@@ -212,10 +225,41 @@ func (g *graph) rebuildEdges(edges []EdgeSpec) {
 			continue
 		}
 		g.adjList[cur[f]] = t
+		g.adjEdge[cur[f]] = int32(i)
 		cur[f]++
 		g.adjList[cur[t]] = f
+		g.adjEdge[cur[t]] = int32(i)
 		cur[t]++
 	}
+}
+
+// edgeRef names edge i by its endpoint ids and declared id.
+func (g *graph) edgeRef(i int32) EdgeRef {
+	return EdgeRef{From: g.ids[g.eFrom[i]], To: g.ids[g.eTo[i]], Id: g.eId[i]}
+}
+
+// findEdge returns the index of the first edge matching ref, or -1. Linear
+// in the edge count; for the programmatic selection calls, not the frame.
+func (g *graph) findEdge(ref EdgeRef) int32 {
+	from, okF := g.slot[ref.From]
+	to, okT := g.slot[ref.To]
+	if !okF || !okT {
+		return -1
+	}
+	for i := range g.eFrom {
+		if g.eFrom[i] == from && g.eTo[i] == to && g.eId[i] == ref.Id {
+			return int32(i)
+		}
+	}
+	return -1
+}
+
+// posOr1 resolves an optional multiplier: non-positive means 1.
+func posOr1(v float32) float32 {
+	if v > 0 {
+		return v
+	}
+	return 1
 }
 
 // allSlots returns every slot index, in the shared newSlots scratch.

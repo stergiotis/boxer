@@ -238,6 +238,42 @@ that wants them gone omits them. Polygons with holes — an aura ringing an
 empty pocket — fill the pocket, since the concave fill takes a single outer
 ring.
 
+**SD12 — The interaction surface is the reference viewers' common core,
+without a navigation layer.** A gap analysis of the ZoomCharts NetChart
+instance API against this widget (see References) sorted the missing
+surface into two kinds. The widget-local kind is adopted here: a
+programmatic selection (`SelectNode`, `SelectEdge`, `ClearSelection` and
+their readers, silent like `HideAura`, since the caller asked); secondary
+clicks — the right button, or a long touch — on nodes, edges and the
+background, and clicks on the background carrying the world position, all
+opt-in through `Options`; edge double-click and edge hover events beside the
+node ones; a Shift-drag rectangle selection over node centres, replacing the
+selection unless multi-selection adds; `FitNodes` to frame a subset, the
+fit a focus action wants; `Positions` as the bulk read a caller saves a
+layout with; zoom bounds as options; `Metrics.CameraMoved` in place of a
+camera event; and `ForceParams.PauseOnSettle`, which holds a settled
+simulation until a drag, a topology or parameter change, a setter or a
+fast-forward moves it, so a graph at rest costs no step per frame. The
+other kind — NetChart's navigation model, where the chart owns a visible
+subset of a larger graph and focus nodes with relevance, expansion radius
+and auto-unfocus decide it, with hide, show, expand and collapse by depth —
+is **deferred**: it is a caller-side walk over data the widget never sees,
+and under SD1 it belongs in a helper package above graphview that declares
+the subset, with `placeNear` already seating expanded nodes beside their
+parent. A radial layout around a focus node is deferred with it, since it
+is the layout that model wants. Neither needs a change to this widget.
+
+**SD13 — Edges may carry an id, a length and a strength.** `EdgeSpec.Id`
+is optional and tells parallel edges of one ordered pair apart in hover,
+click and selection, which are keyed by `EdgeRef{From, To, Id}`; without
+ids the pair's edges share a ref and select together, which is what the
+binding did. The id enters the topology hash, so an id change rebuilds the
+edge structure. `Length` multiplies the ideal edge length `k` for that edge
+and `Strength` its pull in the attraction pass, both 1 unless declared, so
+the unweighted step is unchanged to the bit; the static layouts ignore
+them. The adjacency keeps the edge index beside each neighbour entry to
+find them, one `int32` per edge end.
+
 ## Alternatives
 
 - **O1 — keep the binding.** Every quality fix is seam work in three places,
@@ -261,6 +297,14 @@ ring.
 - **Random vertex sampling instead of Barnes–Hut.** Faster in the
   published measurements, but stochastic per iteration; see SD6. Killed for
   the interactive widget, open as a warm-up phase for very large graphs.
+- **Programmatic selection reporting Select / Deselect events.** NetChart's
+  setter fires `selectionChange`; here the aura setters already established
+  that code-driven state changes are silent, and a caller that wants the
+  event has the id in hand. Killed for SD12.
+- **A widget-owned navigation layer (focus, expand, collapse, hide).**
+  Would give the widget a second, hidden node set beside the declaration
+  and break SD1's one-source-of-topology rule. Deferred as a helper package;
+  see SD12.
 
 ## Consequences
 
@@ -298,6 +342,12 @@ ring.
   measured tables in the background analysis, marching squares on synthetic
   masks, ownership on two-node cases with and without overlap; the force
   demo grouped by subtree under the screenshot tour for the painted result.
+- **Interaction surface (SD12, SD13).** Unit tests drive `applyInput` with
+  synthetic response flags and modifiers: secondary clicks on each target,
+  background clicks carrying the world position, edge hover enter and
+  leave, the rectangle selection replacing and adding, the parallel-edge
+  refs, weighted attraction against the unweighted pull, and the
+  pause-on-settle hold taken and lifted by each wake condition.
 - **What would fail.** A layout regression shows in the unit tests; a
   painter or input regression shows in the tour capture and in driving the
   demo with egui-mcp.
@@ -321,6 +371,9 @@ retirement is recorded when they have.
 - `doc/adr-background-work/snarl-port-analysis.md` — the substrate check.
 - `doc/adr-background-work/netchart-aura-analysis.md` — the black-box
   measurements SD11 re-derives.
+- ZoomCharts NetChart API reference,
+  `https://zoomcharts.com/developers/en/net-chart/api-reference/api.html` —
+  the instance API the SD12 gap analysis was read against.
 - Fruchterman & Reingold, *Graph Drawing by Force-directed Placement*,
   Software: Practice and Experience 21(11), 1991.
 - Barnes & Hut, *A hierarchical O(N log N) force-calculation algorithm*,

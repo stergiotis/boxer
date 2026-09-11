@@ -139,8 +139,7 @@ func (v *View) paint(w, h float32) {
 			col = style.EdgeColor
 		}
 		width := geo.width
-		from, to := v.g.ids[v.g.eFrom[i]], v.g.ids[v.g.eTo[i]]
-		if _, sel := v.selEdges[[2]uint64{from, to}]; sel {
+		if _, sel := v.selEdges[v.g.edgeRef(int32(i))]; sel {
 			col = style.Selected
 			width += 1
 		}
@@ -250,6 +249,14 @@ func (v *View) paint(w, h float32) {
 		if lbl != "" && (o.LabelsAlways || sel || hov) {
 			v.paintLabel(sx, sy-r-2, lbl, style.LabelFontSize, style.LabelColor)
 		}
+	}
+
+	// The selection rectangle in flight (ADR-0224 §SD12).
+	if v.drag.active && v.drag.isRect {
+		minX, maxX := min(v.drag.x0, v.drag.lastX), max(v.drag.x0, v.drag.lastX)
+		minY, maxY := min(v.drag.y0, v.drag.lastY), max(v.drag.y0, v.drag.lastY)
+		c.PaintRectFilled(minX, minY, maxX, maxY, 0, style.SelectionBox).Send()
+		c.PaintRectStroke(minX, minY, maxX, maxY, 0, style.Selected, styletokens.StrokeHair).Send()
 	}
 }
 

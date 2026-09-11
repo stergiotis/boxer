@@ -134,11 +134,16 @@ func parallelRows(n, workers int, body func(worker, lo, hi int)) {
 
 // attraction pulls each node toward its neighbours with force d²/k along the
 // edge, once per edge end, which is the crate's neighbors_undirected walk.
+// An edge's Length multiplies k for that edge and its Strength multiplies
+// the pull (ADR-0224 §SD13); both are 1 unless declared.
 func attraction(g *graph, dx, dy []float32, k, eps, cAttract float32) {
 	for i := range g.ids {
 		xi, yi := g.x[i], g.y[i]
 		var ax, ay float32
-		for _, j := range g.neighbors(int32(i)) {
+		lo, hi := g.adjStart[i], g.adjStart[i+1]
+		for a := lo; a < hi; a++ {
+			j := g.adjList[a]
+			e := g.adjEdge[a]
 			ddx := g.x[j] - xi
 			ddy := g.y[j] - yi
 			d := float32(math.Sqrt(float64(ddx*ddx + ddy*ddy)))
@@ -146,7 +151,7 @@ func attraction(g *graph, dx, dy []float32, k, eps, cAttract float32) {
 				d = eps
 			}
 			// (delta / d) · (cAttract · d² / k) = delta · cAttract · d / k
-			f := cAttract * d / k
+			f := cAttract * g.eStr[e] * d / (k * g.eLen[e])
 			ax += ddx * f
 			ay += ddy * f
 		}

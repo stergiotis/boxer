@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -37,6 +38,7 @@ type graphviewDemoState struct {
 	forceShares  []float32 // three shares per node, backing the donuts
 	forcePinRoot bool
 	forceHold    bool // dropped nodes stay where they were dropped
+	forceRest    bool // pause the simulation once it has settled
 	forceAuras   bool
 	forceOverlap bool
 	forceAuraIds [][]string // per node, the auras it belongs to when auras are on
@@ -74,6 +76,8 @@ func newGraphviewDemoState(ids *c.WidgetIdStack) (st *graphviewDemoState) {
 		o.NodeSelection = true
 		o.EdgeClicking = true
 		o.EdgeSelection = true
+		o.BackgroundClicking = true
+		o.RectSelection = true
 		return o
 	}
 	st.ring = graphview.New(ids, "graphview-ring", interact(graphview.Options{Layout: graphview.LayoutRandom}))
@@ -111,13 +115,15 @@ func newGraphviewDemoState(ids *c.WidgetIdStack) (st *graphviewDemoState) {
 			Donut:  donuts[i],
 		})
 	}
+	// Edge ids (ADR-0224 §SD13) tell the 1→2 pair's two edges apart in
+	// hover, click and selection.
 	for i := range uint64(n) {
 		from, to := i+1, (i+1)%n+1
-		st.ringEdges = append(st.ringEdges, graphview.EdgeSpec{From: from, To: to, Label: fmt.Sprintf("%d→%d", from, to), Color: edgeCol})
+		st.ringEdges = append(st.ringEdges, graphview.EdgeSpec{From: from, To: to, Id: i + 1, Label: fmt.Sprintf("%d→%d", from, to), Color: edgeCol})
 	}
 	st.ringEdges = append(st.ringEdges,
-		graphview.EdgeSpec{From: 1, To: 2, Label: "parallel", Color: edgeCol},
-		graphview.EdgeSpec{From: 3, To: 3, Label: "loop", Color: edgeCol},
+		graphview.EdgeSpec{From: 1, To: 2, Id: 100, Label: "parallel", Color: edgeCol},
+		graphview.EdgeSpec{From: 3, To: 3, Id: 101, Label: "loop", Color: edgeCol},
 	)
 
 	// Hierarchical: a ten-node binary tree.
@@ -188,6 +194,11 @@ func demoGraphviewNav(ids *c.WidgetIdStack, st *graphviewDemoState) {
 		st.force.FitNow()
 		st.hier.FitNow()
 	}
+	if c.Button(ids.PrepareStr("gv-fit-sel"), c.Atoms().Text("fit to selection (all graphs)").Keep()).SendResp().HasPrimaryClicked() {
+		for _, v := range []*graphview.View{st.ring, st.force, st.hier} {
+			v.FitNodes(slices.Collect(v.SelectedNodes()))
+		}
+	}
 	c.Checkbox(ids.PrepareStr("gv-fit-always"), st.fitAlways, "continuous fit (all graphs)").SendRespVal(&st.fitAlways)
 	c.Checkbox(ids.PrepareStr("gv-labels"), st.labelsAlways, "labels always").SendRespVal(&st.labelsAlways)
 	for _, v := range []*graphview.View{st.ring, st.force, st.hier} {
@@ -197,7 +208,7 @@ func demoGraphviewNav(ids *c.WidgetIdStack, st *graphviewDemoState) {
 }
 
 func demoGraphviewRing(ids *c.WidgetIdStack, st *graphviewDemoState) {
-	c.Label("Random layout. Drag a node, drag the background to pan, Ctrl+wheel to zoom, click to select; the 1→2 pair shows a parallel edge and n3 a self-loop. Each node wears a donut: shares on n1–n3, a 35 % progress ring on n4, none on n5.").Send()
+	c.Label("Random layout. Drag a node, drag the background to pan, Shift-drag it for a rectangle selection, Ctrl+wheel to zoom, click to select, right-click for a secondary click; the 1→2 pair shows two parallel edges with their own ids and n3 a self-loop. Each node wears a donut: shares on n1–n3, a 35 % progress ring on n4, none on n5.").Send()
 	st.ring.Render(st.ringNodes, st.ringEdges, demoGraphviewWidth(ids, "gv-ring-pane"), 360)
 	// Readout: the hovered node and where n1 sits in the canvas — the
 	// hover path through R24 and the camera, legible to a headless scene.
@@ -225,6 +236,7 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	c.SliderF64(ids.PrepareStr("gv-force-maxstep"), st.forceMaxStep, 1, 100).Text("max step").SendRespVal(&st.forceMaxStep)
 	c.SliderF64(ids.PrepareStr("gv-force-kscale"), st.forceKScale, 0.1, 5).Text("k scale").SendRespVal(&st.forceKScale)
 	c.Checkbox(ids.PrepareStr("gv-force-paused"), st.forcePaused, "paused").SendRespVal(&st.forcePaused)
+	c.Checkbox(ids.PrepareStr("gv-force-rest"), st.forceRest, "pause once settled (wakes on a drag or a change)").SendRespVal(&st.forceRest)
 	c.Checkbox(ids.PrepareStr("gv-force-donuts"), st.forceDonuts, "donut rings on every node").SendRespVal(&st.forceDonuts)
 	c.Checkbox(ids.PrepareStr("gv-force-pinroot"), st.forcePinRoot, "pin the root at the canvas centre (declared pin)").SendRespVal(&st.forcePinRoot)
 	c.Checkbox(ids.PrepareStr("gv-force-hold"), st.forceHold, "dropped nodes stay put (double-click releases)").SendRespVal(&st.forceHold)
@@ -264,6 +276,7 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	o.Force = graphview.ForceParams{
 		Dt: float32(st.forceDt), Damping: float32(st.forceDamping), Epsilon: float32(st.forceEps),
 		MaxStep: float32(st.forceMaxStep), KScale: float32(st.forceKScale), Paused: st.forcePaused,
+		PauseOnSettle: st.forceRest,
 	}
 	o.PinOnDrag = st.forceHold
 	o.Auras = graphview.AuraParams{Enabled: st.forceAuras, Overlap: st.forceOverlap, Legend: true}
@@ -274,8 +287,8 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 		}
 	}
 	m := st.force.Metrics()
-	c.Label(fmt.Sprintf("nodes=%d edges=%d pinned=%d steps=%d avg displacement=%.4f settled=%v",
-		m.NodeCount, m.EdgeCount, m.PinnedCount, m.Steps, m.LastDisplacement, m.Settled)).Send()
+	c.Label(fmt.Sprintf("nodes=%d edges=%d pinned=%d steps=%d avg displacement=%.4f settled=%v paused=%v",
+		m.NodeCount, m.EdgeCount, m.PinnedCount, m.Steps, m.LastDisplacement, m.Settled, m.Paused)).Send()
 }
 
 func demoGraphviewHier(ids *c.WidgetIdStack, st *graphviewDemoState) {
@@ -303,10 +316,11 @@ func demoGraphviewEventLog(ids *c.WidgetIdStack, st *graphviewDemoState) {
 			c.Label(fmt.Sprintf("  selected node=%d  graph=%s", id, e.name)).Send()
 		}
 		for k := range e.v.SelectedEdges() {
-			c.Label(fmt.Sprintf("  selected edge=%d→%d  graph=%s", k[0], k[1], e.name)).Send()
+			c.Label(fmt.Sprintf("  selected edge=%d→%d id=%d  graph=%s", k.From, k.To, k.Id, e.name)).Send()
 		}
 		for _, ev := range e.v.Events() {
-			if !st.showHover && (ev.Kind == graphview.EventKindNodeHoverEnter || ev.Kind == graphview.EventKindNodeHoverLeave) {
+			if !st.showHover && (ev.Kind == graphview.EventKindNodeHoverEnter || ev.Kind == graphview.EventKindNodeHoverLeave ||
+				ev.Kind == graphview.EventKindEdgeHoverEnter || ev.Kind == graphview.EventKindEdgeHoverLeave) {
 				continue
 			}
 			st.eventLog = append(st.eventLog, ev)
@@ -318,15 +332,18 @@ func demoGraphviewEventLog(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	}
 	c.Label(fmt.Sprintf("recent events (last %d):", keep)).Send()
 	if len(st.eventLog) == 0 {
-		c.Label("(click or drag a node or edge to see events)").Send()
+		c.Label("(click or drag a node, an edge or the background to see events)").Send()
 		return
 	}
 	for _, ev := range st.eventLog {
-		if ev.Kind == graphview.EventKindAuraToggle {
+		switch {
+		case ev.Kind == graphview.EventKindAuraToggle:
 			c.Label(fmt.Sprintf("  %s  aura=%q", ev.Kind.String(), ev.Aura)).Send()
-		} else if ev.Kind.IsEdge() {
-			c.Label(fmt.Sprintf("  %s  edge=%d→%d", ev.Kind.String(), ev.From, ev.To)).Send()
-		} else {
+		case ev.Kind.IsEdge():
+			c.Label(fmt.Sprintf("  %s  edge=%d→%d id=%d", ev.Kind.String(), ev.From, ev.To, ev.Edge)).Send()
+		case ev.Kind.IsBackground():
+			c.Label(fmt.Sprintf("  %s  world=(%.0f, %.0f)", ev.Kind.String(), ev.X, ev.Y)).Send()
+		default:
 			c.Label(fmt.Sprintf("  %s  node=%d", ev.Kind.String(), ev.Node)).Send()
 		}
 	}
