@@ -6,9 +6,11 @@ import (
 	"math"
 	"slices"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/legend"
 )
 
 // View is one graph widget instance. Construct it once per graph with [New]
@@ -46,6 +48,20 @@ type View struct {
 	originX  float32 // canvas top-left in screen pixels, from the R24 row
 	originY  float32
 	originOk bool
+
+	// Auras (ADR-0224 §SD11): the frame's aura table, the field, one ring
+	// set per aura and the paint order; the rings are reused while the
+	// cache key holds and nothing moved.
+	auraSet     auraSet
+	auraF       auraField
+	auraRings   []rings
+	auraOrder   []int32
+	hiddenAuras map[string]struct{}
+	hiddenVer   uint32
+	auraDirty   bool
+	auraValid   bool
+	auraKey     auraCacheKey
+	legendItems []legend.Item
 
 	// scratch
 	batchIdx     map[uint64]int32
@@ -95,6 +111,7 @@ func New(ids *c.WidgetIdStack, key string, opts Options) *View {
 		hoveredEdge: -1,
 		selNodes:    make(map[uint64]struct{}, 8),
 		selEdges:    make(map[[2]uint64]struct{}, 8),
+		hiddenAuras: make(map[string]struct{}, 4),
 		batchIdx:    make(map[uint64]int32, 8),
 		fs:          forceState{lastDisp: nan32},
 	}
@@ -108,6 +125,47 @@ func (v *View) FitNow() { v.fitRequested = true }
 // placed afresh by the layout, widget-side pins are released, the step
 // counter restarts and the camera re-fits.
 func (v *View) ResetLayout() { v.resetPending = true }
+
+// AuraIds yields the aura ids of the last render's declaration in id
+// order, hidden ones included — the rows a legend lists.
+func (v *View) AuraIds() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for _, id := range v.auraSet.ids {
+			if !yield(id) {
+				return
+			}
+		}
+	}
+}
+
+// HideAura stops drawing the aura and its members' contribution to it; the
+// nodes stay. ShowAura reverses it. Neither reports an event — the caller
+// asked.
+func (v *View) HideAura(id string) { v.setAuraHidden(id, true) }
+
+// ShowAura undoes HideAura.
+func (v *View) ShowAura(id string) { v.setAuraHidden(id, false) }
+
+// AuraHidden reports whether the aura is hidden, by HideAura or a legend
+// click.
+func (v *View) AuraHidden(id string) bool {
+	_, hidden := v.hiddenAuras[id]
+	return hidden
+}
+
+func (v *View) setAuraHidden(id string, hidden bool) (changed bool) {
+	_, was := v.hiddenAuras[id]
+	if was == hidden {
+		return false
+	}
+	if hidden {
+		v.hiddenAuras[id] = struct{}{}
+	} else {
+		delete(v.hiddenAuras, id)
+	}
+	v.hiddenVer++
+	return true
+}
 
 // FastForward advances the force simulation by steps extra iterations
 // before the next render. A no-op for the static layouts.
@@ -248,6 +306,7 @@ func (v *View) PinNode(id uint64, x, y float32) {
 	if s, ok := v.g.slot[id]; ok {
 		v.g.x[s], v.g.y[s] = x, y
 		v.g.held[s] = true
+		v.auraDirty = true
 	}
 }
 
@@ -271,6 +330,7 @@ func (v *View) IsPinned(id uint64) bool {
 func (v *View) SetNodePosition(id uint64, x, y float32) {
 	if s, ok := v.g.slot[id]; ok {
 		v.g.x[s], v.g.y[s] = x, y
+		v.auraDirty = true
 	}
 }
 
@@ -297,6 +357,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 	v.style = v.Opts.Style.withDefaults()
 	fp := v.Opts.Force.withDefaults()
 	hp := v.Opts.Hier.withDefaults()
+	ap := v.Opts.Auras.withDefaults()
 
 	for range c.IdScope(v.ids.PrepareStr(v.key)) {
 		sm := c.CurrentApplicationState.StateManager
@@ -321,11 +382,27 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		}
 		inside := posOk && canvasFlags.HasContainsPointer() && px >= 0 && py >= 0 && px <= w && py <= h
 
+		// The aura legend's rows of the previous frame: their regions sit
+		// above the area region, so a row's click is not also a canvas
+		// click, and the toggle lands in this frame's field.
+		if ap.Enabled && ap.Legend && len(v.legendItems) > 0 {
+			if clicked, _ := legend.Read(sm, v.ids, auraLegendPrefix, v.legendItems); clicked >= 0 {
+				id := v.legendItems[clicked].Key
+				v.setAuraHidden(id, !v.AuraHidden(id))
+				v.events = append(v.events, Event{Kind: EventKindAuraToggle, Aura: id})
+			}
+		}
+
 		created, topoChanged := v.g.reconcile(nodes, edges)
 		if topoChanged {
 			v.pruneSelection()
 		}
 		n := v.g.n()
+		if ap.Enabled {
+			if v.auraSet.build(nodes, &v.g) {
+				v.auraDirty = true
+			}
+		}
 
 		if v.resetPending {
 			v.resetPending = false
@@ -353,6 +430,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			layoutHierarchical(&v.g, hp)
 			v.hierDone = true
 			v.lastHier = hp
+			v.auraDirty = true
 		}
 		// Declared pins win over any placement; the drag in flight keeps its
 		// node where the pointer has it (ADR-0224 §SD10).
@@ -366,6 +444,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		}
 
 		// Layout.
+		moved := v.drag.active
 		if v.Opts.Layout.IsAnimated() {
 			cg := float32(0)
 			if v.Opts.Layout == LayoutForceDirectedCG {
@@ -378,6 +457,11 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			}
 			for range steps {
 				v.fs.step(&v.g, w, h, fp, cg)
+			}
+			// A settled layout still steps, by less than epsilon: not a move
+			// worth a new field.
+			if steps > 0 && !v.fs.settled(fp.Epsilon) {
+				moved = true
 			}
 		} else {
 			v.ffSteps = 0
@@ -408,14 +492,23 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			}
 			if minX, minY, maxX, maxY, ok := v.g.bounds(v.style.NodeRadius); ok {
 				v.cam.fit(minX, minY, maxX, maxY, w, h, pad)
+				// Auras reach past the nodes by a screen-space amount; widen
+				// the box by it, in world units at the zoom just fitted, and
+				// fit again so the blobs stay in frame.
+				if m := v.auraFitMargin(ap); m > 0 {
+					v.cam.fit(minX-m, minY-m, maxX+m, maxY+m, w, h, pad)
+				}
 			}
 		}
 
+		v.updateAuras(ap, w, h, topoChanged || len(created) > 0 || moved)
 		v.paint(w, h)
 
 		// Interaction surfaces: the area region owns click and drag, the
-		// canvas owns hover, containment and the wheel.
+		// canvas owns hover, containment and the wheel; the legend's rows
+		// come after the area so they win its clicks.
 		c.PaintSenseRegion(v.ids.PrepareStr("graphview-area"), 0, 0, w, h).Send()
+		v.emitAuraLegend(ap)
 		cv := c.PaintCanvas(v.ids.PrepareStr("graphview-canvas"), w, h).
 			Background(v.style.Background).
 			Sense(true, true, true)
@@ -533,6 +626,7 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 			if s, ok := v.g.slot[v.drag.nodeId]; ok {
 				v.g.x[s] += dx / v.cam.zoom
 				v.g.y[s] += dy / v.cam.zoom
+				v.auraDirty = true
 			}
 		} else if !o.NoZoomAndPan {
 			v.cam.panX += dx
@@ -718,3 +812,121 @@ func (v *View) nodeFill(slot int) color.Color {
 }
 
 func isNaN32(f float32) bool { return f != f }
+
+// auraLegendPrefix keys the aura legend's row regions under the view's ids.
+const auraLegendPrefix = "graphview-aura-legend-"
+
+// auraLegendInset is the legend box's offset from the canvas's top-left.
+const auraLegendInset = 8
+
+// auraCacheKey is everything besides node positions that the aura rings
+// depend on; a change recomputes them.
+type auraCacheKey struct {
+	cam       camera
+	w, h      float32
+	params    auraParamsKey
+	hash      uint64
+	hiddenVer uint32
+}
+
+// auraFitMargin is how far, in world units, the widest aura reaches past
+// its node's disc at the current zoom, or 0 without auras.
+func (v *View) auraFitMargin(ap AuraParams) float32 {
+	if !ap.Enabled || len(v.auraSet.ids) == 0 {
+		return 0
+	}
+	maxR := float32(0)
+	for s := range v.g.ids {
+		if len(v.auraSet.members(int32(s))) == 0 {
+			continue
+		}
+		maxR = max(maxR, v.nodeRadius(s))
+	}
+	if maxR <= 0 {
+		return 0
+	}
+	ext := kernelFor(maxR*v.cam.zoom, ap).extent(ap.DrawLimit) / v.cam.zoom
+	return max(ext-maxR, 0)
+}
+
+// updateAuras recomputes the field and the rings when anything they depend
+// on changed: the camera, the canvas, the parameters, the membership, the
+// hidden set, or a node position (moved, or the dirty flag the setters
+// raise).
+func (v *View) updateAuras(ap AuraParams, w, h float32, moved bool) {
+	na := len(v.auraSet.ids)
+	if !ap.Enabled || na == 0 {
+		v.auraOrder = v.auraOrder[:0]
+		v.auraValid = false
+		return
+	}
+	key := auraCacheKey{cam: v.cam, w: w, h: h, params: ap.key(), hash: v.auraSet.hash, hiddenVer: v.hiddenVer}
+	if v.auraValid && !v.auraDirty && !moved && key == v.auraKey {
+		return
+	}
+	v.auraKey, v.auraValid, v.auraDirty = key, true, false
+	v.auraF.compute(&v.g, v.cam, &v.auraSet, v.hiddenAuras, v.style.NodeRadius, w, h, ap)
+	if cap(v.auraRings) < na {
+		v.auraRings = slices.Grow(v.auraRings, na-len(v.auraRings))
+	}
+	v.auraRings = v.auraRings[:na]
+	v.auraOrder = v.auraOrder[:0]
+	for k := range na {
+		v.auraRings[k].reset()
+		v.auraF.contours(int32(k), &v.auraRings[k])
+		v.auraOrder = append(v.auraOrder, int32(k))
+	}
+	z := func(k int32) int32 { return ap.Styles[v.auraSet.ids[k]].ZIndex }
+	slices.SortStableFunc(v.auraOrder, func(a, b int32) int { return cmp.Compare(z(a), z(b)) })
+}
+
+// paintAuras emits every aura's rings in paint order: one concave fill per
+// ring with a hairline of the fill colour, or the style's line.
+func (v *View) paintAuras() {
+	ap := &v.Opts.Auras
+	for _, k := range v.auraOrder {
+		id := v.auraSet.ids[k]
+		fill := auraFill(int(k), id, ap)
+		lineCol, lineW := fill, float32(styletokens.StrokeHair)
+		if st, ok := ap.Styles[id]; ok && st.Line.Kind() != color.ColorKindNone {
+			lineCol = st.Line
+			lineW = st.LineWidth
+			if lineW <= 0 {
+				lineW = styletokens.StrokeRegular
+			}
+		}
+		r := &v.auraRings[k]
+		for i := range r.count() {
+			xs, ys := r.ring(i)
+			c.PaintPolygonFilled(xs, ys, fill).Concave().Stroke(lineCol, lineW).Send()
+		}
+	}
+}
+
+// emitAuraLegend rebuilds the legend rows — every aura not opted out, in id
+// order, hidden ones dimmed — and, when the legend is on, paints them and
+// stamps their regions. The rows are kept for next frame's Read.
+func (v *View) emitAuraLegend(ap AuraParams) {
+	v.legendItems = v.legendItems[:0]
+	if !ap.Enabled || !ap.Legend {
+		return
+	}
+	for k, id := range v.auraSet.ids {
+		st := ap.Styles[id]
+		if st.NoLegend {
+			continue
+		}
+		label := st.Label
+		if label == "" {
+			label = id
+		}
+		v.legendItems = append(v.legendItems, legend.Item{
+			Key: id, Label: label, Color: opaque(auraFill(k, id, &ap)), Hidden: v.AuraHidden(id),
+		})
+	}
+	if len(v.legendItems) == 0 {
+		return
+	}
+	legend.Paint(v.legendItems, auraLegendInset, auraLegendInset, ap.LegendStyle)
+	legend.EmitSense(v.ids, auraLegendPrefix, v.legendItems, auraLegendInset, auraLegendInset, ap.LegendStyle)
+}

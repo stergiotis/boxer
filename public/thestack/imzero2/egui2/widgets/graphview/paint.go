@@ -128,6 +128,9 @@ func (v *View) paint(w, h float32) {
 	style := &v.style
 	o := &v.Opts
 
+	// Auras, beneath everything (ADR-0224 §SD11).
+	v.paintAuras()
+
 	// Edges.
 	for i := range v.g.eFrom {
 		geo := v.edgeGeometry(i)

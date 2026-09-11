@@ -17,6 +17,11 @@
 //	gv.Render(nodes, edges, w, h)
 //	for _, ev := range gv.Events() { … }
 //
+// Nodes that name the same aura id are drawn over one translucent blob when
+// [Options.Auras] is enabled (ADR-0224 §SD11): a per-aura scalar field on a
+// screen-space grid, contoured and filled beneath the graph, with an
+// optional legend from the shared widgets/legend package.
+//
 // Layout parameters keep the meaning they have in egui_graphs 0.31 (MIT), the
 // crate whose parameterisation this package re-derives; the two documented
 // departures — the canvas-area ideal edge length and deterministic

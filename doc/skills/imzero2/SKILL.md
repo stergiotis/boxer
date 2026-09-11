@@ -1639,6 +1639,18 @@ What to know before using it:
   the qualitative cycle, a `Total` above the sum leaves a muted track (a
   progress ring), and the ring counts as the node for picking and labels.
   Rings are skipped while the node disc is under two pixels on screen.
+- **Auras.** `NodeSpec.Auras` names the groups a node belongs to;
+  `Opts.Auras{Enabled: true}` draws one translucent blob per group beneath
+  the graph (ADR-0224 §SD11): every member emanates a radial ramp on the
+  screen, the ramps accumulate on a `CellSize` grid, and the iso-line at
+  `DrawLimit` is traced and filled. `Overlap` off gives each cell to its
+  strongest aura. `Styles[id]` sets fill, line, zIndex and legend label;
+  `Legend: true` paints the shared `widgets/legend` in the canvas corner,
+  where a click hides the aura (`EventKindAuraToggle`, `Event.Aura`) —
+  `HideAura`/`ShowAura`/`AuraHidden`/`AuraIds` are the same state from
+  code. Auras are paint only: no layout or picking, and the fit widens by
+  their extent. The field is recomputed on any move and reused while the
+  layout is settled; the cost per node grows with (aura radius / cell)².
 
 The gallery demo `egui2_hl_graphview_demo.go` mirrors the `graphs` demo
 feature for feature so the two can be compared while both exist.

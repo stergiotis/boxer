@@ -37,6 +37,9 @@ type graphviewDemoState struct {
 	forceShares  []float32 // three shares per node, backing the donuts
 	forcePinRoot bool
 	forceHold    bool // dropped nodes stay where they were dropped
+	forceAuras   bool
+	forceOverlap bool
+	forceAuraIds [][]string // per node, the auras it belongs to when auras are on
 
 	hierNodes []graphview.NodeSpec
 	hierEdges []graphview.EdgeSpec
@@ -135,7 +138,12 @@ func (st *graphviewDemoState) rebuildForceGraph() {
 	st.forceEdgeSet = st.forceEdgeSet[:0]
 	col := color.Hex(styletokens.InfoDefault.AsHex())
 	st.forceShares = st.forceShares[:0]
+	st.forceAuraIds = st.forceAuraIds[:0]
 	for i := uint64(1); i <= uint64(st.forceNodes); i++ {
+		// Auras (ADR-0224 §SD11) group the tree by its depth-two subtrees:
+		// nodes 4–7 head a team each, their descendants join it, nodes 2 and
+		// 3 sit in both of their children's teams, the root in none.
+		st.forceAuraIds = append(st.forceAuraIds, demoForceTeams(i))
 		// Three deterministic shares per node, so the donut option costs no
 		// allocation when toggled and the capture stays stable.
 		h := i*0x9e3779b97f4a7c15 + 0x7f4a7c15
@@ -145,6 +153,23 @@ func (st *graphviewDemoState) rebuildForceGraph() {
 			st.forceEdgeSet = append(st.forceEdgeSet, graphview.EdgeSpec{From: (i-1)/2 + 1, To: i})
 		}
 	}
+}
+
+// demoForceTeams returns the aura ids of node i of the binary tree whose
+// parent of node n is (n-1)/2+1: the team of its depth-two ancestor, or
+// both teams under it for the depth-one nodes.
+func demoForceTeams(i uint64) []string {
+	team := func(head uint64) string { return fmt.Sprintf("team %d", head-3) }
+	switch {
+	case i == 1:
+		return nil
+	case i <= 3:
+		return []string{team(2 * i), team(2*i + 1)}
+	}
+	for i > 7 {
+		i = (i-1)/2 + 1
+	}
+	return []string{team(i)}
 }
 
 // demoGraphviewWidth is the canvas width: the pane's, as the layout probe
@@ -203,6 +228,8 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	c.Checkbox(ids.PrepareStr("gv-force-donuts"), st.forceDonuts, "donut rings on every node").SendRespVal(&st.forceDonuts)
 	c.Checkbox(ids.PrepareStr("gv-force-pinroot"), st.forcePinRoot, "pin the root at the canvas centre (declared pin)").SendRespVal(&st.forcePinRoot)
 	c.Checkbox(ids.PrepareStr("gv-force-hold"), st.forceHold, "dropped nodes stay put (double-click releases)").SendRespVal(&st.forceHold)
+	c.Checkbox(ids.PrepareStr("gv-force-auras"), st.forceAuras, "auras by depth-two subtree, with a clickable legend").SendRespVal(&st.forceAuras)
+	c.Checkbox(ids.PrepareStr("gv-force-overlap"), st.forceOverlap, "auras may overlap (else each cell goes to its strongest aura)").SendRespVal(&st.forceOverlap)
 	width := demoGraphviewWidth(ids, "gv-force-pane")
 	for i := range st.forceNodeSet {
 		st.forceNodeSet[i].Donut = graphview.Donut{}
@@ -210,6 +237,10 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 			st.forceNodeSet[i].Donut = graphview.Donut{Values: st.forceShares[3*i : 3*i+3]}
 		}
 		st.forceNodeSet[i].Pinned = false
+		st.forceNodeSet[i].Auras = nil
+		if st.forceAuras {
+			st.forceNodeSet[i].Auras = st.forceAuraIds[i]
+		}
 	}
 	if st.forcePinRoot && len(st.forceNodeSet) > 0 {
 		// The declared pin is re-stated every frame in world units; here the
@@ -235,6 +266,7 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 		MaxStep: float32(st.forceMaxStep), KScale: float32(st.forceKScale), Paused: st.forcePaused,
 	}
 	o.PinOnDrag = st.forceHold
+	o.Auras = graphview.AuraParams{Enabled: st.forceAuras, Overlap: st.forceOverlap, Legend: true}
 	st.force.Render(st.forceNodeSet, st.forceEdgeSet, width, 400)
 	for _, ev := range st.force.Events() {
 		if ev.Kind == graphview.EventKindNodeDoubleClick {
@@ -290,7 +322,9 @@ func demoGraphviewEventLog(ids *c.WidgetIdStack, st *graphviewDemoState) {
 		return
 	}
 	for _, ev := range st.eventLog {
-		if ev.Kind.IsEdge() {
+		if ev.Kind == graphview.EventKindAuraToggle {
+			c.Label(fmt.Sprintf("  %s  aura=%q", ev.Kind.String(), ev.Aura)).Send()
+		} else if ev.Kind.IsEdge() {
 			c.Label(fmt.Sprintf("  %s  edge=%d→%d", ev.Kind.String(), ev.From, ev.To)).Send()
 		} else {
 			c.Label(fmt.Sprintf("  %s  node=%d", ev.Kind.String(), ev.Node)).Send()

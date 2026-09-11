@@ -48,6 +48,9 @@ const (
 	EventKindEdgeClick       EventKindE = 9
 	EventKindEdgeSelect      EventKindE = 10
 	EventKindEdgeDeselect    EventKindE = 11
+	// EventKindAuraToggle is a legend click that hid or showed an aura
+	// (ADR-0224 §SD11); Event.Aura names it. Not a binding kind.
+	EventKindAuraToggle EventKindE = 12
 )
 
 // IsNode reports whether the kind refers to a node.
@@ -85,6 +88,8 @@ func (inst EventKindE) String() string {
 		return "EdgeSelect"
 	case EventKindEdgeDeselect:
 		return "EdgeDeselect"
+	case EventKindAuraToggle:
+		return "AuraToggle"
 	}
 	return fmt.Sprintf("EventKind(%d)", uint8(inst))
 }
@@ -92,14 +97,16 @@ func (inst EventKindE) String() string {
 // Event is one interaction reported by [View.Events] (ADR-0224 §SD5). Node
 // carries the node id for node kinds, with X and Y the node's world position
 // at the event — on NodeDragEnd, where the user left it; From/To carry the
-// edge for edge kinds. The fields of the other kind are zero, as are X and Y
-// on a HoverLeave for a node the declaration has since dropped.
+// edge for edge kinds; Aura carries the aura id of an AuraToggle. The fields
+// of the other kinds are zero, as are X and Y on a HoverLeave for a node the
+// declaration has since dropped.
 type Event struct {
 	Kind EventKindE
 	Node uint64
 	X, Y float32
 	From uint64
 	To   uint64
+	Aura string
 }
 
 // NodeSpec is one node of the frame's declaration. A zero Color or Radius
@@ -115,6 +122,10 @@ type NodeSpec struct {
 	// without moving the pin — the caller decides whether to follow.
 	Pinned     bool
 	PinX, PinY float32
+	// Auras names the aura groups the node belongs to (ADR-0224 §SD11);
+	// nodes sharing an id are drawn over one blob when Options.Auras is
+	// enabled. The slice is read during Render and not retained.
+	Auras []string
 }
 
 // EdgeSpec is one directed edge of the frame's declaration. Parallel edges
@@ -228,6 +239,9 @@ type Options struct {
 	// PinOnDrag holds a node where the user drops it, out of the force
 	// layout's reach, until UnpinNode releases it (ADR-0224 §SD10).
 	PinOnDrag bool
+	// Auras draws translucent group blobs beneath the nodes that name the
+	// same aura id (ADR-0224 §SD11).
+	Auras AuraParams
 
 	Style Style
 }
