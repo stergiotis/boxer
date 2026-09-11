@@ -14,7 +14,7 @@ type forceState struct {
 	steps    uint64
 	lastDisp float32
 	tree     quadtree
-	stack    []int32
+	stacks   [][]int32 // one traversal stack per worker, index 0 for the serial walk
 }
 
 // parallelMinNodes is the node count from which the repulsion pass splits
@@ -55,20 +55,21 @@ func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity 
 
 	k2 := p.CRepulse * k * k
 	eps2 := p.Epsilon * p.Epsilon
-	parallel := n >= parallelMinNodes && runtime.GOMAXPROCS(0) > 1
-	switch {
-	case !p.Exact && n >= barnesHutMinNodes:
+	workers := 1
+	if n >= parallelMinNodes {
+		workers = runtime.GOMAXPROCS(0)
+	}
+	fs.stacks = growTo(fs.stacks, workers)
+	if !p.Exact && n >= barnesHutMinNodes {
 		fs.tree.build(g.x, g.y)
 		theta2 := p.Theta * p.Theta
-		if parallel {
-			fs.tree.repulsionBHParallel(g.x, g.y, fs.dx, fs.dy, k2, eps2, theta2)
-		} else {
-			fs.stack = fs.tree.repulsionBH(g.x, g.y, fs.dx, fs.dy, k2, eps2, theta2, 0, n, fs.stack)
-		}
-	case parallel:
-		repulsionParallel(g.x, g.y, fs.dx, fs.dy, k2, eps2)
-	default:
-		repulsionRows(g.x, g.y, fs.dx, fs.dy, k2, eps2, 0, n)
+		parallelRows(n, workers, func(worker, lo, hi int) {
+			fs.stacks[worker] = fs.tree.repulsionBH(g.x, g.y, fs.dx, fs.dy, k2, eps2, theta2, lo, hi, fs.stacks[worker])
+		})
+	} else {
+		parallelRows(n, workers, func(_, lo, hi int) {
+			repulsionRows(g.x, g.y, fs.dx, fs.dy, k2, eps2, lo, hi)
+		})
 	}
 	attraction(g, fs.dx, fs.dy, k, p.Epsilon, p.CAttract)
 	if centerGravity != 0 {
@@ -110,18 +111,23 @@ func repulsionRows(x, y, dx, dy []float32, k2, eps2 float32, lo, hi int) {
 	}
 }
 
-func repulsionParallel(x, y, dx, dy []float32, k2, eps2 float32) {
-	n := len(x)
-	workers := runtime.GOMAXPROCS(0)
+// parallelRows runs body over [0, n) split into up to workers contiguous
+// chunks, one goroutine each; with one worker it runs inline. Each row is
+// summed whole by one call, so the split changes no result.
+func parallelRows(n, workers int, body func(worker, lo, hi int)) {
+	if workers <= 1 || n < workers {
+		body(0, 0, n)
+		return
+	}
 	chunk := (n + workers - 1) / workers
 	var wg sync.WaitGroup
-	for lo := 0; lo < n; lo += chunk {
+	for w, lo := 0, 0; lo < n; w, lo = w+1, lo+chunk {
 		hi := min(lo+chunk, n)
 		wg.Add(1)
-		go func(lo, hi int) {
+		go func(w, lo, hi int) {
 			defer wg.Done()
-			repulsionRows(x, y, dx, dy, k2, eps2, lo, hi)
-		}(lo, hi)
+			body(w, lo, hi)
+		}(w, lo, hi)
 	}
 	wg.Wait()
 }
@@ -151,7 +157,8 @@ func attraction(g *graph, dx, dy []float32, k, eps, cAttract float32) {
 
 // applyDisplacements moves every node that is not fixed by disp · dt · damping,
 // clamped to maxStep, and returns the average clamped step length — the
-// settle metric. Non-finite results leave the node where it was.
+// settle metric, 0 when nothing could move. Non-finite results leave the
+// node where it was.
 func applyDisplacements(g *graph, dx, dy []float32, dt, damping, maxStep float32) float32 {
 	var sum float32
 	count := 0
@@ -177,7 +184,7 @@ func applyDisplacements(g *graph, dx, dy []float32, dt, damping, maxStep float32
 		count++
 	}
 	if count == 0 {
-		return nan32
+		return 0
 	}
 	return sum / float32(count)
 }

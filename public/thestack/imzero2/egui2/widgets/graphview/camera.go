@@ -37,10 +37,10 @@ func (c *camera) fit(minX, minY, maxX, maxY, w, h, pad float32) {
 	zx := w * (1 - 2*pad) / bw
 	zy := h * (1 - 2*pad) / bh
 	z := min(zx, zy)
-	if !(z > 0) || z > maxZoom {
+	if !(z > 0) {
 		z = 1
 	}
-	c.zoom = max(z, minZoom)
+	c.zoom = min(max(z, minZoom), maxZoom)
 	cx := (minX + maxX) / 2
 	cy := (minY + maxY) / 2
 	c.panX = w/2 - cx*c.zoom

@@ -1,6 +1,7 @@
 package graphview
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -59,10 +60,40 @@ func (inst EventKindE) IsEdge() bool {
 	return inst >= EventKindEdgeClick && inst <= EventKindEdgeDeselect
 }
 
-// Event is one interaction reported by [View.Events]. Node carries the node
-// id for node kinds, with X and Y the node's world position at the event —
-// on NodeDragEnd, where the user left it; From/To carry the edge for edge
-// kinds.
+// String names the kind as the binding's demo did, for logs and readouts.
+func (inst EventKindE) String() string {
+	switch inst {
+	case EventKindNodeClick:
+		return "NodeClick"
+	case EventKindNodeDoubleClick:
+		return "NodeDoubleClick"
+	case EventKindNodeSelect:
+		return "NodeSelect"
+	case EventKindNodeDeselect:
+		return "NodeDeselect"
+	case EventKindNodeDragStart:
+		return "NodeDragStart"
+	case EventKindNodeDragEnd:
+		return "NodeDragEnd"
+	case EventKindNodeHoverEnter:
+		return "NodeHoverEnter"
+	case EventKindNodeHoverLeave:
+		return "NodeHoverLeave"
+	case EventKindEdgeClick:
+		return "EdgeClick"
+	case EventKindEdgeSelect:
+		return "EdgeSelect"
+	case EventKindEdgeDeselect:
+		return "EdgeDeselect"
+	}
+	return fmt.Sprintf("EventKind(%d)", uint8(inst))
+}
+
+// Event is one interaction reported by [View.Events] (ADR-0224 §SD5). Node
+// carries the node id for node kinds, with X and Y the node's world position
+// at the event — on NodeDragEnd, where the user left it; From/To carry the
+// edge for edge kinds. The fields of the other kind are zero, as are X and Y
+// on a HoverLeave for a node the declaration has since dropped.
 type Event struct {
 	Kind EventKindE
 	Node uint64
@@ -139,11 +170,12 @@ func (inst ForceParams) withDefaults() ForceParams {
 }
 
 // HierParams tunes the hierarchical layout. RowDist steps between levels
-// and ColDist between siblings, both in world units; zero takes 50.
+// and ColDist between siblings, both in world units; zero takes 50. A
+// change re-runs the layout on the next Render.
 type HierParams struct {
 	RowDist      float32
 	ColDist      float32
-	CenterParent bool // place a parent over the span of its children
+	CenterParent bool // place a parent over the span of its children (the crate declared but never applied this)
 	Orientation  OrientationE
 }
 
@@ -166,7 +198,7 @@ type Options struct {
 	Force  ForceParams
 	Hier   HierParams
 
-	NoDragging         bool // a drag on a node pans instead of moving it
+	NoDragging         bool // a drag on a node is a background drag: a pan, or nothing under NoZoomAndPan
 	NoHover            bool // no hover highlight or hover events
 	NoZoomAndPan       bool // wheel and background drag are inert
 	NodeClicking       bool // emit node click / double-click events
@@ -178,9 +210,18 @@ type Options struct {
 
 	// FitToScreen re-fits the camera every frame. Off, the camera fits once
 	// while a freshly laid-out graph settles and then latches off so manual
-	// pan and zoom stick (ADR-0224 §SD4); FitNow and ResetLayout re-arm it.
+	// pan, zoom and drag stick (ADR-0224 §SD4); FitNow and ResetLayout
+	// re-arm it.
 	FitToScreen bool
-	FitPadding  float32 // fraction of the canvas kept clear on fit, default 0.1
+	// FitPadding is the fraction of the canvas kept clear on each side of
+	// a fit, default 0.1. (The crate's fit_to_screen_padding scaled the
+	// graph's diagonal instead; the same number frames a little tighter
+	// here.)
+	FitPadding float32
+	// ZoomSpeed is an exponent on the host's wheel and pinch zoom factor:
+	// 1 (or 0, the default) takes the gesture as delivered, 2 doubles its
+	// effect, 0.5 halves it.
+	ZoomSpeed float32
 	// LabelsAlways paints every node label; off, only hovered, selected and
 	// dragged nodes carry one.
 	LabelsAlways bool
@@ -278,14 +319,22 @@ func (inst Style) withDefaults() Style {
 }
 
 // Metrics is the per-frame readback the settle logic of a consumer needs.
-// Steps and LastDisplacement are meaningful for the force layouts only;
-// LastDisplacement is NaN before the first step.
+// Steps, LastDisplacement and Settled are meaningful for the force layouts
+// only; LastDisplacement is NaN before the first step and 0 when every node
+// was fixed. Settled is the convergence test — average displacement at or
+// under Epsilon — without the paused and static cases View.IsSettled folds
+// in.
 type Metrics struct {
 	NodeCount        uint32
 	EdgeCount        uint32
+	PinnedCount      uint32 // declared plus widget-side pins
 	Steps            uint64
 	LastDisplacement float32
+	Settled          bool
 }
+
+// defaultFitPadding is Options.FitPadding when left zero.
+const defaultFitPadding = 0.1
 
 var nan32 = float32(math.NaN())
 

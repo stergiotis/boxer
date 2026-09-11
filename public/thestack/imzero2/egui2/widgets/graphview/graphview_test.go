@@ -2,12 +2,14 @@ package graphview
 
 import (
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 func TestReconcileKeepsSurvivingPositionsAndDropsVanished(t *testing.T) {
@@ -152,7 +154,7 @@ func TestRepulsionParallelMatchesSerial(t *testing.T) {
 	dx1, dy1 := make([]float32, n), make([]float32, n)
 	dx2, dy2 := make([]float32, n), make([]float32, n)
 	repulsionRows(x, y, dx1, dy1, 100, 1e-6, 0, n)
-	repulsionParallel(x, y, dx2, dy2, 100, 1e-6)
+	parallelRows(n, 8, func(_, lo, hi int) { repulsionRows(x, y, dx2, dy2, 100, 1e-6, lo, hi) })
 	require.Equal(t, dx1, dx2, "each row is computed whole by one goroutine, so the split changes nothing")
 	require.Equal(t, dy1, dy2)
 }
@@ -161,8 +163,8 @@ func TestRandomPlacementIsAFunctionOfTheId(t *testing.T) {
 	var a, b graph
 	a.reconcile([]NodeSpec{{Id: 7}, {Id: 8}}, nil)
 	b.reconcile([]NodeSpec{{Id: 8}, {Id: 7}}, nil)
-	placeRandom(&a, allSlots(2))
-	placeRandom(&b, allSlots(2))
+	placeRandom(&a, a.allSlots())
+	placeRandom(&b, b.allSlots())
 	require.Equal(t, a.x[a.slot[7]], b.x[b.slot[7]])
 	require.Equal(t, a.y[a.slot[8]], b.y[b.slot[8]])
 	require.NotEqual(t, a.x[a.slot[7]], a.x[a.slot[8]])
@@ -222,4 +224,105 @@ func TestZoomAnchorFallsBackFromTheWheelRowToThePointerToTheCentre(t *testing.T)
 	require.Equal(t, [2]float32{300, 400}, [2]float32{ax, ay}, "a sense region on top leaves the row's hover NaN; the pointer anchors")
 	ax, ay = zoomAnchor(c.CanvasWheelValue{Zoom: 1.1, HoverX: nan, HoverY: nan}, 0, 0, false, 800, 600)
 	require.Equal(t, [2]float32{400, 300}, [2]float32{ax, ay}, "no pointer at all anchors on the centre")
+}
+
+func TestReconcileRemovalAndCreationInOneFrame(t *testing.T) {
+	var g graph
+	g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}, {Id: 3}}, nil)
+	for i := range g.ids {
+		g.x[i] = float32(10 * (i + 1))
+	}
+	// Drop 2, add 4 and 5: the created slots must index the final arrays.
+	created, changed := g.reconcile([]NodeSpec{{Id: 1}, {Id: 3}, {Id: 4}, {Id: 5}}, []EdgeSpec{{From: 3, To: 4}})
+	require.True(t, changed)
+	require.Equal(t, 4, g.n())
+	require.Len(t, created, 2)
+	for _, s := range created {
+		require.Less(t, int(s), g.n(), "a created slot is in range")
+		require.Contains(t, []uint64{4, 5}, g.ids[s])
+	}
+	placeRandom(&g, created) // would have panicked on stale indices
+	require.Equal(t, float32(10), g.x[g.slot[1]], "survivors keep their positions")
+	require.Equal(t, float32(30), g.x[g.slot[3]])
+	// The same id twice in one declaration is one node; the later spec wins.
+	created, _ = g.reconcile([]NodeSpec{{Id: 7, Label: "a"}, {Id: 7, Label: "b"}}, nil)
+	require.Equal(t, 1, g.n())
+	require.Len(t, created, 1)
+	require.Equal(t, "b", g.label[0])
+}
+
+func TestReconcileKeepsEdgeStructureWhenTopologyIsUnchanged(t *testing.T) {
+	var g graph
+	g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}}, []EdgeSpec{{From: 1, To: 2, Label: "a"}, {From: 9, To: 1}})
+	require.Equal(t, []string{"a"}, g.eLabel)
+	_, changed := g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}}, []EdgeSpec{{From: 1, To: 2, Label: "b", Width: 3}, {From: 9, To: 1}})
+	require.False(t, changed, "attributes are not topology")
+	require.Equal(t, []string{"b"}, g.eLabel, "but they are refreshed")
+	require.Equal(t, []float32{3}, g.eWidth)
+	_, changed = g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}}, []EdgeSpec{{From: 2, To: 1}})
+	require.True(t, changed, "reversing an edge is a topology change")
+	require.Equal(t, int32(1), g.inDeg[g.slot[1]])
+}
+
+func TestSelectionIsPrunedWithTheDeclaration(t *testing.T) {
+	v := New(nil, "t", Options{NodeSelection: true, EdgeSelection: true})
+	v.g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}}, []EdgeSpec{{From: 1, To: 2}})
+	v.selNodes[1] = struct{}{}
+	v.selNodes[2] = struct{}{}
+	v.selEdges[[2]uint64{1, 2}] = struct{}{}
+	_, changed := v.g.reconcile([]NodeSpec{{Id: 2}}, nil)
+	require.True(t, changed)
+	v.pruneSelection()
+	require.Equal(t, []uint64{2}, slices.Collect(v.SelectedNodes()))
+	require.Empty(t, slices.Collect(v.SelectedEdges()))
+}
+
+func TestDoubleClickDoesNotToggleSelection(t *testing.T) {
+	v := New(nil, "t", Options{NodeClicking: true, NodeSelection: true})
+	v.g.reconcile([]NodeSpec{{Id: 1}}, nil)
+	v.style = v.Opts.Style.withDefaults()
+	var wheel c.CanvasWheelValue
+	wheel.Zoom = 1
+	v.applyInput(800, 600, 0, 0, true, true, c.PrimaryClickedResponseFlags, wheel)
+	require.Equal(t, []uint64{1}, slices.Collect(v.SelectedNodes()), "the first click selects")
+	v.events = v.events[:0]
+	// egui reports the second click as both a click and a double-click.
+	v.applyInput(800, 600, 0, 0, true, true, c.PrimaryClickedResponseFlags|c.DoubleClickedResponseFlags, wheel)
+	require.Equal(t, []uint64{1}, slices.Collect(v.SelectedNodes()), "the double-click leaves the selection alone")
+	kinds := make([]EventKindE, 0, len(v.events))
+	for _, ev := range v.events {
+		kinds = append(kinds, ev.Kind)
+	}
+	require.Equal(t, []EventKindE{EventKindNodeDoubleClick}, kinds)
+}
+
+func TestBatchesFollowDeclarationOrder(t *testing.T) {
+	v := New(nil, "t", Options{})
+	v.style = v.Opts.Style.withDefaults()
+	red, blue := color.Hex(0xff0000ff), color.Hex(0x0000ffff)
+	v.g.reconcile([]NodeSpec{{Id: 1, Color: red}, {Id: 2, Color: blue}, {Id: 3, Color: red}, {Id: 4, Color: red, Radius: 9}, {Id: 5}}, nil)
+	for range 3 {
+		v.buildBatches()
+		require.Len(t, v.batches, 4)
+		require.Equal(t, red.Literal(), v.batches[0].col.Literal())
+		require.Equal(t, []int32{0, 2}, v.batches[0].slots)
+		require.Equal(t, blue.Literal(), v.batches[1].col.Literal())
+		require.Equal(t, float32(9), v.batches[2].radius)
+		require.Equal(t, v.style.NodeFill.Literal(), v.batches[3].col.Literal(), "an unset colour takes the style's fill")
+	}
+}
+
+func TestCameraFitClampsToTheZoomRange(t *testing.T) {
+	var cam camera
+	cam.fit(0, 0, 10, 10, 4000, 4000, 0.1) // a single node in a huge canvas
+	require.Equal(t, float32(maxZoom), cam.zoom, "clamped, not reset to 1")
+	sx, sy := cam.toScreen(5, 5)
+	require.InDelta(t, 2000, sx, 1e-3)
+	require.InDelta(t, 2000, sy, 1e-3)
+}
+
+func TestEventKindNames(t *testing.T) {
+	require.Equal(t, "NodeDragEnd", EventKindNodeDragEnd.String())
+	require.Equal(t, "EdgeSelect", EventKindEdgeSelect.String())
+	require.Equal(t, "EventKind(42)", EventKindE(42).String())
 }

@@ -1,10 +1,5 @@
 package graphview
 
-import (
-	"runtime"
-	"sync"
-)
-
 // Barnes–Hut repulsion (ADR-0224 §SD6). Above barnesHutMinNodes the O(n²)
 // pair sum is replaced by a quadtree walk: a cell whose size is small
 // relative to its distance from the body acts as one pseudo-body at its
@@ -14,7 +9,7 @@ import (
 //
 // The tree is rebuilt every step; it is struct-of-arrays and its build is a
 // small share of a step, so the tree reuse of Gove's d3-force-reuse is not
-// worth its staleness here yet.
+// worth its staleness here.
 
 // barnesHutMinNodes is the node count from which the quadtree pays for
 // itself against the exact pair sum, chosen from the package benchmark.
@@ -242,22 +237,4 @@ func (q *quadtree) repulsionBH(x, y, dx, dy []float32, k2, eps2, theta2 float32,
 		dy[i] += ay
 	}
 	return stack
-}
-
-// repulsionBHParallel splits the bodies across goroutines, each with its
-// own traversal stack, over one shared read-only tree.
-func (q *quadtree) repulsionBHParallel(x, y, dx, dy []float32, k2, eps2, theta2 float32) {
-	n := len(x)
-	workers := runtime.GOMAXPROCS(0)
-	chunk := (n + workers - 1) / workers
-	var wg sync.WaitGroup
-	for lo := 0; lo < n; lo += chunk {
-		hi := min(lo+chunk, n)
-		wg.Add(1)
-		go func(lo, hi int) {
-			defer wg.Done()
-			q.repulsionBH(x, y, dx, dy, k2, eps2, theta2, lo, hi, make([]int32, 0, 128))
-		}(lo, hi)
-	}
-	wg.Wait()
 }

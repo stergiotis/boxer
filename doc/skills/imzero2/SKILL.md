@@ -1600,11 +1600,12 @@ if m := gv.Metrics(); m.Steps > 0 && m.LastDisplacement <= eps { gv.Opts.Force.P
 What to know before using it:
 
 - **Go owns topology, the widget owns geometry.** Positions survive as long
-  as an id is re-declared; a vanished id drops, a new one is placed beside a
-  neighbour. `gv.Opts` is read every frame, so toggling `Force.Paused` or a
-  layout parameter is an assignment, not a rebuild. The static layouts
-  (random, hierarchical) re-run only on topology change — after changing
-  `Opts.Hier` call `ResetLayout()`.
+  as an id is re-declared; a vanished id drops (and leaves the selection), a
+  new one is placed beside a neighbour. `gv.Opts` is read every frame, so
+  toggling `Force.Paused` or a layout parameter is an assignment, not a
+  rebuild; the hierarchical layout re-runs when its parameters or the
+  topology change. `Camera()`/`SetCamera()`/`CanvasToWorld()` read and set
+  the view; `Metrics()` carries counts, the pinned count and `Settled`.
 - **The fit is a one-shot latch** (ADR-0224 §SD4): the camera frames a fresh
   layout while it settles, then manual pan / zoom stick. `FitNow()` re-arms
   it; `Opts.FitToScreen` forces continuous fit. `FastForward(n)` runs n
@@ -1641,3 +1642,11 @@ What to know before using it:
 
 The gallery demo `egui2_hl_graphview_demo.go` mirrors the `graphs` demo
 feature for feature so the two can be compared while both exist.
+
+Migrating from the `c.Graph` binding, beyond the type renames: the binding's
+`zoomSpeed` was a fixed step per wheel event, graphview follows the host's
+zoom factor and `Opts.ZoomSpeed` is an exponent on it; `fitPadding` is a
+fraction of the canvas per side here, not a scale on the graph's diagonal,
+so the same number frames a little tighter; a zero width or height no longer
+means "fill" — use `RenderFill` for that. Edge selection and hover are keyed
+by (from, to), so parallel edges of one pair select together.

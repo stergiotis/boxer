@@ -114,7 +114,11 @@ commands cross the FFI.
 Random, Fruchterman–Reingold, Fruchterman–Reingold with centre gravity, and
 the crate's hierarchical tree walk keep their parameters and their meaning,
 so a consumer's tuned `dt`, `damping`, `epsilon`, `kScale` and row/column
-distances carry over. The departures: the ideal edge length `k` derives from
+distances carry over (the crate declared `center_parent` and never applied
+it; here it centres). Two knobs do not carry over unchanged and are named in
+the skill's migration note: the wheel zoom follows the host's factor rather
+than a fixed step, and the fit padding is a fraction of the canvas rather
+than a scale on the graph's diagonal. The departures: the ideal edge length `k` derives from
 the **canvas** area, not the whole screen as the crate does, so a graph in a
 side pane spaces like a graph in a window; and the random and hierarchical
 layouts are **deterministic** — random placement hashes the node id — so
@@ -196,8 +200,9 @@ code. The force step leaves fixed nodes where they are, and a drag on a
 declared-pinned node moves it for the gesture only: the node events carry
 the node's world position, so `NodeDragEnd` tells the caller where the user
 left it, and whether the pin follows is the caller's decision, not the
-widget's. A hairline ring marks a fixed node. The static layouts re-place a
-held node on topology change; a declared pin wins over any placement.
+widget's. A hairline ring marks a fixed node. The hierarchical layout
+re-places a widget-side pin when it re-runs; a declared pin wins over any
+placement.
 
 ## Alternatives
 

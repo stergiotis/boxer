@@ -67,11 +67,12 @@ func TestSplitArcHalvesLongSpans(t *testing.T) {
 func TestNodeOuterPxIncludesADrawableDonut(t *testing.T) {
 	v := New(nil, "t", Options{})
 	v.g.reconcile([]NodeSpec{{Id: 1, Donut: Donut{Values: []float32{1}}}, {Id: 2}}, nil)
-	st := v.Opts.Style.withDefaults()
-	plain := v.nodeOuterPx(st, int(v.g.slot[2]))
-	ringed := v.nodeOuterPx(st, int(v.g.slot[1]))
+	v.style = v.Opts.Style.withDefaults()
+	st := v.style
+	plain := v.nodeOuterPx(int(v.g.slot[2]))
+	ringed := v.nodeOuterPx(int(v.g.slot[1]))
 	require.InDelta(t, st.NodeRadius, plain, 1e-6)
 	require.InDelta(t, st.NodeRadius+st.DonutWidth, ringed, 1e-6)
 	v.cam.zoom = 0.01
-	require.InDelta(t, st.NodeRadius*0.01, v.nodeOuterPx(st, int(v.g.slot[1])), 1e-6, "a ring too small to draw does not widen the pick")
+	require.InDelta(t, st.NodeRadius*0.01, v.nodeOuterPx(int(v.g.slot[1])), 1e-6, "a ring too small to draw does not widen the pick")
 }

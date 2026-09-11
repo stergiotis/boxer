@@ -37,20 +37,27 @@ type graph struct {
 	adjList  []int32 // undirected neighbours, one entry per edge end
 	inDeg    []int32
 
-	frame    uint32
-	topoHash uint64
+	frame       uint32
+	topoHash    uint64
+	pinnedCount uint32 // declared or widget-side pins, as of the last applyPins
 
 	// scratch
 	pairCount map[[2]int32]uint8
 	newSlots  []int32
+	pending   []int32 // indices into the declaration of ids not yet known
 	csrCursor []int32
+	mark      []bool // per-slot scratch for the placement passes
 }
 
 func (g *graph) n() int { return len(g.ids) }
 
 // reconcile applies one frame's declaration. It returns the slots created
 // this frame (for placement) and whether the topology — the node set or the
-// edge set — differs from the previous frame's.
+// edge set — differs from the previous frame's. Known ids are updated in
+// place, vanished ids are swap-removed, and only then are the new ids
+// appended, so the created indices are final. When the topology is
+// unchanged the edge structure is kept and only the edge attributes are
+// copied.
 func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, topoChanged bool) {
 	if g.slot == nil {
 		g.slot = make(map[uint64]int32, len(nodes))
@@ -58,50 +65,100 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 	}
 	g.frame++
 	g.newSlots = g.newSlots[:0]
+	g.pending = g.pending[:0]
 	var hash uint64
 	for i := range nodes {
 		sp := &nodes[i]
 		hash += mix64(sp.Id)
 		s, ok := g.slot[sp.Id]
 		if !ok {
-			s = int32(len(g.ids))
-			g.slot[sp.Id] = s
-			g.ids = append(g.ids, sp.Id)
-			g.x = append(g.x, 0)
-			g.y = append(g.y, 0)
-			g.label = append(g.label, "")
-			g.col = append(g.col, color.Color{})
-			g.radius = append(g.radius, 0)
-			g.donut = append(g.donut, Donut{})
-			g.seen = append(g.seen, 0)
-			g.fixed = append(g.fixed, false)
-			g.pinDecl = append(g.pinDecl, false)
-			g.pinX = append(g.pinX, 0)
-			g.pinY = append(g.pinY, 0)
-			g.held = append(g.held, false)
-			g.newSlots = append(g.newSlots, s)
-		}
-		g.seen[s] = g.frame
-		g.label[s] = sp.Label
-		g.col[s] = sp.Color
-		g.radius[s] = sp.Radius
-		g.donut[s] = sp.Donut
-		g.pinDecl[s] = sp.Pinned
-		g.pinX[s] = sp.PinX
-		g.pinY[s] = sp.PinY
-	}
-	// Drop slots the declaration no longer names. Swap-remove from the back
-	// so every index below the cursor stays valid; a new slot can never be
-	// unseen, so the created list needs no repair.
-	for s := len(g.ids) - 1; s >= 0; s-- {
-		if g.seen[s] == g.frame {
+			g.pending = append(g.pending, int32(i))
 			continue
 		}
-		g.removeSlot(s)
+		g.seen[s] = g.frame
+		g.setNode(s, sp)
+	}
+	// Drop slots the declaration no longer names. Swap-remove from the back
+	// so every index below the cursor stays valid.
+	for s := len(g.ids) - 1; s >= 0; s-- {
+		if g.seen[s] != g.frame {
+			g.removeSlot(s)
+		}
+	}
+	for _, i := range g.pending {
+		sp := &nodes[i]
+		if s, dup := g.slot[sp.Id]; dup {
+			// The same id twice in one declaration: the later spec wins.
+			g.setNode(s, sp)
+			continue
+		}
+		s := int32(len(g.ids))
+		g.slot[sp.Id] = s
+		g.ids = append(g.ids, sp.Id)
+		g.x = append(g.x, 0)
+		g.y = append(g.y, 0)
+		g.label = append(g.label, "")
+		g.col = append(g.col, color.Color{})
+		g.radius = append(g.radius, 0)
+		g.donut = append(g.donut, Donut{})
+		g.seen = append(g.seen, g.frame)
+		g.fixed = append(g.fixed, false)
+		g.pinDecl = append(g.pinDecl, false)
+		g.pinX = append(g.pinX, 0)
+		g.pinY = append(g.pinY, 0)
+		g.held = append(g.held, false)
+		g.newSlots = append(g.newSlots, s)
+		g.setNode(s, sp)
 	}
 	created = g.newSlots
 
-	// Edges.
+	// Edges: the hash covers the edges between known ids, in either
+	// direction distinctly; a re-added id changes the node set even when
+	// the hash agrees, so created counts as a change too.
+	for i := range edges {
+		e := &edges[i]
+		_, okF := g.slot[e.From]
+		_, okT := g.slot[e.To]
+		if okF && okT {
+			hash += mix64(e.From ^ mix64(e.To))
+		}
+	}
+	topoChanged = hash != g.topoHash || len(created) > 0
+	g.topoHash = hash
+	if topoChanged {
+		g.rebuildEdges(edges)
+	} else {
+		j := 0
+		for i := range edges {
+			e := &edges[i]
+			_, okF := g.slot[e.From]
+			_, okT := g.slot[e.To]
+			if !okF || !okT {
+				continue
+			}
+			g.eLabel[j] = e.Label
+			g.eCol[j] = e.Color
+			g.eWidth[j] = e.Width
+			j++
+		}
+	}
+	return
+}
+
+// setNode copies a spec's per-frame attributes into slot s.
+func (g *graph) setNode(s int32, sp *NodeSpec) {
+	g.label[s] = sp.Label
+	g.col[s] = sp.Color
+	g.radius[s] = sp.Radius
+	g.donut[s] = sp.Donut
+	g.pinDecl[s] = sp.Pinned
+	g.pinX[s] = sp.PinX
+	g.pinY[s] = sp.PinY
+}
+
+// rebuildEdges rebuilds the edge arrays, the parallel-edge orders, the
+// in-degrees and the undirected CSR adjacency from the declaration.
+func (g *graph) rebuildEdges(edges []EdgeSpec) {
 	n := len(g.ids)
 	g.eFrom = g.eFrom[:0]
 	g.eTo = g.eTo[:0]
@@ -121,7 +178,6 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		if !okF || !okT {
 			continue
 		}
-		hash += mix64(e.From ^ mix64(e.To))
 		key := [2]int32{from, to}
 		order := g.pairCount[key]
 		g.pairCount[key] = order + 1
@@ -160,9 +216,15 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		g.adjList[cur[t]] = f
 		cur[t]++
 	}
-	topoChanged = hash != g.topoHash
-	g.topoHash = hash
-	return
+}
+
+// allSlots returns every slot index, in the shared newSlots scratch.
+func (g *graph) allSlots() []int32 {
+	g.newSlots = g.newSlots[:0]
+	for i := range g.ids {
+		g.newSlots = append(g.newSlots, int32(i))
+	}
+	return g.newSlots
 }
 
 // removeSlot drops slot s by moving the last slot into its place.
@@ -205,11 +267,16 @@ func (g *graph) removeSlot(s int) {
 // keeps the dragged position this frame so the pin does not snap it back
 // mid-gesture, and it is fixed like the others.
 func (g *graph) applyPins(dragSlot int32) {
+	g.pinnedCount = 0
 	for i := range g.ids {
 		if g.pinDecl[i] && int32(i) != dragSlot {
 			g.x[i], g.y[i] = g.pinX[i], g.pinY[i]
 		}
-		g.fixed[i] = g.pinDecl[i] || g.held[i] || int32(i) == dragSlot
+		pinned := g.pinDecl[i] || g.held[i]
+		if pinned {
+			g.pinnedCount++
+		}
+		g.fixed[i] = pinned || int32(i) == dragSlot
 	}
 }
 
@@ -244,9 +311,11 @@ func (g *graph) bounds(defaultRadius float32) (minX, minY, maxX, maxY float32, o
 	return
 }
 
-func growTo(s []int32, n int) []int32 {
+// growTo returns s resliced to n, reallocating only when the capacity is
+// short; the contents are unspecified.
+func growTo[T any](s []T, n int) []T {
 	if cap(s) < n {
-		s = make([]int32, n)
+		s = make([]T, n)
 	}
 	return s[:n]
 }

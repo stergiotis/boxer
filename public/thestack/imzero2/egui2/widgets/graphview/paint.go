@@ -38,7 +38,8 @@ type edgeGeo struct {
 // edgeGeometry resolves edge i against the camera. The arrow head is
 // subtracted from the stroke's end so the stroke does not poke through the
 // head, and both ends stop at the node discs.
-func (v *View) edgeGeometry(style Style, i int) (geo edgeGeo) {
+func (v *View) edgeGeometry(i int) (geo edgeGeo) {
+	style := &v.style
 	f, t := v.g.eFrom[i], v.g.eTo[i]
 	geo.width = v.g.eWidth[i]
 	if geo.width <= 0 {
@@ -47,8 +48,8 @@ func (v *View) edgeGeometry(style Style, i int) (geo edgeGeo) {
 	order := float32(v.g.eOrder[i])
 	x1, y1 := v.cam.toScreen(v.g.x[f], v.g.y[f])
 	x2, y2 := v.cam.toScreen(v.g.x[t], v.g.y[t])
-	r1 := v.nodeRadius(style, int(f)) * v.cam.zoom
-	r2 := v.nodeRadius(style, int(t)) * v.cam.zoom
+	r1 := v.nodeRadius(int(f)) * v.cam.zoom
+	r2 := v.nodeRadius(int(t)) * v.cam.zoom
 	tip := style.TipSize
 
 	if f == t {
@@ -118,15 +119,18 @@ func (v *View) edgeGeometry(style Style, i int) (geo edgeGeo) {
 const tipHalfAngle = 0.4
 
 // paint emits the frame's paint commands, clipped to the canvas: edges,
-// then nodes batched by colour and radius, then highlights and labels.
-func (v *View) paint(style Style, w, h float32) {
+// then nodes batched by colour and radius, then donuts, highlights and
+// labels. Per-node text and strokes are skipped for nodes outside the
+// canvas; markers are one batch and cheap to let the host clip.
+func (v *View) paint(w, h float32) {
 	c.PaintClipPush(0, 0, w, h).Send()
 	defer c.PaintClipPop().Send()
+	style := &v.style
 	o := &v.Opts
 
 	// Edges.
 	for i := range v.g.eFrom {
-		geo := v.edgeGeometry(style, i)
+		geo := v.edgeGeometry(i)
 		col := v.g.eCol[i]
 		if isUnset(col) {
 			col = style.EdgeColor
@@ -151,52 +155,38 @@ func (v *View) paint(style Style, w, h float32) {
 			size := style.TipSize
 			ax, ay := rotate(geo.tipDx, geo.tipDy, tipHalfAngle)
 			bx, by := rotate(geo.tipDx, geo.tipDy, -tipHalfAngle)
-			xs := []float32{geo.tipX, geo.tipX - ax*size, geo.tipX - bx*size}
-			ys := []float32{geo.tipY, geo.tipY - ay*size, geo.tipY - by*size}
-			c.PaintPolygonFilled(xs, ys, col).Send()
+			v.tipXs = [3]float32{geo.tipX, geo.tipX - ax*size, geo.tipX - bx*size}
+			v.tipYs = [3]float32{geo.tipY, geo.tipY - ay*size, geo.tipY - by*size}
+			c.PaintPolygonFilled(v.tipXs[:], v.tipYs[:], col).Send()
 		}
 		if lbl := v.g.eLabel[i]; lbl != "" {
 			mx, my := edgeMidpoint(geo)
-			txt := c.PaintText(mx, my-3, 1, 2, lbl, style.EdgeLabelFontSize, style.EdgeLabelColor)
-			if style.Monospace {
-				txt = txt.Monospace()
+			if onCanvas(mx, my, 0, w, h) {
+				v.paintLabel(mx, my-3, lbl, style.EdgeLabelFontSize, style.EdgeLabelColor)
 			}
-			txt.Send()
 		}
 	}
 
-	// Nodes: one marker batch per (colour, radius).
-	for k := range v.batches {
-		v.batches[k] = v.batches[k][:0]
-	}
-	for i := range v.g.ids {
-		col := v.g.col[i]
-		if isUnset(col) {
-			col = style.NodeFill
-		}
-		k := batchKey(col, v.nodeRadius(style, i))
-		v.batches[k] = append(v.batches[k], int32(i))
-	}
-	for k, slots := range v.batches {
-		if len(slots) == 0 {
-			delete(v.batches, k)
-			continue
-		}
+	// Nodes: one marker batch per (colour, radius), in first-seen order.
+	v.buildBatches()
+	for i := range v.batches {
+		b := &v.batches[i]
 		v.batchXs = v.batchXs[:0]
 		v.batchYs = v.batchYs[:0]
-		for _, s := range slots {
+		for _, s := range b.slots {
 			sx, sy := v.cam.toScreen(v.g.x[s], v.g.y[s])
 			v.batchXs = append(v.batchXs, sx)
 			v.batchYs = append(v.batchYs, sy)
 		}
-		col := color.Hex(uint32(k >> 32))
-		r := math.Float32frombits(uint32(k)) * v.cam.zoom
-		c.PaintMarkers(v.batchXs, v.batchYs, 0, r, col, 0).Send()
+		c.PaintMarkers(v.batchXs, v.batchYs, 0, b.radius*v.cam.zoom, b.col, 0).Send()
 	}
 	if style.NodeStrokeW > 0 {
 		for i := range v.g.ids {
 			sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
-			c.PaintCircleStroke(sx, sy, v.nodeRadius(style, i)*v.cam.zoom, style.NodeStroke, style.NodeStrokeW).Send()
+			r := v.nodeRadius(i) * v.cam.zoom
+			if onCanvas(sx, sy, r, w, h) {
+				c.PaintCircleStroke(sx, sy, r, style.NodeStroke, style.NodeStrokeW).Send()
+			}
 		}
 	}
 
@@ -207,12 +197,15 @@ func (v *View) paint(style Style, w, h float32) {
 		if d.IsEmpty() {
 			continue
 		}
-		rIn := v.nodeRadius(style, i) * v.cam.zoom
+		rIn := v.nodeRadius(i) * v.cam.zoom
 		if rIn < donutMinInnerPx {
 			continue
 		}
 		rOut := rIn + style.DonutWidth
 		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+		if !onCanvas(sx, sy, rOut, w, h) {
+			continue
+		}
 		v.arcs = donutArcs(d, style.DonutTrack, v.arcs[:0])
 		for _, a := range v.arcs {
 			// A span past half a turn splits in two so the outline never
@@ -226,14 +219,23 @@ func (v *View) paint(style Style, w, h float32) {
 		}
 	}
 
-	// Highlights and labels.
+	// Highlights and labels, for the nodes that have any.
+	dragging := v.dragSlot()
 	for i := range v.g.ids {
 		id := v.g.ids[i]
 		_, sel := v.selNodes[id]
-		hov := v.hoveredOk && id == v.hoveredId
+		hov := (v.hoveredOk && id == v.hoveredId) || int32(i) == dragging
+		pinned := v.g.isPinned(i)
+		lbl := v.g.label[i]
+		if !(sel || hov || pinned || (o.LabelsAlways && lbl != "")) {
+			continue
+		}
 		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
-		r := v.nodeOuterPx(style, i)
-		if v.g.isPinned(i) {
+		r := v.nodeOuterPx(i)
+		if !onCanvas(sx, sy, r+style.LabelFontSize*4, w, h) {
+			continue
+		}
+		if pinned {
 			c.PaintCircleStroke(sx, sy, r+1, style.PinnedStroke, styletokens.StrokeHair).Send()
 		}
 		if sel {
@@ -242,14 +244,53 @@ func (v *View) paint(style Style, w, h float32) {
 		if hov {
 			c.PaintCircleStroke(sx, sy, r+3, style.Highlight, styletokens.StrokeRegular).Send()
 		}
-		if lbl := v.g.label[i]; lbl != "" && (o.LabelsAlways || sel || hov) {
-			txt := c.PaintText(sx, sy-r-2, 1, 2, lbl, style.LabelFontSize, style.LabelColor)
-			if style.Monospace {
-				txt = txt.Monospace()
-			}
-			txt.Send()
+		if lbl != "" && (o.LabelsAlways || sel || hov) {
+			v.paintLabel(sx, sy-r-2, lbl, style.LabelFontSize, style.LabelColor)
 		}
 	}
+}
+
+// buildBatches groups the nodes by (fill, radius) into v.batches, in the
+// order a key is first seen, so the paint order is a function of the
+// declaration alone.
+func (v *View) buildBatches() {
+	for i := range v.batches {
+		v.batches[i].slots = v.batches[i].slots[:0]
+	}
+	v.batches = v.batches[:0]
+	clear(v.batchIdx)
+	for i := range v.g.ids {
+		col := v.nodeFill(i)
+		radius := v.nodeRadius(i)
+		k := uint64(col.Literal())<<32 | uint64(math.Float32bits(radius))
+		bi, ok := v.batchIdx[k]
+		if !ok {
+			bi = int32(len(v.batches))
+			v.batchIdx[k] = bi
+			if cap(v.batches) > len(v.batches) {
+				v.batches = v.batches[:len(v.batches)+1]
+				v.batches[bi].col, v.batches[bi].radius = col, radius
+			} else {
+				v.batches = append(v.batches, nodeBatch{col: col, radius: radius})
+			}
+		}
+		v.batches[bi].slots = append(v.batches[bi].slots, int32(i))
+	}
+}
+
+// paintLabel emits one anchored text at the style's face.
+func (v *View) paintLabel(x, y float32, text string, size float32, col color.Color) {
+	txt := c.PaintText(x, y, 1, 2, text, size, col)
+	if v.style.Monospace {
+		txt = txt.Monospace()
+	}
+	txt.Send()
+}
+
+// onCanvas reports whether a disc of radius r around (x, y) touches the
+// w×h canvas.
+func onCanvas(x, y, r, w, h float32) bool {
+	return x+r >= 0 && y+r >= 0 && x-r <= w && y-r <= h
 }
 
 // splitArc returns the arc as one span, or two when it exceeds half a turn.

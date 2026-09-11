@@ -1,6 +1,9 @@
 package graphview
 
-import "slices"
+import (
+	"cmp"
+	"slices"
+)
 
 // spawnSize is the side of the square random placement fills, egui_graphs'
 // SPAWN_SIZE, in world units.
@@ -10,24 +13,29 @@ const spawnSize = 250
 // id, so the same graph lays out the same way in every run (ADR-0224 §SD2).
 func placeRandom(g *graph, slots []int32) {
 	for _, s := range slots {
-		h := mix64(g.ids[s])
-		g.x[s] = unit01(h) * spawnSize
-		g.y[s] = unit01(mix64(h)) * spawnSize
+		placeRandomSlot(g, s)
 	}
+}
+
+func placeRandomSlot(g *graph, s int32) {
+	h := mix64(g.ids[s])
+	g.x[s] = unit01(h) * spawnSize
+	g.y[s] = unit01(mix64(h)) * spawnSize
 }
 
 // placeNear puts a newly declared node beside an already-placed neighbour
 // when it has one, and randomly otherwise. A force layout then pulls it into
 // place from somewhere plausible instead of from the origin.
 func placeNear(g *graph, slots []int32, spread float32) {
-	isNew := make(map[int32]bool, len(slots))
+	g.mark = growTo(g.mark, g.n())
+	clear(g.mark)
 	for _, s := range slots {
-		isNew[s] = true
+		g.mark[s] = true
 	}
 	for _, s := range slots {
 		placed := false
 		for _, nb := range g.neighbors(s) {
-			if isNew[nb] {
+			if g.mark[nb] {
 				continue
 			}
 			h := mix64(g.ids[s])
@@ -37,7 +45,7 @@ func placeNear(g *graph, slots []int32, spread float32) {
 			break
 		}
 		if !placed {
-			placeRandom(g, []int32{s})
+			placeRandomSlot(g, s)
 		}
 	}
 }
@@ -57,7 +65,7 @@ func layoutHierarchical(g *graph, p HierParams) {
 	for i := range order {
 		order[i] = int32(i)
 	}
-	slices.SortFunc(order, func(a, b int32) int { return cmpU64(g.ids[a], g.ids[b]) })
+	slices.SortFunc(order, func(a, b int32) int { return cmp.Compare(g.ids[a], g.ids[b]) })
 
 	// Outgoing adjacency in CSR form, children in id order, so the walk is
 	// linear in nodes plus edges and independent of declaration order.
@@ -83,7 +91,7 @@ func layoutHierarchical(g *graph, p HierParams) {
 	}
 	for s := 0; s < n; s++ {
 		kids := outList[outStart[s]:outStart[s+1]]
-		slices.SortFunc(kids, func(a, b int32) int { return cmpU64(g.ids[a], g.ids[b]) })
+		slices.SortFunc(kids, func(a, b int32) int { return cmp.Compare(g.ids[a], g.ids[b]) })
 	}
 
 	visited := make([]bool, n)
@@ -144,14 +152,4 @@ func (h *hierWalk) tree(s int32, row int, startCol float32) (maxCol float32) {
 	}
 	g.x[s], g.y[s] = x, y
 	return maxCol
-}
-
-func cmpU64(a, b uint64) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	}
-	return 0
 }

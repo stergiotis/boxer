@@ -177,10 +177,10 @@ func demoGraphviewRing(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	// Readout: the hovered node and where n1 sits in the canvas — the
 	// hover path through R24 and the camera, legible to a headless scene.
 	hover := "none"
-	if id, ok := st.ring.Hovered(); ok {
+	if id, ok := st.ring.HoveredNode(); ok {
 		hover = fmt.Sprintf("n%d", id)
 	}
-	x, y, _ := st.ring.NodeScreenPosition(1)
+	x, y, _ := st.ring.NodeCanvasPosition(1)
 	ox, oy, _ := st.ring.CanvasScreenOrigin()
 	c.Label(fmt.Sprintf("hover: %s · n1 at (%.0f, %.0f) · canvas at (%.0f, %.0f)", hover, x, y, ox, oy)).Send()
 }
@@ -236,20 +236,14 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	}
 	o.PinOnDrag = st.forceHold
 	st.force.Render(st.forceNodeSet, st.forceEdgeSet, width, 400)
-	held := 0
 	for _, ev := range st.force.Events() {
 		if ev.Kind == graphview.EventKindNodeDoubleClick {
 			st.force.UnpinNode(ev.Node)
 		}
 	}
-	for _, n := range st.forceNodeSet {
-		if st.force.IsPinned(n.Id) {
-			held++
-		}
-	}
 	m := st.force.Metrics()
 	c.Label(fmt.Sprintf("nodes=%d edges=%d pinned=%d steps=%d avg displacement=%.4f settled=%v",
-		m.NodeCount, m.EdgeCount, held, m.Steps, m.LastDisplacement, st.force.IsSettled())).Send()
+		m.NodeCount, m.EdgeCount, m.PinnedCount, m.Steps, m.LastDisplacement, m.Settled)).Send()
 }
 
 func demoGraphviewHier(ids *c.WidgetIdStack, st *graphviewDemoState) {
@@ -258,45 +252,11 @@ func demoGraphviewHier(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	c.Checkbox(ids.PrepareStr("gv-hier-centre"), st.hierCntr, "centre parent over children").SendRespVal(&st.hierCntr)
 	c.Checkbox(ids.PrepareStr("gv-hier-lr"), st.hierLR, "orientation: left-right (else top-down)").SendRespVal(&st.hierLR)
 	o := &st.hier.Opts
-	prev := o.Hier
 	o.Hier = graphview.HierParams{RowDist: float32(st.hierRow), ColDist: float32(st.hierCol), CenterParent: st.hierCntr}
 	if st.hierLR {
 		o.Hier.Orientation = graphview.OrientationLeftRight
 	}
-	if o.Hier != prev {
-		// The static layout re-runs on topology change only; a parameter
-		// change asks for it explicitly.
-		st.hier.ResetLayout()
-	}
 	st.hier.Render(st.hierNodes, st.hierEdges, demoGraphviewWidth(ids, "gv-hier-pane"), 300)
-}
-
-func graphviewEventKindName(k graphview.EventKindE) string {
-	switch k {
-	case graphview.EventKindNodeClick:
-		return "NodeClick"
-	case graphview.EventKindNodeDoubleClick:
-		return "NodeDoubleClick"
-	case graphview.EventKindNodeSelect:
-		return "NodeSelect"
-	case graphview.EventKindNodeDeselect:
-		return "NodeDeselect"
-	case graphview.EventKindNodeDragStart:
-		return "NodeDragStart"
-	case graphview.EventKindNodeDragEnd:
-		return "NodeDragEnd"
-	case graphview.EventKindNodeHoverEnter:
-		return "NodeHoverEnter"
-	case graphview.EventKindNodeHoverLeave:
-		return "NodeHoverLeave"
-	case graphview.EventKindEdgeClick:
-		return "EdgeClick"
-	case graphview.EventKindEdgeSelect:
-		return "EdgeSelect"
-	case graphview.EventKindEdgeDeselect:
-		return "EdgeDeselect"
-	}
-	return fmt.Sprintf("kind-%d", k)
 }
 
 func demoGraphviewEventLog(ids *c.WidgetIdStack, st *graphviewDemoState) {
@@ -331,9 +291,9 @@ func demoGraphviewEventLog(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	}
 	for _, ev := range st.eventLog {
 		if ev.Kind.IsEdge() {
-			c.Label(fmt.Sprintf("  %s  edge=%d→%d", graphviewEventKindName(ev.Kind), ev.From, ev.To)).Send()
+			c.Label(fmt.Sprintf("  %s  edge=%d→%d", ev.Kind.String(), ev.From, ev.To)).Send()
 		} else {
-			c.Label(fmt.Sprintf("  %s  node=%d", graphviewEventKindName(ev.Kind), ev.Node)).Send()
+			c.Label(fmt.Sprintf("  %s  node=%d", ev.Kind.String(), ev.Node)).Send()
 		}
 	}
 }

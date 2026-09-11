@@ -3,6 +3,7 @@ package graphview
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,10 @@ func TestBarnesHutParallelMatchesSerial(t *testing.T) {
 	s1x, s1y := make([]float32, n), make([]float32, n)
 	p1x, p1y := make([]float32, n), make([]float32, n)
 	q.repulsionBH(x, y, s1x, s1y, 100, 1e-6, 0.81, 0, n, nil)
-	q.repulsionBHParallel(x, y, p1x, p1y, 100, 1e-6, 0.81)
+	stacks := make([][]int32, 8)
+	parallelRows(n, 8, func(w, lo, hi int) {
+		stacks[w] = q.repulsionBH(x, y, p1x, p1y, 100, 1e-6, 0.81, lo, hi, stacks[w])
+	})
 	require.Equal(t, s1x, p1x)
 	require.Equal(t, s1y, p1y)
 }
@@ -93,8 +97,8 @@ func TestForceStepUsesTheTreeAboveTheThreshold(t *testing.T) {
 	var exact, approx graph
 	exact.reconcile(nodes, nil)
 	approx.reconcile(nodes, nil)
-	placeRandom(&exact, allSlots(n))
-	placeRandom(&approx, allSlots(n))
+	placeRandom(&exact, exact.allSlots())
+	placeRandom(&approx, approx.allSlots())
 	fe := forceState{lastDisp: nan32}
 	fa := forceState{lastDisp: nan32}
 	pe := ForceParams{Exact: true}.withDefaults()
@@ -133,9 +137,13 @@ func BenchmarkRepulsion(b *testing.B) {
 		})
 		b.Run(fmt.Sprintf("bh-parallel/%d", n), func(b *testing.B) {
 			var q quadtree
+			workers := runtime.GOMAXPROCS(0)
+			stacks := make([][]int32, workers)
 			for b.Loop() {
 				q.build(x, y)
-				q.repulsionBHParallel(x, y, dx, dy, 100, 1e-6, 0.81)
+				parallelRows(n, workers, func(w, lo, hi int) {
+					stacks[w] = q.repulsionBH(x, y, dx, dy, 100, 1e-6, 0.81, lo, hi, stacks[w])
+				})
 			}
 		})
 	}
