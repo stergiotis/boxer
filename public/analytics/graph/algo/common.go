@@ -21,6 +21,9 @@ const (
 	LimitOutput
 	// LimitContext: the context was cancelled or its deadline passed.
 	LimitContext
+	// LimitRows: a producer's row budget cut the input; the result covers a
+	// uniform subsample of the rows (ADR-0227 §SD1).
+	LimitRows
 )
 
 // Truncation records whether a result stopped short and why (ADR-0226 §SD4).
