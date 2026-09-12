@@ -355,6 +355,182 @@ FROM anchor.facts
 WHERE hasAny(`symbol:value`, ['DDOS', 'PORT_SCAN', 'SQL_INJECTION'])
 ```
 
+## The schema, decoded (`leeway.columns`)
+
+A physical name carries the whole authored structure, which means
+`system.columns` already holds the schema — spelled in a form nobody wants to
+split by hand. The `leeway.*` views read it apart (ADR-0226). They arrive with
+the surface install above; if the tables below come back unknown, run that
+first.
+
+`leeway.columns` is one row per column of every non-system table, joined to
+what ClickHouse knows about it. `layout` is `foreign` for a name this
+convention did not compose, so that filter is how you ask for leeway columns
+only, and `lane_kind` separates the data from the membership machinery that
+rides beside it.
+
+**Keep the backticks on `` `columns` ``.** The editor's client-side parser reads
+a bare `columns` as the start of a `COLUMNS('…')` matcher — as a table name and
+as a result alias alike — and a block it cannot parse is shipped verbatim, which
+silently skips handle resolution and every other pre-execute pass.
+`system.columns` needs them for the same reason; `leeway.sections` and
+`leeway.tables` do not.
+
+```sql
+SELECT handle,
+       lane_kind,
+       canonical_type,
+       formatReadableSize(data_compressed_bytes) AS stored,
+       encoding_hints
+FROM leeway.`columns`
+WHERE database = 'boxer' AND table = 'facts' AND lane_kind = 'value'
+ORDER BY data_compressed_bytes DESC
+```
+
+`handle` is the same short form the editor accepts in backticks, so a row of
+this result is something you can paste into a query.
+
+`leeway.sections` groups the same rows by section, which is where the shape of
+the encoding shows: one value column, and the support lanes that carry its
+memberships.
+
+```sql
+SELECT section,
+       n_value_columns,
+       n_columns - n_value_columns AS support,
+       formatReadableSize(data_compressed_bytes) AS stored
+FROM leeway.sections
+WHERE database = 'boxer' AND table = 'facts'
+ORDER BY data_compressed_bytes DESC
+```
+
+One thing these views deliberately do **not** answer: whether a table really is
+leeway. `name_shape` counts what the *names* support — `mixed` means some
+columns decoded and some did not, which is what a leeway table with a
+hand-added or `MATERIALIZED` column looks like, and is not a fault. The
+restoring classifier is `boxer.tables_leeway` (ADR-0170).
+
+```sql
+SELECT database, name AS table, name_shape, n_foreign_columns, n_columns
+FROM leeway.tables
+WHERE name_shape != 'foreign'
+ORDER BY n_columns DESC
+```
+
+## What the encoding hints are worth
+
+Encoding aspects are declared per column and ride in the name; what they cost
+is in `system.columns`. Joining the two is one `GROUP BY` — the question the
+aspect vocabulary was made queryable for.
+
+Read the rows as overlapping, not as a partition: a column declares several
+hints and is counted under each, so the byte columns do not sum to the table.
+What the comparison supports is one hint against another, on the corpus a
+server happens to hold.
+
+```sql
+SELECT arrayJoin(encoding_hints) AS hint,
+       count()                   AS n_columns,
+       sum(data_uncompressed_bytes) AS raw,
+       sum(data_compressed_bytes)   AS stored,
+       round(stored / nullIf(raw, 0), 3) AS ratio
+FROM leeway.`columns`
+WHERE layout != 'foreign' AND data_uncompressed_bytes > 0
+GROUP BY hint
+ORDER BY raw DESC
+```
+
+Swap `encoding_hints` for `value_semantics` or `use_aspects` to ask the same
+question of the other two vocabularies. The `LW_ASPECT_HAS_*` predicates take
+the physical name, which this view carries as `name`, so they compose with it
+directly — this is a governance sweep over column names alone:
+
+```sql
+SELECT database, table, handle, canonical_type, value_semantics, use_aspects
+FROM leeway.`columns`
+WHERE LW_ASPECT_HAS_SEM(name, 'secret')
+   OR LW_ASPECT_HAS_SEM(name, 'pseudonymized')
+   OR LW_ASPECT_HAS_USE(name, 'privacy')
+ORDER BY database, table, position
+```
+
+## Where the bytes went in a leeway table (Icicle / Treemap)
+
+The hierarchy contract from the disk snippets below, over the schema instead of
+a filesystem: database → table → section → lane kind → column, sized by stored
+bytes. It answers the question people actually ask about the columnar encoding
+— how much of this table is values and how much is the membership machinery —
+by making the two different-sized.
+
+`color` is the compression ratio, and the declared `color_min`/`color_max` pin
+the ramp to 0–1 rather than to the range this result happens to span, so a
+badly-compressing column reads as badly compressing and not merely as the worst
+one present. Focus the **Icicle** tab and Run; the **Treemap** tab reads the
+same result.
+
+```sql
+SELECT [database, table, section, lane_kind, leeway_column] AS stack,
+       sum(data_compressed_bytes) AS value,
+       'bytes'                    AS unit,
+       sum(data_compressed_bytes) / nullIf(sum(data_uncompressed_bytes), 0) AS color,
+       0.0     AS color_min,
+       1.0     AS color_max,
+       'ratio' AS color_unit
+FROM leeway.`columns`
+WHERE layout != 'foreign' AND data_compressed_bytes > 0
+GROUP BY database, table, section, lane_kind, leeway_column
+ORDER BY value DESC
+```
+
+Drop `lane_kind` from the `stack` to read it as plain columns per section, or
+add a `WHERE database = …` to spend the whole picture on one database.
+
+## Tables that share a schema (Network / Graphview)
+
+Two leeway tables built from the same schema carry the same sections, so
+sections shared between a pair is a usable affinity measure — and one the
+**Graphview** tab draws well, because a schema family is a *clique* and a force
+layout puts cliques in a clump. Switch **auras by group** on and each database
+blobs separately. The **Network** tab reads the same two CTEs.
+
+This is affinity by name shape, not the pairwise verdict: `equal` / `subset` /
+`overlap` come from the restoring classifier, in
+`boxer.tables_leeway_compatibility` (ADR-0170). What this draws is the cheap
+live approximation of the same picture.
+
+```sql
+WITH
+  ts AS (
+    SELECT database, table, groupUniqArray(section) AS secs
+    FROM leeway.sections
+    GROUP BY database, table
+  ),
+  vertices AS (
+    SELECT concat(database, '.', table) AS id,
+           table                        AS label,
+           database                     AS `group`,
+           length(secs)                 AS weight
+    FROM ts
+  ),
+  edges AS (
+    SELECT concat(a.database, '.', a.table)              AS source,
+           concat(b.database, '.', b.table)              AS target,
+           toString(length(arrayIntersect(a.secs, b.secs))) AS label,
+           length(arrayIntersect(a.secs, b.secs))        AS weight
+    FROM ts AS a
+    CROSS JOIN ts AS b
+    WHERE (a.database, a.table) < (b.database, b.table)
+      AND length(arrayIntersect(a.secs, b.secs)) > 1
+  )
+SELECT * FROM edges ORDER BY weight DESC
+```
+
+The tuple comparison is what keeps each pair once — a cross join gives both
+orders and the self-pair, and an undirected graph wants neither. Raise the `> 1`
+threshold on a server with many tables: every leeway table has the backbone
+sections, so a low threshold connects everything to everything and the layout
+has nothing left to say.
+
 ## Timeline contract
 
 Map the `timeRange` section onto the canonical slot columns the Timeline tab
@@ -860,7 +1036,7 @@ hub they all reach — that shared node is what makes this a graph rather than a
 row of separate stars. Edit the `num IN (…)` list to point it at a different
 slice of the corpus.
 
-The **Graphview** tab reads the same two CTEs (ADR-0225) and needs no edit to
+The **Graphview** tab reads the same two CTEs (ADR-0227) and needs no edit to
 the query: where Network ranks the graph, Graphview lays it out live — a force
 simulation you can drag nodes around in, pin by dropping, and zoom. Switch **auras by group** on and
 the `group` column above draws each side as a translucent blob — worth it when

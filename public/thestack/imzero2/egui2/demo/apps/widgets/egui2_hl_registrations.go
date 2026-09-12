@@ -160,6 +160,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "graphview-pull", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — soft pins",
+		Stage:       [2]float32{760, 640},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindUX,
+		Description: "The soft pin of ADR-0224 §SD16: every node is pulled toward the row its depth names, on one axis only, and left to the force layout on the other. The levels hold while the siblings settle themselves — the force-DAG posture, which the static hierarchical walk cannot give — and because it is a spring rather than a pin, a dragged node swims back to its row instead of snapping. The strength reads on CenterGravity's scale, that knob being the same term over every node at one point. Toggles turn the pull off, for the same graph as a plain force layout, and swap the level axis.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newGraphviewPullState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoGraphviewPull(ids, state.(*graphviewPullState))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "graphview-explore", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — exploration",
 		Stage:       [2]float32{1024, 900},
 		Flags:       registry.DemoFlagNeedsLargeArea,
@@ -198,6 +211,19 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			demoPortolan(ids, state.(*portolanDemoState))
+		},
+	})
+	registry.Register(registry.Demo{
+		Name: "graphonmap", Category: "Maps & geo", Title: icons.IconGlobe + " graph on a map (hosted canvas)",
+		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindUX,
+		Description: "The hosted-canvas seam of ADR-0228: one canvas, owned by the portolan map and painted and picked by graphview. The map keeps its drag, wheel, box zoom and keyboard; the graph claims the pointer only where it lands on a node, and the map is told before it handles the same frame's input, so it does not pan under a node drag. Nodes are pinned to coordinates and reprojected every frame, which is the recipe that stays exact at every zoom. Nodes with no coordinates at all are declared unpinned and laid out by the force step among the pinned ones, then anchored in geography so they ride the map. The basemap comes from BOXER_MAP_TILE_URL, OpenStreetMap by default; toggles swap it for the offline Natural Earth outlines of portolan/landoverlay, which need no tile server.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newGraphOnMapState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoGraphOnMap(ids, state.(*graphOnMapState))
 		},
 	})
 	registry.Register(registry.Demo{

@@ -369,7 +369,7 @@ func classifyColumns(names []string) (infos []columnInfo, meta tableMeta, single
 			if pErr != nil {
 				continue
 			}
-			ci.section = plainSectionName(pit)
+			ci.section = ddl.PlainSectionName(pit)
 			if ci.section == "" {
 				continue // unmapped item type
 			}
@@ -378,26 +378,6 @@ func classifyColumns(names []string) (infos []columnInfo, meta tableMeta, single
 		infos = append(infos, ci)
 	}
 	return infos, meta, singles, true
-}
-
-// plainSectionName maps a plain/backbone item type to its user-facing section
-// name (the six TableDescDto plain groups). Empty for PlainItemTypeNone.
-func plainSectionName(pit common.PlainItemTypeE) string {
-	switch pit {
-	case common.PlainItemTypeEntityId:
-		return "id"
-	case common.PlainItemTypeEntityTimestamp:
-		return "timestamp"
-	case common.PlainItemTypeEntityRouting:
-		return "routing"
-	case common.PlainItemTypeEntityLifecycle:
-		return "lifecycle"
-	case common.PlainItemTypeTransaction:
-		return "transaction"
-	case common.PlainItemTypeOpaque:
-		return "opaque"
-	}
-	return ""
 }
 
 // splitHandle splits `section:column` on its single ':'. isHandle is false

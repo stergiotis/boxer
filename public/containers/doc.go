@@ -13,6 +13,9 @@
 // None of the types is safe for concurrent use; callers serialise
 // externally.
 //
+// See EXPLANATION.md for why [BinarySearchGrowingKV] searches a plain
+// sorted array, and what an Eytzinger layout would cost here.
+//
 // Subpackage co operates on co-indexed parallel slices and panics on
 // length mismatches; subpackage ragged zips length-mismatched inputs by
 // stopping at the shorter side.

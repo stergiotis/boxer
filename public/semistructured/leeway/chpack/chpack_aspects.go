@@ -91,6 +91,9 @@ func aspectFunctions() (fns []Function) {
 	decodeGuard := fmt.Sprintf(
 		"toUInt8(position('%s', c) - 2 + 0 * throwIf(position('%s', c) < 2 OR c = 'z', 'LW_ASPECT_DECODE: char outside the v0 aspect range'))",
 		aspectcodec.Alphabet, aspectcodec.Alphabet)
+	decodable := fmt.Sprintf(
+		"seg = '' OR seg = '0' OR arrayAll(c -> position('%s', c) >= 2 AND c != 'z', splitByString('', seg))",
+		aspectcodec.Alphabet)
 	fns = []Function{
 		{
 			Name:   "LW_ASPECT_SEG_ENC",
@@ -109,6 +112,12 @@ func aspectFunctions() (fns []Function) {
 			Params: sqlvocab.Exprs("name"),
 			Body:   aspectSegBody(aspectTaggedSemPart, aspectPlainSemPart),
 			Doc:    "value-semantics segment of a physical column name; '' for foreign or aspect-free names",
+		},
+		{
+			Name:   "LW_ASPECT_DECODABLE",
+			Params: sqlvocab.Exprs("seg"),
+			Body:   decodable,
+			Doc:    "whether LW_ASPECT_DECODE accepts the segment; total where DECODE throws, so a scan over names of unknown provenance can sanitize its input",
 		},
 		{
 			Name:   "LW_ASPECT_DECODE",

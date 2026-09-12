@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/chviews"
 )
 
 // Conn is the ClickHouse access Install and Reconcile need. chclient.Client
@@ -28,27 +29,52 @@ type Conn interface {
 // not look like surface state.
 const featureProbeName = "leewaySurfaceFeatureProbe"
 
-// Install reconciles the whole surface onto the server (ADR-0171 §SD2).
-// Idempotent: every statement is CREATE OR REPLACE. Steps, each failing
-// loudly rather than degrading silently:
+// Install reconciles the whole surface onto the server (ADR-0171 §SD2,
+// ADR-0226 §SD4), with the views in their default database. Idempotent: every
+// statement is CREATE OR REPLACE. Steps, each failing loudly rather than
+// degrading silently:
 //
 //  1. feature probe — lambda-parameter SQL UDFs (the floor was verified on
 //     ClickHouse 26.7; older servers are untested),
 //  2. collision check — no declared name may resolve to a non-UDF server
 //     function (e.g. a builtin arriving with a server upgrade),
-//  3. CREATE OR REPLACE the three families in dependency order,
+//  3. CREATE OR REPLACE the three function families in dependency order,
 //  4. verify LW_SURFACE_VERSION() reports this build's Version,
-//  5. drop the names this repository has retired (RetiredNames).
+//  5. drop the names this repository has retired (RetiredNames),
+//  6. CREATE OR REPLACE the views, which expand the families just installed.
 //
-// Step 5 runs last, and only once the new roster has verified: until then
-// the server's existing functions are the only working ones, and dropping
-// them ahead of a failed install would take a working server down. It is
-// also the one step that may fail without failing Install — see dropRetired.
+// Step 5 runs only once the new roster has verified: until then the server's
+// existing functions are the only working ones, and dropping them ahead of a
+// failed install would take a working server down. It is also the one step
+// that may fail without failing Install — see dropRetired.
 //
-// Installing all three families together is what makes the marker mean what
-// the package doc says it means. A caller that wants one family provisions
-// it from that family's own SQL and does not get a marker.
+// Step 6 is last because ClickHouse expands a SQL UDF INTO a view's stored
+// query at CREATE time rather than resolving it at read time (measured on
+// 26.7). A view is therefore a snapshot of the function bodies, and
+// re-creating it is the only thing that refreshes it — which also means the
+// views cannot be created before step 3, and that an install which stopped
+// after step 5 would leave views answering from the previous revision.
+// ViewStamp is how that state is detectable rather than silent.
+//
+// Step 6 can fail on an endpoint whose role cannot create the database. The
+// functions are installed by then and the server is better off than it was;
+// the error names the step, and a caller that cannot grant the database
+// points InstallInto at one the role owns.
+//
+// Installing all the families together is what makes the marker mean what the
+// package doc says it means. A caller that wants one family provisions it
+// from that family's own SQL and does not get a marker.
 func Install(ctx context.Context, conn Conn) (err error) {
+	return InstallInto(ctx, conn, "")
+}
+
+// InstallInto is Install with the views' target database named. The empty
+// value means chviews.DefaultDatabase.
+func InstallInto(ctx context.Context, conn Conn, target chviews.TargetDatabase) (err error) {
+	err = target.Validate()
+	if err != nil {
+		return
+	}
 	err = probeLambdaSupport(ctx, conn)
 	if err != nil {
 		return
@@ -75,6 +101,14 @@ func Install(ctx context.Context, conn Conn) (err error) {
 		return
 	}
 	dropRetired(ctx, conn)
+	for _, stmt := range ViewStatements(target) {
+		e := conn.Exec(ctx, stmt)
+		if e != nil {
+			err = eb.Build().Str("statement", firstLine(stmt)).Str("database", target.Name()).
+				Errorf("install views (the function families are installed): %w", e)
+			return
+		}
+	}
 	return
 }
 
@@ -124,6 +158,22 @@ type Report struct {
 	// marker existed reports -1 while being perfectly functional — read
 	// PreSurfaceVersionFunctionName to tell that case from an empty server.
 	ServerVersion int
+	// MissingViews are declared views the server does not carry, qualified
+	// with their target database and sorted. A server whose role cannot
+	// create that database reports all of them, which is the one shape this
+	// field exists to make visible.
+	MissingViews []string
+	// StaleViews are declared views the server DOES carry, built against a
+	// different surface revision — their stamp is not ViewStamp's. Sorted,
+	// qualified.
+	//
+	// Reported apart from Missing for the same reason Retired is reported
+	// apart from Undeclared: the two need different readings. A missing view
+	// announces itself the moment anyone selects from it; a stale one
+	// answers, and answers from a vocabulary that has moved. It is the only
+	// failure in this report that returns data rather than an error, which
+	// is why it counts toward the verdict.
+	StaleViews []string
 	// MarkerUnreadable is true when the marker IS installed but its value
 	// could not be read as a revision — a hand-edited body, or a transport
 	// returning something other than the bare integer.
@@ -147,6 +197,7 @@ type Report struct {
 // directly.
 func (inst Report) InSync() (ok bool) {
 	ok = len(inst.Retired) == 0 && len(inst.Missing) == 0 &&
+		len(inst.MissingViews) == 0 && len(inst.StaleViews) == 0 &&
 		inst.ServerVersion == Version && !inst.MarkerUnreadable
 	return
 }
@@ -171,7 +222,23 @@ func (inst Report) PreSurface() (ok bool) {
 // reconcile endpoints automatically at startup. Reporting is always safe;
 // deleting someone else's function on a timer is not.
 func Reconcile(ctx context.Context, conn Conn, mode ReconcileModeE) (rep Report, err error) {
+	return ReconcileInto(ctx, conn, "", mode)
+}
+
+// ReconcileInto is Reconcile with the views' target database named. The empty
+// value means chviews.DefaultDatabase.
+//
+// Views are reported missing, never dropped, and no undeclared-view field
+// exists: the `LW_` namespace is owned, so a stray function in it is evidence
+// of something, while the target database may be shared and a view somebody
+// else created there is not this surface's business.
+func ReconcileInto(ctx context.Context, conn Conn, target chviews.TargetDatabase, mode ReconcileModeE) (rep Report, err error) {
 	rep.ServerVersion = -1
+
+	err = target.Validate()
+	if err != nil {
+		return
+	}
 
 	installed, err := serverFunctions(ctx, conn)
 	if err != nil {
@@ -201,6 +268,11 @@ func Reconcile(ctx context.Context, conn Conn, mode ReconcileModeE) (rep Report,
 	slices.Sort(rep.Undeclared)
 	slices.Sort(rep.Retired)
 	slices.Sort(rep.Missing)
+
+	rep.MissingViews, rep.StaleViews, err = viewDrift(ctx, conn, target)
+	if err != nil {
+		return
+	}
 
 	if _, ok := installed[VersionFunctionName]; ok {
 		got, qErr := queryTrimmed(ctx, conn, "SELECT "+VersionFunctionName+"()")
@@ -251,6 +323,52 @@ func serverFunctions(ctx context.Context, conn Conn) (names map[string]struct{},
 	for f := range strings.FieldsSeq(out) {
 		names[f] = struct{}{}
 	}
+	return
+}
+
+// viewDrift reports which declared views the server lacks, and which it
+// carries from a different surface revision.
+//
+// The stamp comparison happens server-side, so what comes back is one
+// whitespace-free token per view and no comment text has to be parsed out of
+// a result. The listing asks for the declared names rather than enumerating
+// the database, so a target shared with somebody else's views answers the
+// question in three rows.
+func viewDrift(ctx context.Context, conn Conn, target chviews.TargetDatabase) (missing []string, stale []string, err error) {
+	names := chviews.AllViewNames()
+	quoted := make([]string, 0, len(names))
+	for _, n := range names {
+		quoted = append(quoted, "'"+n+"'")
+	}
+	sql := "SELECT concat(name, ':', toString(comment = " + ViewStamp().Literal() + ")) FROM system.tables WHERE database = '" +
+		target.Name() + "' AND name IN (" + strings.Join(quoted, ", ") + ") ORDER BY name"
+	out, qErr := queryTrimmed(ctx, conn, sql)
+	if qErr != nil {
+		err = eh.Errorf("list server views: %w", qErr)
+		return
+	}
+	current := make(map[string]bool, len(names))
+	for f := range strings.FieldsSeq(out) {
+		name, flag, ok := strings.Cut(f, ":")
+		if !ok {
+			continue
+		}
+		current[name] = flag == "1"
+	}
+	missing = make([]string, 0, len(names))
+	stale = make([]string, 0, len(names))
+	for _, n := range names {
+		fresh, present := current[n]
+		if !present {
+			missing = append(missing, target.Qualified(n))
+			continue
+		}
+		if !fresh {
+			stale = append(stale, target.Qualified(n))
+		}
+	}
+	slices.Sort(missing)
+	slices.Sort(stale)
 	return
 }
 

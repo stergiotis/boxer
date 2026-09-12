@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"pgregory.net/rapid"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -174,34 +173,6 @@ func TestRandomPlacementIsAFunctionOfTheId(t *testing.T) {
 	}
 }
 
-func TestCameraFitCentresTheBox(t *testing.T) {
-	var cam camera
-	cam.fit(100, 100, 300, 200, 800, 400, 0.1)
-	sx, sy := cam.toScreen(200, 150)
-	require.InDelta(t, 400, sx, 1e-3)
-	require.InDelta(t, 200, sy, 1e-3)
-	// The tighter axis decides the zoom: 200 wide into 640, 100 tall into 320.
-	require.InDelta(t, 3.2, cam.zoom, 1e-5)
-}
-
-func TestCameraZoomAroundKeepsTheAnchorFixed(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		cam := camera{
-			zoom: rapid.Float32Range(0.05, 20).Draw(t, "zoom"),
-			panX: rapid.Float32Range(-1000, 1000).Draw(t, "panX"),
-			panY: rapid.Float32Range(-1000, 1000).Draw(t, "panY"),
-		}
-		ax := rapid.Float32Range(0, 800).Draw(t, "ax")
-		ay := rapid.Float32Range(0, 600).Draw(t, "ay")
-		wx, wy := cam.toWorld(ax, ay)
-		cam.zoomAround(rapid.Float32Range(0.5, 2).Draw(t, "factor"), ax, ay)
-		sx, sy := cam.toScreen(wx, wy)
-		tol := float64(1e-2 * max(1, math.Abs(float64(ax))+math.Abs(float64(cam.panX))))
-		require.InDelta(t, float64(ax), float64(sx), tol)
-		require.InDelta(t, float64(ay), float64(sy), tol)
-	})
-}
-
 func TestDistSegmentAndBezier(t *testing.T) {
 	require.InDelta(t, 3, distSegment(0, 0, 10, 0, 5, 3), 1e-6)
 	require.InDelta(t, 5, distSegment(0, 0, 10, 0, 15, 0), 1e-6, "past the end measures to the endpoint")
@@ -310,15 +281,6 @@ func TestBatchesFollowDeclarationOrder(t *testing.T) {
 		require.Equal(t, float32(9), v.batches[2].radius)
 		require.Equal(t, v.style.NodeFill.Literal(), v.batches[3].col.Literal(), "an unset colour takes the style's fill")
 	}
-}
-
-func TestCameraFitClampsToTheZoomRange(t *testing.T) {
-	var cam camera
-	cam.fit(0, 0, 10, 10, 4000, 4000, 0.1) // a single node in a huge canvas
-	require.Equal(t, float32(maxZoom), cam.zoom, "clamped, not reset to 1")
-	sx, sy := cam.toScreen(5, 5)
-	require.InDelta(t, 2000, sx, 1e-3)
-	require.InDelta(t, 2000, sy, 1e-3)
 }
 
 func TestEventKindNames(t *testing.T) {

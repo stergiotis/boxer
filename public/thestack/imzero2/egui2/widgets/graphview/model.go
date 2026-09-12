@@ -173,7 +173,48 @@ type NodeSpec struct {
 	// nodes sharing an id are drawn over one blob when Options.Auras is
 	// enabled. The slice is read during Render and not retained.
 	Auras []string
+	// Opacity fades the node's own paint — fill, stroke, donut and label —
+	// to this fraction of its declared alpha (ADR-0224 §SD14). Zero, the
+	// unset value, and anything at or above 1 paint it as declared. The
+	// widget's own state paint, the pin, selection and hover rings, keeps
+	// full strength so a dimmed node still shows what it is doing. There is
+	// no spelling for fully transparent: a node that should not be seen is
+	// one the declaration leaves out.
+	Opacity float32
+	// NoPick lets the pointer pass through the node: no hover, no click, no
+	// drag, and no rectangle selection (ADR-0224 §SD14). It says nothing
+	// about how the node looks, and SelectNode still selects it — the caller
+	// asked. Set it with Opacity for the dimmed-and-inert pair, or alone for
+	// a node that is scaffolding rather than content.
+	NoPick bool
+	// Pull draws the node toward a place in the force layout without holding
+	// it there (ADR-0224 §SD16); the zero value pulls nothing.
+	Pull Pull
 }
+
+// Pull is a soft pin: a target the force step draws a node toward, with a
+// strength per axis (ADR-0224 §SD16). It is the same term ForceParams'
+// CenterGravity applies to every node at the canvas centre, made per node and
+// per axis — `displacement += (target − position) · strength`, before the
+// step's Dt, Damping and MaxStep — so a strength reads on the same scale as
+// CenterGravity's 0.3 rather than on a new one.
+//
+// A zero strength on an axis pulls nothing there, which is the point of
+// having two: pulling on X alone holds a node near a column and leaves the
+// layout free to settle it vertically, which is how a level is expressed
+// without making it a placement. The pull is a spring, not a pin: the node
+// rests where the pull balances the other forces, near the target rather than
+// on it. For exactly at, declare NodeSpec.Pinned, which the force step skips
+// altogether — a pinned or dragged node ignores its Pull.
+//
+// The static layouts ignore it, as they ignore every other force parameter.
+type Pull struct {
+	X, Y                 float32 // target, in world units
+	StrengthX, StrengthY float32 // 0 pulls nothing on that axis
+}
+
+// IsZero reports whether the pull draws nothing.
+func (inst Pull) IsZero() bool { return inst.StrengthX == 0 && inst.StrengthY == 0 }
 
 // EdgeSpec is one directed edge of the frame's declaration. Parallel edges
 // between the same ordered pair are drawn as curves of increasing bulge; a
@@ -194,6 +235,13 @@ type EdgeSpec struct {
 	Width    float32 // screen pixels
 	Length   float32
 	Strength float32
+	// Opacity fades the edge's line, arrow head and label to this fraction
+	// of their declared alpha, under the same rule as NodeSpec.Opacity: zero
+	// is unset, and a selected or hovered edge paints at full strength
+	// (ADR-0224 §SD14).
+	Opacity float32
+	// NoPick lets the pointer pass through the edge (ADR-0224 §SD14).
+	NoPick bool
 }
 
 // ForceParams tunes the Fruchterman–Reingold step. Zero fields take the

@@ -1355,8 +1355,47 @@ The slippy map is a Go widget on the painter lane (ADR-0204: Leaflet's map core 
 | The view | `m.View() *portolan.View` | Leaflet's Map view: `SetView/SetZoom/PanTo/PanBy/FitBounds/FitWorld`, animated `SetViewAnimated/SetZoomAnimated/SetZoomAroundAnimated/PanToAnimated/PanByAnimated/FlyTo/FlyToBounds/FitBoundsAnimated`, `Stop`, `Center/Zoom/Bounds/Size`, `LatLngToContainerPoint/ContainerPointToLatLng`, `SetMaxBounds/SetMinZoom/SetMaxZoom` |
 | Readback | `m.Hover() (LatLng, bool)`, `m.Clicked() (LatLng, bool)`, `m.ViewHash()`, `m.Events()`, `m.Loading()`, `m.Stats()`, `m.Health()`, `m.BytesShipped()`, `m.Reships()` | all from the map itself, one frame behind the host like every canvas register |
 | Tiles | `m.SetSource(src)`, `m.Source()`, `m.SetNoTiles(on)` | a source switch restarts the pyramid at the current view and re-uploads under the same ids |
-| Overlays (inside the callback) | `p.Marker`, `p.Label`, `p.Polyline`, `p.Polygon`, `p.ConvexPolygon`, `p.Image`; `p.ToCanvas/ToLatLng/View` | canvas-pixel painting through `c.Paint*`; polylines and polygons are projected, clipped to the padded viewport and simplified per frame (Leaflet's vector pipeline), so a geometry far larger than the view costs its visible part |
+| Overlays (inside the callback) | `p.Marker`, `p.Label`, `p.Polyline`, `p.Polygon`, `p.ConvexPolygon`, `p.Image`; `p.ToCanvas/ToLatLng/View`, `p.Camera/CameraAt` | canvas-pixel painting through `c.Paint*`. A polyline, and a **convex** polygon, are projected, clipped to the padded viewport and simplified per frame (Leaflet's vector pipeline), so a geometry far larger than the view costs its visible part. A **concave** polygon is neither clipped nor simplified, only culled: the fill ear-clips the ring and an ear clipper needs a simple polygon, where Leaflet's canvas fill rule did not — clipping invents edges along the window and simplifying can make a ring cross itself, and both draw triangles the ring does not contain (ADR-0204's 2026-09-12 update). Prefer `ConvexPolygon` when the ring really is convex |
+| A camera for a widget drawn over the map | `m.View().CameraAt(refZoom, origin)`, `p.CameraAt(...)`; `Camera(refZoom)` is the origin-less form | the map's transform as a `camera.Camera`, for hosted rendering (ADR-0228 §SD5); prefer the local-origin form |
+| Offline geography (no tile server) | [`portolan/landoverlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/landoverlay/): `Layer.Draw(p, atlas, Style)`, `Layer.Drawn()`, `DefaultStyle()` | fills land and strokes country borders from the `worldmap` atlas (vendored Natural Earth 110m admin-0) through the projector, so a `NoTiles` map still shows geography; culled per country against the viewport, buffers reused per frame. Coarse by design — a basemap stand-in at country-and-continent zooms, not a replacement for tiles past about zoom 8. The map does not depend on it |
 | H3 cells and regions | [`portolan/h3overlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/h3overlay/): `Layer.Cells`, `Layer.Region`, `ViewportCells`, `ResolutionForZoom` | boundaries and the dissolve come from the `h3` wasm bridge (`public/science/geo/h3`); the caller owns the `h3.Handle` — the map does not depend on the runtime |
+
+### 16.1a Debugging a painter-lane drawing: let the symptom's shape choose
+
+Four rounds were spent on a flicker in the map's country fills by reasoning
+from the code, and the thing that located it was the shape of the symptom.
+Reach for these before reading the pipeline again.
+
+- **Split the drawing and see which half is wrong.** Fill versus stroke,
+  overlay on versus off, one layer at a time. A concave polygon's *fill* and
+  its *outline* travel different paths — the fill clips the polygon
+  (Sutherland–Hodgman), the stroke clips segment by segment (Cohen–Sutherland)
+  — so "only the fills are wrong" names the path on its own. Build the toggle
+  first, not fourth; it is usually a `Style` field and a checkbox.
+- **Let the extent discriminate.** Garbage bounded by one item's own points
+  cannot cross the widget. If a line spans the view, the geometry spans the
+  view: look for a vertex far from where it belongs, not for a subtly wrong
+  shape.
+- **Measure the pipeline, do not read it.** Mirror the stages in a test over
+  real data and count what comes out — duplicate vertices, self-intersections,
+  extents, how many items survive each stage, and how those counts move with
+  the zoom. A count that collapses above zoom 4 says "low zoom only" without
+  anyone having to guess.
+- **The SVG export serialises the mesh.** A `PaintPolygonFilled(...).Concave()`
+  arrives as one `<polygon>` per ear-clipped triangle, so the triangulation is
+  inspectable: parse the file and look for slivers, for triangles spanning the
+  canvas, for vertices outside the world. It also captures **one frame**, so an
+  artefact that changes every frame is easily absent from the one you take —
+  a clean export is not an all-clear.
+- **Suspect your own last change first.** A "fix" applied on reasoning rather
+  than evidence is the likeliest cause of the next symptom; two here were.
+
+The underlying trap, worth knowing before it bites: **this lane's concave fill
+ear-clips the ring, and an ear clipper is defined only for a simple polygon**,
+where the canvas fill rule Leaflet and the browser use asks nothing of it. Any
+step that can make a simple ring non-simple — clipping it, simplifying it,
+rounding it to whole pixels — is safe in a browser port's source and unsafe
+here (ADR-0204's 2026-09-12 update).
 
 ### 16.2 Input is read the canvas way — and the map takes keyboard focus itself
 
@@ -1639,6 +1678,73 @@ What to know before using it:
   edges apart in hover, click and selection — `EdgeRef{From, To, Id}` is
   the key — and `Length` / `Strength` scale one edge's ideal length and
   pull in the force layout (1 when unset; the static layouts ignore them).
+- **Picking** (ADR-0228 §SD6). `layeredgraph/view` hit-tests in Go over its
+  one canvas, against the shapes it drew, rather than stamping a sense region
+  per node: cheaper at any node count, and the priority rule lives in one
+  place instead of an emission order. A consequence for hosts with pan on: a
+  drag pans wherever it starts, including on a node. Any widget that picks
+  from registers this way can later be hosted in a canvas it does not own.
+- **Hosted rendering** (ADR-0228 §SD1–§SD4; the recipe end to end is
+  [doc/howto/graph-on-a-map.md](../../howto/graph-on-a-map.md)). To draw a graph inside a canvas
+  another widget owns — a graph on a portolan map — call the pair instead of
+  `Render`: `claim := gv.HostedInput(graphview.HostCanvas{Canvas, Area, W, H,
+  Camera})` *before* the host handles input, then `gv.HostedPaint(nodes,
+  edges)` inside the host's paint slot. `m.Handles()` gives portolan's two
+  handles and `m.SetPointerVeto(claim.Pointer)` makes it stand down for the
+  frame: a gesture starting on a node is the guest's, everything else the
+  host's. The guest emits no canvas, no sense region and no background, never
+  moves the camera (`SetCamera` / `FitNow` / `FitNodes` are overruled every
+  frame), and must use `AuraLegendExternal`. Pin nodes to
+  `Projector.ToCanvas` layer points with `Camera{Zoom: 1}` and reproject each
+  frame; that is exact at every zoom. **Use it only when every node is
+  located.** A declaration may mix located and unlocated nodes — pin the ones
+  with coordinates, declare the rest with none and the force step places them
+  among the pinned (ADR-0224 §SD10 gives this for free) — but as soon as a
+  layout runs, take `p.CameraAt(refZoom, origin)` and pin at
+  `v.ProjectAt(ll, refZoom) - origin`, with `origin` the projection of
+  somewhere near the data — raw projected coordinates are tens of thousands
+  of units from the antimeridian, which costs float32 precision at high zoom
+  and starts any node that has no placed neighbour in a box at the world
+  origin. World units are then a fixed geometry whatever the map shows, so
+  the layout settles once; under the identity camera it solves in screen space
+  against a geometry that rescales with the view, and the free nodes are flung
+  about as you zoom. Cost of the fixed world: divide `Radius` by the camera's
+  zoom to keep markers a constant screen size. Call `SetHostCamera` with the
+  *current* camera inside the paint slot — the host's view moved since
+  `HostedInput` — or the graph slides against it under a pan.
+- **Camera** (ADR-0228 §SD5; package `widgets/camera`). The view transform
+  `screen = world*Zoom + Pan` is shared, not graphview's: `ToScreen` /
+  `ToWorld`, `Fit(box, w, h, pad)`, `ZoomAround(factor, ax, ay)`,
+  `Translate`, `Clamp` / `ClampZoom` against `MinZoom` / `MaxZoom` (zero
+  takes 0.01 and 100), `SameView` ignoring the limits. `layeredgraph/view`
+  composes its fit, user zoom and pan through it. A slippy map is a *source*
+  of one, not a consumer: `portolan.View.Camera(refZoom)` and
+  `Projector.Camera(refZoom)` hand back the map's transform so a graph can be
+  drawn over tiles in the map's own pixels — world units are
+  `ProjectAt(ll, refZoom)`. Above about zoom 14 prefer declaring
+  `LatLngToLayerPoint` values with an identity camera: the map camera's pan
+  is the pixel origin, ~35 million at zoom 18, which quantises to ~2 px in
+  float32.
+- **Aura legend** (ADR-0224 §SD15). `Opts.Auras.Legend` is a mode, not a
+  flag: `AuraLegendOff`, `AuraLegendInside` (drawn in the view's canvas at
+  `LegendCorner` with `LegendInset`, clicks taken, `EventKindAuraToggle`
+  reported) or `AuraLegendExternal` (nothing drawn — take the rows from
+  `AuraLegendItems()`, paint them anywhere with the `legend` package, toggle
+  with `HideAura` / `ShowAura`). Rows are built in every mode, so the mode
+  picks the painter, not whether they exist; `Enabled: false` is what
+  reports none. Use External wherever the view does not own the canvas the
+  rows would be clicked in.
+- **Fading and inertness** (ADR-0224 §SD14). `NodeSpec.Opacity` and
+  `EdgeSpec.Opacity` scale that item's own paint — a node's fill, stroke,
+  donut and label, an edge's line, head and label — to a fraction of its
+  declared alpha; zero is *unset*, not invisible, and anything at or above
+  1 paints as declared. The widget's pin, selection and hover paint never
+  fades, so a dimmed item still shows what it is doing. `NoPick` takes an
+  item out of hover, click, drag and the rectangle selection while
+  `SelectNode` / `SelectEdge` still reach it. Set both for the dimmed and
+  inert pair, `NoPick` alone for scaffolding. Nodes at one opacity stay one
+  batched marker. `Bounds()` and `BoundsOf(ids)` give the graph's world box
+  — what `FitNodes` frames, auras and labels excluded.
 - **Resting.** `Opts.Force.PauseOnSettle` stops stepping once the average
   displacement is under `Epsilon` and wakes on a drag, a topology or
   parameter change, a pin or position set, `FastForward` or `ResetLayout`;
@@ -1663,8 +1769,15 @@ What to know before using it:
   stub, focused — so it needs no call back into the navigator; `Pending`
   lists the stubs the walk wants loaded — answer with `AddNodes` /
   `AddEdges`, never a callback. `Apply(ev)` wires the double-click. Set
-  `Opts.Radial.Centers` to `FocusNodes()` for the focus picture. The
-  `scenetest` package beneath graphview is the shared headless harness.
+  `Opts.Radial.Centers` to `FocusNodes()` for the focus picture.
+  `Neighbours`, `Degree`, `Components` and `ShortestPath` answer graph
+  questions over the adjacency the derivation already builds — over the
+  *universe*, so a hidden node is still a neighbour — each with its own
+  scratch, so they are safe inside the `Style` hook and safe to combine
+  with `Opacity`: read `HoveredNode`, ask `Neighbours`, fade the rest, and
+  that is the neighbourhood highlight the widget deliberately does not
+  build in. The `scenetest` package beneath graphview is the shared
+  headless harness.
 - **Headless testing.** `Render` runs without a client under a fffi2
   channel that discards paint commands, and the state manager's `Script*`
   setters (`ScriptResponse`, `ScriptCanvasCursor`, `ScriptCanvasWheel`,
@@ -1682,6 +1795,17 @@ What to know before using it:
 - **Determinism.** Random placement hashes the node id, so a demo captures
   stably; the force step is deterministic too because every row is summed by
   one goroutine in a fixed order.
+- **Soft pins** (ADR-0224 §SD16). `NodeSpec.Pull{X, Y, StrengthX, StrengthY}`
+  draws a node toward a place without holding it: the force step adds
+  `(target − position) · strength` per axis, the same term `CenterGravity`
+  applies to every node at the canvas centre, so strengths read on that
+  knob's scale (0.3-ish). Zero strength on an axis pulls nothing there —
+  pull on X alone to hold a column and let the layout settle Y, which is how
+  a level is expressed without placing the node. It is a spring: the node
+  rests *near* the target, and `Pinned` is what exactly-at means (a pinned or
+  dragged node ignores its Pull). With no pull declared the pass is skipped,
+  so an unpulled layout is bit-identical. A ring target is not this shape —
+  recompute it from `NodePosition` per frame, or use `LayoutRadial`.
 - **Pins.** `NodeSpec.Pinned` with `PinX/PinY` fixes a node in world units
   every frame (ADR-0224 §SD10); the force step leaves it alone and a drag
   moves it for the gesture only — `NodeDragEnd` carries the drop position
@@ -1707,10 +1831,10 @@ What to know before using it:
   change and once the simulation has drifted a fraction of a cell, reused
   otherwise; the cost per node grows with (aura radius / cell)².
 
-The gallery registers five graphview demos from `egui2_hl_graphview_demo.go`
-— ring, force-directed, hierarchical, exploration, styling and weights —
-so the screenshot tour captures each one whole; the ring and force ones
-mirror the `graphs` demo so the two can be compared while both exist.
+The gallery registers six graphview demos from `egui2_hl_graphview_demo.go`
+— ring, force-directed, hierarchical, soft pins, exploration, styling and
+weights — so the screenshot tour captures each one whole; the ring and force
+ones mirror the `graphs` demo so the two can be compared while both exist.
 
 Migrating from the `c.Graph` binding, beyond the type renames: the binding's
 `zoomSpeed` was a fixed step per wheel event, graphview follows the host's

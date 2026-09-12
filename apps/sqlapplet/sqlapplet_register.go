@@ -90,6 +90,18 @@ var bookcodevolFS embed.FS
 //go:embed bookcatalog
 var bookcatalogFS embed.FS
 
+// bookleewayFS embeds the leeway-schema suite
+// (apps/sqlapplet/bookleeway/*.md) — canned lenses over the ADR-0226
+// `leeway.*` views, which decode a physical column name into its section,
+// column, role, lane kind, aspects and groups over system.tables and
+// system.columns: what carries leeway names here, what each section stores,
+// where the bytes went, what the aspect vocabularies sit on, and which tables
+// share a schema. Always current, and it classifies nothing — the verdict
+// stays bookcatalog's.
+//
+//go:embed bookleeway
+var bookleewayFS embed.FS
+
 // bookadrFS embeds the decision-corpus suite (apps/sqlapplet/bookadr/*.md) —
 // canned lenses over the ADR-0122 §SD4 `keelson('adr')` family, which reads
 // this repository's decision records rather than the running process.
@@ -167,6 +179,13 @@ func init() {
 	}
 	if err := RegisterBook("lading", help.MustSub(bookladingFS, "booklading"), []app.TopicT{app.TopicData}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register lading book")
+	}
+	// TopicData, beside catalog: the subject is this ClickHouse instance's own
+	// schema. The two are read together — catalog says whether a table really
+	// is leeway, this says what its names spell out — and neither answers the
+	// other's question (ADR-0226 §SD2).
+	if err := RegisterBook("leeway", help.MustSub(bookleewayFS, "bookleeway"), []app.TopicT{app.TopicData}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register leeway-schema book")
 	}
 }
 

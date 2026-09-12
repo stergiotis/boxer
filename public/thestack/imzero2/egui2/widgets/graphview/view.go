@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	cam "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/legend"
 )
@@ -23,10 +24,13 @@ type View struct {
 	key     string
 	paneKey string
 
-	g     graph
-	fs    forceState
-	cam   camera
-	style Style // Opts.Style with defaults filled, resolved once per Render
+	g   graph
+	fs  forceState
+	cam cam.Camera
+	// hosted is set between HostedInput and the end of HostedPaint: the view
+	// is drawing inside a canvas it does not own (ADR-0228 §SD1).
+	hosted bool
+	style  Style // Opts.Style with defaults filled, resolved once per Render
 
 	hierDone     bool
 	lastHier     HierParams
@@ -122,7 +126,7 @@ func New(ids *c.WidgetIdStack, key string, opts Options) *View {
 		ids:         ids,
 		key:         key,
 		paneKey:     key + "-pane",
-		cam:         camera{zoom: 1},
+		cam:         cam.Camera{Zoom: 1},
 		style:       opts.Style.withDefaults(),
 		hoveredEdge: -1,
 		selNodes:    make(map[uint64]struct{}, 8),
@@ -157,18 +161,35 @@ func (v *View) FitNodes(ids []uint64) {
 
 func (v *View) applyFitNodes(w, h float32) {
 	v.fitIdsWait = false
-	var minX, minY, maxX, maxY float32
-	found := false
-	for _, id := range v.fitIds {
-		s, ok := v.g.slot[id]
-		if !ok {
+	minX, minY, maxX, maxY, ok := v.BoundsOf(v.fitIds)
+	if !ok {
+		return
+	}
+	v.cam.Fit(minX, minY, maxX, maxY, w, h, v.fitPadding())
+	v.fitPending = false
+}
+
+// Bounds returns the world-space box of the last declaration's nodes, each
+// node's radius included, and whether there was one — the extent a caller
+// needs to know what a fit would frame, or to declare only what is on
+// screen. It is the node box alone: auras reach past it by a margin the fit
+// adds separately, and labels are screen-sized, so neither is in it.
+func (v *View) Bounds() (minX, minY, maxX, maxY float32, ok bool) {
+	return v.g.bounds(v.style.NodeRadius)
+}
+
+// BoundsOf is Bounds over the named ids. Unknown ids are skipped; with none
+// known it reports false and zeroes.
+func (v *View) BoundsOf(ids []uint64) (minX, minY, maxX, maxY float32, ok bool) {
+	for _, id := range ids {
+		s, known := v.g.slot[id]
+		if !known {
 			continue
 		}
 		r := v.nodeRadius(int(s))
 		x, y := v.g.x[s], v.g.y[s]
-		if !found {
-			minX, minY, maxX, maxY = x-r, y-r, x+r, y+r
-			found = true
+		if !ok {
+			minX, minY, maxX, maxY, ok = x-r, y-r, x+r, y+r, true
 			continue
 		}
 		minX = min(minX, x-r)
@@ -176,11 +197,7 @@ func (v *View) applyFitNodes(w, h float32) {
 		maxX = max(maxX, x+r)
 		maxY = max(maxY, y+r)
 	}
-	if !found {
-		return
-	}
-	v.cam.fit(minX, minY, maxX, maxY, w, h, v.fitPadding())
-	v.fitPending = false
+	return
 }
 
 // fitPadding is Options.FitPadding with its default.
@@ -413,7 +430,7 @@ func (v *View) NodeCanvasPosition(id uint64) (x, y float32, ok bool) {
 	if !ok {
 		return
 	}
-	x, y = v.cam.toScreen(v.g.x[s], v.g.y[s])
+	x, y = v.cam.ToScreen(v.g.x[s], v.g.y[s])
 	return x, y, true
 }
 
@@ -426,20 +443,20 @@ func (v *View) CanvasScreenOrigin() (x, y float32, ok bool) {
 
 // Camera returns the view transform: canvas = world · zoom + pan.
 func (v *View) Camera() (zoom, panX, panY float32) {
-	return v.cam.zoom, v.cam.panX, v.cam.panY
+	return v.cam.Zoom, v.cam.PanX, v.cam.PanY
 }
 
 // SetCamera sets the view transform and releases a pending fit, so the
 // caller's framing sticks.
 func (v *View) SetCamera(zoom, panX, panY float32) {
-	v.cam.zoom = v.cam.clamp(zoom)
-	v.cam.panX, v.cam.panY = panX, panY
+	v.cam.Zoom = v.cam.Clamp(zoom)
+	v.cam.PanX, v.cam.PanY = panX, panY
 	v.fitPending = false
 }
 
 // CanvasToWorld maps a canvas pixel to world units under the last camera.
 func (v *View) CanvasToWorld(x, y float32) (wx, wy float32) {
-	return v.cam.toWorld(x, y)
+	return v.cam.ToWorld(x, y)
 }
 
 // PinNode holds a node at (x, y) in world units until UnpinNode: a
@@ -509,7 +526,8 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 	hp := v.Opts.Hier.withDefaults()
 	rp := v.Opts.Radial.withDefaults()
 	ap := v.Opts.Auras.withDefaults()
-	v.cam.setLimits(v.Opts.ZoomMin, v.Opts.ZoomMax)
+	v.cam.MinZoom, v.cam.MaxZoom = v.Opts.ZoomMin, v.Opts.ZoomMax
+	v.cam.ClampZoom()
 	camBefore := v.cam
 
 	for range c.IdScope(v.ids.PrepareStr(v.key)) {
@@ -539,7 +557,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		// The aura legend's rows of the previous frame: their regions sit
 		// above the area region, so a row's click is not also a canvas
 		// click, and the toggle lands in this frame's field.
-		if ap.Enabled && ap.Legend && len(v.legendItems) > 0 {
+		if ap.Enabled && ap.Legend == AuraLegendInside && len(v.legendItems) > 0 {
 			if clicked, _ := legend.Read(sm, v.ids, auraLegendPrefix, v.legendItems); clicked >= 0 {
 				id := v.legendItems[clicked].Key
 				v.setAuraHidden(id, !v.AuraHidden(id))
@@ -547,61 +565,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			}
 		}
 
-		created, topoChanged := v.g.reconcile(nodes, edges)
-		if topoChanged {
-			v.pruneSelection()
-		}
-		n := v.g.n()
-		// The table is kept current even with auras off, so AuraIds answers.
-		if v.auraSet.build(nodes, &v.g) {
-			v.auraDirty = true
-		}
-
-		if v.resetPending {
-			v.resetPending = false
-			v.hierDone = false
-			v.radialDone = false
-			v.fs.reset()
-			clear(v.g.held)
-			created = v.g.allSlots()
-			v.drag = dragState{}
-			v.fitRequested = true
-			v.auraDirty = true
-			v.autoPaused = false
-		}
-
-		// Placement of nodes that have none yet.
-		if len(created) > 0 {
-			switch v.Opts.Layout {
-			case LayoutForceDirected, LayoutForceDirectedCG:
-				k := idealEdgeLength(w, h, n, fp.KScale)
-				placeNear(&v.g, created, max(k, 1))
-			case LayoutHierarchical, LayoutRadial:
-				// laid out below with the rest of the graph
-			default:
-				placeRandom(&v.g, created)
-			}
-		}
-		layoutChanged := v.Opts.Layout != v.lastLayout
-		v.lastLayout = v.Opts.Layout
-		if v.Opts.Layout == LayoutHierarchical && (topoChanged || layoutChanged || !v.hierDone || len(created) > 0 || hp != v.lastHier) {
-			layoutHierarchical(&v.g, hp)
-			v.hierDone = true
-			v.lastHier = hp
-			v.auraDirty = true
-		}
-		if v.Opts.Layout == LayoutRadial && (topoChanged || layoutChanged || !v.radialDone || len(created) > 0 || !rp.equal(v.lastRadial)) {
-			layoutRadial(&v.g, rp)
-			v.radialDone = true
-			v.lastRadial = rp.clone()
-			v.auraDirty = true
-		}
-		// Declared pins win over any placement; the drag in flight keeps its
-		// node where the pointer has it (ADR-0224 §SD10).
-		if v.g.applyPins(v.dragSlot()) {
-			v.auraDirty = true
-			v.autoPaused = false
-		}
+		topoChanged, created, n := v.reconcileAndPlace(nodes, edges, w, h, fp, hp, rp)
 
 		// Input, against the previous frame's geometry. A drag that began
 		// this frame fixes its node before the step below can move it.
@@ -610,9 +574,108 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			v.g.fixed[s] = true
 		}
 
-		// Layout.
-		v.stepLayout(w, h, fp, topoChanged || len(created) > 0)
+		v.stepAndPaint(w, h, fp, ap, topoChanged, created, n, true)
+		v.camMoved = !v.cam.SameView(camBefore)
 
+		// Interaction surfaces: the area region owns click and drag, the
+		// canvas owns hover, containment and the wheel; the legend's rows
+		// come after the area so they win its clicks.
+		c.PaintSenseRegion(v.ids.PrepareStr("graphview-area"), 0, 0, w, h).Send()
+		v.emitAuraLegend(ap, w, h, true)
+		cv := c.PaintCanvas(v.ids.PrepareStr("graphview-canvas"), w, h).
+			Background(v.style.Background).
+			Sense(true, true, true)
+		if !v.Opts.NoZoomAndPan {
+			cv = cv.CaptureZoom().CaptureScroll()
+		}
+		cv.Send()
+	}
+}
+
+// reconcileAndPlace applies the declaration and everything that must happen
+// before input is read against it: the reconcile, a pending reset, the
+// placement of new slots, the static layouts and the pins. Shared by Render
+// and by the hosted render of ADR-0228 §SD1, which differ in where the input
+// comes from rather than in what a frame does to the graph.
+func (v *View) reconcileAndPlace(nodes []NodeSpec, edges []EdgeSpec, w, h float32, fp ForceParams, hp HierParams, rp RadialParams) (topoChanged bool, created []int32, n int) {
+	created, topoChanged = v.g.reconcile(nodes, edges)
+	if topoChanged {
+		v.pruneSelection()
+	}
+	n = v.g.n()
+	// The table is kept current even with auras off, so AuraIds answers.
+	if v.auraSet.build(nodes, &v.g) {
+		v.auraDirty = true
+	}
+
+	if v.resetPending {
+		v.resetPending = false
+		v.hierDone = false
+		v.radialDone = false
+		v.fs.reset()
+		clear(v.g.held)
+		created = v.g.allSlots()
+		v.drag = dragState{}
+		v.fitRequested = true
+		v.auraDirty = true
+		v.autoPaused = false
+	}
+
+	// Declared pins are snapped before placement as well as after: a node
+	// created this frame with a pin is an anchor its new neighbours can be
+	// seated beside, and the authoritative pass below still has the last
+	// word over the static layouts.
+	if len(created) > 0 {
+		g := &v.g
+		for i := range g.ids {
+			if g.pinDecl[i] {
+				g.x[i], g.y[i] = g.pinX[i], g.pinY[i]
+			}
+		}
+	}
+
+	// Placement of nodes that have none yet.
+	if len(created) > 0 {
+		switch v.Opts.Layout {
+		case LayoutForceDirected, LayoutForceDirectedCG:
+			k := idealEdgeLength(w, h, n, fp.KScale)
+			placeNear(&v.g, created, max(k, 1))
+		case LayoutHierarchical, LayoutRadial:
+			// laid out below with the rest of the graph
+		default:
+			placeRandom(&v.g, created)
+		}
+	}
+	layoutChanged := v.Opts.Layout != v.lastLayout
+	v.lastLayout = v.Opts.Layout
+	if v.Opts.Layout == LayoutHierarchical && (topoChanged || layoutChanged || !v.hierDone || len(created) > 0 || hp != v.lastHier) {
+		layoutHierarchical(&v.g, hp)
+		v.hierDone = true
+		v.lastHier = hp
+		v.auraDirty = true
+	}
+	if v.Opts.Layout == LayoutRadial && (topoChanged || layoutChanged || !v.radialDone || len(created) > 0 || !rp.equal(v.lastRadial)) {
+		layoutRadial(&v.g, rp)
+		v.radialDone = true
+		v.lastRadial = rp.clone()
+		v.auraDirty = true
+	}
+	// Declared pins win over any placement; the drag in flight keeps its
+	// node where the pointer has it (ADR-0224 §SD10).
+	if v.g.applyPins(v.dragSlot()) {
+		v.auraDirty = true
+		v.autoPaused = false
+	}
+	return
+}
+
+// stepAndPaint advances the layout, moves the camera if it may, recomputes
+// the auras and paints. fit is false for a hosted render, where the camera is
+// the host's and this widget does not move it (ADR-0228 §SD3).
+func (v *View) stepAndPaint(w, h float32, fp ForceParams, ap AuraParams, topoChanged bool, created []int32, n int, fit bool) {
+	v.stepLayout(w, h, fp, topoChanged || len(created) > 0)
+
+	if fit {
 		// Camera: the one-shot fit latch (ADR-0224 §SD4).
 		refit := v.fitRequested || (!v.everHadNodes && n > 0)
 		v.fitRequested = false
@@ -634,37 +697,27 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		if doFit {
 			pad := v.fitPadding()
 			if minX, minY, maxX, maxY, ok := v.g.bounds(v.style.NodeRadius); ok {
-				v.cam.fit(minX, minY, maxX, maxY, w, h, pad)
+				v.cam.Fit(minX, minY, maxX, maxY, w, h, pad)
 				// Auras reach past the nodes by a screen-space amount; widen
 				// the box by it, in world units at the zoom just fitted, and
 				// fit again so the blobs stay in frame.
 				if m := v.auraFitMargin(ap); m > 0 {
-					v.cam.fit(minX-m, minY-m, maxX+m, maxY+m, w, h, pad)
+					v.cam.Fit(minX-m, minY-m, maxX+m, maxY+m, w, h, pad)
 				}
 			}
 		}
-
 		if v.fitIdsWait {
 			v.applyFitNodes(w, h)
 		}
-		v.camMoved = !v.cam.same(camBefore)
-
-		v.updateAuras(ap, w, h)
-		v.paint(w, h)
-
-		// Interaction surfaces: the area region owns click and drag, the
-		// canvas owns hover, containment and the wheel; the legend's rows
-		// come after the area so they win its clicks.
-		c.PaintSenseRegion(v.ids.PrepareStr("graphview-area"), 0, 0, w, h).Send()
-		v.emitAuraLegend(ap)
-		cv := c.PaintCanvas(v.ids.PrepareStr("graphview-canvas"), w, h).
-			Background(v.style.Background).
-			Sense(true, true, true)
-		if !v.Opts.NoZoomAndPan {
-			cv = cv.CaptureZoom().CaptureScroll()
-		}
-		cv.Send()
+	} else if n > 0 {
+		// A hosted view never fits, but it must not arrive at its first
+		// unhosted frame believing it has never had nodes.
+		v.everHadNodes = true
+		v.fitRequested, v.fitPending, v.fitIdsWait = false, false, false
 	}
+
+	v.updateAuras(ap, w, h)
+	v.paint(w, h)
 }
 
 // stepLayout advances a force layout by this frame's steps: the fast-forward
@@ -733,6 +786,9 @@ func (v *View) pruneSelection() {
 func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 	areaFlags c.ResponseFlagsE, wheel c.CanvasWheelValue, mods c.ModifiersValue) {
 	o := &v.Opts
+	// A hosted view never moves its own camera: the host owns the view
+	// gestures and supplies the transform (ADR-0228 §SD3).
+	noView := o.NoZoomAndPan || v.hosted
 	// The pick under the pointer serves hover, click and drag alike.
 	hitNode, hitEdge := int32(-1), int32(-1)
 	if posOk && (inside || v.drag.active) {
@@ -826,7 +882,7 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 				v.events = append(v.events, edgeEvent(EventKindEdgeSecondaryClick, ref))
 			}
 		default:
-			wx, wy := v.cam.toWorld(px, py)
+			wx, wy := v.cam.ToWorld(px, py)
 			bg := func(kind EventKindE) {
 				if o.BackgroundClicking {
 					v.events = append(v.events, Event{Kind: kind, X: wx, Y: wy})
@@ -869,16 +925,16 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 		switch {
 		case v.drag.isNode:
 			if s, ok := v.g.slot[v.drag.nodeId]; ok {
-				v.g.x[s] += dx / v.cam.zoom
-				v.g.y[s] += dy / v.cam.zoom
+				v.g.x[s] += dx / v.cam.Zoom
+				v.g.y[s] += dy / v.cam.Zoom
 				v.g.posVer++
 				v.auraDirty = true
 			}
 		case v.drag.isRect:
 			// The rectangle is (x0, y0)–(lastX, lastY); nothing else moves.
-		case !o.NoZoomAndPan:
-			v.cam.panX += dx
-			v.cam.panY += dy
+		case !noView:
+			v.cam.PanX += dx
+			v.cam.PanY += dy
 		}
 	}
 	if v.drag.active && (areaFlags.HasDragStopped() || !areaFlags.HasIsPointerButtonDown()) {
@@ -897,18 +953,18 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 	}
 
 	// Wheel: anchored zoom and scroll-pan, both scoped to this canvas.
-	if !o.NoZoomAndPan {
+	if !noView {
 		if z := wheel.Zoom; z > 0 && z != 1 {
 			if o.ZoomSpeed > 0 && o.ZoomSpeed != 1 {
 				z = float32(math.Pow(float64(z), float64(o.ZoomSpeed)))
 			}
 			ax, ay := zoomAnchor(wheel, px, py, posOk, w, h)
-			v.cam.zoomAround(z, ax, ay)
+			v.cam.ZoomAround(z, ax, ay)
 			v.fitPending = false
 		}
 		if wheel.ScrollX != 0 || wheel.ScrollY != 0 {
-			v.cam.panX += wheel.ScrollX
-			v.cam.panY += wheel.ScrollY
+			v.cam.PanX += wheel.ScrollX
+			v.cam.PanY += wheel.ScrollY
 			v.fitPending = false
 		}
 	}
@@ -1003,7 +1059,10 @@ func (v *View) rectSelect(x0, y0, x1, y1 float32, add bool) {
 	minX, maxX := min(x0, x1), max(x0, x1)
 	minY, maxY := min(y0, y1), max(y0, y1)
 	inside := func(s int32) bool {
-		sx, sy := v.cam.toScreen(v.g.x[s], v.g.y[s])
+		if v.g.noPick[s] {
+			return false
+		}
+		sx, sy := v.cam.ToScreen(v.g.x[s], v.g.y[s])
 		return sx >= minX && sx <= maxX && sy >= minY && sy <= maxY
 	}
 	if !add {
@@ -1047,7 +1106,7 @@ const pickEdgeTolPx = 4
 func (v *View) pickEdge(px, py float32) int32 {
 	best, bestD := int32(-1), float32(math.MaxFloat32)
 	for i := range v.g.eFrom {
-		if !v.edgeBoxMayContain(int32(i), px, py) {
+		if v.g.eNoPick[i] || !v.edgeBoxMayContain(int32(i), px, py) {
 			continue
 		}
 		geo := v.edgeGeometry(i)
@@ -1072,7 +1131,7 @@ func (v *View) pickEdge(px, py float32) int32 {
 // nodeOuterPx is the node's radius on screen including its donut ring, the
 // extent the pick, the highlight and the label respect.
 func (v *View) nodeOuterPx(slot int) float32 {
-	r := v.nodeRadius(slot) * v.cam.zoom
+	r := v.nodeRadius(slot) * v.cam.Zoom
 	if r >= donutMinInnerPx && !v.g.donut[slot].IsEmpty() {
 		r += v.style.DonutWidth
 	}
@@ -1087,13 +1146,18 @@ func (v *View) nodeRadius(slot int) float32 {
 	return v.style.NodeRadius
 }
 
-// nodeFill is the node's fill: its own literal colour, else the style's. A
-// retained colour has no literal to batch on and takes the style's too.
+// nodeFill is the node's fill: its own literal colour, else the style's,
+// faded by its declared opacity. A retained colour has no literal to batch
+// on and takes the style's too.
 func (v *View) nodeFill(slot int) color.Color {
-	if col := v.g.col[slot]; col.Kind() == color.ColorKindLiteral && col.Literal() != 0 {
-		return col
+	col := v.style.NodeFill
+	if c0 := v.g.col[slot]; c0.Kind() == color.ColorKindLiteral && c0.Literal() != 0 {
+		col = c0
 	}
-	return v.style.NodeFill
+	// Fading here rather than at the paint keeps a faded node one batched
+	// marker: the batch key is the resolved colour, so nodes at one opacity
+	// batch together (ADR-0224 §SD14).
+	return fade(col, v.g.opacity[slot])
 }
 
 func isNaN32(f float32) bool { return f != f }
@@ -1101,13 +1165,13 @@ func isNaN32(f float32) bool { return f != f }
 // auraLegendPrefix keys the aura legend's row regions under the view's ids.
 const auraLegendPrefix = "graphview-aura-legend-"
 
-// auraLegendInset is the legend box's offset from the canvas's top-left.
-const auraLegendInset = 8
+// defaultAuraLegendInset is AuraParams.LegendInset when left zero.
+const defaultAuraLegendInset = 8
 
 // auraCacheKey is everything besides node positions that the aura rings
 // depend on; a change recomputes them.
 type auraCacheKey struct {
-	cam       camera
+	cam       cam.Camera
 	w, h      float32
 	params    auraParamsKey
 	hash      uint64
@@ -1130,7 +1194,7 @@ func (v *View) auraFitMargin(ap AuraParams) float32 {
 	if maxR <= 0 {
 		return 0
 	}
-	ext := kernelFor(maxR*v.cam.zoom, ap).extent(ap.DrawLimit) / v.cam.zoom
+	ext := kernelFor(maxR*v.cam.Zoom, ap).extent(ap.DrawLimit) / v.cam.Zoom
 	return max(ext-maxR, 0)
 }
 
@@ -1151,7 +1215,7 @@ func (v *View) updateAuras(ap AuraParams, w, h float32) {
 		return
 	}
 	key := auraCacheKey{cam: v.cam, w: w, h: h, params: ap.key(), hash: v.auraSet.hash, hiddenVer: v.hiddenVer}
-	drifted := v.auraDrift*v.cam.zoom >= auraDriftCells*ap.CellSize
+	drifted := v.auraDrift*v.cam.Zoom >= auraDriftCells*ap.CellSize
 	if !v.auraDirty && !drifted && key == v.auraKey {
 		return
 	}
@@ -1195,11 +1259,12 @@ func (v *View) paintAuras() {
 }
 
 // emitAuraLegend rebuilds the legend rows — every aura not opted out, in id
-// order, hidden ones dimmed — and, when the legend is on, paints them and
-// stamps their regions. The rows are kept for next frame's Read.
-func (v *View) emitAuraLegend(ap AuraParams) {
+// order, hidden ones dimmed — in every mode, since AuraLegendItems publishes
+// them whoever paints them (ADR-0224 §SD15). Only AuraLegendInside paints and
+// stamps regions here; the rows are kept for next frame's Read.
+func (v *View) emitAuraLegend(ap AuraParams, w, h float32, allowInside bool) {
 	v.legendItems = v.legendItems[:0]
-	if !ap.Enabled || !ap.Legend {
+	if !ap.Enabled {
 		return
 	}
 	for k, id := range v.auraSet.ids {
@@ -1215,9 +1280,40 @@ func (v *View) emitAuraLegend(ap AuraParams) {
 			Key: id, Label: label, Color: opaque(ap.fill(k, id)), Hidden: v.AuraHidden(id),
 		})
 	}
-	if len(v.legendItems) == 0 {
+	if !allowInside || ap.Legend != AuraLegendInside || len(v.legendItems) == 0 {
 		return
 	}
-	legend.Paint(v.legendItems, auraLegendInset, auraLegendInset, ap.LegendStyle)
-	legend.EmitSense(v.ids, auraLegendPrefix, v.legendItems, auraLegendInset, auraLegendInset, ap.LegendStyle)
+	x, y := legendOrigin(v.legendItems, ap, w, h)
+	legend.Paint(v.legendItems, x, y, ap.LegendStyle)
+	legend.EmitSense(v.ids, auraLegendPrefix, v.legendItems, x, y, ap.LegendStyle)
 }
+
+// legendOrigin is the legend box's top-left for the chosen corner, measured
+// so a right- or bottom-anchored box sits inside the canvas.
+func legendOrigin(items []legend.Item, ap AuraParams, w, h float32) (x, y float32) {
+	inset := ap.LegendInset
+	if inset <= 0 {
+		inset = defaultAuraLegendInset
+	}
+	bw, bh := legend.Measure(items, ap.LegendStyle)
+	x, y = inset, inset
+	switch ap.LegendCorner {
+	case CornerTopRight:
+		x = w - bw - inset
+	case CornerBottomLeft:
+		y = h - bh - inset
+	case CornerBottomRight:
+		x, y = w-bw-inset, h-bh-inset
+	}
+	// A canvas narrower or shorter than the box would push it off the near
+	// edge; the near edge wins, so the rows stay reachable.
+	return max(x, inset), max(y, inset)
+}
+
+// AuraLegendItems returns the legend rows of the last render — every aura not
+// opted out of the legend, in id order, each with its cycle or declared
+// colour and whether it is hidden. They are built in every AuraLegendModeE,
+// so AuraLegendExternal is a caller painting these where it likes with the
+// legend package and toggling with HideAura and ShowAura (ADR-0224 §SD15).
+// The slice is the view's and valid until the next Render.
+func (v *View) AuraLegendItems() []legend.Item { return v.legendItems }

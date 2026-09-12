@@ -391,7 +391,7 @@ var builtinTabDefs = []builtinTabDef{
 	// row-index `selection` stays local to the driver, per ADR-0129 §SD4.
 	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelectionKey}},
-	// Graphview is the LIVE reading of the Network's contract (ADR-0225): the
+	// Graphview is the LIVE reading of the Network's contract (ADR-0227): the
 	// same `edges`/`vertices` CTEs on the same lanes, laid out by a force
 	// simulation or a tree walk instead of by Graphviz. Two tabs rather than
 	// one tab with a mode, because the ranked reading and the clustered one

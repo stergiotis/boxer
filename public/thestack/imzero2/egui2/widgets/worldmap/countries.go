@@ -65,6 +65,50 @@ func (inst *Country) Label() string {
 	return inst.Name
 }
 
+// RingCount is how many outline rings the country has: every ring of every
+// member polygon, in the atlas's order.
+func (inst *Country) RingCount() int { return len(inst.geo) }
+
+// Ring appends ring i's vertices to lats and lngs in degrees and returns the
+// grown slices, so a caller drawing every frame reuses its buffers instead of
+// allocating per ring. hole reports an interior ring — a filled overlay must
+// not fill one (exactly one ring in the vendored asset is a hole: South
+// Africa's Lesotho enclave). An index outside the country returns the inputs
+// untouched.
+//
+// These are the source coordinates the atlas keeps because its projection is
+// switchable, which is what makes them useful to something projecting for
+// itself — a slippy map drawing an offline basemap, say.
+func (inst *Country) Ring(i int, lats, lngs []float64) (outLats, outLngs []float64, hole bool) {
+	if i < 0 || i >= len(inst.geo) {
+		return lats, lngs, false
+	}
+	for _, p := range inst.geo[i] {
+		lats = append(lats, p.Lat)
+		lngs = append(lngs, p.Lon)
+	}
+	return lats, lngs, inst.ringHole[i]
+}
+
+// GeoBounds is the country's extent in degrees, for a caller culling against
+// a viewport before it projects anything. ok is false for a country with no
+// geometry. The box is the naive one: a country crossing the antimeridian
+// (Russia, Fiji) spans nearly the whole longitude range rather than wrapping,
+// which over-includes and never under-includes.
+func (inst *Country) GeoBounds() (minLat, minLng, maxLat, maxLng float64, ok bool) {
+	for _, ring := range inst.geo {
+		for _, p := range ring {
+			if !ok {
+				minLat, maxLat, minLng, maxLng, ok = p.Lat, p.Lat, p.Lon, p.Lon, true
+				continue
+			}
+			minLat, maxLat = min(minLat, p.Lat), max(maxLat, p.Lat)
+			minLng, maxLng = min(minLng, p.Lon), max(maxLng, p.Lon)
+		}
+	}
+	return
+}
+
 // Atlas is the parsed country set plus the resolver's key table. Geometry is
 // held unprojected; Projected derives (and caches) the outlines under one
 // projection.

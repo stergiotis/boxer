@@ -450,7 +450,7 @@ type PlayApp struct {
 
 	// netSource is the pair of lanes the graph contract is fed from — the
 	// `edges` and `vertices` CTEs of the user's query — SHARED by the two graph
-	// panels below (ADR-0225 §SD2), so with both tabs open the CTEs execute
+	// panels below (ADR-0227 §SD2), so with both tabs open the CTEs execute
 	// once. Closed in Close, forgotten on Run.
 	netSource *networkSource
 
@@ -458,7 +458,7 @@ type PlayApp struct {
 	// ranked reading of that contract, laid out by Graphviz.
 	networkDriver *NetworkDriver
 
-	// graphviewDriver is the ADR-0225 panel (Graphview dock tab): the LIVE
+	// graphviewDriver is the ADR-0227 panel (Graphview dock tab): the LIVE
 	// reading of the same contract — a force or hierarchical layout owned in
 	// Go, over widgets/graphview (ADR-0224).
 	graphviewDriver *GraphviewDriver
@@ -1776,7 +1776,7 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	// bindings themselves survive the Run (they revive by node name, 6c).
 	inst.forgetBoundLanes()
 	// The graph panels' `edges`/`vertices` CTEs are nodes of this query on their
-	// own lanes (ADR-0129), shared by both tabs (ADR-0225 §SD2); forget them on
+	// own lanes (ADR-0129), shared by both tabs (ADR-0227 §SD2); forget them on
 	// Run so a corrected endpoint or changed data is picked up, rather than
 	// memo-hitting a prior error (whose key is the SQL, which a re-Run leaves
 	// unchanged).

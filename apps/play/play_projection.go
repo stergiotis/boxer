@@ -772,7 +772,7 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 	o.Force.PauseOnSettle = true
 	o.Force.Paused = inst.paused || inst.frozen
 	o.HideEdges = !inst.showEdges
-	o.Auras = graphview.AuraParams{Enabled: inst.auras && res.clusters.NumClusters > 0, Legend: true}
+	o.Auras = graphview.AuraParams{Enabled: inst.auras && res.clusters.NumClusters > 0, Legend: graphview.AuraLegendInside}
 
 	inst.view.Render(inst.nodes, inst.edges, w, h)
 

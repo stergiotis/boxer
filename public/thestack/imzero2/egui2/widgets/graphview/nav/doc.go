@@ -19,4 +19,10 @@
 // expand further lands on Pending, the caller answers with data, and the
 // next Declare walks again. Styling is the caller's through Options.Style,
 // run per visible node with its relevance and depth (§SD3).
+//
+// Neighbours, Degree, Components and ShortestPath answer graph questions
+// over the adjacency the derivation already builds, so a consumer need not
+// keep a second one beside the universe it fed in. They read the universe
+// rather than the picture — a hidden node is still a neighbour — and each
+// carries its own scratch, so one may run inside the Style hook.
 package nav

@@ -147,6 +147,27 @@ own text:
 
 Also recorded (append-only, non-reversing): the view gained a per-node `NodeText` hook so a graph mixing light/dark node fills can pair label ink per node; `Layout` now reports the `FontSize` it sized boxes to and the view paints node labels at it — single-sourcing the box-metric and render font sizes so they cannot drift. `apps/capinspector`'s broker schematic is the **second consumer** after `fsmview`.
 
+## Updates
+
+### 2026-09-12 — the pick moved into Go
+
+Hover and click were reported by one `PaintSenseRegion` per node, emitted
+before the canvas so the regions won the hit test. They are now a Go-side
+pick over the painted shapes, against the pointer the canvas's own registers
+carry ([ADR-0228](./0228-hosted-canvas-rendering-and-graph-widget-sharing.md)
+§SD6). The reasons are the ones ADR-0224 §SD3 gave for graphview and they
+apply here at a smaller scale: one `ui.interact` per node per frame, and a
+hit-test priority that lives in an emission order rather than in one place.
+The pick tests what `drawNode` drew — a circle by its radius, an ellipse by
+both, a box by its rect — and the last match wins, a later node being painted
+over an earlier one.
+
+The visible change is that a host with pan enabled now pans from a drag
+starting anywhere, including on a node, where the node's region used to
+swallow it; this widget does not move nodes, so that drag meant nothing. The
+other reason for the change is that it is what a widget needs before it can be
+drawn inside a canvas another widget owns, which is ADR-0228's subject.
+
 ## References
 
 - Existing widget: [`egui2_definition_d_graphs.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_graphs.go); painter: [`egui2_definition_d_painter.go`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_painter.go); DOT emitter: [`pushoutgraph/dot/dot.go`](../../public/algebraicarch/pushout/pushoutgraph/dot/dot.go).

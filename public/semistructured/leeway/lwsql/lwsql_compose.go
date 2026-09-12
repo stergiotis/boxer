@@ -26,8 +26,9 @@ import (
 // never a hand-assembled string.
 
 // DefaultSeparator is the physical-name component separator every in-tree
-// leeway table uses; TableSegments defaults to it.
-const DefaultSeparator = ":"
+// leeway table uses; TableSegments defaults to it. It is the naming
+// convention's constant, not a second spelling of the same character.
+const DefaultSeparator = ddl.DefaultSeparator
 
 // Spec-token vocabulary prefixes (ADR-0181 §SD2). Aspect names collide across
 // the three closed vocabularies (`json*`/`cbor*` exist twice), so every token

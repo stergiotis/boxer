@@ -13,7 +13,7 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// ADR-0225 §Verification: the parts of the Graphview panel that are pure — the
+// ADR-0227 §Verification: the parts of the Graphview panel that are pure — the
 // id intern and its collision probe (§SD7), the group→aura mapping (§SD4), the
 // magnitude→geometry mapping and the donut column (§SD5), the label budget
 // (§SD10) and the declaration cache's key (§SD8). The gestures and the painted

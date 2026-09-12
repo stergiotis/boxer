@@ -180,7 +180,7 @@ func TestSceneForceLayoutSettlesAndPauses(t *testing.T) {
 func TestSceneAurasAndLegendRender(t *testing.T) {
 	s := newScene(t, "auras", Options{
 		Layout: LayoutRandom,
-		Auras:  AuraParams{Enabled: true, Legend: true},
+		Auras:  AuraParams{Enabled: true, Legend: AuraLegendInside},
 	}, 400, 300)
 	nodes := []NodeSpec{{Id: 1, Auras: []string{"a"}}, {Id: 2, Auras: []string{"a", "b"}}, {Id: 3, Auras: []string{"b"}}}
 	s.frame(nodes, nil)

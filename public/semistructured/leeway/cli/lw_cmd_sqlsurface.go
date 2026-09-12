@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/chviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 	"github.com/urfave/cli/v2"
 )
@@ -79,13 +80,29 @@ func sqlSurfaceClient(cCtx *cli.Context) (client *chclient.Client, url string, c
 	return
 }
 
+// sqlSurfaceViewsFlag names the database the schema-decode views are created
+// in (ADR-0226 §SD5). Its default is the name a reader will type; an endpoint
+// whose role cannot create that database points this at one it owns.
+func sqlSurfaceViewsFlag() cli.Flag {
+	return &cli.StringFlag{
+		Name:  "views-database",
+		Value: chviews.DefaultDatabase,
+		Usage: "database for the schema-decode views",
+	}
+}
+
+func sqlSurfaceViewTarget(cCtx *cli.Context) (target chviews.TargetDatabase) {
+	return chviews.TargetDatabase(cCtx.String("views-database"))
+}
+
 func newCliCommandSqlSurfacePrint() *cli.Command {
 	return &cli.Command{
 		Name:  "print",
-		Usage: "print the CREATE FUNCTION statements for the whole surface, version marker included — for provisioning by hand or offline",
+		Usage: "print the whole surface — the CREATE FUNCTION statements, the version marker and the schema-decode views — for provisioning by hand or offline",
+		Flags: []cli.Flag{sqlSurfaceViewsFlag()},
 		Action: func(cCtx *cli.Context) error {
 			var b strings.Builder
-			for _, stmt := range lwsqlsurface.Statements() {
+			for _, stmt := range lwsqlsurface.AllStatements(sqlSurfaceViewTarget(cCtx)) {
 				b.WriteString(stmt)
 				b.WriteString(";\n")
 			}
@@ -98,17 +115,20 @@ func newCliCommandSqlSurfacePrint() *cli.Command {
 func newCliCommandSqlSurfaceInstall() *cli.Command {
 	return &cli.Command{
 		Name:  "install",
-		Usage: "install all three families and the version marker, verify it, and drop this repository's withdrawn spellings",
-		Flags: sqlSurfaceConnFlags(),
+		Usage: "install the function families, the version marker and the schema-decode views, verify the marker, and drop this repository's withdrawn spellings",
+		Flags: append(sqlSurfaceConnFlags(), sqlSurfaceViewsFlag()),
 		Action: func(cCtx *cli.Context) error {
 			client, url, ctx, cancel := sqlSurfaceClient(cCtx)
 			defer cancel()
-			err := lwsqlsurface.Install(ctx, client)
+			target := sqlSurfaceViewTarget(cCtx)
+			err := lwsqlsurface.InstallInto(ctx, client, target)
 			if err != nil {
 				return err
 			}
 			_, err = os.Stdout.WriteString("installed surface v" + strconv.Itoa(lwsqlsurface.Version) +
-				" — " + strconv.Itoa(len(lwsqlsurface.DeclaredFunctions())) + " function(s) on " + url + "\n")
+				" — " + strconv.Itoa(len(lwsqlsurface.DeclaredFunctions())) + " function(s) and " +
+				strconv.Itoa(len(lwsqlsurface.DeclaredViewNames(target))) + " view(s) in " + target.Name() +
+				" on " + url + "\n")
 			return err
 		},
 	}
@@ -118,12 +138,12 @@ func newCliCommandSqlSurfaceStatus() *cli.Command {
 	return &cli.Command{
 		Name:  "status",
 		Usage: "report what the server carries against what this build declares; changes nothing",
-		Flags: append(sqlSurfaceConnFlags(),
+		Flags: append(sqlSurfaceConnFlags(), sqlSurfaceViewsFlag(),
 			&cli.BoolFlag{Name: "fail-on-drift", Usage: "exit non-zero unless the server matches this build exactly"}),
 		Action: func(cCtx *cli.Context) error {
 			client, url, ctx, cancel := sqlSurfaceClient(cCtx)
 			defer cancel()
-			rep, err := lwsqlsurface.Reconcile(ctx, client, lwsqlsurface.ReconcileReport)
+			rep, err := lwsqlsurface.ReconcileInto(ctx, client, sqlSurfaceViewTarget(cCtx), lwsqlsurface.ReconcileReport)
 			if err != nil {
 				return err
 			}
@@ -229,6 +249,20 @@ func formatSurfaceStatus(rep lwsqlsurface.Report, url string) (out string) {
 			b.WriteString("          " + n + "\n")
 		}
 	}
+	if len(rep.MissingViews) > 0 {
+		b.WriteString("views:    " + strconv.Itoa(len(rep.MissingViews)) +
+			" declared view(s) absent — run `install`; a role that cannot create the database needs --views-database\n")
+		for _, n := range rep.MissingViews {
+			b.WriteString("          " + n + "\n")
+		}
+	}
+	if len(rep.StaleViews) > 0 {
+		b.WriteString("stale:    " + strconv.Itoa(len(rep.StaleViews)) +
+			" view(s) built against another revision — they answer, from the vocabulary they were created with; `install` re-creates them\n")
+		for _, n := range rep.StaleViews {
+			b.WriteString("          " + n + "\n")
+		}
+	}
 	if len(rep.Retired) > 0 {
 		b.WriteString("retired:  " + strconv.Itoa(len(rep.Retired)) +
 			" withdrawn spelling(s) still installed — `install` drops them\n")
@@ -248,7 +282,8 @@ func formatSurfaceStatus(rep lwsqlsurface.Report, url string) (out string) {
 		}
 	}
 	if rep.InSync() {
-		b.WriteString("in sync:  " + strconv.Itoa(len(lwsqlsurface.DeclaredFunctions())) + " function(s) declared, all present\n")
+		b.WriteString("in sync:  " + strconv.Itoa(len(lwsqlsurface.DeclaredFunctions())) +
+			" function(s) and " + strconv.Itoa(len(chviews.AllViewNames())) + " view(s) declared, all present\n")
 	}
 	out = b.String()
 	return

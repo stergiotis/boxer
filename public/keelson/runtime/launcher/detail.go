@@ -82,6 +82,12 @@ func (inst *Inst) renderDetailHead(ids *c.WidgetIdStack, m app.Manifest) {
 // renderDetailActions draws the verbs (§SD5's "a row is a noun with several
 // verbs"). Open is the default one the row already performs; the others exist
 // because they were previously unreachable from any launcher surface.
+//
+// Open draws itself selected while the row list holds focus, because that is
+// exactly when Space and Enter perform it (keys.go). It is a readout of an
+// armed action rather than a state of the app — "Raise" already says whether
+// a window exists — and it is what makes the keyboard contract visible to
+// someone who arrived by clicking a row rather than by reading an ADR.
 func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 	_, isOpen := inst.openAppSet()[m.Id]
 	label := icons.PhArrowSquareOut + " Open"
@@ -90,6 +96,7 @@ func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 	}
 	for range c.Horizontal().KeepIter() {
 		if c.Button(ids.PrepareStr("detail-open"), c.Atoms().Text(label).Keep()).
+			Selected(inst.listHasFocus()).
 			SendResp().HasPrimaryClicked() {
 			inst.open(m.Id)
 		}

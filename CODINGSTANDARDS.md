@@ -60,7 +60,52 @@ Adding a *member* to a registry is not a decision; changing what a registry mean
 When a change spans both tiers, it is a Tier 1 change: the core surface sets the bar.
 
 ## Go Version
-Target the most recent stable go version available.
+Target the most recent stable go version available. The `go` directive in
+[`go.mod`](./go.mod) is the floor; raising it raises every build site at once,
+since [`scripts/dev/go-build-env.sh`](./scripts/dev/go-build-env.sh) pins
+`GOTOOLCHAIN` to it.
+
+### Write the modern language
+
+Nothing here is pinned to an older Go: Windows is not a target, trunk-based
+development leaves no branch to stay source-compatible with, and the tree
+already leans on generics, `iter`, `slices` / `maps` and the typed atomics. The
+argument from consistency therefore runs *towards* the new spelling, not back to
+the old one. A feature is in scope the moment the targeted toolchain has it,
+with no transition period in which the pre-generics or pre-`iter` form is still
+an alternative. The rows below are what that rule currently yields, not its
+boundary: a newer form the toolchain offers belongs here whether or not a row
+names it.
+
+| Reach for | Rather than |
+| --- | --- |
+| Type parameters with a named constraint | `interface{}` + type switch, or one copy per concrete type |
+| `any` | `interface{}` |
+| `iter.Seq` / `iter.Seq2`, range-over-func ([Iteration](#iteration)) | Materialised slices, exposed slice fields, callback-taking `ForEach` |
+| `slices` / `maps` / `cmp` | Hand-rolled sort, search, contains, clone, reverse |
+| `min`, `max`, `clear` builtins | Local `minInt` helpers; a loop deleting every map key |
+| `for i := range n` | `for i := 0; i < n; i++` |
+| Per-iteration loop variables | `x := x` shadow copies |
+| `errors.Join`, `errors.Is` / `As` | Manual `[]error` accumulation; `err.Error()` comparison |
+| `sync.OnceFunc` / `OnceValue` | `sync.Once` + package-level result var |
+| Typed `atomic.Int64` / `atomic.Pointer[T]` ([Concurrency](#concurrency-patterns)) | `atomic.LoadInt64(&v)` |
+| The `/vN` package where stdlib ships one (`math/rand/v2`, `encoding/json/v2`) | The superseded original |
+| `testing/synctest` | Sleep-calibrated timing |
+
+*   **Adopting is welcome work, not churn.** A release that deletes a helper, a
+    shadow copy or a hand-rolled loop is worth the small commit. Fix an older
+    form as you touch the file; modernising a whole subsystem has a blast radius
+    and follows [Design Before Code](#design-before-code).
+*   **Generics where the shape is known, reflection where it is not.** Prefer a
+    constraint naming the operations required (`cmp.Ordered`) over `any` plus a
+    runtime assertion; decoding into an unknown type stays reflective.
+*   **Two limits, neither a reason to reach backwards.** Type aliases stay
+    prohibited, generic ones included (see [Nominal Typing](#nominal-typing));
+    and a type parameter with one instantiation and no second caller is still
+    better written concretely.
+*   **No compatibility shims.** No build-tag-gated fallbacks, hand-written
+    copies of stdlib functions, no vendored polyfills. A shape a dependency's
+    interface forces is fixed, not chosen, and is exempt.
 
 ## Packages to Use
 * Use `lukechampine.com/blake3` as cryptographic hash function.

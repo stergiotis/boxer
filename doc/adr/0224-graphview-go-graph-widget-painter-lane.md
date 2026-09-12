@@ -430,6 +430,175 @@ added for its first consumer: `Options.HideEdges` paints and picks no
 edge while the declaration keeps them for the layout, because a
 neighbour graph's edges are the layout's input rather than a reading.
 
+### 2026-09-12 — the fade-and-ignore pair, and the bounds readers
+
+Every reading in the gap-analysis series named one missing primitive, under
+five names: NetChart's `focusAutoFadeout`, vis-network's per-node `opacity`,
+Obsidian's dim-the-rest hover, force-graph's faded background nodes, and
+Ogma's `setDisabled`. The last settles its shape, because a disabled node
+there is faded *and* undetectable — so what is adopted is the pair, not
+opacity alone. A faded item that still swallows the pointer is a bug rather
+than a feature.
+
+**SD14 — An item may fade and may decline the pointer; the widget's state
+paint does neither.** `NodeSpec.Opacity` and `EdgeSpec.Opacity` scale the
+item's *own* paint — a node's fill, stroke, donut and label, an edge's line,
+head and label — to a fraction of its declared alpha. Zero is the unset
+value and anything at or above 1 paints as declared, so a frame that
+declares no opacity is unchanged to the bit; fully transparent has no
+spelling, since an item that should not be seen is one the declaration
+leaves out. That is the sentinel `EdgeSpec.Length` and `Strength` already
+carry, with the same cost, named here rather than discovered later. The pin,
+selection and hover rings, and an edge's selected or hovered colour, keep
+full strength: they are the widget saying what it is doing, not the caller
+saying what the item is, and a dimmed node one can still hover should still
+show that it is hovered. `NoPick` takes an item out of every pointer path —
+hover, click, drag and the rectangle selection — while `SelectNode` and
+`SelectEdge` keep working, since the caller asked, as the aura setters
+established in §SD12. The two fields are independent: the pair is the common
+case, `NoPick` alone is a node that is scaffolding rather than content, and
+`Opacity` alone is a background item that can still be reached. The fade is
+applied where the fill is resolved rather than at the paint, so nodes at one
+opacity remain one batched marker and the batch key does the separating.
+
+Beside it, the two readers four analyses asked for: `Bounds` returns the
+world box of the declaration's nodes, `BoundsOf` the box over a subset, and
+`FitNodes` is expressed through the latter so the fit and the reader cannot
+drift. Neither carries the auras, whose screen-space reach the fit adds
+separately, nor the labels, which are screen-sized.
+
+What this does **not** add is the hover neighbourhood highlight the same
+readings asked for beside it, and it does not need to: with the adjacency
+`nav` publishes (ADR-0225's update of this date) a caller derives the
+neighbour set and dims the rest itself. What counts as a neighbour — one
+hop, both directions, through a hidden node or not — is the consumer's
+question, and a widget that answered it would be guessing.
+
+### 2026-09-13 — the soft pin
+
+The force-graph reading (see References) named one primitive as the best
+leverage in the series: d3's `forceX` / `forceY`, a per-node target with a
+strength, which it argued would carry four rows that had each been scored
+medium or large on their own.
+
+**SD16 — A node may be pulled toward a place without being held there.**
+`NodeSpec.Pull` is a target and a strength per axis, applied in the force step
+as `displacement += (target − position) · strength` before the step's `Dt`,
+`Damping` and `MaxStep`. That is not a new mechanism: it is exactly the term
+`ForceParams.CenterGravity` already applied to every node at the canvas
+centre, made per node and per axis, so a strength reads on the same scale as
+that knob's 0.3 rather than on a new one. A zero strength on an axis pulls
+nothing there, which is the point of having two — pulling on X alone holds a
+node near a column and leaves the layout to settle it on Y.
+
+It is a spring, not a pin. A node rests where the pull balances the other
+forces, near the target and not on it; `Pinned` remains what "exactly at"
+means, and since the step skips a fixed node, a pinned or dragged node ignores
+its `Pull` without either feature knowing about the other. With no pull
+declared anywhere the pass is skipped whole, so an existing caller's layout is
+unchanged to the bit — the same posture §SD13 took for edge weights.
+
+**What it does and does not close**, because the reading's claim was wider
+than what landed:
+
+- *Carried.* A soft level or column — the force-DAG posture, where the level
+  axis is held and siblings settle on the other — given a depth the caller
+  supplies, which is `nav.Depth` for a navigated graph and the caller's own
+  data otherwise. And `CenterGravity` is now the special case of a general
+  term rather than a one-off.
+- *Approximated.* A ring target (`forceRadial`) is a different shape — a
+  distance from a centre, not a point — and a caller reaches it by recomputing
+  the nearest point on the ring from `NodePosition` each frame, which is one
+  frame late. `LayoutRadial` remains the exact, static answer.
+- *Not carried.* A constant bias — vis-network's `wind` — is not a spring: its
+  force does not fall off as the node approaches, because it has nowhere to
+  approach. It would be its own term, and a small one. Nor is an exact
+  per-axis pin: holding X exactly while Y stays free needs the force step to
+  fix one axis, and `fixed` is per node. Both are named here so the next
+  reader does not expect them.
+
+### 2026-09-12 — placement leaves declared pins alone
+
+§SD10 says a declared pin wins over any placement, and it did — but only
+after the fact. On the frame a whole graph arrives every slot is new, so the
+initial placement ran over the pinned nodes too, scattering them into the
+random spawn box; `applyPins` then snapped them back, and nothing looked
+wrong. What was wrong is what happened in between: an unpinned node seated
+"beside a placed neighbour" was seated beside a neighbour that had just been
+randomised, so it started nowhere near where its pinned neighbours would end
+up, and a force layout crawled it back at `MaxStep` a frame.
+
+Three corrections, all inside placement. A node whose declaration carries a
+pin is not placed at all, by either the random or the near-a-neighbour pass,
+since the caller gave it a position. A node that is *not* pinned may be
+seated beside a neighbour created in the same frame when that neighbour is
+pinned — a pin is a known position whether or not the slot is new, and on a
+first frame the pins are the only anchors there are. And declared pins are
+snapped before placement as well as after, so those anchors hold real
+coordinates by the time anything is seated beside them.
+
+It surfaced under ADR-0228's hosted rendering, where world units are
+projected map coordinates and the world origin is thousands of units from the
+data, which turned "started somewhere unhelpful" into "started twenty
+thousand units away and visibly crawled". The defect was never hosting's: any
+caller declaring pinned and unpinned nodes in one frame had it.
+
+### 2026-09-12 — the camera moved out of the package
+
+§SD4's camera — the isotropic scale and translation, the fit, the
+zoom-about-a-point and the zoom limits — is no longer this package's. It is
+`widgets/camera`, shared with `layeredgraph/view`, which had composed the same
+arithmetic inline from its fit and its user pan and zoom, and produced by
+portolan's `View.Camera` so a graph can be drawn over a basemap in the map's
+own pixels ([ADR-0228](./0228-hosted-canvas-rendering-and-graph-widget-sharing.md)
+§SD5, phase 1). Nothing in this widget's behaviour or surface changed: the
+fields are exported where they were unexported, `setLimits` is the two limit
+fields plus `ClampZoom`, and the tests moved with the type.
+
+### 2026-09-12 — the aura legend's place is declared, not assumed
+
+§SD11 put the legend in the canvas's top-left at a fixed inset and made it a
+boolean. That is one of three things a caller wants, and the other two matter:
+a legend in the corner the picture leaves free, and a legend the *caller*
+draws, outside the view entirely.
+
+**SD15 — The legend has a mode and a corner, and its rows are published in
+every mode.** `AuraParams.Legend` becomes `AuraLegendModeE`:
+`AuraLegendOff`, `AuraLegendInside` — the old behaviour, now at
+`LegendCorner` with `LegendInset` — and `AuraLegendExternal`, which paints
+nothing and stamps no region. `View.AuraLegendItems` reports the rows in
+every mode, so the mode chooses *who paints them*, not whether they exist: an
+external caller paints them where it likes through the shared legend package
+and toggles with `HideAura` and `ShowAura`, which were already silent because
+the caller asked. A right- or bottom-anchored box is measured so it sits
+inside the canvas, and on a canvas too small to hold it the near edge wins, so
+its rows stay reachable rather than sliding off.
+
+The zero value is unchanged in meaning — no legend — and `Enabled: false`
+still reports no rows at all, which is the difference between the aura
+machinery being off and its legend being someone else's.
+
+External mode is what makes the legend survive a render into a canvas the
+view does not own: a row's sense region emitted from a host's overlay slot
+sits under the host's own area region and could never be clicked. That is the
+limitation [ADR-0228](./0228-hosted-canvas-rendering-and-graph-widget-sharing.md)
+§SD4 first recorded as a cost of hosting, and it is now a mode rather than a
+cost.
+
+### 2026-09-12 — O4 is taken up
+
+The QOC deferred O4 — whether this widget and `layeredgraph/view` share a
+painter core — to "once graphview has stabilised".
+[ADR-0228](./0228-hosted-canvas-rendering-and-graph-widget-sharing.md) takes
+it, and splits it: the two widgets do not merge, for the reasons the QOC gave
+and which still hold; what they duplicate — the camera of §SD4, and the
+canvas-ownership seam a widget needs to paint and pick inside another's canvas
+— is shared instead. A shared painter core stays deferred, with the trigger
+named. The same record answers the geo-mode composition the §SD12 gap analysis
+and its follow-on both deferred, and it reports that the "injectable camera"
+both reached for is not needed: portolan's transform already factors into this
+widget's camera, measured.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget
@@ -438,7 +607,7 @@ neighbour graph's edges are the layout's input rather than a reading.
   register the camera reads.
 - [ADR-0149](./0149-implot-core-port-painter-lane.md) — the painter-lane port
   this follows.
-- [ADR-0225](./0225-play-graphview-panel.md) — the widget's first consumer in
+- [ADR-0227](./0227-play-graphview-panel.md) — the widget's first consumer in
   this tree: `play`'s Graphview tab.
 - `doc/adr-background-work/snarl-port-analysis.md` — the substrate check.
 - `doc/adr-background-work/netchart-aura-analysis.md` — the black-box

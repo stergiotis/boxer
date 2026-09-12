@@ -342,6 +342,37 @@ arrive as dated `## Update` sections. The milestone survey with exact symbols an
 file paths is
 [data-catalog-competence.md](../adr-background-work/data-catalog-competence.md).
 
+## Updates
+
+### 2026-09-12 — §Q1's O2 kill-reason, split
+
+§Q1 killed *O2 — SQL over `system.columns`* on one sentence: "requires
+re-implementing the column-name grammar and the normalization rules in SQL — a
+second implementation that drifts." Building
+[ADR-0226](0226-leeway-schema-decode-views.md) found that the sentence covers
+two things with different answers. Recorded here so the next reader inherits
+the split rather than re-deriving it.
+
+- **Normalization and restoration** — canonical-type parsing, membership
+  coherence, `TableOperations.Relate`. The kill-reason holds unchanged, and so
+  does everything this ADR decided: `boxer.tables_leeway` stays the only answer
+  to whether a table is leeway, and the pair matrix the only answer to how two
+  of them relate.
+- **Grammar decode** — split on the separator, read field *k*, map an enum code
+  to its name. Here the kill-reason does not hold, because its premise does
+  not: SQL *generated from* the Go declarations is not a second implementation.
+  `LW_ASPECT_*` ([ADR-0182](0182-leeway-aspects-v2-codec-and-vocabulary.md)
+  §SD4) already shipped on that basis, and ADR-0226 extends it to the remaining
+  name components as three views.
+
+Unchanged: O1 as the chosen option, the catalog's storage form, its grain, and
+its authority. The views answer a *column*-grained question about a live
+server, which no part of this ADR addresses. ADR-0226 §SD2 is the discipline
+that keeps the two from claiming each other's answers — its verdict columns are
+named for what they count, and none of them is called `is_leeway`.
+
+ADR-0226 was `proposed` when this entry was written.
+
 ## References
 
 - [ADR-0094](0094-keelson-introspection-tables.md) — introspection plane, `keelson(…)` macro
@@ -349,6 +380,7 @@ file paths is
 - [ADR-0122](0122-play-kanban-panel.md), [ADR-0129](0129-play-layered-graph-panel.md) — named-CTE panel contracts
 - [ADR-0132](0132-sqlapplet-sql-defined-applets.md) — books; [ADR-0159](0159-imzero2-sankey-flow-widget.md) — Sankey widget
 - [ADR-0168](0168-capmap-business-capability-corpus.md) — the competence vocabulary
+- [ADR-0226](0226-leeway-schema-decode-views.md) — the decode half of §Q1's O2, as views
 - Code: `public/semistructured/leeway/common/lw_table_relation.go`,
   `public/semistructured/leeway/ddl/lw_ddl_gen_naming_human.go`,
   `apps/play/play_card_driver.go`, `apps/play/play_schema_provider.go`,

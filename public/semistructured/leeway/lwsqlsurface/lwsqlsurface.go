@@ -36,6 +36,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chpack"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/chviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/readback"
 )
 
@@ -53,7 +54,11 @@ import (
 // stay green.
 //
 // 1 — the surface marker replaces LW_PACK_VERSION (ADR-0171 §SD2).
-const Version = 1
+// 2 — the schema-decode views join the surface, and chpack gains
+//
+//	LW_ASPECT_DECODABLE, the guard they sanitize their input with
+//	(ADR-0226 §SD4).
+const Version = 2
 
 // VersionFunctionName is the zero-argument marker that makes client/server
 // surface skew a query.
@@ -158,10 +163,14 @@ func MarkerStatement() (sql string) {
 	return
 }
 
-// Statements renders the whole surface in installation order — the same
+// Statements renders the function families in installation order — the same
 // order DeclaredFunctions lists, which is also dependency order: the server
 // resolves referenced functions at CREATE time, and the read-back family
 // calls the pack.
+//
+// The views are not here: they need a target database, and they must be
+// created after the marker verifies rather than alongside it. AllStatements
+// is the whole surface.
 func Statements() (stmts []string) {
 	pack := chpack.Statements()
 	helpers := readback.FamilyStatements()
@@ -172,6 +181,58 @@ func Statements() (stmts []string) {
 	stmts = append(stmts, helpers...)
 	stmts = append(stmts, ids...)
 	stmts = append(stmts, MarkerStatement())
+	return
+}
+
+// ViewStamp is what every installed view records in its COMMENT: the surface
+// revision whose function bodies are inlined in it.
+//
+// It is not a second marker. LW_SURFACE_VERSION stays the one thing a server
+// reports; this is how a VIEW says which revision it was built from, which
+// the marker cannot say on its own — an install can put the marker at N and
+// leave a view that was expanded at N-1 still answering (ADR-0226 §SD4).
+func ViewStamp() (stamp chviews.Stamp) {
+	return chviews.Stamp("leeway SQL read surface v" + strconv.Itoa(Version))
+}
+
+// ViewStatements renders the schema-decode views and the database they live
+// in (ADR-0226 §SD4). Separate from Statements because these run last: a view
+// body calls LW_ASPECT_*, and ClickHouse expands a SQL UDF into the view's
+// stored query at CREATE time — so the functions must be current before a
+// view is created, and a view created earlier keeps the bodies it was
+// expanded with.
+func ViewStatements(target chviews.TargetDatabase) (stmts []string) {
+	stmts = chviews.Statements(target, ViewStamp())
+	return
+}
+
+// ViewDropStatements removes the views, for taking the family off a server.
+// An install does not use it — CREATE OR REPLACE refreshes a view in place,
+// and dropping first would only add a window in which it is absent.
+func ViewDropStatements(target chviews.TargetDatabase) (stmts []string) {
+	stmts = chviews.DropStatements(target)
+	return
+}
+
+// DeclaredViewNames returns the views this build declares, qualified with
+// their target database — what a drift report compares the server against.
+func DeclaredViewNames(target chviews.TargetDatabase) (names []string) {
+	unqualified := chviews.AllViewNames()
+	names = make([]string, 0, len(unqualified))
+	for _, n := range unqualified {
+		names = append(names, target.Qualified(n))
+	}
+	return
+}
+
+// AllStatements renders the whole surface: the function families, the marker,
+// then the views.
+func AllStatements(target chviews.TargetDatabase) (stmts []string) {
+	fns := Statements()
+	views := ViewStatements(target)
+	stmts = make([]string, 0, len(fns)+len(views))
+	stmts = append(stmts, fns...)
+	stmts = append(stmts, views...)
 	return
 }
 

@@ -13,6 +13,9 @@ const spawnSize = 250
 // id, so the same graph lays out the same way in every run (ADR-0224 §SD2).
 func placeRandom(g *graph, slots []int32) {
 	for _, s := range slots {
+		if g.pinDecl[s] {
+			continue // the caller gave this one a position
+		}
 		placeRandomSlot(g, s)
 	}
 }
@@ -34,9 +37,20 @@ func placeNear(g *graph, slots []int32, spread float32) {
 		g.mark[s] = true
 	}
 	for _, s := range slots {
+		if g.pinDecl[s] {
+			// A declared pin is the position; placing it would scatter the
+			// very anchors the neighbours below are seated beside, and only
+			// applyPins would put it back.
+			continue
+		}
 		placed := false
 		for _, nb := range g.neighbors(s) {
-			if g.mark[nb] {
+			// A neighbour created this frame has no position yet — unless it
+			// was declared pinned, which is a position the caller gave. On
+			// the frame a whole graph arrives, the pins are the only anchors
+			// there are, and without this every new node falls back to the
+			// random box at the origin instead (ADR-0224 §SD10).
+			if g.mark[nb] && !g.pinDecl[nb] {
 				continue
 			}
 			h := mix64(g.ids[s])

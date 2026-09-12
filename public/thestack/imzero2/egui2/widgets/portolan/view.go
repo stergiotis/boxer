@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 )
 
 // View is the map's camera — the view state of src/map/Map.js without its
@@ -285,6 +286,59 @@ func (v *View) PixelWorldBounds() (Bounds, bool) { return v.PixelWorldBoundsAt(v
 func (v *View) PixelWorldBoundsAt(zoom float64) (Bounds, bool) {
 	return v.crs.GetProjectedBounds(zoom)
 }
+
+// Camera expresses the view's current transform as the shared 2D camera
+// (ADR-0228 §SD5), so a widget with a world of its own can be drawn over the
+// map in the same canvas pixels the map's own geometry lands on. World units
+// are projected positions at refZoom — ProjectAt(ll, refZoom) — because the
+// CRS scale is a pure multiplier, which is what makes the map's transform an
+// isotropic scale and a translation like every other canvas widget's.
+//
+// The map is a *source* of a camera, never a consumer of one: nothing here
+// reads it back, and the view's own centre and zoom stay the authority.
+//
+// Precision: the camera is float32 where this view is float64, and the
+// dominant term is the pan rather than the world point — the pan is the pixel
+// origin, which reaches about 35 million at zoom 18 and so quantises to about
+// two pixels there on its own. A caller that needs exact placement at those
+// zooms does not use this camera: it declares its positions as
+// LatLngToLayerPoint values, which stay viewport-sized, with an identity
+// camera (camera.Camera{Zoom: 1}). Below about zoom 14 both are sub-pixel and
+// the choice does not matter.
+func (v *View) Camera(refZoom float64) camera.Camera { return v.CameraAt(refZoom, Point{}) }
+
+// CameraAt is Camera with world units measured from origin — a projected
+// point, usually ProjectAt of somewhere near the data — instead of from the
+// projection's own corner. That is the form to prefer: projected pixels are
+// large absolute numbers (about 19,700 for Zürich at zoom 7.2), and float32
+// spends its mantissa on the magnitude rather than on the detail. Measured
+// from a local origin the same data sits within a few hundred units of zero,
+// which is what keeps the transform sub-pixel at the zooms where the
+// whole-world form does not.
+//
+// It is also what makes a layout behave: graphview seats a new node beside a
+// placed neighbour, and failing that in a box at the world origin, which is a
+// long way from the data when the origin is the antimeridian.
+func (v *View) CameraAt(refZoom float64, origin Point) camera.Camera {
+	scale := v.ZoomScaleAt(v.zoom, refZoom)
+	return camera.Camera{
+		Zoom: float32(scale),
+		PanX: float32(origin.X*scale - v.pixelOrigin.X),
+		PanY: float32(origin.Y*scale - v.pixelOrigin.Y),
+		// A map's scale spans far more than the camera's own defaults, and
+		// the view has already bounded its zoom; these keep a later Fit or
+		// ZoomAround from clamping a legitimate transform.
+		MinZoom: cameraMinZoom,
+		MaxZoom: cameraMaxZoom,
+	}
+}
+
+// The bounds Camera hands out: wide enough never to bind, since the view's
+// own MinZoom/MaxZoom are the real limits.
+const (
+	cameraMinZoom = 1e-9
+	cameraMaxZoom = 1e9
+)
 
 // LayerPointToLatLng converts a point relative to the pixel origin.
 func (v *View) LayerPointToLatLng(p Point) LatLng { return v.Unproject(p.Add(v.pixelOrigin)) }

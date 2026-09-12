@@ -13,6 +13,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/chviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
@@ -59,6 +60,7 @@ func TestIntegrationSurfaceInstall(t *testing.T) {
 		rep, err := lwsqlsurface.Reconcile(ctx, client, lwsqlsurface.ReconcileReport)
 		require.NoError(t, err)
 		require.Empty(t, rep.Missing, "install left part of the surface off the server")
+		require.Empty(t, rep.MissingViews, "install left part of the view family off the server")
 		require.Equal(t, lwsqlsurface.Version, rep.ServerVersion)
 		// Undeclared names are NOT asserted empty: a shared server may
 		// legitimately carry someone else's LW_ helper, and reporting it is
@@ -69,10 +71,43 @@ func TestIntegrationSurfaceInstall(t *testing.T) {
 		}
 	})
 
-	t.Run("idempotent", func(t *testing.T) {
+	t.Run("views select", func(t *testing.T) {
+		// A view whose body does not analyze is created without complaint
+		// and fails at read time, so creating them is not the assertion —
+		// selecting from them is. LIMIT 0 keeps this about the body rather
+		// than about whatever the endpoint happens to carry.
+		for _, name := range chviews.AllViewNames() {
+			qualified := chviews.TargetDatabase("").Qualified(name)
+			body, err := client.Query(ctx, "SELECT * FROM "+qualified+" LIMIT 0")
+			require.NoError(t, err, "view %s does not analyze", qualified)
+			_ = body.Close()
+		}
+	})
+
+	// A view whose stamp is not this build's is the one drift that answers
+	// rather than erroring: ClickHouse inlines the function bodies at CREATE
+	// time, so a view from an earlier revision serves an older vocabulary
+	// with no sign anything is wrong (ADR-0226 §SD4). Faking the stamp is
+	// enough to exercise the detection — what makes a view stale is what it
+	// claims, and the claim is the only thing a reconciler can check.
+	t.Run("a view from another revision reports stale", func(t *testing.T) {
+		qualified := chviews.TargetDatabase("").Qualified(chviews.ViewColumns)
+		require.NoError(t, client.Exec(ctx, "ALTER TABLE "+qualified+" MODIFY COMMENT 'surface v0'"))
+
+		rep, err := lwsqlsurface.Reconcile(ctx, client, lwsqlsurface.ReconcileReport)
+		require.NoError(t, err)
+		require.Equal(t, []string{qualified}, rep.StaleViews)
+		require.Empty(t, rep.MissingViews, "a stale view is present, not missing")
+		require.False(t, rep.InSync(), "a stale view must fail the verdict; it returns data")
+	})
+
+	t.Run("idempotent, and it re-stamps what it replaces", func(t *testing.T) {
 		require.NoError(t, lwsqlsurface.Install(ctx, client))
 		rep, err := lwsqlsurface.Reconcile(ctx, client, lwsqlsurface.ReconcileReport)
 		require.NoError(t, err)
 		require.Empty(t, rep.Missing)
+		require.Empty(t, rep.MissingViews)
+		require.Empty(t, rep.StaleViews, "re-installing left a view on the previous revision")
+		require.Empty(t, rep.Retired)
 	})
 }

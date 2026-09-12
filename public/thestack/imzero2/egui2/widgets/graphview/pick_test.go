@@ -8,11 +8,15 @@ import (
 	"pgregory.net/rapid"
 )
 
-// scanNode is the pick the grid replaced: every node, exact test.
+// scanNode is the pick the grid replaced: every node, exact test, NoPick
+// skipped as pickNode skips it (ADR-0224 §SD14).
 func (v *View) scanNode(px, py float32) int32 {
 	best, bestD := int32(-1), float32(math.MaxFloat32)
 	for i := range v.g.ids {
-		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+		if v.g.noPick[i] {
+			continue
+		}
+		sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 		r := max(v.nodeOuterPx(i), pickMinPx)
 		dx, dy := px-sx, py-sy
 		d2 := dx*dx + dy*dy
@@ -27,6 +31,9 @@ func (v *View) scanNode(px, py float32) int32 {
 func (v *View) scanEdge(px, py float32) int32 {
 	best, bestD := int32(-1), float32(math.MaxFloat32)
 	for i := range v.g.eFrom {
+		if v.g.eNoPick[i] {
+			continue
+		}
 		geo := v.edgeGeometry(i)
 		tol := max(geo.width, pickEdgeTolPx)
 		var d float32
@@ -66,6 +73,14 @@ func TestPickGridMatchesTheScan(t *testing.T) {
 				})
 			}
 		}
+		// Some items opt out of the pointer; the oracle skips them too, so
+		// the two must still agree (ADR-0224 §SD14).
+		for i := range nodes {
+			nodes[i].NoPick = rapid.Bool().Draw(rt, "nodeNoPick")
+		}
+		for i := range edges {
+			edges[i].NoPick = rapid.Bool().Draw(rt, "edgeNoPick")
+		}
 		v := New(nil, "t", Options{})
 		v.g.reconcile(nodes, edges)
 		// Positions on a wide or a squashed range, so the grid sees both.
@@ -76,14 +91,14 @@ func TestPickGridMatchesTheScan(t *testing.T) {
 			v.g.y[i] = rapid.Float32Range(-spanY, spanY).Draw(rt, "y")
 		}
 		v.g.posVer++
-		v.cam.zoom = rapid.Float32Range(0.02, 20).Draw(rt, "zoom")
-		v.cam.panX = rapid.Float32Range(-500, 500).Draw(rt, "panX")
-		v.cam.panY = rapid.Float32Range(-500, 500).Draw(rt, "panY")
+		v.cam.Zoom = rapid.Float32Range(0.02, 20).Draw(rt, "zoom")
+		v.cam.PanX = rapid.Float32Range(-500, 500).Draw(rt, "panX")
+		v.cam.PanY = rapid.Float32Range(-500, 500).Draw(rt, "panY")
 		// Points near a node, or anywhere.
 		var px, py float32
 		if n > 0 && rapid.Bool().Draw(rt, "near") {
 			i := rapid.IntRange(0, n-1).Draw(rt, "i")
-			sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+			sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 			px = sx + rapid.Float32Range(-40, 40).Draw(rt, "dx")
 			py = sy + rapid.Float32Range(-40, 40).Draw(rt, "dy")
 		} else {
@@ -144,7 +159,7 @@ func TestPickGridBoundsDegenerateShapes(t *testing.T) {
 	v.g.posVer++
 	v.grid.build(&v.g, v.style.NodeRadius)
 	require.LessOrEqual(t, int(v.grid.cols)*int(v.grid.rows), pickGridMaxCellsPerNode*50+64)
-	sx, sy := v.cam.toScreen(v.g.x[7], v.g.y[7])
+	sx, sy := v.cam.ToScreen(v.g.x[7], v.g.y[7])
 	require.Equal(t, int32(7), v.pickNode(sx, sy))
 }
 
