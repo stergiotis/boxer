@@ -657,7 +657,10 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 // the step reports settled.
 func (v *View) stepLayout(w, h float32, fp ForceParams, wake bool) {
 	if !v.Opts.Layout.IsAnimated() {
+		// A static layout drops the hold too, so a switch back to a force
+		// layout starts moving rather than waiting for a wake.
 		v.ffSteps = 0
+		v.autoPaused = false
 		return
 	}
 	if fp != v.lastForce {
@@ -746,19 +749,19 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 	if !o.NoHover && !v.drag.active {
 		v.hoveredEdge = hitEdge
 	}
-	edgeOk := v.hoveredEdge >= 0
-	var edgeRef EdgeRef
-	if edgeOk {
-		edgeRef = v.g.edgeRef(v.hoveredEdge)
+	hovOk := v.hoveredEdge >= 0
+	var hovRef EdgeRef
+	if hovOk {
+		hovRef = v.g.edgeRef(v.hoveredEdge)
 	}
-	if edgeOk != v.hovEdgeOk || edgeRef != v.hovEdge {
+	if hovOk != v.hovEdgeOk || hovRef != v.hovEdge {
 		if v.hovEdgeOk {
 			v.events = append(v.events, edgeEvent(EventKindEdgeHoverLeave, v.hovEdge))
 		}
-		if edgeOk {
-			v.events = append(v.events, edgeEvent(EventKindEdgeHoverEnter, edgeRef))
+		if hovOk {
+			v.events = append(v.events, edgeEvent(EventKindEdgeHoverEnter, hovRef))
 		}
-		v.hovEdge, v.hovEdgeOk = edgeRef, edgeOk
+		v.hovEdge, v.hovEdgeOk = hovRef, hovOk
 	}
 
 	// Click. egui reports the second click of a double-click as a click
@@ -973,18 +976,33 @@ func (v *View) deselectAll() {
 	clear(v.selEdges)
 }
 
-// rectSelect selects the nodes whose centres the canvas rectangle covers,
-// reporting a Select per node, after a Deselect for the previous selection
-// unless add is set.
+// rectSelect selects the nodes whose centres the canvas rectangle covers.
+// Unless add is set it replaces the selection: every selected edge and
+// every selected node outside the rectangle reports a Deselect first, and
+// a node already selected inside it reports nothing. Each newly covered
+// node reports a Select.
 func (v *View) rectSelect(x0, y0, x1, y1 float32, add bool) {
 	minX, maxX := min(x0, x1), max(x0, x1)
 	minY, maxY := min(y0, y1), max(y0, y1)
+	inside := func(s int32) bool {
+		sx, sy := v.cam.toScreen(v.g.x[s], v.g.y[s])
+		return sx >= minX && sx <= maxX && sy >= minY && sy <= maxY
+	}
 	if !add {
-		v.deselectAll()
+		for id := range v.SelectedNodes() {
+			if s, ok := v.g.slot[id]; ok && inside(s) {
+				continue
+			}
+			delete(v.selNodes, id)
+			v.events = append(v.events, v.nodeEventById(EventKindNodeDeselect, id))
+		}
+		for k := range v.SelectedEdges() {
+			v.events = append(v.events, edgeEvent(EventKindEdgeDeselect, k))
+		}
+		clear(v.selEdges)
 	}
 	for i := range v.g.ids {
-		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
-		if sx < minX || sx > maxX || sy < minY || sy > maxY {
+		if !inside(int32(i)) {
 			continue
 		}
 		id := v.g.ids[i]

@@ -128,10 +128,12 @@ func TestEdgeEventsCarryTheIdAndHoverEntersAndLeaves(t *testing.T) {
 }
 
 func TestRectSelectionSelectsCoveredNodes(t *testing.T) {
-	v := twoNodeView(Options{NodeSelection: true, RectSelection: true, NoHover: true})
-	v.g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}, {Id: 3}}, nil)
+	v := twoNodeView(Options{NodeSelection: true, EdgeSelection: true, RectSelection: true, NoHover: true})
+	v.g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}, {Id: 3}}, []EdgeSpec{{From: 1, To: 2}})
 	v.g.x[2], v.g.y[2] = 300, 300
 	v.SelectNode(3)
+	v.SelectNode(1)
+	v.SelectEdge(EdgeRef{From: 1, To: 2})
 	down := c.IsPointerButtonDownResponseFlags
 	shift := c.ModifiersValue{Shift: true}
 	// Shift-press on empty canvas, sweep over nodes 1 and 2, release.
@@ -142,7 +144,11 @@ func TestRectSelectionSelectsCoveredNodes(t *testing.T) {
 	require.Equal(t, float32(0), v.cam.panX, "a rectangle drag does not pan")
 	v.applyInput(800, 600, -10, -10, true, true, c.DragStoppedResponseFlags, identityWheel(), shift)
 	require.Equal(t, []uint64{1, 2}, slices.Collect(v.SelectedNodes()), "node 3 outside the box was replaced")
-	require.Equal(t, []EventKindE{EventKindNodeDeselect, EventKindNodeSelect, EventKindNodeSelect}, kinds(v.events))
+	require.Empty(t, slices.Collect(v.SelectedEdges()), "the edge selection is replaced too")
+	require.Equal(t, []EventKindE{EventKindNodeDeselect, EventKindEdgeDeselect, EventKindNodeSelect}, kinds(v.events),
+		"node 3 and the edge report a Deselect, node 2 a Select, and node 1 — selected and inside — nothing")
+	require.Equal(t, uint64(3), v.events[0].Node)
+	require.Equal(t, uint64(2), v.events[2].Node)
 	require.False(t, v.drag.active)
 
 	// Without Shift the same gesture pans.
@@ -271,6 +277,16 @@ func TestPauseOnSettleHoldsAndWakes(t *testing.T) {
 	v.FastForward(3)
 	v.stepLayout(500, 500, fp, false)
 	require.False(t, v.autoPaused, "FastForward wakes it")
+
+	// A switch to a static layout drops the hold, so the force layout runs
+	// again when switched back rather than waiting for a wake.
+	v.autoPaused = true
+	v.Opts.Layout = LayoutHierarchical
+	v.stepLayout(500, 500, fp, false)
+	v.Opts.Layout = LayoutForceDirected
+	steps = v.fs.steps
+	v.stepLayout(500, 500, fp, false)
+	require.Equal(t, steps+1, v.fs.steps, "moving again after the round trip")
 }
 
 func TestEventKindClasses(t *testing.T) {
