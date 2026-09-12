@@ -284,6 +284,38 @@ limit.
 
 ## Updates
 
+### 2026-09-11 — the contract is hoisted, the lanes are shared, and a second panel reads both
+
+[ADR-0225](./0225-play-graphview-panel.md) adds a live (force-directed and
+hierarchical) reading of this contract as its own tab. Three things move out
+from under this panel and one rule changes:
+
+- **The contract is hoisted.** The column names, the resolvers and the
+  record-to-model build now live beside the panels rather than inside this one,
+  producing a renderer-neutral model that each panel resolves for its own
+  widget — the move [ADR-0166](./0166-play-treemap-panel.md) §SD1 made for the
+  hierarchy contract, for the same reason: two resolvers over one contract
+  drift on the first column added to either. Nothing this panel accepts or
+  draws changes.
+- **The two lanes are shared.** The `edges` and `vertices` lanes belong to a
+  source both tabs demand from, so with both open the CTEs execute once and a
+  forced re-fetch clears one memo rather than two.
+- **The caps are per-panel.** The 400/1000 ceiling of §SD5 is this panel's,
+  argued from what a Graphviz-WASM run is good for; the live panel carries its
+  own, argued from a frame budget.
+- **A `group` claims its palette position whether or not its vertex is toned.**
+  The palette index used to be assigned only where the group actually coloured
+  a vertex, so a group named solely by toned vertices consumed no slot and
+  shifted the colours of the groups after it. A group's identity is not a
+  property of whether one of its members also meant something else, and the
+  live panel needs every group to have a colour for its aura. Drawings mixing
+  `tone` and `group` may therefore shift by one palette position; the
+  tone-over-group precedence of §SD2 is unchanged.
+
+An optional `donut` column (a list of numbers) is added to the vertex contract
+by that record. It is inert here — a laid-out label box has nowhere to put a
+ring — and is resolved rather than ignored, so one claim serves both panels.
+
 ### 2026-08-05 — a `weight` column, beside `tone` rather than instead of it
 
 [ADR-0167](./0167-layeredgraph-magnitude.md) adds an optional numeric `weight`
@@ -353,3 +385,5 @@ in the error tone and cycle edges in the warning tone, verified live.
   precedent for a result panel with a bespoke drawing.
 - [ADR-0126](./0126-appliance-topology-as-data.md) — topology-as-data, a source of
   graph-shaped results to validate against.
+- [ADR-0225](./0225-play-graphview-panel.md) — the live reading of this
+  contract, which hoisted it out of this panel.

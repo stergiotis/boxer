@@ -318,6 +318,8 @@ retirement is recorded when they have.
   register the camera reads.
 - [ADR-0149](./0149-implot-core-port-painter-lane.md) — the painter-lane port
   this follows.
+- [ADR-0225](./0225-play-graphview-panel.md) — the widget's first consumer in
+  this tree: `play`'s Graphview tab.
 - `doc/adr-background-work/snarl-port-analysis.md` — the substrate check.
 - `doc/adr-background-work/netchart-aura-analysis.md` — the black-box
   measurements SD11 re-derives.
