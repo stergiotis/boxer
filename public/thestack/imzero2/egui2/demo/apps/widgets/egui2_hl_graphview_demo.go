@@ -351,7 +351,7 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewForceState) {
 		PauseOnSettle: st.rest,
 	}
 	o.PinOnDrag = st.hold
-	o.Auras = graphview.AuraParams{Enabled: st.auras, Overlap: st.overlap, Legend: true}
+	o.Auras = graphview.AuraParams{Enabled: st.auras, Overlap: st.overlap, Legend: graphview.AuraLegendInside}
 	st.v.Render(st.nodeSet, st.edgeSet, width, 400)
 	for _, ev := range st.v.Events() {
 		if ev.Kind == graphview.EventKindNodeDoubleClick {
@@ -721,7 +721,7 @@ func demoGraphviewStyle(ids *c.WidgetIdStack, st *graphviewStyleState) {
 	o.Style.NodeStroke = color.Hex(styletokens.NeutralTextPrimary.AsHex())
 	o.Style.Monospace = st.mono
 	o.Auras = graphview.AuraParams{
-		Enabled: st.auras, Legend: true, Overlap: true, Intensity: 4,
+		Enabled: st.auras, Legend: graphview.AuraLegendInside, Overlap: true, Intensity: 4,
 		Styles: map[string]graphview.AuraStyle{
 			"near": {Fill: color.Hex(styletokens.SuccessDefault.AsHex()&^0xff | 0x40), Label: "short, strong spokes", ZIndex: 1},
 			"far":  {Fill: color.Hex(styletokens.InfoDefault.AsHex()&^0xff | 0x30), Line: color.Hex(styletokens.InfoDefault.AsHex()), LineWidth: 1, NoLegend: true},

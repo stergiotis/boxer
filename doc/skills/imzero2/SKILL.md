@@ -1639,6 +1639,28 @@ What to know before using it:
   edges apart in hover, click and selection — `EdgeRef{From, To, Id}` is
   the key — and `Length` / `Strength` scale one edge's ideal length and
   pull in the force layout (1 when unset; the static layouts ignore them).
+- **Camera** (ADR-0228 §SD5; package `widgets/camera`). The view transform
+  `screen = world*Zoom + Pan` is shared, not graphview's: `ToScreen` /
+  `ToWorld`, `Fit(box, w, h, pad)`, `ZoomAround(factor, ax, ay)`,
+  `Translate`, `Clamp` / `ClampZoom` against `MinZoom` / `MaxZoom` (zero
+  takes 0.01 and 100), `SameView` ignoring the limits. `layeredgraph/view`
+  composes its fit, user zoom and pan through it. A slippy map is a *source*
+  of one, not a consumer: `portolan.View.Camera(refZoom)` and
+  `Projector.Camera(refZoom)` hand back the map's transform so a graph can be
+  drawn over tiles in the map's own pixels — world units are
+  `ProjectAt(ll, refZoom)`. Above about zoom 14 prefer declaring
+  `LatLngToLayerPoint` values with an identity camera: the map camera's pan
+  is the pixel origin, ~35 million at zoom 18, which quantises to ~2 px in
+  float32.
+- **Aura legend** (ADR-0224 §SD15). `Opts.Auras.Legend` is a mode, not a
+  flag: `AuraLegendOff`, `AuraLegendInside` (drawn in the view's canvas at
+  `LegendCorner` with `LegendInset`, clicks taken, `EventKindAuraToggle`
+  reported) or `AuraLegendExternal` (nothing drawn — take the rows from
+  `AuraLegendItems()`, paint them anywhere with the `legend` package, toggle
+  with `HideAura` / `ShowAura`). Rows are built in every mode, so the mode
+  picks the painter, not whether they exist; `Enabled: false` is what
+  reports none. Use External wherever the view does not own the canvas the
+  rows would be clicked in.
 - **Fading and inertness** (ADR-0224 §SD14). `NodeSpec.Opacity` and
   `EdgeSpec.Opacity` scale that item's own paint — a node's fill, stroke,
   donut and label, an edge's line, head and label — to a fraction of its

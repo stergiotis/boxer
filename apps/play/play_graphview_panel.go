@@ -368,7 +368,7 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	o.Auras = graphview.AuraParams{
 		Enabled: inst.auras && len(inst.groups) > 0,
 		Overlap: inst.overlap,
-		Legend:  true,
+		Legend:  graphview.AuraLegendInside,
 	}
 
 	inst.view.Render(inst.nodes, inst.edges, w, h)

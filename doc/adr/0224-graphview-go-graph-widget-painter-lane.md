@@ -458,6 +458,62 @@ neighbour set and dims the rest itself. What counts as a neighbour — one
 hop, both directions, through a hidden node or not — is the consumer's
 question, and a widget that answered it would be guessing.
 
+### 2026-09-12 — the camera moved out of the package
+
+§SD4's camera — the isotropic scale and translation, the fit, the
+zoom-about-a-point and the zoom limits — is no longer this package's. It is
+`widgets/camera`, shared with `layeredgraph/view`, which had composed the same
+arithmetic inline from its fit and its user pan and zoom, and produced by
+portolan's `View.Camera` so a graph can be drawn over a basemap in the map's
+own pixels ([ADR-0228](./0228-hosted-canvas-rendering-and-graph-widget-sharing.md)
+§SD5, phase 1). Nothing in this widget's behaviour or surface changed: the
+fields are exported where they were unexported, `setLimits` is the two limit
+fields plus `ClampZoom`, and the tests moved with the type.
+
+### 2026-09-12 — the aura legend's place is declared, not assumed
+
+§SD11 put the legend in the canvas's top-left at a fixed inset and made it a
+boolean. That is one of three things a caller wants, and the other two matter:
+a legend in the corner the picture leaves free, and a legend the *caller*
+draws, outside the view entirely.
+
+**SD15 — The legend has a mode and a corner, and its rows are published in
+every mode.** `AuraParams.Legend` becomes `AuraLegendModeE`:
+`AuraLegendOff`, `AuraLegendInside` — the old behaviour, now at
+`LegendCorner` with `LegendInset` — and `AuraLegendExternal`, which paints
+nothing and stamps no region. `View.AuraLegendItems` reports the rows in
+every mode, so the mode chooses *who paints them*, not whether they exist: an
+external caller paints them where it likes through the shared legend package
+and toggles with `HideAura` and `ShowAura`, which were already silent because
+the caller asked. A right- or bottom-anchored box is measured so it sits
+inside the canvas, and on a canvas too small to hold it the near edge wins, so
+its rows stay reachable rather than sliding off.
+
+The zero value is unchanged in meaning — no legend — and `Enabled: false`
+still reports no rows at all, which is the difference between the aura
+machinery being off and its legend being someone else's.
+
+External mode is what makes the legend survive a render into a canvas the
+view does not own: a row's sense region emitted from a host's overlay slot
+sits under the host's own area region and could never be clicked. That is the
+limitation [ADR-0228](./0228-hosted-canvas-rendering-and-graph-widget-sharing.md)
+§SD4 first recorded as a cost of hosting, and it is now a mode rather than a
+cost.
+
+### 2026-09-12 — O4 is taken up
+
+The QOC deferred O4 — whether this widget and `layeredgraph/view` share a
+painter core — to "once graphview has stabilised".
+[ADR-0228](./0228-hosted-canvas-rendering-and-graph-widget-sharing.md) takes
+it, and splits it: the two widgets do not merge, for the reasons the QOC gave
+and which still hold; what they duplicate — the camera of §SD4, and the
+canvas-ownership seam a widget needs to paint and pick inside another's canvas
+— is shared instead. A shared painter core stays deferred, with the trigger
+named. The same record answers the geo-mode composition the §SD12 gap analysis
+and its follow-on both deferred, and it reports that the "injectable camera"
+both reached for is not needed: portolan's transform already factors into this
+widget's camera, measured.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget

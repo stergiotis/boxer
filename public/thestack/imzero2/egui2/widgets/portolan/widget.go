@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
@@ -63,6 +64,11 @@ func (p Projector) ToLatLng(px Point) LatLng { return p.view.ContainerPointToLat
 
 // View is the frame's view, read-only by convention.
 func (p Projector) View() *View { return p.view }
+
+// Camera is the frame's transform as the shared 2D camera, for a widget
+// drawn over the map inside this overlay — see [View.Camera], including its
+// note on which recipe stays exact at high zoom.
+func (p Projector) Camera(refZoom float64) camera.Camera { return p.view.Camera(refZoom) }
 
 // Map is the slippy-map widget: a View, a Pyramid and a TileLoader behind a
 // painter-lane canvas, with Leaflet's handlers between the lane's registers

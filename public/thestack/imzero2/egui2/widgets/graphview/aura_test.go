@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	cam "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 )
 
 func TestAuraKernelPlateauAndRamp(t *testing.T) {
@@ -50,7 +51,7 @@ func TestAuraSetBuildsSortedIdsAndMembership(t *testing.T) {
 
 // setupField builds a graph of the given nodes (world units), a unit camera
 // panned so world (0, 0) is canvas (200, 200), and the aura set.
-func setupField(t *testing.T, nodes []NodeSpec) (g graph, set auraSet, cam camera) {
+func setupField(t *testing.T, nodes []NodeSpec) (g graph, set auraSet, cm cam.Camera) {
 	t.Helper()
 	g.reconcile(nodes, nil)
 	for i := range nodes {
@@ -58,16 +59,16 @@ func setupField(t *testing.T, nodes []NodeSpec) (g graph, set auraSet, cam camer
 		g.x[s], g.y[s] = nodes[i].PinX, nodes[i].PinY
 	}
 	set.build(nodes, &g)
-	cam = camera{zoom: 1, panX: 200, panY: 200}
+	cm = cam.Camera{Zoom: 1, PanX: 200, PanY: 200}
 	return
 }
 
 func TestAuraSingleNodeContourIsACircleAtTheExtent(t *testing.T) {
 	nodes := []NodeSpec{{Id: 1, Radius: 30, Auras: []string{"A"}}}
-	g, set, cam := setupField(t, nodes)
+	g, set, cm := setupField(t, nodes)
 	p := AuraParams{Enabled: true, CellSize: 2, DrawLimit: 0.5}.withDefaults()
 	var f auraField
-	f.compute(&g, cam, &set, nil, 5, 400, 400, p)
+	f.compute(&g, cm, &set, nil, 5, 400, 400, p)
 	var out rings
 	f.contours(0, &out)
 	require.Equal(t, 1, out.count())
@@ -91,10 +92,10 @@ func TestAuraSingleNodeContourIsACircleAtTheExtent(t *testing.T) {
 
 func TestAuraAccumulationIsAComplementaryProduct(t *testing.T) {
 	nodes := []NodeSpec{{Id: 1, Radius: 30, Auras: []string{"A"}, PinX: -50}, {Id: 2, Radius: 30, Auras: []string{"A"}, PinX: 50}}
-	g, set, cam := setupField(t, nodes)
+	g, set, cm := setupField(t, nodes)
 	p := AuraParams{Enabled: true, CellSize: 1}.withDefaults()
 	var f auraField
-	f.compute(&g, cam, &set, nil, 5, 400, 400, p)
+	f.compute(&g, cm, &set, nil, 5, 400, 400, p)
 	// Cell (200, 200) is sampled at its centre (200.5, 200.5): 50.5 px from
 	// the node at canvas x 150 and 49.5 px from the one at 250, half a
 	// pixel off their axis.
@@ -109,10 +110,10 @@ func TestAuraAccumulationIsAComplementaryProduct(t *testing.T) {
 
 func TestAuraOwnershipIsArgmaxWithTiesToTheSmallerId(t *testing.T) {
 	nodes := []NodeSpec{{Id: 1, Radius: 30, Auras: []string{"B"}, PinX: -50}, {Id: 2, Radius: 30, Auras: []string{"A"}, PinX: 50}}
-	g, set, cam := setupField(t, nodes)
+	g, set, cm := setupField(t, nodes)
 	p := AuraParams{Enabled: true, CellSize: 1, DrawLimit: 0.3}.withDefaults()
 	var f auraField
-	f.compute(&g, cam, &set, nil, 5, 400, 400, p)
+	f.compute(&g, cm, &set, nil, 5, 400, 400, p)
 	a, b := set.index["A"], set.index["B"]
 	require.Equal(t, b, f.best[200*f.gw+180], "left of the middle the B node is nearer")
 	require.Equal(t, a, f.best[200*f.gw+220])
@@ -120,14 +121,14 @@ func TestAuraOwnershipIsArgmaxWithTiesToTheSmallerId(t *testing.T) {
 	require.False(t, auraIso{&f, a}.inside(180, 200), "a lost cell is outside its aura")
 	// Overlap on: both own the middle.
 	p.Overlap = true
-	f.compute(&g, cam, &set, nil, 5, 400, 400, p)
+	f.compute(&g, cm, &set, nil, 5, 400, 400, p)
 	require.True(t, auraIso{&f, a}.inside(200, 200))
 	require.True(t, auraIso{&f, b}.inside(200, 200))
 	// Coincident nodes tie everywhere: the smaller id takes every cell.
 	nodes[0].PinX, nodes[1].PinX = 0, 0
-	g, set, cam = setupField(t, nodes)
+	g, set, cm = setupField(t, nodes)
 	p.Overlap = false
-	f.compute(&g, cam, &set, nil, 5, 400, 400, p)
+	f.compute(&g, cm, &set, nil, 5, 400, 400, p)
 	var outA, outB rings
 	f.contours(a, &outA)
 	f.contours(b, &outB)
@@ -137,10 +138,10 @@ func TestAuraOwnershipIsArgmaxWithTiesToTheSmallerId(t *testing.T) {
 
 func TestAuraHiddenContributesNothing(t *testing.T) {
 	nodes := []NodeSpec{{Id: 1, Radius: 30, Auras: []string{"A", "B"}}}
-	g, set, cam := setupField(t, nodes)
+	g, set, cm := setupField(t, nodes)
 	p := AuraParams{Enabled: true, CellSize: 4}.withDefaults()
 	var f auraField
-	f.compute(&g, cam, &set, map[string]struct{}{"A": {}}, 5, 400, 400, p)
+	f.compute(&g, cm, &set, map[string]struct{}{"A": {}}, 5, 400, 400, p)
 	require.True(t, f.box[set.index["A"]].empty())
 	require.False(t, f.box[set.index["B"]].empty())
 	var out rings
@@ -155,7 +156,7 @@ func TestAuraFitMarginCoversTheExtent(t *testing.T) {
 	v.g.reconcile(nodes, nil)
 	v.auraSet.build(nodes, &v.g)
 	ap := v.Opts.Auras.withDefaults()
-	v.cam = camera{zoom: 2}
+	v.cam = cam.Camera{Zoom: 2}
 	// Only the member's radius counts: r' = 10·2 + 4 = 24 px, extent at 0.8
 	// = 12 + 0.2·(144 − 12) = 38.4 px = 19.2 world; minus the 10 in bounds.
 	require.InDelta(t, 9.2, v.auraFitMargin(ap), 1e-4)
@@ -183,7 +184,7 @@ func TestUpdateAurasReusesRingsUntilSomethingChanges(t *testing.T) {
 	v.g.reconcile(nodes, nil)
 	v.g.x[v.g.slot[2]] = 300
 	v.auraSet.build(nodes, &v.g)
-	v.cam = camera{zoom: 1, panX: 100, panY: 200}
+	v.cam = cam.Camera{Zoom: 1, PanX: 100, PanY: 200}
 	ap := v.Opts.Auras.withDefaults()
 
 	v.updateAuras(ap, 600, 400)

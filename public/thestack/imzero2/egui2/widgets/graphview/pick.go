@@ -118,9 +118,9 @@ func (v *View) pickNode(px, py float32) int32 {
 		v.grid.build(&v.g, v.style.NodeRadius)
 	}
 	pg := &v.grid
-	reachPx := max(pg.maxR*v.cam.zoom+v.style.DonutWidth, pickMinPx)
-	reach := reachPx / v.cam.zoom
-	wx, wy := v.cam.toWorld(px, py)
+	reachPx := max(pg.maxR*v.cam.Zoom+v.style.DonutWidth, pickMinPx)
+	reach := reachPx / v.cam.Zoom
+	wx, wy := v.cam.ToWorld(px, py)
 	// Outside the padded bounds no disc can contain the point.
 	if wx < pg.minX-reach || wy < pg.minY-reach ||
 		wx > pg.minX+float32(pg.cols)*pg.cell+reach || wy > pg.minY+float32(pg.rows)*pg.cell+reach {
@@ -136,7 +136,7 @@ func (v *View) pickNode(px, py float32) int32 {
 				if v.g.noPick[i] {
 					continue
 				}
-				sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+				sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 				r := max(v.nodeOuterPx(int(i)), pickMinPx)
 				dx, dy := px-sx, py-sy
 				d2 := dx*dx + dy*dy
@@ -157,8 +157,8 @@ func (v *View) pickNode(px, py float32) int32 {
 // answer is certain; a true one is resolved by the geometry.
 func (v *View) edgeBoxMayContain(i int32, px, py float32) bool {
 	f, t := v.g.eFrom[i], v.g.eTo[i]
-	x1, y1 := v.cam.toScreen(v.g.x[f], v.g.y[f])
-	x2, y2 := v.cam.toScreen(v.g.x[t], v.g.y[t])
+	x1, y1 := v.cam.ToScreen(v.g.x[f], v.g.y[f])
+	x2, y2 := v.cam.ToScreen(v.g.x[t], v.g.y[t])
 	width := v.g.eWidth[i]
 	if width <= 0 {
 		width = v.style.EdgeWidth
@@ -166,9 +166,9 @@ func (v *View) edgeBoxMayContain(i int32, px, py float32) bool {
 	order := float32(v.g.eOrder[i])
 	pad := max(width, pickEdgeTolPx) + v.style.TipSize
 	if f == t {
-		pad += v.nodeRadius(int(f)) * v.cam.zoom * (v.style.LoopSize + order)
+		pad += v.nodeRadius(int(f)) * v.cam.Zoom * (v.style.LoopSize + order)
 	} else {
-		pad += max(v.nodeRadius(int(f)), v.nodeRadius(int(t)))*v.cam.zoom + v.style.CurveSize*order*v.cam.zoom
+		pad += max(v.nodeRadius(int(f)), v.nodeRadius(int(t)))*v.cam.Zoom + v.style.CurveSize*order*v.cam.Zoom
 	}
 	return px >= min(x1, x2)-pad && px <= max(x1, x2)+pad &&
 		py >= min(y1, y2)-pad && py <= max(y1, y2)+pad

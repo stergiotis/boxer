@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	cam "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/legend"
 )
@@ -43,11 +44,49 @@ type AuraParams struct {
 	// Styles gives an aura's look by id; an aura without one takes the
 	// qualitative cycle in id order at AuraFillAlpha.
 	Styles map[string]AuraStyle
-	// Legend draws the aura legend in the canvas's top-left corner; a click
-	// on a row toggles that aura and reports EventKindAuraToggle.
-	Legend      bool
-	LegendStyle legend.Style
+	// Legend says where the legend is drawn and who owns its clicks
+	// (ADR-0224 §SD15). The zero value draws none.
+	Legend AuraLegendModeE
+	// LegendCorner is the canvas corner AuraLegendInside draws in, and
+	// LegendInset the gap from both of that corner's edges in screen
+	// pixels; zero takes 8. Neither is read in the other modes.
+	LegendCorner CornerE
+	LegendInset  float32
+	LegendStyle  legend.Style
 }
+
+// AuraLegendModeE says where a View draws its aura legend (ADR-0224 §SD15).
+// The rows themselves are built in every mode and published by
+// [View.AuraLegendItems], so the mode chooses who paints them, not whether
+// they exist.
+type AuraLegendModeE uint8
+
+const (
+	// AuraLegendOff paints no legend. AuraLegendItems still reports the
+	// rows, which is the difference between this and AuraParams.Enabled
+	// being false.
+	AuraLegendOff AuraLegendModeE = 0
+	// AuraLegendInside paints the legend in the view's own canvas at
+	// AuraParams.LegendCorner and takes its clicks: a click on a row toggles
+	// that aura and reports EventKindAuraToggle.
+	AuraLegendInside AuraLegendModeE = 1
+	// AuraLegendExternal paints nothing and stamps no region. The caller
+	// takes the rows from AuraLegendItems, paints them where it likes with
+	// the legend package, and toggles with HideAura and ShowAura — which is
+	// the only mode that works where the view does not own the canvas its
+	// rows would be clicked in.
+	AuraLegendExternal AuraLegendModeE = 2
+)
+
+// CornerE names a canvas corner, origin top-left.
+type CornerE uint8
+
+const (
+	CornerTopLeft     CornerE = 0
+	CornerTopRight    CornerE = 1
+	CornerBottomLeft  CornerE = 2
+	CornerBottomRight CornerE = 3
+)
 
 // AuraStyle is one aura's look. A zero Fill takes the cycle colour; a zero
 // Line draws a hairline in the fill colour, which is what anti-aliases the
@@ -229,7 +268,7 @@ type auraField struct {
 
 // compute accumulates every visible member's ramp into its auras' grids
 // and, without overlap, assigns each cell to its strongest aura.
-func (f *auraField) compute(g *graph, cam camera, set *auraSet, hidden map[string]struct{}, defaultRadius, w, h float32, p AuraParams) {
+func (f *auraField) compute(g *graph, cm cam.Camera, set *auraSet, hidden map[string]struct{}, defaultRadius, w, h float32, p AuraParams) {
 	f.cs = p.CellSize
 	f.gw = int32(math.Ceil(float64(w / f.cs)))
 	f.gh = int32(math.Ceil(float64(h / f.cs)))
@@ -258,8 +297,8 @@ func (f *auraField) compute(g *graph, cam camera, set *auraSet, hidden map[strin
 		if r <= 0 {
 			r = defaultRadius
 		}
-		sx, sy := cam.toScreen(g.x[s], g.y[s])
-		kern := kernelFor(r*cam.zoom, p)
+		sx, sy := cm.ToScreen(g.x[s], g.y[s])
+		kern := kernelFor(r*cm.Zoom, p)
 		R := kern.R
 		if sx+R < 0 || sy+R < 0 || sx-R > w || sy-R > h {
 			continue

@@ -72,7 +72,7 @@ func TestOpacitySurvivesTheSlotSwapOnRemoval(t *testing.T) {
 
 func TestNoPickTakesTheNodeOutOfEveryPointerPath(t *testing.T) {
 	v := twoNodeView(Options{NodeSelection: true, RectSelection: true})
-	v.cam.zoom = 1
+	v.cam.Zoom = 1
 	require.Equal(t, int32(0), v.pickNode(0, 0), "pickable to begin with")
 
 	v.g.reconcile([]NodeSpec{{Id: 1, NoPick: true}, {Id: 2}}, []EdgeSpec{{From: 1, To: 2, Id: 7}})
@@ -91,7 +91,7 @@ func TestNoPickTakesTheNodeOutOfEveryPointerPath(t *testing.T) {
 
 func TestNoPickTakesTheEdgeOutOfThePick(t *testing.T) {
 	v := twoNodeView(Options{})
-	v.cam.zoom = 1
+	v.cam.Zoom = 1
 	require.Equal(t, int32(0), v.pickEdge(50, 0))
 	v.g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}}, []EdgeSpec{{From: 1, To: 2, Id: 7, NoPick: true}})
 	require.Equal(t, int32(-1), v.pickEdge(50, 0))
@@ -133,7 +133,7 @@ func TestFitNodesStillFramesWhatBoundsOfReports(t *testing.T) {
 	minX, minY, maxX, maxY, ok := v.BoundsOf([]uint64{1, 2})
 	require.True(t, ok)
 	cx, cy := (minX+maxX)/2, (minY+maxY)/2
-	sx, sy := v.cam.toScreen(cx, cy)
+	sx, sy := v.cam.ToScreen(cx, cy)
 	require.InDelta(t, 100, sx, 0.5, "the subset's centre lands on the canvas centre")
 	require.InDelta(t, 100, sy, 0.5)
 }

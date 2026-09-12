@@ -46,10 +46,10 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 		geo.width = style.EdgeWidth
 	}
 	order := float32(v.g.eOrder[i])
-	x1, y1 := v.cam.toScreen(v.g.x[f], v.g.y[f])
-	x2, y2 := v.cam.toScreen(v.g.x[t], v.g.y[t])
-	r1 := v.nodeRadius(int(f)) * v.cam.zoom
-	r2 := v.nodeRadius(int(t)) * v.cam.zoom
+	x1, y1 := v.cam.ToScreen(v.g.x[f], v.g.y[f])
+	x2, y2 := v.cam.ToScreen(v.g.x[t], v.g.y[t])
+	r1 := v.nodeRadius(int(f)) * v.cam.Zoom
+	r2 := v.nodeRadius(int(t)) * v.cam.Zoom
 	tip := style.TipSize
 
 	if f == t {
@@ -100,7 +100,7 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 	// CurveSize · order, control points a third of the way along the chord.
 	geo.kind = edgeKindCurved
 	perpX, perpY := -uy, ux
-	off := style.CurveSize * order * v.cam.zoom
+	off := style.CurveSize * order * v.cam.Zoom
 	seg := max(l/3, 1)
 	c1x, c1y := sx+ux*seg+perpX*off, sy+uy*seg+perpY*off
 	c2x, c2y := ex-ux*seg+perpX*off, ey-uy*seg+perpY*off
@@ -180,16 +180,16 @@ func (v *View) paint(w, h float32) {
 		v.batchXs = v.batchXs[:0]
 		v.batchYs = v.batchYs[:0]
 		for _, s := range b.slots {
-			sx, sy := v.cam.toScreen(v.g.x[s], v.g.y[s])
+			sx, sy := v.cam.ToScreen(v.g.x[s], v.g.y[s])
 			v.batchXs = append(v.batchXs, sx)
 			v.batchYs = append(v.batchYs, sy)
 		}
-		c.PaintMarkers(v.batchXs, v.batchYs, 0, b.radius*v.cam.zoom, b.col, 0).Send()
+		c.PaintMarkers(v.batchXs, v.batchYs, 0, b.radius*v.cam.Zoom, b.col, 0).Send()
 	}
 	if style.NodeStrokeW > 0 {
 		for i := range v.g.ids {
-			sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
-			r := v.nodeRadius(i) * v.cam.zoom
+			sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
+			r := v.nodeRadius(i) * v.cam.Zoom
 			if onCanvas(sx, sy, r, w, h) {
 				c.PaintCircleStroke(sx, sy, r, fade(style.NodeStroke, v.g.opacity[i]), style.NodeStrokeW).Send()
 			}
@@ -203,12 +203,12 @@ func (v *View) paint(w, h float32) {
 		if d.IsEmpty() {
 			continue
 		}
-		rIn := v.nodeRadius(i) * v.cam.zoom
+		rIn := v.nodeRadius(i) * v.cam.Zoom
 		if rIn < donutMinInnerPx {
 			continue
 		}
 		rOut := rIn + style.DonutWidth
-		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+		sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 		if !onCanvas(sx, sy, rOut, w, h) {
 			continue
 		}
@@ -241,7 +241,7 @@ func (v *View) paint(w, h float32) {
 		if !(sel || hov || pinned || (o.LabelsAlways && lbl != "")) {
 			continue
 		}
-		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+		sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 		r := v.nodeOuterPx(i)
 		if !onCanvas(sx, sy, r+style.LabelFontSize*4, w, h) {
 			continue

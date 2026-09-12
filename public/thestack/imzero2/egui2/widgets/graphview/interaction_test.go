@@ -79,7 +79,7 @@ func TestSecondaryClicksReportOnNodeEdgeAndBackground(t *testing.T) {
 	require.Equal(t, EdgeRef{From: 1, To: 2, Id: 7}, EdgeRef{From: v.events[0].From, To: v.events[0].To, Id: v.events[0].Edge})
 
 	v.events = v.events[:0]
-	v.cam.zoom, v.cam.panX, v.cam.panY = 2, 10, 20
+	v.cam.Zoom, v.cam.PanX, v.cam.PanY = 2, 10, 20
 	v.applyInput(800, 600, 400, 300, true, true, sec, identityWheel(), c.ModifiersValue{})
 	require.Equal(t, []EventKindE{EventKindBackgroundSecondaryClick}, kinds(v.events))
 	require.Equal(t, [2]float32{195, 140}, [2]float32{v.events[0].X, v.events[0].Y}, "background clicks carry the world position")
@@ -140,8 +140,8 @@ func TestRectSelectionSelectsCoveredNodes(t *testing.T) {
 	v.applyInput(800, 600, 150, 50, true, true, c.DragStartedResponseFlags|down, identityWheel(), shift)
 	require.True(t, v.drag.isRect)
 	v.applyInput(800, 600, 20, -10, true, true, c.DraggedResponseFlags|down, identityWheel(), shift)
-	require.Equal(t, float32(1), v.cam.zoom)
-	require.Equal(t, float32(0), v.cam.panX, "a rectangle drag does not pan")
+	require.Equal(t, float32(1), v.cam.Zoom)
+	require.Equal(t, float32(0), v.cam.PanX, "a rectangle drag does not pan")
 	v.applyInput(800, 600, -10, -10, true, true, c.DragStoppedResponseFlags, identityWheel(), shift)
 	require.Equal(t, []uint64{1, 2}, slices.Collect(v.SelectedNodes()), "node 3 outside the box was replaced")
 	require.Empty(t, slices.Collect(v.SelectedEdges()), "the edge selection is replaced too")
@@ -155,13 +155,13 @@ func TestRectSelectionSelectsCoveredNodes(t *testing.T) {
 	v.applyInput(800, 600, 150, 50, true, true, c.DragStartedResponseFlags|down, identityWheel(), c.ModifiersValue{})
 	require.False(t, v.drag.isRect)
 	v.applyInput(800, 600, 160, 50, true, true, c.DraggedResponseFlags|down, identityWheel(), c.ModifiersValue{})
-	require.Equal(t, float32(10), v.cam.panX)
+	require.Equal(t, float32(10), v.cam.PanX)
 
 	// Multi-selection adds instead.
 	v.drag = dragState{}
 	v.events = v.events[:0]
 	v.Opts.NodeSelectionMulti = true
-	v.cam.panX = 0
+	v.cam.PanX = 0
 	v.applyInput(800, 600, 250, 250, true, true, c.DragStartedResponseFlags|down, identityWheel(), shift)
 	v.applyInput(800, 600, 350, 350, true, true, c.DragStoppedResponseFlags, identityWheel(), shift)
 	require.Equal(t, []uint64{1, 2, 3}, slices.Collect(v.SelectedNodes()))
@@ -181,13 +181,13 @@ func TestFitNodesFramesTheSubset(t *testing.T) {
 	require.False(t, v.fitPending, "the subset fit releases the latch")
 	// Nodes 1 and 2 span x 0..100 plus a 5 unit radius each: 110 wide into
 	// 400·(1−0.5) = 200 px, so zoom is 200/110; the box is centred.
-	require.InDelta(t, 200.0/110, v.cam.zoom, 1e-5)
-	sx, sy := v.cam.toScreen(50, 0)
+	require.InDelta(t, 200.0/110, v.cam.Zoom, 1e-5)
+	sx, sy := v.cam.ToScreen(50, 0)
 	require.InDelta(t, 200, sx, 1e-3)
 	require.InDelta(t, 200, sy, 1e-3)
-	v.cam.zoom = 3
+	v.cam.Zoom = 3
 	v.FitNodes([]uint64{99})
-	require.Equal(t, float32(3), v.cam.zoom, "no known id leaves the camera alone")
+	require.Equal(t, float32(3), v.cam.Zoom, "no known id leaves the camera alone")
 }
 
 func TestPositionsAndScreenRadius(t *testing.T) {
@@ -197,7 +197,7 @@ func TestPositionsAndScreenRadius(t *testing.T) {
 		got[id] = p
 	}
 	require.Equal(t, map[uint64][2]float32{1: {0, 0}, 2: {100, 0}}, got)
-	v.cam.zoom = 2
+	v.cam.Zoom = 2
 	r, ok := v.NodeScreenRadius(1)
 	require.True(t, ok)
 	require.Equal(t, float32(10), r, "the style radius of 5 at zoom 2")
@@ -207,18 +207,17 @@ func TestPositionsAndScreenRadius(t *testing.T) {
 
 func TestZoomLimitsAreOptions(t *testing.T) {
 	v := twoNodeView(Options{ZoomMin: 0.5, ZoomMax: 2})
-	v.cam.setLimits(v.Opts.ZoomMin, v.Opts.ZoomMax)
+	v.cam.MinZoom, v.cam.MaxZoom = v.Opts.ZoomMin, v.Opts.ZoomMax
+	v.cam.ClampZoom()
 	v.SetCamera(10, 0, 0)
-	require.Equal(t, float32(2), v.cam.zoom)
-	v.cam.zoomAround(0.01, 0, 0)
-	require.Equal(t, float32(0.5), v.cam.zoom)
-	v.cam.fit(0, 0, 1, 1, 4000, 4000, 0.1)
-	require.Equal(t, float32(2), v.cam.zoom)
-	var d camera
-	d.setLimits(0, 0)
-	require.Equal(t, [2]float32{minZoom, maxZoom}, [2]float32{d.minZ, d.maxZ}, "zero takes the defaults")
-	d.setLimits(5, 1)
-	require.Equal(t, float32(5), d.maxZ, "an inverted range collapses to the minimum")
+	require.Equal(t, float32(2), v.cam.Zoom)
+	v.cam.ZoomAround(0.01, 0, 0)
+	require.Equal(t, float32(0.5), v.cam.Zoom)
+	v.cam.Fit(0, 0, 1, 1, 4000, 4000, 0.1)
+	require.Equal(t, float32(2), v.cam.Zoom)
+	// The limit arithmetic itself is the camera package's; what this asserts
+	// is that Options carries into it.
+	require.Equal(t, [2]float32{0.5, 2}, [2]float32{v.cam.MinZoom, v.cam.MaxZoom})
 }
 
 func TestEdgeLengthAndStrengthScaleTheAttraction(t *testing.T) {

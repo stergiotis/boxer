@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	cam "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph"
 )
@@ -230,12 +231,22 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 			}
 			zoom, panX, panY = vs.Zoom, vs.PanX, vs.PanY
 		}
+		// The fitted placement, the user's zoom about the canvas centre and
+		// the user's pan are one affine, which is what the shared camera is
+		// (ADR-0228 §SD5). The limits are opened wide because this view has
+		// never bounded its fit — a tiny layout in a large canvas scales as
+		// far as it must — and the user's zoom is bounded separately, above,
+		// as a multiplier.
 		ccx, ccy := float64(canvasW)/2, float64(canvasH)/2
-		escale := scale * zoom
-		ox := (offX-ccx)*zoom + ccx + panX
-		oy := (offY-ccy)*zoom + ccy + panY
+		cm := cam.Camera{
+			Zoom: float32(scale), PanX: float32(offX), PanY: float32(offY),
+			MinZoom: unboundedMinZoom, MaxZoom: unboundedMaxZoom,
+		}
+		cm.ZoomAround(float32(zoom), float32(ccx), float32(ccy))
+		cm.Translate(float32(panX), float32(panY))
+		escale := float64(cm.Zoom)
 		tf := func(p layeredgraph.Point) (x, y float32) {
-			return float32(p.X*escale + ox), float32(p.Y*escale + oy)
+			return cm.ToScreen(float32(p.X), float32(p.Y))
 		}
 		// Read previous-frame node interaction; it drives this frame's highlight.
 		hovered := make(map[string]bool, len(lay.Nodes))
@@ -325,6 +336,14 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 // so node strokes, the self-loop and edge labels (whose egui font metrics
 // differ slightly from Graphviz's layout estimate) don't clip at the edges.
 const fitPad = 0.06
+
+// unboundedMinZoom and unboundedMaxZoom open the shared camera's limits wide
+// enough that they never bind here: this view fits whatever it is given, and
+// bounds the user's zoom multiplier rather than the resulting scale.
+const (
+	unboundedMinZoom = 1e-9
+	unboundedMaxZoom = 1e9
+)
 
 // fit computes the uniform scale + centring offset to map the layout's bounding
 // box into the target canvas (less a fitPad margin), and the resulting canvas

@@ -16,7 +16,7 @@ func (v *View) scanNode(px, py float32) int32 {
 		if v.g.noPick[i] {
 			continue
 		}
-		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+		sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 		r := max(v.nodeOuterPx(i), pickMinPx)
 		dx, dy := px-sx, py-sy
 		d2 := dx*dx + dy*dy
@@ -91,14 +91,14 @@ func TestPickGridMatchesTheScan(t *testing.T) {
 			v.g.y[i] = rapid.Float32Range(-spanY, spanY).Draw(rt, "y")
 		}
 		v.g.posVer++
-		v.cam.zoom = rapid.Float32Range(0.02, 20).Draw(rt, "zoom")
-		v.cam.panX = rapid.Float32Range(-500, 500).Draw(rt, "panX")
-		v.cam.panY = rapid.Float32Range(-500, 500).Draw(rt, "panY")
+		v.cam.Zoom = rapid.Float32Range(0.02, 20).Draw(rt, "zoom")
+		v.cam.PanX = rapid.Float32Range(-500, 500).Draw(rt, "panX")
+		v.cam.PanY = rapid.Float32Range(-500, 500).Draw(rt, "panY")
 		// Points near a node, or anywhere.
 		var px, py float32
 		if n > 0 && rapid.Bool().Draw(rt, "near") {
 			i := rapid.IntRange(0, n-1).Draw(rt, "i")
-			sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
+			sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 			px = sx + rapid.Float32Range(-40, 40).Draw(rt, "dx")
 			py = sy + rapid.Float32Range(-40, 40).Draw(rt, "dy")
 		} else {
@@ -159,7 +159,7 @@ func TestPickGridBoundsDegenerateShapes(t *testing.T) {
 	v.g.posVer++
 	v.grid.build(&v.g, v.style.NodeRadius)
 	require.LessOrEqual(t, int(v.grid.cols)*int(v.grid.rows), pickGridMaxCellsPerNode*50+64)
-	sx, sy := v.cam.toScreen(v.g.x[7], v.g.y[7])
+	sx, sy := v.cam.ToScreen(v.g.x[7], v.g.y[7])
 	require.Equal(t, int32(7), v.pickNode(sx, sy))
 }
 

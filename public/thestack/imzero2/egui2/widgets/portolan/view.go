@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 )
 
 // View is the map's camera — the view state of src/map/Map.js without its
@@ -285,6 +286,44 @@ func (v *View) PixelWorldBounds() (Bounds, bool) { return v.PixelWorldBoundsAt(v
 func (v *View) PixelWorldBoundsAt(zoom float64) (Bounds, bool) {
 	return v.crs.GetProjectedBounds(zoom)
 }
+
+// Camera expresses the view's current transform as the shared 2D camera
+// (ADR-0228 §SD5), so a widget with a world of its own can be drawn over the
+// map in the same canvas pixels the map's own geometry lands on. World units
+// are projected positions at refZoom — ProjectAt(ll, refZoom) — because the
+// CRS scale is a pure multiplier, which is what makes the map's transform an
+// isotropic scale and a translation like every other canvas widget's.
+//
+// The map is a *source* of a camera, never a consumer of one: nothing here
+// reads it back, and the view's own centre and zoom stay the authority.
+//
+// Precision: the camera is float32 where this view is float64, and the
+// dominant term is the pan rather than the world point — the pan is the pixel
+// origin, which reaches about 35 million at zoom 18 and so quantises to about
+// two pixels there on its own. A caller that needs exact placement at those
+// zooms does not use this camera: it declares its positions as
+// LatLngToLayerPoint values, which stay viewport-sized, with an identity
+// camera (camera.Camera{Zoom: 1}). Below about zoom 14 both are sub-pixel and
+// the choice does not matter.
+func (v *View) Camera(refZoom float64) camera.Camera {
+	return camera.Camera{
+		Zoom: float32(v.ZoomScaleAt(v.zoom, refZoom)),
+		PanX: float32(-v.pixelOrigin.X),
+		PanY: float32(-v.pixelOrigin.Y),
+		// A map's scale spans far more than the camera's own defaults, and
+		// the view has already bounded its zoom; these keep a later Fit or
+		// ZoomAround from clamping a legitimate transform.
+		MinZoom: cameraMinZoom,
+		MaxZoom: cameraMaxZoom,
+	}
+}
+
+// The bounds Camera hands out: wide enough never to bind, since the view's
+// own MinZoom/MaxZoom are the real limits.
+const (
+	cameraMinZoom = 1e-9
+	cameraMaxZoom = 1e9
+)
 
 // LayerPointToLatLng converts a point relative to the pixel origin.
 func (v *View) LayerPointToLatLng(p Point) LatLng { return v.Unproject(p.Add(v.pixelOrigin)) }
