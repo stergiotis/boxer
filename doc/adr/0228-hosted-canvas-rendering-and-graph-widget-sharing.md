@@ -180,15 +180,62 @@ out of ADR-0224 §SD10 — a declared pin is fixed and everything else still
 feels it — and it is Ogma's `geo.runLayout` ("get the coordinates for the
 nodes that don't have them") arriving for free rather than as a feature.
 
-One thing the caller must decide, because the widget cannot: what an
-unlocated node is anchored *to* between frames. Its retained position is in
-world units, which under §SD3's identity camera are canvas pixels, so left
-alone it sticks to the screen and slides against the map on every pan until
-the springs drag it back. Unprojecting the settled position after the paint
-and projecting it back before the next declaration anchors it in geography
-instead, so it rides the map like a located node while still being placed by
-the layout. Two lines each way, and the `graphonmap` demo does it; a consumer
-that wants the screen-anchored behaviour simply does not.
+**Which camera the guest takes then stops being a free choice, and this is
+the correction the demo forced.** Two recipes were on offer in §Context, and
+the first reading recommended layer points universally:
+
+- *Identity camera over layer points.* World units are canvas pixels. Exact at
+  every zoom, and world-unit sizes — the node radius — are already screen
+  sizes. **Right when every node is located**, because nothing has to be laid
+  out.
+- *The host's camera at a fixed reference zoom.* World units are projected
+  pixels at that zoom — the same geometry whatever the host is showing.
+  **Right as soon as a layout runs.**
+
+Under the identity camera a layout is solving in screen space while the
+geometry it solves against rescales with the view. graphview's ideal edge
+length is derived from the canvas area, so it is a constant: in the demo, 174
+px, against a Zürich–Bern separation that runs from 114 px at zoom 7 to 12,699
+px at zoom 14. The unlocated nodes are yanked toward or flung away from their
+neighbours as the view moves, and once one escapes, its edges are the long
+clipped ones that gave the symptom away. A world fixed at a reference zoom
+removes the problem rather than damping it: the layout sees one geometry, it
+settles once, and a camera change is not one of the conditions that wakes a
+settled simulation.
+
+It also removes the anchoring question entirely. An unlocated node's retained
+world position *is* geographic under the fixed world, so nothing needs
+unprojecting after the paint and projecting back before the next declaration —
+which was this record's first answer, and was both more code and, through
+Leaflet's whole-pixel rounding of layer points, a source of jitter near
+equilibrium.
+
+What the fixed world costs is that world-unit sizes scale with the view: a
+radius must be divided by the camera's zoom to stay a constant size on screen.
+That is the caller's one-liner, and it is not a reason to solve in screen
+space.
+
+**Measure the fixed world from a local origin, not from the projection's
+corner.** `View.CameraAt(refZoom, origin)` takes one, and pinning at
+`ProjectAt(ll, refZoom) - origin` is the other half. Projected coordinates are
+large absolute numbers — Zürich is 19,713 pixels from the antimeridian at zoom
+7.2 — and two things go wrong when they are used raw. float32 spends its
+mantissa on the magnitude, which is the ceiling §Context measured and which a
+local origin removes rather than defers: the same data within a few hundred
+units of zero stays sub-pixel at every zoom. And graphview's placement seats a
+node with no placed neighbour in a box at the *world* origin, which under a
+whole-world projection is somewhere in the Pacific; the node then crawls back
+across the map at `MaxStep` a frame. The second failure was what the demo
+actually showed, and it was half a widget defect besides — ADR-0224's dated
+update of this date has the rest.
+
+**SD3b — The paint takes a later camera than the pick.** A host applies input
+at the top of its frame and offers its paint slot at the bottom, so by the
+time the guest paints, the host's view has already moved. `SetHostCamera`
+refreshes the transform between the two phases: the pick keeps the camera of
+the frame the pointer was over, the paint takes the one being drawn.  Without
+it the graph is a frame behind the host's own drawing and slides against it
+under a pan — which is the second half of the same symptom.
 
 **SD4 — What hosted mode gives up is named, not discovered.** The wheel
 belongs to the host, so the guest neither zooms nor reads `GetCanvasWheel`.

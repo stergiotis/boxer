@@ -620,6 +620,19 @@ func (v *View) reconcileAndPlace(nodes []NodeSpec, edges []EdgeSpec, w, h float3
 		v.autoPaused = false
 	}
 
+	// Declared pins are snapped before placement as well as after: a node
+	// created this frame with a pin is an anchor its new neighbours can be
+	// seated beside, and the authoritative pass below still has the last
+	// word over the static layouts.
+	if len(created) > 0 {
+		g := &v.g
+		for i := range g.ids {
+			if g.pinDecl[i] {
+				g.x[i], g.y[i] = g.pinX[i], g.pinY[i]
+			}
+		}
+	}
+
 	// Placement of nodes that have none yet.
 	if len(created) > 0 {
 		switch v.Opts.Layout {

@@ -70,6 +70,12 @@ func (p Projector) View() *View { return p.view }
 // note on which recipe stays exact at high zoom.
 func (p Projector) Camera(refZoom float64) camera.Camera { return p.view.Camera(refZoom) }
 
+// CameraAt is [View.CameraAt]: the frame's transform with world units
+// measured from a local origin, which is the form to prefer.
+func (p Projector) CameraAt(refZoom float64, origin Point) camera.Camera {
+	return p.view.CameraAt(refZoom, origin)
+}
+
 // Map is the slippy-map widget: a View, a Pyramid and a TileLoader behind a
 // painter-lane canvas, with Leaflet's handlers between the lane's registers
 // and the view. Create one per map instance and keep it; call Render every

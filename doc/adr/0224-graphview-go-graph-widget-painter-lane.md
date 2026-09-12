@@ -458,6 +458,32 @@ neighbour set and dims the rest itself. What counts as a neighbour — one
 hop, both directions, through a hidden node or not — is the consumer's
 question, and a widget that answered it would be guessing.
 
+### 2026-09-12 — placement leaves declared pins alone
+
+§SD10 says a declared pin wins over any placement, and it did — but only
+after the fact. On the frame a whole graph arrives every slot is new, so the
+initial placement ran over the pinned nodes too, scattering them into the
+random spawn box; `applyPins` then snapped them back, and nothing looked
+wrong. What was wrong is what happened in between: an unpinned node seated
+"beside a placed neighbour" was seated beside a neighbour that had just been
+randomised, so it started nowhere near where its pinned neighbours would end
+up, and a force layout crawled it back at `MaxStep` a frame.
+
+Three corrections, all inside placement. A node whose declaration carries a
+pin is not placed at all, by either the random or the near-a-neighbour pass,
+since the caller gave it a position. A node that is *not* pinned may be
+seated beside a neighbour created in the same frame when that neighbour is
+pinned — a pin is a known position whether or not the slot is new, and on a
+first frame the pins are the only anchors there are. And declared pins are
+snapped before placement as well as after, so those anchors hold real
+coordinates by the time anything is seated beside them.
+
+It surfaced under ADR-0228's hosted rendering, where world units are
+projected map coordinates and the world origin is thousands of units from the
+data, which turned "started somewhere unhelpful" into "started twenty
+thousand units away and visibly crawled". The defect was never hosting's: any
+caller declaring pinned and unpinned nodes in one frame had it.
+
 ### 2026-09-12 — the camera moved out of the package
 
 §SD4's camera — the isotropic scale and translation, the fit, the

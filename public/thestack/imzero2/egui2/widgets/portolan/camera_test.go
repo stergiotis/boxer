@@ -105,3 +105,47 @@ func TestCameraLimitsDoNotBindAMapScale(t *testing.T) {
 	cm := v.Camera(0)
 	require.Equal(t, cm.Zoom, cm.Clamp(cm.Zoom), "a zoom-20 scale is inside the bounds")
 }
+
+// A local origin must not change where anything lands — it moves the numbers,
+// not the picture — and it must buy precision at the zooms where the
+// whole-world form loses it.
+func TestLocalOriginLandsInTheSamePlaceAndKeepsMorePrecision(t *testing.T) {
+	const refZoom = 7.2
+	here := LL(46.85, 8.0) // near the data
+	for _, z := range []float64{7.2, 12, 16, 18} {
+		v := cameraTestView(z)
+		origin := v.ProjectAt(here, refZoom)
+
+		whole := v.Camera(refZoom)
+		local := v.CameraAt(refZoom, origin)
+		require.Equal(t, whole.Zoom, local.Zoom, "only the pan differs")
+
+		for _, ll := range []LatLng{here, LL(47.3769, 8.5417), LL(46.2044, 6.1432)} {
+			w := v.ProjectAt(ll, refZoom)
+			wx, wy := whole.ToScreen(float32(w.X), float32(w.Y))
+			lx, ly := local.ToScreen(float32(w.X-origin.X), float32(w.Y-origin.Y))
+			want := v.LatLngToContainerPoint(ll)
+
+			// The local form is at least as close to the truth as the whole-
+			// world one, everywhere, and within a pixel of it.
+			dWhole := math.Abs(float64(wx) - want.X)
+			dLocal := math.Abs(float64(lx) - want.X)
+			require.LessOrEqual(t, dLocal, math.Max(dWhole, 1.0), "zoom %v %v: x", z, ll)
+			require.LessOrEqual(t, math.Abs(float64(ly)-want.Y), math.Max(math.Abs(float64(wy)-want.Y), 1.0), "zoom %v %v: y", z, ll)
+			require.LessOrEqual(t, dLocal, 1.0, "zoom %v %v: local stays sub-pixel", z, ll)
+		}
+	}
+}
+
+// The magnitude the mantissa is spent on, stated as a number: the whole-world
+// coordinate is large enough to cost pixels at high zoom where the local one
+// is not.
+func TestLocalOriginKeepsWorldCoordinatesSmall(t *testing.T) {
+	const refZoom = 7.2
+	v := cameraTestView(refZoom)
+	origin := v.ProjectAt(LL(46.85, 8.0), refZoom)
+	w := v.ProjectAt(LL(47.3769, 8.5417), refZoom)
+	require.Greater(t, w.X, 19000.0, "Zurich sits far from the projection's corner")
+	require.Less(t, math.Abs(w.X-origin.X), 100.0, "and close to a local origin")
+	require.Less(t, math.Abs(w.Y-origin.Y), 100.0)
+}

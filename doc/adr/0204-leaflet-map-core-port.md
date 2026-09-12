@@ -603,7 +603,7 @@ it removed.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-### 2026-09-12 — an offline basemap overlay
+### 2026-09-12 — an offline basemap overlay, and a fill the port did not carry
 
 A map with no tile server paints its background and nothing else, which is a
 grey rectangle: correct, and useless as the ground under anything drawn over
@@ -624,6 +624,59 @@ The outlines are coarse on purpose. At country-and-continent zooms they read
 as a basemap; past roughly zoom 8 a 110m coastline is visibly a polygon. This
 is the offline stand-in for tiles, not a replacement for them, and the
 `graphonmap` demo offers both.
+
+**The overlay found a gap in the port.** Leaflet fills a polygon with the
+canvas nonzero rule, which asks nothing of the ring: it may cross itself, run
+back along its own edge, or repeat a vertex, and the fill is still the region
+the rule defines. This lane fills by ear-clipping the ring instead (`earcutr`,
+`interpreter.rs`), and an ear clipper is defined only for a simple polygon.
+Everything Leaflet's vector pipeline does to a ring on the way to the fill is
+therefore safe upstream and unsafe here — and the pipeline was ported
+faithfully, which is how a faithful clip and a faithful fill make an unfaithful
+pair. Three mechanisms, all of them producing triangles the ring does not
+contain, and all of them moving with the view so the result differs every
+frame:
+
+- **Sutherland–Hodgman closes a concave ring along the clip window.** Where the
+  ring leaves the window and re-enters it, the output carries vertices that
+  were never in the input, running along the boundary — for a geometry as wide
+  as Antarctica, an edge the full width of the view.
+- **Douglas–Peucker does not preserve simplicity.** Dropping vertices from a
+  simple ring can make its edges cross, and which vertices survive depends on
+  the view: measured over the country outlines, simplification took the
+  self-intersecting rings from 5 to 10 at one zoom and from 0 to 2 at another.
+- **Projection rounds to whole pixels**, so at low zoom most of a large
+  outline's vertices land on the same one and the clip adds more: 108 of the
+  240 rings reaching the fill at world view carried repeated vertices, falling
+  to 2 by zoom 4 and none above, which is why this only ever showed at world
+  view.
+
+`Polygon` now clips and simplifies **only a convex ring**, where both are safe
+— Sutherland–Hodgman is exact on one and Douglas–Peucker keeps it convex — and
+hands a concave ring over whole to the canvas clip the map already pushes. It
+drops zero-length edges, and routes a ring of under a square pixel to the
+feathered fan, which is bounded by the ring's own points where the ear clip is
+ill-conditioned. A ring wholly outside the window is still dropped, so the
+cheap half of what the clip bought is kept. The cost is vertices: a concave
+ring is sent as the caller gave it, where Leaflet would have trimmed it.
+
+**One correction is recorded as the mistake it was.** Reading the asset for an
+antimeridian problem finds exactly one ring stepping a full turn between
+consecutive vertices, and treating that as a crossing is wrong: it is
+Antarctica's seam over the pole — down the 180th meridian to latitude −90,
+across, and back up the −180th. Making its longitudes continuous moves 554 of
+its 556 vertices and carries the continent to longitudes 180–540, a world
+width east of everything else. Rings are drawn as the atlas holds them, and a
+test asserts that the asset's one full-turn step is a seam, both ends on the
+meridian at latitude −90, so that nothing corrects it again.
+
+What actually located the gap was the shape of the symptom rather than any
+reading of the code: the outlines were clean and only the fills were wrong,
+and the stroke path clips segment by segment where the fill path clipped the
+polygon. The map's own SVG export helped and misled in turn — it serialises
+the mesh, so earcut's triangles are inspectable, but it captures one frame,
+and an artefact that changes every frame is easily absent from the one you
+take.
 
 ## References
 

@@ -249,3 +249,93 @@ func TestUnpinnedNodesAreLaidOutAmongPinnedOnes(t *testing.T) {
 	require.Greater(t, y1, float32(-150))
 	require.Less(t, y1, float32(300))
 }
+
+func TestSetHostCameraRefreshesThePaintButNotThePick(t *testing.T) {
+	s := newHostScene(t, Options{}, 400, 300)
+	s.host.Camera = cam.Camera{Zoom: 1}
+	s.frame(hostedNodes(), nil)
+
+	// The pick runs against the camera HostedInput was given...
+	s.v.HostedInput(s.host)
+	require.Equal(t, float32(1), s.v.cam.Zoom)
+	// ...and the paint against the one the host has by the time it draws,
+	// which is what keeps the graph from sliding against it under a pan.
+	s.v.SetHostCamera(cam.Camera{Zoom: 4, PanX: 7, PanY: 9})
+	require.Equal(t, float32(4), s.v.cam.Zoom)
+	s.v.HostedPaint(hostedNodes(), nil)
+	zoom, panX, panY := s.v.Camera()
+	require.Equal(t, [3]float32{4, 7, 9}, [3]float32{zoom, panX, panY})
+	s.sm.ScriptReset()
+
+	// Outside a hosted render it does nothing: Render owns its camera.
+	s.v.SetCamera(2, 0, 0)
+	s.v.SetHostCamera(cam.Camera{Zoom: 8})
+	zoom, _, _ = s.v.Camera()
+	require.Equal(t, float32(2), zoom)
+}
+
+// A world fixed at a reference zoom is what makes a layout among pinned nodes
+// stable: the pinned geometry does not change when the host's camera does, so
+// the free node settles once (ADR-0228 §SD3a).
+func TestAFixedWorldKeepsTheLayoutStillWhileTheHostZooms(t *testing.T) {
+	s := newHostScene(t, Options{
+		Layout: LayoutForceDirected,
+		Force:  ForceParams{PauseOnSettle: true},
+	}, 400, 300)
+	nodes := []NodeSpec{
+		{Id: 1, Pinned: true, PinX: 0, PinY: 0},
+		{Id: 2, Pinned: true, PinX: 200, PinY: 0},
+		{Id: 3}, // unlocated
+	}
+	edges := []EdgeSpec{{From: 3, To: 1}, {From: 3, To: 2}}
+	settled := false
+	for range 4000 {
+		s.frame(nodes, edges)
+		if s.v.IsSettled() {
+			settled = true
+			break
+		}
+	}
+	require.True(t, settled, "the layout reached equilibrium")
+	x0, y0, ok := s.v.NodePosition(3)
+	require.True(t, ok)
+
+	// The host zooms right in and pans. World positions are unchanged, so
+	// there is nothing new to solve: the camera must not even wake the
+	// settled layout, let alone move the free node.
+	s.host.Camera = cam.Camera{Zoom: 32, PanX: -1000, PanY: -400}
+	for range 20 {
+		s.frame(nodes, edges)
+	}
+	require.True(t, s.v.IsSettled(), "a camera change is not a wake condition")
+	x1, y1, _ := s.v.NodePosition(3)
+	require.Equal(t, [2]float32{x0, y0}, [2]float32{x1, y1}, "the free node ignored the host's zoom")
+}
+
+// The frame a whole graph arrives, every slot is new, so a new node has no
+// already-placed neighbour to be seated beside — except a pinned one, whose
+// position the caller gave. Without that, an unlocated node starts in the box
+// at the world origin, which is nowhere near the data when the world is
+// projected coordinates, and crawls back at MaxStep a frame.
+func TestANewNodeIsSeatedBesideItsPinnedNeighboursOnTheFirstFrame(t *testing.T) {
+	s := newHostScene(t, Options{Layout: LayoutForceDirected}, 400, 300)
+	// Pins far from the origin, as projected map coordinates are.
+	const ox, oy float32 = 19713, 13181
+	nodes := []NodeSpec{
+		{Id: 1, Pinned: true, PinX: ox, PinY: oy},
+		{Id: 2, Pinned: true, PinX: ox + 120, PinY: oy},
+		{Id: 3}, // unlocated, declared in the same frame
+	}
+	edges := []EdgeSpec{{From: 3, To: 1}, {From: 3, To: 2}}
+
+	s.frame(nodes, edges)
+	x, y, ok := s.v.NodePosition(3)
+	require.True(t, ok)
+
+	// It lands among its pinned neighbours on the very first frame, not at
+	// the origin twenty thousand units away.
+	require.InDelta(t, ox+60, x, 400, "placed near its pinned neighbours")
+	require.InDelta(t, oy, y, 400)
+	dist := math.Hypot(float64(x), float64(y))
+	require.Greater(t, dist, 10000.0, "and nowhere near the world origin")
+}

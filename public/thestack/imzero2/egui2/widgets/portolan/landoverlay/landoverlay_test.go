@@ -1,6 +1,7 @@
 package landoverlay
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,6 @@ func TestCullKeepsWhatMeetsTheViewportAndDropsTheRest(t *testing.T) {
 	a := atlas(t)
 	ch := country(t, a, "Switzerland")
 
-	// A box over Switzerland keeps it; one over the Pacific does not.
 	require.True(t, meets(ch, 45.5, 5.5, 48.0, 10.5))
 	require.False(t, meets(ch, -20, -150, -10, -140))
 
@@ -37,14 +37,13 @@ func TestCullKeepsWhatMeetsTheViewportAndDropsTheRest(t *testing.T) {
 	require.True(t, meets(ch, maxLat, minLng, maxLat+1, maxLng), "north edge")
 	require.True(t, meets(ch, minLat-1, maxLng, minLat, maxLng+1), "east edge")
 
-	// A whole-world box keeps everything that has geometry.
 	kept := 0
 	for i := range a.Countries {
 		if meets(&a.Countries[i], -90, -180, 90, 180) {
 			kept++
 		}
 	}
-	require.Equal(t, len(a.Countries), kept)
+	require.Equal(t, len(a.Countries), kept, "a whole-world box keeps everything")
 }
 
 func TestSwitzerlandsBoundsAreWhereSwitzerlandIs(t *testing.T) {
@@ -57,8 +56,7 @@ func TestSwitzerlandsBoundsAreWhereSwitzerlandIs(t *testing.T) {
 }
 
 func TestRingsComeBackAsDegreesAndReuseTheBuffer(t *testing.T) {
-	a := atlas(t)
-	ch := country(t, a, "Switzerland")
+	ch := country(t, atlas(t), "Switzerland")
 	require.Positive(t, ch.RingCount())
 
 	var lats, lngs []float64
@@ -73,14 +71,11 @@ func TestRingsComeBackAsDegreesAndReuseTheBuffer(t *testing.T) {
 		require.LessOrEqual(t, lngs[i], 180.0)
 	}
 
-	// The buffer is the caller's to reuse: appending to a truncated slice
-	// keeps the capacity, which is the point of the signature.
 	capBefore := cap(lats)
 	lats, lngs = lats[:0], lngs[:0]
 	lats, lngs, _ = ch.Ring(0, lats, lngs)
 	require.Equal(t, capBefore, cap(lats), "no reallocation on the second frame")
 
-	// An index outside the country returns the inputs untouched.
 	l2, g2, h2 := ch.Ring(ch.RingCount(), lats, lngs)
 	require.Equal(t, len(lats), len(l2))
 	require.Equal(t, len(lngs), len(g2))
@@ -105,4 +100,52 @@ func TestTheAssetsOneHoleIsReportedAsOne(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, holes)
+}
+
+// Rings are drawn as the atlas holds them, and this is why nothing here
+// "corrects" a longitude. Exactly one ring in the asset steps a full turn
+// between consecutive vertices, and that step is not a crossing: it is
+// Antarctica's seam over the pole, down the 180th meridian to latitude −90,
+// across, and back up the −180th. Making such a ring's longitudes continuous
+// — which is what an antimeridian fix does — moves almost every vertex it has
+// and puts the continent a world width east of everything else.
+func TestTheOnlyFullTurnInTheAssetIsAPoleSeamAndNotACrossing(t *testing.T) {
+	a := atlas(t)
+	var lats, lngs []float64
+	found := 0
+	for i := range a.Countries {
+		cy := &a.Countries[i]
+		for r := range cy.RingCount() {
+			lats, lngs = lats[:0], lngs[:0]
+			lats, lngs, _ = cy.Ring(r, lats, lngs)
+			if len(lngs) < 2 {
+				continue
+			}
+			j := bigStep(lngs)
+			if j < 0 {
+				continue
+			}
+			found++
+			require.Equal(t, "Antarctica", cy.Name)
+			// A seam, not a journey: the step is exactly a full turn, both
+			// ends sit on the meridian, and the latitude does not move.
+			require.Equal(t, 360.0, math.Abs(lngs[j]-lngs[j-1]))
+			require.Equal(t, 180.0, math.Abs(lngs[j-1]))
+			require.Equal(t, 180.0, math.Abs(lngs[j]))
+			require.Equal(t, lats[j-1], lats[j])
+			require.Equal(t, -90.0, lats[j], "and it runs across the pole")
+		}
+	}
+	require.Equal(t, 1, found, "one such ring, and it is the seam")
+}
+
+// bigStep returns the index of the first vertex more than half a turn from
+// its predecessor, or -1.
+func bigStep(lngs []float64) int {
+	for i := 1; i < len(lngs); i++ {
+		if math.Abs(lngs[i]-lngs[i-1]) > 180 {
+			return i
+		}
+	}
+	return -1
 }

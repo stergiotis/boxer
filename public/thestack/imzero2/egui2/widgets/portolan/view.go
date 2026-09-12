@@ -305,11 +305,26 @@ func (v *View) PixelWorldBoundsAt(zoom float64) (Bounds, bool) {
 // LatLngToLayerPoint values, which stay viewport-sized, with an identity
 // camera (camera.Camera{Zoom: 1}). Below about zoom 14 both are sub-pixel and
 // the choice does not matter.
-func (v *View) Camera(refZoom float64) camera.Camera {
+func (v *View) Camera(refZoom float64) camera.Camera { return v.CameraAt(refZoom, Point{}) }
+
+// CameraAt is Camera with world units measured from origin — a projected
+// point, usually ProjectAt of somewhere near the data — instead of from the
+// projection's own corner. That is the form to prefer: projected pixels are
+// large absolute numbers (about 19,700 for Zürich at zoom 7.2), and float32
+// spends its mantissa on the magnitude rather than on the detail. Measured
+// from a local origin the same data sits within a few hundred units of zero,
+// which is what keeps the transform sub-pixel at the zooms where the
+// whole-world form does not.
+//
+// It is also what makes a layout behave: graphview seats a new node beside a
+// placed neighbour, and failing that in a box at the world origin, which is a
+// long way from the data when the origin is the antimeridian.
+func (v *View) CameraAt(refZoom float64, origin Point) camera.Camera {
+	scale := v.ZoomScaleAt(v.zoom, refZoom)
 	return camera.Camera{
-		Zoom: float32(v.ZoomScaleAt(v.zoom, refZoom)),
-		PanX: float32(-v.pixelOrigin.X),
-		PanY: float32(-v.pixelOrigin.Y),
+		Zoom: float32(scale),
+		PanX: float32(origin.X*scale - v.pixelOrigin.X),
+		PanY: float32(origin.Y*scale - v.pixelOrigin.Y),
 		// A map's scale spans far more than the camera's own defaults, and
 		// the view has already bounded its zoom; these keep a later Fit or
 		// ZoomAround from clamping a legitimate transform.

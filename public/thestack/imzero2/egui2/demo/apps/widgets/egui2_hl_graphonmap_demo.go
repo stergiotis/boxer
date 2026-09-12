@@ -6,7 +6,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
-	cam "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
@@ -20,19 +19,42 @@ import (
 // says so through the claim the map is told about before it handles input.
 //
 // It also shows the mixed case. A node with coordinates is declared Pinned at
-// its projected layer point, so the map places it. A node *without* any —
-// something the data joins to but does not locate — is declared unpinned, and
-// the force step lays it out among the pinned ones, which is what ADR-0224
-// §SD10 gives for free: a declared pin is fixed and everything else still
-// feels it. Between frames such a node is anchored in geography rather than
-// on screen: its settled position is unprojected after the paint and
-// projected back before the next one, so it rides the map instead of sliding
-// against it when the view moves.
-
+// its projected position; a node *without* any — something the data joins to
+// but does not locate — is declared unpinned, and the force step lays it out
+// among the pinned ones, which is what ADR-0224 §SD10 gives for free: a
+// declared pin is fixed and everything else still feels it.
+//
+// Because a layout runs, this demo takes the map's camera at a fixed
+// reference zoom rather than an identity camera over layer points. World
+// units are then projected pixels at that zoom — the same geometry whatever
+// the map is showing — so the layout has one equilibrium instead of one that
+// moves with the view, and an unlocated node needs no anchoring at all: its
+// retained world position is already geographic.
+//
+// The world is measured from a local origin near the data rather than from
+// the projection's corner, which is what CameraAt is for: Zürich is 19,713
+// projected pixels from the antimeridian at this zoom and about 60 from the
+// origin below. Small numbers keep float32 sub-pixel at every zoom, and they
+// keep a newly declared node — seated beside a placed neighbour, or in a box
+// at the world origin when it has none — somewhere near the picture.
+//
+// The price of the fixed world is that world-unit sizes scale with the view,
+// so the node radius is divided by the camera's zoom to stay a constant size
+// on screen (ADR-0228 §SD3a).
 const (
 	graphOnMapW = 720
 	graphOnMapH = 460
+	// graphOnMapRefZoom fixes the world the layout runs in. Near the initial
+	// view, so the ideal edge length is comparable to the spread of the
+	// pinned nodes at that zoom.
+	graphOnMapRefZoom = 7.2
+	// graphOnMapNodePx is the node radius as it should appear on screen.
+	graphOnMapNodePx = 7
 )
+
+// graphOnMapCentre is where the world is measured from: near the data, so
+// projected coordinates stay small (see the note above).
+var graphOnMapCentre = portolan.LL(46.85, 8.0)
 
 // graphOnMapSite is a node the data locates.
 type graphOnMapSite struct {
@@ -78,19 +100,20 @@ type graphOnMapState struct {
 
 	nodes []graphview.NodeSpec
 	edges []graphview.EdgeSpec
-	// freeAt anchors an unlocated node in geography between frames: where the
-	// force step left it, unprojected. Empty until it has been placed once.
-	freeAt map[uint64]portolan.LatLng
+	// origin is graphOnMapCentre projected at the reference zoom: the point
+	// world coordinates are measured from.
+	origin portolan.Point
 
-	claimed   bool
-	claimNode uint64
-	hasNode   bool
-	lastEvent string
-	selected  int
-	auras     bool
-	tiles     bool
-	showLand  bool
-	showFree  bool
+	claimed    bool
+	claimNode  uint64
+	hasNode    bool
+	lastEvent  string
+	selected   int
+	auras      bool
+	tiles      bool
+	showLand   bool
+	showFree   bool
+	landNoFill bool
 }
 
 func newGraphOnMapState(ids *c.WidgetIdStack) *graphOnMapState {
@@ -98,13 +121,20 @@ func newGraphOnMapState(ids *c.WidgetIdStack) *graphOnMapState {
 		m: portolan.New(ids, portolan.Options{
 			Source: basemap.PortolanSource(),
 			Loader: basemap.PortolanLoader(),
-			Center: portolan.LL(46.85, 8.0),
-			Zoom:   7.2,
+			Center: graphOnMapCentre,
+			Zoom:   graphOnMapRefZoom,
 		}),
 		gv: graphview.New(ids, "graph-on-map", graphview.Options{
 			// A force layout, because the unlocated nodes need laying out;
 			// every located node is pinned, so the step only moves those.
-			Layout:        graphview.LayoutForceDirected,
+			Layout: graphview.LayoutForceDirected,
+			Force: graphview.ForceParams{
+				// The ideal edge length is derived from the canvas area while
+				// the world is reference-zoom pixels; this brings the two to
+				// the same order.
+				KScale:        0.5,
+				PauseOnSettle: true,
+			},
 			NoZoomAndPan:  true,
 			NodeClicking:  true,
 			NodeSelection: true,
@@ -117,12 +147,12 @@ func newGraphOnMapState(ids *c.WidgetIdStack) *graphOnMapState {
 			},
 		}),
 		land:     &landoverlay.Layer{},
-		freeAt:   make(map[uint64]portolan.LatLng, len(graphOnMapFree)),
 		auras:    true,
 		tiles:    true,
 		showLand: true,
 		showFree: true,
 	}
+	st.origin = st.m.View().ProjectAt(graphOnMapCentre, graphOnMapRefZoom)
 	if a, err := worldmap.LoadAtlas(); err == nil {
 		st.atlas = a
 	}
@@ -132,15 +162,20 @@ func newGraphOnMapState(ids *c.WidgetIdStack) *graphOnMapState {
 	return st
 }
 
-// declare rebuilds the frame's node set: located nodes pinned to their
-// projected layer points, unlocated ones left to the force step.
-func (st *graphOnMapState) declare(p portolan.Projector) {
+// declare rebuilds the frame's node set: located nodes pinned at the
+// reference zoom's projection, unlocated ones left to the force step, which
+// holds them in that same world between frames.
+func (st *graphOnMapState) declare(v *portolan.View, zoom float32) {
+	// World units are reference-zoom pixels, so a world radius would grow
+	// with the view; divide to keep the marker a constant size on screen.
+	r := float32(graphOnMapNodePx) / max(zoom, 1e-6)
 	st.nodes = st.nodes[:0]
 	for _, s := range graphOnMapSites {
-		at := p.ToCanvas(portolan.LL(s.lat, s.lng))
+		at := v.ProjectAt(portolan.LL(s.lat, s.lng), graphOnMapRefZoom)
 		n := graphview.NodeSpec{
-			Id: s.id, Label: s.label, Radius: 7,
-			Pinned: true, PinX: float32(at.X), PinY: float32(at.Y),
+			Id: s.id, Label: s.label, Radius: r,
+			Pinned: true,
+			PinX:   float32(at.X - st.origin.X), PinY: float32(at.Y - st.origin.Y),
 			Color: color.Hex(styletokens.AccentDefault.AsHex()),
 		}
 		if st.auras {
@@ -153,29 +188,13 @@ func (st *graphOnMapState) declare(p portolan.Projector) {
 	}
 	for _, f := range graphOnMapFree {
 		n := graphview.NodeSpec{
-			Id: f.id, Label: f.label, Radius: 6,
+			Id: f.id, Label: f.label, Radius: r * 0.85,
 			Color: color.Hex(styletokens.WarningDefault.AsHex()),
 		}
 		if st.auras {
 			n.Auras = []string{"unlocated"}
 		}
 		st.nodes = append(st.nodes, n)
-		// Put it back where geography left it before the step runs again.
-		if ll, ok := st.freeAt[f.id]; ok {
-			at := p.ToCanvas(ll)
-			st.gv.SetNodePosition(f.id, float32(at.X), float32(at.Y))
-		}
-	}
-}
-
-// adopt remembers where the force step left each unlocated node, as
-// geography rather than as pixels, so the next frame's projection carries it
-// with the map.
-func (st *graphOnMapState) adopt(p portolan.Projector) {
-	for _, f := range graphOnMapFree {
-		if x, y, ok := st.gv.NodePosition(f.id); ok {
-			st.freeAt[f.id] = p.ToLatLng(portolan.Point{X: float64(x), Y: float64(y)})
-		}
 	}
 }
 
@@ -185,14 +204,13 @@ func demoGraphOnMap(ids *c.WidgetIdStack, st *graphOnMapState) {
 	m.SetNoTiles(!st.tiles)
 
 	// 1. The guest reads the pointer first and says what it took, so the map
-	//    can stand down before it handles the same frame's input (§SD2).
+	//    can stand down before it handles the same frame's input (§SD2). The
+	//    camera here is the view the pointer was over.
 	canvas, area := m.Handles()
 	claim := gv.HostedInput(graphview.HostCanvas{
 		Canvas: canvas, Area: area,
 		W: graphOnMapW, H: graphOnMapH,
-		// Layer points are canvas pixels, so the transform is the identity —
-		// the recipe that stays exact at every zoom (ADR-0228 §Context).
-		Camera: cam.Camera{Zoom: 1},
+		Camera: m.View().CameraAt(graphOnMapRefZoom, st.origin),
 	})
 	st.claimed, st.claimNode, st.hasNode = claim.Pointer, claim.Node, claim.HasNode
 	m.SetPointerVeto(claim.Pointer)
@@ -201,11 +219,17 @@ func demoGraphOnMap(ids *c.WidgetIdStack, st *graphOnMapState) {
 	//    canvas, through the same projector.
 	m.Render(graphOnMapW, graphOnMapH, func(p portolan.Projector) {
 		if st.showLand {
-			st.land.Draw(p, st.atlas, landoverlay.DefaultStyle())
+			ls := landoverlay.DefaultStyle()
+			ls.NoFill = st.landNoFill
+			st.land.Draw(p, st.atlas, ls)
 		}
-		st.declare(p)
+		// The map's handlers ran at the top of this Render, so the paint
+		// takes the view as it is now — not the one the pick used, which
+		// would slide the graph against the tiles under a pan.
+		now := p.CameraAt(graphOnMapRefZoom, st.origin)
+		gv.SetHostCamera(now)
+		st.declare(p.View(), now.Zoom)
 		gv.HostedPaint(st.nodes, st.edges)
-		st.adopt(p)
 	})
 
 	// 3. The guest's events are read after the paint, as after Render.
@@ -235,14 +259,16 @@ func demoGraphOnMap(ids *c.WidgetIdStack, st *graphOnMapState) {
 	}
 	c.Label("ADR-0228: one canvas, owned by the map. Drag the background to pan and wheel to zoom — those are the map's. " +
 		"Hover, click or drag a node and the graph takes the pointer instead, so the map does not pan under the gesture. " +
-		"Located nodes are pinned to their coordinates and reprojected every frame; the amber ones have no coordinates at " +
-		"all and are placed by the force layout among them, then anchored in geography so they ride the map.").Wrap().Send()
+		"Located nodes are pinned to their projected coordinates; the amber ones have no coordinates at all and are placed " +
+		"by the force layout among them. The layout runs in a world fixed at one reference zoom, so its result does not " +
+		"change as you zoom the map.").Wrap().Send()
 
 	for range c.CollapsingHeader(ids.PrepareStr("gom-controls"), c.WidgetText().Text("controls and legend").Keep()).DefaultOpen(true).KeepIter() {
 		c.Checkbox(ids.PrepareStr("gom-auras"), st.auras, "group auras").SendRespVal(&st.auras)
 		c.Checkbox(ids.PrepareStr("gom-free"), st.showFree, "nodes without coordinates").SendRespVal(&st.showFree)
 		c.Checkbox(ids.PrepareStr("gom-tiles"), st.tiles, "basemap tiles (needs a tile server)").SendRespVal(&st.tiles)
 		c.Checkbox(ids.PrepareStr("gom-land"), st.showLand, "offline country outlines (landoverlay)").SendRespVal(&st.showLand)
+		c.Checkbox(ids.PrepareStr("gom-land-nofill"), st.landNoFill, "   outlines only, no land fill").SendRespVal(&st.landNoFill)
 		// The legend is external: the rows come from the view and are drawn
 		// out here, in a canvas the map does not own.
 		for _, it := range gv.AuraLegendItems() {

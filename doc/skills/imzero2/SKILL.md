@@ -1355,7 +1355,8 @@ The slippy map is a Go widget on the painter lane (ADR-0204: Leaflet's map core 
 | The view | `m.View() *portolan.View` | Leaflet's Map view: `SetView/SetZoom/PanTo/PanBy/FitBounds/FitWorld`, animated `SetViewAnimated/SetZoomAnimated/SetZoomAroundAnimated/PanToAnimated/PanByAnimated/FlyTo/FlyToBounds/FitBoundsAnimated`, `Stop`, `Center/Zoom/Bounds/Size`, `LatLngToContainerPoint/ContainerPointToLatLng`, `SetMaxBounds/SetMinZoom/SetMaxZoom` |
 | Readback | `m.Hover() (LatLng, bool)`, `m.Clicked() (LatLng, bool)`, `m.ViewHash()`, `m.Events()`, `m.Loading()`, `m.Stats()`, `m.Health()`, `m.BytesShipped()`, `m.Reships()` | all from the map itself, one frame behind the host like every canvas register |
 | Tiles | `m.SetSource(src)`, `m.Source()`, `m.SetNoTiles(on)` | a source switch restarts the pyramid at the current view and re-uploads under the same ids |
-| Overlays (inside the callback) | `p.Marker`, `p.Label`, `p.Polyline`, `p.Polygon`, `p.ConvexPolygon`, `p.Image`; `p.ToCanvas/ToLatLng/View` | canvas-pixel painting through `c.Paint*`; polylines and polygons are projected, clipped to the padded viewport and simplified per frame (Leaflet's vector pipeline), so a geometry far larger than the view costs its visible part |
+| Overlays (inside the callback) | `p.Marker`, `p.Label`, `p.Polyline`, `p.Polygon`, `p.ConvexPolygon`, `p.Image`; `p.ToCanvas/ToLatLng/View`, `p.Camera/CameraAt` | canvas-pixel painting through `c.Paint*`. A polyline, and a **convex** polygon, are projected, clipped to the padded viewport and simplified per frame (Leaflet's vector pipeline), so a geometry far larger than the view costs its visible part. A **concave** polygon is neither clipped nor simplified, only culled: the fill ear-clips the ring and an ear clipper needs a simple polygon, where Leaflet's canvas fill rule did not — clipping invents edges along the window and simplifying can make a ring cross itself, and both draw triangles the ring does not contain (ADR-0204's 2026-09-12 update). Prefer `ConvexPolygon` when the ring really is convex |
+| A camera for a widget drawn over the map | `m.View().CameraAt(refZoom, origin)`, `p.CameraAt(...)`; `Camera(refZoom)` is the origin-less form | the map's transform as a `camera.Camera`, for hosted rendering (ADR-0228 §SD5); prefer the local-origin form |
 | Offline geography (no tile server) | [`portolan/landoverlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/landoverlay/): `Layer.Draw(p, atlas, Style)`, `Layer.Drawn()`, `DefaultStyle()` | fills land and strokes country borders from the `worldmap` atlas (vendored Natural Earth 110m admin-0) through the projector, so a `NoTiles` map still shows geography; culled per country against the viewport, buffers reused per frame. Coarse by design — a basemap stand-in at country-and-continent zooms, not a replacement for tiles past about zoom 8. The map does not depend on it |
 | H3 cells and regions | [`portolan/h3overlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/h3overlay/): `Layer.Cells`, `Layer.Region`, `ViewportCells`, `ResolutionForZoom` | boundaries and the dissolve come from the `h3` wasm bridge (`public/science/geo/h3`); the caller owns the `h3.Handle` — the map does not depend on the runtime |
 
@@ -1651,13 +1652,22 @@ What to know before using it:
   moves the camera (`SetCamera` / `FitNow` / `FitNodes` are overruled every
   frame), and must use `AuraLegendExternal`. Pin nodes to
   `Projector.ToCanvas` layer points with `Camera{Zoom: 1}` and reproject each
-  frame; that is exact at every zoom, where a shared world camera is not.
-  A declaration may **mix located and unlocated nodes**: pin the ones with
-  coordinates, declare the rest with none and the force step places them
-  among the pinned (ADR-0224 §SD10 gives this for free). Anchor an unlocated
-  node in geography between frames — `p.ToLatLng` its settled position after
-  the paint, `p.ToCanvas` + `SetNodePosition` before the next declaration —
-  or it sticks to the screen and slides when the map pans.
+  frame; that is exact at every zoom. **Use it only when every node is
+  located.** A declaration may mix located and unlocated nodes — pin the ones
+  with coordinates, declare the rest with none and the force step places them
+  among the pinned (ADR-0224 §SD10 gives this for free) — but as soon as a
+  layout runs, take `p.CameraAt(refZoom, origin)` and pin at
+  `v.ProjectAt(ll, refZoom) - origin`, with `origin` the projection of
+  somewhere near the data — raw projected coordinates are tens of thousands
+  of units from the antimeridian, which costs float32 precision at high zoom
+  and starts any node that has no placed neighbour in a box at the world
+  origin. World units are then a fixed geometry whatever the map shows, so
+  the layout settles once; under the identity camera it solves in screen space
+  against a geometry that rescales with the view, and the free nodes are flung
+  about as you zoom. Cost of the fixed world: divide `Radius` by the camera's
+  zoom to keep markers a constant screen size. Call `SetHostCamera` with the
+  *current* camera inside the paint slot — the host's view moved since
+  `HostedInput` — or the graph slides against it under a pan.
 - **Camera** (ADR-0228 §SD5; package `widgets/camera`). The view transform
   `screen = world*Zoom + Pan` is shared, not graphview's: `ToScreen` /
   `ToWorld`, `Fit(box, w, h, pad)`, `ZoomAround(factor, ax, ay)`,

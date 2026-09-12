@@ -97,6 +97,21 @@ func (v *View) HostedInput(h HostCanvas) (claim HostClaim) {
 	return
 }
 
+// SetHostCamera refreshes the transform a hosted paint will draw with, for a
+// host whose own view moved between HostedInput and its paint slot — which is
+// every host that applies input at the top of its frame and offers the slot at
+// the bottom. Without it the graph is painted with the camera the *pick* used,
+// one frame behind what the host drew, and slides against it under a pan.
+//
+// Each phase wants its own camera and this is why: the pick belongs to the
+// frame the pointer was over, the paint to the frame being drawn. Outside a
+// hosted render it does nothing — Render owns its camera.
+func (v *View) SetHostCamera(c cam.Camera) {
+	if v.hosted {
+		v.cam = c
+	}
+}
+
 // HostedPaint reconciles the declaration, advances the layout and paints into
 // the canvas that is current — the host's (ADR-0228 §SD1). It emits no
 // PaintCanvas, no sense region and no background, so a graph over a host's

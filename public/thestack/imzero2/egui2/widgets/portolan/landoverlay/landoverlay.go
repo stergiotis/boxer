@@ -9,6 +9,17 @@
 // as a basemap; past roughly zoom 8 a 110m coastline is visibly a polygon, so
 // this is the offline stand-in for tiles rather than a replacement for them.
 //
+// Rings are drawn as the atlas holds them. No ring in the vendored asset
+// crosses the antimeridian: the one ring whose longitudes step a full turn is
+// Antarctica's, and that step is the polygon's seam over the pole — down the
+// 180th meridian to latitude −90, across, and back up the −180th — not a path
+// going anywhere. Treating it as a crossing and making the longitudes
+// continuous moves 554 of its 556 vertices and puts the continent a world
+// width east of everything else, which is how that was found out. Latitudes
+// past the Mercator clamp, which those pole vertices are, flatten onto it as
+// they do for any geometry the projection is given, so the seam lands along
+// the bottom edge of the map where it belongs.
+//
 //	layer := &landoverlay.Layer{}
 //	atlas, _ := worldmap.LoadAtlas()
 //	m.Render(w, h, func(p portolan.Projector) {
@@ -29,6 +40,11 @@ type Style struct {
 	Land        color.Color // filled landmass
 	Border      color.Color // country outline
 	BorderWidth float32     // screen pixels
+	// NoFill strokes the outlines and fills nothing. Beside being a look of
+	// its own, it is the way to tell a fill artefact from a geometry one: the
+	// stroke follows the ring the overlay computed, while the fill is that
+	// ring triangulated, and only the second can go wrong on its own.
+	NoFill bool
 }
 
 // DefaultStyle is the design system's land and border tokens.
@@ -80,8 +96,9 @@ func (l *Layer) Draw(p portolan.Projector, atlas *worldmap.Atlas, st Style) {
 			if len(l.lats) < 3 {
 				continue
 			}
-			if hole {
-				// An enclave: its border, never the fill that would swallow it.
+			if hole || st.NoFill {
+				// An enclave: its border, never the fill that would swallow
+				// it. NoFill takes every ring down the same path.
 				p.Polyline(l.lats, l.lngs, st.Border, st.BorderWidth)
 				continue
 			}
