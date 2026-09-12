@@ -22,6 +22,15 @@
 // screen-space grid, contoured and filled beneath the graph, with an
 // optional legend from the shared widgets/legend package.
 //
+// The force-directed layouts run one of two force models on the same tree
+// and integrator (ADR-0227 §SD2): the Fruchterman–Reingold step the package
+// shipped with, and a neighbour-embedding step with the t-SNE kernel whose
+// one knob, [ForceParams.Exaggeration], moves a declared graph along the
+// attraction–repulsion spectrum from t-SNE through UMAP to ForceAtlas2.
+// Given the neighbour graph of a feature matrix
+// ([github.com/stergiotis/boxer/public/analytics/graph/knn]) it is a
+// dimensionality reduction drawn as an interactive graph.
+//
 // Layout parameters keep the meaning they have in egui_graphs 0.31 (MIT), the
 // crate whose parameterisation this package re-derives; the two documented
 // departures — the canvas-area ideal edge length and deterministic

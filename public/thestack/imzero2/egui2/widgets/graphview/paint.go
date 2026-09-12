@@ -133,6 +133,9 @@ func (v *View) paint(w, h float32) {
 
 	// Edges.
 	for i := range v.g.eFrom {
+		if o.HideEdges {
+			break
+		}
 		geo := v.edgeGeometry(i)
 		col := v.g.eCol[i]
 		if isUnset(col) {

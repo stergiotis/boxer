@@ -15,6 +15,10 @@ type forceState struct {
 	lastDisp float32
 	tree     quadtree
 	stacks   [][]int32 // one traversal stack per worker, index 0 for the serial walk
+	// Neighbour-embedding scratch and schedule state (ADR-0227 §SD2).
+	zi          []float32 // per-node partial of the repulsion normaliser Z
+	lastExag    float32   // the exaggeration the last step used
+	annealSteps uint64    // the schedule length the last step ran under
 }
 
 // parallelMinNodes is the node count from which the repulsion pass splits
@@ -34,7 +38,8 @@ func idealEdgeLength(w, h float32, n int, kScale float32) float32 {
 
 // step advances the simulation by one iteration over the canvas w×h and
 // records the average per-node displacement. Fixed nodes accumulate no
-// motion. centerGravity is 0 for the plain layout.
+// motion. centerGravity is 0 for the plain layout. The kernel is
+// p.Model's; the integrator, the tree and the settle bookkeeping are shared.
 func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity float32) {
 	n := g.n()
 	if n == 0 {
@@ -53,6 +58,28 @@ func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity 
 	clear(fs.dx)
 	clear(fs.dy)
 
+	switch p.Model {
+	case ForceModelNeighborEmbedding:
+		fs.forcesNE(g, k, p)
+	default:
+		fs.lastExag = 0
+		fs.annealSteps = 0
+		fs.forcesFR(g, k, p)
+	}
+	if centerGravity != 0 {
+		cx, cy := w/2, h/2
+		for i := 0; i < n; i++ {
+			fs.dx[i] += (cx - g.x[i]) * centerGravity
+			fs.dy[i] += (cy - g.y[i]) * centerGravity
+		}
+	}
+	fs.lastDisp = applyDisplacements(g, fs.dx, fs.dy, p.Dt, p.Damping, p.MaxStep)
+	fs.steps++
+}
+
+// forcesFR accumulates the Fruchterman–Reingold displacements.
+func (fs *forceState) forcesFR(g *graph, k float32, p ForceParams) {
+	n := g.n()
 	k2 := p.CRepulse * k * k
 	eps2 := p.Epsilon * p.Epsilon
 	workers := 1
@@ -72,15 +99,141 @@ func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity 
 		})
 	}
 	attraction(g, fs.dx, fs.dy, k, p.Epsilon, p.CAttract)
-	if centerGravity != 0 {
-		cx, cy := w/2, h/2
-		for i := 0; i < n; i++ {
-			fs.dx[i] += (cx - g.x[i]) * centerGravity
-			fs.dy[i] += (cy - g.y[i]) * centerGravity
+}
+
+// neGain scales the neighbour-embedding gradient so that the widget's
+// default integrator (Dt·Damping = 0.015) moves a node by about a twelfth
+// of its distance to a neighbour per step — the learning rate n/12 of
+// Belkina et al. (2019) that t-SNE implementations default to, here folded
+// into the force so Dt and Damping keep their meaning across models.
+const neGain = 6
+
+// exaggerationAt is the schedule of ADR-0227 §SD2: geometric from
+// ExaggerationStart to Exaggeration over ExaggerationSteps steps, then
+// constant. Without a schedule it is Exaggeration.
+func exaggerationAt(p ForceParams, step uint64) float32 {
+	if p.ExaggerationStart <= 0 || p.ExaggerationSteps == 0 || step >= uint64(p.ExaggerationSteps) {
+		return p.Exaggeration
+	}
+	t := float64(step) / float64(p.ExaggerationSteps)
+	return float32(float64(p.ExaggerationStart) * math.Pow(float64(p.Exaggeration/p.ExaggerationStart), t))
+}
+
+// forcesNE accumulates the t-SNE-kernel displacements (ADR-0227 §SD2).
+// Distances are measured in units of the ideal edge length k, so KScale
+// sets the picture's scale as it does for FR. Repulsion is the Barnes–Hut
+// walk with the Cauchy kernel, its per-node partials of Z folded in slot
+// order so the normaliser — and the result — does not depend on the worker
+// count; attraction walks the adjacency with strengths normalised over the
+// edge ends. Both are multiplied by n·neGain: n undoes the 1/n that
+// normalised affinities carry, as t-SNE's learning rate does; the deltas
+// are already world units, so no k returns.
+func (fs *forceState) forcesNE(g *graph, k float32, p ForceParams) {
+	n := g.n()
+	exag := exaggerationAt(p, fs.steps)
+	fs.lastExag = exag
+	fs.annealSteps = 0
+	if p.ExaggerationStart > 0 {
+		fs.annealSteps = uint64(p.ExaggerationSteps)
+	}
+	if cap(fs.zi) < n {
+		fs.zi = make([]float32, n)
+	}
+	fs.zi = fs.zi[:n]
+	clear(fs.zi)
+
+	invK2 := 1 / (k * k)
+	workers := 1
+	if n >= parallelMinNodes {
+		workers = runtime.GOMAXPROCS(0)
+	}
+	fs.stacks = growTo(fs.stacks, workers)
+	if !p.Exact && n >= barnesHutMinNodes {
+		fs.tree.build(g.x, g.y)
+		theta2 := p.Theta * p.Theta
+		parallelRows(n, workers, func(worker, lo, hi int) {
+			fs.stacks[worker] = fs.tree.repulsionNE(g.x, g.y, fs.dx, fs.dy, fs.zi, invK2, theta2, lo, hi, fs.stacks[worker])
+		})
+	} else {
+		parallelRows(n, workers, func(_, lo, hi int) {
+			repulsionRowsNE(g.x, g.y, fs.dx, fs.dy, fs.zi, invK2, lo, hi)
+		})
+	}
+	var z float64
+	for _, v := range fs.zi {
+		z += float64(v)
+	}
+	gain := float32(neGain) * float32(n)
+	if z > 0 {
+		rep := gain / float32(z)
+		for i := range n {
+			fs.dx[i] *= rep
+			fs.dy[i] *= rep
 		}
 	}
-	fs.lastDisp = applyDisplacements(g, fs.dx, fs.dy, p.Dt, p.Damping, p.MaxStep)
-	fs.steps++
+	attractionNE(g, fs.dx, fs.dy, invK2, exag*gain)
+}
+
+// repulsionRowsNE accumulates, for rows [lo, hi), the unnormalised Cauchy
+// repulsion Σ_j q²·(u_i − u_j) in k-units and the partial normaliser
+// Σ_j q, with q = 1/(1 + d²/k²) and j ≠ i. The exact pair sum; the tree
+// walk in layout_bh.go approximates the same quantities.
+func repulsionRowsNE(x, y, dx, dy, zi []float32, invK2 float32, lo, hi int) {
+	n := len(x)
+	for i := lo; i < hi; i++ {
+		xi, yi := x[i], y[i]
+		var ax, ay, zs float32
+		for j := 0; j < n; j++ {
+			if j == i {
+				continue
+			}
+			ddx := xi - x[j]
+			ddy := yi - y[j]
+			q := 1 / (1 + (ddx*ddx+ddy*ddy)*invK2)
+			f := q * q
+			ax += ddx * f
+			ay += ddy * f
+			zs += q
+		}
+		dx[i] += ax
+		dy[i] += ay
+		zi[i] += zs
+	}
+}
+
+// attractionNE pulls each node toward its neighbours by
+// gain · (strength / Σ strengths) · q · (u_j − u_i), once per edge end, the
+// strength sum taken over every adjacency entry so the affinities sum to
+// one as t-SNE's do. Length is ignored: the kernel has one scale.
+func attractionNE(g *graph, dx, dy []float32, invK2, gain float32) {
+	var sum float64
+	for i := range g.ids {
+		lo, hi := g.adjStart[i], g.adjStart[i+1]
+		for a := lo; a < hi; a++ {
+			sum += float64(g.eStr[g.adjEdge[a]])
+		}
+	}
+	if sum <= 0 {
+		return
+	}
+	norm := gain / float32(sum)
+	for i := range g.ids {
+		xi, yi := g.x[i], g.y[i]
+		var ax, ay float32
+		lo, hi := g.adjStart[i], g.adjStart[i+1]
+		for a := lo; a < hi; a++ {
+			j := g.adjList[a]
+			e := g.adjEdge[a]
+			ddx := g.x[j] - xi
+			ddy := g.y[j] - yi
+			q := 1 / (1 + (ddx*ddx+ddy*ddy)*invK2)
+			f := norm * g.eStr[e] * q
+			ax += ddx * f
+			ay += ddy * f
+		}
+		dx[i] += ax
+		dy[i] += ay
+	}
 }
 
 // repulsionRows accumulates the exact repulsive displacement of rows
@@ -196,12 +349,16 @@ func applyDisplacements(g *graph, dx, dy []float32, dt, damping, maxStep float32
 }
 
 // settled reports the crate's settle predicate: at least one step, and the
-// last average displacement at or under epsilon.
+// last average displacement at or under epsilon — and, under a
+// neighbour-embedding schedule, the schedule run to its end, since a
+// layout at rest under strong attraction is not the layout asked for.
 func (fs *forceState) settled(epsilon float32) bool {
-	return fs.steps > 0 && !math.IsNaN(float64(fs.lastDisp)) && fs.lastDisp <= epsilon
+	return fs.steps > 0 && fs.steps >= fs.annealSteps && !math.IsNaN(float64(fs.lastDisp)) && fs.lastDisp <= epsilon
 }
 
 func (fs *forceState) reset() {
 	fs.steps = 0
 	fs.lastDisp = nan32
+	fs.lastExag = 0
+	fs.annealSteps = 0
 }

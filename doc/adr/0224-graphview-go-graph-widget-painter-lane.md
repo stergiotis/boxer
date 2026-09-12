@@ -414,6 +414,22 @@ expansions, hidden nodes, a focus list, and the visible set derived from
 them — lives in the `nav` package beneath this one and declares into the
 widget; nothing in the declaration or event surface changed for it.
 
+### 2026-09-12 — a second force model
+
+[ADR-0227](./0227-neighbour-graph-and-neighbour-embedding-force-model.md)
+§SD2 adds `ForceParams.Model`: the zero value is the Fruchterman–Reingold
+step of §SD2 and §SD6, unchanged to the bit; `ForceModelNeighborEmbedding`
+is the t-SNE kernel on the same Barnes–Hut tree — attraction `Strength·q`
+along edges, repulsion `q²/Z` over all pairs, `q = 1/(1 + (d/k)²)` — with
+`Exaggeration` as its one knob and an annealing schedule
+(`ExaggerationStart`, `ExaggerationSteps`) that `ResetLayout` restarts and
+that holds off the settle report until it ends. §SD13's `Strength` is the
+affinity under it; `Length` is ignored, since the kernel has one scale.
+Nothing in the declaration or event surface changed. One paint option was
+added for its first consumer: `Options.HideEdges` paints and picks no
+edge while the declaration keeps them for the layout, because a
+neighbour graph's edges are the layout's input rather than a reading.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget

@@ -252,6 +252,7 @@ func (v *View) Metrics() Metrics {
 		Settled:          v.Opts.Layout.IsAnimated() && v.fs.settled(v.Opts.Force.withDefaults().Epsilon),
 		Paused:           v.Opts.Layout.IsAnimated() && (v.Opts.Force.Paused || v.autoPaused),
 		CameraMoved:      v.camMoved,
+		Exaggeration:     v.fs.lastExag,
 	}
 }
 
@@ -736,7 +737,7 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 	hitNode, hitEdge := int32(-1), int32(-1)
 	if posOk && (inside || v.drag.active) {
 		hitNode = v.pickNode(px, py)
-		if hitNode < 0 {
+		if hitNode < 0 && !o.HideEdges {
 			hitEdge = v.pickEdge(px, py)
 		}
 	}
