@@ -1,5 +1,5 @@
 // Package knn is the neighbour-graph producer of the graph analytics engine
-// (ADR-0227 §SD1): a feature matrix in, a weighted undirected
+// (ADR-0230 §SD1): a feature matrix in, a weighted undirected
 // [github.com/stergiotis/boxer/public/analytics/graph/csr.Graph] out.
 //
 // The graph is the one UMAP builds before it lays anything out (McInnes,
@@ -13,7 +13,7 @@
 //
 // Results are a function of the input alone: candidates tie-break by slot,
 // rows are computed in contiguous chunks with per-worker scratch, and the
-// result at one worker equals the result at any other count (ADR-0226 §SD2).
-// Columns are aligned with the graph's slots (ADR-0226 §SD5), which are in
+// result at one worker equals the result at any other count (ADR-0229 §SD2).
+// Columns are aligned with the graph's slots (ADR-0229 §SD5), which are in
 // ascending id order, not input row order; [Result.Rows] maps back.
 package knn

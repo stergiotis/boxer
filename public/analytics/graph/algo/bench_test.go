@@ -9,7 +9,7 @@ import (
 )
 
 // Benchmarks run on an R-MAT graph of 2^17 vertices and 2^20 edges, the
-// upper end of the sizes ADR-0226 targets. The engine at zero workers uses
+// upper end of the sizes ADR-0229 targets. The engine at zero workers uses
 // every core; the *1 variants pin one worker for the COST comparison.
 
 const benchScale, benchEPV = 17, 8

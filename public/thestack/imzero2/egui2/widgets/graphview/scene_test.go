@@ -221,7 +221,7 @@ func TestSceneStaticLayoutRerunsAfterALayoutSwitch(t *testing.T) {
 
 // A neighbour-embedding layout under an exaggeration schedule reports the
 // schedule's value, does not settle before the schedule ends, and is held by
-// PauseOnSettle after it (ADR-0227 §SD2).
+// PauseOnSettle after it (ADR-0230 §SD2).
 func TestSceneNeighborEmbeddingSettlesAfterTheSchedule(t *testing.T) {
 	s := newScene(t, "ne", Options{
 		Layout: LayoutForceDirected,

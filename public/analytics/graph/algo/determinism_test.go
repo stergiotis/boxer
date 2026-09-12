@@ -47,7 +47,7 @@ func rmatGraph(t testing.TB, scale, epv int, directed bool) *csr.Graph {
 	return g
 }
 
-// TestResultsAreIndependentOfWorkerCount is the ADR-0226 §SD2 contract: the
+// TestResultsAreIndependentOfWorkerCount is the ADR-0229 §SD2 contract: the
 // bits of every result are the same at one worker and at many.
 func TestResultsAreIndependentOfWorkerCount(t *testing.T) {
 	ctx := context.Background()

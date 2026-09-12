@@ -40,7 +40,7 @@ type Options struct {
 	SetOpMixRatio float32
 	// MaxRows is the row budget; above it the input is cut to a uniform
 	// subsample that keeps the first and last row, and the result says so
-	// (ADR-0226 §SD4). Zero means no budget.
+	// (ADR-0229 §SD4). Zero means no budget.
 	MaxRows int
 }
 
@@ -71,7 +71,7 @@ type Result struct {
 	// Sigmas and Rhos are UMAP's per-row bandwidth and offset.
 	Sigmas, Rhos []float32
 	// CoreDist is the distance to the K-th neighbour, the input HDBSCAN's
-	// core distance is read from (ADR-0227 §SD3).
+	// core distance is read from (ADR-0230 §SD3).
 	CoreDist []float32
 	// Indices and Dists are the raw neighbour lists, K per slot, nearest
 	// first, as slot indices and distances; row i occupies [i*K, (i+1)*K).
@@ -104,7 +104,7 @@ const (
 //
 // The exact k-NN is brute force: each row against every other, O(n²·d),
 // which is the interactive budget at the row counts the consumers cap at
-// (ADR-0227 §SD1); an approximate index is deferred there. A cancelled
+// (ADR-0230 §SD1); an approximate index is deferred there. A cancelled
 // context returns its error rather than a partial graph, since a partial
 // neighbour graph is not a result.
 func Build(ctx context.Context, e *engine.Engine, x []float32, d int, ids []uint64, opts Options) (r Result, err error) {

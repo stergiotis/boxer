@@ -22,7 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 )
 
-// play_projection.go is the Projection tab (ADR-0227 §SD4): the result's
+// play_projection.go is the Projection tab (ADR-0230 §SD4): the result's
 // leeway-card features become a neighbour graph in the analytics engine, the
 // graph is laid out live by graphview under the neighbour-embedding force
 // model, and HDBSCAN over the same graph colours it. The background goroutine
@@ -36,16 +36,16 @@ const projectionMinRows = 3
 
 // Maximum rows fed to the producer in a single run. The exact k-NN is
 // O(n²·d) and the force step O(n log n) per iteration, both interactive at
-// ten thousand rows on one machine (ADR-0227 §SD1); results above are
+// ten thousand rows on one machine (ADR-0230 §SD1); results above are
 // subsampled uniformly and reported as "X of Y entities · sampled".
 const projectionMaxRows = 10000
 
 // projectionParams are the run's knobs, read by the goroutine at Start.
 type projectionParams struct {
-	// K is the neighbour count of the graph (ADR-0227 §SD1); the umap-learn
+	// K is the neighbour count of the graph (ADR-0230 §SD1); the umap-learn
 	// n_neighbors is K+1.
 	K int
-	// MinClusterSize is HDBSCAN's one parameter (ADR-0227 §SD3).
+	// MinClusterSize is HDBSCAN's one parameter (ADR-0230 §SD3).
 	MinClusterSize int
 }
 
@@ -53,7 +53,7 @@ const (
 	projectionDefaultK              = 15
 	projectionDefaultMinClusterSize = 10
 	// projectionExaggerationStart and projectionExaggerationSteps are the
-	// annealing schedule (ADR-0227 §SD2): t-SNE's early exaggeration of 12,
+	// annealing schedule (ADR-0230 §SD2): t-SNE's early exaggeration of 12,
 	// lowered geometrically to the slider's value over the first steps
 	// after a run.
 	projectionExaggerationStart = 12
@@ -62,12 +62,12 @@ const (
 	// of a new graph, so the picture opens past the schedule's noisiest
 	// stretch without stalling the frame for the whole schedule.
 	projectionFastForward = 100
-	// projectionFreezeSteps is the play panel's freeze rule (ADR-0225 play
+	// projectionFreezeSteps is the play panel's freeze rule (ADR-0227 play
 	// panel §SD10): a layout that has not settled by then is held.
 	projectionFreezeSteps = 4000
 	// projectionNoiseAuraFloor drops a member from its cluster's aura when
 	// HDBSCAN's probability falls under it — the bridge-point reading
-	// ADR-0227 §SD3's update records.
+	// ADR-0230 §SD3's update records.
 	projectionNoiseAuraFloor = 0.1
 	projectionNodeRadius     = 3
 )
@@ -714,7 +714,7 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 	}
 
 	// Layout controls: the exaggeration slider is the one knob of the
-	// model (ADR-0227 §SD2); its value has published meanings.
+	// model (ADR-0230 §SD2); its value has published meanings.
 	for range c.Horizontal().KeepIter() {
 		c.SliderF64(ids.PrepareStr("projectionExag"), inst.exaggeration, 1, 30).
 			Text("exaggeration (1 t-SNE · 4 UMAP · 30 ForceAtlas2)").SendRespVal(&inst.exaggeration)

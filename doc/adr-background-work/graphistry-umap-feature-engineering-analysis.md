@@ -9,7 +9,7 @@ status: draft
 > **Status: draft — pre-human-review.** Compiled 2026-09-12 as follow-on
 > material for [ADR-0224](../adr/0224-graphview-go-graph-widget-painter-lane.md),
 > [ADR-0225](../adr/0225-graphview-navigation-layer-and-radial-layout.md) and
-> [ADR-0226](../adr/0226-graph-analytics-engine.md). Nothing here is a
+> [ADR-0229](../adr/0229-graph-analytics-engine.md). Nothing here is a
 > decision. Provenance: no Graphistry or PyGraphistry source was read,
 > fetched, cloned, installed or searched — no source-code host, no package
 > archive, no readthedocs source view, no "[source]" link. The inputs are the
@@ -41,9 +41,9 @@ then where each piece would land here.
 The tree this is measured against is the
 [graphview widget](../../public/thestack/imzero2/egui2/widgets/graphview/)
 and its [nav package](../../public/thestack/imzero2/egui2/widgets/graphview/nav/),
-the [graph analytics engine](../../public/analytics/graph/) of ADR-0226,
+the [graph analytics engine](../../public/analytics/graph/) of ADR-0229,
 the `play` graphview panel and the SQL graph contract it reads
-([ADR-0225, play panel](../adr/0225-play-graphview-panel.md);
+([ADR-0227, play panel](../adr/0227-play-graphview-panel.md);
 [ADR-0129 §SD2](../adr/0129-play-layered-graph-panel.md)), and — because it
 already exists and is the nearest thing to the subject — `play`'s
 Projection panel, which runs UMAP client-side over a leeway card
@@ -54,14 +54,14 @@ The classification keeps the four buckets of the sibling analysis and adds
 two, because the subject crosses two more boundaries: **covered** (an
 existing API is named); a **widget gap** (a change inside graphview); a
 **helper gap** (nav or a sibling package above the widget); an **engine
-gap** (a change in or beside `public/analytics/graph` under ADR-0226); a
+gap** (a change in or beside `public/analytics/graph` under ADR-0229); a
 **lane gap** (a change in `play`'s data lanes or the SQL contract); or
 **out of scope** with a reason.
 
 **Skipped**, one line each:
 
 - The GPU substrate — `engine='cuml'`, cuDF, cuGraph. The tree's equivalent
-  decision is ADR-0226 (Go, in-process, `CGO_ENABLED=0`).
+  decision is ADR-0229 (Go, in-process, `CGO_ENABLED=0`).
 - `memoize` and `inplace` — Python object-lifecycle conveniences.
 - The hosted viewer's URL and REST surface, sharing, workbooks.
 - The graph neural network route — `embed()`, `build_gnn()`,
@@ -551,8 +551,8 @@ where it is.
 **The engine.** `csr.BuildE(src, dst []uint64, w []float32, Options)`
 takes exactly an edge list with optional weights, collapses parallel edges
 by summing, and stores undirected graphs in both rows; every `algo`
-function returns slot-aligned columns plus a `Truncation` (ADR-0226 §SD4,
-§SD5). ADR-0226 §SD3 lists degree, BFS, components, SCC, PageRank, k-core,
+function returns slot-aligned columns plus a `Truncation` (ADR-0229 §SD4,
+§SD5). ADR-0229 §SD3 lists degree, BFS, components, SCC, PageRank, k-core,
 triangles, betweenness and maximal cliques; §SD7 defers Louvain/Leiden
 "when a consumer asks for clusters rather than cores" and weighted
 shortest paths "when a weighted `edges` contract has a consumer".
@@ -582,18 +582,18 @@ mapping.
 | Supervised `y` | **covered** by the library; **lane gap** to name the column | §5.3 |
 | `embed` / GNN link prediction | **out of scope** (dependency rule) | §2.3 |
 | Group-in-a-box | **widget gap**, the static cousin of the sibling analysis's open containers; partition from `group` is **covered** | §5.4 |
-| Modularity-weighted layout | **covered** on the widget (`Strength`); **engine gap** for communities (ADR-0226 §SD7); **lane gap** to map `weight` to `Strength` | §5.4 |
+| Modularity-weighted layout | **covered** on the widget (`Strength`); **engine gap** for communities (ADR-0229 §SD7); **lane gap** to map `weight` to `Strength` | §5.4 |
 | Ring layouts (categorical / continuous / time) | **helper gap** for radius-from-column; small **widget gap** for a radius-only lock and axis rings | §5.4 |
 | `locked_x` / `locked_y` / `locked_r` | small **widget gap** (partial pins) | §5.4 |
 | `gravity`, `scaling_ratio`, `precision_vs_speed`, `edge_influence` | **covered** by `ForceParams` and `Strength`, not one-to-one | §5.4 |
 | `lin_log`, `strong_gravity`, `dissuade_hubs` | **not worth doing** as knobs; the model differs | §7 |
 | Histograms as filter, colour, size; data brush | **out of scope** for the widget; in `play` the encoders are contract columns and the filter is the query | §5.5 |
 | Timebar | not documented; `play` has a Timeline tab | §5.5 |
-| `compute_*` pagerank, betweenness, k-core, components, degrees, BFS | **covered** (ADR-0226 §SD3) | §5.6 |
+| `compute_*` pagerank, betweenness, k-core, components, degrees, BFS | **covered** (ADR-0229 §SD3) | §5.6 |
 | One force spectrum (Böhm, Berens & Kobak 2022): the t-SNE kernel with an exaggeration knob | small **widget gap**: a second `ForceModel` on the Barnes–Hut tree | §5.8 |
 | PaCMAP: mid-near pairs as a sampled, annealed second edge set | variant of the §5.1 producer; **deferred** with a trigger | §5.8 |
 | HDBSCAN over the neighbour graph | **engine gap**, displacing DBSCAN; every step a shape the engine owns | §5.8 |
-| Louvain / community | **engine gap**, deferred in ADR-0226 §SD7 | §5.6 |
+| Louvain / community | **engine gap**, deferred in ADR-0229 §SD7 | §5.6 |
 | Closeness, harmonic, eigenvector, Katz | small **engine gaps**, not deferred anywhere | §5.6 |
 | `get_topological_levels`, `hop`, `chain` | **covered**: SQL walks, `nav`, `pushoutgraph` | §5.6 |
 | `hypergraph` | **covered** by SQL; a recipe, not a package | §5.6 |
@@ -611,7 +611,7 @@ is missing: an edge with a weight in (0, 1] is what `EdgeSpec.Strength` and
 update). What is missing is the producer — a function from a feature
 matrix to an edge list `(source id, target id, weight)`, which is the shape
 `csr.BuildE` consumes and the shape the `edges` CTE has. That is an
-**engine gap** in ADR-0226's sense — plain values in, struct-of-arrays out,
+**engine gap** in ADR-0229's sense — plain values in, struct-of-arrays out,
 a budget (`n_neighbors`, a row cap) and a truncation flag, IDL-expressible
 per §SD8 — but it is not a *graph* algorithm: its input is a matrix, not a
 CSR. It belongs beside the graph engine under `public/analytics`, as
@@ -628,7 +628,7 @@ to trust.
 A SQL-side producer is the wrong tool: a *k*-NN join is a self-join with a
 window over distance, quadratic in ClickHouse without a vector index, and
 the fuzzy scaling is a per-row binary search SQL expresses badly.
-ADR-0226's division holds — SQL keeps what it carries well, and this is
+ADR-0229's division holds — SQL keeps what it carries well, and this is
 not that.
 
 *Features derive automatically from arbitrary columns.* This is a **lane
@@ -644,7 +644,7 @@ the query can set, high-cardinality string to something that needs no fit
 is said so plainly in §6; the GapEncoder is a fit without a download and
 could be ported, but its value over hashed n-grams for the purpose here —
 a neighbour graph, not a classifier — is unmeasured, and porting it ahead
-of a measurement is the kind of work ADR-0226's C2 counts against.
+of a measurement is the kind of work ADR-0229's C2 counts against.
 
 Both halves feed the existing consumers unchanged: the edge list goes to
 the `edges` lane or to `csr.BuildE`, the coordinates to the Projection
@@ -655,7 +655,7 @@ scatter or to the graphview panel as positions (§5.2).
 `play=0` with `encode_position=True` is a declared `Pinned` position per
 node (ADR-0224 §SD10): the force step leaves it, a drag moves it for the
 gesture and reports where it was left. **Covered** on the widget. In `play`
-the vertices contract has no position columns; ADR-0225's panel record
+the vertices contract has no position columns; ADR-0227's panel record
 deferred exactly this ("Pins from the query (`pin_x` / `pin_y` columns) and
 holding a dropped node … it is the first thing to add once the panel has
 been used"). A **lane gap**, small and already on the list; the UMAP
@@ -665,23 +665,23 @@ producer would be its first supplier.
 `View.SetNodePosition` for every node (the sibling analysis's reading of
 Cytoscape's `preset` layout) followed by the simulation with no pin, and a
 `FastForward` budget for the part the reader should not watch; the play
-panel already spends a budget of node-steps before first paint (ADR-0225
+panel already spends a budget of node-steps before first paint (ADR-0227
 play panel §SD10). **Covered** by composition; nothing to add.
 
 ### 5.3 Clusters, batches, targets
 
 DBSCAN labels reach the picture as `_dbscan` → colour. Here the same column
 is `group`, and `group` is both the palette position and the aura id
-(ADR-0225 play panel §SD4, ADR-0224 §SD11) — a cluster reads as a tinted
+(ADR-0227 play panel §SD4, ADR-0224 §SD11) — a cluster reads as a tinted
 node *and* as a blob, which is more than the reference draws. **Covered**
 on the widget and the panel. The producer is an **engine gap**: DBSCAN is
-not in ADR-0226 §SD3. It is also cheap given §5.1's output, because DBSCAN
+not in ADR-0229 §SD3. It is also cheap given §5.1's output, because DBSCAN
 over a radius graph is a components pass — every vertex with at least
 `min_samples` neighbours within `eps` is a core point, clusters are the
 connected components of the core points under edges shorter than `eps`,
 and border points attach to a neighbouring core — which is
 `algo`'s union–find over a filtered CSR, with the noise label as the
-truncation-shaped flag. ADR-0226 §SD7 defers Louvain/Leiden "when a
+truncation-shaped flag. ADR-0229 §SD7 defers Louvain/Leiden "when a
 consumer asks for clusters rather than cores"; DBSCAN-on-embedding is a
 different trigger, not the same one — Louvain clusters a topology and
 needs no metric, DBSCAN clusters a metric space and needs no topology
@@ -771,7 +771,7 @@ written in SQL ([ADR-0129 §SD2](../adr/0129-play-layered-graph-panel.md),
 BY` drawn in the Chart tab ([ADR-0172](../adr/0172-play-chart-panel.md)),
 and a range filter is a `WHERE`, so the click-a-bin loop is a query edit.
 What crosses panels is the selection — the graphview panel publishes
-`selection_key` (ADR-0225 play panel §SD6), the Projection panel emits the
+`selection_key` (ADR-0227 play panel §SD6), the Projection panel emits the
 row selection — over the reactive graph of
 [ADR-0097](../adr/0097-play-reactive-query-graph.md); whether a brush over
 the scatter should become a filter elsewhere is a `play` question this page
@@ -781,12 +781,12 @@ nearest thing and is not compared further.
 
 ### 5.6 The compute surface
 
-Against ADR-0226 §SD3: PageRank, betweenness, k-core, components ("clusters"
+Against ADR-0229 §SD3: PageRank, betweenness, k-core, components ("clusters"
 in igraph's naming), degrees and BFS are **covered**, with budgets and
 truncation the reference does not document. `get_topological_levels` is a
 SQL-side walk and `pushoutgraph`'s Kahn sort; `hop` and `chain` are `nav`'s
 bounded walk and the applet books' recursive CTEs; both **covered** in the
-sense ADR-0226 uses — SQL keeps the bounded walks. `hypergraph` is an
+sense ADR-0229 uses — SQL keeps the bounded walks. `hypergraph` is an
 unpivot: a node per distinct value per entity column, a node per row unless
 `direct`, edges from cells to rows — a `SELECT … ARRAY JOIN` into the
 `edges` / `vertices` contract, **covered** by SQL and worth a book entry
@@ -809,7 +809,7 @@ its categorical path fits a GapEncoder through skrub. Neither crosses the
 tree's dependency rule as a *reference* — why-boxer P1 lets a dependency be
 "referenced while it stays cheap to trust" — but a model fetched at first
 use from a public hub is not something an airgapped build can carry, and
-ADR-0226's C3 is the criterion that already ruled on that shape.
+ADR-0229's C3 is the criterion that already ruled on that shape.
 
 What a boxer-side featurizer can rest on without a model: numeric
 pass-through with the lane's `log1p` and z-score; one-hot below a
@@ -882,7 +882,7 @@ and in one scalar. The consequences, each a reading rather than a decision:
 - **Deterministic by construction.** Barnes–Hut computes the repulsive sum
   exactly rather than by negative sampling, so the effective repulsion is
   the declared ρ, not `k·m/n`, and the result is the bit-identical
-  parallel result ADR-0224 §SD6 and ADR-0226 §SD2 require. umap-go's SGD
+  parallel result ADR-0224 §SD6 and ADR-0229 §SD2 require. umap-go's SGD
   with negative sampling is neither.
 - **Annealing replaces the eigensolver.** The Projection lane caps its
   spectral initialisation at 2 000 rows because the dense Laplacian
@@ -934,7 +934,7 @@ their points; and everything else labelled noise. There is "no epsilon".
 That last point is why it should displace DBSCAN in §6: an embedding's
 scale is arbitrary, so ε is a parameter a user cannot set well, whereas
 `min_cluster_size` is a statement about the data. And every step is a
-shape ADR-0226 already owns — the core distance is the *k*th neighbour
+shape ADR-0229 already owns — the core distance is the *k*th neighbour
 weight the producer computes anyway; the MST over the *k*-NN edges is
 Kruskal in weight order over the CSR; the hierarchy is union–find with a
 merge height; the condensed tree and stability extraction are a walk over
@@ -979,10 +979,10 @@ graph is referenced or owned.
    `min_cluster_size`, not ε, which is why it displaces the DBSCAN cut
    Graphistry documents. **2 days** on top of item 1; the ε-DBSCAN of
    §5.3 is a half-day fallback if the hierarchy is not wanted first.
-5. **Engine gap: Louvain or Leiden** — the ADR-0226 §SD7 deferral, with
+5. **Engine gap: Louvain or Leiden** — the ADR-0229 §SD7 deferral, with
    its trigger restated: a consumer asking for clusters over a graph that
    has edges. Modularity-weighted layout and group-in-a-box both want it
-   (§5.4). **3–4 days**, and a dated update to ADR-0226.
+   (§5.4). **3–4 days**, and a dated update to ADR-0229.
 6. **Lane gap: `x` / `y` (or `pin_x` / `pin_y`) columns on the vertices
    contract** — declared pins from the query, the deferral in the play
    panel record; item 1's coordinates are the first supplier (§5.2).
@@ -1028,7 +1028,7 @@ Deferred, with the trigger rather than an estimate:
 ## 7 Not worth doing, with the reason
 
 - **A transformer text encoder** (§3.2) — a model download at first use
-  and a torch runtime; the dependency rule and ADR-0226 C3 have ruled on
+  and a torch runtime; the dependency rule and ADR-0229 C3 have ruled on
   the shape. Hashed n-grams are the substitute, and the loss is stated
   rather than hidden.
 - **`lin_log`, `strong_gravity`, `dissuade_hubs` as knobs** (§5.4) — they
@@ -1061,11 +1061,11 @@ Tree:
   and strength.
 - [ADR-0225 (nav)](../adr/0225-graphview-navigation-layer-and-radial-layout.md)
   — the navigation layer and the hop-distance radial layout (§SD6).
-- [ADR-0225 (play panel)](../adr/0225-play-graphview-panel.md) — `group`
+- [ADR-0227 (play panel)](../adr/0227-play-graphview-panel.md) — `group`
   as aura id (§SD4), `weight` and `donut` (§SD5), `selection_key` (§SD6),
   caps (§SD9), the step budget (§SD10), and the two deferrals (pins from
   the query, per-edge force weight).
-- [ADR-0226](../adr/0226-graph-analytics-engine.md) — the engine: §SD1 CSR,
+- [ADR-0229](../adr/0229-graph-analytics-engine.md) — the engine: §SD1 CSR,
   §SD3 algorithms, §SD4 budgets, §SD5 columns, §SD7 deferrals, §SD8
   IDL-expressible surface; C3 sovereignty.
 - [ADR-0129 §SD2](../adr/0129-play-layered-graph-panel.md) — the `edges` /
@@ -1075,7 +1075,7 @@ Tree:
   [ADR-0167](../adr/0167-layeredgraph-magnitude.md) — the `play` panels and
   channels §5.5 names.
 - [graph analytics engine survey](./graph-analytics-engine-survey.md) — the
-  options and criteria behind ADR-0226.
+  options and criteria behind ADR-0229.
 - [play timeseries analysis survey](./play-timeseries-analysis-survey.md) —
   the Projection panel as counter-precedent.
 - [Cytoscape.js and Ogma analysis](./graph-viewer-gap-analysis-cytoscape-ogma.md)

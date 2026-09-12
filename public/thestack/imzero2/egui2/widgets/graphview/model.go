@@ -249,7 +249,7 @@ type EdgeSpec struct {
 // their meaning. Paused freezes the simulation without discarding it; the
 // zero value runs.
 type ForceParams struct {
-	// Model selects the force law (ADR-0227 §SD2); the zero value is the
+	// Model selects the force law (ADR-0230 §SD2); the zero value is the
 	// Fruchterman–Reingold step the widget shipped with.
 	Model ForceModelE
 	// Exaggeration multiplies the attraction under ForceModelNeighborEmbedding
@@ -307,7 +307,7 @@ func (inst ForceParams) withDefaults() ForceParams {
 }
 
 // ForceModelE selects the force law of the force-directed layouts
-// (ADR-0227 §SD2). Both share the integrator, the Barnes–Hut tree, the pins
+// (ADR-0230 §SD2). Both share the integrator, the Barnes–Hut tree, the pins
 // and the settle logic; only the kernel differs.
 type ForceModelE uint8
 
@@ -395,7 +395,7 @@ type Options struct {
 	// HideEdges paints no edges and picks none: they still drive the force
 	// layout and the adjacency, and Metrics.EdgeCount still counts them. For
 	// a dense neighbour graph, where the edges are the layout's input rather
-	// than a reading (ADR-0227 §SD4).
+	// than a reading (ADR-0230 §SD4).
 	HideEdges bool
 	// LabelsAlways paints every node label; off, only hovered, selected and
 	// dragged nodes carry one.

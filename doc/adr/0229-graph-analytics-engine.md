@@ -6,7 +6,7 @@ reviewed-by: "p@stergiotis"
 reviewed-date: 2026-09-12
 ---
 
-# ADR-0226: an in-process graph analytics engine — CSR core, Ligra-shaped iteration, results as facts
+# ADR-0229: an in-process graph analytics engine — CSR core, Ligra-shaped iteration, results as facts
 
 ## Context
 
@@ -42,7 +42,7 @@ the tree:
 - The workload is repository-, vault-, profile- and topology-sized —
   thousands to low millions of edges — and the draw side is capped three
   orders of magnitude below that
-  ([ADR-0225, play panel](./0225-play-graphview-panel.md) §SD9). The
+  ([ADR-0227, play panel](./0227-play-graphview-panel.md) §SD9). The
   out-of-core and distributed literature is not the operating point; the
   single-thread baseline of *Scalability! But at what COST?* is.
 
@@ -51,7 +51,7 @@ graphview is a pure function of the topology, and the gallery capture
 relies on that; the engine inherits the rule. And the graph contract is
 SQL-side and settled: the `edges` / `vertices` CTEs of
 [ADR-0129](./0129-play-layered-graph-panel.md) §SD2, hoisted into one
-renderer-neutral model by ADR-0225 (play panel). The engine consumes that
+renderer-neutral model by ADR-0227 (play panel). The engine consumes that
 model, not a new one.
 
 ## Design space (QOC)
@@ -377,7 +377,7 @@ Two refinements found in implementation:
 ## References
 
 - [graph analytics engine survey](../adr-background-work/graph-analytics-engine-survey.md) — the literature trace, the tree inventory and the costed options behind the QOC.
-- [ADR-0224](./0224-graphview-go-graph-widget-painter-lane.md), [ADR-0225 (nav)](./0225-graphview-navigation-layer-and-radial-layout.md), [ADR-0225 (play panel)](./0225-play-graphview-panel.md) — the widget, the navigation layer and the graph contract the engine consumes.
+- [ADR-0224](./0224-graphview-go-graph-widget-painter-lane.md), [ADR-0225 (nav)](./0225-graphview-navigation-layer-and-radial-layout.md), [ADR-0227 (play panel)](./0227-play-graphview-panel.md) — the widget, the navigation layer and the graph contract the engine consumes.
 - [ADR-0064](./0064-godepview-go-dependency-explorer.md) — the precedent for moving graph lenses into SQL.
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the bar a reimplementation must clear.
 - [why-boxer P1](../explanation/why-boxer.md) — the dependency rule the assessment's C3 applies.

@@ -1,5 +1,5 @@
 // Package csr is the one adjacency container of the graph analytics engine
-// (ADR-0226 §SD1): vertex ids mapped to dense slots, forward and reverse
+// (ADR-0229 §SD1): vertex ids mapped to dense slots, forward and reverse
 // adjacency as offset and target arrays, neighbours sorted by id within each
 // row, built once per topology by counting sort.
 //

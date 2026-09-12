@@ -15,7 +15,7 @@ type Options struct {
 	Directed bool
 }
 
-// Graph is the compressed-sparse-row container (ADR-0226 §SD1). Slot i holds
+// Graph is the compressed-sparse-row container (ADR-0229 §SD1). Slot i holds
 // the i-th smallest id, so slots are ordered as ids are. Rows are sorted by
 // target slot, hence by target id.
 type Graph struct {

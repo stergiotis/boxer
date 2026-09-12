@@ -1,5 +1,5 @@
 // Package engine is the iteration layer of the graph analytics engine
-// (ADR-0226 §SD2): a frontier ([Subset]) kept sparse or dense, an edge map
+// (ADR-0229 §SD2): a frontier ([Subset]) kept sparse or dense, an edge map
 // whose direction is chosen per sweep, and chunked parallelism whose result
 // is bit-identical to the serial one.
 //

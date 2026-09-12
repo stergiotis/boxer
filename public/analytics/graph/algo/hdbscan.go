@@ -47,7 +47,7 @@ type HDBSCANResult struct {
 }
 
 // HDBSCAN clusters the vertices of a distance-weighted undirected graph
-// (ADR-0227 §SD3): each arc's distance is raised to the mutual reachability
+// (ADR-0230 §SD3): each arc's distance is raised to the mutual reachability
 // distance max(core[s], core[d], w), a minimum spanning forest is built by
 // Kruskal over the arcs in that order, the single-linkage hierarchy it
 // implies is condensed by MinClusterSize, and clusters are selected by

@@ -6,7 +6,7 @@ reviewed-by: "p@stergiotis"
 reviewed-date: 2026-09-12
 ---
 
-# ADR-0227: the neighbour graph as the one object — a *k*-NN producer in the engine, a neighbour-embedding force model in graphview, HDBSCAN over both
+# ADR-0230: the neighbour graph as the one object — a *k*-NN producer in the engine, a neighbour-embedding force model in graphview, HDBSCAN over both
 
 ## Context
 
@@ -26,7 +26,7 @@ written. [ADR-0224](./0224-graphview-go-graph-widget-painter-lane.md) put a
 force layout on the painter lane — Fruchterman–Reingold with Barnes–Hut
 repulsion above a threshold, per-edge `Length` and `Strength` (§SD13),
 declared and held pins (§SD10), auras from a group id (§SD11), a headless
-scene lane — and [ADR-0226](./0226-graph-analytics-engine.md) put a CSR
+scene lane — and [ADR-0229](./0229-graph-analytics-engine.md) put a CSR
 container and a deterministic iteration layer under `public/analytics/graph`
 with components, cores, PageRank, betweenness and cliques over it, every
 result a slot-aligned column with a truncation flag.
@@ -52,9 +52,9 @@ So the Projection lane's UMAP and graphview's force step are the same
 computation on the same object, and the tree holds two copies of it with
 the wrong one exposed. Three constraints carry over. Every layout is a pure
 function of its inputs and the gallery capture relies on that (ADR-0224
-§SD2, ADR-0226 §SD2); umap-go's negative-sampling SGD is not. One
+§SD2, ADR-0229 §SD2); umap-go's negative-sampling SGD is not. One
 implementation must serve the widget and the fact table (the ADR-0069 bar,
-restated in ADR-0226). And the dependency rule of
+restated in ADR-0229). And the dependency rule of
 [why-boxer P1](../explanation/why-boxer.md) lets a dependency be referenced
 while it stays cheap to trust; umap-go is 1 200 lines of a Python port
 whose only consumer would be one call, and the tree already owns the
@@ -86,7 +86,7 @@ and which package owns each step?
   repulsion, so the gallery capture and the golden tests hold.
 - **C2** — One object: the graph the widget lays out is the graph the
   engine clusters and the fact table will key.
-- **C3** — Sovereignty per P1 / ADR-0226 C3: lines owned versus a
+- **C3** — Sovereignty per P1 / ADR-0229 C3: lines owned versus a
   dependency whose trust must be maintained.
 - **C4** — Interactive at the Projection lane's row cap, ten thousand
   rows, on one machine.
@@ -118,7 +118,7 @@ expressible as a variant of O3's producer and a `Strength` schedule on the
 same force model rather than a separate algorithm; it is deferred with a
 trigger (§SD7), not rejected. O3 wins on the two criteria the tree's own
 records already fixed and loses nowhere; its cost is lines owned, and the
-lines are the ones ADR-0226 already decided to own for graphs.
+lines are the ones ADR-0229 already decided to own for graphs.
 
 ## Decision
 
@@ -187,7 +187,7 @@ complete graph the MST disconnects only what the *k*-NN graph disconnects;
 that is the documented approximation and the reason the producer's row
 budget is also this algorithm's. HDBSCAN is chosen over the ε-DBSCAN the
 reference product documents because an embedding's scale is arbitrary and
-`MinClusterSize` is a statement about the data where ε is not. ADR-0226
+`MinClusterSize` is a statement about the data where ε is not. ADR-0229
 §SD7's Louvain deferral is untouched: Louvain clusters a topology and
 needs no metric, HDBSCAN clusters a metric space and needs no topology
 beyond the neighbour graph; a consumer with edges asks for the first, one
@@ -198,7 +198,7 @@ its feature extractor, its row cap and its row selection, and replaces the
 implot scatter with a graphview whose nodes are the rows, whose edges are
 the producer's graph with `Strength` set to the membership weight, whose
 layout is `ModelNeighborEmbedding` with the annealing schedule under the
-settle budget of [ADR-0225 (play panel)](./0225-play-graphview-panel.md)
+settle budget of [ADR-0227 (play panel)](./0227-play-graphview-panel.md)
 §SD10, whose fill is the feature bucket the scatter coloured by, and whose
 aura ids are the HDBSCAN labels. The spectral-initialisation cap disappears
 with the eigensolver: initial placement is the widget's deterministic
@@ -206,14 +206,14 @@ hashed placement and the schedule does the rest (§SD2). Whether that
 reaches the picture umap-go's spectral init reached is the trial named in
 the verification plan, not an assumption of this record. The parameters —
 `K`, the metric, `Exaggeration`, `MinClusterSize` — move from panel state
-into the tab's controls and status line as ADR-0225 (play panel) does for
+into the tab's controls and status line as ADR-0227 (play panel) does for
 its layout; recording them as query settings is the featurization record's
 question, not this one's.
 
 **SD5 — umap-go is retired in two steps.** First it becomes the test
 oracle: a property test over seeded matrices compares the producer's
 `Sigmas`, `Rhos` and arc weights against `FuzzySimplicialSet` within
-`float32` tolerance, and it is imported by tests only — the shape ADR-0226
+`float32` tolerance, and it is imported by tests only — the shape ADR-0229
 chose for `gonum/graph`. Second, once that comparison has run at the sizes
 the lane uses, the oracle's outputs for a handful of seeded inputs are
 committed as golden fixtures under the package's testdata, the test reads
@@ -224,11 +224,11 @@ it.
 
 **SD6 — Determinism and budgets are inherited, not re-decided.** The
 producer's parallel rows and the force model's Barnes–Hut walk follow the
-chunked, per-worker-scratch shape of ADR-0224 §SD6 and ADR-0226 §SD2, so
+chunked, per-worker-scratch shape of ADR-0224 §SD6 and ADR-0229 §SD2, so
 the result at one worker equals the result at `GOMAXPROCS`. The effective
 repulsion is the declared ratio, not `k·m/n`. Every function takes a
-context and a budget and returns a `Truncation` (ADR-0226 §SD4). The
-producer's result is IDL-expressible per ADR-0226 §SD8 — plain values in,
+context and a budget and returns a `Truncation` (ADR-0229 §SD4). The
+producer's result is IDL-expressible per ADR-0229 §SD8 — plain values in,
 slot-aligned columns out — so the worker tier deferred there covers it.
 
 **SD7 — Deferred, with triggers.** An approximate *k*-NN index
@@ -246,7 +246,7 @@ when a consumer names a target column. Normalised compression distance as a
 metric for text columns, with the pairwise cost that entails, when the
 featurization record measures it against hashed n-grams. Persisting the
 neighbour graph and the labels as facts, keyed by the matrix's content
-fingerprint, in the follow-up ADR-0226 §SD5 already names. A `simd` inner
+fingerprint, in the follow-up ADR-0229 §SD5 already names. A `simd` inner
 loop for the distance rows under the same trigger as ADR-0224 §SD6.
 
 ## Surfaces — Tier 1
@@ -256,7 +256,7 @@ loop for the distance rows under the same trigger as ADR-0224 §SD6.
 | Exported Go API under `public/` | added: a `knn` package under [`public/analytics/graph`](../../public/analytics/graph/); `algo.HDBSCAN`; `graphview.ForceParams.Model`, `.Exaggeration`, `.ExaggerationStart`, `.ExaggerationSteps` and `ModelE` | the Projection lane as first consumer of all three; no existing exported API reshaped |
 | `go.mod` | `github.com/nozzle/umap-go` moves to test-only (SD5 step one), then leaves (step two) | `public/semistructured/leeway/card` drops `RunUMAP`, `UMAPOptions` and the spectral-init constants when the lane moves |
 | `play` Projection tab | replaced: implot scatter by a graphview; the row-selection channel unchanged | the help corpus entry for the tab; the screenshot tour capture |
-| `boxer.facts` schema | unchanged by this ADR | the fact kinds are the follow-up named in ADR-0226 §SD5 and §SD7 here |
+| `boxer.facts` schema | unchanged by this ADR | the fact kinds are the follow-up named in ADR-0229 §SD5 and §SD7 here |
 
 ## Alternatives
 
@@ -291,7 +291,7 @@ loop for the distance rows under the same trigger as ADR-0224 §SD6.
 
 - One graph object serves projection, layout, clustering and, after the
   follow-up, the fact table — the isomorphism bar met for the projection
-  as ADR-0226 met it for metrics.
+  as ADR-0229 met it for metrics.
 - The projection becomes interactive: drag, pin, select, aura and fit are
   the widget's, and the row selection channel is unchanged.
 - A single knob replaces `min_dist`, negative-sample rate and repulsion
@@ -558,9 +558,9 @@ now shipped; the trial the verification plan names is the one open item.
 - [ADR-0224](./0224-graphview-go-graph-widget-painter-lane.md) — the widget:
   §SD2 force parameters, §SD6 Barnes–Hut, §SD10 pins, §SD11 auras, §SD13
   edge strength; the headless scene lane.
-- [ADR-0225 (play panel)](./0225-play-graphview-panel.md) — the settle
+- [ADR-0227 (play panel)](./0227-play-graphview-panel.md) — the settle
   budget, the aura-from-group mapping, the panel's deferrals.
-- [ADR-0226](./0226-graph-analytics-engine.md) — the engine: §SD1 CSR,
+- [ADR-0229](./0229-graph-analytics-engine.md) — the engine: §SD1 CSR,
   §SD2 determinism, §SD4 budgets, §SD5 columns and the facts follow-up,
   §SD7 the Louvain deferral, §SD8 the IDL-expressible surface; the
   gonum-as-oracle shape SD5 copies.

@@ -7,7 +7,7 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** Compiled 2026-09-12 to feed
-> [ADR-0226](../adr/0226-graph-analytics-engine.md); nothing here is a
+> [ADR-0229](../adr/0229-graph-analytics-engine.md); nothing here is a
 > decision. Provenance is three-tiered: (a) claims about this repository were
 > checked against the working tree on the compile date; (b) claims about
 > papers and libraries come from the cited sources, fact-checked the same day
@@ -127,7 +127,7 @@ The graph contract itself is settled and is SQL-side:
 [ADR-0129](../adr/0129-play-layered-graph-panel.md) §SD2's two
 convention-named CTEs, `edges` (`source`, `target`, optional `label`,
 `tone`, `weight`) and `vertices` (`id`, optional attributes), hoisted by
-[ADR-0225 (play panel)](../adr/0225-play-graphview-panel.md) into one
+[ADR-0227 (play panel)](../adr/0227-play-graphview-panel.md) into one
 renderer-neutral model with endpoint synthesis, parallel-edge collapse and
 caps as an argument. An engine that consumes that model consumes every
 graph the applet books already produce.
@@ -138,7 +138,7 @@ Everything the tree draws or queries as a graph is *repository-, vault-,
 profile- or topology-sized*: package import graphs, wikilink graphs,
 call graphs derived from profiles, process/socket topologies, capability
 maps. Those are ~10³–10⁶ edges (estimate; no census was taken). The draw
-side is capped far below that — ADR-0225 (play panel) §SD9 caps the
+side is capped far below that — ADR-0227 (play panel) §SD9 caps the
 graphview tab at 2 000 vertices and 6 000 edges, with its stated
 measurement that the parallel Barnes–Hut repulsion "takes about 0.5 ms at
 1 000 nodes and about 3.4 ms at 5 000" on one laptop.

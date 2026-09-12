@@ -8,7 +8,7 @@ import (
 )
 
 // The benchmark runs at the Projection lane's row cap and feature width
-// (ADR-0227 §SD1): ten thousand rows of sixteen features, fifteen
+// (ADR-0230 §SD1): ten thousand rows of sixteen features, fifteen
 // neighbours. The zero-worker engine uses every core; the *1 variant pins
 // one worker for the COST comparison.
 

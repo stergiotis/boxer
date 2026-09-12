@@ -15,7 +15,7 @@ type forceState struct {
 	lastDisp float32
 	tree     quadtree
 	stacks   [][]int32 // one traversal stack per worker, index 0 for the serial walk
-	// Neighbour-embedding scratch and schedule state (ADR-0227 §SD2).
+	// Neighbour-embedding scratch and schedule state (ADR-0230 §SD2).
 	zi          []float32 // per-node partial of the repulsion normaliser Z
 	lastExag    float32   // the exaggeration the last step used
 	annealSteps uint64    // the schedule length the last step ran under
@@ -122,7 +122,7 @@ func (fs *forceState) forcesFR(g *graph, k float32, p ForceParams) {
 // into the force so Dt and Damping keep their meaning across models.
 const neGain = 6
 
-// exaggerationAt is the schedule of ADR-0227 §SD2: geometric from
+// exaggerationAt is the schedule of ADR-0230 §SD2: geometric from
 // ExaggerationStart to Exaggeration over ExaggerationSteps steps, then
 // constant. Without a schedule it is Exaggeration.
 func exaggerationAt(p ForceParams, step uint64) float32 {
@@ -133,7 +133,7 @@ func exaggerationAt(p ForceParams, step uint64) float32 {
 	return float32(float64(p.ExaggerationStart) * math.Pow(float64(p.Exaggeration/p.ExaggerationStart), t))
 }
 
-// forcesNE accumulates the t-SNE-kernel displacements (ADR-0227 §SD2).
+// forcesNE accumulates the t-SNE-kernel displacements (ADR-0230 §SD2).
 // Distances are measured in units of the ideal edge length k, so KScale
 // sets the picture's scale as it does for FR. Repulsion is the Barnes–Hut
 // walk with the Cauchy kernel, its per-node partials of Z folded in slot

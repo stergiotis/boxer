@@ -416,7 +416,7 @@ widget; nothing in the declaration or event surface changed for it.
 
 ### 2026-09-12 — a second force model
 
-[ADR-0227](./0227-neighbour-graph-and-neighbour-embedding-force-model.md)
+[ADR-0230](./0230-neighbour-graph-and-neighbour-embedding-force-model.md)
 §SD2 adds `ForceParams.Model`: the zero value is the Fruchterman–Reingold
 step of §SD2 and §SD6, unchanged to the bit; `ForceModelNeighborEmbedding`
 is the t-SNE kernel on the same Barnes–Hut tree — attraction `Strength·q`

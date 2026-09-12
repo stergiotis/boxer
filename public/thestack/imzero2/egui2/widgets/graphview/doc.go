@@ -23,7 +23,7 @@
 // optional legend from the shared widgets/legend package.
 //
 // The force-directed layouts run one of two force models on the same tree
-// and integrator (ADR-0227 §SD2): the Fruchterman–Reingold step the package
+// and integrator (ADR-0230 §SD2): the Fruchterman–Reingold step the package
 // shipped with, and a neighbour-embedding step with the t-SNE kernel whose
 // one knob, [ForceParams.Exaggeration], moves a declared graph along the
 // attraction–repulsion spectrum from t-SNE through UMAP to ForceAtlas2.

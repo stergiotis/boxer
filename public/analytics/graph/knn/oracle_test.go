@@ -14,7 +14,7 @@ import (
 // The oracle is umap-learn's construction as composed from umap-go's
 // exported stages — brute-force k-NN, SmoothKNNDist,
 // ComputeMembershipStrengths, FuzzySetUnion of the matrix and its transpose
-// — captured once as golden fixtures under testdata (ADR-0227 §SD5), so the
+// — captured once as golden fixtures under testdata (ADR-0230 §SD5), so the
 // comparison is against the construction SD1 re-derives and the module is
 // no longer a dependency. Each fixture carries its input matrix, so the test
 // does not rest on the random source staying stable.

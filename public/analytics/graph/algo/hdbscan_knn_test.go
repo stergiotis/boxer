@@ -12,7 +12,7 @@ import (
 
 // End to end over the producer: the neighbour graph's distance form and
 // core distances into HDBSCAN, on planted blobs with outliers in four
-// dimensions (ADR-0227 §SD3). Over a neighbour graph an outlier is not
+// dimensions (ADR-0230 §SD3). Over a neighbour graph an outlier is not
 // isolated — it has K neighbours — and it is the only bridge between blobs,
 // so it can sit inside a blob's subtree and take the label with a low
 // probability where the complete-graph form calls it noise; the test reads
@@ -71,7 +71,7 @@ func TestHDBSCANOverTheNeighbourGraph(t *testing.T) {
 }
 
 // BenchmarkHDBSCAN runs over the neighbour graph of ten thousand rows of
-// sixteen features, the Projection lane's cap (ADR-0227 §SD3).
+// sixteen features, the Projection lane's cap (ADR-0230 §SD3).
 func BenchmarkHDBSCAN(b *testing.B) {
 	const n, d, k = 10_000, 16, 15
 	rng := rand.New(rand.NewPCG(5, 6))
