@@ -317,9 +317,14 @@ without the next:
    pans from a drag that starts anywhere, including on a node, where the
    node's region used to swallow it. This widget does not move nodes, so there
    was nothing for that drag to mean.
-4. **Geo conveniences**, none of which need the widget: the layer-point recipe
-   as a how-to, and `addGeoClustering` as a distance predicate on whatever
-   grouping stage `nav` grows. *Deferred to grouping.*
+4. ~~**Geo conveniences**, none of which need the widget~~ — **the recipe is
+   written**, as [doc/howto/graph-on-a-map.md](../howto/graph-on-a-map.md):
+   the three-call frame, the two worlds and when each is right, unlocated
+   nodes, the offline basemap, the external legend, and the six ways it bites.
+   It documents both worlds rather than the layer-point one this list first
+   named, because §SD3a's correction made the choice conditional.
+   `addGeoClustering` stays deferred to grouping, which `nav` does not have;
+   nothing about it is geographic beyond the predicate.
 
 **SD8 — Home and provenance.** The shared camera under
 `widgets/` beside the other shared widget packages; `HostCanvas` and the
@@ -419,12 +424,12 @@ entries under `## Updates`.
 a host can hand a canvas to. Nothing has hosted it yet, and nothing asks to —
 the seam is there when a consumer does.
 
-What remains of §SD7 is item 4, the geo conveniences, which need no widget
-work: the fixed-world recipe is documented in the imzero2 skill, and
-`addGeoClustering` is a distance predicate on whatever grouping stage `nav`
-grows. A shared painter core for the two graph widgets stays deferred on the
-trigger §SD6 gave — a consumer that needs one drawing in both postures — and
-still has none.
+Item 4's how-to is written too, so every phase this record planned has
+landed. What it leaves open is owned elsewhere: `addGeoClustering` waits on a
+grouping stage in `nav`, which the Cytoscape/Ogma reading's work order carries
+as its first items; and a shared painter core for the two graph widgets stays
+deferred on the trigger §SD6 gave — a consumer that needs one drawing in both
+postures — and still has none.
 
 ## References
 

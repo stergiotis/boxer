@@ -1684,7 +1684,8 @@ What to know before using it:
   place instead of an emission order. A consequence for hosts with pan on: a
   drag pans wherever it starts, including on a node. Any widget that picks
   from registers this way can later be hosted in a canvas it does not own.
-- **Hosted rendering** (ADR-0228 §SD1–§SD4). To draw a graph inside a canvas
+- **Hosted rendering** (ADR-0228 §SD1–§SD4; the recipe end to end is
+  [doc/howto/graph-on-a-map.md](../../howto/graph-on-a-map.md)). To draw a graph inside a canvas
   another widget owns — a graph on a portolan map — call the pair instead of
   `Render`: `claim := gv.HostedInput(graphview.HostCanvas{Canvas, Area, W, H,
   Camera})` *before* the host handles input, then `gv.HostedPaint(nodes,
