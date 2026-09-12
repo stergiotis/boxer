@@ -827,15 +827,8 @@ func (n *Navigator) walk(start, startDepth int32, depth int, dir DirectionE, rel
 		f := rel * powf(decay, int(d)+1)
 		for a := n.adjStart[s]; a < n.adjStart[s+1]; a++ {
 			to := n.adjTo[a]
-			switch dir {
-			case DirectionOut:
-				if !n.adjOut[a] {
-					continue
-				}
-			case DirectionIn:
-				if n.adjOut[a] {
-					continue
-				}
+			if !dirAllows(dir, n.adjOut[a]) {
+				continue
 			}
 			if isHidden(to) {
 				continue

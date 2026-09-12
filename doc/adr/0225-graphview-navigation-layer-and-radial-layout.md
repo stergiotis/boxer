@@ -294,6 +294,38 @@ against the body rather than by editing it.
   not. The universe's edge index is a map, so bulk loads and removals
   stay linear.
 
+### 2026-09-12 — the universe answers graph questions
+
+§SD1 builds an undirected adjacency with the direction per entry and ids
+sorted, and every derivation walks it; none of it was published. A consumer
+that wanted a node's neighbours, its degree, the component it sits in or a
+path to another node therefore kept a second adjacency beside the universe
+it had already fed in. `Neighbours`, `Degree`, `Components` and
+`ShortestPath` read the one that exists.
+
+They answer over the **universe**, not the picture: a hidden node is still a
+neighbour and a node no mode would show still has a degree, because these
+are questions about the graph, where `Visible`, `Depth` and `Relevance` are
+the questions about the view. Direction is a parameter, the `DirectionE` an
+expansion already takes. Every result is ordered — ascending ids, components
+by their smallest member, breadth-first ties broken by the adjacency's id
+order — so each is a function of the topology alone, as §SD1 requires of
+everything here.
+
+Two deliberate departures from the package's conventions. The results are
+the **caller's**, where `FocusNodes` and `HiddenNodes` lend the navigator's
+slice: a query runs on a gesture rather than every frame, so an owned result
+is worth more than the allocation it costs and is one less aliasing rule to
+remember. And each query carries its own scratch rather than the walk's, so
+one may run inside the `Style` hook while `Declare` is on the stack — which
+is exactly where a consumer sizing a node by its degree, or dimming
+everything outside a hovered node's neighbourhood, would put it.
+
+What the queries deliberately leave out is the analytics: PageRank,
+centralities and the clusterings produce a number per node, and a number per
+node is something the caller declares. This tree computes those in the query
+lane; putting them here would put an analysis engine under a renderer.
+
 ## References
 
 - [ADR-0224](./0224-graphview-go-graph-widget-painter-lane.md) — the
