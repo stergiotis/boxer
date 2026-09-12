@@ -41,12 +41,12 @@ func TestAuraLegendRowsAreBuiltInEveryMode(t *testing.T) {
 	// is what lets a caller draw them outside the view (ADR-0224 §SD15).
 	for _, mode := range []AuraLegendModeE{AuraLegendOff, AuraLegendInside, AuraLegendExternal} {
 		v, ap := auraView(t, AuraParams{Enabled: true, Legend: mode})
-		v.emitAuraLegend(ap, 800, 600)
+		v.emitAuraLegend(ap, 800, 600, true)
 		require.Equal(t, []string{"alpha", "beta", "gamma"}, keys(v.AuraLegendItems()), "mode %d", mode)
 	}
 	// Auras off is the case that reports nothing at all.
 	v, ap := auraView(t, AuraParams{Legend: AuraLegendExternal})
-	v.emitAuraLegend(ap, 800, 600)
+	v.emitAuraLegend(ap, 800, 600, true)
 	require.Empty(t, v.AuraLegendItems())
 }
 
@@ -59,7 +59,7 @@ func TestAuraLegendRowsCarryLabelAndHiddenState(t *testing.T) {
 		},
 	})
 	v.HideAura("alpha")
-	v.emitAuraLegend(ap, 800, 600)
+	v.emitAuraLegend(ap, 800, 600, true)
 	items := v.AuraLegendItems()
 	require.Equal(t, []string{"alpha", "beta"}, keys(items), "NoLegend keeps gamma out")
 	require.Equal(t, "alpha", items[0].Label, "an aura without a label is its id")
@@ -71,7 +71,7 @@ func TestAuraLegendRowsCarryLabelAndHiddenState(t *testing.T) {
 func TestAuraLegendCornersPlaceTheBoxInside(t *testing.T) {
 	const w, h = 800, 600
 	v, ap := auraView(t, AuraParams{Enabled: true, Legend: AuraLegendInside})
-	v.emitAuraLegend(ap, w, h)
+	v.emitAuraLegend(ap, w, h, true)
 	items := v.AuraLegendItems()
 	bw, bh := legend.Measure(items, ap.LegendStyle)
 	require.Greater(t, bw, float32(0))
@@ -105,7 +105,7 @@ func TestAuraLegendStaysReachableOnATinyCanvas(t *testing.T) {
 	// A canvas narrower than the box would push a right-anchored legend off
 	// the left edge; the near edge wins so the rows can still be clicked.
 	v, ap := auraView(t, AuraParams{Enabled: true, Legend: AuraLegendInside})
-	v.emitAuraLegend(ap, 800, 600)
+	v.emitAuraLegend(ap, 800, 600, true)
 	items := v.AuraLegendItems()
 	p := ap
 	p.LegendCorner = CornerBottomRight

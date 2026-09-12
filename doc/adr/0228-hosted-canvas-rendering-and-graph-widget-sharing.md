@@ -6,9 +6,10 @@ date: 2026-09-12
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Nothing here has been built. The
+> **Status: proposed — pre-human-review.** Phases 1 and 2 of §SD7 are built;
+> the record is kept current with them, as a pre-acceptance ADR is. The
 > measurements in §Context were taken against the live `portolan` and
-> `graphview` APIs on the date above; everything else is design.
+> `graphview` APIs on the date above.
 
 # ADR-0228: one canvas, two widgets — hosted rendering, and what the two graph widgets should share
 
@@ -113,11 +114,15 @@ is current and reads its input from a handle the host names:
 
 ```go
 type HostCanvas struct {
-    Canvas, Area   widgethandle.Handle // the host's, for the registers
-    W, H           float32             // the host's canvas size
-    Zoom, PanX, PanY float32           // the transform to draw with
+    Canvas, Area widgethandle.WidgetHandle // the host's, for the registers
+    W, H         float32                   // the host's canvas size
+    Camera       camera.Camera             // the transform to draw with
 }
 ```
+
+The transform is the shared camera of §SD5 rather than three floats, which
+is what phase 1 made possible and what a host hands out directly
+(`portolan.Projector.Camera`).
 
 The guest emits no `PaintCanvas`, no area region and no background — the
 background is the host's `PaintCanvas(...).Background(...)`, which the guest
@@ -131,12 +136,22 @@ and calls the overlay slot at the bottom; one call cannot both claim a gesture
 and paint with the result. So:
 
 ```go
-claim := gv.HostedInput(host)          // read registers, pick, decide
-m.SetGestureVeto(claim.WantsPointer)   // the host stands down this frame
+canvas, area := m.Handles()
+claim := gv.HostedInput(graphview.HostCanvas{Canvas: canvas, Area: area, W: w, H: h, Camera: cm})
+m.SetPointerVeto(claim.Pointer)        // the host stands down this frame
 m.Render(w, h, func(p portolan.Projector) {
     gv.HostedPaint(nodes, edges)       // paints into the map's canvas
 })
 ```
+
+`HostClaim` also names the node under the pointer, which a host has no use
+for but a caller often does. The veto stops a *new* drag, box zoom or
+double-click zoom; a gesture already in flight is the host's to finish, and
+the wheel, the pinch and the keyboard are the host's in every case. One
+consequence of reading the pointer before the declaration: the guest's pick
+runs against the previous frame's geometry — the frame the pointer was
+actually over — so a node first declared in the next frame becomes pickable
+one frame later than it would under `Render`.
 
 `HostedInput` runs the pick and the gesture logic and reports what it took;
 `HostedPaint` reconciles, lays out and paints. The claim is the whole
@@ -147,11 +162,33 @@ one setter and no knowledge of its guest. `View.Events` is read after
 
 **SD3 — In hosted mode the camera is the host's and the guest owns no view
 gestures.** `HostCanvas` carries the transform; `Options.NoZoomAndPan` is
-implied and `SetCamera`, `FitNow` and `FitNodes` are refused, because a camera
-the guest moved would disagree with the tiles the host drew. A consumer that
-wants "fit the graph" in hosted mode calls the *host's* fit — `FitBounds` over
-the unprojected node box, which `Bounds()` and `View.Unproject` give it
+implied, and a camera the guest moved would disagree with what the host drew.
+`SetCamera`, `FitNow` and `FitNodes` are therefore not refused with an error
+but *overruled*: `HostedInput` reinstalls the host's transform every frame and
+a hosted paint clears the fit latch, so they simply have no lasting effect.
+That is one rule rather than a set of guards, and it cannot be got wrong by a
+caller who sets one of them from shared code. A consumer that wants "fit the
+graph" in hosted mode moves the *host's* view — `FitBounds` over the
+unprojected node box, which `Bounds()` and `View.Unproject` give it
 (ADR-0224 §SD14).
+
+**SD3a — A hosted declaration may mix located and unlocated nodes, and
+needs nothing new to.** A node the data places is declared `Pinned` at its
+projected layer point; a node the data joins to but never locates is declared
+without one, and the force step lays it out among the pinned ones. That falls
+out of ADR-0224 §SD10 — a declared pin is fixed and everything else still
+feels it — and it is Ogma's `geo.runLayout` ("get the coordinates for the
+nodes that don't have them") arriving for free rather than as a feature.
+
+One thing the caller must decide, because the widget cannot: what an
+unlocated node is anchored *to* between frames. Its retained position is in
+world units, which under §SD3's identity camera are canvas pixels, so left
+alone it sticks to the screen and slides against the map on every pan until
+the springs drag it back. Unprojecting the settled position after the paint
+and projecting it back before the next declaration anchors it in geography
+instead, so it rides the map like a located node while still being placed by
+the layout. Two lines each way, and the `graphonmap` demo does it; a consumer
+that wants the screen-anchored behaviour simply does not.
 
 **SD4 — What hosted mode gives up is named, not discovered.** The wheel
 belongs to the host, so the guest neither zooms nor reads `GetCanvasWheel`.
@@ -213,9 +250,17 @@ without the next:
    origin reaches about 35 million at zoom 18 and quantises to about two
    pixels on its own, which is why `View.Camera`'s doc sends a caller who
    needs exact placement there to layer points instead.
-2. **The host seam** (§SD1–SD4): `HostCanvas`, `HostedInput`, `HostedPaint`,
-   portolan's gesture veto, and a gallery demo of a graph on a basemap.
-   *4–6 days.*
+2. ~~**The host seam** (§SD1–SD4)~~ — **done 2026-09-12**. `HostCanvas`,
+   `HostClaim`, `HostedInput` and `HostedPaint` in graphview; `Map.Handles`
+   and `Map.SetPointerVeto` in portolan; the `graphonmap` gallery demo. That
+   demo first shipped with tiles off, for a capture that needs no tile
+   server, and the choice was wrong: a basemap is the point of drawing a
+   graph over one, and a `NoTiles` map is a grey rectangle that shows nothing
+   about the composition. Tiles are on with a toggle, as in the portolan
+   demo. `Render` was split into
+   `reconcileAndPlace` and `stepAndPaint` first, so both paths do the same
+   thing to the graph and differ only in where the input comes from and
+   whether the camera may move.
 3. **A Go-side pick for `layeredgraph/view`**, replacing the region per node.
    *2–3 days.* It makes layeredgraph the second guest and pays for itself in
    the interact cost.
@@ -291,18 +336,27 @@ pointer handling and is not taken from Leaflet or from egui.
   assertion below zoom 14, and the layer-point recipe losing nothing at any
   zoom. layeredgraph's transform, which had no test, is pinned by a property
   test against the arithmetic it replaced.
-- **Host seam (phase 2).** The headless scene recipe of ADR-0224's 2026-09-12
-  update scripts registers for a canvas handle; a hosted scene scripts the
-  *host's* handle and asserts that a press on a node claims the pointer and a
-  press on the background does not, that the claim reaches the veto, and that
-  the guest paints no canvas opcode.
+- **Host seam (phase 2).** *Done.* A hosted scene scripts registers on
+  handles the view does not own and asserts: a pointer over a node claims and
+  names it while empty canvas does not; a claim holds for every frame of a
+  node drag, including the one that ends it, and is released after; a
+  Shift-drag claims the rectangle where a plain background drag does not; the
+  host's camera is reinstalled every frame so a `SetCamera` or a `FitNow`
+  between frames does not survive; a background drag and a wheel leave the
+  guest's camera alone; and the legend's rows are published but never stamped.
+  That the guest emits no canvas is asserted by counting messages through the
+  scene channel: a hosted render must send strictly fewer than `Render` for
+  the same declaration.
 - **What would fail.** A wrong claim shows as the map panning while a node is
   dragged, which the scene test catches; a wrong camera shows as the graph
   sliding against the tiles while zooming, which the conversion test catches.
 
 ## Status
 
-Proposed 2026-09-12. Nothing is built; §SD7 is the order if it is accepted.
+Proposed 2026-09-12, and awaiting review. Phases 1 and 2 of §SD7 are built
+and are recorded above as they landed; phase 3 — the Go-side pick that
+`layeredgraph/view` needs before it can be a guest — is not, and has no
+consumer asking for it.
 
 ## References
 

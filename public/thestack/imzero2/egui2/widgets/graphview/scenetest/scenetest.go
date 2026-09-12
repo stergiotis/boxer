@@ -38,6 +38,32 @@ func Install() (reset func()) {
 	return sm.ScriptReset
 }
 
+// countingChannel discards like discardChannel but counts the messages, so a
+// test can compare what two render paths emit without decoding any of it.
+type countingChannel struct{ n *int }
+
+var _ runtime.ChannelI[*runtime.Unmarshaller] = countingChannel{}
+
+func (c countingChannel) SyncMultiUseMsg(uint64, []byte) { *c.n++ }
+func (c countingChannel) SendSingleUseMsg([]byte)        { *c.n++ }
+func (c countingChannel) FlushMessages()                 {}
+func (c countingChannel) ReceiveMsg() iter.Seq[*runtime.Unmarshaller] {
+	return func(func(*runtime.Unmarshaller) bool) {}
+}
+
+// InstallCounting is Install with a message count: messages returns how many
+// have been sent since the last zero, and zero resets it. It is what a test
+// uses to assert that one render path emits strictly less than another — a
+// hosted render, which stamps no canvas and no sense region, against the
+// Render that does (ADR-0228 §SD1).
+func InstallCounting() (messages func() int, zero func(), reset func()) {
+	n := new(int)
+	typed.SetCurrentFffiVar(runtime.NewFffi2[*runtime.Unmarshaller](countingChannel{n: n}))
+	sm := c.CurrentApplicationState.StateManager
+	sm.ScriptReset()
+	return func() int { return *n }, func() { *n = 0 }, sm.ScriptReset
+}
+
 // Handles derives the canvas and area handles a graphview.View constructed
 // with key on ids will use, without consuming the id stack's state, so a
 // test can script their registers.

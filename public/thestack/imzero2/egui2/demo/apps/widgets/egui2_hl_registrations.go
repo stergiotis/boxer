@@ -201,6 +201,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "graphonmap", Category: "Maps & geo", Title: icons.IconGlobe + " graph on a map (hosted canvas)",
+		Stage:       [2]float32{1024, 700},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindUX,
+		Description: "The hosted-canvas seam of ADR-0228: one canvas, owned by the portolan map and painted and picked by graphview. The map keeps its drag, wheel, box zoom and keyboard; the graph claims the pointer only where it lands on a node, and the map is told before it handles the same frame's input, so it does not pan under a node drag. Nodes are pinned to coordinates and reprojected every frame, which is the recipe that stays exact at every zoom. Nodes with no coordinates at all are declared unpinned and laid out by the force step among the pinned ones, then anchored in geography so they ride the map. The basemap comes from BOXER_MAP_TILE_URL, OpenStreetMap by default; toggles swap it for the offline Natural Earth outlines of portolan/landoverlay, which need no tile server.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newGraphOnMapState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoGraphOnMap(ids, state.(*graphOnMapState))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "mapraster", Category: "Maps & geo", Title: icons.IconGlobe + " mapRaster (in-DB geo raster)",
 		Stage:       [2]float32{760, 600},
 		Flags:       registry.DemoFlagNeedsLargeArea,

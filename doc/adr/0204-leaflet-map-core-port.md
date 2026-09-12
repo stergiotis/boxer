@@ -603,6 +603,28 @@ it removed.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+### 2026-09-12 — an offline basemap overlay
+
+A map with no tile server paints its background and nothing else, which is a
+grey rectangle: correct, and useless as the ground under anything drawn over
+it. `portolan/landoverlay` fills land and strokes country borders from the
+`worldmap` atlas — the vendored Natural Earth 110m admin-0 outlines — through
+the projector hook, on §SD9's pattern and beside `h3overlay`: a subpackage the
+map itself does not import, so only a caller that wants it pays for the atlas.
+
+It needed one thing from `worldmap`, which held its source coordinates but
+published only projected ones in an unexported type: `Country.RingCount`,
+`Country.Ring` — appending degrees to the caller's buffers, and reporting an
+interior ring, which a filled overlay must not fill — and `Country.GeoBounds`
+for the viewport cull. The atlas keeps unprojected geometry because its own
+projection is switchable ([ADR-0114](./0114-play-world-choropleth-panel.md)),
+which is exactly what makes it useful to something projecting for itself.
+
+The outlines are coarse on purpose. At country-and-continent zooms they read
+as a basemap; past roughly zoom 8 a 110m coastline is visibly a polygon. This
+is the offline stand-in for tiles, not a replacement for them, and the
+`graphonmap` demo offers both.
+
 ## References
 
 - [leaflet-port-analysis](../adr-background-work/leaflet-port-analysis.md) — the measurements, the three split shapes, the substrate check and the cut line this ADR decides on.

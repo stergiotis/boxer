@@ -24,10 +24,13 @@ type View struct {
 	key     string
 	paneKey string
 
-	g     graph
-	fs    forceState
-	cam   cam.Camera
-	style Style // Opts.Style with defaults filled, resolved once per Render
+	g   graph
+	fs  forceState
+	cam cam.Camera
+	// hosted is set between HostedInput and the end of HostedPaint: the view
+	// is drawing inside a canvas it does not own (ADR-0228 §SD1).
+	hosted bool
+	style  Style // Opts.Style with defaults filled, resolved once per Render
 
 	hierDone     bool
 	lastHier     HierParams
@@ -561,61 +564,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			}
 		}
 
-		created, topoChanged := v.g.reconcile(nodes, edges)
-		if topoChanged {
-			v.pruneSelection()
-		}
-		n := v.g.n()
-		// The table is kept current even with auras off, so AuraIds answers.
-		if v.auraSet.build(nodes, &v.g) {
-			v.auraDirty = true
-		}
-
-		if v.resetPending {
-			v.resetPending = false
-			v.hierDone = false
-			v.radialDone = false
-			v.fs.reset()
-			clear(v.g.held)
-			created = v.g.allSlots()
-			v.drag = dragState{}
-			v.fitRequested = true
-			v.auraDirty = true
-			v.autoPaused = false
-		}
-
-		// Placement of nodes that have none yet.
-		if len(created) > 0 {
-			switch v.Opts.Layout {
-			case LayoutForceDirected, LayoutForceDirectedCG:
-				k := idealEdgeLength(w, h, n, fp.KScale)
-				placeNear(&v.g, created, max(k, 1))
-			case LayoutHierarchical, LayoutRadial:
-				// laid out below with the rest of the graph
-			default:
-				placeRandom(&v.g, created)
-			}
-		}
-		layoutChanged := v.Opts.Layout != v.lastLayout
-		v.lastLayout = v.Opts.Layout
-		if v.Opts.Layout == LayoutHierarchical && (topoChanged || layoutChanged || !v.hierDone || len(created) > 0 || hp != v.lastHier) {
-			layoutHierarchical(&v.g, hp)
-			v.hierDone = true
-			v.lastHier = hp
-			v.auraDirty = true
-		}
-		if v.Opts.Layout == LayoutRadial && (topoChanged || layoutChanged || !v.radialDone || len(created) > 0 || !rp.equal(v.lastRadial)) {
-			layoutRadial(&v.g, rp)
-			v.radialDone = true
-			v.lastRadial = rp.clone()
-			v.auraDirty = true
-		}
-		// Declared pins win over any placement; the drag in flight keeps its
-		// node where the pointer has it (ADR-0224 §SD10).
-		if v.g.applyPins(v.dragSlot()) {
-			v.auraDirty = true
-			v.autoPaused = false
-		}
+		topoChanged, created, n := v.reconcileAndPlace(nodes, edges, w, h, fp, hp, rp)
 
 		// Input, against the previous frame's geometry. A drag that began
 		// this frame fixes its node before the step below can move it.
@@ -624,9 +573,95 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			v.g.fixed[s] = true
 		}
 
-		// Layout.
-		v.stepLayout(w, h, fp, topoChanged || len(created) > 0)
+		v.stepAndPaint(w, h, fp, ap, topoChanged, created, n, true)
+		v.camMoved = !v.cam.SameView(camBefore)
 
+		// Interaction surfaces: the area region owns click and drag, the
+		// canvas owns hover, containment and the wheel; the legend's rows
+		// come after the area so they win its clicks.
+		c.PaintSenseRegion(v.ids.PrepareStr("graphview-area"), 0, 0, w, h).Send()
+		v.emitAuraLegend(ap, w, h, true)
+		cv := c.PaintCanvas(v.ids.PrepareStr("graphview-canvas"), w, h).
+			Background(v.style.Background).
+			Sense(true, true, true)
+		if !v.Opts.NoZoomAndPan {
+			cv = cv.CaptureZoom().CaptureScroll()
+		}
+		cv.Send()
+	}
+}
+
+// reconcileAndPlace applies the declaration and everything that must happen
+// before input is read against it: the reconcile, a pending reset, the
+// placement of new slots, the static layouts and the pins. Shared by Render
+// and by the hosted render of ADR-0228 §SD1, which differ in where the input
+// comes from rather than in what a frame does to the graph.
+func (v *View) reconcileAndPlace(nodes []NodeSpec, edges []EdgeSpec, w, h float32, fp ForceParams, hp HierParams, rp RadialParams) (topoChanged bool, created []int32, n int) {
+	created, topoChanged = v.g.reconcile(nodes, edges)
+	if topoChanged {
+		v.pruneSelection()
+	}
+	n = v.g.n()
+	// The table is kept current even with auras off, so AuraIds answers.
+	if v.auraSet.build(nodes, &v.g) {
+		v.auraDirty = true
+	}
+
+	if v.resetPending {
+		v.resetPending = false
+		v.hierDone = false
+		v.radialDone = false
+		v.fs.reset()
+		clear(v.g.held)
+		created = v.g.allSlots()
+		v.drag = dragState{}
+		v.fitRequested = true
+		v.auraDirty = true
+		v.autoPaused = false
+	}
+
+	// Placement of nodes that have none yet.
+	if len(created) > 0 {
+		switch v.Opts.Layout {
+		case LayoutForceDirected, LayoutForceDirectedCG:
+			k := idealEdgeLength(w, h, n, fp.KScale)
+			placeNear(&v.g, created, max(k, 1))
+		case LayoutHierarchical, LayoutRadial:
+			// laid out below with the rest of the graph
+		default:
+			placeRandom(&v.g, created)
+		}
+	}
+	layoutChanged := v.Opts.Layout != v.lastLayout
+	v.lastLayout = v.Opts.Layout
+	if v.Opts.Layout == LayoutHierarchical && (topoChanged || layoutChanged || !v.hierDone || len(created) > 0 || hp != v.lastHier) {
+		layoutHierarchical(&v.g, hp)
+		v.hierDone = true
+		v.lastHier = hp
+		v.auraDirty = true
+	}
+	if v.Opts.Layout == LayoutRadial && (topoChanged || layoutChanged || !v.radialDone || len(created) > 0 || !rp.equal(v.lastRadial)) {
+		layoutRadial(&v.g, rp)
+		v.radialDone = true
+		v.lastRadial = rp.clone()
+		v.auraDirty = true
+	}
+	// Declared pins win over any placement; the drag in flight keeps its
+	// node where the pointer has it (ADR-0224 §SD10).
+	if v.g.applyPins(v.dragSlot()) {
+		v.auraDirty = true
+		v.autoPaused = false
+	}
+	return
+}
+
+// stepAndPaint advances the layout, moves the camera if it may, recomputes
+// the auras and paints. fit is false for a hosted render, where the camera is
+// the host's and this widget does not move it (ADR-0228 §SD3).
+func (v *View) stepAndPaint(w, h float32, fp ForceParams, ap AuraParams, topoChanged bool, created []int32, n int, fit bool) {
+	v.stepLayout(w, h, fp, topoChanged || len(created) > 0)
+
+	if fit {
 		// Camera: the one-shot fit latch (ADR-0224 §SD4).
 		refit := v.fitRequested || (!v.everHadNodes && n > 0)
 		v.fitRequested = false
@@ -657,28 +692,18 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 				}
 			}
 		}
-
 		if v.fitIdsWait {
 			v.applyFitNodes(w, h)
 		}
-		v.camMoved = !v.cam.SameView(camBefore)
-
-		v.updateAuras(ap, w, h)
-		v.paint(w, h)
-
-		// Interaction surfaces: the area region owns click and drag, the
-		// canvas owns hover, containment and the wheel; the legend's rows
-		// come after the area so they win its clicks.
-		c.PaintSenseRegion(v.ids.PrepareStr("graphview-area"), 0, 0, w, h).Send()
-		v.emitAuraLegend(ap, w, h)
-		cv := c.PaintCanvas(v.ids.PrepareStr("graphview-canvas"), w, h).
-			Background(v.style.Background).
-			Sense(true, true, true)
-		if !v.Opts.NoZoomAndPan {
-			cv = cv.CaptureZoom().CaptureScroll()
-		}
-		cv.Send()
+	} else if n > 0 {
+		// A hosted view never fits, but it must not arrive at its first
+		// unhosted frame believing it has never had nodes.
+		v.everHadNodes = true
+		v.fitRequested, v.fitPending, v.fitIdsWait = false, false, false
 	}
+
+	v.updateAuras(ap, w, h)
+	v.paint(w, h)
 }
 
 // stepLayout advances a force layout by this frame's steps: the fast-forward
@@ -747,6 +772,9 @@ func (v *View) pruneSelection() {
 func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 	areaFlags c.ResponseFlagsE, wheel c.CanvasWheelValue, mods c.ModifiersValue) {
 	o := &v.Opts
+	// A hosted view never moves its own camera: the host owns the view
+	// gestures and supplies the transform (ADR-0228 §SD3).
+	noView := o.NoZoomAndPan || v.hosted
 	// The pick under the pointer serves hover, click and drag alike.
 	hitNode, hitEdge := int32(-1), int32(-1)
 	if posOk && (inside || v.drag.active) {
@@ -890,7 +918,7 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 			}
 		case v.drag.isRect:
 			// The rectangle is (x0, y0)–(lastX, lastY); nothing else moves.
-		case !o.NoZoomAndPan:
+		case !noView:
 			v.cam.PanX += dx
 			v.cam.PanY += dy
 		}
@@ -911,7 +939,7 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 	}
 
 	// Wheel: anchored zoom and scroll-pan, both scoped to this canvas.
-	if !o.NoZoomAndPan {
+	if !noView {
 		if z := wheel.Zoom; z > 0 && z != 1 {
 			if o.ZoomSpeed > 0 && o.ZoomSpeed != 1 {
 				z = float32(math.Pow(float64(z), float64(o.ZoomSpeed)))
@@ -1220,7 +1248,7 @@ func (v *View) paintAuras() {
 // order, hidden ones dimmed — in every mode, since AuraLegendItems publishes
 // them whoever paints them (ADR-0224 §SD15). Only AuraLegendInside paints and
 // stamps regions here; the rows are kept for next frame's Read.
-func (v *View) emitAuraLegend(ap AuraParams, w, h float32) {
+func (v *View) emitAuraLegend(ap AuraParams, w, h float32, allowInside bool) {
 	v.legendItems = v.legendItems[:0]
 	if !ap.Enabled {
 		return
@@ -1238,7 +1266,7 @@ func (v *View) emitAuraLegend(ap AuraParams, w, h float32) {
 			Key: id, Label: label, Color: opaque(ap.fill(k, id)), Hidden: v.AuraHidden(id),
 		})
 	}
-	if ap.Legend != AuraLegendInside || len(v.legendItems) == 0 {
+	if !allowInside || ap.Legend != AuraLegendInside || len(v.legendItems) == 0 {
 		return
 	}
 	x, y := legendOrigin(v.legendItems, ap, w, h)

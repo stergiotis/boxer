@@ -101,6 +101,10 @@ type Map struct {
 	// instead of showing the old source's pixels.
 	srcGen uint64
 
+	// pointerVeto is set for one frame by SetPointerVeto: a widget drawn
+	// over the map has taken this frame's pointer (ADR-0228 §SD2).
+	pointerVeto bool
+
 	// handlers
 	drag  dragHandler
 	wheel wheelHandler
@@ -191,6 +195,27 @@ func (m *Map) wirePyramid() {
 	m.pyramid.OnAbort = func(coords TileCoords) { m.loader.Cancel(coords); m.dropHolder(coords) }
 	m.pyramid.OnUnload = m.dropHolder
 }
+
+// Handles returns the canvas and area handles this map's sense surfaces use,
+// for a widget hosted in its overlay that reads the same registers
+// (ADR-0228 §SD1). The canvas carries containment, hover and the cursor row;
+// the area is the drag-owning region the map emits last. They are derived,
+// not remembered, so this is valid before the first Render.
+func (m *Map) Handles() (canvas, area widgethandle.WidgetHandle) {
+	for range c.IdScope(m.ids.PrepareStr("portolan")) {
+		canvas = widgethandle.Make(m.ids.PrepareStr("portolan-canvas").Derive())
+		area = widgethandle.Make(m.ids.PrepareStr("portolan-area").Derive())
+	}
+	return
+}
+
+// SetPointerVeto tells the map that a widget drawn over it has taken this
+// frame's pointer gesture (ADR-0228 §SD2), so the map starts no drag, no box
+// zoom and no double-click zoom from it. A gesture already in flight
+// finishes, and the wheel, the pinch and the keyboard are untouched — they
+// are the host's in every case. The flag is cleared by the Render it applies
+// to, so set it every frame it should hold.
+func (m *Map) SetPointerVeto(on bool) { m.pointerVeto = on }
 
 // Source is the tile source in use.
 func (m *Map) Source() TileSource { return m.opts.Source }
@@ -481,6 +506,7 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 		CaptureScroll().
 		Send()
 
+	m.pointerVeto = false
 	if again || m.view.Animating() || m.wheel.hasStart || m.pinch.active ||
 		(!m.opts.NoTiles && (m.loader.Pending() > 0 || m.pyramid.IsLoading())) {
 		c.RequestRepaintAfter(1.0 / 60)
@@ -502,6 +528,9 @@ func (m *Map) paintAttribution(w, h float32) {
 func (m *Map) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c.ResponseFlagsE,
 	wheel c.CanvasWheelValue, ptr c.PointerValue, now time.Time) {
 	v := m.view
+	// A guest that claimed the pointer this frame stops a new gesture from
+	// starting here; one already in flight is the map's to finish.
+	veto := m.pointerVeto
 	posX, posY, posOk := cur.PosX, cur.PosY, !isNaN32(cur.PosX) && !isNaN32(cur.PosY)
 	if ptr.Valid && !isNaN32(ptr.X) && !isNaN32(ptr.Y) {
 		posX, posY, posOk = ptr.X-cur.OriginX, ptr.Y-cur.OriginY, true
@@ -518,7 +547,7 @@ func (m *Map) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c
 	if !flags.HasIsPointerButtonDown() && !m.drag.active && !m.box.active {
 		m.pressOriginOk = false
 	}
-	if flags.HasDragStarted() && posOk {
+	if flags.HasDragStarted() && posOk && !veto {
 		var origin Point
 		switch {
 		case areaOk && !isNaN32(areaCur.PosX) && !isNaN32(areaCur.PosY):
@@ -574,7 +603,7 @@ func (m *Map) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c
 	m.wheel.tick(v, now, m.hopts)
 	m.pinch.tick(v, now)
 
-	if !m.opts.NoDoubleClickZoom && flags.HasDoubleClicked() && posOk {
+	if !m.opts.NoDoubleClickZoom && flags.HasDoubleClicked() && posOk && !veto {
 		doubleClick(v, pos, cur.Shift())
 	}
 }
