@@ -191,6 +191,7 @@ func applyDisplacements(g *graph, dx, dy []float32, dt, damping, maxStep float32
 	if count == 0 {
 		return 0
 	}
+	g.posVer++
 	return sum / float32(count)
 }
 

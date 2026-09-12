@@ -46,6 +46,7 @@ type View struct {
 	selEdges    map[EdgeRef]struct{}
 	drag        dragState
 
+	grid         pickGrid // world-space cells over the nodes, rebuilt on posVer
 	lastW, lastH float32  // canvas size of the last Render, 0 before it
 	fitIds       []uint64 // FitNodes request, applied at once or on the next Render
 	fitIdsWait   bool
@@ -444,6 +445,7 @@ func (v *View) PinNode(id uint64, x, y float32) {
 	if s, ok := v.g.slot[id]; ok {
 		v.g.x[s], v.g.y[s] = x, y
 		v.g.held[s] = true
+		v.g.posVer++
 		v.auraDirty = true
 		v.autoPaused = false
 	}
@@ -470,6 +472,7 @@ func (v *View) IsPinned(id uint64) bool {
 func (v *View) SetNodePosition(id uint64, x, y float32) {
 	if s, ok := v.g.slot[id]; ok {
 		v.g.x[s], v.g.y[s] = x, y
+		v.g.posVer++
 		v.auraDirty = true
 		v.autoPaused = false
 	}
@@ -854,6 +857,7 @@ func (v *View) applyInput(w, h, px, py float32, posOk, inside bool,
 			if s, ok := v.g.slot[v.drag.nodeId]; ok {
 				v.g.x[s] += dx / v.cam.zoom
 				v.g.y[s] += dy / v.cam.zoom
+				v.g.posVer++
 				v.auraDirty = true
 			}
 		case v.drag.isRect:
@@ -1018,31 +1022,22 @@ func (v *View) rectSelect(x0, y0, x1, y1 float32, add bool) {
 // down to a dot stays clickable.
 const pickMinPx = 6
 
-// pickNode returns the slot under canvas point (px, py): the nearest node
-// whose screen disc contains it, or -1. Linear in the node count
-// (ADR-0224 §SD3).
-func (v *View) pickNode(px, py float32) int32 {
-	best, bestD := int32(-1), float32(math.MaxFloat32)
-	for i := range v.g.ids {
-		sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
-		r := max(v.nodeOuterPx(i), pickMinPx)
-		dx, dy := px-sx, py-sy
-		d2 := dx*dx + dy*dy
-		if d2 <= r*r && d2 < bestD {
-			best, bestD = int32(i), d2
-		}
-	}
-	return best
-}
+// pickEdgeTolPx is the widest stroke distance that still counts as a hit.
+const pickEdgeTolPx = 4
 
 // pickEdge returns the edge under canvas point (px, py) within a few pixels
 // of its stroke, or -1. Curved edges are tested against a sampled polyline;
-// self-loops against their loop circle.
+// self-loops against their loop circle. An edge whose padded endpoint box
+// misses the point is rejected before its geometry is resolved, which is
+// what keeps the loop cheap at many edges (ADR-0224 §SD3).
 func (v *View) pickEdge(px, py float32) int32 {
 	best, bestD := int32(-1), float32(math.MaxFloat32)
 	for i := range v.g.eFrom {
+		if !v.edgeBoxMayContain(int32(i), px, py) {
+			continue
+		}
 		geo := v.edgeGeometry(i)
-		tol := max(geo.width, 4)
+		tol := max(geo.width, pickEdgeTolPx)
 		var d float32
 		switch geo.kind {
 		case edgeKindLoop:

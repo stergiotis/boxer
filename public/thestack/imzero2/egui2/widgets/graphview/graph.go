@@ -40,10 +40,14 @@ type graph struct {
 	adjList  []int32 // undirected neighbours, one entry per edge end
 	adjEdge  []int32 // the edge index behind each adjList entry
 	inDeg    []int32
+	edgeIdx  map[EdgeRef]int32 // first edge index per ref, rebuilt with the edges
 
 	frame       uint32
 	topoHash    uint64
 	pinnedCount uint32 // declared or widget-side pins, as of the last applyPins
+	// posVer counts the changes to the slot set, a position or a radius —
+	// everything the pick grid is built from. Every writer bumps it.
+	posVer uint32
 
 	// scratch
 	pairCount map[[2]int32]uint8
@@ -66,6 +70,7 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 	if g.slot == nil {
 		g.slot = make(map[uint64]int32, len(nodes))
 		g.pairCount = make(map[[2]int32]uint8, len(edges))
+		g.edgeIdx = make(map[EdgeRef]int32, len(edges))
 	}
 	g.frame++
 	g.newSlots = g.newSlots[:0]
@@ -113,6 +118,7 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		g.held = append(g.held, false)
 		g.newSlots = append(g.newSlots, s)
 		g.setNode(s, sp)
+		g.posVer++
 	}
 	created = g.newSlots
 
@@ -155,6 +161,9 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 func (g *graph) setNode(s int32, sp *NodeSpec) {
 	g.label[s] = sp.Label
 	g.col[s] = sp.Color
+	if g.radius[s] != sp.Radius {
+		g.posVer++
+	}
 	g.radius[s] = sp.Radius
 	g.donut[s] = sp.Donut
 	g.pinDecl[s] = sp.Pinned
@@ -176,6 +185,7 @@ func (g *graph) rebuildEdges(edges []EdgeSpec) {
 	g.eStr = g.eStr[:0]
 	g.eOrder = g.eOrder[:0]
 	clear(g.pairCount)
+	clear(g.edgeIdx)
 	g.inDeg = growTo(g.inDeg, n)
 	clear(g.inDeg)
 	deg := growTo(g.adjStart, n+1)
@@ -199,6 +209,10 @@ func (g *graph) rebuildEdges(edges []EdgeSpec) {
 		g.eLen = append(g.eLen, posOr1(e.Length))
 		g.eStr = append(g.eStr, posOr1(e.Strength))
 		g.eOrder = append(g.eOrder, order)
+		ref := EdgeRef{From: e.From, To: e.To, Id: e.Id}
+		if _, dup := g.edgeIdx[ref]; !dup {
+			g.edgeIdx[ref] = int32(len(g.eFrom) - 1)
+		}
 		g.inDeg[to]++
 		if from != to {
 			deg[from]++
@@ -238,18 +252,10 @@ func (g *graph) edgeRef(i int32) EdgeRef {
 	return EdgeRef{From: g.ids[g.eFrom[i]], To: g.ids[g.eTo[i]], Id: g.eId[i]}
 }
 
-// findEdge returns the index of the first edge matching ref, or -1. Linear
-// in the edge count; for the programmatic selection calls, not the frame.
+// findEdge returns the index of the first edge matching ref, or -1.
 func (g *graph) findEdge(ref EdgeRef) int32 {
-	from, okF := g.slot[ref.From]
-	to, okT := g.slot[ref.To]
-	if !okF || !okT {
-		return -1
-	}
-	for i := range g.eFrom {
-		if g.eFrom[i] == from && g.eTo[i] == to && g.eId[i] == ref.Id {
-			return int32(i)
-		}
+	if i, ok := g.edgeIdx[ref]; ok {
+		return i
 	}
 	return -1
 }
@@ -275,6 +281,7 @@ func (g *graph) allSlots() []int32 {
 func (g *graph) removeSlot(s int) {
 	last := len(g.ids) - 1
 	delete(g.slot, g.ids[s])
+	g.posVer++
 	if s != last {
 		g.ids[s] = g.ids[last]
 		g.x[s] = g.x[last]
@@ -325,6 +332,9 @@ func (g *graph) applyPins(dragSlot int32) (moved bool) {
 			g.pinnedCount++
 		}
 		g.fixed[i] = pinned || int32(i) == dragSlot
+	}
+	if moved {
+		g.posVer++
 	}
 	return
 }

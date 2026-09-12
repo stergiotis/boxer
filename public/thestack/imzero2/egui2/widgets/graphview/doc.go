@@ -1,5 +1,5 @@
-// Package graphview is the live node-and-edge graph widget of ADR-0224
-// (proposed): random, force-directed (Fruchterman–Reingold, optionally with
+// Package graphview is the live node-and-edge graph widget of ADR-0224:
+// random, force-directed (Fruchterman–Reingold, optionally with
 // centre gravity) and hierarchical layouts, drawn on the imzero2 painter lane
 // with no IDL, Rust or fetcher of its own. It is the Go sibling of the
 // egui_graphs-backed `Graph` binding and carries that binding's feature set

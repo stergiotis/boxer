@@ -1579,7 +1579,7 @@ the readbacks (one frame behind, like every canvas register).
 ## 20. graphview — the live graph widget
 
 The force-directed / hierarchical graph is a Go widget on the painter lane
-(ADR-0224, proposed; package [`widgets/graphview`](../../../public/thestack/imzero2/egui2/widgets/graphview/)),
+(ADR-0224; package [`widgets/graphview`](../../../public/thestack/imzero2/egui2/widgets/graphview/)),
 the sibling of the `egui_graphs`-backed `c.Graph` binding it is meant to
 replace once its downstream consumers have moved. New graph work targets
 graphview; `c.GraphNode` / `c.GraphEdge` / `c.Graph` and the three
@@ -1644,6 +1644,14 @@ What to know before using it:
   parameter change, a pin or position set, `FastForward` or `ResetLayout`;
   `Metrics.Paused` reports either kind of pause. Prefer it to polling
   `Settled` and flipping `Paused` by hand.
+- **Headless testing.** `Render` runs without a client under a fffi2
+  channel that discards paint commands, and the state manager's `Script*`
+  setters (`ScriptResponse`, `ScriptCanvasCursor`, `ScriptCanvasWheel`,
+  `ScriptPointer`, `ScriptModifiers`, `ScriptReset` as the frame boundary)
+  play one frame of input into the registers exactly as Sync would drain it.
+  `scene_test.go` in the package is the pattern: derive the canvas and area
+  handles from the same id stack the widget uses, script, render, read the
+  events. The same recipe serves any canvas widget.
 - **Cost.** One batched marker opcode per (colour, radius), one line or
   Bézier per edge, one polygon per arrow head, one text per visible label.
   The force step is exact O(n²) below a few hundred nodes and Barnes–Hut

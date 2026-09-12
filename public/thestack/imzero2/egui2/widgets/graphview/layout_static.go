@@ -21,6 +21,7 @@ func placeRandomSlot(g *graph, s int32) {
 	h := mix64(g.ids[s])
 	g.x[s] = unit01(h) * spawnSize
 	g.y[s] = unit01(mix64(h)) * spawnSize
+	g.posVer++
 }
 
 // placeNear puts a newly declared node beside an already-placed neighbour
@@ -41,6 +42,7 @@ func placeNear(g *graph, slots []int32, spread float32) {
 			h := mix64(g.ids[s])
 			g.x[s] = g.x[nb] + (unit01(h)-0.5)*spread
 			g.y[s] = g.y[nb] + (unit01(mix64(h))-0.5)*spread
+			g.posVer++
 			placed = true
 			break
 		}
@@ -109,6 +111,7 @@ func layoutHierarchical(g *graph, p HierParams) {
 		}
 		nextCol = h.tree(s, 0, nextCol) + 1
 	}
+	g.posVer++
 }
 
 type hierWalk struct {

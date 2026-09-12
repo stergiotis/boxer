@@ -11,7 +11,7 @@ import (
 )
 
 // graphviewDemoState carries the three graphview instances of the gallery
-// demo (ADR-0224, proposed) — the ring, the force-directed tree and the
+// demo (ADR-0224) — the ring, the force-directed tree and the
 // hierarchical tree — plus the shared navigation toggles and event log. It
 // mirrors the egui_graphs demo so the two can be compared side by side
 // while the binding is still in the tree.

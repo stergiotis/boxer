@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-10
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-12
 ---
-
-> **Status: proposed — pre-human-review.** The widget is implemented as a
-> sibling of the `egui_graphs` binding; this record has not been reviewed.
 
 # ADR-0224: graphview — the live graph widget as Go on the painter lane
 
@@ -356,9 +353,54 @@ find them, one `int32` per edge end.
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis. The widget ships with this record;
+Accepted 2026-09-12. The widget ships with this record;
 the downstream consumers migrate at their own pace, and the binding's
 retirement is recorded when they have.
+
+## Updates
+
+### 2026-09-12 — pick grid, edge index, scripted scenes, edge-id scope
+
+Four things that closed the last widget-local gaps before a first
+consumer, recorded here rather than by editing the body.
+
+**SD3's upgrade path is taken.** Node picking runs over a uniform grid in
+world units, rebuilt when a slot, a position or a radius changes and
+reused otherwise, so a graph at rest picks in the cells around the pointer
+rather than over every node; a live force layout rebuilds per frame, one
+counting sort, no worse than the scan it replaces. Edge picking keeps its
+linear loop but rejects an edge on its padded endpoint box before resolving
+its geometry; the padding carries the node radius the stroke is trimmed
+by, since overlapping discs put the trimmed stroke past the far endpoint —
+a case the property test against the plain scan found. The edge refs of
+SD13 are indexed per topology change, so a programmatic select and the
+selection pruning are lookups, not scans.
+
+**Edge ids are scoped to the ordered pair.** An `EdgeSpec.Id` need only be
+unique among the edges between one `(From, To)`, and `EdgeRef` — the full
+triple — is the only key; there is no lookup by id alone. A caller whose
+ids are global still has the endpoints in hand when it declares the edge,
+and a per-pair scope keeps the index a map over the declaration rather
+than a second registry that would have to be kept unique. The alternative,
+id-only lookup with a uniqueness check, was weighed and not taken.
+
+**The headless scene exists.** The bindings' state manager gained
+`Script*` setters that place a value in a per-frame register as Sync does
+when it drains the host, with `ScriptReset` as the frame boundary, and a
+fffi2 channel that discards paint commands lets `Render` run without a
+client. The package's scene tests drive whole frames that way — the fit
+latch, a click, a secondary click on the background, a wheel zoom,
+`FitNodes`, a node vanishing from the declaration, a drag waking the
+pause-on-settle hold, auras with their legend — which closes the
+verification gap the plan named. The recipe is not graphview's: any canvas
+widget can script its registers the same way.
+
+**Live check.** The secondary click on a node and on the background, the
+Shift-drag rectangle and the anchored wheel zoom were driven against the
+gallery demo on the desktop host with OS-level synthetic input and
+screenshots, since the egui_mcp route was not registered in the session
+that ran it, and each reported as designed in the demo's event log. Long
+touch was not exercised: the OS-level route has no touch input.
 
 ## References
 
