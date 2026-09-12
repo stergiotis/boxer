@@ -537,13 +537,21 @@ path.
 
 ### Projection
 
-A 2-D UMAP scatter of the result's feature columns. Click **Compute projection** to
-run it (needs at least three rows); the button becomes **Cancel** while it works, and
-an fsmview chip shows the projector's lifecycle (extracting → running → done, or
-failed / cancelled). When done you get the scatter plus a **colour by** picker
-(monochrome or any feature, binned with a legend) and the UMAP parameters. Pan and
-zoom with the mouse; click a point to select that row (it drives the Detail tab).
-Very large results are sampled (10000-row cap) so UMAP stays interactive.
+A neighbour embedding of the result's feature columns, drawn as a live graph.
+Click **Compute projection** to run it (needs at least three rows): the rows' features
+become a k-nearest-neighbour graph, HDBSCAN clusters it, and the graph is laid out
+under the neighbour-embedding force model. The button becomes **Cancel** while it
+works, and an fsmview chip shows the projector's lifecycle (extracting → running →
+done, or failed / cancelled). **Neighbours** and **min cluster** apply on the next
+Compute; **exaggeration** applies live and moves the same graph along the
+attraction–repulsion spectrum — about 1 draws t-SNE, 4 UMAP, 30 ForceAtlas2 — after
+an annealing schedule that starts high. **Colour by** fills nodes by any feature,
+binned; **auras by cluster** draws a blob per HDBSCAN cluster with a legend, leaving
+low-probability members and noise out; **edges** shows the neighbour edges the layout
+runs on, off by default because they cover the picture. Drag pans and moves a node, ctrl+scroll zooms,
+**fit** reframes, **re-lay-out** restarts the schedule, **settle** runs it ahead.
+Click a node to select that row (it drives the Detail tab). Very large results are
+sampled (10000-row cap) so the exact k-NN stays interactive.
 
 ### Timeline
 

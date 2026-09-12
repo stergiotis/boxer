@@ -1,9 +1,13 @@
 package play
 
 import (
+	"context"
 	"testing"
 
+	"github.com/stergiotis/boxer/public/analytics/graph/algo"
+	"github.com/stergiotis/boxer/public/analytics/graph/knn"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBucketIndexEqualWidth(t *testing.T) {
@@ -84,4 +88,55 @@ func TestSubsampleFeaturesCapped(t *testing.T) {
 			t.Errorf("coordRow not strictly increasing at %d: %d <= %d", i, coordRow[i], coordRow[i-1])
 		}
 	}
+}
+
+// The declaration built from a run: one node per slot with the cluster as
+// its aura unless its membership is weak, one edge per neighbour pair with
+// the membership as its strength, and the colour-by fill bucketed.
+func TestBuildProjectionDeclaration(t *testing.T) {
+	const n, d = 40, 3
+	x := make([]float32, n*d)
+	ids := make([]uint64, n)
+	for i := range n {
+		ids[i] = uint64(i) + 1
+		for j := range d {
+			v := float32(i%2) * 20 // two tight groups
+			if j == i%d {
+				v += float32(i) * 0.01
+			}
+			x[i*d+j] = v
+		}
+	}
+	g, err := knn.Build(context.Background(), nil, x, d, ids, knn.Options{K: 5})
+	require.NoError(t, err)
+	dg, err := g.DistanceGraph()
+	require.NoError(t, err)
+	cl, err := algo.HDBSCAN(context.Background(), dg, g.CoreDist, algo.HDBSCANOptions{MinClusterSize: 5})
+	require.NoError(t, err)
+	res := &projectionResult{graph: g, clusters: cl, rows: make([]int64, n)}
+	for f := range card.NumFeatures {
+		res.featureColumns[f] = make([]float64, n)
+		for s := range n {
+			res.featureColumns[f][s] = float64(s)
+		}
+	}
+	nodes, edges := buildProjectionDeclaration(res, -1, true)
+	require.Len(t, nodes, n)
+	require.Equal(t, int(g.Graph.NumEdges()), len(edges))
+	for s, node := range nodes {
+		require.Equal(t, uint64(s)+1, node.Id)
+		if cl.Label[s] >= 0 && cl.Probability[s] >= projectionNoiseAuraFloor {
+			require.Equal(t, []string{"cluster " + string(rune('1'+cl.Label[s]))}, node.Auras)
+		} else {
+			require.Empty(t, node.Auras)
+		}
+	}
+	for _, e := range edges {
+		require.Greater(t, e.Strength, float32(0))
+		require.Less(t, e.From, e.To)
+	}
+	// Colour by feature 0: the buckets span the palette.
+	coloured, _ := buildProjectionDeclaration(res, 0, false)
+	require.NotEqual(t, coloured[0].Color, coloured[n-1].Color)
+	require.Empty(t, coloured[0].Auras)
 }

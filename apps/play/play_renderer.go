@@ -1065,7 +1065,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 		schemaModel:      schemaview.NewModel(nil),
 		projFSM:          projFSM,
 		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
-			Title("UMAP projector").
+			Title("projector").
 			ShowSubscript(true).
 			AutoAnchor(true),
 		queryFSM: queryFSM,
@@ -1263,7 +1263,7 @@ func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
 		EdgeLabel(projectorStatusExtracting, projectorStatusRunning, "features ready").
 		EdgeLabel(projectorStatusExtracting, projectorStatusCancelling, "Cancel").
 		EdgeLabel(projectorStatusExtracting, projectorStatusFailed, "fail").
-		EdgeLabel(projectorStatusRunning, projectorStatusDone, "UMAP fit").
+		EdgeLabel(projectorStatusRunning, projectorStatusDone, "graph + clusters").
 		EdgeLabel(projectorStatusRunning, projectorStatusCancelling, "Cancel").
 		EdgeLabel(projectorStatusRunning, projectorStatusFailed, "fail").
 		EdgeLabel(projectorStatusCancelling, projectorStatusCancelled, "drained").
@@ -2988,7 +2988,7 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	}, inst.sigEmit)
 }
 
-// renderProjectionTab is the Projection dock tab body: the UMAP scatter
+// renderProjectionTab is the Projection dock tab body: the neighbour embedding
 // with its own toolbar/status. Same empty/error guards as the Table tab.
 func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, err error, executed time.Time) {
 	if loading && rec == nil {

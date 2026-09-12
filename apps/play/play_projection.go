@@ -1,35 +1,76 @@
 package play
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/dustin/go-humanize"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/analytics/graph/algo"
+	"github.com/stergiotis/boxer/public/analytics/graph/knn"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 )
 
-// Minimum number of rows required to compute a meaningful UMAP projection.
-// UMAP needs NNeighbors+1 points minimum; below ~3 entities the layout is
-// uninformative anyway.
+// play_projection.go is the Projection tab (ADR-0227 §SD4): the result's
+// leeway-card features become a neighbour graph in the analytics engine, the
+// graph is laid out live by graphview under the neighbour-embedding force
+// model, and HDBSCAN over the same graph colours it. The background goroutine
+// owns the two engine calls; the render thread owns the widget, which owns
+// the positions. Nothing here computes a coordinate.
+
+// Minimum number of rows required to compute a meaningful projection: the
+// producer wants at least one neighbour per row, and below a handful of
+// entities the picture says nothing.
 const projectionMinRows = 3
 
-// Maximum rows fed to UMAP in a single run. UMAP is O(n × NNeighbors) in
-// memory and roughly O(n × NEpochs × NNeighbors) in time, so the n=2000
-// limit that t-SNE forced is now an order of magnitude too pessimistic.
-// 10k keeps fits under ~30 s on a modern laptop and the kNN graph well
-// under 100 MB; results above are still subsampled uniformly and reported
-// as "X of Y entities · sampled".
+// Maximum rows fed to the producer in a single run. The exact k-NN is
+// O(n²·d) and the force step O(n log n) per iteration, both interactive at
+// ten thousand rows on one machine (ADR-0227 §SD1); results above are
+// subsampled uniformly and reported as "X of Y entities · sampled".
 const projectionMaxRows = 10000
+
+// projectionParams are the run's knobs, read by the goroutine at Start.
+type projectionParams struct {
+	// K is the neighbour count of the graph (ADR-0227 §SD1); the umap-learn
+	// n_neighbors is K+1.
+	K int
+	// MinClusterSize is HDBSCAN's one parameter (ADR-0227 §SD3).
+	MinClusterSize int
+}
+
+const (
+	projectionDefaultK              = 15
+	projectionDefaultMinClusterSize = 10
+	// projectionExaggerationStart and projectionExaggerationSteps are the
+	// annealing schedule (ADR-0227 §SD2): t-SNE's early exaggeration of 12,
+	// lowered geometrically to the slider's value over the first steps
+	// after a run.
+	projectionExaggerationStart = 12
+	projectionExaggerationSteps = 250
+	// projectionFastForward is the step backlog run before the first paint
+	// of a new graph, so the picture opens past the schedule's noisiest
+	// stretch without stalling the frame for the whole schedule.
+	projectionFastForward = 100
+	// projectionFreezeSteps is the play panel's freeze rule (ADR-0225 play
+	// panel §SD10): a layout that has not settled by then is held.
+	projectionFreezeSteps = 4000
+	// projectionNoiseAuraFloor drops a member from its cluster's aura when
+	// HDBSCAN's probability falls under it — the bridge-point reading
+	// ADR-0227 §SD3's update records.
+	projectionNoiseAuraFloor = 0.1
+	projectionNodeRadius     = 3
+)
 
 type projectorStatusE uint8
 
@@ -41,10 +82,10 @@ const (
 	projectorStatusFailed
 	projectorStatusCancelled
 	// projectorStatusCancelling is the transient state between Cancel() and
-	// the goroutine actually returning. UMAP's FitTransform has no per-epoch
-	// hook so cancel-mid-fit takes effect only once FitTransform returns —
-	// the UI sits in Cancelling for up to the remaining UMAP wall-clock.
-	// Final transition Cancelling → Cancelled happens in markCancelled().
+	// the goroutine actually returning. The producer checks its context per
+	// chunk of rows, so the wait is short; the state exists so the click is
+	// seen to register. Final transition Cancelling → Cancelled happens in
+	// markCancelled().
 	projectorStatusCancelling
 )
 
@@ -68,41 +109,43 @@ func (inst projectorStatusE) String() string {
 	return "?"
 }
 
-// projectorSnapshot is a value-copy of Projector state taken under mutex,
-// safe to read on the render goroutine after the lock is released.
-//
-// coordRow maps each coords index → original record-batch row, so the
-// selected-row highlight finds its point even when the projection was run
-// over a uniform subsample. totalRows is the full input count (≥ len(coords));
-// when they differ, the toolbar reports "X of Y · sampled".
-//
-// featureColumns is the per-feature value series for the projected sample,
-// indexed [featureIdx][coordIdx]. Already log1p-transformed for features
-// flagged in card.LogTransformFeature so the colour-bucketing range is
-// honest for skewed distributions. Nil while a run is in progress; populated
-// at the same time as coords / coordRow.
-//
-// startedAt is the wall-clock time the run kicked off; used to render
-// "elapsed Xs" in the toolbar while UMAP runs (the upstream library has no
-// per-epoch callback so a real progress bar / ETA is not exposed).
-type projectorSnapshot struct {
-	status         projectorStatusE
-	coords         [][2]float64
-	coordRow       []int64
+// projectionResult is what one run produces, immutable once published.
+type projectionResult struct {
+	graph    knn.Result
+	clusters algo.HDBSCANResult
+	// rows maps a graph slot to its original record-batch row, so the
+	// selected-row highlight finds its node even when the run was over a
+	// uniform subsample, and a node click translates back to the row.
+	rows []int64
+	// featureColumns is the per-feature value series per slot, indexed
+	// [featureIdx][slot], log1p-transformed where card.LogTransformFeature
+	// says so, for the colour bucketing.
 	featureColumns [card.NumFeatures][]float64
-	totalRows      int64
-	err            error
-	startedAt      time.Time
+	params         projectionParams
 }
 
-// Projector owns the UMAP projection state for the current result batch.
-// A single goroutine runs feature extraction + UMAP in the background; the
-// render thread polls Snapshot() each frame to draw progress / scatter.
+// projectorSnapshot is a value-copy of Projector state taken under mutex,
+// safe to read on the render goroutine after the lock is released. result
+// is nil until Done. version counts published results so the render side
+// rebuilds its declaration once per run, not per frame.
+type projectorSnapshot struct {
+	status    projectorStatusE
+	result    *projectionResult
+	version   uint64
+	totalRows int64
+	err       error
+	startedAt time.Time
+}
+
+// Projector owns the projection state for the current result batch. A
+// single goroutine runs feature extraction, the neighbour graph and the
+// clustering in the background; the render thread polls Snapshot() each
+// frame and drives the widget.
 //
 // Lifecycle: Invalidate(schema, executed) is called every frame from the
 // renderer; if the underlying result changed it cancels any in-flight run
-// and resets to idle. Start(rec, schema, executed) spawns the goroutine
-// (no-op if one is already running). Cancel() signals abort.
+// and resets to idle. Start(rec) spawns the goroutine (no-op if one is
+// already running). Cancel() signals abort.
 //
 // Concurrency: all mutable fields are guarded by mu. The cancel chan is
 // non-nil iff a goroutine is in flight; Start refuses while non-nil. The
@@ -115,15 +158,31 @@ type Projector struct {
 	forSchema *arrow.Schema
 	forExec   time.Time
 
-	status         projectorStatusE
-	coords         [][2]float64
-	coordRow       []int64
-	featureColumns [card.NumFeatures][]float64
-	totalRows      int64
-	err            error
-	startedAt      time.Time
+	status    projectorStatusE
+	result    *projectionResult
+	version   uint64
+	totalRows int64
+	err       error
+	startedAt time.Time
+	params    projectionParams
 
 	cancel chan struct{}
+
+	// Render-thread state: the widget and the declaration cached against
+	// the snapshot version and the colouring.
+	view         *graphview.View
+	nodes        []graphview.NodeSpec
+	edges        []graphview.EdgeSpec
+	builtVersion uint64
+	builtColorBy int8
+	builtAuras   bool
+	auras        bool
+	showEdges    bool
+	exaggeration float64
+	paused       bool
+	frozen       bool
+	paneW, paneH float32
+	lastSelected int64
 }
 
 // NewProjector binds the Projector to the play app's CardDriver. The Projector
@@ -133,6 +192,19 @@ func NewProjector(ids *c.WidgetIdStack, cards *CardDriver) *Projector {
 	return &Projector{
 		ids:   ids,
 		cards: cards,
+		params: projectionParams{
+			K:              projectionDefaultK,
+			MinClusterSize: projectionDefaultMinClusterSize,
+		},
+		view: graphview.New(ids, "play-projection", graphview.Options{
+			Layout:        graphview.LayoutForceDirected,
+			NodeClicking:  true,
+			NodeSelection: true,
+		}),
+		auras:        true,
+		exaggeration: 1,
+		builtColorBy: -2,
+		lastSelected: -1,
 	}
 }
 
@@ -156,9 +228,7 @@ func (inst *Projector) Invalidate(schema *arrow.Schema, executed time.Time) (mat
 	inst.forSchema = schema
 	inst.forExec = executed
 	inst.status = projectorStatusIdle
-	inst.coords = nil
-	inst.coordRow = nil
-	inst.featureColumns = [card.NumFeatures][]float64{}
+	inst.result = nil
 	inst.totalRows = 0
 	inst.err = nil
 	inst.startedAt = time.Time{}
@@ -166,10 +236,10 @@ func (inst *Projector) Invalidate(schema *arrow.Schema, executed time.Time) (mat
 	return
 }
 
-// Start kicks off a projection run on the given record batch. No-op if a
-// run is already in flight (Cancel first if you want to restart). The
-// caller must have called Invalidate(schema, executed) earlier this frame
-// so the cache key is set.
+// Start kicks off a run on the given record batch with the current
+// parameters. No-op if a run is already in flight (Cancel first if you want
+// to restart). The caller must have called Invalidate(schema, executed)
+// earlier this frame so the cache key is set.
 func (inst *Projector) Start(rec arrow.RecordBatch) {
 	inst.mu.Lock()
 	if inst.cancel != nil {
@@ -179,23 +249,21 @@ func (inst *Projector) Start(rec arrow.RecordBatch) {
 	cancel := make(chan struct{})
 	inst.cancel = cancel
 	inst.status = projectorStatusExtracting
-	inst.coords = nil
-	inst.coordRow = nil
-	inst.featureColumns = [card.NumFeatures][]float64{}
+	inst.result = nil
 	inst.totalRows = 0
 	inst.err = nil
 	inst.startedAt = time.Now()
+	params := inst.params
 	inst.mu.Unlock()
 
 	rec.Retain()
-	go inst.run(rec, cancel)
+	go inst.run(rec, cancel, params)
 }
 
 // Cancel signals the in-flight run to stop. The goroutine sees the closed
-// channel on the next stepFunc fire (or the next phase boundary) and exits.
-// While the goroutine winds down (UMAP can take seconds with no per-epoch
-// hook) the status sits at Cancelling so the UI can show that the click
-// was registered. Final transition to Cancelled happens in markCancelled().
+// channel at its next context check and exits. While it winds down the
+// status sits at Cancelling so the UI can show that the click was
+// registered. Final transition to Cancelled happens in markCancelled().
 // No-op if nothing is running.
 func (inst *Projector) Cancel() {
 	inst.mu.Lock()
@@ -246,28 +314,26 @@ func (inst *Projector) Detach() {
 }
 
 // Snapshot returns a value-copy of the current state. Safe to read on the
-// render thread without holding the mutex. The coords slice is shared (not
+// render thread without holding the mutex. The result is shared (not
 // copied) — the goroutine treats it as immutable once published.
 func (inst *Projector) Snapshot() (snap projectorSnapshot) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	snap = projectorSnapshot{
-		status:         inst.status,
-		coords:         inst.coords,
-		coordRow:       inst.coordRow,
-		featureColumns: inst.featureColumns,
-		totalRows:      inst.totalRows,
-		err:            inst.err,
-		startedAt:      inst.startedAt,
+		status:    inst.status,
+		result:    inst.result,
+		version:   inst.version,
+		totalRows: inst.totalRows,
+		err:       inst.err,
+		startedAt: inst.startedAt,
 	}
 	return
 }
 
 // run is the projection goroutine. Owns the rec.Retain() taken by Start and
-// releases it on exit. Drives the FeatureExtractor → builds matrix →
-// preprocesses → runs UMAP. UMAP has no per-epoch callback so cancellation
-// only takes effect at phase boundaries; a Cancel mid-fit waits for
-// FitTransform to return before being honored.
+// releases it on exit. Drives the FeatureExtractor → builds the matrix →
+// preprocesses → neighbour graph → HDBSCAN. The engine calls take a context
+// cancelled by the cancel chan, so a Cancel lands within a chunk of rows.
 //
 // Every publishing step (terminal status writes via fail/markCancelled,
 // inline Running/Done writes) guards on `inst.cancel == cancel` so a run
@@ -275,7 +341,7 @@ func (inst *Projector) Snapshot() (snap projectorSnapshot) {
 // tab state. The inline writes additionally guard on `!isClosed(cancel)`
 // so a user Cancel between the prior isClosed check and the write doesn't
 // clobber the new Cancelling status.
-func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}) {
+func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params projectionParams) {
 	defer rec.Release()
 	defer inst.releaseRunLocked(cancel)
 
@@ -307,24 +373,15 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}) {
 		return
 	}
 
-	// Subsample to keep UMAP's k-NN graph + SGD layout in a sane wall-clock.
-	// UMAP itself is O(n × NNeighbors) memory and roughly O(n × NEpochs ×
-	// NNeighbors) time, so projectionMaxRows can be much higher than the
-	// t-SNE-era cap. The mapping coordRow[i] → original row index is needed
-	// by the renderer to highlight the currently-selected table row.
-	sampledFeatures, coordRow := subsampleFeatures(features, projectionMaxRows)
-
-	// Per-feature columns (post-log1p where flagged) are kept around so the
-	// renderer can colour points by any feature without re-extracting. log1p
-	// here mirrors what UMAP preprocessing does (z-score on log-space values
-	// for skewed features); without it the colour scale on TotalAttributeCount
-	// etc. would be dominated by the few largest values.
+	// Subsample to keep the exact k-NN's O(n²) in a sane wall-clock. The
+	// mapping sampleRow[i] → original row index is needed by the renderer
+	// to highlight the currently-selected table row.
+	sampledFeatures, sampleRow := subsampleFeatures(features, projectionMaxRows)
 	featureColumns := buildFeatureColumns(sampledFeatures)
 
 	inst.mu.Lock()
 	if inst.cancel == cancel && !isClosed(cancel) {
 		inst.totalRows = int64(nRows)
-		inst.featureColumns = featureColumns
 		inst.status = projectorStatusRunning
 	}
 	inst.mu.Unlock()
@@ -335,38 +392,86 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}) {
 		inst.fail(cancel, eh.Errorf("projection: preprocess: %w", err))
 		return
 	}
-	if isClosed(cancel) {
+	n, d := m.Dims()
+	x := make([]float32, n*d)
+	raw := m.RawMatrix()
+	for i := range n {
+		for j := range d {
+			x[i*d+j] = float32(raw.Data[i*raw.Stride+j])
+		}
+	}
+	ids := make([]uint64, n)
+	for i := range ids {
+		ids[i] = uint64(i) + 1 // slot ids; ascending, so slot == sample index
+	}
+
+	// The engine calls take a context; the cancel chan feeds it.
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-cancel:
+			cancelCtx()
+		case <-done:
+		}
+	}()
+	defer close(done)
+	defer cancelCtx()
+
+	g, err := knn.Build(ctx, nil, x, d, ids, knn.Options{K: params.K})
+	if err != nil {
+		if isClosed(cancel) {
+			inst.markCancelled(cancel)
+			return
+		}
+		inst.fail(cancel, eh.Errorf("projection: neighbour graph: %w", err))
+		return
+	}
+	dg, err := g.DistanceGraph()
+	if err != nil {
+		inst.fail(cancel, eh.Errorf("projection: distance graph: %w", err))
+		return
+	}
+	cl, err := algo.HDBSCAN(ctx, dg, g.CoreDist, algo.HDBSCANOptions{MinClusterSize: params.MinClusterSize})
+	if err != nil {
+		inst.fail(cancel, eh.Errorf("projection: clustering: %w", err))
+		return
+	}
+	if isClosed(cancel) || cl.Truncation.Truncated {
 		inst.markCancelled(cancel)
 		return
 	}
 
-	// nozzle/umap-go has no per-epoch callback so we cannot interrupt the
-	// fit early — a Cancel mid-run lands here, after FitTransform returns,
-	// and we discard the result.
-	coords, err := card.RunUMAP(m, card.UMAPOptions{})
-	if err != nil {
-		inst.fail(cancel, eh.Errorf("projection: umap: %w", err))
-		return
+	// Slot order is id order is sample order here, so the slot→row mapping
+	// composes the producer's Rows with the subsample's.
+	res := &projectionResult{graph: g, clusters: cl, params: params}
+	nSlots := g.Graph.NumVertices()
+	res.rows = make([]int64, nSlots)
+	for s := range nSlots {
+		res.rows[s] = sampleRow[g.Rows[s]]
 	}
-	if isClosed(cancel) {
-		inst.markCancelled(cancel)
-		return
+	for f := range card.NumFeatures {
+		col := make([]float64, nSlots)
+		for s := range nSlots {
+			col[s] = featureColumns[f][g.Rows[s]]
+		}
+		res.featureColumns[f] = col
 	}
 
 	inst.mu.Lock()
 	if inst.cancel == cancel && !isClosed(cancel) {
-		inst.coords = coords
-		inst.coordRow = coordRow
+		inst.result = res
+		inst.version++
 		inst.status = projectorStatusDone
 	}
 	inst.mu.Unlock()
 }
 
 // buildFeatureColumns extracts each EntityFeatures field into its own
-// per-coord column, applying log1p to the features flagged in
-// card.LogTransformFeature. The latter matches what the UMAP preprocessing
-// does internally — colouring on raw values would let one heavy-tailed
-// feature smear the whole scale into a single bucket.
+// per-sample column, applying log1p to the features flagged in
+// card.LogTransformFeature. The latter matches what the preprocessing does
+// internally — colouring on raw values would let one heavy-tailed feature
+// smear the whole scale into a single bucket.
 func buildFeatureColumns(features []card.EntityFeatures) (cols [card.NumFeatures][]float64) {
 	n := len(features)
 	for fi := range card.NumFeatures {
@@ -389,25 +494,25 @@ func buildFeatureColumns(features []card.EntityFeatures) (cols [card.NumFeatures
 }
 
 // subsampleFeatures returns up to maxRows uniformly-spaced rows from features
-// plus the coordRow mapping (coordRow[i] = original index). When the input
-// is already ≤ maxRows the input slice is returned as-is and coordRow is the
+// plus the sampleRow mapping (sampleRow[i] = original index). When the input
+// is already ≤ maxRows the input slice is returned as-is and sampleRow is the
 // identity mapping. The first and last rows are always retained so the sample
 // covers the full input range.
-func subsampleFeatures(features []card.EntityFeatures, maxRows int) (sampled []card.EntityFeatures, coordRow []int64) {
+func subsampleFeatures(features []card.EntityFeatures, maxRows int) (sampled []card.EntityFeatures, sampleRow []int64) {
 	n := len(features)
 	if n <= maxRows {
-		coordRow = make([]int64, n)
+		sampleRow = make([]int64, n)
 		for i := range features {
-			coordRow[i] = int64(i)
+			sampleRow[i] = int64(i)
 		}
 		sampled = features
 		return
 	}
 	sampled = make([]card.EntityFeatures, maxRows)
-	coordRow = make([]int64, maxRows)
+	sampleRow = make([]int64, maxRows)
 	for i := range maxRows {
 		idx := int64(i) * int64(n-1) / int64(maxRows-1)
-		coordRow[i] = idx
+		sampleRow[i] = idx
 		sampled[i] = features[idx]
 	}
 	return
@@ -438,7 +543,7 @@ func (inst *Projector) markCancelled(cancel chan struct{}) {
 		return
 	}
 	inst.status = projectorStatusCancelled
-	inst.coords = nil
+	inst.result = nil
 }
 
 func (inst *Projector) releaseRunLocked(cancel chan struct{}) {
@@ -462,38 +567,29 @@ func isClosed(ch <-chan struct{}) (closed bool) {
 // Rendering
 // ============================================================================
 
-const (
-	projectionPointRadius  = 2.5
-	projectionSelectRadius = 5.5
-)
-
 // projectionColorPoint / projectionColorSelected source from the IDS
-// qualitative cycle (Okabe-Ito, ADR-0156). Slot 0 for the default
-// point, AccentDefault for selection (ADR-0031 §SD2 reserves accent
-// for "selection, focus rings, branded highlights").
-//
-// Slot 0 was unreadable until ADR-0156: the previous palette's first
-// entry measured 1.00:1 against the implot plot area — the background's
-// own luminance — so unselected scatter points were invisible. It now
-// reads 7.28:1.
-var (
-	projectionColorPoint    = color.Hex(styletokens.QualitativeCycle(0).AsHex())
-	projectionColorSelected = color.Hex(styletokens.AccentDefault.AsHex())
-)
+// qualitative cycle (Okabe-Ito, ADR-0156). Slot 0 for the default node
+// fill; selection is the widget's own highlight.
+var projectionColorPoint = color.Hex(styletokens.QualitativeCycle(0).AsHex())
 
-// projectionViridisBuckets is the bucket count for the value-by-color
-// scatter overlay. 8 matches the original `colormap.Viridis8`
-// cardinality; the IDS Sequential(SequentialViridis, t) accessor
-// samples the same matplotlib lineage at the same 8 stops.
+// projectionViridisBuckets is the bucket count for the colour-by-feature
+// fill: the IDS Sequential(SequentialViridis, t) accessor sampled at 8
+// stops, the `colormap.Viridis8` cardinality the scatter used.
 const projectionViridisBuckets = 8
 
-// renderProjection draws the projection-mode UI. It picks the right state
-// (idle / running / done / failed) from the Projector's snapshot. Caller
-// is responsible for the surrounding container; this function emits widgets
-// directly into the current ui scope.
+// projectionIDSalt namespaces the pane probe — distinct from the graph
+// panels' so the drawings never collide.
+const projectionIDSalt uint64 = 0x9401ec7104e9a11e
+
+// renderProjection draws the Projection tab. It picks the right state
+// (idle / running / done / failed) from the Projector's snapshot; when done
+// it declares the neighbour graph into the widget. Caller is responsible for
+// the surrounding container; this function emits widgets directly into the
+// current ui scope.
 func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, emit SignalEmitterI) {
 	ids := inst.ids
-	snap := inst.projector.Snapshot()
+	p := inst.projector
+	snap := p.Snapshot()
 	nRows := rec.NumRows()
 
 	// Mirror the projector's status (mutated under its internal mutex
@@ -508,9 +604,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 
 	// Toolbar row: Compute / Cancel + status text. While cancelling, the
 	// Cancel button is replaced by a muted "Cancelling…" label so the user
-	// sees their click was registered — re-clicking would just signal an
-	// already-closed channel, but the visual feedback gap (UMAP can take
-	// seconds to return) confused users into thinking nothing happened.
+	// sees their click was registered.
 	for range c.Horizontal().KeepIter() {
 		switch snap.status {
 		case projectorStatusExtracting, projectorStatusRunning:
@@ -518,7 +612,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 			if c.Button(ids.PrepareStr("projectionCancel"),
 				c.Atoms().Text("Cancel").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.projector.Cancel()
+				p.Cancel()
 			}
 		case projectorStatusCancelling:
 			c.Spinner().Size(14).Send()
@@ -533,7 +627,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 			if c.Button(ids.PrepareStr("projectionCompute"),
 				c.Atoms().Text(label).Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.projector.Start(rec)
+				p.Start(rec)
 			}
 		}
 		c.Separator().Vertical().Send()
@@ -544,21 +638,21 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 		// can see what states are reachable from Here and how often the
 		// projector has cycled in this session.
 		inst.projFSMWidget.Render()
+		c.Separator().Vertical().Send()
+		// The run's knobs apply on the next Compute; the layout's apply live.
+		k := float64(p.params.K)
+		c.SliderF64(ids.PrepareStr("projectionK"), k, 2, 50).Text("neighbours").SendRespVal(&k)
+		p.params.K = int(math.Round(k))
+		mcs := float64(p.params.MinClusterSize)
+		c.SliderF64(ids.PrepareStr("projectionMCS"), mcs, 2, 100).Text("min cluster").SendRespVal(&mcs)
+		p.params.MinClusterSize = int(math.Round(mcs))
 		if snap.status == projectorStatusDone {
 			c.Separator().Vertical().Send()
 			inst.renderColorByCombo()
-			c.Separator().Vertical().Send()
-			for rt := range c.RichTextLabel(
-				fmt.Sprintf("%d-D → 2-D · UMAP · n_neighbors=%d · min_dist=%.2g",
-					card.NumFeatures,
-					card.DefaultUMAPNNeighbors,
-					card.DefaultUMAPMinDist)) {
-				rt.Small().Weak()
-			}
 		} else if nRows > projectionMaxRows {
 			c.Separator().Vertical().Send()
 			for rt := range c.RichTextLabel(
-				fmt.Sprintf("will sample %s of %s (UMAP wall-clock cap)",
+				fmt.Sprintf("will sample %s of %s (exact k-NN cap)",
 					humanize.Comma(projectionMaxRows), humanize.Comma(nRows))) {
 				rt.Small().Weak()
 			}
@@ -575,7 +669,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 			}
 		} else {
 			for rt := range c.RichTextLabel(
-				"Click Compute to project the result set into 2-D.") {
+				"Click Compute to build the result's neighbour graph and lay it out.") {
 				rt.Small().Weak()
 			}
 		}
@@ -592,11 +686,188 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 		}
 	}
 
-	if snap.status == projectorStatusDone && len(snap.coords) > 0 {
-		if newRow, ok := renderProjectionPlot(ids, snap, selectedRow, inst.colorByFeature); ok {
-			emit.Emit(signalSelection, newRow)
+	if snap.status == projectorStatusDone && snap.result != nil {
+		p.renderGraph(snap, selectedRow, inst.colorByFeature, emit)
+	}
+}
+
+// renderGraph declares the run's neighbour graph into the widget and draws
+// it: the layout controls, the status line, the canvas last. The
+// declaration is rebuilt once per run and once per colouring change; the
+// widget keeps the positions across frames.
+func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, colorBy int8, emit SignalEmitterI) {
+	ids := inst.ids
+	res := snap.result
+	if inst.builtVersion != snap.version || inst.builtColorBy != colorBy || inst.builtAuras != inst.auras {
+		fresh := inst.builtVersion != snap.version
+		inst.nodes, inst.edges = buildProjectionDeclaration(res, colorBy, inst.auras)
+		inst.builtVersion, inst.builtColorBy, inst.builtAuras = snap.version, colorBy, inst.auras
+		if fresh {
+			// A new graph: re-place, restart the schedule, re-arm the fit
+			// and run the noisiest stretch before the first paint.
+			inst.view.ResetLayout()
+			inst.view.FitNow()
+			inst.view.FastForward(projectionFastForward)
+			inst.frozen = false
+			inst.lastSelected = -1
 		}
 	}
+
+	// Layout controls: the exaggeration slider is the one knob of the
+	// model (ADR-0227 §SD2); its value has published meanings.
+	for range c.Horizontal().KeepIter() {
+		c.SliderF64(ids.PrepareStr("projectionExag"), inst.exaggeration, 1, 30).
+			Text("exaggeration (1 t-SNE · 4 UMAP · 30 ForceAtlas2)").SendRespVal(&inst.exaggeration)
+		if c.Button(ids.PrepareStr("projectionFit"), c.Atoms().Text("fit").Keep()).SendResp().HasPrimaryClicked() {
+			inst.view.FitNow()
+		}
+		if c.Button(ids.PrepareStr("projectionReset"), c.Atoms().Text("re-lay-out").Keep()).SendResp().HasPrimaryClicked() {
+			inst.view.ResetLayout()
+			inst.view.FastForward(projectionFastForward)
+			inst.frozen = false
+		}
+		if c.Button(ids.PrepareStr("projectionSettle"), c.Atoms().Text("settle").Keep()).SendResp().HasPrimaryClicked() {
+			inst.view.FastForward(projectionExaggerationSteps)
+			inst.frozen = false
+		}
+		c.Checkbox(ids.PrepareStr("projectionPaused"), inst.paused, "paused").SendRespVal(&inst.paused)
+		// The neighbour edges are the layout's input, not a reading: at
+		// fifteen per node they cover the picture, so they are off by default.
+		c.Checkbox(ids.PrepareStr("projectionEdges"), inst.showEdges, "edges").SendRespVal(&inst.showEdges)
+		if res.clusters.NumClusters > 0 {
+			c.Checkbox(ids.PrepareStr("projectionAuras"), inst.auras, "auras by cluster").SendRespVal(&inst.auras)
+		}
+	}
+	c.Label(inst.statusLine(res)).Send()
+
+	for rt := range c.RichTextLabel("drag pans and moves a node, ctrl+scroll zooms; click a node to select its row") {
+		rt.Small().Weak()
+	}
+	c.Separator().Horizontal().Send()
+	if availW, availH, ok := c.CapturePaneSize(projectionIDSalt ^ 0x1); ok {
+		inst.paneW, inst.paneH = availW, availH
+	}
+	w, h := graphviewPaneFill.box(inst.paneW, inst.paneH)
+
+	// An external selection (a Table click) selects its node; the widget's
+	// own clicks are read back below.
+	if selectedRow != inst.lastSelected {
+		inst.lastSelected = selectedRow
+		inst.view.ClearSelection()
+		if selectedRow >= 0 {
+			for s, row := range res.rows {
+				if row == selectedRow {
+					inst.view.SelectNode(uint64(s) + 1)
+					break
+				}
+			}
+		}
+	}
+
+	o := &inst.view.Opts
+	o.Force.Model = graphview.ForceModelNeighborEmbedding
+	o.Force.Exaggeration = float32(inst.exaggeration)
+	o.Force.ExaggerationStart = projectionExaggerationStart
+	o.Force.ExaggerationSteps = projectionExaggerationSteps
+	o.Force.PauseOnSettle = true
+	o.Force.Paused = inst.paused || inst.frozen
+	o.HideEdges = !inst.showEdges
+	o.Auras = graphview.AuraParams{Enabled: inst.auras && res.clusters.NumClusters > 0, Legend: true}
+
+	inst.view.Render(inst.nodes, inst.edges, w, h)
+
+	if m := inst.view.Metrics(); m.Steps >= projectionFreezeSteps && !inst.view.IsSettled() {
+		inst.frozen = true
+	}
+
+	// A node select publishes its row; a deselect of the published row
+	// clears it. Events arrive in order, so replaying them leaves the right
+	// value.
+	for _, ev := range inst.view.Events() {
+		switch ev.Kind {
+		case graphview.EventKindNodeSelect:
+			if s := int(ev.Node) - 1; s >= 0 && s < len(res.rows) {
+				inst.lastSelected = res.rows[s]
+				if emit != nil {
+					emit.Emit(signalSelection, inst.lastSelected)
+				}
+			}
+		}
+	}
+}
+
+// buildProjectionDeclaration turns a run into the widget's declaration:
+// one node per slot, filled by the colour-by feature's viridis bucket or
+// the default; the cluster as an aura id when the member's probability
+// clears the floor; one edge per neighbour-graph arc pair with the
+// membership weight as its strength (ADR-0224 §SD13).
+func buildProjectionDeclaration(res *projectionResult, colorBy int8, auras bool) (nodes []graphview.NodeSpec, edges []graphview.EdgeSpec) {
+	g := res.graph.Graph
+	n := g.NumVertices()
+	nodes = make([]graphview.NodeSpec, n)
+	useColor := colorBy >= 0 && int(colorBy) < card.NumFeatures && len(res.featureColumns[colorBy]) == n
+	var mn, mx float64
+	if useColor {
+		col := res.featureColumns[colorBy]
+		mn, mx = col[0], col[0]
+		for _, v := range col[1:] {
+			mn = min(mn, v)
+			mx = max(mx, v)
+		}
+	}
+	for s := range n {
+		node := graphview.NodeSpec{Id: uint64(s) + 1, Radius: projectionNodeRadius, Color: projectionColorPoint}
+		if useColor {
+			b := bucketIndex(res.featureColumns[colorBy][s], mn, mx, projectionViridisBuckets)
+			t := float32(b) / float32(projectionViridisBuckets-1)
+			node.Color = color.Hex(styletokens.Sequential(styletokens.SequentialViridis, t).AsHex())
+		}
+		if auras && s < len(res.clusters.Label) {
+			if lb := res.clusters.Label[s]; lb >= 0 && res.clusters.Probability[s] >= projectionNoiseAuraFloor {
+				node.Auras = []string{fmt.Sprintf("cluster %d", lb+1)}
+			}
+		}
+		nodes[s] = node
+	}
+	edges = make([]graphview.EdgeSpec, 0, g.NumArcs()/2)
+	for s := range n {
+		out := g.Out(int32(s))
+		w := g.OutWeights(int32(s))
+		for a, d := range out {
+			if d > int32(s) {
+				edges = append(edges, graphview.EdgeSpec{From: uint64(s) + 1, To: uint64(d) + 1, Strength: w[a], Width: 0.5})
+			}
+		}
+	}
+	return
+}
+
+// statusLine reports the graph, the clustering and how far the layout has
+// got — the settle state and the schedule's current exaggeration being the
+// readouts a live neighbour embedding has.
+func (inst *Projector) statusLine(res *projectionResult) string {
+	var b strings.Builder
+	g := res.graph.Graph
+	fmt.Fprintf(&b, "%s nodes · %s neighbour edges · k=%d", humanize.Comma(int64(g.NumVertices())), humanize.Comma(g.NumEdges()), res.graph.K)
+	noise := 0
+	for _, lb := range res.clusters.Label {
+		if lb < 0 {
+			noise++
+		}
+	}
+	fmt.Fprintf(&b, " · %d cluster(s), %s noise (min cluster %d)", res.clusters.NumClusters, humanize.Comma(int64(noise)), res.params.MinClusterSize)
+	m := inst.view.Metrics()
+	switch {
+	case inst.paused:
+		b.WriteString(" · paused")
+	case inst.frozen:
+		fmt.Fprintf(&b, " · frozen after %d steps, still moving (%.3f) — settle or re-lay-out", m.Steps, m.LastDisplacement)
+	case inst.view.IsSettled():
+		fmt.Fprintf(&b, " · settled at exaggeration %.3g", m.Exaggeration)
+	case m.Steps > 0:
+		fmt.Fprintf(&b, " · settling (%.3f) at exaggeration %.3g", m.LastDisplacement, m.Exaggeration)
+	}
+	return b.String()
 }
 
 // renderColorByCombo emits the "Colour by …" picker into the current
@@ -638,23 +909,23 @@ func (inst *PlayApp) renderColorByCombo() {
 // the run did/will project. When the result was subsampled the label is
 // "X of Y · sampled" so the user can tell the projection is partial.
 func formatEntityCountLabel(nRows int64, snap projectorSnapshot) (label string) {
-	switch snap.status {
-	case projectorStatusDone:
-		if snap.totalRows > int64(len(snap.coords)) {
+	switch {
+	case snap.status == projectorStatusDone && snap.result != nil:
+		got := int64(len(snap.result.rows))
+		if snap.totalRows > got {
 			label = fmt.Sprintf("%s of %s entities · sampled",
-				humanize.Comma(int64(len(snap.coords))), humanize.Comma(snap.totalRows))
+				humanize.Comma(got), humanize.Comma(snap.totalRows))
 			return
 		}
-		label = fmt.Sprintf("%s entities", humanize.Comma(int64(len(snap.coords))))
+		label = fmt.Sprintf("%s entities", humanize.Comma(got))
 	default:
 		label = fmt.Sprintf("%s entities", humanize.Comma(nRows))
 	}
 	return
 }
 
-// formatRunningLabel renders the spinner-adjacent label while a projection
-// is in flight. UMAP has no per-epoch hook so we cannot render iter/N or
-// ETA; wall-clock elapsed since Start is the most we can honestly show.
+// formatRunningLabel renders the spinner-adjacent label while a run is in
+// flight, with the wall-clock elapsed since Start.
 func formatRunningLabel(snap projectorSnapshot) (label string) {
 	elapsed := time.Duration(0)
 	if !snap.startedAt.IsZero() {
@@ -664,108 +935,12 @@ func formatRunningLabel(snap projectorSnapshot) (label string) {
 	case projectorStatusExtracting:
 		label = fmt.Sprintf("extracting features · %s", elapsed)
 	case projectorStatusRunning:
-		label = fmt.Sprintf("running UMAP · %s", elapsed)
+		label = fmt.Sprintf("building the neighbour graph and clusters · %s", elapsed)
 	case projectorStatusCancelling:
-		label = fmt.Sprintf("cancelling · waiting for UMAP to return · %s", elapsed)
+		label = fmt.Sprintf("cancelling · %s", elapsed)
 	default:
 		label = snap.status.String()
 	}
-	return
-}
-
-// renderProjectionPlot emits the scatter and the enclosing Plot. When
-// colorByFeature is in [0, NumFeatures) points are bucketed into 8 viridis
-// bins by min-max-normalised value of that feature; otherwise the whole
-// series is a single monochrome scatter. The selected-row marker is drawn
-// last (egui_plot z-orders by emit order) so it sits on top of any colour
-// bucket.
-//
-// snap.coordRow maps each coord index → original record-batch row, used
-// both to locate the selected row inside a sample and to translate clicks
-// back to the row index.
-//
-// Returns (newSelectedRow, true) iff the user primary-clicked inside the
-// plot. The hit is the nearest-by-euclidean-distance point in plot-data
-// coordinates; with well-separated clusters this is the obvious cluster
-// member, but a click in empty space still snaps to the closest point (no
-// max-distance threshold). One-frame lag inherited from the implot
-// click register read.
-
-// projectionPaneProbeSalt namespaces the pane probe's r21 slot; threading it
-// through the instance's id stack makes it window-unique, so two playgrounds
-// size their own plot.
-const projectionPaneProbeSalt uint64 = 0x9401ec7104e9a11e
-
-func renderProjectionPlot(ids *c.WidgetIdStack, snap projectorSnapshot, selectedRow int64, colorByFeature int8) (newSelectedRow int64, hit bool) {
-	coords := snap.coords
-	coordRow := snap.coordRow
-
-	// Fill the remaining panel area in both axes — the greedy-fill choice of
-	// the bridge version; a pinned aspect would preserve cluster shapes but
-	// letterbox one axis. The port renders through implot (ADR-0149 SD7); pan,
-	// anchored zoom, Shift+drag box-zoom and double-click fit come with it.
-	//
-	// The probe is seq-keyed and window-unique (one frame behind). NOT
-	// CaptureAvailableSize: that register is one process-wide slot the frame's
-	// last capture wins, and play's Detail pane renders after every body tab —
-	// so with a temporal row selected this plot took the narrow side column's
-	// size for BOTH of its axes.
-	w, h, _ := c.CapturePaneSize(ids.PrepareHighEntropy(projectionPaneProbeSalt).Derive())
-	if !(w >= 200) {
-		w = 700
-	}
-	if !(h >= 200) {
-		h = 480
-	}
-	p := implot.Begin(ids, "##projectionPlot", w-8, h-8)
-	p.SetupAxes("", "", implot.AxisFlagsNone, implot.AxisFlagsNone)
-
-	useColor := colorByFeature >= 0 && int(colorByFeature) < card.NumFeatures &&
-		len(snap.featureColumns[colorByFeature]) == len(coords)
-	if useColor {
-		emitBucketedScatters(p, coords, snap.featureColumns[colorByFeature],
-			card.FeatureNames()[colorByFeature])
-	} else {
-		xs := make([]float64, len(coords))
-		ys := make([]float64, len(coords))
-		for i, pt := range coords {
-			xs[i] = pt[0]
-			ys[i] = pt[1]
-		}
-		p.SetNextColor(projectionColorPoint.Literal())
-		p.Scatter("entities", xs, ys, implot.MarkerCircle, projectionPointRadius)
-	}
-
-	if selectedRow >= 0 {
-		for i, row := range coordRow {
-			if row == selectedRow {
-				sel := coords[i]
-				p.SetNextColor(projectionColorSelected.Literal())
-				p.Scatter("selected", []float64{sel[0]}, []float64{sel[1]},
-					implot.MarkerDiamond, projectionSelectRadius)
-				break
-			}
-		}
-	}
-	clickX, clickY, clicked := p.Clicked()
-	p.End()
-	if !clicked || len(coords) == 0 {
-		return
-	}
-	bestI := 0
-	dx0 := coords[0][0] - clickX
-	dy0 := coords[0][1] - clickY
-	bestD := dx0*dx0 + dy0*dy0
-	for i := 1; i < len(coords); i++ {
-		dx := coords[i][0] - clickX
-		dy := coords[i][1] - clickY
-		d := dx*dx + dy*dy
-		if d < bestD {
-			bestI, bestD = i, d
-		}
-	}
-	newSelectedRow = coordRow[bestI]
-	hit = true
 	return
 }
 
@@ -787,52 +962,4 @@ func bucketIndex(v, mn, mx float64, n int) int {
 		return n - 1
 	}
 	return idx
-}
-
-// emitBucketedScatters partitions points by feature value into len(Viridis8)
-// equal-width bins (min-max scale) and emits one PlotScatter per non-empty
-// bucket. Each series is named with the bucket's value range so the egui_plot
-// legend doubles as a colour-scale legend. Constant columns (max == min)
-// fall back to a single bucket — equivalent to monochrome but using the
-// palette's lowest stop.
-func emitBucketedScatters(p *implot.Plot, coords [][2]float64, values []float64, featureName string) {
-	if len(values) == 0 {
-		return
-	}
-	mn, mx := values[0], values[0]
-	for _, v := range values[1:] {
-		if v < mn {
-			mn = v
-		}
-		if v > mx {
-			mx = v
-		}
-	}
-	span := mx - mn
-	nBuckets := projectionViridisBuckets
-	bucketXs := make([][]float64, nBuckets)
-	bucketYs := make([][]float64, nBuckets)
-	for i, v := range values {
-		idx := bucketIndex(v, mn, mx, nBuckets)
-		bucketXs[idx] = append(bucketXs[idx], coords[i][0])
-		bucketYs[idx] = append(bucketYs[idx], coords[i][1])
-	}
-	for b := range nBuckets {
-		if len(bucketXs[b]) == 0 {
-			continue
-		}
-		var lo, hi float64
-		if span > 1e-12 {
-			// Equal-width bins: divide the span into exactly nBuckets, so the
-			// top bucket's upper edge is mx (no overshoot).
-			lo = mn + span*float64(b)/float64(nBuckets)
-			hi = mn + span*float64(b+1)/float64(nBuckets)
-		} else {
-			lo, hi = mn, mn
-		}
-		name := fmt.Sprintf("%s [%.2g, %.2g]", featureName, lo, hi)
-		bucketT := float32(b) / float32(nBuckets-1)
-		p.SetNextColor(styletokens.Sequential(styletokens.SequentialViridis, bucketT).AsHex())
-		p.Scatter(name, bucketXs[b], bucketYs[b], implot.MarkerCircle, projectionPointRadius)
-	}
 }

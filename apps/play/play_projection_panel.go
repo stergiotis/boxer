@@ -4,7 +4,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 )
 
-// play_projection_panel.go is slice 2 of ADR-0097: the Projection (UMAP scatter)
+// play_projection_panel.go is slice 2 of ADR-0097: the Projection (neighbour embedding)
 // as a PanelI observer of the `main` node. Like the Table, it is both consumer
 // and producer of the `selection` signal (SD8): Accept reads the highlighted row
 // from the signal env; Render draws the scatter and emits signalSelection on a
