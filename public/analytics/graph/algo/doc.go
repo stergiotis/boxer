@@ -1,7 +1,8 @@
 // Package algo holds the whole-graph metrics of the graph analytics engine
 // (ADR-0226 §SD3): degrees, breadth-first distances, connected and strongly
 // connected components, PageRank, k-core decomposition, triangle counting,
-// betweenness centrality and maximal cliques.
+// betweenness centrality and maximal cliques — and, over a
+// distance-weighted graph, HDBSCAN (ADR-0227 §SD3).
 //
 // Every function takes a [context.Context] and a budget and returns, beside
 // its columns, a [Truncation] saying whether and by which limit it stopped
