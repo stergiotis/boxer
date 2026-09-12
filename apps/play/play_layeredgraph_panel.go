@@ -8,8 +8,6 @@ import (
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/memory"
-	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/contrast"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -32,35 +30,15 @@ import (
 // `id` (+ optional `label`, `group`, `shape`, `tone`). Nothing but intent
 // separates a source column from a target column, so the panel asks for the
 // names.
+//
+// The contract itself — its columns, its resolvers and the record-to-model
+// build — lives in play_network_model.go, which the Graphview tab reads the
+// same rows through (ADR-0225 §SD1). What is here is the LAYERED reading of
+// that model: a Graphviz-WASM layout cached on a topology fingerprint, painted
+// through layeredgraph/view. The lanes that feed it are shared too
+// (play_network_source.go).
 
 const (
-	// Edge columns (chEdges). source/target are the graph-data standard and
-	// avoid the `from` SQL keyword (§SD2 kill-reason).
-	networkSourceCol = "source"
-	networkTargetCol = "target"
-	// Vertex columns (chVertices). label is shared with the edge contract —
-	// the two live in different CTEs, so one name serves both.
-	networkIDCol    = "id"
-	networkGroupCol = "group"
-	networkShapeCol = "shape"
-	networkLabelCol = "label"
-	// tone names a design-system semantic family for one vertex or edge, for
-	// when the drawing carries a *meaning* the auto-palette cannot: a
-	// forbidden dependency is not "category 4", it is an error. Shared by
-	// both contracts, like label.
-	networkToneCol = "tone"
-	// weight is the ORDINAL magnitude channel (ADR-0167): how *much* flowed
-	// along an edge, as opposed to what it means. It is the opposite kind of
-	// claim from `tone` and they compose — a weighted edge still takes its
-	// tone, because a semantic claim is the more specific one (§SD5).
-	// Numeric; non-positive is *unknown* and renders as an ordinary edge.
-	networkWeightCol = "weight"
-
-	// networkEdgesNodeID / networkVerticesNodeID are the CTEs the two channels
-	// bind to (§SD1). Nodes of the user's own split graph, demanded on their
-	// own lanes — not panel-authored queries.
-	networkEdgesNodeID    NodeID = "edges"
-	networkVerticesNodeID NodeID = "vertices"
 
 	// networkMaxVertices / networkMaxEdges bound the model (§SD5). Layered
 	// layout of a Graphviz-WASM run is a tens-to-low-hundreds instrument; a
@@ -96,128 +74,6 @@ var networkPaneFill = paneFill{
 // per-instance idSeed (from nextVizSeed) keeps two live PlayApps apart.
 const networkIDSalt uint64 = 0x6e37c0de9a11f00d
 
-// networkGroupPalette colours the optional `group` column by distinct value.
-// These are the *Subtle background tones — the INVERSE of a kanban dot (§SD2):
-// a node body is a background, so the palette is background fills (dark, L≈0.2)
-// and the default light NodeText reads on them, where the kanban dot vocabulary
-// deliberately excludes the *Subtle tones because a dot is a foreground mark.
-var networkGroupPalette = []styletokens.RGBA8{
-	styletokens.AccentSubtle,
-	styletokens.InfoSubtle,
-	styletokens.SuccessSubtle,
-	styletokens.WarningSubtle,
-	styletokens.ErrorSubtle,
-	styletokens.NeutralSubtle,
-}
-
-func networkGroupColor(idx int) color.Color {
-	return color.Hex(networkGroupPalette[idx%len(networkGroupPalette)].AsHex())
-}
-
-// magnitudeBandSteps is how finely networkMagnitudeBandLo searches the ramp.
-// The band floor only has to be found to within a few percent — it is a
-// legibility threshold, not a value — and a coarse walk keeps this cheap
-// enough to run per render rather than being cached against a theme change.
-const magnitudeBandSteps = 40
-
-// networkMagnitudeBandLo is the palette position the weight ramp starts at:
-// the first one whose contrast against the drawing's background reaches the
-// ordinary edge stroke's.
-//
-// The rule it enforces is that **no weighted edge is less visible than an
-// unweighted one**. A sequential palette runs from one end of the lightness
-// range to the other, so on a dark surface its low end sinks into the
-// background — and an edge that carries a small but *known* weight would then
-// be harder to see than one carrying no weight at all, which is backwards.
-// (Measured against the dark theme's panel, the default stroke sits at 4.55:1
-// and Batlow only reaches that around t=0.5, so half the ramp is unusable.)
-//
-// Derived rather than pinned as a constant because both ends of the comparison
-// are theme tokens: under a light theme the palette's dark end is the visible
-// one and the floor lands elsewhere. The icicle's flame band (ADR-0160) solves
-// the same problem with fixed bounds, which it can because it owns its plot
-// surface; this ramp is drawn on whatever surface the style carries.
-//
-// No ceiling: the top of the ramp is the most visible colour available, which
-// is exactly what the heaviest edge should be.
-func networkMagnitudeBandLo(palette styletokens.SequentialE, bg styletokens.RGBA8, base styletokens.RGBA8) float32 {
-	want := contrast.Ratio(base.R, base.G, base.B, bg.R, bg.G, bg.B)
-	for i := range magnitudeBandSteps {
-		t := float32(i) / float32(magnitudeBandSteps)
-		s := styletokens.Sequential(palette, t)
-		if contrast.Ratio(s.R, s.G, s.B, bg.R, bg.G, bg.B) >= want {
-			return t
-		}
-	}
-	// Nothing in the ramp reaches it. Fall back to the whole range rather than
-	// collapsing to a single colour: a less legible ordering still orders.
-	return 0
-}
-
-// networkNodeRamp samples the magnitude ramp for one node weight. Shared by
-// the fill and the ink so the two cannot drift onto different colours, and it
-// carries the same square root the edge width and the edge ramp use.
-func networkNodeRamp(palette styletokens.SequentialE, bandLo float32, w float64, maxW float64) styletokens.RGBA8 {
-	t := float32(math.Sqrt(min(w, maxW) / maxW))
-	return styletokens.Sequential(palette, bandLo+(1-bandLo)*t)
-}
-
-// networkInkOn picks the label colour for a ramped node body: whichever of the
-// style's own ink and the dark extreme contrasts better with the fill.
-//
-// The group and tone palettes are all *Subtle background tones, chosen dark so
-// the one light ink reads on every one of them — a fixed pairing that works
-// because the palette is fixed. A magnitude ramp is not: it sweeps the whole
-// lightness range by construction, so its bright end would carry light ink on
-// a light fill. The view offers NodeText beside NodeFill for exactly this, and
-// choosing by measured contrast is what keeps the pairing honest as either the
-// palette or the theme moves.
-func networkInkOn(fill styletokens.RGBA8) styletokens.RGBA8 {
-	light, dark := styletokens.NeutralTextPrimary, styletokens.NeutralBgExtreme
-	lr := contrast.Ratio(light.R, light.G, light.B, fill.R, fill.G, fill.B)
-	dr := contrast.Ratio(dark.R, dark.G, dark.B, fill.R, fill.G, fill.B)
-	if dr > lr {
-		return dark
-	}
-	return light
-}
-
-// networkTone maps a `tone` cell to a design-system colour. The vocabulary is
-// the six semantic families — accent, info, success, warning, error, neutral —
-// and the *role* picks the variant: a vertex body is a background, so it takes
-// the Subtle tone the group palette also uses; an edge is a foreground stroke,
-// where a subtle background tone would be invisible, so it takes Default.
-// Anything else (including an empty cell) returns ok=false, leaving the group
-// palette or the style default in charge — an unknown tone must not blank a
-// node.
-//
-// Naming a family rather than a colour is what keeps ADR-0156's palette
-// decision in one place: the query says what a vertex *means*, the design
-// system says what that looks like.
-func networkTone(s string, foreground bool) (col color.Color, ok bool) {
-	var subtle, def styletokens.RGBA8
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "accent":
-		subtle, def = styletokens.AccentSubtle, styletokens.AccentDefault
-	case "info":
-		subtle, def = styletokens.InfoSubtle, styletokens.InfoDefault
-	case "success":
-		subtle, def = styletokens.SuccessSubtle, styletokens.SuccessDefault
-	case "warning":
-		subtle, def = styletokens.WarningSubtle, styletokens.WarningDefault
-	case "error":
-		subtle, def = styletokens.ErrorSubtle, styletokens.ErrorDefault
-	case "neutral":
-		subtle, def = styletokens.NeutralSubtle, styletokens.NeutralDefault
-	default:
-		return
-	}
-	if foreground {
-		return color.Hex(def.AsHex()), true
-	}
-	return color.Hex(subtle.AsHex()), true
-}
-
 // parseNetworkShape maps a `shape` cell to a node boundary; the box is the
 // default for an absent or unrecognised value.
 func parseNetworkShape(s string) layeredgraph.NodeShape {
@@ -231,33 +87,17 @@ func parseNetworkShape(s string) layeredgraph.NodeShape {
 	}
 }
 
-// networkEdgesClaim / networkVerticesClaim are the resolved column indices a
-// channel's schema yields in AcceptForChannel and Render consumes. -1 marks an
-// absent optional column.
-type networkEdgesClaim struct {
-	srcCol, tgtCol, labelCol, toneCol, weightCol int
-}
-
-type networkVerticesClaim struct {
-	idCol, labelCol, groupCol, shapeCol, toneCol, weightCol int
-}
-
-// NetworkDriver owns the Network tab state: the two input lanes, the cached
-// layout (recomputed only on a topology or rank-direction change, so a
-// selection click never re-lays-out), and the pan/zoom view.
+// NetworkDriver owns the Network tab state: the cached layout (recomputed only
+// on a topology or rank-direction change, so a selection click never
+// re-lays-out) and the pan/zoom view. Its inputs arrive through the shared
+// source (play_network_source.go), which it reads the lane status back from.
 type NetworkDriver struct {
 	ids    *c.WidgetIdStack
 	idSeed uint64
 
-	// edgesLane / verticesLane run the `edges` / `vertices` CTEs of the user's
-	// split on their own lanes (nil for an unwired host — tests). The status
-	// mirrors let a failed lane say so rather than reading as "no graph".
-	edgesLane       *nodeLane
-	verticesLane    *nodeLane
-	edgesLoading    bool
-	verticesLoading bool
-	edgesErr        error
-	verticesErr     error
+	// src is the shared pair of lanes; nil for an unwired host (tests), which
+	// leaves the status line silent about them.
+	src *networkSource
 
 	rankDir layeredgraph.RankDir
 	view    view.ViewState
@@ -293,35 +133,11 @@ type NetworkDriver struct {
 	capped    bool
 }
 
-// NewNetworkDriver builds the driver. client may be nil (tests, an unwired
-// host): the lanes are then absent and the panel shows its empty-state.
-func NewNetworkDriver(ids *c.WidgetIdStack, client *Client) (inst *NetworkDriver) {
-	inst = &NetworkDriver{ids: ids, idSeed: nextVizSeed(), rankDir: layeredgraph.RankDirTopBottom}
-	if client != nil {
-		inst.edgesLane = newNodeLane(clientExecutor{client: client, opts: newExecOptions("network-edges")},
-			memory.NewGoAllocator(), 0)
-		inst.verticesLane = newNodeLane(clientExecutor{client: client, opts: newExecOptions("network-vertices")},
-			memory.NewGoAllocator(), 0)
-	}
+// NewNetworkDriver builds the driver over the shared source. src may be nil
+// (tests, an unwired host): the panel then shows its empty state.
+func NewNetworkDriver(ids *c.WidgetIdStack, src *networkSource) (inst *NetworkDriver) {
+	inst = &NetworkDriver{ids: ids, idSeed: nextVizSeed(), src: src, rankDir: layeredgraph.RankDirTopBottom}
 	return
-}
-
-// forgetLanes clears both lane memos so the next demand re-executes, even for
-// an unchanged (SQL, params) pair — the Run hook (executeRun), matching the
-// intermediate and bound lanes. Without it a re-Run after a transient failure
-// (a wrong endpoint, a server that was down) memo-hits the stored error — its
-// key is the SQL, and the endpoint is not part of it — so the graph never
-// recovers though the main result does.
-func (inst *NetworkDriver) forgetLanes() {
-	if inst == nil {
-		return
-	}
-	if inst.edgesLane != nil {
-		inst.edgesLane.forget()
-	}
-	if inst.verticesLane != nil {
-		inst.verticesLane.forget()
-	}
 }
 
 // layeredGraphPanel is the PanelI face. Acceptance is schema-only and cheap —
@@ -344,34 +160,7 @@ func (inst layeredGraphPanel) Channels() []ChannelSpec {
 }
 
 func (inst layeredGraphPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
-	switch ch {
-	case chEdges:
-		if schema == nil {
-			reason = "Run a query with an `edges` CTE (columns `source` and `target`) to see a graph."
-			return
-		}
-		ec, r := resolveNetworkEdges(schema)
-		if r != "" {
-			reason = r
-			return
-		}
-		claim = ec
-		return
-	case chVertices:
-		if schema == nil {
-			reason = "no vertices result" // optional channel: reason is swallowed by the dispatcher
-			return
-		}
-		vc, r := resolveNetworkVertices(schema)
-		if r != "" {
-			reason = r
-			return
-		}
-		claim = vc
-		return
-	}
-	reason = "unknown channel"
-	return
+	return acceptGraphChannel(ch, schema)
 }
 
 // Render draws the graph. A vertex click publishes `selection_key` (the
@@ -397,226 +186,57 @@ func (inst layeredGraphPanel) Render(filled map[ChannelID]ChannelResult, emit Si
 	inst.driver.render(edges.Rec, ec, vertRec, vc, emit)
 }
 
-// resolveNetworkEdges applies the §SD2 edge contract to a schema. Pure and
-// schema-only; source/target are read through formatCell (total over Arrow
-// types), so they carry no type requirement — a numeric id is a fine key.
-func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason string) {
-	ec = networkEdgesClaim{srcCol: -1, tgtCol: -1, labelCol: -1, toneCol: -1, weightCol: -1}
-	for ci, f := range schema.Fields() {
-		switch f.Name {
-		case networkSourceCol:
-			ec.srcCol = ci
-		case networkTargetCol:
-			ec.tgtCol = ci
-		case networkLabelCol:
-			ec.labelCol = ci
-		case networkToneCol:
-			ec.toneCol = ci
-		case networkWeightCol:
-			// Claimed only when it can carry a quantity. A `weight` that is
-			// not numeric is far more likely to be a column that happens to
-			// share the name than a magnitude the author meant, and silently
-			// widening every edge off a parsed string would be the worse
-			// failure. Left unclaimed, it stays an ordinary result column.
-			if isNumericType(f.Type) {
-				ec.weightCol = ci
-			}
-		}
-	}
-	if ec.srcCol < 0 || ec.tgtCol < 0 {
-		var missing []string
-		if ec.srcCol < 0 {
-			missing = append(missing, "`source`")
-		}
-		if ec.tgtCol < 0 {
-			missing = append(missing, "`target`")
-		}
-		reason = fmt.Sprintf("The graph's `edges` CTE needs a %s column. Name them in the query — e.g. "+
-			"WITH edges AS (SELECT a AS source, b AS target FROM t) SELECT * FROM edges — and optionally add a "+
-			"`vertices` CTE (`id`, `label`, `group`, `shape`, `tone`) to decorate the nodes.",
-			strings.Join(missing, " and a "))
-	}
-	return
-}
-
-// resolveNetworkVertices applies the §SD2 vertex contract. Only `id` is
-// required; a vertices CTE missing it is rejected, and because the channel is
-// optional the panel simply draws from the edges alone (endpoint inference).
-func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reason string) {
-	vc = networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1}
-	for ci, f := range schema.Fields() {
-		switch f.Name {
-		case networkIDCol:
-			vc.idCol = ci
-		case networkLabelCol:
-			vc.labelCol = ci
-		case networkGroupCol:
-			vc.groupCol = ci
-		case networkShapeCol:
-			vc.shapeCol = ci
-		case networkToneCol:
-			vc.toneCol = ci
-		case networkWeightCol:
-			// Numeric-only, for the same reason the edge contract is.
-			if isNumericType(f.Type) {
-				vc.weightCol = ci
-			}
-		}
-	}
-	if vc.idCol < 0 {
-		reason = "the `vertices` CTE needs an `id` column"
-	}
-	return
-}
-
-// networkBuild is the outcome of mapping the two result sets to a GraphModel:
-// the model plus the per-vertex group fill Render's NodeFill hook reads.
+// networkBuild is the shared model resolved FOR THE LAYERED WIDGET: the
+// GraphModel the engine lays out, the per-vertex fill and per-edge stroke the
+// view's NodeFill / EdgeStroke hooks serve, and the magnitude maxima carried
+// through from the build.
 type networkBuild struct {
 	model  layeredgraph.GraphModel
 	fillOf map[string]color.Color // vertex id → tone or group fill (absent → default)
 	// strokeOf colours an edge by its endpoints, the key view.RenderOpts'
 	// EdgeStroke hook is given. Only edges naming a tone appear.
 	strokeOf map[[2]string]color.Color
-	// maxWeight / maxNodeWeight are the heaviest edge and vertex weights
-	// seen, or 0 when that side carries no `weight` column or nothing
-	// positive in it. They are what the magnitude channels normalise against
-	// (ADR-0167 §SD5) — the panel sees the whole result, where a book would
-	// have to compute this in SQL and restate it per query. Kept apart
-	// because the two are different quantities: an edge's cost and a node's
-	// need not even share a unit.
+	// maxWeight / maxNodeWeight are the heaviest edge and vertex weights seen
+	// (netModel's, carried through): what the magnitude channels normalise
+	// against (ADR-0167 §SD5).
 	maxWeight     float64
 	maxNodeWeight float64
 	capped        bool
 }
 
-// buildNetworkModel maps the edges/vertices records to a directed GraphModel
-// (§SD2): vertices are de-duplicated by id, an edge endpoint with no vertices
-// row synthesises a node (so a partial or absent `vertices` CTE still draws
-// every edge), parallel (source,target) pairs collapse, and both inputs are
-// capped. Node ids must be unique (the widget's invariant) — the dedup enforces
-// it. Deterministic given the records, so the layout key is stable frame to
-// frame.
-func buildNetworkModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim) (b networkBuild) {
-	b.fillOf = make(map[string]color.Color)
-	nodes := make([]layeredgraph.Node, 0, 64)
-	seen := make(map[string]struct{}, 64)
-	groupIdx := make(map[string]int, 8)
+// buildNetworkLayered is this tab's whole mapping: the shared contract build at
+// this panel's caps (§SD9), resolved for the layered widget.
+func buildNetworkLayered(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim) networkBuild {
+	m := buildNetModel(edgesRec, ec, vertRec, vc, netCaps{vertices: networkMaxVertices, edges: networkMaxEdges})
+	return layeredBuild(&m)
+}
 
-	// addSynth adds an edge endpoint with no vertices row; false means the
-	// vertex cap is reached, so the caller must drop the edge rather than leave
-	// it referencing a node the model does not contain.
-	addSynth := func(id string) bool {
-		if _, ok := seen[id]; ok {
-			return true
-		}
-		if len(nodes) >= networkMaxVertices {
-			return false
-		}
-		seen[id] = struct{}{}
-		nodes = append(nodes, layeredgraph.Node{ID: id, Label: id})
-		return true
-	}
-
-	haveVerts := vertRec != nil && vc.idCol >= 0
-	if haveVerts {
-		rows := vertRec.NumRows()
-		for row := range rows {
-			if len(nodes) >= networkMaxVertices {
-				b.capped = true
-				break
-			}
-			id := formatCell(vertRec, vc.idCol, row)
-			if id == "" {
-				continue
-			}
-			if _, dup := seen[id]; dup {
-				continue
-			}
-			seen[id] = struct{}{}
-			node := layeredgraph.Node{ID: id, Label: id}
-			if vc.labelCol >= 0 {
-				if l := formatCell(vertRec, vc.labelCol, row); l != "" {
-					node.Label = l
-				}
-			}
-			if vc.shapeCol >= 0 {
-				node.Shape = parseNetworkShape(formatCell(vertRec, vc.shapeCol, row))
-			}
-			if vc.weightCol >= 0 {
-				if v, ok := quantityCellValue(vertRec, vc.weightCol, row); ok && v > 0 {
-					node.Weight = v
-					b.maxNodeWeight = max(b.maxNodeWeight, v)
-				}
-			}
-			nodes = append(nodes, node)
-			// An explicit tone wins over the group palette: `group` says
-			// "these belong together", `tone` says "this one means something",
-			// and a query that bothers to name a meaning meant it.
-			toned := false
-			if vc.toneCol >= 0 {
-				if col, ok := networkTone(formatCell(vertRec, vc.toneCol, row), false); ok {
-					b.fillOf[id] = col
-					toned = true
-				}
-			}
-			if !toned && vc.groupCol >= 0 {
-				if g := formatCell(vertRec, vc.groupCol, row); g != "" {
-					idx, ok := groupIdx[g]
-					if !ok {
-						idx = len(groupIdx)
-						groupIdx[g] = idx
-					}
-					b.fillOf[id] = networkGroupColor(idx)
-				}
-			}
+// layeredBuild resolves the neutral model for this widget (ADR-0225 §SD1):
+// `shape` becomes a node boundary, `tone` and `group` become the colours the
+// hooks serve. `donut` is dropped — a laid-out label box has nowhere to put a
+// ring, which is the asymmetry the second tab exists for (§SD5).
+func layeredBuild(m *netModel) (b networkBuild) {
+	b.maxWeight, b.maxNodeWeight, b.capped = m.maxWeight, m.maxNodeWeight, m.capped
+	b.fillOf = make(map[string]color.Color, len(m.Vertices))
+	nodes := make([]layeredgraph.Node, 0, len(m.Vertices))
+	for i := range m.Vertices {
+		v := &m.Vertices[i]
+		nodes = append(nodes, layeredgraph.Node{
+			ID: v.ID, Label: v.Label, Shape: parseNetworkShape(v.Shape), Weight: v.Weight,
+		})
+		if col, ok := m.vertexFill(*v); ok {
+			b.fillOf[v.ID] = col
 		}
 	}
-
-	edges := make([]layeredgraph.Edge, 0, 64)
-	edgeSeen := make(map[[2]string]struct{}, 64)
-	if edgesRec != nil {
-		rows := edgesRec.NumRows()
-		for row := range rows {
-			if len(edges) >= networkMaxEdges {
-				b.capped = true
-				break
+	edges := make([]layeredgraph.Edge, 0, len(m.Edges))
+	for i := range m.Edges {
+		e := &m.Edges[i]
+		edges = append(edges, layeredgraph.Edge{From: e.From, To: e.To, Label: e.Label, Weight: e.Weight})
+		if col, ok := m.edgeStroke(*e); ok {
+			if b.strokeOf == nil {
+				b.strokeOf = make(map[[2]string]color.Color, 8)
 			}
-			src := formatCell(edgesRec, ec.srcCol, row)
-			tgt := formatCell(edgesRec, ec.tgtCol, row)
-			if src == "" || tgt == "" {
-				continue
-			}
-			key := [2]string{src, tgt}
-			if _, dup := edgeSeen[key]; dup {
-				continue
-			}
-			if !addSynth(src) || !addSynth(tgt) {
-				b.capped = true
-				continue // a dangling endpoint (vertex cap reached) drops the edge
-			}
-			edgeSeen[key] = struct{}{}
-			e := layeredgraph.Edge{From: src, To: tgt}
-			if ec.labelCol >= 0 {
-				e.Label = formatCell(edgesRec, ec.labelCol, row)
-			}
-			if ec.toneCol >= 0 {
-				if col, ok := networkTone(formatCell(edgesRec, ec.toneCol, row), true); ok {
-					if b.strokeOf == nil {
-						b.strokeOf = make(map[[2]string]color.Color, 8)
-					}
-					b.strokeOf[key] = col
-				}
-			}
-			if ec.weightCol >= 0 {
-				// A non-positive or unreadable cell leaves Weight at 0, which
-				// the widget reads as *unknown* and draws as an ordinary edge
-				// (ADR-0167 §SD2).
-				if v, ok := quantityCellValue(edgesRec, ec.weightCol, row); ok && v > 0 {
-					e.Weight = v
-					b.maxWeight = max(b.maxWeight, v)
-				}
-			}
-			edges = append(edges, e)
+			b.strokeOf[[2]string{e.From, e.To}] = col
 		}
 	}
 	b.model = layeredgraph.GraphModel{Nodes: nodes, Edges: edges}
@@ -628,7 +248,7 @@ func buildNetworkModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec
 func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim, emit SignalEmitterI) {
 	inst.renderControls()
 
-	b := buildNetworkModel(edgesRec, ec, vertRec, vc)
+	b := buildNetworkLayered(edgesRec, ec, vertRec, vc)
 	inst.nodeCount = len(b.model.Nodes)
 	inst.edgeCount = len(b.model.Edges)
 	inst.capped = b.capped
@@ -732,7 +352,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		if !found || w <= 0 {
 			return
 		}
-		return color.Hex(networkNodeRamp(seqPalette, bandLo, w, b.maxNodeWeight).AsHex()), true
+		return color.Hex(networkMagnitudeRamp(seqPalette, bandLo, w, b.maxNodeWeight).AsHex()), true
 	}
 	// Ink follows the fill, and only for the nodes the ramp actually painted:
 	// everything else keeps the style default, which the tone and group
@@ -748,7 +368,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		if !found || w <= 0 {
 			return
 		}
-		return color.Hex(networkInkOn(networkNodeRamp(seqPalette, bandLo, w, b.maxNodeWeight)).AsHex()), true
+		return color.Hex(networkInkOn(networkMagnitudeRamp(seqPalette, bandLo, w, b.maxNodeWeight)).AsHex()), true
 	}
 	// Edges carrying a `tone` are stroked with it; the rest keep the style
 	// default. Nothing overrides the selection highlight, which is a fill.
@@ -861,14 +481,7 @@ func (inst *NetworkDriver) statusLine() string {
 	if inst.capped {
 		fmt.Fprintf(&b, " · capped at %d nodes / %d edges (add a LIMIT or filter)", networkMaxVertices, networkMaxEdges)
 	}
-	switch {
-	case inst.edgesErr != nil:
-		fmt.Fprintf(&b, " · edges query failed: %v", inst.edgesErr)
-	case inst.verticesErr != nil:
-		fmt.Fprintf(&b, " · vertices query failed: %v", inst.verticesErr)
-	case inst.edgesLoading || inst.verticesLoading:
-		b.WriteString(" · …")
-	}
+	b.WriteString(inst.src.statusSuffix())
 	return b.String()
 }
 
@@ -896,27 +509,12 @@ func networkModelKey(m layeredgraph.GraphModel, rd layeredgraph.RankDir) string 
 // panels it does not read the active result — its inputs are the `edges` and
 // `vertices` CTEs by name, each on its own lane (like the Kanban lanes node).
 func (inst *PlayApp) renderNetworkTab() {
-	edgesRec, edgesSchema := inst.demandNetworkEdges()
-	if edgesRec != nil {
-		defer edgesRec.Release()
-	}
-	vertRec, vertSchema := inst.demandNetworkVertices()
-	if vertRec != nil {
-		defer vertRec.Release()
-	}
+	inputs, release := inst.graphChannelInputs()
+	defer release()
 
-	inputs := map[ChannelID]channelInput{
-		chEdges: {node: networkEdgesNodeID, rec: edgesRec, schema: edgesSchema, sig: inst.frameSig},
-	}
-	// Offer the vertices channel only when the CTE exists (a schema-only view
-	// still fills it, so an inventory that legitimately returned nothing reads
-	// as "no vertices" rather than as pending).
-	if vertRec != nil || vertSchema != nil {
-		inputs[chVertices] = channelInput{node: networkVerticesNodeID, rec: vertRec, schema: vertSchema, sig: inst.frameSig}
-	}
 	reject := dispatchPanel(layeredGraphPanel{driver: inst.networkDriver}, inputs, inst.sigEmit)
 	if reject != "" {
-		if inst.networkDriver != nil && inst.networkDriver.edgesLoading {
+		if inst.netSource.edgesPending() {
 			for rt := range c.RichTextLabel("building the graph…") {
 				rt.Small().Weak()
 			}
@@ -933,45 +531,3 @@ func (inst *PlayApp) renderNetworkTab() {
 // chEdges channel (the caller MUST Release rec). Mirrors demandKanbanLanes: the
 // node comes from the last Run's split, so its signal reads resolve like any
 // other node's and a SET-bound name travels inside the fused SQL.
-func (inst *PlayApp) demandNetworkEdges() (rec arrow.RecordBatch, schema *arrow.Schema) {
-	d := inst.networkDriver
-	if d == nil || d.edgesLane == nil {
-		return
-	}
-	node, ok := findSplitNode(inst.currentSplit, networkEdgesNodeID)
-	if !ok {
-		d.edgesLoading = false
-		d.edgesErr = nil
-		return
-	}
-	v := d.edgesLane.demand(compiledNode{
-		SQL:    fuseNode(inst.currentSplit, networkEdgesNodeID),
-		NodeID: networkEdgesNodeID,
-		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
-	})
-	d.edgesLoading = v.loading
-	d.edgesErr = v.err // mirrored every demand — nil clears (no latch)
-	return v.rec, v.schema
-}
-
-// demandNetworkVertices is demandNetworkEdges for the optional `vertices` CTE.
-func (inst *PlayApp) demandNetworkVertices() (rec arrow.RecordBatch, schema *arrow.Schema) {
-	d := inst.networkDriver
-	if d == nil || d.verticesLane == nil {
-		return
-	}
-	node, ok := findSplitNode(inst.currentSplit, networkVerticesNodeID)
-	if !ok {
-		d.verticesLoading = false
-		d.verticesErr = nil
-		return
-	}
-	v := d.verticesLane.demand(compiledNode{
-		SQL:    fuseNode(inst.currentSplit, networkVerticesNodeID),
-		NodeID: networkVerticesNodeID,
-		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
-	})
-	d.verticesLoading = v.loading
-	d.verticesErr = v.err
-	return v.rec, v.schema
-}

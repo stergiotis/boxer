@@ -53,6 +53,7 @@ func TestPanelPaneFillsAreCoherent(t *testing.T) {
 		f    paneFill
 	}{
 		{"network", networkPaneFill},
+		{"graphview", graphviewPaneFill},
 		{"sankey", sankeyPaneFill},
 		{"icicle", iciclePaneFill},
 		{"treemap", treemapPaneFill},

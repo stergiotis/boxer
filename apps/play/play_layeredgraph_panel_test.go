@@ -53,7 +53,7 @@ func (inst *flakyExecutor) callCount() int {
 // clears the memo so the re-Run re-executes.
 func TestNetworkForgetLanesRecoversFromError(t *testing.T) {
 	exec := &flakyExecutor{failUntil: 1}
-	d := &NetworkDriver{edgesLane: newNodeLane(exec, memory.NewGoAllocator(), 0)}
+	d := &networkSource{edgesLane: newNodeLane(exec, memory.NewGoAllocator(), 0)}
 	defer d.edgesLane.close()
 
 	cn := compiledNode{SQL: "SELECT a AS source, b AS target FROM edges"}
@@ -148,9 +148,10 @@ func edgeSet(m layeredgraph.GraphModel) map[[2]string]string {
 }
 
 // noVerts is the zero vertices claim (no vertices CTE): idCol -1 disables the
-// vertex pass, so buildNetworkModel infers nodes from the edge endpoints.
+// vertex pass, so the build infers vertices from the edge endpoints.
 func noVerts() networkVerticesClaim {
-	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1}
+	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1,
+		donutCol: -1, donutTotalCol: -1}
 }
 
 func TestNetworkAcceptEdgesContract(t *testing.T) {
@@ -199,7 +200,7 @@ func TestNetworkBuildInfersVerticesFromEdges(t *testing.T) {
 	ec, reason := resolveNetworkEdges(er.Schema())
 	require.Empty(t, reason)
 
-	b := buildNetworkModel(er, ec, nil, noVerts())
+	b := buildNetworkLayered(er, ec, nil, noVerts())
 
 	nodes := nodesByID(b.model)
 	assert.ElementsMatch(t, []string{"a", "b", "c"}, keysOf(nodes))
@@ -225,7 +226,7 @@ func TestNetworkBuildDecoratesVertices(t *testing.T) {
 	vc, reason := resolveNetworkVertices(vr.Schema())
 	require.Empty(t, reason)
 
-	b := buildNetworkModel(er, ec, vr, vc)
+	b := buildNetworkLayered(er, ec, vr, vc)
 	nodes := nodesByID(b.model)
 
 	assert.Equal(t, "Beta", nodes["b"].Label)
@@ -290,7 +291,7 @@ func TestNetworkBuildToneOverridesGroup(t *testing.T) {
 	vc, reason := resolveNetworkVertices(vr.Schema())
 	require.Empty(t, reason)
 
-	b := buildNetworkModel(er, ec, vr, vc)
+	b := buildNetworkLayered(er, ec, vr, vc)
 	want, _ := networkTone("error", false)
 	assert.Equal(t, want, b.fillOf["a"], "the named tone wins over the group palette")
 	assert.NotEqual(t, b.fillOf["a"], b.fillOf["b"], "same group, but a is toned")
@@ -306,7 +307,7 @@ func TestNetworkBuildEdgeTone(t *testing.T) {
 	ec, reason := resolveNetworkEdges(er.Schema())
 	require.Empty(t, reason)
 
-	b := buildNetworkModel(er, ec, nil, noVerts())
+	b := buildNetworkLayered(er, ec, nil, noVerts())
 	want, _ := networkTone("error", true)
 	assert.Equal(t, want, b.strokeOf[[2]string{"a", "b"}])
 	_, has := b.strokeOf[[2]string{"b", "c"}]
@@ -314,7 +315,7 @@ func TestNetworkBuildEdgeTone(t *testing.T) {
 
 	plain := netEdges(t, []string{"a"}, []string{"b"}, nil)
 	pec, _ := resolveNetworkEdges(plain.Schema())
-	pb := buildNetworkModel(plain, pec, nil, noVerts())
+	pb := buildNetworkLayered(plain, pec, nil, noVerts())
 	assert.Nil(t, pb.strokeOf, "no tone column, no stroke map")
 }
 
@@ -326,7 +327,7 @@ func TestNetworkBuildDeDupesVertices(t *testing.T) {
 	ec, _ := resolveNetworkEdges(er.Schema())
 	vc, _ := resolveNetworkVertices(vr.Schema())
 
-	b := buildNetworkModel(er, ec, vr, vc)
+	b := buildNetworkLayered(er, ec, vr, vc)
 	nodes := nodesByID(b.model)
 	assert.Len(t, b.model.Nodes, 2, "the duplicate id collapses to one node")
 	assert.Equal(t, "first", nodes["a"].Label, "first row wins")
@@ -338,7 +339,7 @@ func TestNetworkBuildCollapsesParallelEdges(t *testing.T) {
 	er := netEdges(t, []string{"a", "a", "b"}, []string{"b", "b", "c"}, []string{"first", "second", "bc"})
 	ec, _ := resolveNetworkEdges(er.Schema())
 
-	b := buildNetworkModel(er, ec, nil, noVerts())
+	b := buildNetworkLayered(er, ec, nil, noVerts())
 	assert.Len(t, b.model.Edges, 2, "the parallel (a,b) edge collapses")
 	assert.Equal(t, "first", edgeSet(b.model)[[2]string{"a", "b"}], "first label wins")
 }
@@ -351,7 +352,7 @@ func TestNetworkBuildSynthesizesMissingEndpoints(t *testing.T) {
 	ec, _ := resolveNetworkEdges(er.Schema())
 	vc, _ := resolveNetworkVertices(vr.Schema())
 
-	b := buildNetworkModel(er, ec, vr, vc)
+	b := buildNetworkLayered(er, ec, vr, vc)
 	nodes := nodesByID(b.model)
 	assert.ElementsMatch(t, []string{"a", "z"}, keysOf(nodes))
 	assert.Equal(t, "z", nodes["z"].Label, "synthesised node is id-labelled")
@@ -369,7 +370,7 @@ func TestNetworkBuildCaps(t *testing.T) {
 	vc, _ := resolveNetworkVertices(vr.Schema())
 	er0 := netEdges(t, []string{}, []string{}, nil)
 	ec0, _ := resolveNetworkEdges(er0.Schema())
-	b := buildNetworkModel(er0, ec0, vr, vc)
+	b := buildNetworkLayered(er0, ec0, vr, vc)
 	assert.True(t, b.capped)
 	assert.Len(t, b.model.Nodes, networkMaxVertices)
 
@@ -388,7 +389,7 @@ func TestNetworkBuildCaps(t *testing.T) {
 	}
 	er := netEdges(t, src, tgt, nil)
 	ec, _ := resolveNetworkEdges(er.Schema())
-	b = buildNetworkModel(er, ec, nil, noVerts())
+	b = buildNetworkLayered(er, ec, nil, noVerts())
 	assert.True(t, b.capped)
 	assert.Len(t, b.model.Edges, networkMaxEdges)
 	assert.LessOrEqual(t, len(b.model.Nodes), pool, "the small node pool stays under the vertex cap")
@@ -434,7 +435,7 @@ func TestNetworkBuildCarriesEdgeWeight(t *testing.T) {
 	require.Empty(t, reason)
 	require.GreaterOrEqual(t, ec.weightCol, 0, "a numeric `weight` must be claimed")
 
-	b := buildNetworkModel(er, ec, nil, noVerts())
+	b := buildNetworkLayered(er, ec, nil, noVerts())
 	w := weightsOf(b.model)
 	assert.InDelta(t, 5.0, w[[2]string{"a", "b"}], 1e-9)
 	assert.InDelta(t, 40.0, w[[2]string{"b", "c"}], 1e-9)
@@ -446,7 +447,7 @@ func TestNetworkBuildCarriesEdgeWeight(t *testing.T) {
 func TestNetworkBuildTreatsNonPositiveWeightAsUnknown(t *testing.T) {
 	er := netWeightedEdges(t, []string{"a", "b"}, []string{"b", "c"}, []float64{0, -3}, nil)
 	ec, _ := resolveNetworkEdges(er.Schema())
-	b := buildNetworkModel(er, ec, nil, noVerts())
+	b := buildNetworkLayered(er, ec, nil, noVerts())
 
 	for _, e := range b.model.Edges {
 		assert.Zero(t, e.Weight, "%s→%s", e.From, e.To)
@@ -469,7 +470,7 @@ func TestNetworkRejectsNonNumericWeight(t *testing.T) {
 	ec, reason := resolveNetworkEdges(rec.Schema())
 	require.Empty(t, reason, "an unusable `weight` must not reject the whole contract")
 	assert.Equal(t, -1, ec.weightCol)
-	assert.Zero(t, buildNetworkModel(rec, ec, nil, noVerts()).maxWeight)
+	assert.Zero(t, buildNetworkLayered(rec, ec, nil, noVerts()).maxWeight)
 }
 
 // ADR-0167 §SD5: the two claims compose. A weighted edge that also names a
@@ -478,7 +479,7 @@ func TestNetworkRejectsNonNumericWeight(t *testing.T) {
 func TestNetworkToneAndWeightCompose(t *testing.T) {
 	er := netWeightedEdges(t, []string{"a"}, []string{"b"}, []float64{7}, []string{"error"})
 	ec, _ := resolveNetworkEdges(er.Schema())
-	b := buildNetworkModel(er, ec, nil, noVerts())
+	b := buildNetworkLayered(er, ec, nil, noVerts())
 
 	assert.Contains(t, b.strokeOf, [2]string{"a", "b"}, "the tone still colours the edge")
 	assert.InDelta(t, 7.0, weightsOf(b.model)[[2]string{"a", "b"}], 1e-9)
@@ -491,7 +492,7 @@ func TestNetworkWithoutWeightColumnHasNoMagnitude(t *testing.T) {
 	ec, _ := resolveNetworkEdges(er.Schema())
 	assert.Equal(t, -1, ec.weightCol)
 
-	b := buildNetworkModel(er, ec, nil, noVerts())
+	b := buildNetworkLayered(er, ec, nil, noVerts())
 	assert.Zero(t, b.maxWeight)
 	for _, e := range b.model.Edges {
 		assert.Zero(t, e.Weight)
@@ -562,7 +563,7 @@ func TestNetworkBuildCarriesNodeWeight(t *testing.T) {
 
 	er := netWeightedEdges(t, []string{"a"}, []string{"b"}, []float64{500}, nil)
 	ec, _ := resolveNetworkEdges(er.Schema())
-	b := buildNetworkModel(er, ec, vr, vc)
+	b := buildNetworkLayered(er, ec, vr, vc)
 
 	byID := nodesByID(b.model)
 	assert.InDelta(t, 3.0, byID["a"].Weight, 1e-9)
@@ -608,7 +609,7 @@ func TestNetworkInkOnRampStaysReadable(t *testing.T) {
 		if w <= 0 {
 			continue
 		}
-		fill := networkNodeRamp(palette, bandLo, w, 1)
+		fill := networkMagnitudeRamp(palette, bandLo, w, 1)
 		ink := networkInkOn(fill)
 		got := contrast.Ratio(ink.R, ink.G, ink.B, fill.R, fill.G, fill.B)
 		assert.GreaterOrEqualf(t, got, 4.5,
