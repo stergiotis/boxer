@@ -1639,6 +1639,17 @@ What to know before using it:
   edges apart in hover, click and selection — `EdgeRef{From, To, Id}` is
   the key — and `Length` / `Strength` scale one edge's ideal length and
   pull in the force layout (1 when unset; the static layouts ignore them).
+- **Fading and inertness** (ADR-0224 §SD14). `NodeSpec.Opacity` and
+  `EdgeSpec.Opacity` scale that item's own paint — a node's fill, stroke,
+  donut and label, an edge's line, head and label — to a fraction of its
+  declared alpha; zero is *unset*, not invisible, and anything at or above
+  1 paints as declared. The widget's pin, selection and hover paint never
+  fades, so a dimmed item still shows what it is doing. `NoPick` takes an
+  item out of hover, click, drag and the rectangle selection while
+  `SelectNode` / `SelectEdge` still reach it. Set both for the dimmed and
+  inert pair, `NoPick` alone for scaffolding. Nodes at one opacity stay one
+  batched marker. `Bounds()` and `BoundsOf(ids)` give the graph's world box
+  — what `FitNodes` frames, auras and labels excluded.
 - **Resting.** `Opts.Force.PauseOnSettle` stops stepping once the average
   displacement is under `Epsilon` and wakes on a drag, a topology or
   parameter change, a pin or position set, `FastForward` or `ResetLayout`;
@@ -1663,8 +1674,15 @@ What to know before using it:
   stub, focused — so it needs no call back into the navigator; `Pending`
   lists the stubs the walk wants loaded — answer with `AddNodes` /
   `AddEdges`, never a callback. `Apply(ev)` wires the double-click. Set
-  `Opts.Radial.Centers` to `FocusNodes()` for the focus picture. The
-  `scenetest` package beneath graphview is the shared headless harness.
+  `Opts.Radial.Centers` to `FocusNodes()` for the focus picture.
+  `Neighbours`, `Degree`, `Components` and `ShortestPath` answer graph
+  questions over the adjacency the derivation already builds — over the
+  *universe*, so a hidden node is still a neighbour — each with its own
+  scratch, so they are safe inside the `Style` hook and safe to combine
+  with `Opacity`: read `HoveredNode`, ask `Neighbours`, fade the rest, and
+  that is the neighbourhood highlight the widget deliberately does not
+  build in. The `scenetest` package beneath graphview is the shared
+  headless harness.
 - **Headless testing.** `Render` runs without a client under a fffi2
   channel that discards paint commands, and the state manager's `Script*`
   setters (`ScriptResponse`, `ScriptCanvasCursor`, `ScriptCanvasWheel`,

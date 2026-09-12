@@ -70,7 +70,7 @@ Legend: **✓** covered, **≈** covered with a different shape or partially,
 | `getPositions()`, `storePositions()` | `Positions()` over every placed node; `SetNodePosition` writes | ✓ | Closed by ADR-0224 §SD12. |
 | `moveNode` | `SetNodePosition` | ✓ | |
 | `getBoundingBox` (label bounding box) | `NodePosition` + radius | ≈ | Label extent is not readable; needed to place caller-drawn adornments beside a label. Small once a paint hook exists (§6). |
-| `getConnectedNodes(id, direction)`, `getConnectedEdges` | caller owns the declaration | caller | |
+| `getConnectedNodes(id, direction)`, `getConnectedEdges` | `nav.Neighbours(id, dir)`, `nav.Degree`; no edge-list form | ✓ / ≈ | The node half closed with ADR-0225's 2026-09-12 update, over the adjacency the helper already built. `getConnectedEdges` has no counterpart: the caller has the edges it declared. |
 | `getNodeAt({x, y})`, `getEdgeAt({x, y})` | `CanvasToWorld`, no pick entry point | **gap** | Small: expose the SD3 pick as a method. Drop targets and caller-side context menus want it. |
 | `DOMtoCanvas` / `canvasToDOM` | `CanvasToWorld`; `NodeCanvasPosition` for nodes only | ≈ | Small: a general `WorldToCanvas`. |
 | `setData`, `setOptions` | `Render(nodes, edges)`, `Options` read every frame | ✓ | |
@@ -186,7 +186,7 @@ nodes, edges and their labels. graphview reports the one picked item.
 | `shape: custom` + `ctxRenderer({ctx, id, x, y, state, style, label}) → {drawNode, drawExternalLabel, nodeDimensions}` | — | **gap** | Medium: a per-node paint callback with the node's screen geometry, drawn under arrows, with the caller reporting its extent for picking. The same hook as §6 `beforeDrawing`, scoped to a node. |
 | `size`, `scaling.min/max`, `value`, `customScalingFunction` | `Radius`; caller maps | ✓ | |
 | `scaling.label.enabled/min/max/maxVisible/drawThreshold` | fixed screen size (SD7) | ≈ | `drawThreshold` (no text below N px) confirms the NetChart §6 LOD row; `maxVisible` (a cap on the screen size when zoomed in) is the mirror case. |
-| `opacity` per node; edge `color.opacity` | — | **gap** | Confirms NetChart §6 / §4 opacity. |
+| `opacity` per node; edge `color.opacity` | `NodeSpec.Opacity`, `EdgeSpec.Opacity` | ✓ | Closed by ADR-0224 §SD14, with `NoPick` beside it — Ogma's reading of the same feature, which this page's row did not separate. |
 | `borderWidth`, `borderWidthSelected`, `color.border`, `color.background`, `color.highlight.*`, `color.hover.*` per node | `Color`; global `NodeStroke[W]`, `Highlight`, `Selected` | ≈ | Per-node stroke confirms NetChart §6. New: per-node **state colours** (a node's own selected or hovered colour) and a wider selected border. Small once per-node stroke exists. |
 | `shapeProperties.borderDashes`, `borderRadius` | — | gap | Small; dashed borders mark provisional or external nodes. Confirms the per-item dash rows. |
 | `shapeProperties.useImageSize`, `useBorderWithImage`, `imagePadding`, `image.selected` / `unselected` | — | gap | Rides on the image-node gap; `image.selected` is a state image, the image twin of state colours. |

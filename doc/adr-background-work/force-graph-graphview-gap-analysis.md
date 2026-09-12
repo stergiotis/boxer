@@ -159,7 +159,7 @@ mapping is exact.
 
 | force-graph | graphview | Status | Note |
 |---|---|---|---|
-| `getGraphBbox(nodeFilter)` | bounds computed internally for the fit, not exported | **gap** | Small: export the box, with an optional id set — the same subset the fit-to-subset row wants. |
+| `getGraphBbox(nodeFilter)` | `Bounds()`, `BoundsOf(ids)` | ✓ | Closed by ADR-0224 §SD14, filter included: `FitNodes` is now expressed through `BoundsOf`, so the fit and the reader cannot drift. Auras and labels are outside the box, as they are outside force-graph's. |
 | `screen2GraphCoords(x, y)` | `CanvasToWorld` | ✓ | |
 | `graph2ScreenCoords(x, y)` | `NodeCanvasPosition` for nodes only | ≈ | Confirms vis-network §2 `WorldToCanvas`. |
 | `simulation.find(x, y, radius)` (d3) | no pick entry point | **gap** | Confirms vis-network §2 `getNodeAt` / `getEdgeAt`. |

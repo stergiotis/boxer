@@ -145,13 +145,16 @@ centralities, four clusterings (`markovClustering`, `kMeans`,
 `hierarchicalClustering`, `affinityPropagation`), and the connectivity trio
 (`hierholzer`, `hopcroftTarjanBiconnected`, `tarjanStronglyConnected`).
 
-**Traversal is a helper gap, small and worth closing.** `nav` already builds an
+**Traversal was a helper gap, and it is closed.** `nav` already built an
 undirected adjacency with direction per entry and sorted ids (ADR-0225 §SD1)
-and walks it every derivation; it publishes none of it. A consumer that wants
-"select this node's neighbourhood", "fit the component this node is in", or
-"size nodes by degree" has to keep a second adjacency beside the universe it
-already fed in. Neighbours, degree, components and an unweighted shortest path
-are the useful four; they are reads over a structure that exists.
+and walked it every derivation while publishing none of it, so a consumer that
+wanted "select this node's neighbourhood", "fit the component this node is in"
+or "size nodes by degree" kept a second adjacency beside the universe it had
+already fed in. `Neighbours`, `Degree`, `Components` and `ShortestPath` — the
+useful four named here — landed in ADR-0225's 2026-09-12 update as reads over
+the structure that existed. They answer over the universe rather than the
+picture, which is the distinction Ogma draws with `getNodes("visible" | "raw" |
+"all")`.
 
 **The analytics are out of scope.** PageRank, centralities and clustering
 produce a number per node, and a number per node is something the caller
@@ -197,9 +200,11 @@ Two small **widget gaps**:
   zoom. That is the motion a "go to this search hit" button wants.
 - `cy.extent()` "Get the extent of the viewport, a bounding box in model
   co-ordinates that lets you know what model positions are visible in the
-  viewport", returning `{ x1, y1, x2, y2, w, h }`. Derivable from
-  `View.Camera` and `View.CanvasToWorld`; a reader saves every consumer the
-  same four lines, and is what a caller needs to declare only what is on
+  viewport", returning `{ x1, y1, x2, y2, w, h }`. Still open, and not to be
+  confused with the `Bounds` / `BoundsOf` readers ADR-0224 §SD14 added: those
+  are the box of the *graph*, this is the box of the *viewport*. Derivable
+  from `View.Camera` and `View.CanvasToWorld`; a reader saves every consumer
+  the same four lines, and is what a caller needs to declare only what is on
   screen.
 
 ### 2.6 Events
@@ -608,11 +613,15 @@ together — because a faded node that still swallows clicks is a bug rather tha
 a feature. `detectable: false` is the same flag without the fade, and earns its
 place alone for a node that is scaffolding: a group's centre, a legend anchor.
 
-The finding is as much `nav`'s as the widget's. `nav` derives a relevance per
-visible node and hands it to `Options.Style` (ADR-0225 §SD2, §SD3), which has
-nothing to spend it on: a caller can shrink a node or recolour it, but the
-fade the reference exploration model is built around cannot be expressed. **A
-widget gap**, and the one every page in the series voted for.
+The finding was as much `nav`'s as the widget's: `nav` derived a relevance per
+visible node and handed it to `Options.Style` (ADR-0225 §SD2, §SD3) with
+nothing to spend it on, since a caller could shrink or recolour a node but not
+fade it. **Closed by ADR-0224 §SD14**, and closed as the pair this section
+argued for — `NodeSpec.Opacity` and `NodeSpec.NoPick`, independent fields whose
+common case is both. The widget's own pin, selection and hover paint keeps full
+strength, so a dimmed node still shows what it is doing; and zero opacity means
+*unset*, not invisible, since an item that should not be seen is one the
+declaration leaves out.
 
 **Badges.** `badges.topLeft / topRight / bottomLeft / bottomRight`, each
 `{text{content, color, font, scale, style}, image{url, scale}, color,
@@ -639,7 +648,7 @@ The rest of the vocabulary:
 | `shape`: circle, cross, diamond, pentagon, square, star, equilateral | circle markers | **widget gap** | Confirms NetChart §6. All are marker glyphs, which is a useful minimum for a "kind" encoding. |
 | `icon` (`content`, `font`, `color`, `scale`, `style`, `minVisibleSize`) | — | **widget gap** | The design question is the font handle, not the paint. |
 | `image` (`url`, `scale`, `fit`, `tile`, `minVisibleSize`) | — | **widget gap** | `fit` versus `tile`, and the size threshold, are the two bits to decide. |
-| `opacity` | — | **widget gap** | The pair above. |
+| `opacity` | `NodeSpec.Opacity` | ✓ | ADR-0224 §SD14, with `NoPick` beside it — the pair above. |
 | `outerStroke`, `innerStroke` (`color`, `width`, `scalingMethod`, `minVisibleSize`) | global `Style.NodeStroke`, `NodeStrokeW` | **widget gap**, small | Two strokes carry a kind and a state on one node. Per-node stroke costs the one-batch-per-colour paint, which ADR-0224 §SD12 already accepted as opt-in. |
 | `halo` (`color`, `width`, `strokeColor`, `strokeWidth`, `hideNonAdjacentEdges`) | `Style.Highlight` ring on hover; `Auras` | ≈ | A halo is a one-node aura, and the SD11 field machinery draws it already. `hideNonAdjacentEdges` — while a halo shows, hide edges touching no haloed node — is a focus mode and reduces to the pair above. |
 | `pulse` (`duration`, `interval`, `startRatio`, `endRatio`, colours); `Node.pulse()` | — | **widget gap**, small | An expanding ring that says "look here": a search hit, an arrival, an alert. Borderline polish, listed because it is attention direction rather than decoration, and the widget already animates per frame. |
@@ -652,7 +661,7 @@ The rest of the vocabulary:
 | `texts.preventOverlap`, default **on** | — | **widget gap** | The reference declines to draw a label that would overlap rather than moving it, and does so by default — a useful precedent for the skip-versus-move question NetChart §6 left open. |
 | `draggable: false` | `Options.NoDragging`, global | **widget gap**, small | Confirms NetChart §3. |
 | `layoutable: false` | `Pinned` | ≈ | A pin holds a place; `layoutable` merely exempts from the layout. Close enough for most uses, as vis-network §2 also concluded. |
-| `detectable: false` | — | **widget gap**, small | The pair above, without the fade. Cheap: skip the node in the ADR-0224 §SD3 pick. |
+| `detectable: false` | `NodeSpec.NoPick` | ✓ | ADR-0224 §SD14: the node is skipped in the §SD3 pick and in the rectangle selection, while `SelectNode` still reaches it. |
 | `x`, `y` | `SetNodePosition` after the first `Render` | ≈ | A declare-with-initial-position field on `NodeSpec` closes the one-frame gap, and it is the one small widget change closed grouping needs (§4). |
 
 ### 3.11 The edge attribute vocabulary
@@ -679,7 +688,8 @@ wants when arrowheads would be noise. **A widget gap**, small.
 | `width` + `minVisibleSize` | `Width` in screen pixels | ≈ | Edge level-of-detail by on-screen width is NetChart's `linkDetailMinSize`. |
 | `stroke` (`color`, `width`) | — | **widget gap**, small | A casing: a selected edge drawn as an outlined line rather than a recolour. |
 | `halo` | — | **widget gap**, small | A translucent band under an edge — the path-highlight primitive. |
-| `opacity`, `layer`, `detectable` | — | **widget gap** | §3.10. `detectable: false` is the natural setting for a scaffold edge. |
+| `opacity`, `detectable` | `EdgeSpec.Opacity`, `EdgeSpec.NoPick` | ✓ | ADR-0224 §SD14; a selected or hovered edge paints at full strength. |
+| `layer` | — | **widget gap** | §3.10; the one of the three still open. |
 | `text.adjustAngle` (rotate along the edge; horizontal when the edge is shorter than the text) | horizontal at the midpoint | ≈ | Confirms the rotated-edge-label row, and names the right rule for when *not* to rotate. |
 | `adjustAnchors` (geometry accounts for the extremity decoration) | line trimmed to the node edge | ≈ | Matters once decorations and badges exist. |
 | `edgesAlwaysCurvy` | straight; bulge for parallel edges by order | ≈ | A per-edge curvature override is the small cut, confirmed by every page in the series. |
@@ -779,11 +789,17 @@ and `circlePack`; on the main class, `getConnectedComponents` and
 `getConnectedComponentByNode`; on `Node`, `getDegree`. PageRank and Louvain do
 not appear there and are not counted.
 
-§2.3 sorted this shape once — traversal is a **helper gap** worth closing
-because `nav` already builds the adjacency and publishes none of it, and the
-analytics are out of scope because a number per node is something the caller
-declares — and Ogma's list does not change it. Two entries are neither, and
-both feed §4:
+§2.3 sorted this shape once — traversal is a helper gap worth closing because
+`nav` already builds the adjacency and publishes none of it, and the analytics
+are out of scope because a number per node is something the caller declares —
+and Ogma's list did not change it. The traversal half is now closed:
+`shortestPath`, `bfs` / `dfs`, `getConnectedComponents` and `getDegree` have
+counterparts in ADR-0225's 2026-09-12 update, which also records why the
+analytics stayed out. `betweenness`, `hasCycle`, `detectCycle`,
+`getAllSimpleCycles` and `minimumSpanningTree` have none and are not planned;
+each is a number or a structure the query lane can produce.
+
+Two entries are neither traversal nor analytics, and both feed §4:
 
 - `getMinimumEnclosingCircle(nodes)` is exactly an open container's radius
   (§4, item 1): the helper computes it, the widget draws it.
@@ -852,13 +868,13 @@ an open group it needs item (4) above and nothing else.
 Effort is a rough estimate in days, including tests; the two large entries
 would want an ADR first.
 
-1. **The fade-and-ignore pair on `NodeSpec` and `EdgeSpec`** (§3.10) — a
-   per-item opacity and a non-pickable flag that travel together. It is the
-   primitive every page in this series asked for under one name or another,
-   and the one that gives `nav`'s relevance something to do: focus fade-out,
-   the hover neighbourhood highlight, the legend's dim-the-rest mode and search
-   dimming are all it. **1–1.5 days**, and nothing else here depends on so
-   little.
+1. ~~**The fade-and-ignore pair on `NodeSpec` and `EdgeSpec`** (§3.10)~~ —
+   **done**, ADR-0224 §SD14 (2026-09-12). The primitive every page in this
+   series asked for under one name or another, and the one that gave `nav`'s
+   relevance something to do: focus fade-out, the hover neighbourhood
+   highlight, the legend's dim-the-rest mode and search dimming are all it,
+   and all four are now the caller's to write. Estimated 1–1.5 days; the
+   bounds readers of §2.5 came with it.
 2. **Closed grouping in `nav`** — group definitions as navigation state,
    members undeclared, one aggregate node per group and one aggregate edge per
    group pair, nesting, and open/close as inverses. Turns a graph too dense to
@@ -883,9 +899,11 @@ would want an ADR first.
    working as the universe grows. **1 day** on the pipeline, 2 without.
 7. **Node collapsing in `nav`** (§3.5) — the join-node-to-edge rewrite, which
    is how a storage model becomes a domain picture. **1.5–2 days.**
-8. **Adjacency and graph queries from `nav`** (§2.3, §3.14) — neighbours,
-   degree, components, unweighted shortest path, over the adjacency the package
-   already builds. **1.5–2 days.**
+8. ~~**Adjacency and graph queries from `nav`** (§2.3, §3.14)~~ — **done**,
+   ADR-0225's 2026-09-12 update. `Neighbours`, `Degree`, `Components` and
+   `ShortestPath` over the adjacency the package already built, answering over
+   the universe rather than the picture, each with its own scratch so it may
+   run inside the `Style` hook. Estimated 1.5–2 days.
 9. **Legibility on a dense graph** (§3.10, §3.11) — the bundle that decides
    whether a large picture can be read at all: a label threshold by on-screen
    size and word wrap, a label backing, a label anchor and a secondary label,
@@ -901,9 +919,9 @@ would want an ADR first.
     unrelated nodes and a scaffold draws under them. A sort key before
     batching. **0.5–1 day.**
 13. **Viewport and pick readers** (§2.5, §3.12) — centre-on-subset at the
-    current zoom, the visible extent as a box, a pick-at-point entry and a
-    general world-to-canvas. Four readers every consumer otherwise writes.
-    **1 day.**
+    current zoom, the *viewport* extent as a box, a pick-at-point entry and a
+    general world-to-canvas. Four readers every consumer otherwise writes; the
+    graph-extent reader beside them landed with item 1. **1 day.**
 14. **The connect and rewire gestures** (§3.12) — a mode on `Options` that
     reinterprets a node drag as a rubber line and reports the node under the
     pointer at release, plus endpoint handles on a selected edge. **3–4 days**

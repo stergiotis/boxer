@@ -115,8 +115,8 @@ affordance layer the fade needs:
 |---|---|---|---|
 | `expandNode` / `collapseNode` / `closeNode`, `expandOnClick`, `defaultExpandMode` | `nav.Expand(id, depth, dir)`, `Collapse`, `Close`; `nav.Apply` wires the double-click | ✓ | Closed by ADR-0225 §SD2 and §SD4, in the helper. Collapse is the inverse of expand by construction, which the reference's own documentation does not promise. |
 | `addFocusNode` / `removeFocusNode` / `clearFocus`, `numberOfFocusNodes`, `autoUnfocus` | `nav.Focus` / `Unfocus` / `ClearFocus` / `FocusNodes`; `Options.MaxFocusNodes`, `NoAutoUnfocus` | ✓ | Closed by ADR-0225 §SD2, keeping the reference's parameter names. |
-| `focusAutoFadeout` (relevance < 1 drawn faded and smaller) | `nav.Relevance`, `NodeInfo.Relevance` at the `Style` hook; radius is settable, opacity is not | **gap** | Half closed by ADR-0225 §SD3: the number exists and reaches the caller per frame. The fade itself still needs per-node **opacity** on `NodeSpec` / `EdgeSpec` — and, per the Ogma reading, a non-pickable flag beside it, since a faded node that still answers the pointer is a bug. The single most reusable missing primitive in the series. |
-| `nodeExpanded` / `nodeNotLoaded` state styles | `nav` publishes `Expanded(id)` and `NodeInfo.Stub`, `Focused` | ≈ | The states are derived and handed to the `Style` hook; nothing draws a marker for them. Same widget half as the hidden-links hint in §2. |
+| `focusAutoFadeout` (relevance < 1 drawn faded and smaller) | `nav.Relevance` at the `Style` hook, spent on `NodeSpec.Opacity` and `Radius` | ✓ | Closed in two halves: ADR-0225 §SD3 derives the relevance, ADR-0224 §SD14 gives it somewhere to go. The fade came with `NoPick` beside it, which is the shape the Ogma reading argued for. |
+| `nodeExpanded` / `nodeNotLoaded` state styles | `nav` publishes `Expanded(id)` and `NodeInfo.Stub`, `Focused`; the hook can recolour, resize or fade | ≈ | The states are derived and reach the caller, and since ADR-0224 §SD14 a not-loaded node can be drawn faint. A *marker* still has nowhere to go — the badge slot of the Ogma reading is the widget half. |
 | `autoZoomOnFocus`, `scrollIntoView(nodes, margins)` | `FitNodes(ids)`, padded by `FitPadding` | ✓ | Closed by ADR-0224 §SD12; it also releases the pending fit so the framing sticks. |
 | `zoom()` get/set, `home()` | `Camera`, `SetCamera`, `FitNow` | ✓ | |
 | `zoomExtent` (manual zoom clamp) | `Options.ZoomMin`, `Options.ZoomMax` | ✓ | Closed by ADR-0224 §SD12; zero takes 0.01 and 100. |
@@ -150,7 +150,7 @@ affordance layer the fade needs:
 | `nodeStyleFunction`, `linkStyleFunction`, classes, rules | caller fills the spec fields every frame | ✓ | Strictly more direct. |
 | per-node `radius`, `fillColor` | `NodeSpec.Radius`, `Color` | ✓ | |
 | per-node `lineColor`, `lineWidth`, `lineDash` | global `NodeStroke`, `NodeStrokeW` | ≈ | A per-node stroke breaks the one-batch-per-colour paint; acceptable as an opt-in. |
-| per-node / per-link `opacity` | — | **gap** | See §4; the single most reusable missing primitive. |
+| per-node / per-link `opacity` | `NodeSpec.Opacity`, `EdgeSpec.Opacity`, with `NoPick` beside each | ✓ | Closed by ADR-0224 §SD14 — the primitive this page called the most reusable one missing, and the one every later analysis voted for again. Zero is unset; the widget's own pin, selection and hover paint does not fade. |
 | `display` shapes (rectangle, rhombus, droplet, text-only, rounded text, custom) | circle markers only | **gap** | The marker batch is called with one shape code; the batch API may carry others. Rectangle and diamond would cover most "kind" encodings; text-only nodes are a separate paint path. |
 | `image`, `imageCropping` | — | **gap** | The lane has an image paint opcode; graphview never calls it. Icon or avatar nodes are functional in people, host and package graphs. Needs a texture handle on `NodeSpec` and a clip. |
 | `invisible` node / link | omit from the declaration, or keep for layout only | ≈ | An invisible node that still takes part in layout (a layout scaffold) cannot be expressed. Small. |
@@ -158,7 +158,7 @@ affordance layer the fade needs:
 | `nodeDetailMinSize`, `nodeDetailMinZoom`, `linkDetailMinSize` | none; labels follow hover / selection / `LabelsAlways` | **gap** | Level-of-detail culling by on-screen size: labels, donuts (already culled under 2 px), arrow heads. Cheap and it protects frame time on large graphs with `LabelsAlways`. |
 | label `overlapStrategy` (skip / move) | — | gap | Nice to have; medium. |
 | `items` layer (badges, secondary text, icons at anchored offsets around a node or along a link) | `Donut` | ≈ | Donut is one item kind. A general "items" slot (text or image at a normalised offset, optional background) is what turns a node into a card. Medium. |
-| `aura` | `Auras`, `AuraParams`, `AuraStyle`, legend | ✓ | SD11. Legend `mode: "highlight"` (dim others rather than hide) is missing; small once opacity exists. |
+| `aura` | `Auras`, `AuraParams`, `AuraStyle`, legend | ✓ | SD11. Legend `mode: "highlight"` — dim the others rather than hide them — is now the caller's: a legend click reports `EventKindAuraToggle`, and the caller fades the non-members through `NodeSpec.Opacity` (§SD14) instead of calling `HideAura`. |
 | `toDecoration` (arrow) | arrow head at `To` | ✓ | |
 | `fromDecoration`, decoration kinds (circle, open arrow, hollow arrow), bidirectional | — | **gap** | Cheap: a per-edge or per-style decoration pair. Undirected graphs currently draw an arrow they should not. |
 | per-link `lineDash` | — | **gap** | The lane has a dashed-line opcode. Cheap: a per-edge dash flag or pattern. |
