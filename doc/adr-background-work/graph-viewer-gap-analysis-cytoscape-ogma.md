@@ -8,14 +8,17 @@ status: draft
 
 > **Status: draft — pre-human-review.** Compiled 2026-09-12 as follow-on
 > material for [ADR-0224](../adr/0224-graphview-go-graph-widget-painter-lane.md)
-> and [ADR-0225](../adr/0225-graphview-navigation-layer-and-radial-layout.md).
-> Nothing here is a decision. Provenance: no library source was read or
-> decompiled. The inputs are the two vendors' public documentation as served on
-> the compile date — the Cytoscape.js single-page reference, and the Ogma 6.0.9
-> API reference and tutorials — read as HTML and quoted. Behaviour not stated in
-> those pages is not asserted here; where this page describes what a reference
-> does, the sentence it rests on is quoted. Effort figures are estimates, not
-> measurements.
+> and [ADR-0225](../adr/0225-graphview-navigation-layer-and-radial-layout.md),
+> and merged 2026-09-12 with a separate Ogma page compiled a day earlier, whose
+> row-level inventory is §3.10 onward; two pages answering the same question
+> about one library is how the two verdicts on where grouping lands came to
+> disagree. Nothing here is a decision. Provenance: no library source was read
+> or decompiled. The inputs are the two vendors' public documentation as served
+> on the read dates — the Cytoscape.js single-page reference, and the Ogma 6.0.9
+> API reference and tutorials — read as HTML and quoted; §7 lists the pages.
+> Behaviour not stated in those pages is not asserted here; where this page
+> describes what a reference does, the sentence it rests on is quoted. Effort
+> figures are estimates, not measurements.
 
 # Cytoscape.js and Ogma against graphview and nav
 
@@ -26,7 +29,10 @@ done first and acted on; its widget-local half is [ADR-0224
 §SD12](../adr/0224-graphview-go-graph-widget-painter-lane.md) and §SD13, and
 the navigation model it deferred is [ADR-0225](../adr/0225-graphview-navigation-layer-and-radial-layout.md).
 This page asks a different question: what do Cytoscape.js and Ogma carry that
-NetChart does not, and where would each piece land here.
+NetChart does not, and where would each piece land here. §2 and §3.1–§3.9 read
+the two surfaces for the concepts they add; §3.10 onward is the row-level
+inventory of Ogma's attribute, tool and event vocabulary, which is the widest
+in the series and the reason a second page existed to carry it.
 
 The tree this is measured against is the [graphview
 widget](../../public/thestack/imzero2/egui2/widgets/graphview/) and the
@@ -55,6 +61,14 @@ package above the widget), or **out of scope** with a reason.
 - Ogma's `useWebWorker` and `gpu` layout flags — a substrate choice; the
   equivalent decision here is ADR-0224 §SD6 (goroutine-split rows, Barnes–Hut
   above a threshold).
+- Ogma's renderer switch (WebGL / canvas / SVG), `imgCrossOrigin`, fonts and
+  `reloadFonts`, `cursor`, `minimumWidth` / `minimumHeight`, `setContainer`,
+  `batchSize` progressive loading, the `parse` helpers, `rendererStateChange`
+  and `destroy` — host and DOM plumbing.
+- Ogma's `tools.brand`, the tooltip's HTML content (its *trigger set* is
+  §3.12), `mouse.doubleClickTimer`, and view rotation (`setAngle`, `rotate`,
+  `interactions.rotation`) — the last for want of a consumer, not for want of a
+  use.
 
 ## 2 Cytoscape.js
 
@@ -484,12 +498,55 @@ Four options inside the layouts are not covered:
   `placeNear`, which seats a newly declared node beside a placed neighbour and
   is what makes `nav`'s one-hop growth not re-scatter the picture.
 
+Four more sit inside `hierarchical`:
+
+- **Caller-assigned levels and sibling order.** `layer` names a data field
+  holding the level and `siblingIndex` one ordering siblings, beside `roots`
+  and `sinks` naming nodes outright. graphview derives the level from the walk
+  and orders siblings by id for determinism. A **widget gap**, small; the
+  natural shape is a `Level` and an `Order` field on `NodeSpec`. This is
+  NetChart's `categoryHierarchy` and `sortNodes` and vis-network's `level`,
+  reached for the third time.
+- **Crossing reduction and compaction.** `decross` — on by default, not an
+  option — plus `compactSiblings`, `siblingsDistance` and `gapWidth`.
+  graphview places a tree and leaves it. A barycentre sweep is
+  graphview-sized; the full treatment belongs to `layeredgraph`, which has
+  Graphviz for it. A **widget gap**, medium.
+- **Component arrangement.** `componentDistance` and `arrangeComponents` fit /
+  grid / singleLine, with `gridDistance` putting isolated nodes on a grid of
+  their own. graphview packs forests in root-id order. This is what keeps a
+  real dependency graph — mostly singletons — readable. A **widget gap**,
+  small.
+- **A second solver.** `forceLink`'s options are ForceAtlas2's by name:
+  `scalingRatio`, `gravity`, `strongGravityMode`, `linLogMode`,
+  `outboundAttractionDistribution`, `edgeWeightInfluence`, `barnesHutOptimize`
+  / `barnesHutTheta`, `slowDown`, `alignNodeSiblings`. It is vis-network's
+  `forceAtlas2Based` under another name, and if a second solver is ever added
+  the two switches worth carrying are `linLogMode`, a cluster-emphasising
+  energy, and `outboundAttractionDistribution`, which pushes hubs outward.
+  A **widget gap**, medium, and it wants the per-node mass above. Beside it,
+  `force.cx` / `cy` is a gravity target where `CenterGravity` pulls to the
+  canvas centre, and `alignSiblings` / `siblingsOffset` lines up a hub's
+  degree-one neighbours, which is what makes a star legible — both small.
+
 Of the layouts themselves, `concentric` — "This layout takes a base node as
 parameter and organizes the graph so the nodes close to the selected node are
 close to it spatially", with `circleHopRatio` and a `sortBy` naming "'radius',
 'degree' or custom data attributes" — is `LayoutRadial` with `RadialParams`
 (ADR-0225 §SD6), which orders children by id for determinism rather than by a
-chosen key. `grid` and `sequential` have no counterpart and are not worth one.
+chosen key; Ogma's own `radial` adds a repulsion sweep inside each ring, which
+is that static layout plus a few force steps constrained to a circle. `grid` —
+rows and columns by a sort key — has no counterpart and earns one only as the
+isolated-node arrangement above.
+
+**`sequential` is a gap.** It is "a layered layout for graphs that are not
+trees", and graphview's hierarchical layout is a tree walk from the roots: a
+DAG with shared descendants is misreported, since a node reachable by two paths
+takes one depth and the other parent's edge stretches past it. A longest-path
+or network-simplex layering behind the existing hierarchical painter is the
+shape. A **widget gap**, medium. The two pages merged here disagreed on this
+row — the sentence that dismissed `sequential` did not separate it from `grid`,
+and `grid` is the one not worth building.
 
 ### 3.9 Geo mode
 
@@ -531,6 +588,211 @@ world-to-screen transform can be supplied by portolan instead of by
 piece ADR-0224 §SD4 specified, which makes it its own decision rather than a
 line item here. `addGeoClustering` needs nothing of its own — it is the
 grouping stage with a distance predicate.
+
+### 3.10 The node attribute vocabulary
+
+`NodeAttributes` is the widest per-node vocabulary in the series, and three of
+its entries are primitives the earlier analyses named without being able to
+specify.
+
+**The disabled state, and what it settles about opacity.** `Node.setDisabled`,
+`getEnabledNodes` / `getDisabledNodes`, the `nodesEnabled` / `nodesDisabled`
+events and `styles.setDisabledNodeAttributes` are one feature: a per-node state
+with its own attribute slot, which the reference also makes undetectable — a
+disabled node does not answer the pointer. Every earlier page in the series
+arrived here as *opacity*: NetChart's `focusAutoFadeout`, vis-network's
+per-node `opacity`, Obsidian's dim-the-rest on hover. Ogma shows the two are
+one feature seen from two sides, and that is the correction worth carrying:
+**the primitive is the pair** — a fade and a non-pickable flag travelling
+together — because a faded node that still swallows clicks is a bug rather than
+a feature. `detectable: false` is the same flag without the fade, and earns its
+place alone for a node that is scaffolding: a group's centre, a legend anchor.
+
+The finding is as much `nav`'s as the widget's. `nav` derives a relevance per
+visible node and hands it to `Options.Style` (ADR-0225 §SD2, §SD3), which has
+nothing to spend it on: a caller can shrink a node or recolour it, but the
+fade the reference exploration model is built around cannot be expressed. **A
+widget gap**, and the one every page in the series voted for.
+
+**Badges.** `badges.topLeft / topRight / bottomLeft / bottomRight`, each
+`{text{content, color, font, scale, style}, image{url, scale}, color,
+stroke{color, width, scalingMethod}, scale, positionScale, minVisibleSize}`,
+with `detect.nodeBadges` and `view.getNodeBadgeAt(node, point)` making them
+pickable. This is the specification the NetChart "items slot" row lacked: four
+anchored corners, text or an image in each, its own stroke, a size relative to
+the node, a threshold under which it is not drawn, and a hit test. One
+primitive covers three rows the series raised separately — the "stands for N
+nodes" marker a closed group wants (§4), the count of neighbours not shown that
+`nav.HiddenNeighbours` already computes, and a status dot. **A widget gap**,
+medium.
+
+**Layer.** A per-item z-band, 1–3 for nodes and −1–3 for edges, so an edge may
+draw above nodes. graphview paints every edge under every node and batches
+nodes by colour and radius; a highlighted path drawn over unrelated nodes, or a
+scaffold drawn beneath everything, has no way to say so. On the painter lane it
+is a sort key before batching. **A widget gap**, small.
+
+The rest of the vocabulary:
+
+| Ogma | graphview | Status | Note |
+|---|---|---|---|
+| `shape`: circle, cross, diamond, pentagon, square, star, equilateral | circle markers | **widget gap** | Confirms NetChart §6. All are marker glyphs, which is a useful minimum for a "kind" encoding. |
+| `icon` (`content`, `font`, `color`, `scale`, `style`, `minVisibleSize`) | — | **widget gap** | The design question is the font handle, not the paint. |
+| `image` (`url`, `scale`, `fit`, `tile`, `minVisibleSize`) | — | **widget gap** | `fit` versus `tile`, and the size threshold, are the two bits to decide. |
+| `opacity` | — | **widget gap** | The pair above. |
+| `outerStroke`, `innerStroke` (`color`, `width`, `scalingMethod`, `minVisibleSize`) | global `Style.NodeStroke`, `NodeStrokeW` | **widget gap**, small | Two strokes carry a kind and a state on one node. Per-node stroke costs the one-batch-per-colour paint, which ADR-0224 §SD12 already accepted as opt-in. |
+| `halo` (`color`, `width`, `strokeColor`, `strokeWidth`, `hideNonAdjacentEdges`) | `Style.Highlight` ring on hover; `Auras` | ≈ | A halo is a one-node aura, and the SD11 field machinery draws it already. `hideNonAdjacentEdges` — while a halo shows, hide edges touching no haloed node — is a focus mode and reduces to the pair above. |
+| `pulse` (`duration`, `interval`, `startRatio`, `endRatio`, colours); `Node.pulse()` | — | **widget gap**, small | An expanding ring that says "look here": a search hit, an arrival, an alert. Borderline polish, listed because it is attention direction rather than decoration, and the widget already animates per frame. |
+| `radius` + `scalingMethod: scaled \| fixed` | `Radius` in world units | ≈ | `fixed` is NetChart's `scaleObjectsWithZoom: false`, here per node. It touches picking and aura radii. |
+| `color` as an **array** (the node painted in sectors) | `Color`; `Donut` | ≈ | A pie-fill variant of the donut; a multi-membership encoding the ring already carries. |
+| `text.position` right / left / top / bottom / center | label above the node | **widget gap**, small | A label anchor. `center` is the label-inside node of vis-network §7. |
+| `text.secondary` | one label | **widget gap**, small | A `SubLabel` painted smaller: id under name, count under kind. |
+| `text.backgroundColor` (or `"inherit"`), `text.tip` | — | **widget gap**, small | A backing keeps a label legible over edges and auras; the tip turns the label into a callout. Applies to edge labels too. |
+| `text.minVisibleSize`, `text.maxLineLength` | fixed screen size (ADR-0224 §SD7); one line | **widget gap** | The label level-of-detail threshold Obsidian's text-fade row asks for, and word wrap. With screen-sized labels this is the only way a vault-sized graph stays readable under `LabelsAlways`. |
+| `texts.preventOverlap`, default **on** | — | **widget gap** | The reference declines to draw a label that would overlap rather than moving it, and does so by default — a useful precedent for the skip-versus-move question NetChart §6 left open. |
+| `draggable: false` | `Options.NoDragging`, global | **widget gap**, small | Confirms NetChart §3. |
+| `layoutable: false` | `Pinned` | ≈ | A pin holds a place; `layoutable` merely exempts from the layout. Close enough for most uses, as vis-network §2 also concluded. |
+| `detectable: false` | — | **widget gap**, small | The pair above, without the fade. Cheap: skip the node in the ADR-0224 §SD3 pick. |
+| `x`, `y` | `SetNodePosition` after the first `Render` | ≈ | A declare-with-initial-position field on `NodeSpec` closes the one-frame gap, and it is the one small widget change closed grouping needs (§4). |
+
+### 3.11 The edge attribute vocabulary
+
+Edges get nearly the node vocabulary, and two entries have no counterpart
+anywhere else in the series.
+
+**End texts.** `sourceText` and `targetText`, each with an `offset` and a
+`position`, put a label near an extremity rather than at the midpoint:
+cardinalities on a relationship, port names on a wiring diagram, role names on
+a join — things a midpoint label cannot say because they belong to one end. Two
+strings on `EdgeSpec` and a placement at `t = offset` along the curve the pick
+code already samples. **A widget gap**, small.
+
+**A tapered body.** `shape.body: triangle` draws an edge thick at the source
+and thin at the target: direction without a head, which is what a dense graph
+wants when arrowheads would be noise. **A widget gap**, small.
+
+| Ogma | graphview | Status | Note |
+|---|---|---|---|
+| `shape.style`: plain, dashed, dotted | one solid line | **widget gap** | Confirms NetChart §6; the lane has a dashed-line opcode the widget never calls. |
+| `shape.head`, `shape.tail`: arrow, short-arrow, open-arrow, sharp-arrow, circle-hole-arrow, triangle-hole-arrow, circle, square, none | arrow head at `To`, `Style.TipSize` | **widget gap** | The fullest decoration list in the series, and `none` is the arrows-off switch the Obsidian page asks for — an undirected vault graph currently draws heads it should not. `edgeTipRatio` / `edgeMinTipSize` is the global knob behind `TipSize`. |
+| `color`: a colour or `"source"` / `"target"` | `EdgeSpec.Color` per frame | ≈ | The caller copies the endpoint colour; a gradient is polish. |
+| `width` + `minVisibleSize` | `Width` in screen pixels | ≈ | Edge level-of-detail by on-screen width is NetChart's `linkDetailMinSize`. |
+| `stroke` (`color`, `width`) | — | **widget gap**, small | A casing: a selected edge drawn as an outlined line rather than a recolour. |
+| `halo` | — | **widget gap**, small | A translucent band under an edge — the path-highlight primitive. |
+| `opacity`, `layer`, `detectable` | — | **widget gap** | §3.10. `detectable: false` is the natural setting for a scaffold edge. |
+| `text.adjustAngle` (rotate along the edge; horizontal when the edge is shorter than the text) | horizontal at the midpoint | ≈ | Confirms the rotated-edge-label row, and names the right rule for when *not* to rotate. |
+| `adjustAnchors` (geometry accounts for the extremity decoration) | line trimmed to the node edge | ≈ | Matters once decorations and badges exist. |
+| `edgesAlwaysCurvy` | straight; bulge for parallel edges by order | ≈ | A per-edge curvature override is the small cut, confirmed by every page in the series. |
+
+### 3.12 Tools are gesture modes, not UI
+
+The `tools` namespace looks like widgets and is not: each member is
+`enable(options)` / `disable()` / `enabled()` over the pointer the chart
+already reads, and what it contributes is the **policy** each gesture needs.
+Under ADR-0224 §SD1 the data change is always the caller's; the gesture is the
+widget's.
+
+- `rectangleSelect.enable({callback, bothExtremities, strokeColor, fillColor,
+  strokeWidth})` — **covered** by `Options.RectSelection` (ADR-0224 §SD12), a
+  Shift-drag over node centres. The one policy bit graphview does not carry is
+  `bothExtremities`: whether an edge crossing the rectangle is selected when
+  only one end is inside. A **widget gap**, small, and meaningful only once
+  edges are selectable by rectangle at all.
+- `lasso.enable(…)` — the same options, freehand. A **widget gap**, small on
+  top of the rectangle: a polygon paint and a point-in-polygon test over the
+  same struct-of-arrays positions.
+- `connectNodes.enable({condition, createEdge, createNode, createNodes,
+  continueDrawing, onComplete, dashLength, strokeColor})`, with a
+  `connectNodes {source, target, edge}` event — a drag from node to node that
+  draws a rubber line instead of moving the node, and reports the pair on
+  release. `condition(source, target)` says which pairs may connect;
+  `createNodes` makes a release over empty canvas create a node there. A
+  **widget gap**, medium, and the same gesture vis-network's add-edge mode
+  asks for.
+- `rewire.enable({edges, anchor, radius, hoverRadius, drawEdges})`, with
+  `rewireStart` / `Progress` / `End {node, newNode, edges, isSource, x, y}` —
+  endpoint handles on a selected edge; `isSource` says which end moved. A
+  **widget gap**, medium, sharing the drop-target report with connect.
+- `snapping.enable({tolerance, neighbours, preferredDistance,
+  centerSnapDistance, guidelineColor})` — alignment guides while dragging. A
+  **widget gap**, small–medium; it belongs with pinning and manual layout
+  (ADR-0224 §SD10).
+- `resize.enable(…)` — drag a handle to change a node's radius. **Out of
+  scope**: the radius is the caller's declaration, restated every frame.
+- `legend.enable({position, titleFunction, …})`, generated from the style
+  rules — graphview has the aura legend through the shared `widgets/legend`
+  package; caller-supplied rows beside the aura rows is the remaining work, and
+  it belongs to that package rather than to graphview.
+- `tooltip.onNodeHover / onNodeClick / onNodeDoubleClick / onNodeRightClick`,
+  the edge four, and `onBackgroundClick` / `DoubleClick` / `RightClick` — the
+  trigger set, **covered** in full by ADR-0224 §SD12's event kinds.
+
+`interactions` is the flat switchboard `Options` approximates, and five of its
+rows are still open: `scrollToPan` with a modifier for zoom, and separate pan
+and zoom toggles, where `NoZoomAndPan` is one flag; `multiSelectionKey`, a
+named modifier that accumulates selection, where graphview has
+`NodeSelectionMulti` as a mode and spends Shift on the rectangle; per-gesture,
+per-class level of detail (`hideNodes` / `hideEdges` / `hideNodeTexts` /
+`hideEdgeTexts` during zoom, pan and pinch); `detect.*` per item class with
+`nodeErrorMargin` and `edgeErrorMargin` named separately, where graphview has
+one `pickMinPx` floor and a fixed edge tolerance; and keyboard pan and zoom,
+which want a canvas-scoped key event the substrate can already report.
+
+### 3.13 Events: the payload, and dragging a selection
+
+The event catalogue is the completest in the series, and the **payload shape**
+is the finding. Every pointer event carries `x, y` in graph coordinates,
+`button`, `source` (mouse or touch), `target` (node, edge or null) and
+`domEvent`. graphview's `Event{Kind, Node, X, Y, From, To, Edge, Aura}` carries
+the world position and one id, distinguishing by kind what Ogma distinguishes
+by a nullable target and a button field. After ADR-0224 §SD12 the two cover the
+same ground, with one difference worth recording: a graphview consumer cannot
+tell a middle click or a triple click from anything else, because only primary,
+secondary and double are read off the lane.
+
+Two rows remain open, both about dragging:
+
+- **Dragging the selection as a group.** `nodesDragStart {nodes}`,
+  `nodesDragProgress {nodes, dx, dy}` and `nodesDragEnd {nodes, start, end}`
+  move every selected node when the drag begins on one of them; graphview drags
+  exactly one. A **widget gap**, small–medium, and the natural partner of the
+  rectangle selection that already exists.
+- **The start-and-end pair on drag end.** `nodesDragEnd` carries both
+  positions. `NodeDragEnd` carries the final one, and a caller offering undo
+  diffs it against the `NodeDragStart` event it kept — workable, but the pair
+  is what an undo record wants. **Small.**
+
+A per-frame `dragProgress` is readable through `NodePosition`, as the
+vis-network and force-graph readings both concluded.
+
+### 3.14 Algorithms, and the helper they describe
+
+The `algorithms` namespace is not a widget concern under ADR-0224 §SD1 — it
+reads a graph the caller owns — but it is the clearest public inventory in the
+series of what a graph helper carries, and it is worth setting beside §2.3's
+verdict. On the public page: `shortestPath({source, target, directed,
+edgeCostFunction, heuristicFunction, nodes, edges})`, `bfs` / `dfs`,
+`betweenness`, `hasCycle`, `detectCycle`, `getAllSimpleCycles`,
+`minimumSpanningTree(nodes, edges, edgeCostFunction)`,
+`getMinimumEnclosingCircle(nodes)`, `fishEyeExpand({focusNode, deltaRadius})`
+and `circlePack`; on the main class, `getConnectedComponents` and
+`getConnectedComponentByNode`; on `Node`, `getDegree`. PageRank and Louvain do
+not appear there and are not counted.
+
+§2.3 sorted this shape once — traversal is a **helper gap** worth closing
+because `nav` already builds the adjacency and publishes none of it, and the
+analytics are out of scope because a number per node is something the caller
+declares — and Ogma's list does not change it. Two entries are neither, and
+both feed §4:
+
+- `getMinimumEnclosingCircle(nodes)` is exactly an open container's radius
+  (§4, item 1): the helper computes it, the widget draws it.
+- `circlePack({nodes, margin, sort, origin})` is the natural sub-layout for an
+  open container's members (§4, item 2), and a static layout in its own right.
+
+`fishEyeExpand` — push a focus node's neighbours outward by a radius — is
+arithmetic over `View.Positions` and `SetNodePosition`, and is what the
+reference's `expandGroup` uses to make room for what it opens.
 
 ## 4 Where grouping goes
 
@@ -590,32 +852,73 @@ an open group it needs item (4) above and nothing else.
 Effort is a rough estimate in days, including tests; the two large entries
 would want an ADR first.
 
-1. **Closed grouping in `nav`** — group definitions as navigation state,
+1. **The fade-and-ignore pair on `NodeSpec` and `EdgeSpec`** (§3.10) — a
+   per-item opacity and a non-pickable flag that travel together. It is the
+   primitive every page in this series asked for under one name or another,
+   and the one that gives `nav`'s relevance something to do: focus fade-out,
+   the hover neighbourhood highlight, the legend's dim-the-rest mode and search
+   dimming are all it. **1–1.5 days**, and nothing else here depends on so
+   little.
+2. **Closed grouping in `nav`** — group definitions as navigation state,
    members undeclared, one aggregate node per group and one aggregate edge per
    group pair, nesting, and open/close as inverses. Turns a graph too dense to
-   read into one that can be drilled into, with no widget change. **3–4 days.**
-2. **The transformation pipeline in `nav`** — the derivation as an ordered list
+   read into one that can be drilled into, with no widget change beyond the
+   declare-with-initial-position field of §3.10. **3–4 days.**
+3. **The transformation pipeline in `nav`** — the derivation as an ordered list
    of named, individually toggleable stages over the unchanged universe, the
    present visible-set walk being one of them (§3.1). On its own it changes
-   nothing a consumer sees; it is what makes items 1, 4 and 5 compose instead
-   of accumulating as fields on `Options`. Worth doing before or with item 1.
+   nothing a consumer sees; it is what makes items 2, 6 and 7 compose instead
+   of accumulating as fields on `Options`. Worth doing before or with item 2.
    **3 days**, plus roughly a day per stage moved onto it.
-3. **Open containers in graphview** — the four-item list in §4. The largest
+4. **The badge slot** (§3.10) — four anchored corner discs, text or image,
+   own stroke, size relative to the node, a draw threshold, pickable. It is
+   simultaneously the "stands for N nodes" marker closed grouping wants, the
+   count of unshown neighbours `nav.HiddenNeighbours` already computes, and a
+   status dot. **2.5–3 days.**
+5. **Open containers in graphview** — the four-item list in §4. The largest
    item here and the one that unlocks the "meta-graph you can still see into"
    picture both references treat as the payoff of grouping. **6–9 days**, and a
    decision record of its own.
-4. **Predicate filters in `nav`** (§3.4) — a facet or search box that keeps
+6. **Predicate filters in `nav`** (§3.4) — a facet or search box that keeps
    working as the universe grows. **1 day** on the pipeline, 2 without.
-5. **Node collapsing in `nav`** (§3.5) — the join-node-to-edge rewrite, which
+7. **Node collapsing in `nav`** (§3.5) — the join-node-to-edge rewrite, which
    is how a storage model becomes a domain picture. **1.5–2 days.**
-6. **Adjacency and graph queries from `nav`** (§2.3) — neighbours, degree,
-   components, unweighted shortest path, over the adjacency the package already
-   builds. **1.5–2 days.**
-7. **Layout readability: overlap removal and per-node mass** (§3.8) — the two
-   force-step options that matter once radii vary. **2–2.5 days** together.
-8. **Hierarchy constraints: per-node layer, roots, sinks** (§3.8). **1.5 days.**
-9. **Viewport readers: centre-on-subset and visible extent** (§2.5).
-   **0.5 days.**
+8. **Adjacency and graph queries from `nav`** (§2.3, §3.14) — neighbours,
+   degree, components, unweighted shortest path, over the adjacency the package
+   already builds. **1.5–2 days.**
+9. **Legibility on a dense graph** (§3.10, §3.11) — the bundle that decides
+   whether a large picture can be read at all: a label threshold by on-screen
+   size and word wrap, a label backing, a label anchor and a secondary label,
+   per-edge dash, decoration kinds including *none*, and per-node stroke. Each
+   is small and none is interesting alone; together they are what separates a
+   vault-sized graph from a hairball. **3–4 days.**
+10. **Layout readability: overlap removal and per-node mass** (§3.8) — the two
+    force-step options that matter once radii vary. **2–2.5 days** together.
+11. **Hierarchy constraints** (§3.8) — a per-node level and sibling order,
+    caller-named roots and sinks, and a component arrangement with a grid for
+    the isolated nodes. **2 days.**
+12. **Per-item layer** (§3.10) — a z-band, so a highlighted path draws over
+    unrelated nodes and a scaffold draws under them. A sort key before
+    batching. **0.5–1 day.**
+13. **Viewport and pick readers** (§2.5, §3.12) — centre-on-subset at the
+    current zoom, the visible extent as a box, a pick-at-point entry and a
+    general world-to-canvas. Four readers every consumer otherwise writes.
+    **1 day.**
+14. **The connect and rewire gestures** (§3.12) — a mode on `Options` that
+    reinterprets a node drag as a rubber line and reports the node under the
+    pointer at release, plus endpoint handles on a selected edge. **3–4 days**
+    together; the data change stays the caller's.
+15. **`sequential` layering for DAGs** (§3.8) — a longest-path or
+    network-simplex layering behind the hierarchical painter, so a DAG with
+    shared descendants is not misreported by the tree walk. **3 days.**
+
+Smaller entries not worth their own line, each an `Options` or spec field:
+lasso on top of the rectangle selection; multi-node drag of the selection with
+a start-and-end pair on the event; node shapes, icon and image nodes; a tapered
+edge body and edge end-texts; an edge stroke and halo; per-node `draggable` and
+`detectable`; a gravity target beside the canvas centre; sibling alignment;
+per-gesture level of detail; a named multi-selection modifier; keyboard pan and
+zoom; and the `bothExtremities` policy bit on rectangle selection.
 
 Deferred, with the trigger rather than an estimate:
 
@@ -623,10 +926,18 @@ Deferred, with the trigger rather than an estimate:
   injectable camera shared with portolan, which is a contract between two
   widgets and wants its own ADR. Trigger: a consumer that needs one canvas to
   own both the map gestures and the graph picking.
-- **Neighbour generation and merging** (§3.6). Cheap stages once item 2 exists,
+- **A second force solver** (§3.8) — ForceAtlas2, with `linLogMode` and
+  outbound attraction. Trigger: a consumer whose graph is social or
+  citation-shaped, where hub spreading is the whole picture. It wants per-node
+  mass (item 10) first.
+- **Neighbour generation and merging** (§3.6). Cheap stages once item 3 exists,
   and computable by the caller before `AddNodes` until then.
 - **A serialisable selector expression** (§2.2). Belongs with whatever persists
   a view, not with the widget.
+- **Crossing reduction and sibling compaction** (§3.8). A barycentre sweep is
+  graphview-sized, but `layeredgraph` has Graphviz for the full treatment;
+  trigger is a consumer that wants the live layout to read as well as the
+  static one.
 
 ## 6 Not worth doing, with the reason
 
@@ -641,8 +952,15 @@ Deferred, with the trigger rather than an estimate:
 - **Centralities, PageRank and the clusterings** (§2.3) — a number per node is
   something the caller declares, and this tree computes numbers in the query
   lane. A clustering that produces a partition feeds §4 as data.
-- **`grid` and `sequential` layouts** (§3.8) — no use here that the five
-  existing layouts do not cover.
+- **The `grid` layout** (§3.8) — rows and columns by a sort key; no use here
+  that the five existing layouts do not cover, beyond arranging isolated nodes,
+  which is item 11's job. (`sequential` was dismissed beside it by one of the
+  two pages merged here and is a gap; see §3.8.)
+- **Style rules, classes and their dependency tracking** (§3.10) — the
+  machinery exists because the reference retains the graph and must know when a
+  rule goes stale. A declaration filled every frame has no cache to invalidate.
+- **The resize tool** (§3.12) — dragging a handle to change a node's radius,
+  when the radius is the caller's declaration and is restated every frame.
 - **`alignSiblings` and similar post-passes** (§3.8) — readability polish whose
   value is hard to judge without a consumer asking for it.
 
@@ -656,6 +974,13 @@ Deferred, with the trigger rather than an estimate:
   stub protocol (§SD5), the radial layout (§SD6).
 - [ADR-0204](../adr/0204-leaflet-map-core-port.md) — the map core the geo-mode
   discussion composes against.
+- [netchart-graphview-gap-analysis.md](./netchart-graphview-gap-analysis.md)
+  — the analysis that opened the series and set the row vocabulary; its §8
+  named Cytoscape.js and Ogma as candidates, which this page answers.
+- [vis-network-graphview-gap-analysis.md](./vis-network-graphview-gap-analysis.md),
+  [force-graph-graphview-gap-analysis.md](./force-graph-graphview-gap-analysis.md)
+  and [obsidian-graph-view-graphview-gap-analysis.md](./obsidian-graph-view-graphview-gap-analysis.md)
+  — the rest of the series; rows above that confirm theirs say so.
 - [netchart-aura-analysis.md](./netchart-aura-analysis.md) — the earlier
   black-box analysis of the same problem space.
 - Cytoscape.js documentation, `https://js.cytoscape.org/` — the single-page
@@ -663,6 +988,16 @@ Deferred, with the trigger rather than an estimate:
   Collection (traversing, algorithms), Core (batch, viewport, style), Events,
   Layouts.
 - Ogma documentation, `https://doc.linkurious.com/ogma/latest/` — version
-  6.0.9, read 2026-09-12. Pages quoted: the Transformations API tutorial, the
+  6.0.9. Read 2026-09-12 for §3.1–§3.9: the Transformations API tutorial, the
   Layouts tutorial, and the API reference for `Ogma.transformations`,
-  `Transformation`, `Ogma.layouts` and `Ogma.geo`.
+  `Transformation`, `Ogma.layouts` and `Ogma.geo`. Read 2026-09-11 for §3.10
+  onward, merged in from the separate page: the `api.html` index; the namespace
+  pages `api/ogma/{transformations,styles,layouts,algorithms,view,geo,
+  keyboard}.html` and `api/ogma/tools/{lasso,rectangleselect,tooltip,
+  connectnodes,rewire,resize,snapping,legend}.html`; the class pages
+  `api/{ogma,node,nodelist,transformation,stylerule}.html`; the type pages
+  under `api/types/` for `options`, `nodeattributes`, `edgeattributes`,
+  `badge`, `nodeshape`, `edgetype`, `edgestyle`, `edgeextremity`,
+  `predefinededgeshape`, `nodedependencies` and the per-transformation option
+  types; and `api/events.html`. None was login-gated. The public `algorithms`
+  page lists no PageRank or Louvain method, so neither is counted above.
