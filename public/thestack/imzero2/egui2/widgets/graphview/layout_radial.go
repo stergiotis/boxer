@@ -96,14 +96,13 @@ func layoutRadial(g *graph, p RadialParams) {
 		centers = append(centers, bestUnvisited())
 	}
 
-	parent := make([]int32, n)
 	depth := make([]int32, n)
 	order := make([]int32, 0, n) // breadth-first order, per system appended
 	kids := make([][]int32, n)
 	leaves := make([]int32, n)
 	sector0 := make([]float64, n) // sector start
 	sector := make([]float64, n)  // sector width
-	rw := radialWalker{adjStart: adjStart, adj: adj, visited: visited, parent: parent, depth: depth, kids: kids}
+	rw := radialWalker{adjStart: adjStart, adj: adj, visited: visited, depth: depth, kids: kids}
 
 	offsetX := float32(0)
 	first := true
@@ -181,13 +180,12 @@ type radialWalker struct {
 	adjStart []int32
 	adj      []int32
 	visited  []bool
-	parent   []int32
 	depth    []int32
 	kids     [][]int32
 }
 
-// walk visits everything reachable from the centres, recording parent,
-// depth and children, and appends the visit order to out.
+// walk visits everything reachable from the centres, recording depth and
+// children, and appends the visit order to out.
 func (w *radialWalker) walk(centers []int32, out []int32) []int32 {
 	head := len(out)
 	for _, c := range centers {
@@ -195,7 +193,6 @@ func (w *radialWalker) walk(centers []int32, out []int32) []int32 {
 			continue
 		}
 		w.visited[c] = true
-		w.parent[c] = -1
 		w.depth[c] = 0
 		out = append(out, c)
 	}
@@ -207,7 +204,6 @@ func (w *radialWalker) walk(centers []int32, out []int32) []int32 {
 				continue
 			}
 			w.visited[nb] = true
-			w.parent[nb] = s
 			w.depth[nb] = w.depth[s] + 1
 			w.kids[s] = append(w.kids[s], nb)
 			out = append(out, nb)

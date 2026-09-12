@@ -262,6 +262,38 @@ and the radial angle allotment is the standard radial tree drawing
 Accepted 2026-09-12. Implemented with this record; ADR-0224 carries a dated
 update naming it for the radial layout.
 
+## Updates
+
+### 2026-09-12 — review corrections to the surface
+
+Five things the first review of the implementation changed, recorded
+against the body rather than by editing it.
+
+- **The style hook is told the facts.** SD3's hook takes a `NodeInfo` —
+  relevance, depth, hidden-neighbour count, stub, focused — beside the
+  spec, so it has no reason to call back into the navigator; the
+  derivation is published before any hook runs, so a hook that does call
+  back reads a finished walk instead of re-entering it. The specs are
+  copied and styled on every `Declare`, with the walk behind them cached,
+  so a hook that reads outside state is current each frame.
+- **Depth continues through an expansion.** A node an expansion reaches
+  sits at the expanded node's depth plus its hops; the expanded node keeps
+  its own. SD2's "hops from the nearest root or focus" now holds through
+  chained expansions.
+- **A hidden focus entry counts for nothing.** `Hide` keeps a focus entry
+  for when the node is shown again, but the bound of SD2 counts the
+  entries not hidden and evicts the oldest such; `Reset` focuses the
+  initial nodes under the same bound, in order.
+- **Several centres are spread by their subtrees.** SD6 said "spread
+  evenly"; the layout allots each centre a sector proportional to its
+  subtree's leaf count, as it does every node, and the sentence is
+  corrected here rather than the code.
+- **`FocusNodes` returns a slice**, the navigator's, oldest first, hidden
+  entries included — the repo's iterator naming rule reserves the
+  iterator form for a type's single canonical iteration, which this is
+  not. The universe's edge index is a map, so bulk loads and removals
+  stay linear.
+
 ## References
 
 - [ADR-0224](./0224-graphview-go-graph-widget-painter-lane.md) — the

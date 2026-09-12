@@ -9,8 +9,8 @@ import "math"
 // ((i+0.5)·cs, (j+0.5)·cs); samples outside the grid count as outside, so
 // every ring closes.
 
-// isoSource is what the tracer asks of a field.
-type isoSource interface {
+// isoSourceI is what the tracer asks of a field.
+type isoSourceI interface {
 	// inside reports whether sample (i, j) belongs to the region.
 	inside(i, j int32) bool
 	// frac returns where on the edge from inside sample a to outside sample
@@ -101,7 +101,7 @@ func (t *tracer) vKey(i, j int32) int32 { return (j+1)*(t.gw+2) + (i + 1) }
 
 // edgePoint returns the point on the edge between samples a and b — one
 // inside, one outside — creating it at the interpolated position.
-func (t *tracer) edgePoint(src isoSource, cs float32, ai, aj, bi, bj int32) int32 {
+func (t *tracer) edgePoint(src isoSourceI, cs float32, ai, aj, bi, bj int32) int32 {
 	var slot *int32
 	var key int32
 	if aj == bj {
@@ -140,7 +140,7 @@ var squareCorners = [4][2]int32{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
 // follow the source's verdict. The winding that results gives an outer
 // boundary a negative shoelace area in screen coordinates and a hole a
 // positive one.
-func (t *tracer) trace(src isoSource, cs float32, i0, j0, i1, j1 int32, out *rings) {
+func (t *tracer) trace(src isoSourceI, cs float32, i0, j0, i1, j1 int32, out *rings) {
 	seg := func(i, j int32, eFrom, eTo int) {
 		a, b := squareCorners[(eFrom+4)%4], squareCorners[(eFrom+5)%4]
 		p := t.edgePoint(src, cs, i+a[0], j+a[1], i+b[0], j+b[1])

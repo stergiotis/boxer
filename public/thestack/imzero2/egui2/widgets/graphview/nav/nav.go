@@ -2,33 +2,31 @@ package nav
 
 import (
 	"cmp"
-	"iter"
-	"math"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 )
 
 // Mode selects how the visible set is derived (ADR-0225 §SD2).
-type Mode uint8
+type ModeE uint8
 
 const (
 	// ModeShowAll shows every node not hidden.
-	ModeShowAll Mode = 0
+	ModeShowAll ModeE = 0
 	// ModeManual shows the roots and what the expansions reach.
-	ModeManual Mode = 1
+	ModeManual ModeE = 1
 	// ModeFocus shows the roots and what the focus nodes reach within their
 	// radius, with a relevance that decays per hop.
-	ModeFocus Mode = 2
+	ModeFocus ModeE = 2
 )
 
 // Direction says which edges an expansion walks.
-type Direction uint8
+type DirectionE uint8
 
 const (
-	DirBoth Direction = 0
-	DirOut  Direction = 1 // along the edge, from the expanded node outward
-	DirIn   Direction = 2 // against it
+	DirectionBoth DirectionE = 0
+	DirectionOut  DirectionE = 1 // along the edge, from the expanded node outward
+	DirectionIn   DirectionE = 2 // against it
 )
 
 // Node is one node of the universe: the spec graphview draws, and whether
@@ -43,11 +41,11 @@ type Node struct {
 // Opts is read on every derivation, so a change takes effect on the next
 // Declare.
 type Options struct {
-	Mode Mode
+	Mode ModeE
 	// ExpandDepth and ExpandDir are what Apply's double-click and an
 	// Expand with a zero depth use: default 1 hop, both directions.
 	ExpandDepth int
-	ExpandDir   Direction
+	ExpandDir   DirectionE
 	// FocusRadius is the hops shown around the newest focus node, default
 	// 2; FocusTailRadius around the older ones, default FocusRadius.
 	FocusRadius     int
@@ -58,29 +56,38 @@ type Options struct {
 	NoAutoUnfocus bool
 	// RelevanceDecay is the factor per hop from a focus node, default 0.5.
 	RelevanceDecay float32
-	// Style, when set, runs per visible node during Declare with the
-	// node's relevance (1 outside focus mode) and depth — hops from the
-	// nearest root or focus — and may edit the spec declared for it.
-	Style func(id uint64, relevance float32, depth int, spec *graphview.NodeSpec)
+	// Style, when set, runs per visible node on every Declare with the
+	// node's facts and may edit the spec declared for it. The facts come
+	// as arguments so the hook has no reason to call back into the
+	// navigator; its accessors are valid inside the hook all the same.
+	Style func(id uint64, info NodeInfo, spec *graphview.NodeSpec)
+}
+
+// NodeInfo is what the Style hook is told about a visible node.
+type NodeInfo struct {
+	Relevance        float32 // by distance from the focus nodes in focus mode, 1 otherwise
+	Depth            int     // hops from the nearest root or focus node
+	HiddenNeighbours int     // known neighbours not in the picture: the "+n" badge
+	Stub             bool    // the node's own neighbourhood is not loaded
+	Focused          bool    // on the focus list
 }
 
 // optionsKey is the comparable part of Options the derivation depends on;
 // a change derives afresh even when nothing else moved.
 type optionsKey struct {
-	mode            Mode
+	mode            ModeE
 	expandDepth     int
-	expandDir       Direction
+	expandDir       DirectionE
 	focusRadius     int
 	focusTailRadius int
 	maxFocusNodes   int
 	noAutoUnfocus   bool
 	relevanceDecay  float32
-	styled          bool
 }
 
 func (inst Options) key() optionsKey {
 	return optionsKey{inst.Mode, inst.ExpandDepth, inst.ExpandDir, inst.FocusRadius, inst.FocusTailRadius,
-		inst.MaxFocusNodes, inst.NoAutoUnfocus, inst.RelevanceDecay, inst.Style != nil}
+		inst.MaxFocusNodes, inst.NoAutoUnfocus, inst.RelevanceDecay}
 }
 
 func (inst Options) withDefaults() Options {
@@ -104,7 +111,7 @@ func (inst Options) withDefaults() Options {
 
 type expansion struct {
 	depth int
-	dir   Direction
+	dir   DirectionE
 }
 
 type focusEntry struct {
@@ -119,11 +126,12 @@ type Navigator struct {
 	Opts Options
 
 	// universe, struct-of-arrays by slot
-	ids   []uint64
-	slot  map[uint64]int32
-	specs []graphview.NodeSpec
-	stub  []bool
-	edges []graphview.EdgeSpec
+	ids     []uint64
+	slot    map[uint64]int32
+	specs   []graphview.NodeSpec
+	stub    []bool
+	edges   []graphview.EdgeSpec
+	edgeIdx map[graphview.EdgeRef]int // index into edges by ref
 	// undirected adjacency in id order, with the direction per entry
 	adjStart []int32
 	adjTo    []int32
@@ -146,10 +154,12 @@ type Navigator struct {
 	visible            []bool
 	relevance          []float32
 	depth              []int32
-	declNodes          []graphview.NodeSpec
+	hiddenNb           []int32 // known neighbours not visible, per visible slot
 	declEdges          []graphview.EdgeSpec
 	pending            []uint64
 	pendingSet         map[uint64]struct{}
+	declNodes          []graphview.NodeSpec // rebuilt on every Declare, so the hook runs each time
+	focusOut           []uint64
 
 	// scratch
 	queue    []int32
@@ -164,12 +174,12 @@ func New(o Options) *Navigator {
 	return &Navigator{
 		Opts:       o,
 		slot:       make(map[uint64]int32, 64),
+		edgeIdx:    make(map[graphview.EdgeRef]int, 64),
 		roots:      make(map[uint64]struct{}, 8),
 		expanded:   make(map[uint64]expansion, 8),
 		hidden:     make(map[uint64]struct{}, 8),
 		pendingSet: make(map[uint64]struct{}, 8),
 		adjDirty:   true,
-		derivedS:   math.MaxUint32,
 	}
 }
 
@@ -200,23 +210,28 @@ func (n *Navigator) AddNodes(nodes []Node) {
 func (n *Navigator) AddEdges(edges []graphview.EdgeSpec) {
 	for i := range edges {
 		e := &edges[i]
-		if j := n.findEdge(refOf(e)); j >= 0 {
+		ref := refOf(e)
+		if j, ok := n.edgeIdx[ref]; ok {
 			n.edges[j] = *e
 			continue
 		}
+		n.edgeIdx[ref] = len(n.edges)
 		n.edges = append(n.edges, *e)
 	}
 	n.touchUniverse()
 }
 
-// RemoveNodes drops nodes and every edge at them. State that names a
-// removed id is left alone; it takes effect again if the id returns.
+// RemoveNodes drops nodes and every edge at them, in one pass over the
+// edges. State that names a removed id is left alone; it takes effect
+// again if the id returns.
 func (n *Navigator) RemoveNodes(ids []uint64) {
+	gone := make(map[uint64]struct{}, len(ids))
 	for _, id := range ids {
 		s, ok := n.slot[id]
 		if !ok {
 			continue
 		}
+		gone[id] = struct{}{}
 		last := int32(len(n.ids) - 1)
 		delete(n.slot, id)
 		if s != last {
@@ -228,19 +243,44 @@ func (n *Navigator) RemoveNodes(ids []uint64) {
 		n.ids = n.ids[:last]
 		n.specs = n.specs[:last]
 		n.stub = n.stub[:last]
-		n.edges = slices.DeleteFunc(n.edges, func(e graphview.EdgeSpec) bool { return e.From == id || e.To == id })
+	}
+	if len(gone) > 0 {
+		n.edges = slices.DeleteFunc(n.edges, func(e graphview.EdgeSpec) bool {
+			_, f := gone[e.From]
+			_, t := gone[e.To]
+			return f || t
+		})
+		n.reindexEdges()
 	}
 	n.touchUniverse()
 }
 
-// RemoveEdges drops edges by ref.
+// RemoveEdges drops edges by ref, each by a swap with the last.
 func (n *Navigator) RemoveEdges(refs []graphview.EdgeRef) {
 	for _, ref := range refs {
-		if j := n.findEdge(ref); j >= 0 {
-			n.edges = slices.Delete(n.edges, j, j+1)
+		j, ok := n.edgeIdx[ref]
+		if !ok {
+			continue
 		}
+		last := len(n.edges) - 1
+		delete(n.edgeIdx, ref)
+		if j != last {
+			n.edges[j] = n.edges[last]
+			n.edgeIdx[refOf(&n.edges[j])] = j
+		}
+		n.edges = n.edges[:last]
 	}
 	n.touchUniverse()
+}
+
+func (n *Navigator) reindexEdges() {
+	clear(n.edgeIdx)
+	for j := range n.edges {
+		ref := refOf(&n.edges[j])
+		if _, dup := n.edgeIdx[ref]; !dup {
+			n.edgeIdx[ref] = j
+		}
+	}
 }
 
 // Clear empties the universe and the state, keeping the options.
@@ -250,6 +290,7 @@ func (n *Navigator) Clear() {
 	n.specs = n.specs[:0]
 	n.stub = n.stub[:0]
 	n.edges = n.edges[:0]
+	clear(n.edgeIdx)
 	n.initial = n.initial[:0]
 	clear(n.roots)
 	clear(n.expanded)
@@ -277,15 +318,6 @@ func (n *Navigator) IsStub(id uint64) bool {
 
 func refOf(e *graphview.EdgeSpec) graphview.EdgeRef {
 	return graphview.EdgeRef{From: e.From, To: e.To, Id: e.Id}
-}
-
-func (n *Navigator) findEdge(ref graphview.EdgeRef) int {
-	for j := range n.edges {
-		if refOf(&n.edges[j]) == ref {
-			return j
-		}
-	}
-	return -1
 }
 
 func (n *Navigator) touchUniverse() {
@@ -368,7 +400,10 @@ func boolInt(b bool) int {
 // --- state ------------------------------------------------------------
 
 // SetInitial names the nodes Reset returns to: roots in every mode, and
-// the focus list in focus mode. It does not apply them; call Reset.
+// the focus list in focus mode, focused in this order under the same
+// bound as Focus — size MaxFocusNodes to the list, or the earliest are
+// unfocused again (or, under NoAutoUnfocus, the latest never focused).
+// It does not apply them; call Reset.
 func (n *Navigator) SetInitial(ids []uint64) {
 	n.initial = append(n.initial[:0], ids...)
 }
@@ -401,8 +436,10 @@ func (n *Navigator) Show(id uint64) bool {
 	return true
 }
 
-// Hide keeps the node out of the picture and out of every walk until Show;
-// it stays a root or an expansion for when it is shown again.
+// Hide keeps the node out of the picture and out of every walk until Show.
+// It stops being a root; an expansion or a focus entry it carries is kept
+// for when it is shown again, and a hidden focus entry counts for nothing
+// against MaxFocusNodes.
 func (n *Navigator) Hide(id uint64) {
 	delete(n.roots, id)
 	n.hidden[id] = struct{}{}
@@ -425,7 +462,7 @@ func (n *Navigator) IsHidden(id uint64) bool {
 // depth takes Options.ExpandDepth. It takes effect while the node is
 // visible, and replaces an earlier expansion of the same node. It reports
 // false for an unknown id.
-func (n *Navigator) Expand(id uint64, depth int, dir Direction) bool {
+func (n *Navigator) Expand(id uint64, depth int, dir DirectionE) bool {
 	if !n.Known(id) {
 		return false
 	}
@@ -455,9 +492,10 @@ func (n *Navigator) Expanded(id uint64) bool {
 }
 
 // Focus appends the node to the focus list with the given relevance (zero
-// takes 1); a node already listed moves to the end. Past MaxFocusNodes
-// the oldest is dropped, or, under NoAutoUnfocus, the call refuses. It
-// reports whether the node is focused afterwards.
+// takes 1); a node already listed moves to the end. Past MaxFocusNodes —
+// counting the entries not hidden — the oldest such is dropped, or, under
+// NoAutoUnfocus, the call refuses. It reports whether the node is focused
+// afterwards.
 func (n *Navigator) Focus(id uint64, relevance float32) bool {
 	if !n.Known(id) {
 		return false
@@ -475,11 +513,23 @@ func (n *Navigator) pushFocus(id uint64, relevance float32, o Options) bool {
 	}
 	if i := slices.IndexFunc(n.focus, func(f focusEntry) bool { return f.id == id }); i >= 0 {
 		n.focus = slices.Delete(n.focus, i, i+1)
-	} else if len(n.focus) >= o.MaxFocusNodes {
-		if o.NoAutoUnfocus {
-			return false
+	} else {
+		live, oldest := 0, -1
+		for i, f := range n.focus {
+			if _, h := n.hidden[f.id]; h {
+				continue
+			}
+			live++
+			if oldest < 0 {
+				oldest = i
+			}
 		}
-		n.focus = slices.Delete(n.focus, 0, 1)
+		if live >= o.MaxFocusNodes {
+			if o.NoAutoUnfocus {
+				return false
+			}
+			n.focus = slices.Delete(n.focus, oldest, oldest+1)
+		}
 	}
 	n.focus = append(n.focus, focusEntry{id: id, relevance: relevance})
 	return true
@@ -499,15 +549,14 @@ func (n *Navigator) ClearFocus() {
 	n.touchState()
 }
 
-// FocusNodes yields the focus list, oldest first.
-func (n *Navigator) FocusNodes() iter.Seq[uint64] {
-	return func(yield func(uint64) bool) {
-		for _, f := range n.focus {
-			if !yield(f.id) {
-				return
-			}
-		}
+// FocusNodes returns the focus list, oldest first, hidden entries
+// included. The slice is the navigator's and valid until the next call.
+func (n *Navigator) FocusNodes() []uint64 {
+	n.focusOut = n.focusOut[:0]
+	for _, f := range n.focus {
+		n.focusOut = append(n.focusOut, f.id)
 	}
+	return n.focusOut
 }
 
 // IsFocused reports whether the node is on the focus list.
@@ -537,10 +586,31 @@ func (n *Navigator) Apply(ev graphview.Event) {
 // --- derived ----------------------------------------------------------
 
 // Declare returns the visible nodes and the edges between them, in
-// universe order, styled by Options.Style. The slices are the navigator's
-// and valid until the next call that changes the universe or the state.
+// universe order. The walk behind them is cached until the universe, the
+// state or the options change; the node specs are copied and passed
+// through Options.Style on every call, so a hook that reads outside state
+// is current each frame. The slices are the navigator's and valid until
+// the next Declare.
 func (n *Navigator) Declare() (nodes []graphview.NodeSpec, edges []graphview.EdgeSpec) {
 	n.ensureDerived()
+	style := n.Opts.Style
+	n.declNodes = n.declNodes[:0]
+	for s := range n.ids {
+		if !n.visible[s] {
+			continue
+		}
+		spec := n.specs[s]
+		if style != nil {
+			style(n.ids[s], NodeInfo{
+				Relevance:        n.relevance[s],
+				Depth:            int(n.depth[s]),
+				HiddenNeighbours: int(n.hiddenNb[s]),
+				Stub:             n.stub[s],
+				Focused:          n.IsFocused(n.ids[s]),
+			}, &spec)
+		}
+		n.declNodes = append(n.declNodes, spec)
+	}
 	return n.declNodes, n.declEdges
 }
 
@@ -589,32 +659,25 @@ func (n *Navigator) HiddenNeighbours(id uint64) int {
 	if !ok || !n.visible[s] {
 		return 0
 	}
-	count := 0
-	lastTo := int32(-1)
-	for a := n.adjStart[s]; a < n.adjStart[s+1]; a++ {
-		to := n.adjTo[a]
-		if to == lastTo {
-			continue // parallel edges count the neighbour once
-		}
-		lastTo = to
-		if !n.visible[to] {
-			count++
-		}
-	}
-	return count
+	return int(n.hiddenNb[s])
 }
 
+// ensureDerived derives when the universe, the state or the options moved
+// since the last derivation. The validity is published before derive
+// returns its last pass, so an accessor called from inside a hook reads a
+// finished walk rather than deriving again.
 func (n *Navigator) ensureDerived() {
 	k := n.Opts.key()
 	if n.derivedOk && n.derivedU == n.uVer && n.derivedS == n.sVer && n.derivedOpts == k {
 		return
 	}
-	n.derive()
 	n.derivedOk, n.derivedU, n.derivedS, n.derivedOpts = true, n.uVer, n.sVer, k
+	n.derive()
 }
 
-// derive computes the visible set, relevance and depth from the universe
-// and the state (§SD2), then the declaration and the pending list.
+// derive computes the visible set, relevance, depth and hidden-neighbour
+// counts from the universe and the state (§SD2), then the visible edges
+// and the pending list.
 func (n *Navigator) derive() {
 	n.ensureAdjacency()
 	o := n.Opts.withDefaults()
@@ -622,9 +685,11 @@ func (n *Navigator) derive() {
 	n.visible = growTo(n.visible, cnt)
 	n.relevance = growTo(n.relevance, cnt)
 	n.depth = growTo(n.depth, cnt)
+	n.hiddenNb = growTo(n.hiddenNb, cnt)
 	n.stamp = growTo(n.stamp, cnt)
 	clear(n.visible)
 	clear(n.relevance)
+	clear(n.hiddenNb)
 	for i := range n.depth {
 		n.depth[i] = -1
 	}
@@ -668,7 +733,7 @@ func (n *Navigator) derive() {
 				if k == len(n.focus)-1 {
 					radius = o.FocusRadius
 				}
-				n.walk(s, radius, DirBoth, f.relevance, o.RelevanceDecay, reach, isHidden)
+				n.walk(s, 0, radius, DirectionBoth, f.relevance, o.RelevanceDecay, reach, isHidden)
 			}
 		} else {
 			// Expansions take effect while their node is visible, which
@@ -687,7 +752,7 @@ func (n *Navigator) derive() {
 						continue
 					}
 					e := n.expanded[id]
-					n.walk(s, e.depth, e.dir, 1, 1, reach, isHidden)
+					n.walk(s, n.depth[s], e.depth, e.dir, 1, 1, reach, isHidden)
 					done[i] = true
 					progressed = true
 				}
@@ -695,18 +760,25 @@ func (n *Navigator) derive() {
 		}
 	}
 
-	// Declaration in universe order; edges with both ends visible.
-	n.declNodes = n.declNodes[:0]
+	// Hidden-neighbour counts: parallel edges count a neighbour once,
+	// which the id-ordered adjacency makes a run check.
 	for s := range n.ids {
 		if !n.visible[s] {
 			continue
 		}
-		spec := n.specs[s]
-		if o.Style != nil {
-			o.Style(n.ids[s], n.relevance[s], int(n.depth[s]), &spec)
+		lastTo := int32(-1)
+		for a := n.adjStart[s]; a < n.adjStart[s+1]; a++ {
+			to := n.adjTo[a]
+			if to == lastTo {
+				continue
+			}
+			lastTo = to
+			if !n.visible[to] {
+				n.hiddenNb[s]++
+			}
 		}
-		n.declNodes = append(n.declNodes, spec)
 	}
+	// Edges with both ends visible.
 	n.declEdges = n.declEdges[:0]
 	for i := range n.edges {
 		e := &n.edges[i]
@@ -721,9 +793,11 @@ func (n *Navigator) derive() {
 
 // walk is one breadth-first expansion from start to at most depth hops,
 // following edges per dir and never entering a hidden node. Every node
-// reached is made visible at relevance rel·decay^hops. A stub with hops
-// left, the start included, goes on the pending list.
-func (n *Navigator) walk(start int32, depth int, dir Direction, rel, decay float32,
+// reached is made visible at relevance rel·decay^hops and at depth
+// startDepth plus its hops — a focus node starts at 0, an expanded node
+// at the depth it already has. A stub with hops left, the start included,
+// goes on the pending list.
+func (n *Navigator) walk(start, startDepth int32, depth int, dir DirectionE, rel, decay float32,
 	reach func(s int32, d int32, rel float32), isHidden func(s int32) bool) {
 	n.stampCur++
 	if n.stampCur == 0 {
@@ -733,7 +807,7 @@ func (n *Navigator) walk(start int32, depth int, dir Direction, rel, decay float
 	n.queue = append(n.queue[:0], start)
 	n.hops = append(n.hops[:0], 0)
 	n.stamp[start] = n.stampCur
-	reach(start, 0, rel)
+	reach(start, startDepth, rel)
 	if n.stub[start] && depth > 0 {
 		n.addPending(n.ids[start])
 	}
@@ -747,11 +821,11 @@ func (n *Navigator) walk(start int32, depth int, dir Direction, rel, decay float
 		for a := n.adjStart[s]; a < n.adjStart[s+1]; a++ {
 			to := n.adjTo[a]
 			switch dir {
-			case DirOut:
+			case DirectionOut:
 				if !n.adjOut[a] {
 					continue
 				}
-			case DirIn:
+			case DirectionIn:
 				if n.adjOut[a] {
 					continue
 				}
@@ -763,7 +837,7 @@ func (n *Navigator) walk(start int32, depth int, dir Direction, rel, decay float
 				continue
 			}
 			n.stamp[to] = n.stampCur
-			reach(to, d+1, f)
+			reach(to, startDepth+d+1, f)
 			if n.stub[to] && int(d)+1 < depth {
 				n.addPending(n.ids[to])
 			}

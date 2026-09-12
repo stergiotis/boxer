@@ -54,28 +54,28 @@ func TestManualExpandAndCollapseAreInverses(t *testing.T) {
 	require.True(t, n.Show(1))
 	require.False(t, n.Show(99))
 	require.Equal(t, []uint64{1}, visible(n))
-	require.True(t, n.Expand(1, 1, DirBoth))
+	require.True(t, n.Expand(1, 1, DirectionBoth))
 	require.Equal(t, []uint64{1, 2, 8}, visible(n))
-	n.Expand(2, 2, DirBoth)
+	n.Expand(2, 2, DirectionBoth)
 	require.Equal(t, []uint64{1, 2, 3, 4, 7, 8}, visible(n))
-	require.Equal(t, 2, n.Depth(4), "hops from the nearest root")
+	require.Equal(t, 3, n.Depth(4), "hops from the nearest root, 1, through the chained expansions")
 	require.Equal(t, float32(1), n.Relevance(4))
 	require.True(t, n.Collapse(2))
 	require.Equal(t, []uint64{1, 2, 8}, visible(n), "what only 2 revealed is gone")
 	require.False(t, n.Collapse(2))
 	n.Collapse(1)
 	require.Equal(t, []uint64{1}, visible(n))
-	require.False(t, n.Expand(99, 1, DirBoth))
+	require.False(t, n.Expand(99, 1, DirectionBoth))
 }
 
 func TestManualDirectionAndHiddenWall(t *testing.T) {
 	n := chain(Options{Mode: ModeManual})
 	n.Show(1)
-	n.Expand(1, 1, DirOut)
+	n.Expand(1, 1, DirectionOut)
 	require.Equal(t, []uint64{1, 2}, visible(n), "out follows 1→2 only")
-	n.Expand(1, 1, DirIn)
+	n.Expand(1, 1, DirectionIn)
 	require.Equal(t, []uint64{1, 8}, visible(n), "in follows 8→1 only, replacing the earlier expansion")
-	n.Expand(1, 4, DirBoth)
+	n.Expand(1, 4, DirectionBoth)
 	require.Equal(t, []uint64{1, 2, 3, 4, 5, 7, 8}, visible(n))
 	n.Hide(3)
 	require.Equal(t, []uint64{1, 2, 8}, visible(n), "a hidden node is a wall")
@@ -92,9 +92,9 @@ func TestManualExpansionsChainRegardlessOfOrder(t *testing.T) {
 	// 3's expansion applies once 1's makes 3 visible, whatever the map order.
 	n := chain(Options{Mode: ModeManual})
 	n.Show(1)
-	n.Expand(3, 1, DirBoth)
+	n.Expand(3, 1, DirectionBoth)
 	require.Equal(t, []uint64{1}, visible(n), "an expansion of a node not shown waits")
-	n.Expand(1, 2, DirBoth)
+	n.Expand(1, 2, DirectionBoth)
 	require.Equal(t, []uint64{1, 2, 3, 4, 7, 8}, visible(n))
 }
 
@@ -111,25 +111,25 @@ func TestFocusModeRadiusRelevanceAndList(t *testing.T) {
 
 	n.Focus(4, 0)
 	require.Equal(t, []uint64{1, 2, 3, 4, 5, 6, 7, 8}, visible(n), "1 at the tail radius keeps 2 and 8; 4 reaches 2..7")
-	require.Equal(t, []uint64{1, 4}, slices.Collect(n.FocusNodes()))
+	require.Equal(t, []uint64{1, 4}, n.FocusNodes())
 	require.Equal(t, float32(0.5), n.Relevance(3), "the larger of the two focus contributions")
 	require.Equal(t, float32(0.5), n.Relevance(2))
 
 	n.Focus(6, 0)
-	require.Equal(t, []uint64{4, 6}, slices.Collect(n.FocusNodes()), "the oldest was unfocused")
+	require.Equal(t, []uint64{4, 6}, n.FocusNodes(), "the oldest was unfocused")
 	require.Equal(t, []uint64{3, 4, 5, 6}, visible(n))
 	n.Focus(4, 0)
-	require.Equal(t, []uint64{6, 4}, slices.Collect(n.FocusNodes()), "refocusing moves to the end")
+	require.Equal(t, []uint64{6, 4}, n.FocusNodes(), "refocusing moves to the end")
 	require.True(t, n.IsFocused(4))
 	n.Unfocus(6)
-	require.Equal(t, []uint64{4}, slices.Collect(n.FocusNodes()))
+	require.Equal(t, []uint64{4}, n.FocusNodes())
 	n.ClearFocus()
 	require.Empty(t, visible(n))
 
 	strict := chain(Options{Mode: ModeFocus, MaxFocusNodes: 1, NoAutoUnfocus: true})
 	require.True(t, strict.Focus(1, 0))
 	require.False(t, strict.Focus(2, 0), "refused rather than unfocusing")
-	require.Equal(t, []uint64{1}, slices.Collect(strict.FocusNodes()))
+	require.Equal(t, []uint64{1}, strict.FocusNodes())
 }
 
 func TestFocusModeRootsAndHiddenCompose(t *testing.T) {
@@ -169,15 +169,18 @@ func TestStubsReachThePendingListAndLeaveItWhenLoaded(t *testing.T) {
 	m.AddNodes([]Node{{Spec: graphview.NodeSpec{Id: 9}, Stub: true}})
 	m.Show(9)
 	require.Empty(t, m.Pending())
-	m.Expand(9, 1, DirBoth)
+	m.Expand(9, 1, DirectionBoth)
 	require.Equal(t, []uint64{9}, m.Pending())
 }
 
 func TestDeclareIsCachedOrderedAndStyled(t *testing.T) {
 	styled := map[uint64][2]float32{}
-	n := chain(Options{Mode: ModeFocus, FocusRadius: 1, Style: func(id uint64, rel float32, depth int, spec *graphview.NodeSpec) {
-		styled[id] = [2]float32{rel, float32(depth)}
-		spec.Radius = 10 * rel
+	n := chain(Options{Mode: ModeFocus, FocusRadius: 1, Style: func(id uint64, info NodeInfo, spec *graphview.NodeSpec) {
+		styled[id] = [2]float32{info.Relevance, float32(info.Depth)}
+		spec.Radius = 10 * info.Relevance
+		if info.HiddenNeighbours > 0 {
+			spec.Label = "+"
+		}
 	}})
 	n.Focus(1, 0)
 	ns, es := n.Declare()
@@ -186,11 +189,86 @@ func TestDeclareIsCachedOrderedAndStyled(t *testing.T) {
 	require.Equal(t, float32(5), ns[1].Radius, "the hook edited the declared spec")
 	require.Equal(t, [2]float32{0.5, 1}, styled[2])
 	require.Len(t, es, 2, "edges with both ends visible: 1→2 and 8→1")
+	require.Equal(t, "+", ns[1].Label, "node 2 has 3 unseen; the count came with the facts")
+	require.Equal(t, "", ns[2].Label, "node 8 has none")
 	ns2, _ := n.Declare()
 	require.Same(t, &ns[0], &ns2[0], "nothing changed: the same backing array")
 	n.Opts.FocusRadius = 2
 	ns3, _ := n.Declare()
 	require.Len(t, ns3, 4, "an option change derives afresh: 3 joins at two hops")
+
+	// A swapped hook is applied on the next Declare without any change.
+	n.Opts.Style = func(id uint64, info NodeInfo, spec *graphview.NodeSpec) { spec.Label = "swapped" }
+	ns4, _ := n.Declare()
+	require.Equal(t, "swapped", ns4[0].Label)
+
+	// A hook that reads the navigator back does not re-enter the walk.
+	n.Opts.Style = func(id uint64, info NodeInfo, spec *graphview.NodeSpec) {
+		require.Equal(t, info.HiddenNeighbours, n.HiddenNeighbours(id))
+		require.True(t, n.Visible(id))
+		require.Equal(t, info.Depth, n.Depth(id))
+	}
+	n.Opts.FocusRadius = 1
+	n.Declare()
+}
+
+func TestExpansionDepthContinuesFromTheNode(t *testing.T) {
+	n := chain(Options{Mode: ModeManual})
+	n.Show(1)
+	n.Expand(1, 2, DirectionBoth)
+	require.Equal(t, 2, n.Depth(3))
+	n.Expand(3, 1, DirectionBoth)
+	require.Equal(t, 2, n.Depth(3), "an expanded node keeps its depth")
+	require.Equal(t, 3, n.Depth(4), "and what it reveals counts from there")
+	require.Equal(t, 3, n.Depth(7))
+}
+
+func TestHiddenFocusEntriesDoNotCountAgainstTheBound(t *testing.T) {
+	n := chain(Options{Mode: ModeFocus, FocusRadius: 1, MaxFocusNodes: 3})
+	n.Focus(1, 0)
+	n.Focus(3, 0)
+	n.Focus(7, 0)
+	n.Hide(7)
+	require.Equal(t, []uint64{1, 3, 7}, n.FocusNodes(), "hidden entries stay listed")
+	n.Focus(5, 0)
+	require.Equal(t, []uint64{1, 3, 7, 5}, n.FocusNodes(), "the hidden entry made room; no live focus was evicted")
+	n.Focus(6, 0)
+	require.Equal(t, []uint64{3, 7, 5, 6}, n.FocusNodes(), "past the bound the oldest live entry goes, not the hidden one")
+	n.Show(7)
+	require.Equal(t, []uint64{3, 7, 5, 6}, n.FocusNodes())
+	n.Focus(2, 0)
+	require.Equal(t, []uint64{7, 5, 6, 2}, n.FocusNodes(), "shown again, 7 counts and 3 is the oldest live")
+}
+
+func TestResetFocusesTheInitialNodesUnderTheBound(t *testing.T) {
+	n := chain(Options{Mode: ModeFocus, FocusRadius: 1, MaxFocusNodes: 2})
+	n.SetInitial([]uint64{1, 2, 3})
+	n.Reset()
+	require.Equal(t, []uint64{2, 3}, n.FocusNodes(), "the earliest was unfocused again")
+	require.Equal(t, []uint64{1, 2, 3, 4, 7}, visible(n), "1 stays a root")
+	strict := chain(Options{Mode: ModeFocus, FocusRadius: 1, MaxFocusNodes: 2, NoAutoUnfocus: true})
+	strict.SetInitial([]uint64{1, 2, 3})
+	strict.Reset()
+	require.Equal(t, []uint64{1, 2}, strict.FocusNodes(), "the latest was never focused")
+}
+
+func TestEdgeIndexFollowsRemovals(t *testing.T) {
+	n := chain(Options{Mode: ModeShowAll})
+	require.Equal(t, 7, n.EdgeCount())
+	n.RemoveEdges([]graphview.EdgeRef{{From: 1, To: 2}, {From: 9, To: 9}})
+	require.Equal(t, 6, n.EdgeCount())
+	_, es := n.Declare()
+	require.Len(t, es, 6)
+	for _, e := range es {
+		require.False(t, e.From == 1 && e.To == 2)
+	}
+	// The swapped-in edge is still found by its ref.
+	n.AddEdges([]graphview.EdgeSpec{{From: 8, To: 1, Label: "again"}})
+	require.Equal(t, 6, n.EdgeCount(), "replaced, not appended")
+	n.RemoveNodes([]uint64{3, 5})
+	require.Equal(t, 1, n.EdgeCount(), "1→2 was removed earlier; 3 and 5 took five edges; 8→1 remains")
+	n.AddEdges([]graphview.EdgeSpec{{From: 8, To: 1, Label: "third"}})
+	require.Equal(t, 1, n.EdgeCount())
 }
 
 func TestApplyGestures(t *testing.T) {
@@ -207,7 +285,7 @@ func TestApplyGestures(t *testing.T) {
 
 	f := chain(Options{Mode: ModeFocus})
 	f.Apply(dbl)
-	require.Equal(t, []uint64{1}, slices.Collect(f.FocusNodes()))
+	require.Equal(t, []uint64{1}, f.FocusNodes())
 	a := chain(Options{Mode: ModeShowAll})
 	a.Apply(dbl)
 	require.Len(t, visible(a), 8, "show-all shows everything and ignores the gesture")
@@ -218,7 +296,7 @@ func TestUniverseEditsAndReset(t *testing.T) {
 	n.SetInitial([]uint64{1, 3})
 	n.Reset()
 	require.Equal(t, []uint64{1, 3}, visible(n))
-	n.Expand(3, 1, DirBoth)
+	n.Expand(3, 1, DirectionBoth)
 	require.Equal(t, []uint64{1, 2, 3, 4, 7}, visible(n))
 	n.RemoveNodes([]uint64{4})
 	require.False(t, n.Known(4))
@@ -235,7 +313,7 @@ func TestUniverseEditsAndReset(t *testing.T) {
 	f := chain(Options{Mode: ModeFocus, FocusRadius: 1})
 	f.SetInitial([]uint64{6})
 	f.Reset()
-	require.Equal(t, []uint64{6}, slices.Collect(f.FocusNodes()), "focus mode focuses the initial nodes")
+	require.Equal(t, []uint64{6}, f.FocusNodes(), "focus mode focuses the initial nodes")
 	require.Equal(t, []uint64{5, 6}, visible(f))
 	f.Clear()
 	require.Equal(t, 0, f.NodeCount())
@@ -248,7 +326,7 @@ func TestParallelEdgesAndSelfLoops(t *testing.T) {
 	n.AddEdges([]graphview.EdgeSpec{{From: 1, To: 2, Id: 1}, {From: 1, To: 2, Id: 2}, {From: 1, To: 1}})
 	n.Show(1)
 	require.Equal(t, 1, n.HiddenNeighbours(1), "two parallel edges, one neighbour; the loop is none")
-	n.Expand(1, 1, DirBoth)
+	n.Expand(1, 1, DirectionBoth)
 	_, es := n.Declare()
 	require.Len(t, es, 3)
 	n.AddEdges([]graphview.EdgeSpec{{From: 1, To: 2, Id: 2, Label: "replaced"}})
@@ -263,7 +341,7 @@ func TestParallelEdgesAndSelfLoops(t *testing.T) {
 func TestGesturesKeepTheInvariants(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		cnt := rapid.IntRange(1, 12).Draw(rt, "n")
-		mode := Mode(rapid.IntRange(1, 2).Draw(rt, "mode"))
+		mode := ModeE(rapid.IntRange(1, 2).Draw(rt, "mode"))
 		n := New(Options{Mode: mode, FocusRadius: rapid.IntRange(1, 3).Draw(rt, "radius"), MaxFocusNodes: rapid.IntRange(1, 3).Draw(rt, "max")})
 		nl := make([]Node, 0, cnt)
 		for i := 1; i <= cnt; i++ {
@@ -285,7 +363,7 @@ func TestGesturesKeepTheInvariants(t *testing.T) {
 			case 1:
 				n.Hide(id)
 			case 2:
-				n.Expand(id, rapid.IntRange(1, 3).Draw(rt, "d"), Direction(rapid.IntRange(0, 2).Draw(rt, "dir")))
+				n.Expand(id, rapid.IntRange(1, 3).Draw(rt, "d"), DirectionE(rapid.IntRange(0, 2).Draw(rt, "dir")))
 			case 3:
 				n.Collapse(id)
 			case 4:
@@ -297,7 +375,7 @@ func TestGesturesKeepTheInvariants(t *testing.T) {
 		before := visible(n)
 		x := uint64(rapid.IntRange(1, cnt).Draw(rt, "x"))
 		if !n.Expanded(x) {
-			n.Expand(x, rapid.IntRange(1, 3).Draw(rt, "xd"), DirBoth)
+			n.Expand(x, rapid.IntRange(1, 3).Draw(rt, "xd"), DirectionBoth)
 			n.Collapse(x)
 			require.Equal(rt, before, visible(n), "expand then collapse is the identity")
 		}

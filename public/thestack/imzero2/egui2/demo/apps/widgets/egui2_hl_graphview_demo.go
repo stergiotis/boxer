@@ -60,7 +60,6 @@ type graphviewDemoState struct {
 	exploreRadius float64
 	exploreSpecs  map[uint64]graphview.NodeSpec   // every node's spec, for loading a stub
 	exploreHeld   map[uint64][]graphview.EdgeSpec // a stub's own edges, withheld until loaded
-	exploreNodes  []graphview.NodeSpec            // the declaration with badge labels
 	exploreCentre []uint64
 
 	labelsAlways bool
@@ -169,14 +168,17 @@ func (st *graphviewDemoState) buildExploreUniverse() {
 	base := styletokens.InfoDefault.AsHex()
 	focused := styletokens.WarningDefault.AsHex()
 	st.nv = nav.New(nav.Options{
-		Style: func(id uint64, rel float32, depth int, spec *graphview.NodeSpec) {
-			alpha := uint32(0x50 + 0xaf*rel)
+		Style: func(id uint64, info nav.NodeInfo, spec *graphview.NodeSpec) {
+			alpha := uint32(0x50 + 0xaf*info.Relevance)
 			col := base
-			if st.nv.IsFocused(id) {
+			if info.Focused {
 				col = focused
 			}
 			spec.Color = color.Hex(col&^0xff | alpha)
-			spec.Radius = 4 + 5*rel
+			spec.Radius = 4 + 5*info.Relevance
+			if info.HiddenNeighbours > 0 {
+				spec.Label = fmt.Sprintf("%s +%d", spec.Label, info.HiddenNeighbours)
+			}
 		},
 	})
 	isStub := func(id uint64) bool { return id%9 == 0 }
@@ -235,22 +237,17 @@ func demoGraphviewExplore(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	}
 	st.applyExploreMode()
 
-	// The load: answer last frame's wanted stubs with their own edges.
-	for _, id := range st.nv.Pending() {
+	// The load: every stub wanted last frame becomes loaded, with its own
+	// edges when it has any.
+	for _, id := range slices.Clone(st.nv.Pending()) {
+		st.nv.AddNodes([]nav.Node{{Spec: st.exploreSpecs[id]}})
 		if held, ok := st.exploreHeld[id]; ok {
-			st.nv.AddNodes([]nav.Node{{Spec: st.exploreSpecs[id]}})
 			st.nv.AddEdges(held)
 			delete(st.exploreHeld, id)
 		}
 	}
 
 	ns, es := st.nv.Declare()
-	st.exploreNodes = append(st.exploreNodes[:0], ns...)
-	for i := range st.exploreNodes {
-		if k := st.nv.HiddenNeighbours(st.exploreNodes[i].Id); k > 0 {
-			st.exploreNodes[i].Label = fmt.Sprintf("%s +%d", st.exploreNodes[i].Label, k)
-		}
-	}
 	o := &st.explore.Opts
 	o.Layout = graphview.LayoutForceDirectedCG
 	if st.exploreRadial {
@@ -258,21 +255,19 @@ func demoGraphviewExplore(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	}
 	st.exploreCentre = st.exploreCentre[:0]
 	if st.exploreFocus {
-		st.exploreCentre = slices.AppendSeq(st.exploreCentre, st.nv.FocusNodes())
+		st.exploreCentre = append(st.exploreCentre, st.nv.FocusNodes()...)
 	} else {
 		st.exploreCentre = append(st.exploreCentre, 1)
 	}
 	o.Radial.Centers = st.exploreCentre
-	o.LabelsAlways = st.labelsAlways
-	st.explore.Render(st.exploreNodes, es, demoGraphviewWidth(ids, "gv-explore-pane"), 420)
+	st.explore.Render(ns, es, demoGraphviewWidth(ids, "gv-explore-pane"), 420)
 	for _, ev := range st.explore.Events() {
 		st.nv.Apply(ev)
 		if ev.Kind == graphview.EventKindNodeSecondaryClick {
 			st.nv.Hide(ev.Node)
 		}
 	}
-	focus := slices.Collect(st.nv.FocusNodes())
-	c.Label(fmt.Sprintf("visible=%d of %d · focus=%v · wanted stubs=%d", len(ns), st.nv.NodeCount(), focus, len(st.nv.Pending()))).Send()
+	c.Label(fmt.Sprintf("visible=%d of %d · focus=%v · wanted stubs=%d", len(ns), st.nv.NodeCount(), st.nv.FocusNodes(), len(st.nv.Pending()))).Send()
 }
 
 // rebuildForceGraph regenerates the force demo's binary tree at the chosen
@@ -328,21 +323,26 @@ func demoGraphviewWidth(ids *c.WidgetIdStack, key string) float32 {
 
 func demoGraphviewNav(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	if c.Button(ids.PrepareStr("gv-fit-now"), c.Atoms().Text("fit now (all graphs)").Keep()).SendResp().HasPrimaryClicked() {
-		st.ring.FitNow()
-		st.force.FitNow()
-		st.hier.FitNow()
+		for _, v := range st.views() {
+			v.FitNow()
+		}
 	}
 	if c.Button(ids.PrepareStr("gv-fit-sel"), c.Atoms().Text("fit to selection (all graphs)").Keep()).SendResp().HasPrimaryClicked() {
-		for _, v := range []*graphview.View{st.ring, st.force, st.hier} {
+		for _, v := range st.views() {
 			v.FitNodes(slices.Collect(v.SelectedNodes()))
 		}
 	}
 	c.Checkbox(ids.PrepareStr("gv-fit-always"), st.fitAlways, "continuous fit (all graphs)").SendRespVal(&st.fitAlways)
 	c.Checkbox(ids.PrepareStr("gv-labels"), st.labelsAlways, "labels always").SendRespVal(&st.labelsAlways)
-	for _, v := range []*graphview.View{st.ring, st.force, st.hier} {
+	for _, v := range st.views() {
 		v.Opts.FitToScreen = st.fitAlways
 		v.Opts.LabelsAlways = st.labelsAlways
 	}
+}
+
+// views lists every graph the shared navigation controls reach.
+func (st *graphviewDemoState) views() []*graphview.View {
+	return []*graphview.View{st.ring, st.force, st.hier, st.explore}
 }
 
 func demoGraphviewRing(ids *c.WidgetIdStack, st *graphviewDemoState) {
@@ -445,11 +445,12 @@ func demoGraphviewHier(ids *c.WidgetIdStack, st *graphviewDemoState) {
 func demoGraphviewEventLog(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	c.Separator().Send()
 	c.Checkbox(ids.PrepareStr("gv-show-hover"), st.showHover, "show hover enter/leave events").SendRespVal(&st.showHover)
-	views := []struct {
-		name string
-		v    *graphview.View
-	}{{"ring", st.ring}, {"force", st.force}, {"hier", st.hier}, {"explore", st.explore}}
-	for _, e := range views {
+	names := []string{"ring", "force", "hier", "explore"}
+	for i, v := range st.views() {
+		e := struct {
+			name string
+			v    *graphview.View
+		}{names[i], v}
 		for id := range e.v.SelectedNodes() {
 			c.Label(fmt.Sprintf("  selected node=%d  graph=%s", id, e.name)).Send()
 		}

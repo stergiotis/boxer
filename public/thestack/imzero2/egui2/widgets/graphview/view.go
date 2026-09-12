@@ -32,6 +32,7 @@ type View struct {
 	lastHier     HierParams
 	radialDone   bool
 	lastRadial   RadialParams
+	lastLayout   LayoutE // a switch between layouts re-runs a static one
 	everHadNodes bool
 	fitPending   bool
 	fitFrames    uint32
@@ -580,13 +581,15 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 				placeRandom(&v.g, created)
 			}
 		}
-		if v.Opts.Layout == LayoutHierarchical && (topoChanged || !v.hierDone || len(created) > 0 || hp != v.lastHier) {
+		layoutChanged := v.Opts.Layout != v.lastLayout
+		v.lastLayout = v.Opts.Layout
+		if v.Opts.Layout == LayoutHierarchical && (topoChanged || layoutChanged || !v.hierDone || len(created) > 0 || hp != v.lastHier) {
 			layoutHierarchical(&v.g, hp)
 			v.hierDone = true
 			v.lastHier = hp
 			v.auraDirty = true
 		}
-		if v.Opts.Layout == LayoutRadial && (topoChanged || !v.radialDone || len(created) > 0 || !rp.equal(v.lastRadial)) {
+		if v.Opts.Layout == LayoutRadial && (topoChanged || layoutChanged || !v.radialDone || len(created) > 0 || !rp.equal(v.lastRadial)) {
 			layoutRadial(&v.g, rp)
 			v.radialDone = true
 			v.lastRadial = rp.clone()

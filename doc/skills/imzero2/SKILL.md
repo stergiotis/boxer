@@ -1658,11 +1658,13 @@ What to know before using it:
   view every frame. The visible set is derived from that state — collapse
   is the inverse of expand, hide is a wall — in three modes: show-all,
   manual, focus (a bounded focus list with a radius and a relevance that
-  decays per hop). `Opts.Style` runs per visible node with relevance and
-  depth; `HiddenNeighbours` is the "+n" badge count; `Pending` lists the
-  stubs the walk wants loaded — answer with `AddNodes` / `AddEdges`, never
-  a callback. `Apply(ev)` wires the double-click. Set
-  `Opts.Radial.Centers` to `FocusNodes()` for the focus picture.
+  decays per hop). `Opts.Style` runs per visible node on every `Declare`
+  with a `NodeInfo` — relevance, depth, the "+n" hidden-neighbour count,
+  stub, focused — so it needs no call back into the navigator; `Pending`
+  lists the stubs the walk wants loaded — answer with `AddNodes` /
+  `AddEdges`, never a callback. `Apply(ev)` wires the double-click. Set
+  `Opts.Radial.Centers` to `FocusNodes()` for the focus picture. The
+  `scenetest` package beneath graphview is the shared headless harness.
 - **Headless testing.** `Render` runs without a client under a fffi2
   channel that discards paint commands, and the state manager's `Script*`
   setters (`ScriptResponse`, `ScriptCanvasCursor`, `ScriptCanvasWheel`,

@@ -1,7 +1,6 @@
 package graphview
 
 import (
-	"iter"
 	"math"
 	"slices"
 	"testing"
@@ -9,26 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
-	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
 
-// discardChannel is a fffi2 channel with no host behind it: every paint
-// command is dropped and nothing is ever received. It is what lets Render
-// run end to end in a test, with the input registers scripted.
-type discardChannel struct{}
-
-func (discardChannel) SyncMultiUseMsg(uint64, []byte) {}
-func (discardChannel) SendSingleUseMsg([]byte)        {}
-func (discardChannel) FlushMessages()                 {}
-func (discardChannel) ReceiveMsg() iter.Seq[*runtime.Unmarshaller] {
-	return func(func(*runtime.Unmarshaller) bool) {}
-}
-
-// scene is a headless widget under a scripted state manager. The handles
-// are derived the way Render derives them, from the same id stack, so a
-// scripted register lands on the widget's own canvas and area.
+// scene is a headless widget under a scripted state manager (package
+// scenetest): the handles are the widget's own, so a scripted register
+// lands on its canvas and area.
 type scene struct {
 	t      *testing.T
 	ids    *c.WidgetIdStack
@@ -40,16 +27,10 @@ type scene struct {
 }
 
 func newScene(t *testing.T, key string, o Options, w, h float32) *scene {
-	typed.SetCurrentFffiVar(runtime.NewFffi2[*runtime.Unmarshaller](discardChannel{}))
-	sm := c.CurrentApplicationState.StateManager
-	sm.ScriptReset()
-	t.Cleanup(sm.ScriptReset)
+	t.Cleanup(scenetest.Install())
 	ids := c.NewWidgetIdStack()
-	s := &scene{t: t, ids: ids, sm: sm, w: w, h: h}
-	for range c.IdScope(ids.PrepareStr(key)) {
-		s.canvas = widgethandle.Make(ids.PrepareStr("graphview-canvas").Derive())
-		s.area = widgethandle.Make(ids.PrepareStr("graphview-area").Derive())
-	}
+	s := &scene{t: t, ids: ids, sm: c.CurrentApplicationState.StateManager, w: w, h: h}
+	s.canvas, s.area = scenetest.Handles(ids, key)
 	s.v = New(ids, key, o)
 	return s
 }
@@ -209,4 +190,31 @@ func TestSceneAurasAndLegendRender(t *testing.T) {
 	s.frame(nodes, nil)
 	require.True(t, s.v.AuraHidden("b"))
 	require.Equal(t, 1, len(s.v.legendItems)-1, "both rows are listed, the hidden one dimmed")
+}
+
+func TestSceneStaticLayoutRerunsAfterALayoutSwitch(t *testing.T) {
+	s := newScene(t, "switch", Options{Layout: LayoutRadial, Radial: RadialParams{Centers: []uint64{1}}}, 400, 300)
+	nodes := []NodeSpec{{Id: 1}, {Id: 2}, {Id: 3}}
+	edges := []EdgeSpec{{From: 1, To: 2}, {From: 1, To: 3}}
+	s.frame(nodes, edges)
+	x2, y2, _ := s.v.NodePosition(2)
+	s.v.Opts.Layout = LayoutForceDirectedCG
+	for range 5 {
+		s.frame(nodes, edges)
+	}
+	fx, fy, _ := s.v.NodePosition(2)
+	require.NotEqual(t, [2]float32{x2, y2}, [2]float32{fx, fy}, "the force step moved it")
+	s.v.Opts.Layout = LayoutRadial
+	s.frame(nodes, edges)
+	rx, ry, _ := s.v.NodePosition(2)
+	require.Equal(t, [2]float32{x2, y2}, [2]float32{rx, ry}, "back on radial, the layout re-ran with unchanged topology and centres")
+	s.v.Opts.Layout = LayoutHierarchical
+	s.frame(nodes, edges)
+	hx, hy, _ := s.v.NodePosition(2)
+	s.v.Opts.Layout = LayoutForceDirectedCG
+	s.frame(nodes, edges)
+	s.v.Opts.Layout = LayoutHierarchical
+	s.frame(nodes, edges)
+	hx2, hy2, _ := s.v.NodePosition(2)
+	require.Equal(t, [2]float32{hx, hy}, [2]float32{hx2, hy2}, "the hierarchical layout too")
 }

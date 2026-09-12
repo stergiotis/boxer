@@ -1,43 +1,26 @@
 package nav
 
 import (
-	"iter"
 	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
-	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
-
-type discardChannel struct{}
-
-func (discardChannel) SyncMultiUseMsg(uint64, []byte) {}
-func (discardChannel) SendSingleUseMsg([]byte)        {}
-func (discardChannel) FlushMessages()                 {}
-func (discardChannel) ReceiveMsg() iter.Seq[*runtime.Unmarshaller] {
-	return func(func(*runtime.Unmarshaller) bool) {}
-}
 
 // The headless scene of ADR-0224's 2026-09-12 update, driven through the
 // navigator: a double-click on a rendered node reaches Apply, the next
 // frame renders the grown declaration, and a stub at the frontier lands on
 // the pending list.
 func TestSceneDoubleClickExpandsThroughApply(t *testing.T) {
-	typed.SetCurrentFffiVar(runtime.NewFffi2[*runtime.Unmarshaller](discardChannel{}))
+	t.Cleanup(scenetest.Install())
 	sm := c.CurrentApplicationState.StateManager
-	sm.ScriptReset()
-	t.Cleanup(sm.ScriptReset)
 	ids := c.NewWidgetIdStack()
-	var canvas, area widgethandle.WidgetHandle
-	for range c.IdScope(ids.PrepareStr("nav")) {
-		canvas = widgethandle.Make(ids.PrepareStr("graphview-canvas").Derive())
-		area = widgethandle.Make(ids.PrepareStr("graphview-area").Derive())
-	}
+	canvas, area := scenetest.Handles(ids, "nav")
 	gv := graphview.New(ids, "nav", graphview.Options{Layout: graphview.LayoutRadial, NodeClicking: true})
 
 	nv := New(Options{Mode: ModeManual, ExpandDepth: 3})
