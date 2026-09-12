@@ -1795,6 +1795,17 @@ What to know before using it:
 - **Determinism.** Random placement hashes the node id, so a demo captures
   stably; the force step is deterministic too because every row is summed by
   one goroutine in a fixed order.
+- **Soft pins** (ADR-0224 §SD16). `NodeSpec.Pull{X, Y, StrengthX, StrengthY}`
+  draws a node toward a place without holding it: the force step adds
+  `(target − position) · strength` per axis, the same term `CenterGravity`
+  applies to every node at the canvas centre, so strengths read on that
+  knob's scale (0.3-ish). Zero strength on an axis pulls nothing there —
+  pull on X alone to hold a column and let the layout settle Y, which is how
+  a level is expressed without placing the node. It is a spring: the node
+  rests *near* the target, and `Pinned` is what exactly-at means (a pinned or
+  dragged node ignores its Pull). With no pull declared the pass is skipped,
+  so an unpulled layout is bit-identical. A ring target is not this shape —
+  recompute it from `NodePosition` per frame, or use `LayoutRadial`.
 - **Pins.** `NodeSpec.Pinned` with `PinX/PinY` fixes a node in world units
   every frame (ADR-0224 §SD10); the force step leaves it alone and a drag
   moves it for the gesture only — `NodeDragEnd` carries the drop position

@@ -79,6 +79,19 @@ func (fs *forceState) step(g *graph, w, h float32, p ForceParams, centerGravity 
 			fs.dy[i] += (cy - g.y[i]) * centerGravity
 		}
 	}
+	// Soft pins: the same term as centre gravity above, per node and per axis
+	// (ADR-0224 §SD16). Skipped whole when nothing declared one.
+	if g.anyPull {
+		for i := 0; i < n; i++ {
+			pl := g.pull[i]
+			if pl.StrengthX != 0 {
+				fs.dx[i] += (pl.X - g.x[i]) * pl.StrengthX
+			}
+			if pl.StrengthY != 0 {
+				fs.dy[i] += (pl.Y - g.y[i]) * pl.StrengthY
+			}
+		}
+	}
 	fs.lastDisp = applyDisplacements(g, fs.dx, fs.dy, p.Dt, p.Damping, p.MaxStep)
 	fs.steps++
 }

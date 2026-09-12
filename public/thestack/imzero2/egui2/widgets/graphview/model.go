@@ -187,7 +187,34 @@ type NodeSpec struct {
 	// asked. Set it with Opacity for the dimmed-and-inert pair, or alone for
 	// a node that is scaffolding rather than content.
 	NoPick bool
+	// Pull draws the node toward a place in the force layout without holding
+	// it there (ADR-0224 §SD16); the zero value pulls nothing.
+	Pull Pull
 }
+
+// Pull is a soft pin: a target the force step draws a node toward, with a
+// strength per axis (ADR-0224 §SD16). It is the same term ForceParams'
+// CenterGravity applies to every node at the canvas centre, made per node and
+// per axis — `displacement += (target − position) · strength`, before the
+// step's Dt, Damping and MaxStep — so a strength reads on the same scale as
+// CenterGravity's 0.3 rather than on a new one.
+//
+// A zero strength on an axis pulls nothing there, which is the point of
+// having two: pulling on X alone holds a node near a column and leaves the
+// layout free to settle it vertically, which is how a level is expressed
+// without making it a placement. The pull is a spring, not a pin: the node
+// rests where the pull balances the other forces, near the target rather than
+// on it. For exactly at, declare NodeSpec.Pinned, which the force step skips
+// altogether — a pinned or dragged node ignores its Pull.
+//
+// The static layouts ignore it, as they ignore every other force parameter.
+type Pull struct {
+	X, Y                 float32 // target, in world units
+	StrengthX, StrengthY float32 // 0 pulls nothing on that axis
+}
+
+// IsZero reports whether the pull draws nothing.
+func (inst Pull) IsZero() bool { return inst.StrengthX == 0 && inst.StrengthY == 0 }
 
 // EdgeSpec is one directed edge of the frame's declaration. Parallel edges
 // between the same ordered pair are drawn as curves of increasing bulge; a

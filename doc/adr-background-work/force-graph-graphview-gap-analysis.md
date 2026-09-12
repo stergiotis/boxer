@@ -120,8 +120,8 @@ mapping is exact.
 | `d3Force('charge')` — `strength` per node (default −30), `theta` (0.9), `distanceMin` (1), `distanceMax` (∞) | `CRepulse` global, `Theta` (default 0.9), `Epsilon` doubles as the minimum distance in the repulsion clamp | ≈ | Theta matches exactly. Per-node strength is the vis-network §2 `mass` row. `distanceMax` — a locality cutoff that also bounds the exact pair sum — is small. Worth a look on its own: the repulsion's minimum distance is the settle threshold `Epsilon` (1e-3), so two coincident nodes see a force `k²/1e-6` that only `MaxStep` tames; d3 keeps the two knobs apart. |
 | `d3Force('center')` — `x`, `y`, `strength` (a translation of the mean, default 1) | `CenterGravity` pulls every node toward the canvas centre (`LayoutForceDirectedCG`) | ≈ | d3's centre force shifts the whole layout so its mean sits at the centre; graphview's is a per-node spring, closer to `forceX` + `forceY` at one point. Same job for a connected graph; for disconnected components graphview's also packs them, which is the NetChart §3 gravity row. |
 | `forceCollide` — `radius` per node, `strength`, `iterations` | — | **gap** | Confirms NetChart §3 radius-aware spacing and vis-network §4 `avoidOverlap`. d3's shape — a separate pass after the forces, with its own iteration count — is the one to copy: it leaves the FR step alone. |
-| `forceX` / `forceY` — target per node, `strength` per node (default 0.1) | `Pinned` (infinite strength, both axes) | **gap** | The most reusable missing primitive on the force side: a **soft pin** — per-node target `(x, y)` with a per-axis strength. It generalises `Pinned`, the vis-network §2 per-axis pin and §4 wind, and it is how force-graph implements `dagMode` (§ below). Small in the step. |
-| `forceRadial` — `radius` per node, centre `x`, `y`, `strength` | — | **gap** | The force form of NetChart §3 radial layout: a ring per hop distance, nodes settle around it. Small once the soft pin exists (a radial target is the polar twin). |
+| `forceX` / `forceY` — target per node, `strength` per node (default 0.1) | `NodeSpec.Pull{X, Y, StrengthX, StrengthY}` | ✓ | Closed by ADR-0224 §SD16, and it turned out to be the term `CenterGravity` already applied to every node at the canvas centre, made per node and per axis. Two of the four rows it was said to carry did not follow: wind is a constant bias rather than a spring, and an exact per-axis pin needs a per-axis `fixed`. |
+| `forceRadial` — `radius` per node, centre `x`, `y`, `strength` | `Pull` toward the nearest point on the ring, recomputed from `NodePosition` each frame | ≈ | A ring is a different target shape — a distance from a centre, not a point — so the soft pin approximates it one frame late rather than carrying it. `LayoutRadial` (ADR-0225 §SD6) is the exact, static answer. |
 | `alpha`, `alphaMin` (force-graph sets 0), `alphaDecay` (0.0228), `alphaTarget` | none — no annealing | ≈ | graphview has no temperature; `Dt · Damping` is a constant scale. FR's classic cooling schedule was left out with the crate's parameters (SD2). Whether a cooling factor would settle faster is a measurement, not a decision, and belongs in a trial. |
 | `velocityDecay` (0.4, friction) | `Damping` (0.3) | ≈ | Both are friction-like, but on different integrators (velocity vs displacement); the numbers do not transfer. |
 | `d3ReheatSimulation` (alpha ← 1) | `ResetLayout` is the strong form; the `PauseOnSettle` hold lifts on a drag, a topology or parameter change, a setter or `FastForward` | ✓ | The freeze-on-settle of §5 landed with its reheat built in as a wake list rather than a method, so there is nothing to call. |
@@ -203,11 +203,15 @@ confirmations stand unchanged, and none has landed:
   the per-node and per-edge callbacks useful without giving up the marker batch
   for the nodes that do not use them.
 - **The soft pin**: d3's `forceX` / `forceY` / `forceRadial` as per-node targets
-  with a strength. It remains the best leverage in the series. `Pinned` is its
-  infinite-strength case; the per-axis pin, the wind force and the force-DAG
-  posture are all it; and now that `LayoutRadial` has landed as a *static*
-  layout, `forceRadial` is the one thing that layout cannot do — let a node keep
-  its ring while repulsion still moves it. One primitive, four rows.
+  with a strength. **Landed as ADR-0224 §SD16**, `NodeSpec.Pull`, and worth
+  recording against the claim made here. It does carry the force-DAG posture —
+  hold the level axis, let siblings settle on the other — given a depth the
+  caller supplies, and it subsumes `CenterGravity`, which is the same term over
+  every node at one point. It does *not* carry wind, a constant bias rather
+  than a spring, nor an exact per-axis pin, which needs the step to fix one
+  axis where `fixed` is per node; and it only approximates a ring target, which
+  is a distance and not a point. Two rows of the four, then: the reading was
+  right that the primitive was cheap and wrong about its reach.
 
 **Two integrator notes**, for a trial rather than a decision, both unchanged:
 graphview has no cooling schedule, where d3 anneals and halts — `PauseOnSettle`

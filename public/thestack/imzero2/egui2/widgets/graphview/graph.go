@@ -22,6 +22,10 @@ type graph struct {
 	// from the node entirely (ADR-0224 §SD14).
 	opacity []float32
 	noPick  []bool
+	pull    []Pull
+	// anyPull is recomputed every reconcile: with no pull declared the step
+	// skips its pass entirely, so an unpulled graph is unchanged to the bit.
+	anyPull bool
 	seen    []uint32 // frame stamp of the last declaration that named the slot
 	// fixed is recomputed every frame: the force step leaves a fixed node
 	// alone. Its sources are a declared pin, a widget-side hold and the drag.
@@ -79,6 +83,7 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		g.edgeIdx = make(map[EdgeRef]int32, len(edges))
 	}
 	g.frame++
+	g.anyPull = false
 	g.newSlots = g.newSlots[:0]
 	g.pending = g.pending[:0]
 	var hash uint64
@@ -118,6 +123,7 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		g.donut = append(g.donut, Donut{})
 		g.opacity = append(g.opacity, 1)
 		g.noPick = append(g.noPick, false)
+		g.pull = append(g.pull, Pull{})
 		g.seen = append(g.seen, g.frame)
 		g.fixed = append(g.fixed, false)
 		g.pinDecl = append(g.pinDecl, false)
@@ -178,6 +184,10 @@ func (g *graph) setNode(s int32, sp *NodeSpec) {
 	g.donut[s] = sp.Donut
 	g.opacity[s] = opacityOr1(sp.Opacity)
 	g.noPick[s] = sp.NoPick
+	g.pull[s] = sp.Pull
+	if !sp.Pull.IsZero() {
+		g.anyPull = true
+	}
 	g.pinDecl[s] = sp.Pinned
 	g.pinX[s] = sp.PinX
 	g.pinY[s] = sp.PinY
@@ -320,6 +330,7 @@ func (g *graph) removeSlot(s int) {
 		g.donut[s] = g.donut[last]
 		g.opacity[s] = g.opacity[last]
 		g.noPick[s] = g.noPick[last]
+		g.pull[s] = g.pull[last]
 		g.seen[s] = g.seen[last]
 		g.fixed[s] = g.fixed[last]
 		g.pinDecl[s] = g.pinDecl[last]
@@ -337,6 +348,7 @@ func (g *graph) removeSlot(s int) {
 	g.donut = g.donut[:last]
 	g.opacity = g.opacity[:last]
 	g.noPick = g.noPick[:last]
+	g.pull = g.pull[:last]
 	g.seen = g.seen[:last]
 	g.fixed = g.fixed[:last]
 	g.pinDecl = g.pinDecl[:last]

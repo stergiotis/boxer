@@ -65,7 +65,7 @@ Legend: **✓** covered, **≈** covered with a different shape or partially,
 | node `mass` | uniform mass | **gap** | Small: a per-node weight in the repulsion term and in centre gravity. Hub emphasis and cluster-node weight both want it. |
 | node `value` + `scaling` (min, max, `customScalingFunction`); edge `value` + `scaling` | caller maps a value to `Radius` / `Width` | caller | |
 | node `x`, `y` (initial, then simulated) | `SetNodePosition` after the first `Render` | ≈ | Confirms NetChart §2 initial position. |
-| node `fixed: {x, y}` per axis | `Pinned` fixes both | ≈ | Small: a per-axis pin lets a node slide along a lane or a level. |
+| node `fixed: {x, y}` per axis | `Pinned` fixes both; `NodeSpec.Pull` constrains one axis softly | ≈ | ADR-0224 §SD16 gives the soft form — a spring on X with Y free is the lane or level in practice. An *exact* per-axis pin still needs the force step to fix one axis, where `fixed` is per node. |
 | `group` string + `groups` module, `useDefaultGroups` colour cycle | caller fills `Color` per frame | caller | The aura cycle in `AuraParams.Styles` is the analogous widget-side cycle; nodes have none, deliberately. |
 | `getPositions()`, `storePositions()` | `Positions()` over every placed node; `SetNodePosition` writes | ✓ | Closed by ADR-0224 §SD12. |
 | `moveNode` | `SetNodePosition` | ✓ | |
@@ -119,7 +119,7 @@ The `physics` module is one parameter vocabulary — `gravitationalConstant`,
 | `solver: hierarchicalRepulsion` (levels fixed, nodes settle on the free axis, forces normalised) | `LayoutHierarchical` is static | **gap** | Medium. A hierarchy whose siblings settle by force is the common "tree that breathes" look; it needs per-axis pins (§2) plus a repulsion that ignores the level axis. |
 | `avoidOverlap` (0..1) | — | **gap** | Confirms NetChart §3 radius-aware spacing. |
 | `adaptiveTimestep` during stabilisation | fixed `Dt` | gap | Small; belongs with `FastForward`. |
-| `wind: {x, y}` or a function per node id | — | **gap** | Small: a constant or per-node bias force. It is how a force layout is nudged into a left-to-right flow without switching to the hierarchical walk. |
+| `wind: {x, y}` or a function per node id | — | **gap** | Small: a constant or per-node bias force, and not the soft pin of ADR-0224 §SD16 — a spring's pull falls off as the node arrives, where wind has nowhere to arrive. It is how a force layout is nudged into a left-to-right flow without switching to the hierarchical walk. |
 | `stabilization.enabled`, `iterations`, `fit`; `stabilize(n)` | fit latch (SD4), `FastForward(steps)` | ✓ | Hidden pre-first-paint stabilisation is the caller's `FastForward` before the first `Render`. |
 | `stabilization.updateInterval` + `stabilizationProgress {iterations, total}`, `stabilizationIterationsDone`, `stabilized {iterations}`, `startStabilizing` | `Metrics.Steps`, `Metrics.Settled`, `IsSettled` polled per frame | ≈ | Progress is readable; a "settled since last frame" transition is a caller diff. Adequate. |
 | `startSimulation`, `stopSimulation` | `ForceParams.Paused` | ✓ | |
