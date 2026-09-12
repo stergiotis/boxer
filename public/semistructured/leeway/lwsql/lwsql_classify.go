@@ -25,6 +25,42 @@ const (
 	LaneKindCusum                 // materialized cumulative companions
 )
 
+var AllLaneKinds = []LaneKindE{
+	LaneKindUnknown,
+	LaneKindValue,
+	LaneKindLength,
+	LaneKindSetCardinality,
+	LaneKindMembership,
+	LaneKindMembershipCardinality,
+	LaneKindCusum,
+}
+
+// String renders the lane kind for reports and for the generated SQL
+// vocabulary that classifies a role server-side (ADR-0226 §SD3). The
+// spellings are part of that surface: changing one changes what a query
+// over the views compares against.
+func (inst LaneKindE) String() (s string) {
+	switch inst {
+	case LaneKindUnknown:
+		s = "unknown"
+	case LaneKindValue:
+		s = "value"
+	case LaneKindLength:
+		s = "length"
+	case LaneKindSetCardinality:
+		s = "set-cardinality"
+	case LaneKindMembership:
+		s = "membership"
+	case LaneKindMembershipCardinality:
+		s = "membership-cardinality"
+	case LaneKindCusum:
+		s = "cusum"
+	default:
+		s = common.InvalidEnumValueString
+	}
+	return
+}
+
 // membershipLaneRoles are the membership identity/payload lane roles; their
 // cardinality companions are the `<role>card` spellings.
 var membershipLaneRoles = map[common.ColumnRoleE]bool{

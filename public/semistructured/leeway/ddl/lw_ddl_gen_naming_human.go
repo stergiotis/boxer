@@ -60,17 +60,17 @@ type positionData struct {
 }
 
 func addParseData(dest *positionData, s []string) {
-	dest.prefixIndex = slices.Index(s, componentPrefix)
-	dest.sectionNameIndex = slices.Index(s, componentSectionName)
-	dest.columnNameIndex = slices.Index(s, componentColumnName)
-	dest.roleIndex = slices.Index(s, componentRole)
-	dest.canonicalTypeIndex = slices.Index(s, componentCanonicalType)
-	dest.encodingHintsIndex = slices.Index(s, componentEncodingHints)
-	dest.useAspectsIndex = slices.Index(s, componentUseAspects)
-	dest.tableRowConfigIndex = slices.Index(s, componentTableRowConfig)
-	dest.valueSemanticsIndex = slices.Index(s, componentValueSemantics)
-	dest.coSectionGroupIndex = slices.Index(s, componentCoSectionGroup)
-	dest.streamingGroupIndex = slices.Index(s, componentStreamingGroup)
+	dest.prefixIndex = slices.Index(s, ComponentPrefix)
+	dest.sectionNameIndex = slices.Index(s, ComponentSectionName)
+	dest.columnNameIndex = slices.Index(s, ComponentColumnName)
+	dest.roleIndex = slices.Index(s, ComponentRole)
+	dest.canonicalTypeIndex = slices.Index(s, ComponentCanonicalType)
+	dest.encodingHintsIndex = slices.Index(s, ComponentEncodingHints)
+	dest.useAspectsIndex = slices.Index(s, ComponentUseAspects)
+	dest.tableRowConfigIndex = slices.Index(s, ComponentTableRowConfig)
+	dest.valueSemanticsIndex = slices.Index(s, ComponentValueSemantics)
+	dest.coSectionGroupIndex = slices.Index(s, ComponentCoSectionGroup)
+	dest.streamingGroupIndex = slices.Index(s, ComponentStreamingGroup)
 	if dest.canonicalTypeIndex < 0 || dest.encodingHintsIndex < 0 ||
 		dest.canonicalTypeIndex == dest.encodingHintsIndex {
 		log.Panic().Msg("something is wrong with the naming components")
@@ -78,56 +78,56 @@ func addParseData(dest *positionData, s []string) {
 }
 
 const (
-	componentPrefix         = "prefix"
-	componentColumnName     = "name"
-	componentSectionName    = "sectionName"
-	componentRole           = "role"
-	componentCanonicalType  = "canonicalType"
-	componentEncodingHints  = "encodingHints"
-	componentUseAspects     = "useAspects"
-	componentValueSemantics = "valueSemantics"
-	componentTableRowConfig = "tableRowConfig"
-	componentCoSectionGroup = "coSectionGroup"
-	componentStreamingGroup = "streamingGroup"
+	ComponentPrefix         = "prefix"
+	ComponentColumnName     = "name"
+	ComponentSectionName    = "sectionName"
+	ComponentRole           = "role"
+	ComponentCanonicalType  = "canonicalType"
+	ComponentEncodingHints  = "encodingHints"
+	ComponentUseAspects     = "useAspects"
+	ComponentValueSemantics = "valueSemantics"
+	ComponentTableRowConfig = "tableRowConfig"
+	ComponentCoSectionGroup = "coSectionGroup"
+	ComponentStreamingGroup = "streamingGroup"
 )
 
 var ColumnsComponentsExplanation13 = []string{
-	componentPrefix,
+	ComponentPrefix,
 	SeparatorExplanation,
-	componentColumnName,
+	ComponentColumnName,
 	SeparatorExplanation,
-	componentCanonicalType,
+	ComponentCanonicalType,
 	SeparatorExplanation,
-	componentEncodingHints,
+	ComponentEncodingHints,
 	SeparatorExplanation,
-	componentValueSemantics,
+	ComponentValueSemantics,
 	SeparatorExplanation,
-	componentTableRowConfig,
+	ComponentTableRowConfig,
 	SeparatorExplanation,
-	componentStreamingGroup,
+	ComponentStreamingGroup,
 }
 var ColumnsComponentsExplanation21 = []string{
-	componentPrefix,
+	ComponentPrefix,
 	SeparatorExplanation,
-	componentSectionName,
+	ComponentSectionName,
 	SeparatorExplanation,
-	componentColumnName,
+	ComponentColumnName,
 	SeparatorExplanation,
-	componentRole,
+	ComponentRole,
 	SeparatorExplanation,
-	componentCanonicalType,
+	ComponentCanonicalType,
 	SeparatorExplanation,
-	componentEncodingHints,
+	ComponentEncodingHints,
 	SeparatorExplanation,
-	componentUseAspects,
+	ComponentUseAspects,
 	SeparatorExplanation,
-	componentValueSemantics,
+	ComponentValueSemantics,
 	SeparatorExplanation,
-	componentTableRowConfig,
+	ComponentTableRowConfig,
 	SeparatorExplanation,
-	componentCoSectionGroup,
+	ComponentCoSectionGroup,
 	SeparatorExplanation,
-	componentStreamingGroup,
+	ComponentStreamingGroup,
 }
 
 var ErrUnhandledIntermediateColumnContextType = eh.Errorf("unhandled intermediate column context type")
