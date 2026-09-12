@@ -33,7 +33,7 @@ import (
 //
 // The contract itself — its columns, its resolvers and the record-to-model
 // build — lives in play_network_model.go, which the Graphview tab reads the
-// same rows through (ADR-0225 §SD1). What is here is the LAYERED reading of
+// same rows through (ADR-0227 §SD1). What is here is the LAYERED reading of
 // that model: a Graphviz-WASM layout cached on a topology fingerprint, painted
 // through layeredgraph/view. The lanes that feed it are shared too
 // (play_network_source.go).
@@ -211,7 +211,7 @@ func buildNetworkLayered(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertR
 	return layeredBuild(&m)
 }
 
-// layeredBuild resolves the neutral model for this widget (ADR-0225 §SD1):
+// layeredBuild resolves the neutral model for this widget (ADR-0227 §SD1):
 // `shape` becomes a node boundary, `tone` and `group` become the colours the
 // hooks serve. `donut` is dropped — a laid-out label box has nowhere to put a
 // ring, which is the asymmetry the second tab exists for (§SD5).

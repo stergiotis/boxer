@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The contract's own rules, where the two graph panels share them (ADR-0225
+// The contract's own rules, where the two graph panels share them (ADR-0227
 // §SD1). The mapping tests that go through the layered adapter live beside that
 // panel; these are the ones about the neutral model itself.
 

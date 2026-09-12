@@ -16,7 +16,7 @@ import (
 // CTEs of ADR-0129 §SD2 — and maps a pair of results to a renderer-neutral
 // model both graph panels draw from: the Network tab's layered drawing
 // (play_layeredgraph_panel.go) and the Graphview tab's live one
-// (play_graphview_panel.go). ADR-0225 §SD1 hoisted it here for the reason
+// (play_graphview_panel.go). ADR-0227 §SD1 hoisted it here for the reason
 // ADR-0166 §SD1 hoisted the hierarchy contract: two resolvers over one
 // contract drift on the first column added to either.
 //
@@ -52,7 +52,7 @@ const (
 	// Numeric; non-positive is *unknown* and renders as an ordinary edge.
 	networkWeightCol = "weight"
 
-	// donut / donutTotal are the live panel's per-node breakdown (ADR-0225
+	// donut / donutTotal are the live panel's per-node breakdown (ADR-0227
 	// §SD5): a list of numbers drawn as a ring of proportional slices around
 	// the vertex, and an optional total that leaves the remainder as a muted
 	// track, which turns the ring into a share or progress display. Read by
@@ -70,7 +70,7 @@ const (
 )
 
 // netCaps bounds one build. The ceiling is the CALLER'S because the two panels
-// have different reasons for having one (ADR-0225 §SD9): a Graphviz-WASM
+// have different reasons for having one (ADR-0227 §SD9): a Graphviz-WASM
 // layered run is a tens-to-low-hundreds instrument, while a force simulation is
 // bounded by the frame it steps in. Excess is dropped and counted rather than
 // silently truncated — both panels report it in their status line.
@@ -217,7 +217,7 @@ type networkVerticesClaim struct {
 }
 
 // acceptGraphChannel is the contract's acceptance, shared by both graph panels
-// (ADR-0225 §SD1): schema-only and cheap enough to run every frame, because the
+// (ADR-0227 §SD1): schema-only and cheap enough to run every frame, because the
 // question is about column names and the schema answers it on its own. The
 // reject messages name the contract rather than either drawing, so the two tabs
 // say the same thing about the same query.
@@ -359,7 +359,7 @@ type netEdge struct {
 	Weight   float64 // 0 is *unknown*, not zero
 }
 
-// netModel is a pair of results as one renderer-neutral graph (ADR-0225 §SD1).
+// netModel is a pair of results as one renderer-neutral graph (ADR-0227 §SD1).
 type netModel struct {
 	Vertices []netVertex
 	Edges    []netEdge
@@ -432,7 +432,7 @@ func (inst *netModel) groups() (out []string) {
 // vertices are de-duplicated by id, an edge endpoint with no vertices row
 // synthesises one (so a partial or absent `vertices` CTE still draws every
 // edge), parallel (source,target) pairs collapse, and both inputs are capped at
-// the CALLER'S caps (ADR-0225 §SD9). Vertex ids must be unique — both widgets'
+// the CALLER'S caps (ADR-0227 §SD9). Vertex ids must be unique — both widgets'
 // invariant — and the dedup enforces it. Deterministic given the records, so
 // the layout key of one panel and the interned ids of the other are stable
 // frame to frame.

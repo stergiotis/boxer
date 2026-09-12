@@ -422,7 +422,7 @@ widget; nothing in the declaration or event surface changed for it.
   register the camera reads.
 - [ADR-0149](./0149-implot-core-port-painter-lane.md) — the painter-lane port
   this follows.
-- [ADR-0225](./0225-play-graphview-panel.md) — the widget's first consumer in
+- [ADR-0227](./0227-play-graphview-panel.md) — the widget's first consumer in
   this tree: `play`'s Graphview tab.
 - `doc/adr-background-work/snarl-port-analysis.md` — the substrate check.
 - `doc/adr-background-work/netchart-aura-analysis.md` — the black-box

@@ -9,7 +9,7 @@ date: 2026-09-11
 > **Status: proposed — pre-human-review.** The panel ships with this record;
 > it has not been reviewed.
 
-# ADR-0225: a Graphview panel for `play` — the live reading of the Network contract
+# ADR-0227: a Graphview panel for `play` — the live reading of the Network contract
 
 ## Context
 

@@ -286,7 +286,7 @@ limit.
 
 ### 2026-09-11 — the contract is hoisted, the lanes are shared, and a second panel reads both
 
-[ADR-0225](./0225-play-graphview-panel.md) adds a live (force-directed and
+[ADR-0227](./0227-play-graphview-panel.md) adds a live (force-directed and
 hierarchical) reading of this contract as its own tab. Three things move out
 from under this panel and one rule changes:
 
@@ -385,5 +385,5 @@ in the error tone and cycle edges in the warning tone, verified live.
   precedent for a result panel with a bespoke drawing.
 - [ADR-0126](./0126-appliance-topology-as-data.md) — topology-as-data, a source of
   graph-shaped results to validate against.
-- [ADR-0225](./0225-play-graphview-panel.md) — the live reading of this
+- [ADR-0227](./0227-play-graphview-panel.md) — the live reading of this
   contract, which hoisted it out of this panel.

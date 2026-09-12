@@ -14,7 +14,7 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// play_graphview_panel.go is the ADR-0225 Graphview dock tab: the LIVE reading
+// play_graphview_panel.go is the ADR-0227 Graphview dock tab: the LIVE reading
 // of the graph contract the Network tab defines — a force-directed or
 // hierarchical layout owned in Go, over widgets/graphview (ADR-0224). Same two
 // CTEs, same columns, same lanes (play_network_source.go); what differs is the
@@ -581,7 +581,7 @@ func (inst *GraphviewDriver) statusLine() string {
 }
 
 // renderGraphviewTab is the Graphview dock tab body: the same two CTEs the
-// Network tab reads, demanded on the same lanes (ADR-0225 §SD2), then the
+// Network tab reads, demanded on the same lanes (ADR-0227 §SD2), then the
 // PanelI dispatch. Like the Network tab it does not read the active result.
 func (inst *PlayApp) renderGraphviewTab() {
 	inputs, release := inst.graphChannelInputs()

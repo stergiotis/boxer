@@ -11,7 +11,7 @@ import (
 // the `edges` and `vertices` CTEs of the user's own split, each demanded on its
 // own lane, the kanban `lanes`-CTE mechanism (ADR-0122 §SD6) applied twice.
 //
-// The source is SHARED by both graph panels (ADR-0225 §SD2). With the Network
+// The source is SHARED by both graph panels (ADR-0227 §SD2). With the Network
 // and Graphview tabs both open the CTEs execute once — the second demand is a
 // memo hit on the same lane — and a forced re-fetch clears one memo rather than
 // two. It also puts the status mirrors in one place, so a failed lane says so
@@ -33,7 +33,7 @@ type networkSource struct {
 
 	// edgesFP / verticesFP are the served results' content fingerprints — the
 	// early-cutoff hook of ADR-0097 §SD4. A panel that rebuilds its model per
-	// frame keys the cache on them (ADR-0225 §SD8), so a running simulation
+	// frame keys the cache on them (ADR-0227 §SD8), so a running simulation
 	// re-formats no cells and a re-fetch returning identical bytes costs no
 	// rebuild. Zero means nothing served.
 	edgesFP    uint64
