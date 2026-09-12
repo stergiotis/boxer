@@ -122,7 +122,7 @@ func init() {
 		Stage:       [2]float32{1024, 700},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "The live graph widget of ADR-0224 — the egui_graphs binding's feature set as Go on the painter lane: random, force-directed (with and without centre gravity) and hierarchical layouts, node drag, pan and anchored zoom, click and selection events, parallel edges and self-loops, one-shot fit. Deterministic placement, so the capture is stable.",
+		Description: "The live graph widget of ADR-0224 — the egui_graphs binding's feature set as Go on the painter lane: random, force-directed (with and without centre gravity) and hierarchical layouts, node drag, pan and anchored zoom, click and selection events, parallel edges and self-loops, one-shot fit; plus the ADR-0225 navigation layer over a larger universe with the radial layout. Deterministic placement, so the capture is stable.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			state = newGraphviewDemoState(ids)
 			return
@@ -140,6 +140,9 @@ func init() {
 			}
 			for range c.CollapsingHeader(ids.PrepareStr("gv-hier"), c.WidgetText().Text("tree (hierarchical)").Keep()).KeepIter() {
 				demoGraphviewHier(ids, st)
+			}
+			for range c.CollapsingHeader(ids.PrepareStr("gv-explore"), c.WidgetText().Text("exploration (navigation layer, radial layout)").Keep()).KeepIter() {
+				demoGraphviewExplore(ids, st)
 			}
 			demoGraphviewEventLog(ids, st)
 		},

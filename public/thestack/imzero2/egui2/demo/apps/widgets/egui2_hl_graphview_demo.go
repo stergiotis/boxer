@@ -8,6 +8,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/nav"
 )
 
 // graphviewDemoState carries the three graphview instances of the gallery
@@ -50,26 +51,44 @@ type graphviewDemoState struct {
 	hierCntr  bool
 	hierLR    bool
 
+	// Exploration (ADR-0225): a navigator over a generated universe, drawn
+	// by a fourth view. Stubs are loaded a frame after they are wanted.
+	nv            *nav.Navigator
+	explore       *graphview.View
+	exploreFocus  bool // focus mode, else manual
+	exploreRadial bool // radial layout around the focus nodes, else force-directed
+	exploreRadius float64
+	exploreSpecs  map[uint64]graphview.NodeSpec   // every node's spec, for loading a stub
+	exploreHeld   map[uint64][]graphview.EdgeSpec // a stub's own edges, withheld until loaded
+	exploreNodes  []graphview.NodeSpec            // the declaration with badge labels
+	exploreCentre []uint64
+
 	labelsAlways bool
 	fitAlways    bool
 	showHover    bool
 	eventLog     []graphview.Event
 }
 
+// demoExploreNodes is the size of the exploration universe.
+const demoExploreNodes = 150
+
 func newGraphviewDemoState(ids *c.WidgetIdStack) (st *graphviewDemoState) {
 	st = &graphviewDemoState{
-		forceNodes:   40,
-		forceNodesF:  40,
-		forceCG:      true,
-		forceDt:      0.05,
-		forceDamping: 0.3,
-		forceEps:     0.1,
-		forceMaxStep: 20,
-		forceKScale:  1,
-		hierRow:      60,
-		hierCol:      50,
-		hierCntr:     true,
-		labelsAlways: true,
+		forceNodes:    40,
+		forceNodesF:   40,
+		forceCG:       true,
+		forceDt:       0.05,
+		forceDamping:  0.3,
+		forceEps:      0.1,
+		forceMaxStep:  20,
+		forceKScale:   1,
+		hierRow:       60,
+		hierCol:       50,
+		hierCntr:      true,
+		labelsAlways:  true,
+		exploreFocus:  true,
+		exploreRadial: true,
+		exploreRadius: 2,
 	}
 	interact := func(o graphview.Options) graphview.Options {
 		o.NodeClicking = true
@@ -134,7 +153,126 @@ func newGraphviewDemoState(ids *c.WidgetIdStack) (st *graphviewDemoState) {
 		}
 	}
 	st.rebuildForceGraph()
+	st.explore = graphview.New(ids, "graphview-explore", interact(graphview.Options{Layout: graphview.LayoutRadial}))
+	st.buildExploreUniverse()
 	return
+}
+
+// buildExploreUniverse fills the navigator with a deterministic universe:
+// a binary tree of demoExploreNodes nodes with a chord from every fifth
+// node, where every ninth node is a stub whose own edges are held back
+// until the navigator wants it (ADR-0225 §SD5). The universe is styled
+// once here; relevance and focus are applied per frame by the Style hook.
+func (st *graphviewDemoState) buildExploreUniverse() {
+	st.exploreSpecs = make(map[uint64]graphview.NodeSpec, demoExploreNodes)
+	st.exploreHeld = make(map[uint64][]graphview.EdgeSpec, demoExploreNodes/9+1)
+	base := styletokens.InfoDefault.AsHex()
+	focused := styletokens.WarningDefault.AsHex()
+	st.nv = nav.New(nav.Options{
+		Style: func(id uint64, rel float32, depth int, spec *graphview.NodeSpec) {
+			alpha := uint32(0x50 + 0xaf*rel)
+			col := base
+			if st.nv.IsFocused(id) {
+				col = focused
+			}
+			spec.Color = color.Hex(col&^0xff | alpha)
+			spec.Radius = 4 + 5*rel
+		},
+	})
+	isStub := func(id uint64) bool { return id%9 == 0 }
+	var nodes []nav.Node
+	var edges []graphview.EdgeSpec
+	for i := uint64(1); i <= demoExploreNodes; i++ {
+		spec := graphview.NodeSpec{Id: i, Label: fmt.Sprintf("#%d", i)}
+		st.exploreSpecs[i] = spec
+		nodes = append(nodes, nav.Node{Spec: spec, Stub: isStub(i)})
+		var own []graphview.EdgeSpec
+		if i >= 2 {
+			own = append(own, graphview.EdgeSpec{From: (i-1)/2 + 1, To: i})
+		}
+		if i%5 == 0 {
+			if to := (i*7)%demoExploreNodes + 1; to != i {
+				own = append(own, graphview.EdgeSpec{From: i, To: to})
+			}
+		}
+		for _, e := range own {
+			// A stub's outgoing edges are its own neighbourhood: withheld.
+			// The edge that reaches it from its parent is how it is known.
+			if isStub(e.From) {
+				st.exploreHeld[e.From] = append(st.exploreHeld[e.From], e)
+				continue
+			}
+			edges = append(edges, e)
+		}
+	}
+	st.nv.AddNodes(nodes)
+	st.nv.AddEdges(edges)
+	st.nv.SetInitial([]uint64{1})
+	st.applyExploreMode()
+	st.nv.Reset()
+}
+
+// applyExploreMode pushes the demo's toggles into the navigator's options.
+func (st *graphviewDemoState) applyExploreMode() {
+	st.nv.Opts.Mode = nav.ModeManual
+	if st.exploreFocus {
+		st.nv.Opts.Mode = nav.ModeFocus
+	}
+	st.nv.Opts.FocusRadius = int(st.exploreRadius)
+	st.nv.Opts.ExpandDepth = int(st.exploreRadius)
+}
+
+func demoGraphviewExplore(ids *c.WidgetIdStack, st *graphviewDemoState) {
+	c.Label("Exploration over a 150-node universe (ADR-0225): the picture is what the navigator derives from a few gestures. Double-click a node to focus it (focus mode) or to expand and collapse it (manual mode); right-click hides it. A \"+n\" on a label counts neighbours not shown. Every ninth node is a stub whose own edges arrive a frame after they are wanted, standing in for a load.").Send()
+	wasFocus := st.exploreFocus
+	c.Checkbox(ids.PrepareStr("gv-x-focus"), st.exploreFocus, "focus mode (else manual expand / collapse)").SendRespVal(&st.exploreFocus)
+	c.SliderF64(ids.PrepareStr("gv-x-radius"), st.exploreRadius, 1, 4).Text("focus radius / expand depth").SendRespVal(&st.exploreRadius)
+	c.Checkbox(ids.PrepareStr("gv-x-radial"), st.exploreRadial, "radial layout around the focus nodes (else force-directed)").SendRespVal(&st.exploreRadial)
+	if c.Button(ids.PrepareStr("gv-x-reset"), c.Atoms().Text("reset exploration").Keep()).SendResp().HasPrimaryClicked() || wasFocus != st.exploreFocus {
+		st.applyExploreMode()
+		st.nv.Reset()
+		st.explore.ResetLayout()
+	}
+	st.applyExploreMode()
+
+	// The load: answer last frame's wanted stubs with their own edges.
+	for _, id := range st.nv.Pending() {
+		if held, ok := st.exploreHeld[id]; ok {
+			st.nv.AddNodes([]nav.Node{{Spec: st.exploreSpecs[id]}})
+			st.nv.AddEdges(held)
+			delete(st.exploreHeld, id)
+		}
+	}
+
+	ns, es := st.nv.Declare()
+	st.exploreNodes = append(st.exploreNodes[:0], ns...)
+	for i := range st.exploreNodes {
+		if k := st.nv.HiddenNeighbours(st.exploreNodes[i].Id); k > 0 {
+			st.exploreNodes[i].Label = fmt.Sprintf("%s +%d", st.exploreNodes[i].Label, k)
+		}
+	}
+	o := &st.explore.Opts
+	o.Layout = graphview.LayoutForceDirectedCG
+	if st.exploreRadial {
+		o.Layout = graphview.LayoutRadial
+	}
+	st.exploreCentre = st.exploreCentre[:0]
+	if st.exploreFocus {
+		st.exploreCentre = slices.AppendSeq(st.exploreCentre, st.nv.FocusNodes())
+	} else {
+		st.exploreCentre = append(st.exploreCentre, 1)
+	}
+	o.Radial.Centers = st.exploreCentre
+	o.LabelsAlways = st.labelsAlways
+	st.explore.Render(st.exploreNodes, es, demoGraphviewWidth(ids, "gv-explore-pane"), 420)
+	for _, ev := range st.explore.Events() {
+		st.nv.Apply(ev)
+		if ev.Kind == graphview.EventKindNodeSecondaryClick {
+			st.nv.Hide(ev.Node)
+		}
+	}
+	focus := slices.Collect(st.nv.FocusNodes())
+	c.Label(fmt.Sprintf("visible=%d of %d · focus=%v · wanted stubs=%d", len(ns), st.nv.NodeCount(), focus, len(st.nv.Pending()))).Send()
 }
 
 // rebuildForceGraph regenerates the force demo's binary tree at the chosen
@@ -310,7 +448,7 @@ func demoGraphviewEventLog(ids *c.WidgetIdStack, st *graphviewDemoState) {
 	views := []struct {
 		name string
 		v    *graphview.View
-	}{{"ring", st.ring}, {"force", st.force}, {"hier", st.hier}}
+	}{{"ring", st.ring}, {"force", st.force}, {"hier", st.hier}, {"explore", st.explore}}
 	for _, e := range views {
 		for id := range e.v.SelectedNodes() {
 			c.Label(fmt.Sprintf("  selected node=%d  graph=%s", id, e.name)).Send()

@@ -30,6 +30,8 @@ type View struct {
 
 	hierDone     bool
 	lastHier     HierParams
+	radialDone   bool
+	lastRadial   RadialParams
 	everHadNodes bool
 	fitPending   bool
 	fitFrames    uint32
@@ -503,6 +505,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 	v.style = v.Opts.Style.withDefaults()
 	fp := v.Opts.Force.withDefaults()
 	hp := v.Opts.Hier.withDefaults()
+	rp := v.Opts.Radial.withDefaults()
 	ap := v.Opts.Auras.withDefaults()
 	v.cam.setLimits(v.Opts.ZoomMin, v.Opts.ZoomMax)
 	camBefore := v.cam
@@ -555,6 +558,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 		if v.resetPending {
 			v.resetPending = false
 			v.hierDone = false
+			v.radialDone = false
 			v.fs.reset()
 			clear(v.g.held)
 			created = v.g.allSlots()
@@ -570,8 +574,8 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			case LayoutForceDirected, LayoutForceDirectedCG:
 				k := idealEdgeLength(w, h, n, fp.KScale)
 				placeNear(&v.g, created, max(k, 1))
-			case LayoutHierarchical:
-				// laid out below with the rest of the tree
+			case LayoutHierarchical, LayoutRadial:
+				// laid out below with the rest of the graph
 			default:
 				placeRandom(&v.g, created)
 			}
@@ -580,6 +584,12 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			layoutHierarchical(&v.g, hp)
 			v.hierDone = true
 			v.lastHier = hp
+			v.auraDirty = true
+		}
+		if v.Opts.Layout == LayoutRadial && (topoChanged || !v.radialDone || len(created) > 0 || !rp.equal(v.lastRadial)) {
+			layoutRadial(&v.g, rp)
+			v.radialDone = true
+			v.lastRadial = rp.clone()
 			v.auraDirty = true
 		}
 		// Declared pins win over any placement; the drag in flight keeps its

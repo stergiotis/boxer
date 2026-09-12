@@ -402,6 +402,18 @@ screenshots, since the egui_mcp route was not registered in the session
 that ran it, and each reported as designed in the demo's event log. Long
 touch was not exercised: the OS-level route has no touch input.
 
+### 2026-09-12 — a fifth layout, radial, and the navigation layer above
+
+[ADR-0225](./0225-graphview-navigation-layer-and-radial-layout.md) takes
+the two pieces §SD12 deferred. The widget gains `LayoutRadial` with
+`RadialParams{Centers, RingDist}` — rings by undirected hop distance from
+a centre set, angles by the radial tree allotment, static and re-run on a
+topology or parameter change like the hierarchical layout, its value past
+the binding's four so a cast still lands. The navigation model — roots,
+expansions, hidden nodes, a focus list, and the visible set derived from
+them — lives in the `nav` package beneath this one and declares into the
+widget; nothing in the declaration or event surface changed for it.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget

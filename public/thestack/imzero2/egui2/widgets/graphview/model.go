@@ -8,8 +8,9 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
-// LayoutE selects the node-placement algorithm. The values mirror the
-// `Graph` binding's GraphLayoutE so a consumer can cast across.
+// LayoutE selects the node-placement algorithm. The first four values
+// mirror the `Graph` binding's GraphLayoutE so a consumer can cast across;
+// LayoutRadial is graphview's own (ADR-0225 §SD6).
 type LayoutE uint8
 
 const (
@@ -17,6 +18,7 @@ const (
 	LayoutForceDirected   LayoutE = 1 // Fruchterman–Reingold
 	LayoutForceDirectedCG LayoutE = 2 // Fruchterman–Reingold plus centre gravity
 	LayoutHierarchical    LayoutE = 3
+	LayoutRadial          LayoutE = 4 // rings by hop distance from RadialParams.Centers
 )
 
 // IsAnimated reports whether the layout advances every frame.
@@ -268,6 +270,7 @@ type Options struct {
 	Layout LayoutE
 	Force  ForceParams
 	Hier   HierParams
+	Radial RadialParams
 
 	NoDragging         bool // a drag on a node is a background drag: a pan, or nothing under NoZoomAndPan
 	NoHover            bool // no hover highlight or hover events

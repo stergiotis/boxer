@@ -1644,6 +1644,25 @@ What to know before using it:
   parameter change, a pin or position set, `FastForward` or `ResetLayout`;
   `Metrics.Paused` reports either kind of pause. Prefer it to polling
   `Settled` and flipping `Paused` by hand.
+- **Radial layout** (ADR-0225 §SD6). `Layout: graphview.LayoutRadial` with
+  `Opts.Radial{Centers, RingDist}` puts every node on the ring of its hop
+  distance from the centres — one at the origin, several on ring one —
+  with angles by subtree leaf count, so children stay under their parent.
+  Static like the hierarchical layout; an unreached component gets its
+  own system beside; no centre takes the highest-degree node.
+- **Navigation layer** (ADR-0225; package `nav` beneath graphview). For a
+  graph larger than the picture: feed `nav.New(opts)` the universe with
+  `AddNodes` / `AddEdges` (a `Node.Stub` is one known only as a
+  neighbour), drive it with `Show` / `Hide` / `Close`, `Expand` /
+  `Collapse`, `Focus` / `Unfocus`, and declare `nv.Declare()` into the
+  view every frame. The visible set is derived from that state — collapse
+  is the inverse of expand, hide is a wall — in three modes: show-all,
+  manual, focus (a bounded focus list with a radius and a relevance that
+  decays per hop). `Opts.Style` runs per visible node with relevance and
+  depth; `HiddenNeighbours` is the "+n" badge count; `Pending` lists the
+  stubs the walk wants loaded — answer with `AddNodes` / `AddEdges`, never
+  a callback. `Apply(ev)` wires the double-click. Set
+  `Opts.Radial.Centers` to `FocusNodes()` for the focus picture.
 - **Headless testing.** `Render` runs without a client under a fffi2
   channel that discards paint commands, and the state manager's `Script*`
   setters (`ScriptResponse`, `ScriptCanvasCursor`, `ScriptCanvasWheel`,
