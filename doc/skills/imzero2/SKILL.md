@@ -1360,6 +1360,43 @@ The slippy map is a Go widget on the painter lane (ADR-0204: Leaflet's map core 
 | Offline geography (no tile server) | [`portolan/landoverlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/landoverlay/): `Layer.Draw(p, atlas, Style)`, `Layer.Drawn()`, `DefaultStyle()` | fills land and strokes country borders from the `worldmap` atlas (vendored Natural Earth 110m admin-0) through the projector, so a `NoTiles` map still shows geography; culled per country against the viewport, buffers reused per frame. Coarse by design — a basemap stand-in at country-and-continent zooms, not a replacement for tiles past about zoom 8. The map does not depend on it |
 | H3 cells and regions | [`portolan/h3overlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/h3overlay/): `Layer.Cells`, `Layer.Region`, `ViewportCells`, `ResolutionForZoom` | boundaries and the dissolve come from the `h3` wasm bridge (`public/science/geo/h3`); the caller owns the `h3.Handle` — the map does not depend on the runtime |
 
+### 16.1a Debugging a painter-lane drawing: let the symptom's shape choose
+
+Four rounds were spent on a flicker in the map's country fills by reasoning
+from the code, and the thing that located it was the shape of the symptom.
+Reach for these before reading the pipeline again.
+
+- **Split the drawing and see which half is wrong.** Fill versus stroke,
+  overlay on versus off, one layer at a time. A concave polygon's *fill* and
+  its *outline* travel different paths — the fill clips the polygon
+  (Sutherland–Hodgman), the stroke clips segment by segment (Cohen–Sutherland)
+  — so "only the fills are wrong" names the path on its own. Build the toggle
+  first, not fourth; it is usually a `Style` field and a checkbox.
+- **Let the extent discriminate.** Garbage bounded by one item's own points
+  cannot cross the widget. If a line spans the view, the geometry spans the
+  view: look for a vertex far from where it belongs, not for a subtly wrong
+  shape.
+- **Measure the pipeline, do not read it.** Mirror the stages in a test over
+  real data and count what comes out — duplicate vertices, self-intersections,
+  extents, how many items survive each stage, and how those counts move with
+  the zoom. A count that collapses above zoom 4 says "low zoom only" without
+  anyone having to guess.
+- **The SVG export serialises the mesh.** A `PaintPolygonFilled(...).Concave()`
+  arrives as one `<polygon>` per ear-clipped triangle, so the triangulation is
+  inspectable: parse the file and look for slivers, for triangles spanning the
+  canvas, for vertices outside the world. It also captures **one frame**, so an
+  artefact that changes every frame is easily absent from the one you take —
+  a clean export is not an all-clear.
+- **Suspect your own last change first.** A "fix" applied on reasoning rather
+  than evidence is the likeliest cause of the next symptom; two here were.
+
+The underlying trap, worth knowing before it bites: **this lane's concave fill
+ear-clips the ring, and an ear clipper is defined only for a simple polygon**,
+where the canvas fill rule Leaflet and the browser use asks nothing of it. Any
+step that can make a simple ring non-simple — clipping it, simplifying it,
+rounding it to whole pixels — is safe in a browser port's source and unsafe
+here (ADR-0204's 2026-09-12 update).
+
 ### 16.2 Input is read the canvas way — and the map takes keyboard focus itself
 
 The map owns a `PaintCanvas` with a sense region over it: the drag's origin is the sense region's press, positions come from the frame-end pointer (R20), and the view during a drag is the view at the press plus the offset from the origin (never a sum of per-frame deltas — that recipe lost 20 × 10 px of a 240 × 120 px drag). The wheel and the pinch arrive through the canvas's R23 row. None of that needs a `TabNoScroll`: the canvas captures the wheel while hovered, so a map sits under a plain `Tab`.
@@ -1641,6 +1678,12 @@ What to know before using it:
   edges apart in hover, click and selection — `EdgeRef{From, To, Id}` is
   the key — and `Length` / `Strength` scale one edge's ideal length and
   pull in the force layout (1 when unset; the static layouts ignore them).
+- **Picking** (ADR-0228 §SD6). `layeredgraph/view` hit-tests in Go over its
+  one canvas, against the shapes it drew, rather than stamping a sense region
+  per node: cheaper at any node count, and the priority rule lives in one
+  place instead of an emission order. A consequence for hosts with pan on: a
+  drag pans wherever it starts, including on a node. Any widget that picks
+  from registers this way can later be hosted in a canvas it does not own.
 - **Hosted rendering** (ADR-0228 §SD1–§SD4). To draw a graph inside a canvas
   another widget owns — a graph on a portolan map — call the pair instead of
   `Render`: `claim := gv.HostedInput(graphview.HostCanvas{Canvas, Area, W, H,

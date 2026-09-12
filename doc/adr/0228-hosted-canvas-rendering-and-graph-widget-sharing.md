@@ -1,15 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-12
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-12
 ---
-
-> **Status: proposed — pre-human-review.** Phases 1 and 2 of §SD7 are built;
-> the record is kept current with them, as a pre-acceptance ADR is. The
-> measurements in §Context were taken against the live `portolan` and
-> `graphview` APIs on the date above.
 
 # ADR-0228: one canvas, two widgets — hosted rendering, and what the two graph widgets should share
 
@@ -308,9 +303,20 @@ without the next:
    `reconcileAndPlace` and `stepAndPaint` first, so both paths do the same
    thing to the graph and differ only in where the input comes from and
    whether the camera may move.
-3. **A Go-side pick for `layeredgraph/view`**, replacing the region per node.
-   *2–3 days.* It makes layeredgraph the second guest and pays for itself in
-   the interact cost.
+3. ~~**A Go-side pick for `layeredgraph/view`**, replacing the region per
+   node~~ — **done 2026-09-12**. The painted extent of each node is kept as it
+   is computed for the paint, and the pointer is hit-tested against those
+   shapes over the widget's one canvas: a circle by the radius `drawNode` drew,
+   an ellipse by both of its radii, a box by its rect, with the last match
+   winning because a later node paints over an earlier one. The scan is linear
+   — this widget draws tens to a few hundred host-laid-out nodes, where the
+   grid graphview needs at thousands would cost more than it saves. It had no
+   hit-testing test before; it has one per shape now.
+
+   One behaviour changed and is worth stating: a host that enables pan now
+   pans from a drag that starts anywhere, including on a node, where the
+   node's region used to swallow it. This widget does not move nodes, so there
+   was nothing for that drag to mean.
 4. **Geo conveniences**, none of which need the widget: the layer-point recipe
    as a how-to, and `addGeoClustering` as a distance predicate on whatever
    grouping stage `nav` grows. *Deferred to grouping.*
@@ -400,10 +406,25 @@ pointer handling and is not taken from Leaflet or from egui.
 
 ## Status
 
-Proposed 2026-09-12, and awaiting review. Phases 1 and 2 of §SD7 are built
-and are recorded above as they landed; phase 3 — the Go-side pick that
-`layeredgraph/view` needs before it can be a guest — is not, and has no
-consumer asking for it.
+Accepted 2026-09-12. Phases 1 and 2 of §SD7 shipped before acceptance and are
+recorded above as they landed; phase 3 follows. Later changes go in dated
+entries under `## Updates`.
+
+## Updates
+
+### 2026-09-12 — phase 3, and what is left
+
+`layeredgraph/view` picks in Go (§SD7 item 3), which was the prerequisite
+§SD6 named: a widget that reads registers rather than stamping regions is one
+a host can hand a canvas to. Nothing has hosted it yet, and nothing asks to —
+the seam is there when a consumer does.
+
+What remains of §SD7 is item 4, the geo conveniences, which need no widget
+work: the fixed-world recipe is documented in the imzero2 skill, and
+`addGeoClustering` is a distance predicate on whatever grouping stage `nav`
+grows. A shared painter core for the two graph widgets stays deferred on the
+trigger §SD6 gave — a consumer that needs one drawing in both postures — and
+still has none.
 
 ## References
 

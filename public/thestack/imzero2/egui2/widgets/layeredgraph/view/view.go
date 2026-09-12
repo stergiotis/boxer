@@ -7,9 +7,11 @@
 // layeredgraph coordinates are points, top-left origin, y-down. Render fits
 // them into the target canvas (uniform scale, centred — the v1 "fit to view";
 // pan/zoom is deferred to v2 per ADR-0069), then paints nodes (box/circle),
-// edges (cubic-Bézier splines plus a synthesised arrow head) and labels, with
-// one PaintSenseRegion per node so hover/click is reported back. The reported
-// interaction is from the previous frame (immediate-mode one-frame lag).
+// edges (cubic-Bézier splines plus a synthesised arrow head) and labels, and
+// hit-tests the pointer against the painted shapes in Go over the widget's one
+// canvas, so hover and click are reported back without a sense region per node
+// (ADR-0228 §SD6). The reported interaction is from the previous frame
+// (immediate-mode one-frame lag).
 package view
 
 import (
@@ -172,9 +174,17 @@ type RenderResult struct {
 	Clicked string
 }
 
-// Render paints lay and returns hover/click hit-testing. idBase namespaces this
-// widget's canvas + per-node sense-region ids; pass a stable per-instance
-// high-entropy constant so two layered graphs on screen do not collide.
+// Render paints lay and returns hover/click hit-testing. idBase namespaces
+// this widget's canvas id; pass a stable per-instance high-entropy constant so
+// two layered graphs on screen do not collide.
+//
+// Hit-testing is done in Go over the one canvas rather than with a sense
+// region per node (ADR-0228 §SD6): the region form costs a ui.interact per
+// node per frame and settles priority by emission order. One consequence is
+// visible to a host that enables pan — a drag now pans wherever it starts,
+// including on a node, where a node's region used to swallow it. This widget
+// does not move nodes, the layout being the engine's, so there was nothing
+// for that drag to mean.
 func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResult {
 	st := opts.Style
 	if st.NodeFontSize <= 0 {
@@ -194,16 +204,17 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		// single affine: screen = p*(scale*zoom) + offset, zoom about the canvas
 		// centre, then panned. Input is read from the previous frame's canvas
 		// response (drag) and the zoom-gesture register, both scoped to the canvas.
+		canvasHandle := widgethandle.Make(wis.PrepareStr("canvas").Derive())
+		canvasResp := sm.GetResponse(canvasHandle)
 		zoom, panX, panY := 1.0, 0.0, 0.0
 		if vs := opts.State; vs != nil {
-			canvasH := widgethandle.Make(wis.PrepareStr("canvas").Derive())
-			resp := sm.GetResponse(canvasH)
+			resp := canvasResp
 			// ADR-0140: the wheel is scoped to this canvas by the .CaptureZoom() on
 			// the PaintCanvas below — GetCanvasWheel is non-identity only when the
 			// pointer was over us last frame, so there is no separate
 			// contains-pointer gate and no read of the global zoom register that a
 			// sibling canvas would also see.
-			if zd := sm.GetCanvasWheel(canvasH).Zoom; zd > 0 && zd != 1 {
+			if zd := sm.GetCanvasWheel(canvasHandle).Zoom; zd > 0 && zd != 1 {
 				z := vs.Zoom
 				if z <= 0 {
 					z = 1
@@ -248,16 +259,34 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		tf := func(p layeredgraph.Point) (x, y float32) {
 			return cm.ToScreen(float32(p.X), float32(p.Y))
 		}
-		// Read previous-frame node interaction; it drives this frame's highlight.
-		hovered := make(map[string]bool, len(lay.Nodes))
-		for _, n := range lay.Nodes {
-			resp := sm.GetResponse(widgethandle.Make(wis.PrepareStr(n.ID).Derive()))
-			if resp.HasHovered() {
-				hovered[n.ID] = true
-				res.Hovered = n.ID
+		// The painted extent of every node, which the pick tests and the paint
+		// below reuses (ADR-0228 §SD6).
+		boxes := make([]nodeBox, len(lay.Nodes))
+		for i, n := range lay.Nodes {
+			cx, cy := tf(n.Center)
+			boxes[i] = nodeBox{
+				shape: n.Shape, cx: cx, cy: cy,
+				w: float32(n.W * escale), h: float32(n.H * escale),
 			}
-			if resp.HasPrimaryClicked() {
-				res.Clicked = n.ID
+		}
+
+		// Hit-test in Go against the previous frame's input, over the one
+		// canvas, rather than with a sense region per node: the region form
+		// costs a ui.interact per node per frame and puts the priority rule in
+		// an emission order (ADR-0224 §SD3's reasoning, applied here by
+		// ADR-0228 §SD6). A widget that picks from registers is also one that
+		// can be hosted in a canvas it does not own.
+		px, py, posOk := canvasPointer(sm, canvasHandle)
+		hit := -1
+		if posOk && canvasResp.HasContainsPointer() {
+			hit = pickNode(boxes, px, py)
+		}
+		hovered := -1
+		if hit >= 0 {
+			hovered = hit
+			res.Hovered = lay.Nodes[hit].ID
+			if canvasResp.HasPrimaryClicked() {
+				res.Clicked = lay.Nodes[hit].ID
 			}
 		}
 
@@ -289,10 +318,9 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 		if lay.FontSize > 0 {
 			nodeFontPt = float32(lay.FontSize)
 		}
-		for _, n := range lay.Nodes {
-			cx, cy := tf(n.Center)
-			w := float32(n.W * escale)
-			h := float32(n.H * escale)
+		for i, n := range lay.Nodes {
+			b := boxes[i]
+			cx, cy, w, h := b.cx, b.cy, b.w, b.h
 			// A node whose weight scaled its font was laid out at that size,
 			// so paint it there — the same no-drift reason the layout-wide
 			// size wins over the style's (ADR-0167 §SD3).
@@ -312,19 +340,20 @@ func Render(idBase uint64, lay *layeredgraph.Layout, opts RenderOpts) RenderResu
 					txt = c2
 				}
 			}
-			drawNode(n.Shape, cx, cy, w, h, st, fill, hovered[n.ID])
+			drawNode(n.Shape, cx, cy, w, h, st, fill, i == hovered)
 			c.PaintText(cx, cy, 1, 1, n.Label, fontPt*float32(escale), txt).Send()
-			c.PaintSenseRegion(wis.PrepareStr(n.ID), cx-w/2, cy-h/2, w, h).Send()
 		}
 
-		// Drain into the canvas. Sense click/drag/hover only when pan/zoom is
-		// enabled, so Render can read drag + zoom over the canvas.
-		cv := c.PaintCanvas(wis.PrepareStr("canvas"), canvasW, canvasH).Background(st.Background)
+		// Drain into the canvas, which senses in every case: it carries the
+		// hover and the click the per-node regions used to, and the drag and
+		// the wheel when pan/zoom is on.
+		cv := c.PaintCanvas(wis.PrepareStr("canvas"), canvasW, canvasH).
+			Background(st.Background).Sense(true, true, true)
 		if opts.State != nil {
 			// CaptureZoom (ADR-0140) scopes the zoom gesture to this canvas; Render
 			// reads it back via GetCanvasWheel. Scroll is left uncaptured — pan is
 			// drag-based, so plain wheel stays free for an enclosing pane.
-			cv = cv.Sense(true, true, true).CaptureZoom()
+			cv = cv.CaptureZoom()
 		}
 		cv.Send()
 	}
@@ -367,6 +396,73 @@ func fit(lay *layeredgraph.Layout, targetW, targetH float32) (scale, offX, offY 
 	offY = (float64(targetH) - h*scale) / 2
 	return scale, offX, offY, targetW, targetH
 }
+
+// nodeBox is one node's painted extent in canvas pixels. The pick tests the
+// shape that was drawn, so what the pointer hits is what the eye sees.
+type nodeBox struct {
+	shape  layeredgraph.NodeShape
+	cx, cy float32
+	w, h   float32
+}
+
+// contains reports whether a canvas point is inside the painted shape; the
+// geometry mirrors drawNode's.
+func (b nodeBox) contains(x, y float32) bool {
+	switch b.shape {
+	case layeredgraph.NodeShapeCircle:
+		r := b.w
+		if b.h < b.w {
+			r = b.h
+		}
+		r /= 2
+		dx, dy := x-b.cx, y-b.cy
+		return dx*dx+dy*dy <= r*r
+	case layeredgraph.NodeShapeEllipse:
+		rx, ry := b.w/2, b.h/2
+		if rx <= 0 || ry <= 0 {
+			return false
+		}
+		dx, dy := (x-b.cx)/rx, (y-b.cy)/ry
+		return dx*dx+dy*dy <= 1
+	default: // box
+		return x >= b.cx-b.w/2 && x <= b.cx+b.w/2 &&
+			y >= b.cy-b.h/2 && y <= b.cy+b.h/2
+	}
+}
+
+// pickNode returns the index of the topmost node under the point, or -1.
+// Nodes paint in the layout's order, so a later one covers an earlier one and
+// the last match is the one on top: the priority rule is here, in one place,
+// rather than in the order regions happened to be emitted.
+//
+// The scan is linear. This widget draws a host-laid-out graph of tens to a
+// few hundred nodes; the spatial grid graphview needs at thousands (ADR-0224
+// §SD3) would cost more than it saves here.
+func pickNode(boxes []nodeBox, x, y float32) int {
+	hit := -1
+	for i := range boxes {
+		if boxes[i].contains(x, y) {
+			hit = i
+		}
+	}
+	return hit
+}
+
+// canvasPointer is the pointer in canvas pixels, from the canvas's R24 origin
+// row and the global pointer, as of the previous frame.
+func canvasPointer(sm *c.StateManager, canvas widgethandle.WidgetHandle) (x, y float32, ok bool) {
+	cur, live := sm.GetCanvasCursor(canvas)
+	if !live || isNaN32(cur.OriginX) || isNaN32(cur.OriginY) {
+		return 0, 0, false
+	}
+	ptr := sm.GetPointer()
+	if !ptr.Valid || isNaN32(ptr.X) || isNaN32(ptr.Y) {
+		return 0, 0, false
+	}
+	return ptr.X - cur.OriginX, ptr.Y - cur.OriginY, true
+}
+
+func isNaN32(f float32) bool { return f != f }
 
 func drawNode(sh layeredgraph.NodeShape, cx, cy, w, h float32, st Style, fill color.Color, hovered bool) {
 	switch sh {
