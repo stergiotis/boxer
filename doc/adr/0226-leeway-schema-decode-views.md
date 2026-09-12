@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-12
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-12
 ---
-
-> **Status: proposed — pre-human-review.** The views ship with this record;
-> they have not been reviewed.
 
 # ADR-0226: `leeway.*` — schema-decode views over `system.tables` and `system.columns`
 
@@ -346,10 +343,41 @@ cannot be told from a snake_case component by position alone.
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis.
+Accepted 2026-09-12.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
+
+## Updates
+
+### 2026-09-12 — the views get a book, and the backtick gap closes
+
+`apps/sqlapplet/bookleeway` ships five chapters over the three views — the
+leeway-table inventory, a table's section anatomy, the stored bytes as an
+icicle and a treemap, what each aspect vocabulary sits on, and the tables that
+share a schema as a graph. It sits beside the ADR-0170 catalog book under the
+same topic, which is where §SD2's split becomes something a reader can see
+rather than a sentence they have to remember: one book says what the names
+spell out, the other says whether a table really is leeway.
+
+Two things the book settled that the body above left open.
+
+**The `columns` backtick requirement is now pinned.** §Verification recorded it
+as a gap — caught in the shipped play snippets by the help-corpus parse and
+nowhere else. `TestLeewayBookBackticksTheColumnsView` asserts it directly, on
+every chapter, against the view name rather than a literal.
+
+**The Graphview tab needed classifying before a chapter could name it.** It had
+landed in play (ADR-0227) without an entry in sqlapplet's tab policy, which
+that policy's own guard had been failing on. It is a result panel, and it is
+listed auto-off: its contract is the Network tab's unchanged, so every shape
+that would turn it on already turns Network on, and auto-on would put a second
+graph tab on those windows by default. `lw-affinity.md` names both and lets the
+reader compare the two readings.
+
+The chapters' SQL is verified against a live server by the book's own
+integration lane, knobs included — the views are generated SQL, and a Go test
+can check the shape of what they emit but not what it means.
 
 ## References
 
@@ -359,3 +387,4 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 - [ADR-0182](./0182-leeway-aspects-v2-codec-and-vocabulary.md) — the aspect codec and the `LW_ASPECT_*` family §SD1 builds on.
 - [ADR-0116](./0116-play-leeway-column-handle-resolution.md) — handles and labels.
 - [doc/explanation/leeway-column-names.md](../explanation/leeway-column-names.md) — the name anatomy in prose.
+- [ADR-0132](./0132-sqlapplet-sql-defined-applets.md) — the applet book the views ship a corpus for.

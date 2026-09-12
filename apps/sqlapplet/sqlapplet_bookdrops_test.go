@@ -43,6 +43,8 @@ func TestBookCorporaDropNothing(t *testing.T) {
 		{"bookjsonbench", bookjsonbenchFS},
 		{"bookcodevol", bookcodevolFS},
 		{"bookcatalog", bookcatalogFS},
+		{"bookleeway", bookleewayFS},
+		{"booklading", bookladingFS},
 		{"bookadr", bookadrFS},
 		{"bookwatchbill", bookwatchbillFS},
 	}
