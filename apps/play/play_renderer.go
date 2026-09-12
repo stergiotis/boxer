@@ -131,6 +131,7 @@ const (
 	dockTabGlosses     uint64 = 27
 	dockTabCompletion  uint64 = 28
 	dockTabFiles       uint64 = 29
+	dockTabGraphview   uint64 = 30
 )
 
 type PlayApp struct {
@@ -447,10 +448,20 @@ type PlayApp struct {
 	// plain observer of the active result — no lane, nothing to Close.
 	kanbanDriver *KanbanDriver
 
-	// networkDriver is the ADR-0129 layered-graph panel (Network dock tab): a
-	// node-link view whose vertices and edges come from two named CTEs of the
-	// user's query, each on its own lane (closed in Close).
+	// netSource is the pair of lanes the graph contract is fed from — the
+	// `edges` and `vertices` CTEs of the user's query — SHARED by the two graph
+	// panels below (ADR-0225 §SD2), so with both tabs open the CTEs execute
+	// once. Closed in Close, forgotten on Run.
+	netSource *networkSource
+
+	// networkDriver is the ADR-0129 layered-graph panel (Network dock tab): the
+	// ranked reading of that contract, laid out by Graphviz.
 	networkDriver *NetworkDriver
+
+	// graphviewDriver is the ADR-0225 panel (Graphview dock tab): the LIVE
+	// reading of the same contract — a force or hierarchical layout owned in
+	// Go, over widgets/graphview (ADR-0224).
+	graphviewDriver *GraphviewDriver
 
 	// sankeyDriver is the ADR-0159 flow-diagram panel (Sankey dock tab): the
 	// same two-private-lane shape as the Network's, over the `flows` and
@@ -1104,7 +1115,9 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.mapDriver = NewMapDriver(mk(), client)
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
-	inst.networkDriver = NewNetworkDriver(mk(), client)
+	inst.netSource = newNetworkSource(client)
+	inst.networkDriver = NewNetworkDriver(mk(), inst.netSource)
+	inst.graphviewDriver = NewGraphviewDriver(mk(), inst.netSource)
 	inst.sankeyDriver = NewSankeyDriver(mk(), client)
 	inst.distDriver = NewDistDriver(mk())
 	inst.icicleDriver = NewIcicleDriver(mk())
@@ -1187,14 +1200,7 @@ func (inst *PlayApp) Close() {
 	if inst.kanbanDriver != nil && inst.kanbanDriver.lanesLane != nil {
 		inst.kanbanDriver.lanesLane.close()
 	}
-	if inst.networkDriver != nil {
-		if inst.networkDriver.edgesLane != nil {
-			inst.networkDriver.edgesLane.close()
-		}
-		if inst.networkDriver.verticesLane != nil {
-			inst.networkDriver.verticesLane.close()
-		}
-	}
+	inst.netSource.close()
 	if inst.sankeyDriver != nil {
 		if inst.sankeyDriver.flowsLane != nil {
 			inst.sankeyDriver.flowsLane.close()
@@ -1769,11 +1775,12 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	// Bound lanes re-execute against the possibly-changed data too; the
 	// bindings themselves survive the Run (they revive by node name, 6c).
 	inst.forgetBoundLanes()
-	// The Network panel's `edges`/`vertices` CTEs are nodes of this query on
-	// their own lanes (ADR-0129); forget them on Run so a corrected endpoint or
-	// changed data is picked up, rather than memo-hitting a prior error (whose
-	// key is the SQL, which a re-Run leaves unchanged).
-	inst.networkDriver.forgetLanes()
+	// The graph panels' `edges`/`vertices` CTEs are nodes of this query on their
+	// own lanes (ADR-0129), shared by both tabs (ADR-0225 §SD2); forget them on
+	// Run so a corrected endpoint or changed data is picked up, rather than
+	// memo-hitting a prior error (whose key is the SQL, which a re-Run leaves
+	// unchanged).
+	inst.netSource.forgetLanes()
 	// The Kanban panel's `lanes` CTE (ADR-0122 §SD6) is likewise a node of this
 	// query on its own lane; forget it on Run for the same reason — a re-Run
 	// after a transient failure would otherwise memo-hit the stored error (its

@@ -18,8 +18,9 @@ The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 into three groups: the **editor** (Editor, History), the **tool panes** beside
 it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Experiments — each reads
 the buffer, or something derived from it, while you type), and the **result
-panes** below (Table, Projection, Timeline, Map, World, Kanban, Network, Sankey,
-Distribution, Icicle, Files, Graph, Schema, and Detail alongside them). Drag a tab to
+panes** below (Table, Projection, Timeline, Map, World, Kanban, Network,
+Graphview, Sankey, Distribution, Icicle, Files, Graph, Schema, and Detail
+alongside them). Drag a tab to
 re-dock or split it; the layout holds for the session and starts fresh next
 launch.
 

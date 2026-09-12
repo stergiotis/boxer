@@ -67,7 +67,10 @@ derived from it, so you keep them open while typing:
   (ISO codes or names) alongside a numeric column.
 - **Kanban** — the result as cards in lanes, when it carries `lane` and `title`
   columns.
-- **Network** — the result as a node-link graph, when it names an `edges` set.
+- **Network** — the result as a node-link graph, ranked top-down or
+  left-right, when it names an `edges` set.
+- **Graphview** — the same graph laid out live: a force simulation you can
+  drag, pin and zoom, with each `group` drawn as a translucent aura.
 - **Graph** — the reactive query-graph: the buffer's CTEs as nodes; observe an
   intermediate node to point the result tabs at it. Also hosts the **signals**
   editor (see below).

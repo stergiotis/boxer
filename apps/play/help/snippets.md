@@ -860,6 +860,16 @@ hub they all reach — that shared node is what makes this a graph rather than a
 row of separate stars. Edit the `num IN (…)` list to point it at a different
 slice of the corpus.
 
+The **Graphview** tab reads the same two CTEs (ADR-0225) and needs no edit to
+the query: where Network ranks the graph, Graphview lays it out live — a force
+simulation you can drag nodes around in, pin by dropping, and zoom. Switch **auras by group** on and
+the `group` column above draws each side as a translucent blob — worth it when
+a group is also a cluster, which is what a force layout makes visible and a
+ranked one cannot. A vertex `weight` sizes the node there rather than its label box,
+and an optional `donut` column — a list of numbers — draws a ring of
+proportional slices around it. Open both tabs side by side to compare the two
+readings of one result.
+
 ```sql
 WITH
   picked AS (

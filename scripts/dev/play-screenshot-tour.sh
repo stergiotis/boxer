@@ -423,6 +423,50 @@ SELECT * FROM edges"
 	settle=3000
 }
 
+scene_08_graphview() {
+	desc="Graphview — the same two CTEs as the Network scene, read live (ADR-0225): a force layout with centre gravity, each group drawn as a translucent aura with a clickable legend"
+	senv=(BOXER_PLAY_FOCUS_GRAPHVIEW=1)
+	# Deliberately the Network scene's query, unedited: what the two tabs show
+	# of one result is the comparison this panel exists for, and a scene that
+	# changed the SQL would not make it. Operators and aircraft types are two
+	# groups, so the aura pass has something to separate.
+	sql="WITH
+  top_ops AS (
+    SELECT ownOp
+    FROM default.planes_mercator_sample100
+    WHERE ownOp != '' AND t != ''
+    GROUP BY ownOp
+    ORDER BY uniq(icao) DESC
+    LIMIT 6
+  ),
+  fleets AS (
+    SELECT ownOp, t
+    FROM default.planes_mercator_sample100
+    WHERE t != '' AND ownOp IN (SELECT ownOp FROM top_ops)
+    GROUP BY ownOp, t
+  ),
+  vertices AS (
+    SELECT DISTINCT ownOp AS id, ownOp AS label, 'operator' AS \`group\` FROM fleets
+    UNION ALL
+    SELECT DISTINCT t, t, 'aircraft type' FROM fleets
+  ),
+  edges AS (
+    SELECT ownOp AS source, t AS target FROM fleets
+  )
+SELECT * FROM edges"
+	# Longer than the Network scene's: this layout is a simulation, and the
+	# capture wants it settled rather than mid-flight. The fit latch holds the
+	# camera on the graph until it is.
+	settle=6000
+	# Two captures: the panel as it opens, then with the auras switched on,
+	# which is the pair the default argues from — the blobs are worth their
+	# cost when a group is also a cluster, and this bipartite result is the
+	# case where it is not.
+	steps='{"do":"capture","text":"08_graphview","settleMs":600}
+{"do":"click","name":"auras by group","role":"check_box"}
+{"do":"capture","text":"08_graphview_auras","settleMs":1200}'
+}
+
 # Shares 08 with the Network scene rather than renumbering the tail: order is
 # the function name's sort order, so this lands immediately after it, which is
 # where the other result-shape panel belongs.

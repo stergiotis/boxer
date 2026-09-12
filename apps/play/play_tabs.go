@@ -391,6 +391,14 @@ var builtinTabDefs = []builtinTabDef{
 	// row-index `selection` stays local to the driver, per ADR-0129 §SD4.
 	{id: "network", dockID: dockTabNetwork, title: "Network", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelectionKey}},
+	// Graphview is the LIVE reading of the Network's contract (ADR-0225): the
+	// same `edges`/`vertices` CTEs on the same lanes, laid out by a force
+	// simulation or a tree walk instead of by Graphviz. Two tabs rather than
+	// one tab with a mode, because the ranked reading and the clustered one
+	// are most useful side by side. Its selection is local for the Network's
+	// reason, and it publishes the clicked vertex id.
+	{id: "graphview", dockID: dockTabGraphview, title: "Graphview", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelectionKey}},
 	// The Sankey tab draws the result as a flow-quantity diagram (ADR-0159).
 	// Its inputs are the `flows`/`nodes` CTEs, so its selection is local for
 	// the same reason the Network's is; a pinned node publishes its id.
@@ -636,6 +644,14 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// ScrollArea.
 			spec.Panel = layeredGraphPanel{driver: inst.networkDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderNetworkTab) }
+		case "graphview":
+			// Reads the same two named CTEs off the split as the Network tab,
+			// so the body ignores the frame. Scrolled for the Network tab's
+			// reason — the canvas is a fixed box sized from the pane probe —
+			// and the two do not fight over the wheel: graphview takes it only
+			// while the pointer is over its canvas (ADR-0140).
+			spec.Panel = graphviewPanel{driver: inst.graphviewDriver}
+			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphviewTab) }
 		case "sankey":
 			// Reads its two named CTEs off the split, not the active result, so
 			// the body ignores the frame. Scrolled, like the Network tab: the

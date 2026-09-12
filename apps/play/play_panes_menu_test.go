@@ -36,8 +36,8 @@ func TestPaneMenuGroups(t *testing.T) {
 	for _, r := range shows {
 		showIDs = append(showIDs, r.TabID)
 	}
-	assert.Equal(t, []string{"table", "projection", "timeline", "world", "kanban", "network", "sankey",
-		"dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"},
+	assert.Equal(t, []string{"table", "projection", "timeline", "world", "kanban", "network", "graphview",
+		"sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"},
 		showIDs, "one row per PanelI-bearing tab, in strip order")
 
 	require.Len(t, drives, 1, "only the World writes a name this buffer reads")
