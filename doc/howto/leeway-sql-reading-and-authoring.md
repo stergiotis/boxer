@@ -249,6 +249,21 @@ FROM system.columns
 WHERE database = 'anchor' AND table = 'facts'
 ```
 
+The rest of the name — section, column, role, canonical type, row config,
+co-section and streaming group — is decoded for you by `leeway.columns`
+(ADR-0226), which also carries the handle and the lane kind:
+
+```sql
+SELECT handle, role, lane_kind, canonical_type, encoding_hints, streaming_group
+FROM leeway.`columns`
+WHERE database = 'anchor' AND table = 'facts' AND layout != 'foreign'
+ORDER BY position
+```
+
+`leeway.sections` and `leeway.tables` are the same decode at coarser grain.
+All three report what the *names* support, not whether discovery would
+succeed — that verdict lives in `boxer.tables_leeway` (ADR-0170).
+
 ## 9. Author new leeway columns
 
 A computed column with an ordinary alias breaks leeway closure — the result

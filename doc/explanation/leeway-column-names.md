@@ -131,4 +131,7 @@ data-level predicate, out of scope for name resolution.
 - The `leeway-beginner` and `leeway-advanced` skills — the backbone/payload
   model and the physical encoding this page summarises.
 - [the SQL read surface](./leeway-sql-read-surface.md) — handles are one
-  layer of it; that page names the rest and says which endpoint carries what.
+  layer of it; that page names the rest and says which endpoint carries what,
+  including the `leeway.*` views that read this anatomy apart as rows
+  ([ADR-0226](../adr/0226-leeway-schema-decode-views.md)) — a handle is one of
+  their columns.

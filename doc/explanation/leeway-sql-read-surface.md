@@ -38,7 +38,7 @@ cardinality was not uniform, and nothing said so.
 
 ## The layering
 
-Five things compose, bottom to top. Each layer only assumes the one below it.
+Six things compose, bottom to top. Each layer only assumes the one below it.
 
 | Layer | What it knows | Names |
 | --- | --- | --- |
@@ -47,6 +47,7 @@ Five things compose, bottom to top. Each layer only assumes the one below it.
 | **Identity** ([ADR-0106](../adr/0106-identity-fibonacci-tags-build-tag-retirement.md)) | the bit layout of a tagged identifier | `LW_ID_*` |
 | **Read-back** ([ADR-0066](../adr/0066-leeway-dql-clickhouse-readback-generator.md)) | leeway's tagged-section layout: locate an attribute by membership, extract its value | `LW_LU_*`, `LW_VALUE_BY_TAG_EQUAL`, `LW_LIST_BY_TAG_EQUAL` |
 | **Authoring** ([ADR-0116](../adr/0116-play-leeway-column-handle-resolution.md), [ADR-0181](../adr/0181-leeway-dql-authoring-surface.md)) | how a person names a column or an attribute | handles, `LW_PLAIN`/`LW_TV*`, `LW_GET*` |
+| **Schema decode** ([ADR-0226](../adr/0226-leeway-schema-decode-views.md)) | the whole physical name, read apart as rows over the system tables | `leeway.columns`, `leeway.sections`, `leeway.tables` |
 
 The layering is not new — ADR-0162's 2026-08-02 Update records it. What was
 missing is a reader arriving from the consumer side finding it stated once.
@@ -59,7 +60,9 @@ work, and it does not follow package boundaries.
 - **Server** — installed SQL user-defined functions. `LW_CO_*`,
   `LW_RAGGED_*`, `LW_ASPECT_*`, `LW_LU_*`, `LW_VALUE_BY_TAG_EQUAL`,
   `LW_LIST_BY_TAG_EQUAL`. Absent means *not provisioned here*; the server
-  answers "unknown function", which reads like a typo and is not one.
+  answers "unknown function", which reads like a typo and is not one. The
+  `leeway.*` views are installed the same way and fail the same way, except
+  that the message names an unknown table.
 - **Client** — expanded before the statement ships, so they work against any
   endpoint, including one carrying nothing. Column handles, the `LW_PLAIN` /
   `LW_TV*` constructors, and the `LW_GET*` extraction family. Absent means
@@ -74,16 +77,25 @@ never travels. play's Vocabulary tab marks exactly this case.
 
 ## Provisioning, and checking
 
-The three server families install together, under one version marker:
+The server families install together, under one version marker:
 
 ```go
-err := lwsqlsurface.Install(ctx, conn) // pack + read-back + identity, then verify
+err := lwsqlsurface.Install(ctx, conn) // pack + read-back + identity + views, then verify
 ```
 
 `LW_SURFACE_VERSION()` reports the revision, and the invariant is that the
-marker at revision N means **all three** families are installed at N — which
-is why they install together and why none carries a marker of its own
-([ADR-0171](../adr/0171-leeway-sql-read-surface.md) §SD2).
+marker at revision N means **everything the build declares** is installed at N
+— which is why they install together and why no family carries a marker of its
+own ([ADR-0171](../adr/0171-leeway-sql-read-surface.md) §SD2).
+
+The views go on last, and this is the one part worth knowing rather than
+trusting: **ClickHouse expands a SQL UDF into a view's stored query at `CREATE`
+time**, so an installed view carries the aspect vocabulary *inlined* — replacing
+the function afterwards does not reach it. A view is a snapshot of the revision
+it was created against, which is why each records that revision in its
+`COMMENT` and why `status` reports a view from another one as **stale** rather
+than missing. It is the only drift in this surface that answers instead of
+erroring, and `install` is what clears it.
 
 ```sql
 SELECT LW_SURFACE_VERSION()   -- unknown function ⇒ nothing is provisioned here
@@ -124,6 +136,50 @@ check.
   consumer that wants that family alone, and `leeway id udf` the identity
   statements. Neither stamps the version marker — prefer
   `leeway sqlsurface print`, which does.
+
+## Asking about the schema itself
+
+A leeway physical column name carries the whole authored structure, which
+means `system.columns` already holds the schema — spelled in a form nobody
+wants to split by hand. Three views read it apart
+([ADR-0226](../adr/0226-leeway-schema-decode-views.md)):
+
+| View | Grain | What it adds |
+| --- | --- | --- |
+| `leeway.columns` | one row per column of every non-system table | section, column, role, lane kind, canonical type, the three aspect sets, row config, co-section and streaming group, the handle — joined to `system.columns`' type and compression figures |
+| `leeway.sections` | one row per (table, section) | the section's value columns, roles, canonical types and use-aspects |
+| `leeway.tables` | one row per non-system table | layout counts, sections, and the `system.tables` passthrough |
+
+So the question the aspect predicates were shipped for becomes a `GROUP BY`:
+
+```sql
+SELECT arrayJoin(encoding_hints) AS hint,
+       count(),
+       sum(data_compressed_bytes) / sum(data_uncompressed_bytes) AS ratio
+FROM leeway.`columns`
+WHERE database = 'boxer' AND layout != 'foreign'
+GROUP BY hint ORDER BY ratio
+```
+
+Two things to keep straight:
+
+- **The views decode names; they do not classify tables.** `layout` is
+  `foreign | plain | tagged` and `name_shape` is `foreign | mixed | leeway |
+  empty` — counts of what the *names* support. Whether a table really is
+  leeway is what `DiscoverTableFromColumnNames` answers, and
+  `boxer.tables_catalog` / `boxer.tables_leeway`
+  ([ADR-0170](../adr/0170-data-catalog-competence.md)) are where that answer
+  is written down. The views are live and cheap; the catalog is authoritative
+  and a snapshot.
+- **A name composed with another separator reads as `foreign`.** Only `:` is
+  decoded, which is every leeway table in this tree.
+- **Backtick `` `columns` `` in the playground.** A bare `columns` reads as the
+  start of a `COLUMNS('…')` matcher to the client-side parser, and an
+  unparseable statement ships verbatim — skipping handle resolution and every
+  other pre-execute pass. `system.columns` has always needed the same; the
+  other two views do not.
+- **After a vocabulary change, re-install.** The views hold an expanded copy of
+  the aspect tables; `status` says which endpoints are still on the old one.
 
 ## Reading one attribute, end to end
 
@@ -248,5 +304,7 @@ Stated here rather than discovered later:
   named thing: the version handshake, and the gaps above.
 - [ADR-0181](../adr/0181-leeway-dql-authoring-surface.md) — constructors,
   extraction sugar, shape checking, skip-index options.
+- [ADR-0226](../adr/0226-leeway-schema-decode-views.md) — the schema-decode
+  views, and why they are not a second classifier.
 - [jsonbench-on-facts trial](../trials/jsonbench-on-facts/README.md) — the
   measurements this page opens with.
