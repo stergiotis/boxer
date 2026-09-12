@@ -118,33 +118,73 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
-		Name: "graphview", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go)",
-		Stage:       [2]float32{1024, 700},
+		Name: "graphview-ring", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — ring",
+		Stage:       [2]float32{1024, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
-		Description: "The live graph widget of ADR-0224 — the egui_graphs binding's feature set as Go on the painter lane: random, force-directed (with and without centre gravity) and hierarchical layouts, node drag, pan and anchored zoom, click and selection events, parallel edges and self-loops, one-shot fit; plus the ADR-0225 navigation layer over a larger universe with the radial layout. Deterministic placement, so the capture is stable.",
+		Description: "The live graph widget of ADR-0224 on its random layout: node drag, pan and anchored zoom, click, rectangle and programmatic selection, secondary and background clicks, parallel edges told apart by id, a self-loop, donut rings, and the interaction options switched off one by one. Deterministic placement, so the capture is stable.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
-			state = newGraphviewDemoState(ids)
+			state = newGraphviewRingState(ids)
 			return
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			st := state.(*graphviewDemoState)
-			for range c.CollapsingHeader(ids.PrepareStr("gv-nav"), c.WidgetText().Text("navigation controls").Keep()).KeepIter() {
-				demoGraphviewNav(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("gv-ring"), c.WidgetText().Text("ring (random layout)").Keep()).DefaultOpen(true).KeepIter() {
-				demoGraphviewRing(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("gv-force"), c.WidgetText().Text("tree (force-directed)").Keep()).KeepIter() {
-				demoGraphviewForce(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("gv-hier"), c.WidgetText().Text("tree (hierarchical)").Keep()).KeepIter() {
-				demoGraphviewHier(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("gv-explore"), c.WidgetText().Text("exploration (navigation layer, radial layout)").Keep()).KeepIter() {
-				demoGraphviewExplore(ids, st)
-			}
-			demoGraphviewEventLog(ids, st)
+			demoGraphviewRing(ids, state.(*graphviewRingState))
+		},
+	})
+	registry.Register(registry.Demo{
+		Name: "graphview-force", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — force-directed",
+		Stage:       [2]float32{1024, 980},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindUX,
+		Description: "Fruchterman–Reingold with and without centre gravity over a binary tree of 2 to 20,000 nodes: every ForceParams knob live, pause by hand or once settled, fast-forward, a declared pin, dropped nodes held, donuts, auras with a clickable legend, and a saved layout restored with its selection. The simulation runs a step per frame, so the capture depends on when it is taken.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			state = newGraphviewForceState(ids)
+			return
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoGraphviewForce(ids, state.(*graphviewForceState))
+		},
+	})
+	registry.Register(registry.Demo{
+		Name: "graphview-hier", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — hierarchical",
+		Stage:       [2]float32{1024, 720},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindUX,
+		Description: "The hierarchical tree walk: row and column distance, centred parents, orientation, and a forest of a second tree and a rootless cycle packed beside the first. A function of the topology alone, so the capture is stable.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			state = newGraphviewHierState(ids)
+			return
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoGraphviewHier(ids, state.(*graphviewHierState))
+		},
+	})
+	registry.Register(registry.Demo{
+		Name: "graphview-explore", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — exploration",
+		Stage:       [2]float32{1024, 900},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindUX,
+		Description: "The ADR-0225 navigation layer over a 170-node universe in two components: focus, manual and show-all modes, expansion direction, focus and tail radius, stubs loaded a frame after they are wanted, hide and show, and the radial layout around the focus nodes or the force layout. The radial picture is deterministic, so the capture is stable.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			state = newGraphviewExploreState(ids)
+			return
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoGraphviewExplore(ids, state.(*graphviewExploreState))
+		},
+	})
+	registry.Register(registry.Demo{
+		Name: "graphview-style", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — styling and weights",
+		Stage:       [2]float32{1024, 800},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindUX,
+		Description: "A hub and spokes under the force layout: per-edge length and strength pulling the spokes into two rings, zoom bounds, a node outline, monospace labels, and auras with explicit fills, a line and a legend opt-out. The force layout steps per frame, so the capture depends on when it is taken.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			state = newGraphviewStyleState(ids)
+			return
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoGraphviewStyle(ids, state.(*graphviewStyleState))
 		},
 	})
 	registry.Register(registry.Demo{

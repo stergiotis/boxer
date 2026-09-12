@@ -559,6 +559,13 @@ func (n *Navigator) FocusNodes() []uint64 {
 	return n.focusOut
 }
 
+// HiddenNodes returns the hidden ids in ascending order, known or not. The
+// slice is the navigator's and valid until the next call.
+func (n *Navigator) HiddenNodes() []uint64 {
+	n.focusOut = sortedKeys(n.focusOut[:0], n.hidden)
+	return n.focusOut
+}
+
 // IsFocused reports whether the node is on the focus list.
 func (n *Navigator) IsFocused(id uint64) bool {
 	return slices.IndexFunc(n.focus, func(f focusEntry) bool { return f.id == id }) >= 0

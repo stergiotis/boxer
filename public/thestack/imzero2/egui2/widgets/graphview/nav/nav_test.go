@@ -80,6 +80,7 @@ func TestManualDirectionAndHiddenWall(t *testing.T) {
 	n.Hide(3)
 	require.Equal(t, []uint64{1, 2, 8}, visible(n), "a hidden node is a wall")
 	require.True(t, n.IsHidden(3))
+	require.Equal(t, []uint64{3}, n.HiddenNodes())
 	require.Equal(t, 1, n.HiddenNeighbours(2))
 	require.Equal(t, 0, n.HiddenNeighbours(8))
 	n.Show(3)
