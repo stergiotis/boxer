@@ -160,6 +160,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "graphview-pull", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — soft pins",
+		Stage:       [2]float32{760, 640},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindUX,
+		Description: "The soft pin of ADR-0224 §SD16: every node is pulled toward the row its depth names, on one axis only, and left to the force layout on the other. The levels hold while the siblings settle themselves — the force-DAG posture, which the static hierarchical walk cannot give — and because it is a spring rather than a pin, a dragged node swims back to its row instead of snapping. The strength reads on CenterGravity's scale, that knob being the same term over every node at one point. Toggles turn the pull off, for the same graph as a plain force layout, and swap the level axis.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newGraphviewPullState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoGraphviewPull(ids, state.(*graphviewPullState))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "graphview-explore", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — exploration",
 		Stage:       [2]float32{1024, 900},
 		Flags:       registry.DemoFlagNeedsLargeArea,

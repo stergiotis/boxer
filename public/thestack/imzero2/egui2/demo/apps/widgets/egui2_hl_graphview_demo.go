@@ -11,8 +11,8 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/nav"
 )
 
-// The graphview demos (ADR-0224, ADR-0225) are five registered demos —
-// ring, force-directed, hierarchical, exploration, styling — so the
+// The graphview demos (ADR-0224, ADR-0225) are six registered demos — ring,
+// force-directed, hierarchical, soft pins, exploration, styling — so the
 // screenshot tour captures each one whole. They share the controls and
 // the event log below.
 
@@ -730,5 +730,87 @@ func demoGraphviewStyle(ids *c.WidgetIdStack, st *graphviewStyleState) {
 	st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-style-pane"), 380)
 	zoom, _, _ := st.v.Camera()
 	c.Label(fmt.Sprintf("zoom=%.2f · weighted=%v", zoom, st.weighted)).Send()
+	st.events(ids, st.v)
+}
+
+// --- soft pins (levels) --------------------------------------------------
+
+// graphviewPullState draws a DAG whose nodes are pulled toward the row their
+// depth names, on one axis only (ADR-0224 §SD16). The layout holds the levels
+// and settles the siblings, which is the posture a force-DAG has and the
+// static hierarchical walk does not: drag a node and it swims back to its
+// row rather than snapping to a placement.
+type graphviewPullState struct {
+	gvCommon
+	v        *graphview.View
+	nodes    []graphview.NodeSpec
+	edges    []graphview.EdgeSpec
+	depth    []int32 // parallel to nodes
+	strength float64
+	rowDist  float64
+	on       bool
+	lr       bool
+}
+
+func newGraphviewPullState(ids *c.WidgetIdStack) (st *graphviewPullState) {
+	st = &graphviewPullState{gvCommon: newGvCommon(), strength: 0.6, rowDist: 90, on: true}
+	st.v = graphview.New(ids, "graphview-pull", gvInteract(graphview.Options{
+		Layout: graphview.LayoutForceDirected,
+		Force:  graphview.ForceParams{PauseOnSettle: true},
+	}))
+	st.build()
+	return
+}
+
+// build makes a four-level DAG — one root, then widening rows, with a couple
+// of edges that skip a level so the depth is a longest path rather than a
+// tree's.
+func (st *graphviewPullState) build() {
+	rows := [][]uint64{{1}, {2, 3}, {4, 5, 6}, {7, 8, 9, 10}}
+	st.depth = st.depth[:0]
+	for d, row := range rows {
+		for _, id := range row {
+			st.nodes = append(st.nodes, graphview.NodeSpec{
+				Id: id, Label: fmt.Sprintf("L%d.%d", d, id),
+				Color: color.Hex(styletokens.QualitativeCycle(d).AsHex()),
+			})
+			st.depth = append(st.depth, int32(d))
+		}
+	}
+	for _, e := range [][2]uint64{
+		{1, 2}, {1, 3}, {2, 4}, {2, 5}, {3, 5}, {3, 6},
+		{4, 7}, {5, 8}, {5, 9}, {6, 10}, {1, 5}, {2, 9},
+	} {
+		st.edges = append(st.edges, graphview.EdgeSpec{From: e[0], To: e[1]})
+	}
+}
+
+func demoGraphviewPull(ids *c.WidgetIdStack, st *graphviewPullState) {
+	c.Label("Soft pins (ADR-0224 §SD16): every node is pulled toward the row its depth names, on one axis only, and left to the force layout on the other. " +
+		"The levels hold and the siblings settle themselves — the force-DAG posture, which the static hierarchical walk cannot give. " +
+		"It is a spring and not a pin: drag a node away and it swims back to its row instead of snapping. Turn the pull off to see the same graph as a plain force layout.").Wrap().Send()
+	st.controls(ids, st.v)
+	c.SliderF64(ids.PrepareStr("gv-pull-strength"), st.strength, 0.05, 3).Text("pull strength (CenterGravity's scale; 0.3 is its default)").SendRespVal(&st.strength)
+	c.SliderF64(ids.PrepareStr("gv-pull-row"), st.rowDist, 30, 200).Text("row distance").SendRespVal(&st.rowDist)
+	for range c.Horizontal().KeepIter() {
+		c.Checkbox(ids.PrepareStr("gv-pull-on"), st.on, "pull to levels").SendRespVal(&st.on)
+		c.Checkbox(ids.PrepareStr("gv-pull-lr"), st.lr, "levels run left-to-right").SendRespVal(&st.lr)
+	}
+
+	// The declaration carries the pull: the target is the node's row, and the
+	// strength is on that axis alone so the other stays free.
+	for i := range st.nodes {
+		st.nodes[i].Pull = graphview.Pull{}
+		if !st.on {
+			continue
+		}
+		at := float32(st.depth[i]) * float32(st.rowDist)
+		if st.lr {
+			st.nodes[i].Pull = graphview.Pull{X: at, StrengthX: float32(st.strength)}
+		} else {
+			st.nodes[i].Pull = graphview.Pull{Y: at, StrengthY: float32(st.strength)}
+		}
+	}
+	st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-pull-pane"), 340)
 	st.events(ids, st.v)
 }
