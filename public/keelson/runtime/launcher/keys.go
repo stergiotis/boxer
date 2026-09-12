@@ -16,6 +16,16 @@ package launcher
 // field on ↓ and give the list its own capture. That is two focus stops for
 // one gesture, it loses the caret, and typing after arrowing would go
 // nowhere.
+//
+// # Why there is a second site anyway
+//
+// That reasoning holds for the typed path and says nothing about the pointer
+// one. A click on a row takes focus off the field, so the field captures
+// nothing afterwards and every key the launcher owns goes dead until someone
+// clicks back into the box. The row list therefore carries the tree's shape as
+// well — a capture-only Frame the click focuses (rows.go) — and the two sites
+// share one handler. The gesture that opens the field's site is typing; the
+// one that opens the list's is a click; only the focused one ever delivers.
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
@@ -40,6 +50,19 @@ var launcherKeyMask = keycodes.MaskOf(
 	keycodes.Enter, keycodes.Escape,
 )
 
+// launcherListKeyMask is what the ROW LIST's capture Frame eats while it has
+// focus, which is what clicking a row gives it (rows.go).
+//
+// The field's mask plus Space. Space is the one key the two sites must
+// disagree about: in a text field it is a space — and a space separates the
+// battery's tokens, so it cannot be taken away there — while on a focused
+// list it is "open this", the gesture every file manager and app launcher
+// binds. Having a second site at all is what keeps the keyboard alive after a
+// click: capture is gated on the capturing widget having focus (ADR-0177
+// §SD1), and a click on a row takes focus off the field, so before this the
+// arrows went dead the moment someone used the mouse.
+var launcherListKeyMask = launcherKeyMask | keycodes.MaskOf(keycodes.Space)
+
 // keyPageStep is how far PageUp/PageDown move the cursor. A fixed step rather
 // than a viewport-derived one: the launcher list is virtualised, so the number
 // of visible rows is known only to the table's own visible-range report, one
@@ -47,15 +70,42 @@ var launcherKeyMask = keycodes.MaskOf(
 // one that is simply "about a screen".
 const keyPageStep = 10
 
-// applyKeys consumes the query field's captured keys and moves the cursor.
+// applyKeys consumes the launcher's captured keys and moves the cursor.
 // Called after the rows are built, so the cursor moves within the list the
-// user is actually looking at, and returns the row to open when Enter landed.
+// user is actually looking at, and returns the row to open when Enter or
+// Space landed.
+//
+// Two capture sites, one handler: the query field while someone is typing,
+// and the row list's Frame once a click has focused it. Only the focused one
+// delivers anything — capture is gated on focus — so which of the two answers
+// says where the person is working, and the merge below is a formality rather
+// than an arbitration. listId is zero on the first frame, before the list has
+// been rendered once.
 //
 // rows is this frame's list; the cursor is an index into it. openIdx is -1
 // when nothing was activated.
-func (inst *Inst) applyKeys(rows []rowT, fieldId uint64) (openIdx int) {
+func (inst *Inst) applyKeys(rows []rowT, fieldId uint64, listId uint64) (openIdx int) {
 	openIdx = -1
-	captured := c.CurrentApplicationState.StateManager.GetCapturedKeys(widgethandle.Make(fieldId))
+	sm := c.CurrentApplicationState.StateManager
+	if idx := inst.handleKeys(rows, sm.GetCapturedKeys(widgethandle.Make(fieldId)), fieldId); idx >= 0 {
+		openIdx = idx
+	}
+	if listId != 0 {
+		if idx := inst.handleKeys(rows, sm.GetCapturedKeys(widgethandle.Make(listId)), listId); idx >= 0 {
+			openIdx = idx
+		}
+	}
+	return
+}
+
+// handleKeys turns one capture site's keys into cursor moves, and reports the
+// row an activation key landed on. Split from [Inst.applyKeys] so the whole
+// keyboard contract is a function of (rows, keys) — the capture read-back
+// needs a live client, this does not.
+//
+// focusId is the site the keys came from, which Escape surrenders.
+func (inst *Inst) handleKeys(rows []rowT, captured []c.CapturedKey, focusId uint64) (openIdx int) {
+	openIdx = -1
 	if len(captured) == 0 {
 		return
 	}
@@ -73,7 +123,9 @@ func (inst *Inst) applyKeys(rows []rowT, fieldId uint64) (openIdx int) {
 			inst.cursor = firstAppRow(rows)
 		case keycodes.End:
 			inst.cursor = lastAppRow(rows)
-		case keycodes.Enter:
+		case keycodes.Enter, keycodes.Space:
+			// Space reaches here only from the list site: the field's mask
+			// leaves it out, so typing a query still types spaces.
 			if idx := inst.cursor; idx >= 0 && idx < len(rows) && rows[idx].heading == "" {
 				openIdx = idx
 			}
@@ -82,12 +134,25 @@ func (inst *Inst) applyKeys(rows []rowT, fieldId uint64) (openIdx int) {
 			// pressed Escape means "not that" far more often than "close the
 			// launcher", and the two-step keeps the destructive reading one
 			// press further away.
+			//
+			// Clearing the query moves the cursor too, but not here: a filter
+			// change puts it on the first row wherever the change came from
+			// (launcher.go, syncCursorToFilter).
 			if inst.searchText != "" {
 				inst.searchText = ""
-				inst.cursor = 0
 				continue
 			}
-			c.SurrenderFocus(fieldId)
+			// Giving the focus up takes both ops, and only because of where
+			// focus lives. SurrenderFocus clears focus only when the id it
+			// names is the one holding it, and it names the Focusable-Frame id
+			// (ADR-0177 §SD7) — which the list site does hold and the field
+			// does not: a TextEdit holds focus under its own widget id
+			// (launcher.go, renderSearchBox). Taking that id and handing it
+			// straight back leaves NOTHING focused either way, which is what
+			// Escape means here — the next press reaches the window rather
+			// than the field eating Escape forever.
+			c.RequestFocus(focusId)
+			c.SurrenderFocus(focusId)
 		}
 	}
 	return

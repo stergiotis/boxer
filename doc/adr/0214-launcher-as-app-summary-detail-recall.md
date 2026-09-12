@@ -230,12 +230,36 @@ selected**, and the rest of this decision is its consequences.
   command palette) would each add their own fetcher to keep the consumed-event
   ownership explicit per binding".
 
-  The keyboard contract they buy: the field takes focus when the launcher opens
-  (`RequestFocus` exists), typing filters, ↑/↓ move the list cursor while the
-  caret stays in the field, Enter opens the cursor row, Escape surrenders focus
-  and closes. Without the `TextEdit` half this collapses to mouse-plus-Ctrl+Enter,
-  which fails C5 — a launcher you cannot type into and arrow through is a
-  dialog.
+  The keyboard contract they buy: the field takes focus when the launcher opens,
+  typing filters, ↑/↓ move the list cursor while the caret stays in the field,
+  Enter opens the cursor row, Escape surrenders focus and closes. Focus moves
+  through `TextEdit.setCursor`'s `focus` half, **not** `RequestFocus` — that op
+  names the id a `Focusable` Frame registers (ADR-0177 §SD7) and a `TextEdit`
+  holds focus under its own, so pointing it at a field is the silent miss §SD7
+  exists to name, and taking focus away needs the same id back.
+
+  Without the `TextEdit` half this collapses to mouse-plus-Ctrl+Enter, which
+  fails C5 — a launcher you cannot type into and arrow through is a dialog.
+
+  **Capture is on two widgets, because focus is.** A click on a row takes focus
+  off the field, and a mask on a widget that does not have focus captures
+  nothing (ADR-0177 §SD1) — so the typed path above is the whole contract only
+  until someone uses the mouse, after which every key the launcher owns is
+  dead. The row list therefore carries the tree's arrangement as well: a
+  capture-only `Frame` the click focuses, sharing one handler with the field.
+  The two masks differ by one key, Space, which opens on the list and is a
+  space in the field — the battery separates its tokens with spaces, so the
+  field cannot have it. The Open button in the detail pane draws itself
+  selected while the list holds focus, so the armed action is visible rather
+  than folklore.
+
+  **A changed filter restarts the cursor at the best hit.** The cursor is an
+  index into a list the query rebuilds, so leaving it where it was means
+  clamping it to the last row of the new one — a query matching two apps
+  selected the second. Every facet is compared per frame rather than each
+  control resetting on its own write, because the query, the toggles and the
+  chips land at three different moments and one of them (the field's
+  databinding) belongs to no control.
 
   The binding is **F2**, beside F1's help: unused anywhere in the tree, and
   symmetric with the one global key the runtime already owns. A bare function

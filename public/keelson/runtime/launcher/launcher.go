@@ -40,6 +40,13 @@ type HostI interface {
 // about. Resizable, and egui remembers where the user put it.
 const listPanelDefaultWidth = 420
 
+// caretAtEnd is the packed caret range [c.TextEditFluid.SetCursor] takes —
+// low half start, high half end, in CHAR offsets — with both halves saturated
+// so the editor clamps them to the end of whatever it currently holds
+// (ADR-0130's caret channel). A collapsed caret after the last character,
+// computed without a second copy of the buffer's length.
+const caretAtEnd = uint64(0xffff_ffff_ffff_ffff)
+
 // Inst is the launcher component. One value backs every mount point (§SD2),
 // so the query, the facet filters and the selection survive moving between
 // the empty-state pane and the launcher window.
@@ -89,6 +96,19 @@ type Inst struct {
 	// row list. Row lists change under it as the query changes, so it is
 	// clamped at render rather than trusted between frames.
 	cursor int
+	// cursorFilter is the filter the cursor was last placed against, so a
+	// change to any facet can be noticed once per frame rather than by each
+	// control that writes one (syncCursorToFilter).
+	cursorFilter filterT
+	// listKeyId is the row list's capture Frame, written when the list
+	// renders and read on the NEXT frame — by applyKeys, which runs before
+	// the list is emitted, and by the detail pane, which asks whether the
+	// list holds focus. Zero until the list has rendered once.
+	//
+	// One id rather than one per mount point because only one mount point
+	// draws per frame: the empty-state pane exists exactly while no window
+	// does, and the launcher window is a window (§SD2).
+	listKeyId uint64
 
 	// helpAppId is the app the "Help" action raises, injected rather than
 	// imported: a launcher that names one app in its own imports cannot be
@@ -187,11 +207,12 @@ func (inst *Inst) renderListPane(ids *c.WidgetIdStack) {
 	visible := inst.visibleManifests()
 	rows := inst.buildRows(visible)
 	queryBefore := inst.query()
-	openIdx := inst.applyKeys(rows, fieldId)
+	openIdx := inst.applyKeys(rows, fieldId, inst.listKeyId)
 	if inst.query() != queryBefore {
 		visible = inst.visibleManifests()
 		rows = inst.buildRows(visible)
 	}
+	inst.syncCursorToFilter(rows)
 	inst.renderRows(ids, visible, rows)
 	// Acted on after the rows are drawn: opening a window mutates the host,
 	// and the row that asked for it should already be on screen when it does.
@@ -220,20 +241,29 @@ func (inst *Inst) renderSearchBox(ids *c.WidgetIdStack) (fieldId uint64) {
 			edit := inst.searchHl.Prepare(ids.PrepareStr("launcher-search"), inst.searchText, false, regexedit.ModeTokens).
 				HintText("Search apps").
 				CaptureKeys(uint64(launcherKeyMask))
-			fieldId = edit.Id()
-			edit.SendRespVal(&inst.searchText)
 			if inst.wantFocus {
-				// One shot. RequestFocus is an op, not a state, so a standing
-				// request would re-take focus from whatever the user clicked
-				// next, every frame.
-				c.RequestFocus(fieldId)
+				// Focus through the caret channel, NOT RequestFocus, and this
+				// is the one thing to know about focusing a field: RequestFocus
+				// asks egui for `Id::new(id).with("imzero-focus")` — the id a
+				// Focusable Frame registers (ADR-0177 §SD7) — while a TextEdit
+				// is built `.id(widgetId)` and holds focus under the widget id
+				// itself. The two never meet, and the miss is silent: focus
+				// went to a phantom id for one frame and the caret never
+				// arrived, so F2 opened a launcher you had to click into.
+				// setCursor's `focus` half asks the editor's own id.
+				//
+				// One shot, for the reason the RequestFocus call it replaces
+				// was: a standing request would re-take focus from whatever
+				// the user clicked next, every frame.
+				edit = edit.SetCursor(caretAtEnd, true)
 				inst.wantFocus = false
 			}
+			fieldId = edit.Id()
+			edit.SendRespVal(&inst.searchText)
 			if inst.searchText != "" {
 				if c.Button(ids.PrepareStr("launcher-search-clear"), c.Atoms().Text(icons.PhX).Keep()).
 					SendResp().HasPrimaryClicked() {
 					inst.searchText = ""
-					inst.cursor = 0
 				}
 			}
 		}
@@ -247,11 +277,54 @@ func (inst *Inst) query() (q string) {
 	return
 }
 
+// filterState is the whole filter in one comparable value: the query and both
+// facet axes.
+func (inst *Inst) filterState() (f filterT) {
+	f = filterT{query: inst.query(), kinds: inst.kindFilter(), topics: inst.topicFilter}
+	return
+}
+
 // visibleManifests applies the facet filters — the set the browse sections and
 // the search both draw from.
 func (inst *Inst) visibleManifests() (out []app.Manifest) {
 	out = filterManifests(inst.registry.AllManifests(),
 		filterT{kinds: inst.kindFilter(), topics: inst.topicFilter}, inst.rank)
+	return
+}
+
+// syncCursorToFilter puts the cursor back on the first app row whenever the
+// filter changed since the last frame.
+//
+// A narrowing filter is why this exists rather than leaving it to
+// clampCursor. The cursor is an index into a list that the query rebuilds
+// from scratch, and an index that now points past the end is clamped DOWN to
+// the last row — so typing a query that matches two apps selected the second
+// one, and one that matches one app selected it only because there was
+// nothing else. The first hit is the ranked answer to what was typed, and it
+// is what Enter should open.
+//
+// Noticed here, once, rather than by each control that writes a filter: the
+// query arrives from the field's databinding a frame after the keystroke, the
+// kind toggles the same way, and the chips write within the frame — three
+// different moments, one of which no control owns.
+func (inst *Inst) syncCursorToFilter(rows []rowT) {
+	f := inst.filterState()
+	if f == inst.cursorFilter {
+		return
+	}
+	inst.cursorFilter = f
+	inst.cursor = firstAppRow(rows)
+}
+
+// listHasFocus reports whether the row list's capture Frame held focus last
+// frame — which is to say whether Space and Enter currently open the selected
+// app (keys.go). The detail pane reads it to show the Open button as the
+// armed action.
+func (inst *Inst) listHasFocus() (ok bool) {
+	if inst.listKeyId == 0 {
+		return
+	}
+	ok = c.CurrentApplicationState.StateManager.GetResponseByIdRaw(inst.listKeyId).HasFocus()
 	return
 }
 
@@ -332,14 +405,12 @@ func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
 				inst.topicFilter.selectedAt(i), topicLabel(t)).
 				SendResp().HasPrimaryClicked() {
 				inst.topicFilter = inst.topicFilter.toggledAt(i)
-				inst.cursor = 0
 			}
 		}
 		if !inst.topicFilter.isInert() {
 			if c.Button(ids.PrepareStr("topic-chip-clear"), c.Atoms().Text(icons.PhX+" Clear").Keep()).
 				SendResp().HasPrimaryClicked() {
 				inst.topicFilter = 0
-				inst.cursor = 0
 			}
 		}
 	}

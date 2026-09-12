@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
 )
 
@@ -106,6 +107,132 @@ func TestFirstLastAppRow(t *testing.T) {
 	assert.Equal(t, 4, lastAppRow(rows))
 	assert.Equal(t, 0, firstAppRow(nil), "no app row is a defensible 0, not a panic")
 	assert.Equal(t, 0, lastAppRow(nil))
+}
+
+// TestSyncCursorToFilter_ANarrowedListStartsAtTheFirstHit is the defect:
+// applying a query moved the selection to the LAST hit.
+//
+// The cursor is an index, the query rebuilds the list under it, and an index
+// past the end is clamped down to the last row — so a query matching two apps
+// selected the second one. The first hit is the ranked answer to what was
+// typed, and it is what Enter opens.
+func TestSyncCursorToFilter_ANarrowedListStartsAtTheFirstHit(t *testing.T) {
+	inst := newTestInst()
+	browse := rowsFixture()
+
+	inst.cursor = 4 // arrowed down to the last app of the browse view
+	inst.syncCursorToFilter(browse)
+	assert.Equal(t, 4, inst.cursor, "nothing about the filter changed")
+
+	inst.searchText = "one"
+	hits := []rowT{
+		{m: mkTopicManifest("d1", "D one", app.TopicData)},
+		{m: mkTopicManifest("r1", "R one", app.TopicRuntime)},
+	}
+	inst.syncCursorToFilter(hits)
+	assert.Equal(t, 0, inst.cursor, "the best hit, not the last one")
+
+	// And it stays there while the query does: the next frame must not fight
+	// an arrow key.
+	inst.cursor = 1
+	inst.syncCursorToFilter(hits)
+	assert.Equal(t, 1, inst.cursor)
+}
+
+// TestSyncCursorToFilter_ClearingTheQueryLandsOnAnAppRow: back in the browse
+// view the list opens with a section heading, which is not a place the cursor
+// can rest.
+func TestSyncCursorToFilter_ClearingTheQueryLandsOnAnAppRow(t *testing.T) {
+	inst := newTestInst()
+	inst.searchText = "one"
+	inst.syncCursorToFilter([]rowT{{m: mkTopicManifest("d1", "D one", app.TopicData)}})
+
+	inst.searchText = ""
+	inst.cursor = 3
+	inst.syncCursorToFilter(rowsFixture())
+	assert.Equal(t, 1, inst.cursor)
+}
+
+// TestSyncCursorToFilter_TheFacetsCountToo: the chips and the provenance
+// toggles narrow the same list the query does, and each writes its filter at
+// its own moment. Noticing the change in one place is what keeps them in
+// step.
+func TestSyncCursorToFilter_TheFacetsCountToo(t *testing.T) {
+	inst := newTestInst()
+	rows := rowsFixture()
+	inst.cursor = 4
+	inst.syncCursorToFilter(rows)
+	require.Equal(t, 4, inst.cursor)
+
+	inst.topicFilter = inst.topicFilter.toggledAt(0)
+	inst.syncCursorToFilter(rows)
+	assert.Equal(t, 1, inst.cursor, "a chip narrows the list, so the cursor restarts")
+
+	inst.cursor = 4
+	inst.ensureKindShown()
+	inst.kindShown[0] = false
+	inst.syncCursorToFilter(rows)
+	assert.Equal(t, 1, inst.cursor, "so does hiding a kind")
+}
+
+// TestHandleKeys_SpaceOpensTheCursorRow covers the list site's one addition to
+// the field's contract. Enter is the same branch; the point of the test is
+// that Space reaches it at all, since the field's mask deliberately does not
+// carry the key.
+func TestHandleKeys_SpaceOpensTheCursorRow(t *testing.T) {
+	rows := rowsFixture()
+	inst := newTestInst()
+	inst.cursor = 2
+
+	assert.Equal(t, 2, inst.handleKeys(rows, []c.CapturedKey{{Code: keycodes.Space}}, 0))
+	assert.Equal(t, 2, inst.handleKeys(rows, []c.CapturedKey{{Code: keycodes.Enter}}, 0))
+	assert.Equal(t, -1, inst.handleKeys(rows, nil, 0), "no keys, nothing to open")
+
+	// A cursor on a heading cannot be activated — it is not an app.
+	inst.cursor = 0
+	assert.Equal(t, -1, inst.handleKeys(rows, []c.CapturedKey{{Code: keycodes.Space}}, 0))
+}
+
+// TestHandleKeys_ArrowsThenSpaceOpenWhereTheCursorLanded: one batch of keys is
+// a sequence, not a set — key repeat delivers several per frame.
+func TestHandleKeys_ArrowsThenSpaceOpenWhereTheCursorLanded(t *testing.T) {
+	rows := rowsFixture()
+	inst := newTestInst()
+	inst.cursor = 1
+	got := inst.handleKeys(rows, []c.CapturedKey{
+		{Code: keycodes.ArrowDown},
+		{Code: keycodes.ArrowDown},
+		{Code: keycodes.Space},
+	}, 0)
+	assert.Equal(t, 4, got)
+	assert.Equal(t, 4, inst.cursor)
+}
+
+// TestHandleKeys_EscapeClearsTheQueryFirst pins the two-step:
+// a person who typed a query and pressed Escape means "not that" far more
+// often than "close the launcher".
+func TestHandleKeys_EscapeClearsTheQueryFirst(t *testing.T) {
+	inst := newTestInst()
+	inst.searchText = "quant"
+	assert.Equal(t, -1, inst.handleKeys(rowsFixture(), []c.CapturedKey{{Code: keycodes.Escape}}, 0))
+	assert.Equal(t, "", inst.searchText, "the query goes first")
+	// The empty-query press surrenders focus, which needs a live client, so
+	// the second step is the scene's to assert rather than this test's.
+}
+
+// TestLauncherListKeyMask_IsTheFieldsPlusSpace pins the one key the two
+// capture sites must disagree about: a space separates the battery's tokens,
+// so the field cannot take it — and a focused list is where "activate" is the
+// only thing Space could mean.
+func TestLauncherListKeyMask_IsTheFieldsPlusSpace(t *testing.T) {
+	has := func(m keycodes.Mask, code keycodes.Code) bool {
+		return uint64(m)&(1<<uint64(code)) != 0
+	}
+	assert.True(t, has(launcherListKeyMask, keycodes.Space))
+	assert.False(t, has(launcherKeyMask, keycodes.Space))
+	assert.Equal(t, launcherKeyMask, launcherListKeyMask&launcherKeyMask,
+		"the list keeps every key the field navigates with")
+	assert.False(t, has(launcherListKeyMask, keycodes.Tab), "neither site is a focus trap")
 }
 
 // TestLauncherKeyMask_ShapeIsTheDecision pins the two deliberate differences

@@ -123,39 +123,54 @@ func (inst *Inst) renderRows(ids *c.WidgetIdStack, visible []app.Manifest, rows 
 	}
 	openSet := inst.openAppSet()
 
-	// One column, declared before the table: egui_table takes its columns from
-	// the EtColumn ops pushed ahead of the EndETable, and a table with none
-	// renders nothing at all — which is what the first screenshot run showed.
-	//
-	// A single column is the whole point of the shape: a launcher row is one
-	// target carrying a name over a summary, not a grid of fields. The width
-	// range spans from something usable at the narrowest sensible pane to well
-	// past the widest, so the column follows the pane the user sized rather
-	// than fighting it; the declared width is only where it starts, since
-	// etAutoSizeAlways re-fits it to the pane every frame.
-	c.EtColumn(listPanelDefaultWidth).RangeMinMax(rowMinWidth, rowMaxWidth).Resizable(false).Send()
-	et := c.EndETable(ids.PrepareStr("launcher-rows"), uint64(len(rows)), inst.rowHeight(), 0, 0).
-		FillPane(true).
-		AutoSizeMode(etAutoSizeAlways)
-	rowBegin, rowEnd := 0, len(rows)
-	if rb, re, _, _, _, ok := et.VisibleRange(); ok {
-		rowBegin = min(int(rb), len(rows))
-		rowEnd = min(int(re), rowEnd)
-	}
-	for i := rowBegin; i < rowEnd; i++ {
-		r := rows[i]
-		if r.heading != "" {
-			inst.renderHeadingRow(ids, et, i, r.heading)
-			continue
+	// The list's capture Frame (keys.go): CaptureKeys and NOT Focusable, the
+	// tree's recipe and for the tree's reason — a focusable rect senses
+	// clicks and, registered after the body, would sit above every row and
+	// eat the clicks selection is made of. Zero margins so wrapping the table
+	// costs no layout: FillPane measures the parent, and a margin here would
+	// come off it.
+	kf := c.Frame(ids.PrepareStr("launcher-rows-keys")).
+		CaptureKeys(uint64(launcherListKeyMask)).
+		OuterMargin(0).
+		InnerMargin(0)
+	inst.listKeyId = kf.Id()
+	for range kf.KeepIter() {
+		// One column, declared before the table: egui_table takes its columns
+		// from the EtColumn ops pushed ahead of the EndETable, and a table
+		// with none renders nothing at all — which is what the first
+		// screenshot run showed.
+		//
+		// A single column is the whole point of the shape: a launcher row is
+		// one target carrying a name over a summary, not a grid of fields.
+		// The width range spans from something usable at the narrowest
+		// sensible pane to well past the widest, so the column follows the
+		// pane the user sized rather than fighting it; the declared width is
+		// only where it starts, since etAutoSizeAlways re-fits it to the pane
+		// every frame.
+		c.EtColumn(listPanelDefaultWidth).RangeMinMax(rowMinWidth, rowMaxWidth).Resizable(false).Send()
+		et := c.EndETable(ids.PrepareStr("launcher-rows"), uint64(len(rows)), inst.rowHeight(), 0, 0).
+			FillPane(true).
+			AutoSizeMode(etAutoSizeAlways)
+		rowBegin, rowEnd := 0, len(rows)
+		if rb, re, _, _, _, ok := et.VisibleRange(); ok {
+			rowBegin = min(int(rb), len(rows))
+			rowEnd = min(int(re), rowEnd)
 		}
-		_, isOpen := openSet[r.m.Id]
-		inst.renderAppRow(ids, et, i, r.m, isOpen, i == inst.cursor)
+		for i := rowBegin; i < rowEnd; i++ {
+			r := rows[i]
+			if r.heading != "" {
+				inst.renderHeadingRow(ids, et, i, r.heading)
+				continue
+			}
+			_, isOpen := openSet[r.m.Id]
+			inst.renderAppRow(ids, et, i, r.m, isOpen, i == inst.cursor)
+		}
+		// The terminal. egui_table's Go surface accumulates columns, then the
+		// table, then the captured cell blocks, and Send ships the lot — so a
+		// table without it renders nothing at all, which is exactly what the
+		// first screenshot run showed.
+		et.Send()
 	}
-	// The terminal. egui_table's Go surface accumulates columns, then the
-	// table, then the captured cell blocks, and Send ships the lot — so a
-	// table without it renders nothing at all, which is exactly what the
-	// first screenshot run showed.
-	et.Send()
 }
 
 // rowT is one line of the list: either a section heading or an app. A single
@@ -342,6 +357,16 @@ func (inst *Inst) renderAppRow(ids *c.WidgetIdStack, et c.EndETableFluid, rowIdx
 	}
 	if flags.HasPrimaryClicked() {
 		inst.cursor = rowIdx
+		// And the list takes focus, so the keyboard continues from where the
+		// pointer left off: ↑/↓ walk on from the clicked row, and Space or
+		// Enter open it — the Open button in the detail pane shows itself as
+		// the armed action while that focus lasts (detail.go). The capture
+		// Frame does not sense clicks and must not (renderRows), so focus is
+		// asked for here rather than arriving on its own — the tree's
+		// arrangement, for the same reason.
+		if inst.listKeyId != 0 {
+			c.RequestFocus(inst.listKeyId)
+		}
 	}
 }
 
