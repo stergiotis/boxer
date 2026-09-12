@@ -414,6 +414,50 @@ expansions, hidden nodes, a focus list, and the visible set derived from
 them — lives in the `nav` package beneath this one and declares into the
 widget; nothing in the declaration or event surface changed for it.
 
+### 2026-09-12 — the fade-and-ignore pair, and the bounds readers
+
+Every reading in the gap-analysis series named one missing primitive, under
+five names: NetChart's `focusAutoFadeout`, vis-network's per-node `opacity`,
+Obsidian's dim-the-rest hover, force-graph's faded background nodes, and
+Ogma's `setDisabled`. The last settles its shape, because a disabled node
+there is faded *and* undetectable — so what is adopted is the pair, not
+opacity alone. A faded item that still swallows the pointer is a bug rather
+than a feature.
+
+**SD14 — An item may fade and may decline the pointer; the widget's state
+paint does neither.** `NodeSpec.Opacity` and `EdgeSpec.Opacity` scale the
+item's *own* paint — a node's fill, stroke, donut and label, an edge's line,
+head and label — to a fraction of its declared alpha. Zero is the unset
+value and anything at or above 1 paints as declared, so a frame that
+declares no opacity is unchanged to the bit; fully transparent has no
+spelling, since an item that should not be seen is one the declaration
+leaves out. That is the sentinel `EdgeSpec.Length` and `Strength` already
+carry, with the same cost, named here rather than discovered later. The pin,
+selection and hover rings, and an edge's selected or hovered colour, keep
+full strength: they are the widget saying what it is doing, not the caller
+saying what the item is, and a dimmed node one can still hover should still
+show that it is hovered. `NoPick` takes an item out of every pointer path —
+hover, click, drag and the rectangle selection — while `SelectNode` and
+`SelectEdge` keep working, since the caller asked, as the aura setters
+established in §SD12. The two fields are independent: the pair is the common
+case, `NoPick` alone is a node that is scaffolding rather than content, and
+`Opacity` alone is a background item that can still be reached. The fade is
+applied where the fill is resolved rather than at the paint, so nodes at one
+opacity remain one batched marker and the batch key does the separating.
+
+Beside it, the two readers four analyses asked for: `Bounds` returns the
+world box of the declaration's nodes, `BoundsOf` the box over a subset, and
+`FitNodes` is expressed through the latter so the fit and the reader cannot
+drift. Neither carries the auras, whose screen-space reach the fit adds
+separately, nor the labels, which are screen-sized.
+
+What this does **not** add is the hover neighbourhood highlight the same
+readings asked for beside it, and it does not need to: with the adjacency
+`nav` publishes (ADR-0225's update of this date) a caller derives the
+neighbour set and dims the rest itself. What counts as a neighbour — one
+hop, both directions, through a hidden node or not — is the consumer's
+question, and a widget that answered it would be guessing.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget

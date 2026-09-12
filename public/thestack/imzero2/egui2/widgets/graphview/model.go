@@ -173,6 +173,20 @@ type NodeSpec struct {
 	// nodes sharing an id are drawn over one blob when Options.Auras is
 	// enabled. The slice is read during Render and not retained.
 	Auras []string
+	// Opacity fades the node's own paint — fill, stroke, donut and label —
+	// to this fraction of its declared alpha (ADR-0224 §SD14). Zero, the
+	// unset value, and anything at or above 1 paint it as declared. The
+	// widget's own state paint, the pin, selection and hover rings, keeps
+	// full strength so a dimmed node still shows what it is doing. There is
+	// no spelling for fully transparent: a node that should not be seen is
+	// one the declaration leaves out.
+	Opacity float32
+	// NoPick lets the pointer pass through the node: no hover, no click, no
+	// drag, and no rectangle selection (ADR-0224 §SD14). It says nothing
+	// about how the node looks, and SelectNode still selects it — the caller
+	// asked. Set it with Opacity for the dimmed-and-inert pair, or alone for
+	// a node that is scaffolding rather than content.
+	NoPick bool
 }
 
 // EdgeSpec is one directed edge of the frame's declaration. Parallel edges
@@ -194,6 +208,13 @@ type EdgeSpec struct {
 	Width    float32 // screen pixels
 	Length   float32
 	Strength float32
+	// Opacity fades the edge's line, arrow head and label to this fraction
+	// of their declared alpha, under the same rule as NodeSpec.Opacity: zero
+	// is unset, and a selected or hovered edge paints at full strength
+	// (ADR-0224 §SD14).
+	Opacity float32
+	// NoPick lets the pointer pass through the edge (ADR-0224 §SD14).
+	NoPick bool
 }
 
 // ForceParams tunes the Fruchterman–Reingold step. Zero fields take the

@@ -106,7 +106,9 @@ func (pg *pickGrid) cellIndex(x, y float32) int32 {
 // whose screen disc — donut ring included, floored at pickMinPx — contains
 // it, or -1. Candidates come from the grid cells within the widest disc any
 // node can present, in world units at the current zoom; the test on each is
-// exact (ADR-0224 §SD3).
+// exact (ADR-0224 §SD3). A node declared NoPick is skipped, so the pointer
+// reaches whatever is behind it (§SD14); the grid still holds it, since
+// NoPick changes per frame and the grid is keyed on positions.
 func (v *View) pickNode(px, py float32) int32 {
 	n := v.g.n()
 	if n == 0 {
@@ -131,6 +133,9 @@ func (v *View) pickNode(px, py float32) int32 {
 		for cx := cx0; cx <= cx1; cx++ {
 			c := cy*pg.cols + cx
 			for _, i := range pg.items[pg.start[c]:pg.start[c+1]] {
+				if v.g.noPick[i] {
+					continue
+				}
 				sx, sy := v.cam.toScreen(v.g.x[i], v.g.y[i])
 				r := max(v.nodeOuterPx(int(i)), pickMinPx)
 				dx, dy := px-sx, py-sy

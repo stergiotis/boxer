@@ -18,7 +18,11 @@ type graph struct {
 	col    []color.Color
 	radius []float32
 	donut  []Donut
-	seen   []uint32 // frame stamp of the last declaration that named the slot
+	// opacity is resolved to 1 when unset; noPick takes the pointer away
+	// from the node entirely (ADR-0224 §SD14).
+	opacity []float32
+	noPick  []bool
+	seen    []uint32 // frame stamp of the last declaration that named the slot
 	// fixed is recomputed every frame: the force step leaves a fixed node
 	// alone. Its sources are a declared pin, a widget-side hold and the drag.
 	fixed   []bool
@@ -34,7 +38,9 @@ type graph struct {
 	eWidth     []float32
 	eLen       []float32 // ideal-length multiplier, resolved to 1 when unset
 	eStr       []float32 // attraction multiplier, resolved to 1 when unset
-	eOrder     []uint8   // index among parallel edges of the same ordered pair
+	eOpacity   []float32 // resolved to 1 when unset (ADR-0224 §SD14)
+	eNoPick    []bool
+	eOrder     []uint8 // index among parallel edges of the same ordered pair
 
 	adjStart []int32 // n+1 offsets into adjList
 	adjList  []int32 // undirected neighbours, one entry per edge end
@@ -110,6 +116,8 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 		g.col = append(g.col, color.Color{})
 		g.radius = append(g.radius, 0)
 		g.donut = append(g.donut, Donut{})
+		g.opacity = append(g.opacity, 1)
+		g.noPick = append(g.noPick, false)
 		g.seen = append(g.seen, g.frame)
 		g.fixed = append(g.fixed, false)
 		g.pinDecl = append(g.pinDecl, false)
@@ -151,6 +159,8 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 			g.eWidth[j] = e.Width
 			g.eLen[j] = posOr1(e.Length)
 			g.eStr[j] = posOr1(e.Strength)
+			g.eOpacity[j] = opacityOr1(e.Opacity)
+			g.eNoPick[j] = e.NoPick
 			j++
 		}
 	}
@@ -166,6 +176,8 @@ func (g *graph) setNode(s int32, sp *NodeSpec) {
 	}
 	g.radius[s] = sp.Radius
 	g.donut[s] = sp.Donut
+	g.opacity[s] = opacityOr1(sp.Opacity)
+	g.noPick[s] = sp.NoPick
 	g.pinDecl[s] = sp.Pinned
 	g.pinX[s] = sp.PinX
 	g.pinY[s] = sp.PinY
@@ -183,6 +195,8 @@ func (g *graph) rebuildEdges(edges []EdgeSpec) {
 	g.eWidth = g.eWidth[:0]
 	g.eLen = g.eLen[:0]
 	g.eStr = g.eStr[:0]
+	g.eOpacity = g.eOpacity[:0]
+	g.eNoPick = g.eNoPick[:0]
 	g.eOrder = g.eOrder[:0]
 	clear(g.pairCount)
 	clear(g.edgeIdx)
@@ -208,6 +222,8 @@ func (g *graph) rebuildEdges(edges []EdgeSpec) {
 		g.eWidth = append(g.eWidth, e.Width)
 		g.eLen = append(g.eLen, posOr1(e.Length))
 		g.eStr = append(g.eStr, posOr1(e.Strength))
+		g.eOpacity = append(g.eOpacity, opacityOr1(e.Opacity))
+		g.eNoPick = append(g.eNoPick, e.NoPick)
 		g.eOrder = append(g.eOrder, order)
 		ref := EdgeRef{From: e.From, To: e.To, Id: e.Id}
 		if _, dup := g.edgeIdx[ref]; !dup {
@@ -268,6 +284,18 @@ func posOr1(v float32) float32 {
 	return 1
 }
 
+// opacityOr1 resolves a declared opacity (ADR-0224 §SD14). Zero is the unset
+// value and paints as declared, as does anything at or above 1; only a value
+// strictly between fades. Fully transparent has no spelling — an item that
+// should not be seen is one the declaration leaves out — which is the same
+// sentinel EdgeSpec.Length and Strength carry.
+func opacityOr1(v float32) float32 {
+	if v <= 0 || v >= 1 {
+		return 1
+	}
+	return v
+}
+
 // allSlots returns every slot index, in the shared newSlots scratch.
 func (g *graph) allSlots() []int32 {
 	g.newSlots = g.newSlots[:0]
@@ -290,6 +318,8 @@ func (g *graph) removeSlot(s int) {
 		g.col[s] = g.col[last]
 		g.radius[s] = g.radius[last]
 		g.donut[s] = g.donut[last]
+		g.opacity[s] = g.opacity[last]
+		g.noPick[s] = g.noPick[last]
 		g.seen[s] = g.seen[last]
 		g.fixed[s] = g.fixed[last]
 		g.pinDecl[s] = g.pinDecl[last]
@@ -305,6 +335,8 @@ func (g *graph) removeSlot(s int) {
 	g.col = g.col[:last]
 	g.radius = g.radius[:last]
 	g.donut = g.donut[:last]
+	g.opacity = g.opacity[:last]
+	g.noPick = g.noPick[:last]
 	g.seen = g.seen[:last]
 	g.fixed = g.fixed[:last]
 	g.pinDecl = g.pinDecl[:last]

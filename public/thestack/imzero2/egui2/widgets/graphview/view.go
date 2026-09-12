@@ -157,18 +157,35 @@ func (v *View) FitNodes(ids []uint64) {
 
 func (v *View) applyFitNodes(w, h float32) {
 	v.fitIdsWait = false
-	var minX, minY, maxX, maxY float32
-	found := false
-	for _, id := range v.fitIds {
-		s, ok := v.g.slot[id]
-		if !ok {
+	minX, minY, maxX, maxY, ok := v.BoundsOf(v.fitIds)
+	if !ok {
+		return
+	}
+	v.cam.fit(minX, minY, maxX, maxY, w, h, v.fitPadding())
+	v.fitPending = false
+}
+
+// Bounds returns the world-space box of the last declaration's nodes, each
+// node's radius included, and whether there was one — the extent a caller
+// needs to know what a fit would frame, or to declare only what is on
+// screen. It is the node box alone: auras reach past it by a margin the fit
+// adds separately, and labels are screen-sized, so neither is in it.
+func (v *View) Bounds() (minX, minY, maxX, maxY float32, ok bool) {
+	return v.g.bounds(v.style.NodeRadius)
+}
+
+// BoundsOf is Bounds over the named ids. Unknown ids are skipped; with none
+// known it reports false and zeroes.
+func (v *View) BoundsOf(ids []uint64) (minX, minY, maxX, maxY float32, ok bool) {
+	for _, id := range ids {
+		s, known := v.g.slot[id]
+		if !known {
 			continue
 		}
 		r := v.nodeRadius(int(s))
 		x, y := v.g.x[s], v.g.y[s]
-		if !found {
-			minX, minY, maxX, maxY = x-r, y-r, x+r, y+r
-			found = true
+		if !ok {
+			minX, minY, maxX, maxY, ok = x-r, y-r, x+r, y+r, true
 			continue
 		}
 		minX = min(minX, x-r)
@@ -176,11 +193,7 @@ func (v *View) applyFitNodes(w, h float32) {
 		maxX = max(maxX, x+r)
 		maxY = max(maxY, y+r)
 	}
-	if !found {
-		return
-	}
-	v.cam.fit(minX, minY, maxX, maxY, w, h, v.fitPadding())
-	v.fitPending = false
+	return
 }
 
 // fitPadding is Options.FitPadding with its default.
@@ -1002,6 +1015,9 @@ func (v *View) rectSelect(x0, y0, x1, y1 float32, add bool) {
 	minX, maxX := min(x0, x1), max(x0, x1)
 	minY, maxY := min(y0, y1), max(y0, y1)
 	inside := func(s int32) bool {
+		if v.g.noPick[s] {
+			return false
+		}
 		sx, sy := v.cam.toScreen(v.g.x[s], v.g.y[s])
 		return sx >= minX && sx <= maxX && sy >= minY && sy <= maxY
 	}
@@ -1046,7 +1062,7 @@ const pickEdgeTolPx = 4
 func (v *View) pickEdge(px, py float32) int32 {
 	best, bestD := int32(-1), float32(math.MaxFloat32)
 	for i := range v.g.eFrom {
-		if !v.edgeBoxMayContain(int32(i), px, py) {
+		if v.g.eNoPick[i] || !v.edgeBoxMayContain(int32(i), px, py) {
 			continue
 		}
 		geo := v.edgeGeometry(i)
@@ -1086,13 +1102,18 @@ func (v *View) nodeRadius(slot int) float32 {
 	return v.style.NodeRadius
 }
 
-// nodeFill is the node's fill: its own literal colour, else the style's. A
-// retained colour has no literal to batch on and takes the style's too.
+// nodeFill is the node's fill: its own literal colour, else the style's,
+// faded by its declared opacity. A retained colour has no literal to batch
+// on and takes the style's too.
 func (v *View) nodeFill(slot int) color.Color {
-	if col := v.g.col[slot]; col.Kind() == color.ColorKindLiteral && col.Literal() != 0 {
-		return col
+	col := v.style.NodeFill
+	if c0 := v.g.col[slot]; c0.Kind() == color.ColorKindLiteral && c0.Literal() != 0 {
+		col = c0
 	}
-	return v.style.NodeFill
+	// Fading here rather than at the paint keeps a faded node one batched
+	// marker: the batch key is the resolved colour, so nodes at one opacity
+	// batch together (ADR-0224 §SD14).
+	return fade(col, v.g.opacity[slot])
 }
 
 func isNaN32(f float32) bool { return f != f }

@@ -22,6 +22,12 @@
 // screen-space grid, contoured and filled beneath the graph, with an
 // optional legend from the shared widgets/legend package.
 //
+// A node or edge may be faded with Opacity and taken out of the pointer's
+// reach with NoPick (ADR-0224 §SD14). The two are what a caller spends a
+// relevance, a search result or a dimmed background on; the widget's own
+// pin, selection and hover paint keeps full strength so a dimmed item still
+// shows what it is doing.
+//
 // Layout parameters keep the meaning they have in egui_graphs 0.31 (MIT), the
 // crate whose parameterisation this package re-derives; the two documented
 // departures — the canvas-area ideal edge length and deterministic
