@@ -37,6 +37,7 @@ func TestStatementsGolden(t *testing.T) {
 		"CREATE OR REPLACE FUNCTION LW_ASPECT_SEG_ENC AS (name) -> if(length(splitByChar(':', name)) = 11, arrayElement(splitByChar(':', name), 6), if(length(splitByChar(':', name)) = 7, arrayElement(splitByChar(':', name), 4), ''))",
 		"CREATE OR REPLACE FUNCTION LW_ASPECT_SEG_USE AS (name) -> if(length(splitByChar(':', name)) = 11, arrayElement(splitByChar(':', name), 7), if(length(splitByChar(':', name)) = 7, '', ''))",
 		"CREATE OR REPLACE FUNCTION LW_ASPECT_SEG_SEM AS (name) -> if(length(splitByChar(':', name)) = 11, arrayElement(splitByChar(':', name), 8), if(length(splitByChar(':', name)) = 7, arrayElement(splitByChar(':', name), 5), ''))",
+		"CREATE OR REPLACE FUNCTION LW_ASPECT_DECODABLE AS (seg) -> seg = '' OR seg = '0' OR arrayAll(c -> position('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', c) >= 2 AND c != 'z', splitByString('', seg))",
 		"CREATE OR REPLACE FUNCTION LW_ASPECT_DECODE AS (seg) -> if(seg = '' OR seg = '0', CAST([], 'Array(UInt8)'), arrayMap(c -> toUInt8(position('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', c) - 2 + 0 * throwIf(position('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', c) < 2 OR c = 'z', 'LW_ASPECT_DECODE: char outside the v0 aspect range')), splitByString('', seg)))",
 	)
 	// The six transform-bearing statements carry the full enum tables; the

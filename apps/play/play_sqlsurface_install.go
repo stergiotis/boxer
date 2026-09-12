@@ -35,10 +35,11 @@ const surfaceInstallTimeout = 2 * time.Minute
 
 // installSQLSurface reconciles leeway's SQL read surface (ADR-0171 §SD2) on
 // the configured ClickHouse endpoint, once per process and off the render
-// path — all three families and the version marker, not the pack alone.
-// Best-effort by design: on failure play still opens, and a query using a
-// surface name fails server-side with an unknown-function error — an
-// attributable signal — while the warning below records why.
+// path — every function family, the version marker and the schema-decode
+// views, not the pack alone. Best-effort by design: on failure play still
+// opens, and a query using a surface name fails server-side with an
+// unknown-function or unknown-table error — an attributable signal — while
+// the warning below records why.
 //
 // Reconcile is not called here, and deliberately not with ReconcileDrop:
 // this runs unattended at startup against whatever endpoint is configured,
@@ -55,7 +56,7 @@ func installSQLSurface(url, user, password string, logger zerolog.Logger) {
 			client := chclient.New(chclient.Config{URL: url, User: user, Password: password}, nil)
 			err := lwsqlsurface.Install(ctx, client)
 			if err != nil {
-				logger.Warn().Err(err).Str("url", url).Msg("play: leeway SQL surface install failed; LW_* names will be missing on this server")
+				logger.Warn().Err(err).Str("url", url).Msg("play: leeway SQL surface install failed; part of the surface is missing on this server")
 				return
 			}
 			logger.Info().Str("url", url).Int("version", lwsqlsurface.Version).Msg("play: leeway SQL surface reconciled")
