@@ -17,6 +17,16 @@ type PageRankOptions struct {
 	// Tolerance stops early once the L1 change of one sweep falls below it;
 	// zero runs the whole budget.
 	Tolerance float64
+	// Teleport restarts the random surfer at these slots rather than
+	// uniformly, and returns dangling mass there too — personalised PageRank
+	// (ADR-0232 §SD7). Empty teleports uniformly, which is the classic rank
+	// and is computed by the arithmetic it always was, bit for bit.
+	//
+	// Slots out of range are ignored, and a set with no slot left in range
+	// teleports uniformly; a duplicate slot counts once. Seeding every slot
+	// is uniform teleportation expressed the long way and gives the same
+	// ranks to within the arithmetic's own rounding.
+	Teleport []int32
 }
 
 // PageRankResult holds the ranks, which sum to one.
@@ -50,9 +60,20 @@ func PageRank(ctx context.Context, e *engine.Engine, g *csr.Graph, opts PageRank
 	if budget == 0 {
 		budget = 20
 	}
+	// tp is the teleport distribution, nil when it is uniform: the uniform
+	// path then keeps the exact expression it had, so a classic rank is
+	// unchanged to the bit by this option existing.
+	tp := teleportDistribution(opts.Teleport, n)
 	rank := make([]float64, n)
 	next := make([]float64, n)
-	fill(rank, 1/float64(n))
+	if tp == nil {
+		fill(rank, 1/float64(n))
+	} else {
+		// Start at the teleport distribution: the fixed point does not depend
+		// on the start vector, and starting where the mass restarts reaches
+		// it in fewer sweeps.
+		copy(rank, tp)
+	}
 	invOut := make([]float64, n)
 	for v := range n {
 		if d := g.OutDegree(int32(v)); d > 0 {
@@ -83,7 +104,13 @@ func PageRank(ctx context.Context, e *engine.Engine, g *csr.Graph, opts PageRank
 				for _, src := range inTgt[inOff[d]:inOff[d+1]] {
 					s += rank[src] * invOut[src]
 				}
-				next[d] = base + spread + damping*s
+				if tp == nil {
+					next[d] = base + spread + damping*s
+					continue
+				}
+				// Seeded: the restart mass and the dangling mass both land on
+				// the teleport distribution instead of being spread evenly.
+				next[d] = (1-damping)*tp[d] + damping*dangling*tp[d] + damping*s
 			}
 		})
 		r.Delta = e.ReduceFloat64(n, func(lo, hi int) float64 {
@@ -105,4 +132,34 @@ func PageRank(ctx context.Context, e *engine.Engine, g *csr.Graph, opts PageRank
 	}
 	r.Rank = rank
 	return
+}
+
+// teleportDistribution builds the restart distribution over n slots: mass
+// 1/|T| on each distinct in-range slot of t, zero elsewhere. It returns nil
+// when the distribution is the uniform one — an empty set, or one whose
+// slots are all out of range — so the caller keeps the uniform arithmetic
+// rather than expressing it as a vector.
+func teleportDistribution(t []int32, n int) (tp []float64) {
+	if len(t) == 0 || n == 0 {
+		return nil
+	}
+	tp = make([]float64, n)
+	var count int
+	for _, s := range t {
+		if s < 0 || int(s) >= n || tp[s] != 0 {
+			continue // out of range, or already counted
+		}
+		tp[s] = 1
+		count++
+	}
+	if count == 0 {
+		return nil
+	}
+	w := 1 / float64(count)
+	for i, v := range tp {
+		if v != 0 {
+			tp[i] = w
+		}
+	}
+	return tp
 }
