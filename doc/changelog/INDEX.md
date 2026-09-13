@@ -19,6 +19,23 @@ into the entries. The machinery sections every entry repeats (coverage,
 breaking changes, …) are omitted; the compilation process is described in
 [README.md](./README.md).
 
+## [2026-08-29 – 2026-09-13](./2026-08-29--2026-09-13.md)
+
+- [CS013: values move off error messages onto eb fields (ADR-0011)](./2026-08-29--2026-09-13.md#cs013-values-move-off-error-messages-onto-eb-fields-adr-0011)
+- [leeway: single-membership declaration (ADR-0213), the canonical form and wire, fixed-width text](./2026-08-29--2026-09-13.md#leeway-single-membership-declaration-adr-0213-the-canonical-form-and-wire-fixed-width-text)
+- [leeway: schema-decode views (ADR-0226)](./2026-08-29--2026-09-13.md#leeway-schema-decode-views-adr-0226)
+- [recordstore: the ADR-0100 deferrals](./2026-08-29--2026-09-13.md#recordstore-the-adr-0100-deferrals)
+- [The launcher as an app (ADR-0214)](./2026-08-29--2026-09-13.md#the-launcher-as-an-app-adr-0214)
+- [Markdown: mdedit's second wave (ADR-0216, ADR-0217) and the ingestor (ADR-0218)](./2026-08-29--2026-09-13.md#markdown-mdedits-second-wave-adr-0216-adr-0217-and-the-ingestor-adr-0218)
+- [play: canonical record identity (ADR-0219) and CBOR diagnostics](./2026-08-29--2026-09-13.md#play-canonical-record-identity-adr-0219-and-cbor-diagnostics)
+- [pushout: machine-checked claims, storage capabilities (ADR-0220), batch verbs (ADR-0221)](./2026-08-29--2026-09-13.md#pushout-machine-checked-claims-storage-capabilities-adr-0220-batch-verbs-adr-0221)
+- [tally and lading: launch arguments (ADR-0222), ad-hoc trees](./2026-08-29--2026-09-13.md#tally-and-lading-launch-arguments-adr-0222-ad-hoc-trees)
+- [watchbill: durable work as facts (ADR-0223)](./2026-08-29--2026-09-13.md#watchbill-durable-work-as-facts-adr-0223)
+- [graphview: a graph widget in Go (ADR-0224), navigation (ADR-0225), play's panel (ADR-0227)](./2026-08-29--2026-09-13.md#graphview-a-graph-widget-in-go-adr-0224-navigation-adr-0225-plays-panel-adr-0227)
+- [Hosted canvas rendering (ADR-0228) — a graph on a map](./2026-08-29--2026-09-13.md#hosted-canvas-rendering-adr-0228--a-graph-on-a-map)
+- [Build: mimalloc retired (ADR-0215), the last build tag gone (ADR-0212)](./2026-08-29--2026-09-13.md#build-mimalloc-retired-adr-0215-the-last-build-tag-gone-adr-0212)
+- [gov: doclint rules and a generated changelog index](./2026-08-29--2026-09-13.md#gov-doclint-rules-and-a-generated-changelog-index)
+
 ## [2026-08-16 – 2026-08-29](./2026-08-16--2026-08-29.md)
 
 - [Go 1.27 (ADR-0199) — v0.0.20](./2026-08-16--2026-08-29.md#go-127-adr-0199--v0020)
