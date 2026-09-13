@@ -202,26 +202,28 @@ func buildNetworkLayered(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertR
 // ring, which is the asymmetry the second tab exists for (§SD5).
 func layeredBuild(m *netModel) (b networkBuild) {
 	b.maxWeight, b.maxNodeWeight, b.capped = m.maxWeight, m.maxNodeWeight, m.capped
-	b.fillOf = make(map[string]color.Color, len(m.Vertices))
-	nodes := make([]layeredgraph.Node, 0, len(m.Vertices))
-	for i := range m.Vertices {
-		v := &m.Vertices[i]
+	n := m.NumVertices()
+	b.fillOf = make(map[string]color.Color, n)
+	nodes := make([]layeredgraph.Node, 0, n)
+	for i := range n {
+		id := m.ID[i]
 		nodes = append(nodes, layeredgraph.Node{
-			ID: v.ID, Label: v.Label, Shape: parseNetworkShape(v.Shape), Weight: v.Weight,
+			ID: id, Label: m.Label[i], Shape: parseNetworkShape(m.Shape[i]), Weight: m.Weight[i],
 		})
-		if col, ok := m.vertexFill(*v); ok {
-			b.fillOf[v.ID] = col
+		if col, ok := m.vertexFill(i); ok {
+			b.fillOf[id] = col
 		}
 	}
-	edges := make([]layeredgraph.Edge, 0, len(m.Edges))
-	for i := range m.Edges {
-		e := &m.Edges[i]
-		edges = append(edges, layeredgraph.Edge{From: e.From, To: e.To, Label: e.Label, Weight: e.Weight})
-		if col, ok := m.edgeStroke(*e); ok {
+	ne := m.NumEdges()
+	edges := make([]layeredgraph.Edge, 0, ne)
+	for i := range ne {
+		from, to := m.FromID[i], m.ToID[i]
+		edges = append(edges, layeredgraph.Edge{From: from, To: to, Label: m.EdgeLabel[i], Weight: m.EdgeWeight[i]})
+		if col, ok := m.edgeStroke(i); ok {
 			if b.strokeOf == nil {
 				b.strokeOf = make(map[[2]string]color.Color, 8)
 			}
-			b.strokeOf[[2]string{e.From, e.To}] = col
+			b.strokeOf[[2]string{from, to}] = col
 		}
 	}
 	b.model = layeredgraph.GraphModel{Nodes: nodes, Edges: edges}

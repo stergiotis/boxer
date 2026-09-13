@@ -1,9 +1,11 @@
 package play
 
 import (
+	"cmp"
 	"fmt"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -343,34 +345,48 @@ func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reas
 	return
 }
 
-// netVertex is one vertex of the contract as the query declared it. Group,
-// Shape and Tone are the raw cells: what they LOOK like is the drawing panel's
-// question, what they MEAN is this contract's.
-type netVertex struct {
-	ID     string
-	Label  string
-	Group  string
-	Shape  string
-	Tone   string
-	Weight float64 // 0 is *unknown*, not zero
-	// Donut / DonutTotal carry the optional ring (§SD5). float32 because that
-	// is what the widget that draws it takes; nil draws none.
-	Donut      []float32
-	DonutTotal float32
-}
-
-// netEdge is one directed edge of the contract as declared.
-type netEdge struct {
-	From, To string
-	Label    string
-	Tone     string
-	Weight   float64 // 0 is *unknown*, not zero
-}
-
-// netModel is a pair of results as one renderer-neutral graph (ADR-0227 §SD1).
+// netModel is a pair of results as one renderer-neutral graph (ADR-0227 §SD1),
+// **in columns** (ADR-0232 §SD9).
+//
+// Every vertex column is parallel to Key, whose **ascending order is the
+// model's row order**. That is also `csr.Graph`'s slot order, and — because
+// the panel declares in this order — the widget's slot order too, so a metric
+// the engine returns indexes the model's rows and the widget's arrays with no
+// join written anywhere (ADR-0232 §SD3).
+//
+// Group, Shape and Tone are the raw cells: what they LOOK like is the drawing
+// panel's question, what they MEAN is this contract's.
 type netModel struct {
-	Vertices []netVertex
-	Edges    []netEdge
+	// Vertex columns, parallel, in ascending Key order.
+	Key    []uint64 // the interned id: the widget's node id and the sort key
+	ID     []string // the id as the query declared it
+	Label  []string
+	Group  []string
+	Shape  []string
+	Tone   []string
+	Weight []float64 // 0 is *unknown*, not zero
+	// Donut is ragged, in the list layout the widget's columnar declaration
+	// takes (ADR-0232 §SD2): vertex i's slices are
+	// DonutValues[DonutStart[i]:DonutStart[i+1]]. DonutStart has one entry
+	// more than the vertex count, or is nil when no vertex carries a ring.
+	DonutStart  []int32
+	DonutValues []float32
+	DonutTotal  []float32
+
+	// Edge columns, parallel, in declaration order. From and To are interned
+	// keys; FromID and ToID keep the declared spelling for the renderers that
+	// address a node by string.
+	From       []uint64
+	To         []uint64
+	FromID     []string
+	ToID       []string
+	EdgeLabel  []string
+	EdgeTone   []string
+	EdgeWeight []float64 // 0 is *unknown*, not zero
+
+	// names resolves a key back to its declared id, for the id a click
+	// publishes (ADR-0227 §SD7).
+	names *netIds
 	// groupIdx is the palette position of each distinct `group`, in the order
 	// the vertices first named them — shared so one query colours the same in
 	// both panels, and the aura order of the live one (§SD4).
@@ -396,30 +412,44 @@ type netModel struct {
 // means something", and a query that bothers to name a meaning meant it. An
 // UNRECOGNISED tone falls through to the group rather than blanking the node.
 // ok=false leaves the renderer's own default in charge.
-func (inst *netModel) vertexFill(v netVertex) (col color.Color, ok bool) {
-	if v.Tone != "" {
-		if col, ok = networkTone(v.Tone, false); ok {
+func (inst *netModel) vertexFill(i int) (col color.Color, ok bool) {
+	if tone := inst.Tone[i]; tone != "" {
+		if col, ok = networkTone(tone, false); ok {
 			return
 		}
 	}
-	if v.Group == "" {
+	g := inst.Group[i]
+	if g == "" {
 		return
 	}
-	idx, has := inst.groupIdx[v.Group]
+	idx, has := inst.groupIdx[g]
 	if !has {
 		return
 	}
 	return networkGroupColor(idx), true
 }
 
+// NumVertices and NumEdges size the two column groups.
+func (inst *netModel) NumVertices() int { return len(inst.Key) }
+func (inst *netModel) NumEdges() int    { return len(inst.From) }
+
+// donutAt is vertex i's ring slices, or nil where it declared none.
+func (inst *netModel) donutAt(i int) []float32 {
+	if inst.DonutStart == nil {
+		return nil
+	}
+	return inst.DonutValues[inst.DonutStart[i]:inst.DonutStart[i+1]]
+}
+
 // edgeStroke resolves an edge's tone colour — a foreground stroke, so the
 // Default variant rather than the Subtle one a node body takes. ok=false keeps
 // the style default.
-func (inst *netModel) edgeStroke(e netEdge) (col color.Color, ok bool) {
-	if e.Tone == "" {
+func (inst *netModel) edgeStroke(i int) (col color.Color, ok bool) {
+	tone := inst.EdgeTone[i]
+	if tone == "" {
 		return
 	}
-	return networkTone(e.Tone, true)
+	return networkTone(tone, true)
 }
 
 // groups lists the distinct `group` values in the order the vertices first
@@ -446,8 +476,8 @@ func (inst *netModel) groups() (out []string) {
 // frame to frame.
 func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim, caps netCaps) (m netModel) {
 	m.groupIdx = make(map[string]int, 8)
-	verts := make([]netVertex, 0, 64)
-	seen := make(map[string]struct{}, 64)
+	m.names = newNetIds(64)
+	seen := make(map[string]int, 64) // declared id -> row while building
 
 	noteGroup := func(g string) {
 		if g == "" {
@@ -458,6 +488,23 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 		}
 	}
 
+	// appendVertex appends one row to every vertex column, so the columns stay
+	// parallel by construction rather than by each caller remembering to.
+	appendVertex := func(id, label, group, shape, tone string, weight float64,
+		donut []float32, donutTotal float32) {
+		seen[id] = len(m.Key)
+		m.Key = append(m.Key, m.names.intern(id))
+		m.ID = append(m.ID, id)
+		m.Label = append(m.Label, label)
+		m.Group = append(m.Group, group)
+		m.Shape = append(m.Shape, shape)
+		m.Tone = append(m.Tone, tone)
+		m.Weight = append(m.Weight, weight)
+		m.DonutTotal = append(m.DonutTotal, donutTotal)
+		m.DonutValues = append(m.DonutValues, donut...)
+		m.DonutStart = append(m.DonutStart, int32(len(m.DonutValues)))
+	}
+
 	// addSynth adds an edge endpoint with no vertices row; false means the
 	// vertex cap is reached, so the caller must drop the edge rather than leave
 	// it referencing a vertex the model does not contain.
@@ -465,19 +512,23 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 		if _, ok := seen[id]; ok {
 			return true
 		}
-		if len(verts) >= caps.vertices {
+		if len(m.Key) >= caps.vertices {
 			return false
 		}
-		seen[id] = struct{}{}
-		verts = append(verts, netVertex{ID: id, Label: id})
+		appendVertex(id, id, "", "", "", 0, nil, 0)
 		return true
 	}
+
+	// DonutStart is offsets with a leading zero (the list layout of ADR-0232
+	// §SD2); it is dropped again below when no vertex declared a ring, so the
+	// common case carries no offsets slice at all.
+	m.DonutStart = append(m.DonutStart, 0)
 
 	if vertRec != nil && vc.idCol >= 0 {
 		var donut []float32
 		rows := vertRec.NumRows()
 		for row := range rows {
-			if len(verts) >= caps.vertices {
+			if len(m.Key) >= caps.vertices {
 				m.capped = true
 				break
 			}
@@ -488,52 +539,54 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 			if _, dup := seen[id]; dup {
 				continue
 			}
-			seen[id] = struct{}{}
-			v := netVertex{ID: id, Label: id}
+			label := id
 			if vc.labelCol >= 0 {
 				if l := formatCell(vertRec, vc.labelCol, row); l != "" {
-					v.Label = l
+					label = l
 				}
 			}
+			var shape, tone, group string
 			if vc.shapeCol >= 0 {
-				v.Shape = formatCell(vertRec, vc.shapeCol, row)
+				shape = formatCell(vertRec, vc.shapeCol, row)
 			}
 			if vc.toneCol >= 0 {
-				v.Tone = formatCell(vertRec, vc.toneCol, row)
+				tone = formatCell(vertRec, vc.toneCol, row)
 			}
 			if vc.groupCol >= 0 {
-				v.Group = formatCell(vertRec, vc.groupCol, row)
-				noteGroup(v.Group)
+				group = formatCell(vertRec, vc.groupCol, row)
+				noteGroup(group)
 			}
+			var weight float64
 			if vc.weightCol >= 0 {
 				if w, ok := quantityCellValue(vertRec, vc.weightCol, row); ok && w > 0 {
-					v.Weight = w
+					weight = w
 					m.maxNodeWeight = max(m.maxNodeWeight, w)
 				}
 			}
+			var ring []float32
 			if vc.donutCol >= 0 {
-				// The slices are copied out rather than aliased: the scratch
-				// buffer is reused for the next row.
+				// The scratch buffer is reused for the next row; the values
+				// are copied into the model's own column by appendVertex.
 				if got, ok := netDonutAt(vertRec.Column(vc.donutCol), int(row), donut[:0]); ok && len(got) > 0 {
 					donut = got
-					v.Donut = append([]float32(nil), got...)
+					ring = got
 				}
 			}
+			var total float32
 			if vc.donutTotalCol >= 0 {
 				if t, ok := quantityCellValue(vertRec, vc.donutTotalCol, row); ok && t > 0 {
-					v.DonutTotal = float32(t)
+					total = float32(t)
 				}
 			}
-			verts = append(verts, v)
+			appendVertex(id, label, group, shape, tone, weight, ring, total)
 		}
 	}
 
-	edges := make([]netEdge, 0, 64)
 	edgeSeen := make(map[[2]string]struct{}, 64)
 	if edgesRec != nil {
 		rows := edgesRec.NumRows()
 		for row := range rows {
-			if len(edges) >= caps.edges {
+			if m.NumEdges() >= caps.edges {
 				m.capped = true
 				break
 			}
@@ -551,26 +604,94 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 				continue // a dangling endpoint (vertex cap reached) drops the edge
 			}
 			edgeSeen[key] = struct{}{}
-			e := netEdge{From: src, To: tgt}
+			var label, tone string
 			if ec.labelCol >= 0 {
-				e.Label = formatCell(edgesRec, ec.labelCol, row)
+				label = formatCell(edgesRec, ec.labelCol, row)
 			}
 			if ec.toneCol >= 0 {
-				e.Tone = formatCell(edgesRec, ec.toneCol, row)
+				tone = formatCell(edgesRec, ec.toneCol, row)
 			}
+			var weight float64
 			if ec.weightCol >= 0 {
-				// A non-positive or unreadable cell leaves Weight at 0, which
-				// both widgets read as *unknown* and draw as an ordinary edge
-				// (ADR-0167 §SD2).
+				// A non-positive or unreadable cell leaves the weight at 0,
+				// which both widgets read as *unknown* and draw as an ordinary
+				// edge (ADR-0167 §SD2).
 				if w, ok := quantityCellValue(edgesRec, ec.weightCol, row); ok && w > 0 {
-					e.Weight = w
+					weight = w
 					m.maxWeight = max(m.maxWeight, w)
 				}
 			}
-			edges = append(edges, e)
+			m.From = append(m.From, m.names.intern(src))
+			m.To = append(m.To, m.names.intern(tgt))
+			m.FromID = append(m.FromID, src)
+			m.ToID = append(m.ToID, tgt)
+			m.EdgeLabel = append(m.EdgeLabel, label)
+			m.EdgeTone = append(m.EdgeTone, tone)
+			m.EdgeWeight = append(m.EdgeWeight, weight)
 		}
 	}
-	m.Vertices, m.Edges = verts, edges
+	if len(m.DonutValues) == 0 {
+		m.DonutStart = nil // no vertex declared a ring
+	}
+	m.sortByKey()
+	return
+}
+
+// sortByKey puts the vertex columns in ascending interned-id order, which is
+// what makes the model's row order the CSR's slot order and the widget's
+// (ADR-0232 §SD9). Edge columns are untouched: they address vertices by key,
+// not by row.
+//
+// The permutation is applied by building each column afresh rather than by
+// swapping in place, because the ragged donut column cannot be swapped
+// elementwise and a second shape for it would be the bug this whole change
+// exists to avoid.
+func (inst *netModel) sortByKey() {
+	n := inst.NumVertices()
+	perm := make([]int32, n)
+	for i := range perm {
+		perm[i] = int32(i)
+	}
+	slices.SortFunc(perm, func(a, b int32) int {
+		return cmp.Compare(inst.Key[a], inst.Key[b])
+	})
+	sorted := true
+	for i, p := range perm {
+		if int(p) != i {
+			sorted = false
+			break
+		}
+	}
+	if sorted {
+		return // already ascending: the common case of a query that ORDERed by id
+	}
+	inst.Key = permuteSlice(inst.Key, perm)
+	inst.ID = permuteSlice(inst.ID, perm)
+	inst.Label = permuteSlice(inst.Label, perm)
+	inst.Group = permuteSlice(inst.Group, perm)
+	inst.Shape = permuteSlice(inst.Shape, perm)
+	inst.Tone = permuteSlice(inst.Tone, perm)
+	inst.Weight = permuteSlice(inst.Weight, perm)
+	inst.DonutTotal = permuteSlice(inst.DonutTotal, perm)
+	if inst.DonutStart == nil {
+		return
+	}
+	start := make([]int32, 0, n+1)
+	values := make([]float32, 0, len(inst.DonutValues))
+	start = append(start, 0)
+	for _, p := range perm {
+		values = append(values, inst.DonutValues[inst.DonutStart[p]:inst.DonutStart[p+1]]...)
+		start = append(start, int32(len(values)))
+	}
+	inst.DonutStart, inst.DonutValues = start, values
+}
+
+// permuteSlice returns src reordered by perm.
+func permuteSlice[T any](src []T, perm []int32) (out []T) {
+	out = make([]T, len(perm))
+	for i, p := range perm {
+		out[i] = src[p]
+	}
 	return
 }
 

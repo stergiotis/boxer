@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -221,8 +222,8 @@ type GraphviewDriver struct {
 	// key changes, so a running simulation formats no cells (§SD8).
 	key     graphviewModelKey
 	keyOk   bool
-	nodes   []graphview.NodeSpec
-	edges   []graphview.EdgeSpec
+	nodes   graphview.NodeColumns
+	edges   graphview.EdgeColumns
 	names   *netIds
 	groups  []string
 	capped  bool
@@ -305,7 +306,7 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		// graph would be framed by the camera the last one was left at.
 		// Positions of surviving ids are kept — only the framing is re-armed.
 		inst.view.FitNow()
-		inst.view.FastForward(graphviewSettleBudget(len(inst.nodes)))
+		inst.view.FastForward(graphviewSettleBudget(inst.nodes.Len()))
 		inst.frozen = false
 	}
 	inst.pruneSelection(emit)
@@ -313,7 +314,7 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	inst.renderControls()
 	c.Label(inst.statusLine()).Send()
 
-	if len(inst.nodes) == 0 {
+	if inst.nodes.Len() == 0 {
 		for rt := range c.RichTextLabel("The `edges` CTE produced no drawable edges, and there are no `vertices` rows.") {
 			rt.Small().Weak()
 		}
@@ -356,7 +357,12 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		Legend:  graphview.AuraLegendInside,
 	}
 
-	inst.view.Render(inst.nodes, inst.edges, w, h)
+	if err := inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
+		// Validate ran at rebuild, so reaching here is a panel bug rather
+		// than a malformed query; the widget rendered nothing and kept its
+		// state, and the next rebuild is the recovery.
+		log.Error().Err(err).Msg("graphview render refused the declaration")
+	}
 
 	// Freeze on the way out, so the verdict is read from the frame that was
 	// just drawn and takes effect on the next one.
@@ -405,50 +411,83 @@ func (inst *GraphviewDriver) pruneSelection(emit SignalEmitterI) (cleared bool) 
 // are interned (§SD7), `group` becomes an aura id and a fill, `weight` becomes
 // a radius and an edge width, and `donut` becomes the ring.
 func (inst *GraphviewDriver) rebuild(m *netModel) {
+	n := m.NumVertices()
 	inst.capped = m.capped
 	inst.groups = m.groups()
-	inst.labeled = len(m.Vertices) <= graphviewLabelBudget
-	inst.names = newNetIds(len(m.Vertices))
-	inst.nodes = make([]graphview.NodeSpec, 0, len(m.Vertices))
-	for i := range m.Vertices {
-		v := &m.Vertices[i]
-		n := graphview.NodeSpec{Id: inst.names.intern(v.ID), Label: v.Label}
-		if col, ok := m.vertexFill(*v); ok {
-			n.Color = col
-		}
-		n.Radius = graphviewRadius(v.Weight, m.maxNodeWeight)
-		if v.Group != "" {
-			// One slice per vertex, built with the model and reused until it
-			// changes; the widget reads it during Render and keeps no copy.
-			n.Auras = []string{v.Group}
-		}
-		if len(v.Donut) > 0 {
-			n.Donut = graphview.Donut{Values: v.Donut, Total: v.DonutTotal}
-		}
-		inst.nodes = append(inst.nodes, n)
+	inst.labeled = n <= graphviewLabelBudget
+	// The model already interned the ids and sorted its rows by them
+	// (ADR-0232 §SD9), so the declaration is its columns and the widget's
+	// slots come out in the same order as the engine's CSR slots.
+	inst.names = m.names
+
+	nc := graphview.NodeColumns{
+		Ids:    m.Key,
+		Label:  m.Label,
+		Color:  make([]color.Color, n),
+		Radius: make([]float32, n),
 	}
+	var auraOffsets []int32
+	var auraIds []string
+	if len(m.groupIdx) > 0 {
+		auraOffsets = make([]int32, 0, n+1)
+		auraIds = make([]string, 0, n)
+		auraOffsets = append(auraOffsets, 0)
+	}
+	for i := range n {
+		if col, ok := m.vertexFill(i); ok {
+			nc.Color[i] = col
+		}
+		nc.Radius[i] = graphviewRadius(m.Weight[i], m.maxNodeWeight)
+		if auraOffsets != nil {
+			if g := m.Group[i]; g != "" {
+				auraIds = append(auraIds, g)
+			}
+			auraOffsets = append(auraOffsets, int32(len(auraIds)))
+		}
+	}
+	nc.AuraOffsets, nc.AuraIds = auraOffsets, auraIds
+	// The donut column is already the list layout the widget takes, so it is
+	// handed over as it stands rather than re-nested per row.
+	nc.DonutOffsets, nc.DonutValues, nc.DonutTotal = m.DonutStart, m.DonutValues, m.DonutTotal
+	inst.nodes = nc
 
 	seqPalette := styletokens.SequentialDefault()
 	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
-	inst.edges = make([]graphview.EdgeSpec, 0, len(m.Edges))
-	for i := range m.Edges {
-		e := &m.Edges[i]
-		spec := graphview.EdgeSpec{
-			From:  inst.names.intern(e.From),
-			To:    inst.names.intern(e.To),
-			Label: e.Label,
-		}
+	ne := m.NumEdges()
+	ec := graphview.EdgeColumns{
+		From:  m.From,
+		To:    m.To,
+		Label: m.EdgeLabel,
+		Color: make([]color.Color, ne),
+		Width: make([]float32, ne),
+	}
+	for i := range ne {
 		// A `tone` wins the colour, being the more specific claim; a `weight`
 		// still widens the edge under it, and where no tone was named it also
 		// ramps the colour at the SAME normalised position as the width, so
 		// the two channels cannot disagree (ADR-0167 §SD4).
-		if col, ok := m.edgeStroke(*e); ok {
-			spec.Color = col
-		} else if e.Weight > 0 && m.maxWeight > 0 {
-			spec.Color = color.Hex(networkMagnitudeRamp(seqPalette, bandLo, e.Weight, m.maxWeight).AsHex())
+		w := m.EdgeWeight[i]
+		if col, ok := m.edgeStroke(i); ok {
+			ec.Color[i] = col
+		} else if w > 0 && m.maxWeight > 0 {
+			ec.Color[i] = color.Hex(networkMagnitudeRamp(seqPalette, bandLo, w, m.maxWeight).AsHex())
 		}
-		spec.Width = graphviewEdgeWidth(e.Weight, m.maxWeight)
-		inst.edges = append(inst.edges, spec)
+		ec.Width[i] = graphviewEdgeWidth(w, m.maxWeight)
+	}
+	inst.edges = ec
+
+	// Validating once per rebuild rather than per frame is what the widget's
+	// Validate is exported for; a disagreement here is this panel's bug, not
+	// the query's, so it is logged and the declaration emptied rather than
+	// shown to the reader as a rejected query.
+	if err := inst.nodes.Validate(); err != nil {
+		log.Error().Err(err).Msg("graphview node declaration is malformed")
+		inst.nodes, inst.edges = graphview.NodeColumns{}, graphview.EdgeColumns{}
+		return
+	}
+	if err := inst.edges.Validate(); err != nil {
+		log.Error().Err(err).Msg("graphview edge declaration is malformed")
+		inst.nodes, inst.edges = graphview.NodeColumns{}, graphview.EdgeColumns{}
 	}
 }
 
@@ -518,7 +557,7 @@ func (inst *GraphviewDriver) renderControls() {
 		// Fast-forward is what a large graph wants instead of watching it
 		// converge: the steps run before the frame paints.
 		if c.Button(ids.PrepareStr("gv-ff"), c.Atoms().Text("settle").Keep()).SendResp().HasPrimaryClicked() {
-			inst.view.FastForward(graphviewSettleBudget(len(inst.nodes)))
+			inst.view.FastForward(graphviewSettleBudget(inst.nodes.Len()))
 			inst.frozen = false
 		}
 		c.Checkbox(ids.PrepareStr("gv-paused"), inst.paused, "paused").SendRespVal(&inst.paused)
@@ -538,7 +577,7 @@ func (inst *GraphviewDriver) renderControls() {
 // readout a live layout has and a static one does not.
 func (inst *GraphviewDriver) statusLine() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d nodes · %d edges", len(inst.nodes), len(inst.edges))
+	fmt.Fprintf(&b, "%d nodes · %d edges", inst.nodes.Len(), inst.edges.Len())
 	if inst.capped {
 		fmt.Fprintf(&b, " · capped at %d nodes / %d edges (add a LIMIT or filter)",
 			graphviewMaxVertices, graphviewMaxEdges)

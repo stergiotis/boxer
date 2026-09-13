@@ -2,11 +2,13 @@ package play
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,13 +67,66 @@ func gvBuild(t *testing.T, edgesRec arrow.RecordBatch, vertRec arrow.RecordBatch
 	return d
 }
 
-func gvNodeByName(d *GraphviewDriver, id string) (graphview.NodeSpec, bool) {
-	for _, n := range d.nodes {
-		if d.names.name(n.Id) == id {
-			return n, true
+// gvNodeView is one row of the driver's columnar declaration (ADR-0232 §SD9)
+// gathered back into the shape an assertion reads: the declaration is
+// columns, but a test that asks about one node still wants a node.
+type gvNodeView struct {
+	Id     uint64
+	Label  string
+	Color  color.Color
+	Radius float32
+	Auras  []string
+	Donut  graphview.Donut
+}
+
+func gvNodeAt(d *GraphviewDriver, i int) (v gvNodeView) {
+	n := &d.nodes
+	v.Id = n.Ids[i]
+	if n.Label != nil {
+		v.Label = n.Label[i]
+	}
+	if n.Color != nil {
+		v.Color = n.Color[i]
+	}
+	if n.Radius != nil {
+		v.Radius = n.Radius[i]
+	}
+	if n.AuraOffsets != nil {
+		if a := n.AuraIds[n.AuraOffsets[i]:n.AuraOffsets[i+1]]; len(a) > 0 {
+			v.Auras = a
 		}
 	}
-	return graphview.NodeSpec{}, false
+	if n.DonutOffsets != nil {
+		v.Donut.Values = n.DonutValues[n.DonutOffsets[i]:n.DonutOffsets[i+1]]
+	}
+	if n.DonutTotal != nil {
+		v.Donut.Total = n.DonutTotal[i]
+	}
+	return
+}
+
+func gvEdgeAt(d *GraphviewDriver, i int) (s graphview.EdgeSpec) {
+	e := &d.edges
+	s = graphview.EdgeSpec{From: e.From[i], To: e.To[i]}
+	if e.Label != nil {
+		s.Label = e.Label[i]
+	}
+	if e.Color != nil {
+		s.Color = e.Color[i]
+	}
+	if e.Width != nil {
+		s.Width = e.Width[i]
+	}
+	return
+}
+
+func gvNodeByName(d *GraphviewDriver, id string) (gvNodeView, bool) {
+	for i := range d.nodes.Ids {
+		if d.names.name(d.nodes.Ids[i]) == id {
+			return gvNodeAt(d, i), true
+		}
+	}
+	return gvNodeView{}, false
 }
 
 // The declared string id is what the widget's uint64 key stands for, and what
@@ -81,20 +136,24 @@ func TestGraphviewIdsRoundTrip(t *testing.T) {
 	er := netEdges(t, []string{"a", "b"}, []string{"b", "c"}, nil)
 	d := gvBuild(t, er, nil)
 
-	require.Len(t, d.nodes, 3)
-	for _, n := range d.nodes {
-		assert.NotEmpty(t, d.names.name(n.Id), "every declared node id names a vertex")
+	require.Equal(t, 3, d.nodes.Len())
+	for i := range d.nodes.Ids {
+		assert.NotEmpty(t, d.names.name(d.nodes.Ids[i]), "every declared node id names a vertex")
 	}
-	seen := make(map[uint64]struct{}, len(d.nodes))
-	for _, n := range d.nodes {
-		_, dup := seen[n.Id]
+	seen := make(map[uint64]struct{}, d.nodes.Len())
+	for i := range d.nodes.Ids {
+		id := d.nodes.Ids[i]
+		_, dup := seen[id]
 		require.False(t, dup, "interned ids are unique — the widget keys nodes by them")
-		seen[n.Id] = struct{}{}
+		seen[id] = struct{}{}
 	}
+	// The declaration is in ascending key order, which is what makes a
+	// metric column index it without a join (ADR-0232 §SD3/§SD9).
+	assert.True(t, slices.IsSorted(d.nodes.Ids), "the declaration is sorted by interned id")
 	// The edges reference the same keys, not a second interning.
-	for _, e := range d.edges {
-		assert.Contains(t, seen, e.From)
-		assert.Contains(t, seen, e.To)
+	for i := range d.edges.From {
+		assert.Contains(t, seen, d.edges.From[i])
+		assert.Contains(t, seen, d.edges.To[i])
 	}
 	// Interning is a function of the string: the same id twice is one key.
 	assert.Equal(t, d.names.intern("a"), d.names.intern("a"))
@@ -167,15 +226,15 @@ func TestGraphviewWeightSizesNodeAndEdge(t *testing.T) {
 	assert.Greater(t, b.Radius, float32(0))
 	assert.Zero(t, c.Radius, "an unweighted vertex takes the style default")
 
-	require.Len(t, d.edges, 2)
-	assert.InDelta(t, graphviewMaxEdgeW, d.edges[0].Width, 0.01)
-	assert.Greater(t, d.edges[0].Width, d.edges[1].Width)
+	require.Equal(t, 2, d.edges.Len())
+	assert.InDelta(t, graphviewMaxEdgeW, gvEdgeAt(d, 0).Width, 0.01)
+	assert.Greater(t, gvEdgeAt(d, 0).Width, gvEdgeAt(d, 1).Width)
 
 	// The ramp and the width are read at the same normalised position, so an
 	// unweighted result colours nothing.
 	plain := netEdges(t, []string{"a"}, []string{"b"}, nil)
 	pd := gvBuild(t, plain, nil)
-	assert.Zero(t, pd.edges[0].Width, "no weight column leaves the style default")
+	assert.Zero(t, gvEdgeAt(pd, 0).Width, "no weight column leaves the style default")
 }
 
 // An explicit `tone` wins an edge's colour over the magnitude ramp, and does
@@ -185,10 +244,10 @@ func TestGraphviewEdgeToneWinsColourNotWidth(t *testing.T) {
 		[]float64{9, 1}, []string{"error", ""})
 	d := gvBuild(t, er, nil)
 
-	require.Len(t, d.edges, 2)
+	require.Equal(t, 2, d.edges.Len())
 	want, _ := networkTone("error", true)
-	assert.Equal(t, want, d.edges[0].Color)
-	assert.Greater(t, d.edges[0].Width, d.edges[1].Width, "the toned edge still carries its magnitude")
+	assert.Equal(t, want, gvEdgeAt(d, 0).Color)
+	assert.Greater(t, gvEdgeAt(d, 0).Width, gvEdgeAt(d, 1).Width, "the toned edge still carries its magnitude")
 }
 
 // The `donut` column is claimed only when it is a list of numbers, and its
@@ -244,7 +303,7 @@ func TestGraphviewLabelBudget(t *testing.T) {
 	}
 	big := netEdges(t, src, tgt, nil)
 	d := gvBuild(t, big, nil)
-	require.Greater(t, len(d.nodes), graphviewLabelBudget)
+	require.Greater(t, d.nodes.Len(), graphviewLabelBudget)
 	assert.False(t, d.labeled, "past the budget the labels follow hover and selection")
 }
 
@@ -259,7 +318,7 @@ func TestGraphviewCapsAreItsOwn(t *testing.T) {
 	vr := netVerts(t, ids, nil, nil, nil)
 	er := netEdges(t, []string{}, []string{}, nil)
 	d := gvBuild(t, er, vr)
-	assert.Len(t, d.nodes, n)
+	assert.Equal(t, n, d.nodes.Len())
 	assert.False(t, d.capped)
 }
 
