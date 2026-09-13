@@ -23,6 +23,7 @@ import (
 type networkSource struct {
 	edgesLane    *nodeLane
 	verticesLane *nodeLane
+	optsLane     *nodeLane
 
 	// The status mirrors let a failed lane say so rather than reading as "no
 	// graph". Written by every demand — nil clears, there is no latch.
@@ -38,6 +39,7 @@ type networkSource struct {
 	// rebuild. Zero means nothing served.
 	edgesFP    uint64
 	verticesFP uint64
+	optsFP     uint64
 }
 
 // newNetworkSource builds the source. client may be nil, which leaves both
@@ -48,6 +50,8 @@ func newNetworkSource(client *Client) (inst *networkSource) {
 		inst.edgesLane = newNodeLane(clientExecutor{client: client, opts: newExecOptions("network-edges")},
 			memory.NewGoAllocator(), 0)
 		inst.verticesLane = newNodeLane(clientExecutor{client: client, opts: newExecOptions("network-vertices")},
+			memory.NewGoAllocator(), 0)
+		inst.optsLane = newNodeLane(clientExecutor{client: client, opts: newExecOptions("network-graph-opts")},
 			memory.NewGoAllocator(), 0)
 	}
 	return
@@ -69,6 +73,9 @@ func (inst *networkSource) forgetLanes() {
 	if inst.verticesLane != nil {
 		inst.verticesLane.forget()
 	}
+	if inst.optsLane != nil {
+		inst.optsLane.forget()
+	}
 }
 
 // close tears both lanes down with the app.
@@ -81,6 +88,9 @@ func (inst *networkSource) close() {
 	}
 	if inst.verticesLane != nil {
 		inst.verticesLane.close()
+	}
+	if inst.optsLane != nil {
+		inst.optsLane.close()
 	}
 }
 
@@ -138,6 +148,29 @@ func (inst *PlayApp) demandNetworkVertices() (rec arrow.RecordBatch, schema *arr
 	return v.rec, v.schema
 }
 
+// demandGraphOpts compiles the optional `graph_opts` CTE and demands it on its
+// own lane. Its own lane rather than a read off the vertices result because it
+// is a different CTE with a different shape, and because a settings row that
+// changes must not re-execute the graph.
+func (inst *PlayApp) demandGraphOpts() (rec arrow.RecordBatch, schema *arrow.Schema) {
+	s := inst.netSource
+	if s == nil || s.optsLane == nil {
+		return
+	}
+	node, ok := findSplitNode(inst.currentSplit, networkGraphOptsNodeID)
+	if !ok {
+		s.optsFP = 0
+		return
+	}
+	v := s.optsLane.demand(compiledNode{
+		SQL:    fuseNode(inst.currentSplit, networkGraphOptsNodeID),
+		NodeID: networkGraphOptsNodeID,
+		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
+	})
+	s.optsFP = v.fingerprint
+	return v.rec, v.schema
+}
+
 // graphChannelInputs demands both CTEs and packs them as the channel inputs the
 // two graph panels dispatch on. The caller MUST release the two records, which
 // the returned closure does.
@@ -148,6 +181,7 @@ func (inst *PlayApp) demandNetworkVertices() (rec arrow.RecordBatch, schema *arr
 func (inst *PlayApp) graphChannelInputs() (inputs map[ChannelID]channelInput, release func()) {
 	edgesRec, edgesSchema := inst.demandNetworkEdges()
 	vertRec, vertSchema := inst.demandNetworkVertices()
+	optsRec, optsSchema := inst.demandGraphOpts()
 	release = func() {
 		if edgesRec != nil {
 			edgesRec.Release()
@@ -155,12 +189,18 @@ func (inst *PlayApp) graphChannelInputs() (inputs map[ChannelID]channelInput, re
 		if vertRec != nil {
 			vertRec.Release()
 		}
+		if optsRec != nil {
+			optsRec.Release()
+		}
 	}
 	inputs = map[ChannelID]channelInput{
 		chEdges: {node: networkEdgesNodeID, rec: edgesRec, schema: edgesSchema, sig: inst.frameSig},
 	}
 	if vertRec != nil || vertSchema != nil {
 		inputs[chVertices] = channelInput{node: networkVerticesNodeID, rec: vertRec, schema: vertSchema, sig: inst.frameSig}
+	}
+	if optsRec != nil || optsSchema != nil {
+		inputs[chGraphOpts] = channelInput{node: networkGraphOptsNodeID, rec: optsRec, schema: optsSchema, sig: inst.frameSig}
 	}
 	return
 }

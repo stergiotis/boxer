@@ -68,16 +68,17 @@ type SignalEmitterI interface {
 type ChannelID string
 
 const (
-	chMain     ChannelID = "main"     // the lone channel of single-input panels (Table, Projection, Detail)
-	chEvents   ChannelID = "events"   // the Timeline's foreground marks
-	chBands    ChannelID = "bands"    // the Timeline's background bands (slice 4b-2)
-	chLanes    ChannelID = "lanes"    // the Kanban board's lane inventory (ADR-0122 §SD6)
-	chEdges    ChannelID = "edges"    // the Network graph's arcs (ADR-0129)
-	chVertices ChannelID = "vertices" // the Network graph's nodes (ADR-0129, optional)
-	chFlows    ChannelID = "flows"    // the Sankey diagram's quantified flows (ADR-0159)
-	chNodes    ChannelID = "nodes"    // the Sankey diagram's nodes (ADR-0159, optional)
-	chScores   ChannelID = "scores"   // the Series panel's score lane (ADR-0163, optional)
-	chSpans    ChannelID = "spans"    // the Series panel's flagged extents (ADR-0163, optional)
+	chMain      ChannelID = "main"       // the lone channel of single-input panels (Table, Projection, Detail)
+	chEvents    ChannelID = "events"     // the Timeline's foreground marks
+	chBands     ChannelID = "bands"      // the Timeline's background bands (slice 4b-2)
+	chLanes     ChannelID = "lanes"      // the Kanban board's lane inventory (ADR-0122 §SD6)
+	chEdges     ChannelID = "edges"      // the Network graph's arcs (ADR-0129)
+	chVertices  ChannelID = "vertices"   // the Network graph's nodes (ADR-0129, optional)
+	chGraphOpts ChannelID = "graph_opts" // the Graphview tab's settings row (ADR-0231 §SD5, optional)
+	chFlows     ChannelID = "flows"      // the Sankey diagram's quantified flows (ADR-0159)
+	chNodes     ChannelID = "nodes"      // the Sankey diagram's nodes (ADR-0159, optional)
+	chScores    ChannelID = "scores"     // the Series panel's score lane (ADR-0163, optional)
+	chSpans     ChannelID = "spans"      // the Series panel's flagged extents (ADR-0163, optional)
 )
 
 // ChannelSpec declares one of a panel's input channels. A panel is renderable iff

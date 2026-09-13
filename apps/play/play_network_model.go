@@ -762,6 +762,11 @@ type graphChannelInputs struct {
 	ec       networkEdgesClaim
 	vertices arrow.RecordBatch
 	vc       networkVerticesClaim
+	// opts is the Graphview tab's settings row (ADR-0231 §SD5). The layered
+	// panel ignores it, the way it ignores `donut` — one contract, two panels
+	// honouring different subsets (ADR-0227 §SD1).
+	opts arrow.RecordBatch
+	gc   networkGraphOptsClaim
 }
 
 func graphChannelsToClaims(filled map[ChannelID]ChannelResult) (in graphChannelInputs, ok bool) {
@@ -779,6 +784,13 @@ func graphChannelsToClaims(filled map[ChannelID]ChannelResult) (in graphChannelI
 		if got, isC := v.Claim.(networkVerticesClaim); isC {
 			in.vc = got
 			in.vertices = v.Rec
+		}
+	}
+	in.gc = noGraphOptsClaim()
+	if o, has := filled[chGraphOpts]; has {
+		if got, isC := o.Claim.(networkGraphOptsClaim); isC {
+			in.gc = got
+			in.opts = o.Rec
 		}
 	}
 	return

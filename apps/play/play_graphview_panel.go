@@ -121,10 +121,21 @@ const graphviewIDSalt uint64 = 0x67726170766965DD
 type graphviewLayoutE uint8
 
 const (
-	graphviewLayoutForce   graphviewLayoutE = iota // Fruchterman–Reingold
-	graphviewLayoutGravity                         // FR with centre gravity
-	graphviewLayoutTree                            // the hierarchical walk
+	// graphviewLayoutAuto is the chrome's *auto* position: whatever the
+	// query's `graph_opts.layout` said, and the panel's own default when it
+	// said nothing (ADR-0231 §SD1's precedence rule).
+	graphviewLayoutAuto    graphviewLayoutE = iota
+	graphviewLayoutForce                    // Fruchterman–Reingold
+	graphviewLayoutGravity                  // FR with centre gravity
+	graphviewLayoutTree                     // the hierarchical walk
+	graphviewLayoutRadial                   // rings by hop distance (ADR-0225 §SD6)
+	graphviewLayoutRandom                   // a starting state, reachable only from SQL
 )
+
+// graphviewLayoutDefault is what the panel draws when neither the query nor
+// the reader named a layout — ADR-0227 §SD4's choice, unchanged by the query
+// gaining a say.
+const graphviewLayoutDefault = graphviewLayoutGravity
 
 // widgetLayout maps the chrome's choice onto the widget's.
 func (inst graphviewLayoutE) widgetLayout() graphview.LayoutE {
@@ -133,8 +144,29 @@ func (inst graphviewLayoutE) widgetLayout() graphview.LayoutE {
 		return graphview.LayoutForceDirectedCG
 	case graphviewLayoutTree:
 		return graphview.LayoutHierarchical
+	case graphviewLayoutRadial:
+		return graphview.LayoutRadial
+	case graphviewLayoutRandom:
+		return graphview.LayoutRandom
 	}
 	return graphview.LayoutForceDirected
+}
+
+// String is the `graph_opts.layout` spelling, and the chrome's label.
+func (inst graphviewLayoutE) String() string {
+	switch inst {
+	case graphviewLayoutForce:
+		return "force"
+	case graphviewLayoutGravity:
+		return "force_gravity"
+	case graphviewLayoutTree:
+		return "hierarchical"
+	case graphviewLayoutRadial:
+		return "radial"
+	case graphviewLayoutRandom:
+		return "random"
+	}
+	return "auto"
 }
 
 // The Graphview tab's gesture seam (ADR-0231 §SD8): one family per gesture the
@@ -223,9 +255,14 @@ func (inst *netIds) known(s string) bool {
 // re-Run can change which columns the same bytes are read through.
 type graphviewModelKey struct {
 	edgesFP, verticesFP uint64
+	// optsFP is the settings row's fingerprint: a changed `graph_opts` can
+	// change the declaration — the encoding channels and the undirected
+	// reading are built into it — so it re-keys the cache like the other two.
+	optsFP              uint64
 	haveEdges, haveVert bool
 	ec                  networkEdgesClaim
 	vc                  networkVerticesClaim
+	gc                  networkGraphOptsClaim
 }
 
 // GraphviewDriver owns the Graphview tab state: the widget (which owns the
@@ -265,16 +302,29 @@ type GraphviewDriver struct {
 	capped  bool
 	labeled bool // the label budget's verdict for the cached model
 
+	// opts is the query's settings row (ADR-0231 §SD5), re-read every frame
+	// and cheap: it is one row of already-materialised cells.
+	opts graphOpts
+
 	// metrics is the analytics engine's side (ADR-0229 §SD6): the CSR and the
 	// computed columns, rebuilt with the declaration and cached on the CSR's
 	// fingerprint, so a running simulation computes nothing per frame.
 	metrics *graphviewMetrics
-	// sizeBy is the size channel's encoding selector (ADR-0231 §SD6). The
-	// chrome sets it here; `graph_opts` will supply the default it overrides,
-	// under §SD1's precedence rule. Empty leaves the channel on `weight`.
-	sizeBy      string
-	sizeReason  string
-	seedRowsBuf []int32
+	// sizeBy is the size channel's encoding selector (ADR-0231 §SD6) as the
+	// READER set it; the query's `graph_opts.size_by` is the default it
+	// overrides, under §SD1's precedence rule. sizeBySet is what tells the
+	// two apart, since "follow the query" and "size by weight" are both
+	// empty strings.
+	sizeBy     string
+	sizeBySet  bool
+	sizeReason string
+	// orientSet / pinOnDragSet record that the reader moved the control, which
+	// is what makes it an override rather than the zero value agreeing with a
+	// default (§SD1).
+	orientSet    bool
+	pinOnDrag    bool
+	pinOnDragSet bool
+	seedRowsBuf  []int32
 
 	// The gesture seam's own state (ADR-0231 §SD8): the hover dwell, the
 	// camera settle latch, and two scratch buffers the per-frame reader
@@ -307,7 +357,7 @@ func NewGraphviewDriver(ids *c.WidgetIdStack, src *networkSource) (inst *Graphvi
 	// the most members reaching it, and the larger group simply swallows the
 	// smaller one: two groups, one blob.
 	inst = &GraphviewDriver{ids: ids, idSeed: nextVizSeed(), src: src,
-		layout: graphviewLayoutGravity, overlap: true, metrics: newGraphviewMetrics()}
+		layout: graphviewLayoutAuto, overlap: true, metrics: newGraphviewMetrics()}
 	inst.view = graphview.New(ids, "play-graphview", graphview.Options{
 		Layout:        graphview.LayoutForceDirectedCG,
 		NodeClicking:  true,
@@ -334,10 +384,21 @@ func (inst graphviewPanel) Channels() []ChannelSpec {
 	return []ChannelSpec{
 		{ID: chEdges, Required: true, Label: "edges"},
 		{ID: chVertices, Required: false, Label: "vertices"},
+		{ID: chGraphOpts, Required: false, Label: "graph_opts"},
 	}
 }
 
 func (inst graphviewPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {
+	if ch == chGraphOpts {
+		// Every column is optional, so the settings CTE is never rejected for
+		// its shape (ADR-0231 §SD5): one that names nothing the panel knows is
+		// a table of ordinary result columns and the drawing keeps its
+		// defaults.
+		if schema == nil {
+			return nil, "no graph_opts result"
+		}
+		return resolveGraphOpts(schema), ""
+	}
 	return acceptGraphChannel(ch, schema)
 }
 
@@ -346,16 +407,21 @@ func (inst graphviewPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, 
 // GraphviewDriver.selectedID.
 func (inst graphviewPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
 	if in, ok := graphChannelsToClaims(filled); ok {
-		inst.driver.render(in.edges, in.ec, in.vertices, in.vc, emit)
+		inst.driver.render(in.edges, in.ec, in.vertices, in.vc, in.opts, in.gc, emit)
 	}
 }
 
 // render rebuilds the declaration when its inputs changed, draws it, and
 // mirrors the widget's selection outward.
-func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim, emit SignalEmitterI) {
-	key := graphviewModelKey{ec: ec, vc: vc}
+func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim, optsRec arrow.RecordBatch, gc networkGraphOptsClaim, emit SignalEmitterI) {
+	// The settings row is read before the model, because what it says about
+	// the encoding channels and the undirected reading is part of what the
+	// declaration is built from.
+	inst.opts = buildGraphOpts(optsRec, gc)
+
+	key := graphviewModelKey{ec: ec, vc: vc, gc: gc}
 	if inst.src != nil {
-		key.edgesFP, key.verticesFP = inst.src.edgesFP, inst.src.verticesFP
+		key.edgesFP, key.verticesFP, key.optsFP = inst.src.edgesFP, inst.src.verticesFP, inst.src.optsFP
 	}
 	key.haveEdges, key.haveVert = edgesRec != nil, vertRec != nil
 	if !inst.keyOk || key != inst.key {
@@ -379,12 +445,7 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	// columns that depend on it. Until a `distance_from` column exists
 	// (ADR-0231 §SD2) the selection is the only seed there is.
 	if inst.metrics != nil && inst.names != nil {
-		rows := inst.seedRowsBuf[:0]
-		for id := range inst.view.SelectedNodes() {
-			if r, ok := inst.rowOfKey(id); ok {
-				rows = append(rows, r)
-			}
-		}
+		rows := inst.effectiveSeeds()
 		inst.seedRowsBuf = rows
 		inst.metrics.setSeeds(rows)
 	}
@@ -413,10 +474,25 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	w, h := graphviewPaneFill.box(inst.paneW, inst.paneH)
 
 	o := &inst.view.Opts
-	o.Layout = inst.layout.widgetLayout()
+	g := &inst.opts
+	o.Layout = inst.effectiveLayout().widgetLayout()
+	// The query's spacing knobs reach the widget's own zero-as-default, so an
+	// unset column simply leaves the default (ADR-0231 §SD5). `k_scale` is the
+	// exception: this panel has a non-default of its own (§SD12), which the
+	// query overrides rather than adds to.
 	o.Force.KScale = graphviewKScale
+	if g.KScale > 0 {
+		o.Force.KScale = g.KScale
+	}
+	o.Force.CenterGravity = g.Gravity
+	o.Force.Model, o.Force.Exaggeration = g.ForceModel, g.Exaggeration
+	o.Radial.RingDist = g.RingDist
+	o.Hier.RowDist, o.Hier.ColDist = g.RowDist, g.ColDist
+	o.HideEdges = g.HideEdges
+	o.Undirected = g.Undirected
+	o.PinOnDrag = inst.effectivePinOnDrag()
 	o.Force.Paused = inst.paused || inst.frozen
-	o.Hier.Orientation = inst.orient
+	o.Hier.Orientation = inst.effectiveOrientation()
 	o.LabelsAlways = inst.labeled
 	// The aura colours are the WIDGET's cycle rather than this contract's group
 	// palette, which the node bodies take: that palette is the *Subtle
@@ -590,7 +666,7 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 
 	// The CSR is rebuilt with the declaration, which is also what drops every
 	// metric computed for the old topology (ADR-0232 §SD8).
-	if err := inst.metrics.buildGraph(m, false); err != nil {
+	if err := inst.metrics.buildGraph(m, inst.opts.Undirected); err != nil {
 		log.Error().Err(err).Msg("graphview: the metric graph could not be built")
 	}
 	sizeVals, sizeMax := inst.sizeChannel(m)
@@ -712,17 +788,23 @@ func (inst *GraphviewDriver) renderControls() {
 		selector.Segmented(ids, "gv-layout", &inst.layout).
 			Inline().
 			Style(selector.StyleSelectable).
+			Option(graphviewLayoutAuto, "auto").
 			Option(graphviewLayoutForce, "force").
 			Option(graphviewLayoutGravity, "gravity").
 			Option(graphviewLayoutTree, "tree").
+			Option(graphviewLayoutRadial, "radial").
 			SendResp()
-		if inst.layout == graphviewLayoutTree {
+		if inst.effectiveLayout() == graphviewLayoutTree {
+			before := inst.orient
 			selector.Segmented(ids, "gv-orient", &inst.orient).
 				Inline().
 				Style(selector.StyleSelectable).
 				Option(graphview.OrientationTopDown, "top-down").
 				Option(graphview.OrientationLeftRight, "left-right").
 				SendResp()
+			if inst.orient != before {
+				inst.orientSet = true // the reader moved it: an override
+			}
 		}
 	}
 	for range c.Horizontal().KeepIter() {
@@ -740,27 +822,40 @@ func (inst *GraphviewDriver) renderControls() {
 			inst.frozen = false
 		}
 		c.Checkbox(ids.PrepareStr("gv-paused"), inst.paused, "paused").SendRespVal(&inst.paused)
+		held := inst.effectivePinOnDrag()
+		if c.Checkbox(ids.PrepareStr("gv-hold"), held, "hold dropped nodes").
+			SendRespVal(&held); held != inst.effectivePinOnDrag() {
+			inst.pinOnDrag, inst.pinOnDragSet = held, true
+		}
 		// The size channel's selector. `graph_opts` will supply the default
 		// this overrides (ADR-0231 §SD1); until then the chrome is the only
 		// writer, and the vocabulary is the engine's own.
-		cur := inst.sizeBy
-		if cur == "" {
-			cur = networkWeightCol
+		cur := "auto"
+		if inst.sizeBySet {
+			cur = inst.sizeBy
+			if cur == "" {
+				cur = networkWeightCol
+			}
 		}
 		for range c.ComboBox(ids.PrepareStr("gv-size-by"),
 			c.WidgetText().Text("size by").Keep(),
 			c.WidgetText().Text(cur).Keep()).
 			KeepIter() {
-			for i, name := range graphviewSizeOptions() {
+			// "auto" is the *auto* position §SD1 gives the control: it hands
+			// the channel back to whatever the query said.
+			for i, name := range append([]string{"auto"}, graphviewSizeOptions()...) {
 				if c.Button(ids.PrepareSeq(uint64(0x6000+i)),
 					c.Atoms().Text(name).Keep()).
 					Frame(false).
 					Selected(cur == name).
 					SendResp().HasPrimaryClicked() {
-					if name == networkWeightCol {
-						inst.sizeBy = ""
-					} else {
-						inst.sizeBy = name
+					switch name {
+					case "auto":
+						inst.sizeBy, inst.sizeBySet = "", false
+					case networkWeightCol:
+						inst.sizeBy, inst.sizeBySet = "", true
+					default:
+						inst.sizeBy, inst.sizeBySet = name, true
 					}
 					// The declaration carries the radius, so a change of
 					// channel is a rebuild rather than a repaint.
@@ -796,6 +891,7 @@ func (inst *GraphviewDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %d group(s)", len(inst.groups))
 	}
 	b.WriteString(graphviewSettleStatus(inst.view, inst.paused, inst.frozen))
+	b.WriteString(inst.opts.statusNote())
 	if inst.sizeReason != "" {
 		fmt.Fprintf(&b, " · %s", inst.sizeReason)
 	}
@@ -833,7 +929,7 @@ const graphviewHoverDwell = 200 * time.Millisecond
 // which a zero would do.
 func (inst *GraphviewDriver) sizeChannel(m *netModel) (vals []float64, maxV float64) {
 	inst.sizeReason = ""
-	sel, reason := parseGraphviewSelector(inst.sizeBy, graphviewChannelSize, func(name string) bool {
+	sel, reason := parseGraphviewSelector(inst.effectiveSizeBy(), graphviewChannelSize, func(name string) bool {
 		return name == networkWeightCol
 	})
 	if reason != "" {
@@ -902,3 +998,75 @@ func (inst *GraphviewDriver) rowOfKey(key uint64) (row int32, ok bool) {
 // (ADR-0232 §SD4). It is what an absent magnitude spells, since in a column a
 // zero is an explicit zero rather than a request for the default.
 var graphviewUnsetF32 = float32(math.NaN())
+
+// The precedence rule of ADR-0231 §SD1: the query sets the default and an
+// explicit chrome setting overrides it, with the control's *auto* position
+// meaning "whatever the query said". Each control that has an auto position
+// resolves through one of these, so the rule is stated once per channel rather
+// than inline at the point of use.
+
+// effectiveLayout is the chrome's choice, else the query's, else the panel's
+// own default (ADR-0227 §SD4).
+func (inst *GraphviewDriver) effectiveLayout() graphviewLayoutE {
+	if inst.layout != graphviewLayoutAuto {
+		return inst.layout
+	}
+	if inst.opts.LayoutSet {
+		return inst.opts.Layout
+	}
+	return graphviewLayoutDefault
+}
+
+// effectiveOrientation is the hierarchical growth direction. The chrome's
+// control appears only under that layout, and its zero is top-down, which is
+// also the widget's — so the query wins only while the reader has not touched
+// it, which orientSet records.
+func (inst *GraphviewDriver) effectiveOrientation() graphview.OrientationE {
+	if inst.orientSet {
+		return inst.orient
+	}
+	if inst.opts.OrientationSet {
+		return inst.opts.Orientation
+	}
+	return graphview.OrientationTopDown
+}
+
+// effectivePinOnDrag decides whether a dropped node is held. Off by default
+// (ADR-0231 §SD11): with `pin_x`/`pin_y` and `gv_pin_*` the query is the better
+// place to decide whether a drop sticks, and a reader who wants nodes to hold
+// has the checkbox.
+func (inst *GraphviewDriver) effectivePinOnDrag() bool {
+	if inst.pinOnDragSet {
+		return inst.pinOnDrag
+	}
+	return inst.opts.PinOnDrag
+}
+
+// effectiveSizeBy is the size channel's selector: the chrome's when the reader
+// picked one, else the query's `size_by`.
+func (inst *GraphviewDriver) effectiveSizeBy() string {
+	if inst.sizeBySet {
+		return inst.sizeBy
+	}
+	return inst.opts.SizeBy
+}
+
+// effectiveSeeds is where the seeded metrics measure from (§SD5's
+// `distance_from`): the selection by default, or the hovered vertex.
+func (inst *GraphviewDriver) effectiveSeeds() (rows []int32) {
+	rows = inst.seedRowsBuf[:0]
+	if inst.opts.DistanceFrom == graphviewSeedHover {
+		if id, ok := inst.view.HoveredNode(); ok {
+			if r, found := inst.rowOfKey(id); found {
+				rows = append(rows, r)
+			}
+		}
+		return
+	}
+	for id := range inst.view.SelectedNodes() {
+		if r, ok := inst.rowOfKey(id); ok {
+			rows = append(rows, r)
+		}
+	}
+	return
+}
