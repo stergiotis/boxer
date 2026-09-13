@@ -428,6 +428,57 @@ The Verification plan's paint-order pin was found where predicted: the
 existing scene test for a vanishing node passed unchanged, because every
 reading of the widget is by id, and the new test pins the batch order.
 
+### 2026-09-13 — the engine vocabulary and the consumer half shipped (SD6–SD9)
+
+`algo` carries `MetricE` over sixteen names with `String`, `ParseMetric`,
+`Kind`, `Symmetric` and `IsSeeded`, `Compute` returning a slot-aligned
+`MetricColumn`, the three derived metrics, and `PageRankOptions.Teleport`.
+`play`'s network model is columns sorted by interned id, the Graphview panel
+declares through `RenderColumns`, the gesture seam publishes under §SD9's
+state-versus-moment split, and one signal declaration feeds the four
+registration points with the Map's six moved onto it.
+
+The lane runs: every metric name round-trips and is unique; `Kind` and
+`Symmetric` against a table, with the symmetric form a fixed point; `Compute`
+value-identical to the direct call for every metric at one worker and at four;
+the derived metrics against brute force and the clique oracle; the seeded rank
+against a personalised power iteration and equal to the unseeded one when
+every vertex is seeded; the vocabulary completeness test; the model's sort
+carrying its ragged donut column; the CSR's slots asserted to be the model's
+rows; a metric column computed once per key; and the seed and encoder cases of
+the signal declaration.
+
+Five refinements found in implementation:
+
+- **A seed is a literal, not a flag.** The empty-default rule was a boolean
+  meaning "resolves to the empty string", which is right for a String slot and
+  wrong for the `Float64` and `Array(String)` ones this seam adds — neither
+  accepts `""`. A seed now carries the literal its declared type takes.
+- **An absent magnitude had to be respelled.** §SD4 makes a zero explicit in a
+  column, so the panel's radius and width helpers — which returned 0 for an
+  absent `weight` under the row form's zero-as-default reading — were drawing
+  invisible nodes until they returned NaN instead. The columnar rule is not
+  only for the widget's own fields: every value a caller *computes* into a
+  column needs the same distinction, which is the part of §SD4 that is easy to
+  miss on the consumer side.
+- **`degree` needs a directedness rule.** On an undirected container every
+  edge sits in both rows, so the out-degree already is the degree; on a
+  directed one the total degree is the sum. Stated on `Compute` rather than
+  left to the caller.
+- **`clustering` is absent below degree two**, not zero: a vertex with no
+  neighbour pair has no coefficient, and a ramp must not place it beside a
+  vertex whose neighbours are genuinely unconnected.
+- **The seeded metrics measure from the selection.** §SD6 gives them a source
+  set without saying whose; until ADR-0231 §SD2's `distance_from` column
+  exists, the widget's selection is the only seed there is, and it is the
+  reading a reader means by "how far is this from what I picked". A change of
+  selection drops only the columns that depend on it.
+
+One thing the seam does not yet have is its SQL source: the selectors are
+written by the chrome, which ADR-0231 §SD1's precedence rule already allows as
+the override half. `graph_opts` supplies the default it overrides, and is
+ADR-0231's surface rather than this record's.
+
 ## References
 
 - [ADR-0231](./0231-play-graph-contract-widening.md) — the SQL surface this
