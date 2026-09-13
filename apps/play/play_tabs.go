@@ -375,7 +375,7 @@ var builtinTabDefs = []builtinTabDef{
 	// The Map is chrome (no PanelI) that nonetheless publishes its viewport —
 	// the case that puts Writes on the spec rather than on the panel.
 	{id: "map", dockID: dockTabMap, title: "Map", noScroll: true, lazy: true,
-		writes: mapViewportSignals[:]},
+		writes: signalsWrittenBy("map")},
 	// Scrolls, unlike Map: the world choropleth now draws into a canvas it
 	// sizes from a ui-rect probe of the pane width (ADR-0114 Update
 	// 2026-08-01), so it no longer needs a bounded leaf to read an available
@@ -398,7 +398,7 @@ var builtinTabDefs = []builtinTabDef{
 	// are most useful side by side. Its selection is local for the Network's
 	// reason, and it publishes the clicked vertex id.
 	{id: "graphview", dockID: dockTabGraphview, title: "Graphview", lazy: true, shapeContract: true,
-		writes: []SignalID{signalSelectionKey}},
+		writes: append([]SignalID{signalSelectionKey}, signalsWrittenBy("graphview")...)},
 	// The Sankey tab draws the result as a flow-quantity diagram (ADR-0159).
 	// Its inputs are the `flows`/`nodes` CTEs, so its selection is local for
 	// the same reason the Network's is; a pinned node publishes its id.

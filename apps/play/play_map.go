@@ -126,7 +126,11 @@ type MapDriver struct {
 // the output raster size. The Map is their writer; the raster template reads
 // them — and being ordinary named signals (SD8), nothing stops another node
 // from referencing them too.
-var mapViewportSignals = [...]SignalID{"vp_min_x", "vp_max_x", "vp_min_y", "vp_max_y", "vp_w", "vp_h"}
+//
+// Read off the signal declaration (ADR-0232 §SD9) rather than spelled again
+// here: the emit order below is the declaration's order, which is the order
+// the bbox reads.
+var mapViewportSignals = signalsWrittenBy("map")
 
 const (
 	mapDebounce        = 250 * time.Millisecond

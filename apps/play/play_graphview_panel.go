@@ -3,10 +3,14 @@ package play
 import (
 	"fmt"
 	"math"
+	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/analytics/graph/algo"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -133,6 +137,38 @@ func (inst graphviewLayoutE) widgetLayout() graphview.LayoutE {
 	return graphview.LayoutForceDirected
 }
 
+// The Graphview tab's gesture seam (ADR-0231 §SD8): one family per gesture the
+// widget reports. Their types and seeds are declared once in
+// play_signal_decl.go; these are the names the panel writes and a query reads.
+//
+// The split that matters is ADR-0232 §SD9's: the STATE-shaped signals — hover,
+// the selection set, the camera, the hidden auras — are read off the widget's
+// own readers every frame, because the widget already holds that state and
+// replaying events to rebuild it was this panel's own complexity. The
+// EVENT-shaped ones — a focus, a context click, an edge click, a drop, a
+// background click — are moments rather than state, so they come from the
+// event queue and stay at their last value until the gesture happens again.
+const (
+	signalGvHover      SignalID = "gv_hover"
+	signalGvSelection  SignalID = "gv_selection"
+	signalGvFocus      SignalID = "gv_focus"
+	signalGvContext    SignalID = "gv_context"
+	signalGvEdgeSource SignalID = "gv_edge_source"
+	signalGvEdgeTarget SignalID = "gv_edge_target"
+	signalGvEdgeID     SignalID = "gv_edge_id"
+	signalGvPinID      SignalID = "gv_pin_id"
+	signalGvPinX       SignalID = "gv_pin_x"
+	signalGvPinY       SignalID = "gv_pin_y"
+	signalGvBgX        SignalID = "gv_bg_x"
+	signalGvBgY        SignalID = "gv_bg_y"
+	signalGvMinX       SignalID = "gv_min_x"
+	signalGvMaxX       SignalID = "gv_max_x"
+	signalGvMinY       SignalID = "gv_min_y"
+	signalGvMaxY       SignalID = "gv_max_y"
+	signalGvZoom       SignalID = "gv_zoom"
+	signalGvAuraHidden SignalID = "gv_aura_hidden"
+)
+
 // netIds interns the contract's string vertex ids into the uint64 keys
 // graphview declares with, and back again for the id a click publishes
 // (§SD7). Built with the model, in vertex order, so it is a deterministic
@@ -229,6 +265,27 @@ type GraphviewDriver struct {
 	capped  bool
 	labeled bool // the label budget's verdict for the cached model
 
+	// metrics is the analytics engine's side (ADR-0229 §SD6): the CSR and the
+	// computed columns, rebuilt with the declaration and cached on the CSR's
+	// fingerprint, so a running simulation computes nothing per frame.
+	metrics *graphviewMetrics
+	// sizeBy is the size channel's encoding selector (ADR-0231 §SD6). The
+	// chrome sets it here; `graph_opts` will supply the default it overrides,
+	// under §SD1's precedence rule. Empty leaves the channel on `weight`.
+	sizeBy      string
+	sizeReason  string
+	seedRowsBuf []int32
+
+	// The gesture seam's own state (ADR-0231 §SD8): the hover dwell, the
+	// camera settle latch, and two scratch buffers the per-frame reader
+	// passes reuse.
+	hoverPending   string
+	hoverPublished string
+	hoverSince     time.Time
+	cameraDirty    bool
+	selBuf         []string
+	auraBuf        []string
+
 	// selectedID mirrors the widget's selection as the DECLARED id, published
 	// as `selection_key`. The row-index `selection` stays unpublished for
 	// ADR-0129 §SD4's reason, which this panel inherits unchanged: the
@@ -250,11 +307,17 @@ func NewGraphviewDriver(ids *c.WidgetIdStack, src *networkSource) (inst *Graphvi
 	// the most members reaching it, and the larger group simply swallows the
 	// smaller one: two groups, one blob.
 	inst = &GraphviewDriver{ids: ids, idSeed: nextVizSeed(), src: src,
-		layout: graphviewLayoutGravity, overlap: true}
+		layout: graphviewLayoutGravity, overlap: true, metrics: newGraphviewMetrics()}
 	inst.view = graphview.New(ids, "play-graphview", graphview.Options{
 		Layout:        graphview.LayoutForceDirectedCG,
 		NodeClicking:  true,
 		NodeSelection: true,
+		// Edge and background clicking are on because the seam publishes
+		// them (ADR-0231 §SD8); without them the contract's `edges.label`
+		// and `edges.tone` are drawn but unselectable.
+		EdgeClicking:       true,
+		EdgeSelection:      true,
+		BackgroundClicking: true,
 	})
 	return
 }
@@ -310,6 +373,21 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		inst.frozen = false
 	}
 	inst.pruneSelection(emit)
+	// The seeded metrics — the distance family and `relevance` — measure from
+	// the current selection, which is the reading a reader means by "how far
+	// is this from what I picked". A change of selection drops only the
+	// columns that depend on it. Until a `distance_from` column exists
+	// (ADR-0231 §SD2) the selection is the only seed there is.
+	if inst.metrics != nil && inst.names != nil {
+		rows := inst.seedRowsBuf[:0]
+		for id := range inst.view.SelectedNodes() {
+			if r, ok := inst.rowOfKey(id); ok {
+				rows = append(rows, r)
+			}
+		}
+		inst.seedRowsBuf = rows
+		inst.metrics.setSeeds(rows)
+	}
 
 	inst.renderControls()
 	c.Label(inst.statusLine()).Send()
@@ -370,25 +448,115 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		inst.frozen = true
 	}
 
-	// Selection arrives as events, in order: selecting a second node reports
-	// the first's deselect before the new select, so replaying them in order
-	// leaves the right id. A background click deselects and reports it, which
-	// is what clears the published value.
-	changed := false
-	for _, ev := range inst.view.Events() {
-		switch ev.Kind {
-		case graphview.EventKindNodeSelect:
-			inst.selectedID, changed = inst.names.name(ev.Node), true
-		case graphview.EventKindNodeDeselect:
-			if inst.selectedID == inst.names.name(ev.Node) {
-				inst.selectedID, changed = "", true
-			}
+	inst.publishGestures(emit)
+}
+
+// publishGestures writes the gesture seam (ADR-0231 §SD8) under ADR-0232
+// §SD9's split.
+//
+// STATE is read off the widget's readers: the widget already holds the
+// selection, the hover, the camera and the hidden auras, so reading them is
+// one pass and cannot drift from what is drawn. Replaying events to
+// reconstruct them — which is what this panel used to do for the selection
+// alone — got the answer right only as long as every kind that changes the
+// state was handled. The store dedups, so a still frame writes nothing.
+//
+// MOMENTS come from the event queue, because they are not state: a
+// double-click is not a property of the graph afterwards. They keep their last
+// value until the gesture happens again, which is what lets a query filter on
+// the last focus.
+func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
+	if emit == nil {
+		return
+	}
+	v := inst.view
+
+	// --- state -----------------------------------------------------------
+	sel := inst.selBuf[:0]
+	for id := range v.SelectedNodes() {
+		if name := inst.names.name(id); name != "" {
+			sel = append(sel, name)
 		}
 	}
-	if changed && emit != nil {
-		// The empty string is the honest "nothing focused" value — a query
-		// reading `{selection_key:String}` sees the state it started in.
-		emit.Emit(signalSelectionKey, inst.selectedID)
+	inst.selBuf = sel
+	emit.Emit(signalGvSelection, append([]string(nil), sel...))
+	// selection_key keeps its meaning: the last of the selected set, and the
+	// empty string for none. It is the cross-panel value other panes also
+	// write, so it stays a scalar.
+	last := ""
+	if len(sel) > 0 {
+		last = sel[len(sel)-1]
+	}
+	if last != inst.selectedID {
+		inst.selectedID = last
+		emit.Emit(signalSelectionKey, last)
+	}
+
+	// Hover publishes on a DWELL rather than on every crossing: a pointer
+	// crossing a dense graph would otherwise re-run a Live query per node.
+	hovered := ""
+	if id, ok := v.HoveredNode(); ok {
+		hovered = inst.names.name(id)
+	}
+	now := time.Now()
+	if hovered != inst.hoverPending {
+		inst.hoverPending, inst.hoverSince = hovered, now
+	}
+	if inst.hoverPending != inst.hoverPublished && now.Sub(inst.hoverSince) >= graphviewHoverDwell {
+		inst.hoverPublished = inst.hoverPending
+		emit.Emit(signalGvHover, inst.hoverPublished)
+	}
+
+	hidden := inst.auraBuf[:0]
+	for id := range v.AuraIds() {
+		if v.AuraHidden(id) {
+			hidden = append(hidden, id)
+		}
+	}
+	inst.auraBuf = hidden
+	emit.Emit(signalGvAuraHidden, append([]string(nil), hidden...))
+
+	// The camera publishes on SETTLE, as the Map's viewport does: a pan that
+	// wrote per frame would re-run a Live query on every frame of the gesture
+	// and trip the runaway breaker, which is the right behaviour for a loop
+	// and the wrong one for a pan.
+	if v.Metrics().CameraMoved {
+		inst.cameraDirty = true
+	} else if inst.cameraDirty {
+		inst.cameraDirty = false
+		if minX, minY, maxX, maxY, ok := v.Bounds(); ok {
+			emit.Emit(signalGvMinX, float64(minX))
+			emit.Emit(signalGvMaxX, float64(maxX))
+			emit.Emit(signalGvMinY, float64(minY))
+			emit.Emit(signalGvMaxY, float64(maxY))
+		}
+		zoom, _, _ := v.Camera()
+		emit.Emit(signalGvZoom, float64(zoom))
+	}
+
+	// --- moments ---------------------------------------------------------
+	for _, ev := range v.Events() {
+		switch ev.Kind {
+		case graphview.EventKindNodeDoubleClick:
+			// The expansion gesture: with Live on, this is what turns the
+			// navigation layer's walk into a query (ADR-0231 §SD8).
+			emit.Emit(signalGvFocus, inst.names.name(ev.Node))
+		case graphview.EventKindNodeSecondaryClick:
+			emit.Emit(signalGvContext, inst.names.name(ev.Node))
+		case graphview.EventKindEdgeClick:
+			emit.Emit(signalGvEdgeSource, inst.names.name(ev.From))
+			emit.Emit(signalGvEdgeTarget, inst.names.name(ev.To))
+			emit.Emit(signalGvEdgeID, strconv.FormatUint(ev.Edge, 10))
+		case graphview.EventKindNodeDragEnd:
+			// Where the user left it, which is what a `pin_x`/`pin_y` column
+			// reads back to make the drop stick.
+			emit.Emit(signalGvPinID, inst.names.name(ev.Node))
+			emit.Emit(signalGvPinX, float64(ev.X))
+			emit.Emit(signalGvPinY, float64(ev.Y))
+		case graphview.EventKindBackgroundClick:
+			emit.Emit(signalGvBgX, float64(ev.X))
+			emit.Emit(signalGvBgY, float64(ev.Y))
+		}
 	}
 }
 
@@ -420,6 +588,13 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 	// slots come out in the same order as the engine's CSR slots.
 	inst.names = m.names
 
+	// The CSR is rebuilt with the declaration, which is also what drops every
+	// metric computed for the old topology (ADR-0232 §SD8).
+	if err := inst.metrics.buildGraph(m, false); err != nil {
+		log.Error().Err(err).Msg("graphview: the metric graph could not be built")
+	}
+	sizeVals, sizeMax := inst.sizeChannel(m)
+
 	nc := graphview.NodeColumns{
 		Ids:    m.Key,
 		Label:  m.Label,
@@ -437,7 +612,7 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 		if col, ok := m.vertexFill(i); ok {
 			nc.Color[i] = col
 		}
-		nc.Radius[i] = graphviewRadius(m.Weight[i], m.maxNodeWeight)
+		nc.Radius[i] = graphviewRadius(sizeVals[i], sizeMax)
 		if auraOffsets != nil {
 			if g := m.Group[i]; g != "" {
 				auraIds = append(auraIds, g)
@@ -507,8 +682,12 @@ func graphviewSettleBudget(n int) uint32 {
 // Zero — no weight column, or nothing positive in it — takes the style
 // default.
 func graphviewRadius(w float64, maxW float64) float32 {
-	if w <= 0 || maxW <= 0 {
-		return 0
+	if math.IsNaN(w) || w <= 0 || maxW <= 0 {
+		// NaN is "not declared for this row" in a columnar declaration
+		// (ADR-0232 §SD4), which is what takes the style default. A zero
+		// would be an explicit zero radius — a node that is only its label —
+		// which is not what an absent or non-positive weight means.
+		return graphviewUnsetF32
 	}
 	t := math.Sqrt(min(w, maxW) / maxW)
 	return float32(graphviewMinRadius + (graphviewMaxRadius-graphviewMinRadius)*t)
@@ -516,8 +695,8 @@ func graphviewRadius(w float64, maxW float64) float32 {
 
 // graphviewEdgeWidth is graphviewRadius for an edge, in screen pixels.
 func graphviewEdgeWidth(w float64, maxW float64) float32 {
-	if w <= 0 || maxW <= 0 {
-		return 0
+	if math.IsNaN(w) || w <= 0 || maxW <= 0 {
+		return graphviewUnsetF32 // the style default, not a hairline
 	}
 	t := math.Sqrt(min(w, maxW) / maxW)
 	return float32(graphviewMinEdgeW + (graphviewMaxEdgeW-graphviewMinEdgeW)*t)
@@ -561,6 +740,34 @@ func (inst *GraphviewDriver) renderControls() {
 			inst.frozen = false
 		}
 		c.Checkbox(ids.PrepareStr("gv-paused"), inst.paused, "paused").SendRespVal(&inst.paused)
+		// The size channel's selector. `graph_opts` will supply the default
+		// this overrides (ADR-0231 §SD1); until then the chrome is the only
+		// writer, and the vocabulary is the engine's own.
+		cur := inst.sizeBy
+		if cur == "" {
+			cur = networkWeightCol
+		}
+		for range c.ComboBox(ids.PrepareStr("gv-size-by"),
+			c.WidgetText().Text("size by").Keep(),
+			c.WidgetText().Text(cur).Keep()).
+			KeepIter() {
+			for i, name := range graphviewSizeOptions() {
+				if c.Button(ids.PrepareSeq(uint64(0x6000+i)),
+					c.Atoms().Text(name).Keep()).
+					Frame(false).
+					Selected(cur == name).
+					SendResp().HasPrimaryClicked() {
+					if name == networkWeightCol {
+						inst.sizeBy = ""
+					} else {
+						inst.sizeBy = name
+					}
+					// The declaration carries the radius, so a change of
+					// channel is a rebuild rather than a repaint.
+					inst.keyOk = false
+				}
+			}
+		}
 		// Auras are offered only when the vertices named a `group` — the
 		// column they are drawn from (§SD4).
 		if len(inst.groups) > 0 {
@@ -589,6 +796,16 @@ func (inst *GraphviewDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %d group(s)", len(inst.groups))
 	}
 	b.WriteString(graphviewSettleStatus(inst.view, inst.paused, inst.frozen))
+	if inst.sizeReason != "" {
+		fmt.Fprintf(&b, " · %s", inst.sizeReason)
+	}
+	if inst.metrics != nil {
+		// A truncated metric is a valid result with a flag (ADR-0229 §SD4),
+		// and a reader sizing nodes by a lower bound should know it is one.
+		if names := inst.metrics.truncatedMetrics(); len(names) > 0 {
+			fmt.Fprintf(&b, " · %s truncated — the value is a lower bound", strings.Join(names, ", "))
+		}
+	}
 	b.WriteString(inst.src.statusSuffix())
 	return b.String()
 }
@@ -599,3 +816,89 @@ func (inst *GraphviewDriver) statusLine() string {
 func (inst *PlayApp) renderGraphviewTab() {
 	inst.renderGraphContractTab(graphviewPanel{driver: inst.graphviewDriver})
 }
+
+// graphviewHoverDwell is how long the pointer must rest on a node before
+// `gv_hover` publishes it. A pointer crossing a dense graph passes over many
+// nodes on the way to one; publishing each would re-run a Live query per
+// crossing, and the reader meant only the one they stopped on.
+const graphviewHoverDwell = 200 * time.Millisecond
+
+// sizeChannel is the column the node radius ramps over and the maximum it
+// normalises against (ADR-0231 §SD6): the metric a `size_by` selector names,
+// or the contract's `weight` when it names none.
+//
+// A NaN — an unreached vertex under `distance`, a vertex with no neighbour
+// pair under `clustering` — reads as *no value* and takes the style default,
+// the same reading an absent `weight` has. It must not ramp to the bottom,
+// which a zero would do.
+func (inst *GraphviewDriver) sizeChannel(m *netModel) (vals []float64, maxV float64) {
+	inst.sizeReason = ""
+	sel, reason := parseGraphviewSelector(inst.sizeBy, graphviewChannelSize, func(name string) bool {
+		return name == networkWeightCol
+	})
+	if reason != "" {
+		inst.sizeReason = reason
+	}
+	if sel.Metric == algo.MetricNone {
+		return m.Weight, m.maxNodeWeight
+	}
+	col, ok := inst.metrics.column(sel.Metric)
+	if !ok || len(col.Values) != m.NumVertices() {
+		// A seeded metric with nothing selected, or an engine refusal: say so
+		// and leave the channel where it was rather than blanking every node.
+		if inst.sizeReason == "" && sel.Metric.IsSeeded() {
+			inst.sizeReason = "`size_by = " + inst.sizeBy + "`: select a node to measure from"
+		}
+		return m.Weight, m.maxNodeWeight
+	}
+	for _, v := range col.Values {
+		if !math.IsNaN(v) && v > maxV {
+			maxV = v
+		}
+	}
+	if !sel.Invert {
+		return col.Values, maxV
+	}
+	// Inverted: the ramp flips about the maximum, so the nearest is the
+	// largest. NaN stays NaN — absent is not the far end.
+	out := make([]float64, len(col.Values))
+	for i, v := range col.Values {
+		if math.IsNaN(v) {
+			out[i] = v
+			continue
+		}
+		out[i] = maxV - v
+	}
+	return out, maxV
+}
+
+// graphviewSizeOptions is the chrome's vocabulary for the size channel: the
+// contract's own column, then every metric the engine computes. The list is
+// the engine's (ADR-0232 §SD6) rather than a copy, so a metric added there
+// appears here.
+func graphviewSizeOptions() (out []string) {
+	out = append(out, networkWeightCol)
+	for _, m := range algo.Metrics() {
+		if m.Kind() == algo.KindCategorical {
+			continue // a label cannot size a node
+		}
+		out = append(out, m.String())
+	}
+	return
+}
+
+// rowOfKey is the model row an interned key sits at. The declaration is sorted
+// by key (ADR-0232 §SD9), so this is a binary search rather than a map — and
+// the row it finds is the metric column's slot as well.
+func (inst *GraphviewDriver) rowOfKey(key uint64) (row int32, ok bool) {
+	i, found := slices.BinarySearch(inst.nodes.Ids, key)
+	if !found {
+		return 0, false
+	}
+	return int32(i), true
+}
+
+// graphviewUnsetF32 is the columnar declaration's "not declared for this row"
+// (ADR-0232 §SD4). It is what an absent magnitude spells, since in a column a
+// zero is an explicit zero rather than a request for the default.
+var graphviewUnsetF32 = float32(math.NaN())

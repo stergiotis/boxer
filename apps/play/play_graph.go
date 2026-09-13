@@ -409,8 +409,42 @@ func encodeSignalValue(value any) (raw string, ok bool) {
 			return "1", true
 		}
 		return "0", true
+	case []string:
+		// The array case (ADR-0231 §SD8): a ClickHouse array literal on the
+		// same param_* wire the scalars ride, so `{name:Array(String)}`
+		// substitutes like any typed param. An empty slice is `[]`, which is
+		// the honest "nothing selected" rather than a missing value.
+		var b strings.Builder
+		b.WriteByte('[')
+		for i, e := range v {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteString(quoteCHString(e))
+		}
+		b.WriteByte(']')
+		return b.String(), true
 	}
 	return "", false
+}
+
+// quoteCHString wraps one element of an array literal in single quotes,
+// escaping the backslash first so an escaped quote is not re-escaped.
+func quoteCHString(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + 2)
+	b.WriteByte('\'')
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; c {
+		case '\\', '\'':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte('\'')
+	return b.String()
 }
 
 // graphEmitter is the live SignalEmitterI over the signal store (ADR-0097
@@ -541,7 +575,7 @@ func resolveSignalNames(names []string, bound map[string]bool, sig SignalEnvI) (
 }
 
 // resolveSignalNamesWithDefaults is resolveSignalNames plus the reserved-String
-// empty default (signalDefaultsEmpty): an unbound, unwritten reserved String
+// seed (signalSeedRaw): an unbound, unwritten reserved
 // signal — selection_country before the first World click — resolves to "".
 // The Run (resolveRunSignals) and the staleness witness (runSignalsDiverged)
 // MUST resolve identically: if only the Run applied the default, its
@@ -558,11 +592,11 @@ func resolveSignalNamesWithDefaults(names []string, bound map[string]bool, sig S
 		if _, ok := out["param_"+name]; ok {
 			continue
 		}
-		if signalDefaultsEmpty(name) {
+		if raw, seeded := signalSeedRaw(name); seeded {
 			if out == nil {
 				out = make(map[string]string, 1)
 			}
-			out["param_"+name] = ""
+			out["param_"+name] = raw
 		}
 	}
 	return

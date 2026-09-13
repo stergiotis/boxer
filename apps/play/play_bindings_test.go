@@ -176,7 +176,7 @@ func TestDispatcherStampsSelectionKey(t *testing.T) {
 // an unfilled input.
 func TestSelectionKeyIsReservedAndEmptyDefaulted(t *testing.T) {
 	assert.Equal(t, "String", reservedSignalTypes()[string(signalSelectionKey)])
-	assert.True(t, signalDefaultsEmpty(string(signalSelectionKey)))
+	assert.True(t, signalHasSeed(string(signalSelectionKey)))
 }
 
 // The read gate: a panel sees `selection` only when the cursor indexes its

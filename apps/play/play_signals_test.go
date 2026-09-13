@@ -297,8 +297,10 @@ func TestEmitDropNoticeSetsAndRetires(t *testing.T) {
 	em.Emit("x", struct{}{})
 	require.Len(t, g.emitDrops(), 1)
 
-	// A drop on a second name is its own notice; name-sorted.
-	em.Emit("a", []string{"multi"})
+	// A drop on a second name is its own notice; name-sorted. []string is
+	// encodable since the array case landed (ADR-0231 §SD8), so the value
+	// here has to be one the encoder still has no literal for.
+	em.Emit("a", map[string]int{"multi": 1})
 	require.Equal(t, []string{"a", "x"}, []string{g.emitDrops()[0].Name, g.emitDrops()[1].Name})
 
 	// A store write from another surface does NOT retire it — the emitting
@@ -539,10 +541,10 @@ func TestUnfilledInputsFromCaches(t *testing.T) {
 func TestReservedStringSignalDefaultsEmptyOnRun(t *testing.T) {
 	// Pure predicate: only the String-typed reserved signals default.
 	for _, name := range []string{"selection_country", "selection_node"} {
-		require.True(t, signalDefaultsEmpty(name), "%s is a reserved String signal", name)
+		require.True(t, signalHasSeed(name), "%s is a reserved String signal", name)
 	}
 	for _, name := range []string{"vp_min_x", "tl_min", "selection", "selection_id", "nope"} {
-		require.False(t, signalDefaultsEmpty(name), "%s must still gate the Run", name)
+		require.False(t, signalHasSeed(name), "%s must still gate the Run", name)
 	}
 
 	app := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 10), "", nil)

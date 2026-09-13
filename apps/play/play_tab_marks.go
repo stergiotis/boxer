@@ -227,7 +227,7 @@ func signalRelation(spec *TabSpec, in tabVerdict) (drives, unfilled []string) {
 			continue
 		}
 		drives = append(drives, name)
-		if signalDefaultsEmpty(name) {
+		if signalHasSeed(name) {
 			continue // a reserved String signal never blocks a Run
 		}
 		if in.sig != nil {

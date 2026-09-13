@@ -2,6 +2,7 @@ package play
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"testing"
 
@@ -224,7 +225,9 @@ func TestGraphviewWeightSizesNodeAndEdge(t *testing.T) {
 	assert.InDelta(t, graphviewMaxRadius, a.Radius, 0.01, "the heaviest vertex takes the ceiling")
 	assert.Greater(t, a.Radius, b.Radius)
 	assert.Greater(t, b.Radius, float32(0))
-	assert.Zero(t, c.Radius, "an unweighted vertex takes the style default")
+	assert.True(t, math.IsNaN(float64(c.Radius)),
+		"an unweighted vertex is ABSENT, which takes the style default; a zero "+
+			"radius in a column is an explicit zero (ADR-0232 §SD4)")
 
 	require.Equal(t, 2, d.edges.Len())
 	assert.InDelta(t, graphviewMaxEdgeW, gvEdgeAt(d, 0).Width, 0.01)
@@ -234,7 +237,8 @@ func TestGraphviewWeightSizesNodeAndEdge(t *testing.T) {
 	// unweighted result colours nothing.
 	plain := netEdges(t, []string{"a"}, []string{"b"}, nil)
 	pd := gvBuild(t, plain, nil)
-	assert.Zero(t, gvEdgeAt(pd, 0).Width, "no weight column leaves the style default")
+	assert.True(t, math.IsNaN(float64(gvEdgeAt(pd, 0).Width)),
+		"no weight column leaves the width absent, which takes the style default")
 }
 
 // An explicit `tone` wins an edge's colour over the magnitude ramp, and does
