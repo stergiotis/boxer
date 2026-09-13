@@ -1048,6 +1048,32 @@ and an optional `donut` column — a list of numbers — draws a ring of
 proportional slices around it. Open both tabs side by side to compare the two
 readings of one result.
 
+A third optional CTE, `graph_opts`, carries what is a property of the whole
+drawing rather than of one row (ADR-0231): one row, and every column optional.
+`layout` (`force`, `force_gravity`, `hierarchical`, `radial`, `random`),
+`orientation`, the spacing knobs `ring_dist` / `row_dist` / `col_dist` /
+`k_scale` / `gravity`, `force_model` and `exaggeration`, the flags
+`hide_edges` / `undirected` / `pin_on_drag`, and the encoding selectors
+`size_by`, `tone_by`, `opacity_by` and `aura_by`. A selector names either a
+column of `vertices` or a metric the graph engine computes — `degree`,
+`pagerank`, `betweenness`, `kcore`, `triangles`, `clustering`, `clique`,
+`component`, `component_size`, `distance`, `relevance` — so
+`size_by = 'pagerank'` sizes each node by its rank without the query computing
+one. A leading `-` inverts an ordinal ramp. `component` and `scc` are labels
+rather than quantities, so they colour and group but cannot size.
+
+The tab's controls sit on **auto**, which means "whatever the query said"; move
+one and it overrides the column until you put it back. A value outside a
+column's vocabulary is refused in the status line and leaves the default in
+place, and a `graph_opts` that returns more than one row says so and reads the
+first. Because it is an ordinary CTE its cells may read signals, so
+`{gv_zoom:Float64} < 0.3 AS hide_edges` is a level of detail the query owns.
+
+```sql
+WITH graph_opts AS (SELECT 'pagerank' AS size_by, 'component' AS tone_by, true AS undirected)
+SELECT * FROM edges
+```
+
 ```sql
 WITH
   picked AS (

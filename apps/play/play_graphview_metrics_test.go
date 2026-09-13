@@ -168,7 +168,7 @@ func TestParseGraphviewSelector(t *testing.T) {
 func TestSizeChannelSpendsTheSelectedMetric(t *testing.T) {
 	m := gvModel(t, []string{"b", "c", "d"}, []string{"a", "a", "a"})
 	d := NewGraphviewDriver(nil, nil)
-	d.sizeBy = "degree"
+	d.sizeBy, d.sizeBySet = "degree", true
 	d.rebuild(&m)
 	require.Empty(t, d.sizeReason)
 
@@ -182,14 +182,14 @@ func TestSizeChannelSpendsTheSelectedMetric(t *testing.T) {
 	// A seeded metric with nothing selected says so and leaves the channel
 	// on the contract's column rather than blanking every node.
 	d2 := NewGraphviewDriver(nil, nil)
-	d2.sizeBy = "distance"
+	d2.sizeBy, d2.sizeBySet = "distance", true
 	m2 := gvModel(t, []string{"b"}, []string{"a"})
 	d2.rebuild(&m2)
 	assert.Contains(t, d2.sizeReason, "select a node")
 
 	// An unparseable selector is refused by name.
 	d3 := NewGraphviewDriver(nil, nil)
-	d3.sizeBy = "nonesuch"
+	d3.sizeBy, d3.sizeBySet = "nonesuch", true
 	m3 := gvModel(t, []string{"b"}, []string{"a"})
 	d3.rebuild(&m3)
 	assert.Contains(t, d3.sizeReason, "no column or metric")
