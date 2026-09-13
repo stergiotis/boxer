@@ -69,6 +69,11 @@ var AllowedSpecialIds = map[string]bool{
 	// reading the declaring package's import path and correctly finding they
 	// differ; what was wrong was the list, not the constant.
 	"runtime.appletstore": true,
+	// runtime.watchbill — the durable-work worker (ADR-0223). A host-side
+	// runtime service like every entry above: hostboot mints its bus client
+	// under this id, and its two subjects are NATS-aligned, so the id is a
+	// service name rather than the declaring package's import path.
+	"runtime.watchbill": true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.

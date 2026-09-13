@@ -10,6 +10,15 @@ import (
 
 func alphaOf(c color.Color) uint32 { return c.Literal() & 0xff }
 
+// rgba is this file's fixture-colour constructor. The assertions below are
+// about the exact bits an opacity produces and about which colours share a
+// batch key, not about a palette choice, so a styletokens constant would
+// hide what is being checked.
+func rgba(r uint8, g uint8, b uint8, a uint8) (ret color.Color) {
+	ret = color.RGBA(r, g, b, a) // designlint:ignore=L2 (fixture colour, see above)
+	return
+}
+
 func TestOpacityResolvesTheUnsetValue(t *testing.T) {
 	// NaN is unset and anything at or above 1 is opaque, so an undeclared
 	// opacity leaves a declaration unchanged to the bit (ADR-0224 §SD14); a
@@ -30,7 +39,7 @@ func TestOpacityResolvesTheUnsetValue(t *testing.T) {
 }
 
 func TestFadeScalesAlphaAndLeavesTheRestAlone(t *testing.T) {
-	col := color.RGBA(0x10, 0x20, 0x30, 0x80)
+	col := rgba(0x10, 0x20, 0x30, 0x80)
 	require.Equal(t, col.Literal(), fade(col, 1).Literal(), "an opaque item is not rewritten")
 	half := fade(col, 0.5)
 	require.Equal(t, uint32(0x40), alphaOf(half))
@@ -44,9 +53,9 @@ func TestOpacityReachesTheNodeFillAndItsBatchKey(t *testing.T) {
 	v := New(nil, "t", Options{})
 	v.style = DefaultStyle()
 	v.g.reconcile([]NodeSpec{
-		{Id: 1, Color: color.RGBA(0xff, 0, 0, 0xff)},
-		{Id: 2, Color: color.RGBA(0xff, 0, 0, 0xff), Opacity: 0.5},
-		{Id: 3, Color: color.RGBA(0xff, 0, 0, 0xff)},
+		{Id: 1, Color: rgba(0xff, 0, 0, 0xff)},
+		{Id: 2, Color: rgba(0xff, 0, 0, 0xff), Opacity: 0.5},
+		{Id: 3, Color: rgba(0xff, 0, 0, 0xff)},
 	}, nil)
 	require.Equal(t, uint32(0xff), alphaOf(v.nodeFill(int(v.g.slot[1]))))
 	require.Equal(t, uint32(0x80), alphaOf(v.nodeFill(int(v.g.slot[2]))))
@@ -60,9 +69,9 @@ func TestOpacityReachesTheNodeFillAndItsBatchKey(t *testing.T) {
 
 	// Dropping the opacity puts it back.
 	v.g.reconcile([]NodeSpec{
-		{Id: 1, Color: color.RGBA(0xff, 0, 0, 0xff)},
-		{Id: 2, Color: color.RGBA(0xff, 0, 0, 0xff)},
-		{Id: 3, Color: color.RGBA(0xff, 0, 0, 0xff)},
+		{Id: 1, Color: rgba(0xff, 0, 0, 0xff)},
+		{Id: 2, Color: rgba(0xff, 0, 0, 0xff)},
+		{Id: 3, Color: rgba(0xff, 0, 0, 0xff)},
 	}, nil)
 	v.buildBatches()
 	require.Len(t, v.batches, 1)

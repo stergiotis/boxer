@@ -558,7 +558,7 @@ func demoGraphviewExplore(ids *c.WidgetIdStack, st *graphviewExploreState) {
 	st.controls(ids, st.v)
 	wasMode := st.mode
 	for range c.Horizontal().KeepIter() {
-		c.Label("mode:").Send()
+		c.Label("Mode:").Send()
 		for i, m := range []struct {
 			mode nav.ModeE
 			text string
@@ -568,7 +568,7 @@ func demoGraphviewExplore(ids *c.WidgetIdStack, st *graphviewExploreState) {
 				st.mode = m.mode
 			}
 		}
-		c.Label("   expand direction:").Send()
+		c.Label("   Expand direction:").Send()
 		for i, d := range []struct {
 			dir  nav.DirectionE
 			text string
