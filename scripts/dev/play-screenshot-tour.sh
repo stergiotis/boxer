@@ -896,15 +896,19 @@ scene_08_series() {
 	# shared y axis is honest only between comparable magnitudes, which is the
 	# tab's one composition rule.
 	#
-	# The window is a day rather than the fixture's whole week for the sake of
-	# the second capture: smoothing's extrapolated tail is a half-width of
+	# The window is one day even when the fixture holds several, for the sake
+	# of the second capture: smoothing's extrapolated tail is a half-width of
 	# samples, and at ~290 points that is a visible stretch of the line rather
-	# than a few pixels.
+	# than a few pixels. The day is the fixture's first UTC day, not a date
+	# literal — demo.sh loads "yesterday" by default, so any literal matches
+	# nothing after the next reload and the Series tab never draws.
 	#
-	# 287 buckets, not 288 — the fixture is missing one, which is the point.
-	# The status line says "regular with gaps" at 5 minutes and the pane offers
-	# the WITH FILL scaffold with the measured step already substituted; the
-	# line BREAKS at the hole rather than being drawn across it.
+	# 287 buckets, not 288 — the 12:00 UTC bucket is carved out, which is the
+	# point. The status line says "regular with gaps" at 5 minutes and the pane
+	# offers the WITH FILL scaffold with the measured step already substituted;
+	# the line BREAKS at the hole rather than being drawn across it. The hole
+	# is made here rather than left to the fixture: a freshly loaded day
+	# usually has all 288.
 	# toDateTime64 because toStartOfInterval yields a DateTime, which reaches
 	# Arrow as a bare UInt32 of epoch seconds — indistinguishable from a count,
 	# so the claim cannot take it (ADR-0163 Update 2026-08-05).
@@ -912,7 +916,8 @@ scene_08_series() {
        count()            AS positions,
        uniqExact(icao)    AS aircraft
 FROM default.planes_mercator_sample100
-WHERE time >= '2026-07-05 00:00:00' AND time < '2026-07-06 00:00:00'
+WHERE toDate(time, 'UTC') = (SELECT min(toDate(time, 'UTC')) FROM default.planes_mercator_sample100)
+  AND NOT (toHour(time, 'UTC') = 12 AND toMinute(time, 'UTC') < 5)
 GROUP BY t
 ORDER BY t"
 	# Two captures: the series as it lands, then with smoothing on. The second
@@ -1159,12 +1164,14 @@ scene_08_chart_series() {
 	senv=(BOXER_PLAY_FOCUS_CHART=1)
 	# toDateTime64 for the Series tab's reason (ADR-0163 Update 2026-08-05): a
 	# plain DateTime reaches Arrow as a bare UInt32 and nothing tells it from a
-	# count, so the temporal axis needs the cast to be recognised.
+	# count, so the temporal axis needs the cast to be recognised. The day is
+	# the fixture's first UTC day rather than a literal, for the Series scene's
+	# reason: demo.sh loads "yesterday", so a literal goes stale on reload.
 	sql="SELECT toDateTime64(toStartOfInterval(time, INTERVAL 30 MINUTE), 3) AS x,
        t                                                             AS series,
        count()                                                       AS y
 FROM default.planes_mercator_sample100
-WHERE time >= '2026-07-05 00:00:00' AND time < '2026-07-06 00:00:00'
+WHERE toDate(time, 'UTC') = (SELECT min(toDate(time, 'UTC')) FROM default.planes_mercator_sample100)
   AND t IN ('A320', 'B738', 'A21N')
 GROUP BY x, series
 ORDER BY x"
