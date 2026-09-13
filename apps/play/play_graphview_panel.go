@@ -199,6 +199,16 @@ const (
 	signalGvMaxY       SignalID = "gv_max_y"
 	signalGvZoom       SignalID = "gv_zoom"
 	signalGvAuraHidden SignalID = "gv_aura_hidden"
+	// A located graph reads back in its own units (§SD3): while any vertex
+	// carried lat/lon, the drop and the camera are published in degrees
+	// beside the world-unit forms, so the query that wrote `lat`/`lon` gets
+	// `lat`/`lon` back.
+	signalGvPinLat SignalID = "gv_pin_lat"
+	signalGvPinLon SignalID = "gv_pin_lon"
+	signalGvMinLat SignalID = "gv_min_lat"
+	signalGvMaxLat SignalID = "gv_max_lat"
+	signalGvMinLon SignalID = "gv_min_lon"
+	signalGvMaxLon SignalID = "gv_max_lon"
 )
 
 // netIds interns the contract's string vertex ids into the uint64 keys
@@ -322,9 +332,20 @@ type GraphviewDriver struct {
 	// is what makes it an override rather than the zero value agreeing with a
 	// default (§SD1).
 	orientSet    bool
+	aurasSet     bool
 	pinOnDrag    bool
 	pinOnDragSet bool
 	seedRowsBuf  []int32
+	// centers is the `center` column resolved to keys — the radial layout's
+	// middle, which is data rather than a control (§SD2).
+	centers []uint64
+	fitBuf  []uint64
+	// pendingState marks a rebuild whose declared selection, frame and
+	// initial positions have not been spent yet; they need the reconcile to
+	// have given the ids slots, so they run after the next render.
+	pendingState bool
+	// lastModel is the declaration's model, kept for that one pass.
+	lastModel *netModel
 
 	// The gesture seam's own state (ADR-0231 §SD8): the hover dwell, the
 	// camera settle latch, and two scratch buffers the per-frame reader
@@ -428,6 +449,7 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		m := buildNetModel(edgesRec, ec, vertRec, vc,
 			netCaps{vertices: graphviewMaxVertices, edges: graphviewMaxEdges})
 		inst.rebuild(&m)
+		inst.lastModel = &m
 		inst.key, inst.keyOk = key, true
 		// A new result is a freshly laid-out graph, which is the case the fit
 		// latch exists for (ADR-0224 §SD4): the widget arms it on its first
@@ -487,6 +509,7 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	o.Force.CenterGravity = g.Gravity
 	o.Force.Model, o.Force.Exaggeration = g.ForceModel, g.Exaggeration
 	o.Radial.RingDist = g.RingDist
+	o.Radial.Centers = inst.centers
 	o.Hier.RowDist, o.Hier.ColDist = g.RowDist, g.ColDist
 	o.HideEdges = g.HideEdges
 	o.Undirected = g.Undirected
@@ -506,7 +529,7 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	// island is a concave filled polygon (ADR-0224 §SD11), which is the paint
 	// the merged blob exists to avoid.
 	o.Auras = graphview.AuraParams{
-		Enabled: inst.auras && len(inst.groups) > 0,
+		Enabled: inst.effectiveAuras() && len(inst.groups) > 0,
 		Overlap: inst.overlap,
 		Legend:  graphview.AuraLegendInside,
 	}
@@ -516,6 +539,14 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		// than a malformed query; the widget rendered nothing and kept its
 		// state, and the next rebuild is the recovery.
 		log.Error().Err(err).Msg("graphview render refused the declaration")
+	}
+
+	if inst.pendingState {
+		// The reconcile has now given every declared id a slot, so the
+		// columns that are TOLD to the widget rather than declared to it can
+		// be spent (§SD2).
+		inst.applyDeclaredState(inst.lastModel)
+		inst.pendingState = false
 	}
 
 	// Freeze on the way out, so the verdict is read from the frame that was
@@ -605,6 +636,16 @@ func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
 			emit.Emit(signalGvMaxX, float64(maxX))
 			emit.Emit(signalGvMinY, float64(minY))
 			emit.Emit(signalGvMaxY, float64(maxY))
+			if inst.located() {
+				// y grows downward in the projection, so the northern edge is
+				// the smaller y: the max latitude comes from minY.
+				maxLat, minLon := inst.toLatLon(minX, minY)
+				minLat, maxLon := inst.toLatLon(maxX, maxY)
+				emit.Emit(signalGvMinLat, minLat)
+				emit.Emit(signalGvMaxLat, maxLat)
+				emit.Emit(signalGvMinLon, minLon)
+				emit.Emit(signalGvMaxLon, maxLon)
+			}
 		}
 		zoom, _, _ := v.Camera()
 		emit.Emit(signalGvZoom, float64(zoom))
@@ -629,6 +670,11 @@ func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
 			emit.Emit(signalGvPinID, inst.names.name(ev.Node))
 			emit.Emit(signalGvPinX, float64(ev.X))
 			emit.Emit(signalGvPinY, float64(ev.Y))
+			if inst.located() {
+				lat, lon := inst.toLatLon(ev.X, ev.Y)
+				emit.Emit(signalGvPinLat, lat)
+				emit.Emit(signalGvPinLon, lon)
+			}
 		case graphview.EventKindBackgroundClick:
 			emit.Emit(signalGvBgX, float64(ev.X))
 			emit.Emit(signalGvBgY, float64(ev.Y))
@@ -671,46 +717,60 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 	}
 	sizeVals, sizeMax := inst.sizeChannel(m)
 
+	// Seam A's columns travel as they stand wherever the model and the widget
+	// already agree on the shape (ADR-0231 §SD2): the model spells "not
+	// declared for this row" as NaN and false, which is the widget's own
+	// unset, so there is no per-row conversion between them.
 	nc := graphview.NodeColumns{
-		Ids:    m.Key,
-		Label:  m.Label,
-		Color:  make([]color.Color, n),
-		Radius: make([]float32, n),
-	}
-	var auraOffsets []int32
-	var auraIds []string
-	if len(m.groupIdx) > 0 {
-		auraOffsets = make([]int32, 0, n+1)
-		auraIds = make([]string, 0, n)
-		auraOffsets = append(auraOffsets, 0)
+		Ids:           m.Key,
+		Label:         m.Label,
+		Color:         make([]color.Color, n),
+		Radius:        make([]float32, n),
+		Opacity:       m.Opacity,
+		NoPick:        m.NoPick,
+		LabelAlways:   m.LabelAlways,
+		PinX:          m.PinX,
+		PinY:          m.PinY,
+		PullX:         m.PullX,
+		PullY:         m.PullY,
+		PullStrengthX: m.PullSX,
+		PullStrengthY: m.PullSY,
+		AuraOffsets:   m.AuraStart,
+		AuraIds:       m.AuraValues,
 	}
 	for i := range n {
 		if col, ok := m.vertexFill(i); ok {
 			nc.Color[i] = col
 		}
-		nc.Radius[i] = graphviewRadius(sizeVals[i], sizeMax)
-		if auraOffsets != nil {
-			if g := m.Group[i]; g != "" {
-				auraIds = append(auraIds, g)
-			}
-			auraOffsets = append(auraOffsets, int32(len(auraIds)))
+		// An absolute `radius` wins over the size channel's share (§SD2): a
+		// query that names a size in world units meant that size, where
+		// `weight` and a metric are both shares of a maximum.
+		if r := m.Radius[i]; !math.IsNaN(float64(r)) {
+			nc.Radius[i] = r
+			continue
 		}
+		nc.Radius[i] = graphviewRadius(sizeVals[i], sizeMax)
 	}
-	nc.AuraOffsets, nc.AuraIds = auraOffsets, auraIds
-	// The donut column is already the list layout the widget takes, so it is
-	// handed over as it stands rather than re-nested per row.
+	// The donut columns are already the list layout the widget takes, so they
+	// are handed over as they stand rather than re-nested per row.
 	nc.DonutOffsets, nc.DonutValues, nc.DonutTotal = m.DonutStart, m.DonutValues, m.DonutTotal
+	nc.DonutColors = graphviewDonutColors(m)
 	inst.nodes = nc
 
 	seqPalette := styletokens.SequentialDefault()
 	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
 	ne := m.NumEdges()
 	ec := graphview.EdgeColumns{
-		From:  m.From,
-		To:    m.To,
-		Label: m.EdgeLabel,
-		Color: make([]color.Color, ne),
-		Width: make([]float32, ne),
+		From:     m.From,
+		To:       m.To,
+		Id:       m.EdgeID,
+		Label:    m.EdgeLabel,
+		Color:    make([]color.Color, ne),
+		Width:    make([]float32, ne),
+		Opacity:  m.EdgeOpacity,
+		NoPick:   m.EdgeNoPick,
+		Length:   m.EdgeLength,
+		Strength: m.EdgeStrength,
 	}
 	for i := range ne {
 		// A `tone` wins the colour, being the more specific claim; a `weight`
@@ -726,6 +786,19 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 		ec.Width[i] = graphviewEdgeWidth(w, m.maxWeight)
 	}
 	inst.edges = ec
+
+	// The radial centres are a property of the data, so they come from a
+	// column rather than a control (§SD2).
+	inst.centers = inst.centers[:0]
+	for i := range n {
+		if m.Center[i] {
+			inst.centers = append(inst.centers, m.Key[i])
+		}
+	}
+	// `selected`, `fit` and `start_x`/`start_y` are applied to the WIDGET
+	// rather than declared, and only once the reconcile has given the ids
+	// slots — so they are queued here and spent after the next render.
+	inst.pendingState = true
 
 	// Validating once per rebuild rather than per frame is what the widget's
 	// Validate is exported for; a disagreement here is this panel's bug, not
@@ -866,8 +939,12 @@ func (inst *GraphviewDriver) renderControls() {
 		// Auras are offered only when the vertices named a `group` — the
 		// column they are drawn from (§SD4).
 		if len(inst.groups) > 0 {
-			c.Checkbox(ids.PrepareStr("gv-auras"), inst.auras, "auras by group").SendRespVal(&inst.auras)
-			if inst.auras {
+			shown := inst.effectiveAuras()
+			if c.Checkbox(ids.PrepareStr("gv-auras"), shown, "auras by group").
+				SendRespVal(&shown); shown != inst.effectiveAuras() {
+				inst.auras, inst.aurasSet = shown, true
+			}
+			if inst.effectiveAuras() {
 				c.Checkbox(ids.PrepareStr("gv-overlap"), inst.overlap, "auras may overlap").SendRespVal(&inst.overlap)
 			}
 		}
@@ -1069,4 +1146,96 @@ func (inst *GraphviewDriver) effectiveSeeds() (rows []int32) {
 		}
 	}
 	return
+}
+
+// graphviewDonutColors resolves the `donut_tones` column to the colours the
+// ring slices take (§SD2). The column is tone FAMILIES rather than colours,
+// like `tone` itself, so the design system stays the one place a family's
+// appearance is decided; an unrecognised family leaves the slice on the
+// qualitative cycle, which a zero colour is the widget's spelling for.
+func graphviewDonutColors(m *netModel) color.Colors {
+	if len(m.DonutToneValues) == 0 || m.DonutStart == nil {
+		return nil
+	}
+	// Paired with DonutValues by index, so the slice has to be as long as the
+	// values are — a query that tones only the first few slices leaves the
+	// rest on the cycle.
+	out := make(color.Colors, len(m.DonutValues))
+	for i := range m.NumVertices() {
+		vals := m.DonutStart[i+1] - m.DonutStart[i]
+		tones := m.DonutToneValues[m.DonutToneStart[i]:m.DonutToneStart[i+1]]
+		for j := range int(vals) {
+			if j >= len(tones) {
+				break
+			}
+			if col, ok := networkTone(tones[j], true); ok {
+				// color.Colors is raw RGBA literals, and 0 is the widget's
+				// "take the cycle" (ADR-0232 Update 2026-09-13).
+				out[int(m.DonutStart[i])+j] = col.Literal()
+			}
+		}
+	}
+	return out
+}
+
+// applyDeclaredState spends the columns that are told to the widget rather
+// than declared to it (§SD2): a declared selection, a declared frame, and an
+// initial position. They run after the render that reconciled the declaration,
+// because until then the ids have no slots.
+//
+// Applied once per rebuild, not per frame: `start_x`/`start_y` is an initial
+// position and then the node is free, and re-applying it every frame would
+// pin it by repetition.
+func (inst *GraphviewDriver) applyDeclaredState(m *netModel) {
+	if m == nil {
+		return
+	}
+	fit := inst.fitBuf[:0]
+	for i := range m.NumVertices() {
+		if m.Selected[i] {
+			inst.view.SelectNode(m.Key[i])
+		}
+		if m.Fit[i] {
+			fit = append(fit, m.Key[i])
+		}
+		x, y := m.StartX[i], m.StartY[i]
+		if !math.IsNaN(float64(x)) && !math.IsNaN(float64(y)) {
+			inst.view.SetNodePosition(m.Key[i], x, y)
+		}
+	}
+	inst.fitBuf = fit
+	if len(fit) > 0 {
+		// A declared frame replaces the whole-graph fit the rebuild armed:
+		// the query said what it wanted framed.
+		inst.view.FitNodes(fit)
+	}
+}
+
+// located reports that the declaration placed its vertices geographically, so
+// a gesture reads back in degrees as well as world units (§SD3).
+func (inst *GraphviewDriver) located() bool {
+	return inst.lastModel != nil && inst.lastModel.Located
+}
+
+// toLatLon inverts the projection a located declaration was pinned with. The
+// origin is the located set's centroid, so it has to come from the model
+// rather than being recomputed.
+func (inst *GraphviewDriver) toLatLon(x, y float32) (lat, lon float64) {
+	m := inst.lastModel
+	return netUnprojectWebMercator(float64(x)+m.GeoOriginX, float64(y)+m.GeoOriginY)
+}
+
+// effectiveAuras decides whether the blobs are drawn. Declaring `groups` or an
+// `aura_by` selector is the query asking for auras, so it switches them on as
+// the default (§SD4); ADR-0227 §SD4's off-by-default stays the rule for a
+// query that declares only `group`, where the reader is the one who can see
+// whether the grouping is also spatial.
+func (inst *GraphviewDriver) effectiveAuras() bool {
+	if inst.aurasSet {
+		return inst.auras
+	}
+	if inst.opts.AuraBy != "" {
+		return true
+	}
+	return inst.lastModel != nil && inst.lastModel.GroupsDeclared
 }

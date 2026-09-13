@@ -1046,6 +1046,27 @@ and an optional `donut` column — a list of numbers — draws a ring of
 proportional slices around it. Open both tabs side by side to compare the two
 readings of one result.
 
+Both CTEs take more than identity and category. On `vertices`: `opacity` and
+`pick` fade a node and take it out of the pointer's reach, which is what a
+search result or a dimmed background is spent on; `radius` is an absolute size
+that wins over `weight`'s share; `pin_x`/`pin_y` fix a node and `lat`/`lon` fix
+it geographically, with everything unlocated laid out among the pinned ones;
+`start_x`/`start_y` place it once and then leave it free, which is how a stored
+layout is restored; `pull_x`/`pull_y` with `pull_strength` name a soft target
+per axis, so naming `pull_x` alone holds a node near a column and leaves the
+layout free to settle it vertically; `groups` declares aura membership as a set
+where `group` names one; `donut_tones` colours the ring slices; `center` marks
+a radial centre; and `selected`, `fit` and `label_always` say what is picked,
+framed and named. On `edges`: `id` tells parallel edges apart, `opacity` and
+`pick` behave as they do on a vertex, and `length` and `strength` are the force
+step's per-edge terms — `weight` still sizes, since an edge's magnitude and its
+physics are different claims.
+
+A **NULL means "not declared for this row"**, which is how a query pins some
+vertices and leaves the rest to the layout. Because NULL is the unset value, a
+declared **zero is a zero**: `opacity = 0` paints nothing and `strength = 0` is
+an edge that is drawn and does not pull.
+
 A third optional CTE, `graph_opts`, carries what is a property of the whole
 drawing rather than of one row (ADR-0231): one row, and every column optional.
 `layout` (`force`, `force_gravity`, `hierarchical`, `radial`, `random`),
