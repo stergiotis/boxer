@@ -254,14 +254,14 @@ concave fill.
   node. Deferred, not killed: it is the first thing to add once the panel has
   been used, and it raises a question this record does not have to answer —
   whether a drag-end position is published anywhere. Taken up by
-  [ADR-0231](./0231-play-graph-contract-widening.md) (proposed), which answers
+  [ADR-0231](./0231-play-graph-contract-widening.md), which answers
   both.
 - **Per-edge force weight** (a heavy edge pulling shorter). The contract
   already carries `weight` on an edge and this panel spends it on width alone.
   The force step has the term — `EdgeSpec.Length` / `Strength`, ADR-0224
   §SD13 — and the panel does not map `weight` onto it, because the mapping
   wants a scale decision (a weight is a magnitude, a strength a spring) this
-  record does not take. ADR-0231 (proposed) spells the two as their own
+  record does not take. ADR-0231 spells the two as their own
   columns rather than taking it.
 - **Node shapes.** The contract's `shape` is a layered-drawing vocabulary
   (box, ellipse, circle); graphview draws circles only, which is a gap in the
