@@ -106,6 +106,15 @@ var reservedSignals = []reservedSignal{
 	{Name: signalGvMaxY, Type: "Float64", Seed: seedZero, Owner: "graphview"},
 	{Name: signalGvZoom, Type: "Float64", Seed: seedZero, Owner: "graphview"},
 	{Name: signalGvAuraHidden, Type: "Array(String)", Seed: seedEmptyArray, Owner: "graphview"},
+	// The located forms (ADR-0231 §SD3), written only while some vertex
+	// carried `lat`/`lon`; seeded like the rest, so a query may reference
+	// them whether or not this result is geographic.
+	{Name: signalGvPinLat, Type: "Float64", Seed: seedZero, Owner: "graphview"},
+	{Name: signalGvPinLon, Type: "Float64", Seed: seedZero, Owner: "graphview"},
+	{Name: signalGvMinLat, Type: "Float64", Seed: seedZero, Owner: "graphview"},
+	{Name: signalGvMaxLat, Type: "Float64", Seed: seedZero, Owner: "graphview"},
+	{Name: signalGvMinLon, Type: "Float64", Seed: seedZero, Owner: "graphview"},
+	{Name: signalGvMaxLon, Type: "Float64", Seed: seedZero, Owner: "graphview"},
 
 	// The selection family (slice 5b). No owner: the row cursor is written by
 	// every pane whose rows ARE result rows, and the three companions are

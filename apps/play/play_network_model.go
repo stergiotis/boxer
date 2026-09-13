@@ -65,6 +65,43 @@ const (
 	networkDonutCol      = "donut"
 	networkDonutTotalCol = "donut_total"
 
+	// Seam A (ADR-0231 §SD2): placement, emphasis and state. Every one is
+	// optional and claimed on name AND type, and a NULL cell is "not declared
+	// for this row" — which is how a query pins some vertices and leaves the
+	// rest to the layout, and which reaches the widget as the NaN of
+	// ADR-0232 §SD4. Because NULL is the unset value a DECLARED ZERO IS A
+	// ZERO: `opacity = 0` paints nothing, `strength = 0` is an edge that is
+	// drawn and does not pull — neither of which the row-shaped spec could
+	// say.
+	networkOpacityCol     = "opacity"
+	networkPickCol        = "pick"
+	networkSelectedCol    = "selected"
+	networkFitCol         = "fit"
+	networkRadiusCol      = "radius"
+	networkLabelAlwaysCol = "label_always"
+	networkPinXCol        = "pin_x"
+	networkPinYCol        = "pin_y"
+	networkLatCol         = "lat"
+	networkLonCol         = "lon"
+	networkStartXCol      = "start_x"
+	networkStartYCol      = "start_y"
+	networkPullXCol       = "pull_x"
+	networkPullYCol       = "pull_y"
+	networkPullSCol       = "pull_strength"
+	networkPullSXCol      = "pull_strength_x"
+	networkPullSYCol      = "pull_strength_y"
+	networkGroupsCol      = "groups"
+	networkDonutTonesCol  = "donut_tones"
+	networkCenterCol      = "center"
+
+	// Edge-only additions. `id` tells parallel edges apart in hover,
+	// selection and events; `length` and `strength` are the force step's
+	// per-edge terms, which `weight` deliberately does not become — an edge's
+	// magnitude and its physics are different claims (§SD2).
+	networkEdgeIDCol   = "id"
+	networkLengthCol   = "length"
+	networkStrengthCol = "strength"
+
 	// networkEdgesNodeID / networkVerticesNodeID are the CTEs the two channels
 	// bind to (§SD1). Nodes of the user's own split graph, demanded on their
 	// own lanes — not panel-authored queries.
@@ -148,7 +185,20 @@ func networkMagnitudeBandLo(palette styletokens.SequentialE, bg styletokens.RGBA
 // column index -1, so the build infers the vertices from the edge endpoints.
 func noVerticesClaim() networkVerticesClaim {
 	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1,
-		donutCol: -1, donutTotalCol: -1}
+		donutCol: -1, donutTotalCol: -1,
+		opacityCol: -1, pickCol: -1, selectedCol: -1, fitCol: -1,
+		radiusCol: -1, labelAlwaysCol: -1, centerCol: -1,
+		pinXCol: -1, pinYCol: -1, latCol: -1, lonCol: -1,
+		startXCol: -1, startYCol: -1,
+		pullXCol: -1, pullYCol: -1, pullSCol: -1, pullSXCol: -1, pullSYCol: -1,
+		groupsCol: -1, donutTonesCol: -1}
+}
+
+// noEdgesClaim is the all-absent edge claim; the two required columns are
+// filled in by the resolver.
+func noEdgesClaim() networkEdgesClaim {
+	return networkEdgesClaim{srcCol: -1, tgtCol: -1, labelCol: -1, toneCol: -1, weightCol: -1,
+		idCol: -1, opacityCol: -1, pickCol: -1, selectedCol: -1, lengthCol: -1, strengthCol: -1}
 }
 
 func networkMagnitudeRamp(palette styletokens.SequentialE, bandLo float32, w float64, maxW float64) styletokens.RGBA8 {
@@ -217,6 +267,9 @@ func networkTone(s string, foreground bool) (col color.Color, ok bool) {
 // absent optional column.
 type networkEdgesClaim struct {
 	srcCol, tgtCol, labelCol, toneCol, weightCol int
+	// Seam A (§SD2).
+	idCol, opacityCol, pickCol, selectedCol int
+	lengthCol, strengthCol                  int
 }
 
 type networkVerticesClaim struct {
@@ -224,6 +277,16 @@ type networkVerticesClaim struct {
 	// donutCol / donutTotalCol are spent by the live panel alone (§SD5); the
 	// layered panel resolves them and ignores them, so one claim serves both.
 	donutCol, donutTotalCol int
+	// Seam A (§SD2): emphasis, state, placement and the two set-valued
+	// columns. The layered panel honours opacity, pick and selected and
+	// ignores the placement ones, since Graphviz owns positions there
+	// (ADR-0231 §SD10).
+	opacityCol, pickCol, selectedCol, fitCol           int
+	radiusCol, labelAlwaysCol, centerCol               int
+	pinXCol, pinYCol, latCol, lonCol                   int
+	startXCol, startYCol                               int
+	pullXCol, pullYCol, pullSCol, pullSXCol, pullSYCol int
+	groupsCol, donutTonesCol                           int
 }
 
 // acceptGraphChannel is the contract's acceptance, shared by both graph panels
@@ -266,7 +329,7 @@ func acceptGraphChannel(ch ChannelID, schema *arrow.Schema) (claim ChannelClaim,
 // schema-only; source/target are read through formatCell (total over Arrow
 // types), so they carry no type requirement — a numeric id is a fine key.
 func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason string) {
-	ec = networkEdgesClaim{srcCol: -1, tgtCol: -1, labelCol: -1, toneCol: -1, weightCol: -1}
+	ec = noEdgesClaim()
 	for ci, f := range schema.Fields() {
 		switch f.Name {
 		case networkSourceCol:
@@ -285,6 +348,30 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 			// failure. Left unclaimed, it stays an ordinary result column.
 			if isNumericType(f.Type) {
 				ec.weightCol = ci
+			}
+		case networkEdgeIDCol:
+			// Any type: read as text and interned like a vertex id, so a
+			// UUID, an integer key and a name all tell parallel edges apart.
+			ec.idCol = ci
+		case networkOpacityCol:
+			if isNumericType(f.Type) {
+				ec.opacityCol = ci
+			}
+		case networkLengthCol:
+			if isNumericType(f.Type) {
+				ec.lengthCol = ci
+			}
+		case networkStrengthCol:
+			if isNumericType(f.Type) {
+				ec.strengthCol = ci
+			}
+		case networkPickCol:
+			if isBooleanType(f.Type) {
+				ec.pickCol = ci
+			}
+		case networkSelectedCol:
+			if isBooleanType(f.Type) {
+				ec.selectedCol = ci
 			}
 		}
 	}
@@ -308,8 +395,7 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 // required; a vertices CTE missing it is rejected, and because the channel is
 // optional the panel simply draws from the edges alone (endpoint inference).
 func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reason string) {
-	vc = networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1,
-		donutCol: -1, donutTotalCol: -1}
+	vc = noVerticesClaim()
 	for ci, f := range schema.Fields() {
 		switch f.Name {
 		case networkIDCol:
@@ -336,6 +422,88 @@ func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reas
 		case networkDonutTotalCol:
 			if isNumericType(f.Type) {
 				vc.donutTotalCol = ci
+			}
+		case networkOpacityCol:
+			if isNumericType(f.Type) {
+				vc.opacityCol = ci
+			}
+		case networkRadiusCol:
+			if isNumericType(f.Type) {
+				vc.radiusCol = ci
+			}
+		case networkPinXCol:
+			if isNumericType(f.Type) {
+				vc.pinXCol = ci
+			}
+		case networkPinYCol:
+			if isNumericType(f.Type) {
+				vc.pinYCol = ci
+			}
+		case networkLatCol:
+			if isNumericType(f.Type) {
+				vc.latCol = ci
+			}
+		case networkLonCol:
+			if isNumericType(f.Type) {
+				vc.lonCol = ci
+			}
+		case networkStartXCol:
+			if isNumericType(f.Type) {
+				vc.startXCol = ci
+			}
+		case networkStartYCol:
+			if isNumericType(f.Type) {
+				vc.startYCol = ci
+			}
+		case networkPullXCol:
+			if isNumericType(f.Type) {
+				vc.pullXCol = ci
+			}
+		case networkPullYCol:
+			if isNumericType(f.Type) {
+				vc.pullYCol = ci
+			}
+		case networkPullSCol:
+			if isNumericType(f.Type) {
+				vc.pullSCol = ci
+			}
+		case networkPullSXCol:
+			if isNumericType(f.Type) {
+				vc.pullSXCol = ci
+			}
+		case networkPullSYCol:
+			if isNumericType(f.Type) {
+				vc.pullSYCol = ci
+			}
+		case networkPickCol:
+			if isBooleanType(f.Type) {
+				vc.pickCol = ci
+			}
+		case networkSelectedCol:
+			if isBooleanType(f.Type) {
+				vc.selectedCol = ci
+			}
+		case networkFitCol:
+			if isBooleanType(f.Type) {
+				vc.fitCol = ci
+			}
+		case networkLabelAlwaysCol:
+			if isBooleanType(f.Type) {
+				vc.labelAlwaysCol = ci
+			}
+		case networkCenterCol:
+			if isBooleanType(f.Type) {
+				vc.centerCol = ci
+			}
+		case networkGroupsCol:
+			// A set of aura ids, or nothing: a scalar column that happens to
+			// be called `groups` is a name collision, not a membership.
+			if netIsStringList(f.Type) {
+				vc.groupsCol = ci
+			}
+		case networkDonutTonesCol:
+			if netIsStringList(f.Type) {
+				vc.donutTonesCol = ci
 			}
 		}
 	}
@@ -372,6 +540,44 @@ type netModel struct {
 	DonutStart  []int32
 	DonutValues []float32
 	DonutTotal  []float32
+	// DonutTones is one tone family per ring slice, paired with DonutValues
+	// by index (§SD2); the panel resolves the family to a colour.
+	DonutToneStart  []int32
+	DonutToneValues []string
+
+	// Seam A (ADR-0231 §SD2). Every float column spells "not declared for
+	// this row" as NaN, which is the widget's own unset (ADR-0232 §SD4) and
+	// what makes a DECLARED ZERO a zero: an `opacity` of 0 paints nothing.
+	// Every flag column spells it as false, which is each flag's "the query
+	// did not ask".
+	Opacity     []float32
+	Radius      []float32 // absolute size, winning over `weight`'s share
+	NoPick      []bool    // the inverse of the `pick` column the query writes
+	Selected    []bool
+	Fit         []bool
+	LabelAlways []bool
+	Center      []bool // a radial-layout centre
+	PinX, PinY  []float32
+	// StartX / StartY place a node once and then leave it free — what a
+	// stored layout is restored from.
+	StartX, StartY []float32
+	PullX, PullY   []float32
+	PullSX, PullSY []float32
+	// AuraStart / AuraValues are the resolved aura membership: the `groups`
+	// set, or `group` alone where the query declared only that (§SD4), so a
+	// panel spends one column rather than re-deciding the rule.
+	AuraStart  []int32
+	AuraValues []string
+
+	// Located reports that some vertex carried `lat`/`lon`, and GeoOrigin is
+	// the projected centroid its pins were measured from (§SD3) — what a
+	// panel needs to publish a gesture back in the units the query wrote.
+	Located                bool
+	GeoOriginX, GeoOriginY float64
+	// GroupsDeclared reports that the query wrote a `groups` column, which is
+	// the query asking for auras (§SD4) — distinct from `group` alone, where
+	// the reader still judges whether the grouping is spatial.
+	GroupsDeclared bool
 
 	// Edge columns, parallel, in declaration order. From and To are interned
 	// keys; FromID and ToID keep the declared spelling for the renderers that
@@ -383,6 +589,15 @@ type netModel struct {
 	EdgeLabel  []string
 	EdgeTone   []string
 	EdgeWeight []float64 // 0 is *unknown*, not zero
+	// Seam A's edge half. EdgeID tells parallel edges apart in hover,
+	// selection and events; Length and Strength are the force step's per-edge
+	// terms, which `weight` deliberately does not become.
+	EdgeID       []uint64
+	EdgeOpacity  []float32
+	EdgeLength   []float32
+	EdgeStrength []float32
+	EdgeNoPick   []bool
+	EdgeSelected []bool
 
 	// names resolves a key back to its declared id, for the id a click
 	// publishes (ADR-0227 §SD7).
@@ -477,8 +692,35 @@ func (inst *netModel) groups() (out []string) {
 func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim, caps netCaps) (m netModel) {
 	m.groupIdx = make(map[string]int, 8)
 	m.names = newNetIds(64)
-	seen := make(map[string]int, 64) // declared id -> row while building
 
+	// vertexRef is one vertex before its columns are written: the declared
+	// id, its interned key, and the vertices row it came from — -1 for an
+	// endpoint the edge list synthesised.
+	//
+	// Collecting refs, sorting THEM, and only then writing the columns is what
+	// removes the permutation this build used to apply per column after the
+	// fact. With Seam A the vertex side carries two dozen columns including
+	// two ragged ones, and a permutation that missed one would put a pin on
+	// the wrong node — silently, since every column would still be the right
+	// length.
+	type vertexRef struct {
+		id  string
+		key uint64
+		row int64
+	}
+	refs := make([]vertexRef, 0, 64)
+	seen := make(map[string]struct{}, 64)
+	addVertex := func(id string, row int64) bool {
+		if _, dup := seen[id]; dup {
+			return true
+		}
+		if len(refs) >= caps.vertices {
+			return false
+		}
+		seen[id] = struct{}{}
+		refs = append(refs, vertexRef{id: id, key: m.names.intern(id), row: row})
+		return true
+	}
 	noteGroup := func(g string) {
 		if g == "" {
 			return
@@ -488,47 +730,13 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 		}
 	}
 
-	// appendVertex appends one row to every vertex column, so the columns stay
-	// parallel by construction rather than by each caller remembering to.
-	appendVertex := func(id, label, group, shape, tone string, weight float64,
-		donut []float32, donutTotal float32) {
-		seen[id] = len(m.Key)
-		m.Key = append(m.Key, m.names.intern(id))
-		m.ID = append(m.ID, id)
-		m.Label = append(m.Label, label)
-		m.Group = append(m.Group, group)
-		m.Shape = append(m.Shape, shape)
-		m.Tone = append(m.Tone, tone)
-		m.Weight = append(m.Weight, weight)
-		m.DonutTotal = append(m.DonutTotal, donutTotal)
-		m.DonutValues = append(m.DonutValues, donut...)
-		m.DonutStart = append(m.DonutStart, int32(len(m.DonutValues)))
-	}
-
-	// addSynth adds an edge endpoint with no vertices row; false means the
-	// vertex cap is reached, so the caller must drop the edge rather than leave
-	// it referencing a vertex the model does not contain.
-	addSynth := func(id string) bool {
-		if _, ok := seen[id]; ok {
-			return true
-		}
-		if len(m.Key) >= caps.vertices {
-			return false
-		}
-		appendVertex(id, id, "", "", "", 0, nil, 0)
-		return true
-	}
-
-	// DonutStart is offsets with a leading zero (the list layout of ADR-0232
-	// §SD2); it is dropped again below when no vertex declared a ring, so the
-	// common case carries no offsets slice at all.
-	m.DonutStart = append(m.DonutStart, 0)
-
+	// Pass A — the vertices rows, in declaration order, so `group` claims its
+	// palette position in the order the query named them (§SD1) whatever the
+	// sort does next.
 	if vertRec != nil && vc.idCol >= 0 {
-		var donut []float32
 		rows := vertRec.NumRows()
 		for row := range rows {
-			if len(m.Key) >= caps.vertices {
+			if len(refs) >= caps.vertices {
 				m.capped = true
 				break
 			}
@@ -539,54 +747,22 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 			if _, dup := seen[id]; dup {
 				continue
 			}
-			label := id
-			if vc.labelCol >= 0 {
-				if l := formatCell(vertRec, vc.labelCol, row); l != "" {
-					label = l
-				}
-			}
-			var shape, tone, group string
-			if vc.shapeCol >= 0 {
-				shape = formatCell(vertRec, vc.shapeCol, row)
-			}
-			if vc.toneCol >= 0 {
-				tone = formatCell(vertRec, vc.toneCol, row)
-			}
+			addVertex(id, row)
 			if vc.groupCol >= 0 {
-				group = formatCell(vertRec, vc.groupCol, row)
-				noteGroup(group)
+				noteGroup(formatCell(vertRec, vc.groupCol, row))
 			}
-			var weight float64
-			if vc.weightCol >= 0 {
-				if w, ok := quantityCellValue(vertRec, vc.weightCol, row); ok && w > 0 {
-					weight = w
-					m.maxNodeWeight = max(m.maxNodeWeight, w)
-				}
-			}
-			var ring []float32
-			if vc.donutCol >= 0 {
-				// The scratch buffer is reused for the next row; the values
-				// are copied into the model's own column by appendVertex.
-				if got, ok := netDonutAt(vertRec.Column(vc.donutCol), int(row), donut[:0]); ok && len(got) > 0 {
-					donut = got
-					ring = got
-				}
-			}
-			var total float32
-			if vc.donutTotalCol >= 0 {
-				if t, ok := quantityCellValue(vertRec, vc.donutTotalCol, row); ok && t > 0 {
-					total = float32(t)
-				}
-			}
-			appendVertex(id, label, group, shape, tone, weight, ring, total)
 		}
 	}
 
-	edgeSeen := make(map[[2]string]struct{}, 64)
+	// Pass B — the edges, which may synthesise an endpoint the vertices CTE
+	// never named.
+	type edgeRef struct{ row int64 }
+	edgeRows := make([]edgeRef, 0, 64)
+	edgeSeen := make(map[[3]string]struct{}, 64)
 	if edgesRec != nil {
 		rows := edgesRec.NumRows()
 		for row := range rows {
-			if m.NumEdges() >= caps.edges {
+			if len(edgeRows) >= caps.edges {
 				m.capped = true
 				break
 			}
@@ -595,103 +771,280 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 			if src == "" || tgt == "" {
 				continue
 			}
-			key := [2]string{src, tgt}
+			// The dedup key carries the edge id, so parallel edges that
+			// declare distinct ids are distinct edges (§SD2) where before
+			// every repeat of a pair collapsed.
+			var eid string
+			if ec.idCol >= 0 {
+				eid = formatCell(edgesRec, ec.idCol, row)
+			}
+			key := [3]string{src, tgt, eid}
 			if _, dup := edgeSeen[key]; dup {
 				continue
 			}
-			if !addSynth(src) || !addSynth(tgt) {
+			if !addVertex(src, -1) || !addVertex(tgt, -1) {
 				m.capped = true
 				continue // a dangling endpoint (vertex cap reached) drops the edge
 			}
 			edgeSeen[key] = struct{}{}
-			var label, tone string
-			if ec.labelCol >= 0 {
-				label = formatCell(edgesRec, ec.labelCol, row)
-			}
-			if ec.toneCol >= 0 {
-				tone = formatCell(edgesRec, ec.toneCol, row)
-			}
-			var weight float64
-			if ec.weightCol >= 0 {
-				// A non-positive or unreadable cell leaves the weight at 0,
-				// which both widgets read as *unknown* and draw as an ordinary
-				// edge (ADR-0167 §SD2).
-				if w, ok := quantityCellValue(edgesRec, ec.weightCol, row); ok && w > 0 {
-					weight = w
-					m.maxWeight = max(m.maxWeight, w)
-				}
-			}
-			m.From = append(m.From, m.names.intern(src))
-			m.To = append(m.To, m.names.intern(tgt))
-			m.FromID = append(m.FromID, src)
-			m.ToID = append(m.ToID, tgt)
-			m.EdgeLabel = append(m.EdgeLabel, label)
-			m.EdgeTone = append(m.EdgeTone, tone)
-			m.EdgeWeight = append(m.EdgeWeight, weight)
+			edgeRows = append(edgeRows, edgeRef{row: row})
 		}
 	}
-	if len(m.DonutValues) == 0 {
-		m.DonutStart = nil // no vertex declared a ring
+
+	m.GroupsDeclared = vc.groupsCol >= 0
+
+	// Pass C — ascending interned id, which is the CSR's slot order and the
+	// widget's (ADR-0232 §SD9).
+	slices.SortFunc(refs, func(a, b vertexRef) int { return cmp.Compare(a.key, b.key) })
+
+	// Pass D — the vertex columns, written once each in final order.
+	n := len(refs)
+	m.Key = make([]uint64, n)
+	m.ID = make([]string, n)
+	m.Label = make([]string, n)
+	m.Group = make([]string, n)
+	m.Shape = make([]string, n)
+	m.Tone = make([]string, n)
+	m.Weight = make([]float64, n)
+	m.DonutTotal = make([]float32, n)
+	m.Opacity = make([]float32, n)
+	m.Radius = make([]float32, n)
+	m.PinX, m.PinY = make([]float32, n), make([]float32, n)
+	m.StartX, m.StartY = make([]float32, n), make([]float32, n)
+	m.PullX, m.PullY = make([]float32, n), make([]float32, n)
+	m.PullSX, m.PullSY = make([]float32, n), make([]float32, n)
+	m.NoPick = make([]bool, n)
+	m.Selected = make([]bool, n)
+	m.Fit = make([]bool, n)
+	m.LabelAlways = make([]bool, n)
+	m.Center = make([]bool, n)
+	m.DonutStart = make([]int32, 0, n+1)
+	m.AuraStart = make([]int32, 0, n+1)
+	m.DonutToneStart = make([]int32, 0, n+1)
+	m.DonutStart = append(m.DonutStart, 0)
+	m.AuraStart = append(m.AuraStart, 0)
+	m.DonutToneStart = append(m.DonutToneStart, 0)
+
+	// geo collects the located vertices' projected coordinates before the
+	// origin is known, since the origin is their centroid (§SD3).
+	type geoPoint struct {
+		i    int
+		x, y float64
 	}
-	m.sortByKey()
+	var geo []geoPoint
+
+	for i := range refs {
+		r := &refs[i]
+		m.Key[i], m.ID[i], m.Label[i] = r.key, r.id, r.id
+		// An unset float column is NaN, not zero: "not declared for this row".
+		m.Opacity[i], m.Radius[i] = graphviewUnsetF32, graphviewUnsetF32
+		m.PinX[i], m.PinY[i] = graphviewUnsetF32, graphviewUnsetF32
+		m.StartX[i], m.StartY[i] = graphviewUnsetF32, graphviewUnsetF32
+		m.PullX[i], m.PullY[i] = graphviewUnsetF32, graphviewUnsetF32
+		m.PullSX[i], m.PullSY[i] = graphviewUnsetF32, graphviewUnsetF32
+		if r.row < 0 {
+			// A synthesised endpoint: it is its own label and nothing else.
+			m.DonutStart = append(m.DonutStart, int32(len(m.DonutValues)))
+			m.AuraStart = append(m.AuraStart, int32(len(m.AuraValues)))
+			m.DonutToneStart = append(m.DonutToneStart, int32(len(m.DonutToneValues)))
+			continue
+		}
+		row := r.row
+		if vc.labelCol >= 0 {
+			if l := formatCell(vertRec, vc.labelCol, row); l != "" {
+				m.Label[i] = l
+			}
+		}
+		if vc.shapeCol >= 0 {
+			m.Shape[i] = formatCell(vertRec, vc.shapeCol, row)
+		}
+		if vc.toneCol >= 0 {
+			m.Tone[i] = formatCell(vertRec, vc.toneCol, row)
+		}
+		if vc.groupCol >= 0 {
+			m.Group[i] = formatCell(vertRec, vc.groupCol, row)
+		}
+		if vc.weightCol >= 0 {
+			if w, ok := quantityCellValue(vertRec, vc.weightCol, row); ok && w > 0 {
+				m.Weight[i] = w
+				m.maxNodeWeight = max(m.maxNodeWeight, w)
+			}
+		}
+		if vc.donutTotalCol >= 0 {
+			if t, ok := quantityCellValue(vertRec, vc.donutTotalCol, row); ok && t > 0 {
+				m.DonutTotal[i] = float32(t)
+			}
+		}
+		m.Opacity[i] = netFloatAt(vertRec, vc.opacityCol, row)
+		m.Radius[i] = netFloatAt(vertRec, vc.radiusCol, row)
+		m.PinX[i], m.PinY[i] = netFloatAt(vertRec, vc.pinXCol, row), netFloatAt(vertRec, vc.pinYCol, row)
+		m.StartX[i], m.StartY[i] = netFloatAt(vertRec, vc.startXCol, row), netFloatAt(vertRec, vc.startYCol, row)
+		m.PullX[i], m.PullY[i] = netFloatAt(vertRec, vc.pullXCol, row), netFloatAt(vertRec, vc.pullYCol, row)
+		m.PullSX[i], m.PullSY[i] = netPullStrength(vertRec, vc.pullSXCol, vc.pullSCol, row),
+			netPullStrength(vertRec, vc.pullSYCol, vc.pullSCol, row)
+		// `pick` is the positive spelling — absent is pickable — and the
+		// widget takes the negative, so the claim inverts once here.
+		if vc.pickCol >= 0 {
+			if v, set := booleanCellValue(vertRec, vc.pickCol, row); set {
+				m.NoPick[i] = !v
+			}
+		}
+		m.Selected[i] = netFlagAt(vertRec, vc.selectedCol, row)
+		m.Fit[i] = netFlagAt(vertRec, vc.fitCol, row)
+		m.LabelAlways[i] = netFlagAt(vertRec, vc.labelAlwaysCol, row)
+		m.Center[i] = netFlagAt(vertRec, vc.centerCol, row)
+		if lat, okLat := netFloat64At(vertRec, vc.latCol, row); okLat {
+			if lon, okLon := netFloat64At(vertRec, vc.lonCol, row); okLon {
+				x, y := netProjectWebMercator(lat, lon)
+				geo = append(geo, geoPoint{i: i, x: x, y: y})
+			}
+		}
+		if vc.donutCol >= 0 {
+			m.DonutValues, _ = netDonutAt(vertRec.Column(vc.donutCol), int(row), m.DonutValues)
+		}
+		m.DonutToneValues = netStringsAt(vertRec, vc.donutTonesCol, row, m.DonutToneValues)
+		// Aura membership: the `groups` set, or `group` alone when the query
+		// declared only that (§SD4).
+		before := len(m.AuraValues)
+		m.AuraValues = netStringsAt(vertRec, vc.groupsCol, row, m.AuraValues)
+		for _, g := range m.AuraValues[before:] {
+			noteGroup(g)
+		}
+		if len(m.AuraValues) == before && m.Group[i] != "" {
+			m.AuraValues = append(m.AuraValues, m.Group[i])
+		}
+		m.DonutStart = append(m.DonutStart, int32(len(m.DonutValues)))
+		m.AuraStart = append(m.AuraStart, int32(len(m.AuraValues)))
+		m.DonutToneStart = append(m.DonutToneStart, int32(len(m.DonutToneValues)))
+	}
+	if len(m.DonutValues) == 0 {
+		m.DonutStart = nil
+	}
+	if len(m.AuraValues) == 0 {
+		m.AuraStart = nil
+	}
+	if len(m.DonutToneValues) == 0 {
+		m.DonutToneStart = nil
+	}
+	// §SD3: the world is measured from the located set's centroid, so a
+	// country-level graph does not spend float32's mantissa on its distance
+	// from the antimeridian.
+	if len(geo) > 0 {
+		var sx, sy float64
+		for _, p := range geo {
+			sx, sy = sx+p.x, sy+p.y
+		}
+		m.Located = true
+		m.GeoOriginX, m.GeoOriginY = sx/float64(len(geo)), sy/float64(len(geo))
+		for _, p := range geo {
+			// A `lat`/`lon` pin wins over a `pin_x`/`pin_y` one: a query that
+			// declares both means the geographic placement, which is the more
+			// specific claim.
+			m.PinX[p.i] = float32(p.x - m.GeoOriginX)
+			m.PinY[p.i] = float32(p.y - m.GeoOriginY)
+		}
+	}
+
+	// Pass E — the edge columns, in declaration order.
+	ne := len(edgeRows)
+	m.From, m.To = make([]uint64, ne), make([]uint64, ne)
+	m.FromID, m.ToID = make([]string, ne), make([]string, ne)
+	m.EdgeLabel, m.EdgeTone = make([]string, ne), make([]string, ne)
+	m.EdgeWeight = make([]float64, ne)
+	m.EdgeID = make([]uint64, ne)
+	m.EdgeOpacity = make([]float32, ne)
+	m.EdgeLength, m.EdgeStrength = make([]float32, ne), make([]float32, ne)
+	m.EdgeNoPick = make([]bool, ne)
+	m.EdgeSelected = make([]bool, ne)
+	for i := range edgeRows {
+		row := edgeRows[i].row
+		src := formatCell(edgesRec, ec.srcCol, row)
+		tgt := formatCell(edgesRec, ec.tgtCol, row)
+		m.FromID[i], m.ToID[i] = src, tgt
+		m.From[i], m.To[i] = m.names.intern(src), m.names.intern(tgt)
+		if ec.labelCol >= 0 {
+			m.EdgeLabel[i] = formatCell(edgesRec, ec.labelCol, row)
+		}
+		if ec.toneCol >= 0 {
+			m.EdgeTone[i] = formatCell(edgesRec, ec.toneCol, row)
+		}
+		if ec.weightCol >= 0 {
+			// A non-positive or unreadable cell leaves the weight at 0, which
+			// both widgets read as *unknown* and draw as an ordinary edge
+			// (ADR-0167 §SD2).
+			if w, ok := quantityCellValue(edgesRec, ec.weightCol, row); ok && w > 0 {
+				m.EdgeWeight[i] = w
+				m.maxWeight = max(m.maxWeight, w)
+			}
+		}
+		if ec.idCol >= 0 {
+			if s := formatCell(edgesRec, ec.idCol, row); s != "" {
+				// Interned in the same table as the vertex ids: an edge id
+				// need only be unique among the edges of one ordered pair,
+				// and one table keeps that true without a second convention.
+				m.EdgeID[i] = m.names.intern(s)
+			}
+		}
+		m.EdgeOpacity[i] = netFloatAt(edgesRec, ec.opacityCol, row)
+		m.EdgeLength[i] = netFloatAt(edgesRec, ec.lengthCol, row)
+		m.EdgeStrength[i] = netFloatAt(edgesRec, ec.strengthCol, row)
+		if ec.pickCol >= 0 {
+			if v, set := booleanCellValue(edgesRec, ec.pickCol, row); set {
+				m.EdgeNoPick[i] = !v
+			}
+		}
+		m.EdgeSelected[i] = netFlagAt(edgesRec, ec.selectedCol, row)
+	}
 	return
 }
 
-// sortByKey puts the vertex columns in ascending interned-id order, which is
-// what makes the model's row order the CSR's slot order and the widget's
-// (ADR-0232 §SD9). Edge columns are untouched: they address vertices by key,
-// not by row.
-//
-// The permutation is applied by building each column afresh rather than by
-// swapping in place, because the ragged donut column cannot be swapped
-// elementwise and a second shape for it would be the bug this whole change
-// exists to avoid.
-func (inst *netModel) sortByKey() {
-	n := inst.NumVertices()
-	perm := make([]int32, n)
-	for i := range perm {
-		perm[i] = int32(i)
+// netPullStrength resolves one axis's pull strength: the per-axis column when
+// the query gave one, else the shared `pull_strength`, else the default. A
+// target named without a strength still pulls — "naming an axis turns the pull
+// on" (§SD2) — and the default is CenterGravity's, so a strength reads on the
+// scale the widget's own centre pull already uses rather than on a new one.
+func netPullStrength(rec arrow.RecordBatch, perAxis, shared int, row int64) float32 {
+	if v := netFloatAt(rec, perAxis, row); !math.IsNaN(float64(v)) {
+		return v
 	}
-	slices.SortFunc(perm, func(a, b int32) int {
-		return cmp.Compare(inst.Key[a], inst.Key[b])
-	})
-	sorted := true
-	for i, p := range perm {
-		if int(p) != i {
-			sorted = false
-			break
-		}
+	if v := netFloatAt(rec, shared, row); !math.IsNaN(float64(v)) {
+		return v
 	}
-	if sorted {
-		return // already ascending: the common case of a query that ORDERed by id
-	}
-	inst.Key = permuteSlice(inst.Key, perm)
-	inst.ID = permuteSlice(inst.ID, perm)
-	inst.Label = permuteSlice(inst.Label, perm)
-	inst.Group = permuteSlice(inst.Group, perm)
-	inst.Shape = permuteSlice(inst.Shape, perm)
-	inst.Tone = permuteSlice(inst.Tone, perm)
-	inst.Weight = permuteSlice(inst.Weight, perm)
-	inst.DonutTotal = permuteSlice(inst.DonutTotal, perm)
-	if inst.DonutStart == nil {
-		return
-	}
-	start := make([]int32, 0, n+1)
-	values := make([]float32, 0, len(inst.DonutValues))
-	start = append(start, 0)
-	for _, p := range perm {
-		values = append(values, inst.DonutValues[inst.DonutStart[p]:inst.DonutStart[p+1]]...)
-		start = append(start, int32(len(values)))
-	}
-	inst.DonutStart, inst.DonutValues = start, values
+	return networkDefaultPullStrength
 }
 
-// permuteSlice returns src reordered by perm.
-func permuteSlice[T any](src []T, perm []int32) (out []T) {
-	out = make([]T, len(perm))
-	for i, p := range perm {
-		out[i] = src[p]
-	}
+// networkDefaultPullStrength is what an axis pulls with when the query named a
+// target and no strength. It is ForceParams.CenterGravity's default, which is
+// the scale ADR-0224 §SD16 says a per-node pull reads on.
+const networkDefaultPullStrength = 0.3
+
+// netWebMercatorZoom is the reference zoom the geographic pins are projected
+// at (§SD3). The value only sets the world's scale — every located vertex is
+// projected at the same one and measured from their centroid — so it is
+// chosen to put a country-sized graph in the same range as a free layout's
+// world units rather than for any tiling reason.
+const netWebMercatorZoom = 8
+
+// netProjectWebMercator projects degrees to world units at the reference zoom.
+// Latitudes past the Mercator limit are clamped rather than sent to infinity.
+func netProjectWebMercator(lat, lon float64) (x, y float64) {
+	const limit = 85.05112878
+	lat = min(max(lat, -limit), limit)
+	lon = min(max(lon, -180), 180)
+	scale := float64(int(1)<<netWebMercatorZoom) * 256
+	x = (lon + 180) / 360 * scale
+	s := math.Sin(lat * math.Pi / 180)
+	y = (0.5 - math.Log((1+s)/(1-s))/(4*math.Pi)) * scale
+	return
+}
+
+// netUnprojectWebMercator is netProjectWebMercator inverted, for publishing a
+// located graph's gestures back in the units the query wrote (§SD3).
+func netUnprojectWebMercator(x, y float64) (lat, lon float64) {
+	scale := float64(int(1)<<netWebMercatorZoom) * 256
+	lon = x/scale*360 - 180
+	n := math.Pi * (1 - 2*y/scale)
+	lat = math.Atan(math.Sinh(n)) * 180 / math.Pi
 	return
 }
 
@@ -821,4 +1174,98 @@ func graphviewSettleStatus(v *graphview.View, paused, frozen bool) string {
 		return fmt.Sprintf(" · settling (%.3f)", m.LastDisplacement)
 	}
 	return ""
+}
+
+// The Seam A cell readers (ADR-0231 §SD2). Each spells "not declared for this
+// row" the way its channel does: NaN for a float, false for a flag, an empty
+// slice for a set. A NULL cell and an absent column are the same thing, which
+// is what lets a query pin some vertices and leave the rest to the layout.
+
+// netIsStringList reports whether a column can carry a set of names: a list of
+// a string-like type. A scalar column of the same name is a collision, not a
+// set.
+func netIsStringList(dt arrow.DataType) bool {
+	var elem arrow.DataType
+	switch t := dt.(type) {
+	case *arrow.ListType:
+		elem = t.Elem()
+	case *arrow.LargeListType:
+		elem = t.Elem()
+	case *arrow.FixedSizeListType:
+		elem = t.Elem()
+	default:
+		return false
+	}
+	return isStringLikeType(elem)
+}
+
+// netFloatAt reads a numeric cell, NaN for an absent column, a NULL cell or an
+// unreadable one. NaN is the widget's own "not declared" (ADR-0232 §SD4), so
+// the value travels to the declaration without a second convention.
+func netFloatAt(rec arrow.RecordBatch, col int, row int64) float32 {
+	if col < 0 {
+		return graphviewUnsetF32
+	}
+	v, ok := numericCellValue(rec.Column(col), row)
+	if !ok {
+		return graphviewUnsetF32
+	}
+	return float32(v)
+}
+
+// netFloat64At is netFloatAt in double precision, for the geographic columns:
+// a latitude rounded to float32 moves a node by metres, and the projection
+// runs before the world units are narrowed.
+func netFloat64At(rec arrow.RecordBatch, col int, row int64) (v float64, ok bool) {
+	if col < 0 {
+		return 0, false
+	}
+	return numericCellValue(rec.Column(col), row)
+}
+
+// netFlagAt reads a flag cell; an absent column or a NULL cell is false, which
+// is every flag's "the query did not ask".
+func netFlagAt(rec arrow.RecordBatch, col int, row int64) bool {
+	if col < 0 {
+		return false
+	}
+	v, _ := booleanCellValue(rec, col, row)
+	return v
+}
+
+// netStringsAt appends a string-list cell's non-empty elements to dst. An
+// absent column, a NULL cell or a column that is not a list appends nothing.
+func netStringsAt(rec arrow.RecordBatch, col int, row int64, dst []string) []string {
+	if col < 0 {
+		return dst
+	}
+	arr := rec.Column(col)
+	if row < 0 || int(row) >= arr.Len() || arr.IsNull(int(row)) {
+		return dst
+	}
+	var values arrow.Array
+	var start, end int
+	switch a := arr.(type) {
+	case *array.List:
+		values = a.ListValues()
+		start, end = int(a.Offsets()[row]), int(a.Offsets()[row+1])
+	case *array.LargeList:
+		values = a.ListValues()
+		start, end = int(a.Offsets()[row]), int(a.Offsets()[row+1])
+	case *array.FixedSizeList:
+		values = a.ListValues()
+		n := int(a.DataType().(*arrow.FixedSizeListType).Len())
+		start, end = int(row)*n, (int(row)+1)*n
+	default:
+		return dst
+	}
+	for i := start; i < end; i++ {
+		if values.IsNull(i) {
+			continue
+		}
+		if s := formatArrayElem(values, int64(i)); s != "" {
+			dst = append(dst, s)
+		}
+	}
+	return dst
 }
