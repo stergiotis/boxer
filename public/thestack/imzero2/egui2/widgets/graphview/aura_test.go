@@ -37,15 +37,16 @@ func TestAuraSetBuildsSortedIdsAndMembership(t *testing.T) {
 	nodes := []NodeSpec{{Id: 1, Auras: []string{"z", "a"}}, {Id: 2, Auras: []string{"m"}}, {Id: 3}, {Id: 4, Auras: []string{"", "a"}}}
 	g.reconcile(nodes, nil)
 	var set auraSet
-	require.True(t, set.build(nodes, &g))
+	require.True(t, set.build(&g.declN, &g))
 	require.Equal(t, []string{"a", "m", "z"}, set.ids)
 	require.ElementsMatch(t, []int32{2, 0}, set.members(g.slot[1]))
 	require.Equal(t, []int32{1}, set.members(g.slot[2]))
 	require.Empty(t, set.members(g.slot[3]))
 	require.Equal(t, []int32{0}, set.members(g.slot[4]), "the empty id is ignored")
-	require.False(t, set.build(nodes, &g), "same membership, no change")
+	require.False(t, set.build(&g.declN, &g), "same membership, no change")
 	nodes[2].Auras = []string{"m"}
-	require.True(t, set.build(nodes, &g))
+	g.reconcile(nodes, nil)
+	require.True(t, set.build(&g.declN, &g))
 	require.Equal(t, []int32{1}, set.members(g.slot[3]))
 }
 
@@ -58,7 +59,7 @@ func setupField(t *testing.T, nodes []NodeSpec) (g graph, set auraSet, cm cam.Ca
 		s := g.slot[nodes[i].Id]
 		g.x[s], g.y[s] = nodes[i].PinX, nodes[i].PinY
 	}
-	set.build(nodes, &g)
+	set.build(&g.declN, &g)
 	cm = cam.Camera{Zoom: 1, PanX: 200, PanY: 200}
 	return
 }
@@ -154,7 +155,7 @@ func TestAuraFitMarginCoversTheExtent(t *testing.T) {
 	v.style = v.Opts.Style.withDefaults()
 	nodes := []NodeSpec{{Id: 1, Radius: 10, Auras: []string{"A"}}, {Id: 2, Radius: 40}}
 	v.g.reconcile(nodes, nil)
-	v.auraSet.build(nodes, &v.g)
+	v.auraSet.build(&v.g.declN, &v.g)
 	ap := v.Opts.Auras.withDefaults()
 	v.cam = cam.Camera{Zoom: 2}
 	// Only the member's radius counts: r' = 10·2 + 4 = 24 px, extent at 0.8
@@ -183,7 +184,7 @@ func TestUpdateAurasReusesRingsUntilSomethingChanges(t *testing.T) {
 	nodes := []NodeSpec{{Id: 1, Radius: 20, Auras: []string{"A"}}, {Id: 2, Radius: 20, Auras: []string{"B"}}}
 	v.g.reconcile(nodes, nil)
 	v.g.x[v.g.slot[2]] = 300
-	v.auraSet.build(nodes, &v.g)
+	v.auraSet.build(&v.g.declN, &v.g)
 	v.cam = cam.Camera{Zoom: 1, PanX: 100, PanY: 200}
 	ap := v.Opts.Auras.withDefaults()
 

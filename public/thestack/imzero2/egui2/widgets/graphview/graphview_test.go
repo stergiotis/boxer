@@ -29,10 +29,12 @@ func TestReconcileKeepsSurvivingPositionsAndDropsVanished(t *testing.T) {
 	require.Equal(t, float32(20), g.y[g.slot[1]])
 	require.Equal(t, float32(30), g.x[g.slot[3]])
 	require.Equal(t, float32(40), g.y[g.slot[3]])
-	// Slot map and ids agree after the swap-remove.
+	// Slot map and ids agree after the relayout, and the slots follow the
+	// declaration (ADR-0232 §SD3).
 	for id, s := range g.slot {
 		require.Equal(t, id, g.ids[s])
 	}
+	require.Equal(t, []uint64{1, 3, 4}, g.ids)
 	// Same declaration again: nothing new, no topology change.
 	created, changed = g.reconcile([]NodeSpec{{Id: 1}, {Id: 3}, {Id: 4}}, []EdgeSpec{{From: 3, To: 4}})
 	require.Empty(t, created)

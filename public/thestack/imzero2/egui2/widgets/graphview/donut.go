@@ -63,8 +63,10 @@ func donutArcs(d Donut, track color.Color, dst []donutArc) []donutArc {
 			continue
 		}
 		span := float32(2*math.Pi) * v / denom
+		// A missing colour, or a 0 — the columnar declaration's unset entry
+		// — takes the cycle.
 		col := color.Color{}
-		if i < len(d.Colors) {
+		if i < len(d.Colors) && d.Colors[i] != 0 {
 			col = color.Hex(d.Colors[i])
 		}
 		if isUnset(col) {

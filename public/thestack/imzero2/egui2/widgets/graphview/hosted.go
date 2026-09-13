@@ -124,6 +124,27 @@ func (v *View) SetHostCamera(c cam.Camera) {
 // Call it inside the host's paint slot, after HostedInput, with the same
 // declaration Render would take.
 func (v *View) HostedPaint(nodes []NodeSpec, edges []EdgeSpec) {
+	v.g.declN.fromSpecs(nodes)
+	v.g.declE.fromSpecs(edges)
+	v.hostedPaintColumns(&v.g.declN, &v.g.declE)
+}
+
+// HostedPaintColumns is HostedPaint over a columnar declaration, under
+// RenderColumns' rules for a malformed one.
+func (v *View) HostedPaintColumns(nodes *NodeColumns, edges *EdgeColumns) (err error) {
+	if err = nodes.Validate(); err != nil {
+		v.hosted = false
+		return
+	}
+	if err = edges.Validate(); err != nil {
+		v.hosted = false
+		return
+	}
+	v.hostedPaintColumns(nodes, edges)
+	return
+}
+
+func (v *View) hostedPaintColumns(nodes *NodeColumns, edges *EdgeColumns) {
 	w, h := v.lastW, v.lastH
 	if w <= 0 || h <= 0 {
 		v.hosted = false
@@ -134,7 +155,7 @@ func (v *View) HostedPaint(nodes []NodeSpec, edges []EdgeSpec) {
 	rp := v.Opts.Radial.withDefaults()
 	ap := v.Opts.Auras.withDefaults()
 
-	topoChanged, created, n := v.reconcileAndPlace(nodes, edges, w, h, fp, hp, rp)
+	topoChanged, created, n := v.reconcileAndPlaceColumns(nodes, edges, w, h, fp, hp, rp)
 	if s := v.dragSlot(); s >= 0 {
 		v.g.fixed[s] = true
 	}

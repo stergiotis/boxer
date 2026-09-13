@@ -24,7 +24,7 @@ func auraView(t *testing.T, ap AuraParams) (*View, AuraParams) {
 		{Id: 3, Auras: []string{"gamma"}},
 	}
 	v.g.reconcile(nodes, nil)
-	v.auraSet.build(nodes, &v.g)
+	v.auraSet.build(&v.g.declN, &v.g)
 	return v, ap.withDefaults()
 }
 

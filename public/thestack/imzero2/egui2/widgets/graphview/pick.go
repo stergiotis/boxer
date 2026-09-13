@@ -44,11 +44,7 @@ func (pg *pickGrid) build(g *graph, defaultRadius float32) {
 	minX, minY, maxX, maxY, _ := g.bounds(defaultRadius)
 	maxR := float32(0)
 	for i := range g.ids {
-		r := g.radius[i]
-		if r <= 0 {
-			r = defaultRadius
-		}
-		maxR = max(maxR, r)
+		maxR = max(maxR, g.radiusOr(i, defaultRadius))
 	}
 	pg.maxR = maxR
 	w, h := maxX-minX, maxY-minY
@@ -160,7 +156,7 @@ func (v *View) edgeBoxMayContain(i int32, px, py float32) bool {
 	x1, y1 := v.cam.ToScreen(v.g.x[f], v.g.y[f])
 	x2, y2 := v.cam.ToScreen(v.g.x[t], v.g.y[t])
 	width := v.g.eWidth[i]
-	if width <= 0 {
+	if isNaN32(width) {
 		width = v.style.EdgeWidth
 	}
 	order := float32(v.g.eOrder[i])

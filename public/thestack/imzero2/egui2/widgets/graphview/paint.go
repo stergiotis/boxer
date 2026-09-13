@@ -42,7 +42,7 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 	style := &v.style
 	f, t := v.g.eFrom[i], v.g.eTo[i]
 	geo.width = v.g.eWidth[i]
-	if geo.width <= 0 {
+	if isNaN32(geo.width) {
 		geo.width = style.EdgeWidth
 	}
 	order := float32(v.g.eOrder[i])
@@ -50,7 +50,12 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 	x2, y2 := v.cam.ToScreen(v.g.x[t], v.g.y[t])
 	r1 := v.nodeRadius(int(f)) * v.cam.Zoom
 	r2 := v.nodeRadius(int(t)) * v.cam.Zoom
+	// An undirected picture draws no head, so the stroke runs to the disc
+	// (ADR-0232 §SD5); a head of no size trims nothing.
 	tip := style.TipSize
+	if v.Opts.Undirected {
+		tip = 0
+	}
 
 	if f == t {
 		// egui_graphs' loop: a cubic leaving the disc at 45° left, bulging
@@ -63,7 +68,7 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 		geo.x = [4]float32{ex, x1 + loopSize, x1 - loopSize, sx}
 		geo.y = [4]float32{ey, y1 - loopSize, y1 - loopSize, sy}
 		geo.loopR = loopSize * 0.75
-		geo.hasTip = true
+		geo.hasTip = tip > 0
 		geo.tipX, geo.tipY = sx, sy
 		geo.tipDx, geo.tipDy = unit(sx-geo.x[2], sy-geo.y[2])
 		// The stroke ends where the head begins.
@@ -86,7 +91,7 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 	ex, ey := x2-ux*r2, y2-uy*r2
 	if order == 0 {
 		geo.kind = edgeKindStraight
-		geo.hasTip = l > r1+r2+tip
+		geo.hasTip = tip > 0 && l > r1+r2+tip
 		geo.tipX, geo.tipY = ex, ey
 		geo.tipDx, geo.tipDy = ux, uy
 		if geo.hasTip {
@@ -104,7 +109,7 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 	seg := max(l/3, 1)
 	c1x, c1y := sx+ux*seg+perpX*off, sy+uy*seg+perpY*off
 	c2x, c2y := ex-ux*seg+perpX*off, ey-uy*seg+perpY*off
-	geo.hasTip = l > r1+r2+tip
+	geo.hasTip = tip > 0 && l > r1+r2+tip
 	geo.tipX, geo.tipY = ex, ey
 	geo.tipDx, geo.tipDy = unit(ex-c2x, ey-c2y)
 	if geo.hasTip {
@@ -241,7 +246,8 @@ func (v *View) paint(w, h float32) {
 		hov := (v.hoveredOk && id == v.hoveredId) || int32(i) == dragging
 		pinned := v.g.isPinned(i)
 		lbl := v.g.label[i]
-		if !(sel || hov || pinned || (o.LabelsAlways && lbl != "")) {
+		always := o.LabelsAlways || v.g.labelAlways[i]
+		if !(sel || hov || pinned || (always && lbl != "")) {
 			continue
 		}
 		sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
@@ -258,7 +264,7 @@ func (v *View) paint(w, h float32) {
 		if hov {
 			c.PaintCircleStroke(sx, sy, r+3, style.Highlight, styletokens.StrokeRegular).Send()
 		}
-		if lbl != "" && (o.LabelsAlways || sel || hov) {
+		if lbl != "" && (always || sel || hov) {
 			v.paintLabel(sx, sy-r-2, lbl, style.LabelFontSize, fade(style.LabelColor, v.g.opacity[i]))
 		}
 	}

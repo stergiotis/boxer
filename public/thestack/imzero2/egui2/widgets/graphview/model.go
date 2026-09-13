@@ -156,8 +156,12 @@ type EdgeRef struct {
 	Id   uint64
 }
 
-// NodeSpec is one node of the frame's declaration. A zero Color or Radius
-// takes the style default.
+// NodeSpec is one node of the frame's declaration, the row form. A zero
+// Color or Radius takes the style default; zero is the unset value of every
+// numeric field here, so a declared zero has no spelling in this form. The
+// columnar form, [NodeColumns], has one — NaN is unset there and a zero is a
+// zero (ADR-0232 §SD4) — and the two forms reconcile to the same retained
+// state.
 type NodeSpec struct {
 	Id     uint64
 	Label  string
@@ -190,6 +194,11 @@ type NodeSpec struct {
 	// Pull draws the node toward a place in the force layout without holding
 	// it there (ADR-0224 §SD16); the zero value pulls nothing.
 	Pull Pull
+	// LabelAlways paints this node's label whatever the hover and selection
+	// state — the per-node form of Options.LabelsAlways, for the few nodes
+	// that should stay named when a caller's label budget silences the rest
+	// (ADR-0232 §SD5).
+	LabelAlways bool
 }
 
 // Pull is a soft pin: a target the force step draws a node toward, with a
@@ -399,8 +408,14 @@ type Options struct {
 	// than a reading (ADR-0230 §SD4).
 	HideEdges bool
 	// LabelsAlways paints every node label; off, only hovered, selected and
-	// dragged nodes carry one.
+	// dragged nodes carry one, and those declared LabelAlways.
 	LabelsAlways bool
+	// Undirected paints no arrow heads, so the picture is the graph an
+	// undirected reading of it describes (ADR-0232 §SD5). Nothing else
+	// changes: edges keep the ordered pair they were declared as in their
+	// refs and events, hover and pick are unchanged, and the hierarchical
+	// layout still walks the declared direction.
+	Undirected bool
 	// PinOnDrag holds a node where the user drops it, out of the force
 	// layout's reach, until UnpinNode releases it (ADR-0224 §SD10).
 	PinOnDrag bool

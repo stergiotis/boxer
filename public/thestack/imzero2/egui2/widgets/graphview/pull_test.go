@@ -102,7 +102,7 @@ func TestPullSurvivesTheSlotSwapAndIsRecomputedPerFrame(t *testing.T) {
 	}
 	decl([]NodeSpec{{Id: 1, Pull: Pull{X: 5, StrengthX: 0.2}}, {Id: 2}, {Id: 3, Pull: Pull{X: 9, StrengthY: 0.3}}})
 	require.True(t, v.g.anyPull)
-	// Dropping id 2 swap-removes it, moving id 3 into its slot.
+	// Dropping id 2 lays the slots out afresh, moving id 3 up one.
 	decl([]NodeSpec{{Id: 1, Pull: Pull{X: 5, StrengthX: 0.2}}, {Id: 3, Pull: Pull{X: 9, StrengthY: 0.3}}})
 	require.Equal(t, Pull{X: 5, StrengthX: 0.2}, v.g.pull[v.g.slot[1]])
 	require.Equal(t, Pull{X: 9, StrengthY: 0.3}, v.g.pull[v.g.slot[3]])

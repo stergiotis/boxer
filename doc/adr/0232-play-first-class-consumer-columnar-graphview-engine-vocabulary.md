@@ -381,6 +381,53 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Updates
+
+### 2026-09-13 — the graphview half shipped (SD2–SD5)
+
+`widgets/graphview` carries `NodeColumns`, `EdgeColumns`, `RenderColumns`,
+`HostedPaintColumns`, `PositionColumns`, `Options.Undirected` and
+`NodeSpec.LabelAlways`, and its slots follow the declaration's row order.
+The lane runs: the same declaration through both forms reconciles to
+identical retained state and paints a byte-identical stream over four
+frames, measured by a hashing paint channel in `scenetest`; NaN against a
+declared zero for every float column, including a zero strength pulling
+nothing and a zero opacity painting nothing; a reorder, a drop, an
+insertion and a duplicate keeping every surviving position and hold by id;
+`PositionColumns` in declaration order; a malformed declaration refused
+with the state untouched; `Undirected` painting one polygon less per edge
+and hovering the edge as before; `LabelAlways` painting under the budget;
+and the batch order after a removal.
+
+Five refinements found in implementation:
+
+- **The row form is rewritten into columns, not the other way round.** One
+  reconcile serves both forms because `Render` rewrites its specs into
+  scratch columns first, resolving each zero-as-default field to NaN. That
+  is what makes the identity a property of the structure rather than of
+  two loops kept in step, and it costs the row form one linear copy per
+  frame into reused slices.
+- **A pin and a pull are declared by their columns, not by a flag.** A node
+  is pinned where both `PinX` and `PinY` are declared and pulled on an axis
+  where both its target and its strength are; a result's NULL in either
+  column is the unset the spec's `Pinned` bool was standing in for.
+- **A malformed declaration is an error, not a panic.** `RenderColumns`
+  and `HostedPaintColumns` validate the column lengths and the list offsets
+  and return the first disagreement, rendering nothing that frame and
+  touching no state; `Validate` is exported so a caller that builds its
+  columns once per rebuild can check there and skip the per-frame pass.
+- **A donut colour of 0 takes the cycle.** The columnar colour column needs
+  an unset entry and 0 — transparent black — was never a colour anyone
+  declared; the row form reads a 0 entry the same way now, which is the
+  one place its behaviour moved.
+- **`PositionColumns` appends to the caller's slices** and returns the ids
+  beside the positions when asked, so a caller with duplicate rows can
+  still pair them.
+
+The Verification plan's paint-order pin was found where predicted: the
+existing scene test for a vanishing node passed unchanged, because every
+reading of the widget is by id, and the new test pins the batch order.
+
 ## References
 
 - [ADR-0231](./0231-play-graph-contract-widening.md) — the SQL surface this

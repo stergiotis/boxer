@@ -165,17 +165,25 @@ type auraSet struct {
 	count []int32 // scratch
 }
 
-// build rebuilds the table from the declaration against g's slots and
-// reports whether the membership changed.
-func (a *auraSet) build(nodes []NodeSpec, g *graph) (changed bool) {
+// build rebuilds the table from the declaration's aura column against g's
+// slots — the rows' slots as the reconcile of the same frame assigned them
+// — and reports whether the membership changed.
+func (a *auraSet) build(nodes *NodeColumns, g *graph) (changed bool) {
 	if a.index == nil {
 		a.index = make(map[string]int32, 8)
 		a.seed = maphash.MakeSeed()
 	}
 	a.ids = a.ids[:0]
 	clear(a.index)
-	for i := range nodes {
-		for _, id := range nodes[i].Auras {
+	rows := len(nodes.Ids)
+	auras := func(i int) []string {
+		if nodes.AuraOffsets == nil {
+			return nil
+		}
+		return nodes.AuraIds[nodes.AuraOffsets[i]:nodes.AuraOffsets[i+1]]
+	}
+	for i := range rows {
+		for _, id := range auras(i) {
 			if id == "" {
 				continue
 			}
@@ -194,12 +202,11 @@ func (a *auraSet) build(nodes []NodeSpec, g *graph) (changed bool) {
 	n := g.n()
 	a.count = growTo(a.count, n)
 	clear(a.count)
-	for i := range nodes {
-		if s, ok := g.slot[nodes[i].Id]; ok {
-			for _, id := range nodes[i].Auras {
-				if id != "" {
-					a.count[s]++
-				}
+	for i := range rows {
+		s := g.rowSlot[i]
+		for _, id := range auras(i) {
+			if id != "" {
+				a.count[s]++
 			}
 		}
 	}
@@ -212,19 +219,16 @@ func (a *auraSet) build(nodes []NodeSpec, g *graph) (changed bool) {
 	a.start[n] = acc
 	a.list = growTo(a.list, int(acc))
 	copy(a.count, a.start[:n])
-	for i := range nodes {
-		s, ok := g.slot[nodes[i].Id]
-		if !ok {
-			continue
-		}
-		for _, id := range nodes[i].Auras {
+	for i := range rows {
+		s := g.rowSlot[i]
+		for _, id := range auras(i) {
 			if id == "" {
 				continue
 			}
 			k := a.index[id]
 			a.list[a.count[s]] = k
 			a.count[s]++
-			h += mix64(nodes[i].Id) ^ maphash.String(a.seed, id)
+			h += mix64(nodes.Ids[i]) ^ maphash.String(a.seed, id)
 		}
 	}
 	changed = h != a.hash

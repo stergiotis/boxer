@@ -9,6 +9,8 @@ package scenetest
 import (
 	"iter"
 
+	"github.com/zeebo/xxh3"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -73,4 +75,30 @@ func Handles(ids *c.WidgetIdStack, key string) (canvas, area widgethandle.Widget
 		area = widgethandle.Make(ids.PrepareStr("graphview-area").Derive())
 	}
 	return
+}
+
+// hashingChannel folds every message's bytes into one running hash, so a
+// test can assert that two render paths emit byte-identical paint streams
+// without decoding any of it.
+type hashingChannel struct{ h *xxh3.Hasher }
+
+var _ runtime.ChannelI[*runtime.Unmarshaller] = hashingChannel{}
+
+func (c hashingChannel) SyncMultiUseMsg(_ uint64, b []byte) { _, _ = c.h.Write(b) }
+func (c hashingChannel) SendSingleUseMsg(b []byte)          { _, _ = c.h.Write(b) }
+func (c hashingChannel) FlushMessages()                     {}
+func (c hashingChannel) ReceiveMsg() iter.Seq[*runtime.Unmarshaller] {
+	return func(func(*runtime.Unmarshaller) bool) {}
+}
+
+// InstallHashing is Install with a digest of everything sent: sum returns
+// the hash of the bytes since the last zero, and zero restarts it. It is
+// what a test uses to assert that the row-shaped and the columnar
+// declaration paint the same picture to the bit (ADR-0232 §SD2).
+func InstallHashing() (sum func() uint64, zero func(), reset func()) {
+	h := xxh3.New()
+	typed.SetCurrentFffiVar(runtime.NewFffi2[*runtime.Unmarshaller](hashingChannel{h: h}))
+	sm := c.CurrentApplicationState.StateManager
+	sm.ScriptReset()
+	return h.Sum64, h.Reset, sm.ScriptReset
 }

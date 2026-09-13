@@ -31,6 +31,18 @@
 // ([github.com/stergiotis/boxer/public/analytics/graph/knn]) it is a
 // dimensionality reduction drawn as an interactive graph.
 //
+// The declaration has two forms (ADR-0232 §SD2). The row form above — a
+// [NodeSpec] and an [EdgeSpec] per item, zero meaning unset — suits a
+// hand-written graph and a caller that styles one item at a time. The
+// columnar form, [NodeColumns] and [EdgeColumns] through [View.RenderColumns],
+// suits a caller whose data is already columns: one optional slice per
+// field, NaN as the unset value so a declared zero is a zero, and the
+// ragged columns in Arrow's list layout. The two reconcile to the same
+// retained state and paint the same picture. Slots follow the declaration's
+// row order (§SD3), so a caller that declares in ascending id order shares
+// the slot order of the analytics engine's CSR and reads its columns with
+// no join; [View.PositionColumns] reads the layout back in the same order.
+//
 // A node or edge may be faded with Opacity and taken out of the pointer's
 // reach with NoPick (ADR-0224 §SD14). The two are what a caller spends a
 // relevance, a search result or a dimmed background on; the widget's own

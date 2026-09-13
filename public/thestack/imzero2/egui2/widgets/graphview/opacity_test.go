@@ -11,13 +11,22 @@ import (
 func alphaOf(c color.Color) uint32 { return c.Literal() & 0xff }
 
 func TestOpacityResolvesTheUnsetValue(t *testing.T) {
-	// Zero is unset and anything at or above 1 is opaque, so an undeclared
-	// opacity leaves a declaration unchanged to the bit (ADR-0224 §SD14).
-	require.Equal(t, float32(1), opacityOr1(0))
+	// NaN is unset and anything at or above 1 is opaque, so an undeclared
+	// opacity leaves a declaration unchanged to the bit (ADR-0224 §SD14); a
+	// declared zero paints nothing (ADR-0232 §SD4).
+	require.Equal(t, float32(1), opacityOr1(nan32))
 	require.Equal(t, float32(1), opacityOr1(1))
 	require.Equal(t, float32(1), opacityOr1(2))
-	require.Equal(t, float32(1), opacityOr1(-0.5), "a negative reads as unset, not as invisible")
+	require.Equal(t, float32(0), opacityOr1(0))
+	require.Equal(t, float32(0), opacityOr1(-0.5), "a negative is clamped to invisible")
 	require.Equal(t, float32(0.25), opacityOr1(0.25))
+	// The row form's zero is its unset value and reaches the resolver as
+	// NaN, so a NodeSpec with no opacity stays opaque.
+	var g graph
+	g.reconcile([]NodeSpec{{Id: 1}, {Id: 2, Opacity: -1}}, []EdgeSpec{{From: 1, To: 2}})
+	require.Equal(t, float32(1), g.opacity[g.slot[1]])
+	require.Equal(t, float32(1), g.opacity[g.slot[2]], "a negative reads as unset in the row form")
+	require.Equal(t, float32(1), g.eOpacity[0])
 }
 
 func TestFadeScalesAlphaAndLeavesTheRestAlone(t *testing.T) {
@@ -62,7 +71,7 @@ func TestOpacityReachesTheNodeFillAndItsBatchKey(t *testing.T) {
 func TestOpacitySurvivesTheSlotSwapOnRemoval(t *testing.T) {
 	v := New(nil, "t", Options{})
 	v.g.reconcile([]NodeSpec{{Id: 1, Opacity: 0.2}, {Id: 2}, {Id: 3, Opacity: 0.7, NoPick: true}}, nil)
-	// Dropping id 2 swap-removes it, moving id 3 into its slot.
+	// Dropping id 2 lays the slots out afresh, moving id 3 up one.
 	v.g.reconcile([]NodeSpec{{Id: 1, Opacity: 0.2}, {Id: 3, Opacity: 0.7, NoPick: true}}, nil)
 	require.Equal(t, float32(0.2), v.g.opacity[v.g.slot[1]])
 	require.Equal(t, float32(0.7), v.g.opacity[v.g.slot[3]])

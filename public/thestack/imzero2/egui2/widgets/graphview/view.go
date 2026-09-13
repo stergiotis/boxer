@@ -390,9 +390,21 @@ func (v *View) ClearSelection() {
 	clear(v.selEdges)
 }
 
-// Positions yields every declared node's id and world position, in the
-// widget's slot order, which is stable while the declaration is. It is the
-// bulk read a caller saves a layout with; SetNodePosition restores it.
+// PositionColumns appends every declared node's id and world position to
+// the given slices, in slot order — the declaration's row order, duplicates
+// folded (ADR-0232 §SD3) — and returns them. It is the bulk read a caller
+// persists a layout with, in the shape the declaration came in; a caller
+// that knows its own order passes nil for dstIds.
+func (v *View) PositionColumns(dstIds []uint64, dstX, dstY []float32) (ids []uint64, x, y []float32) {
+	if dstIds != nil {
+		ids = append(dstIds, v.g.ids...)
+	}
+	return ids, append(dstX, v.g.x...), append(dstY, v.g.y...)
+}
+
+// Positions yields every declared node's id and world position, in slot
+// order, which is the declaration's. PositionColumns is the same read as
+// columns.
 func (v *View) Positions() iter.Seq2[uint64, [2]float32] {
 	return func(yield func(uint64, [2]float32) bool) {
 		for i, id := range v.g.ids {
@@ -514,8 +526,32 @@ func (v *View) RenderFill(nodes []NodeSpec, edges []EdgeSpec, fallbackW, fallbac
 // Render reconciles the declaration, applies the previous frame's input,
 // advances the layout and paints into a w×h canvas at the current layout
 // position. A non-positive size renders nothing; RenderFill takes the
-// pane's size.
+// pane's size. The row form is rewritten into columns and rendered as
+// RenderColumns would: the two forms paint the same picture.
 func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
+	v.g.declN.fromSpecs(nodes)
+	v.g.declE.fromSpecs(edges)
+	v.renderColumns(&v.g.declN, &v.g.declE, w, h)
+}
+
+// RenderColumns is Render over a columnar declaration (ADR-0232 §SD2). A
+// malformed declaration — a column of the wrong length, offsets that do not
+// span their values — is reported and renders nothing this frame, the
+// widget's state untouched. The columns are read during the call and not
+// retained, except that a donut's values and colours are referenced until
+// the next render, as a NodeSpec's are.
+func (v *View) RenderColumns(nodes *NodeColumns, edges *EdgeColumns, w, h float32) (err error) {
+	if err = nodes.Validate(); err != nil {
+		return
+	}
+	if err = edges.Validate(); err != nil {
+		return
+	}
+	v.renderColumns(nodes, edges, w, h)
+	return
+}
+
+func (v *View) renderColumns(nodes *NodeColumns, edges *EdgeColumns, w, h float32) {
 	v.events = v.events[:0]
 	v.camMoved = false
 	// A view that was hosted last frame owns its camera again; HostedInput
@@ -570,7 +606,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 			}
 		}
 
-		topoChanged, created, n := v.reconcileAndPlace(nodes, edges, w, h, fp, hp, rp)
+		topoChanged, created, n := v.reconcileAndPlaceColumns(nodes, edges, w, h, fp, hp, rp)
 
 		// Input, against the previous frame's geometry. A drag that began
 		// this frame fixes its node before the step below can move it.
@@ -597,13 +633,20 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 	}
 }
 
-// reconcileAndPlace applies the declaration and everything that must happen
-// before input is read against it: the reconcile, a pending reset, the
-// placement of new slots, the static layouts and the pins. Shared by Render
-// and by the hosted render of ADR-0228 §SD1, which differ in where the input
-// comes from rather than in what a frame does to the graph.
+// reconcileAndPlace is reconcileAndPlaceColumns over the row form.
 func (v *View) reconcileAndPlace(nodes []NodeSpec, edges []EdgeSpec, w, h float32, fp ForceParams, hp HierParams, rp RadialParams) (topoChanged bool, created []int32, n int) {
-	created, topoChanged = v.g.reconcile(nodes, edges)
+	v.g.declN.fromSpecs(nodes)
+	v.g.declE.fromSpecs(edges)
+	return v.reconcileAndPlaceColumns(&v.g.declN, &v.g.declE, w, h, fp, hp, rp)
+}
+
+// reconcileAndPlaceColumns applies the declaration and everything that must
+// happen before input is read against it: the reconcile, a pending reset,
+// the placement of new slots, the static layouts and the pins. Shared by
+// Render and by the hosted render of ADR-0228 §SD1, which differ in where
+// the input comes from rather than in what a frame does to the graph.
+func (v *View) reconcileAndPlaceColumns(nodes *NodeColumns, edges *EdgeColumns, w, h float32, fp ForceParams, hp HierParams, rp RadialParams) (topoChanged bool, created []int32, n int) {
+	created, topoChanged = v.g.reconcileColumns(nodes, edges)
 	if topoChanged {
 		v.pruneSelection()
 	}
@@ -1146,12 +1189,10 @@ func (v *View) nodeOuterPx(slot int) float32 {
 	return r
 }
 
-// nodeRadius is the node's world radius: its own, else the style's.
+// nodeRadius is the node's world radius: its own, else the style's. A
+// declared 0 is 0 (ADR-0232 §SD4).
 func (v *View) nodeRadius(slot int) float32 {
-	if r := v.g.radius[slot]; r > 0 {
-		return r
-	}
-	return v.style.NodeRadius
+	return v.g.radiusOr(slot, v.style.NodeRadius)
 }
 
 // nodeFill is the node's fill: its own literal colour, else the style's,

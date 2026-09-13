@@ -599,6 +599,20 @@ than what landed:
   fix one axis, and `fixed` is per node. Both are named here so the next
   reader does not expect them.
 
+### 2026-09-13 — a columnar declaration, and slots in declaration order
+
+[ADR-0232](./0232-play-first-class-consumer-columnar-graphview-engine-vocabulary.md)
+§SD2–§SD5 add a second declaration form, `NodeColumns` / `EdgeColumns`
+through `RenderColumns`, with NaN as the unset value so a declared zero is a
+zero — which gives §SD13's `Strength` a "no spring" and §SD14's `Opacity` a
+"paints nothing" in that form, the row form's sentinels unchanged — plus
+`Options.Undirected`, `NodeSpec.LabelAlways` and `PositionColumns`. One
+rule of §SD1 changes for both forms: a slot is the declaration's row rather
+than the first-seen order with a swap-remove on a vanished id, so a reorder
+is a topology change and the retained per-id state follows the ids. Every
+reading of the widget is by id, so nothing a caller observes moves except
+the paint order after a removal.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget
