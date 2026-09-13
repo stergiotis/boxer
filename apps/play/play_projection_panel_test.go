@@ -25,5 +25,5 @@ func TestProjectionPanelRejectsNilSchema(t *testing.T) {
 func TestProjectionPanelDeclaresMainChannel(t *testing.T) {
 	var p PanelI = projectionPanel{}
 	require.Equal(t, PanelID("projection"), p.ID())
-	require.Equal(t, []ChannelSpec{{ID: chMain, Required: true, Label: "points"}}, p.Channels())
+	require.Equal(t, []ChannelSpec{{ID: chMain, Required: true, Label: "rows"}}, p.Channels())
 }

@@ -65,7 +65,6 @@ func (v *View) HostedInput(h HostCanvas) (claim HostClaim) {
 	sm := c.CurrentApplicationState.StateManager
 	canvasFlags := sm.GetResponse(h.Canvas)
 	areaFlags := sm.GetResponse(h.Area)
-	wheel := sm.GetCanvasWheel(h.Canvas)
 	mods := sm.GetModifiers()
 
 	px, py, posOk := float32(0), float32(0), false
@@ -93,7 +92,9 @@ func (v *View) HostedInput(h HostCanvas) (claim HostClaim) {
 		claim.Node, claim.HasNode = v.g.ids[hit], true
 	}
 
-	v.applyInput(h.W, h.H, px, py, posOk, inside, areaFlags, wheel, mods)
+	// The wheel is the host's: a hosted view neither zooms nor reads it
+	// (ADR-0228 §SD4).
+	v.applyInput(h.W, h.H, px, py, posOk, inside, areaFlags, c.CanvasWheelValue{}, mods)
 	return
 }
 

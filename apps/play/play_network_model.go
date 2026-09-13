@@ -2,6 +2,7 @@ package play
 
 import (
 	"fmt"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 	"math"
 	"strings"
 
@@ -141,6 +142,13 @@ func networkMagnitudeBandLo(palette styletokens.SequentialE, bg styletokens.RGBA
 // an edge's. Shared by every channel that spends one, so a fill, an ink and a
 // stroke cannot drift onto different colours, and it carries the same square
 // root the edge and node widths use (ADR-0167 §SD4).
+// noVerticesClaim is the claim of a query without a vertices CTE: every
+// column index -1, so the build infers the vertices from the edge endpoints.
+func noVerticesClaim() networkVerticesClaim {
+	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1,
+		donutCol: -1, donutTotalCol: -1}
+}
+
 func networkMagnitudeRamp(palette styletokens.SequentialE, bandLo float32, w float64, maxW float64) styletokens.RGBA8 {
 	t := float32(math.Sqrt(min(w, maxW) / maxW))
 	return styletokens.Sequential(palette, bandLo+(1-bandLo)*t)
@@ -623,4 +631,61 @@ func netDonutAt(arr arrow.Array, row int, dst []float32) (out []float32, ok bool
 		out = append(out, float32(v))
 	}
 	return out, true
+}
+
+// graphChannelInputs is what the two graph panels' Render methods read off
+// the filled channels: the edges batch and claim, and the vertices batch and
+// claim when the query has a vertices CTE, else noVerticesClaim.
+type graphChannelInputs struct {
+	edges    arrow.RecordBatch
+	ec       networkEdgesClaim
+	vertices arrow.RecordBatch
+	vc       networkVerticesClaim
+}
+
+func graphChannelsToClaims(filled map[ChannelID]ChannelResult) (in graphChannelInputs, ok bool) {
+	edges, has := filled[chEdges]
+	if !has {
+		return
+	}
+	in.ec, ok = edges.Claim.(networkEdgesClaim)
+	if !ok {
+		return
+	}
+	in.edges = edges.Rec
+	in.vc = noVerticesClaim()
+	if v, has := filled[chVertices]; has {
+		if got, isC := v.Claim.(networkVerticesClaim); isC {
+			in.vc = got
+			in.vertices = v.Rec
+		}
+	}
+	return
+}
+
+// graphviewFrozen is the freeze rule the live panels share: a layout that
+// has run its step budget without settling is held, so a graph that never
+// converges stops costing a step per frame. Read after the Render, so the
+// verdict is the frame just drawn and takes effect on the next one.
+func graphviewFrozen(v *graphview.View, steps uint64) bool {
+	m := v.Metrics()
+	return m.Steps >= steps && !v.IsSettled()
+}
+
+// graphviewSettleStatus is the simulation readout the live panels share: the
+// hold, the freeze, the rest, or the motion.
+func graphviewSettleStatus(v *graphview.View, paused, frozen bool) string {
+	m := v.Metrics()
+	switch {
+	case paused:
+		return " · paused"
+	case frozen:
+		return fmt.Sprintf(" · frozen after %d steps, still moving (%.3f) — settle or re-lay-out",
+			m.Steps, m.LastDisplacement)
+	case v.IsSettled():
+		return " · settled"
+	case m.Steps > 0:
+		return fmt.Sprintf(" · settling (%.3f)", m.LastDisplacement)
+	}
+	return ""
 }

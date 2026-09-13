@@ -414,6 +414,22 @@ expansions, hidden nodes, a focus list, and the visible set derived from
 them — lives in the `nav` package beneath this one and declares into the
 widget; nothing in the declaration or event surface changed for it.
 
+### 2026-09-12 — a second force model
+
+[ADR-0230](./0230-neighbour-graph-and-neighbour-embedding-force-model.md)
+§SD2 adds `ForceParams.Model`: the zero value is the Fruchterman–Reingold
+step of §SD2 and §SD6, unchanged to the bit; `ForceModelNeighborEmbedding`
+is the t-SNE kernel on the same Barnes–Hut tree — attraction `Strength·q`
+along edges, repulsion `q²/Z` over all pairs, `q = 1/(1 + (d/k)²)` — with
+`Exaggeration` as its one knob and an annealing schedule
+(`ExaggerationStart`, `ExaggerationSteps`) that `ResetLayout` restarts and
+that holds off the settle report until it ends. §SD13's `Strength` is the
+affinity under it; `Length` is ignored, since the kernel has one scale.
+Nothing in the declaration or event surface changed. One paint option was
+added for its first consumer: `Options.HideEdges` paints and picks no
+edge while the declaration keeps them for the layout, because a
+neighbour graph's edges are the layout's input rather than a reading.
+
 ### 2026-09-12 — the fade-and-ignore pair, and the bounds readers
 
 Every reading in the gap-analysis series named one missing primitive, under
@@ -457,49 +473,6 @@ readings asked for beside it, and it does not need to: with the adjacency
 neighbour set and dims the rest itself. What counts as a neighbour — one
 hop, both directions, through a hidden node or not — is the consumer's
 question, and a widget that answered it would be guessing.
-
-### 2026-09-13 — the soft pin
-
-The force-graph reading (see References) named one primitive as the best
-leverage in the series: d3's `forceX` / `forceY`, a per-node target with a
-strength, which it argued would carry four rows that had each been scored
-medium or large on their own.
-
-**SD16 — A node may be pulled toward a place without being held there.**
-`NodeSpec.Pull` is a target and a strength per axis, applied in the force step
-as `displacement += (target − position) · strength` before the step's `Dt`,
-`Damping` and `MaxStep`. That is not a new mechanism: it is exactly the term
-`ForceParams.CenterGravity` already applied to every node at the canvas
-centre, made per node and per axis, so a strength reads on the same scale as
-that knob's 0.3 rather than on a new one. A zero strength on an axis pulls
-nothing there, which is the point of having two — pulling on X alone holds a
-node near a column and leaves the layout to settle it on Y.
-
-It is a spring, not a pin. A node rests where the pull balances the other
-forces, near the target and not on it; `Pinned` remains what "exactly at"
-means, and since the step skips a fixed node, a pinned or dragged node ignores
-its `Pull` without either feature knowing about the other. With no pull
-declared anywhere the pass is skipped whole, so an existing caller's layout is
-unchanged to the bit — the same posture §SD13 took for edge weights.
-
-**What it does and does not close**, because the reading's claim was wider
-than what landed:
-
-- *Carried.* A soft level or column — the force-DAG posture, where the level
-  axis is held and siblings settle on the other — given a depth the caller
-  supplies, which is `nav.Depth` for a navigated graph and the caller's own
-  data otherwise. And `CenterGravity` is now the special case of a general
-  term rather than a one-off.
-- *Approximated.* A ring target (`forceRadial`) is a different shape — a
-  distance from a centre, not a point — and a caller reaches it by recomputing
-  the nearest point on the ring from `NodePosition` each frame, which is one
-  frame late. `LayoutRadial` remains the exact, static answer.
-- *Not carried.* A constant bias — vis-network's `wind` — is not a spring: its
-  force does not fall off as the node approaches, because it has nowhere to
-  approach. It would be its own term, and a small one. Nor is an exact
-  per-axis pin: holding X exactly while Y stays free needs the force step to
-  fix one axis, and `fixed` is per node. Both are named here so the next
-  reader does not expect them.
 
 ### 2026-09-12 — placement leaves declared pins alone
 
@@ -582,6 +555,49 @@ named. The same record answers the geo-mode composition the §SD12 gap analysis
 and its follow-on both deferred, and it reports that the "injectable camera"
 both reached for is not needed: portolan's transform already factors into this
 widget's camera, measured.
+
+### 2026-09-13 — the soft pin
+
+The force-graph reading (see References) named one primitive as the best
+leverage in the series: d3's `forceX` / `forceY`, a per-node target with a
+strength, which it argued would carry four rows that had each been scored
+medium or large on their own.
+
+**SD16 — A node may be pulled toward a place without being held there.**
+`NodeSpec.Pull` is a target and a strength per axis, applied in the force step
+as `displacement += (target − position) · strength` before the step's `Dt`,
+`Damping` and `MaxStep`. That is not a new mechanism: it is exactly the term
+`ForceParams.CenterGravity` already applied to every node at the canvas
+centre, made per node and per axis, so a strength reads on the same scale as
+that knob's 0.3 rather than on a new one. A zero strength on an axis pulls
+nothing there, which is the point of having two — pulling on X alone holds a
+node near a column and leaves the layout to settle it on Y.
+
+It is a spring, not a pin. A node rests where the pull balances the other
+forces, near the target and not on it; `Pinned` remains what "exactly at"
+means, and since the step skips a fixed node, a pinned or dragged node ignores
+its `Pull` without either feature knowing about the other. With no pull
+declared anywhere the pass is skipped whole, so an existing caller's layout is
+unchanged to the bit — the same posture §SD13 took for edge weights.
+
+**What it does and does not close**, because the reading's claim was wider
+than what landed:
+
+- *Carried.* A soft level or column — the force-DAG posture, where the level
+  axis is held and siblings settle on the other — given a depth the caller
+  supplies, which is `nav.Depth` for a navigated graph and the caller's own
+  data otherwise. And `CenterGravity` is now the special case of a general
+  term rather than a one-off.
+- *Approximated.* A ring target (`forceRadial`) is a different shape — a
+  distance from a centre, not a point — and a caller reaches it by recomputing
+  the nearest point on the ring from `NodePosition` each frame, which is one
+  frame late. `LayoutRadial` remains the exact, static answer.
+- *Not carried.* A constant bias — vis-network's `wind` — is not a spring: its
+  force does not fall off as the node approaches, because it has nowhere to
+  approach. It would be its own term, and a small one. Nor is an exact
+  per-axis pin: holding X exactly while Y stays free needs the force step to
+  fix one axis, and `fixed` is per node. Both are named here so the next
+  reader does not expect them.
 
 ## References
 

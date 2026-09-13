@@ -16,7 +16,7 @@ import (
 // ADR-0227 §Verification: the parts of the Graphview panel that are pure — the
 // id intern and its collision probe (§SD7), the group→aura mapping (§SD4), the
 // magnitude→geometry mapping and the donut column (§SD5), the label budget
-// (§SD10) and the declaration cache's key (§SD8). The gestures and the painted
+// (§SD11) and the declaration cache's key (§SD8). The gestures and the painted
 // result are verified interactively, as ADR-0224 records.
 
 // netDonutVerts builds a vertices record carrying id + a list-of-double

@@ -281,24 +281,9 @@ func (inst graphviewPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, 
 // clicked vertex id); the row-index `selection` stays unpublished — see
 // GraphviewDriver.selectedID.
 func (inst graphviewPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
-	edges, ok := filled[chEdges]
-	if !ok {
-		return
+	if in, ok := graphChannelsToClaims(filled); ok {
+		inst.driver.render(in.edges, in.ec, in.vertices, in.vc, emit)
 	}
-	ec, ok := edges.Claim.(networkEdgesClaim)
-	if !ok {
-		return
-	}
-	vc := networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1,
-		donutCol: -1, donutTotalCol: -1}
-	var vertRec arrow.RecordBatch
-	if v, has := filled[chVertices]; has {
-		if got, isC := v.Claim.(networkVerticesClaim); isC {
-			vc = got
-			vertRec = v.Rec
-		}
-	}
-	inst.driver.render(edges.Rec, ec, vertRec, vc, emit)
 }
 
 // render rebuilds the declaration when its inputs changed, draws it, and
@@ -375,7 +360,7 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 
 	// Freeze on the way out, so the verdict is read from the frame that was
 	// just drawn and takes effect on the next one.
-	if m := inst.view.Metrics(); m.Steps >= graphviewFreezeSteps && !inst.view.IsSettled() {
+	if graphviewFrozen(inst.view, graphviewFreezeSteps) {
 		inst.frozen = true
 	}
 
@@ -564,18 +549,7 @@ func (inst *GraphviewDriver) statusLine() string {
 	if len(inst.groups) > 0 {
 		fmt.Fprintf(&b, " · %d group(s)", len(inst.groups))
 	}
-	m := inst.view.Metrics()
-	switch {
-	case inst.paused:
-		b.WriteString(" · paused")
-	case inst.frozen:
-		fmt.Fprintf(&b, " · frozen after %d steps, still moving (%.3f) — settle or re-lay-out",
-			m.Steps, m.LastDisplacement)
-	case inst.view.IsSettled():
-		b.WriteString(" · settled")
-	case m.Steps > 0:
-		fmt.Fprintf(&b, " · settling (%.3f)", m.LastDisplacement)
-	}
+	b.WriteString(graphviewSettleStatus(inst.view, inst.paused, inst.frozen))
 	b.WriteString(inst.src.statusSuffix())
 	return b.String()
 }
@@ -584,19 +558,5 @@ func (inst *GraphviewDriver) statusLine() string {
 // Network tab reads, demanded on the same lanes (ADR-0227 §SD2), then the
 // PanelI dispatch. Like the Network tab it does not read the active result.
 func (inst *PlayApp) renderGraphviewTab() {
-	inputs, release := inst.graphChannelInputs()
-	defer release()
-
-	reject := dispatchPanel(graphviewPanel{driver: inst.graphviewDriver}, inputs, inst.sigEmit)
-	if reject != "" {
-		if inst.netSource.edgesPending() {
-			for rt := range c.RichTextLabel("building the graph…") {
-				rt.Small().Weak()
-			}
-			return
-		}
-		for rt := range c.RichTextLabel(reject) {
-			rt.Small().Weak()
-		}
-	}
+	inst.renderGraphContractTab(graphviewPanel{driver: inst.graphviewDriver})
 }

@@ -218,3 +218,75 @@ func TestSceneStaticLayoutRerunsAfterALayoutSwitch(t *testing.T) {
 	hx2, hy2, _ := s.v.NodePosition(2)
 	require.Equal(t, [2]float32{hx, hy}, [2]float32{hx2, hy2}, "the hierarchical layout too")
 }
+
+// A neighbour-embedding layout under an exaggeration schedule reports the
+// schedule's value, does not settle before the schedule ends, and is held by
+// PauseOnSettle after it (ADR-0230 §SD2).
+func TestSceneNeighborEmbeddingSettlesAfterTheSchedule(t *testing.T) {
+	s := newScene(t, "ne", Options{
+		Layout: LayoutForceDirected,
+		Force: ForceParams{
+			Model: ForceModelNeighborEmbedding, Exaggeration: 1,
+			ExaggerationStart: 12, ExaggerationSteps: 40,
+			PauseOnSettle: true, Epsilon: 0.5,
+		},
+	}, 500, 500)
+	var nodes []NodeSpec
+	var edges []EdgeSpec
+	for i := uint64(1); i <= 30; i++ {
+		nodes = append(nodes, NodeSpec{Id: i})
+		edges = append(edges, EdgeSpec{From: i, To: i%30 + 1, Strength: 0.5}) // a ring
+	}
+	s.frame(nodes, edges)
+	m := s.v.Metrics()
+	require.InDelta(t, 12, m.Exaggeration, 1e-4, "the first step runs at the schedule's start")
+	require.False(t, m.Settled)
+	s.v.FastForward(20)
+	s.frame(nodes, edges)
+	m = s.v.Metrics()
+	require.Less(t, m.Exaggeration, float32(12))
+	require.Greater(t, m.Exaggeration, float32(1))
+	require.False(t, m.Settled, "not settled while the schedule runs")
+	require.False(t, m.Paused)
+	for range 600 {
+		s.frame(nodes, edges)
+		if s.v.Metrics().Paused {
+			break
+		}
+	}
+	m = s.v.Metrics()
+	require.Equal(t, float32(1), m.Exaggeration, "the schedule ended at Exaggeration")
+	require.GreaterOrEqual(t, m.Steps, uint64(40))
+	require.True(t, m.Paused, "held once settled after the schedule")
+	require.True(t, m.Settled)
+
+	// ResetLayout restarts the schedule.
+	s.v.ResetLayout()
+	s.frame(nodes, edges)
+	require.InDelta(t, 12, s.v.Metrics().Exaggeration, 1e-4)
+}
+
+// HideEdges paints no edge and picks none, while the declaration keeps its
+// edges for the layout and the count.
+func TestSceneHideEdgesPicksNoEdge(t *testing.T) {
+	s := newScene(t, "hide-edges", Options{Layout: LayoutRandom, EdgeClicking: true, HideEdges: true}, 400, 300)
+	nodes := []NodeSpec{{Id: 1}, {Id: 2}}
+	edges := []EdgeSpec{{From: 1, To: 2}}
+	s.frame(nodes, edges)
+	require.Equal(t, uint32(1), s.v.Metrics().EdgeCount)
+	x1, y1, _ := s.v.NodeCanvasPosition(1)
+	x2, y2, _ := s.v.NodeCanvasPosition(2)
+	s.pointerAt((x1+x2)/2, (y1+y2)/2, c.ContainsPointerResponseFlags)
+	evs := s.frame(nodes, edges)
+	for _, ev := range evs {
+		require.False(t, ev.Kind.IsEdge(), "no edge event under HideEdges: %v", ev.Kind)
+	}
+	_, ok := s.v.HoveredEdge()
+	require.False(t, ok)
+	// The same pointer with edges shown hovers the edge.
+	s.v.Opts.HideEdges = false
+	s.pointerAt((x1+x2)/2, (y1+y2)/2, c.ContainsPointerResponseFlags)
+	s.frame(nodes, edges)
+	_, ok = s.v.HoveredEdge()
+	require.True(t, ok)
+}

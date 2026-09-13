@@ -69,14 +69,14 @@ and **the choice is not free**.
 
 Under the identity camera a layout solves in screen space while the geometry it
 solves against rescales with the view: graphview's ideal edge length comes from
-the canvas area and is a constant, where in the demo the Zürich–Bern separation
-runs from 114 px at zoom 7 to 12,699 px at zoom 14. Unlocated nodes are yanked
-about as you zoom. A world fixed at a reference zoom has one equilibrium, so the
+the canvas area and is a constant, where the separation of two located nodes
+doubles with every zoom level (ADR-0228 §SD3a has the demo's figures).
+Unlocated nodes are yanked about as you zoom. A world fixed at a reference zoom has one equilibrium, so the
 layout settles once and a camera change does not even wake it.
 
 **Measure the fixed world from a local origin.** Projected coordinates are large
-absolute numbers — Zürich is 19,713 px from the antimeridian at zoom 7.2 — and
-that costs twice: float32 spends its mantissa on the magnitude (about 2 px of
+absolute numbers — tens of thousands of pixels from the antimeridian at a
+country-level zoom — and that costs twice: float32 spends its mantissa on the magnitude (about 2 px of
 error at zoom 18, none from a local origin at any zoom), and graphview seats a
 node with no placed neighbour in a box at the *world* origin, which under a
 whole-world projection is in the Pacific. `CameraAt(refZoom, origin)` with
@@ -143,15 +143,18 @@ the shared `legend` package, toggling with `HideAura` / `ShowAura`
   `claim.Pointer` to `SetPointerVeto`.
 - **`FitNow` / `FitNodes` / `SetCamera` do nothing.** They are overruled every
   frame in hosted mode by design; move the *host's* view instead —
-  `FitBounds` over the unprojected node box, from `gv.Bounds()` and
-  `v.Unproject`.
+  `FitBounds` over the node box `gv.Bounds()` gives in world units, inverted
+  the way the world was built: `v.UnprojectAt(p.Add(origin), refZoom)` under
+  the fixed world of §3, `v.LayerPointToLatLng` under layer points.
+  `v.Unproject` takes projected pixels at the *current* zoom and is wrong in
+  both.
 
 ## 8 Not covered
 
 Clustering nodes by their distance on the map — Ogma's `addGeoClustering` — is
 a distance predicate over whatever grouping stage `nav` grows, and `nav` has no
 grouping yet ([the gap analysis](../adr-background-work/graph-viewer-gap-analysis-cytoscape-ogma.md)
-§5 items 1–3). Nothing about it is geographic beyond the predicate, so it is
+§5 items 2–3). Nothing about it is geographic beyond the predicate, so it is
 noted here and owned there.
 
 ## References

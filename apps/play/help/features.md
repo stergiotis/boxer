@@ -318,7 +318,7 @@ query body. Toggle it off to hand-edit the `SET` lines directly.
 
 A placeholder *without* a `SET` line is a **signal**: a live value shared by
 name across every query and panel. Panels write them as you interact —
-clicking a row (Table), a point (Projection), an event (Timeline), or a
+clicking a row (Table), a node (Projection), an event (Timeline), or a
 country (World) writes `selection`; the Map's settled viewport writes the
 `vp_*` set; the Timeline publishes the events extent as `tl_min`/`tl_max` —
 and any query referencing the name picks the value up on its next run. The
@@ -510,7 +510,7 @@ plotted. A row with no datetime attribute shows no timeline.
 
 Before a query it reads *Run a query, then select a row to see its detail.* When a
 result lands the first row is selected automatically, so the card populates straight
-away; click another row in **Table** (or a point in **Projection** / an event in
+away; click another row in **Table** (or a node in **Projection** / an event in
 **Timeline**) to retarget it.
 
 ### Files
@@ -537,13 +537,21 @@ path.
 
 ### Projection
 
-A 2-D UMAP scatter of the result's feature columns. Click **Compute projection** to
-run it (needs at least three rows); the button becomes **Cancel** while it works, and
-an fsmview chip shows the projector's lifecycle (extracting → running → done, or
-failed / cancelled). When done you get the scatter plus a **colour by** picker
-(monochrome or any feature, binned with a legend) and the UMAP parameters. Pan and
-zoom with the mouse; click a point to select that row (it drives the Detail tab).
-Very large results are sampled (10000-row cap) so UMAP stays interactive.
+A neighbour embedding of the result's feature columns, drawn as a live graph.
+Click **Compute projection** to run it (needs at least three rows): the rows' features
+become a k-nearest-neighbour graph, HDBSCAN clusters it, and the graph is laid out
+under the neighbour-embedding force model. The button becomes **Cancel** while it
+works, and an fsmview chip shows the projector's lifecycle (extracting → running →
+done, or failed / cancelled). **Neighbours** and **min cluster** apply on the next
+Compute; **exaggeration** applies live and moves the same graph along the
+attraction–repulsion spectrum — about 1 draws t-SNE, 4 UMAP, 30 ForceAtlas2 — after
+an annealing schedule that starts high. **Colour by** fills nodes by any feature,
+binned; **auras by cluster** draws a blob per HDBSCAN cluster with a legend, leaving
+low-probability members and noise out; **edges** shows the neighbour edges the layout
+runs on, off by default because they cover the picture. Drag pans and moves a node, ctrl+scroll zooms,
+**fit** reframes, **re-lay-out** restarts the schedule, **settle** runs it ahead.
+Click a node to select that row (it drives the Detail tab). Very large results are
+sampled (10000-row cap) so the exact k-NN stays interactive.
 
 ### Timeline
 

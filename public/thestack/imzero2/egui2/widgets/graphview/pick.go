@@ -166,7 +166,9 @@ func (v *View) edgeBoxMayContain(i int32, px, py float32) bool {
 	order := float32(v.g.eOrder[i])
 	pad := max(width, pickEdgeTolPx) + v.style.TipSize
 	if f == t {
-		pad += v.nodeRadius(int(f)) * v.cam.Zoom * (v.style.LoopSize + order)
+		// The loop's pick circle is centred 0.75·loopSize above the node
+		// with radius 0.75·loopSize, so its stroke reaches 1.5·loopSize.
+		pad += 1.5 * v.nodeRadius(int(f)) * v.cam.Zoom * (v.style.LoopSize + order)
 	} else {
 		pad += max(v.nodeRadius(int(f)), v.nodeRadius(int(t)))*v.cam.Zoom + v.style.CurveSize*order*v.cam.Zoom
 	}

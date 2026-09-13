@@ -175,3 +175,26 @@ func TestEdgeIndexFindsParallelEdgesByRef(t *testing.T) {
 	require.Equal(t, int32(-1), g.findEdge(EdgeRef{From: 1, To: 2}), "the index follows the edges")
 	require.Equal(t, int32(0), g.findEdge(EdgeRef{From: 2, To: 1}))
 }
+
+// A high-order self-loop reaches 1.5× its loop size above the node; the box
+// rejection must reach as far, or the pick misses a stroke the scan finds.
+// The case the property test found, made deterministic.
+func TestPickEdgeReachesAHighOrderLoop(t *testing.T) {
+	v := New(nil, "t", Options{})
+	nodes := []NodeSpec{{Id: 1, Radius: 1}}
+	edges := make([]EdgeSpec, 24)
+	for i := range edges {
+		edges[i] = EdgeSpec{From: 1, To: 1, Id: uint64(i)}
+	}
+	v.g.reconcile(nodes, edges)
+	v.g.x[0], v.g.y[0] = 1, 1
+	v.g.posVer++
+	v.cam.Zoom, v.cam.PanX, v.cam.PanY = 1, 1, 42
+	sx, sy := v.cam.ToScreen(1, 1)
+	// The top of the last loop: 1.5 · r · (LoopSize + 23) above the node.
+	top := sy - 1.5*v.style.LoopSize*1 - 1.5*23
+	for _, py := range []float32{top, top - 3, top + 3} {
+		require.Equal(t, v.scanEdge(sx, py), v.pickEdge(sx, py), "py %v", py)
+	}
+	require.GreaterOrEqual(t, v.pickEdge(sx, top), int32(0), "the loop is picked at its top")
+}

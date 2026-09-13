@@ -238,3 +238,59 @@ func (q *quadtree) repulsionBH(x, y, dx, dy []float32, k2, eps2, theta2 float32,
 	}
 	return stack
 }
+
+// repulsionNE is the walk of repulsionBH with the Cauchy kernel of
+// ForceModelNeighborEmbedding: a far cell of mass m contributes
+// m·q²·(u_i − c) to the displacement and m·q to the normaliser partial
+// zi[i], q = 1/(1 + d²/k²), the form of van der Maaten's tree-based t-SNE
+// (2014). Same cell order, same determinism.
+func (q *quadtree) repulsionNE(x, y, dx, dy, zi []float32, invK2, theta2 float32, lo, hi int, stack []int32) []int32 {
+	if len(q.internal) == 0 {
+		return stack
+	}
+	for i := lo; i < hi; i++ {
+		xi, yi := x[i], y[i]
+		var ax, ay, zs float32
+		stack = append(stack[:0], 0)
+		for len(stack) > 0 {
+			c := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if q.internal[c] {
+				ddx := xi - q.comX[c]
+				ddy := yi - q.comY[c]
+				d2 := ddx*ddx + ddy*ddy
+				s := 2 * q.half[c]
+				if s*s < theta2*d2 {
+					qq := 1 / (1 + d2*invK2)
+					f := q.mass[c] * qq * qq
+					ax += ddx * f
+					ay += ddy * f
+					zs += q.mass[c] * qq
+					continue
+				}
+				for k := 0; k < 4; k++ {
+					if ch := q.child[4*c+int32(k)]; ch >= 0 {
+						stack = append(stack, ch)
+					}
+				}
+				continue
+			}
+			for b := q.first[c]; b >= 0; b = q.next[b] {
+				if int(b) == i {
+					continue
+				}
+				ddx := xi - x[b]
+				ddy := yi - y[b]
+				qq := 1 / (1 + (ddx*ddx+ddy*ddy)*invK2)
+				f := qq * qq
+				ax += ddx * f
+				ay += ddy * f
+				zs += qq
+			}
+		}
+		dx[i] += ax
+		dy[i] += ay
+		zi[i] += zs
+	}
+	return stack
+}

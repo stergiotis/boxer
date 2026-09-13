@@ -58,7 +58,7 @@ derived from it, so you keep them open while typing:
 
 - **Table** — the result grid. Select a row here to drive the Detail tab.
 - **Detail** — the per-row card for the row selected in Table.
-- **Projection** — a derived/projection view over the result columns.
+- **Projection** — the neighbour graph of the result's numeric columns, laid out as a graph.
 - **Timeline** — plots time-shaped results on a horizontal time axis, when the
   result matches the timeline column contract (see the example-queries page).
 - **Map** — an in-database-rendered geo raster over a pannable map, for tables
@@ -70,7 +70,7 @@ derived from it, so you keep them open while typing:
 - **Network** — the result as a node-link graph, ranked top-down or
   left-right, when it names an `edges` set.
 - **Graphview** — the same graph laid out live: a force simulation you can
-  drag, pin and zoom, with each `group` drawn as a translucent aura.
+  drag and zoom, with each `group` drawn as a translucent aura.
 - **Graph** — the reactive query-graph: the buffer's CTEs as nodes; observe an
   intermediate node to point the result tabs at it. Also hosts the **signals**
   editor (see below).

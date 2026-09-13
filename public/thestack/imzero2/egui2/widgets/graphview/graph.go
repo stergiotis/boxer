@@ -58,6 +58,10 @@ type graph struct {
 	// posVer counts the changes to the slot set, a position or a radius —
 	// everything the pick grid is built from. Every writer bumps it.
 	posVer uint32
+	// forceVer counts the declared changes the force step reads but the
+	// topology hash does not cover — a pull, an edge length or strength —
+	// so a PauseOnSettle hold wakes for them.
+	forceVer uint32
 
 	// scratch
 	pairCount map[[2]int32]uint8
@@ -163,8 +167,10 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 			g.eLabel[j] = e.Label
 			g.eCol[j] = e.Color
 			g.eWidth[j] = e.Width
-			g.eLen[j] = posOr1(e.Length)
-			g.eStr[j] = posOr1(e.Strength)
+			if l, st := posOr1(e.Length), posOr1(e.Strength); l != g.eLen[j] || st != g.eStr[j] {
+				g.eLen[j], g.eStr[j] = l, st
+				g.forceVer++
+			}
 			g.eOpacity[j] = opacityOr1(e.Opacity)
 			g.eNoPick[j] = e.NoPick
 			j++
@@ -184,7 +190,10 @@ func (g *graph) setNode(s int32, sp *NodeSpec) {
 	g.donut[s] = sp.Donut
 	g.opacity[s] = opacityOr1(sp.Opacity)
 	g.noPick[s] = sp.NoPick
-	g.pull[s] = sp.Pull
+	if g.pull[s] != sp.Pull {
+		g.pull[s] = sp.Pull
+		g.forceVer++
+	}
 	if !sp.Pull.IsZero() {
 		g.anyPull = true
 	}

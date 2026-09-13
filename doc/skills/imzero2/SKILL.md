@@ -1362,9 +1362,9 @@ The slippy map is a Go widget on the painter lane (ADR-0204: Leaflet's map core 
 
 ### 16.1a Debugging a painter-lane drawing: let the symptom's shape choose
 
-Four rounds were spent on a flicker in the map's country fills by reasoning
-from the code, and the thing that located it was the shape of the symptom.
-Reach for these before reading the pipeline again.
+A flicker in the map's country fills (ADR-0204 Updates) was located by the
+shape of the symptom, not by reading the code. Reach for these before reading
+the pipeline again.
 
 - **Split the drawing and see which half is wrong.** Fill versus stroke,
   overlay on versus off, one layer at a time. A concave polygon's *fill* and
@@ -1388,7 +1388,7 @@ Reach for these before reading the pipeline again.
   artefact that changes every frame is easily absent from the one you take —
   a clean export is not an all-clear.
 - **Suspect your own last change first.** A "fix" applied on reasoning rather
-  than evidence is the likeliest cause of the next symptom; two here were.
+  than evidence is the likeliest cause of the next symptom.
 
 The underlying trap, worth knowing before it bites: **this lane's concave fill
 ear-clips the ring, and an ear clipper is defined only for a simple polygon**,
@@ -1694,7 +1694,8 @@ What to know before using it:
   frame: a gesture starting on a node is the guest's, everything else the
   host's. The guest emits no canvas, no sense region and no background, never
   moves the camera (`SetCamera` / `FitNow` / `FitNodes` are overruled every
-  frame), and must use `AuraLegendExternal`. Pin nodes to
+  frame), and draws no aura legend — `AuraLegendInside` is overruled, so
+  `AuraLegendExternal` is the way to rows at all. Pin nodes to
   `Projector.ToCanvas` layer points with `Camera{Zoom: 1}` and reproject each
   frame; that is exact at every zoom. **Use it only when every node is
   located.** A declaration may mix located and unlocated nodes — pin the ones
@@ -1747,7 +1748,8 @@ What to know before using it:
   — what `FitNodes` frames, auras and labels excluded.
 - **Resting.** `Opts.Force.PauseOnSettle` stops stepping once the average
   displacement is under `Epsilon` and wakes on a drag, a topology or
-  parameter change, a pin or position set, `FastForward` or `ResetLayout`;
+  parameter change, a changed `Pull` or edge `Length` / `Strength`, a pin or
+  position set, `FastForward` or `ResetLayout`;
   `Metrics.Paused` reports either kind of pause. Prefer it to polling
   `Settled` and flipping `Paused` by hand.
 - **Radial layout** (ADR-0225 §SD6). `Layout: graphview.LayoutRadial` with
@@ -1823,7 +1825,7 @@ What to know before using it:
   screen, the ramps accumulate on a `CellSize` grid, and the iso-line at
   `DrawLimit` is traced and filled. `Overlap` off gives each cell to its
   strongest aura. `Styles[id]` sets fill, line, zIndex and legend label;
-  `Legend: true` paints the shared `widgets/legend` in the canvas corner,
+  `Legend: AuraLegendInside` paints the shared `widgets/legend` in the canvas corner,
   where a click hides the aura (`EventKindAuraToggle`, `Event.Aura`) —
   `HideAura`/`ShowAura`/`AuraHidden`/`AuraIds` are the same state from
   code. Auras are paint only: no layout or picking, and the fit widens by

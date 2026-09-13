@@ -130,3 +130,42 @@ func TestPullEquilibriumIsNearTheTargetNotOnIt(t *testing.T) {
 	require.Positive(t, apart, "because repulsion still holds them apart")
 	require.Less(t, d1, float64(apart), "each is nearer the target than to the other")
 }
+
+// A settled graph under PauseOnSettle wakes when a declared pull, or an
+// edge's length or strength, changes: the topology hash does not cover them.
+func TestAPullOrWeightChangeWakesTheSettleHold(t *testing.T) {
+	s := newScene(t, "pullwake", Options{Layout: LayoutForceDirected, Force: ForceParams{PauseOnSettle: true, Epsilon: 1}}, 500, 500)
+	nodes := []NodeSpec{{Id: 1}, {Id: 2}}
+	edges := []EdgeSpec{{From: 1, To: 2}}
+	rest := func() {
+		for range 400 {
+			s.frame(nodes, edges)
+			if s.v.autoPaused {
+				return
+			}
+		}
+		t.Fatal("the layout did not come to rest")
+	}
+	rest()
+	steps := s.v.fs.steps
+	s.frame(nodes, edges)
+	require.Equal(t, steps, s.v.fs.steps, "held: no step")
+
+	nodes[1].Pull = Pull{X: 400, StrengthX: 0.5}
+	s.frame(nodes, edges)
+	require.Equal(t, steps+1, s.v.fs.steps, "a new pull wakes it")
+	rest()
+	steps = s.v.fs.steps
+	nodes[1].Pull = Pull{}
+	s.frame(nodes, edges)
+	require.Equal(t, steps+1, s.v.fs.steps, "a withdrawn pull wakes it")
+	rest()
+	steps = s.v.fs.steps
+	edges[0].Strength = 3
+	s.frame(nodes, edges)
+	require.Equal(t, steps+1, s.v.fs.steps, "an edge strength change wakes it")
+	rest()
+	steps = s.v.fs.steps
+	s.frame(nodes, edges)
+	require.Equal(t, steps, s.v.fs.steps, "the same declaration again stays held")
+}

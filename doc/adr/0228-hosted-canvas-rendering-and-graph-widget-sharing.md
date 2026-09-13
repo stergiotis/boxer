@@ -163,9 +163,9 @@ but *overruled*: `HostedInput` reinstalls the host's transform every frame and
 a hosted paint clears the fit latch, so they simply have no lasting effect.
 That is one rule rather than a set of guards, and it cannot be got wrong by a
 caller who sets one of them from shared code. A consumer that wants "fit the
-graph" in hosted mode moves the *host's* view — `FitBounds` over the
-unprojected node box, which `Bounds()` and `View.Unproject` give it
-(ADR-0224 §SD14).
+graph" in hosted mode moves the *host's* view — `FitBounds` over the node box
+`Bounds()` gives (ADR-0224 §SD14), inverted the way the world was built
+(§SD3a; corrected 2026-09-13, see Updates).
 
 **SD3a — A hosted declaration may mix located and unlocated nodes, and
 needs nothing new to.** A node the data places is declared `Pinned` at its
@@ -275,8 +275,8 @@ is split:
 
 A shared *painter* core — the node and edge drawing itself — stays deferred,
 with the trigger unchanged: a consumer that needs one drawing in both
-postures. Nothing in the tree asks for that today, and the two vocabularies
-would have to converge first.
+postures. No consumer in the tree needs it, and the two vocabularies would
+have to converge first.
 
 **SD7 — Order of work.** Four phases, each landing on its own and each useful
 without the next:
@@ -352,10 +352,11 @@ pointer handling and is not taken from Leaflet or from egui.
   Rejected: it couples the host to the guest's type, where a boolean veto
   couples it to nothing.
 - **Merging graphview and `layeredgraph/view`** (ADR-0224 O4). Killed, §SD6.
-- **Global projected pixels as world units.** Rejected for the float32
-  measurement in §Context: correct to about zoom 16, visibly wrong at street
-  level. Layer points cost one projection per node per frame and measure
-  exact.
+- **Global projected pixels as world units, raw and un-shifted.** Rejected
+  for the float32 measurement in §Context: correct to about zoom 16, visibly
+  wrong at street level. Layer points cost one projection per node per frame
+  and measure exact; projected pixels at a fixed zoom from a local origin are
+  the conditioned form §SD3a keeps.
 
 ## Consequences
 
@@ -372,7 +373,8 @@ pointer handling and is not taken from Leaflet or from egui.
 ### Negative
 
 - graphview grows a second entry point and a mode in which several of its
-  methods are refused; that is API surface whose only purpose is composition.
+  methods are overruled (§SD3); that is API surface whose only purpose is
+  composition.
 - layeredgraph's picking change is a real change to a working widget, made for
   a composition nobody has asked for yet — which is why it is phase 3 and not
   phase 1.
@@ -444,3 +446,13 @@ postures — and still has none.
   doctrine and the M7 emission-order lesson §SD1 rests on.
 - [graph-viewer-gap-analysis-cytoscape-ogma.md](../adr-background-work/graph-viewer-gap-analysis-cytoscape-ogma.md)
   §3.9 — the geo-mode reading this record answers.
+
+### 2026-09-13 — the fit recipe's inverse
+
+§SD3 told a consumer wanting "fit the graph" to invert `Bounds()` with
+`View.Unproject`. That takes projected pixels at the map's *current* zoom,
+which is neither world the record allows: under the fixed world of §SD3a the
+inverse is `UnprojectAt(p.Add(origin), refZoom)`, under layer points it is
+`LayerPointToLatLng`. The sentence now points at the world's own inverse, and
+`doc/howto/graph-on-a-map.md` carries both forms. The Consequences said the
+hosted mode "refuses" methods where §SD3 says they are overruled; aligned.

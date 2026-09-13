@@ -643,13 +643,12 @@ frame:
   as Antarctica, an edge the full width of the view.
 - **Douglas–Peucker does not preserve simplicity.** Dropping vertices from a
   simple ring can make its edges cross, and which vertices survive depends on
-  the view: measured over the country outlines, simplification took the
-  self-intersecting rings from 5 to 10 at one zoom and from 0 to 2 at another.
+  the view: measured over the country outlines, simplification turned simple
+  rings self-intersecting, in numbers that moved with the zoom.
 - **Projection rounds to whole pixels**, so at low zoom most of a large
-  outline's vertices land on the same one and the clip adds more: 108 of the
-  240 rings reaching the fill at world view carried repeated vertices, falling
-  to 2 by zoom 4 and none above, which is why this only ever showed at world
-  view.
+  outline's vertices land on the same one and the clip adds more: at world
+  view nearly half the rings reaching the fill carried repeated vertices, and
+  none did above zoom 4, which is why this only ever showed at world view.
 
 `Polygon` now clips and simplifies **only a convex ring**, where both are safe
 — Sutherland–Hodgman is exact on one and Douglas–Peucker keeps it convex — and
@@ -670,13 +669,10 @@ width east of everything else. Rings are drawn as the atlas holds them, and a
 test asserts that the asset's one full-turn step is a seam, both ends on the
 meridian at latitude −90, so that nothing corrects it again.
 
-What actually located the gap was the shape of the symptom rather than any
-reading of the code: the outlines were clean and only the fills were wrong,
-and the stroke path clips segment by segment where the fill path clipped the
-polygon. The map's own SVG export helped and misled in turn — it serialises
-the mesh, so earcut's triangles are inspectable, but it captures one frame,
-and an artefact that changes every frame is easily absent from the one you
-take.
+The symptom's shape is what names this path: the outlines were clean and
+only the fills were wrong, and the stroke path clips segment by segment where
+the fill path clipped the polygon. The method is in the imzero2 skill,
+§16.1a.
 
 ## References
 

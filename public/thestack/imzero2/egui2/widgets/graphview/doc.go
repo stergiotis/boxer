@@ -22,6 +22,15 @@
 // screen-space grid, contoured and filled beneath the graph, with an
 // optional legend from the shared widgets/legend package.
 //
+// The force-directed layouts run one of two force models on the same tree
+// and integrator (ADR-0230 §SD2): the Fruchterman–Reingold step the package
+// shipped with, and a neighbour-embedding step with the t-SNE kernel whose
+// one knob, [ForceParams.Exaggeration], moves a declared graph along the
+// attraction–repulsion spectrum from t-SNE through UMAP to ForceAtlas2.
+// Given the neighbour graph of a feature matrix
+// ([github.com/stergiotis/boxer/public/analytics/graph/knn]) it is a
+// dimensionality reduction drawn as an interactive graph.
+//
 // A node or edge may be faded with Opacity and taken out of the pointer's
 // reach with NoPick (ADR-0224 §SD14). The two are what a caller spends a
 // relevance, a search result or a dimmed background on; the widget's own

@@ -249,14 +249,29 @@ type EdgeSpec struct {
 // their meaning. Paused freezes the simulation without discarding it; the
 // zero value runs.
 type ForceParams struct {
-	Dt            float32 // integration step, default 0.05
-	Damping       float32 // velocity damping, default 0.3
-	Epsilon       float32 // settle threshold on the average displacement, default 1e-3
-	MaxStep       float32 // per-node displacement clamp in world units, default 10
-	KScale        float32 // scales the ideal edge length k = sqrt(area/n), default 1
-	CAttract      float32 // attraction strength, default 1
-	CRepulse      float32 // repulsion strength, default 1
-	CenterGravity float32 // pull toward the canvas centre, LayoutForceDirectedCG only, default 0.3
+	// Model selects the force law (ADR-0230 §SD2); the zero value is the
+	// Fruchterman–Reingold step the widget shipped with.
+	Model ForceModelE
+	// Exaggeration multiplies the attraction under ForceModelNeighborEmbedding
+	// — the attraction–repulsion ratio of Böhm, Berens & Kobak (2022): about 1
+	// draws t-SNE, about 4 UMAP, about 30 ForceAtlas2. Default 1. Ignored by
+	// ForceModelFR, whose CAttract and CRepulse play the part.
+	Exaggeration float32
+	// ExaggerationStart and ExaggerationSteps anneal the exaggeration from
+	// Start down to Exaggeration, geometrically, over the first Steps steps
+	// after a reset — early exaggeration read as a schedule. Either at zero
+	// means no schedule. The layout does not report settled while the
+	// schedule runs.
+	ExaggerationStart float32
+	ExaggerationSteps uint32
+	Dt                float32 // integration step, default 0.05
+	Damping           float32 // velocity damping, default 0.3
+	Epsilon           float32 // settle threshold on the average displacement, default 1e-3
+	MaxStep           float32 // per-node displacement clamp in world units, default 10
+	KScale            float32 // scales the ideal edge length k = sqrt(area/n), default 1
+	CAttract          float32 // attraction strength, default 1
+	CRepulse          float32 // repulsion strength, default 1
+	CenterGravity     float32 // pull toward the canvas centre, LayoutForceDirectedCG only, default 0.3
 	// Theta is the Barnes–Hut opening angle used above a few hundred nodes:
 	// smaller is closer to the exact sum and slower. Default 0.9.
 	Theta float32
@@ -266,8 +281,9 @@ type ForceParams struct {
 	Paused bool
 	// PauseOnSettle stops stepping once the average displacement is at or
 	// under Epsilon, and resumes when something moves it: a topology
-	// change, a drag, a pin or position set, FastForward, ResetLayout or a
-	// change of these parameters. Saves the per-frame step on a graph that
+	// change, a changed pull or edge length or strength, a drag, a pin or
+	// position set, FastForward, ResetLayout or a change of these
+	// parameters. Saves the per-frame step on a graph that
 	// has come to rest.
 	PauseOnSettle bool
 }
@@ -287,8 +303,30 @@ func (inst ForceParams) withDefaults() ForceParams {
 	def(&inst.CRepulse, 1)
 	def(&inst.CenterGravity, 0.3)
 	def(&inst.Theta, defaultTheta)
+	def(&inst.Exaggeration, 1)
 	return inst
 }
+
+// ForceModelE selects the force law of the force-directed layouts
+// (ADR-0230 §SD2). Both share the integrator, the Barnes–Hut tree, the pins
+// and the settle logic; only the kernel differs.
+type ForceModelE uint8
+
+const (
+	// ForceModelFR is Fruchterman–Reingold: attraction d²/k along edges,
+	// repulsion k²/d between all pairs, k the ideal edge length (ADR-0224
+	// §SD2, §SD6).
+	ForceModelFR ForceModelE = 0
+	// ForceModelNeighborEmbedding is the t-SNE kernel: attraction
+	// Strength·q along edges, repulsion q²/Z between all pairs, with
+	// q = 1/(1 + (d/k)²) and Z the sum of q over all pairs, the attraction
+	// scaled by Exaggeration. Edge strengths are normalised to sum to one,
+	// so a neighbour graph's membership weights are its affinities. A graph
+	// laid out under it is a neighbour embedding of its topology; with the
+	// neighbour graph of a feature matrix it is UMAP, t-SNE or ForceAtlas2
+	// by the value of Exaggeration.
+	ForceModelNeighborEmbedding ForceModelE = 1
+)
 
 // HierParams tunes the hierarchical layout. RowDist steps between levels
 // and ColDist between siblings, both in world units; zero takes 50. A
@@ -355,6 +393,11 @@ type Options struct {
 	// 1 (or 0, the default) takes the gesture as delivered, 2 doubles its
 	// effect, 0.5 halves it.
 	ZoomSpeed float32
+	// HideEdges paints no edges and picks none: they still drive the force
+	// layout and the adjacency, and Metrics.EdgeCount still counts them. For
+	// a dense neighbour graph, where the edges are the layout's input rather
+	// than a reading (ADR-0230 §SD4).
+	HideEdges bool
 	// LabelsAlways paints every node label; off, only hovered, selected and
 	// dragged nodes carry one.
 	LabelsAlways bool
@@ -474,6 +517,10 @@ type Metrics struct {
 	Settled          bool
 	Paused           bool
 	CameraMoved      bool
+	// Exaggeration is the attraction multiplier the last step used under
+	// ForceModelNeighborEmbedding, following the schedule; 0 under other
+	// models or before the first step.
+	Exaggeration float32
 }
 
 // defaultFitPadding is Options.FitPadding when left zero.
