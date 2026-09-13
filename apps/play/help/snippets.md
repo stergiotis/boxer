@@ -1038,7 +1038,9 @@ slice of the corpus.
 
 The **Graphview** tab reads the same two CTEs (ADR-0227) and needs no edit to
 the query: where Network ranks the graph, Graphview lays it out live — a force
-simulation you can drag nodes around in, pin by dropping, and zoom. Switch **auras by group** on and
+simulation you can drag nodes around in and zoom; a node you drop reports where
+it landed as the `gv_pin_*` signals (see *The graph contract, widened* below).
+Switch **auras by group** on and
 the `group` column above draws each side as a translucent blob — worth it when
 a group is also a cluster, which is what a force layout makes visible and a
 ranked one cannot. A vertex `weight` sizes the node there rather than its label box,
@@ -1078,6 +1080,310 @@ WITH
     FROM refs
   )
 SELECT * FROM edges
+```
+
+## The graph contract, widened (Graphview)
+
+The graph contract has three seams (ADR-0231). **Per-row columns** on `edges`
+and `vertices` say what a node or edge *is*: identity, category, magnitude,
+and — as the columns land — placement and emphasis. **Signals** named `gv_*`
+say what the reader *did* to the picture: hover, selection, a double-click, a
+right-click, an edge click, a dropped node, a background click, the camera,
+the legend. A query reads them as `{gv_focus:String}` like any signal, and
+with **Live** checked it re-runs when they move. **Encoding selectors** spend a
+computed metric on a channel: the *size by* control of the Graphview tab
+offers `weight` and every ordinal metric of the analytics engine (ADR-0229) —
+`degree`, `pagerank`, `betweenness`, `kcore`, `triangles`, `clustering`,
+`clique`, `component_size`, and the seeded `distance`, `distance_in`,
+`distance_out` and `relevance`, which measure from the selected node.
+
+One rule makes every block below safe to run today: a column the current build
+does not claim stays an ordinary result column — the **Table** tab shows it and
+the graph ignores it. Each block names which of its columns draw now and which
+wait for ADR-0231's placement columns (`lat` / `lon`, `pin_x` / `pin_y`,
+`length`, `opacity`, `groups`), so the same query gains channels as they land
+without an edit. The signals are live now; the one-row `graph_opts` and
+`aura_style` CTEs are not yet read, and neither is a `selected` column.
+
+### The decision corpus as a citation network
+
+Every ADR that names another is an arc. `extractAll` pulls the `ADR-NNNN`
+references out of each decision's source, the self-citation is dropped, and the
+count of distinct citers becomes the vertex `weight` — an in-degree spelled in
+SQL, which is what a query can do on its own. Compare it with what it cannot:
+open **size by** and pick `pagerank` or `betweenness`, and the engine computes
+the centrality over the same edges with no SQL at all; pick `distance`, click a
+node, and every node is sized by its hop count from it. `group` is the
+lifecycle status, so **auras by group** blobs the accepted decisions apart from
+the proposed ones, and `tone` marks a superseded decision in the warning family
+so it reads as a warning rather than as category four.
+
+Same no-setup path as the ADR board: point **Endpoint** at *Keelson
+introspection* and Run. The **Network** tab draws it too, capped at its own
+ceiling, which this graph's edge count may pass — its status line says so.
+
+```sql
+WITH
+  cites AS (
+    SELECT c.num AS src,
+           toUInt32(arrayJoin(extractAll(c.`content@text/markdown`, 'ADR-(\\d{4})'))) AS dst
+    FROM keelson('adrcontent') AS c
+  ),
+  refs AS (
+    SELECT src, dst, count() AS n
+    FROM cites
+    WHERE src != dst AND dst IN (SELECT num FROM keelson('adr'))
+    GROUP BY src, dst
+  ),
+  cited AS (
+    SELECT dst AS num, count() AS citers FROM refs GROUP BY dst
+  ),
+  vertices AS (
+    SELECT concat('ADR-', leftPad(toString(a.num), 4, '0'))       AS id,
+           concat(toString(a.num), ' ', substring(a.title, 1, 28)) AS label,
+           a.status                                                AS `group`,
+           if(a.superseded_by != '', 'warning', '')                AS tone,
+           i.citers                                                AS weight
+    FROM keelson('adr') AS a
+    LEFT JOIN cited AS i ON i.num = a.num
+  ),
+  edges AS (
+    SELECT concat('ADR-', leftPad(toString(src), 4, '0')) AS source,
+           concat('ADR-', leftPad(toString(dst), 4, '0')) AS target,
+           n                                              AS weight
+    FROM refs
+  )
+SELECT * FROM edges ORDER BY weight DESC
+```
+
+### Expansion by query (`gv_focus`)
+
+The graph is a window onto a larger one and the database is the universe. The
+`focus` CTE reads `{gv_focus:String}`, the signal a node double-click writes,
+and falls back to a starting decision while nothing has. The picture is that
+decision, everything within one citation of it, and everything within two;
+`hop` becomes the `group`, so the rings blob separately with auras on, and
+`3 - hop` is the `weight`, so the centre is the largest node. Check **Live**,
+double-click a node on the rim, and the query re-runs around it: the nodes
+that survive keep their places and the new rim arrives beside them. Nothing
+in the widget knows what an ADR is; the expansion is the query's.
+
+```sql
+WITH
+  focus AS (
+    SELECT if({gv_focus:String} = '', 'ADR-0097', {gv_focus:String}) AS id
+  ),
+  pairs AS (
+    SELECT DISTINCT
+           concat('ADR-', leftPad(toString(c.num), 4, '0'))                                     AS a,
+           concat('ADR-', arrayJoin(extractAll(c.`content@text/markdown`, 'ADR-(\\d{4})')))      AS b
+    FROM keelson('adrcontent') AS c
+    WHERE a != b
+  ),
+  hop1 AS (
+    SELECT DISTINCT if(a = (SELECT id FROM focus), b, a) AS id
+    FROM pairs
+    WHERE a = (SELECT id FROM focus) OR b = (SELECT id FROM focus)
+  ),
+  hop2 AS (
+    SELECT DISTINCT id
+    FROM (
+      SELECT b AS id FROM pairs WHERE a IN (SELECT id FROM hop1)
+      UNION ALL
+      SELECT a AS id FROM pairs WHERE b IN (SELECT id FROM hop1)
+    )
+    WHERE id != (SELECT id FROM focus) AND id NOT IN (SELECT id FROM hop1)
+  ),
+  ring AS (
+    SELECT id, 0 AS hop FROM focus
+    UNION ALL SELECT id, 1 FROM hop1
+    UNION ALL SELECT id, 2 FROM hop2
+  ),
+  vertices AS (
+    SELECT id,
+           concat('hop ', toString(hop))     AS `group`,
+           if(hop = 0, 'accent', '')         AS tone,
+           3 - hop                           AS weight
+    FROM ring
+  ),
+  edges AS (
+    SELECT a AS source, b AS target
+    FROM pairs
+    WHERE a IN (SELECT id FROM ring) AND b IN (SELECT id FROM ring)
+  )
+SELECT * FROM ring ORDER BY hop, id
+```
+
+### The selection, the hover and the camera, read back
+
+Three of the seam's signals in one query. `{gv_selection:Array(String)}` is
+the selected set — one id today, since a click replaces the selection, but the
+type is a set because the seam is — and `main` turns it into the selected
+decisions' rows with their source, so **Detail** renders the decision you
+clicked. `selection_key` carries the last selected id as a scalar; it is the
+value the Table and Network panes also write, so a query written against it
+follows a click in any of them. `{gv_hover:String}` moves after the pointer
+has rested on a node for a moment, not on every crossing, which is what keeps a
+Live query from re-running once per node under a sweep. The camera publishes
+its world-unit bounds and zoom once a pan or a wheel has settled, and a
+background click publishes where it landed; every row of the result carries
+them, so the result is empty until a node is selected. Read these in `main`,
+as here: a graph CTE that read the camera would rebuild the picture on every
+settle, and a rebuild re-frames the camera.
+
+```sql
+WITH
+  pairs AS (
+    SELECT DISTINCT
+           concat('ADR-', leftPad(toString(c.num), 4, '0'))                                     AS a,
+           concat('ADR-', arrayJoin(extractAll(c.`content@text/markdown`, 'ADR-(\\d{4})')))      AS b
+    FROM keelson('adrcontent') AS c
+    WHERE a != b
+  ),
+  edges AS (
+    SELECT a AS source, b AS target FROM pairs
+  ),
+  picked AS (
+    SELECT arrayJoin({gv_selection:Array(String)}) AS id
+  )
+SELECT p.id                                                   AS id,
+       a.status                                               AS status,
+       a.title                                                AS title,
+       {gv_hover:String}                                      AS hovered,
+       concat(toString(round({gv_zoom:Float64}, 2)), '× at ',
+              toString(round({gv_min_x:Float64})), '..',
+              toString(round({gv_max_x:Float64})))            AS camera,
+       concat(toString(round({gv_bg_x:Float64})), ', ',
+              toString(round({gv_bg_y:Float64})))             AS last_background_click,
+       c.`content@text/markdown`
+FROM picked AS p
+JOIN keelson('adr') AS a ON concat('ADR-', leftPad(toString(a.num), 4, '0')) = p.id
+LEFT JOIN keelson('adrcontent') AS c ON c.num = a.num
+ORDER BY p.id
+```
+
+### A route network with coordinates (geo, table-free)
+
+Nodes with a place. Airports carry `lat` and `lon`, routes carry a weekly
+frequency, and `geoDistance` — metres over the WGS84 ellipsoid, longitude
+first — turns each pair into a great-circle length. What draws today: the
+frequency as edge `weight`, the distance as the edge `label`, the country as
+the aura `group`, and each airport's total frequency as its `weight`. What
+waits for ADR-0231 §SD3: `lat` / `lon` become pins, so the picture is the map
+without a basemap — located airports fixed where they are, the force layout
+free to seat anything that has no coordinates among them — and the `length`
+column, the distance in units of a short hop, tells the force step how long
+each spring wants to be, which is the difference between a network *of*
+Europe and a network drawn *on* it. The values are illustrative.
+
+```sql
+WITH
+  airports AS (
+    SELECT * FROM values('id String, city String, country String, lat Float64, lon Float64',
+      ('ZRH', 'Zürich',    'CH', 47.4647,  8.5492),
+      ('GVA', 'Geneva',    'CH', 46.2381,  6.1090),
+      ('FRA', 'Frankfurt', 'DE', 50.0379,  8.5622),
+      ('MUC', 'Munich',    'DE', 48.3538, 11.7861),
+      ('VIE', 'Vienna',    'AT', 48.1103, 16.5697),
+      ('CDG', 'Paris',     'FR', 49.0097,  2.5479),
+      ('AMS', 'Amsterdam', 'NL', 52.3105,  4.7683),
+      ('LHR', 'London',    'GB', 51.4700, -0.4543),
+      ('MXP', 'Milan',     'IT', 45.6306,  8.7281),
+      ('BCN', 'Barcelona', 'ES', 41.2974,  2.0833))
+  ),
+  routes AS (
+    SELECT * FROM values('source String, target String, flights UInt32',
+      ('ZRH', 'LHR', 42), ('ZRH', 'FRA', 35), ('ZRH', 'VIE', 28), ('ZRH', 'AMS', 21),
+      ('ZRH', 'BCN', 14), ('GVA', 'LHR', 27), ('GVA', 'CDG', 24), ('GVA', 'AMS', 12),
+      ('FRA', 'LHR', 49), ('FRA', 'MUC', 40), ('FRA', 'CDG', 33), ('FRA', 'VIE', 30),
+      ('MUC', 'VIE', 26), ('MUC', 'MXP', 18), ('CDG', 'AMS', 31), ('CDG', 'BCN', 29),
+      ('AMS', 'LHR', 45), ('MXP', 'ZRH', 16), ('MXP', 'BCN', 15), ('VIE', 'AMS', 13))
+  ),
+  traffic AS (
+    SELECT id, sum(flights) AS flights
+    FROM (
+      SELECT source AS id, flights FROM routes
+      UNION ALL
+      SELECT target AS id, flights FROM routes
+    )
+    GROUP BY id
+  ),
+  vertices AS (
+    SELECT a.id       AS id,
+           a.city     AS label,
+           a.country  AS `group`,
+           a.lat      AS lat,
+           a.lon      AS lon,
+           t.flights  AS weight
+    FROM airports AS a
+    LEFT JOIN traffic AS t ON t.id = a.id
+  ),
+  edges AS (
+    SELECT r.source                                                         AS source,
+           r.target                                                         AS target,
+           r.flights                                                        AS weight,
+           round(geoDistance(a.lon, a.lat, b.lon, b.lat) / 1000)            AS km,
+           concat(toString(round(geoDistance(a.lon, a.lat, b.lon, b.lat) / 1000)), ' km') AS label,
+           geoDistance(a.lon, a.lat, b.lon, b.lat) / 500000                 AS length
+    FROM routes AS r
+    JOIN airports AS a ON a.id = r.source
+    JOIN airports AS b ON b.id = r.target
+  )
+SELECT * FROM edges ORDER BY km DESC
+```
+
+### Aircraft within fifteen kilometres of each other (geo, ADS-B)
+
+The same seams over the Map tab's own data. Each aircraft's last position in
+the loaded slice's final ten minutes is a vertex, its type the `group`, its
+altitude the `weight`; two aircraft within fifteen kilometres are an edge, the
+closer the heavier. A pairwise distance over every aircraft is quadratic, so
+the join is bucketed first: `geohashEncode` at precision three is a cell about
+150 km on a side, and only pairs sharing a cell are measured — a pair that
+straddles a cell edge is missed, which is the price of the bucket and is
+stated here rather than hidden. Point play's endpoint at the ClickHouse the
+demo loader filled (`apps/play/demo/adsb`), as for the raster snippets below.
+
+What to look at once it draws: the clusters are the stacks over the airports,
+and **size by** `component_size` or `degree` names them without a query
+change. With **auras by group** on, a type that flies in formation blobs
+together. When `lat` / `lon` land as pins the same result draws in place.
+
+```sql
+WITH
+  latest AS (
+    SELECT icao,
+           argMax(lat, time)      AS lat,
+           argMax(lon, time)      AS lon,
+           argMax(altitude, time) AS altitude,
+           anyLast(t)             AS type
+    FROM planes_mercator
+    WHERE time >= (SELECT max(time) FROM planes_mercator) - INTERVAL 10 MINUTE
+    GROUP BY icao
+  ),
+  cells AS (
+    SELECT icao, lat, lon, altitude, type,
+           geohashEncode(lon, lat, 3) AS cell
+    FROM latest
+  ),
+  vertices AS (
+    SELECT icao                          AS id,
+           if(type = '', icao, type)     AS label,
+           type                          AS `group`,
+           lat, lon,
+           altitude                      AS weight
+    FROM cells
+  ),
+  edges AS (
+    SELECT a.icao                                                  AS source,
+           b.icao                                                  AS target,
+           round(geoDistance(a.lon, a.lat, b.lon, b.lat) / 1000, 1) AS km,
+           1 / (1 + km)                                            AS weight
+    FROM cells AS a
+    JOIN cells AS b ON a.cell = b.cell
+    WHERE a.icao < b.icao AND km < 15
+  )
+SELECT * FROM edges ORDER BY km LIMIT 6000
 ```
 
 ## Flow diagram (Sankey / alluvial)
