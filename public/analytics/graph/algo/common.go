@@ -1,8 +1,6 @@
 package algo
 
 import (
-	"context"
-
 	"github.com/stergiotis/boxer/public/analytics/graph/engine"
 )
 
@@ -34,15 +32,6 @@ type Truncation struct {
 
 func truncatedBy(by LimitE) Truncation {
 	return Truncation{Truncated: true, By: by}
-}
-
-func ctxDone(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
 }
 
 func engineOrDefault(e *engine.Engine) *engine.Engine {

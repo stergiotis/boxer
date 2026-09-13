@@ -281,8 +281,9 @@ type ForceParams struct {
 	Paused bool
 	// PauseOnSettle stops stepping once the average displacement is at or
 	// under Epsilon, and resumes when something moves it: a topology
-	// change, a drag, a pin or position set, FastForward, ResetLayout or a
-	// change of these parameters. Saves the per-frame step on a graph that
+	// change, a changed pull or edge length or strength, a drag, a pin or
+	// position set, FastForward, ResetLayout or a change of these
+	// parameters. Saves the per-frame step on a graph that
 	// has come to rest.
 	PauseOnSettle bool
 }

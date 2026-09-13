@@ -1,5 +1,7 @@
 package engine
 
+import "slices"
+
 // Subset is a vertex subset — Ligra's vertexSubset — held either as a sorted
 // slot list (sparse) or as a membership bitmap (dense). Both forms may be
 // present; conversions are cached until the next mutation.
@@ -28,7 +30,7 @@ func FromSlots(n int, slots []int32) *Subset {
 // SetSparse replaces the membership with slots (copied, sorted, deduplicated).
 func (s *Subset) SetSparse(slots []int32) {
 	s.sparse = append(s.sparse[:0], slots...)
-	sortSlots(s.sparse)
+	slices.Sort(s.sparse)
 	s.sparse = compactSlots(s.sparse)
 	s.count = len(s.sparse)
 	s.hasS, s.hasD = true, false
@@ -52,9 +54,6 @@ func (s *Subset) SetDense(bits []bool) {
 
 // Len is the member count.
 func (s *Subset) Len() int { return s.count }
-
-// N is the slot count of the universe.
-func (s *Subset) N() int { return s.n }
 
 // IsEmpty reports an empty subset.
 func (s *Subset) IsEmpty() bool { return s.count == 0 }
@@ -98,23 +97,6 @@ func (s *Subset) Contains(v int32) bool {
 	}
 	_, ok := searchSlots(s.sparse, v)
 	return ok
-}
-
-func sortSlots(a []int32) {
-	// Insertion sort for short lists, else the standard sort.
-	if len(a) < 32 {
-		for i := 1; i < len(a); i++ {
-			t := a[i]
-			j := i - 1
-			for j >= 0 && a[j] > t {
-				a[j+1] = a[j]
-				j--
-			}
-			a[j+1] = t
-		}
-		return
-	}
-	sortInt32(a)
 }
 
 func compactSlots(a []int32) []int32 {

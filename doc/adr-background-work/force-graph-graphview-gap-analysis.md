@@ -185,7 +185,7 @@ tier, an `Options` field, a spec field or a method each: per-edge dash; an
 arrows-off switch, a per-edge arrow length and a head position along the edge;
 separate pan and zoom toggles, with force-graph's predicate form so a wheel over
 an embedded graph can scroll the page; pixel padding on the fit beside the
-fractional one; an exported bounding box; `WorldToCanvas`; pick-at-point; a
+fractional one; `WorldToCanvas`; pick-at-point; a
 world-centred `SetCamera` and a centre-preserving `SetZoom`; a *budgeted* freeze
 (after N steps or N milliseconds, settled or not) beside the convergence one
 that landed; a cycle report from the hierarchical walk; and a

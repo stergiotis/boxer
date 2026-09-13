@@ -36,8 +36,10 @@ type Options struct {
 	// Default 1.
 	LocalConnectivity float32
 	// SetOpMixRatio blends the fuzzy union (1) and intersection (0) when the
-	// directed graph is symmetrised. Default 1.
-	SetOpMixRatio float32
+	// directed graph is symmetrised. Zero takes the default, 1, unless
+	// HasSetOpMixRatio says the zero is meant: the pure intersection.
+	SetOpMixRatio    float32
+	HasSetOpMixRatio bool
 	// MaxRows is the row budget; above it the input is cut to a uniform
 	// subsample that keeps the first and last row, and the result says so
 	// (ADR-0229 §SD4). Zero means no budget.
@@ -51,7 +53,7 @@ func (o Options) withDefaults() Options {
 	if o.LocalConnectivity <= 0 {
 		o.LocalConnectivity = 1
 	}
-	if o.SetOpMixRatio <= 0 {
+	if o.SetOpMixRatio < 0 || (o.SetOpMixRatio == 0 && !o.HasSetOpMixRatio) {
 		o.SetOpMixRatio = 1
 	}
 	return o
@@ -191,7 +193,7 @@ func Build(ctx context.Context, e *engine.Engine, x []float32, d int, ids []uint
 		buf := scratch[w][:n]
 		h := &heaps[w]
 		for i := lo; i < hi; i++ {
-			if i%1024 == 0 && ctxDone(ctx) {
+			if i%1024 == 0 && engine.ContextDone(ctx) {
 				cancelled.Store(true)
 				return
 			}
@@ -273,7 +275,9 @@ func Build(ctx context.Context, e *engine.Engine, x []float32, d int, ids []uint
 			pdist = append(pdist, di[a])
 		}
 	}
-	g, err := csr.BuildE(src, dst, wgt, csr.Options{})
+	// Every kept row is a vertex, with or without a mutual neighbour: the
+	// intersection can leave a row without arcs.
+	g, err := csr.BuildE(src, dst, wgt, csr.Options{Vertices: kept})
 	if err != nil {
 		err = eh.Errorf("knn: build graph: %w", err)
 		return
@@ -520,13 +524,4 @@ func smoothKNN(dists []float32, target, localConnectivity, meanAll float64) (sig
 		sigma = minKDistScale * meanAll
 	}
 	return
-}
-
-func ctxDone(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
 }

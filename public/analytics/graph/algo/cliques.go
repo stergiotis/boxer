@@ -2,6 +2,8 @@ package algo
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/analytics/graph/engine"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/analytics/graph/csr"
 )
@@ -58,7 +60,7 @@ func MaximalCliques(ctx context.Context, g *csr.Graph, opts CliqueOptions) (r Cl
 	}
 	bk := &bkState{u: u, res: &r, capCliques: capCliques, minSize: max(opts.MinSize, 1)}
 	for i, v := range kc.Order {
-		if i&0xFF == 0 && ctxDone(ctx) {
+		if i&0xFF == 0 && engine.ContextDone(ctx) {
 			r.Truncation = truncatedBy(LimitContext)
 			return
 		}
@@ -147,7 +149,7 @@ func (s *bkState) emit() bool {
 	// Members ascending, so the listing is canonical.
 	start := len(s.res.Members)
 	s.res.Members = append(s.res.Members, s.clique...)
-	sortSlotsAsc(s.res.Members[start:])
+	slices.Sort(s.res.Members[start:])
 	s.res.Start = append(s.res.Start, int32(len(s.res.Members)))
 	s.res.Count++
 	s.res.Largest = max(s.res.Largest, len(s.clique))
@@ -178,16 +180,4 @@ func insertSorted(a []int32, v int32) []int32 {
 		out = append(out, v)
 	}
 	return out
-}
-
-func sortSlotsAsc(a []int32) {
-	for i := 1; i < len(a); i++ {
-		t := a[i]
-		j := i - 1
-		for j >= 0 && a[j] > t {
-			a[j+1] = a[j]
-			j--
-		}
-		a[j+1] = t
-	}
 }

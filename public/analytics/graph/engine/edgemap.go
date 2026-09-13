@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"context"
+
 	"github.com/stergiotis/boxer/public/analytics/graph/csr"
 )
 
@@ -127,9 +129,9 @@ func (e *Engine) push(g *csr.Graph, frontier *Subset, f EdgeFuncs, dir Direction
 	}
 	mark := e.next[:n]
 	clear(mark)
-	out := make([]int32, 0, 64)
+	buf := make([]int32, 0, 64)
 	for _, s := range frontier.Sparse() {
-		for _, d := range e.forward(g, s, dir, out[:0]) {
+		for _, d := range Forward(g, s, dir, &buf) {
 			if f.Cond != nil && !f.Cond(d) {
 				continue
 			}
@@ -141,9 +143,11 @@ func (e *Engine) push(g *csr.Graph, frontier *Subset, f EdgeFuncs, dir Direction
 	next.SetDense(mark)
 }
 
-// forward returns the neighbours of s in the sweep direction, ascending. For
-// DirectionBoth on a directed graph the two rows are merged.
-func (e *Engine) forward(g *csr.Graph, s int32, dir DirectionE, buf []int32) []int32 {
+// Forward returns the neighbours of s in the sweep direction, ascending.
+// For DirectionBoth on a directed graph the two rows are merged into *buf,
+// which grows to fit and is kept for the next call; otherwise the graph's
+// own row is returned and buf is untouched.
+func Forward(g *csr.Graph, s int32, dir DirectionE, buf *[]int32) []int32 {
 	switch dir {
 	case DirectionIn:
 		return g.In(s)
@@ -151,15 +155,16 @@ func (e *Engine) forward(g *csr.Graph, s int32, dir DirectionE, buf []int32) []i
 		if !g.IsDirected() {
 			return g.Out(s)
 		}
-		return mergeRows(g.Out(s), g.In(s), buf)
+		*buf = MergeSorted(g.Out(s), g.In(s), (*buf)[:0])
+		return *buf
 	default:
 		return g.Out(s)
 	}
 }
 
-// backward returns the vertices whose sweep-direction edge reaches d — the
-// sources a pull over d must consult.
-func (e *Engine) backward(g *csr.Graph, d int32, dir DirectionE, buf []int32) []int32 {
+// Backward returns the vertices whose sweep-direction edge reaches d — the
+// sources a pull over d must consult. buf is used as in [Forward].
+func Backward(g *csr.Graph, d int32, dir DirectionE, buf *[]int32) []int32 {
 	switch dir {
 	case DirectionIn:
 		return g.Out(d)
@@ -167,13 +172,16 @@ func (e *Engine) backward(g *csr.Graph, d int32, dir DirectionE, buf []int32) []
 		if !g.IsDirected() {
 			return g.Out(d)
 		}
-		return mergeRows(g.Out(d), g.In(d), buf)
+		*buf = MergeSorted(g.Out(d), g.In(d), (*buf)[:0])
+		return *buf
 	default:
 		return g.In(d)
 	}
 }
 
-func mergeRows(a, b, buf []int32) []int32 {
+// MergeSorted appends the sorted union of two ascending slot lists to buf
+// and returns it.
+func MergeSorted(a, b, buf []int32) []int32 {
 	i, j := 0, 0
 	for i < len(a) && j < len(b) {
 		switch {
@@ -194,6 +202,17 @@ func mergeRows(a, b, buf []int32) []int32 {
 	return buf
 }
 
+// ContextDone reports whether ctx is cancelled or past its deadline, without
+// blocking.
+func ContextDone(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
 // pull runs over every candidate destination, split across workers by
 // contiguous chunks; each destination's sources are consulted in ascending
 // order, and the walk stops when Cond(d) turns false.
@@ -211,7 +230,7 @@ func (e *Engine) pull(g *csr.Graph, frontier *Subset, f EdgeFuncs, dir Direction
 			if f.Cond != nil && !f.Cond(d) {
 				continue
 			}
-			for _, s := range e.backward(g, d, dir, buf[:0]) {
+			for _, s := range Backward(g, d, dir, &buf) {
 				if !inF[s] {
 					continue
 				}
@@ -225,27 +244,4 @@ func (e *Engine) pull(g *csr.Graph, frontier *Subset, f EdgeFuncs, dir Direction
 		}
 	})
 	next.SetDense(mark)
-}
-
-// VertexMap applies f to every member of s, in ascending slot order, split
-// across workers by contiguous chunks of the slot range. f must write only
-// state indexed by its argument.
-func (e *Engine) VertexMap(s *Subset, f func(v int32)) {
-	if s.hasD && s.count*4 > s.n {
-		bits := s.Dense()
-		e.ParallelFor(s.n, func(_, lo, hi int) {
-			for v := lo; v < hi; v++ {
-				if bits[v] {
-					f(int32(v))
-				}
-			}
-		})
-		return
-	}
-	list := s.Sparse()
-	e.ParallelFor(len(list), func(_, lo, hi int) {
-		for _, v := range list[lo:hi] {
-			f(v)
-		}
-	})
 }

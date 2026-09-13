@@ -83,6 +83,27 @@ func TestHostedClaimsTheGestureOnANodeAndNotTheBackground(t *testing.T) {
 	require.False(t, claim.HasNode)
 }
 
+// The pick runs through the host's camera: with a zoom and a pan the node
+// is where the host draws it, not at its world position.
+func TestHostedPickFollowsTheHostsCamera(t *testing.T) {
+	s := newHostScene(t, Options{NodeClicking: true}, 400, 300)
+	s.host.Camera = cam.Camera{Zoom: 2, PanX: 50, PanY: 120}
+	s.frame(hostedNodes(), nil)
+
+	// Node 2 sits at world (100,0): canvas (250,120) under this camera.
+	s.pointerAt(250, 120, c.PrimaryClickedResponseFlags, c.ModifiersValue{})
+	claim, evs := s.frame(hostedNodes(), nil)
+	require.True(t, claim.Pointer)
+	require.Equal(t, uint64(2), claim.Node)
+	require.Contains(t, kinds(evs), EventKindNodeClick)
+
+	// Its world position is where the host's camera would find it, not
+	// where an identity camera would.
+	s.pointerAt(100, 0, c.ResponseFlagsE(0), c.ModifiersValue{})
+	claim, _ = s.frame(hostedNodes(), nil)
+	require.False(t, claim.Pointer, "world coordinates are not canvas coordinates")
+}
+
 func TestHostedClaimHoldsForTheWholeNodeDrag(t *testing.T) {
 	s := newHostScene(t, Options{}, 400, 300)
 	s.frame(hostedNodes(), nil)
@@ -194,13 +215,34 @@ func TestHostedPaintEmitsLessThanRender(t *testing.T) {
 func TestHostedDrawsNoLegendEvenWhenAskedInside(t *testing.T) {
 	// Inside mode would stamp rows under the host's area region, where they
 	// could never be clicked; the rows are still published (ADR-0224 §SD15).
-	s := newHostScene(t, Options{Auras: AuraParams{Enabled: true, Legend: AuraLegendInside}}, 400, 300)
+	// A hosted frame asked for the inside legend emits exactly what one
+	// asked for none emits.
+	messages, zero, reset := scenetest.InstallCounting()
+	t.Cleanup(reset)
+	ids := c.NewWidgetIdStack()
+	host := HostCanvas{
+		Canvas: widgethandle.Make(ids.PrepareStr("h-canvas").Derive()),
+		Area:   widgethandle.Make(ids.PrepareStr("h-area").Derive()),
+		W:      400, H: 300, Camera: cam.Camera{Zoom: 1},
+	}
 	nodes := []NodeSpec{
 		{Id: 1, Pinned: true, Auras: []string{"alpha"}},
 		{Id: 2, Pinned: true, PinX: 100, Auras: []string{"beta"}},
 	}
-	s.frame(nodes, nil)
-	require.Equal(t, []string{"alpha", "beta"}, keys(s.v.AuraLegendItems()))
+	count := func(key string, mode AuraLegendModeE) (int, *View) {
+		v := New(ids, key, Options{Auras: AuraParams{Enabled: true, Legend: mode}})
+		// Two frames: the legend rows exist from the second frame on.
+		for range 2 {
+			zero()
+			v.HostedInput(host)
+			v.HostedPaint(nodes, nil)
+		}
+		return messages(), v
+	}
+	off, _ := count("off", AuraLegendOff)
+	inside, v := count("inside", AuraLegendInside)
+	require.Equal(t, []string{"alpha", "beta"}, keys(v.AuraLegendItems()))
+	require.Equal(t, off, inside, "no legend rows stamped under the host")
 }
 
 // The mixed case: a declaration where some nodes carry coordinates and some

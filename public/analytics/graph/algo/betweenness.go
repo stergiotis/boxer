@@ -105,7 +105,7 @@ func Betweenness(ctx context.Context, e *engine.Engine, g *csr.Graph, opts Betwe
 		}
 	}
 	for wave := 0; wave < chunks; wave += workers {
-		if ctxDone(ctx) {
+		if engine.ContextDone(ctx) {
 			r.Truncation = truncatedBy(LimitContext)
 			break
 		}
@@ -185,7 +185,7 @@ func brandesSource(g *csr.Graph, dir engine.DirectionE, s int32, sc *bcScratch, 
 	for head := 0; head < len(sc.queue); head++ {
 		v := sc.queue[head]
 		sc.order = append(sc.order, v)
-		for _, w := range forwardRow(g, v, dir, sc.buf[:0]) {
+		for _, w := range engine.Forward(g, v, dir, &sc.buf) {
 			if sc.dist[w] == -1 {
 				sc.dist[w] = sc.dist[v] + 1
 				sc.queue = append(sc.queue, w)
@@ -198,7 +198,7 @@ func brandesSource(g *csr.Graph, dir engine.DirectionE, s int32, sc *bcScratch, 
 	for i := len(sc.order) - 1; i >= 0; i-- {
 		w := sc.order[i]
 		coeff := (1 + sc.delta[w]) / sc.sigma[w]
-		for _, v := range backwardRow(g, w, dir, sc.buf[:0]) {
+		for _, v := range engine.Backward(g, w, dir, &sc.buf) {
 			if sc.dist[v] == sc.dist[w]-1 {
 				sc.delta[v] += sc.sigma[v] * coeff
 			}
@@ -206,33 +206,5 @@ func brandesSource(g *csr.Graph, dir engine.DirectionE, s int32, sc *bcScratch, 
 		if w != s {
 			acc[w] += sc.delta[w]
 		}
-	}
-}
-
-func forwardRow(g *csr.Graph, v int32, dir engine.DirectionE, buf []int32) []int32 {
-	switch dir {
-	case engine.DirectionIn:
-		return g.In(v)
-	case engine.DirectionBoth:
-		if !g.IsDirected() {
-			return g.Out(v)
-		}
-		return mergeSorted(g.Out(v), g.In(v), buf)
-	default:
-		return g.Out(v)
-	}
-}
-
-func backwardRow(g *csr.Graph, v int32, dir engine.DirectionE, buf []int32) []int32 {
-	switch dir {
-	case engine.DirectionIn:
-		return g.Out(v)
-	case engine.DirectionBoth:
-		if !g.IsDirected() {
-			return g.Out(v)
-		}
-		return mergeSorted(g.Out(v), g.In(v), buf)
-	default:
-		return g.In(v)
 	}
 }

@@ -63,7 +63,7 @@ func PageRank(ctx context.Context, e *engine.Engine, g *csr.Graph, opts PageRank
 	inOff := g.InOffsets()
 	inTgt := g.InTargets()
 	for r.Iterations < budget {
-		if ctxDone(ctx) {
+		if engine.ContextDone(ctx) {
 			r.Truncation = truncatedBy(LimitContext)
 			break
 		}

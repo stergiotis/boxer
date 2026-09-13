@@ -183,6 +183,9 @@ type Projector struct {
 	frozen       bool
 	paneW, paneH float32
 	lastSelected int64
+	// idSeed keeps two live PlayApps' pane probes apart, as the graph
+	// panels' does.
+	idSeed uint64
 }
 
 // NewProjector binds the Projector to the play app's CardDriver. The Projector
@@ -205,6 +208,7 @@ func NewProjector(ids *c.WidgetIdStack, cards *CardDriver) *Projector {
 		exaggeration: 1,
 		builtColorBy: -2,
 		lastSelected: -1,
+		idSeed:       nextVizSeed(),
 	}
 }
 
@@ -574,7 +578,7 @@ var projectionColorPoint = color.Hex(styletokens.QualitativeCycle(0).AsHex())
 
 // projectionViridisBuckets is the bucket count for the colour-by-feature
 // fill: the IDS Sequential(SequentialViridis, t) accessor sampled at 8
-// stops, the `colormap.Viridis8` cardinality the scatter used.
+// stops, the `colormap.Viridis8` cardinality the former scatter used.
 const projectionViridisBuckets = 8
 
 // projectionIDSalt namespaces the pane probe — distinct from the graph
@@ -744,7 +748,7 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 		rt.Small().Weak()
 	}
 	c.Separator().Horizontal().Send()
-	if availW, availH, ok := c.CapturePaneSize(projectionIDSalt ^ 0x1); ok {
+	if availW, availH, ok := c.CapturePaneSize(projectionIDSalt ^ inst.idSeed ^ 0x1); ok {
 		inst.paneW, inst.paneH = availW, availH
 	}
 	w, h := graphviewPaneFill.box(inst.paneW, inst.paneH)
@@ -776,22 +780,31 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 
 	inst.view.Render(inst.nodes, inst.edges, w, h)
 
-	if m := inst.view.Metrics(); m.Steps >= projectionFreezeSteps && !inst.view.IsSettled() {
+	if graphviewFrozen(inst.view, projectionFreezeSteps) {
 		inst.frozen = true
 	}
 
 	// A node select publishes its row; a deselect of the published row
-	// clears it. Events arrive in order, so replaying them leaves the right
-	// value.
+	// clears it to -1, the Table's own "no row". Events arrive in order, so
+	// replaying them leaves the right value.
 	for _, ev := range inst.view.Events() {
+		s := int(ev.Node) - 1
+		if s < 0 || s >= len(res.rows) {
+			continue
+		}
 		switch ev.Kind {
 		case graphview.EventKindNodeSelect:
-			if s := int(ev.Node) - 1; s >= 0 && s < len(res.rows) {
-				inst.lastSelected = res.rows[s]
-				if emit != nil {
-					emit.Emit(signalSelection, inst.lastSelected)
-				}
+			inst.lastSelected = res.rows[s]
+		case graphview.EventKindNodeDeselect:
+			if res.rows[s] != inst.lastSelected {
+				continue
 			}
+			inst.lastSelected = -1
+		default:
+			continue
+		}
+		if emit != nil {
+			emit.Emit(signalSelection, inst.lastSelected)
 		}
 	}
 }

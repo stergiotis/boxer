@@ -2,6 +2,7 @@ package algo
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/analytics/graph/engine"
 
 	"github.com/stergiotis/boxer/public/analytics/graph/csr"
 )
@@ -48,9 +49,11 @@ func ConnectedComponents(ctx context.Context, g *csr.Graph) (r CCResult) {
 	targets := g.OutTargets()
 	offsets := g.OutOffsets()
 	for v := range n {
-		if v&0xFFFF == 0 && ctxDone(ctx) {
+		if v&0xFFFF == 0 && engine.ContextDone(ctx) {
+			// The unions made so far are a valid, coarser-than-final
+			// labelling; it is reported with the flag.
 			r.Truncation = truncatedBy(LimitContext)
-			return
+			break
 		}
 		for _, d := range targets[offsets[v]:offsets[v+1]] {
 			if d > int32(v) || (g.IsDirected() && d != int32(v)) {
@@ -107,7 +110,7 @@ func StronglyConnectedComponents(ctx context.Context, g *csr.Graph) (r SCCResult
 		if index[root] != unvisited {
 			continue
 		}
-		if root&0x3FF == 0 && ctxDone(ctx) {
+		if root&0x3FF == 0 && engine.ContextDone(ctx) {
 			r.Truncation = truncatedBy(LimitContext)
 			return
 		}

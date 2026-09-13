@@ -318,7 +318,7 @@ query body. Toggle it off to hand-edit the `SET` lines directly.
 
 A placeholder *without* a `SET` line is a **signal**: a live value shared by
 name across every query and panel. Panels write them as you interact —
-clicking a row (Table), a point (Projection), an event (Timeline), or a
+clicking a row (Table), a node (Projection), an event (Timeline), or a
 country (World) writes `selection`; the Map's settled viewport writes the
 `vp_*` set; the Timeline publishes the events extent as `tl_min`/`tl_max` —
 and any query referencing the name picks the value up on its next run. The
@@ -510,7 +510,7 @@ plotted. A row with no datetime attribute shows no timeline.
 
 Before a query it reads *Run a query, then select a row to see its detail.* When a
 result lands the first row is selected automatically, so the card populates straight
-away; click another row in **Table** (or a point in **Projection** / an event in
+away; click another row in **Table** (or a node in **Projection** / an event in
 **Timeline**) to retarget it.
 
 ### Files

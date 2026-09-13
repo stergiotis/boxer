@@ -199,10 +199,10 @@ partial refresh does not throw away a layout the user has been reading.
 
 **SD9 — The caps are this panel's own.** The Network panel caps at 400
 vertices because a Graphviz-WASM layered layout is a tens-to-low-hundreds
-instrument. A force step is not: measured on one laptop (an i7-10510U, not a
-trial), the package's parallel Barnes–Hut repulsion takes about 0.5 ms at 1 000
-nodes and about 3.4 ms at 5 000. The step is one item in a 60 Hz frame that
-also paints the graph, so this panel caps at **2 000 vertices and 6 000
+instrument. A force step is not: the package's parallel Barnes–Hut repulsion
+at a few thousand nodes is a small fraction of a 60 Hz frame (a bench figure,
+not a trial, so not quoted). The step is one item in a frame that also paints
+the graph, so this panel caps at **2 000 vertices and 6 000
 edges** — a frame-budget guard, with legibility giving out well before it —
 and says so in the status line when it bites, as the Network panel does.
 
@@ -256,9 +256,10 @@ concave fill.
   whether a drag-end position is published anywhere.
 - **Per-edge force weight** (a heavy edge pulling shorter). The contract
   already carries `weight` on an edge and this panel spends it on width alone.
-  The force step has no per-edge term; that is a graphview gap recorded in
-  `doc/adr-background-work/netchart-graphview-gap-analysis.md`, and it is
-  where this panel's `weight` will land when it grows one.
+  The force step has the term — `EdgeSpec.Length` / `Strength`, ADR-0224
+  §SD13 — and the panel does not map `weight` onto it, because the mapping
+  wants a scale decision (a weight is a magnitude, a strength a spring) this
+  record does not take.
 - **Node shapes.** The contract's `shape` is a layered-drawing vocabulary
   (box, ellipse, circle); graphview draws circles only, which is a gap in the
   same analysis. The column is ignored here rather than approximated.
@@ -311,7 +312,9 @@ concave fill.
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis.
+Accepted 2026-09-13. The panel, the shared network model and the Projection
+tab's reading of it (ADR-0230 §SD4) are in the tree. Later changes go in
+dated entries under `## Updates`.
 
 ## References
 

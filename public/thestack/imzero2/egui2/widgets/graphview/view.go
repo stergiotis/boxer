@@ -59,6 +59,7 @@ type View struct {
 	fitIdsWait   bool
 	autoPaused   bool // ForceParams.PauseOnSettle hold
 	lastForce    ForceParams
+	lastForceVer uint32 // graph.forceVer the hold last saw
 	camMoved     bool
 
 	events   []Event
@@ -517,6 +518,10 @@ func (v *View) RenderFill(nodes []NodeSpec, edges []EdgeSpec, fallbackW, fallbac
 func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 	v.events = v.events[:0]
 	v.camMoved = false
+	// A view that was hosted last frame owns its camera again; HostedInput
+	// sets the flag before its size check, so a host that skipped its paint
+	// slot leaves it set.
+	v.hosted = false
 	if w <= 0 || h <= 0 {
 		return
 	}
@@ -627,8 +632,9 @@ func (v *View) reconcileAndPlace(nodes []NodeSpec, edges []EdgeSpec, w, h float3
 	// word over the static layouts.
 	if len(created) > 0 {
 		g := &v.g
+		drag := v.dragSlot()
 		for i := range g.ids {
-			if g.pinDecl[i] {
+			if g.pinDecl[i] && int32(i) != drag {
 				g.x[i], g.y[i] = g.pinX[i], g.pinY[i]
 			}
 		}
@@ -673,7 +679,9 @@ func (v *View) reconcileAndPlace(nodes []NodeSpec, edges []EdgeSpec, w, h float3
 // the auras and paints. fit is false for a hosted render, where the camera is
 // the host's and this widget does not move it (ADR-0228 §SD3).
 func (v *View) stepAndPaint(w, h float32, fp ForceParams, ap AuraParams, topoChanged bool, created []int32, n int, fit bool) {
-	v.stepLayout(w, h, fp, topoChanged || len(created) > 0)
+	wake := topoChanged || len(created) > 0 || v.g.forceVer != v.lastForceVer
+	v.lastForceVer = v.g.forceVer
+	v.stepLayout(w, h, fp, wake)
 
 	if fit {
 		// Camera: the one-shot fit latch (ADR-0224 §SD4).
@@ -722,9 +730,9 @@ func (v *View) stepAndPaint(w, h float32, fp ForceParams, ap AuraParams, topoCha
 
 // stepLayout advances a force layout by this frame's steps: the fast-forward
 // backlog plus one, unless paused by ForceParams.Paused or by the
-// PauseOnSettle hold. wake is a topology change; a drag, FastForward, a
-// parameter change or the setters lift the hold too, and it is taken once
-// the step reports settled.
+// PauseOnSettle hold. wake is a topology change or a declared pull, edge
+// length or strength change; a drag, FastForward, a parameter change or the
+// setters lift the hold too, and it is taken once the step reports settled.
 func (v *View) stepLayout(w, h float32, fp ForceParams, wake bool) {
 	if !v.Opts.Layout.IsAnimated() {
 		// A static layout drops the hold too, so a switch back to a force

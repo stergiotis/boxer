@@ -2,6 +2,7 @@ package algo
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/analytics/graph/engine"
 
 	"github.com/stergiotis/boxer/public/analytics/graph/csr"
 )
@@ -61,7 +62,7 @@ func KCore(ctx context.Context, g *csr.Graph) (r KCoreResult) {
 	}
 	bin[0] = 0
 	for i := range n {
-		if i&0xFFFF == 0 && ctxDone(ctx) {
+		if i&0xFFFF == 0 && engine.ContextDone(ctx) {
 			r.Truncation = truncatedBy(LimitContext)
 			return
 		}

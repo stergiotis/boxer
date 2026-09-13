@@ -2,6 +2,7 @@ package csr
 
 import (
 	"encoding/binary"
+	"math"
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -13,6 +14,9 @@ type Options struct {
 	// Directed keeps each arc as declared. When false every edge is stored in
 	// both rows and the in- and out-adjacency coincide.
 	Directed bool
+	// Vertices are ids that get a slot whether or not an arc names them —
+	// the isolated vertices, which the edge list alone cannot declare.
+	Vertices []uint64
 }
 
 // Graph is the compressed-sparse-row container (ADR-0229 §SD1). Slot i holds
@@ -56,9 +60,10 @@ func BuildE(src, dst []uint64, w []float32, opts Options) (g *Graph, err error) 
 	m := len(src)
 
 	// Slots in ascending id order.
-	ids := make([]uint64, 0, 2*m)
+	ids := make([]uint64, 0, 2*m+len(opts.Vertices))
 	ids = append(ids, src...)
 	ids = append(ids, dst...)
+	ids = append(ids, opts.Vertices...)
 	radixSortUint64(ids, nil)
 	ids = slices.Compact(ids)
 	ids = slices.Clip(ids)
@@ -72,6 +77,10 @@ func BuildE(src, dst []uint64, w []float32, opts Options) (g *Graph, err error) 
 	arcs := m
 	if !opts.Directed {
 		arcs = 2 * m
+	}
+	if arcs > math.MaxInt32 {
+		err = eb.Build().Int("arcs", arcs).Errorf("the arc count exceeds the int32 offsets")
+		return
 	}
 	as := make([]int32, 0, arcs)
 	ad := make([]int32, 0, arcs)

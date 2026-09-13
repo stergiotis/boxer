@@ -7,8 +7,8 @@ import (
 // play_projection_panel.go is slice 2 of ADR-0097: the Projection (neighbour embedding)
 // as a PanelI observer of the `main` node. Like the Table, it is both consumer
 // and producer of the `selection` signal (SD8): Accept reads the highlighted row
-// from the signal env; Render draws the scatter and emits signalSelection on a
-// point click. The projector lifecycle (idle / running / done) stays inside
+// from the signal env; Render draws the neighbour graph and emits signalSelection on a
+// node click. The projector lifecycle (idle / running / done) stays inside
 // renderProjection.
 
 type projectionPanel struct {
@@ -17,9 +17,9 @@ type projectionPanel struct {
 
 func (inst projectionPanel) ID() PanelID { return "projection" }
 
-// Channels: one required "main" channel — the points to scatter.
+// Channels: one required "main" channel — the rows to embed.
 func (inst projectionPanel) Channels() []ChannelSpec {
-	return []ChannelSpec{{ID: chMain, Required: true, Label: "points"}}
+	return []ChannelSpec{{ID: chMain, Required: true, Label: "rows"}}
 }
 
 func (inst projectionPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig SignalEnvI) (claim ChannelClaim, reason string) {

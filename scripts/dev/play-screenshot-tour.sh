@@ -424,7 +424,7 @@ SELECT * FROM edges"
 }
 
 scene_08_graphview() {
-	desc="Graphview — the same two CTEs as the Network scene, read live (ADR-0225): a force layout with centre gravity, each group drawn as a translucent aura with a clickable legend"
+	desc="Graphview — the same two CTEs as the Network scene, read live (ADR-0227): a force layout with centre gravity, each group drawn as a translucent aura with a clickable legend"
 	senv=(BOXER_PLAY_FOCUS_GRAPHVIEW=1)
 	# Deliberately the Network scene's query, unedited: what the two tabs show
 	# of one result is the comparison this panel exists for, and a scene that
@@ -1369,13 +1369,17 @@ ORDER BY y, x"
 }
 
 scene_09_projection() {
-	desc="Projection — dimensionality reduction over the numeric columns of a result, with the point cloud tied to the selection signal"
+	desc="Projection — the neighbour graph of a result's numeric columns (ADR-0230), laid out by the neighbour-embedding force model with clusters as auras, its nodes tied to the selection signal"
 	senv=(BOXER_PLAY_FOCUS_PROJECTION=1)
 	sql="SELECT icao, altitude, ground_speed, track_degrees, lat, lon, vertical_rate
 FROM default.planes_mercator_sample100
 WHERE altitude > 0 AND ground_speed > 0
 LIMIT 1500"
 	settle=4000
+	# The tab starts idle; the graph exists only after Compute has run and
+	# the layout has had its noisiest stretch.
+	steps='{"do":"click","name":"Compute projection","role":"button","settleMs":600}
+{"do":"capture","text":"09_projection","settleMs":5000}'
 }
 
 scene_10_schema() {

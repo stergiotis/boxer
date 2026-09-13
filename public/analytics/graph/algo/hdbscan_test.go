@@ -180,6 +180,24 @@ func TestHDBSCANSingleClusterOptionAndErrors(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, r.NumClusters, 1)
 
+	// One blob that never splits into two clusters of MinClusterSize: the
+	// root is the only candidate, so the flag decides between all noise
+	// and one cluster.
+	pts, _ = blobsAndNoise(1, 30, 0, 3)
+	g, core, _ = completeGraph(t, pts, 3)
+	r, err = HDBSCAN(context.Background(), g, core, HDBSCANOptions{MinClusterSize: 20})
+	require.NoError(t, err)
+	require.Equal(t, 0, r.NumClusters, "the root is excluded")
+	for _, lb := range r.Label {
+		require.Equal(t, int32(-1), lb)
+	}
+	r, err = HDBSCAN(context.Background(), g, core, HDBSCANOptions{MinClusterSize: 20, AllowSingleCluster: true})
+	require.NoError(t, err)
+	require.Equal(t, 1, r.NumClusters, "the root is the one cluster")
+	for _, lb := range r.Label {
+		require.Equal(t, int32(0), lb)
+	}
+
 	// An unweighted graph is refused; a mismatched core column is refused.
 	ug, _ := csr.BuildE([]uint64{1, 2}, []uint64{2, 3}, nil, csr.Options{})
 	_, err = HDBSCAN(context.Background(), ug, nil, HDBSCANOptions{})

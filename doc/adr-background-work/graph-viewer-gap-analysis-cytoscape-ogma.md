@@ -159,8 +159,9 @@ picture, which is the distinction Ogma draws with `getNodes("visible" | "raw" |
 **The analytics are out of scope.** PageRank, centralities and clustering
 produce a number per node, and a number per node is something the caller
 declares — a colour, a radius, an aura, a donut slice. This tree computes those
-in the query lane and feeds the result to the widget; putting them in a viewer
-package would put an analysis engine under a renderer. The one clustering
+in `public/analytics/graph` (ADR-0229) or in the query lane and feeds the
+result to the widget; putting them in a viewer package would put an analysis
+engine under a renderer. The one clustering
 result that is not just an attribute is a *partition*, because a partition is
 what grouping consumes; that dependency is noted in §4 and does not change the
 verdict — a partition can arrive as data.
@@ -587,12 +588,13 @@ view. The force step leaves declared pins alone (ADR-0224 §SD10), so the graph
 follows the map. What it does not give is one shared canvas, so hover, picking
 and gestures belong to whichever widget owns the region.
 
-The heavy cut is a **widget gap**: an injectable camera, so graphview's
-world-to-screen transform can be supplied by portolan instead of by
-`View.SetCamera`. That is a contract between two widgets and a change to the
-piece ADR-0224 §SD4 specified, which makes it its own decision rather than a
-line item here. `addGeoClustering` needs nothing of its own — it is the
-grouping stage with a distance predicate.
+The heavy cut landed as ADR-0228: one canvas owned by the map, painted and
+picked by graphview through `HostedInput` / `HostedPaint`, the host's camera
+taken as a value each frame. The injectable-camera framing this page first
+gave it was wrong — the transform is supplied, not called — and ADR-0228
+§Context records why. The `graphonmap` demo and
+`doc/howto/graph-on-a-map.md` show the recipe. `addGeoClustering` needs
+nothing of its own — it is the grouping stage with a distance predicate.
 
 ### 3.10 The node attribute vocabulary
 
@@ -940,10 +942,8 @@ zoom; and the `bothExtremities` policy bit on rectangle selection.
 
 Deferred, with the trigger rather than an estimate:
 
-- **Geo mode** (§3.9). The light cut needs nothing; the heavy cut is an
-  injectable camera shared with portolan, which is a contract between two
-  widgets and wants its own ADR. Trigger: a consumer that needs one canvas to
-  own both the map gestures and the graph picking.
+- ~~**Geo mode** (§3.9).~~ Landed as ADR-0228's hosted canvas; the
+  injectable-camera framing was wrong (§3.9).
 - **A second force solver** (§3.8) — ForceAtlas2, with `linLogMode` and
   outbound attraction. Trigger: a consumer whose graph is social or
   citation-shaped, where hub spreading is the whole picture. It wants per-node
@@ -968,8 +968,9 @@ Deferred, with the trigger rather than an estimate:
 - **Element data and scratch** (§2.7) — the caller owns its data; there are not
   two owners to keep apart with a namespace convention.
 - **Centralities, PageRank and the clusterings** (§2.3) — a number per node is
-  something the caller declares, and this tree computes numbers in the query
-  lane. A clustering that produces a partition feeds §4 as data.
+  something the caller declares, and this tree computes numbers in
+  `public/analytics/graph` (ADR-0229) or the query lane. A clustering that
+  produces a partition feeds §4 as data.
 - **The `grid` layout** (§3.8) — rows and columns by a sort key; no use here
   that the five existing layouts do not cover, beyond arranging isolated nodes,
   which is item 11's job. (`sequential` was dismissed beside it by one of the

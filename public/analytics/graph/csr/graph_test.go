@@ -75,3 +75,12 @@ func TestEmptyGraph(t *testing.T) {
 	require.Equal(t, 0, g.NumVertices())
 	require.EqualValues(t, 0, g.NumEdges())
 }
+
+func TestBuildEDeclaresIsolatedVertices(t *testing.T) {
+	g, err := BuildE([]uint64{1}, []uint64{2}, nil, Options{Vertices: []uint64{7, 2}})
+	require.NoError(t, err)
+	require.Equal(t, 3, g.NumVertices())
+	s, ok := g.Slot(7)
+	require.True(t, ok)
+	require.Empty(t, g.Out(s))
+}

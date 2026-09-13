@@ -54,13 +54,14 @@ func Triangles(ctx context.Context, e *engine.Engine, g *csr.Graph, opts Triangl
 		r.PerVertex = make([]uint32, n)
 		buf := make([]int32, 0, 64)
 		for v := range n {
-			if v&0xFFF == 0 && ctxDone(ctx) {
+			if v&0xFFF == 0 && engine.ContextDone(ctx) {
 				r.Truncation = truncatedBy(LimitContext)
 				return
 			}
 			rv := orow(int32(v))
 			for _, w := range rv {
-				for _, x := range intersectSorted(rv, orow(w), buf[:0]) {
+				buf = intersectSorted(rv, orow(w), buf[:0])
+				for _, x := range buf {
 					r.Total++
 					r.PerVertex[v]++
 					r.PerVertex[w]++
@@ -85,7 +86,7 @@ func Triangles(ctx context.Context, e *engine.Engine, g *csr.Graph, opts Triangl
 	for _, p := range partial {
 		r.Total += p
 	}
-	if ctxDone(ctx) {
+	if engine.ContextDone(ctx) {
 		r.Truncation = truncatedBy(LimitContext)
 	}
 	return

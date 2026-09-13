@@ -2,6 +2,7 @@ package algo
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/analytics/graph/engine"
 	"math"
 	"sort"
 
@@ -15,9 +16,10 @@ type HDBSCANOptions struct {
 	// than as points falling out of one (Campello, Moulavi & Sander 2013).
 	// Default 5.
 	MinClusterSize int
-	// AllowSingleCluster lets the root — every point — be selected when it
-	// is more stable than its children; off, the root is never a cluster,
-	// which is the reference behaviour.
+	// AllowSingleCluster lets the root of a connected graph — every point —
+	// be selected when it is more stable than its children; off, that root
+	// is never a cluster, which is the reference behaviour. A disconnected
+	// graph has a root per component and each competes on its own.
 	AllowSingleCluster bool
 }
 
@@ -63,6 +65,10 @@ func HDBSCAN(ctx context.Context, g *csr.Graph, core []float32, opts HDBSCANOpti
 		err = eb.Build().Errorf("hdbscan: the graph carries no distances")
 		return
 	}
+	if g.IsDirected() {
+		err = eb.Build().Errorf("hdbscan: the graph must be undirected")
+		return
+	}
 	if core != nil && len(core) != n {
 		err = eb.Build().Int("core", len(core)).Int("vertices", n).Errorf("hdbscan: one core distance per slot required")
 		return
@@ -89,7 +95,7 @@ func HDBSCAN(ctx context.Context, g *csr.Graph, core []float32, opts HDBSCANOpti
 			if d == int32(s) {
 				continue
 			}
-			if d < int32(s) && g.HasArc(d, int32(s)) {
+			if d < int32(s) {
 				continue // its mirror is taken from d's row
 			}
 			w := ws[a-offs[s]]
@@ -111,7 +117,7 @@ func HDBSCAN(ctx context.Context, g *csr.Graph, core []float32, opts HDBSCANOpti
 		}
 		return hi1 < hi2
 	})
-	if ctxDone(ctx) {
+	if engine.ContextDone(ctx) {
 		r.Truncation = truncatedBy(LimitContext)
 		return
 	}
@@ -225,9 +231,16 @@ func HDBSCAN(ctx context.Context, g *csr.Graph, core []float32, opts HDBSCANOpti
 		cSize = append(cSize, sz)
 		return id
 	}
+	// The virtual root holds the forest and is never a cluster; the cluster
+	// of a connected graph's single tree is the reference's root, excluded
+	// unless AllowSingleCluster.
+	excluded := int32(root)
 	for _, rt := range roots {
 		if size[rt] >= m {
 			c := newCluster(root, 0, size[rt])
+			if len(roots) == 1 {
+				excluded = c
+			}
 			if int(rt) < n {
 				pointCluster[rt] = c
 				pointLambda[rt] = 0
@@ -271,7 +284,7 @@ func HDBSCAN(ctx context.Context, g *csr.Graph, core []float32, opts HDBSCANOpti
 	// A point that a continuing cluster's leaf reached keeps that cluster
 	// with the split's λ; a point whose subtree never split (a cluster that
 	// is a single leaf) has λ = 0 — it is the cluster's whole mass.
-	if ctxDone(ctx) {
+	if engine.ContextDone(ctx) {
 		r.Truncation = truncatedBy(LimitContext)
 		return
 	}
@@ -294,8 +307,11 @@ func HDBSCAN(ctx context.Context, g *csr.Graph, core []float32, opts HDBSCANOpti
 	selected := make([]bool, nc)
 	childSum := make([]float64, nc)
 	for c := nc - 1; c >= 0; c-- {
-		if c == root && !opts.AllowSingleCluster {
+		if c == root || (int32(c) == excluded && !opts.AllowSingleCluster) {
 			selected[c] = false
+			if p := cParent[c]; p >= 0 {
+				childSum[p] += childSum[c]
+			}
 			continue
 		}
 		if childSum[c] > stab[c] {

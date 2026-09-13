@@ -1,6 +1,9 @@
 package algo
 
-import "github.com/stergiotis/boxer/public/analytics/graph/csr"
+import (
+	"github.com/stergiotis/boxer/public/analytics/graph/csr"
+	"github.com/stergiotis/boxer/public/analytics/graph/engine"
+)
 
 // undirectedView is the symmetric, loop-free adjacency the undirected
 // algorithms (k-core, triangles, cliques) walk. For an undirected graph it
@@ -19,7 +22,8 @@ func newUndirectedView(g *csr.Graph) (u undirectedView) {
 	for v := range n {
 		row := g.Out(int32(v))
 		if g.IsDirected() {
-			row = mergeSorted(g.Out(int32(v)), g.In(int32(v)), buf[:0])
+			buf = engine.MergeSorted(g.Out(int32(v)), g.In(int32(v)), buf[:0])
+			row = buf
 		}
 		for _, d := range row {
 			if d != int32(v) {
@@ -34,27 +38,6 @@ func newUndirectedView(g *csr.Graph) (u undirectedView) {
 func (u undirectedView) nbr(v int32) []int32 { return u.list[u.start[v]:u.start[v+1]] }
 
 func (u undirectedView) degree(v int32) int32 { return u.start[v+1] - u.start[v] }
-
-func mergeSorted(a, b, buf []int32) []int32 {
-	i, j := 0, 0
-	for i < len(a) && j < len(b) {
-		switch {
-		case a[i] < b[j]:
-			buf = append(buf, a[i])
-			i++
-		case a[i] > b[j]:
-			buf = append(buf, b[j])
-			j++
-		default:
-			buf = append(buf, a[i])
-			i++
-			j++
-		}
-	}
-	buf = append(buf, a[i:]...)
-	buf = append(buf, b[j:]...)
-	return buf
-}
 
 // intersectSorted writes a ∩ b into buf and returns it.
 func intersectSorted(a, b, buf []int32) []int32 {

@@ -326,6 +326,17 @@ centralities and the clusterings produce a number per node, and a number per
 node is something the caller declares. This tree computes those in the query
 lane; putting them here would put an analysis engine under a renderer.
 
+### 2026-09-13 — where the analytics went
+
+The boundary above stands — the queries answer what a gesture asks, at
+gesture latency — and the analytics now have a home in the tree:
+`public/analytics/graph` (ADR-0229) computes PageRank, the centralities,
+components and the clusterings in-process, and the play panels declare the
+numbers into the widget as colour, radius or aura. The sentence in §SD6
+saying this tree computes them in the query lane describes the tree before
+that record; the decision it justifies is unchanged. A reader wanting a
+graph number reaches for `analytics/graph`, not for `nav`.
+
 ## References
 
 - [ADR-0224](./0224-graphview-go-graph-widget-painter-lane.md) — the

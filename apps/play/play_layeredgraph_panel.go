@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"math"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -167,23 +166,9 @@ func (inst layeredGraphPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schem
 // clicked vertex id); the row-index `selection` stays unpublished — see
 // NetworkDriver.selectedID for why the two differ.
 func (inst layeredGraphPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmitterI) {
-	edges, ok := filled[chEdges]
-	if !ok {
-		return
+	if in, ok := graphChannelsToClaims(filled); ok {
+		inst.driver.render(in.edges, in.ec, in.vertices, in.vc, emit)
 	}
-	ec, ok := edges.Claim.(networkEdgesClaim)
-	if !ok {
-		return
-	}
-	vc := networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1}
-	var vertRec arrow.RecordBatch
-	if v, has := filled[chVertices]; has {
-		if got, isC := v.Claim.(networkVerticesClaim); isC {
-			vc = got
-			vertRec = v.Rec
-		}
-	}
-	inst.driver.render(edges.Rec, ec, vertRec, vc, emit)
 }
 
 // networkBuild is the shared model resolved FOR THE LAYERED WIDGET: the
@@ -408,8 +393,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 		}
 		// Same square root as the width, so the channels stay in step, then
 		// mapped onto the legible part of the ramp.
-		t := float32(math.Sqrt(min(w, b.maxWeight) / b.maxWeight))
-		return color.Hex(styletokens.Sequential(seqPalette, bandLo+(1-bandLo)*t).AsHex()), true
+		return color.Hex(networkMagnitudeRamp(seqPalette, bandLo, w, b.maxWeight).AsHex()), true
 	}
 	res := view.Render(networkIDSalt+inst.idSeed, inst.layout, view.RenderOpts{
 		Style:      style,
@@ -509,10 +493,17 @@ func networkModelKey(m layeredgraph.GraphModel, rd layeredgraph.RankDir) string 
 // panels it does not read the active result — its inputs are the `edges` and
 // `vertices` CTEs by name, each on its own lane (like the Kanban lanes node).
 func (inst *PlayApp) renderNetworkTab() {
+	inst.renderGraphContractTab(layeredGraphPanel{driver: inst.networkDriver})
+}
+
+// renderGraphContractTab is the body both graph tabs share: the two named
+// CTEs demanded on their lanes, then the PanelI dispatch, with the pending
+// build reported instead of a rejection while the edges are still coming.
+func (inst *PlayApp) renderGraphContractTab(p PanelI) {
 	inputs, release := inst.graphChannelInputs()
 	defer release()
 
-	reject := dispatchPanel(layeredGraphPanel{driver: inst.networkDriver}, inputs, inst.sigEmit)
+	reject := dispatchPanel(p, inputs, inst.sigEmit)
 	if reject != "" {
 		if inst.netSource.edgesPending() {
 			for rt := range c.RichTextLabel("building the graph…") {
@@ -525,9 +516,3 @@ func (inst *PlayApp) renderNetworkTab() {
 		}
 	}
 }
-
-// demandNetworkEdges compiles the query's `edges` CTE — if it has one — and
-// demands it on the driver's edges lane, returning the retained result for the
-// chEdges channel (the caller MUST Release rec). Mirrors demandKanbanLanes: the
-// node comes from the last Run's split, so its signal reads resolve like any
-// other node's and a SET-bound name travels inside the fused SQL.

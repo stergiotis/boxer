@@ -351,3 +351,16 @@ func TestDegrees(t *testing.T) {
 	require.Equal(t, []int32{2, 1, 0}, out)
 	require.Equal(t, []int32{0, 1, 2}, in)
 }
+
+func TestConnectedComponentsTruncatedStillLabels(t *testing.T) {
+	g, err := csr.BuildE([]uint64{1, 2, 4}, []uint64{2, 3, 5}, nil, csr.Options{})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := ConnectedComponents(ctx, g)
+	require.True(t, r.Truncation.Truncated)
+	require.Len(t, r.Comp, g.NumVertices(), "a truncated result still carries a label per slot")
+	for _, c := range r.Comp {
+		require.GreaterOrEqual(t, c, int32(0))
+	}
+}

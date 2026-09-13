@@ -74,7 +74,7 @@ func BFS(ctx context.Context, e *engine.Engine, g *csr.Graph, sources []int32, o
 		if opts.MaxDepth > 0 && r.Levels >= opts.MaxDepth {
 			break
 		}
-		if ctxDone(ctx) {
+		if engine.ContextDone(ctx) {
 			r.Truncation = truncatedBy(LimitContext)
 			return
 		}

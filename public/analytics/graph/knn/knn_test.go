@@ -2,6 +2,7 @@ package knn
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/analytics/graph/csr"
 	"math"
 	"math/rand/v2"
 	"sort"
@@ -265,4 +266,31 @@ func TestKClamps(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 3, r.K)
 	require.Equal(t, 4*3, r.Graph.NumArcs())
+}
+
+func TestSetOpMixRatioZeroIsTheIntersection(t *testing.T) {
+	n, d := 60, 3
+	x := randomMatrix(n, d, 7)
+	union, err := Build(context.Background(), nil, x, d, seqIDs(n), Options{K: 4})
+	require.NoError(t, err)
+	inter, err := Build(context.Background(), nil, x, d, seqIDs(n), Options{K: 4, HasSetOpMixRatio: true})
+	require.NoError(t, err)
+	// The intersection keeps only mutual neighbours: a subset of the union's
+	// arcs, each no stronger than the union's.
+	require.Less(t, inter.Graph.NumArcs(), union.Graph.NumArcs())
+	for s := range int32(n) {
+		for a, dd := range inter.Graph.Out(s) {
+			require.True(t, union.Graph.HasArc(s, dd))
+			require.LessOrEqual(t, inter.Graph.OutWeights(s)[a], union.Graph.OutWeights(s)[unionArc(union.Graph, s, dd)])
+		}
+	}
+}
+
+func unionArc(g *csr.Graph, s, d int32) int {
+	for a, dd := range g.Out(s) {
+		if dd == d {
+			return a
+		}
+	}
+	return -1
 }

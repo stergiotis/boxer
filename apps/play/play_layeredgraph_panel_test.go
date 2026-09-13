@@ -149,10 +149,7 @@ func edgeSet(m layeredgraph.GraphModel) map[[2]string]string {
 
 // noVerts is the zero vertices claim (no vertices CTE): idCol -1 disables the
 // vertex pass, so the build infers vertices from the edge endpoints.
-func noVerts() networkVerticesClaim {
-	return networkVerticesClaim{idCol: -1, labelCol: -1, groupCol: -1, shapeCol: -1, toneCol: -1, weightCol: -1,
-		donutCol: -1, donutTotalCol: -1}
-}
+func noVerts() networkVerticesClaim { return noVerticesClaim() }
 
 func TestNetworkAcceptEdgesContract(t *testing.T) {
 	p := layeredGraphPanel{driver: NewNetworkDriver(nil, nil)}

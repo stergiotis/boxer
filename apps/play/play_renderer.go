@@ -553,7 +553,7 @@ type PlayApp struct {
 	diag *DiagnosticsDriver
 
 	// colorByFeature picks the EntityFeatures field whose value drives the
-	// projection scatter's per-point colour. -1 means monochrome (default);
+	// projection graph's per-node colour. -1 means monochrome (default);
 	// 0..card.NumFeatures-1 indexes card.FeatureNames(). Persisted across
 	// recomputes so the user's chosen colouring sticks.
 	colorByFeature int8
