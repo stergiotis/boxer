@@ -438,13 +438,26 @@ the subject preferred, as §SD1 records.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-09-14 — the client protocol, queues and worker presence are ADR-0234's
+
+[ADR-0234](./0234-watchbill-client-protocol-and-worker-presence.md)
+(accepted 2026-09-14) gives watchbill the verb surface this ADR stopped short of: a
+request/reply protocol on `watchbill.job.<op>` served by the worker, so an
+app holding `ClientCaps` reaches the queue without a store handle. Three
+statements here are refined by it:
+
+- §SD2 said a client that wants to enqueue inserts a job row. It may still,
+  from a process that holds the store; an app does it through the bus, and
+  the owner app on the row is then the envelope's sender.
+- §SD6 recorded the queue column without a reader. A worker now drains the
+  queues its `Config.Queues` names; nil is every queue.
+- §SD8's headless worker minted a run id and wrote no heartbeat, so a host
+  worker on the same cell swept its jobs while they ran. The CLI verb now
+  stands a run like the host's: runtime-start row, heartbeats, liveness.
+
+Nothing on the job table changed.
 
 ## References
 
