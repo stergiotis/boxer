@@ -164,9 +164,11 @@ func (g *graph) reconcileColumns(nc *NodeColumns, ec *EdgeColumns) (created []in
 	// known ids, in either direction distinctly, so a row to an unknown id
 	// changes nothing; a re-added id changes the node set even when the hash
 	// agrees, so created counts as a change too.
+	// One mix per row, the ends told apart by their multipliers; the
+	// rolling sum reads a reorder of the rows as a change.
 	var rawHash uint64
 	for i := range ec.From {
-		rawHash = rawHash*0x100000001b3 + mix64(ec.From[i]^mix64(ec.To[i]^mix64(colU64(ec.Id, i))))
+		rawHash = rawHash*0x100000001b3 + mix64(ec.From[i]*0x9E3779B97F4A7C15^ec.To[i]*0xC2B2AE3D27D4EB4F^colU64(ec.Id, i))
 	}
 	if same && rawHash == g.rawEdgeHash {
 		topoChanged = false
