@@ -85,7 +85,7 @@ func TestBarnesHutCoincidentBodiesTerminate(t *testing.T) {
 	// that joins them.
 	require.Greater(t, dx[0], float32(0))
 	require.InDelta(t, float64(dx[0])*480/490, float64(dy[0]), 1e-3*math.Abs(float64(dx[0])))
-	require.Equal(t, float32(n), q.mass[0], "the root aggregates every body once")
+	require.Equal(t, float32(n), q.cells[0].mass, "the root aggregates every body once")
 }
 
 func TestForceStepUsesTheTreeAboveTheThreshold(t *testing.T) {
