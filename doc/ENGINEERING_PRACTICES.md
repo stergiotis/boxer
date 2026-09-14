@@ -214,6 +214,21 @@ go test -race -json -short -cover -tags "$tags" ./... \
   tolerance chosen for friendly table data usually does not: state the input
   domain the property covers and derive the tolerance from it. The comment on
   `FuzzStreamStats` works one through for floating-point error.
+- Benchmarks are compiled by the default runner and executed only by
+  [scripts/ci/gobench.sh](../scripts/ci/gobench.sh). Its `smoke` mode runs
+  every benchmark once (`-benchtime 1x`, `-short`) and lists the ones that
+  skipped, since a skip passes without running. Its `compare` mode builds each
+  named package's test binary from a base ref (a detached worktree) and from
+  the working tree, runs the two alternately for `BOXER_BENCH_COUNT` rounds,
+  and summarises with
+  [golang.org/x/perf/cmd/benchstat](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat),
+  declared as a `go tool`. Alternating spreads drift in machine load over both
+  sides; it does not remove load, so a comparison taken beside other builds or
+  fuzzing on the same host says little. Both sides build with `GOWORK=off`, so
+  a workspace cannot select different dependencies for one of them. A
+  benchmark figure that is meant to be cited belongs in a trial under
+  [doc/trials/](./trials/README.md), which states its conditions; a `compare`
+  table is evidence for one change on one machine.
 - `example_test.go` files are reserved for the *How-To* quadrant of Diátaxis
   per [§1 of DOCUMENTATION_STANDARD.md](./DOCUMENTATION_STANDARD.md#how-to-guides-problem-oriented);
   current count is low, representing an under-served convention rather than an

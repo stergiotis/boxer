@@ -74,6 +74,7 @@ require (
 	github.com/KimMachineGun/automemlimit v0.7.5 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
+	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
 	github.com/agnivade/levenshtein v1.2.2-0.20250519083737-420867539855 // indirect
 	github.com/antithesishq/antithesis-sdk-go v0.7.0-default-no-op // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -221,6 +222,7 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
 	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
 	golang.org/x/text v0.41.0 // indirect
@@ -241,6 +243,7 @@ tool (
 	github.com/mfridman/tparse
 	github.com/nats-io/nats-server/v2
 	go.uber.org/nilaway/cmd/nilaway
+	golang.org/x/perf/cmd/benchstat
 	golang.org/x/vuln/cmd/govulncheck
 	honnef.co/go/tools/cmd/staticcheck
 )
