@@ -278,9 +278,10 @@ type networkVerticesClaim struct {
 	// layered panel resolves them and ignores them, so one claim serves both.
 	donutCol, donutTotalCol int
 	// Seam A (§SD2): emphasis, state, placement and the two set-valued
-	// columns. The layered panel honours opacity, pick and selected and
-	// ignores the placement ones, since Graphviz owns positions there
-	// (ADR-0231 §SD10).
+	// columns. The layered panel honours opacity and selected and ignores the
+	// placement ones, since Graphviz owns positions there (ADR-0231 §SD10);
+	// pick and the edge id wait on the layered view, which has no per-node
+	// hit exclusion and one edge per ordered pair.
 	opacityCol, pickCol, selectedCol, fitCol           int
 	radiusCol, labelAlwaysCol, centerCol               int
 	pinXCol, pinYCol, latCol, lonCol                   int
@@ -574,10 +575,20 @@ type netModel struct {
 	// panel needs to publish a gesture back in the units the query wrote.
 	Located                bool
 	GeoOriginX, GeoOriginY float64
+	// Lat / Lon are the located rows' declared coordinates, NaN elsewhere:
+	// what a host frames the picture by and what a geographic read-back is
+	// checked against.
+	Lat, Lon []float64
 	// GroupsDeclared reports that the query wrote a `groups` column, which is
 	// the query asking for auras (§SD4) — distinct from `group` alone, where
 	// the reader still judges whether the grouping is spatial.
 	GroupsDeclared bool
+	// Extra carries the vertices columns an encoding selector named that are
+	// not part of the contract (ADR-0231 §SD6: "naming a column spends that
+	// column on the channel"). Read at build for the names the settings row
+	// and the chrome asked for, one row per vertex, NaN and "" for a
+	// synthesised endpoint.
+	Extra map[string]netExtraColumn
 
 	// Edge columns, parallel, in declaration order. From and To are interned
 	// keys; FromID and ToID keep the declared spelling for the renderers that
@@ -690,6 +701,32 @@ func (inst *netModel) groups() (out []string) {
 // the layout key of one panel and the interned ids of the other are stable
 // frame to frame.
 func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim, caps netCaps) (m netModel) {
+	return buildNetModelWith(edgesRec, ec, vertRec, vc, caps, nil)
+}
+
+// netExtraColumn is one selector-named vertices column as the build read it:
+// a numeric column arrives in Num, a string-like one in Str, and a list of
+// strings in the list layout of ListStart / ListValues. Exactly one of the
+// three shapes is set.
+type netExtraColumn struct {
+	Num        []float64 // NaN: not declared for this row
+	Str        []string
+	ListStart  []int32
+	ListValues []string
+}
+
+// IsNumeric reports the column carries quantities.
+func (inst netExtraColumn) IsNumeric() bool { return inst.Num != nil }
+
+// IsList reports the column carries a set per row.
+func (inst netExtraColumn) IsList() bool { return inst.ListStart != nil }
+
+// buildNetModelWith is buildNetModel that also reads the named vertices
+// columns into netModel.Extra, for the encoding selectors that name a column
+// of the query's own (§SD6). A name that is not a column of the vertices
+// result, or names a type no channel can spend, is left out; the selector's
+// own refusal says so.
+func buildNetModelWith(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arrow.RecordBatch, vc networkVerticesClaim, caps netCaps, extra []string) (m netModel) {
 	m.groupIdx = make(map[string]int, 8)
 	m.names = newNetIds(64)
 
@@ -809,6 +846,7 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 	m.DonutTotal = make([]float32, n)
 	m.Opacity = make([]float32, n)
 	m.Radius = make([]float32, n)
+	m.Lat, m.Lon = make([]float64, n), make([]float64, n)
 	m.PinX, m.PinY = make([]float32, n), make([]float32, n)
 	m.StartX, m.StartY = make([]float32, n), make([]float32, n)
 	m.PullX, m.PullY = make([]float32, n), make([]float32, n)
@@ -833,15 +871,81 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 	}
 	var geo []geoPoint
 
+	// The selector-named columns, resolved once against the schema.
+	type extraRef struct {
+		name string
+		col  int
+		kind uint8 // 1 numeric, 2 string, 3 string list
+	}
+	var extras []extraRef
+	if vertRec != nil && len(extra) > 0 {
+		for _, name := range extra {
+			ci := vertRec.Schema().FieldIndices(name)
+			if len(ci) == 0 {
+				continue
+			}
+			f := vertRec.Schema().Field(ci[0])
+			switch {
+			case isNumericType(f.Type):
+				extras = append(extras, extraRef{name: name, col: ci[0], kind: 1})
+			case isStringLikeType(f.Type):
+				extras = append(extras, extraRef{name: name, col: ci[0], kind: 2})
+			case netIsStringList(f.Type):
+				extras = append(extras, extraRef{name: name, col: ci[0], kind: 3})
+			}
+		}
+	}
+	if len(extras) > 0 {
+		m.Extra = make(map[string]netExtraColumn, len(extras))
+		for _, x := range extras {
+			var col netExtraColumn
+			switch x.kind {
+			case 1:
+				col.Num = make([]float64, n)
+			case 2:
+				col.Str = make([]string, n)
+			default:
+				col.ListStart = make([]int32, 1, n+1)
+			}
+			m.Extra[x.name] = col
+		}
+	}
+	writeExtras := func(i int, row int64) {
+		for _, x := range extras {
+			col := m.Extra[x.name]
+			switch x.kind {
+			case 1:
+				col.Num[i] = math.NaN()
+				if row >= 0 {
+					if v, ok := numericCellValue(vertRec.Column(x.col), row); ok {
+						col.Num[i] = v
+					}
+				}
+			case 2:
+				if row >= 0 {
+					col.Str[i] = formatCell(vertRec, x.col, row)
+				}
+			default:
+				if row >= 0 {
+					col.ListValues = netStringsAt(vertRec, x.col, row, col.ListValues)
+				}
+				col.ListStart = append(col.ListStart, int32(len(col.ListValues)))
+			}
+			m.Extra[x.name] = col
+		}
+	}
+
 	for i := range refs {
 		r := &refs[i]
 		m.Key[i], m.ID[i], m.Label[i] = r.key, r.id, r.id
 		// An unset float column is NaN, not zero: "not declared for this row".
 		m.Opacity[i], m.Radius[i] = graphviewUnsetF32, graphviewUnsetF32
+		m.Lat[i], m.Lon[i] = math.NaN(), math.NaN()
 		m.PinX[i], m.PinY[i] = graphviewUnsetF32, graphviewUnsetF32
 		m.StartX[i], m.StartY[i] = graphviewUnsetF32, graphviewUnsetF32
 		m.PullX[i], m.PullY[i] = graphviewUnsetF32, graphviewUnsetF32
 		m.PullSX[i], m.PullSY[i] = graphviewUnsetF32, graphviewUnsetF32
+		writeExtras(i, r.row)
 		if r.row < 0 {
 			// A synthesised endpoint: it is its own label and nothing else.
 			m.DonutStart = append(m.DonutStart, int32(len(m.DonutValues)))
@@ -895,6 +999,7 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 		m.Center[i] = netFlagAt(vertRec, vc.centerCol, row)
 		if lat, okLat := netFloat64At(vertRec, vc.latCol, row); okLat {
 			if lon, okLon := netFloat64At(vertRec, vc.lonCol, row); okLon {
+				m.Lat[i], m.Lon[i] = lat, lon
 				x, y := netProjectWebMercator(lat, lon)
 				geo = append(geo, geoPoint{i: i, x: x, y: y})
 			}
@@ -937,9 +1042,13 @@ func buildNetModel(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec arr
 		m.Located = true
 		m.GeoOriginX, m.GeoOriginY = sx/float64(len(geo)), sy/float64(len(geo))
 		for _, p := range geo {
-			// A `lat`/`lon` pin wins over a `pin_x`/`pin_y` one: a query that
-			// declares both means the geographic placement, which is the more
-			// specific claim.
+			// A `pin_x`/`pin_y` declared on the same row wins (§SD12): the
+			// world-unit pin is the more deliberate statement, and a query
+			// that wants geography does not write one. The row still counts
+			// as located, so the geographic read-back covers it.
+			if !math.IsNaN(float64(m.PinX[p.i])) && !math.IsNaN(float64(m.PinY[p.i])) {
+				continue
+			}
 			m.PinX[p.i] = float32(p.x - m.GeoOriginX)
 			m.PinY[p.i] = float32(p.y - m.GeoOriginY)
 		}

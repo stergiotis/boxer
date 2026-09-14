@@ -1090,8 +1090,43 @@ place, and a `graph_opts` that returns more than one row says so and reads the
 first. Because it is an ordinary CTE its cells may read signals, so
 `{gv_zoom:Float64} < 0.3 AS hide_edges` is a level of detail the query owns.
 
+The block below is the decision graph again with a settings row in front of
+it: sized by PageRank, coloured by component, read undirected, and laid out
+radially around the two most-cited decisions, which the `center` column marks.
+Put the chrome's layout control back on **auto** if you moved it.
+
 ```sql
-WITH graph_opts AS (SELECT 'pagerank' AS size_by, 'component' AS tone_by, true AS undirected)
+WITH
+  graph_opts AS (
+    SELECT 'radial'    AS layout,
+           'pagerank'  AS size_by,
+           'component' AS tone_by,
+           true        AS undirected
+  ),
+  picked AS (
+    SELECT num FROM keelson('adr') WHERE num IN (97, 114, 122, 123, 124, 129)
+  ),
+  refs AS (
+    SELECT num, pkg, count() AS n
+    FROM keelson('coderef')
+    WHERE pkg != '' AND num IN (SELECT num FROM picked)
+    GROUP BY num, pkg
+  ),
+  vertices AS (
+    SELECT concat('ADR-', leftPad(toString(num), 4, '0')) AS id,
+           'decision'                                     AS `group`,
+           num IN (97, 129)                               AS center
+    FROM picked
+    UNION ALL
+    SELECT DISTINCT pkg AS id, 'package' AS `group`, false AS center
+    FROM refs
+  ),
+  edges AS (
+    SELECT concat('ADR-', leftPad(toString(num), 4, '0')) AS source,
+           pkg                                            AS target,
+           n                                              AS weight
+    FROM refs
+  )
 SELECT * FROM edges
 ```
 
@@ -1146,11 +1181,9 @@ offers `weight` and every ordinal metric of the analytics engine (ADR-0229) —
 
 One rule makes every block below safe to run today: a column the current build
 does not claim stays an ordinary result column — the **Table** tab shows it and
-the graph ignores it. Each block names which of its columns draw now and which
-wait for ADR-0231's placement columns (`lat` / `lon`, `pin_x` / `pin_y`,
-`length`, `opacity`, `groups`), so the same query gains channels as they land
-without an edit. The signals are live now; the one-row `graph_opts` and
-`aura_style` CTEs are not yet read, and neither is a `selected` column.
+the graph ignores it. The placement, emphasis and state columns of ADR-0231
+§SD2 and the `graph_opts` row all draw now; the `aura_style` CTE is the one
+seam not yet read, so an aura keeps the widget's own colour cycle.
 
 ### The decision corpus as a citation network
 
@@ -1315,13 +1348,16 @@ Nodes with a place. Airports carry `lat` and `lon`, routes carry a weekly
 frequency, and `geoDistance` — metres over the WGS84 ellipsoid, longitude
 first — turns each pair into a great-circle length. What draws today: the
 frequency as edge `weight`, the distance as the edge `label`, the country as
-the aura `group`, and each airport's total frequency as its `weight`. What
-waits for ADR-0231 §SD3: `lat` / `lon` become pins, so the picture is the map
-without a basemap — located airports fixed where they are, the force layout
-free to seat anything that has no coordinates among them — and the `length`
-column, the distance in units of a short hop, tells the force step how long
-each spring wants to be, which is the difference between a network *of*
-Europe and a network drawn *on* it. The values are illustrative.
+the aura `group`, and each airport's total frequency as its `weight`. `lat` /
+`lon` pin each airport where it is, and a located graph draws **inside a map**:
+tiles where a tile server is configured (`BOXER_MAP_TILE_URL`), country
+outlines from the offline atlas otherwise. The map owns the pan and the wheel,
+the graph owns a drag that starts on a node, and the camera reads back in
+degrees as `gv_min_lat` and its three companions. Anything the data joins to
+but never locates is laid out by the force step among the pinned airports, and
+the `length` column, the distance in units of a short hop, tells the force
+step how long each such spring wants to be. Untick **basemap** to see the same
+arrangement on the plain canvas. The values are illustrative.
 
 ```sql
 WITH
@@ -1391,10 +1427,12 @@ straddles a cell edge is missed, which is the price of the bucket and is
 stated here rather than hidden. Point play's endpoint at the ClickHouse the
 demo loader filled (`apps/play/demo/adsb`), as for the raster snippets below.
 
-What to look at once it draws: the clusters are the stacks over the airports,
-and **size by** `component_size` or `degree` names them without a query
-change. With **auras by group** on, a type that flies in formation blobs
-together. When `lat` / `lon` land as pins the same result draws in place.
+What to look at once it draws: the aircraft sit at their positions over the
+map, the clusters are the stacks over the airports, and **size by**
+`component_size` or `degree` names them without a query change. With **auras
+by group** on, a type that flies in formation blobs together. Pan the map with
+**Live** on and `gv_min_lat` and its companions follow the view, which is the
+seed for a query that loads only what is in frame.
 
 ```sql
 WITH

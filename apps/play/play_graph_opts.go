@@ -316,11 +316,18 @@ func (inst *graphOpts) statusNote() string {
 }
 
 // isBooleanType reports whether a column can carry a flag: Arrow's own
-// boolean, or the small integer a ClickHouse Bool arrives as on the paths that
-// widen it. A numeric column here is read as 0-or-not, which is what a query
-// writing `1 AS undirected` means.
+// boolean, or the 8-bit integer a ClickHouse Bool arrives as on the paths that
+// widen it (ADR-0231 §SD2). Wider numerics are not flags: a `center` or a
+// `pick` column holding a score shares the name and not the meaning, and
+// claiming it would take every zero-scored node out of the pointer's reach.
+// An 8-bit column is read as 0-or-not, which is what `1 AS undirected` means
+// when the server sends it narrow.
 func isBooleanType(dt arrow.DataType) bool {
-	return dt.ID() == arrow.BOOL || isNumericType(dt)
+	switch dt.ID() {
+	case arrow.BOOL, arrow.UINT8, arrow.INT8:
+		return true
+	}
+	return false
 }
 
 // booleanCellValue reads a flag cell. It is its own reader rather than a

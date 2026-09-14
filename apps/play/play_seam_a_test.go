@@ -248,9 +248,11 @@ func TestSeamALatLonBecomesAPin(t *testing.T) {
 	assert.InDelta(t, 8.54, lon, 0.0001)
 }
 
-// A `lat`/`lon` pin wins over a `pin_x`/`pin_y` one: the geographic placement
-// is the more specific claim.
-func TestSeamALatLonWinsOverPinXY(t *testing.T) {
+// A `pin_x`/`pin_y` declared on the same row wins over `lat`/`lon` (ADR-0231
+// §SD12): the world-unit pin is the more deliberate statement, and a query
+// that wants geography does not write one. The row still counts as located,
+// so the geographic read-back covers it.
+func TestSeamAPinXYWinsOverLatLon(t *testing.T) {
 	vr := seamVerts(t, []string{"a"}, map[string]any{
 		networkLatCol:  []*float64{f64p(47)},
 		networkLonCol:  []*float64{f64p(8)},
@@ -258,7 +260,10 @@ func TestSeamALatLonWinsOverPinXY(t *testing.T) {
 		networkPinYCol: []*float64{f64p(999)},
 	})
 	m := seamModel(t, vr)
-	assert.NotEqual(t, float32(999), m.PinX[netRowOf(t, &m, "a")])
+	r := netRowOf(t, &m, "a")
+	assert.Equal(t, float32(999), m.PinX[r])
+	assert.True(t, m.Located)
+	assert.Equal(t, 47.0, m.Lat[r])
 }
 
 // One coordinate without the other is not a location: both are required.

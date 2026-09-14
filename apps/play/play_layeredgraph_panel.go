@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -178,6 +179,11 @@ func (inst layeredGraphPanel) Render(filled map[ChannelID]ChannelResult, emit Si
 type networkBuild struct {
 	model  layeredgraph.GraphModel
 	fillOf map[string]color.Color // vertex id → tone or group fill (absent → default)
+	// opacityOf fades a vertex's fill (ADR-0231 §SD2 `opacity`, honoured here
+	// per §SD10); absent is opaque. declaredSel marks the vertices the query
+	// declared `selected`, drawn like a click's highlight.
+	opacityOf   map[string]float32
+	declaredSel map[string]struct{}
 	// strokeOf colours an edge by its endpoints, the key view.RenderOpts'
 	// EdgeStroke hook is given. Only edges naming a tone appear.
 	strokeOf map[[2]string]color.Color
@@ -212,6 +218,18 @@ func layeredBuild(m *netModel) (b networkBuild) {
 		})
 		if col, ok := m.vertexFill(i); ok {
 			b.fillOf[id] = col
+		}
+		if op := m.Opacity[i]; !math.IsNaN(float64(op)) && op < 1 {
+			if b.opacityOf == nil {
+				b.opacityOf = make(map[string]float32, 8)
+			}
+			b.opacityOf[id] = max(op, 0)
+		}
+		if m.Selected[i] {
+			if b.declaredSel == nil {
+				b.declaredSel = make(map[string]struct{}, 8)
+			}
+			b.declaredSel[id] = struct{}{}
 		}
 	}
 	ne := m.NumEdges()
@@ -325,21 +343,38 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 			nodeWeights[n.ID] = n.Weight
 		}
 	}
+	// A declared `opacity` fades whatever fill the node would otherwise take,
+	// the style default included (§SD10); the selection highlight, being the
+	// widget saying what it is doing, keeps full strength.
+	faded := func(id string, col color.Color) (color.Color, bool) {
+		op, has := b.opacityOf[id]
+		if !has {
+			return col, false
+		}
+		lit := col.Literal()
+		a := uint32(float32(lit&0xff)*op + 0.5)
+		return color.Hex(lit&^0xff | a), true
+	}
 	fill := func(id string) (col color.Color, ok bool) {
-		if inst.selectedID != "" && id == inst.selectedID {
+		_, declared := b.declaredSel[id]
+		if (inst.selectedID != "" && id == inst.selectedID) || declared {
 			return color.Hex(styletokens.AccentDefault.AsHex()), true
 		}
 		if col, ok = b.fillOf[id]; ok {
-			return
+			return faded(id, col)
 		}
 		if b.maxNodeWeight <= 0 {
-			return
+			return faded(id, style.NodeFill)
 		}
 		w, found := nodeWeights[id]
 		if !found || w <= 0 {
-			return
+			return faded(id, style.NodeFill)
 		}
-		return color.Hex(networkMagnitudeRamp(seqPalette, bandLo, w, b.maxNodeWeight).AsHex()), true
+		col = color.Hex(networkMagnitudeRamp(seqPalette, bandLo, w, b.maxNodeWeight).AsHex())
+		if fcol, wasFaded := faded(id, col); wasFaded {
+			return fcol, true
+		}
+		return col, true
 	}
 	// Ink follows the fill, and only for the nodes the ramp actually painted:
 	// everything else keeps the style default, which the tone and group
