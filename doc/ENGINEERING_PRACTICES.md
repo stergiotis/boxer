@@ -200,6 +200,20 @@ go test -race -json -short -cover -tags "$tags" ./... \
   membership: on a developer machine that happens to be running ClickHouse, a
   probe-and-skip test executes for real. Both gates belong on such a test — the
   tag decides which lane it is in, the probe decides whether it can run there.
+- Fuzz targets (`func Fuzz…`) run in two lanes. The default runner replays
+  each target's seed corpus — its `f.Add` seeds plus any
+  `testdata/fuzz/<Target>/` files — as ordinary tests. Generating new inputs
+  is the job of [scripts/ci/gofuzz.sh](../scripts/ci/gofuzz.sh), which runs
+  every target under `go test -fuzz` one at a time (the toolchain accepts one
+  package and one target per invocation) for `BOXER_FUZZ_TIME` each, and
+  narrows by package pattern or `BOXER_FUZZ_MATCH`. A failing input is left in
+  the package's `testdata/fuzz/` and listed at the end, so it becomes a
+  permanent regression seed when committed with the fix.
+
+  A fuzz oracle has to hold on every input the fuzzer can reach, which a
+  tolerance chosen for friendly table data usually does not: state the input
+  domain the property covers and derive the tolerance from it. The comment on
+  `FuzzStreamStats` works one through for floating-point error.
 - `example_test.go` files are reserved for the *How-To* quadrant of Diátaxis
   per [§1 of DOCUMENTATION_STANDARD.md](./DOCUMENTATION_STANDARD.md#how-to-guides-problem-oriented);
   current count is low, representing an under-served convention rather than an
@@ -404,8 +418,9 @@ into this repository's CI:
   ([§4 of DOCUMENTATION_STANDARD.md](./DOCUMENTATION_STANDARD.md#front-matter-and-document-state-markdown-only)).
 - No release automation (`goreleaser` or equivalent) and no container build
   pipeline.
-- No fuzz-test workflow despite parser and codec surface (`go test -fuzz` is
-  supported by the toolchain but not scheduled).
+- No scheduled fuzzing: [scripts/ci/gofuzz.sh](../scripts/ci/gofuzz.sh) is a
+  local lane with no workflow behind it, and much of the parser and codec
+  surface has no fuzz target.
 - Coverage is computed but not uploaded to a coverage service (Codecov,
   Coveralls, etc.).
 
