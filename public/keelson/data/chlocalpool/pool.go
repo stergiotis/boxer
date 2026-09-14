@@ -59,6 +59,9 @@ type Pool struct {
 // New constructs a Pool, validates cfg, probes the binary, and
 // kicks off the refill goroutine to fill MinIdle workers.
 func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
+	if cfg.BinaryPath == "" {
+		cfg.BinaryPath = resolveBinaryPath()
+	}
 	cfg = cfg.withDefaults()
 	if err = cfg.validate(); err != nil {
 		return

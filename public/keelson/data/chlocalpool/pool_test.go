@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -15,15 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// requireBinary skips the test if chlocalpool.DefaultBinaryPath is absent.
+// requireBinary skips the test if no clickhouse binary resolves the way an
+// unset Config.BinaryPath does — the packaged path, the override, PATH.
 // Most pool tests need a real subprocess; non-binary tests stand alone.
 func requireBinary(t *testing.T) (path string) {
 	t.Helper()
-	p, err := exec.LookPath(DefaultBinaryPath)
-	if err != nil {
-		t.Skipf("clickhouse not installed at %s: %v", DefaultBinaryPath, err)
+	path = resolveBinaryPath()
+	if _, err := exec.LookPath(path); err != nil {
+		t.Skipf("clickhouse not installed at %s nor on PATH: %v", DefaultBinaryPath, err)
 	}
-	path = p
 	return
 }
 
@@ -109,12 +110,32 @@ func TestConfig_ValidateRejectsSpawnConcurrencyExceedingMax(t *testing.T) {
 }
 
 func TestNew_RejectsMissingBinary(t *testing.T) {
+	// An explicit path is taken as written: it is not rescued by the PATH
+	// fallback an unset path gets.
 	cfg := Config{
 		BinaryPath: "/nonexistent/clickhouse-xyz",
 	}
 	_, err := New(cfg, zerolog.Nop())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "binary")
+}
+
+// An unset BinaryPath resolves to the packaged path when it exists and to
+// the PATH binary otherwise; with neither, New fails naming the default.
+func TestNew_UnsetBinaryPathResolves(t *testing.T) {
+	resolved := resolveBinaryPath()
+	if _, statErr := os.Stat(DefaultBinaryPath); statErr == nil {
+		assert.Equal(t, DefaultBinaryPath, resolved, "the packaged path wins when present")
+	}
+	if _, err := exec.LookPath(resolved); err != nil {
+		assert.Equal(t, DefaultBinaryPath, resolved, "with nothing to resolve, the error names the default")
+		_, newErr := New(testConfig(t), zerolog.Nop())
+		require.Error(t, newErr)
+		assert.Contains(t, newErr.Error(), DefaultBinaryPath)
+		return
+	}
+	pool := newTestPool(t, testConfig(t))
+	assert.Equal(t, resolved, pool.cfg.BinaryPath)
 }
 
 func TestPool_RoundTrip_SelectOne(t *testing.T) {

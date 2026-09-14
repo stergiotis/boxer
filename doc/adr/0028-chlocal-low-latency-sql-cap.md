@@ -499,6 +499,33 @@ documentation, and prose in this repo that names the engine rather than an
 invocation was left alone.
 
 
+### 2026-09-13 — an unset `BinaryPath` falls back to the override and to PATH
+
+`chlocalpool.New` with an empty `Config.BinaryPath` now resolves the binary
+rather than assuming the packaged path: `DefaultBinaryPath` when it exists,
+else what the `extbin` declaration resolves — the `BOXER_CLICKHOUSE_LOCAL`
+override, then a `clickhouse` on `PATH` — and only then the default, so the
+startup error still names where the packaged install would have put it.
+
+**Why.** The single-binary install (`curl https://clickhouse.com/ | sh`) and a
+user-local copy land under a home directory and on `PATH`, not at
+`/usr/bin/clickhouse`. `boxer adr` already looked on `PATH` when the packaged
+path was absent; the pool, and with it every in-process endpoint over it —
+play's Keelson introspection among them — refused to start on the same
+machine. One resolution rule for both.
+
+**What did not change.** A `BinaryPath` set explicitly is taken as written and
+a missing one is still a startup error: an operator who names a binary means
+that binary, which is the 2026-08-23 entry's rule. The packaged path still
+wins over `PATH` where both exist, so no deployment that worked resolves
+differently.
+
+**Known limitation.** The override variable is consulted only when the
+packaged path is absent, because it is read by `extbin` alone and the pool
+cannot rank it above a path it checks itself without a second reader of the
+same variable. An operator with both who wants the override to win sets
+`Config.BinaryPath`.
+
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).

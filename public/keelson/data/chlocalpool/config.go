@@ -1,8 +1,10 @@
 package chlocalpool
 
 import (
+	"os"
 	"time"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -25,6 +27,12 @@ const (
 // the Default* constants by withDefaults; a caller can pass Config{}
 // to accept all defaults.
 type Config struct {
+	// BinaryPath names the multi-call `clickhouse` binary. Empty resolves at
+	// New: DefaultBinaryPath when the packaged install put it there, else what
+	// the extbin declaration resolves — the BOXER_CLICKHOUSE_LOCAL override,
+	// then a `clickhouse` on PATH. A path set here is taken as written, and
+	// a missing one is a startup error rather than a fallback, since an
+	// operator who names a binary means that binary.
 	BinaryPath          string
 	BaseTmpDir          string
 	MinIdle             uint8
@@ -79,4 +87,20 @@ func (inst Config) validate() (err error) {
 		return
 	}
 	return
+}
+
+// resolveBinaryPath is what an unset Config.BinaryPath means: the packaged
+// install's DefaultBinaryPath when it exists, else whatever the extbin
+// declaration resolves on this host — the BOXER_CLICKHOUSE_LOCAL override,
+// then a `clickhouse` on PATH, which is where a single-binary install lands
+// (ADR-0028's 2026-09-13 update). With neither it returns the default path,
+// so the startup error names where the packaged install would have put it.
+func resolveBinaryPath() string {
+	if _, err := os.Stat(DefaultBinaryPath); err == nil {
+		return DefaultBinaryPath
+	}
+	if bin, ok := extbin.ClickHouseLocal.Resolve(); ok && bin != "" {
+		return bin
+	}
+	return DefaultBinaryPath
 }
