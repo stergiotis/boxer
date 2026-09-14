@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/graph/algo"
 	"github.com/stergiotis/boxer/public/analytics/graph/knn"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 	"github.com/stretchr/testify/require"
 )
 
@@ -120,23 +121,30 @@ func TestBuildProjectionDeclaration(t *testing.T) {
 			res.featureColumns[f][s] = float64(s)
 		}
 	}
-	nodes, edges := buildProjectionDeclaration(res, -1, true)
-	require.Len(t, nodes, n)
-	require.Equal(t, int(g.Graph.NumEdges()), len(edges))
-	for s, node := range nodes {
-		require.Equal(t, uint64(s)+1, node.Id)
+	var nodes graphview.NodeColumns
+	var edges graphview.EdgeColumns
+	buildProjectionDeclaration(res, -1, true, &nodes, &edges)
+	require.NoError(t, nodes.Validate())
+	require.NoError(t, edges.Validate())
+	require.Len(t, nodes.Ids, n)
+	require.Equal(t, int(g.Graph.NumEdges()), len(edges.From))
+	for s, id := range nodes.Ids {
+		require.Equal(t, uint64(s)+1, id)
+		auras := nodes.AuraIds[nodes.AuraOffsets[s]:nodes.AuraOffsets[s+1]]
 		if cl.Label[s] >= 0 && cl.Probability[s] >= projectionNoiseAuraFloor {
-			require.Equal(t, []string{"cluster " + string(rune('1'+cl.Label[s]))}, node.Auras)
+			require.Equal(t, []string{"cluster " + string(rune('1'+cl.Label[s]))}, auras)
 		} else {
-			require.Empty(t, node.Auras)
+			require.Empty(t, auras)
 		}
 	}
-	for _, e := range edges {
-		require.Greater(t, e.Strength, float32(0))
-		require.Less(t, e.From, e.To)
+	for i := range edges.From {
+		require.Greater(t, edges.Strength[i], float32(0))
+		require.Less(t, edges.From[i], edges.To[i])
 	}
-	// Colour by feature 0: the buckets span the palette.
-	coloured, _ := buildProjectionDeclaration(res, 0, false)
-	require.NotEqual(t, coloured[0].Color, coloured[n-1].Color)
-	require.Empty(t, coloured[0].Auras)
+	// Colour by feature 0, over the same columns: the buckets span the
+	// palette, and no aura column is declared.
+	buildProjectionDeclaration(res, 0, false, &nodes, &edges)
+	require.NoError(t, nodes.Validate())
+	require.NotEqual(t, nodes.Color[0], nodes.Color[n-1])
+	require.Nil(t, nodes.AuraOffsets)
 }

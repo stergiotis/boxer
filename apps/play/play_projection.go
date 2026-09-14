@@ -171,8 +171,8 @@ type Projector struct {
 	// Render-thread state: the widget and the declaration cached against
 	// the snapshot version and the colouring.
 	view         *graphview.View
-	nodes        []graphview.NodeSpec
-	edges        []graphview.EdgeSpec
+	nodes        graphview.NodeColumns
+	edges        graphview.EdgeColumns
 	builtVersion uint64
 	builtColorBy int8
 	builtAuras   bool
@@ -704,7 +704,7 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 	res := snap.result
 	if inst.builtVersion != snap.version || inst.builtColorBy != colorBy || inst.builtAuras != inst.auras {
 		fresh := inst.builtVersion != snap.version
-		inst.nodes, inst.edges = buildProjectionDeclaration(res, colorBy, inst.auras)
+		buildProjectionDeclaration(res, colorBy, inst.auras, &inst.nodes, &inst.edges)
 		inst.builtVersion, inst.builtColorBy, inst.builtAuras = snap.version, colorBy, inst.auras
 		if fresh {
 			// A new graph: re-place, restart the schedule, re-arm the fit
@@ -778,7 +778,9 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 	o.HideEdges = !inst.showEdges
 	o.Auras = graphview.AuraParams{Enabled: inst.auras && res.clusters.NumClusters > 0, Legend: graphview.AuraLegendInside}
 
-	inst.view.Render(inst.nodes, inst.edges, w, h)
+	if err := inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
+		log.Error().Err(err).Msg("play: projection declaration rejected")
+	}
 
 	if graphviewFrozen(inst.view, projectionFreezeSteps) {
 		inst.frozen = true
@@ -809,15 +811,23 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 	}
 }
 
-// buildProjectionDeclaration turns a run into the widget's declaration:
-// one node per slot, filled by the colour-by feature's viridis bucket or
-// the default; the cluster as an aura id when the member's probability
-// clears the floor; one edge per neighbour-graph arc pair with the
-// membership weight as its strength (ADR-0224 §SD13).
-func buildProjectionDeclaration(res *projectionResult, colorBy int8, auras bool) (nodes []graphview.NodeSpec, edges []graphview.EdgeSpec) {
+// buildProjectionDeclaration turns a run into the widget's columnar
+// declaration (ADR-0232 §SD2), over the columns' previous backing slices:
+// one node per slot, filled by the colour-by feature's viridis bucket or the
+// default; the cluster as an aura id when the member's probability clears
+// the floor; one edge per neighbour-graph arc pair with the membership
+// weight as its strength (ADR-0224 §SD13). The columns go to the widget as
+// they are, so a frame does not pay the row form's rewrite.
+func buildProjectionDeclaration(res *projectionResult, colorBy int8, auras bool, nodes *graphview.NodeColumns, edges *graphview.EdgeColumns) {
 	g := res.graph.Graph
 	n := g.NumVertices()
-	nodes = make([]graphview.NodeSpec, n)
+	nodes.Ids = projectionColumn(nodes.Ids, n)
+	nodes.Radius = projectionColumn(nodes.Radius, n)
+	nodes.Color = projectionColumn(nodes.Color, n)
+	nodes.AuraOffsets, nodes.AuraIds = nil, nodes.AuraIds[:0]
+	if auras {
+		nodes.AuraOffsets = projectionColumn(nodes.AuraOffsets, n+1)
+	}
 	useColor := colorBy >= 0 && int(colorBy) < card.NumFeatures && len(res.featureColumns[colorBy]) == n
 	var mn, mx float64
 	if useColor {
@@ -829,30 +839,60 @@ func buildProjectionDeclaration(res *projectionResult, colorBy int8, auras bool)
 		}
 	}
 	for s := range n {
-		node := graphview.NodeSpec{Id: uint64(s) + 1, Radius: projectionNodeRadius, Color: projectionColorPoint}
+		nodes.Ids[s] = uint64(s) + 1
+		nodes.Radius[s] = projectionNodeRadius
+		nodes.Color[s] = projectionColorPoint
 		if useColor {
 			b := bucketIndex(res.featureColumns[colorBy][s], mn, mx, projectionViridisBuckets)
 			t := float32(b) / float32(projectionViridisBuckets-1)
-			node.Color = color.Hex(styletokens.Sequential(styletokens.SequentialViridis, t).AsHex())
+			nodes.Color[s] = color.Hex(styletokens.Sequential(styletokens.SequentialViridis, t).AsHex())
 		}
-		if auras && s < len(res.clusters.Label) {
-			if lb := res.clusters.Label[s]; lb >= 0 && res.clusters.Probability[s] >= projectionNoiseAuraFloor {
-				node.Auras = []string{fmt.Sprintf("cluster %d", lb+1)}
+		if auras {
+			nodes.AuraOffsets[s] = int32(len(nodes.AuraIds))
+			if s < len(res.clusters.Label) {
+				if lb := res.clusters.Label[s]; lb >= 0 && res.clusters.Probability[s] >= projectionNoiseAuraFloor {
+					nodes.AuraIds = append(nodes.AuraIds, fmt.Sprintf("cluster %d", lb+1))
+				}
 			}
 		}
-		nodes[s] = node
 	}
-	edges = make([]graphview.EdgeSpec, 0, g.NumArcs()/2)
+	if auras {
+		nodes.AuraOffsets[n] = int32(len(nodes.AuraIds))
+	}
+	m := int(g.NumArcs() / 2)
+	edges.From = projectionColumn(edges.From, m)[:0]
+	edges.To = projectionColumn(edges.To, m)[:0]
+	edges.Strength = projectionColumn(edges.Strength, m)[:0]
 	for s := range n {
 		out := g.Out(int32(s))
 		w := g.OutWeights(int32(s))
 		for a, d := range out {
 			if d > int32(s) {
-				edges = append(edges, graphview.EdgeSpec{From: uint64(s) + 1, To: uint64(d) + 1, Strength: w[a], Width: 0.5})
+				edges.From = append(edges.From, uint64(s)+1)
+				edges.To = append(edges.To, uint64(d)+1)
+				// A weight that is not positive is undeclared, as the row
+				// form reads it: the widget's default strength.
+				st := w[a]
+				if !(st > 0) {
+					st = float32(math.NaN())
+				}
+				edges.Strength = append(edges.Strength, st)
 			}
 		}
 	}
-	return
+	edges.Width = projectionColumn(edges.Width, len(edges.From))
+	for i := range edges.Width {
+		edges.Width[i] = 0.5
+	}
+}
+
+// projectionColumn is s resized to n rows over its own backing array when
+// that holds them.
+func projectionColumn[T any](s []T, n int) []T {
+	if cap(s) >= n {
+		return s[:n]
+	}
+	return make([]T, n)
 }
 
 // statusLine reports the graph, the clustering and how far the layout has
