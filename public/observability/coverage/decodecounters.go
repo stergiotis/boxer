@@ -215,10 +215,15 @@ func decodeArgsTable(strTab []byte, argsTab []byte) (args map[string]string, err
 		if err != nil {
 			return
 		}
-		if int(idx) >= len(strs) {
+		if idx >= uint64(len(strs)) {
 			return "", eb.Build().Uint64("index", idx).Int("entries", len(strs)).Errorf("args table string index is out of range")
 		}
 		return strs[idx], nil
+	}
+	// Each pair is two ULEB indexes, at least a byte apiece; guard the count
+	// before it sizes the map.
+	if n > uint64(ar.remaining())/2 {
+		return nil, eb.Build().Uint64("pairs", n).Int("remaining", ar.remaining()).Errorf("corrupt args table: pairs exceed the bytes remaining")
 	}
 	args = make(map[string]string, n)
 	for range n {

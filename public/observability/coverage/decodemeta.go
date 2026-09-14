@@ -101,11 +101,20 @@ func DecodeMeta(data []byte) (prof *covsnap.MetaProfile, err error) {
 	prof.Pkgs = make([]covsnap.PkgMeta, entries)
 	unitBase := uint32(0)
 	stmtTotal := uint32(0)
+	// The toolchain lays package blobs end to end. Spans that overlap would
+	// have one set of bytes decoded once per package that names them; the
+	// lengths together must fit the total, which keeps decoding linear in the
+	// blob without pinning the layout further.
+	spanned := uint64(0)
 	for i := range prof.Pkgs {
 		off := pkgOffsets[i]
 		length := pkgLengths[i]
 		if off > totalLength || length > totalLength || off+length > totalLength {
 			return nil, eb.Build().Int("package", i).Uint64("start", off).Uint64("end", off+length).Uint64("totalLength", totalLength).Errorf("coverage meta-data blob corrupt: package spans beyond the total length")
+		}
+		spanned += length
+		if spanned > totalLength {
+			return nil, eb.Build().Int("package", i).Uint64("spanned", spanned).Uint64("totalLength", totalLength).Errorf("coverage meta-data blob corrupt: package lengths together exceed the total length")
 		}
 		err = decodeMetaPackage(data[off:off+length], &prof.Pkgs[i], &unitBase, &stmtTotal)
 		if err != nil {
@@ -202,6 +211,13 @@ func decodeMetaPackage(blob []byte, pkg *covsnap.PkgMeta, unitBase *uint32, stmt
 			return eb.Build().Int("function", i).Errorf("decode function: %w", err)
 		}
 		fn := &pkg.Funcs[i]
+		// A unit costs at least five bytes of its own. Offsets that name one
+		// record repeatedly would decode its units again for each, so the
+		// package's units together must fit its blob, which keeps decoding
+		// linear.
+		if uint64(*unitBase-pkg.UnitBase)+uint64(len(fn.Units)) > uint64(len(blob)) {
+			return eb.Build().Int("function", i).Int("blobLength", len(blob)).Errorf("package blob corrupt: function records overlap")
+		}
 		*unitBase += uint32(len(fn.Units))
 		*stmtTotal += fn.NumStmts
 	}
@@ -227,7 +243,7 @@ func decodeMetaFunc(r *byteReader, strs []string, fn *covsnap.FuncMeta, unitBase
 	if err != nil {
 		return
 	}
-	if int(nameIdx) >= len(strs) || int(fileIdx) >= len(strs) {
+	if nameIdx >= uint64(len(strs)) || fileIdx >= uint64(len(strs)) {
 		return eh.Errorf("function name/file string index out of range")
 	}
 	fn.Name = strs[nameIdx]

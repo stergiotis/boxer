@@ -160,3 +160,34 @@ func TestDecodeSurvivesTruncationAndBitFlips(t *testing.T) {
 		}
 	}
 }
+
+// Records the toolchain never shares — package spans, function records — must
+// not be decoded once per reference, which would let allocation grow with the
+// product of two counts in the input rather than with its length.
+func TestDecodeMetaBoundsSharedRecords(t *testing.T) {
+	prof, err := DecodeMeta(syntheticMeta(1, 1, 3, 0))
+	require.NoError(t, err)
+	require.Equal(t, uint32(3), prof.TotalUnits)
+
+	var sharedFuncs error
+	alloc := allocatedBy(func() { _, sharedFuncs = DecodeMeta(syntheticMeta(1, 3000, 3000, 0)) })
+	require.ErrorContains(t, sharedFuncs, "function records overlap")
+	require.Less(t, alloc, uint64(16<<20))
+
+	_, err = DecodeMeta(syntheticMeta(8, 1, 3, 0))
+	require.ErrorContains(t, err, "package lengths together exceed")
+
+	// A name index past MaxInt64 must not wrap negative past the range check.
+	_, err = DecodeMeta(syntheticMeta(1, 1, 3, 1<<63))
+	require.ErrorContains(t, err, "string index out of range")
+}
+
+func TestDecodeArgsTableBoundsPairCount(t *testing.T) {
+	strTab := []byte{1, 1, 'a'}
+	_, err := decodeArgsTable(strTab, binary.AppendUvarint(nil, 1<<40))
+	require.ErrorContains(t, err, "pairs exceed")
+
+	huge := binary.AppendUvarint([]byte{1}, 1<<63)
+	_, err = decodeArgsTable(strTab, append(huge, 0))
+	require.ErrorContains(t, err, "string index is out of range")
+}
