@@ -154,6 +154,13 @@ func (inst *TableValidator) validateSection(section TaggedValuesSection) {
 		addErr(eb.Build().Stringer("section", section.Name).Stringer("channels", orphan).
 			Errorf("single-membership declaration without its membership channel — add the channel to the section's membership spec or drop the declaration"))
 	}
+	// A params-codec declaration (ADR-0233) states the encoding of the
+	// section's params blobs; without a params-bearing channel there is no
+	// blob to encode.
+	if DeclaredParamsCodec(section.UseAspects) != ParamsCodecUndeclared && section.MembershipSpec&MembershipSpecParamsBearing == 0 {
+		addErr(eb.Build().Stringer("section", section.Name).
+			Errorf("params-codec declaration without a params-bearing membership channel — add hp, lp, mrhp or mvhp to the section's membership spec or drop the declaration"))
+	}
 	addErr(inst.validateNamesTypes(section.ValueColumnNames, section.ValueColumnTypes))
 	n := len(section.ValueColumnNames)
 	addErr(checkCoSliceLen("section "+section.Name.String(), "encodingHints", n, len(section.ValueEncodingHints)))

@@ -389,6 +389,28 @@ func (inst TaggedValueSectionMerger) AddSectionSingleMembership(memberships ...M
 	return inst
 }
 
+// AddSectionParamsCodec declares the encoding of the section's membership
+// params blobs (ADR-0233), on every params-bearing channel it carries.
+// Spelled as a section use-aspect, so it rides the physical column names and
+// round-trips through schema discovery; the family is exclusive, so a later
+// declaration replaces an earlier one. The table validator rejects a
+// declaration on a section without a params-bearing channel.
+func (inst TaggedValueSectionMerger) AddSectionParamsCodec(codec ParamsCodecE) TaggedValueSectionMerger {
+	a, ok := codec.Aspect()
+	if !ok {
+		log.Panic().Stringer("codec", codec).Msg("no use-aspect for params codec")
+	}
+	sec := &inst.table.TaggedValuesSections[inst.sectionIndex]
+	kept := make([]useaspects2.AspectE, 0, 8)
+	for _, prev := range sec.UseAspects.IterateAspects() {
+		if _, isCodec := GetParamsCodecByAspect(prev); !isCodec {
+			kept = append(kept, prev)
+		}
+	}
+	sec.UseAspects = useaspects2.EncodeAspectsIgnoreInvalid(append(kept, a)...)
+	return inst
+}
+
 func (inst TaggedValueSectionMerger) ClearSectionMembership(memberships ...MembershipSpecE) TaggedValueSectionMerger {
 	for _, membership := range memberships {
 		inst.table.TaggedValuesSections[inst.sectionIndex].MembershipSpec =

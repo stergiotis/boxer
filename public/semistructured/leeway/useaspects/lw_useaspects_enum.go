@@ -116,6 +116,20 @@ const (
 	AspectSectionSingleMembershipLowCardRefParametrized                 AspectE = 52
 	AspectSectionSingleMembershipMixedLowCardRefHighCardParameters      AspectE = 53
 	AspectSectionSingleMembershipMixedLowCardVerbatimHighCardParameters AspectE = 54
+
+	// Params-codec declaration (exclusive; ADR-0233): the encoding every
+	// membership params blob of the section is written in, on each of its
+	// params-bearing channels (hp, lp, mrhp, mvhp). The params column is
+	// declared as opaque bytes, so nothing in the wire format states the
+	// encoding; this aspect is that statement, and it is what a reader, a
+	// read-back generator or a SQL extractor consults instead of assuming.
+	// The one codec spelled today is membership.{Append,Encode,Decode}Params:
+	// fixed-width lowercase hex, four digits per index, '.'-separated, in
+	// path order. Undeclared means unstated, not "some other codec".
+	// Meaningful only with a params-bearing channel in the section's
+	// MembershipSpec; the table validator rejects a declaration without one.
+
+	AspectSectionParamsFixedWidthHex AspectE = 55
 )
 
 var MaxAspectExcl = slices.Max(AllAspects) + 1
@@ -176,6 +190,7 @@ var AllAspects = []AspectE{
 	AspectSectionSingleMembershipLowCardRefParametrized,
 	AspectSectionSingleMembershipMixedLowCardRefHighCardParameters,
 	AspectSectionSingleMembershipMixedLowCardVerbatimHighCardParameters,
+	AspectSectionParamsFixedWidthHex,
 }
 
 const InvalidAspectEnumValueString = "<invalid AspectE>"
@@ -295,6 +310,8 @@ func (inst AspectE) String() string {
 		return "single-membership-mixed-low-card-ref"
 	case AspectSectionSingleMembershipMixedLowCardVerbatimHighCardParameters:
 		return "single-membership-mixed-low-card-verbatim"
+	case AspectSectionParamsFixedWidthHex:
+		return "params-fixed-width-hex"
 	}
 	return InvalidAspectEnumValueString
 }

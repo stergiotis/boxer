@@ -27,7 +27,8 @@ func generateExampleAspects(rnd *rand.Rand, nAspectsMax int) (r useaspects2.Aspe
 	// the section's channels are known, so the free sample must not.
 	asps = slices.DeleteFunc(asps, func(a useaspects2.AspectE) bool {
 		_, isSingle := GetMembershipSpecBySingleMembershipAspect(a)
-		return isSingle
+		_, isCodec := GetParamsCodecByAspect(a)
+		return isSingle || isCodec
 	})
 	var err error
 	r, err = useaspects2.EncodeAspects(asps...)
@@ -152,6 +153,11 @@ func PopulateManipulator(manipulator *TableManipulator, rnd *rand.Rand, acceptCa
 			if rnd.IntN(4) == 0 {
 				manipulator.TaggedValueSection(naming.StylableName(fmt.Sprintf("section%d", i))).AddSectionSingleMembership(m)
 			}
+		}
+		// Declare the params codec on half the sections that carry a
+		// params-bearing channel (ADR-0233), so declared schemas are fuzzed.
+		if specUnion&MembershipSpecParamsBearing != 0 && rnd.IntN(2) == 0 {
+			manipulator.TaggedValueSection(naming.StylableName(fmt.Sprintf("section%d", i))).AddSectionParamsCodec(ParamsCodecFixedWidthHex)
 		}
 	}
 	return

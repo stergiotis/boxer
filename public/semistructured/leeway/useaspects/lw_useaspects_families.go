@@ -25,6 +25,7 @@ var Families = []aspectcodec.Family[AspectE]{
 		AspectSectionSingleMembershipMixedLowCardRefHighCardParameters,
 		AspectSectionSingleMembershipMixedLowCardVerbatimHighCardParameters,
 	}, Exclusive: false},
+	{Name: "params-codec", Members: []AspectE{AspectSectionParamsFixedWidthHex}, Exclusive: true},
 }
 
 // CheckFamilyExclusivity rejects sets carrying more than one member of an
