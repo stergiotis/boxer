@@ -71,6 +71,7 @@ Boxer follows the [Diátaxis](https://diataxis.fr/) framework (ADR-0001). Docs l
 * **Trials** — [`doc/trials/`](doc/trials/) holds reproducible measurement protocols in the sea-trials sense: standardized runs repeated against later builds. Each trial's README §0 states the one claim its numbers carry and the condition that claim holds under; the tables under `runs/` are per-arm evidence, not citable figures.
 * **Standards** — [`CODINGSTANDARDS.md`](CODINGSTANDARDS.md) and [`doc/DOCUMENTATION_STANDARD.md`](doc/DOCUMENTATION_STANDARD.md).
 * **Engineering practices** — [`doc/ENGINEERING_PRACTICES.md`](doc/ENGINEERING_PRACTICES.md) catalogues CI workflows, static analysis, build-tag discipline, supply-chain gates, and in-tree governance.
+* **Quality assessment** — [`doc/explanation/iso25010-assessment.md`](doc/explanation/iso25010-assessment.md) grades the premises, standing commitments and process choices against the nine characteristics of ISO/IEC 25010:2023, dating every figure and naming the trials behind it; [`iso25010-temperament.md`](doc/explanation/iso25010-temperament.md) is the companion that carries the same reading with the figures removed, written to lose precision over time rather than validity.
 
 ## Style Conventions
 ### File Extensions

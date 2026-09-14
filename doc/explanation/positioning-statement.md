@@ -100,3 +100,4 @@ exactly that.
 - [why-boxer](./why-boxer.md) — the premises the statement compresses.
 - [README](../../README.md) — the short form in place.
 - [doc/ARCHITECTURE.md](../ARCHITECTURE.md) — the drawing behind the process and host clauses; its §5 keeps the architecture-only reading as a check on what the architecture evidences by itself.
+- [iso25010-assessment](./iso25010-assessment.md) — the same bets read as quality characteristics rather than as a pitch, with each cost measured and dated; [iso25010-temperament](./iso25010-temperament.md) is its figure-free companion.

@@ -416,3 +416,8 @@ single-shell-orchestrator pipeline with custom in-tree governance for
 documentation and LLM authorship. The trade-off versus a meta-runner setup
 is broader linter coverage in exchange for tighter control over individual
 tool versions and bespoke checks that no off-the-shelf runner provides.
+
+What this pipeline buys and what it costs, graded against ISO/IEC 25010 and
+dated, is in [doc/explanation/iso25010-assessment.md](./explanation/iso25010-assessment.md);
+§10 above is its most-cited source, and the two counteractions it presses
+hardest are the release-only CI gate and the bus factor.
