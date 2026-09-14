@@ -267,13 +267,15 @@ func (inst *File) parseE(size int64) (err error) {
 		if err != nil {
 			return err
 		}
-		advance := chunkSize + (chunkSize & 1)
-		if advance > size-body {
+		// Compared as a remainder, never as body+advance: a size escaped
+		// through ds64 can be near MaxInt64, and adding its pad byte would
+		// wrap negative.
+		if chunkSize > size-body-(chunkSize&1) {
 			// The chunk runs to or past the end of the stream, so there is
 			// nothing after it to walk. A truncated data chunk lands here.
 			break
 		}
-		pos = body + advance
+		pos = body + chunkSize + (chunkSize & 1)
 	}
 
 	if !inst.haveFmt {
@@ -294,8 +296,12 @@ func (inst *File) parseE(size int64) (err error) {
 	return nil
 }
 
+// checkChunkFitsE compares against the bytes remaining after body rather than
+// summing body and chunkSize, which a ds64 table entry near MaxInt64 would
+// wrap negative. Callers that size a read or an allocation from the chunk
+// body rely on it: the ds64 table length is bounded by chunkSize.
 func (inst *File) checkChunkFitsE(id uint32, body int64, chunkSize int64, size int64) (err error) {
-	if body+chunkSize > size {
+	if chunkSize > size-body {
 		return eb.Build().
 			Str("chunk", fourCCString(id)).
 			Int64("offset", body).
