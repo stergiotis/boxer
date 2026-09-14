@@ -38,6 +38,18 @@ type quadtree struct {
 	comY     []float32
 
 	next []int32 // per body: next body in the same leaf, -1 at the end
+
+	// After the build the bodies are linearised in tree order: order lists
+	// them leaf by leaf along a depth-first walk, bx and by are their
+	// positions in that order, and a leaf's bodies are order[lStart:lEnd].
+	// The walks run over order too, so consecutive bodies share their path
+	// through the tree and a leaf's bodies are read in sequence rather
+	// than chased through next.
+	order  []int32
+	bx, by []float32
+	lStart []int32
+	lEnd   []int32
+	dfs    []int32 // scratch for the linearisation
 }
 
 func (q *quadtree) reset(n int) {
@@ -54,6 +66,9 @@ func (q *quadtree) reset(n int) {
 		q.next = make([]int32, n)
 	}
 	q.next = q.next[:n]
+	q.order = q.order[:0]
+	q.bx = q.bx[:0]
+	q.by = q.by[:0]
 }
 
 func (q *quadtree) newCell(cx, cy, half float32) int32 {
@@ -118,7 +133,39 @@ func (q *quadtree) build(x, y []float32) {
 	for b := 0; b < n; b++ {
 		q.insert(root, int32(b), x, y)
 	}
-	q.aggregate(x, y)
+	q.linearize(x, y)
+	q.aggregate()
+}
+
+// linearize lists the bodies leaf by leaf along a depth-first walk of the
+// tree, children in quadrant order and each leaf's list in its own order,
+// and copies their positions alongside. It runs before aggregate, which
+// sums a leaf over its range.
+func (q *quadtree) linearize(x, y []float32) {
+	nc := len(q.internal)
+	q.lStart = growTo(q.lStart, nc)
+	q.lEnd = growTo(q.lEnd, nc)
+	q.dfs = append(q.dfs[:0], 0)
+	for len(q.dfs) > 0 {
+		c := q.dfs[len(q.dfs)-1]
+		q.dfs = q.dfs[:len(q.dfs)-1]
+		if q.internal[c] {
+			q.lStart[c], q.lEnd[c] = 0, 0
+			for k := 3; k >= 0; k-- {
+				if ch := q.child[4*c+int32(k)]; ch >= 0 {
+					q.dfs = append(q.dfs, ch)
+				}
+			}
+			continue
+		}
+		q.lStart[c] = int32(len(q.order))
+		for b := q.first[c]; b >= 0; b = q.next[b] {
+			q.order = append(q.order, b)
+			q.bx = append(q.bx, x[b])
+			q.by = append(q.by, y[b])
+		}
+		q.lEnd[c] = int32(len(q.order))
+	}
 }
 
 func (q *quadtree) insert(root, b int32, x, y []float32) {
@@ -155,7 +202,7 @@ func (q *quadtree) insert(root, b int32, x, y []float32) {
 
 // aggregate fills mass and centre of mass. Children are created after their
 // parent, so a reverse sweep sees every child before its parent.
-func (q *quadtree) aggregate(x, y []float32) {
+func (q *quadtree) aggregate() {
 	for c := len(q.internal) - 1; c >= 0; c-- {
 		var m, sx, sy float32
 		if q.internal[c] {
@@ -169,10 +216,10 @@ func (q *quadtree) aggregate(x, y []float32) {
 				sy += q.comY[ch] * q.mass[ch]
 			}
 		} else {
-			for b := q.first[c]; b >= 0; b = q.next[b] {
+			for u, e := q.lStart[c], q.lEnd[c]; u < e; u++ {
 				m++
-				sx += x[b]
-				sy += y[b]
+				sx += q.bx[u]
+				sy += q.by[u]
 			}
 		}
 		q.mass[c] = m
@@ -184,14 +231,17 @@ func (q *quadtree) aggregate(x, y []float32) {
 }
 
 // repulsionBH accumulates the approximate repulsive displacement of bodies
-// [lo, hi) with the same force law as repulsionRows. theta2 is the squared
+// [lo, hi) of the tree order with the same force law as repulsionRows;
+// every body is at one position of that order, so the chunks of a row
+// split cover them all. theta2 is the squared
 // opening angle; stack is per-caller scratch.
 func (q *quadtree) repulsionBH(x, y, dx, dy []float32, k2, eps2, theta2 float32, lo, hi int, stack []int32) []int32 {
 	if len(q.internal) == 0 {
 		return stack
 	}
-	for i := lo; i < hi; i++ {
-		xi, yi := x[i], y[i]
+	for t := lo; t < hi; t++ {
+		i := q.order[t]
+		xi, yi := q.bx[t], q.by[t]
 		var ax, ay float32
 		stack = append(stack[:0], 0)
 		for len(stack) > 0 {
@@ -218,12 +268,12 @@ func (q *quadtree) repulsionBH(x, y, dx, dy []float32, k2, eps2, theta2 float32,
 				}
 				continue
 			}
-			for b := q.first[c]; b >= 0; b = q.next[b] {
-				if int(b) == i {
+			for u, e := q.lStart[c], q.lEnd[c]; u < e; u++ {
+				if q.order[u] == i {
 					continue
 				}
-				ddx := xi - x[b]
-				ddy := yi - y[b]
+				ddx := xi - q.bx[u]
+				ddy := yi - q.by[u]
 				d2 := ddx*ddx + ddy*ddy
 				if d2 < eps2 {
 					d2 = eps2
@@ -248,8 +298,9 @@ func (q *quadtree) repulsionNE(x, y, dx, dy, zi []float32, invK2, theta2 float32
 	if len(q.internal) == 0 {
 		return stack
 	}
-	for i := lo; i < hi; i++ {
-		xi, yi := x[i], y[i]
+	for t := lo; t < hi; t++ {
+		i := q.order[t]
+		xi, yi := q.bx[t], q.by[t]
 		var ax, ay, zs float32
 		stack = append(stack[:0], 0)
 		for len(stack) > 0 {
@@ -275,12 +326,12 @@ func (q *quadtree) repulsionNE(x, y, dx, dy, zi []float32, invK2, theta2 float32
 				}
 				continue
 			}
-			for b := q.first[c]; b >= 0; b = q.next[b] {
-				if int(b) == i {
+			for u, e := q.lStart[c], q.lEnd[c]; u < e; u++ {
+				if q.order[u] == i {
 					continue
 				}
-				ddx := xi - x[b]
-				ddy := yi - y[b]
+				ddx := xi - q.bx[u]
+				ddy := yi - q.by[u]
 				qq := 1 / (1 + (ddx*ddx+ddy*ddy)*invK2)
 				f := qq * qq
 				ax += ddx * f
