@@ -114,7 +114,7 @@ func (v *View) pickNode(px, py float32) int32 {
 		v.grid.build(&v.g, v.style.NodeRadius)
 	}
 	pg := &v.grid
-	reachPx := max(pg.maxR*v.cam.Zoom+v.style.DonutWidth, pickMinPx)
+	reachPx := max(radiusPx(pg.maxR, v.cam.Zoom)+v.style.DonutWidth, pickMinPx)
 	reach := reachPx / v.cam.Zoom
 	wx, wy := v.cam.ToWorld(px, py)
 	// Outside the padded bounds no disc can contain the point.
@@ -164,9 +164,9 @@ func (v *View) edgeBoxMayContain(i int32, px, py float32) bool {
 	if f == t {
 		// The loop's pick circle is centred 0.75·loopSize above the node
 		// with radius 0.75·loopSize, so its stroke reaches 1.5·loopSize.
-		pad += 1.5 * v.nodeRadius(int(f)) * v.cam.Zoom * (v.style.LoopSize + order)
+		pad += 1.5 * v.nodeOuterPx(int(f)) * (v.style.LoopSize + order)
 	} else {
-		pad += max(v.nodeRadius(int(f)), v.nodeRadius(int(t)))*v.cam.Zoom + v.style.CurveSize*order*v.cam.Zoom
+		pad += max(v.nodeOuterPx(int(f)), v.nodeOuterPx(int(t))) + v.style.CurveSize*order*v.cam.Zoom
 	}
 	return px >= min(x1, x2)-pad && px <= max(x1, x2)+pad &&
 		py >= min(y1, y2)-pad && py <= max(y1, y2)+pad

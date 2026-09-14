@@ -343,7 +343,8 @@ func TestLabelAlwaysPaintsUnderTheBudget(t *testing.T) {
 		reset()
 		return messages()
 	}
-	require.Equal(t, render(false)+1, render(true))
+	// The label is one text plus its halo copies.
+	require.Equal(t, render(false)+1+len(labelHaloOffsets), render(true))
 }
 
 // An undirected picture paints no arrow heads — fewer messages for the same

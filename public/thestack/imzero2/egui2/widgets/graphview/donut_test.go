@@ -74,5 +74,5 @@ func TestNodeOuterPxIncludesADrawableDonut(t *testing.T) {
 	require.InDelta(t, st.NodeRadius, plain, 1e-6)
 	require.InDelta(t, st.NodeRadius+st.DonutWidth, ringed, 1e-6)
 	v.cam.Zoom = 0.01
-	require.InDelta(t, st.NodeRadius*0.01, v.nodeOuterPx(int(v.g.slot[1])), 1e-6, "a ring too small to draw does not widen the pick")
+	require.InDelta(t, nodeMinRadiusPx, v.nodeOuterPx(int(v.g.slot[1])), 1e-6, "a ring too small to draw does not widen the pick; the disc holds its floor")
 }

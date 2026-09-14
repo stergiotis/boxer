@@ -432,16 +432,17 @@ type Style struct {
 	NodeFill       color.Color // default when a NodeSpec carries none
 	NodeStroke     color.Color
 	LabelColor     color.Color
+	LabelHalo      color.Color // outline behind node and edge labels, default Background; fully transparent draws none
 	EdgeColor      color.Color // default when an EdgeSpec carries none
 	EdgeLabelColor color.Color
 	Highlight      color.Color // hovered node or edge
 	Selected       color.Color // selected node or edge
 	SelectionBox   color.Color // fill of the rectangle-selection box, default Selected at low alpha
 
-	NodeRadius        float32     // world units, default 5
-	NodeStrokeW       float32     // screen pixels; 0 (the default) draws no per-node outline, which keeps a node one batched marker
-	EdgeWidth         float32     // screen pixels, default 1.5
-	TipSize           float32     // arrow head length in screen pixels, default 10
+	NodeRadius        float32     // world units, default 5; on screen never under nodeMinRadiusPx
+	NodeStrokeW       float32     // screen pixels at zoom 1, following the zoom below it (decorScale); 0 (the default) draws no per-node outline, which keeps a node one batched marker
+	EdgeWidth         float32     // screen pixels at zoom 1, following the zoom below it (decorScale), default 1.5
+	TipSize           float32     // arrow head length in screen pixels at zoom 1, following the zoom below it (decorScale), default 10
 	LabelFontSize     float32     // screen points, default 12 (ADR-0224 §SD7)
 	EdgeLabelFontSize float32     // screen points, default 10
 	CurveSize         float32     // bulge per parallel-edge order in world units, default 20
@@ -452,19 +453,25 @@ type Style struct {
 	Monospace         bool
 }
 
-// DefaultStyle returns the design-token default appearance.
+// DefaultStyle returns the design-token default appearance. It follows the
+// IDS scheme widgets/implot draws with, so a graph sits beside a plot as the
+// same kind of surface: the canvas is implot's plot-area fill, an undeclared
+// node takes the colour of implot's first series (the qualitative cycle's
+// first entry), and the selection is the accent role implot gives its
+// box-zoom rectangle.
 func DefaultStyle() Style {
 	hex := func(t styletokens.RGBA8) color.Color { return color.Hex(t.AsHex()) }
 	return Style{
-		Background:        hex(styletokens.NeutralBgPanel),
-		NodeFill:          hex(styletokens.AccentDefault),
+		Background:        hex(styletokens.NeutralBgSurface),
+		NodeFill:          hex(styletokens.QualitativeCycle(0)),
 		NodeStroke:        hex(styletokens.NeutralBorderDefault),
 		LabelColor:        hex(styletokens.NeutralTextPrimary),
+		LabelHalo:         hex(styletokens.NeutralBgSurface),
 		EdgeColor:         hex(styletokens.NeutralBorderDefault),
 		EdgeLabelColor:    hex(styletokens.NeutralTextSecondary),
 		Highlight:         hex(styletokens.NeutralTextPrimary),
-		Selected:          hex(styletokens.WarningDefault),
-		SelectionBox:      color.Hex(styletokens.WarningDefault.AsHex()&^0xff | selectionBoxAlpha),
+		Selected:          hex(styletokens.AccentDefault),
+		SelectionBox:      color.Hex(styletokens.AccentDefault.AsHex()&^0xff | selectionBoxAlpha),
 		NodeRadius:        5,
 		EdgeWidth:         1.5,
 		TipSize:           10,
@@ -497,6 +504,7 @@ func (inst Style) withDefaults() Style {
 	col(&inst.NodeFill, d.NodeFill)
 	col(&inst.NodeStroke, d.NodeStroke)
 	col(&inst.LabelColor, d.LabelColor)
+	col(&inst.LabelHalo, inst.Background)
 	col(&inst.EdgeColor, d.EdgeColor)
 	col(&inst.EdgeLabelColor, d.EdgeLabelColor)
 	col(&inst.Highlight, d.Highlight)
@@ -541,8 +549,20 @@ type Metrics struct {
 // defaultFitPadding is Options.FitPadding when left zero.
 const defaultFitPadding = 0.1
 
-// selectionBoxAlpha is the alpha of the default rectangle-selection fill.
-const selectionBoxAlpha = 0x40
+// nodeMinRadiusPx is the smallest disc a node with a radius paints, in
+// screen pixels, whatever the zoom.
+const nodeMinRadiusPx = 2.5
+
+// decorScaleMin bounds how far the edge decorations shrink with the zoom
+// (View.decorScale): below it an arrow head is a smudge.
+const decorScaleMin = 0.4
+
+// edgeMinWidthPx is the thinnest an edge stroke gets under decorScale.
+const edgeMinWidthPx = 1
+
+// selectionBoxAlpha is the alpha of the default rectangle-selection fill,
+// the one implot fills its box-zoom rectangle with.
+const selectionBoxAlpha = 0x28
 
 var nan32 = float32(math.NaN())
 

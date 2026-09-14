@@ -613,6 +613,33 @@ is a topology change and the retained per-id state follows the ids. Every
 reading of the widget is by id, so nothing a caller observes moves except
 the paint order after a removal.
 
+### 2026-09-15 — sizes that follow the zoom, and labels off the stroke
+
+The picture at a fit zoom was the one §Context names as `egui_graphs`'
+cap — "arrowheads in screen pixels" — reproduced: a node's radius is in
+world units and shrank with the zoom while the arrow head, the stroke and
+the outline held their screen size, so a forty-node tree at fit was dots of
+two pixels under heads of ten. Three rules in the paint, none in the
+declaration:
+
+- A disc never paints under `nodeMinRadiusPx`; a declared 0 stays 0
+  (ADR-0232 §SD4). The donut still follows the unfloored radius, so a graph
+  zoomed out to dots carries no rings (§SD9), and the pick grid's reach
+  includes the floor.
+- The screen-sized decorations — edge stroke, arrow head, node outline —
+  follow the zoom below 1 down to `decorScaleMin` (`View.decorScale`), and
+  keep their declared size at 1 and above. A hosted view keeps them
+  throughout: its camera is the host's (ADR-0228 §SD3a), and the consumer
+  already sizes its radii against that zoom.
+- §SD7 stands: labels are screen-sized. They now paint over a halo
+  (`Style.LabelHalo`, the background by default, transparent for none), the
+  painter lane's outline for text it lays out but cannot stroke; an edge
+  label sits beside the stroke on the side that faces up, its box pushed
+  along the curve's normal by its own extent, estimated from the rune count;
+  a loop's label sits over the loop's top rather than a loop radius past it.
+  An edge whose discs overlap past the trimmed ends paints nothing, label
+  included.
+
 ## References
 
 - [ADR-0069](./0069-imzero2-layeredgraph-widget.md) — the first graph widget

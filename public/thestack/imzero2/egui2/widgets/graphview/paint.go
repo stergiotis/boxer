@@ -2,6 +2,7 @@ package graphview
 
 import (
 	"math"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -32,12 +33,20 @@ type edgeGeo struct {
 	tipY   float32
 	tipDx  float32
 	tipDy  float32
+	tipLen float32 // the head's length on screen
 	hasTip bool
+	hidden bool // the nodes overlap past the trimmed ends: nothing to paint
 }
+
+// edgeGapPx is the space, in screen pixels, between an edge's ends — the
+// arrow head's tip included — and the outer edge of the node it meets, its
+// outline included.
+const edgeGapPx = 2
 
 // edgeGeometry resolves edge i against the camera. The arrow head is
 // subtracted from the stroke's end so the stroke does not poke through the
-// head, and both ends stop at the node discs.
+// head, and both ends stop edgeGapPx short of the node's outer edge, its
+// donut ring included, so neither the stroke nor the head runs into it.
 func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 	style := &v.style
 	f, t := v.g.eFrom[i], v.g.eTo[i]
@@ -45,26 +54,33 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 	if isNaN32(geo.width) {
 		geo.width = style.EdgeWidth
 	}
+	geo.width = max(geo.width*v.decorScale(), edgeMinWidthPx)
 	order := float32(v.g.eOrder[i])
 	x1, y1 := v.cam.ToScreen(v.g.x[f], v.g.y[f])
 	x2, y2 := v.cam.ToScreen(v.g.x[t], v.g.y[t])
-	r1 := v.nodeRadius(int(f)) * v.cam.Zoom
-	r2 := v.nodeRadius(int(t)) * v.cam.Zoom
-	// An undirected picture draws no head, so the stroke runs to the disc
+	o1 := v.nodeOuterPx(int(f))
+	// The trimmed ends: the outer edge, the half of a node outline that lies
+	// outside it, and the gap.
+	pad := v.nodeStrokePx()/2 + edgeGapPx
+	e1 := o1 + pad
+	e2 := v.nodeOuterPx(int(t)) + pad
+	// An undirected picture draws no head, so the stroke runs to the gap
 	// (ADR-0232 §SD5); a head of no size trims nothing.
-	tip := style.TipSize
+	tip := v.tipPx()
 	if v.Opts.Undirected {
 		tip = 0
 	}
+	geo.tipLen = tip
 
 	if f == t {
-		// egui_graphs' loop: a cubic leaving the disc at 45° left, bulging
-		// upward by loopSize, re-entering at 45° right.
+		// egui_graphs' loop: a cubic leaving the node at 45° left, bulging
+		// upward by loopSize, re-entering at 45° right. It is sized from the
+		// outer edge, so a donut ring does not swallow it.
 		geo.kind = edgeKindLoop
-		loopSize := r1 * (style.LoopSize + order)
+		loopSize := o1 * (style.LoopSize + order)
 		s := float32(math.Sqrt2 / 2)
-		sx, sy := x1-r1*s, y1-r1*s
-		ex, ey := x1+r1*s, y1-r1*s
+		sx, sy := x1-e1*s, y1-e1*s
+		ex, ey := x1+e1*s, y1-e1*s
 		geo.x = [4]float32{ex, x1 + loopSize, x1 - loopSize, sx}
 		geo.y = [4]float32{ey, y1 - loopSize, y1 - loopSize, sy}
 		geo.loopR = loopSize * 0.75
@@ -87,11 +103,15 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 		return
 	}
 	ux, uy := dx/l, dy/l
-	sx, sy := x1+ux*r1, y1+uy*r1
-	ex, ey := x2-ux*r2, y2-uy*r2
+	sx, sy := x1+ux*e1, y1+uy*e1
+	ex, ey := x2-ux*e2, y2-uy*e2
+	// Discs that overlap, or all but touch, leave no stroke between them:
+	// an inverted segment would paint under the discs and its label beside
+	// them.
+	geo.hidden = l <= e1+e2
 	if order == 0 {
 		geo.kind = edgeKindStraight
-		geo.hasTip = tip > 0 && l > r1+r2+tip
+		geo.hasTip = tip > 0 && l > e1+e2+tip
 		geo.tipX, geo.tipY = ex, ey
 		geo.tipDx, geo.tipDy = ux, uy
 		if geo.hasTip {
@@ -109,7 +129,7 @@ func (v *View) edgeGeometry(i int) (geo edgeGeo) {
 	seg := max(l/3, 1)
 	c1x, c1y := sx+ux*seg+perpX*off, sy+uy*seg+perpY*off
 	c2x, c2y := ex-ux*seg+perpX*off, ey-uy*seg+perpY*off
-	geo.hasTip = tip > 0 && l > r1+r2+tip
+	geo.hasTip = tip > 0 && l > e1+e2+tip
 	geo.tipX, geo.tipY = ex, ey
 	geo.tipDx, geo.tipDy = unit(ex-c2x, ey-c2y)
 	if geo.hasTip {
@@ -142,6 +162,9 @@ func (v *View) paint(w, h float32) {
 			break
 		}
 		geo := v.edgeGeometry(i)
+		if geo.hidden {
+			continue
+		}
 		col := v.g.eCol[i]
 		if isUnset(col) {
 			col = style.EdgeColor
@@ -166,7 +189,7 @@ func (v *View) paint(w, h float32) {
 			c.PaintCubicBezier(geo.x[0], geo.y[0], geo.x[1], geo.y[1], geo.x[2], geo.y[2], geo.x[3], geo.y[3], col, width).Send()
 		}
 		if geo.hasTip {
-			size := style.TipSize
+			size := geo.tipLen
 			ax, ay := rotate(geo.tipDx, geo.tipDy, tipHalfAngle)
 			bx, by := rotate(geo.tipDx, geo.tipDy, -tipHalfAngle)
 			v.tipXs = [3]float32{geo.tipX, geo.tipX - ax*size, geo.tipX - bx*size}
@@ -174,9 +197,9 @@ func (v *View) paint(w, h float32) {
 			c.PaintPolygonFilled(v.tipXs[:], v.tipYs[:], col).Send()
 		}
 		if lbl := v.g.eLabel[i]; lbl != "" {
-			mx, my := edgeMidpoint(geo)
-			if onCanvas(mx, my, 0, w, h) {
-				v.paintLabel(mx, my-3, lbl, style.EdgeLabelFontSize, fade(style.EdgeLabelColor, v.g.eOpacity[i]))
+			lx, ly := edgeLabelPos(geo, lbl, style.EdgeLabelFontSize)
+			if onCanvas(lx, ly, style.EdgeLabelFontSize*4, w, h) {
+				v.paintLabel(lx, ly, 1, 1, lbl, style.EdgeLabelFontSize, fade(style.EdgeLabelColor, v.g.eOpacity[i]))
 			}
 		}
 	}
@@ -192,14 +215,14 @@ func (v *View) paint(w, h float32) {
 			v.batchXs = append(v.batchXs, sx)
 			v.batchYs = append(v.batchYs, sy)
 		}
-		c.PaintMarkers(v.batchXs, v.batchYs, 0, b.radius*v.cam.Zoom, b.col, 0).Send()
+		c.PaintMarkers(v.batchXs, v.batchYs, 0, radiusPx(b.radius, v.cam.Zoom), b.col, 0).Send()
 	}
 	if style.NodeStrokeW > 0 {
 		for i := range v.g.ids {
 			sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
-			r := v.nodeRadius(i) * v.cam.Zoom
+			r := v.nodeRadiusPx(i)
 			if onCanvas(sx, sy, r, w, h) {
-				c.PaintCircleStroke(sx, sy, r, fade(style.NodeStroke, v.g.opacity[i]), style.NodeStrokeW).Send()
+				c.PaintCircleStroke(sx, sy, r, fade(style.NodeStroke, v.g.opacity[i]), v.nodeStrokePx()).Send()
 			}
 		}
 	}
@@ -207,14 +230,11 @@ func (v *View) paint(w, h float32) {
 	// Donuts: one concave ring sector per slice, skipped when the ring
 	// would be too small to read (ADR-0224 §SD9).
 	for i := range v.g.ids {
+		if !v.donutDrawable(i) {
+			continue
+		}
 		d := v.g.donut[i]
-		if d.IsEmpty() {
-			continue
-		}
-		rIn := v.nodeRadius(i) * v.cam.Zoom
-		if rIn < donutMinInnerPx {
-			continue
-		}
+		rIn := v.nodeRadiusPx(i)
 		rOut := rIn + style.DonutWidth
 		sx, sy := v.cam.ToScreen(v.g.x[i], v.g.y[i])
 		if !onCanvas(sx, sy, rOut, w, h) {
@@ -265,7 +285,7 @@ func (v *View) paint(w, h float32) {
 			c.PaintCircleStroke(sx, sy, r+3, style.Highlight, styletokens.StrokeRegular).Send()
 		}
 		if lbl != "" && (always || sel || hov) {
-			v.paintLabel(sx, sy-r-2, lbl, style.LabelFontSize, fade(style.LabelColor, v.g.opacity[i]))
+			v.paintLabel(sx, sy-r-2, 1, 2, lbl, style.LabelFontSize, fade(style.LabelColor, v.g.opacity[i]))
 		}
 	}
 
@@ -306,13 +326,70 @@ func (v *View) buildBatches() {
 	}
 }
 
-// paintLabel emits one anchored text at the style's face.
-func (v *View) paintLabel(x, y float32, text string, size float32, col color.Color) {
-	txt := c.PaintText(x, y, 1, 2, text, size, col)
+// paintLabel emits one anchored text at the style's face, over a halo when
+// the style has one: the same text in the halo colour, one pixel off in
+// each cardinal direction, which is the painter lane's outline — it lays
+// text out but does not stroke it. The four copies share egui's per-frame
+// galley cache, so the halo costs tessellation, not layout.
+func (v *View) paintLabel(x, y float32, anchorH, anchorV uint8, text string, size float32, col color.Color) {
+	if halo := v.style.LabelHalo; !isUnset(halo) && halo.Literal()&0xff != 0 {
+		halo = fade(halo, float32(col.Literal()&0xff)/255)
+		for _, d := range labelHaloOffsets {
+			v.paintText(x+d[0], y+d[1], anchorH, anchorV, text, size, halo)
+		}
+	}
+	v.paintText(x, y, anchorH, anchorV, text, size, col)
+}
+
+// labelHaloOffsets are the halo's copies, in screen pixels off the text.
+var labelHaloOffsets = [4][2]float32{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+
+func (v *View) paintText(x, y float32, anchorH, anchorV uint8, text string, size float32, col color.Color) {
+	txt := c.PaintText(x, y, anchorH, anchorV, text, size, col)
 	if v.style.Monospace {
 		txt = txt.Monospace()
 	}
 	txt.Send()
+}
+
+// The edge label's text box, estimated from the rune count: the painter
+// lane measures no text at paint time, and a label is short.
+const (
+	edgeLabelGlyphW = 0.55 // advance per rune as a fraction of the font size
+	edgeLabelLineH  = 1.2  // line height as a fraction of the font size
+	edgeLabelGapPx  = 2    // clearance between the stroke and the box
+)
+
+// edgeLabelPos places an edge's label beside the middle of its stroke, on
+// the side that faces up: the text box's centre is pushed along the
+// curve's normal by as much of the box as lies along that normal, so the
+// box clears the stroke whether the edge runs flat, upright or between.
+func edgeLabelPos(geo edgeGeo, text string, fontSize float32) (x, y float32) {
+	var mx, my, tx, ty float32
+	switch geo.kind {
+	case edgeKindStraight:
+		mx, my = (geo.x[0]+geo.x[3])/2, (geo.y[0]+geo.y[3])/2
+		tx, ty = geo.x[3]-geo.x[0], geo.y[3]-geo.y[0]
+	default:
+		mx, my = bezierAt(geo.x, geo.y, 0.5)
+		tx, ty = bezierTangentAt(geo.x, geo.y, 0.5)
+	}
+	tx, ty = unit(tx, ty)
+	nx, ny := -ty, tx
+	if ny > 0 || (ny == 0 && nx > 0) {
+		nx, ny = -nx, -ny
+	}
+	halfW := edgeLabelGlyphW * fontSize * float32(utf8.RuneCountInString(text)) / 2
+	halfH := edgeLabelLineH * fontSize / 2
+	off := halfH*abs32(ny) + halfW*abs32(nx) + edgeLabelGapPx
+	return mx + nx*off, my + ny*off
+}
+
+func abs32(f float32) float32 {
+	if f < 0 {
+		return -f
+	}
+	return f
 }
 
 // fade scales a colour's alpha by op, which opacityOr1 has already resolved,
@@ -343,14 +420,13 @@ func splitArc(a0, a1 float32) [][2]float32 {
 	return [][2]float32{{a0, mid}, {mid, a1}}
 }
 
-func edgeMidpoint(geo edgeGeo) (x, y float32) {
-	switch geo.kind {
-	case edgeKindStraight:
-		return (geo.x[0] + geo.x[3]) / 2, (geo.y[0] + geo.y[3]) / 2
-	case edgeKindLoop:
-		return geo.loopCx, geo.loopCy - geo.loopR
-	}
-	return bezierAt(geo.x, geo.y, 0.5)
+// bezierTangentAt is the cubic's derivative at t, unnormalised.
+func bezierTangentAt(x, y [4]float32, t float32) (dx, dy float32) {
+	mt := 1 - t
+	a := 3 * mt * mt
+	b := 6 * mt * t
+	cc := 3 * t * t
+	return a*(x[1]-x[0]) + b*(x[2]-x[1]) + cc*(x[3]-x[2]), a*(y[1]-y[0]) + b*(y[2]-y[1]) + cc*(y[3]-y[2])
 }
 
 func bezierAt(x, y [4]float32, t float32) (bx, by float32) {

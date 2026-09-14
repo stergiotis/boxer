@@ -840,7 +840,7 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 	inst.deriveChannels(m)
 
 	seqPalette := styletokens.SequentialDefault()
-	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
+	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgSurface, styletokens.NeutralBorderDefault)
 	ne := m.NumEdges()
 	ec := graphview.EdgeColumns{
 		From:     m.From,
@@ -1620,7 +1620,7 @@ func (inst *GraphviewDriver) deriveChannels(m *netModel) {
 			// A quantity ramps, at the same normalised position the edge
 			// channel uses (ADR-0167 §SD4).
 			seq := styletokens.SequentialDefault()
-			bandLo := networkMagnitudeBandLo(seq, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
+			bandLo := networkMagnitudeBandLo(seq, styletokens.NeutralBgSurface, styletokens.NeutralBorderDefault)
 			maxV := maxOf(num)
 			for i, v := range num {
 				if !math.IsNaN(v) && maxV > 0 {

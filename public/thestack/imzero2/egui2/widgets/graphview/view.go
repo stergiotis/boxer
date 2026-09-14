@@ -1184,11 +1184,59 @@ func (v *View) pickEdge(px, py float32) int32 {
 // nodeOuterPx is the node's radius on screen including its donut ring, the
 // extent the pick, the highlight and the label respect.
 func (v *View) nodeOuterPx(slot int) float32 {
-	r := v.nodeRadius(slot) * v.cam.Zoom
-	if r >= donutMinInnerPx && !v.g.donut[slot].IsEmpty() {
+	r := v.nodeRadiusPx(slot)
+	if v.donutDrawable(slot) {
 		r += v.style.DonutWidth
 	}
 	return r
+}
+
+// donutDrawable reports whether the node's ring paints this frame: it has
+// one, and its disc under the camera — before the floor — is at least
+// donutMinInnerPx, so a graph zoomed out to dots carries no rings
+// (ADR-0224 §SD9).
+func (v *View) donutDrawable(slot int) bool {
+	return !v.g.donut[slot].IsEmpty() && v.nodeRadius(slot)*v.cam.Zoom >= donutMinInnerPx
+}
+
+// nodeRadiusPx is the node's disc radius on screen: its world radius under
+// the camera, held at nodeMinRadiusPx once the zoom would take it below,
+// so a zoomed-out graph stays dots rather than vanishing under its arrow
+// heads. A declared 0 stays 0 (ADR-0232 §SD4).
+func (v *View) nodeRadiusPx(slot int) float32 {
+	return radiusPx(v.nodeRadius(slot), v.cam.Zoom)
+}
+
+// radiusPx is nodeRadiusPx for a world radius.
+func radiusPx(r, zoom float32) float32 {
+	if r <= 0 {
+		return 0
+	}
+	return max(r*zoom, nodeMinRadiusPx)
+}
+
+// decorScale is the factor the screen-sized decorations — edge stroke,
+// arrow head, node outline — follow the zoom by: the declared size at zoom
+// 1 and above, shrinking with the picture below it down to decorScaleMin,
+// so an arrow head never dwarfs the disc it points at. A hosted view keeps
+// the declared sizes: its camera is the host's, whose zoom is not the
+// graph's scale, and the consumer already sizes its radii against it
+// (ADR-0228 §SD3a).
+func (v *View) decorScale() float32 {
+	if v.hosted {
+		return 1
+	}
+	return min(max(v.cam.Zoom, decorScaleMin), 1)
+}
+
+// nodeStrokePx is the node outline width on screen this frame.
+func (v *View) nodeStrokePx() float32 {
+	return v.style.NodeStrokeW * v.decorScale()
+}
+
+// tipPx is the arrow head length on screen this frame.
+func (v *View) tipPx() float32 {
+	return v.style.TipSize * v.decorScale()
 }
 
 // nodeRadius is the node's world radius: its own, else the style's. A
