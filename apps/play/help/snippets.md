@@ -1421,10 +1421,14 @@ The same seams over the Map tab's own data. Each aircraft's last position in
 the loaded slice's final ten minutes is a vertex, its type the `group`, its
 altitude the `weight`; two aircraft within fifteen kilometres are an edge, the
 closer the heavier. A pairwise distance over every aircraft is quadratic, so
-the join is bucketed first: `geohashEncode` at precision three is a cell about
-150 km on a side, and only pairs sharing a cell are measured — a pair that
-straddles a cell edge is missed, which is the price of the bucket and is
-stated here rather than hidden. Point play's endpoint at the ClickHouse the
+the join is bucketed first on H3, the grid the rest of boxer uses: `geoToH3` at
+resolution four is a hexagon with edges of about 26 km, wider than the fifteen
+kilometre threshold, so a pair within it shares a cell or sits in adjacent
+ones. Each aircraft is joined against its own cell and the ring around it
+(`h3kRing(cell, 1)`), and `a.icao < b.icao` keeps each pair once. The trailing
+`SETTINGS` pins `geoToH3`'s argument order to `(lat, lon)`, which ClickHouse
+has changed across releases — a server that predates the setting rejects the
+query rather than bucketing on swapped coordinates. Point play's endpoint at the ClickHouse the
 demo loader filled (`apps/play/demo/adsb`), as for the raster snippets below.
 
 What to look at once it draws: the aircraft sit at their positions over the
@@ -1448,8 +1452,13 @@ WITH
   ),
   cells AS (
     SELECT icao, lat, lon, altitude, type,
-           geohashEncode(lon, lat, 3) AS cell
+           geoToH3(lat, lon, 4) AS cell
     FROM latest
+  ),
+  ring AS (
+    SELECT icao, lat, lon,
+           arrayJoin(h3kRing(cell, 1)) AS cell
+    FROM cells
   ),
   vertices AS (
     SELECT icao                          AS id,
@@ -1465,10 +1474,11 @@ WITH
            round(geoDistance(a.lon, a.lat, b.lon, b.lat) / 1000, 1) AS km,
            1 / (1 + km)                                            AS weight
     FROM cells AS a
-    JOIN cells AS b ON a.cell = b.cell
+    JOIN ring AS b ON a.cell = b.cell
     WHERE a.icao < b.icao AND km < 15
   )
 SELECT * FROM edges ORDER BY km LIMIT 6000
+SETTINGS geotoh3_argument_order = 'lat_lon'
 ```
 
 ## Flow diagram (Sankey / alluvial)
