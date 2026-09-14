@@ -64,6 +64,10 @@ type Registry struct {
 	mu      sync.RWMutex
 	entries []entry
 	byId    map[AppIdT]int
+	// manifests is the sorted manifest list as of the last registration.
+	// register builds a new one rather than appending, so a slice handed out
+	// by Manifests stays what it was.
+	manifests []Manifest
 }
 
 // NewRegistry returns an empty Registry. Tests use this for isolation;
@@ -184,6 +188,11 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 	for i := idx; i < len(inst.entries); i++ {
 		inst.byId[inst.entries[i].manifest.Id] = i
 	}
+	manifests := make([]Manifest, len(inst.entries))
+	for i, e := range inst.entries {
+		manifests[i] = e.manifest
+	}
+	inst.manifests = manifests
 	return
 }
 
@@ -249,14 +258,40 @@ func AllManifests() (manifests []Manifest) {
 }
 
 // AllManifests returns registered manifests in sorted-Id order. The
-// returned slice is a fresh copy.
+// returned slice is a fresh copy; a caller that reads every frame wants
+// Manifests instead.
 func (inst *Registry) AllManifests() (manifests []Manifest) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
-	manifests = make([]Manifest, len(inst.entries))
-	for i, e := range inst.entries {
-		manifests[i] = e.manifest
-	}
+	manifests = make([]Manifest, len(inst.manifests))
+	copy(manifests, inst.manifests)
+	return
+}
+
+// Manifests returns the registered manifests in sorted-Id order from
+// DefaultRegistry as a shared snapshot: read-only for the caller.
+func Manifests() (manifests []Manifest) {
+	manifests = DefaultRegistry.Manifests()
+	return
+}
+
+// Manifests returns the registered manifests in sorted-Id order as a
+// snapshot shared with every other caller: it must not be mutated, and a
+// registration after the call does not reach it. It is the form for a
+// caller that enumerates every frame, where AllManifests' copy is the
+// allocation.
+func (inst *Registry) Manifests() (manifests []Manifest) {
+	inst.mu.RLock()
+	manifests = inst.manifests
+	inst.mu.RUnlock()
+	return
+}
+
+// NumApps is the number of registered apps.
+func (inst *Registry) NumApps() (n int) {
+	inst.mu.RLock()
+	n = len(inst.entries)
+	inst.mu.RUnlock()
 	return
 }
 

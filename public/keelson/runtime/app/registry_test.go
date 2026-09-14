@@ -327,3 +327,23 @@ func TestRegister_SingletonWithoutWorkingsetStillAllowed(t *testing.T) {
 	require.Len(t, regs, 1)
 	assert.True(t, regs[0].Singleton)
 }
+
+// Manifests is a snapshot: shared between callers, read-only, and left
+// behind by a later registration; AllManifests' copy stays independent.
+func TestRegistry_Manifests_Snapshot(t *testing.T) {
+	reg := NewRegistry()
+	require.Empty(t, reg.Manifests())
+	require.Equal(t, 0, reg.NumApps())
+	require.NoError(t, reg.Register(newTestApp(t, "org.test.b")))
+	require.NoError(t, reg.Register(newTestApp(t, "org.test.a")))
+	snap := reg.Manifests()
+	require.Equal(t, 2, reg.NumApps())
+	require.Len(t, snap, 2)
+	require.Equal(t, AppIdT("org.test.a"), snap[0].Id)
+	require.NoError(t, reg.Register(newTestApp(t, "org.test.c")))
+	require.Len(t, snap, 2, "an earlier snapshot is unchanged")
+	require.Len(t, reg.Manifests(), 3)
+	cp := reg.AllManifests()
+	cp[0].Id = "org.test.z"
+	require.Equal(t, AppIdT("org.test.a"), reg.Manifests()[0].Id, "AllManifests is a copy")
+}

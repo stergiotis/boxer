@@ -27,7 +27,7 @@ const menuRecentsMax = 8
 // before the frame body.
 func (inst *Inst) RenderMenu(ids *c.WidgetIdStack) {
 	for range c.MenuButton(c.Atoms().Text("Apps").Keep()).KeepIter() {
-		if inst.registry == nil || len(inst.registry.AllManifests()) == 0 {
+		if inst.registry == nil || inst.registry.NumApps() == 0 {
 			c.Label("(no apps registered)").Send()
 			return
 		}

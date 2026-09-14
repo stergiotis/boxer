@@ -195,7 +195,7 @@ func (inst *Inst) Render(ids *c.WidgetIdStack) {
 // before they are drawn, so Escape-to-clear does not leave a frame of stale
 // hits on screen.
 func (inst *Inst) renderListPane(ids *c.WidgetIdStack) {
-	if len(inst.registry.AllManifests()) == 0 {
+	if inst.registry.NumApps() == 0 {
 		c.Label("No apps registered.").Send()
 		return
 	}
@@ -287,7 +287,7 @@ func (inst *Inst) filterState() (f filterT) {
 // visibleManifests applies the facet filters — the set the browse sections and
 // the search both draw from.
 func (inst *Inst) visibleManifests() (out []app.Manifest) {
-	out = filterManifests(inst.registry.AllManifests(),
+	out = filterManifests(inst.registry.Manifests(),
 		filterT{kinds: inst.kindFilter(), topics: inst.topicFilter}, inst.rank)
 	return
 }
@@ -388,7 +388,7 @@ func (inst *Inst) renderKindToggles(ids *c.WidgetIdStack, scope string) {
 // the registry's spelling is `observability`, and a person browsing is not
 // looking for a token.
 func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
-	manifests := inst.registry.AllManifests()
+	manifests := inst.registry.Manifests()
 	present := make(map[app.TopicT]struct{}, len(app.AllTopics))
 	for _, m := range manifests {
 		for _, t := range m.Topics {
