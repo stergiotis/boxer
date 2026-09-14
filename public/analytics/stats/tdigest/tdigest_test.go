@@ -407,9 +407,21 @@ func BenchmarkQuantile(b *testing.B) {
 // invariants hold over arbitrary finite inputs.
 func FuzzTDigest(f *testing.F) {
 	f.Add([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+	seed := func(values ...float64) []byte {
+		out := make([]byte, 0, 8*len(values))
+		for _, v := range values {
+			out = binary.LittleEndian.AppendUint64(out, math.Float64bits(v))
+		}
+		return out
+	}
+	f.Add(seed(1, 2, 3, 4, 5, 6, 7, 8))
+	f.Add(seed(-1e300, 5e-324, 1e300, 0, 42))
+	f.Add(seed(3, 3, 3, 3, -3, -3, -3))
 
 	f.Fuzz(func(t *testing.T, raw []byte) {
-		if len(raw)%8 != 0 || len(raw) < 16 {
+		// Read whole float64s and drop a partial trailing one, so every
+		// mutation of the length still reaches the digest.
+		if len(raw) < 16 {
 			return
 		}
 		floats := make([]float64, len(raw)/8)

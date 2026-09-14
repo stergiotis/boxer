@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"math"
 	"math/big"
@@ -12,38 +13,47 @@ import (
 
 // --- Helper: Arbitrary Precision "Source of Truth" ---
 
-// exactStats calculates mean and variance using math/big for infinite precision.
+// exactPrec is the math/big precision exactStats computes at. big.NewFloat
+// defaults to 53 bits — float64 arithmetic with correct rounding, not a
+// reference. A float64 spans 2^-1074..2^1024, so a sum needs about 2100 bits
+// to stay exact and a squared difference about twice that; the quotients by n
+// round, far below any tolerance the tests apply.
+const exactPrec = 4400
+
+func exactFloat(v float64) *big.Float {
+	return new(big.Float).SetPrec(exactPrec).SetFloat64(v)
+}
+
+// exactStats calculates mean and variance using math/big at exactPrec.
 func exactStats(data []float64) (mean, variance float64) {
 	if len(data) == 0 {
 		return 0, 0
 	}
 
-	n := big.NewFloat(float64(len(data)))
-	sum := big.NewFloat(0)
+	n := exactFloat(float64(len(data)))
+	sum := exactFloat(0)
 
 	// 1. Calculate Exact Mean
 	for _, v := range data {
-		sum.Add(sum, big.NewFloat(v))
+		sum.Add(sum, exactFloat(v))
 	}
 
-	bigMean := new(big.Float).Quo(sum, n)
+	bigMean := exactFloat(0).Quo(sum, n)
 
 	// 2. Calculate Exact Variance
 	// sum((x - mean)^2)
-	sumSqDiff := big.NewFloat(0)
+	sumSqDiff := exactFloat(0)
 	for _, v := range data {
-		val := big.NewFloat(v)
-		diff := new(big.Float).Sub(val, bigMean)
-		sq := new(big.Float).Mul(diff, diff)
+		diff := exactFloat(0).Sub(exactFloat(v), bigMean)
+		sq := exactFloat(0).Mul(diff, diff)
 		sumSqDiff.Add(sumSqDiff, sq)
 	}
 
 	var bigVar *big.Float
 	if len(data) > 1 {
-		divisor := big.NewFloat(float64(len(data) - 1))
-		bigVar = new(big.Float).Quo(sumSqDiff, divisor)
+		bigVar = exactFloat(0).Quo(sumSqDiff, exactFloat(float64(len(data)-1)))
 	} else {
-		bigVar = big.NewFloat(0)
+		bigVar = exactFloat(0)
 	}
 
 	mean, _ = bigMean.Float64()
@@ -54,8 +64,11 @@ func exactStats(data []float64) (mean, variance float64) {
 // assertClose checks if two float64s are within a small epsilon.
 // We use a relative error check for large numbers and absolute for small ones.
 func assertClose(t *testing.T, name string, expected, actual float64) {
-	const epsilon = 1e-12 // High precision requirement
+	assertCloseTol(t, name, expected, actual, 1e-12) // High precision requirement
+}
 
+func assertCloseTol(t *testing.T, name string, expected, actual, epsilon float64) {
+	t.Helper()
 	diff := math.Abs(expected - actual)
 
 	// Handle zero cases strictly
@@ -104,6 +117,8 @@ func Test_vsArbitraryPrecision(t *testing.T) {
 	scenarios := []struct {
 		name string
 		data []float64
+		// epsilon overrides assertClose's relative tolerance when non-zero.
+		epsilon float64
 	}{
 		{
 			name: "Small Integers",
@@ -117,8 +132,14 @@ func Test_vsArbitraryPrecision(t *testing.T) {
 		},
 		{
 			name: "Mixed Magnitudes",
-			// Mixing large and very small numbers tests the Kahan summation
-			data: []float64{1e9, 1e-5, -1e9, -1e-5, 500, 0.0001},
+			// Mixing large and very small numbers tests the Kahan summation.
+			// The 1e-5 terms meet a running mean near 1e9, whose ulp is
+			// 1.2e-7, so x - mean rounds them away before compensation can
+			// keep them: the stream lands ~2.7e-11 (relative) off the exact
+			// mean. That is float64's floor for a streaming update, not a
+			// defect.
+			data:    []float64{1e9, 1e-5, -1e9, -1e-5, 500, 0.0001},
+			epsilon: 1e-10,
 		},
 		{
 			name: "Random Uniform (Size 1000)",
@@ -153,9 +174,13 @@ func Test_vsArbitraryPrecision(t *testing.T) {
 			expectedMean, expectedVar := exactStats(sc.data)
 			expectedStdDev := math.Sqrt(expectedVar)
 
-			assertClose(t, "Mean", expectedMean, stats.Mean())
-			assertClose(t, "Variance", expectedVar, stats.Variance())
-			assertClose(t, "StdDev", expectedStdDev, stats.StdDev())
+			epsilon := sc.epsilon
+			if epsilon == 0 {
+				epsilon = 1e-12
+			}
+			assertCloseTol(t, "Mean", expectedMean, stats.Mean(), epsilon)
+			assertCloseTol(t, "Variance", expectedVar, stats.Variance(), epsilon)
+			assertCloseTol(t, "StdDev", expectedStdDev, stats.StdDev(), epsilon)
 		})
 	}
 }
@@ -237,72 +262,69 @@ func TestJSONSerialization(t *testing.T) {
 	}
 }
 
-// FuzzStreamStats generates random byte sequences, converts them to floats,
-// and compares the streaming result against the math/big exact implementation.
-// Run with: go test -fuzz=Fuzz -fuzztime=10s
+// FuzzStreamStats reads the input as little-endian float64s and compares
+// the streaming mean and variance against exactStats.
+//
+// A relative tolerance alone is not a sound oracle: Welford's update rounds
+// every x - mean at the magnitude of the larger operand, so data that cancels
+// (1e17, 1, -1e17) leaves an absolute error of order eps·max|x| that can
+// dwarf a small exact result. The tolerance is therefore the larger of a
+// relative one and that forward-error bound, scaled by n for accumulation and
+// by max|x| again for the variance's squares, and never below n subnormal
+// steps. Inputs are held below a quarter
+// of the magnitude at which the intermediate differences (for the mean) or
+// their squares (for the variance) overflow; past it the stream reports ±Inf
+// for a finite result, which is float64 range rather than a defect.
 func FuzzStreamStats(f *testing.F) {
-	// Seed with some basic cases
-	f.Add([]byte{0x00, 0x00, 0x00, 0x00}) // Zeros
+	f.Add(float64Bytes(0, 0))
+	f.Add(float64Bytes(1, 2, 3, 4))
+	f.Add(float64Bytes(-1.5, 1e-300, 2.5e10, 7))
+	f.Add(float64Bytes(1e17, 1, -1e17))
+	f.Add(float64Bytes(1e150, -1e150, 3))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		// Convert bytes to float64 slice
-		if len(data)%8 != 0 {
+		// Read whole float64s and drop a partial trailing one, so every
+		// mutation of the length still reaches the code under test.
+		n := len(data) / 8
+		if n < 2 {
 			return
 		}
-
-		inputCount := len(data) / 8
-		if inputCount < 2 {
-			return
-		}
-
-		floats := make([]float64, inputCount)
-		for i := range inputCount {
-			bits := uint64(data[i*8]) | uint64(data[i*8+1])<<8 |
-				uint64(data[i*8+2])<<16 | uint64(data[i*8+3])<<24 |
-				uint64(data[i*8+4])<<32 | uint64(data[i*8+5])<<40 |
-				uint64(data[i*8+6])<<48 | uint64(data[i*8+7])<<56
-
-			fVal := math.Float64frombits(bits)
-
-			// Skip Infs and NaNs for standard logic verification
-			// as they naturally propagate and break "Exact" comparisons
-			if math.IsInf(fVal, 0) || math.IsNaN(fVal) {
-				return
+		floats := make([]float64, n)
+		maxAbs := 0.0
+		for i := range floats {
+			v := math.Float64frombits(binary.LittleEndian.Uint64(data[i*8:]))
+			if math.IsInf(v, 0) || math.IsNaN(v) {
+				return // non-finite input propagates by design
 			}
-			floats[i] = fVal
+			floats[i] = v
+			maxAbs = math.Max(maxAbs, math.Abs(v))
 		}
 
-		// Calculate using Stream
 		stats := NewStreamStats()
 		stats.PushSeq(slices.Values(floats))
-
-		// Calculate using Exact (math/big)
 		expMean, expVar := exactStats(floats)
 
-		// We need a slightly looser epsilon for Fuzzing because random
-		// bit-sequences create extremely ill-conditioned numbers (denormals, max float, etc)
-		// where 64-bit float precision naturally breaks down compared to math/big.
-		// However, we ensure it doesn't panic and stays reasonably close.
-
-		// 1. Check for Panic (implicitly handled by Fuzz)
-
-		// 2. Check Reasonable Accuracy (skip if BigInt overflowed or result is NaN)
-		if math.IsNaN(expMean) || math.IsNaN(stats.Mean()) {
-			return
+		const relTol = 1e-9
+		const slack = 16.0
+		eps := math.Nextafter(1, 2) - 1
+		// Rounding cannot be finer than one subnormal step, so the bound
+		// never falls below n of them however small the inputs are.
+		floor := slack * float64(n) * math.SmallestNonzeroFloat64
+		within := func(exp, got, bound float64) bool {
+			return math.Abs(exp-got) <= math.Max(relTol*math.Abs(exp), bound+floor)
 		}
 
-		// Relative error check
-		const looseEpsilon = 1e-9
-
-		diffMean := math.Abs(expMean - stats.Mean())
-		if expMean != 0 && diffMean/math.Abs(expMean) > looseEpsilon {
-			// This usually catches catastrophic cancellation failures
-			t.Errorf("Fuzz Mean Divergence: Stream=%.5e, Exact=%.5e", stats.Mean(), expMean)
+		if maxAbs <= math.MaxFloat64/4 {
+			bound := slack * float64(n) * eps * maxAbs
+			if !within(expMean, stats.Mean(), bound) {
+				t.Errorf("mean: stream=%.17g exact=%.17g bound=%.3g n=%d", stats.Mean(), expMean, bound, n)
+			}
 		}
-
-		diffVar := math.Abs(expVar - stats.Variance())
-		if expVar != 0 && diffVar/math.Abs(expVar) > looseEpsilon {
-			t.Errorf("Fuzz Var Divergence: Stream=%.5e, Exact=%.5e", stats.Variance(), expVar)
+		if maxAbs <= math.Sqrt(math.MaxFloat64)/4 {
+			bound := slack * float64(n) * eps * maxAbs * maxAbs
+			if !within(expVar, stats.Variance(), bound) {
+				t.Errorf("variance: stream=%.17g exact=%.17g bound=%.3g n=%d", stats.Variance(), expVar, bound, n)
+			}
 		}
 	})
 }
@@ -367,6 +389,8 @@ func TestExtendedStats(t *testing.T) {
 	scenarios := []struct {
 		name string
 		data []float64
+		// epsilon overrides assertClose's relative tolerance when non-zero.
+		epsilon float64
 	}{
 		{
 			name: "Sequence 1-10",
@@ -503,4 +527,13 @@ func TestMergeHigherMoments(t *testing.T) {
 	assertClose(t, "Variance", ref.Variance(), partA.Variance())
 	assertClose(t, "Skewness", ref.Skewness(), partA.Skewness())
 	assertClose(t, "Kurtosis", ref.Kurtosis(), partA.Kurtosis())
+}
+
+// float64Bytes encodes values little-endian, the layout FuzzStreamStats reads.
+func float64Bytes(values ...float64) []byte {
+	out := make([]byte, 0, 8*len(values))
+	for _, v := range values {
+		out = binary.LittleEndian.AppendUint64(out, math.Float64bits(v))
+	}
+	return out
 }
