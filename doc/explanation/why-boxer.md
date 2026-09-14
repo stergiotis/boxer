@@ -353,3 +353,7 @@ code growing without consuming decisions.
   design-before-code norm.
 - [README](../../README.md) — inventory, build instructions, the AI codegen
   declaration.
+- [iso25010-assessment](./iso25010-assessment.md) — these premises graded
+  against ISO/IEC 25010, with the costs measured rather than asserted;
+  [iso25010-temperament](./iso25010-temperament.md) is its figure-free
+  companion.
