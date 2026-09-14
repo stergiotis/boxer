@@ -13,9 +13,13 @@ import (
 	"github.com/stergiotis/boxer/public/analytics/graph/algo"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 	"github.com/zeebo/xxh3"
 )
 
@@ -265,14 +269,23 @@ func (inst *netIds) known(s string) bool {
 // re-Run can change which columns the same bytes are read through.
 type graphviewModelKey struct {
 	edgesFP, verticesFP uint64
-	// optsFP is the settings row's fingerprint: a changed `graph_opts` can
-	// change the declaration — the encoding channels and the undirected
-	// reading are built into it — so it re-keys the cache like the other two.
-	optsFP              uint64
+	// decl is the part of the settings row that is built INTO the declaration
+	// — the encoding selectors and the undirected reading. The rest of
+	// `graph_opts` (the layout, the spacing, `hide_edges`) is applied to the
+	// widget's options per frame and re-keys nothing, so a settings row that
+	// reads `{gv_zoom:Float64}` re-executes on every settle without
+	// rebuilding the picture or re-framing the camera.
+	decl                graphviewDeclKey
 	haveEdges, haveVert bool
 	ec                  networkEdgesClaim
 	vc                  networkVerticesClaim
 	gc                  networkGraphOptsClaim
+}
+
+// graphviewDeclKey is what the declaration depends on beyond the two records.
+type graphviewDeclKey struct {
+	sizeBy, toneBy, opacityBy, auraBy string
+	undirected                        bool
 }
 
 // GraphviewDriver owns the Graphview tab state: the widget (which owns the
@@ -328,6 +341,9 @@ type GraphviewDriver struct {
 	sizeBy     string
 	sizeBySet  bool
 	sizeReason string
+	// chanReasons are the tone, opacity and aura selectors' refusals, for the
+	// status line, rebuilt with the channels.
+	chanReasons []string
 	// orientSet / pinOnDragSet record that the reader moved the control, which
 	// is what makes it an override rather than the zero value agreeing with a
 	// default (§SD1).
@@ -335,7 +351,46 @@ type GraphviewDriver struct {
 	aurasSet     bool
 	pinOnDrag    bool
 	pinOnDragSet bool
-	seedRowsBuf  []int32
+	// The checkboxes with an auto position bind a persistent mirror rather
+	// than a local: the client writes the bound value at frame END, so a
+	// local would be written after the compare that reads it and the control
+	// would flip back next frame. *Sent is what went out last frame; a
+	// mirror that differs from it at the top of a frame is the reader's click.
+	aurasCtl, aurasSent     bool
+	holdCtl, holdSent       bool
+	basemap, basemapSet     bool
+	basemapCtl, basemapSent bool
+	seedRowsBuf             []int32
+	// lastSeedKey is the seed set the seeded channels were last derived for;
+	// a change re-derives the channels without rebuilding the model.
+	lastSeedKey uint64
+	// declaredSel is the selection the query declared on its last rebuild
+	// (§SD2 `selected`), so a re-run can withdraw it and the seam can leave it
+	// unpublished (§SD8: the round trip must not loop).
+	declaredSel map[uint64]struct{}
+	// prevKeys are the previous declaration's ids: a start position is spent
+	// on a node that was not there before, not on one the reader may have
+	// moved since.
+	prevKeys map[uint64]struct{}
+	// served is what the three lanes had served at the last rebuild, for the
+	// own-signal rule (§SD8): a rebuild whose inputs diverged only on signals
+	// this panel wrote keeps the camera.
+	served netServed
+
+	// The located mode (§SD3 as revised in ADR-0231's 2026-09-14 update):
+	// while the declaration carries lat/lon and the reader has not switched
+	// the basemap off, a portolan map owns the canvas and the graph paints
+	// and picks inside it (ADR-0228). The offline atlas draws country
+	// outlines where no tile server is configured.
+	pm             *portolan.Map
+	land           *landoverlay.Layer
+	atlas          *worldmap.Atlas
+	hostViewHash   uint64
+	hostStableAt   time.Time
+	hostFitPending bool
+	hostFitIds     []uint64
+	hostNodes      graphview.NodeColumns
+	hostRadius     []float32
 	// centers is the `center` column resolved to keys — the radial layout's
 	// middle, which is data rather than a control (§SD2).
 	centers []uint64
@@ -440,36 +495,50 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	// declaration is built from.
 	inst.opts = buildGraphOpts(optsRec, gc)
 
-	key := graphviewModelKey{ec: ec, vc: vc, gc: gc}
+	key := graphviewModelKey{ec: ec, vc: vc, gc: gc, decl: inst.declKey()}
 	if inst.src != nil {
-		key.edgesFP, key.verticesFP, key.optsFP = inst.src.edgesFP, inst.src.verticesFP, inst.src.optsFP
+		key.edgesFP, key.verticesFP = inst.src.edgesFP, inst.src.verticesFP
 	}
 	key.haveEdges, key.haveVert = edgesRec != nil, vertRec != nil
 	if !inst.keyOk || key != inst.key {
-		m := buildNetModel(edgesRec, ec, vertRec, vc,
-			netCaps{vertices: graphviewMaxVertices, edges: graphviewMaxEdges})
+		// The own-signal rule (§SD8): when the lanes re-ran because a signal
+		// THIS panel wrote moved — an expansion on `gv_focus`, a drop read
+		// back through `gv_pin_*` — the picture is the reader's and the
+		// camera stays; a Run, an edit or another panel's signal re-frames.
+		keep := false
+		if inst.keyOk && inst.src != nil {
+			keep = inst.src.served().divergedOnlyOn(inst.served, graphviewOwnSignal)
+		}
+		inst.prevKeys = keySet(inst.nodes.Ids, inst.prevKeys)
+		m := buildNetModelWith(edgesRec, ec, vertRec, vc,
+			netCaps{vertices: graphviewMaxVertices, edges: graphviewMaxEdges},
+			inst.selectorColumns())
 		inst.rebuild(&m)
 		inst.lastModel = &m
 		inst.key, inst.keyOk = key, true
-		// A new result is a freshly laid-out graph, which is the case the fit
-		// latch exists for (ADR-0224 §SD4): the widget arms it on its first
-		// nodes and never again, so without this a re-Run against a different
-		// graph would be framed by the camera the last one was left at.
-		// Positions of surviving ids are kept — only the framing is re-armed.
-		inst.view.FitNow()
+		if inst.src != nil {
+			inst.served = inst.src.served()
+		}
+		if !keep {
+			// A new result is a freshly laid-out graph, which is the case the
+			// fit latch exists for (ADR-0224 §SD4): the widget arms it on its
+			// first nodes and never again, so without this a re-Run against a
+			// different graph would be framed by the camera the last one was
+			// left at. Positions of surviving ids are kept — only the framing
+			// is re-armed.
+			inst.view.FitNow()
+			inst.hostFitPending = true
+		}
 		inst.view.FastForward(graphviewSettleBudget(inst.nodes.Len()))
 		inst.frozen = false
 	}
 	inst.pruneSelection(emit)
 	// The seeded metrics — the distance family and `relevance` — measure from
-	// the current selection, which is the reading a reader means by "how far
-	// is this from what I picked". A change of selection drops only the
-	// columns that depend on it. Until a `distance_from` column exists
-	// (ADR-0231 §SD2) the selection is the only seed there is.
+	// the seed set `distance_from` names: the selection, or the hovered
+	// vertex. A change of seed drops the columns that depend on it and
+	// re-derives the channels that spend one, without rebuilding the model.
 	if inst.metrics != nil && inst.names != nil {
-		rows := inst.effectiveSeeds()
-		inst.seedRowsBuf = rows
-		inst.metrics.setSeeds(rows)
+		inst.syncSeeds()
 	}
 
 	inst.renderControls()
@@ -486,7 +555,11 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 	// probe reports the room left for the NEXT widget, so the canvas has to be
 	// the last thing in the body or it holds a scrollbar open, which narrows
 	// the pane, which resizes the canvas.
-	for rt := range c.RichTextLabel("drag pans and moves a node, ctrl+scroll zooms; click a node to select it") {
+	hint := "drag pans and moves a node, ctrl+scroll zooms; click a node to select it"
+	if inst.hosted() {
+		hint = "drag pans the map and moves a node, wheel zooms; click a node to select it"
+	}
+	for rt := range c.RichTextLabel(hint) {
 		rt.Small().Weak()
 	}
 	c.Separator().Horizontal().Send()
@@ -534,11 +607,16 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		Legend:  graphview.AuraLegendInside,
 	}
 
-	if err := inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
-		// Validate ran at rebuild, so reaching here is a panel bug rather
-		// than a malformed query; the widget rendered nothing and kept its
-		// state, and the next rebuild is the recovery.
-		log.Error().Err(err).Msg("graphview render refused the declaration")
+	if inst.hosted() {
+		inst.renderHosted(w, h)
+	} else {
+		o.Style.NodeRadius = 0 // the style default, in world units
+		if err := inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
+			// Validate ran at rebuild, so reaching here is a panel bug rather
+			// than a malformed query; the widget rendered nothing and kept its
+			// state, and the next rebuild is the recovery.
+			log.Error().Err(err).Msg("graphview render refused the declaration")
+		}
 	}
 
 	if inst.pendingState {
@@ -581,6 +659,12 @@ func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
 	// --- state -----------------------------------------------------------
 	sel := inst.selBuf[:0]
 	for id := range v.SelectedNodes() {
+		// A selection the query DECLARED is the query's own statement read
+		// back: publishing it would feed a query that declares `selected`
+		// from `selection_key` its own output (§SD8).
+		if _, declared := inst.declaredSel[id]; declared {
+			continue
+		}
 		if name := inst.names.name(id); name != "" {
 			sel = append(sel, name)
 		}
@@ -627,9 +711,19 @@ func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
 	// wrote per frame would re-run a Live query on every frame of the gesture
 	// and trip the runaway breaker, which is the right behaviour for a loop
 	// and the wrong one for a pan.
-	if v.Metrics().CameraMoved {
+	switch {
+	case inst.hosted():
+		// The host owns the camera, so its view is what settles: the Map
+		// tab's own debounce over the view hash.
+		if vh := inst.pm.ViewHash(); vh != inst.hostViewHash {
+			inst.hostViewHash, inst.hostStableAt, inst.cameraDirty = vh, now, true
+		} else if inst.cameraDirty && now.Sub(inst.hostStableAt) >= mapDebounce {
+			inst.cameraDirty = false
+			inst.publishHostCamera(emit)
+		}
+	case v.Metrics().CameraMoved:
 		inst.cameraDirty = true
-	} else if inst.cameraDirty {
+	case inst.cameraDirty:
 		inst.cameraDirty = false
 		if minX, minY, maxX, maxY, ok := v.Bounds(); ok {
 			emit.Emit(signalGvMinX, float64(minX))
@@ -715,7 +809,7 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 	if err := inst.metrics.buildGraph(m, inst.opts.Undirected); err != nil {
 		log.Error().Err(err).Msg("graphview: the metric graph could not be built")
 	}
-	sizeVals, sizeMax := inst.sizeChannel(m)
+	inst.lastSeedKey = inst.metrics.seedKey
 
 	// Seam A's columns travel as they stand wherever the model and the widget
 	// already agree on the shape (ADR-0231 §SD2): the model spells "not
@@ -738,24 +832,12 @@ func (inst *GraphviewDriver) rebuild(m *netModel) {
 		AuraOffsets:   m.AuraStart,
 		AuraIds:       m.AuraValues,
 	}
-	for i := range n {
-		if col, ok := m.vertexFill(i); ok {
-			nc.Color[i] = col
-		}
-		// An absolute `radius` wins over the size channel's share (§SD2): a
-		// query that names a size in world units meant that size, where
-		// `weight` and a metric are both shares of a maximum.
-		if r := m.Radius[i]; !math.IsNaN(float64(r)) {
-			nc.Radius[i] = r
-			continue
-		}
-		nc.Radius[i] = graphviewRadius(sizeVals[i], sizeMax)
-	}
 	// The donut columns are already the list layout the widget takes, so they
 	// are handed over as they stand rather than re-nested per row.
 	nc.DonutOffsets, nc.DonutValues, nc.DonutTotal = m.DonutStart, m.DonutValues, m.DonutTotal
 	nc.DonutColors = graphviewDonutColors(m)
 	inst.nodes = nc
+	inst.deriveChannels(m)
 
 	seqPalette := styletokens.SequentialDefault()
 	bandLo := networkMagnitudeBandLo(seqPalette, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
@@ -831,14 +913,17 @@ func graphviewSettleBudget(n int) uint32 {
 // Zero — no weight column, or nothing positive in it — takes the style
 // default.
 func graphviewRadius(w float64, maxW float64) float32 {
-	if math.IsNaN(w) || w <= 0 || maxW <= 0 {
+	if math.IsNaN(w) || maxW <= 0 {
 		// NaN is "not declared for this row" in a columnar declaration
 		// (ADR-0232 §SD4), which is what takes the style default. A zero
 		// would be an explicit zero radius — a node that is only its label —
-		// which is not what an absent or non-positive weight means.
+		// which is not what an absent value means. The size channel spells
+		// an unknown `weight` as NaN before it gets here, so a metric's
+		// legitimate zero — a degree of none, a distance of nothing — is the
+		// smallest disc rather than the default one.
 		return graphviewUnsetF32
 	}
-	t := math.Sqrt(min(w, maxW) / maxW)
+	t := math.Sqrt(min(max(w, 0), maxW) / maxW)
 	return float32(graphviewMinRadius + (graphviewMaxRadius-graphviewMinRadius)*t)
 }
 
@@ -883,6 +968,7 @@ func (inst *GraphviewDriver) renderControls() {
 	for range c.Horizontal().KeepIter() {
 		if c.Button(ids.PrepareStr("gv-fit"), c.Atoms().Text("fit").Keep()).SendResp().HasPrimaryClicked() {
 			inst.view.FitNow()
+			inst.hostFitPending = true
 		}
 		if c.Button(ids.PrepareStr("gv-reset"), c.Atoms().Text("re-lay-out").Keep()).SendResp().HasPrimaryClicked() {
 			inst.view.ResetLayout()
@@ -895,10 +981,11 @@ func (inst *GraphviewDriver) renderControls() {
 			inst.frozen = false
 		}
 		c.Checkbox(ids.PrepareStr("gv-paused"), inst.paused, "paused").SendRespVal(&inst.paused)
-		held := inst.effectivePinOnDrag()
-		if c.Checkbox(ids.PrepareStr("gv-hold"), held, "hold dropped nodes").
-			SendRespVal(&held); held != inst.effectivePinOnDrag() {
-			inst.pinOnDrag, inst.pinOnDragSet = held, true
+		autoCheckbox(ids, "gv-hold", "hold dropped nodes", &inst.holdCtl, &inst.holdSent,
+			&inst.pinOnDrag, &inst.pinOnDragSet, inst.opts.PinOnDrag)
+		if inst.located() {
+			autoCheckbox(ids, "gv-basemap", "basemap", &inst.basemapCtl, &inst.basemapSent,
+				&inst.basemap, &inst.basemapSet, true)
 		}
 		// The size channel's selector. `graph_opts` will supply the default
 		// this overrides (ADR-0231 §SD1); until then the chrome is the only
@@ -939,16 +1026,54 @@ func (inst *GraphviewDriver) renderControls() {
 		// Auras are offered only when the vertices named a `group` — the
 		// column they are drawn from (§SD4).
 		if len(inst.groups) > 0 {
-			shown := inst.effectiveAuras()
-			if c.Checkbox(ids.PrepareStr("gv-auras"), shown, "auras by group").
-				SendRespVal(&shown); shown != inst.effectiveAuras() {
-				inst.auras, inst.aurasSet = shown, true
-			}
+			autoCheckbox(ids, "gv-auras", "auras by group", &inst.aurasCtl, &inst.aurasSent,
+				&inst.auras, &inst.aurasSet, inst.aurasDefault())
 			if inst.effectiveAuras() {
 				c.Checkbox(ids.PrepareStr("gv-overlap"), inst.overlap, "auras may overlap").SendRespVal(&inst.overlap)
 			}
 		}
 	}
+	// Hosted, the legend cannot live in the canvas — a row stamped under the
+	// map's own drag region could never be clicked (ADR-0224 §SD15) — so its
+	// rows are buttons out here, toggling through the silent setters.
+	if inst.hosted() && inst.effectiveAuras() {
+		for range c.Horizontal().KeepIter() {
+			for i, it := range inst.view.AuraLegendItems() {
+				mark := "■ "
+				if it.Hidden {
+					mark = "□ "
+				}
+				if c.Button(ids.PrepareSeq(uint64(0x6100+i)), c.Atoms().Text(mark+it.Label).Keep()).
+					Frame(false).SendResp().HasPrimaryClicked() {
+					if it.Hidden {
+						inst.view.ShowAura(it.Key)
+					} else {
+						inst.view.HideAura(it.Key)
+					}
+				}
+			}
+		}
+	}
+}
+
+// autoCheckbox draws a checkbox that follows def while the reader has not
+// touched it, and the reader's choice once they have (ADR-0231 §SD1's auto
+// position). ctl is the persistent mirror the client writes back at frame end
+// and sent what went out last frame: a mirror that differs from it now is the
+// reader's click, which sets val and marks it set. The mirror has to be a
+// field rather than a local — the client's write lands after the frame, into
+// whatever the pointer named, and a local is gone by then.
+func autoCheckbox(ids *c.WidgetIdStack, key, label string, ctl, sent, val, set *bool, def bool) {
+	if *ctl != *sent {
+		*val, *set = *ctl, true
+	}
+	if *set {
+		*ctl = *val
+	} else {
+		*ctl = def
+	}
+	c.Checkbox(ids.PrepareStr(key), *ctl, label).SendRespVal(ctl)
+	*sent = *ctl
 }
 
 // statusLine reports the drawn shape, what the caps and the label budget did
@@ -971,6 +1096,16 @@ func (inst *GraphviewDriver) statusLine() string {
 	b.WriteString(inst.opts.statusNote())
 	if inst.sizeReason != "" {
 		fmt.Fprintf(&b, " · %s", inst.sizeReason)
+	}
+	for _, r := range inst.chanReasons {
+		fmt.Fprintf(&b, " · %s", r)
+	}
+	if inst.hosted() {
+		if basemap.Configured() {
+			b.WriteString(" · located: over a basemap")
+		} else {
+			b.WriteString(" · located: over country outlines (no tile server configured)")
+		}
 	}
 	if inst.metrics != nil {
 		// A truncated metric is a valid result with a flag (ADR-0229 §SD4),
@@ -1006,43 +1141,35 @@ const graphviewHoverDwell = 200 * time.Millisecond
 // which a zero would do.
 func (inst *GraphviewDriver) sizeChannel(m *netModel) (vals []float64, maxV float64) {
 	inst.sizeReason = ""
-	sel, reason := parseGraphviewSelector(inst.effectiveSizeBy(), graphviewChannelSize, func(name string) bool {
-		return name == networkWeightCol
-	})
+	sel, reason := parseGraphviewSelector(inst.effectiveSizeBy(), graphviewChannelSize, m.hasColumn)
 	if reason != "" {
 		inst.sizeReason = reason
 	}
-	if sel.Metric == algo.MetricNone {
-		return m.Weight, m.maxNodeWeight
+	if sel.IsZero() {
+		return m.weightChannel(), m.maxNodeWeight
 	}
-	col, ok := inst.metrics.column(sel.Metric)
-	if !ok || len(col.Values) != m.NumVertices() {
-		// A seeded metric with nothing selected, or an engine refusal: say so
-		// and leave the channel where it was rather than blanking every node.
-		if inst.sizeReason == "" && sel.Metric.IsSeeded() {
-			inst.sizeReason = "`size_by = " + inst.sizeBy + "`: select a node to measure from"
+	num, _, _, reason := inst.channelColumn(m, sel, graphviewChannelSize)
+	if reason != "" || num == nil {
+		if reason != "" {
+			inst.sizeReason = reason
 		}
-		return m.Weight, m.maxNodeWeight
+		return m.weightChannel(), m.maxNodeWeight
 	}
-	for _, v := range col.Values {
-		if !math.IsNaN(v) && v > maxV {
-			maxV = v
+	return num, maxOf(num)
+}
+
+// weightChannel is the contract's `weight` as a size channel: NaN where a
+// vertex has none, since the contract's 0 means *unknown* (ADR-0167 §SD2) and
+// a channel's 0 is a value.
+func (inst *netModel) weightChannel() []float64 {
+	out := make([]float64, len(inst.Weight))
+	for i, w := range inst.Weight {
+		out[i] = math.NaN()
+		if w > 0 {
+			out[i] = w
 		}
 	}
-	if !sel.Invert {
-		return col.Values, maxV
-	}
-	// Inverted: the ramp flips about the maximum, so the nearest is the
-	// largest. NaN stays NaN — absent is not the far end.
-	out := make([]float64, len(col.Values))
-	for i, v := range col.Values {
-		if math.IsNaN(v) {
-			out[i] = v
-			continue
-		}
-		out[i] = maxV - v
-	}
-	return out, maxV
+	return out
 }
 
 // graphviewSizeOptions is the chrome's vocabulary for the size channel: the
@@ -1183,31 +1310,48 @@ func graphviewDonutColors(m *netModel) color.Colors {
 // initial position. They run after the render that reconciled the declaration,
 // because until then the ids have no slots.
 //
-// Applied once per rebuild, not per frame: `start_x`/`start_y` is an initial
-// position and then the node is free, and re-applying it every frame would
-// pin it by repetition.
+// The declared selection is withdrawn before it is re-applied, so a re-run
+// that moves `selected` from one node to another does not accumulate; what
+// the reader selected by hand stays, since the widget's setters are additive
+// and only the ids this panel declared are deselected. A start position is
+// spent on a node that was not in the previous declaration: it is an initial
+// position and then the node is free, and re-applying it to a survivor on
+// every Live re-run would undo whatever the reader dragged.
 func (inst *GraphviewDriver) applyDeclaredState(m *netModel) {
 	if m == nil {
 		return
 	}
+	for id := range inst.declaredSel {
+		inst.view.DeselectNode(id)
+	}
+	if inst.declaredSel == nil {
+		inst.declaredSel = make(map[uint64]struct{}, 8)
+	}
+	clear(inst.declaredSel)
 	fit := inst.fitBuf[:0]
 	for i := range m.NumVertices() {
-		if m.Selected[i] {
-			inst.view.SelectNode(m.Key[i])
+		key := m.Key[i]
+		if m.Selected[i] && inst.view.SelectNode(key) {
+			inst.declaredSel[key] = struct{}{}
 		}
 		if m.Fit[i] {
-			fit = append(fit, m.Key[i])
+			fit = append(fit, key)
+		}
+		if _, survived := inst.prevKeys[key]; survived {
+			continue
 		}
 		x, y := m.StartX[i], m.StartY[i]
 		if !math.IsNaN(float64(x)) && !math.IsNaN(float64(y)) {
-			inst.view.SetNodePosition(m.Key[i], x, y)
+			inst.view.SetNodePosition(key, x, y)
 		}
 	}
 	inst.fitBuf = fit
+	inst.hostFitIds = append(inst.hostFitIds[:0], fit...)
 	if len(fit) > 0 {
 		// A declared frame replaces the whole-graph fit the rebuild armed:
-		// the query said what it wanted framed.
+		// the query said what it wanted framed. Hosted, the map frames it.
 		inst.view.FitNodes(fit)
+		inst.hostFitPending = true
 	}
 }
 
@@ -1238,4 +1382,514 @@ func (inst *GraphviewDriver) effectiveAuras() bool {
 		return true
 	}
 	return inst.lastModel != nil && inst.lastModel.GroupsDeclared
+}
+
+// keySet rebuilds a set over ids in dst's storage.
+func keySet(ids []uint64, dst map[uint64]struct{}) map[uint64]struct{} {
+	if dst == nil {
+		dst = make(map[uint64]struct{}, len(ids))
+	}
+	clear(dst)
+	for _, id := range ids {
+		dst[id] = struct{}{}
+	}
+	return dst
+}
+
+// graphviewOwnSignal reports whether a signal name is one this panel writes:
+// the reserved names the declaration gives the Graphview tab (§SD8).
+func graphviewOwnSignal(name string) bool {
+	r, ok := reservedSignalIndex[SignalID(name)]
+	return ok && r.Owner == "graphview"
+}
+
+// declKey is the part of the settings row and the chrome the declaration is
+// built from.
+func (inst *GraphviewDriver) declKey() graphviewDeclKey {
+	return graphviewDeclKey{
+		sizeBy: inst.effectiveSizeBy(), toneBy: inst.opts.ToneBy,
+		opacityBy: inst.opts.OpacityBy, auraBy: inst.opts.AuraBy,
+		undirected: inst.opts.Undirected,
+	}
+}
+
+// selectorColumns names the vertices columns the four selectors spend that are
+// neither a metric nor a contract column, so the build reads them (§SD6).
+func (inst *GraphviewDriver) selectorColumns() (names []string) {
+	for _, raw := range []string{inst.effectiveSizeBy(), inst.opts.ToneBy, inst.opts.OpacityBy, inst.opts.AuraBy} {
+		s := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(raw), "-"))
+		if s == "" {
+			continue
+		}
+		if _, isMetric := algo.ParseMetric(s); isMetric {
+			continue
+		}
+		switch s {
+		case networkWeightCol, networkGroupCol, networkToneCol:
+			continue
+		}
+		if !slices.Contains(names, s) {
+			names = append(names, s)
+		}
+	}
+	return
+}
+
+// hasColumn reports whether a selector may name this column: a contract
+// column the model carries, or one the build read for the selectors.
+func (inst *netModel) hasColumn(name string) bool {
+	switch name {
+	case networkWeightCol, networkGroupCol, networkToneCol:
+		return true
+	}
+	_, ok := inst.Extra[name]
+	return ok
+}
+
+// channelColumn resolves a selector against the model: quantities in num (NaN
+// where a row has none), labels in lbl ("" where none), or a set per row in
+// sets — exactly one of the three. reason is a status-line sentence when the
+// channel cannot spend what the selector names.
+func (inst *GraphviewDriver) channelColumn(m *netModel, sel graphviewSelector, ch graphviewChannelE) (num []float64, lbl []string, sets *netExtraColumn, reason string) {
+	n := m.NumVertices()
+	if sel.Metric != algo.MetricNone {
+		col, ok := inst.metrics.column(sel.Metric)
+		if !ok || len(col.Values) != n {
+			// A seeded metric with nothing to measure from, or an engine
+			// refusal: say so and leave the channel where it was.
+			if sel.Metric.IsSeeded() {
+				return nil, nil, nil, "`" + ch.String() + " = " + sel.Metric.String() + "`: select or hover a node to measure from"
+			}
+			return nil, nil, nil, "`" + ch.String() + " = " + sel.Metric.String() + "`: the engine did not compute it"
+		}
+		if sel.Metric.Kind() == algo.KindCategorical {
+			lbl = make([]string, n)
+			for i, v := range col.Values {
+				if !math.IsNaN(v) {
+					lbl[i] = strconv.FormatInt(int64(v), 10)
+				}
+			}
+			return
+		}
+		return invertIf(col.Values, sel.Invert), nil, nil, ""
+	}
+	switch sel.Column {
+	case networkWeightCol:
+		num = make([]float64, n)
+		for i, w := range m.Weight {
+			num[i] = math.NaN()
+			if w > 0 {
+				num[i] = w
+			}
+		}
+		return invertIf(num, sel.Invert), nil, nil, ""
+	case networkGroupCol:
+		return nil, m.Group, nil, quantityRefusal(ch, sel.Column)
+	case networkToneCol:
+		return nil, m.Tone, nil, quantityRefusal(ch, sel.Column)
+	}
+	x, ok := m.Extra[sel.Column]
+	switch {
+	case !ok:
+		return nil, nil, nil, "`" + ch.String() + " = " + sel.Column + "`: no column or metric of that name"
+	case x.IsNumeric():
+		return invertIf(x.Num, sel.Invert), nil, nil, ""
+	case x.IsList():
+		if ch.wantsQuantity() {
+			return nil, nil, nil, quantityRefusal(ch, sel.Column)
+		}
+		return nil, nil, &x, ""
+	}
+	return nil, x.Str, nil, quantityRefusal(ch, sel.Column)
+}
+
+// quantityRefusal is the sentence for a label column named where a quantity
+// is needed, and the empty string where a label is fine.
+func quantityRefusal(ch graphviewChannelE, col string) string {
+	if !ch.wantsQuantity() {
+		return ""
+	}
+	return "`" + ch.String() + " = " + col + "`: " + col + " is a label rather than a quantity, so it can colour or group but not size"
+}
+
+// invertIf flips a quantity column about its maximum when asked — the
+// nearest the largest — leaving NaN in place, since absent is not the far end.
+// The returned slice is the input when nothing is to invert.
+func invertIf(vals []float64, invert bool) []float64 {
+	if !invert {
+		return vals
+	}
+	maxV := maxOf(vals)
+	out := make([]float64, len(vals))
+	for i, v := range vals {
+		if math.IsNaN(v) {
+			out[i] = v
+			continue
+		}
+		out[i] = maxV - v
+	}
+	return out
+}
+
+// maxOf is the largest non-NaN value, 0 for none.
+func maxOf(vals []float64) (maxV float64) {
+	for _, v := range vals {
+		if !math.IsNaN(v) && v > maxV {
+			maxV = v
+		}
+	}
+	return
+}
+
+// graphviewOpacityFloor is the least opacity the `opacity_by` ramp gives a
+// node with a value, so the smallest is dim rather than gone: the widget has
+// no spelling for fully transparent that a caller would want here.
+const graphviewOpacityFloor = 0.15
+
+// usesSeededChannel reports whether any channel spends a seeded metric, which
+// is what makes a seed change worth a re-derivation.
+func (inst *GraphviewDriver) usesSeededChannel() bool {
+	for _, raw := range []string{inst.effectiveSizeBy(), inst.opts.ToneBy, inst.opts.OpacityBy, inst.opts.AuraBy} {
+		s := strings.TrimPrefix(strings.TrimSpace(raw), "-")
+		if m, ok := algo.ParseMetric(strings.TrimSpace(s)); ok && m.IsSeeded() {
+			return true
+		}
+	}
+	return false
+}
+
+// syncSeeds declares the seed set and, when it moved and a channel spends a
+// seeded metric, re-derives the channels over the cached model: the radius,
+// the fill, the opacity and the auras, without touching the topology or the
+// positions.
+func (inst *GraphviewDriver) syncSeeds() {
+	rows := inst.effectiveSeeds()
+	inst.seedRowsBuf = rows
+	inst.metrics.setSeeds(rows)
+	if inst.metrics.seedKey == inst.lastSeedKey || inst.lastModel == nil {
+		return
+	}
+	inst.lastSeedKey = inst.metrics.seedKey
+	if inst.usesSeededChannel() {
+		inst.deriveChannels(inst.lastModel)
+	}
+}
+
+// deriveChannels spends the four encoding selectors on the declaration
+// (ADR-0231 §SD6) under §SD12's precedence: an absolute `radius` beats the
+// size channel, a `tone_by` value beats `tone` and `group`, an `opacity_by`
+// value beats `opacity`, and an `aura_by` set replaces `groups` and `group`.
+// It writes into the cached declaration's own columns, so a re-derivation on
+// a seed change touches nothing else.
+func (inst *GraphviewDriver) deriveChannels(m *netModel) {
+	n := m.NumVertices()
+	if n == 0 || inst.nodes.Len() != n {
+		return
+	}
+	inst.chanReasons = inst.chanReasons[:0]
+	nc := &inst.nodes
+
+	// Size.
+	sizeVals, sizeMax := inst.sizeChannel(m)
+	for i := range n {
+		// An absolute `radius` wins over the size channel's share (§SD2): a
+		// query that names a size in world units meant that size, where
+		// `weight` and a metric are both shares of a maximum.
+		if r := m.Radius[i]; !math.IsNaN(float64(r)) {
+			nc.Radius[i] = r
+			continue
+		}
+		nc.Radius[i] = graphviewRadius(sizeVals[i], sizeMax)
+	}
+
+	// Fill: `tone_by`, else the contract's tone-over-group.
+	for i := range n {
+		nc.Color[i] = color.Color{}
+		if col, ok := m.vertexFill(i); ok {
+			nc.Color[i] = col
+		}
+	}
+	if sel, reason := parseGraphviewSelector(inst.opts.ToneBy, graphviewChannelTone, m.hasColumn); reason != "" {
+		inst.chanReasons = append(inst.chanReasons, reason)
+	} else if !sel.IsZero() {
+		num, lbl, sets, reason := inst.channelColumn(m, sel, graphviewChannelTone)
+		switch {
+		case reason != "":
+			inst.chanReasons = append(inst.chanReasons, reason)
+		case num != nil:
+			// A quantity ramps, at the same normalised position the edge
+			// channel uses (ADR-0167 §SD4).
+			seq := styletokens.SequentialDefault()
+			bandLo := networkMagnitudeBandLo(seq, styletokens.NeutralBgPanel, styletokens.NeutralBorderDefault)
+			maxV := maxOf(num)
+			for i, v := range num {
+				if !math.IsNaN(v) && maxV > 0 {
+					nc.Color[i] = color.Hex(networkMagnitudeRamp(seq, bandLo, max(v, 0), maxV).AsHex())
+				}
+			}
+		case lbl != nil:
+			// A label takes the group palette by distinct value, in the order
+			// the rows first name them.
+			idx := make(map[string]int, 8)
+			for i, l := range lbl {
+				if l == "" {
+					continue
+				}
+				k, seen := idx[l]
+				if !seen {
+					k = len(idx)
+					idx[l] = k
+				}
+				nc.Color[i] = networkGroupColor(k)
+			}
+		case sets != nil:
+			inst.chanReasons = append(inst.chanReasons, "`tone_by = "+sel.Column+"`: a set cannot colour one node")
+		}
+	}
+
+	// Opacity: `opacity_by`, else the declared `opacity`.
+	nc.Opacity = m.Opacity
+	if sel, reason := parseGraphviewSelector(inst.opts.OpacityBy, graphviewChannelOpacity, m.hasColumn); reason != "" {
+		inst.chanReasons = append(inst.chanReasons, reason)
+	} else if !sel.IsZero() {
+		num, _, _, reason := inst.channelColumn(m, sel, graphviewChannelOpacity)
+		if reason != "" {
+			inst.chanReasons = append(inst.chanReasons, reason)
+		} else if num != nil {
+			out := make([]float32, n)
+			maxV := maxOf(num)
+			for i, v := range num {
+				out[i] = m.Opacity[i]
+				if math.IsNaN(v) || maxV <= 0 {
+					continue
+				}
+				share := min(max(v, 0), maxV) / maxV
+				out[i] = float32(graphviewOpacityFloor + (1-graphviewOpacityFloor)*share)
+			}
+			nc.Opacity = out
+		}
+	}
+
+	// Auras: `aura_by`, else the `groups` set or `group` (§SD4).
+	nc.AuraOffsets, nc.AuraIds = m.AuraStart, m.AuraValues
+	inst.groups = m.groups()
+	if sel, reason := parseGraphviewSelector(inst.opts.AuraBy, graphviewChannelAura, m.hasColumn); reason != "" {
+		inst.chanReasons = append(inst.chanReasons, reason)
+	} else if !sel.IsZero() {
+		num, lbl, sets, reason := inst.channelColumn(m, sel, graphviewChannelAura)
+		if reason != "" {
+			inst.chanReasons = append(inst.chanReasons, reason)
+		} else {
+			offsets := make([]int32, 1, n+1)
+			var ids []string
+			seen := make(map[string]struct{}, 8)
+			var groups []string
+			add := func(id string) {
+				if id == "" {
+					return
+				}
+				ids = append(ids, id)
+				if _, dup := seen[id]; !dup {
+					seen[id] = struct{}{}
+					groups = append(groups, id)
+				}
+			}
+			for i := range n {
+				switch {
+				case num != nil:
+					if v := num[i]; !math.IsNaN(v) {
+						add(strconv.FormatFloat(v, 'g', -1, 64))
+					}
+				case lbl != nil:
+					add(lbl[i])
+				case sets != nil:
+					for _, id := range sets.ListValues[sets.ListStart[i]:sets.ListStart[i+1]] {
+						add(id)
+					}
+				}
+				offsets = append(offsets, int32(len(ids)))
+			}
+			if len(ids) > 0 {
+				nc.AuraOffsets, nc.AuraIds = offsets, ids
+			} else {
+				nc.AuraOffsets, nc.AuraIds = nil, nil
+			}
+			slices.Sort(groups)
+			inst.groups = groups
+		}
+	}
+}
+
+// aurasDefault is what the auras control follows on auto (§SD4): on when the
+// query declared a `groups` set or an `aura_by` selector, off for `group`
+// alone, where the reader judges whether the grouping is also spatial.
+func (inst *GraphviewDriver) aurasDefault() bool {
+	if inst.opts.AuraBy != "" {
+		return true
+	}
+	return inst.lastModel != nil && inst.lastModel.GroupsDeclared
+}
+
+// effectiveBasemap decides whether a located graph is hosted in a map: the
+// reader's switch when they moved it, else on.
+func (inst *GraphviewDriver) effectiveBasemap() bool {
+	if inst.basemapSet {
+		return inst.basemap
+	}
+	return true
+}
+
+// hosted reports that this frame draws inside a map: a located declaration
+// with the basemap on.
+func (inst *GraphviewDriver) hosted() bool {
+	return inst.located() && inst.effectiveBasemap() && inst.nodes.Len() > 0
+}
+
+// hostOrigin is the located set's centroid in the host's projected pixels at
+// the reference zoom — the point the pins were measured from (§SD3).
+func (inst *GraphviewDriver) hostOrigin() portolan.Point {
+	return portolan.Point{X: inst.lastModel.GeoOriginX, Y: inst.lastModel.GeoOriginY}
+}
+
+// hostFitPadding is the room a framing leaves at the map's edges, in pixels.
+const hostFitPadding = 48
+
+// hostFitMaxZoom caps the framing of a single located vertex, which has no
+// extent to fit.
+const hostFitMaxZoom = 12
+
+// renderHosted draws the located graph inside a portolan map (ADR-0228): the
+// map owns the canvas, the pan, the wheel and the camera, and the graph
+// paints and picks inside it at a world fixed at the reference zoom the pins
+// were projected at, so the layout of the unlocated nodes has one equilibrium
+// whatever the map shows. Without a configured tile server the offline atlas
+// draws country outlines under the graph.
+func (inst *GraphviewDriver) renderHosted(w, h float32) {
+	m := inst.lastModel
+	if inst.pm == nil {
+		lat0, lon0 := netUnprojectWebMercator(m.GeoOriginX, m.GeoOriginY)
+		inst.pm = portolan.New(inst.ids, portolan.Options{
+			Source:  basemap.PortolanSource(),
+			Loader:  basemap.PortolanLoader(),
+			Center:  portolan.LL(lat0, lon0),
+			Zoom:    netWebMercatorZoom,
+			NoTiles: !basemap.Configured(),
+		})
+		inst.land = &landoverlay.Layer{}
+		if a, err := worldmap.LoadAtlas(); err == nil {
+			inst.atlas = a
+		}
+		inst.hostFitPending = true
+	}
+	origin := inst.hostOrigin()
+	v := inst.pm.View()
+	if inst.hostFitPending && v.Loaded() && v.Size().X > 0 {
+		inst.hostFitPending = false
+		inst.fitHost(m)
+	}
+
+	// The guest reads the pointer first and says what it took, so the map
+	// stands down before it handles the same frame's input (ADR-0228 §SD2).
+	canvas, area := inst.pm.Handles()
+	claim := inst.view.HostedInput(graphview.HostCanvas{
+		Canvas: canvas, Area: area, W: w, H: h,
+		Camera: v.CameraAt(netWebMercatorZoom, origin),
+	})
+	inst.pm.SetPointerVeto(claim.Pointer)
+
+	inst.pm.Render(w, h, func(p portolan.Projector) {
+		if !basemap.Configured() && inst.atlas != nil {
+			inst.land.Draw(p, inst.atlas, landoverlay.DefaultStyle())
+		}
+		// The map's handlers ran at the top of this Render, so the paint
+		// takes the view as it is now rather than the one the pick used
+		// (ADR-0228 §SD3b).
+		cam := p.CameraAt(netWebMercatorZoom, origin)
+		inst.view.SetHostCamera(cam)
+		inst.scaleForHost(cam.Zoom)
+		if err := inst.view.HostedPaintColumns(&inst.hostNodes, &inst.edges); err != nil {
+			log.Error().Err(err).Msg("graphview hosted paint refused the declaration")
+		}
+	})
+}
+
+// scaleForHost prepares the frame's declaration for the host's camera: world
+// units are reference-zoom pixels, so a radius meant as a screen size is
+// divided by the camera's zoom to stay that size on screen (ADR-0228 §SD3a).
+// Everything else in the declaration is shared with the plain path.
+func (inst *GraphviewDriver) scaleForHost(zoom float32) {
+	z := max(zoom, 1e-6)
+	inst.hostNodes = inst.nodes
+	inst.hostRadius = growToF32(inst.hostRadius, len(inst.nodes.Radius))
+	for i, r := range inst.nodes.Radius {
+		inst.hostRadius[i] = r / z
+	}
+	inst.hostNodes.Radius = inst.hostRadius
+	inst.view.Opts.Style.NodeRadius = graphviewDefaultNodeRadius / z
+	// The legend cannot live in the host's canvas (ADR-0224 §SD15); the
+	// controls draw its rows.
+	inst.view.Opts.Auras.Legend = graphview.AuraLegendExternal
+}
+
+// graphviewDefaultNodeRadius is the widget's own default, restated here so the
+// hosted scale has a number to divide.
+const graphviewDefaultNodeRadius = 5
+
+func growToF32(s []float32, n int) []float32 {
+	if cap(s) < n {
+		return make([]float32, n)
+	}
+	return s[:n]
+}
+
+// fitHost frames the located vertices — or the `fit` rows among them when the
+// query named some — in the host's view. A single point has no extent, so
+// its zoom is capped.
+func (inst *GraphviewDriver) fitHost(m *netModel) {
+	minLat, minLon := math.Inf(1), math.Inf(1)
+	maxLat, maxLon := math.Inf(-1), math.Inf(-1)
+	count := 0
+	want := func(i int) bool {
+		if len(inst.hostFitIds) == 0 {
+			return true
+		}
+		return slices.Contains(inst.hostFitIds, m.Key[i])
+	}
+	for i := range m.NumVertices() {
+		la, lo := m.Lat[i], m.Lon[i]
+		if math.IsNaN(la) || math.IsNaN(lo) || !want(i) {
+			continue
+		}
+		minLat, maxLat = min(minLat, la), max(maxLat, la)
+		minLon, maxLon = min(minLon, lo), max(maxLon, lo)
+		count++
+	}
+	if count == 0 {
+		return
+	}
+	_ = inst.pm.View().FitBounds(
+		portolan.LatLngBoundsOf(portolan.LL(minLat, minLon), portolan.LL(maxLat, maxLon)),
+		portolan.FitOptions{Padding: portolan.Point{X: hostFitPadding, Y: hostFitPadding}, MaxZoom: hostFitMaxZoom, HasMaxZoom: true})
+}
+
+// publishHostCamera writes the camera signals from the host's settled view:
+// the bounds in degrees, the same bounds in the graph's world units, and the
+// zoom as the guest camera's scale, so a query reads the located graph's
+// camera in whichever units it wrote.
+func (inst *GraphviewDriver) publishHostCamera(emit SignalEmitterI) {
+	v := inst.pm.View()
+	b := v.Bounds()
+	emit.Emit(signalGvMinLat, b.GetSouth())
+	emit.Emit(signalGvMaxLat, b.GetNorth())
+	emit.Emit(signalGvMinLon, b.GetWest())
+	emit.Emit(signalGvMaxLon, b.GetEast())
+	m := inst.lastModel
+	// y grows downward in the projection: the northern edge is the smaller y.
+	x0, y0 := netProjectWebMercator(b.GetNorth(), b.GetWest())
+	x1, y1 := netProjectWebMercator(b.GetSouth(), b.GetEast())
+	emit.Emit(signalGvMinX, x0-m.GeoOriginX)
+	emit.Emit(signalGvMaxX, x1-m.GeoOriginX)
+	emit.Emit(signalGvMinY, y0-m.GeoOriginY)
+	emit.Emit(signalGvMaxY, y1-m.GeoOriginY)
+	emit.Emit(signalGvZoom, float64(v.CameraAt(netWebMercatorZoom, inst.hostOrigin()).Zoom))
 }

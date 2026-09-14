@@ -652,6 +652,65 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Updates
+
+### 2026-09-14 — SD2–SD5, SD8 and SD11 shipped; SD3's descoping is reversed
+
+`play` reads Seam A's columns on both CTEs, the `graph_opts` and `aura_style`
+seams' first half — `graph_opts` with every column §SD5 names — the four
+encoding selectors over a metric or a column of the query's own, the `gv_*`
+signal set with its located forms, the `PinOnDrag` control with its *auto*
+position, and the layered tab's honoured subset of §SD10. `aura_style` (§SD7)
+and the `selection_id` publish (§SD9) are still open.
+
+**The basemap.** §SD3 descoped hosting the located graph inside `portolan` as
+"a different panel with different rules". The first located queries wanted the
+map under them, and each of the three rules the descoping named has an answer
+that already existed: the legend goes external (ADR-0224 §SD15), the host owns
+the camera and `FitNow` is replaced by the map's own framing of the located
+set, and the pointer is arbitrated by the hosted claim (ADR-0228 §SD2). So a
+located declaration is drawn **inside a map in the Graphview tab itself**, not
+in a new panel: the map owns the canvas, pan and wheel, the graph paints and
+picks inside it at the world fixed at the reference zoom the pins were
+projected at, unlocated vertices are laid out among the pinned ones, and the
+camera signals publish from the map's settled view in both units. A configured
+tile server draws tiles; without one the offline atlas draws country outlines,
+so the arrangement reads as a map either way. A `basemap` control with an
+*auto* position lets the reader draw the located graph on the plain canvas
+instead. The model's Web Mercator projection is asserted equal to the host's
+CRS at the reference zoom, which is what lets one projection serve both.
+
+**Deviations recorded, with the reason each was resolved as it was.**
+
+- §SD12's position order stands: `pin_x`/`pin_y` wins over `lat`/`lon` on a
+  row that declares both. The first implementation had it the other way; the
+  world-unit pin is the more deliberate statement and a query that wants
+  geography does not write one.
+- The Bool claim is Arrow's boolean or an 8-bit integer, as §SD2 says. A
+  wider numeric sharing a flag's name is a collision: a `pick` column holding
+  a score would otherwise take every zero-scored node out of the pointer's
+  reach.
+- `start_x`/`start_y` is spent on a vertex that was not in the previous
+  declaration. Re-applying it to a survivor on every Live re-run undid what
+  the reader had dragged, which is the opposite of "place it once and then
+  leave it free".
+- `pull_x` alone pulls at the centre-gravity default strength, which is what
+  "naming an axis turns the pull on" needed a number for.
+- §SD10's honoured subset for the Network tab is `opacity` and `selected`;
+  `pick` and the edge `id` wait on the layered view, which has no per-node
+  hit exclusion and one edge per ordered pair.
+
+**Three rules the implementation needed stated.** Only the settings that are
+built into the declaration — the selectors and `undirected` — re-key the
+model; the layout, spacing and `hide_edges` reach the widget's options per
+frame, so a settings row that reads `{gv_zoom:Float64}` re-executes on every
+settle without rebuilding or re-framing. The seeded metrics re-derive the
+channels that spend them when the seed moves, without a rebuild, which is what
+makes `distance_from = 'hover'` follow the pointer. And §SD8's own-signal rule
+is implemented over the lanes' served inputs: a rebuild whose SQL is unchanged
+and whose signal values differ only in names this panel writes keeps the
+camera.
+
 ## References
 
 - [ADR-0129](./0129-play-layered-graph-panel.md) — the graph contract and the

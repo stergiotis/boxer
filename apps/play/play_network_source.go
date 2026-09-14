@@ -40,6 +40,58 @@ type networkSource struct {
 	edgesFP    uint64
 	verticesFP uint64
 	optsFP     uint64
+
+	// The three lanes' served SQL and signal values, for the own-signal rule
+	// of ADR-0231 §SD8: a rebuild whose inputs diverged only on signals the
+	// Graphview tab itself wrote keeps the camera.
+	edgesServed, verticesServed, optsServed laneServed
+}
+
+// laneServed is what one lane last served a result for: the fused SQL and the
+// signal values it was compiled with.
+type laneServed struct {
+	sql    string
+	params map[string]string
+}
+
+// netServed is the three graph lanes' served inputs at one moment.
+type netServed struct {
+	edges, vertices, opts laneServed
+}
+
+// served snapshots the three lanes' served inputs.
+func (inst *networkSource) served() netServed {
+	return netServed{edges: inst.edgesServed, vertices: inst.verticesServed, opts: inst.optsServed}
+}
+
+// divergedOnlyOn reports whether every difference between two snapshots is a
+// signal value whose name own accepts, with the SQL of every lane unchanged.
+// It is false when nothing differs, since then nothing was caused at all.
+func (inst netServed) divergedOnlyOn(prev netServed, own func(name string) bool) bool {
+	differs := false
+	for _, pair := range [][2]laneServed{{inst.edges, prev.edges}, {inst.vertices, prev.vertices}, {inst.opts, prev.opts}} {
+		cur, old := pair[0], pair[1]
+		if cur.sql != old.sql {
+			return false
+		}
+		for name, v := range cur.params {
+			if ov, had := old.params[name]; !had || ov != v {
+				if !own(name) {
+					return false
+				}
+				differs = true
+			}
+		}
+		for name := range old.params {
+			if _, has := cur.params[name]; !has {
+				if !own(name) {
+					return false
+				}
+				differs = true
+			}
+		}
+	}
+	return differs
 }
 
 // newNetworkSource builds the source. client may be nil, which leaves both
@@ -121,6 +173,7 @@ func (inst *PlayApp) demandNetworkEdges() (rec arrow.RecordBatch, schema *arrow.
 	s.edgesLoading = v.loading
 	s.edgesErr = v.err // mirrored every demand — nil clears (no latch)
 	s.edgesFP = v.fingerprint
+	s.edgesServed = laneServed{sql: v.sql, params: v.params}
 	return v.rec, v.schema
 }
 
@@ -145,6 +198,7 @@ func (inst *PlayApp) demandNetworkVertices() (rec arrow.RecordBatch, schema *arr
 	s.verticesLoading = v.loading
 	s.verticesErr = v.err
 	s.verticesFP = v.fingerprint
+	s.verticesServed = laneServed{sql: v.sql, params: v.params}
 	return v.rec, v.schema
 }
 
@@ -168,6 +222,7 @@ func (inst *PlayApp) demandGraphOpts() (rec arrow.RecordBatch, schema *arrow.Sch
 		Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
 	})
 	s.optsFP = v.fingerprint
+	s.optsServed = laneServed{sql: v.sql, params: v.params}
 	return v.rec, v.schema
 }
 

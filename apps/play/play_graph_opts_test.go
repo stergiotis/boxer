@@ -59,6 +59,13 @@ func optsRec(t *testing.T, cells map[string]any, rows int) arrow.RecordBatch {
 			}
 			fields = append(fields, arrow.Field{Name: name, Type: arrow.FixedWidthTypes.Boolean})
 			cols = append(cols, b.NewArray())
+		case uint8:
+			b := array.NewUint8Builder(pool)
+			for range rows {
+				b.Append(v)
+			}
+			fields = append(fields, arrow.Field{Name: name, Type: arrow.PrimitiveTypes.Uint8})
+			cols = append(cols, b.NewArray())
 		default:
 			t.Fatalf("unhandled cell type for %q", name)
 		}
@@ -168,13 +175,16 @@ func TestGraphOptsClaimsOnTypeAsWellAsName(t *testing.T) {
 	assert.Equal(t, -1, gc.gravityCol)
 	assert.Zero(t, buildGraphOpts(rec, gc).Gravity)
 
-	// A numeric flag is read as 0-or-not, which is what `1 AS undirected`
-	// means.
-	rec2 := optsRec(t, map[string]any{graphOptUndirectedCol: 1.0}, 1)
+	// An 8-bit flag is read as 0-or-not, which is what `1 AS undirected`
+	// means when the server sends it narrow; a wider numeric is a column
+	// that happens to share the name (ADR-0231 §SD2).
+	rec2 := optsRec(t, map[string]any{graphOptUndirectedCol: uint8(1)}, 1)
 	gc2 := resolveGraphOpts(rec2.Schema())
 	require.NotEqual(t, -1, gc2.undirectedCol)
 	o := buildGraphOpts(rec2, gc2)
 	assert.True(t, o.Undirected && o.UndirectedSet)
+	wide := optsRec(t, map[string]any{graphOptUndirectedCol: 1.0}, 1)
+	assert.Equal(t, -1, resolveGraphOpts(wide.Schema()).undirectedCol)
 
 	// A non-positive quantity is unset, as it is in the widget.
 	rec3 := optsRec(t, map[string]any{graphOptKScaleCol: 0.0, graphOptRingDistCol: -5.0}, 1)

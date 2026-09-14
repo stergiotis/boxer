@@ -185,7 +185,7 @@ func TestSizeChannelSpendsTheSelectedMetric(t *testing.T) {
 	d2.sizeBy, d2.sizeBySet = "distance", true
 	m2 := gvModel(t, []string{"b"}, []string{"a"})
 	d2.rebuild(&m2)
-	assert.Contains(t, d2.sizeReason, "select a node")
+	assert.Contains(t, d2.sizeReason, "select or hover a node")
 
 	// An unparseable selector is refused by name.
 	d3 := NewGraphviewDriver(nil, nil)
