@@ -65,7 +65,17 @@ if [ "${#targets[@]}" -eq 0 ]; then
   exit 1
 fi
 
-before="$(git status --porcelain --untracked-files=all -- '*/testdata/fuzz/*' || true)"
+# Only the selected packages' corpora are compared, so a concurrent fuzz run
+# elsewhere in a shared working tree is not reported as this lane's.
+corpora=()
+for entry in "${targets[@]}"; do
+  corpora+=("${entry% *}/testdata/fuzz")
+done
+mapfile -t corpora < <(printf '%s\n' "${corpora[@]}" | sort -u)
+fuzzstatus() {
+  git status --porcelain --untracked-files=all -- "${corpora[@]}" 2>/dev/null || true
+}
+before="$(fuzzstatus)"
 echo "gofuzz: ${#targets[@]} targets, $fuzztime each, logs in $logdir"
 
 failed=()
@@ -93,7 +103,7 @@ for entry in "${targets[@]}"; do
   fi
 done
 
-after="$(git status --porcelain --untracked-files=all -- '*/testdata/fuzz/*' || true)"
+after="$(fuzzstatus)"
 new="$(comm -13 <(echo "$before" | sort) <(echo "$after" | sort))"
 if [ -n "$new" ]; then
   echo
