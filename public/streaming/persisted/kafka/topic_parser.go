@@ -17,6 +17,8 @@
 //   - Refactored to boxer coding standards: named return values, eh.Errorf
 //     instead of errors.New / fmt.Errorf. Parsing logic, accepted syntax,
 //     and error messages preserved verbatim from upstream.
+//   - Rejects partition specs upstream accepted: ranges expanding past
+//     MaxTopicPartitions, reversed ranges, and an empty topic name.
 
 package kafka
 
@@ -28,10 +30,19 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
+// MaxTopicPartitions bounds how many partitions one [ParseTopics] call may
+// expand its ranges into, summed over every entry. A range is expanded into
+// one map entry per partition, so without a bound `topic:0-2147483647` asks
+// for 2^31 of them. The value is far above the partition count a consumer
+// names explicitly — a whole topic is consumed by naming the topic without
+// partitions — and keeps the worst case at a few MiB.
+const MaxTopicPartitions = 1 << 16
+
 // parsePartitions parses a single partition spec or a contiguous range
 // (for example "5" or "5-10") and returns the corresponding partition
-// list. An empty expression or a malformed range yields an error.
-func parsePartitions(expr string) (parts []int32, err error) {
+// list. An empty expression, a malformed or reversed range, or a range
+// longer than budget yields an error.
+func parsePartitions(expr string, budget int) (parts []int32, err error) {
 	if expr == "" {
 		err = eh.Errorf("empty partition expression")
 		return
@@ -50,6 +61,10 @@ func parsePartitions(expr string) (parts []int32, err error) {
 			err = eh.Errorf("parsing partition number: %w", err)
 			return
 		}
+		if budget < 1 {
+			err = eb.Build().Str("partition", expr).Int("limit", MaxTopicPartitions).Errorf("topic spec exceeds the partition limit")
+			return
+		}
 		parts = []int32{int32(partition)}
 		return
 	}
@@ -66,6 +81,16 @@ func parsePartitions(expr string) (parts []int32, err error) {
 		return
 	}
 
+	if start > end {
+		err = eb.Build().Str("partition", expr).Errorf("partition range is invalid; start of range is after its end")
+		return
+	}
+	if end-start+1 > int64(budget) {
+		err = eb.Build().Str("partition", expr).Int("limit", MaxTopicPartitions).Errorf("topic spec exceeds the partition limit")
+		return
+	}
+
+	parts = make([]int32, 0, end-start+1)
 	for i := start; i <= end; i++ {
 		parts = append(parts, int32(i))
 	}
@@ -77,10 +102,18 @@ func parsePartitions(expr string) (parts []int32, err error) {
 // the last of which is rejected unless allowExplicitOffsets is true.
 // Comma-separated and whitespace-padded entries are accepted.
 //
+// The partitions named across all entries may total at most
+// [MaxTopicPartitions]; a spec asking for more is rejected before any range
+// is expanded.
+//
 // When a partition appears multiple times across the input, an explicit
 // non-default offset always wins; ties at the default offset preserve
 // the first-seen mapping.
 func ParseTopics(sourceTopics []string, defaultOffset int64, allowExplicitOffsets bool) (topics []string, topicPartitions map[string]map[int32]int64, err error) {
+	// expanded counts partitions before de-duplication, so overlapping
+	// entries spend the budget too; that keeps the work bounded as well as
+	// the result.
+	expanded := 0
 	for _, t := range sourceTopics {
 		for splitTopic := range strings.SplitSeq(t, ",") {
 			trimmed := strings.TrimSpace(splitTopic)
@@ -104,12 +137,17 @@ func ParseTopics(sourceTopics []string, defaultOffset int64, allowExplicitOffset
 			}
 
 			topic := strings.TrimSpace(splitByColon[0])
+			if topic == "" {
+				err = eb.Build().Str("topic", trimmed).Errorf("topic is invalid; empty topic name")
+				return
+			}
 
 			var parts []int32
-			parts, err = parsePartitions(splitByColon[1])
+			parts, err = parsePartitions(splitByColon[1], MaxTopicPartitions-expanded)
 			if err != nil {
 				return
 			}
+			expanded += len(parts)
 
 			offset := defaultOffset
 			if len(splitByColon) == 3 {

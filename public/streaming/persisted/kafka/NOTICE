@@ -197,6 +197,14 @@ MODIFICATIONS APPLIED DURING PORT
     observability utility that callers compose with the reader
     using the reader's Client field.
 
+  * topic_parser.go: ParseTopics rejects three partition specs
+    upstream accepted. A range is expanded into one entry per
+    partition, so `topic:0-2147483647` asked for 2^31 of them; the
+    partitions named across one call are now capped at
+    MaxTopicPartitions. A reversed range (`topic:7-5`) used to yield
+    a topic with no partitions, and `:3` a partition map under the
+    empty topic name; both are now errors.
+
 Per Apache-2.0 §4.b, every modified source file in this package
 carries a "Modifications applied during port" line in its header
 referencing this NOTICE.
