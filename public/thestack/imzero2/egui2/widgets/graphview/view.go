@@ -78,6 +78,7 @@ type View struct {
 	hiddenVer   uint32
 	auraDirty   bool         // a node moved by other means than the force step
 	auraDrift   float32      // force-step displacement since the last field, world units
+	stepping    bool         // the simulation moved the nodes this frame
 	auraKey     auraCacheKey // what the rings were computed for; zero before the first
 	legendItems []legend.Item
 
@@ -803,10 +804,11 @@ func (v *View) stepLayout(w, h float32, fp ForceParams, wake bool) {
 	for range steps {
 		v.fs.step(&v.g, w, h, fp, cg)
 	}
+	v.stepping = steps > 0
 	// The field follows the simulation once the nodes have drifted a
-	// fraction of a cell: a settled layout still steps, by less than
-	// epsilon, and this keeps that from either forcing a field per
-	// frame or accumulating unseen.
+	// cell, and the frame the motion stops: a settled layout still steps,
+	// by less than epsilon, and this keeps that from either forcing a
+	// field per frame or accumulating unseen.
 	if steps > 0 && !isNaN32(v.fs.lastDisp) {
 		v.auraDrift += v.fs.lastDisp * float32(steps)
 	}
@@ -1248,8 +1250,10 @@ func (v *View) auraFitMargin(ap AuraParams) float32 {
 }
 
 // auraDriftCells is the force-step drift, in cells on screen, past which
-// the rings are recomputed.
-const auraDriftCells = 0.25
+// the rings are recomputed while the simulation moves the nodes; under a
+// cell the field's own sampling hides the lag. The frame the motion stops
+// applies whatever drift is left, so a settled picture is exact.
+const auraDriftCells = 1
 
 // updateAuras recomputes the field and the rings when anything they depend
 // on changed: the camera, the canvas, the parameters, the membership, the
@@ -1264,7 +1268,7 @@ func (v *View) updateAuras(ap AuraParams, w, h float32) {
 		return
 	}
 	key := auraCacheKey{cam: v.cam, w: w, h: h, params: ap.key(), hash: v.auraSet.hash, hiddenVer: v.hiddenVer}
-	drifted := v.auraDrift*v.cam.Zoom >= auraDriftCells*ap.CellSize
+	drifted := v.auraDrift > 0 && (!v.stepping || v.auraDrift*v.cam.Zoom >= auraDriftCells*ap.CellSize)
 	if !v.auraDirty && !drifted && key == v.auraKey {
 		return
 	}

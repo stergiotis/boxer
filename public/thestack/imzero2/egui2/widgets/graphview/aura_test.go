@@ -200,11 +200,21 @@ func TestUpdateAurasReusesRingsUntilSomethingChanges(t *testing.T) {
 	require.Equal(t, key, v.auraKey)
 	require.Equal(t, float32(-1), first[0], "rings untouched")
 
-	// Drift below a quarter cell keeps them; past it recomputes.
-	v.auraDrift = 0.5
+	// While the simulation moves the nodes, drift under a cell keeps
+	// them; a cell recomputes.
+	v.stepping = true
+	v.auraDrift = 2
 	v.updateAuras(ap, 600, 400)
 	require.Equal(t, float32(-1), v.auraRings[0].xs[0])
-	v.auraDrift = 2
+	v.auraDrift = 4
+	v.updateAuras(ap, 600, 400)
+	require.NotEqual(t, float32(-1), v.auraRings[0].xs[0])
+	require.Zero(t, v.auraDrift)
+
+	// The frame the motion stops, whatever drift is left is applied.
+	v.auraRings[0].xs[0] = -1
+	v.stepping = false
+	v.auraDrift = 0.5
 	v.updateAuras(ap, 600, 400)
 	require.NotEqual(t, float32(-1), v.auraRings[0].xs[0])
 	require.Zero(t, v.auraDrift)
@@ -231,4 +241,36 @@ func TestApplyPinsReportsMoves(t *testing.T) {
 	g.pinX[g.slot[1]] = 7
 	require.True(t, g.applyPins(-1))
 	require.False(t, g.applyPins(g.slot[1]), "the dragged node is left where it is")
+}
+
+// BenchmarkAuraFieldAndContours is one frame's aura work — the field and
+// every aura's rings — over two thousand small nodes in five auras spread
+// across a 1200×800 canvas, the shape of a projection with clusters.
+func BenchmarkAuraFieldAndContours(b *testing.B) {
+	const n = 2000
+	nodes := make([]NodeSpec, n)
+	for i := range nodes {
+		h := mix64(uint64(i) + 1)
+		nodes[i] = NodeSpec{Id: uint64(i) + 1, Radius: 3, Auras: []string{"cluster " + string(rune('a'+i%5))},
+			PinX: unit01(h)*1200 - 200, PinY: unit01(mix64(h))*800 - 200}
+	}
+	var g graph
+	g.reconcile(nodes, nil)
+	for i := range nodes {
+		s := g.slot[nodes[i].Id]
+		g.x[s], g.y[s] = nodes[i].PinX, nodes[i].PinY
+	}
+	var set auraSet
+	set.build(&g.declN, &g)
+	cm := cam.Camera{Zoom: 1, PanX: 200, PanY: 200}
+	p := AuraParams{Enabled: true}.withDefaults()
+	var f auraField
+	var out rings
+	for b.Loop() {
+		f.compute(&g, cm, &set, nil, 5, 1200, 800, p)
+		for k := range set.ids {
+			out.reset()
+			f.contours(int32(k), &out)
+		}
+	}
 }

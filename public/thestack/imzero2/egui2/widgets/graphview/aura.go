@@ -304,6 +304,7 @@ func (f *auraField) compute(g *graph, cm cam.Camera, set *auraSet, hidden map[st
 		sx, sy := cm.ToScreen(g.x[s], g.y[s])
 		kern := kernelFor(r*cm.Zoom, p)
 		R := kern.R
+		R2, d02, ramp := R*R, kern.d0*kern.d0, 1/(R-kern.d0)
 		if sx+R < 0 || sy+R < 0 || sx-R > w || sy-R > h {
 			continue
 		}
@@ -322,14 +323,24 @@ func (f *auraField) compute(g *graph, cm cam.Camera, set *auraSet, hidden map[st
 			vals := f.vals[k]
 			for j := j0; j <= j1; j++ {
 				dy := (float32(j)+0.5)*f.cs - sy
+				dy2 := dy * dy
 				row := vals[j*f.gw : (j+1)*f.gw]
 				for i := i0; i <= i1; i++ {
 					dx := (float32(i)+0.5)*f.cs - sx
-					v := kern.at(float32(math.Sqrt(float64(dx*dx + dy*dy))))
-					if v > 0 {
-						a := row[i]
-						row[i] = a + v - a*v
+					d2 := dx*dx + dy2
+					// The kernel in squared distance: past R nothing,
+					// inside d0 the plateau, which no later blend lowers;
+					// the root is taken on the ramp between alone.
+					if d2 >= R2 {
+						continue
 					}
+					if d2 <= d02 {
+						row[i] = 1
+						continue
+					}
+					v := (R - float32(math.Sqrt(float64(d2)))) * ramp
+					a := row[i]
+					row[i] = a + v*(1-a)
 				}
 			}
 		}

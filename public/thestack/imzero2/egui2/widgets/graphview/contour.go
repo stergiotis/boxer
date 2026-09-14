@@ -68,14 +68,22 @@ type tracer struct {
 	next    []int32
 	visited []bool
 	touched []int32 // set entries of hIdx (k) and vIdx (−k−1), for the cheap reset
+	// in holds the region's inside samples over the padded grid, sample
+	// (i, j) at (j+1)·(gw+2)+(i+1): trace asks the source once per sample
+	// of its bbox and reads the mask for every corner and edge after, then
+	// clears what it set.
+	in []bool
 }
 
 func (t *tracer) setup(gw, gh int32) {
 	nh := int((gw + 1) * (gh + 2))
 	nv := int((gw + 2) * (gh + 1))
-	if t.gw != gw || t.gh != gh || cap(t.hIdx) < nh || cap(t.vIdx) < nv {
+	ni := int((gw + 2) * (gh + 2))
+	if t.gw != gw || t.gh != gh || cap(t.hIdx) < nh || cap(t.vIdx) < nv || cap(t.in) < ni {
 		t.hIdx = growTo(t.hIdx, nh)
 		t.vIdx = growTo(t.vIdx, nv)
+		t.in = growTo(t.in, ni)
+		clear(t.in)
 		for i := range t.hIdx {
 			t.hIdx[i] = -1
 		}
@@ -96,8 +104,9 @@ func (t *tracer) setup(gw, gh int32) {
 	t.px, t.py, t.next = t.px[:0], t.py[:0], t.next[:0]
 }
 
-func (t *tracer) hKey(i, j int32) int32 { return (j+1)*(t.gw+1) + (i + 1) }
-func (t *tracer) vKey(i, j int32) int32 { return (j+1)*(t.gw+2) + (i + 1) }
+func (t *tracer) hKey(i, j int32) int32  { return (j+1)*(t.gw+1) + (i + 1) }
+func (t *tracer) vKey(i, j int32) int32  { return (j+1)*(t.gw+2) + (i + 1) }
+func (t *tracer) inKey(i, j int32) int32 { return (j+1)*(t.gw+2) + (i + 1) }
 
 // edgePoint returns the point on the edge between samples a and b — one
 // inside, one outside — creating it at the interpolated position.
@@ -115,7 +124,7 @@ func (t *tracer) edgePoint(src isoSourceI, cs float32, ai, aj, bi, bj int32) int
 	if *slot >= 0 {
 		return *slot
 	}
-	if !src.inside(ai, aj) {
+	if !t.in[t.inKey(ai, aj)] {
 		ai, aj, bi, bj = bi, bj, ai, aj
 	}
 	f := src.frac(ai, aj, bi, bj)
@@ -148,13 +157,35 @@ func (t *tracer) trace(src isoSourceI, cs float32, i0, j0, i1, j1 int32, out *ri
 		q := t.edgePoint(src, cs, i+a[0], j+a[1], i+b[0], j+b[1])
 		t.next[p] = q
 	}
+	i0, j0 = max(i0, 0), max(j0, 0)
+	i1, j1 = min(i1, t.gw-1), min(j1, t.gh-1)
+	if i1 < i0 || j1 < j0 {
+		return
+	}
+	// The samples the squares touch — the bbox padded by one on every
+	// side — asked of the source once each.
+	stride := t.gw + 2
+	for j := j0 - 1; j <= j1+1; j++ {
+		base := (j + 1) * stride
+		for i := i0 - 1; i <= i1+1; i++ {
+			t.in[base+i+1] = src.inside(i, j)
+		}
+	}
 	for j := j0 - 1; j <= j1; j++ {
 		for i := i0 - 1; i <= i1; i++ {
 			var m uint8
-			for k, cc := range squareCorners {
-				if src.inside(i+cc[0], j+cc[1]) {
-					m |= 1 << k
-				}
+			top := (j+1)*stride + i + 1
+			if t.in[top] {
+				m |= 1
+			}
+			if t.in[top+1] {
+				m |= 2
+			}
+			if t.in[top+stride+1] {
+				m |= 4
+			}
+			if t.in[top+stride] {
+				m |= 8
 			}
 			switch m {
 			case 0, 15:
@@ -200,6 +231,10 @@ func (t *tracer) trace(src isoSourceI, cs float32, i0, j0, i1, j1 int32, out *ri
 			out.ys = append(out.ys, t.py[p])
 		}
 		out.close(startLen)
+	}
+	for j := j0 - 1; j <= j1+1; j++ {
+		base := (j + 1) * stride
+		clear(t.in[base+i0 : base+i1+3])
 	}
 }
 
