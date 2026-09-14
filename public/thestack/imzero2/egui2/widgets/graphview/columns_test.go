@@ -391,3 +391,40 @@ func TestScenePaintOrderFollowsTheDeclarationAfterARemoval(t *testing.T) {
 	}
 	require.Equal(t, []uint64{1, 3, 4}, order)
 }
+
+// The edge declaration is hashed as handed over, so a frame that repeats
+// the last one is known unchanged without a lookup per edge, while a
+// changed one is still filtered by the known ids: a row to an unknown id
+// is skipped, dropping it keeps the topology, and the attributes land on
+// the edges their rows declare.
+func TestEdgeRowsFollowTheDeclaration(t *testing.T) {
+	v := New(nil, "t", Options{})
+	nodes := []NodeSpec{{Id: 1}, {Id: 2}, {Id: 3}}
+	_, changed := v.g.reconcile(nodes, []EdgeSpec{{From: 1, To: 2, Label: "a"}, {From: 1, To: 99}, {From: 2, To: 3, Label: "b"}})
+	require.True(t, changed)
+	require.Equal(t, []int32{0, 2}, v.g.eRow)
+	require.Equal(t, []string{"a", "b"}, v.g.eLabel)
+	raw, topo := v.g.rawEdgeHash, v.g.topoHash
+
+	// The same declaration again: the raw hash agrees, nothing is rebuilt.
+	_, changed = v.g.reconcile(nodes, []EdgeSpec{{From: 1, To: 2, Label: "a"}, {From: 1, To: 99}, {From: 2, To: 3, Label: "b"}})
+	require.False(t, changed)
+	require.Equal(t, raw, v.g.rawEdgeHash)
+	require.Equal(t, topo, v.g.topoHash)
+
+	// The unknown row dropped and the labels changed: the topology holds,
+	// the kept rows are derived again, the attributes follow their rows.
+	_, changed = v.g.reconcile(nodes, []EdgeSpec{{From: 1, To: 2, Label: "A"}, {From: 2, To: 3, Label: "B"}})
+	require.False(t, changed)
+	require.NotEqual(t, raw, v.g.rawEdgeHash)
+	require.Equal(t, topo, v.g.topoHash)
+	require.Equal(t, []int32{0, 1}, v.g.eRow)
+	require.Equal(t, []string{"A", "B"}, v.g.eLabel)
+
+	// An edge between known ids added: a topology change, rebuilt from the
+	// kept rows.
+	_, changed = v.g.reconcile(nodes, []EdgeSpec{{From: 1, To: 2, Label: "A"}, {From: 2, To: 3, Label: "B"}, {From: 3, To: 1}})
+	require.True(t, changed)
+	require.Equal(t, []int32{0, 1, 2}, v.g.eRow)
+	require.Equal(t, []int32{0, 1, 2}, v.g.eFrom)
+}

@@ -53,6 +53,11 @@ type graph struct {
 	eOpacity   []float32 // resolved to 1 when unset (ADR-0224 §SD14)
 	eNoPick    []bool
 	eOrder     []uint8 // index among parallel edges of the same ordered pair
+	// eRow is the declaration row each edge was kept from, in edge order. It
+	// is rebuilt whenever the edge declaration differs from last frame's, so
+	// the attribute copy of an unchanged topology reads the rows through it
+	// rather than testing both ends of every row against the slot map again.
+	eRow []int32
 
 	adjStart []int32 // n+1 offsets into adjList
 	adjList  []int32 // undirected neighbours, one entry per edge end
@@ -60,8 +65,13 @@ type graph struct {
 	inDeg    []int32
 	edgeIdx  map[EdgeRef]int32 // first edge index per ref, rebuilt with the edges
 
-	frame       uint32
-	topoHash    uint64
+	frame    uint32
+	topoHash uint64
+	// rawEdgeHash covers the edge declaration as handed over — every row, in
+	// declaration order — so a declaration that is last frame's is known to
+	// be without a slot lookup per edge; only a changed one is filtered into
+	// topoHash.
+	rawEdgeHash uint64
 	pinnedCount uint32 // declared or widget-side pins, as of the last applyPins
 	// posVer counts the changes to the slot set, a position or a radius —
 	// everything the pick grid is built from. Every writer bumps it.
@@ -107,7 +117,9 @@ func (g *graph) reconcile(nodes []NodeSpec, edges []EdgeSpec) (created []int32, 
 // in declaration order, each surviving id carrying its position and hold
 // into its new slot, and the created indices are final. When the topology
 // is unchanged the edge structure is kept and only the edge attributes are
-// copied.
+// copied; the common frame — the same ids in the same order and the same
+// edge rows — is recognised by a hash of the declaration alone, with no
+// slot lookup per edge.
 func (g *graph) reconcileColumns(nc *NodeColumns, ec *EdgeColumns) (created []int32, topoChanged bool) {
 	if g.slot == nil {
 		g.slot = make(map[uint64]int32, len(nc.Ids))
@@ -144,28 +156,39 @@ func (g *graph) reconcileColumns(nc *NodeColumns, ec *EdgeColumns) (created []in
 		g.setNode(g.rowSlot[i], nc, i)
 	}
 
-	// Edges: the hash covers the edges between known ids, in either
-	// direction distinctly; a re-added id changes the node set even when
-	// the hash agrees, so created counts as a change too.
+	// Edges. The declaration is hashed as handed over first, every row in
+	// declaration order: with the same ids in the same order and the same
+	// rows the topology is unchanged and last frame's kept rows still stand,
+	// so the per-edge lookups are paid only for a declaration that differs.
+	// A changed declaration is filtered: the hash covers the edges between
+	// known ids, in either direction distinctly, so a row to an unknown id
+	// changes nothing; a re-added id changes the node set even when the hash
+	// agrees, so created counts as a change too.
+	var rawHash uint64
 	for i := range ec.From {
-		_, okF := g.slot[ec.From[i]]
-		_, okT := g.slot[ec.To[i]]
-		if okF && okT {
-			hash += mix64(ec.From[i] ^ mix64(ec.To[i]^mix64(colU64(ec.Id, i))))
-		}
+		rawHash = rawHash*0x100000001b3 + mix64(ec.From[i]^mix64(ec.To[i]^mix64(colU64(ec.Id, i))))
 	}
-	topoChanged = !same || hash != g.topoHash || len(created) > 0
-	g.topoHash = hash
-	if topoChanged {
-		g.rebuildEdges(ec)
+	if same && rawHash == g.rawEdgeHash {
+		topoChanged = false
 	} else {
-		j := 0
+		g.eRow = g.eRow[:0]
 		for i := range ec.From {
 			_, okF := g.slot[ec.From[i]]
 			_, okT := g.slot[ec.To[i]]
-			if !okF || !okT {
-				continue
+			if okF && okT {
+				hash += mix64(ec.From[i] ^ mix64(ec.To[i]^mix64(colU64(ec.Id, i))))
+				g.eRow = append(g.eRow, int32(i))
 			}
+		}
+		topoChanged = !same || hash != g.topoHash || len(created) > 0
+		g.topoHash = hash
+	}
+	g.rawEdgeHash = rawHash
+	if topoChanged {
+		g.rebuildEdges(ec)
+	} else {
+		for j, row := range g.eRow {
+			i := int(row)
 			g.eLabel[j] = colStr(ec.Label, i)
 			g.eCol[j] = colColor(ec.Color, i)
 			g.eWidth[j] = colF32(ec.Width, i)
@@ -175,7 +198,6 @@ func (g *graph) reconcileColumns(nc *NodeColumns, ec *EdgeColumns) (created []in
 			}
 			g.eOpacity[j] = opacityOr1(colF32(ec.Opacity, i))
 			g.eNoPick[j] = colBool(ec.NoPick, i)
-			j++
 		}
 	}
 	return
@@ -327,7 +349,8 @@ func pullAt(nc *NodeColumns, i int) (p Pull) {
 }
 
 // rebuildEdges rebuilds the edge arrays, the parallel-edge orders, the
-// in-degrees and the undirected CSR adjacency from the declaration.
+// in-degrees and the undirected CSR adjacency from the declaration's kept
+// rows, which reconcileColumns has put in eRow.
 func (g *graph) rebuildEdges(ec *EdgeColumns) {
 	n := len(g.ids)
 	g.eFrom = g.eFrom[:0]
@@ -347,12 +370,9 @@ func (g *graph) rebuildEdges(ec *EdgeColumns) {
 	clear(g.inDeg)
 	deg := growTo(g.adjStart, n+1)
 	clear(deg)
-	for i := range ec.From {
-		from, okF := g.slot[ec.From[i]]
-		to, okT := g.slot[ec.To[i]]
-		if !okF || !okT {
-			continue
-		}
+	for _, row := range g.eRow {
+		i := int(row)
+		from, to := g.slot[ec.From[i]], g.slot[ec.To[i]]
 		key := [2]int32{from, to}
 		order := g.pairCount[key]
 		g.pairCount[key] = order + 1
