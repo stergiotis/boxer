@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,6 +34,9 @@ type Config struct {
 	Liveness LivenessI
 	// MaxWorkers is the concurrency per kind; zero is DefaultMaxWorkers.
 	MaxWorkers int
+	// Queues is the set this worker drains (ADR-0234 §SD3); nil is every
+	// queue, which is what a worker drained before queues meant anything.
+	Queues []string
 	// Poll, AbandonAfter and Keep default to the environment's.
 	Poll         time.Duration
 	AbandonAfter time.Duration
@@ -65,8 +69,11 @@ type Worker struct {
 	// records no outcome, since the row belongs to the sweep from then on.
 	stopping atomic.Bool
 
-	mu      sync.Mutex
-	running map[string]*run
+	mu       sync.Mutex
+	running  map[string]*run
+	lastTick time.Time
+	ticks    uint64
+	unsubReq func()
 }
 
 // run is one claimed job in flight.
@@ -123,6 +130,12 @@ func (inst *Worker) Start(ctx context.Context) (err error) {
 			return eh.Errorf("subscribe wake: %w", err)
 		}
 	}
+	if err = inst.serve(); err != nil {
+		if inst.unsub != nil {
+			inst.unsub()
+		}
+		return
+	}
 	ctx, inst.cancel = context.WithCancel(ctx)
 	inst.done = make(chan struct{})
 	go inst.loop(ctx)
@@ -139,8 +152,52 @@ func (inst *Worker) Stop() {
 	if inst.unsub != nil {
 		inst.unsub()
 	}
+	if inst.unsubReq != nil {
+		inst.unsubReq()
+	}
 	inst.cancel()
 	<-inst.done
+}
+
+// Status is what a worker says about itself (ADR-0234 §SD5): the kinds
+// and queues it drains, its concurrency, what it holds, and when it last
+// polled. It backs keelson('watchbill_worker') for this process. What it
+// does not say is what other processes serve — that is a presence fact
+// deferred by the ADR.
+type Status struct {
+	RunId        string
+	Kinds        []string
+	Queues       []string
+	MaxWorkers   int
+	Running      []string
+	LastTick     time.Time
+	Ticks        uint64
+	Poll         time.Duration
+	AbandonAfter time.Duration
+	Keep         time.Duration
+	// Serving is true when the worker answers watchbill.job.* on a bus.
+	Serving bool
+	// Sweeping is true when the worker has a liveness source and so
+	// rescues abandoned claims.
+	Sweeping bool
+}
+
+// Status snapshots the worker.
+func (inst *Worker) Status() (s Status) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	s = Status{
+		RunId: inst.cfg.RunId, Kinds: inst.handlers.Kinds(), Queues: append([]string(nil), inst.cfg.Queues...),
+		MaxWorkers: inst.cfg.MaxWorkers, LastTick: inst.lastTick, Ticks: inst.ticks,
+		Poll: inst.cfg.Poll, AbandonAfter: inst.cfg.AbandonAfter, Keep: inst.cfg.Keep,
+		Serving: inst.cfg.Bus != nil, Sweeping: inst.cfg.Liveness != nil,
+	}
+	s.Running = make([]string, 0, len(inst.running))
+	for id := range inst.running {
+		s.Running = append(s.Running, id)
+	}
+	sort.Strings(s.Running)
+	return
 }
 
 // Wake asks for a poll now.
@@ -176,6 +233,9 @@ func (inst *Worker) loop(ctx context.Context) {
 // counts the runs started; nil is accepted when the caller does not wait.
 func (inst *Worker) Tick(ctx context.Context, wg *sync.WaitGroup) (err error) {
 	now := inst.now().UTC()
+	inst.mu.Lock()
+	inst.lastTick, inst.ticks = now, inst.ticks+1
+	inst.mu.Unlock()
 	if err = inst.honourCancels(ctx); err != nil {
 		return
 	}
@@ -289,7 +349,7 @@ func (inst *Worker) fill(ctx context.Context, now time.Time, wg *sync.WaitGroup)
 	if total == 0 {
 		return
 	}
-	ids, err := inst.cfg.Store.Queue(ctx, want, now, total)
+	ids, err := inst.cfg.Store.Queue(ctx, want, inst.cfg.Queues, now, total)
 	if err != nil {
 		return
 	}

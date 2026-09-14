@@ -33,10 +33,23 @@ func TestClaimSQL(t *testing.T) {
 }
 
 func TestQueueSQL(t *testing.T) {
-	sql := QueueSQL(testLayout, []string{"a.b", "c"}, testNow, 5)
+	sql := QueueSQL(testLayout, []string{"a.b", "c"}, nil, testNow, 5)
 	assert.Equal(t, `SELECT "id:id:s:4::0:" FROM wb.watchbill WHERE "tv:jobState:value:val:s:24:::0::data"[1] = 'queued' AND "tv:jobRunAfter:value:val:z64:4:::0::data"[1] <= fromUnixTimestamp64Nano(1788955200000000000) AND "tv:jobKind:value:val:s:24:::0::data"[1] IN ('a.b', 'c') ORDER BY "tv:jobPriority:value:val:u32:4:::0::data"[1] ASC, "tv:jobRunAfter:value:val:z64:4:::0::data"[1] ASC, "ts:ts:z64:47::0:" ASC LIMIT 5`, sql)
-	assert.NotContains(t, QueueSQL(testLayout, nil, testNow, 0), "IN (")
-	assert.NotContains(t, QueueSQL(testLayout, nil, testNow, 0), "LIMIT")
+	assert.NotContains(t, QueueSQL(testLayout, nil, nil, testNow, 0), "IN (")
+	assert.NotContains(t, QueueSQL(testLayout, nil, nil, testNow, 0), "LIMIT")
+	// A worker that drains named queues (ADR-0234 §SD3) filters on the
+	// queue column the same way it filters on its kinds.
+	assert.Contains(t, QueueSQL(testLayout, []string{"a"}, []string{"default", "bulk"}, testNow, 0),
+		`AND "tv:jobKind:value:val:s:24:::0::data"[1] IN ('a') AND "tv:jobQueue:value:val:s:24:::0::data"[1] IN ('default', 'bulk') ORDER BY`)
+}
+
+// The list predicate starts without a conjunction — the generated scan
+// supplies it — and a zero filter is no predicate at all.
+func TestListPredicate(t *testing.T) {
+	assert.Equal(t, "", ListPredicate(ListFilter{}))
+	assert.Equal(t, `"tv:jobState:value:val:s:24:::0::data"[1] IN ('queued', 'running')`, ListPredicate(ListFilter{States: []string{StateQueued, StateRunning}}))
+	assert.Equal(t, `"tv:jobKind:value:val:s:24:::0::data"[1] IN ('k') AND "tv:jobQueue:value:val:s:24:::0::data"[1] IN ('q') AND "tv:jobOwnerApp:value:val:s:24:::0::data"[1] = 'app.x'`,
+		ListPredicate(ListFilter{Kinds: []string{"k"}, Queues: []string{"q"}, OwnerAppId: "app.x"}))
 }
 
 func TestTransitionSQL(t *testing.T) {

@@ -78,6 +78,18 @@ func Enqueue(ctx context.Context, store StoreI, req Request) (id string, err err
 	return
 }
 
+// Submit is [Enqueue] followed by [Wake]: the one call a store holder
+// makes, so a job never waits a poll for want of the doorbell (ADR-0234
+// §SD4). An app without a store handle uses [Client.Enqueue] instead,
+// which the worker answers by doing both.
+func Submit(ctx context.Context, store StoreI, bus app.BusI, req Request) (id string, err error) {
+	if id, err = Enqueue(ctx, store, req); err != nil {
+		return
+	}
+	err = Wake(bus, id)
+	return
+}
+
 // Wake rings the doorbell for id. A nil bus is silent: the worker polls at
 // its interval regardless.
 func Wake(bus app.BusI, id string) (err error) {
@@ -92,9 +104,10 @@ func Wake(bus app.BusI, id string) (err error) {
 
 // RequestCancel asks for the job to stop (ADR-0223 §SD2): a queued job
 // is cancelled outright; a running one is marked, and the holding worker
-// acknowledges within a poll. actor is the run asking. ok is false when
-// the job is not in a state a cancel applies to.
-func RequestCancel(ctx context.Context, store StoreI, id string, actor string, now time.Time) (ok bool, err error) {
+// acknowledges within a poll. actor is the run asking and note, when not
+// empty, is recorded on the event in place of the default. ok is false
+// when the job is not in a state a cancel applies to.
+func RequestCancel(ctx context.Context, store StoreI, id string, actor string, note string, now time.Time) (ok bool, err error) {
 	// The current state decides the route, and a repeat of an earlier
 	// cancel by the same actor is refused here rather than read as won:
 	// the read-back cannot tell "just did it" from "did it before".
@@ -113,7 +126,7 @@ func RequestCancel(ctx context.Context, store StoreI, id string, actor string, n
 		if err != nil || !ok {
 			return ok, err
 		}
-		return true, store.WriteEvent(ctx, fin, watchbillstore.Event{ID: id, State: watchbillstore.StateCancelled, Attempt: job.Attempt, WorkerRun: actor, Note: "cancelled while queued"})
+		return true, store.WriteEvent(ctx, fin, watchbillstore.Event{ID: id, State: watchbillstore.StateCancelled, Attempt: job.Attempt, WorkerRun: actor, Note: noteOr(note, "cancelled while queued")})
 	case watchbillstore.StateRunning:
 		// The holder keeps the row: the state changes, the worker-run
 		// column must not, or the holder would no longer find it held.
@@ -124,15 +137,16 @@ func RequestCancel(ctx context.Context, store StoreI, id string, actor string, n
 		if err != nil || !ok {
 			return ok, err
 		}
-		return true, store.WriteEvent(ctx, fin, watchbillstore.Event{ID: id, State: watchbillstore.StateCancel, Attempt: job.Attempt, WorkerRun: actor})
+		return true, store.WriteEvent(ctx, fin, watchbillstore.Event{ID: id, State: watchbillstore.StateCancel, Attempt: job.Attempt, WorkerRun: actor, Note: note})
 	default:
 		return false, nil
 	}
 }
 
 // Retry puts a finished job back in the queue with its attempts reset
-// (ADR-0223 §SD2); ok is false when the job is not in a final state.
-func Retry(ctx context.Context, store StoreI, id string, actor string, now time.Time) (ok bool, err error) {
+// (ADR-0223 §SD2); ok is false when the job is not in a final state. note,
+// when not empty, is recorded on the event in place of the default.
+func Retry(ctx context.Context, store StoreI, id string, actor string, note string, now time.Time) (ok bool, err error) {
 	job, found, err := store.Get(ctx, id)
 	if err != nil || !found || !watchbillstore.IsFinal(job.State) {
 		return false, err
@@ -145,5 +159,12 @@ func Retry(ctx context.Context, store StoreI, id string, actor string, now time.
 	if err != nil || !ok {
 		return ok, err
 	}
-	return true, store.WriteEvent(ctx, at, watchbillstore.Event{ID: id, State: watchbillstore.StateQueued, Attempt: job.Attempt, WorkerRun: actor, Note: "retried"})
+	return true, store.WriteEvent(ctx, at, watchbillstore.Event{ID: id, State: watchbillstore.StateQueued, Attempt: job.Attempt, WorkerRun: actor, Note: noteOr(note, "retried")})
+}
+
+func noteOr(note string, dflt string) (s string) {
+	if note == "" {
+		return dflt
+	}
+	return note
 }

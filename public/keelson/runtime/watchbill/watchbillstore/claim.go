@@ -82,23 +82,16 @@ func AlterJobTableSettingsSQL(layout Layout) (sql string) {
 }
 
 // QueueSQL reads the ids of the jobs a worker may take now, oldest-first
-// within priority (ADR-0223 §SD2): queued, due, of one of the kinds, at
-// most limit. Kinds is the worker's handler set; empty means every kind.
-func QueueSQL(layout Layout, kinds []string, now time.Time, limit int) (sql string) {
+// within priority (ADR-0223 §SD2): queued, due, of one of the kinds and on
+// one of the queues, at most limit. Kinds is the worker's handler set and
+// queues the set it drains (ADR-0234 §SD3); empty means every one.
+func QueueSQL(layout Layout, kinds []string, queues []string, now time.Time, limit int) (sql string) {
 	var sb strings.Builder
 	sb.WriteString("SELECT " + JobColKey + " FROM " + layout.JobTable() +
 		" WHERE " + elem("jobState") + " = " + strLit(StateQueued) +
 		" AND " + elem("jobRunAfter") + " <= " + timeLit(now))
-	if len(kinds) > 0 {
-		sb.WriteString(" AND " + elem("jobKind") + " IN (")
-		for i, k := range kinds {
-			if i > 0 {
-				sb.WriteString(", ")
-			}
-			sb.WriteString(strLit(k))
-		}
-		sb.WriteString(")")
-	}
+	sb.WriteString(inClause("jobKind", kinds))
+	sb.WriteString(inClause("jobQueue", queues))
 	sb.WriteString(" ORDER BY " + elem("jobPriority") + " ASC, " + elem("jobRunAfter") + " ASC, " + JobColOrder + " ASC")
 	if limit > 0 {
 		sb.WriteString(" LIMIT " + strconv.Itoa(limit))
@@ -215,5 +208,23 @@ func ExpireSQL(layout Layout, cutoff time.Time) (sql string) {
 		sb.WriteString(strLit(s))
 	}
 	sb.WriteString(") AND " + elem("jobFinishedAt") + " < " + timeLit(cutoff) + deleteSettings)
+	return sb.String()
+}
+
+// inClause is " AND <section>[1] IN (...)" over values, or nothing when
+// there are none — a filter that is absent matches everything.
+func inClause(section string, values []string) (clause string) {
+	if len(values) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(" AND " + elem(section) + " IN (")
+	for i, v := range values {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(strLit(v))
+	}
+	sb.WriteString(")")
 	return sb.String()
 }

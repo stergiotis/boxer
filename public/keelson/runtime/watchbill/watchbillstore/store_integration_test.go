@@ -92,7 +92,7 @@ func TestStoreRoundTripUnderClickhouseLocal(t *testing.T) {
 
 func queueIds(t *testing.T, exec recordstore.ExecutorI, layout Layout, now time.Time) (ids []string) {
 	t.Helper()
-	for rec, err := range exec.QueryArrow(context.Background(), QueueSQL(layout, nil, now, 0)) {
+	for rec, err := range exec.QueryArrow(context.Background(), QueueSQL(layout, nil, nil, now, 0)) {
 		require.NoError(t, err)
 		c := rec.Column(0)
 		for i := 0; i < int(rec.NumRows()); i++ {

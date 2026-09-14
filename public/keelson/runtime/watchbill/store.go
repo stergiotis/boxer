@@ -24,8 +24,9 @@ type StoreI interface {
 	// Enqueue inserts job as written and flushes.
 	Enqueue(ctx context.Context, job watchbillstore.Job) (err error)
 	// Queue lists the ids a worker may take now: queued, due, of one of
-	// kinds (empty: any), oldest-first within priority, at most limit.
-	Queue(ctx context.Context, kinds []string, now time.Time, limit int) (ids []string, err error)
+	// kinds and on one of queues (empty: any), oldest-first within
+	// priority, at most limit.
+	Queue(ctx context.Context, kinds []string, queues []string, now time.Time, limit int) (ids []string, err error)
 	// Claim takes a queued, due job for workerRun. won is true exactly
 	// when the row read back names workerRun.
 	Claim(ctx context.Context, id string, workerRun string, now time.Time) (job watchbillstore.Job, won bool, err error)
@@ -42,6 +43,10 @@ type StoreI interface {
 	WriteEvent(ctx context.Context, at time.Time, ev watchbillstore.Event) (err error)
 	// Expire deletes the rows that left the queue before cutoff.
 	Expire(ctx context.Context, cutoff time.Time) (err error)
+	// List reads the job rows f selects, newest request first, at most
+	// limit (zero: the store's own bound). The read side of the client
+	// protocol (ADR-0234 §SD2).
+	List(ctx context.Context, f watchbillstore.ListFilter, limit int) (jobs []watchbillstore.Job, err error)
 }
 
 // Transition is one guarded change of a job row. From is the state the row
@@ -113,10 +118,10 @@ func (inst *SqlStore) Enqueue(ctx context.Context, job watchbillstore.Job) (err 
 	return
 }
 
-func (inst *SqlStore) Queue(ctx context.Context, kinds []string, now time.Time, limit int) (ids []string, err error) {
+func (inst *SqlStore) Queue(ctx context.Context, kinds []string, queues []string, now time.Time, limit int) (ids []string, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	for rec, qerr := range inst.exec.QueryArrow(ctx, watchbillstore.QueueSQL(inst.layout, kinds, now, limit)) {
+	for rec, qerr := range inst.exec.QueryArrow(ctx, watchbillstore.QueueSQL(inst.layout, kinds, queues, now, limit)) {
 		if qerr != nil {
 			return nil, eh.Errorf("queue read: %w", qerr)
 		}
@@ -206,6 +211,28 @@ func (inst *SqlStore) Expire(ctx context.Context, cutoff time.Time) (err error) 
 	defer inst.mu.Unlock()
 	if err = inst.exec.Exec(ctx, watchbillstore.ExpireSQL(inst.layout, cutoff)); err != nil {
 		return eh.Errorf("expire: %w", err)
+	}
+	return
+}
+
+// listBound caps a List whose caller named no limit; the table is a
+// window on the queue, not an export of it.
+const listBound = 10_000
+
+func (inst *SqlStore) List(ctx context.Context, f watchbillstore.ListFilter, limit int) (jobs []watchbillstore.Job, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if limit <= 0 {
+		limit = listBound
+	}
+	opts := recordstore.ScanOpts{ExtraPredicate: watchbillstore.ListPredicate(f), Limit: limit}
+	for ent, serr := range inst.st.Job.ScanJob(ctx, opts) {
+		if serr != nil {
+			return nil, eh.Errorf("list jobs: %w", serr)
+		}
+		if ent != nil && ent.Job.Has {
+			jobs = append(jobs, ent.Job.Val)
+		}
 	}
 	return
 }

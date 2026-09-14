@@ -105,6 +105,9 @@ type Deps struct {
 	// keelson.watchbill and keelson.watchbill_event (ADR-0223 §SD7). nil
 	// is allowed and leaves both empty rather than absent.
 	Watchbill watchbill.ListerI
+	// WatchbillWorker is this process's worker, backing
+	// keelson.watchbill_worker (ADR-0234 §SD5). nil leaves it empty.
+	WatchbillWorker watchbill.StatusI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -151,7 +154,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	}
 	// ADR-0223 §SD7: the job table and its transitions. Registered
 	// unconditionally — a host with no worker answers with empty tables.
-	if e := watchbill.RegisterIntrospect(reg, deps.Watchbill); e != nil {
+	if e := watchbill.RegisterIntrospect(reg, deps.Watchbill, deps.WatchbillWorker); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: watchbill provider registration failed")
 	}
 	// ADR-0169 §SD5: live coverage tables over the in-process sampler.

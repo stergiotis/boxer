@@ -29,17 +29,60 @@ type EventRow struct {
 // a window on the queue, not an export of it.
 const snapshotLimit = 10_000
 
-// RegisterIntrospect registers keelson('watchbill') and
-// keelson('watchbill_event') over lister; nil answers with empty tables,
-// so the names exist whether or not a store was wired.
-func RegisterIntrospect(r *introspect.Registry, lister ListerI) (err error) {
+// StatusI is what keelson('watchbill_worker') reads: the process's own
+// worker, or nil for none.
+type StatusI interface {
+	Status() (s Status)
+}
+
+// RegisterIntrospect registers keelson('watchbill'),
+// keelson('watchbill_event') and keelson('watchbill_worker') over lister
+// and status; nil answers with empty tables, so the names exist whether
+// or not a store or a worker was wired.
+func RegisterIntrospect(r *introspect.Registry, lister ListerI, status StatusI) (err error) {
 	if err = r.Register(jobsProvider{lister: lister}); err != nil {
 		return eh.Errorf("register watchbill: %w", err)
 	}
 	if err = r.Register(eventsProvider{lister: lister}); err != nil {
 		return eh.Errorf("register watchbill_event: %w", err)
 	}
+	if err = r.Register(workerProvider{status: status}); err != nil {
+		return eh.Errorf("register watchbill_worker: %w", err)
+	}
 	return
+}
+
+type workerProvider struct{ status StatusI }
+
+func (workerProvider) Name() string                         { return "watchbill_worker" }
+func (workerProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (workerProvider) Schema() *arrow.Schema                { return workerTable(nil).Schema() }
+
+func (p workerProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+	var rows []Status
+	if p.status != nil {
+		rows = []Status{p.status.Status()}
+	}
+	rec = workerTable(rows).Build(proj, len(rows))
+	return
+}
+
+// workerTable is one row per worker in this process (ADR-0234 §SD5) —
+// one, today — with what it drains and what it holds.
+func workerTable(rows []Status) *introspect.Table {
+	return introspect.NewTable().
+		String("run_id", func(i int) string { return rows[i].RunId }).
+		StringList("kinds", func(i int) []string { return rows[i].Kinds }).
+		StringList("queues", func(i int) []string { return rows[i].Queues }).
+		Int64("max_workers", func(i int) int64 { return int64(rows[i].MaxWorkers) }).
+		StringList("running", func(i int) []string { return rows[i].Running }).
+		String("last_tick", func(i int) string { return rfc(rows[i].LastTick) }).
+		Int64("ticks", func(i int) int64 { return int64(rows[i].Ticks) }).
+		Int64("poll_ms", func(i int) int64 { return rows[i].Poll.Milliseconds() }).
+		Int64("abandon_after_ms", func(i int) int64 { return rows[i].AbandonAfter.Milliseconds() }).
+		Int64("keep_ms", func(i int) int64 { return rows[i].Keep.Milliseconds() }).
+		Bool("serving", func(i int) bool { return rows[i].Serving }).
+		Bool("sweeping", func(i int) bool { return rows[i].Sweeping })
 }
 
 type jobsProvider struct{ lister ListerI }
@@ -121,17 +164,7 @@ func eventsTable(rows []EventRow) *introspect.Table {
 
 // ListJobs reads every job row, newest request first, up to limit.
 func (inst *SqlStore) ListJobs(ctx context.Context, limit int) (jobs []watchbillstore.Job, err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	for ent, serr := range inst.st.Job.ScanJob(ctx, recordstore.ScanOpts{Limit: limit}) {
-		if serr != nil {
-			return nil, eh.Errorf("list jobs: %w", serr)
-		}
-		if ent != nil && ent.Job.Has {
-			jobs = append(jobs, ent.Job.Val)
-		}
-	}
-	return
+	return inst.List(ctx, watchbillstore.ListFilter{}, limit)
 }
 
 // ListEvents reads event rows in write order, up to limit.

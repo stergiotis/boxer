@@ -3,10 +3,14 @@
 // CLICKHOUSE_* variables name. `run` is the worker a machine with no window
 // host stands; the rest write or read rows.
 //
-// A worker started here has no facts store to read heartbeats from, so it
-// sweeps nothing: abandoned claims are the host's worker's to notice. It
-// runs the handlers this binary links, which is what makes a consumer's
-// kind runnable from a shell: link the package, register at init.
+// A worker started here is a run like the host's (ADR-0234 §SD6): it
+// writes its runtime-start row and heartbeats to the facts store on the
+// same server, so a host's worker on the cell does not take its jobs for
+// abandoned, and it reads heartbeats back, so it sweeps what others left.
+// Where the facts store is not reachable it stands without either and says
+// so. It runs the handlers this binary links, which is what makes a
+// consumer's kind runnable from a shell: link the package, register at
+// init.
 package watchbill
 
 import (
@@ -22,12 +26,20 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
+
+// factsPingTimeout is how long `run` waits for the facts store before it
+// stands without heartbeats; the host's own bound.
+const factsPingTimeout = 2 * time.Second
 
 // NewCliCommand returns the `watchbill` group.
 func NewCliCommand() *cli.Command {
@@ -72,6 +84,7 @@ func newRunCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.IntFlag{Name: "max-workers", Value: watchbill.DefaultMaxWorkers, Usage: "runs in flight per kind"},
 			&cli.DurationFlag{Name: "poll", Usage: "queue read interval (default: $KEELSON_WATCHBILL_POLL)"},
+			&cli.StringSliceFlag{Name: "queue", Usage: "drain only these queues (repeatable; default: every queue)"},
 		},
 		Action: func(c *cli.Context) (err error) {
 			store, err := open(c)
@@ -83,19 +96,52 @@ func newRunCommand() *cli.Command {
 			if len(kinds) == 0 {
 				return eh.Errorf("no handler is registered in this binary; there is nothing to run")
 			}
-			worker, err := watchbill.New(watchbill.Config{
-				Store: store, RunId: runid.Mint("watchbill", "cli"), Log: log.Logger,
-				MaxWorkers: c.Int("max-workers"), Poll: c.Duration("poll"),
-			})
+			ctx, stop := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+
+			// The run's identity and its liveness, the host's way: a
+			// runtime-start row, then a heartbeat every interval, on the
+			// facts store of the same server (ADR-0234 §SD6).
+			runInst, err := runinfo.Init()
+			if err != nil {
+				return eh.Errorf("runinfo: %w", err)
+			}
+			logger := runinfo.TagLogger(log.Logger, runInst)
+			factsCfg := chstore.ConfigFromEnv()
+			factsCfg.RunId = runInst.RunId
+			facts, isCh := chstore.NewWithFallback(factsCfg, logger, factsPingTimeout)
+			cfg := watchbill.Config{
+				Store: store, RunId: runInst.RunId, Log: logger,
+				MaxWorkers: c.Int("max-workers"), Poll: c.Duration("poll"), Queues: c.StringSlice("queue"),
+			}
+			if isCh {
+				if _, werr := facts.WriteRuntimeStart(factsstore.RuntimeStartRow{
+					RunId: runInst.RunId, Hostname: runInst.Hostname, Pid: runInst.Pid, GoVersion: runInst.GoVersion,
+					VcsRevision: runInst.VcsRevision, VcsModified: runInst.VcsModified, VcsBuildInfo: runInst.VcsBuildInfo,
+					ModulePath: runInst.ModulePath, Ts: runInst.StartedAt,
+				}); werr != nil {
+					logger.Warn().Err(werr).Msg("watchbill: runtime-start row not written")
+				}
+				hb, herr := heartbeat.Start(context.Background(), facts, runInst.RunId, heartbeat.DefaultInterval, logger)
+				if herr != nil {
+					return eh.Errorf("heartbeat: %w", herr)
+				}
+				defer hb.Stop()
+				if l := watchbill.NewRunEventLiveness(facts); l != nil {
+					cfg.Liveness = l
+				}
+			} else {
+				logger.Warn().Msg("watchbill: the facts store is not reachable; this run writes no heartbeat, so a host's worker on the same cell will abandon its jobs, and it sweeps nothing")
+			}
+
+			worker, err := watchbill.New(cfg)
 			if err != nil {
 				return
 			}
-			ctx, stop := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
-			defer stop()
 			if err = worker.Start(ctx); err != nil {
 				return
 			}
-			log.Info().Strs("kinds", kinds).Msg("watchbill: worker started")
+			logger.Info().Strs("kinds", kinds).Strs("queues", cfg.Queues).Bool("heartbeat", isCh).Msg("watchbill: worker started")
 			<-ctx.Done()
 			worker.Stop()
 			return nil
@@ -148,25 +194,32 @@ func newAddCommand() *cli.Command {
 func newListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
-		Usage: "print the job rows, one per line",
-		Flags: []cli.Flag{&cli.IntFlag{Name: "limit", Value: 200}},
+		Usage: "print the job rows, one per line, newest request first",
+		Flags: []cli.Flag{
+			&cli.IntFlag{Name: "limit", Value: 200},
+			&cli.StringSliceFlag{Name: "state", Usage: "only these states (repeatable)"},
+			&cli.StringSliceFlag{Name: "kind", Usage: "only these kinds (repeatable)"},
+			&cli.StringSliceFlag{Name: "queue", Usage: "only these queues (repeatable)"},
+			&cli.StringFlag{Name: "owner", Usage: "only jobs this app id enqueued"},
+		},
 		Action: func(c *cli.Context) (err error) {
 			store, err := open(c)
 			if err != nil {
 				return
 			}
 			defer store.Close()
-			jobs, err := store.ListJobs(c.Context, c.Int("limit"))
+			filter := watchbillstore.ListFilter{States: c.StringSlice("state"), Kinds: c.StringSlice("kind"), Queues: c.StringSlice("queue"), OwnerAppId: c.String("owner")}
+			jobs, err := store.List(c.Context, filter, c.Int("limit"))
 			if err != nil {
 				return
 			}
 			tw := tabwriter.NewWriter(c.App.Writer, 0, 0, 2, ' ', 0)
-			if _, err = fmt.Fprintln(tw, "id\tkind\tstate\tattempt\trun_after\tworker_run\tsubject\tlast_error"); err != nil {
+			if _, err = fmt.Fprintln(tw, "id\tkind\tqueue\tstate\tattempt\trun_after\tworker_run\tsubject\tlast_error"); err != nil {
 				return
 			}
 			for _, j := range jobs {
-				if _, err = fmt.Fprintf(tw, "%s\t%s\t%s\t%d/%d\t%s\t%s\t%s\t%s\n",
-					j.ID, j.Kind, j.State, j.Attempt, j.MaxAttempts, j.RunAfter.UTC().Format(time.RFC3339), j.WorkerRun, j.Subject, j.LastError); err != nil {
+				if _, err = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d/%d\t%s\t%s\t%s\t%s\n",
+					j.ID, j.Kind, j.Queue, j.State, j.Attempt, j.MaxAttempts, j.RunAfter.UTC().Format(time.RFC3339), j.WorkerRun, j.Subject, j.LastError); err != nil {
 					return
 				}
 			}
@@ -184,6 +237,7 @@ func newCancelCommand() *cli.Command {
 		Name:      "cancel",
 		Usage:     "ask for a job to stop: a queued one is cancelled now, a running one by its worker within a poll",
 		ArgsUsage: "ID",
+		Flags:     []cli.Flag{noteFlag()},
 		Action:    verb("cancel", watchbill.RequestCancel),
 	}
 }
@@ -193,11 +247,16 @@ func newRetryCommand() *cli.Command {
 		Name:      "retry",
 		Usage:     "put a finished job back in the queue with its attempts reset",
 		ArgsUsage: "ID",
+		Flags:     []cli.Flag{noteFlag()},
 		Action:    verb("retry", watchbill.Retry),
 	}
 }
 
-func verb(name string, fn func(context.Context, watchbill.StoreI, string, string, time.Time) (bool, error)) cli.ActionFunc {
+func noteFlag() *cli.StringFlag {
+	return &cli.StringFlag{Name: "note", Usage: "why; recorded on the event"}
+}
+
+func verb(name string, fn func(context.Context, watchbill.StoreI, string, string, string, time.Time) (bool, error)) cli.ActionFunc {
 	return func(c *cli.Context) (err error) {
 		if c.NArg() != 1 {
 			return eh.Errorf("exactly one job id")
@@ -207,7 +266,7 @@ func verb(name string, fn func(context.Context, watchbill.StoreI, string, string
 			return
 		}
 		defer store.Close()
-		ok, err := fn(c.Context, store, c.Args().Get(0), runid.Mint("watchbill", "cli"), time.Now())
+		ok, err := fn(c.Context, store, c.Args().Get(0), runid.Mint("watchbill", "cli"), c.String("note"), time.Now())
 		if err != nil {
 			return
 		}

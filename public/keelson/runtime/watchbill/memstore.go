@@ -46,7 +46,7 @@ func (inst *MemStore) Enqueue(_ context.Context, job watchbillstore.Job) (err er
 	return
 }
 
-func (inst *MemStore) Queue(_ context.Context, kinds []string, now time.Time, limit int) (ids []string, err error) {
+func (inst *MemStore) Queue(_ context.Context, kinds []string, queues []string, now time.Time, limit int) (ids []string, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	var due []watchbillstore.Job
@@ -55,6 +55,9 @@ func (inst *MemStore) Queue(_ context.Context, kinds []string, now time.Time, li
 			continue
 		}
 		if len(kinds) > 0 && !slices.Contains(kinds, j.Kind) {
+			continue
+		}
+		if len(queues) > 0 && !slices.Contains(queues, j.Queue) {
 			continue
 		}
 		due = append(due, j)
@@ -182,5 +185,33 @@ func (inst *MemStore) Jobs() (out []watchbillstore.Job) {
 		out = append(out, j)
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].ID < out[b].ID })
+	return
+}
+
+// List is the SQL predicate's semantics in memory: every empty field of
+// f matches, and the rows come newest request first — the request instant
+// is not kept here, so the id order stands in for it, reversed.
+func (inst *MemStore) List(_ context.Context, f watchbillstore.ListFilter, limit int) (jobs []watchbillstore.Job, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, j := range inst.jobs {
+		if len(f.States) > 0 && !slices.Contains(f.States, j.State) {
+			continue
+		}
+		if len(f.Kinds) > 0 && !slices.Contains(f.Kinds, j.Kind) {
+			continue
+		}
+		if len(f.Queues) > 0 && !slices.Contains(f.Queues, j.Queue) {
+			continue
+		}
+		if f.OwnerAppId != "" && j.OwnerAppId != f.OwnerAppId {
+			continue
+		}
+		jobs = append(jobs, j)
+	}
+	sort.Slice(jobs, func(a, b int) bool { return jobs[a].ID > jobs[b].ID })
+	if limit > 0 && len(jobs) > limit {
+		jobs = jobs[:limit]
+	}
 	return
 }

@@ -594,6 +594,9 @@ func (rt *Runtime) bootIntrospect() {
 	if rt.WatchbillStore != nil {
 		deps.Watchbill = rt.WatchbillStore
 	}
+	if rt.Watchbill != nil {
+		deps.WatchbillWorker = rt.Watchbill
+	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {
 		logger.Warn().Err(ierr).Msg("introspect: table source unavailable")

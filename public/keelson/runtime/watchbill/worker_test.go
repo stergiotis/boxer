@@ -195,7 +195,7 @@ func TestCancelWhileRunning(t *testing.T) {
 	require.Eventually(t, func() bool { return f.running.Load() == 1 }, time.Second, time.Millisecond)
 	assert.Equal(t, watchbillstore.StateRunning, f.job(t, id).State)
 
-	ok, err := RequestCancel(context.Background(), f.store, id, "someone", t0)
+	ok, err := RequestCancel(context.Background(), f.store, id, "someone", "", t0)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, watchbillstore.StateCancel, f.job(t, id).State)
@@ -209,11 +209,11 @@ func TestCancelWhileRunning(t *testing.T) {
 
 	// A cancel on a queued job is immediate; on a finished one, nothing.
 	queued := f.enqueue(t, Request{RunAfter: t0.Add(time.Hour)})
-	ok, err = RequestCancel(context.Background(), f.store, queued, "someone", t0)
+	ok, err = RequestCancel(context.Background(), f.store, queued, "someone", "", t0)
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, queued).State)
-	ok, err = RequestCancel(context.Background(), f.store, queued, "someone", t0)
+	ok, err = RequestCancel(context.Background(), f.store, queued, "someone", "", t0)
 	require.NoError(t, err)
 	assert.False(t, ok)
 }
@@ -274,7 +274,7 @@ func TestRetryResetsAttempts(t *testing.T) {
 	id := f.enqueue(t, Request{MaxAttempts: 1})
 	f.tick(t)
 	require.Equal(t, watchbillstore.StateDiscarded, f.job(t, id).State)
-	ok, err := Retry(context.Background(), f.store, id, "someone", t0)
+	ok, err := Retry(context.Background(), f.store, id, "someone", "", t0)
 	require.NoError(t, err)
 	require.True(t, ok)
 	f.outcome = func(watchbillstore.Job) error { return nil }
@@ -329,4 +329,22 @@ func TestRegistryRefusesDuplicates(t *testing.T) {
 	assert.Error(t, r.Register(HandlerFunc{KindName: "k"}))
 	assert.Error(t, r.Register(HandlerFunc{}))
 	assert.Equal(t, []string{"k"}, r.Kinds())
+}
+
+// A worker configured for named queues takes only their jobs (ADR-0234
+// §SD3); one with no queues named drains every queue, as before queues
+// meant anything.
+func TestWorkerDrainsOnlyItsQueues(t *testing.T) {
+	f := newFixture(t, "run-q", func(c *Config) { c.Queues = []string{"bulk"} })
+	bulk := f.enqueue(t, Request{Queue: "bulk"})
+	other := f.enqueue(t, Request{})
+	f.tick(t)
+	assert.Equal(t, watchbillstore.StateSucceeded, f.job(t, bulk).State)
+	assert.Equal(t, watchbillstore.StateQueued, f.job(t, other).State, "the default queue is not this worker's")
+
+	every := newFixture(t, "run-any")
+	every.store = f.store
+	every.w.cfg.Store = f.store
+	every.tick(t)
+	assert.Equal(t, watchbillstore.StateSucceeded, every.job(t, other).State)
 }
