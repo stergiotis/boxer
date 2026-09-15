@@ -52,6 +52,14 @@ func TestListPredicate(t *testing.T) {
 		ListPredicate(ListFilter{Kinds: []string{"k"}, Queues: []string{"q"}, OwnerAppId: "app.x"}))
 }
 
+// The list reads ids newest first with the bound after the order, and
+// the rows by those ids.
+func TestListSQL(t *testing.T) {
+	assert.Equal(t, `SELECT "id:id:s:4::0:" FROM wb.watchbill ORDER BY "ts:ts:z64:47::0:" DESC`, ListSQL(testLayout, ListFilter{}, 0))
+	assert.Equal(t, `SELECT "id:id:s:4::0:" FROM wb.watchbill WHERE "tv:jobState:value:val:s:24:::0::data"[1] IN ('queued') ORDER BY "ts:ts:z64:47::0:" DESC LIMIT 20`, ListSQL(testLayout, ListFilter{States: []string{StateQueued}}, 20))
+	assert.Equal(t, `"id:id:s:4::0:" IN ('a', 'b\'c')`, IdsPredicate([]string{"a", "b'c"}))
+}
+
 func TestTransitionSQL(t *testing.T) {
 	after := testNow.Add(time.Minute)
 	msg := "it's broken"

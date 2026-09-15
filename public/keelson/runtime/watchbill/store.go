@@ -219,19 +219,41 @@ func (inst *SqlStore) Expire(ctx context.Context, cutoff time.Time) (err error) 
 // window on the queue, not an export of it.
 const listBound = 10_000
 
+// List reads the ids newest first and bounded, then the rows by id, and
+// hands them back in the ids' order: the generated scan orders ascending,
+// so a bound on it alone would be the oldest N.
 func (inst *SqlStore) List(ctx context.Context, f watchbillstore.ListFilter, limit int) (jobs []watchbillstore.Job, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if limit <= 0 {
 		limit = listBound
 	}
-	opts := recordstore.ScanOpts{ExtraPredicate: watchbillstore.ListPredicate(f), Limit: limit}
-	for ent, serr := range inst.st.Job.ScanJob(ctx, opts) {
+	var ids []string
+	for rec, qerr := range inst.exec.QueryArrow(ctx, watchbillstore.ListSQL(inst.layout, f, limit)) {
+		if qerr != nil {
+			return nil, eh.Errorf("list ids: %w", qerr)
+		}
+		col := rec.Column(0)
+		for i := 0; i < int(rec.NumRows()); i++ {
+			ids = append(ids, col.ValueStr(i))
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	byId := make(map[string]watchbillstore.Job, len(ids))
+	for ent, serr := range inst.st.Job.ScanJob(ctx, recordstore.ScanOpts{ExtraPredicate: watchbillstore.IdsPredicate(ids)}) {
 		if serr != nil {
 			return nil, eh.Errorf("list jobs: %w", serr)
 		}
 		if ent != nil && ent.Job.Has {
-			jobs = append(jobs, ent.Job.Val)
+			byId[ent.Job.Val.ID] = ent.Job.Val
+		}
+	}
+	jobs = make([]watchbillstore.Job, 0, len(ids))
+	for _, id := range ids {
+		if j, ok := byId[id]; ok {
+			jobs = append(jobs, j)
 		}
 	}
 	return

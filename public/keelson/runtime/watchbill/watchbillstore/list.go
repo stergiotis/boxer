@@ -1,6 +1,9 @@
 package watchbillstore
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // ListFilter narrows a read of the job table (ADR-0234 §SD2): any of the
 // states, any of the kinds, any of the queues, one owner app. Every empty
@@ -27,4 +30,36 @@ func ListPredicate(f ListFilter) (pred string) {
 		sb.WriteString(" AND " + elem("jobOwnerApp") + " = " + strLit(f.OwnerAppId))
 	}
 	return strings.TrimPrefix(sb.String(), " AND ")
+}
+
+// ListSQL reads the ids of the rows f selects, newest request first — the
+// envelope ts is the request instant and never changes — at most limit.
+// The bound applies after the order, so a list of N is the newest N; the
+// generated scan orders ascending and cannot say otherwise, which is why
+// the ids come from here and the rows from the scan.
+func ListSQL(layout Layout, f ListFilter, limit int) (sql string) {
+	var sb strings.Builder
+	sb.WriteString("SELECT " + JobColKey + " FROM " + layout.JobTable())
+	if pred := ListPredicate(f); pred != "" {
+		sb.WriteString(" WHERE " + pred)
+	}
+	sb.WriteString(" ORDER BY " + JobColOrder + " DESC")
+	if limit > 0 {
+		sb.WriteString(" LIMIT " + strconv.Itoa(limit))
+	}
+	return sb.String()
+}
+
+// IdsPredicate is the ScanOpts.ExtraPredicate that reads a set of jobs.
+func IdsPredicate(ids []string) (pred string) {
+	var sb strings.Builder
+	sb.WriteString(JobColKey + " IN (")
+	for i, id := range ids {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(strLit(id))
+	}
+	sb.WriteString(")")
+	return sb.String()
 }
