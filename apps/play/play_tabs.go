@@ -385,6 +385,10 @@ var builtinTabDefs = []builtinTabDef{
 		writes: []SignalID{signalSelection, signalSelectionCountry}},
 	{id: "kanban", dockID: dockTabKanban, title: "Kanban", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection}},
+	// The Chat tab draws the result as a message transcript (ADR-0239): a
+	// named-column contract like the board's, with two optional CTEs.
+	{id: "chat", dockID: dockTabChat, title: "Chat", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
 	// The Network tab draws the result as a node-link graph (ADR-0129). Its
 	// title is deliberately not "Graph" — that is the dataflow chrome below.
 	// It publishes the clicked vertex id as `selection_key` (a value); the
@@ -637,6 +641,9 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 		case "kanban":
 			spec.Panel = kanbanPanel{driver: inst.kanbanDriver}
 			spec.Render = func(f *TabFrame) { inst.renderKanbanTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) }
+		case "chat":
+			spec.Panel = chatPanel{app: inst}
+			spec.Render = func(f *TabFrame) { inst.renderChatTab(f.Rec, f.Schema, f.Loading, f.Err, f.Result) }
 		case "network":
 			// The panel reads its two named CTEs off the split (not the active
 			// result), so the body ignores the frame; scrollTab mirrors the

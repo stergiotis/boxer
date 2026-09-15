@@ -132,6 +132,7 @@ const (
 	dockTabCompletion  uint64 = 28
 	dockTabFiles       uint64 = 29
 	dockTabGraphview   uint64 = 30
+	dockTabChat        uint64 = 31
 )
 
 type PlayApp struct {
@@ -447,6 +448,10 @@ type PlayApp struct {
 	// kanbanDriver is the ADR-0122 board panel (Kanban dock tab): likewise a
 	// plain observer of the active result — no lane, nothing to Close.
 	kanbanDriver *KanbanDriver
+	// chatDriver is the ADR-0239 transcript panel (Chat dock tab): the same
+	// shape as the board — a PanelI observer of the active result with two
+	// optional CTE channels on their own lanes.
+	chatDriver *ChatDriver
 
 	// netSource is the pair of lanes the graph contract is fed from — the
 	// `edges` and `vertices` CTEs of the user's query — SHARED by the two graph
@@ -1119,6 +1124,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.mapDriver = NewMapDriver(mk(), client)
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
+	inst.chatDriver = NewChatDriver(mk(), client)
 	inst.netSource = newNetworkSource(client)
 	inst.networkDriver = NewNetworkDriver(mk(), inst.netSource)
 	inst.graphviewDriver = NewGraphviewDriver(mk(), inst.netSource)
@@ -1206,6 +1212,7 @@ func (inst *PlayApp) Close() {
 	if inst.kanbanDriver != nil && inst.kanbanDriver.lanesLane != nil {
 		inst.kanbanDriver.lanesLane.close()
 	}
+	inst.chatDriver.close()
 	inst.netSource.close()
 	if inst.sankeyDriver != nil {
 		if inst.sankeyDriver.flowsLane != nil {
@@ -1793,6 +1800,9 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	// key is the SQL, unchanged) and the lane inventory would stay stuck-errored
 	// though the board recovered.
 	inst.kanbanDriver.forgetLanes()
+	// The Chat panel's `participants` / `reactions` CTEs (ADR-0239 §SD1)
+	// are the same shape again.
+	inst.chatDriver.forgetLanes()
 	// The Sankey panel's `flows`/`nodes` CTEs are the same shape again.
 	inst.sankeyDriver.forgetLanes()
 	// And the Series panel's optional `scores`/`spans` CTEs (ADR-0163 §SD1).

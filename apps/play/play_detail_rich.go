@@ -681,6 +681,14 @@ func cardBlockFace(gc *glossColumn) bool {
 // card should reserve. text is the value's marshalled text, owned by the
 // caller's buffer — retaining it (a plain-text face does) is fine.
 func (inst *PlayApp) cardBlock(gc *glossColumn, key richKey, text string, kind gloss.ValueKindE) leewaywidgets.CellBlock {
+	return inst.glossBlock(inst.richCells, "card", gc, key, text, kind)
+}
+
+// glossBlock is cardBlock over any artifact cache: the Chat pane (ADR-0239)
+// draws the same faces inside a bubble from a cache of its own, keyed by
+// message rather than by the one row the Detail card shows. prefix keeps the
+// two panes' widget-id scopes apart when both show a face for one key.
+func (inst *PlayApp) glossBlock(cache *richCellCache, prefix string, gc *glossColumn, key richKey, text string, kind gloss.ValueKindE) leewaywidgets.CellBlock {
 	if gc.mediaType == gloss.MediaTypeURL {
 		face := gc.inst.Inline(gloss.TextCell{S: text, K: kind})
 		url := strings.TrimSpace(text)
@@ -691,20 +699,20 @@ func (inst *PlayApp) cardBlock(gc *glossColumn, key richKey, text string, kind g
 	if gc.mediaType == gloss.MediaTypeTaggedId {
 		cell := gloss.TextCell{S: text, K: kind}
 		b := inst.taggedIdBlockFor(gc.inst.Inline(cell), cell)
-		scope := "card-" + key.String()
+		scope := prefix + "-" + key.String()
 		return leewaywidgets.CellBlock{
 			Height: b.height(),
 			Render: func() {
 				// PushId, as the text faces below do: the buttons sit inside
 				// a cell that may hold several of the column's values.
-				for range c.PushId(inst.ids.PrepareStr("play-card-tid-" + scope)).KeepIter() {
+				for range c.PushId(cache.ids.PrepareStr("play-" + prefix + "-tid-" + scope)).KeepIter() {
 					inst.renderTaggedIdBlock(scope, b)
 				}
 			},
 		}
 	}
 	d, _ := gc.declaration(gc.label)
-	e := inst.richCells.entryFor(key, d, text)
+	e := cache.entryFor(key, d, text)
 	if e.reason != "" {
 		// Declared, cannot be honoured: the first line and why, as the
 		// ad-hoc pane shows it.
@@ -717,11 +725,11 @@ func (inst *PlayApp) cardBlock(gc *glossColumn, key richKey, text string, kind g
 		}}
 	}
 	mt := gc.mediaType
-	scope := "play-card-block-" + key.String()
+	scope := "play-" + prefix + "-block-" + key.String()
 	if isImageType(mt) {
 		return leewaywidgets.CellBlock{Height: float32(min(e.heightPx, cardImageMaxH)) + cardBlockPad, Render: func() {
-			for range c.PushId(inst.ids.PrepareStr(scope)).KeepIter() {
-				inst.richCells.renderImage(key, e, cardImageMaxW, cardImageMaxH)
+			for range c.PushId(cache.ids.PrepareStr(scope)).KeepIter() {
+				cache.renderImage(key, e, cardImageMaxW, cardImageMaxH)
 			}
 		}}
 	}
@@ -744,14 +752,14 @@ func (inst *PlayApp) cardBlock(gc *glossColumn, key richKey, text string, kind g
 		// PushId keeps the ScrollArea's egui id apart from a sibling block's
 		// in the same cell; the vertical scroll takes what the estimate
 		// missed, and AutoShrink lets a short face stop short.
-		for range c.PushId(inst.ids.PrepareStr(scope)).KeepIter() {
+		for range c.PushId(cache.ids.PrepareStr(scope)).KeepIter() {
 			for range c.ScrollArea().Vscroll(true).AutoShrink(false, true).KeepIter() {
-				inst.richCells.renderBody(key, d, e)
+				cache.renderBody(key, d, e)
 			}
 			if anchored {
 				// Outside the scroll area: the anchor is the cell's
 				// affordance, not part of the pattern that scrolls under it.
-				inst.renderRegexpAnchor("card-"+key.String(), gc.label, e.text)
+				inst.renderRegexpAnchor(scope, gc.label, e.text)
 			}
 		}
 	}}

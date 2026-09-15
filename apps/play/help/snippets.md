@@ -940,6 +940,70 @@ ORDER BY s.code_refs DESC, s.num
 LIMIT 25
 ```
 
+## Chat transcript (messages, replies, reactions)
+
+A result naming a `ts`, a `sender` and a `body` column renders as a message
+transcript in the **Chat** tab (ADR-0239): a two-party dialogue laid out like a
+phone's SMS view once you pick the **viewer** in the pane's options row, a
+group chat otherwise. `id`, `reply_to`, `system`, `deleted`, `edited_at`,
+`status` and `conversation` are optional; a `reactions` CTE (`id`, `key`,
+`sender`) and a `participants` CTE (`sender`, `name`, `color`) join in on
+their own lanes, the way the board reads its `lanes` CTE. Every column the
+contract does not claim renders inside the bubble through its gloss, so a
+`photo@image/png` column is an image attachment and a `body@text/markdown`
+column is a markdown message. Clicking a bubble selects its row, so Detail
+and Table follow; clicking a quote strip jumps to the quoted message. Both
+blocks are table-free and run against any server.
+
+The first block is the contract itself, with every edge the pane handles: a
+reply chain, an edited message, a deleted message, a system line, two
+reactions on one message, and an image attachment. Pick *Ada* as the viewer
+to see the dialogue layout. `ts` must be a `DateTime` or `DateTime64` — a
+bare integer cannot be told from a count — and `system` and `deleted` must
+be `Bool`. A `reply_to` naming an unknown `id` is drawn as no reply; a
+reaction naming an unknown `id` is counted in the status line.
+
+```sql
+WITH
+  reactions AS (
+    SELECT * FROM values('id String, key String, sender String',
+      ('m2', '👍', 'Bob'), ('m2', '👍', 'Cy'), ('m2', '❤️', 'Bob'), ('m5', '🎉', 'Ada'))
+  ),
+  participants AS (
+    SELECT * FROM values('sender String, name String, color String',
+      ('ada', 'Ada Lovelace', 'accent.default'), ('bob', 'Bob', 'success.default'), ('cy', 'Cy', 'warning.default'))
+  )
+SELECT *
+FROM values('ts DateTime64(3), sender String, body String, id String, reply_to Nullable(String),
+             system Bool, deleted Bool, edited_at Nullable(DateTime64(3)), status String, `photo@image/png` Nullable(String)',
+  ('2026-03-02 09:00:00.000', 'ada', 'Morning! Did the ingest finish overnight?',            'm1', NULL, false, false, NULL, 'read', NULL),
+  ('2026-03-02 09:00:40.000', 'ada', 'The dashboard still shows yesterday.',                 'm2', NULL, false, false, NULL, 'read', NULL),
+  ('2026-03-02 09:04:10.000', 'bob', 'It finished at 03:12 — the view was cached.',          'm3', 'm2', false, false, '2026-03-02 09:05:00.000', '', NULL),
+  ('2026-03-02 09:04:30.000', 'bob', 'Refreshing it now.',                                   'm4', NULL, false, false, NULL, '', NULL),
+  ('2026-03-02 09:12:00.000', '',    'Cy joined the conversation',                           's1', NULL, true,  false, NULL, '', NULL),
+  ('2026-03-02 09:13:15.000', 'cy',  'Here is what it looks like after the refresh:',        'm5', NULL, false, false, NULL, '', NULL),
+  ('2026-03-02 09:13:16.000', 'cy',  '',                                                     'm6', NULL, false, false, NULL, '',
+     unhex('89504e470d0a1a0a0000000d4948445200000010000000100203000000629d17f200000009504c5445202020e6b55d3b6ea563f88312000000414944415478da620003a955ab9630a8ad5a35834173d5aa0c06adac952b18b4662d5bc1a0b56cd60a06ad95593002cc054b8094801583b5810d000140000000ffff54231bef9464752c0000000049454e44ae426082')),
+  ('2026-03-02 09:20:00.000', 'ada', 'oops wrong chat',                                      'm7', NULL, false, true,  NULL, 'sent', NULL),
+  ('2026-03-03 08:30:00.000', 'ada', 'Thanks both — closing the ticket.',                    'm8', 'm3', false, false, NULL, 'delivered', NULL))
+ORDER BY ts
+```
+
+Real transcripts are rows of an event table with the reactions and the roster
+as their own rows, the shape every messaging model stores (a reaction is an
+event relating to a message id, not a column of it): the CTEs are then plain
+`SELECT`s over those tables. Without an `id` column the row number is the
+identity, which is what a `reactions` CTE built with `rowNumberInAllBlocks()`
+names. A markdown body is one alias away:
+
+```sql
+SELECT
+  toDateTime64('2026-03-02 09:00:00', 3) + INTERVAL number * 90 SECOND AS ts,
+  ['ada', 'bob'][number % 2 + 1]                                       AS sender,
+  concat('Step **', toString(number + 1), '**: `SELECT ', toString(number), '` — see [the plan](https://example.invalid)') AS `body@text/markdown`
+FROM numbers(6)
+```
+
 ## Read an ADR where you found it
 
 The same join as the board above, without the board — a plain table narrowed to

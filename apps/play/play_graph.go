@@ -79,6 +79,9 @@ const (
 	chNodes     ChannelID = "nodes"      // the Sankey diagram's nodes (ADR-0159, optional)
 	chScores    ChannelID = "scores"     // the Series panel's score lane (ADR-0163, optional)
 	chSpans     ChannelID = "spans"      // the Series panel's flagged extents (ADR-0163, optional)
+
+	chParticipants ChannelID = "participants" // the Chat pane's roster (ADR-0239 §SD1, optional)
+	chReactions    ChannelID = "reactions"    // the Chat pane's reactions, one row each (ADR-0239 §SD1, optional)
 )
 
 // ChannelSpec declares one of a panel's input channels. A panel is renderable iff
