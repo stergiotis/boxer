@@ -940,6 +940,26 @@ APIs with `egui::Ui` callbacks (like `egui_table::TableDelegate`) use `WithDefer
   The same root shows up as its other failure mode — a plain **tofu box** where the fallback has no glyph at all. `◈` (U+25C8) does this in `schemaview`'s navigator while rendering correctly in its own legend a few pixels away, because the legend's chips are `Monospace()` and land on a different face. If a glyph looks wrong in one place and right in another, suspect the font before the layout.
 * **Diagnosing it:** run the same scene twice, once with `--fallbackFontTTF` and once without, and measure the glyph's ink box against the neighbouring label's. If the two runs disagree, it is the fallback chain and not your code. Found this way for ADR-0176's tree; the widget's `render.go` carries the numbers.
 
+## Content Drawn at the Left of a Right-Aligned Row (Unknown-Width Frames)
+* **The Symptom:** A `Frame` that should hug the right edge — a chat bubble, a trailing card — is drawn at the *left* although it sits inside `c.UiWithLayout().MainDirRightToLeft()`. A related one: a small `Frame` (an avatar disc) that wraps a `c.VerticalCentered()` renders as a bar across the whole pane.
+* **The Cause:** egui's `Frame::show` hands its content ui the **full available rect** and only afterwards wraps the content's min rect. A `c.Vertical()` inside the frame (or inside the RTL row) opens a top-down/left-aligned child ui over that full rect, so the content lands at the left; the RTL parent then merely advances its cursor past it. `VerticalCentered` is `ui.vertical_centered`, which takes all the width it is offered.
+* **The Pattern:** **A top-down column aligned to the cross axis's end, and nothing inside that resets it.** `c.UiWithLayout().MainDirTopDown().CrossAlignMax()` places every child at the right edge; `c.UiSetMaxWidth(w)` inside then shrinks the column from the *left* (the placer aligns the max-width rect by the cross alignment); a `Frame` directly inside inherits the alignment and wraps its content tightly at the right. Rows inside the frame must be `MainDirRightToLeft()` ones — the first child drawn sits rightmost, so draw the items in reverse. For a fixed small box, pin `UiSetMinWidth`/`UiSetMaxWidth`/`UiSetMinHeight`/`UiSetMaxHeight` and centre the glyph with `MainDirTopDown().CrossAlignCenter()`, not `VerticalCentered`. Reference: `widgets/chatview/render.go` (`column`, `hrow`, `ordered`, `renderAvatar`).
+  ```go
+  // WRONG: the Vertical opens a left-aligned ui over the whole width
+  for range c.UiWithLayout().MainDirRightToLeft().KeepIter() {
+      for range c.Vertical().KeepIter() { bubble() }
+  }
+
+  // RIGHT: a right-aligned column; the frame inherits it
+  for range c.UiWithLayout().MainDirTopDown().CrossAlignMax().KeepIter() {
+      for range c.Frame(id).Fill(fill).KeepIter() {
+          c.UiSetMaxWidth(bubbleW)
+          c.Label(body).Wrap().Send()
+          for range c.UiWithLayout().MainDirRightToLeft().KeepIter() { status(); timeLabel() } // reversed
+      }
+  }
+  ```
+
 ## Gallery Scroll-Host Layout — Side Panels Collapse, and the Tour Hides It
 * **The Symptom:** A widget-gallery demo puts a control column beside a filling content area with `c.PanelLeftInside(...)` + `c.PanelCentralInside()`. The screenshot tour looks perfect, but in the *interactive* gallery the left panel collapses to a sliver and clips its controls while the central area fills wide. Related symptoms from the same layout: a fixed-width output column (`UiSetMaxWidth`) strands dead space on the right of a wide window with its scrollbar floating mid-pane, and a `DockArea` overflows / clips instead of scrolling.
 * **The Cause:** The two demo hosts are not equivalent. The **TestDriver** (tour; `IMZERO2_SCREENSHOT_DIR` set) wraps each demo in a bounded `c.AllocateUiAtRect(0, 0, stageW, stageH)` — finite width **and** height, with a real region for side panels to claim. The **InteractiveDriver** (the gallery you click around in) wraps each demo in `c.ScrollArea().Vscroll(true).AutoShrink(false, false)` — full host width but **unbounded, scrollable height**, and **no CentralPanel region**. egui side panels (`SidePanel` / the `*Inside` variants) size against a CentralPanel region; inside a bare scroll area they get a degenerate width and clip. A `DockArea` (egui_dock fills its allocated rect) has no finite height to fill in the vscroll, so it clips. The tour's bounded rect papers over both — which is exactly why a tour-only "fix" readily regresses the gallery.
