@@ -194,3 +194,6 @@
 189	wb-job-backoff	12884902077
 190	wb-job-backoff-base-ms	12884902078
 191	wb-job-timeout-ms	12884902079
+192	wb-launch-job-id	12884902080
+193	wb-launch-kind	12884902081
+194	wb-launch-state	12884902082

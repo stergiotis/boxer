@@ -99,3 +99,15 @@ var (
 	MembWbJobTimeoutMs = KeelsonHrNkRegistry.MustBegin("wbJobTimeoutMs", 191).
 				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
 )
+
+// The watchbill management app's launch config (ADR-0236 §SD4): what a
+// caller asks the window to show — one job, or a filter. Scalars only, so
+// the ExactlyOne cardinality of every other launch config holds.
+var (
+	MembWbLaunchJobId = KeelsonHrNkRegistry.MustBegin("wbLaunchJobId", 192).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembWbLaunchKind = KeelsonHrNkRegistry.MustBegin("wbLaunchKind", 193).
+				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	MembWbLaunchState = KeelsonHrNkRegistry.MustBegin("wbLaunchState", 194).
+				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+)

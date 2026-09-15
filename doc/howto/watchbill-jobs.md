@@ -3,7 +3,7 @@ type: how-to
 audience: developer giving an app or a headless binary durable work to do
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-09-14
+reviewed-date: 2026-09-15
 ---
 
 # How to run a job on watchbill
@@ -115,6 +115,10 @@ only the queues you name, or every queue when you name none.
 
 ## 4. Watch it
 
+- **Manage** — the Watchbill window (`apps/watchbill`): the queue across
+  kinds, a job's fields and trail, cancel and retry, the worker of the
+  process. Another app opens it on a job with a `watchbillLaunch` config
+  carrying the id.
 - **In flight, failures, one job's timeline, workers** — the `watchbill`
   applet book in sqlapplet, over `keelson('watchbill')`,
   `keelson('watchbill_event')` and `keelson('watchbill_worker')`. It needs

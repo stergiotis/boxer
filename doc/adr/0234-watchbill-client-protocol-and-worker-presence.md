@@ -308,6 +308,22 @@ waited a whole poll, because nothing rang the bell. Both are fixed on the
 worker and pinned in its bus lane. The management app remains M5's other
 half, its own design.
 
+### 2026-09-15 — the list is the newest N, not the oldest
+
+Standing the window up showed the list verb returning the oldest rows
+first: the generated scan orders ascending and a bound on it is the
+oldest N. `SqlStore.List` now reads the ids newest-first with the bound
+after the order, then the rows by id, and hands them back in that order;
+`ListSQL` and `IdsPredicate` are pinned beside the other statements. §SD2's
+"newest request first" holds as written.
+
+### 2026-09-15 — the management window is ADR-0236
+
+M5's second half, the window that manages the queue, is
+[ADR-0236](./0236-watchbill-management-app.md) (accepted 2026-09-15): the list verb for the
+rows, cancel and retry through the client, the trail and the worker row
+from the introspection tables rather than a verb River lacks (§SD7).
+
 ## References
 
 - [ADR-0223](./0223-watchbill-durable-work-on-facts.md) — the substrate, the claim, the worker; what this ADR completes.
