@@ -286,6 +286,20 @@ var (
 	MembWatchbillEventWorker   = NkRegistry.MustBegin("watchbillEventWorkerRun", 92).End()
 	MembWatchbillEventError    = NkRegistry.MustBegin("watchbillEventError", 93).End()
 	MembWatchbillEventNote     = NkRegistry.MustBegin("watchbillEventNote", 94).End()
+
+	// watchbill worker presence (ADR-0237) — one boxer.facts row per worker
+	// run at its start and one at a clean stop: what the run drains. The
+	// row is append-only; liveness is the run's heartbeat, not a field
+	// here. Kind label on the symbol section as the other kinds; the run
+	// gets a membership of its own so the store's scan can filter on it
+	// without the reflect path; kinds and queues are symbol arrays.
+	MembKindWatchbillWorker         = NkRegistry.MustBegin("runtimeKindWatchbillWorker", 95).End()
+	MembWatchbillPresenceRun        = NkRegistry.MustBegin("watchbillWorkerRunId", 96).End()
+	MembWatchbillPresenceHost       = NkRegistry.MustBegin("watchbillWorkerHost", 97).End()
+	MembWatchbillPresencePhase      = NkRegistry.MustBegin("watchbillWorkerPhase", 98).End()
+	MembWatchbillPresenceKinds      = NkRegistry.MustBegin("watchbillWorkerKinds", 99).End()
+	MembWatchbillPresenceQueues     = NkRegistry.MustBegin("watchbillWorkerQueues", 100).End()
+	MembWatchbillPresenceMaxWorkers = NkRegistry.MustBegin("watchbillWorkerMaxWorkers", 101).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -313,4 +327,6 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindColumnWidth, MembColWidthTier, MembColWidthScope,
 	MembColWidthColumnKey, MembColWidthPoints, MembColWidthFontSize,
 	MembPersistValue,
+	MembKindWatchbillWorker, MembWatchbillPresenceRun, MembWatchbillPresenceHost, MembWatchbillPresencePhase,
+	MembWatchbillPresenceKinds, MembWatchbillPresenceQueues, MembWatchbillPresenceMaxWorkers,
 }

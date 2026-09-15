@@ -202,8 +202,13 @@ type Runtime struct {
 	PersistExec    recordstore.ExecutorI
 	// Watchbill is the running worker and WatchbillStore its store; both
 	// nil when the service is off or had no store to run over.
-	Watchbill      *watchbill.Worker
-	WatchbillStore *watchbill.SqlStore
+	// WatchbillPresence is the worker's declaration on the facts store
+	// (ADR-0237) and WatchbillLiveness the heartbeat reader behind the
+	// sweep; nil where the facts store reads no heartbeats.
+	Watchbill         *watchbill.Worker
+	WatchbillStore    *watchbill.SqlStore
+	WatchbillPresence *watchbill.Presence
+	WatchbillLiveness watchbill.LivenessI
 	// Introspect is the shared introspection registry (populated whether or
 	// not the HTTP host serves it).
 	Introspect *introspect.Registry
@@ -597,6 +602,12 @@ func (rt *Runtime) bootIntrospect() {
 	if rt.Watchbill != nil {
 		deps.WatchbillWorker = rt.Watchbill
 	}
+	if rt.WatchbillPresence != nil {
+		deps.WatchbillPresence = rt.WatchbillPresence
+	}
+	if rt.WatchbillLiveness != nil {
+		deps.WatchbillLiveness = rt.WatchbillLiveness
+	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {
 		logger.Warn().Err(ierr).Msg("introspect: table source unavailable")
@@ -679,8 +690,18 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 	}
 	if l := watchbill.NewRunEventLiveness(rt.Facts); l != nil {
 		cfg.Liveness = l
+		rt.WatchbillLiveness = l
 	} else {
 		logger.Debug().Msg("watchbill: the facts store reads no heartbeats; abandoned claims are not swept by this run")
+	}
+	// The worker's declaration lives on the facts store, which the persist
+	// executor reaches on the same server (ADR-0237 §SD1); with the facts
+	// store fallen back to memory there is no such table to write.
+	if rt.IsChStore {
+		presence := watchbill.NewPresence(rt.PersistExec)
+		cfg.Presence = presence
+		rt.WatchbillPresence = presence
+		rt.cleanups = append(rt.cleanups, presence.Close)
 	}
 	worker, err := watchbill.New(cfg)
 	if err != nil {

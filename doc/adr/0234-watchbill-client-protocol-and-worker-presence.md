@@ -324,6 +324,15 @@ M5's second half, the window that manages the queue, is
 rows, cancel and retry through the client, the trail and the worker row
 from the introspection tables rather than a verb River lacks (§SD7).
 
+### 2026-09-15 — worker presence is ADR-0237
+
+§SD5's deferral — which runs on the cell serve which kinds — is closed by
+[ADR-0237](./0237-watchbill-worker-presence.md) (accepted 2026-09-15): an appended
+`watchbillWorker` row on the facts store at a worker's start and stop,
+liveness by the heartbeat join, and `keelson('watchbill_worker')` listing
+every run seen. Nothing here changes; the local status of §SD5 becomes the
+`local` row of that table.
+
 ## References
 
 - [ADR-0223](./0223-watchbill-durable-work-on-facts.md) — the substrate, the claim, the worker; what this ADR completes.

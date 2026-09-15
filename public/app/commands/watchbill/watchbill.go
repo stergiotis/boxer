@@ -130,6 +130,11 @@ func newRunCommand() *cli.Command {
 				if l := watchbill.NewRunEventLiveness(facts); l != nil {
 					cfg.Liveness = l
 				}
+				// The declaration of what this run drains (ADR-0237), on
+				// the facts store the same executor reaches.
+				presence := watchbill.NewPresence(store.Executor())
+				defer presence.Close()
+				cfg.Presence = presence
 			} else {
 				logger.Warn().Msg("watchbill: the facts store is not reachable; this run writes no heartbeat, so a host's worker on the same cell will abandon its jobs, and it sweeps nothing")
 			}

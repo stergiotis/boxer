@@ -99,6 +99,10 @@ func NewSqlStore(exec recordstore.ExecutorI, layout watchbillstore.Layout) (inst
 	return
 }
 
+// Executor is the executor the store was opened on, for a sibling store
+// on the same server.
+func (inst *SqlStore) Executor() (exec recordstore.ExecutorI) { return inst.exec }
+
 // Close releases the generated stores.
 func (inst *SqlStore) Close() {
 	inst.mu.Lock()

@@ -209,7 +209,7 @@ func TestWorkerIntrospectionTable(t *testing.T) {
 	assert.NotZero(t, s.Ticks)
 
 	reg := introspect.NewRegistry()
-	require.NoError(t, RegisterIntrospect(reg, f.store, f.w))
+	require.NoError(t, RegisterIntrospect(reg, IntrospectDeps{Lister: f.store, Status: f.w}))
 	p, ok := reg.Lookup("watchbill_worker")
 	require.True(t, ok)
 	rec, err := p.Snapshot(introspect.Projection{})
@@ -218,7 +218,7 @@ func TestWorkerIntrospectionTable(t *testing.T) {
 	rec.Release()
 
 	empty := introspect.NewRegistry()
-	require.NoError(t, RegisterIntrospect(empty, nil, nil))
+	require.NoError(t, RegisterIntrospect(empty, IntrospectDeps{}))
 	p, ok = empty.Lookup("watchbill_worker")
 	require.True(t, ok)
 	rec, err = p.Snapshot(introspect.Projection{})

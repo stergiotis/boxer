@@ -29,60 +29,134 @@ type EventRow struct {
 // a window on the queue, not an export of it.
 const snapshotLimit = 10_000
 
-// StatusI is what keelson('watchbill_worker') reads: the process's own
-// worker, or nil for none.
+// StatusI is the process's own worker, or nil for none.
 type StatusI interface {
 	Status() (s Status)
 }
 
+// IntrospectDeps is what the three tables read: the job table, the
+// process's worker, and the cell's presence rows with the liveness that
+// says which runs are alive (ADR-0237 §SD4). Every field may be nil; the
+// tables then answer with what the rest can say.
+type IntrospectDeps struct {
+	Lister   ListerI
+	Status   StatusI
+	Presence PresenceReaderI
+	Liveness LivenessI
+	// AbandonAfter is the sweep's rule for a dead run; zero takes the
+	// environment's.
+	AbandonAfter time.Duration
+}
+
+// presenceWindow bounds how far back the worker table reads presence
+// rows: a run older than this that is still alive has written a started
+// row more recently, since a worker declares itself at every start.
+const presenceWindow = 24 * time.Hour
+
 // RegisterIntrospect registers keelson('watchbill'),
-// keelson('watchbill_event') and keelson('watchbill_worker') over lister
-// and status; nil answers with empty tables, so the names exist whether
-// or not a store or a worker was wired.
-func RegisterIntrospect(r *introspect.Registry, lister ListerI, status StatusI) (err error) {
-	if err = r.Register(jobsProvider{lister: lister}); err != nil {
+// keelson('watchbill_event') and keelson('watchbill_worker') over deps;
+// nil answers with empty tables, so the names exist whether or not a
+// store or a worker was wired.
+func RegisterIntrospect(r *introspect.Registry, deps IntrospectDeps) (err error) {
+	if err = r.Register(jobsProvider{lister: deps.Lister}); err != nil {
 		return eh.Errorf("register watchbill: %w", err)
 	}
-	if err = r.Register(eventsProvider{lister: lister}); err != nil {
+	if err = r.Register(eventsProvider{lister: deps.Lister}); err != nil {
 		return eh.Errorf("register watchbill_event: %w", err)
 	}
-	if err = r.Register(workerProvider{status: status}); err != nil {
+	if err = r.Register(workerProvider{deps: deps}); err != nil {
 		return eh.Errorf("register watchbill_worker: %w", err)
 	}
 	return
 }
 
-type workerProvider struct{ status StatusI }
+type workerProvider struct{ deps IntrospectDeps }
 
 func (workerProvider) Name() string                         { return "watchbill_worker" }
 func (workerProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (workerProvider) Schema() *arrow.Schema                { return workerTable(nil).Schema() }
 
 func (p workerProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
-	var rows []Status
-	if p.status != nil {
-		rows = []Status{p.status.Status()}
+	rows, err := p.rows(context.Background(), time.Now())
+	if err != nil {
+		return
 	}
 	rec = workerTable(rows).Build(proj, len(rows))
 	return
 }
 
-// workerTable is one row per worker in this process (ADR-0234 §SD5) —
-// one, today — with what it drains and what it holds.
-func workerTable(rows []Status) *introspect.Table {
+// workerRow is one line of the table: a run on the cell as presence and
+// liveness see it, with the live fields filled for this process's own
+// worker.
+type workerRow struct {
+	WorkerInfo
+	Local  bool
+	Status Status
+}
+
+// rows is the cell's runs from presence, the process's own worker merged
+// in — or standing alone where presence is not wired.
+func (p workerProvider) rows(ctx context.Context, now time.Time) (rows []workerRow, err error) {
+	var local *Status
+	if p.deps.Status != nil {
+		s := p.deps.Status.Status()
+		local = &s
+	}
+	if p.deps.Presence != nil {
+		found, lerr := p.deps.Presence.ListPresence(ctx, now.Add(-presenceWindow))
+		if lerr != nil {
+			return nil, lerr
+		}
+		abandonAfter := p.deps.AbandonAfter
+		if abandonAfter <= 0 {
+			abandonAfter = AbandonAfter.Get()
+		}
+		workers, ferr := FoldWorkers(ctx, found, now, abandonAfter, p.deps.Liveness)
+		if ferr != nil {
+			return nil, ferr
+		}
+		for _, w := range workers {
+			row := workerRow{WorkerInfo: w}
+			if local != nil && local.RunId == w.RunId {
+				row.Local, row.Status = true, *local
+				local = nil
+			}
+			rows = append(rows, row)
+		}
+	}
+	if local != nil {
+		// The process's worker declared nothing, or its row is outside
+		// the window: it is here all the same, alive by construction.
+		rows = append(rows, workerRow{
+			WorkerInfo: WorkerInfo{RunId: local.RunId, Host: hostname(), Kinds: local.Kinds, Queues: local.Queues, MaxWorkers: uint32(max(local.MaxWorkers, 0)), Alive: true},
+			Local:      true, Status: *local,
+		})
+	}
+	return
+}
+
+// workerTable is one row per run seen on the cell (ADR-0237 §SD4): what
+// it drains, whether it is alive, and — for this process's own worker —
+// what it holds and when it last polled.
+func workerTable(rows []workerRow) *introspect.Table {
 	return introspect.NewTable().
 		String("run_id", func(i int) string { return rows[i].RunId }).
+		String("host", func(i int) string { return rows[i].Host }).
 		StringList("kinds", func(i int) []string { return rows[i].Kinds }).
 		StringList("queues", func(i int) []string { return rows[i].Queues }).
 		Int64("max_workers", func(i int) int64 { return int64(rows[i].MaxWorkers) }).
-		StringList("running", func(i int) []string { return rows[i].Running }).
-		String("last_tick", func(i int) string { return rfc(rows[i].LastTick) }).
-		Int64("ticks", func(i int) int64 { return int64(rows[i].Ticks) }).
-		Int64("poll_ms", func(i int) int64 { return rows[i].Poll.Milliseconds() }).
-		Int64("abandon_after_ms", func(i int) int64 { return rows[i].AbandonAfter.Milliseconds() }).
-		Int64("keep_ms", func(i int) int64 { return rows[i].Keep.Milliseconds() }).
-		Bool("serving", func(i int) bool { return rows[i].Serving }).
-		Bool("sweeping", func(i int) bool { return rows[i].Sweeping })
+		String("started_at", func(i int) string { return rfc(rows[i].StartedAt) }).
+		String("stopped_at", func(i int) string { return rfc(rows[i].StoppedAt) }).
+		Bool("alive", func(i int) bool { return rows[i].Alive }).
+		Bool("local", func(i int) bool { return rows[i].Local }).
+		StringList("running", func(i int) []string { return rows[i].Status.Running }).
+		String("last_tick", func(i int) string { return rfc(rows[i].Status.LastTick) }).
+		Int64("ticks", func(i int) int64 { return int64(rows[i].Status.Ticks) }).
+		Int64("poll_ms", func(i int) int64 { return rows[i].Status.Poll.Milliseconds() }).
+		Int64("abandon_after_ms", func(i int) int64 { return rows[i].Status.AbandonAfter.Milliseconds() }).
+		Int64("keep_ms", func(i int) int64 { return rows[i].Status.Keep.Milliseconds() }).
+		Bool("serving", func(i int) bool { return rows[i].Status.Serving }).
+		Bool("sweeping", func(i int) bool { return rows[i].Status.Sweeping })
 }
 
 type jobsProvider struct{ lister ListerI }

@@ -97,3 +97,10 @@
 92	watchbill-event-worker-run	9223372049739677788
 93	watchbill-event-error	9223372049739677789
 94	watchbill-event-note	9223372049739677790
+95	runtime-kind-watchbill-worker	9223372049739677791
+96	watchbill-worker-run-id	9223372049739677792
+97	watchbill-worker-host	9223372049739677793
+98	watchbill-worker-phase	9223372049739677794
+99	watchbill-worker-kinds	9223372049739677795
+100	watchbill-worker-queues	9223372049739677796
+101	watchbill-worker-max-workers	9223372049739677797

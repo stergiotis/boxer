@@ -32,6 +32,9 @@ type Config struct {
 	Bus app.BusI
 	// Liveness answers the sweep (ADR-0223 §SD4); nil sweeps nothing.
 	Liveness LivenessI
+	// Presence is where the worker declares what it drains, at Start and
+	// at Stop (ADR-0237); nil declares nothing.
+	Presence PresenceI
 	// MaxWorkers is the concurrency per kind; zero is DefaultMaxWorkers.
 	MaxWorkers int
 	// Queues is the set this worker drains (ADR-0234 §SD3); nil is every
@@ -138,6 +141,13 @@ func (inst *Worker) Start(ctx context.Context) (err error) {
 	}
 	ctx, inst.cancel = context.WithCancel(ctx)
 	inst.done = make(chan struct{})
+	if inst.cfg.Presence != nil {
+		// Declared before the first poll, so a reader that sees a claim
+		// by this run can find what the run is.
+		if perr := inst.cfg.Presence.Started(ctx, inst.Status()); perr != nil {
+			inst.log.Warn().Err(perr).Msg("watchbill: presence not declared")
+		}
+	}
 	go inst.loop(ctx)
 	return
 }
@@ -157,6 +167,11 @@ func (inst *Worker) Stop() {
 	}
 	inst.cancel()
 	<-inst.done
+	if inst.cfg.Presence != nil {
+		if perr := inst.cfg.Presence.Stopped(context.Background(), inst.Status()); perr != nil {
+			inst.log.Warn().Err(perr).Msg("watchbill: presence stop not declared")
+		}
+	}
 }
 
 // Status is what a worker says about itself (ADR-0234 §SD5): the kinds
