@@ -48,7 +48,54 @@ type projectionParams struct {
 	K int
 	// MinClusterSize is HDBSCAN's one parameter (ADR-0230 §SD3).
 	MinClusterSize int
+	// FeatureSet is the matrix the neighbour graph is built over (ADR-0238).
+	FeatureSet projectionFeatureSetE
 }
+
+// projectionFeatureSetE names a feature set the lane can project.
+type projectionFeatureSetE uint8
+
+const (
+	// projectionFeatureShape is the sixteen shape features of
+	// card.EntityFeatures under Euclidean distance: how big and how skewed
+	// a record is.
+	projectionFeatureShape projectionFeatureSetE = iota
+	// projectionFeatureStructure is the hashed structural identity of
+	// card.StructureMatrix under cosine distance: which sections and
+	// attributes a record has.
+	projectionFeatureStructure
+	// projectionFeatureComponents is one column per registered component
+	// kind, 1 where the record carries it, under cosine distance: the
+	// archetype (ADR-0146 D5) as a vector.
+	projectionFeatureComponents
+)
+
+func (inst projectionFeatureSetE) String() string {
+	switch inst {
+	case projectionFeatureShape:
+		return "shape"
+	case projectionFeatureStructure:
+		return "structure"
+	case projectionFeatureComponents:
+		return "components"
+	}
+	return "?"
+}
+
+// Doc is the one-line reading of the feature set the picker shows.
+func (inst projectionFeatureSetE) Doc() string {
+	switch inst {
+	case projectionFeatureShape:
+		return "shape — the sixteen size and skew features, Euclidean"
+	case projectionFeatureStructure:
+		return "structure — which sections and attributes a record has, hashed, cosine"
+	case projectionFeatureComponents:
+		return "components — which registered component kinds a record carries, one-hot, cosine"
+	}
+	return "?"
+}
+
+var projectionFeatureSets = [...]projectionFeatureSetE{projectionFeatureShape, projectionFeatureStructure, projectionFeatureComponents}
 
 const (
 	projectionDefaultK              = 15
@@ -126,6 +173,9 @@ type projectionResult struct {
 	// explanation is the labels read back off the features (ADR-0235):
 	// a threshold tree and per-cluster contrasts, or why there is none.
 	explanation projectionExplanation
+	// slotFeatures is the raw features per slot, what the explanation was
+	// fitted on and what a publish writes out.
+	slotFeatures []card.EntityFeatures
 }
 
 // projectorSnapshot is a value-copy of Projector state taken under mutex,
@@ -199,11 +249,16 @@ type Projector struct {
 	// rather than the features (play_projection_items.go).
 	explainByItems bool
 	// copyText hands a rule to the clipboard; nil when the app has none.
-	copyText     func(string)
-	paused       bool
-	frozen       bool
-	paneW, paneH float32
-	lastSelected int64
+	copyText func(string)
+	// renderPublish draws the app's publish affordance in the layout row.
+	renderPublish func()
+	// componentPresence detects the registered component kinds per row of
+	// a result (componentDetail.presenceRows); nil when the app has none.
+	componentPresence func(rec arrow.RecordBatch) (kinds []string, rows [][]int32, err error)
+	paused            bool
+	frozen            bool
+	paneW, paneH      float32
+	lastSelected      int64
 	// idSeed keeps two live PlayApps' pane probes apart, as the graph
 	// panels' does.
 	idSeed uint64
@@ -404,6 +459,18 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 		inst.markCancelled(cancel)
 		return
 	}
+	// The registered components each row carries join the item sets, and
+	// are the components feature set on their own (ADR-0238 update).
+	var compKinds []string
+	var compRows [][]int32
+	var compErr error
+	if inst.componentPresence != nil {
+		compKinds, compRows, compErr = inst.componentPresence(rec)
+		if compErr != nil {
+			log.Debug().Err(compErr).Msg("play: projection: component presence unavailable")
+		}
+	}
+	allItems := withComponentItems(ie.Results(), compKinds, compRows)
 
 	features := fe.Results()
 	nRows := len(features)
@@ -425,18 +492,57 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 	}
 	inst.mu.Unlock()
 
-	m := card.BuildFeatureMatrix(sampledFeatures)
-	err = card.PreprocessFeatureMatrix(m)
-	if err != nil {
-		inst.fail(cancel, eh.Errorf("projection: preprocess: %w", err))
-		return
-	}
-	n, d := m.Dims()
-	x := make([]float32, n*d)
-	raw := m.RawMatrix()
-	for i := range n {
-		for j := range d {
-			x[i*d+j] = float32(raw.Data[i*raw.Stride+j])
+	// The matrix the graph is built over is the run's choice (ADR-0238):
+	// the shape features, preprocessed, under Euclidean distance; or the
+	// hashed structural identity of the item sets under cosine.
+	var x []float32
+	var d int
+	metric := knn.MetricEuclidean
+	n := len(sampledFeatures)
+	switch params.FeatureSet {
+	case projectionFeatureStructure:
+		if itemErr != nil {
+			inst.fail(cancel, eh.Errorf("projection: item extraction: %w", itemErr))
+			return
+		}
+		sampleIdx := make([]int, n)
+		for i, r := range sampleRow {
+			sampleIdx[i] = int(r)
+		}
+		d = card.StructureDims
+		x = card.StructureMatrix(allItems.Select(sampleIdx), d)
+		metric = knn.MetricCosine
+	case projectionFeatureComponents:
+		if compErr != nil {
+			inst.fail(cancel, eh.Errorf("projection: component presence: %w", compErr))
+			return
+		}
+		if len(compKinds) == 0 {
+			inst.fail(cancel, eh.Errorf("projection: no registered component reads this result — the components set needs a facts-shaped result"))
+			return
+		}
+		d = len(compKinds)
+		x = make([]float32, n*d)
+		for i, r := range sampleRow {
+			for _, k := range compRows[r] {
+				x[i*d+int(k)] = 1
+			}
+		}
+		metric = knn.MetricCosine
+	default:
+		m := card.BuildFeatureMatrix(sampledFeatures)
+		err = card.PreprocessFeatureMatrix(m)
+		if err != nil {
+			inst.fail(cancel, eh.Errorf("projection: preprocess: %w", err))
+			return
+		}
+		_, d = m.Dims()
+		x = make([]float32, n*d)
+		raw := m.RawMatrix()
+		for i := range n {
+			for j := range d {
+				x[i*d+j] = float32(raw.Data[i*raw.Stride+j])
+			}
 		}
 	}
 	ids := make([]uint64, n)
@@ -457,7 +563,7 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 	defer close(done)
 	defer cancelCtx()
 
-	g, err := knn.Build(ctx, nil, x, d, ids, knn.Options{K: params.K})
+	g, err := knn.Build(ctx, nil, x, d, ids, knn.Options{K: params.K, Metric: metric})
 	if err != nil {
 		if isClosed(cancel) {
 			inst.markCancelled(cancel)
@@ -503,6 +609,7 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 	for s := range nSlots {
 		slotFeatures[s] = sampledFeatures[g.Rows[s]]
 	}
+	res.slotFeatures = slotFeatures
 	res.explanation = explainProjection(ctx, slotFeatures, cl)
 	if itemErr != nil {
 		res.explanation.items.err = itemErr
@@ -511,8 +618,7 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 		for s := range nSlots {
 			slotIdx[s] = int(sampleRow[g.Rows[s]])
 		}
-		all := ie.Results()
-		res.explanation.items = explainItems(ctx, all.Select(slotIdx), len(all.Items), cl, rec.Schema())
+		res.explanation.items = explainItems(ctx, allItems.Select(slotIdx), len(allItems.Items), cl, params.MinClusterSize)
 	}
 	if isClosed(cancel) {
 		inst.markCancelled(cancel)
@@ -705,6 +811,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 		p.params.K = int(math.Round(p.kKnob))
 		c.SliderF64(ids.PrepareStr("projectionMCS"), p.mcsKnob, 2, 100).Integer().Text("min cluster").SendRespVal(&p.mcsKnob)
 		p.params.MinClusterSize = int(math.Round(p.mcsKnob))
+		p.renderFeatureSetCombo()
 		if snap.status == projectorStatusDone {
 			c.Separator().Vertical().Send()
 			inst.renderColorByCombo()
@@ -745,10 +852,22 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 		}
 	}
 
+	inst.syncProjectionPublish()
 	if snap.status == projectorStatusDone && snap.result != nil {
 		p.copyText = nil
 		if inst.CanCopy() {
 			p.copyText = inst.copyToClipboard
+		}
+		// The publish affordance sits at the end of the layout controls,
+		// the row with room; it needs the app's bus, so the app renders it.
+		res := snap.result
+		p.renderPublish = func() {
+			inst.renderProjectionPublish(func() projectionPublishInput {
+				_, x, y := p.view.PositionColumns(nil, nil, nil)
+				return projectionPublishInput{
+					rec: rec, res: res, depth: p.explainDepth, perCluster: p.explainPerCluster, x: x, y: y,
+				}
+			})
 		}
 		p.renderGraph(snap, selectedRow, inst.colorByFeature, emit)
 	}
@@ -799,6 +918,10 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 		c.Checkbox(ids.PrepareStr("projectionEdges"), inst.showEdges, "edges").SendRespVal(&inst.showEdges)
 		if res.clusters.NumClusters > 0 {
 			c.Checkbox(ids.PrepareStr("projectionAuras"), inst.auras, "auras by cluster").SendRespVal(&inst.auras)
+		}
+		if inst.renderPublish != nil {
+			c.Separator().Vertical().Send()
+			inst.renderPublish()
 		}
 	}
 	c.Label(inst.statusLine(res)).Send()
@@ -963,7 +1086,7 @@ func projectionColumn[T any](s []T, n int) []T {
 func (inst *Projector) statusLine(res *projectionResult) string {
 	var b strings.Builder
 	g := res.graph.Graph
-	fmt.Fprintf(&b, "%s nodes · %s neighbour edges · k=%d", humanize.Comma(int64(g.NumVertices())), humanize.Comma(g.NumEdges()), res.graph.K)
+	fmt.Fprintf(&b, "%s nodes · %s neighbour edges · k=%d · features: %s", humanize.Comma(int64(g.NumVertices())), humanize.Comma(g.NumEdges()), res.graph.K, res.params.FeatureSet)
 	noise := 0
 	for _, lb := range res.clusters.Label {
 		if lb < 0 {
@@ -983,6 +1106,27 @@ func (inst *Projector) statusLine(res *projectionResult) string {
 		fmt.Fprintf(&b, " · settling (%.3f) at exaggeration %.3g", m.LastDisplacement, m.Exaggeration)
 	}
 	return b.String()
+}
+
+// renderFeatureSetCombo emits the "features" picker: which matrix the
+// next Compute builds the neighbour graph over (ADR-0238). A run knob,
+// like the neighbour count, so it applies on the next Compute.
+func (inst *Projector) renderFeatureSetCombo() {
+	ids := inst.ids
+	for range c.ComboBox(ids.PrepareStr("projectionFeatureSet"),
+		c.WidgetText().Text("features").Keep(),
+		c.WidgetText().Text(inst.params.FeatureSet.String()).Keep()).
+		KeepIter() {
+		for i, fs := range projectionFeatureSets {
+			if c.Button(ids.PrepareSeq(uint64(0x3200+i)),
+				c.Atoms().Text(fs.Doc()).Keep()).
+				Frame(false).
+				Selected(inst.params.FeatureSet == fs).
+				SendResp().HasPrimaryClicked() {
+				inst.params.FeatureSet = fs
+			}
+		}
+	}
 }
 
 // renderColorByCombo emits the "Colour by …" picker into the current

@@ -18,7 +18,7 @@ The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 into three groups: the **editor** (Editor, History), the **tool panes** beside
 it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Experiments — each reads
 the buffer, or something derived from it, while you type), and the **result
-panes** below (Table, Projection, Timeline, Map, World, Kanban, Network,
+panes** below (Table, Projection, Timeline, Map, World, Kanban, Chat, Network,
 Graphview, Sankey, Distribution, Icicle, Files, Graph, Schema, and Detail
 alongside them). Drag a tab to
 re-dock or split it; the layout holds for the session and starts fresh next
@@ -543,7 +543,12 @@ become a k-nearest-neighbour graph, HDBSCAN clusters it, and the graph is laid o
 under the neighbour-embedding force model. The button becomes **Cancel** while it
 works, and an fsmview chip shows the projector's lifecycle (extracting → running →
 done, or failed / cancelled). **Neighbours** and **min cluster** apply on the next
-Compute; **exaggeration** applies live and moves the same graph along the
+Compute, as does **features**: *shape* (the default) builds the graph over the
+sixteen size-and-skew features under Euclidean distance, *structure* over a hashed
+vector of which sections and attributes each record has, under cosine, so records
+of one kind sit together whatever their values or sizes, and *components* over
+which registered component kinds each record carries, one column per kind, for a
+facts-shaped result; **exaggeration** applies live and moves the same graph along the
 attraction–repulsion spectrum — about 1 draws t-SNE, 4 UMAP, 30 ForceAtlas2 — after
 an annealing schedule that starts high. **Colour by** fills nodes by any feature,
 binned; **auras by cluster** draws a blob per HDBSCAN cluster with a legend, leaving
@@ -579,14 +584,29 @@ earned.
 **By attributes** switches the same table to what the clusters' entities *are*:
 each entity becomes a set of items — its tagged sections and co-groups, short
 values of its columns, its low-cardinality memberships — and per cluster the row
-shows the best small conjunction of items held or lacked, as SQL over the physical
-columns (`length(...) > 0` for a section, `has(...)` for a value or a membership),
+shows the best small conjunction of items held or lacked, as SQL over column
+handles — `` length(`section:column`) > 0 `` for a section, `` has(`section:column`, v) ``
+for a value, `` has(`section:lv`, 'name') `` for a membership,
+`LW_COMPONENT_FILTER('Kind')` for a registered component the row carries —
+which play resolves before the statement ships,
 with its precision and recall, beside the items most over- or under-represented
 in the cluster, each with its share in the cluster against the rest and its lift.
 Only items that survive a Fisher exact test corrected for the number of items
 and clusters are listed, and the summary line states the vocabulary and the
 number of tests. Unlike the feature rules these run against the result as it
 is; a rule whose item has no column in the result says so.
+
+**Publish as dataset** (in the toolbar once a run is done, when the session has
+capabilities) writes the run as two ad-hoc datasets and binds their aliases:
+`keelson('projection')` holds one row per projected entity — the result's row
+index and its plain identity columns, the sixteen features under the names the
+rules use, `cluster` (numbered as the tab shows, noise at −1), `probability`, the
+layout `x` and `y`, `feature_set`, and `items`, the entity's item names as an
+array — and `keelson('projection_rules')` one row per cluster and reading with
+the rule as SQL, its precision, recall and coverage. A scaffold query lands at the
+caret. A copied feature rule runs as written against `keelson('projection')`,
+and the attribute contrasts are an `arrayJoin(items)` with a `GROUP BY cluster`.
+Publishing again replaces both datasets; they live for the session only.
 
 ### Timeline
 
@@ -615,6 +635,27 @@ counts unmatched and duplicate rows in its status line (duplicates: last row win
 the pane never aggregates for you). Hover reads `name · value`; clicking a country
 selects its row, driving the Detail tab. The **Snippets** library carries a
 ready-to-run example ("World choropleth (countries)").
+
+### Chat
+
+A message transcript (ADR-0239) over a result naming `ts`, `sender` and `body`
+columns, matched on the gloss label so `body@text/markdown` still claims `body`.
+Optional `id`, `reply_to`, `system`, `deleted`, `edited_at`, `status` and
+`conversation` columns add quote strips, centred system lines, deleted
+placeholders, edited marks, delivery checks and a conversation picker; a
+`reactions` CTE (`id`, `key`, `sender`) draws reaction pills under the bubble
+with the reactors on hover, and a `participants` CTE (`sender`, `name`,
+`color`) names and colours the senders. Every column the contract does not
+claim renders inside the bubble through its gloss — an image column is an
+attachment, a JSON column a payload — and, unglossed, as a caption line. The
+**viewer** picker in the options row decides whose bubbles sit on the right:
+with two speakers and a viewer among them the pane draws the SMS-style
+dialogue, otherwise the group layout with names and initials discs. The
+newest messages are drawn (300 by default; **older** above the first widens
+the window), the view follows the tail until you scroll up, and **newest**
+pins it again. Clicking a bubble selects its row, driving Detail and Table;
+clicking a quote strip jumps to the quoted message. The **Snippets** library
+carries a ready-to-run example ("Chat transcript").
 
 ### Map
 

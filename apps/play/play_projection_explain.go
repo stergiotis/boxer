@@ -247,6 +247,11 @@ func (inst *Projector) renderExplanation(res *projectionResult) {
 			summary := explanationSummary(ex, inst.explainDepth, inst.explainPerCluster)
 			if inst.explainByItems {
 				summary = itemsSummary(ex.items)
+			} else if res.params.FeatureSet != projectionFeatureShape {
+				// The clustering ran on structure or components, so these
+				// rules describe each cluster's shape; the attribute rules
+				// are its criterion.
+				summary = "clustered by " + res.params.FeatureSet.String() + " — shape rules are a description here, the attribute rules the criterion · " + summary
 			}
 			for rt := range c.RichTextLabel(summary) {
 				rt.Small().Weak()

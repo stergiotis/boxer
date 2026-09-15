@@ -148,3 +148,13 @@ func TestBuildProjectionDeclaration(t *testing.T) {
 	require.NotEqual(t, nodes.Color[0], nodes.Color[n-1])
 	require.Nil(t, nodes.AuraOffsets)
 }
+
+func TestProjectionFeatureSetNames(t *testing.T) {
+	require.Equal(t, "shape", projectionFeatureShape.String())
+	require.Equal(t, "structure", projectionFeatureStructure.String())
+	require.Equal(t, "?", projectionFeatureSetE(9).String())
+	for _, fs := range projectionFeatureSets {
+		require.Contains(t, fs.Doc(), fs.String())
+	}
+	require.Equal(t, projectionFeatureShape, projectionParams{}.FeatureSet, "the zero value is the shape set the lane always had")
+}

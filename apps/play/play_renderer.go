@@ -517,6 +517,10 @@ type PlayApp struct {
 	fixtures     *fixtureState
 	fixtureSpec  fixtureSpec
 	fixturesSeen uint64
+	// projPublish publishes a projection run as ad-hoc datasets (ADR-0238
+	// update); inert without the bus, like the fixture lab.
+	projPublish     *projectionPublishState
+	projPublishSeen uint64
 
 	// tsCollisions caches whether the server has functions whose names play's
 	// own `ts*` vocabulary shadows (ADR-0163 §SD4). Chrome only — the answer
@@ -1132,10 +1136,12 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
 	inst.fixtures = &fixtureState{}
+	inst.projPublish = &projectionPublishState{}
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())
 	inst.components = newComponentDetail(mk())
+	inst.projector.componentPresence = inst.components.presenceRows
 	inst.identity = newIdentityDetail(mk())
 	// The Experiments pane's card emitters get a stack on a DIFFERENT base
 	// salt, not merely a different instance. PrepareSeq maps its argument

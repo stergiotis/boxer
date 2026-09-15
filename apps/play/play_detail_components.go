@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/componentview"
@@ -284,6 +285,53 @@ func (inst *componentDetail) release() {
 	inst.dropRecord()
 	inst.schema = nil
 	inst.indices = nil
+}
+
+// presenceRows detects every bound kind on every row of rec: kinds in
+// binding order across the stores, and per row the indices of the kinds it
+// carries (Approximate or Exact). Nil kinds when the result is not
+// facts-shaped. It builds its own read access over rec rather than the
+// per-record cache, so it may run off the render thread; the schema map and
+// the binders are read-only after build.
+func (inst *componentDetail) presenceRows(rec arrow.RecordBatch) (kinds []string, rows [][]int32, err error) {
+	if inst == nil || inst.buildErr != nil || rec == nil || !inst.ensureSchema(rec.Schema()) {
+		return
+	}
+	access := ra.NewReadAccessFacts()
+	access.SetColumnIndices(inst.indices)
+	if err = access.LoadFromRecord(rec); err != nil {
+		access.Release()
+		err = eh.Errorf("load facts read access: %w", err)
+		return
+	}
+	defer access.Release()
+	readers := factsSectionReaders(access)
+	for i := range inst.stores {
+		for _, b := range inst.stores[i].binder.Bindings() {
+			kinds = append(kinds, string(b.Kind()))
+		}
+	}
+	n := int(rec.NumRows())
+	rows = make([][]int32, n)
+	for r := range n {
+		base := int32(0)
+		for i := range inst.stores {
+			st := &inst.stores[i]
+			var got []componentview.KindPresence
+			got, err = st.binder.Detect(readers, r)
+			if err != nil {
+				err = eb.Build().Str("store", st.name).Int("row", r).Errorf("%w", err)
+				return nil, nil, err
+			}
+			for k, kp := range got {
+				if kp.Presence != mappingplan.PresenceAbsent {
+					rows[r] = append(rows[r], base+int32(k))
+				}
+			}
+			base += int32(len(got))
+		}
+	}
+	return
 }
 
 // componentsFor returns the components row of rec carries, of play's kinds,
