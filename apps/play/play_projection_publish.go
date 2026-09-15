@@ -22,13 +22,16 @@ import (
 // entity with its identity, its features, its cluster and its position,
 // and one row per cluster and reading with the rule as SQL. The feature
 // rules the section shows then run as written against
-// keelson('projection'), and the attribute contrasts are a GROUP BY over
-// the items column. Modelled on the Series fixture's publish round: off
-// the render thread, single-flight, the aliases bound once per publish.
+// the published rows, and the attribute contrasts are a GROUP BY over the
+// items column. Modelled on imzrt's profile publish: off the render
+// thread, single-flight, each dataset republished onto its own stable
+// handle so its revision bumps, and the query naming the dataset by that
+// handle as a literal — no alias binding, so any play instance, this one
+// or another, reads it the same way.
 
 const (
-	// projectionAlias and projectionRulesAlias are what a buffer writes as
-	// keelson('<alias>'). Fixed names, so a snippet can name them.
+	// projectionAlias and projectionRulesAlias label the datasets in the
+	// ad-hoc catalogue; a query names them by handle.
 	projectionAlias      = "projection"
 	projectionRulesAlias = "projection_rules"
 	projectionPublisher  = "play/projection"
@@ -63,6 +66,9 @@ type projectionPublishInput struct {
 	perCluster bool
 	// x, y are the widget's positions per slot, world units.
 	x, y []float32
+	// prevRows, prevRules are the handles of this projector's last publish,
+	// republished onto rather than replaced.
+	prevRows, prevRules string
 }
 
 // publishProjection encodes and publishes the current run. A second click
@@ -79,6 +85,7 @@ func (inst *PlayApp) publishProjection(in projectionPublishInput) {
 	}
 	st.publishing = true
 	st.err = nil
+	in.prevRows, in.prevRules = st.rowsHandle, st.rulesHandle
 	st.mu.Unlock()
 	in.rec.Retain()
 	go func() {
@@ -122,21 +129,21 @@ func doPublishProjection(bus busPublisherI, in projectionPublishInput) (out proj
 		return
 	}
 	rowsRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: projectionAlias, ArrowIPCStream: rowsIPC, Publisher: projectionPublisher,
+		Alias: projectionAlias, Handle: in.prevRows, ArrowIPCStream: rowsIPC, Publisher: projectionPublisher,
 	})
 	if err != nil {
 		return out, eb.Build().Str("alias", projectionAlias).Errorf("play: projection: publish: %w", err)
 	}
 	rulesRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: projectionRulesAlias, ArrowIPCStream: rulesIPC, Publisher: projectionPublisher,
+		Alias: projectionRulesAlias, Handle: in.prevRules, ArrowIPCStream: rulesIPC, Publisher: projectionPublisher,
 	})
 	if err != nil {
 		return out, eb.Build().Str("alias", projectionRulesAlias).Errorf("play: projection: publish: %w", err)
 	}
 	out.rowsHandle = rowsRes.Handle
 	out.rulesHandle = rulesRes.Handle
-	out.summary = fmt.Sprintf("keelson('%s'): %d rows · keelson('%s'): %d rules",
-		projectionAlias, rowsRes.Rows, projectionRulesAlias, rulesRes.Rows)
+	out.summary = fmt.Sprintf("keelson('%s'): %d rows (rev %d) · keelson('%s'): %d rules (rev %d)",
+		rowsRes.Handle, rowsRes.Rows, rowsRes.Revision, rulesRes.Handle, rulesRes.Rows, rulesRes.Revision)
 	return
 }
 
@@ -304,13 +311,6 @@ func buildProjectionRules(in projectionPublishInput, alloc memory.Allocator) arr
 		hits.Append(hit)
 		n++
 	}
-	names := card.FeatureNames()
-	name := func(f int32) string {
-		if int(f) < len(names) {
-			return names[f]
-		}
-		return fmt.Sprintf("f%d", f)
-	}
 	if ex.tree != nil {
 		for lb := range ex.tree.NumLabels {
 			var rules []explain.Rule
@@ -325,7 +325,7 @@ func buildProjectionRules(in projectionPublishInput, alloc memory.Allocator) arr
 				continue
 			}
 			cover, hit, p, r := explain.Coverage(rules)
-			add(lb, "features", explain.SQL(rules, name), p, r, cover, hit)
+			add(lb, "features", rulesSQL(rules, ex.desc), p, r, cover, hit)
 		}
 	}
 	pi := ex.items
@@ -365,9 +365,8 @@ func buildProjectionRules(in projectionPublishInput, alloc memory.Allocator) arr
 	return out
 }
 
-// syncProjectionPublish binds the aliases once per publish and offers a
-// scaffold, on the render thread, where BindDataset and the delivery ops
-// belong.
+// syncProjectionPublish offers the scaffold once per publish, on the
+// render thread, where the delivery ops belong.
 func (inst *PlayApp) syncProjectionPublish() {
 	if inst.projPublish == nil {
 		return
@@ -381,28 +380,24 @@ func (inst *PlayApp) syncProjectionPublish() {
 	st.mu.Lock()
 	rowsHandle, rulesHandle := st.rowsHandle, st.rulesHandle
 	st.mu.Unlock()
-	for _, b := range []struct{ alias, handle string }{
-		{projectionAlias, rowsHandle},
-		{projectionRulesAlias, rulesHandle},
-	} {
-		if b.handle == "" {
-			continue
-		}
-		_ = inst.BindDataset(b.alias, b.handle)
+	if rowsHandle == "" || rulesHandle == "" {
+		return
 	}
-	inst.InsertSqlAtCaret(projectionScaffold())
+	inst.InsertSqlAtCaret(projectionScaffold(rowsHandle, rulesHandle))
 }
 
 // projectionScaffold is the query offered after a publish: the clusters
-// with their sizes and rules, ready to narrow to one.
-func projectionScaffold() string {
+// with their sizes and rules, ready to narrow to one. The handles are
+// spliced as literals, as imzrt's explore seed does: a handle is the
+// dataset's name on every endpoint that resolves ad-hoc datasets.
+func projectionScaffold(rowsHandle, rulesHandle string) string {
 	return fmt.Sprintf(`
 -- the projection as data: one row per entity, one per cluster and rule
 SELECT p.cluster, count() AS entities, any(r.rule) AS rule
 FROM keelson('%s') AS p
 LEFT JOIN keelson('%s') AS r ON r.cluster = p.cluster AND r.kind = 'attributes'
 GROUP BY p.cluster ORDER BY entities DESC
-`, projectionAlias, projectionRulesAlias)
+`, rowsHandle, rulesHandle)
 }
 
 // renderProjectionPublish is the toolbar affordance: the button while a

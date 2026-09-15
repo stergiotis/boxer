@@ -42,14 +42,13 @@ func twoClusterFeatures(n int) (features []card.EntityFeatures, cl algo.HDBSCANR
 
 func TestExplainProjectionReadsTheSplit(t *testing.T) {
 	features, cl := twoClusterFeatures(60)
-	ex := explainProjection(context.Background(), features, cl)
+	ex := explainProjection(context.Background(), shapeFeatureDesc(features), cl)
 	require.NoError(t, ex.err)
 	require.NotNil(t, ex.tree)
 	require.NotNil(t, ex.contrast)
 	require.Len(t, ex.perCluster, 2)
-	names := card.FeatureNames()
 	for _, perCluster := range []bool{false, true} {
-		rows := explanationRows(ex, projectionExplainDefaultDepth, names, perCluster)
+		rows := explanationRows(ex, projectionExplainDefaultDepth, perCluster)
 		require.Len(t, rows, 2)
 		require.Equal(t, "cluster 1", rows[0].cluster)
 		require.Equal(t, "30", rows[0].rows)
@@ -64,9 +63,9 @@ func TestExplainProjectionReadsTheSplit(t *testing.T) {
 	// Against the rest, cluster 2's noise rows sit on the rest side of its
 	// own tree, so its precision is under one there and whole in the
 	// partition, which never saw them.
-	part := explanationRows(ex, projectionExplainDefaultDepth, names, false)
+	part := explanationRows(ex, projectionExplainDefaultDepth, false)
 	require.Contains(t, part[1].fit, "precision 100%")
-	own := explanationRows(ex, projectionExplainDefaultDepth, names, true)
+	own := explanationRows(ex, projectionExplainDefaultDepth, true)
 	require.Contains(t, own[1].fit, "recall 100%")
 	require.NotContains(t, own[1].fit, "precision 100%")
 	summary := explanationSummary(ex, projectionExplainDefaultDepth, false)
@@ -78,10 +77,10 @@ func TestExplainProjectionReadsTheSplit(t *testing.T) {
 func TestExplainProjectionNothingToExplain(t *testing.T) {
 	features, cl := twoClusterFeatures(12)
 	cl.NumClusters = 0
-	ex := explainProjection(context.Background(), features, cl)
+	ex := explainProjection(context.Background(), shapeFeatureDesc(features), cl)
 	require.Nil(t, ex.tree)
 	require.NoError(t, ex.err)
-	require.Empty(t, explanationRows(ex, 3, card.FeatureNames(), true))
+	require.Empty(t, explanationRows(ex, 3, true))
 	require.Equal(t, "", explanationSummary(ex, 3, true))
 }
 
@@ -89,14 +88,14 @@ func TestExplanationRowsWithoutALeaf(t *testing.T) {
 	// A partition cut at depth 0 has one leaf, so the minority cluster has
 	// none; each cluster's own tree at depth 0 predicts the rest.
 	features, cl := twoClusterFeatures(60)
-	ex := explainProjection(context.Background(), features, cl)
+	ex := explainProjection(context.Background(), shapeFeatureDesc(features), cl)
 	require.NoError(t, ex.err)
-	rows := explanationRows(ex, 0, card.FeatureNames(), false)
+	rows := explanationRows(ex, 0, false)
 	require.Len(t, rows, 2)
 	require.Equal(t, "true", rows[0].rule)
 	require.Equal(t, "no leaf at this depth", rows[1].rule)
 	require.Equal(t, "", rows[1].fit)
-	own := explanationRows(ex, 0, card.FeatureNames(), true)
+	own := explanationRows(ex, 0, true)
 	require.Equal(t, "no leaf at this depth", own[0].rule)
 }
 
@@ -191,7 +190,7 @@ func TestExplainItemsPlanted(t *testing.T) {
 func TestBuildProjectionDatasets(t *testing.T) {
 	alloc := memory.NewGoAllocator()
 	features, cl := twoClusterFeatures(60)
-	ex := explainProjection(context.Background(), features, cl)
+	ex := explainProjection(context.Background(), shapeFeatureDesc(features), cl)
 	require.NoError(t, ex.err)
 	// A result whose slots are rows 5..0 of a six-row record, with an
 	// identity column and a tagged-section column the publish must skip.
@@ -248,5 +247,43 @@ func TestBuildProjectionDatasets(t *testing.T) {
 		}
 	}
 	require.True(t, sawFeatures)
-	require.Contains(t, projectionScaffold(), "keelson('projection')")
+	require.Contains(t, projectionScaffold("adhoc_a", "adhoc_b"), "keelson('adhoc_a')")
+	require.Contains(t, projectionScaffold("adhoc_a", "adhoc_b"), "keelson('adhoc_b')")
+}
+
+func TestExplainProjectionOverComponents(t *testing.T) {
+	// Cluster 0 carries kind A, cluster 1 kind B, a noise row neither.
+	kinds := []string{"KindA", "KindB"}
+	rows := [][]int32{{0}, {0}, {0}, {1}, {1}, {1}, {}}
+	cl := algo.HDBSCANResult{Label: []int32{0, 0, 0, 1, 1, 1, -1}, NumClusters: 2}
+	desc := componentFeatureDesc(kinds, rows)
+	require.True(t, desc.binary)
+	ex := explainProjection(context.Background(), desc, cl)
+	require.NoError(t, ex.err)
+	require.NotNil(t, ex.tree)
+	out := explanationRows(ex, 2, true)
+	require.Len(t, out, 2)
+	require.Equal(t, "LW_COMPONENT_FILTER('KindA')", out[0].rule)
+	require.Equal(t, "LW_COMPONENT_FILTER('KindB')", out[1].rule)
+	require.True(t, strings.HasPrefix(out[0].features, "KindA ↑ (100% vs 0%)"), out[0].features)
+	require.Contains(t, explanationSummary(ex, 2, true), "over 2 component kinds")
+	// The partition at depth 1 splits on one kind; the other side is its
+	// negation.
+	part := explanationRows(ex, 1, false)
+	require.Contains(t, part[0].rule+part[1].rule, "NOT (LW_COMPONENT_FILTER(")
+	// Structure over item sets keeps structural items only.
+	sets := card.ItemSets{
+		Items: []card.Item{
+			{Name: "section:a", Kind: card.ItemKindSection, Handle: "a:v"},
+			{Name: "value:a.v=1", Kind: card.ItemKindTaggedValue, Handle: "a:v", Value: "1"},
+			{Name: "tag:a=t", Kind: card.ItemKindTagVerbatim, Handle: "a:lv", Value: "t", Quoted: true},
+		},
+		Rows: [][]int32{{0, 1}, {0, 2}}, Support: []int32{2, 1, 1},
+	}
+	sd := structureFeatureDesc(sets)
+	require.Equal(t, []string{"section:a", "tag:a=t"}, sd.names)
+	require.Equal(t, []float64{1, 0, 1, 1}, sd.x)
+	pred, ok := sd.spell(1)
+	require.True(t, ok)
+	require.Equal(t, "has(`a:lv`, 't')", pred)
 }

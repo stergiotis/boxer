@@ -610,16 +610,34 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 		slotFeatures[s] = sampledFeatures[g.Rows[s]]
 	}
 	res.slotFeatures = slotFeatures
-	res.explanation = explainProjection(ctx, slotFeatures, cl)
-	if itemErr != nil {
-		res.explanation.items.err = itemErr
-	} else {
-		slotIdx := make([]int, nSlots)
-		for s := range nSlots {
-			slotIdx[s] = int(sampleRow[g.Rows[s]])
-		}
-		res.explanation.items = explainItems(ctx, allItems.Select(slotIdx), len(allItems.Items), cl, params.MinClusterSize)
+	slotIdx := make([]int, nSlots)
+	for s := range nSlots {
+		slotIdx[s] = int(sampleRow[g.Rows[s]])
 	}
+	var items projectionItems
+	if itemErr != nil {
+		items.err = itemErr
+	} else {
+		items = explainItems(ctx, allItems.Select(slotIdx), len(allItems.Items), cl, params.MinClusterSize)
+	}
+	// The trees read the matrix the clustering ran on (ADR-0238).
+	var desc projectionFeatureDesc
+	switch params.FeatureSet {
+	case projectionFeatureComponents:
+		slotComp := make([][]int32, nSlots)
+		for s, r := range slotIdx {
+			if r < len(compRows) {
+				slotComp[s] = compRows[r]
+			}
+		}
+		desc = componentFeatureDesc(compKinds, slotComp)
+	case projectionFeatureStructure:
+		desc = structureFeatureDesc(items.sets)
+	default:
+		desc = shapeFeatureDesc(slotFeatures)
+	}
+	res.explanation = explainProjection(ctx, desc, cl)
+	res.explanation.items = items
 	if isClosed(cancel) {
 		inst.markCancelled(cancel)
 		return

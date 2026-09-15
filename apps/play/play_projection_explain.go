@@ -53,20 +53,113 @@ type projectionExplanation struct {
 	perCluster []*explain.Tree
 	contrast   *explain.Contrast
 	err        error
+	// desc is the matrix the trees and contrasts were read over — the
+	// feature set the clustering ran on — and labels the clustering.
+	desc   projectionFeatureDesc
+	labels []int32
 	// items is the attribute-level reading (play_projection_items.go).
 	items projectionItems
 }
 
-// explainProjection fits the tree and the contrasts over the raw feature
-// values in slot order. Raw rather than the preprocessed matrix: a
-// threshold tree and a rank statistic are indifferent to the monotone
-// transforms the preprocessing applies, and the thresholds then read in
-// the feature's own units.
-func explainProjection(ctx context.Context, slotFeatures []card.EntityFeatures, cl algo.HDBSCANResult) (ex projectionExplanation) {
-	if cl.NumClusters == 0 || len(slotFeatures) == 0 {
+// projectionFeatureDesc is a feature matrix with its spellings: the
+// sixteen shape features in their own units, or a binary matrix — one
+// column per registered component kind, or per structural item — whose
+// columns spell as predicates rather than thresholds. The explanation
+// reads the matrix the clustering ran on (ADR-0238), so a rule is a
+// criterion of the picture and not a description of another space.
+type projectionFeatureDesc struct {
+	x     []float64
+	d     int
+	names []string
+	// what names the columns in a summary: "shape features", "component
+	// kinds", "structural items".
+	what string
+	// binary marks 0/1 columns; spell gives such a column's predicate, or
+	// false when it has none.
+	binary bool
+	spell  func(f int32) (pred string, ok bool)
+}
+
+// shapeFeatureDesc is the sixteen shape features, raw: a threshold tree and
+// a rank statistic are indifferent to the monotone transforms the
+// preprocessing applies, and the thresholds then read in the feature's own
+// units.
+func shapeFeatureDesc(slotFeatures []card.EntityFeatures) projectionFeatureDesc {
+	return projectionFeatureDesc{
+		x: card.BuildFeatureMatrix(slotFeatures).RawMatrix().Data, d: card.NumFeatures,
+		names: card.FeatureNames(), what: "shape features",
+	}
+}
+
+// binaryFeatureDesc is a 0/1 matrix over n rows: rows[r] lists the
+// columns row r holds.
+func binaryFeatureDesc(names []string, rows [][]int32, what string, spell func(f int32) (string, bool)) projectionFeatureDesc {
+	d := len(names)
+	x := make([]float64, len(rows)*d)
+	for r, row := range rows {
+		for _, c := range row {
+			if int(c) < d {
+				x[r*d+int(c)] = 1
+			}
+		}
+	}
+	return projectionFeatureDesc{x: x, d: d, names: names, what: what, binary: true, spell: spell}
+}
+
+// projectionStructureExplainItems caps the structural items a structure
+// run's trees read, by support: a tree's cost is linear in the columns.
+const projectionStructureExplainItems = 64
+
+// structureFeatureDesc is the pruned item sets' structural items — sections,
+// co-groups, memberships, components; never values — as a binary matrix,
+// the most frequent first, spelled as the attribute reading spells them.
+func structureFeatureDesc(sets card.ItemSets) projectionFeatureDesc {
+	keep := make([]int32, 0, len(sets.Items))
+	for i, it := range sets.Items {
+		switch it.Kind {
+		case card.ItemKindTaggedValue:
+			continue
+		}
+		keep = append(keep, int32(i))
+	}
+	if len(keep) > projectionStructureExplainItems {
+		keep = keep[:projectionStructureExplainItems] // Prune orders by support
+	}
+	col := make(map[int32]int32, len(keep))
+	names := make([]string, len(keep))
+	for c, i := range keep {
+		col[i] = int32(c)
+		names[c] = sets.Items[i].Name
+	}
+	rows := make([][]int32, len(sets.Rows))
+	for r, row := range sets.Rows {
+		for _, i := range row {
+			if c, ok := col[i]; ok {
+				rows[r] = append(rows[r], c)
+			}
+		}
+	}
+	return binaryFeatureDesc(names, rows, "structural items", func(f int32) (string, bool) {
+		return itemPredicate(sets.Items[keep[f]])
+	})
+}
+
+// componentFeatureDesc is one column per registered component kind.
+func componentFeatureDesc(kinds []string, rows [][]int32) projectionFeatureDesc {
+	return binaryFeatureDesc(kinds, rows, "component kinds", func(f int32) (string, bool) {
+		return "LW_COMPONENT_FILTER('" + kinds[f] + "')", true
+	})
+}
+
+// explainProjection fits the partition tree, one tree per cluster and the
+// contrasts over desc in slot order.
+func explainProjection(ctx context.Context, desc projectionFeatureDesc, cl algo.HDBSCANResult) (ex projectionExplanation) {
+	ex.desc = desc
+	ex.labels = cl.Label
+	if cl.NumClusters == 0 || desc.d == 0 || len(desc.x) != desc.d*len(cl.Label) {
 		return
 	}
-	x := card.BuildFeatureMatrix(slotFeatures).RawMatrix().Data
+	x := desc.x
 	labels := cl.Label
 	fitted := 0
 	for _, lb := range labels {
@@ -75,7 +168,7 @@ func explainProjection(ctx context.Context, slotFeatures []card.EntityFeatures, 
 		}
 	}
 	minLeaf := max(projectionExplainMinLeafFloor, int(math.Round(projectionExplainMinLeafShare*float64(fitted))))
-	tree, err := explain.FitTree(ctx, x, card.NumFeatures, labels, explain.TreeOptions{
+	tree, err := explain.FitTree(ctx, x, desc.d, labels, explain.TreeOptions{
 		MaxDepth: projectionExplainFitDepth,
 		MinLeaf:  minLeaf,
 	})
@@ -83,7 +176,7 @@ func explainProjection(ctx context.Context, slotFeatures []card.EntityFeatures, 
 		ex.err = err
 		return
 	}
-	contrast, err := explain.Contrasts(ctx, x, card.NumFeatures, labels)
+	contrast, err := explain.Contrasts(ctx, x, desc.d, labels)
 	if err != nil {
 		ex.err = err
 		return
@@ -97,7 +190,7 @@ func explainProjection(ctx context.Context, slotFeatures []card.EntityFeatures, 
 		if ctx.Err() != nil {
 			break
 		}
-		t, err := explain.FitOneVsRest(ctx, x, card.NumFeatures, labels, lb, explain.TreeOptions{
+		t, err := explain.FitOneVsRest(ctx, x, desc.d, labels, lb, explain.TreeOptions{
 			MaxDepth: projectionExplainFitDepth,
 			MinLeaf:  minLeaf,
 		})
@@ -126,13 +219,14 @@ type explanationRow struct {
 // tree; otherwise the partition tree's leaves for the cluster. Either way
 // the rule is the SQL disjunction of those leaves with the coverage it
 // earns, and the strongest contrasts with their medians follow.
-func explanationRows(ex projectionExplanation, depth int, names []string, perCluster bool) (rows []explanationRow) {
+func explanationRows(ex projectionExplanation, depth int, perCluster bool) (rows []explanationRow) {
 	if ex.tree == nil || ex.contrast == nil {
 		return
 	}
+	desc := ex.desc
 	name := func(f int32) string {
-		if int(f) < len(names) {
-			return names[f]
+		if int(f) < len(desc.names) {
+			return desc.names[f]
 		}
 		return fmt.Sprintf("f%d", f)
 	}
@@ -158,7 +252,7 @@ func explanationRows(ex projectionExplanation, depth int, names []string, perClu
 		case len(rules) == 0:
 			row.rule = "no leaf at this depth"
 		default:
-			row.rule = explain.SQL(rules, name)
+			row.rule = rulesSQL(rules, desc)
 			_, _, precision, recall := explain.Coverage(rules)
 			row.fit = fmt.Sprintf("precision %.0f%% · recall %.0f%%", 100*precision, 100*recall)
 			if len(rules) > 1 {
@@ -179,7 +273,12 @@ func explanationRows(ex projectionExplanation, depth int, names []string, perClu
 			if cell.AUC < 0.5 {
 				arrow = "↓"
 			}
-			fmt.Fprintf(&b, "%s %s (%.3g vs %.3g; AUC %.2f)", name(f), arrow, cell.Median, cell.MedianRest, cell.AUC)
+			if desc.binary {
+				in, rest := binaryShares(desc, ex.labels, int32(lb), f)
+				fmt.Fprintf(&b, "%s %s (%.0f%% vs %.0f%%)", name(f), arrow, 100*in, 100*rest)
+			} else {
+				fmt.Fprintf(&b, "%s %s (%.3g vs %.3g; AUC %.2f)", name(f), arrow, cell.Median, cell.MedianRest, cell.AUC)
+			}
 			listed++
 		}
 		if listed == 0 {
@@ -189,6 +288,77 @@ func explanationRows(ex projectionExplanation, depth int, names []string, perClu
 		rows = append(rows, row)
 	}
 	return
+}
+
+// binaryShares is the share of the label's rows holding column f, and the
+// share of every other row holding it.
+func binaryShares(desc projectionFeatureDesc, labels []int32, label, f int32) (in, rest float64) {
+	var nIn, nRest, hitIn, hitRest float64
+	for r, lb := range labels {
+		v := desc.x[r*desc.d+int(f)]
+		if lb == label {
+			nIn++
+			hitIn += v
+		} else {
+			nRest++
+			hitRest += v
+		}
+	}
+	if nIn > 0 {
+		in = hitIn / nIn
+	}
+	if nRest > 0 {
+		rest = hitRest / nRest
+	}
+	return
+}
+
+// rulesSQL spells a rule set over desc: thresholds over feature names for
+// a numeric matrix; for a binary one each term is the column's predicate,
+// negated when the term keeps the column at zero.
+func rulesSQL(rules []explain.Rule, desc projectionFeatureDesc) string {
+	name := func(f int32) string {
+		if int(f) < len(desc.names) {
+			return desc.names[f]
+		}
+		return fmt.Sprintf("f%d", f)
+	}
+	if !desc.binary {
+		return explain.SQL(rules, name)
+	}
+	parts := make([]string, 0, len(rules))
+	for _, r := range rules {
+		if len(r.Terms) == 0 {
+			parts = append(parts, "true")
+			continue
+		}
+		var b strings.Builder
+		for i, t := range r.Terms {
+			if i > 0 {
+				b.WriteString(" AND ")
+			}
+			pred, ok := "", false
+			if desc.spell != nil {
+				pred, ok = desc.spell(t.Feature)
+			}
+			if !ok {
+				pred = "/* " + name(t.Feature) + " has no SQL spelling */ true"
+			}
+			if t.Above {
+				b.WriteString(pred)
+			} else {
+				b.WriteString("NOT (" + pred + ")")
+			}
+		}
+		parts = append(parts, b.String())
+	}
+	switch len(parts) {
+	case 0:
+		return "false"
+	case 1:
+		return parts[0]
+	}
+	return "(" + strings.Join(parts, ") OR (") + ")"
 }
 
 // explanationSummary is the line above the table: how much of the
@@ -210,6 +380,7 @@ func explanationSummary(ex projectionExplanation, depth int, perCluster bool) st
 		s = fmt.Sprintf("one partition: rules at depth %d reproduce the clustering for %d of %d clustered rows (%.0f%%) · %d leaves · smallest leaf %d rows",
 			depth, agree, fitted, pct, len(ex.tree.Rules(depth)), ex.tree.Options.MinLeaf)
 	}
+	s += fmt.Sprintf(" · over %d %s", ex.desc.d, ex.desc.what)
 	if ex.tree.Truncation.Truncated || ex.contrast.Truncation.Truncated {
 		s += " · cut short"
 	}
@@ -247,23 +418,21 @@ func (inst *Projector) renderExplanation(res *projectionResult) {
 			summary := explanationSummary(ex, inst.explainDepth, inst.explainPerCluster)
 			if inst.explainByItems {
 				summary = itemsSummary(ex.items)
-			} else if res.params.FeatureSet != projectionFeatureShape {
-				// The clustering ran on structure or components, so these
-				// rules describe each cluster's shape; the attribute rules
-				// are its criterion.
-				summary = "clustered by " + res.params.FeatureSet.String() + " — shape rules are a description here, the attribute rules the criterion · " + summary
 			}
 			for rt := range c.RichTextLabel(summary) {
 				rt.Small().Weak()
 			}
 		}
 		var rows []explanationRow
-		ruleHeader, apartHeader := "rule (SQL over the feature columns)", "what sets it apart (median in vs rest)"
+		ruleHeader, apartHeader := "rule (SQL over the "+ex.desc.what+")", "what sets it apart (median in vs rest)"
+		if ex.desc.binary {
+			apartHeader = "what sets it apart (share in vs rest)"
+		}
 		if inst.explainByItems {
 			rows = itemsRows(ex.items, ex.tree.NumLabels)
-			ruleHeader, apartHeader = "what they are (SQL over the physical columns)", "what sets it apart (share in vs rest)"
+			ruleHeader, apartHeader = "what they are (SQL over column handles)", "what sets it apart (share in vs rest)"
 		} else {
-			rows = explanationRows(ex, inst.explainDepth, card.FeatureNames(), inst.explainPerCluster)
+			rows = explanationRows(ex, inst.explainDepth, inst.explainPerCluster)
 		}
 		for range c.ScrollArea().Vscroll(true).AutoShrink(false, true).KeepIter() {
 			inst.renderExplanationGrid(rows, ruleHeader, apartHeader)

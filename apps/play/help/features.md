@@ -559,7 +559,9 @@ Click a node to select that row (it drives the Detail tab). Very large results a
 sampled (10000-row cap) so the exact k-NN stays interactive.
 
 **Why these clusters** (a collapsible section under the status line, present when
-HDBSCAN found any) reads the clusters back off the features. Each cluster's row
+HDBSCAN found any) reads the clusters back off the feature set the run used: the
+shape features as thresholds, the component kinds or structural items as
+predicates. Each cluster's row
 carries a rule as a SQL predicate over the feature columns, with the rule's
 precision (how much of what it catches is the cluster) and recall (how much of the
 cluster it catches), and a **copy SQL** button. With **one tree per cluster** on
@@ -597,16 +599,18 @@ number of tests. Unlike the feature rules these run against the result as it
 is; a rule whose item has no column in the result says so.
 
 **Publish as dataset** (in the toolbar once a run is done, when the session has
-capabilities) writes the run as two ad-hoc datasets and binds their aliases:
-`keelson('projection')` holds one row per projected entity — the result's row
+capabilities) writes the run as two ad-hoc datasets, each on a stable handle of
+its own that a query names as `keelson('<handle>')` — the scaffold that lands at
+the caret spells both, and the summary beside the button shows them with their
+revision. The rows dataset holds one row per projected entity — the result's row
 index and its plain identity columns, the sixteen features under the names the
 rules use, `cluster` (numbered as the tab shows, noise at −1), `probability`, the
 layout `x` and `y`, `feature_set`, and `items`, the entity's item names as an
-array — and `keelson('projection_rules')` one row per cluster and reading with
-the rule as SQL, its precision, recall and coverage. A scaffold query lands at the
-caret. A copied feature rule runs as written against `keelson('projection')`,
-and the attribute contrasts are an `arrayJoin(items)` with a `GROUP BY cluster`.
-Publishing again replaces both datasets; they live for the session only.
+array — and the rules dataset one row per cluster and reading with the rule as
+SQL, its precision, recall and coverage. A copied feature rule runs as written
+against the rows dataset, and the attribute contrasts are an `arrayJoin(items)`
+with a `GROUP BY cluster`. Publishing again republishes onto the same handles;
+another play window reads them by the same names; they live for the session only.
 
 ### Timeline
 
