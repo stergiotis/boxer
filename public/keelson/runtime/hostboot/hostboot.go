@@ -238,7 +238,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	rt = &Runtime{opts: opts}
 	logger := opts.Log
 	if !opts.KeepCoreDumps {
-		adhocdata.DisableCoreDumps(logger)
+		disableCoreDumps(logger)
 	}
 
 	// Identity first so every line below carries run_id.

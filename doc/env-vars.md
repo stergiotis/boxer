@@ -213,7 +213,7 @@ generated-at: 2026-09-11T21:26:55Z
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
-| `BOXER_ADHOC_DIR` | string | — | — |  | directory for the ad-hoc dataset store (ADR-0134); empty resolves to <user cache dir>/boxer/adhoc |
+| `BOXER_ADHOC_DIR` | string | — | — |  | directory whose filesystem holds the unnamed sealed files of ad-hoc datasets and staged recordings (ADR-0240 §SD1); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs) |
 | `BOXER_AUDIO_PEAKS_CACHE_DIR` | path | — | — |  | directory holding cached audio peaks pyramids (ADR-0208 §SD4); empty uses <user cache dir>/boxer/audio-peaks |
 | `BOXER_COMPONENT` | string | — | — |  | component identity mark, injected by the supervisor (unit Environment= line, launcher script) and inherited by children; read by the topology layer (ADR-0126); empty = unmarked |
 | `BOXER_LAUNCHER_FRECENCY_HALFLIFE` | duration | `336h` | — |  | launcher ranking decay: a launch this old counts half as much as one just now |
@@ -251,7 +251,7 @@ generated-at: 2026-09-11T21:26:55Z
 
 | Name | Module | Package |
 |------|--------|---------|
-| `BOXER_ADHOC_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/adhocdata` |
+| `BOXER_ADHOC_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/sealed` |
 | `BOXER_ADR_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/gov/adrcorpus` |
 | `BOXER_ADR_ROOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/gov/adrcorpus` |
 | `BOXER_AUDIO_PEAKS_CACHE_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/science/audio/track` |

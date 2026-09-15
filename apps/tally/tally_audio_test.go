@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
 	"github.com/stergiotis/boxer/public/science/audio/decode"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
 	"github.com/stergiotis/boxer/public/science/audio/wavfile"
@@ -58,7 +58,7 @@ func TestIsAudioName(t *testing.T) {
 // the recording's own samples, and closing takes the file with it.
 func TestStagedWavIsSealedAndReadsBack(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(adhocdata.StoreDir.Spec().Name, filepath.Join(dir, "store"))
+	t.Setenv(sealed.BaseDir.Spec().Name, filepath.Join(dir, "store"))
 	path, want := writeWavFixture(t, dir, "tone.wav")
 	info, err := os.Stat(path)
 	require.NoError(t, err)
@@ -67,11 +67,10 @@ func TestStagedWavIsSealedAndReadsBack(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, decode.KindWAV, staged.kind, "a WAV is decoded in-process, so it is sealed")
 
-	sealed, err := os.ReadFile(staged.sealPath)
+	require.NotNil(t, staged.seal, "a WAV is held in a sealed file")
+	entries, err := os.ReadDir(filepath.Join(dir, "store"))
 	require.NoError(t, err)
-	assert.False(t, bytes.Contains(sealed, []byte("RIFF")), "the staged file is ciphertext, not the recording")
-	assert.False(t, bytes.Contains(sealed, staged.key), "a key is never written beside what it opens")
-	assert.Equal(t, "BXAD", string(sealed[:4]), "the ad-hoc store's own format")
+	assert.Empty(t, entries, "the sealed file has no name in the store directory")
 
 	src, err := staged.openSourceE(context.Background())
 	require.NoError(t, err)
@@ -97,11 +96,10 @@ func TestStagedWavIsSealedAndReadsBack(t *testing.T) {
 	require.NoError(t, other.CloseE())
 	require.NoError(t, src.CloseE())
 
-	sealPath := staged.sealPath
+	seal := staged.seal
 	require.NoError(t, staged.closeE())
-	_, err = os.Stat(sealPath)
-	assert.True(t, os.IsNotExist(err), "closing a staged recording removes it")
-	assert.Nil(t, staged.key, "and forgets its key")
+	assert.True(t, seal.Closed(), "closing a staged recording closes the sealed file, and the inode goes with it")
+	assert.Nil(t, staged.seal, "and forgets it")
 	assert.NoError(t, staged.closeE(), "closing twice is not an error")
 }
 
@@ -110,7 +108,7 @@ func TestStagedWavIsSealedAndReadsBack(t *testing.T) {
 // discovered part-way through a read.
 func TestStagedRecordingRefusesAnOversizeFile(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(adhocdata.StoreDir.Spec().Name, filepath.Join(dir, "store"))
+	t.Setenv(sealed.BaseDir.Spec().Name, filepath.Join(dir, "store"))
 	_, err := stageRecording(context.Background(), os.DirFS(dir), "huge.wav", audioMaxBytes+1)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "over the")
@@ -124,7 +122,7 @@ func TestStagedRecordingRefusesAnOversizeFile(t *testing.T) {
 func TestStagedCompressedRecordingIsAnonymous(t *testing.T) {
 	dir := t.TempDir()
 	store := filepath.Join(dir, "store")
-	t.Setenv(adhocdata.StoreDir.Spec().Name, store)
+	t.Setenv(sealed.BaseDir.Spec().Name, store)
 	// Any non-WAV header routes to the external decoder; opening it as a
 	// track would need ffmpeg, staging it does not.
 	body := append([]byte("fLaC\x00\x00\x00\x22"), bytes.Repeat([]byte{0x5a}, 4096)...)
@@ -134,7 +132,7 @@ func TestStagedCompressedRecordingIsAnonymous(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, staged.closeE()) }()
 	require.Equal(t, decode.KindFfmpeg, staged.kind)
-	assert.Empty(t, staged.sealPath, "nothing is written for the external decoder")
+	assert.Nil(t, staged.seal, "nothing is sealed for the external decoder")
 	if entries, rerr := os.ReadDir(store); rerr == nil {
 		assert.Empty(t, entries, "the staging directory stays empty")
 	}
@@ -164,13 +162,13 @@ func TestStagedCompressedRecordingIsAnonymous(t *testing.T) {
 // the previous one rather than leaking its decoders and its device.
 func TestPreviewLaneClosesTheRecordingItReplaces(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(adhocdata.StoreDir.Spec().Name, filepath.Join(dir, "store"))
+	t.Setenv(sealed.BaseDir.Spec().Name, filepath.Join(dir, "store"))
 	path, _ := writeWavFixture(t, dir, "tone.wav")
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 
 	app := newApp()
-	stage := func(key string) (sealPath string) {
+	stage := func(key string) (seal *sealed.File) {
 		deadline := time.Now().Add(10 * time.Second)
 		for time.Now().Before(deadline) {
 			content, done, lerr, busy := app.preview.demand(key, func(ctx context.Context) (previewContent, error) {
@@ -186,17 +184,17 @@ func TestPreviewLaneClosesTheRecordingItReplaces(t *testing.T) {
 			}
 			require.NoError(t, lerr)
 			require.NotNil(t, content.audio)
-			return content.audio.staged.sealPath
+			return content.audio.staged.seal
 		}
 		t.Fatalf("the lane never settled on %s", key)
-		return ""
+		return nil
 	}
 	first := stage("a")
-	require.FileExists(t, first)
+	require.False(t, first.Closed())
 	second := stage("b")
-	require.NotEqual(t, first, second)
-	assert.NoFileExists(t, first, "the replaced recording is released")
+	require.NotSame(t, first, second)
+	assert.True(t, first.Closed(), "the replaced recording is released")
 
 	app.preview.close()
-	assert.NoFileExists(t, second, "and so is the one held at unmount")
+	assert.True(t, second.Closed(), "and so is the one held at unmount")
 }

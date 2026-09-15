@@ -16,10 +16,10 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/rs/zerolog"
 
-	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -38,16 +38,6 @@ const (
 // ServiceAppId is the synthetic identity the capability service speaks
 // under on the bus; audit rows attribute publishes/grants/retracts to it.
 const ServiceAppId app.AppIdT = "runtime.adhoc"
-
-// StoreDir names the directory holding the encrypted dataset files. Empty
-// resolves to <user cache dir>/boxer/adhoc; on the appliance the host sets
-// it beneath /perm (ADR-0134 SD1/SD8).
-var StoreDir = env.NewString(env.Spec{
-	Name:        "BOXER_ADHOC_DIR",
-	Default:     "",
-	Description: "directory for the ad-hoc dataset store (ADR-0134); empty resolves to <user cache dir>/boxer/adhoc",
-	Category:    env.CategorySystem,
-})
 
 // KeyRegistrarI is the broker-side key custody the capability service
 // drives (ADR-0134 K2). *chlocalbroker.KeyStore satisfies it; taking an
@@ -74,7 +64,7 @@ type Config struct {
 	Registry *introspect.Registry
 	// Keys is the broker key store; required.
 	Keys KeyRegistrarI
-	// Dir overrides the store directory; empty resolves from StoreDir.
+	// Dir overrides the store directory; empty resolves from sealed.BaseDir.
 	Dir string
 	// Log is the service logger.
 	Log zerolog.Logger
@@ -657,25 +647,10 @@ func newHandle() (handle string, err error) {
 	return "adhoc_" + hex.EncodeToString(b[:]), nil
 }
 
-// ResolveStoreDir returns the directory the ephemeral store writes into:
-// [StoreDir] when set, else <user cache dir>/boxer/adhoc, else a directory
-// under [os.TempDir]. It is exported because the store's guarantees are
-// directory-wide — every file here is swept at service start and deleted at
-// orderly exit — so another runtime component staging ephemeral bytes under
-// the same scheme belongs in the same directory rather than one of its own.
-func ResolveStoreDir() (dir string) { return resolveStoreDir() }
-
-// resolveStoreDir returns the configured store directory, defaulting to
-// <user cache dir>/boxer/adhoc.
-func resolveStoreDir() string {
-	if d := StoreDir.Get(); d != "" {
-		return d
-	}
-	if cache, err := os.UserCacheDir(); err == nil {
-		return filepath.Join(cache, "boxer", "adhoc")
-	}
-	return filepath.Join(os.TempDir(), "boxer-adhoc")
-}
+// resolveStoreDir returns the directory the v1 named-file store writes
+// under: the sealed store's base directory (ADR-0240 §SD1), until M2 moves
+// the records onto unnamed sealed files and this path goes.
+func resolveStoreDir() string { return sealed.BaseDirPath() }
 
 // validAlias reports whether s is a bare identifier usable as a stable
 // alias in an applet's frontmatter and rewrite.

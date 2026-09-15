@@ -3,22 +3,19 @@ package tally
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -38,31 +35,29 @@ import (
 // on their own command line. A snapshot's recording therefore has to be
 // staged out of ClickHouse before it can be played, and staging it as a
 // plain file would leave a browsed recording lying on disk after the window
-// closed — the exact durability the ad-hoc dataset store exists to refuse
-// (ADR-0134). Staging reuses that store: its directory, its quotas, its
-// AES-GCM chunk format, its keys-in-memory-only rule, and its startup sweep.
+// closed — the exact durability the sealed store exists to refuse
+// (ADR-0240 §SD1). Staging uses that store: an unnamed inode under a key
+// that exists only inside the [sealed.File], so nothing has a name on any
+// filesystem and a crash strands nothing at all.
 //
 // Two shapes, because one boundary cannot be crossed with ciphertext:
 //
-//   - A WAV is sealed into a BXAD file beside the ad-hoc datasets under a key
-//     held only in this process. [adhocdata.SeekableReader] gives each reader
-//     random access to the plaintext, so nothing ever leaves the process and
-//     a crash strands ciphertext whose key is gone.
+//   - A WAV is sealed and read back in-process; [sealed.Reader] gives each
+//     reader random access to the plaintext.
 //   - Everything else is decoded by ffmpeg, a separate process that can read
 //     neither our ciphertext nor a stream (ffprobe seeks for the duration).
-//     ADR-0134 met the same wall at ClickHouse and answered it by decrypting
-//     on our side of the boundary into a kernel object with no name; here
-//     that object is a memfd, anonymous memory the decoders reach only as an
-//     inherited descriptor ([decode.FdInputI]). It has no name on any
-//     filesystem, so nothing outlives the process holding it.
+//     For it the recording is held in a memfd, anonymous memory the decoders
+//     reach only as an inherited descriptor ([decode.FdInputI]) — the same
+//     no-name property by the other kernel object.
 
 const (
-	// audioMaxBytes is the largest recording tally will stage. It is the
-	// ad-hoc store's own per-dataset quota, and for the ffmpeg path it also
-	// bounds the anonymous memory a staged recording occupies.
-	audioMaxBytes int64 = adhocdata.PerDatasetMaxBytes
-	// audioStagePrefix names tally's files in the shared store directory, so
-	// they are recognisable in a listing and swept with everything else.
+	// audioMaxBytes is the largest recording tally will stage — the same
+	// figure as an ad-hoc dataset's per-dataset quota, chosen for the same
+	// reason; for the ffmpeg path it also bounds the anonymous memory a
+	// staged recording occupies.
+	audioMaxBytes int64 = 256 << 20
+	// audioStagePrefix names the memfd a staged recording occupies, so it is
+	// recognisable in /proc.
 	audioStagePrefix = "tally-audio-"
 	// audioCopyChunk is the staging copy's buffer.
 	audioCopyChunk = 1 << 20
@@ -99,10 +94,9 @@ type stagedRecording struct {
 	name string
 	kind decode.KindE
 
-	// sealPath and key are the KindWAV shape: a BXAD file under the ad-hoc
-	// store directory, and the key that opens it, which exists nowhere else.
-	sealPath string
-	key      []byte
+	// seal is the KindWAV shape: an unnamed sealed file whose key exists
+	// nowhere but inside it.
+	seal *sealed.File
 
 	// plain is the KindFfmpeg shape: an anonymous file the decoder processes
 	// inherit a handle on.
@@ -144,49 +138,25 @@ func stageRecording(ctx context.Context, fsys fs.FS, p string, size int64) (inst
 	return inst, nil
 }
 
-// sealE writes the recording as a BXAD file under a fresh key, through a
-// temporary name renamed into place — the ad-hoc store's own write shape.
+// sealE writes the recording into an unnamed sealed file.
 func (inst *stagedRecording) sealE(ctx context.Context, r io.Reader) (err error) {
-	dir := adhocdata.ResolveStoreDir()
-	if err = os.MkdirAll(dir, 0o700); err != nil {
-		return eh.Errorf("unable to prepare the staging directory: %w", err)
-	}
-	inst.key = make([]byte, adhocdata.KeySize)
-	if _, err = rand.Read(inst.key); err != nil {
-		return eh.Errorf("unable to mint a staging key: %w", err)
-	}
-	var suffix [8]byte
-	if _, err = rand.Read(suffix[:]); err != nil {
-		return eh.Errorf("unable to mint a staging name: %w", err)
-	}
-	final := filepath.Join(dir, fmt.Sprintf("%s%x.bxad", audioStagePrefix, suffix))
-	tmp := final + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := sealed.Create()
 	if err != nil {
-		return eh.Errorf("unable to create the staging file: %w", err)
+		return eh.Errorf("unable to stage: %w", err)
 	}
-	err = func() (err error) {
-		w, err := adhocdata.NewWriter(f, inst.key)
-		if err != nil {
-			return
-		}
-		if _, err = copyChunked(ctx, w, r); err != nil {
-			return
-		}
-		return w.Close()
-	}()
-	if cerr := f.Close(); err == nil {
-		err = cerr
+	w, err := f.Writer()
+	if err != nil {
+		_ = f.Close()
+		return eh.Errorf("unable to stage: %w", err)
+	}
+	if _, err = copyChunked(ctx, w, r); err == nil {
+		err = w.Close()
 	}
 	if err != nil {
-		_ = os.Remove(tmp)
+		_ = f.Close()
 		return eb.Build().Str("name", inst.name).Errorf("unable to seal: %w", err)
 	}
-	if err = os.Rename(tmp, final); err != nil {
-		_ = os.Remove(tmp)
-		return eh.Errorf("unable to place the staging file: %w", err)
-	}
-	inst.sealPath = final
+	inst.seal = f
 	return nil
 }
 
@@ -258,43 +228,31 @@ func (inst *stagedRecording) openSourceE(ctx context.Context) (src pcm.SourceI, 
 	return decode.OpenFfmpegFdE(ctx, inst)
 }
 
-// openSealedWavE reads the WAV out of the sealed file: one file handle, one
-// seekable decryptor over it, and the native reader on top.
+// openSealedWavE reads the WAV out of the sealed file: one independent
+// reader over the plaintext, and the native WAV reader on top.
 func (inst *stagedRecording) openSealedWavE() (src pcm.SourceI, err error) {
-	f, err := os.Open(inst.sealPath)
-	if err != nil {
-		return nil, eb.Build().Str("name", inst.name).Errorf("unable to open the staged recording: %w", err)
+	if inst.seal == nil {
+		return nil, eb.Build().Str("name", inst.name).Errorf("the recording is not staged")
 	}
-	st, err := f.Stat()
+	r, err := inst.seal.Open()
 	if err != nil {
-		_ = f.Close()
-		return nil, eb.Build().Str("name", inst.name).Errorf("unable to size the staged recording: %w", err)
-	}
-	sr, err := adhocdata.NewSeekableReader(f, st.Size(), inst.key)
-	if err != nil {
-		_ = f.Close()
 		return nil, eb.Build().Str("name", inst.name).Errorf("unable to unseal: %w", err)
 	}
-	file, err := wavfile.NewReaderE(&sealedReaderAt{r: sr}, sr.PlaintextSize())
+	file, err := wavfile.NewReaderE(r, r.PlaintextSize())
 	if err != nil {
-		_ = f.Close()
+		_ = r.Close()
 		return nil, err
 	}
-	return &sealedWav{File: file, seal: f}, nil
+	return &sealedWav{File: file, seal: r}, nil
 }
 
-// closeE releases everything staging took: the sealed file and its key, or
-// the anonymous one. It is idempotent.
+// closeE releases everything staging took: the sealed file — its inode
+// goes with the last descriptor, its key with it — or the anonymous one.
+// It is idempotent.
 func (inst *stagedRecording) closeE() (err error) {
-	if inst.sealPath != "" {
-		if rerr := os.Remove(inst.sealPath); rerr != nil && !os.IsNotExist(rerr) {
-			err = rerr
-		}
-		inst.sealPath = ""
-	}
-	if inst.key != nil {
-		clear(inst.key)
-		inst.key = nil
+	if inst.seal != nil {
+		err = inst.seal.Close()
+		inst.seal = nil
 	}
 	if inst.plain != nil {
 		if cerr := inst.plain.Close(); cerr != nil && err == nil {
@@ -305,39 +263,13 @@ func (inst *stagedRecording) closeE() (err error) {
 	return
 }
 
-// sealedReaderAt is the [io.ReaderAt] the WAV reader wants over a
-// [adhocdata.SeekableReader], which is a ReadSeeker. The mutex is not for
-// concurrency the track creates — each reader is single-goroutine, as
-// [pcm.SourceI] says — but so that a positioned read is a seek and a read
-// together, never interleaved with another.
-type sealedReaderAt struct {
-	mu sync.Mutex
-	r  *adhocdata.SeekableReader
-}
-
-func (inst *sealedReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if _, err = inst.r.Seek(off, io.SeekStart); err != nil {
-		return 0, err
-	}
-	n, err = io.ReadFull(inst.r, p)
-	if err == io.ErrUnexpectedEOF {
-		// The ReaderAt contract spells a short read at the end io.EOF; a
-		// caller reading past the plaintext must see the end, not a distinct
-		// error it has no rule for.
-		err = io.EOF
-	}
-	return n, err
-}
-
-// sealedWav is a WAV source that also owns the sealed file it reads from.
+// sealedWav is a WAV source that also owns the sealed reader it reads from.
 type sealedWav struct {
 	*wavfile.File
-	seal *os.File
+	seal io.Closer
 }
 
-// CloseE closes the reader and then the file under it.
+// CloseE closes the WAV reader and then the sealed reader under it.
 func (inst *sealedWav) CloseE() (err error) {
 	err = inst.File.CloseE()
 	if cerr := inst.seal.Close(); err == nil {

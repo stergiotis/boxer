@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/extbin"
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
 	"github.com/stergiotis/boxer/public/science/audio/decode"
 )
 
@@ -27,7 +27,7 @@ func TestAudioSessionOverACompressedRecording(t *testing.T) {
 		t.Skip("ffmpeg is not available on this host")
 	}
 	dir := t.TempDir()
-	t.Setenv(adhocdata.StoreDir.Spec().Name, filepath.Join(dir, "store"))
+	t.Setenv(sealed.BaseDir.Spec().Name, filepath.Join(dir, "store"))
 	path, want := writeWavFixture(t, dir, "tone.wav")
 	flac := filepath.Join(dir, "tone.flac")
 	require.NoError(t, extbin.Ffmpeg.Run(context.Background(), extbin.Opts{},
