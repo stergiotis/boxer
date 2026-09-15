@@ -2,6 +2,7 @@ package watchbill
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -111,4 +112,29 @@ func TestBusDoorbellAnnouncementAndTaskBridge(t *testing.T) {
 		return j.State == watchbillstore.StateSucceeded
 	}, 2*time.Second, 5*time.Millisecond)
 	assert.Eventually(t, func() bool { return rec.finished.Load() == 1 }, time.Second, 5*time.Millisecond)
+}
+
+// A handler that fails under a bus ends failed, then discarded — not
+// cancelled: finishing the task ends the handle's context, and the outcome
+// must be read before that, not after.
+func TestBusFailureIsNotReadAsCancel(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	store := NewMemStore()
+	reg := NewRegistry()
+	require.NoError(t, reg.Register(HandlerFunc{KindName: "fail.kind", Run: func(context.Context, watchbillstore.Job, task.HandleI) error {
+		return errors.New("on purpose")
+	}}))
+	w, err := New(Config{Store: store, Handlers: reg, RunId: "run-fail", Bus: bus.NewClient("watchbill-worker", WorkerCaps()), Poll: time.Hour, Keep: time.Hour, AbandonAfter: time.Minute})
+	require.NoError(t, err)
+	require.NoError(t, w.Start(context.Background()))
+	defer w.Stop()
+
+	id, err := Enqueue(context.Background(), store, Request{Kind: "fail.kind", MaxAttempts: 2})
+	require.NoError(t, err)
+	w.Wake()
+	require.Eventually(t, func() bool {
+		j, _, _ := store.Get(context.Background(), id)
+		return j.State == watchbillstore.StateDiscarded
+	}, 2*time.Second, 5*time.Millisecond, "two attempts fail, the second discards; a due re-queue wakes the worker itself")
+	assert.Equal(t, []string{"running", "failed", "running", "discarded"}, states(store.Events(id)))
 }

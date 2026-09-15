@@ -447,6 +447,10 @@ func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, clai
 	}
 	hctx := handle.Ctx()
 	runErr := inst.runHandler(hctx, h, job, handle)
+	// Read before the task is finished: Done and Error end the handle's
+	// context themselves, so afterwards every outcome would look like a
+	// cancel through the task.
+	cancelledViaTask := jobCtx.Err() == nil && hctx.Err() != nil
 	inst.finishTask(handle, runErr)
 
 	cause := context.Cause(jobCtx)
@@ -457,7 +461,7 @@ func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, clai
 		outcome = outcomeSucceeded
 	case errors.Is(cause, errCancelRequested):
 		outcome = outcomeCancelled
-	case jobCtx.Err() == nil && hctx.Err() != nil:
+	case cancelledViaTask:
 		// The task's own cancel subject ended the handle's context while
 		// the job's was still live: a cancel from an observer.
 		outcome = outcomeCancelled
@@ -558,6 +562,12 @@ func (inst *Worker) settle(job watchbillstore.Job, outcome outcomeE, runErr erro
 	}
 	if err = inst.event(ctx, now, after, eventState, runErr, note); err != nil {
 		inst.log.Warn().Err(err).Str("id", job.ID).Msg("watchbill: settle event")
+	}
+	// A re-queued attempt that is due already should not wait a poll:
+	// ring the worker's own bell. One with a backoff waits its runAfter,
+	// which the next poll or wake reads.
+	if after.State == watchbillstore.StateQueued && !after.RunAfter.After(now) {
+		inst.Wake()
 	}
 }
 
