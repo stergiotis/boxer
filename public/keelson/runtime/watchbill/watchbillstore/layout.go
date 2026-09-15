@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/rowcas"
 )
 
 // Layout names the database the two tables live in (ADR-0223 §SD1). The
@@ -31,13 +32,8 @@ func (inst Layout) EventTable() (name string) { return inst.DatabaseName() + "."
 
 // jobTableSettingsTail is what the job table's CREATE gains beyond the
 // generator's own settings: the two block-position columns the lightweight
-// UPDATE needs (ADR-0223 §SD3). It extends the SETTINGS clause the
-// generated DDL ends with.
-const jobTableSettingsTail = ", enable_block_number_column=1, enable_block_offset_column=1"
-
-// jobTableSettingsAlter is the same pair as an ALTER, for a table created
-// before the tail existed; MODIFY SETTING is idempotent.
-const jobTableSettingsAlter = "ALTER TABLE %s MODIFY SETTING enable_block_number_column=1, enable_block_offset_column=1"
+// UPDATE needs (ADR-0223 §SD3), rowcas's tail.
+const jobTableSettingsTail = rowcas.TableSettingsTail
 
 // Stores is the pair a consumer holds. Both are single-goroutine, as every
 // generated store is; the worker confines them to one goroutine.

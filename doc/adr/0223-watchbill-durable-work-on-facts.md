@@ -459,6 +459,17 @@ statements here are refined by it:
 
 Nothing on the job table changed.
 
+### 2026-09-15 — the claim's model, named
+
+[doc/explanation/watchbill-consistency-model.md](../explanation/watchbill-consistency-model.md)
+states what §SD3's claim guarantees in Jepsen's terms — a linearizable
+compare-and-set on one row on one server under the fenced statements, no
+transactional model above the row — and which phenomena remain possible,
+with the durability caveat that an acknowledged patch part is not fsynced.
+The conditions the claim holds under moved into
+`recordstore/rowcas`, which the store's statements now compose through, so
+a second primitive inherits them rather than copying SQL.
+
 ## References
 
 - [ADR-0038](./0038-keelson-background-task-primitive.md) — the task primitive; the Update of 2026-06-22 this ADR withdraws.

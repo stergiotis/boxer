@@ -1,13 +1,13 @@
 package watchbillstore
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
+	"github.com/stergiotis/boxer/public/storage/recordstore/rowcas"
 )
 
 // The claim, the transitions, the queue read and the sweep are hand-written
@@ -62,23 +62,19 @@ func timeArr(t time.Time) (lit string) { return "[" + timeLit(t) + "]" }
 
 func u32Arr(v uint32) (lit string) { return "[" + strconv.FormatUint(uint64(v), 10) + "]" }
 
-// updateSettings is what every update of the job table carries: the
-// server's sequential mode, stated rather than left to the default's
-// dependency analysis. Measured (the background note, 2026-09-09): under
-// `async` a twenty-way race doubles most rounds; under `auto` and `sync`
-// none in hundreds — as long as no heavyweight mutation runs on the table
-// meanwhile, which is why [ExpireSQL] deletes as a lightweight update and
-// nothing here issues an ALTER that rewrites parts.
-const updateSettings = " SETTINGS update_parallel_mode='sync'"
-
-// deleteSettings makes the expiry a patch-part delete rather than the
-// default heavyweight mutation, so it serialises with the updates.
-const deleteSettings = " SETTINGS lightweight_delete_mode='lightweight_update'"
+// The settings every statement carries, and the conditions they hold
+// under, are rowcas's (ADR-0223 §SD3; the model in
+// doc/explanation/watchbill-consistency-model.md): the sequential update
+// mode stated on the statement, a delete as a lightweight update, the
+// block-position columns on the table, and never a heavyweight mutation.
+// Measured (the background note, 2026-09-09): under `async` a twenty-way
+// race doubles most rounds; under `sync` none in hundreds, as long as no
+// mutation rewrites a part meanwhile.
 
 // AlterJobTableSettingsSQL puts the lightweight-update settings on a job
 // table that exists already.
 func AlterJobTableSettingsSQL(layout Layout) (sql string) {
-	return fmt.Sprintf(jobTableSettingsAlter, layout.JobTable())
+	return rowcas.AlterTableSettingsSQL(layout.JobTable())
 }
 
 // QueueSQL reads the ids of the jobs a worker may take now, oldest-first
@@ -105,13 +101,15 @@ func QueueSQL(layout Layout, kinds []string, queues []string, now time.Time, lim
 // the row; the caller reads the row back and holds the job exactly when
 // WorkerRun is its own.
 func ClaimSQL(layout Layout, id string, workerRun string, now time.Time) (sql string) {
-	return "UPDATE " + layout.JobTable() +
-		" SET " + col("jobState") + " = " + strArr(StateRunning) +
-		", " + col("jobWorkerRun") + " = " + strArr(workerRun) +
-		", " + col("jobAttempt") + " = [" + elem("jobAttempt") + " + 1]" +
-		" WHERE " + JobColKey + " = " + strLit(id) +
-		" AND " + elem("jobState") + " = " + strLit(StateQueued) +
-		" AND " + elem("jobRunAfter") + " <= " + timeLit(now) + updateSettings
+	return rowcas.UpdateSQL(layout.JobTable(),
+		[]rowcas.Set{
+			{Column: col("jobState"), Expr: strArr(StateRunning)},
+			{Column: col("jobWorkerRun"), Expr: strArr(workerRun)},
+			{Column: col("jobAttempt"), Expr: "[" + elem("jobAttempt") + " + 1]"},
+		},
+		JobColKey+" = "+strLit(id)+
+			" AND "+elem("jobState")+" = "+strLit(StateQueued)+
+			" AND "+elem("jobRunAfter")+" <= "+timeLit(now))
 }
 
 // ReadJobPredicate is the ScanOpts.ExtraPredicate that reads one job.
@@ -160,55 +158,38 @@ type Transition struct {
 
 // TransitionSQL renders t as one conditional update.
 func TransitionSQL(layout Layout, t Transition) (sql string) {
-	var sb strings.Builder
-	sb.WriteString("UPDATE " + layout.JobTable() + " SET " + col("jobState") + " = " + strArr(t.To))
+	sets := []rowcas.Set{{Column: col("jobState"), Expr: strArr(t.To)}}
 	if t.SetWorkerRun {
-		sb.WriteString(", " + col("jobWorkerRun") + " = " + strArr(t.NewWorkerRun))
+		sets = append(sets, rowcas.Set{Column: col("jobWorkerRun"), Expr: strArr(t.NewWorkerRun)})
 	}
 	if t.RunAfter != nil {
-		sb.WriteString(", " + col("jobRunAfter") + " = " + timeArr(*t.RunAfter))
+		sets = append(sets, rowcas.Set{Column: col("jobRunAfter"), Expr: timeArr(*t.RunAfter)})
 	}
 	if t.FinishedAt != nil {
-		sb.WriteString(", " + col("jobFinishedAt") + " = " + timeArr(*t.FinishedAt))
+		sets = append(sets, rowcas.Set{Column: col("jobFinishedAt"), Expr: timeArr(*t.FinishedAt)})
 	}
 	if t.LastError != nil {
-		sb.WriteString(", " + col("jobLastError") + " = " + strArr(*t.LastError))
+		sets = append(sets, rowcas.Set{Column: col("jobLastError"), Expr: strArr(*t.LastError)})
 	}
 	if t.ResetAttempts {
-		sb.WriteString(", " + col("jobAttempt") + " = " + u32Arr(0))
+		sets = append(sets, rowcas.Set{Column: col("jobAttempt"), Expr: u32Arr(0)})
 	}
-	sb.WriteString(" WHERE " + JobColKey + " = " + strLit(t.ID))
-	if len(t.From) > 0 {
-		sb.WriteString(" AND " + elem("jobState") + " IN (")
-		for i, s := range t.From {
-			if i > 0 {
-				sb.WriteString(", ")
-			}
-			sb.WriteString(strLit(s))
-		}
-		sb.WriteString(")")
-	}
+	var where strings.Builder
+	where.WriteString(JobColKey + " = " + strLit(t.ID))
+	where.WriteString(inClause("jobState", t.From))
 	if t.WorkerRun != "" {
-		sb.WriteString(" AND " + elem("jobWorkerRun") + " = " + strLit(t.WorkerRun))
+		where.WriteString(" AND " + elem("jobWorkerRun") + " = " + strLit(t.WorkerRun))
 	}
-	sb.WriteString(updateSettings)
-	return sb.String()
+	return rowcas.UpdateSQL(layout.JobTable(), sets, where.String())
 }
 
 // ExpireSQL deletes the rows that left the queue before cutoff (ADR-0223
 // §SD4): a lightweight DELETE, since a TTL on a column the update rewrites
 // is not a contract worth relying on.
 func ExpireSQL(layout Layout, cutoff time.Time) (sql string) {
-	var sb strings.Builder
-	sb.WriteString("DELETE FROM " + layout.JobTable() + " WHERE " + elem("jobState") + " IN (")
-	for i, s := range FinalStates {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString(strLit(s))
-	}
-	sb.WriteString(") AND " + elem("jobFinishedAt") + " < " + timeLit(cutoff) + deleteSettings)
-	return sb.String()
+	where := strings.TrimPrefix(inClause("jobState", FinalStates), " AND ") +
+		" AND " + elem("jobFinishedAt") + " < " + timeLit(cutoff)
+	return rowcas.DeleteSQL(layout.JobTable(), where)
 }
 
 // inClause is " AND <section>[1] IN (...)" over values, or nothing when
