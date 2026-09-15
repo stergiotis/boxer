@@ -14,4 +14,8 @@
 //
 // [StoreI] is the seam between the worker and the table: [SqlStore] is the
 // production shape over a generated store, [MemStore] the test double.
+//
+// Apps reach the queue through [Client] over the bus (ADR-0234), a worker
+// declares what it drains through [PresenceI] (ADR-0237), and the pieces
+// are drawn together in doc/explanation/watchbill-architecture.md.
 package watchbill

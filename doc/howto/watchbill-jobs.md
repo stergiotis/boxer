@@ -49,8 +49,9 @@ func init() {
 
 Registration is process-wide: every binary that links this package has the
 handler, and every worker in such a binary drains the kind. A job of a kind
-no running binary links sits `queued` — `keelson('watchbill_worker')` shows
-what this process serves.
+no running binary links sits `queued` — `keelson('watchbill_worker')` lists
+every worker run on the cell with what it serves and whether it is alive,
+and the Watchbill window's bottom line shows the live ones.
 
 Prefer `Subject` over args. When there is no row of your own to point at,
 attach a generated facts DTO with `watchbill.WithArgs` and read it back with

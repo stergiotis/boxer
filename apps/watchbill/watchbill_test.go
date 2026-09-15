@@ -181,7 +181,7 @@ func TestEndpointReads(t *testing.T) {
 			_, _ = w.Write([]byte(`{"job_id":"j1","at":"2026-09-15T10:00:00Z","state":"running","attempt":1,"worker_run":"r1","note":"","error":""}` + "\n" +
 				`{"job_id":"j1","at":"2026-09-15T10:00:03Z","state":"discarded","attempt":1,"worker_run":"r1","note":"attempts exhausted","error":"boom\nat x"}` + "\n"))
 		default:
-			_, _ = w.Write([]byte(`{"run_id":"r1","kinds":["a","b"],"queues":[],"max_workers":2,"running":["j1"],"last_tick":"2026-09-15T10:00:00Z","poll_ms":5000,"serving":true,"sweeping":false}` + "\n"))
+			_, _ = w.Write([]byte(`{"run_id":"r1","host":"box","kinds":["a","b"],"queues":[],"max_workers":2,"started_at":"2026-09-15T09:00:00Z","alive":true,"local":true,"running":["j1"],"last_tick":"2026-09-15T10:00:00Z","poll_ms":5000,"serving":true,"sweeping":false}` + "\n"))
 		}
 	}))
 	defer srv.Close()
@@ -198,6 +198,9 @@ func TestEndpointReads(t *testing.T) {
 	require.Len(t, ws, 1)
 	assert.Equal(t, []string{"a", "b"}, ws[0].Kinds)
 	assert.True(t, ws[0].Serving)
+	assert.True(t, ws[0].Alive)
+	assert.True(t, ws[0].Local)
+	assert.Equal(t, "box", ws[0].Host)
 	assert.Nil(t, newEndpointClient(""), "no endpoint is nil, not a client that fails")
 }
 

@@ -211,26 +211,38 @@ func (inst *App) renderTrail(snap snapshot, job watchbillstore.Job) {
 	}
 }
 
+// renderWorkers is the cell's live workers (ADR-0237 §SD4), one line
+// each, this process's own first with its live fields.
 func (inst *App) renderWorkers(snap snapshot) {
-	for range c.HorizontalTop().KeepIter() {
-		c.LabelAtoms(c.Atoms().BeginRichText("Worker").Strong().End().Keep()).Send()
-		switch {
-		case !snap.endpoint:
-			c.Label("Unknown: the introspection endpoint is not served in this process").Send()
-		case len(snap.workers) == 0:
-			c.Label("None in this process (the watchbill service needs a live ClickHouse)").Send()
-		default:
-			for _, w := range snap.workers {
+	switch {
+	case !snap.endpoint:
+		c.Label("Workers: unknown, the introspection endpoint is not served in this process").Send()
+		return
+	case len(snap.workers) == 0:
+		c.Label("Workers: none alive on the cell (a worker needs a live ClickHouse)").Send()
+		return
+	}
+	c.LabelAtoms(c.Atoms().BeginRichText(fmt.Sprintf("Workers alive on the cell: %d", len(snap.workers))).Strong().End().Keep()).Send()
+	for i, w := range snap.workers {
+		for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+			for range c.HorizontalTop().KeepIter() {
 				queues := "every queue"
 				if len(w.Queues) > 0 {
 					queues = strings.Join(w.Queues, ", ")
 				}
-				c.Label(fmt.Sprintf("run %s · kinds %s · %s · %d per kind · %d running · poll %dms", short(w.RunId), strings.Join(w.Kinds, ", "), queues, w.MaxWorkers, len(w.Running), w.PollMs)).Send()
-				if !w.Serving {
-					badge.New(inst.ids.PrepareStr("noserve"), "not serving").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+				line := fmt.Sprintf("run %s on %s · kinds %s · %s · %d per kind", short(w.RunId), w.Host, strings.Join(w.Kinds, ", "), queues, w.MaxWorkers)
+				if w.Local {
+					line += fmt.Sprintf(" · %d running · poll %dms", len(w.Running), w.PollMs)
 				}
-				if !w.Sweeping {
-					badge.New(inst.ids.PrepareStr("nosweep"), "not sweeping").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip("this run reads no heartbeats, so it rescues nothing a dead run left").Send()
+				c.Label(line).Send()
+				if w.Local {
+					badge.New(inst.ids.PrepareStr("local"), "this process").Tone(badge.ToneInfo).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+					if !w.Serving {
+						badge.New(inst.ids.PrepareStr("noserve"), "not serving").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+					}
+					if !w.Sweeping {
+						badge.New(inst.ids.PrepareStr("nosweep"), "not sweeping").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip("this run reads no heartbeats, so it rescues nothing a dead run left").Send()
+					}
 				}
 			}
 		}

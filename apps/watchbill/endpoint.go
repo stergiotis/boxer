@@ -31,12 +31,18 @@ type eventRow struct {
 	Error     string `json:"error"`
 }
 
-// workerRow is one row of keelson('watchbill_worker').
+// workerRow is one row of keelson('watchbill_worker'): a run on the cell
+// as its presence row and heartbeat say (ADR-0237), the live fields
+// filled for the process's own worker.
 type workerRow struct {
 	RunId      string   `json:"run_id"`
+	Host       string   `json:"host"`
 	Kinds      []string `json:"kinds"`
 	Queues     []string `json:"queues"`
 	MaxWorkers int64    `json:"max_workers"`
+	StartedAt  string   `json:"started_at"`
+	Alive      bool     `json:"alive"`
+	Local      bool     `json:"local"`
 	Running    []string `json:"running"`
 	LastTick   string   `json:"last_tick"`
 	PollMs     int64    `json:"poll_ms"`
@@ -73,7 +79,7 @@ func (inst *endpointClient) events(ctx context.Context, jobId string) (rows []ev
 }
 
 func (inst *endpointClient) workers(ctx context.Context) (rows []workerRow, err error) {
-	const sql = "SELECT run_id, kinds, queues, max_workers, running, last_tick, poll_ms, serving, sweeping FROM keelson('watchbill_worker') FORMAT JSONEachRow"
+	const sql = "SELECT run_id, host, kinds, queues, max_workers, started_at, alive, local, running, last_tick, poll_ms, serving, sweeping FROM keelson('watchbill_worker') WHERE alive ORDER BY local DESC, started_at FORMAT JSONEachRow"
 	err = inst.query(ctx, sql, func(dec *json.Decoder) (derr error) {
 		var r workerRow
 		if derr = dec.Decode(&r); derr == nil {
