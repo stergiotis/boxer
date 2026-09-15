@@ -553,6 +553,41 @@ runs on, off by default because they cover the picture. Drag pans and moves a no
 Click a node to select that row (it drives the Detail tab). Very large results are
 sampled (10000-row cap) so the exact k-NN stays interactive.
 
+**Why these clusters** (a collapsible section under the status line, present when
+HDBSCAN found any) reads the clusters back off the features. Each cluster's row
+carries a rule as a SQL predicate over the feature columns, with the rule's
+precision (how much of what it catches is the cluster) and recall (how much of the
+cluster it catches), and a **copy SQL** button. With **one tree per cluster** on
+(the default) the rule comes from a tree fitted to that cluster against everything
+else, noise included — the answer to "what is in this cluster?", with each cluster
+getting its own best split. Off, the rules come from one tree fitted to all the
+labels at once — a single partition of the feature space whose leaves do not
+overlap, whose summary line says how many clustered rows it reproduces, and in
+which a small cluster can lose its leaf to the larger ones' splits. **Rule
+depth** cuts the same trees shallower or deeper, live: fewer terms read easier,
+more terms fit closer. Thresholds are the shortest decimals between the two
+adjacent values, so a copied predicate partitions the rows exactly as the tree
+did. Beside the rule, the features that set the cluster apart: each is ranked by
+the chance a member's value exceeds a non-member's (an AUC of 0.5 is no
+separation), listed with the members' median against everyone else's, and only
+when the separation is clear. The feature columns are not columns of the result
+today, so a copied predicate runs once they are (a client-side features call is
+the planned route); the section is a description of what the clustering did, not
+a recomputation, and its fit is stated so a rule can be read with the trust it
+earned.
+
+**By attributes** switches the same table to what the clusters' entities *are*:
+each entity becomes a set of items — its tagged sections and co-groups, short
+values of its columns, its low-cardinality memberships — and per cluster the row
+shows the best small conjunction of items held or lacked, as SQL over the physical
+columns (`length(...) > 0` for a section, `has(...)` for a value or a membership),
+with its precision and recall, beside the items most over- or under-represented
+in the cluster, each with its share in the cluster against the rest and its lift.
+Only items that survive a Fisher exact test corrected for the number of items
+and clusters are listed, and the summary line states the vocabulary and the
+number of tests. Unlike the feature rules these run against the result as it
+is; a rule whose item has no column in the result says so.
+
 ### Timeline
 
 Plots time-shaped results on a horizontal time axis, when the result matches the

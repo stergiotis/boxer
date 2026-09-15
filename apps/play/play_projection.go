@@ -25,9 +25,10 @@ import (
 // play_projection.go is the Projection tab (ADR-0230 §SD4): the result's
 // leeway-card features become a neighbour graph in the analytics engine, the
 // graph is laid out live by graphview under the neighbour-embedding force
-// model, and HDBSCAN over the same graph colours it. The background goroutine
-// owns the two engine calls; the render thread owns the widget, which owns
-// the positions. Nothing here computes a coordinate.
+// model, HDBSCAN over the same graph colours it, and the labels are read back
+// off the features as rules (ADR-0235, play_projection_explain.go). The
+// background goroutine owns the engine calls; the render thread owns the
+// widget, which owns the positions. Nothing here computes a coordinate.
 
 // Minimum number of rows required to compute a meaningful projection: the
 // producer wants at least one neighbour per row, and below a handful of
@@ -122,6 +123,9 @@ type projectionResult struct {
 	// says so, for the colour bucketing.
 	featureColumns [card.NumFeatures][]float64
 	params         projectionParams
+	// explanation is the labels read back off the features (ADR-0235):
+	// a threshold tree and per-cluster contrasts, or why there is none.
+	explanation projectionExplanation
 }
 
 // projectorSnapshot is a value-copy of Projector state taken under mutex,
@@ -179,6 +183,23 @@ type Projector struct {
 	auras        bool
 	showEdges    bool
 	exaggeration float64
+	// kKnob, mcsKnob and explainDepthKnob back the integer sliders. A
+	// slider's value is written at frame-end Sync into the pointer bound
+	// at render, so the binding must outlive the frame: a local re-derived
+	// from the int each frame is written after it is read and never
+	// changes. The ints are read off these after the bind.
+	kKnob, mcsKnob   float64
+	explainDepthKnob float64
+	// explainDepth is the cut the explanation's rules are read at;
+	// explainPerCluster reads each cluster's own tree against the rest
+	// rather than the one partition.
+	explainDepth      int
+	explainPerCluster bool
+	// explainByItems reads the clusters against the card's attributes
+	// rather than the features (play_projection_items.go).
+	explainByItems bool
+	// copyText hands a rule to the clipboard; nil when the app has none.
+	copyText     func(string)
 	paused       bool
 	frozen       bool
 	paneW, paneH float32
@@ -204,11 +225,16 @@ func NewProjector(ids *c.WidgetIdStack, cards *CardDriver) *Projector {
 			NodeClicking:  true,
 			NodeSelection: true,
 		}),
-		auras:        true,
-		exaggeration: 1,
-		builtColorBy: -2,
-		lastSelected: -1,
-		idSeed:       nextVizSeed(),
+		auras:             true,
+		exaggeration:      1,
+		kKnob:             projectionDefaultK,
+		mcsKnob:           projectionDefaultMinClusterSize,
+		explainDepthKnob:  projectionExplainDefaultDepth,
+		explainDepth:      projectionExplainDefaultDepth,
+		explainPerCluster: true,
+		builtColorBy:      -2,
+		lastSelected:      -1,
+		idSeed:            nextVizSeed(),
 	}
 }
 
@@ -370,6 +396,15 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 		return
 	}
 
+	// The item sets ride on a second pass with their own sink; a failure
+	// there costs the attribute reading, not the run.
+	ie := card.NewItemExtractor()
+	itemErr := driver.DriveRecordBatch(ie, rec)
+	if isClosed(cancel) {
+		inst.markCancelled(cancel)
+		return
+	}
+
 	features := fe.Results()
 	nRows := len(features)
 	if nRows < projectionMinRows {
@@ -460,6 +495,28 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 			col[s] = featureColumns[f][g.Rows[s]]
 		}
 		res.featureColumns[f] = col
+	}
+	// The explanation reads the raw features in slot order (ADR-0235 §SD3).
+	// A cancel during it truncates rather than fails: the graph and the
+	// clusters are already there to show.
+	slotFeatures := make([]card.EntityFeatures, nSlots)
+	for s := range nSlots {
+		slotFeatures[s] = sampledFeatures[g.Rows[s]]
+	}
+	res.explanation = explainProjection(ctx, slotFeatures, cl)
+	if itemErr != nil {
+		res.explanation.items.err = itemErr
+	} else {
+		slotIdx := make([]int, nSlots)
+		for s := range nSlots {
+			slotIdx[s] = int(sampleRow[g.Rows[s]])
+		}
+		all := ie.Results()
+		res.explanation.items = explainItems(ctx, all.Select(slotIdx), len(all.Items), cl, rec.Schema())
+	}
+	if isClosed(cancel) {
+		inst.markCancelled(cancel)
+		return
 	}
 
 	inst.mu.Lock()
@@ -644,12 +701,10 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 		inst.projFSMWidget.Render()
 		c.Separator().Vertical().Send()
 		// The run's knobs apply on the next Compute; the layout's apply live.
-		k := float64(p.params.K)
-		c.SliderF64(ids.PrepareStr("projectionK"), k, 2, 50).Text("neighbours").SendRespVal(&k)
-		p.params.K = int(math.Round(k))
-		mcs := float64(p.params.MinClusterSize)
-		c.SliderF64(ids.PrepareStr("projectionMCS"), mcs, 2, 100).Text("min cluster").SendRespVal(&mcs)
-		p.params.MinClusterSize = int(math.Round(mcs))
+		c.SliderF64(ids.PrepareStr("projectionK"), p.kKnob, 2, 50).Integer().Text("neighbours").SendRespVal(&p.kKnob)
+		p.params.K = int(math.Round(p.kKnob))
+		c.SliderF64(ids.PrepareStr("projectionMCS"), p.mcsKnob, 2, 100).Integer().Text("min cluster").SendRespVal(&p.mcsKnob)
+		p.params.MinClusterSize = int(math.Round(p.mcsKnob))
 		if snap.status == projectorStatusDone {
 			c.Separator().Vertical().Send()
 			inst.renderColorByCombo()
@@ -691,6 +746,10 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 	}
 
 	if snap.status == projectorStatusDone && snap.result != nil {
+		p.copyText = nil
+		if inst.CanCopy() {
+			p.copyText = inst.copyToClipboard
+		}
 		p.renderGraph(snap, selectedRow, inst.colorByFeature, emit)
 	}
 }
@@ -743,6 +802,9 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 		}
 	}
 	c.Label(inst.statusLine(res)).Send()
+	if res.clusters.NumClusters > 0 {
+		inst.renderExplanation(res)
+	}
 
 	for rt := range c.RichTextLabel("drag pans and moves a node, ctrl+scroll zooms; click a node to select its row") {
 		rt.Small().Weak()
