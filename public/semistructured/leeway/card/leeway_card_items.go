@@ -35,6 +35,10 @@ const (
 	// ItemKindTagVerbatim: a low-cardinality verbatim membership Value is
 	// attached to an attribute of the section.
 	ItemKindTagVerbatim
+	// ItemKindComponent: the entity carries the registered component kind
+	// named by Value. Not emitted by the sink — a consumer that can detect
+	// components adds these to the sets it built.
+	ItemKindComponent
 )
 
 // Item is one member of the vocabulary an ItemExtractor builds: a fact an
@@ -49,8 +53,13 @@ type Item struct {
 	PhysicalSection string
 	// Column is the physical column the item reads, where the sink saw
 	// one: the value column for values, the section's first value column
-	// for a section, empty for co-groups and memberships.
+	// for a section, empty for co-groups and memberships. Handle is the
+	// same column as the authoring surface names it, `section:column`
+	// (ADR-0116), which is how a predicate over the item should be spelled;
+	// for a membership it names the section's low-cardinality ref or
+	// verbatim column, `section:lr` or `section:lv`.
 	Column string
+	Handle string
 	// Value is the value text, or the verbatim membership; Ref the
 	// membership ref. Quoted says whether Value is spelled as a string.
 	Value  string
@@ -253,6 +262,7 @@ func (inst *ItemExtractor) BeginColumn(colAddr streamreadaccess.PhysicalColumnAd
 	}
 	if inst.curSecItem >= 0 && inst.items[inst.curSecItem].Column == "" {
 		inst.items[inst.curSecItem].Column = inst.curColumn
+		inst.items[inst.curSecItem].Handle = inst.curSection + ":" + inst.curColName
 		inst.items[inst.curSecItem].PhysicalSection = inst.curSecPhys
 	}
 }
@@ -297,8 +307,8 @@ func (inst *ItemExtractor) value(s string) {
 	}
 	inst.add(Item{
 		Name: "value:" + inst.curSection + "." + inst.curColName + "=" + s,
-		Kind: ItemKindTaggedValue, Column: inst.curColumn, Value: s, Quoted: inst.curQuoted,
-		Section: inst.curSection, PhysicalSection: inst.curSecPhys,
+		Kind: ItemKindTaggedValue, Column: inst.curColumn, Handle: inst.curSection + ":" + inst.curColName,
+		Value: s, Quoted: inst.curQuoted, Section: inst.curSection, PhysicalSection: inst.curSecPhys,
 	})
 }
 
@@ -328,6 +338,7 @@ func (inst *ItemExtractor) AddMembershipRef(lowCard bool, ref uint64) {
 	inst.add(Item{
 		Name: "tag:" + inst.curSection + "#" + strconv.FormatUint(ref, 10),
 		Kind: ItemKindTagRef, Section: inst.curSection, PhysicalSection: inst.curSecPhys, Ref: ref,
+		Handle: inst.curSection + ":lr",
 	})
 }
 
@@ -338,6 +349,7 @@ func (inst *ItemExtractor) AddMembershipVerbatim(lowCard bool, verbatim string) 
 	inst.add(Item{
 		Name: "tag:" + inst.curSection + "=" + verbatim,
 		Kind: ItemKindTagVerbatim, Section: inst.curSection, PhysicalSection: inst.curSecPhys, Value: verbatim, Quoted: true,
+		Handle: inst.curSection + ":lv",
 	})
 }
 

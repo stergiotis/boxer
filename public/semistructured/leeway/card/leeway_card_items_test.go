@@ -98,7 +98,10 @@ func TestItemExtractorVocabularyAndSupport(t *testing.T) {
 	require.Equal(t, ItemKindSection, geo.Kind)
 	require.Equal(t, "tv:geo:lat:val", geo.Column)
 	require.Equal(t, "geo", geo.PhysicalSection)
+	require.Equal(t, "geo:lat", geo.Handle)
 	require.Equal(t, "geo", res.Items[byName["tag:geo#7"]].PhysicalSection)
+	require.Equal(t, "geo:lr", res.Items[byName["tag:geo#7"]].Handle)
+	require.Equal(t, "geo:lat", res.Items[byName["value:geo.lat=1"]].Handle)
 	lat := res.Items[byName["value:geo.lat=1"]]
 	require.Equal(t, ItemKindTaggedValue, lat.Kind)
 	require.False(t, lat.Quoted)
