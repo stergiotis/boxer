@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; the implementation in the tree follows it and is up for review with it.
 
 # ADR-0238: a second feature set for the Projection lane — hashed structural identity, chosen per run
 
@@ -71,10 +69,12 @@ attributes, which the shape set already measures.
 **SD3 — A run knob, not a blend.** The lane's `FeatureSet` is chosen in
 the toolbar beside the neighbour count and applies on the next Compute;
 it is recorded in the run's parameters and shown in the status line. The
-shape set stays the default, so no existing capture changes. Under the
-structure set the explanation's feature rules describe each cluster's
-shape rather than its criterion, and the section says so; the attribute
-rules of ADR-0235 §SD6 are the criterion there.
+shape set stays the default, so no existing capture changes. The
+explanation reads the matrix the clustering ran on: the shape features
+as thresholds, a binary set — component kinds, or the structural items
+of the pruned item sets capped by support — as predicates, a column at
+zero spelled as the negation, so a rule is a criterion of the picture
+under every set.
 
 **SD4 — Deferred, with triggers.** Values as items in the vector, behind
 a support floor, when a consumer's kinds are told apart by a categorical
@@ -148,7 +148,7 @@ Nothing to migrate: the default is the set the lane always had.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-09-15.
 
 ## Updates
 
@@ -171,16 +171,20 @@ table's first rows, not a uniform draw.
 ### 2026-09-15 — the run as data: publish as ad-hoc datasets
 
 A **publish as dataset** button in the tab's toolbar writes the current
-run as two ad-hoc datasets over ADR-0134's store, the way the Series
-fixture lab does: `keelson('projection')`, one row per projected entity —
-the result's row index and its plain identity columns, the sixteen
-features in their own units under the names the rules use, the cluster
-numbered as the tab shows it with noise at −1, HDBSCAN's probability, the
-layout position, the feature set, and the item set the attribute reading
-used as an array of item names — and `keelson('projection_rules')`, one
-row per cluster and reading with the SQL predicate, precision, recall and
-coverage. The aliases are bound once per publish and a scaffold query is
-offered at the caret. This is what makes a copied feature rule runnable
+run as two ad-hoc datasets over ADR-0134's store, the way imzrt
+publishes a profile: each dataset is republished onto this projector's
+own stable handle, so its revision bumps, and the scaffold names it by
+that handle as a literal, `keelson('<handle>')` — no alias is bound into
+this play instance, so another instance reads it the same way and two
+instances publishing at once do not replace each other. The rows dataset
+holds one row per projected entity — the result's row index and its plain
+identity columns, the sixteen features in their own units under the names
+the rules use, the cluster numbered as the tab shows it with noise at −1,
+HDBSCAN's probability, the layout position, the feature set, and the item
+set the attribute reading used as an array of item names — and the rules
+dataset one row per cluster and reading with the SQL predicate, precision,
+recall and coverage. A scaffold query is offered at the caret once per
+publish. This is what makes a copied feature rule runnable
 today, against the published rows rather than the source, and it is the
 recorded, replayable form of what the panel computed, which ADR-0163's
 argument against panel-side analysis asks for. A publish replaces the
