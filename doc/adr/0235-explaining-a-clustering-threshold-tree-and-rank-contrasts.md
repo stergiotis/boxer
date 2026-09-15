@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-15
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; the implementation in the tree follows it and is up for review with it.
 
 # ADR-0235: explaining a clustering — a threshold tree and rank contrasts over the feature matrix, read in the Projection lane
 
@@ -328,7 +326,7 @@ Nothing to migrate: the package is new and the lane's change is additive.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-09-15.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
