@@ -88,6 +88,10 @@ the same transition.
 From a process that holds the store — a host service, a test over
 `watchbill.MemStore` — `watchbill.Submit` is the same enqueue plus wake.
 
+`apps/watchbilldemo` is the in-tree example of this section end to end: a
+handler for its own kind, the client on the mount context's bus, and the
+task monitor beside the job list.
+
 ## 3. Enqueue from a shell, and stand a headless worker
 
 The CLI group targets the ClickHouse server the `CLICKHOUSE_*` variables

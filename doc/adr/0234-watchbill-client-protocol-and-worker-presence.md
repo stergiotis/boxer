@@ -287,6 +287,27 @@ Accepted 2026-09-14.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-09-15 — the first app client, and two worker corrections it found
+
+`apps/watchbilldemo` is M5's first half: a demo app on the runtime topic
+that declares `ClientCaps` beside the task producer's set, registers a
+handler for its own kind (`demo.sleep`, the subject a duration and an
+optional `fail`), enqueues through `watchbill.Client`, lists the queue with
+a cancel and a retry per row, and embeds the task monitor. No bus request
+runs on the frame goroutine: a poller refreshes on a tick and on every
+`watchbill.changed`, and each verb runs in its own goroutine. Its tests
+stand a worker over the memory store on the same in-proc bus.
+
+Standing it up found two things in the worker that the ADR-0223 lanes had
+not combined: a handler failing under a bus was recorded as cancelled,
+because finishing the task ends the handle's context and the outcome was
+classified after that; and a failed attempt re-queued with no backoff
+waited a whole poll, because nothing rang the bell. Both are fixed on the
+worker and pinned in its bus lane. The management app remains M5's other
+half, its own design.
+
 ## References
 
 - [ADR-0223](./0223-watchbill-durable-work-on-facts.md) — the substrate, the claim, the worker; what this ADR completes.
