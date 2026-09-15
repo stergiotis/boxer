@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -68,6 +69,27 @@ func buildPersistTableDesc() (tbl *common.TableDesc, err error) {
 	t, err := manip.BuildTableDesc()
 	if err != nil {
 		err = eh.Errorf("unable to build the boxer.persiststate table description: %w", err)
+		return
+	}
+	tbl = &t
+	return
+}
+
+// loadWatchbillTableDesc is CapWatchbill's CapSchema.Load: the job
+// table's TableDesc the generated store was emitted from (ADR-0223 §SD1),
+// memoised for the same reasons as the facts one. The lightweight-update
+// settings the table carries beyond this description are rowcas's.
+var loadWatchbillTableDesc = sync.OnceValues(buildWatchbillTableDesc)
+
+func buildWatchbillTableDesc() (tbl *common.TableDesc, err error) {
+	manip, err := watchbillstore.GetJobSchemaInManipulator()
+	if err != nil {
+		err = eh.Errorf("unable to load the watchbill job schema: %w", err)
+		return
+	}
+	t, err := manip.BuildTableDesc()
+	if err != nil {
+		err = eh.Errorf("unable to build the watchbill job table description: %w", err)
 		return
 	}
 	tbl = &t

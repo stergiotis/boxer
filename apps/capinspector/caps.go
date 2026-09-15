@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 )
 
@@ -21,6 +22,11 @@ const (
 	CapFs      CapId = "fs"
 	CapPersist CapId = "persist"
 	CapTask    CapId = "task"
+	// CapWatchbill is durable work (ADR-0223): the client verbs an app
+	// holds and the worker service the host runs, one entry with both
+	// sides as backends, the way CapTask pairs the primitive with its
+	// supervisor.
+	CapWatchbill CapId = "watchbill"
 )
 
 // BackendImpl is one realisation of a capability's contract. A cap
@@ -266,12 +272,50 @@ var Registry = map[CapId]CapSpec{
 			{Id: "supervisor", Display: "+supervisor"},
 		},
 	},
+	CapWatchbill: {
+		Id:            CapWatchbill,
+		Display:       "watchbill durable work",
+		SubjectFamily: "watchbill.job.{enqueue|cancel|retry|get|list} (request/reply), watchbill.wake, watchbill.changed",
+		Description: "Durable work as rows on one substrate (ADR-0223): a job is a " +
+			"row on a store-owned table claimed by one guarded update, every " +
+			"transition is an event row, and a running job is a keelson task " +
+			"with the job's id, so its progress and cancel are task.* . An app " +
+			"holds the capability by declaring watchbill.ClientCaps() and " +
+			"drives it through watchbill.Client — River's five client verbs on " +
+			"the bus (ADR-0234), answered by the worker the host runs under " +
+			"runtime.watchbill. The worker polls, claims, runs the handlers " +
+			"registered in its binary, sweeps abandoned claims by the runtime " +
+			"heartbeat, and declares what it drains as a presence row on " +
+			"boxer.facts (ADR-0237). The two doorbell subjects carry a job id " +
+			"and nothing else: the table is the truth.",
+		Backend: "runtime/watchbill + runtime/watchbill/watchbillstore + runtime/watchbill/watchbillpresence",
+		AppFilter: func(f app.SubjectFilter) bool {
+			return strings.HasPrefix(f.Pattern, "watchbill.")
+		},
+		// The worker is the service; the store is the table it writes,
+		// with the memory double beside it; presence is the worker's
+		// declaration on the facts table.
+		Backends: []BackendImpl{
+			{Id: "worker", Display: "worker"},
+			{Id: "sqlstore", Display: "SqlStore"},
+			{Id: "memstore", Display: "MemStore"},
+		},
+		// The job table, updated in place under the guarded-update rules
+		// (recordstore/rowcas); the event table and the presence rows are
+		// its siblings and are read through keelson('watchbill_event') and
+		// keelson('watchbill_worker').
+		Schema: &CapSchema{
+			Database: watchbillstore.DatabaseName,
+			Table:    watchbillstore.TableNameJob,
+			Load:     loadWatchbillTableDesc,
+		},
+	},
 }
 
 // allCapIdsOrdered returns the canonical render order so the
 // inspector picker UI doesn't shuffle entries across frames (Go map
 // iteration is randomised).
 func allCapIdsOrdered() (ids []CapId) {
-	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask}
+	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill}
 	return
 }

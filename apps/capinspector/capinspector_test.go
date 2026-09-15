@@ -11,12 +11,12 @@ import (
 )
 
 func TestRegistry_HasAllShippedCaps(t *testing.T) {
-	wantIds := []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask}
+	wantIds := []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill}
 	for _, id := range wantIds {
 		_, ok := Registry[id]
 		assert.True(t, ok, "Registry must contain %q", id)
 	}
-	assert.Len(t, Registry, 6, "exactly six shipped caps; adding a cap means appending to caps.go")
+	assert.Len(t, Registry, 7, "exactly seven shipped caps; adding a cap means appending to caps.go")
 }
 
 func TestAllCapIdsOrdered_StableAcrossCalls(t *testing.T) {

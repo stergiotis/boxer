@@ -54,10 +54,11 @@ func TestCapPersist_DeclaresTheStoreSchemaAndBothBackends(t *testing.T) {
 // Every other cap leaves Schema nil — the rest land their rows in the
 // facts table. Adding a table to one of them means updating this list,
 // which is the point: the section appears the moment a cap declares one.
+// Watchbill's is its store-owned job table (ADR-0223 §SD1).
 func TestRegistry_OnlyFactsAndPersistCarryASchema(t *testing.T) {
 	for _, capId := range allCapIdsOrdered() {
 		spec := Registry[capId]
-		if capId == CapFacts || capId == CapPersist {
+		if capId == CapFacts || capId == CapPersist || capId == CapWatchbill {
 			continue
 		}
 		assert.Nilf(t, spec.Schema, "cap %q declares a storage schema; add it to the expected set", capId)
