@@ -198,22 +198,6 @@ func (inst *App) handover(handle string, res *Analysis) (outHandle string, note 
 	return
 }
 
-// retractHandover drops the published dataset. Called from Unmount; a failure
-// is logged rather than surfaced, because by then there is no window to
-// surface it in and the store sweeps unreferenced datasets on restart anyway.
-func (inst *App) retractHandover() {
-	inst.handoverMu.Lock()
-	handle := inst.handle
-	inst.handle = ""
-	inst.handoverMu.Unlock()
-	if handle == "" || inst.bus == nil {
-		return
-	}
-	if err := adhocdata.RetractRequest(inst.bus, handle); err != nil {
-		inst.logger.Debug().Err(err).Msg("writingstylescope: retract on unmount")
-	}
-}
-
 // handoverState snapshots the fields the button and its status line read.
 func (inst *App) handoverState() (busy bool, note string, errText string) {
 	inst.handoverMu.Lock()

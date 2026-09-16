@@ -645,17 +645,15 @@ func TestHandoverWithoutABusFailsCleanly(t *testing.T) {
 	assert.False(t, busy, "the busy flag must clear even on the failure path")
 	assert.Empty(t, note)
 	assert.Contains(t, errText, "no bus")
-	// Nothing was published, so nothing is left to retract.
-	assert.Empty(t, inst.handle)
-	inst.retractHandover()
+	assert.Empty(t, inst.handle, "nothing was published")
 }
 
 func TestManifestDeclaresTheHandoverCaps(t *testing.T) {
-	// The three caps the handover actually exercises, and no others — an app
-	// that declares a cap it never uses is the §SD10 gate's other failure mode.
+	// The two caps the handover actually exercises, and no others — an app
+	// that declares a cap it never uses is the §SD10 gate's other failure
+	// mode. Retract is the runtime's since ADR-0240 §SD5.
 	want := map[string]bool{
 		adhocdata.SubjectPublish: false,
-		adhocdata.SubjectRetract: false,
 		windowhost.OpenSubject:   false,
 	}
 	for _, cap := range manifest.Caps {

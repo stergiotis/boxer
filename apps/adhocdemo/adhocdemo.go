@@ -198,12 +198,9 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 		inst.inner.Close()
 		inst.inner = nil
 	}
-	if inst.handle != "" {
-		if rerr := adhocdata.RetractRequest(inst.bus, inst.handle); rerr != nil {
-			inst.log.Debug().Err(rerr).Msg("adhocdemo: retract on unmount")
-		}
-		inst.handle = ""
-	}
+	// The dataset is not retracted here: the runtime retracts what this
+	// window published when the host closes its bus client (ADR-0240 §SD5).
+	inst.handle = ""
 	return
 }
 

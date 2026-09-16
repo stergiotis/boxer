@@ -41,11 +41,6 @@ var manifest = app.Manifest{
 			Reason:    "writingstylescope: publish the section cross-matrix as an ephemeral dataset for the play handover (ADR-0134)",
 		},
 		{
-			Pattern:   adhocdata.SubjectRetract,
-			Direction: app.CapDirectionPub,
-			Reason:    "writingstylescope: retract that dataset when the window closes",
-		},
-		{
 			Pattern:   windowhost.OpenSubject,
 			Direction: app.CapDirectionPub,
 			Reason:    "writingstylescope: Open in play — a play window seeded with the query behind the pairs table (ADR-0135 §SD7)",

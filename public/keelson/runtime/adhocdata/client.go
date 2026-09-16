@@ -11,14 +11,14 @@ import (
 // dataset via the adhoc.publish capability subject and returns the minted
 // or reused handle (ADR-0134 SD2). It is how an in-process app (e.g. an
 // embedder) drives the capability without holding a Service reference; the
-// caller's bus client needs Pub on adhoc.publish. The publisher is
-// attributed to the authenticated sender by the service, so in.Publisher
-// is ignored on this path.
+// caller's bus client needs Pub on adhoc.publish. The publisher is the
+// envelope's sender and instance; in.By is ignored on this path.
 func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error) {
 	payload, err := buscodec.Encode(wirePublishReq{
 		V:              wireVersion,
 		Alias:          in.Alias,
 		Handle:         in.Handle,
+		KeepAfterClose: in.KeepAfterClose,
 		ArrowIPCStream: in.ArrowIPCStream,
 	})
 	if err != nil {

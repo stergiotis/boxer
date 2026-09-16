@@ -193,22 +193,48 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 		{Pattern: SubjectRetract, Direction: app.CapDirectionSub, Reason: "adhoc capability: retract"},
 		{Pattern: SubjectResolve, Direction: app.CapDirectionSub, Reason: "adhoc capability: resolve"},
 		{Pattern: SubjectEventAll, Direction: app.CapDirectionPub, Reason: "adhoc: announce publish and retract"},
+		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "adhoc: retract what a closed instance published (ADR-0240 §SD5)"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "adhoc: reply to caller inboxes"},
 	}
 	client := bus.NewClient(ServiceAppId, caps)
-	for _, subject := range []string{SubjectPublish, SubjectRetract, SubjectResolve} {
-		unsub, subErr := client.Subscribe(subject, inst.handleRequest)
+	subs := []struct {
+		subject string
+		handler app.MsgHandlerFunc
+	}{
+		{SubjectPublish, inst.handleRequest},
+		{SubjectRetract, inst.handleRequest},
+		{SubjectResolve, inst.handleRequest},
+		{app.SubjectInstanceClosed, inst.handleInstanceClosed},
+	}
+	for _, sub := range subs {
+		unsub, subErr := client.Subscribe(sub.subject, sub.handler)
 		if subErr != nil {
 			for _, u := range inst.unsubs {
 				u()
 			}
 			inst.unsubs = nil
-			return eb.Build().Str("subject", subject).Errorf("adhocdata: subscribe: %w", subErr)
+			return eb.Build().Str("subject", sub.subject).Errorf("adhocdata: subscribe: %w", subErr)
 		}
 		inst.unsubs = append(inst.unsubs, unsub)
 	}
 	inst.busClient = client
 	return nil
+}
+
+// handleInstanceClosed is the runtime retract (ADR-0240 §SD5): the
+// instance's client has closed, so everything it published and did not
+// keep goes with it. A dataset lives as long as the window that published
+// it, unless the publisher said otherwise.
+func (inst *Service) handleInstanceClosed(msg *app.Msg) {
+	ev, err := buscodec.Decode[app.InstanceClosed](msg.Payload)
+	if err != nil {
+		inst.log.Warn().Err(err).Msg("adhocdata: decode instance-closed")
+		return
+	}
+	if n := inst.retractOwnedBy(Identity{App: ev.App, Instance: ev.Instance}); n > 0 {
+		inst.log.Info().Str("app", string(ev.App)).Uint64("instance", ev.Instance).Int("retracted", n).
+			Msg("adhocdata: instance closed; its datasets retracted")
+	}
 }
 
 // sender is the identity the envelope carries: the authenticated sender

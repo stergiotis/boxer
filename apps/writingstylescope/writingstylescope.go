@@ -244,12 +244,13 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	return
 }
 
-// Unmount cancels a confidence-band solve still running for this window and
-// retracts the published pairs dataset. A band that already finished stays in
-// the shared ecdfbands cache, so a reopen still renders instantly.
+// Unmount cancels a confidence-band solve still running for this window. A
+// band that already finished stays in the shared ecdfbands cache, so a
+// reopen still renders instantly. The published pairs dataset is not
+// retracted here: the runtime retracts what this window published when the
+// host closes its bus client (ADR-0240 §SD5).
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	ecdf.CancelBandJob(inst.bandKey)
-	inst.retractHandover()
 	return
 }
 

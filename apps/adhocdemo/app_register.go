@@ -31,11 +31,6 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "adhocdemo: publish and republish an ephemeral dataset the embedded applet queries (ADR-0134)",
 		},
-		{
-			Pattern:   adhocdata.SubjectRetract,
-			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: retract the dataset when the window closes",
-		},
 		// The embedded applet's two escape hatches ride this manifest
 		// (ADR-0132 §SD8: an embedded applet's capabilities are the
 		// embedder's). Without them the surface still offers both — the

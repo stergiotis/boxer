@@ -282,9 +282,13 @@ func (c *capturedOpen) all() (out []launchrequest.LaunchRequest) {
 type evalTestRig struct {
 	app   *App
 	opens *capturedOpen
+	// client is the window's bus client; closing it is how the runtime
+	// learns the window is gone and retracts what it published (ADR-0240
+	// §SD5).
+	client *inprocbus.Client
 	// svc is the real service, kept for [evalTestRig.flushRetracts]: a
 	// retract only leaves the dataset queryable for RetractGrace, and the
-	// key stays registered until the UNLOAD step (ADR-0188 §SD3).
+	// provider stays registered until the UNLOAD step (ADR-0188 §SD3).
 	svc *adhocdata.Service
 }
 
@@ -332,13 +336,14 @@ func setupEvalRig(t *testing.T) (rig *evalTestRig) {
 	t.Cleanup(unsub)
 
 	inst := newApp()
-	inst.setBus(bus.NewClient("test.regex_explorer", []runtimeapp.SubjectFilter{
+	client := bus.NewClient("test.regex_explorer", []runtimeapp.SubjectFilter{
 		{Pattern: adhocdata.SubjectPublish, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
-		{Pattern: adhocdata.SubjectRetract, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
 		{Pattern: windowhost.OpenSubject, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
-	}))
+	})
+	client.SetInstanceKey(1) // a window's client, so its close is announced
+	inst.setBus(client)
 
-	rig = &evalTestRig{app: inst, opens: opens, svc: svc}
+	rig = &evalTestRig{app: inst, opens: opens, client: client, svc: svc}
 	return
 }
 
@@ -438,7 +443,11 @@ func TestEvalHandoffDegradesWithoutClickHouseResult(t *testing.T) {
 	assert.Contains(t, cfg.Sql, "only the Go side was published")
 }
 
-func TestRetractEvalDatasetsDropsBothHandles(t *testing.T) {
+// TestClosingTheWindowRetractsBothHandles — the app retracts nothing
+// itself; the runtime retracts what the window published when its bus
+// client closes (ADR-0240 §SD5), and the service holds the provider for
+// RetractGrace so an in-flight query still resolves (ADR-0188 §SD3).
+func TestClosingTheWindowRetractsBothHandles(t *testing.T) {
 	rig := setupEvalRig(t)
 	inst := rig.app
 	inst.pattern = `(a)`
@@ -451,25 +460,9 @@ func TestRetractEvalDatasetsDropsBothHandles(t *testing.T) {
 	inst.requestEvalInPlay(snap)
 	require.Equal(t, 2, rig.svc.LiveCount())
 
-	inst.retractEvalDatasets()
-	// The app gives the handles back at once; the service holds the keys for
-	// RetractGrace so an in-flight query still resolves (ADR-0188 §SD3).
+	require.NoError(t, rig.client.Close())
 	rig.flushRetracts()
 	assert.Equal(t, 0, rig.svc.LiveCount())
-
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	assert.Empty(t, inst.evalGoHandle)
-	assert.Empty(t, inst.evalChHandle)
-}
-
-// TestRetractEvalDatasetsIsSafeWhenNothingPublished — Unmount calls this
-// unconditionally, including on a window that never clicked the button.
-func TestRetractEvalDatasetsIsSafeWhenNothingPublished(t *testing.T) {
-	inst := newApp()
-	inst.setBus(&runtimeapp.NoopBus{})
-	inst.retractEvalDatasets()
-	inst.retractEvalDatasets()
 }
 
 // ---------------------------------------------------------------------------
@@ -525,12 +518,12 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	assert.Equalf(t, before, rig.svc.LiveCount(),
 		"repeated failing hand-offs minted more datasets: %d -> %d live", before, rig.svc.LiveCount())
 
-	// And what it holds, it gives back — once the grace it was retracted
-	// under has been flushed (ADR-0188 §SD3).
-	inst.retractEvalDatasets()
+	// And when the window closes, everything it published goes with it —
+	// the fillers included, since this test published them from the same
+	// client — once the grace has been flushed (ADR-0240 §SD5, ADR-0188 §SD3).
+	require.NoError(t, rig.client.Close())
 	rig.flushRetracts()
-	assert.Equal(t, adhocdata.MaxDatasets-1, rig.svc.LiveCount(),
-		"the app's own dataset was not retracted")
+	assert.Equal(t, 0, rig.svc.LiveCount(), "the runtime retracts what the window published")
 }
 
 // TestStatusIsRetiredWhenTheInputsChange — every other result surface in

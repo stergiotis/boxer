@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -83,7 +84,31 @@ func (inst *Client) Close() (err error) {
 		inst.inst.unsubscribe(id)
 	}
 	inst.inst.dropClient(inst)
+	inst.announceClosed()
 	return
+}
+
+// announceClosed publishes app.SubjectInstanceClosed for a client that
+// carried an instance key (ADR-0240 §SD5). It runs after the client's own
+// subscriptions are gone, so the instance never hears its own closing, and
+// it bypasses the cap check the way the bus's own inboxes do — the bus is
+// the speaker here, in the closed client's name. Delivery is synchronous
+// like every publish on this bus, so a service that retracts on it has
+// done so by the time Close returns. A client with no instance key owns
+// nothing and announces nothing.
+func (inst *Client) announceClosed() {
+	key := inst.instanceKey.Load()
+	if key == 0 {
+		return
+	}
+	payload, err := buscodec.Encode(app.InstanceClosed{App: inst.appId, Instance: key})
+	if err != nil {
+		inst.inst.log.Warn().Err(err).Str("app", string(inst.appId)).Msg("inprocbus: encode instance-closed")
+		return
+	}
+	if _, pubErr := inst.inst.publish(inst.appId, key, app.SubjectInstanceClosed, "", payload); pubErr != nil {
+		inst.inst.log.Warn().Err(pubErr).Str("app", string(inst.appId)).Msg("inprocbus: announce instance-closed")
+	}
 }
 
 // IsClosed reports whether Close has run.

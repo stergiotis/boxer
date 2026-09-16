@@ -33,7 +33,7 @@ var manifest = runtimeapp.Manifest{
 			Reason:    "interactive regex evaluation via clickhouse-local",
 			Sticky:    true,
 		},
-		// The ADR-0017 extraction hand-off. Without these three the
+		// The ADR-0017 extraction hand-off. Without these two the
 		// button is still drawn, and each publish is refused with a
 		// reason in the status line — which is the honest degradation,
 		// but only these caps make it work.
@@ -41,11 +41,6 @@ var manifest = runtimeapp.Manifest{
 			Pattern:   adhocdata.SubjectPublish,
 			Direction: runtimeapp.CapDirectionPub,
 			Reason:    "regex_explorer: publish the Go and ClickHouse extraction as ad-hoc datasets (ADR-0134)",
-		},
-		{
-			Pattern:   adhocdata.SubjectRetract,
-			Direction: runtimeapp.CapDirectionPub,
-			Reason:    "regex_explorer: retract those datasets when the window closes",
 		},
 		{
 			Pattern:   windowhost.OpenSubject,

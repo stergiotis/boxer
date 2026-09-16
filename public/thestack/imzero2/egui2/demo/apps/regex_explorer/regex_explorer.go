@@ -269,15 +269,14 @@ func (inst *AppInstance) Mount(ctx runtimeapp.MountContextI) (err error) {
 	return
 }
 
-// Unmount abandons anything still in flight and retracts anything this
-// window published. Without the first a closed window leaves up to four
-// queries running against pooled clickhouse-local workers with nothing
-// left to consume their results; without the second its ad-hoc datasets
-// (ADR-0017) would sit in the ephemeral store until process exit.
+// Unmount abandons anything still in flight: without it a closed window
+// leaves up to four queries running against pooled clickhouse-local workers
+// with nothing left to consume their results. The ad-hoc datasets this
+// window published (ADR-0017) are not retracted here — the runtime retracts
+// them when the host closes the window's bus client (ADR-0240 §SD5).
 func (inst *AppInstance) Unmount(ctx runtimeapp.MountContextI) (err error) {
 	if inst.state != nil {
 		inst.state.cancelQueries()
-		inst.state.retractEvalDatasets()
 	}
 	return
 }

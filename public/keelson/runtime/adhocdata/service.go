@@ -572,6 +572,30 @@ func (inst *Service) Retract(handle string, by Identity) (err error) {
 	return nil
 }
 
+// retractOwnedBy withdraws every dataset the instance published and did
+// not mark KeepAfterClose (ADR-0240 §SD5). The runtime is the caller, so
+// ownership is not re-checked; a dataset kept after close is the app's and
+// lives until Close.
+func (inst *Service) retractOwnedBy(who Identity) (retracted int) {
+	inst.mu.RLock()
+	var handles []string
+	for h, r := range inst.live {
+		r.mu.RLock()
+		mine := r.owner == who && !r.keepAfterClose
+		r.mu.RUnlock()
+		if mine {
+			handles = append(handles, h)
+		}
+	}
+	inst.mu.RUnlock()
+	for _, h := range handles {
+		if err := inst.Retract(h, Identity{}); err == nil {
+			retracted++
+		}
+	}
+	return
+}
+
 // unload is the UNLOAD step: the provider leaves the registry and the file
 // retires once its readers are gone, bounded by ceiling (zero: at once).
 func (inst *Service) unload(handle string, ceiling time.Duration) {

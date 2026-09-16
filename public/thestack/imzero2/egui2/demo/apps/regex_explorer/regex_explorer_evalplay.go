@@ -491,28 +491,3 @@ func encodeRecord(schema *arrow.Schema, fill func(rb *array.RecordBuilder)) (out
 	out = buf.Bytes()
 	return
 }
-
-// retractEvalDatasets drops both published handles. Called from Unmount
-// (and [EmbeddedApp.Close]); safe to call more than once and safe when
-// nothing was ever published.
-func (inst *App) retractEvalDatasets() {
-	inst.mu.Lock()
-	goHandle, chHandle := inst.evalGoHandle, inst.evalChHandle
-	inst.evalGoHandle, inst.evalChHandle = "", ""
-	inst.mu.Unlock()
-	if goHandle == "" && chHandle == "" {
-		return
-	}
-	bus := inst.busSnapshot()
-	if bus == nil {
-		return
-	}
-	for _, h := range []string{goHandle, chHandle} {
-		if h == "" {
-			continue
-		}
-		// A retract failure is not actionable here — the window is going
-		// away and the ephemeral store bounds the exposure either way.
-		_ = adhocdata.RetractRequest(bus, h)
-	}
-}

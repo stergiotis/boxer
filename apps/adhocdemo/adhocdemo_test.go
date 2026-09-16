@@ -61,7 +61,6 @@ func TestManifestCapsCoverEmbeddedApplet(t *testing.T) {
 
 	for _, want := range []string{
 		adhocdata.SubjectPublish,
-		adhocdata.SubjectRetract,
 		clipboardbroker.SubjectWrite,
 		windowhost.OpenSubject,
 	} {
