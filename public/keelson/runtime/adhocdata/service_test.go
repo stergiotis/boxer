@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -20,32 +21,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
-
-type fakeKeys struct {
-	mu   sync.Mutex
-	keys map[string][]byte
-}
-
-func newFakeKeys() *fakeKeys { return &fakeKeys{keys: make(map[string][]byte)} }
-
-func (f *fakeKeys) RegisterDatasetKey(name string, key []byte) {
-	f.mu.Lock()
-	f.keys[name] = append([]byte(nil), key...)
-	f.mu.Unlock()
-}
-
-func (f *fakeKeys) DeregisterDatasetKey(name string) {
-	f.mu.Lock()
-	delete(f.keys, name)
-	f.mu.Unlock()
-}
-
-func (f *fakeKeys) has(name string) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	_, ok := f.keys[name]
-	return ok
-}
 
 func testLogger(t *testing.T) zerolog.Logger { return zerolog.New(zerolog.NewTestWriter(t)) }
 
@@ -85,7 +60,6 @@ func newTestService(t *testing.T) *Service {
 	t.Helper()
 	svc, err := NewService(Config{
 		Registry: introspect.NewRegistry(),
-		Keys:     newFakeKeys(),
 		Dir:      t.TempDir(),
 		Log:      testLogger(t),
 	})
@@ -94,11 +68,23 @@ func newTestService(t *testing.T) *Service {
 	return svc
 }
 
+// readAll opens the registered sealed provider and reads it back.
+func readAll(t *testing.T, reg *introspect.Registry, handle string) (plain []byte, revision uint64) {
+	t.Helper()
+	p, ok := reg.Lookup(handle)
+	require.True(t, ok)
+	rc, rev, err := p.(introspect.EncryptedDatasetI).Open()
+	require.NoError(t, err)
+	defer func() { _ = rc.Close() }()
+	plain, err = io.ReadAll(rc)
+	require.NoError(t, err)
+	return plain, rev
+}
+
 func TestServiceLifecycle(t *testing.T) {
 	dir := t.TempDir()
-	keys := newFakeKeys()
 	reg := introspect.NewRegistry()
-	svc, err := NewService(Config{Registry: reg, Keys: keys, Dir: dir, Log: testLogger(t)})
+	svc, err := NewService(Config{Registry: reg, Dir: dir, Log: testLogger(t)})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 
@@ -109,47 +95,47 @@ func TestServiceLifecycle(t *testing.T) {
 	assert.Equal(t, uint64(3), res.Rows)
 	assert.Positive(t, res.Bytes)
 
-	_, ok := reg.Lookup(res.Handle)
-	assert.True(t, ok, "handle registered as a provider")
-	assert.True(t, keys.has(res.Handle), "key registered with the broker")
-	assert.FileExists(t, filepath.Join(dir, res.Handle+".bxad"))
-
-	g, err := svc.Grant(res.Handle)
+	p, ok := reg.Lookup(res.Handle)
+	require.True(t, ok, "handle registered as a provider")
+	enc := p.(introspect.EncryptedDatasetI)
+	assert.Equal(t, "`v` Int64", enc.Structure())
+	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	assert.Equal(t, "items", g.Alias)
-	assert.Equal(t, uint64(1), g.Revision)
-	assert.Equal(t, "`v` Int64", g.Structure)
+	assert.Empty(t, entries, "a sealed dataset has no name in the store directory")
+	plain, rev := readAll(t, reg, res.Handle)
+	assert.Equal(t, uint64(1), rev)
+	assert.Equal(t, int64Stream(t, false, 1, 2, 3), plain, "the sealed bytes are the publisher's stream")
 
-	// Republish: same handle, bumped revision, entry updated in place.
+	// Republish: same handle, bumped revision, record updated in place, the
+	// previous file retired.
 	res2, err := svc.Publish(PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 4, 5)})
 	require.NoError(t, err)
 	assert.Equal(t, res.Handle, res2.Handle)
 	assert.Equal(t, uint64(2), res2.Revision)
 	assert.Equal(t, uint64(2), res2.Rows)
-	p, _ := reg.Lookup(res.Handle)
-	assert.Equal(t, uint64(2), p.(introspect.EncryptedDatasetI).Revision())
+	assert.Equal(t, uint64(2), enc.Revision())
+	plain, rev = readAll(t, reg, res.Handle)
+	assert.Equal(t, uint64(2), rev)
+	assert.Equal(t, int64Stream(t, false, 4, 5), plain)
 
-	// Retract is two-phase (ADR-0188 §SD3). LEAVE: the record stops
-	// resolving at once, but the provider, key and file stay for the grace
-	// period so an already-resolved query completes.
-	require.NoError(t, svc.Retract(res.Handle))
+	// Retract is two-phase (ADR-0188 §SD3, ADR-0240 §SD4). LEAVE: the
+	// record stops resolving at once, but the provider stays for the grace
+	// so an already-resolved query completes.
+	require.NoError(t, svc.Retract(res.Handle, Identity{}))
 	_, rErr := svc.Resolve("items")
 	require.Error(t, rErr, "a retracted dataset no longer resolves")
-	_, gErr := svc.Grant(res.Handle)
-	require.Error(t, gErr, "nor is it grantable")
+	assert.False(t, svc.IsLive(res.Handle))
 	_, ok = reg.Lookup(res.Handle)
 	assert.True(t, ok, "the provider stays queryable during the grace")
-	assert.True(t, keys.has(res.Handle))
-	// UNLOAD (run early here): provider, key, and file all gone.
+	_, _ = readAll(t, reg, res.Handle)
+	// UNLOAD (run early here): provider gone, file closed.
 	svc.FlushRetracts()
 	_, ok = reg.Lookup(res.Handle)
 	assert.False(t, ok)
-	assert.False(t, keys.has(res.Handle))
-	assert.NoFileExists(t, filepath.Join(dir, res.Handle+".bxad"))
+	_, _, err = enc.Open()
+	require.Error(t, err, "the sealed file is closed")
 
-	require.Error(t, svc.Retract("adhoc_missing"))
-	_, err = svc.Grant("adhoc_missing")
-	require.Error(t, err)
+	require.Error(t, svc.Retract("adhoc_missing", Identity{}))
 }
 
 func TestServiceRejections(t *testing.T) {
@@ -166,6 +152,39 @@ func TestServiceRejections(t *testing.T) {
 
 	_, err = svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: []byte("not an arrow stream")})
 	require.Error(t, err, "undecodable arrow bytes")
+
+	_, err = svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: make([]byte, PerDatasetMaxBytes+1)})
+	require.Error(t, err, "an oversize stream is refused before it is decoded")
+	assert.Equal(t, 0, svc.LiveCount())
+}
+
+// TestServiceOwnership pins ADR-0240 §SD2/§SD5: a republish or retract by
+// any identity but the publisher's is refused; the runtime may do either;
+// a dataset kept after close belongs to the app, so any of its instances
+// may.
+func TestServiceOwnership(t *testing.T) {
+	svc := newTestService(t)
+	owner := Identity{App: "app.a", Instance: 1}
+	sibling := Identity{App: "app.a", Instance: 2}
+	other := Identity{App: "app.b", Instance: 1}
+
+	res, err := svc.Publish(PublishInput{Alias: "items", By: owner, ArrowIPCStream: int64Stream(t, false, 1)})
+	require.NoError(t, err)
+	_, err = svc.Publish(PublishInput{Alias: "items", Handle: res.Handle, By: other, ArrowIPCStream: int64Stream(t, false, 2)})
+	require.ErrorIs(t, err, ErrNotOwner, "another app cannot republish")
+	_, err = svc.Publish(PublishInput{Alias: "items", Handle: res.Handle, By: sibling, ArrowIPCStream: int64Stream(t, false, 2)})
+	require.ErrorIs(t, err, ErrNotOwner, "another instance of the same app cannot either")
+	require.ErrorIs(t, svc.Retract(res.Handle, other), ErrNotOwner)
+	_, err = svc.Publish(PublishInput{Alias: "items", Handle: res.Handle, By: owner, ArrowIPCStream: int64Stream(t, false, 2)})
+	require.NoError(t, err, "the publisher republishes")
+	require.NoError(t, svc.Retract(res.Handle, Identity{}), "the runtime retracts anything")
+
+	kept, err := svc.Publish(PublishInput{Alias: "prof", By: owner, KeepAfterClose: true, ArrowIPCStream: int64Stream(t, false, 1)})
+	require.NoError(t, err)
+	_, err = svc.Publish(PublishInput{Alias: "prof", Handle: kept.Handle, By: sibling, ArrowIPCStream: int64Stream(t, false, 2)})
+	require.NoError(t, err, "kept after close: the app's, so a sibling instance republishes")
+	require.ErrorIs(t, svc.Retract(kept.Handle, other), ErrNotOwner)
+	require.NoError(t, svc.Retract(kept.Handle, sibling))
 }
 
 func TestServiceCountQuota(t *testing.T) {
@@ -179,7 +198,7 @@ func TestServiceCountQuota(t *testing.T) {
 }
 
 func TestCheckQuotaLocked(t *testing.T) {
-	svc := &Service{datasets: make(map[string]*dataset)}
+	svc := &Service{live: make(map[string]*record)}
 
 	// Byte budget.
 	svc.totalBytes = StoreMaxBytes - 10
@@ -189,24 +208,104 @@ func TestCheckQuotaLocked(t *testing.T) {
 	// Count budget; a republish (existing != nil) does not add to the count.
 	svc.totalBytes = 0
 	for i := range MaxDatasets {
-		svc.datasets[fmt.Sprintf("d%d", i)] = &dataset{}
+		svc.live[fmt.Sprintf("d%d", i)] = &record{}
 	}
 	require.Error(t, svc.checkQuotaLocked(nil, 1), "a new dataset past the count exceeds")
-	require.NoError(t, svc.checkQuotaLocked(svc.datasets["d0"], 1), "republish keeps the count")
+	require.NoError(t, svc.checkQuotaLocked(svc.live["d0"], 1), "republish keeps the count")
 }
 
-func TestSweepOnStart(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "adhoc_stale.bxad"), []byte("crash residue"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "leftover.tmp"), []byte("x"), 0o600))
+// TestQuotaAccountingSurvivesRetractAndRepublish pins the invariant the v1
+// service broke under a republish racing a retract: the byte total equals
+// the sum of live datasets after any interleaving.
+func TestQuotaAccountingSurvivesRetractAndRepublish(t *testing.T) {
+	svc := newTestService(t)
+	var handles []string
+	for i := range 8 {
+		res, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, int64(i))})
+		require.NoError(t, err)
+		handles = append(handles, res.Handle)
+	}
+	var wg sync.WaitGroup
+	for _, h := range handles {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, _ = svc.Publish(PublishInput{Alias: "items", Handle: h, ArrowIPCStream: int64Stream(t, false, 1, 2, 3, 4)})
+		}()
+		go func() {
+			defer wg.Done()
+			_ = svc.Retract(h, Identity{})
+		}()
+	}
+	wg.Wait()
+	svc.FlushRetracts()
+	svc.mu.RLock()
+	var sum uint64
+	for _, r := range svc.live {
+		sum += r.bytes
+	}
+	assert.Equal(t, sum, svc.totalBytes, "the byte total is the sum of the live datasets")
+	svc.mu.RUnlock()
+}
 
-	svc, err := NewService(Config{Registry: introspect.NewRegistry(), Keys: newFakeKeys(), Dir: dir, Log: testLogger(t)})
+// TestConcurrentRepublishesKeepOneRevisionPerFile: two republishes of one
+// handle land as two revisions, each readable as a whole stream.
+func TestConcurrentRepublishesKeepOneRevisionPerFile(t *testing.T) {
+	reg := introspect.NewRegistry()
+	svc, err := NewService(Config{Registry: reg, Dir: t.TempDir(), Log: testLogger(t)})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
-
-	entries, err := os.ReadDir(dir)
+	res, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 0)})
 	require.NoError(t, err)
-	assert.Empty(t, entries, "sweep removes crash residue on start")
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := svc.Publish(PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, int64(i), int64(i))})
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+	p, _ := reg.Lookup(res.Handle)
+	assert.Equal(t, uint64(9), p.(introspect.EncryptedDatasetI).Revision())
+	plain, rev := readAll(t, reg, res.Handle)
+	assert.Equal(t, uint64(9), rev)
+	rdr, err := ipc.NewReader(bytes.NewReader(plain))
+	require.NoError(t, err, "the final file is one whole stream")
+	rdr.Release()
+}
+
+func TestPublishAfterCloseRefused(t *testing.T) {
+	svc := newTestService(t)
+	require.NoError(t, svc.Close(context.Background()))
+	_, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
+	require.ErrorIs(t, err, ErrClosed)
+	_, err = svc.Resolve("items")
+	require.ErrorIs(t, err, ErrClosed)
+	require.ErrorIs(t, svc.Retract("adhoc_x", Identity{}), ErrClosed)
+	require.NoError(t, svc.Close(context.Background()), "close is idempotent")
+}
+
+// TestRepublishKeepsOldRevisionForOpenReaders: a reader opened before a
+// republish reads the revision it opened, to the end.
+func TestRepublishKeepsOldRevisionForOpenReaders(t *testing.T) {
+	reg := introspect.NewRegistry()
+	svc, err := NewService(Config{Registry: reg, Dir: t.TempDir(), Log: testLogger(t), RetractGrace: time.Second})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = svc.Close(context.Background()) })
+	res, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
+	require.NoError(t, err)
+	p, _ := reg.Lookup(res.Handle)
+	rc, rev, err := p.(introspect.EncryptedDatasetI).Open()
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), rev)
+	_, err = svc.Publish(PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 2, 3)})
+	require.NoError(t, err)
+	old, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, int64Stream(t, false, 1), old, "the open reader still sees revision 1")
+	require.NoError(t, rc.Close())
 }
 
 func TestNewHandleShape(t *testing.T) {
@@ -214,6 +313,5 @@ func TestNewHandleShape(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(h, "adhoc_"))
 	assert.Len(t, h, len("adhoc_")+16)
-	assert.True(t, introspect.NewRegistry().Register(introspect.NewEncryptedEntry(h, arrow.NewSchema(nil, nil), "", "", 1)) == nil,
-		"a minted handle is a valid table name")
+	assert.True(t, introspect.ValidTableName(h), "a minted handle is a valid table name")
 }

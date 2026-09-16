@@ -12,29 +12,45 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
-// fakeDecryptor returns a fixed plaintext for any handle, standing in for
-// the broker's real seekable decrypt.
-type fakeDecryptor struct{ plaintext []byte }
-
-type fakePlaintext struct{ *bytes.Reader }
-
-func (fakePlaintext) Close() error { return nil }
-
-func (f fakeDecryptor) OpenDatasetPlaintext(ref adhocdata.Ref) (adhocdata.PlaintextI, error) {
-	return fakePlaintext{bytes.NewReader(f.plaintext)}, nil
+// sealedStub is a sealed provider whose Open answers from memory (or
+// fails), standing in for a dataset record.
+type sealedStub struct {
+	name      string
+	plaintext []byte
+	revision  uint64
+	openErr   error
 }
 
-// TestServer_EncryptedDatasetRefused checks that the HTTP table source
-// refuses an ad-hoc dataset with a clear 4xx rather than attempting a
-// snapshot: plaintext must never ride HTTP (ADR-0134 SD3).
-func TestServer_EncryptedDatasetRefused(t *testing.T) {
+type nopCloser struct{ *bytes.Reader }
+
+func (nopCloser) Close() error { return nil }
+
+func (s *sealedStub) Name() string                         { return s.name }
+func (s *sealedStub) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (s *sealedStub) Schema() *arrow.Schema {
+	return arrow.NewSchema([]arrow.Field{{Name: "id", Type: arrow.PrimitiveTypes.Int64}}, nil)
+}
+func (s *sealedStub) Structure() string { return "id Int64" }
+func (s *sealedStub) Revision() uint64  { return s.revision }
+func (s *sealedStub) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+	return nil, assert.AnError
+}
+func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) {
+	if s.openErr != nil {
+		return nil, 0, s.openErr
+	}
+	return nopCloser{bytes.NewReader(s.plaintext)}, s.revision, nil
+}
+
+// TestServer_SealedDatasetUnavailable checks that a sealed dataset whose
+// record cannot open — retired, closed — answers 503 rather than a
+// snapshot: the table source never hands out ciphertext or a stale copy.
+func TestServer_SealedDatasetUnavailable(t *testing.T) {
 	r := introspect.NewRegistry()
-	schema := arrow.NewSchema([]arrow.Field{{Name: "id", Type: arrow.PrimitiveTypes.Int64}}, nil)
-	require.NoError(t, r.Register(introspect.NewEncryptedEntry("adhoc_secret", schema, "id Int64", "/p/x.bxad", 1)))
+	require.NoError(t, r.Register(&sealedStub{name: "adhoc_secret", revision: 1, openErr: assert.AnError}))
 	s := New(Config{Registry: r}, zerolog.Nop())
 	require.NoError(t, s.Start())
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
@@ -42,19 +58,19 @@ func TestServer_EncryptedDatasetRefused(t *testing.T) {
 	resp, err := http.Get(s.BaseURL() + "/table/adhoc_secret")
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	assert.Contains(t, string(body), "ad-hoc dataset")
+	assert.Contains(t, string(body), "sealed dataset")
 }
 
-// TestServer_EncryptedDatasetDecrypts checks that with a decryptor wired,
-// /table streams the plaintext Arrow of an ad-hoc dataset (ADR-0134 §SD3,
-// revised).
-func TestServer_EncryptedDatasetDecrypts(t *testing.T) {
+// TestServer_SealedDatasetOpens checks that /table serves a sealed
+// dataset by opening its record (ADR-0240 §SD3), with the revision the
+// reader belongs to in the ETag and ranges answered.
+func TestServer_SealedDatasetOpens(t *testing.T) {
 	r := introspect.NewRegistry()
-	require.NoError(t, r.Register(introspect.NewEncryptedEntry("adhoc_x", nil, "id Int64", "/p/x.bxad", 1)))
 	plaintext := []byte("PLAINTEXT-ARROW-STREAM-BYTES")
-	s := New(Config{Registry: r, Decryptor: fakeDecryptor{plaintext}}, zerolog.Nop())
+	require.NoError(t, r.Register(&sealedStub{name: "adhoc_x", plaintext: plaintext, revision: 7}))
+	s := New(Config{Registry: r}, zerolog.Nop())
 	require.NoError(t, s.Start())
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
@@ -63,6 +79,16 @@ func TestServer_EncryptedDatasetDecrypts(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "application/vnd.apache.arrow.stream", resp.Header.Get("Content-Type"))
+	assert.Equal(t, `"adhoc_x-r7"`, resp.Header.Get("ETag"))
 	body, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, plaintext, body)
+
+	req, _ := http.NewRequest(http.MethodGet, s.BaseURL()+"/table/adhoc_x", nil)
+	req.Header.Set("Range", "bytes=10-")
+	resp2, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp2.Body.Close() }()
+	assert.Equal(t, http.StatusPartialContent, resp2.StatusCode)
+	tail, _ := io.ReadAll(resp2.Body)
+	assert.Equal(t, plaintext[10:], tail)
 }

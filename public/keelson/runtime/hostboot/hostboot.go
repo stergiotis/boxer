@@ -91,8 +91,9 @@ type Services struct {
 	// ChLocal is ch.local.exec.*: lazily created `clickhouse local` pools
 	// (ADR-0028 §SD9).
 	ChLocal bool
-	// AdhocData is the encrypted ad-hoc dataset capability (ADR-0134). It
-	// needs ChLocal; without it the service is skipped.
+	// AdhocData is the ad-hoc dataset capability (ADR-0240): publish,
+	// resolve, retract and the keelson('adhoc') catalog. Reading a dataset
+	// still needs ChLocal and Introspect, which fail visibly on their own.
 	AdhocData bool
 	// Clipboard is clipboard.*: copies drained into egui copy ops each frame.
 	Clipboard bool
@@ -405,11 +406,10 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	rt.Introspect = introspect.NewRegistry()
-	if svc.AdhocData && rt.ChLocal != nil {
+	if svc.AdhocData {
 		adhocSvc, adhocErr := adhocdata.NewService(adhocdata.Config{
 			Bus:      rt.Bus,
 			Registry: rt.Introspect,
-			Keys:     rt.ChLocal.KeyStore(),
 			Log:      logger,
 		})
 		if adhocErr != nil {
@@ -587,9 +587,6 @@ func (rt *Runtime) bootIntrospect() {
 		PersistExec:      rt.PersistExec,
 		Log:              logger,
 	}
-	if rt.ChLocal != nil {
-		deps.Decryptor = rt.ChLocal
-	}
 	if rt.Coverage != nil {
 		deps.Coverage = rt.Coverage
 	}
@@ -639,6 +636,7 @@ func (rt *Runtime) statusSnapshot() (s *runtimestatus.Snapshot) {
 	s = &runtimestatus.Snapshot{
 		BusActive:      rt.Bus != nil,
 		FsBrokerActive: rt.Fs != nil,
+		AdhocActive:    rt.Adhoc != nil,
 	}
 	if rt.RunInfo != nil && len(rt.RunInfo.RunId) >= 8 {
 		s.RunIdShort = rt.RunInfo.RunId[:8]

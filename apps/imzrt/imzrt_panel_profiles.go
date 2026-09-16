@@ -255,6 +255,11 @@ func (h *profilesHub) startCapture(spec profileKindSpec, bus app.BusI, tasks tas
 			Alias:          profileAliasPrefix + spec.key,
 			Handle:         prevHandle,
 			ArrowIPCStream: conv.IPCStream,
+			// The hub is process-global and republishes from whichever
+			// Profiles tab is open, and a profile stays explorable after the
+			// dashboard closes: the dataset is the app's, not the window's
+			// (ADR-0240 §SD5).
+			KeepAfterClose: true,
 		})
 		if err != nil {
 			err = eh.Errorf("publish: %w", err)

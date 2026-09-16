@@ -56,7 +56,6 @@ type Service struct {
 	timeout   time.Duration
 	busClient *inprocbus.Client
 	unsub     func()
-	keys      *KeyStore
 
 	mu      sync.Mutex
 	pools   map[string]*chlocalpool.Pool
@@ -79,7 +78,6 @@ func NewService(bus *inprocbus.Inst, poolCfg chlocalpool.Config, log zerolog.Log
 		poolCfg:  poolCfg,
 		cacheCfg: CacheConfig{}.withDefaults(),
 		timeout:  DefaultRequestTimeout,
-		keys:     NewKeyStore(),
 		pools:    make(map[string]*chlocalpool.Pool),
 		caches:   make(map[string]*poolCache),
 	}
@@ -105,12 +103,6 @@ func NewService(bus *inprocbus.Inst, poolCfg chlocalpool.Config, log zerolog.Log
 	svc.unsub = unsub
 	return
 }
-
-// KeyStore returns the broker's in-process dataset key store (ADR-0134
-// K2). The ad-hoc capability service registers handle→key here at
-// publish and deregisters at retract; the broker resolves the key by
-// table name when streaming an encrypted input. Keys never ride the bus.
-func (inst *Service) KeyStore() *KeyStore { return inst.keys }
 
 // SetRequestTimeout overrides DefaultRequestTimeout; useful when the
 // pool is expected to handle long-running queries (large data

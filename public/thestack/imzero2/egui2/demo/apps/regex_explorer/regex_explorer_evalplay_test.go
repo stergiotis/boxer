@@ -263,36 +263,6 @@ func TestSqlCommentTruncatesLongInput(t *testing.T) {
 // Publish + open, over a real adhocdata service
 // ---------------------------------------------------------------------------
 
-// stubKeyRegistrar stands in for the chlocalbroker key store: the
-// adhocdata service is the policy owner and only registers/deregisters
-// per-dataset keys, which is all these tests need.
-type stubKeyRegistrar struct {
-	mu   sync.Mutex
-	keys map[string][]byte
-}
-
-func (s *stubKeyRegistrar) RegisterDatasetKey(name string, key []byte) {
-	s.mu.Lock()
-	if s.keys == nil {
-		s.keys = map[string][]byte{}
-	}
-	s.keys[name] = key
-	s.mu.Unlock()
-}
-
-func (s *stubKeyRegistrar) DeregisterDatasetKey(name string) {
-	s.mu.Lock()
-	delete(s.keys, name)
-	s.mu.Unlock()
-}
-
-func (s *stubKeyRegistrar) live() (n int) {
-	s.mu.Lock()
-	n = len(s.keys)
-	s.mu.Unlock()
-	return
-}
-
 // capturedOpen is what the stub window host saw.
 type capturedOpen struct {
 	mu   sync.Mutex
@@ -311,7 +281,6 @@ func (c *capturedOpen) all() (out []launchrequest.LaunchRequest) {
 // carrying the three caps the manifest declares.
 type evalTestRig struct {
 	app   *App
-	keys  *stubKeyRegistrar
 	opens *capturedOpen
 	// svc is the real service, kept for [evalTestRig.flushRetracts]: a
 	// retract only leaves the dataset queryable for RetractGrace, and the
@@ -331,11 +300,9 @@ func setupEvalRig(t *testing.T) (rig *evalTestRig) {
 	bus := inprocbus.NewInst(logger)
 	bus.SetRequestTimeout(10 * time.Second)
 
-	keys := &stubKeyRegistrar{}
 	svc, err := adhocdata.NewService(adhocdata.Config{
 		Bus:      bus,
 		Registry: introspect.NewRegistry(),
-		Keys:     keys,
 		Dir:      t.TempDir(),
 		Log:      logger,
 	})
@@ -371,7 +338,7 @@ func setupEvalRig(t *testing.T) (rig *evalTestRig) {
 		{Pattern: windowhost.OpenSubject, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
 	}))
 
-	rig = &evalTestRig{app: inst, keys: keys, opens: opens, svc: svc}
+	rig = &evalTestRig{app: inst, opens: opens, svc: svc}
 	return
 }
 
@@ -440,7 +407,7 @@ func TestEvalHandoffReusesHandles(t *testing.T) {
 	secondGo, secondCh := run()
 	assert.Equal(t, firstGo, secondGo)
 	assert.Equal(t, firstCh, secondCh)
-	assert.Equal(t, 2, rig.keys.live(), "one window holds at most two datasets")
+	assert.Equal(t, 2, rig.svc.LiveCount(), "one window holds at most two datasets")
 }
 
 func TestEvalHandoffDegradesWithoutClickHouseResult(t *testing.T) {
@@ -461,7 +428,7 @@ func TestEvalHandoffDegradesWithoutClickHouseResult(t *testing.T) {
 	require.Empty(t, evalErr, "a missing CH result is a partial answer, not a failure")
 	assert.NotEmpty(t, goHandle)
 	assert.Empty(t, chHandle, "nothing to publish for the CH side")
-	assert.Equal(t, 1, rig.keys.live())
+	assert.Equal(t, 1, rig.svc.LiveCount())
 
 	reqs := rig.opens.all()
 	require.Len(t, reqs, 1)
@@ -482,13 +449,13 @@ func TestRetractEvalDatasetsDropsBothHandles(t *testing.T) {
 	snap.hasCH = true
 	snap.chRows = chExtractRows(listOutcome{Matches: []string{"a"}})
 	inst.requestEvalInPlay(snap)
-	require.Equal(t, 2, rig.keys.live())
+	require.Equal(t, 2, rig.svc.LiveCount())
 
 	inst.retractEvalDatasets()
 	// The app gives the handles back at once; the service holds the keys for
 	// RetractGrace so an in-flight query still resolves (ADR-0188 §SD3).
 	rig.flushRetracts()
-	assert.Equal(t, 0, rig.keys.live())
+	assert.Equal(t, 0, rig.svc.LiveCount())
 
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
@@ -532,7 +499,7 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 		})
 		require.NoErrorf(t, pErr, "filler %d", i)
 	}
-	require.Equal(t, adhocdata.MaxDatasets-1, rig.keys.live())
+	require.Equal(t, adhocdata.MaxDatasets-1, rig.svc.LiveCount())
 
 	snap, err := inst.snapshotEval()
 	require.NoError(t, err)
@@ -547,22 +514,22 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	require.NotEmpty(t, evalErr, "the ClickHouse publish must have been refused")
 	assert.NotEmptyf(t, goHandle,
 		"the Go dataset was published (live=%d) but its handle was not retained — nothing could retract it",
-		rig.keys.live())
+		rig.svc.LiveCount())
 
 	// Retrying republishes under the recorded handle rather than minting
 	// a fresh one each time.
-	before := rig.keys.live()
+	before := rig.svc.LiveCount()
 	for range 3 {
 		inst.requestEvalInPlay(snap)
 	}
-	assert.Equalf(t, before, rig.keys.live(),
-		"repeated failing hand-offs minted more datasets: %d -> %d live", before, rig.keys.live())
+	assert.Equalf(t, before, rig.svc.LiveCount(),
+		"repeated failing hand-offs minted more datasets: %d -> %d live", before, rig.svc.LiveCount())
 
 	// And what it holds, it gives back — once the grace it was retracted
 	// under has been flushed (ADR-0188 §SD3).
 	inst.retractEvalDatasets()
 	rig.flushRetracts()
-	assert.Equal(t, adhocdata.MaxDatasets-1, rig.keys.live(),
+	assert.Equal(t, adhocdata.MaxDatasets-1, rig.svc.LiveCount(),
 		"the app's own dataset was not retracted")
 }
 

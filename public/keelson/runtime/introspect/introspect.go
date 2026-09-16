@@ -15,7 +15,11 @@
 // which ClickHouse reserves for its own introspection tables.
 package introspect
 
-import "github.com/apache/arrow-go/v18/arrow"
+import (
+	"io"
+
+	"github.com/apache/arrow-go/v18/arrow"
+)
 
 // FreshnessClass declares how long a provider's snapshot stays valid.
 type FreshnessClass uint8
@@ -49,7 +53,7 @@ func (f FreshnessClass) String() (s string) {
 type Provider interface {
 	// Name is the table name: a ClickHouse identifier with no
 	// `keelson.` prefix. It is the URL path segment and the TEMPORARY
-	// table name, so it must match validTableName.
+	// table name, so it must match ValidTableName.
 	Name() string
 	// Schema is the full, unprojected Arrow schema. It serves the HTTP
 	// endpoint's shape and lets the query analyser expand `SELECT *`.
@@ -64,22 +68,27 @@ type Provider interface {
 	Snapshot(proj Projection) (arrow.RecordBatch, error)
 }
 
-// EncryptedDatasetI marks a Provider whose rows are not snapshotted in
-// process but streamed from a chunk-encrypted file through the chlocal
-// broker at query time (ADR-0134). The in-process engine detects this
-// kind by type assertion and routes it to
-// chlocalbroker.ExecRequest.EncryptedInputs instead of snapshotting; the
-// HTTP table source refuses it, so plaintext never rides HTTP and
-// exactly one decrypt path exists. Its Snapshot always errors.
+// EncryptedDatasetI marks a Provider that is a sealed dataset (ADR-0240,
+// from ADR-0134): its bytes are never snapshotted in process but opened —
+// decrypted by the record that owns the key — and served by the loopback
+// HTTP table source through `url(...,'ArrowStream',<structure>)`. It is
+// the marker the placement wall keys on (ADR-0145: a statement naming one
+// is confined to this process's plane), and the in-process engine refuses
+// it by name. Its Snapshot always errors.
 type EncryptedDatasetI interface {
 	Provider
 	// Structure is the explicit ClickHouse structure string the
-	// ArrowStream read requires (schema inference over a pipe fails).
+	// ArrowStream read requires; schema inference is not used on this
+	// path, so the publish gate's mapping is what the reader applies.
 	Structure() string
-	// Path is the absolute path to the chunk-encrypted Arrow file.
-	Path() string
 	// Revision is the dataset revision; a republish bumps it.
 	Revision() uint64
+	// Open returns a seekable reader over the plaintext Arrow stream and
+	// the revision it belongs to, taken together so a republish cannot
+	// split them. Seek is load-bearing: it is what lets /table answer the
+	// HTTP range requests ClickHouse's Arrow reader issues. The caller
+	// closes it.
+	Open() (rc io.ReadSeekCloser, revision uint64, err error)
 }
 
 // Projection selects which columns a Snapshot materialises. The zero

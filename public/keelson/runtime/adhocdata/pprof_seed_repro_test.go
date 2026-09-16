@@ -39,7 +39,7 @@ func TestPprofSeedQueryE2E(t *testing.T) {
 		require.Positive(t, conv.Rows, kind)
 
 		res, err := svc.Publish(adhocdata.PublishInput{
-			Alias: "pprof_" + kind, Publisher: "test", ArrowIPCStream: conv.IPCStream,
+			Alias: "pprof_" + kind, ArrowIPCStream: conv.IPCStream,
 		})
 		require.NoError(t, err, kind)
 
@@ -89,7 +89,7 @@ func TestLargeDatasetPartialReadE2E(t *testing.T) {
 	require.NoError(t, w.Write(rec))
 	require.NoError(t, w.Close())
 
-	res, err := svc.Publish(adhocdata.PublishInput{Alias: "skiptail", Publisher: "test", ArrowIPCStream: buf.Bytes()})
+	res, err := svc.Publish(adhocdata.PublishInput{Alias: "skiptail", ArrowIPCStream: buf.Bytes()})
 	require.NoError(t, err)
 
 	// Reads s and v, leaves the ~7.7 MB tail column unread — the skip

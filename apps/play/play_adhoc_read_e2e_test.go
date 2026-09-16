@@ -3,7 +3,6 @@ package play
 import (
 	"context"
 	"io"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -55,7 +54,7 @@ import (
 // capability service plus its `/query` URL.
 func adhocReadPlane(t *testing.T) (svc *adhocdata.Service, queryURL string) {
 	t.Helper()
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
@@ -75,7 +74,7 @@ func adhocReadPlane(t *testing.T) (svc *adhocdata.Service, queryURL string) {
 	reg := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(reg))
 	svc, err = adhocdata.NewService(adhocdata.Config{
-		Registry: reg, Keys: broker.KeyStore(), Dir: t.TempDir(), Log: logger,
+		Registry: reg, Dir: t.TempDir(), Log: logger,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
@@ -94,7 +93,7 @@ func adhocReadPlane(t *testing.T) (svc *adhocdata.Service, queryURL string) {
 		}
 		return io.ReadAll(rep)
 	})
-	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner, Decryptor: broker}, logger)
+	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner}, logger)
 	require.NoError(t, srv.Start())
 	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
 
@@ -166,11 +165,11 @@ func TestClientReadsKeelsonTablesEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 
 	series, err := svc.Publish(adhocdata.PublishInput{
-		Alias: fixtureSeriesAlias, Publisher: fixturePublisher, ArrowIPCStream: seriesIPC,
+		Alias: fixtureSeriesAlias, ArrowIPCStream: seriesIPC,
 	})
 	require.NoError(t, err)
 	truth, err := svc.Publish(adhocdata.PublishInput{
-		Alias: fixtureTruthAlias, Publisher: fixturePublisher, ArrowIPCStream: truthIPC,
+		Alias: fixtureTruthAlias, ArrowIPCStream: truthIPC,
 	})
 	require.NoError(t, err)
 

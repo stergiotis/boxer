@@ -53,8 +53,6 @@ const (
 	fixtureStepSec = 60
 	// fixturePublishTimeout bounds one publish round.
 	fixturePublishTimeout = 30 * time.Second
-	// fixturePublisher attributes the datasets in the ad-hoc catalog.
-	fixturePublisher = "play/series-fixture"
 )
 
 // fixtureTimeType is the Arrow type the PUBLISHED tables carry. Microsecond,
@@ -303,13 +301,13 @@ func doPublishFixture(bus busPublisherI, spec fixtureSpec) (out fixturePublished
 		return
 	}
 	seriesRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: fixtureSeriesAlias, ArrowIPCStream: seriesIPC, Publisher: fixturePublisher,
+		Alias: fixtureSeriesAlias, ArrowIPCStream: seriesIPC,
 	})
 	if err != nil {
 		return out, eb.Build().Str("alias", fixtureSeriesAlias).Errorf("play: fixture: publish: %w", err)
 	}
 	truthRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: fixtureTruthAlias, ArrowIPCStream: truthIPC, Publisher: fixturePublisher,
+		Alias: fixtureTruthAlias, ArrowIPCStream: truthIPC,
 	})
 	if err != nil {
 		return out, eb.Build().Str("alias", fixtureTruthAlias).Errorf("play: fixture: publish: %w", err)

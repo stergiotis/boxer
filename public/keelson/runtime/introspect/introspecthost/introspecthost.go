@@ -18,7 +18,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -73,9 +72,6 @@ type Deps struct {
 	// becomes queryable through this endpoint. nil builds a private
 	// registry (the historical behaviour).
 	Registry *introspect.Registry
-	// Decryptor, when set, lets /table stream ad-hoc datasets' in-process
-	// decryption (ADR-0134 §SD3, revised). nil keeps the refusal.
-	Decryptor adhocdata.DecryptorI
 	// Facts is the runtime's facts store, backing keelson.workingsets
 	// (ADR-0148 §SD7). nil is allowed and leaves that table empty rather
 	// than absent, so the set of table names does not depend on whether a
@@ -200,7 +196,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		deps.Log.Warn().Err(e).Msg("introspecthost: catalog registration failed")
 	}
 
-	cfg := introspecthttp.Config{Registry: reg, Decryptor: deps.Decryptor}
+	cfg := introspecthttp.Config{Registry: reg}
 	if deps.ChlocalAvailable && deps.Bus != nil {
 		// Back POST /query with the chlocal broker so a co-resident client
 		// (apps/play) can query `SELECT ... FROM keelson('env')` here and get

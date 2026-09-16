@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +37,7 @@ import (
 // only the path underneath is now the one that ships.
 func setupE2E(t *testing.T) (svc *adhocdata.Service, query func(sql string) string) {
 	t.Helper()
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
@@ -57,7 +56,7 @@ func setupE2E(t *testing.T) (svc *adhocdata.Service, query func(sql string) stri
 
 	reg := introspect.NewRegistry()
 	svc, err = adhocdata.NewService(adhocdata.Config{
-		Registry: reg, Keys: broker.KeyStore(), Dir: t.TempDir(), Log: logger,
+		Registry: reg, Dir: t.TempDir(), Log: logger,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
@@ -76,7 +75,7 @@ func setupE2E(t *testing.T) (svc *adhocdata.Service, query func(sql string) stri
 		}
 		return io.ReadAll(rep)
 	})
-	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner, Decryptor: broker}, logger)
+	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner}, logger)
 	require.NoError(t, srv.Start())
 	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
 
@@ -121,9 +120,9 @@ func TestServiceE2E_QueryByHandle(t *testing.T) {
 func TestCatalogE2E(t *testing.T) {
 	svc, query := setupE2E(t)
 
-	a, err := svc.Publish(adhocdata.PublishInput{Alias: "alpha", Publisher: "app.one", ArrowIPCStream: int64Stream(t, 1, 2)})
+	a, err := svc.Publish(adhocdata.PublishInput{Alias: "alpha", By: adhocdata.Identity{App: "app.one"}, ArrowIPCStream: int64Stream(t, 1, 2)})
 	require.NoError(t, err)
-	_, err = svc.Publish(adhocdata.PublishInput{Alias: "beta", Publisher: "app.two", ArrowIPCStream: int64Stream(t, 3)})
+	_, err = svc.Publish(adhocdata.PublishInput{Alias: "beta", By: adhocdata.Identity{App: "app.two"}, ArrowIPCStream: int64Stream(t, 3)})
 	require.NoError(t, err)
 
 	body := query("SELECT count(*) FROM keelson('adhoc')")
@@ -133,7 +132,7 @@ func TestCatalogE2E(t *testing.T) {
 	body = query("SELECT alias, publisher, rows FROM keelson('adhoc') ORDER BY alias")
 	assert.Equal(t, "alpha\tapp.one\t2\nbeta\tapp.two\t1", body)
 
-	require.NoError(t, svc.Retract(a.Handle))
+	require.NoError(t, svc.Retract(a.Handle, adhocdata.Identity{}))
 	body = query("SELECT count(*) FROM keelson('adhoc')")
 	assert.Equal(t, "1", body, "retract removes the catalog row")
 }

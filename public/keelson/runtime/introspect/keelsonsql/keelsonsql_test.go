@@ -1,7 +1,10 @@
 package keelsonsql
 
 import (
+	"io"
 	"testing"
+
+	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -125,8 +128,7 @@ func TestReferencesIsRegistryIndependent(t *testing.T) {
 
 func TestRewriteToURLEncryptedDataset(t *testing.T) {
 	r := testReg(t)
-	require.NoError(t, r.Register(introspect.NewEncryptedEntry(
-		"adhoc_deadbeef01234567", nil, "id Int64, ts DateTime64(6,'UTC')", "/p/x.bxad", 1)))
+	require.NoError(t, r.Register(&sealedStub{name: "adhoc_deadbeef01234567", structure: "id Int64, ts DateTime64(6,'UTC')", revision: 1}))
 
 	// An ad-hoc dataset gets the 3-arg url() with its explicit structure;
 	// the 'UTC' quotes inside the structure are escaped.
@@ -141,3 +143,21 @@ func TestRewriteToURLEncryptedDataset(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT * FROM url('http://127.0.0.1:8097/table/env', 'ArrowStream')", got)
 }
+
+// sealedStub is the smallest introspect.EncryptedDatasetI: enough for the
+// rewrite to see a sealed provider and read its structure.
+type sealedStub struct {
+	name      string
+	structure string
+	revision  uint64
+}
+
+func (s *sealedStub) Name() string                         { return s.name }
+func (s *sealedStub) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (s *sealedStub) Schema() *arrow.Schema                { return arrow.NewSchema(nil, nil) }
+func (s *sealedStub) Structure() string                    { return s.structure }
+func (s *sealedStub) Revision() uint64                     { return s.revision }
+func (s *sealedStub) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+	return nil, assert.AnError
+}
+func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) { return nil, 0, assert.AnError }

@@ -24,9 +24,10 @@ const maxColumnNameLen = 256
 const maxBareIdentLen = 64
 
 // StructureFor renders the ClickHouse structure string — a comma-joined
-// list of backtick-quoted `name Type` columns — that a
-// `file(fifo,'ArrowStream',<structure>)` read requires, because schema
-// inference over a pipe is impossible (ADR-0134 SD3). Every column name is
+// list of backtick-quoted `name Type` columns — that the
+// `url(...,'ArrowStream',<structure>)` read of a sealed dataset is handed,
+// so the publish gate's mapping, not inference, decides the types
+// (ADR-0240 §SD2). Every column name is
 // backtick-quoted, so leeway-encoded / nested columnar schemas — whose
 // physical names carry colons and whose repeated sections are Array-typed —
 // survive the round trip. The type mapping is recursive and total over the
@@ -269,8 +270,8 @@ func checkColumnName(name, col string) (err error) {
 // quoteIdent backtick-quotes a ClickHouse identifier, doubling any embedded
 // backtick, so a name carrying colons, dashes, or spaces is carried verbatim
 // into the structure string. The structure string is itself wrapped as a
-// single-quoted SQL literal downstream (the fifo file() read and the url()
-// rewrite), which escapes the quote and backslash bytes; a backtick is not
+// single-quoted SQL literal downstream (the url() rewrite), which escapes
+// the quote and backslash bytes; a backtick is not
 // special in that literal, so the two escaping layers do not interfere.
 func quoteIdent(name string) string {
 	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
@@ -279,9 +280,9 @@ func quoteIdent(name string) string {
 // validColumnName reports whether name is a bare ClickHouse identifier —
 // `[A-Za-z_][A-Za-z0-9_]*`, up to maxBareIdentLen bytes — safe to
 // interpolate unquoted. Column names in the structure string no longer need
-// this (they are backtick-quoted); it now guards the dataset alias and
-// handle, which stay bare so they can name a TEMPORARY table and a
-// frontmatter binding without quoting (ADR-0134 SD2/SD4).
+// this (they are backtick-quoted); it guards nested field names and stays
+// the rule a dataset alias and handle satisfy, which stay bare so they can
+// name a table and a frontmatter binding without quoting.
 func validColumnName(name string) (ok bool) {
 	if name == "" || len(name) > maxBareIdentLen {
 		return

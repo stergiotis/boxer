@@ -24,7 +24,7 @@ func NewRegistry() *Registry {
 // is left in place.
 func (r *Registry) Register(p Provider) (err error) {
 	name := p.Name()
-	if !validTableName(name) {
+	if !ValidTableName(name) {
 		return eb.Build().Str("name", name).Errorf("introspect: invalid table name")
 	}
 	r.mu.Lock()
@@ -97,12 +97,12 @@ func Register(p Provider) error { return Default.Register(p) }
 // Unregister removes name from the Default registry.
 func Unregister(name string) bool { return Default.Unregister(name) }
 
-// validTableName reports whether name is a safe ClickHouse identifier
+// ValidTableName reports whether name is a safe ClickHouse identifier
 // for use as a TEMPORARY table name and a URL path segment:
 // `[A-Za-z_][A-Za-z0-9_]*`, up to 64 bytes (ADR-0094 §SD1). It matches
 // the chlocalbroker InputTables rule so a name that registers here also
 // passes the broker.
-func validTableName(name string) (ok bool) {
+func ValidTableName(name string) (ok bool) {
 	if name == "" || len(name) > 64 {
 		return
 	}
@@ -117,5 +117,22 @@ func validTableName(name string) (ok bool) {
 		}
 	}
 	ok = true
+	return
+}
+
+// IsSealed reports whether the registered provider under name is a sealed
+// dataset — one whose bytes are readable only by opening its record in
+// this process (ADR-0240, ADR-0145).
+//
+// It is what a dispatcher consults to decide whether a statement naming
+// this table is confined, so it answers about the registry rather than
+// about SQL text: a name either resolves to a sealed provider here or it
+// does not.
+func (inst *Registry) IsSealed(name string) (yes bool) {
+	p, ok := inst.Lookup(name)
+	if !ok {
+		return
+	}
+	_, yes = p.(EncryptedDatasetI)
 	return
 }

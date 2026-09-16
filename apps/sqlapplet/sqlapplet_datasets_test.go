@@ -394,7 +394,7 @@ func TestDatasetBinderLiveWithdrawal(t *testing.T) {
 	logger := zerolog.Nop()
 	bus := inprocbus.NewInst(logger)
 	svc, err := adhocdata.NewService(adhocdata.Config{
-		Bus: bus, Registry: introspect.NewRegistry(), Keys: fakeKeyRegistrar{}, Dir: t.TempDir(), Log: logger,
+		Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger,
 		RetractGrace: 50 * time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -456,13 +456,6 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 	}
 	t.Fatalf("timed out waiting: %s", what)
 }
-
-// fakeKeyRegistrar satisfies adhocdata.KeyRegistrarI for a service that never
-// decrypts in these tests.
-type fakeKeyRegistrar struct{}
-
-func (fakeKeyRegistrar) RegisterDatasetKey(string, []byte) {}
-func (fakeKeyRegistrar) DeregisterDatasetKey(string)       {}
 
 // int64ArrowStream builds a one-column Int64 Arrow IPC stream.
 func int64ArrowStream(t *testing.T, vals ...int64) []byte {

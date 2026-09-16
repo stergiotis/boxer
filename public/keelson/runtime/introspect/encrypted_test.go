@@ -1,6 +1,8 @@
 package introspect
 
 import (
+	"bytes"
+	"io"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -8,10 +10,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// sealedStub is the smallest EncryptedDatasetI: what the registry and its
+// sealed predicate see of a dataset, with none of the capability behind it.
+type sealedStub struct {
+	name      string
+	schema    *arrow.Schema
+	structure string
+	revision  uint64
+	plaintext []byte
+}
+
+type nopCloser struct{ *bytes.Reader }
+
+func (nopCloser) Close() error { return nil }
+
+func (s *sealedStub) Name() string              { return s.name }
+func (s *sealedStub) Freshness() FreshnessClass { return FreshnessLive }
+func (s *sealedStub) Schema() *arrow.Schema     { return s.schema }
+func (s *sealedStub) Structure() string         { return s.structure }
+func (s *sealedStub) Revision() uint64          { return s.revision }
+func (s *sealedStub) Snapshot(Projection) (arrow.RecordBatch, error) {
+	return nil, assert.AnError
+}
+func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) {
+	return nopCloser{bytes.NewReader(s.plaintext)}, s.revision, nil
+}
+
+var _ EncryptedDatasetI = (*sealedStub)(nil)
+
 func TestRegistryUnregister(t *testing.T) {
 	r := NewRegistry()
 	schema := arrow.NewSchema([]arrow.Field{{Name: "id", Type: arrow.PrimitiveTypes.Int64}}, nil)
-	require.NoError(t, r.Register(NewEncryptedEntry("adhoc_x", schema, "id Int64", "/p/x.bxad", 1)))
+	require.NoError(t, r.Register(&sealedStub{name: "adhoc_x", schema: schema, structure: "id Int64", revision: 1}))
 	_, ok := r.Lookup("adhoc_x")
 	assert.True(t, ok)
 
@@ -21,38 +51,15 @@ func TestRegistryUnregister(t *testing.T) {
 	assert.False(t, r.Unregister("adhoc_x"), "second unregister is a no-op")
 }
 
-func TestEncryptedEntry(t *testing.T) {
-	schema := arrow.NewSchema([]arrow.Field{{Name: "id", Type: arrow.PrimitiveTypes.Int64}}, nil)
-	e := NewEncryptedEntry("adhoc_x", schema, "id Int64", "/p/x.bxad", 1)
-
-	var _ EncryptedDatasetI = e // satisfies the marker interface
-	assert.Equal(t, "adhoc_x", e.Name())
-	assert.Equal(t, FreshnessLive, e.Freshness())
-	assert.Equal(t, "id Int64", e.Structure())
-	assert.Equal(t, "/p/x.bxad", e.Path())
-	assert.Equal(t, uint64(1), e.Revision())
-	assert.Equal(t, schema, e.Schema())
-
-	_, err := e.Snapshot(AllColumns())
-	require.Error(t, err, "an ad-hoc dataset never snapshots in process")
-
-	schema2 := arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.BinaryTypes.String}}, nil)
-	e.Update(schema2, "v String", "/p/x2.bxad", 2)
-	assert.Equal(t, "v String", e.Structure())
-	assert.Equal(t, "/p/x2.bxad", e.Path())
-	assert.Equal(t, uint64(2), e.Revision())
-	assert.Equal(t, schema2, e.Schema())
-}
-
 // TestRegistryIsSealed is the derivation's ground truth: a name either
 // resolves to a sealed provider in this registry or it does not. Everything
 // upstream — the dispatch label, the refusals — rests on this answer, so it
 // must not be a guess about the name's shape.
 func TestRegistryIsSealed(t *testing.T) {
 	reg := NewRegistry()
-	require.NoError(t, reg.Register(NewEncryptedEntry("adhoc_secret",
-		arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.PrimitiveTypes.Int64}}, nil),
-		"v Int64", "/nonexistent/ciphertext", 1)))
+	require.NoError(t, reg.Register(&sealedStub{name: "adhoc_secret",
+		schema:    arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.PrimitiveTypes.Int64}}, nil),
+		structure: "v Int64", revision: 1}))
 
 	assert.True(t, reg.IsSealed("adhoc_secret"))
 	assert.False(t, reg.IsSealed("nothing_registered"),

@@ -2,7 +2,6 @@ package adhocdata
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -11,14 +10,13 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Capability subjects (request/reply, CBOR, audited — ADR-0134 SD2, the
-// ADR-0026 taxonomy).
+// Capability subjects (request/reply, CBOR, audited — ADR-0240 §SD2, the
+// ADR-0026 taxonomy). The resolve step is the audited hand-out moment;
+// there is no grant.
 const (
 	SubjectPublish = "adhoc.publish"
-	SubjectGrant   = "adhoc.grant"
 	SubjectRetract = "adhoc.retract"
 	SubjectResolve = "adhoc.resolve"
-	subjectAll     = "adhoc.>"
 )
 
 // Event subjects (fire-and-forget, CBOR — ADR-0188 §SD3). The service
@@ -33,7 +31,6 @@ const (
 	SubjectEventPublished = "adhoc.event.published"
 	SubjectEventRetracted = "adhoc.event.retracted"
 	SubjectEventAll       = "adhoc.event.>"
-	subjectEventPrefix    = "adhoc.event."
 )
 
 // Event is one dataset transition as consumers see it (decoded from the
@@ -133,6 +130,7 @@ type wirePublishReq struct {
 	V              uint8  `json:"v"`
 	Alias          string `json:"alias"`
 	Handle         string `json:"handle,omitempty"`
+	KeepAfterClose bool   `json:"keep_after_close,omitempty"`
 	ArrowIPCStream []byte `json:"arrow_ipc_stream"`
 }
 
@@ -144,21 +142,6 @@ type wirePublishRep struct {
 	Revision uint64 `json:"revision,omitempty"`
 	Rows     uint64 `json:"rows,omitempty"`
 	Bytes    uint64 `json:"bytes,omitempty"`
-}
-
-type wireGrantReq struct {
-	V      uint8  `json:"v"`
-	Handle string `json:"handle"`
-}
-
-type wireGrantRep struct {
-	V             uint8  `json:"v"`
-	OK            bool   `json:"ok"`
-	Error         string `json:"error,omitempty"`
-	Structure     string `json:"structure,omitempty"`
-	SchemaSummary string `json:"schema_summary,omitempty"`
-	Revision      uint64 `json:"revision,omitempty"`
-	Alias         string `json:"alias,omitempty"`
 }
 
 type wireResolveReq struct {
@@ -200,30 +183,39 @@ type wireRetractRep struct {
 	Error string `json:"error,omitempty"`
 }
 
-// subscribe binds the capability subjects on the bus. A request/reply
+// subscribe binds the three request subjects on the bus — each on its
+// own, so the service's own events never echo back to it. A request/reply
 // service needs the inbox-prefix Pub cap, or replies never reach the
 // caller's inbox and requests time out.
 func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 	caps := []app.SubjectFilter{
-		{Pattern: subjectAll, Direction: app.CapDirectionBoth, Reason: "adhoc capability: publish/grant/retract"},
+		{Pattern: SubjectPublish, Direction: app.CapDirectionSub, Reason: "adhoc capability: publish"},
+		{Pattern: SubjectRetract, Direction: app.CapDirectionSub, Reason: "adhoc capability: retract"},
+		{Pattern: SubjectResolve, Direction: app.CapDirectionSub, Reason: "adhoc capability: resolve"},
+		{Pattern: SubjectEventAll, Direction: app.CapDirectionPub, Reason: "adhoc: announce publish and retract"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "adhoc: reply to caller inboxes"},
 	}
 	client := bus.NewClient(ServiceAppId, caps)
-	unsub, subErr := client.Subscribe(subjectAll, inst.handleRequest)
-	if subErr != nil {
-		return eh.Errorf("adhocdata: subscribe: %w", subErr)
+	for _, subject := range []string{SubjectPublish, SubjectRetract, SubjectResolve} {
+		unsub, subErr := client.Subscribe(subject, inst.handleRequest)
+		if subErr != nil {
+			for _, u := range inst.unsubs {
+				u()
+			}
+			inst.unsubs = nil
+			return eb.Build().Str("subject", subject).Errorf("adhocdata: subscribe: %w", subErr)
+		}
+		inst.unsubs = append(inst.unsubs, unsub)
 	}
 	inst.busClient = client
-	inst.unsub = unsub
 	return nil
 }
 
+// sender is the identity the envelope carries: the authenticated sender
+// app and the instance the host minted its client for (ADR-0240 §SD2).
+func sender(msg *app.Msg) Identity { return Identity{App: msg.Sender, Instance: msg.SenderInstance} }
+
 func (inst *Service) handleRequest(msg *app.Msg) {
-	if strings.HasPrefix(msg.Subject, subjectEventPrefix) {
-		// The service's own events echo back through its adhoc.> request
-		// subscription; they are not requests.
-		return
-	}
 	if msg.Reply == "" {
 		inst.log.Warn().Str("subject", msg.Subject).Msg("adhocdata: request without reply inbox")
 		return
@@ -231,8 +223,6 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	switch msg.Subject {
 	case SubjectPublish:
 		inst.handlePublish(msg)
-	case SubjectGrant:
-		inst.handleGrant(msg)
 	case SubjectRetract:
 		inst.handleRetract(msg)
 	case SubjectResolve:
@@ -242,16 +232,24 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	}
 }
 
+// maxPublishPayload bounds the encoded publish request before it is
+// decoded: the stream plus a generous allowance for the envelope fields.
+const maxPublishPayload = PerDatasetMaxBytes + 4096
+
 func (inst *Service) handlePublish(msg *app.Msg) {
+	if len(msg.Payload) > maxPublishPayload {
+		inst.reply(msg.Reply, wirePublishRep{V: wireVersion, Error: "publish payload exceeds the per-dataset quota"})
+		return
+	}
 	req, err := buscodec.Decode[wirePublishReq](msg.Payload)
 	if err != nil {
 		inst.reply(msg.Reply, wirePublishRep{V: wireVersion, Error: "decode: " + err.Error()})
 		return
 	}
-	// Attribute to the authenticated sender, not a client-supplied field.
+	// The publisher is the envelope's sender, never a client-supplied field.
 	res, pErr := inst.Publish(PublishInput{
 		Alias: req.Alias, Handle: req.Handle, ArrowIPCStream: req.ArrowIPCStream,
-		Publisher: string(msg.Sender),
+		KeepAfterClose: req.KeepAfterClose, By: sender(msg),
 	})
 	if pErr != nil {
 		inst.reply(msg.Reply, wirePublishRep{V: wireVersion, Error: pErr.Error()})
@@ -259,23 +257,6 @@ func (inst *Service) handlePublish(msg *app.Msg) {
 	}
 	inst.reply(msg.Reply, wirePublishRep{
 		V: wireVersion, OK: true, Handle: res.Handle, Revision: res.Revision, Rows: res.Rows, Bytes: res.Bytes,
-	})
-}
-
-func (inst *Service) handleGrant(msg *app.Msg) {
-	req, err := buscodec.Decode[wireGrantReq](msg.Payload)
-	if err != nil {
-		inst.reply(msg.Reply, wireGrantRep{V: wireVersion, Error: "decode: " + err.Error()})
-		return
-	}
-	res, gErr := inst.Grant(req.Handle)
-	if gErr != nil {
-		inst.reply(msg.Reply, wireGrantRep{V: wireVersion, Error: gErr.Error()})
-		return
-	}
-	inst.reply(msg.Reply, wireGrantRep{
-		V: wireVersion, OK: true, Structure: res.Structure, SchemaSummary: res.SchemaSummary,
-		Revision: res.Revision, Alias: res.Alias,
 	})
 }
 
@@ -305,7 +286,7 @@ func (inst *Service) handleRetract(msg *app.Msg) {
 		inst.reply(msg.Reply, wireRetractRep{V: wireVersion, Error: "decode: " + err.Error()})
 		return
 	}
-	if rErr := inst.Retract(req.Handle); rErr != nil {
+	if rErr := inst.Retract(req.Handle, sender(msg)); rErr != nil {
 		inst.reply(msg.Reply, wireRetractRep{V: wireVersion, Error: rErr.Error()})
 		return
 	}

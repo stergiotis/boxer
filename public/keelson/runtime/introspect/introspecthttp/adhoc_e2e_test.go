@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +34,7 @@ import (
 // A regular introspection table (env) resolves in the same query, proving
 // the two coexist.
 func TestServer_AdhocQueryEndpoint(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
@@ -55,7 +54,7 @@ func TestServer_AdhocQueryEndpoint(t *testing.T) {
 	reg := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(reg))
 	adhoc, err := adhocdata.NewService(adhocdata.Config{
-		Registry: reg, Keys: broker.KeyStore(), Dir: t.TempDir(), Log: logger,
+		Registry: reg, Dir: t.TempDir(), Log: logger,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = adhoc.Close(context.Background()) })
@@ -77,7 +76,7 @@ func TestServer_AdhocQueryEndpoint(t *testing.T) {
 		}
 		return io.ReadAll(rep)
 	})
-	s := New(Config{Registry: reg, Runner: runner, Decryptor: broker}, logger)
+	s := New(Config{Registry: reg, Runner: runner}, logger)
 	require.NoError(t, s.Start())
 	t.Cleanup(func() { _ = s.Stop(context.Background()) })
 
@@ -187,7 +186,7 @@ func adhocInt64Stream(t *testing.T, vals ...int64) []byte {
 // as much: a nonce nobody fetched must check false, or the wall would open
 // on a statement that merely ran.
 func TestProbeIsFetchedByARealEngine(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))

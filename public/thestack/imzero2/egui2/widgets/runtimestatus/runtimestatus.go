@@ -30,6 +30,7 @@ const (
 	CapBus     = "bus"
 	CapFs      = "fs"
 	CapPersist = "persist"
+	CapAdhoc   = "adhoc"
 )
 
 // ClickHandler is called when a status segment is clicked. capId is
@@ -57,6 +58,9 @@ type Snapshot struct {
 	// FsBrokerActive reports whether fsbroker.NewService succeeded
 	// (Phase B); false leaves fs.* unbound.
 	FsBrokerActive bool
+	// AdhocActive reports whether the ad-hoc dataset capability started
+	// (ADR-0240 §SD3); false leaves adhoc.* unbound.
+	AdhocActive bool
 	// PersistBackend names the persist.NewService backend: "store"
 	// when app state is written to boxer.persiststate through the
 	// generated record store (ADR-0105 D3a, durable in ClickHouse),
@@ -87,6 +91,8 @@ func RenderInline(s *Snapshot, onClick ClickHandler) {
 	renderStatusSegment(idsLocal, "bus", s.BusActive, CapBus, onClick)
 	monoSpacer()
 	renderStatusSegment(idsLocal, "fs", s.FsBrokerActive, CapFs, onClick)
+	monoSpacer()
+	renderStatusSegment(idsLocal, "adhoc", s.AdhocActive, CapAdhoc, onClick)
 	monoSpacer()
 	if s.PersistBackend == "" {
 		renderStatusSegment(idsLocal, "persist", false, CapPersist, onClick)

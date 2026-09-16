@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os/exec"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -151,7 +150,7 @@ func leakOneGoroutineForever() {
 // the way appletApp.Mount does, and runs every buffer — SET prelude
 // included — through the production /query endpoint with the aliases bound.
 func TestPprofBookQueriesExecute(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t)).Level(zerolog.WarnLevel)
@@ -170,7 +169,7 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 
 	reg := introspect.NewRegistry()
 	svc, err := adhocdata.NewService(adhocdata.Config{
-		Bus: bus, Registry: reg, Keys: broker.KeyStore(), Dir: t.TempDir(), Log: logger,
+		Bus: bus, Registry: reg, Dir: t.TempDir(), Log: logger,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
@@ -188,7 +187,7 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 		}
 		return io.ReadAll(rep)
 	})
-	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner, Decryptor: broker}, logger)
+	srv := introspecthttp.New(introspecthttp.Config{Registry: reg, Runner: runner}, logger)
 	require.NoError(t, srv.Start())
 	t.Cleanup(func() { _ = srv.Stop(context.Background()) })
 
@@ -200,7 +199,7 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 		require.NoError(t, cErr, kind)
 		require.Positive(t, conv.Rows, kind)
 		_, pErr := svc.Publish(adhocdata.PublishInput{
-			Alias: "pprof_" + kind, Publisher: "test", ArrowIPCStream: conv.IPCStream,
+			Alias: "pprof_" + kind, ArrowIPCStream: conv.IPCStream,
 		})
 		require.NoError(t, pErr, kind)
 	}

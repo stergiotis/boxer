@@ -34,7 +34,6 @@ const (
 	// ad-hoc catalogue; a query names them by handle.
 	projectionAlias      = "projection"
 	projectionRulesAlias = "projection_rules"
-	projectionPublisher  = "play/projection"
 )
 
 // projectionPublishState is the publish round's state, shared between the
@@ -129,13 +128,13 @@ func doPublishProjection(bus busPublisherI, in projectionPublishInput) (out proj
 		return
 	}
 	rowsRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: projectionAlias, Handle: in.prevRows, ArrowIPCStream: rowsIPC, Publisher: projectionPublisher,
+		Alias: projectionAlias, Handle: in.prevRows, ArrowIPCStream: rowsIPC,
 	})
 	if err != nil {
 		return out, eb.Build().Str("alias", projectionAlias).Errorf("play: projection: publish: %w", err)
 	}
 	rulesRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: projectionRulesAlias, Handle: in.prevRules, ArrowIPCStream: rulesIPC, Publisher: projectionPublisher,
+		Alias: projectionRulesAlias, Handle: in.prevRules, ArrowIPCStream: rulesIPC,
 	})
 	if err != nil {
 		return out, eb.Build().Str("alias", projectionRulesAlias).Errorf("play: projection: publish: %w", err)

@@ -20,7 +20,6 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chhttp"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -37,14 +36,13 @@ var ListenAddr = env.NewString(env.Spec{
 
 // Server serves introspection tables as ArrowStream over HTTP.
 type Server struct {
-	reg       *introspect.Registry
-	log       zerolog.Logger
-	addr      string
-	runner    QueryRunner
-	passes    *passreg.Registry
-	decryptor adhocdata.DecryptorI
-	srv       *http.Server
-	ln        net.Listener
+	reg    *introspect.Registry
+	log    zerolog.Logger
+	addr   string
+	runner QueryRunner
+	passes *passreg.Registry
+	srv    *http.Server
+	ln     net.Listener
 	// probes holds the outstanding E6 reachability nonces (probe.go). The
 	// zero value is ready to use.
 	probes probeStore
@@ -64,11 +62,6 @@ type Config struct {
 	// Passes supplies the registered pre-execute rewrites applied to
 	// /query SQL (ADR-0108 §SD6); defaults to passreg.Default.
 	Passes *passreg.Registry
-	// Decryptor, when set, lets /table serve ad-hoc datasets by streaming
-	// their in-process decryption (ADR-0134 §SD3, revised). nil keeps the
-	// refusal — an encrypted entry answers 4xx. This is loopback-only by
-	// construction: the server refuses non-loopback binds at Start.
-	Decryptor adhocdata.DecryptorI
 }
 
 // QueryRunner executes SQL (the FORMAT clause is already part of sql) with
@@ -106,7 +99,7 @@ func New(cfg Config, log zerolog.Logger) (s *Server) {
 	if ps == nil {
 		ps = passreg.Default
 	}
-	s = &Server{reg: reg, log: log, addr: addr, runner: cfg.Runner, passes: ps, decryptor: cfg.Decryptor}
+	s = &Server{reg: reg, log: log, addr: addr, runner: cfg.Runner, passes: ps}
 	s.srv = &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second}
 	return
 }
@@ -182,11 +175,10 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown introspection table: "+name, http.StatusNotFound)
 		return
 	}
-	// An ad-hoc dataset is served by streaming its in-process decryption
-	// (ADR-0134 §SD3, revised): the broker resolves the key by handle and
-	// hands back a plaintext Arrow reader — the key never rides the wire,
-	// and this endpoint is loopback-only (non-loopback binds are refused at
-	// Start). Without a decryptor wired, it is refused.
+	// A sealed dataset is served by opening its own record (ADR-0240
+	// §SD3): the record holds the key, the plaintext exists only in this
+	// process, and this endpoint is loopback-only (non-loopback binds are
+	// refused at Start).
 	if enc, isEnc := p.(introspect.EncryptedDatasetI); isEnc {
 		s.serveEncrypted(w, r, enc)
 		return
@@ -208,49 +200,36 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
 }
 
-// serveEncrypted serves an ad-hoc dataset's decryption as ArrowStream
-// (ADR-0134 §SD3, revised; ranges per the 2026-08-01 update). A decryptor
-// must be wired (else 4xx).
+// serveEncrypted serves a sealed dataset's plaintext as ArrowStream
+// (ADR-0240 §SD3).
 //
 // It answers through ServeContent over the seekable plaintext because
 // range requests are load-bearing here: ClickHouse's Arrow reader skips
 // column buffers a query does not touch by re-requesting the source from
 // a later offset, so a dataset larger than the client's read buffer is
-// unreadable from a stream-only endpoint (found live: heap profiles,
-// ~7 MiB). The ETag carries the revision, so a ranged continuation that
-// straddles a republish fails If-Range validation instead of splicing
-// two revisions.
+// unreadable from a stream-only endpoint. The ETag carries the revision the
+// reader was opened at — the record hands both out under one lock — so a
+// ranged continuation that straddles a republish fails If-Range validation
+// instead of splicing two revisions.
 //
 // A decrypt failure — truncation or authentication — cannot change the
 // already-sent status, so it aborts the connection, which the url()
 // reader surfaces as a failed fetch: the query fails as a whole rather
 // than accepting a silently-truncated result.
 func (s *Server) serveEncrypted(w http.ResponseWriter, r *http.Request, enc introspect.EncryptedDatasetI) {
-	if s.decryptor == nil {
-		http.Error(w, "ad-hoc dataset "+enc.Name()+" is not served here (no decryptor wired)", http.StatusForbidden)
-		return
-	}
-	// The registry says "this provider is sealed" in accessors; the
-	// decryptor wants a Ref. This handler imports both, so it converts —
-	// introspect cannot depend on adhocdata, which registers into it.
-	rc, err := s.decryptor.OpenDatasetPlaintext(adhocdata.Ref{
-		Handle:    enc.Name(),
-		Path:      enc.Path(),
-		Structure: enc.Structure(),
-		Revision:  enc.Revision(),
-	})
+	rc, revision, err := enc.Open()
 	if err != nil {
-		s.log.Warn().Err(err).Str("table", enc.Name()).Msg("introspecthttp: open ad-hoc dataset")
-		http.Error(w, "ad-hoc dataset unavailable", http.StatusServiceUnavailable)
+		s.log.Warn().Err(err).Str("table", enc.Name()).Msg("introspecthttp: open sealed dataset")
+		http.Error(w, "sealed dataset unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer func() { _ = rc.Close() }()
 	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
-	w.Header().Set("ETag", fmt.Sprintf("%q", fmt.Sprintf("%s-r%d", enc.Name(), enc.Revision())))
+	w.Header().Set("ETag", fmt.Sprintf("%q", fmt.Sprintf("%s-r%d", enc.Name(), revision)))
 	tracked := &erroringReadSeeker{rs: rc}
 	http.ServeContent(w, r, "", time.Time{}, tracked)
 	if tracked.err != nil {
-		s.log.Warn().Err(tracked.err).Str("table", enc.Name()).Msg("introspecthttp: ad-hoc dataset stream aborted")
+		s.log.Warn().Err(tracked.err).Str("table", enc.Name()).Msg("introspecthttp: sealed dataset stream aborted")
 		panic(http.ErrAbortHandler)
 	}
 }

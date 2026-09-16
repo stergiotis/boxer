@@ -54,9 +54,8 @@ func TestWithdrawal_TwoPhaseWithEvents(t *testing.T) {
 	logger := testLogger(t)
 	bus := inprocbus.NewInst(logger)
 	reg := introspect.NewRegistry()
-	keys := newFakeKeys()
 	svc, err := NewService(Config{
-		Bus: bus, Registry: reg, Keys: keys, Dir: t.TempDir(), Log: logger,
+		Bus: bus, Registry: reg, Dir: t.TempDir(), Log: logger,
 		RetractGrace: 150 * time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -101,7 +100,7 @@ func TestWithdrawal_TwoPhaseWithEvents(t *testing.T) {
 	assert.Empty(t, svc.catalogRows(), "left: the catalog no longer lists it")
 	_, ok := reg.Lookup(res.Handle)
 	assert.True(t, ok, "grace: the provider still answers")
-	assert.True(t, keys.has(res.Handle), "grace: the key is still with the broker")
+	assert.False(t, svc.IsLive(res.Handle), "grace: but it is no longer live")
 
 	// UNLOAD after the grace.
 	deadline := time.Now().Add(2 * time.Second)
@@ -112,7 +111,6 @@ func TestWithdrawal_TwoPhaseWithEvents(t *testing.T) {
 		require.True(t, time.Now().Before(deadline), "provider was not unloaded after the grace")
 		time.Sleep(10 * time.Millisecond)
 	}
-	assert.False(t, keys.has(res.Handle), "unloaded: the key is gone")
 
 	// A retracted handle cannot be republished; a fresh publish mints anew.
 	_, err = PublishRequest(producer, PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: int64Stream(t, false, 4)})
@@ -125,28 +123,26 @@ func TestWithdrawal_TwoPhaseWithEvents(t *testing.T) {
 func TestWithdrawal_CloseFlushesPendingUnloads(t *testing.T) {
 	logger := testLogger(t)
 	reg := introspect.NewRegistry()
-	keys := newFakeKeys()
 	svc, err := NewService(Config{
-		Registry: reg, Keys: keys, Dir: t.TempDir(), Log: logger,
+		Registry: reg, Dir: t.TempDir(), Log: logger,
 		RetractGrace: time.Hour, // never elapses inside the test
 	})
 	require.NoError(t, err)
 	res, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
 	require.NoError(t, err)
-	require.NoError(t, svc.Retract(res.Handle))
+	require.NoError(t, svc.Retract(res.Handle, Identity{}))
 	_, ok := reg.Lookup(res.Handle)
 	require.True(t, ok, "in grace")
 	require.NoError(t, svc.Close(context.Background()))
 	_, ok = reg.Lookup(res.Handle)
 	assert.False(t, ok, "Close unloads what the grace had not yet")
-	assert.False(t, keys.has(res.Handle))
 }
 
 func TestWithdrawal_NoBusMeansNoEventsAndNoPanic(t *testing.T) {
 	svc := newTestService(t)
 	res, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
 	require.NoError(t, err)
-	require.NoError(t, svc.Retract(res.Handle))
+	require.NoError(t, svc.Retract(res.Handle, Identity{}))
 	svc.FlushRetracts()
 }
 
@@ -154,7 +150,7 @@ func TestResolveVerify_AnswersLivenessAndSuccessor(t *testing.T) {
 	logger := testLogger(t)
 	bus := inprocbus.NewInst(logger)
 	svc, err := NewService(Config{
-		Bus: bus, Registry: introspect.NewRegistry(), Keys: newFakeKeys(), Dir: t.TempDir(), Log: logger,
+		Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger,
 		RetractGrace: time.Hour,
 	})
 	require.NoError(t, err)

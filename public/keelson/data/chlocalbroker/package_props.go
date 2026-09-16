@@ -13,12 +13,9 @@ import "github.com/stergiotis/boxer/public/packageprops"
 // until a TinyGo that accepts the repo's Go version probes it.
 //
 // Arrow is intrinsic to what this package is for — brokering clickhouse-local
-// means moving Arrow (chlocalbroker → keelson/runtime/adhocdata → arrow/ipc) —
-// so its verdict follows arrow-go's rather than an accidental import.
-//
-// Declared amenable at the 2026-06-12 rollout, which was true then; the
-// adhocdata edge came later. It went unnoticed because nothing ran `props
-// verify` until it was wired into CI.
+// means moving Arrow — so its verdict follows arrow-go's rather than an
+// accidental import. (The edge once ran through keelson/runtime/adhocdata,
+// which ADR-0240 §SD3 removed from this package.)
 var PackageProps = packageprops.Props{
 	WASMWASI:         packageprops.WASMUnknown,
 	WASMJS:           packageprops.WASMUnknown,

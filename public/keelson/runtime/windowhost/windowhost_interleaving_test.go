@@ -52,8 +52,8 @@ func (inst *effApp) Mount(ctx app.MountContextI) (err error) {
 		return
 	}
 	res, pErr := inst.svc.Publish(adhocdata.PublishInput{
-		Alias:     fmt.Sprintf("ds_%s", strings.ReplaceAll(string(inst.manifest.Id), ".", "_")),
-		Publisher: string(inst.manifest.Id), ArrowIPCStream: oneRowStream(),
+		Alias: fmt.Sprintf("ds_%s", strings.ReplaceAll(string(inst.manifest.Id), ".", "_")),
+		By:    adhocdata.Identity{App: inst.manifest.Id}, ArrowIPCStream: oneRowStream(),
 	})
 	if pErr != nil {
 		err = pErr
@@ -67,7 +67,7 @@ func (inst *effApp) Unmount(ctx app.MountContextI) (err error) {
 	// The producer's own release: retract, and (deliberately) NOT the
 	// subscription — the host must release that.
 	if inst.handle != "" {
-		_ = inst.svc.Retract(inst.handle)
+		_ = inst.svc.Retract(inst.handle, adhocdata.Identity{})
 		inst.handle = ""
 	}
 	return
@@ -87,11 +87,6 @@ func oneRowStream() []byte {
 	return buf.Bytes()
 }
 
-type nopKeys struct{}
-
-func (nopKeys) RegisterDatasetKey(string, []byte) {}
-func (nopKeys) DeregisterDatasetKey(string)       {}
-
 const (
 	effFactoryId   app.AppIdT = "test.eff.factory"
 	effSingletonId app.AppIdT = "test.eff.singleton"
@@ -110,7 +105,7 @@ func newEffWorld(t *testing.T) (w *effWorld) {
 	t.Helper()
 	w = &effWorld{bus: inprocbus.NewInst(zerolog.Nop()), reg: introspect.NewRegistry()}
 	svc, err := adhocdata.NewService(adhocdata.Config{
-		Bus: w.bus, Registry: w.reg, Keys: nopKeys{}, Dir: t.TempDir(), Log: zerolog.Nop(),
+		Bus: w.bus, Registry: w.reg, Dir: t.TempDir(), Log: zerolog.Nop(),
 		RetractGrace: time.Millisecond,
 	})
 	require.NoError(t, err)
@@ -284,7 +279,7 @@ func (m *effMachine) republish(rt *rapid.T) {
 	}
 	a := apps[rapid.IntRange(0, len(apps)-1).Draw(rt, "producer")]
 	_, err := m.w.svc.Publish(adhocdata.PublishInput{
-		Alias: "ds_re", Handle: a.handle, Publisher: string(a.manifest.Id), ArrowIPCStream: oneRowStream(),
+		Alias: "ds_re", Handle: a.handle, By: adhocdata.Identity{App: a.manifest.Id}, ArrowIPCStream: oneRowStream(),
 	})
 	require.NoError(m.t, err)
 }

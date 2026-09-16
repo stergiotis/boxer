@@ -1,3 +1,11 @@
+// Package adhocdata is the ad-hoc dataset capability (ADR-0240, from
+// ADR-0134): a running app hands tabular data to SQL without creating
+// durable state, a durable public name, or plaintext at rest. A dataset is
+// a [sealed.File] — an unnamed inode under a key that exists only inside
+// it — registered under an unguessable handle that is a valid
+// `keelson('…')` table name, published under a stable alias, owned by the
+// instance that published it, and withdrawn in two phases so a query that
+// already resolved it completes.
 package adhocdata
 
 import (
@@ -6,9 +14,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
+	"io"
 	"sync"
 	"time"
 
@@ -24,120 +30,88 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Quotas bound the store (ADR-0134 SD1). A publish that would breach one
+// Quotas bound the store (ADR-0240 §SD2). A publish that would breach one
 // is refused with a named error, never discovered at query time.
 const (
-	// PerDatasetMaxBytes caps one dataset's ciphertext.
+	// PerDatasetMaxBytes caps one dataset — checked against the incoming
+	// stream before it is decoded, and against the ciphertext after.
 	PerDatasetMaxBytes = 256 << 20 // 256 MiB
-	// StoreMaxBytes caps the whole store.
+	// StoreMaxBytes caps the live datasets' ciphertext together.
 	StoreMaxBytes = 1 << 30 // 1 GiB
-	// MaxDatasets caps how many datasets may coexist.
+	// MaxDatasets caps how many datasets may be live at once.
 	MaxDatasets = 64
 )
 
 // ServiceAppId is the synthetic identity the capability service speaks
-// under on the bus; audit rows attribute publishes/grants/retracts to it.
+// under on the bus; audit rows attribute publishes and retracts to it.
 const ServiceAppId app.AppIdT = "runtime.adhoc"
 
-// KeyRegistrarI is the broker-side key custody the capability service
-// drives (ADR-0134 K2). *chlocalbroker.KeyStore satisfies it; taking an
-// interface keeps this package from importing the broker (the broker
-// imports the AEAD stream from here).
-//
-// It is deliberately register-and-forget, with no lookup. ADR-0134 §SD2
-// splits key roles — this service is the POLICY OWNER, the broker is the
-// DECRYPT EXECUTOR — and a custody interface spanning both halves would
-// hand the policy owner exactly the ability that split exists to deny it.
-// See [DecryptorI] for the executor's half.
-type KeyRegistrarI interface {
-	RegisterDatasetKey(name string, key []byte)
-	DeregisterDatasetKey(name string)
+// DefaultRetractGrace bounds both halves of a withdrawal (ADR-0240 §SD4):
+// how long a dataset that has left stays registered for a query that
+// resolved it but has not fetched yet, and then how long an open reader
+// may keep the file after that. One bus request timeout each.
+const DefaultRetractGrace = inprocbus.DefaultRequestTimeout
+
+// ErrNotOwner is returned when a republish or retract comes from an
+// identity other than the one that published the dataset (ADR-0240 §SD2).
+// Hygiene, not security: it turns "any app that can read the catalog can
+// delete anyone's dataset" into an accident that cannot happen.
+var ErrNotOwner = errors.New("not the dataset's publisher")
+
+// ErrClosed is returned by every operation after Close.
+var ErrClosed = errors.New("adhocdata: service closed")
+
+// ErrNoLiveDataset is Resolve's answer when nothing is published under the
+// alias (or everything under it has been retracted). It travels the wire as
+// its own flag so a bus caller can tell it from a transport failure with
+// errors.Is — the difference between "wait" and "retry".
+var ErrNoLiveDataset = errors.New("no live dataset under alias")
+
+// Identity is who publishes or retracts: the bus envelope's sender app and
+// sender instance (the window or embed the client was minted for). The zero
+// Identity is the runtime itself — an in-process caller of the Go API —
+// which owns everything.
+type Identity struct {
+	App      app.AppIdT
+	Instance uint64
 }
+
+// IsRuntime reports whether the identity is the runtime's own.
+func (inst Identity) IsRuntime() (yes bool) { return inst.App == "" }
 
 // Config parameterises the capability Service.
 type Config struct {
-	// Bus, when non-nil, backs the adhoc.publish/grant/retract
-	// request/reply subjects. Nil leaves only the in-process Go methods.
+	// Bus, when non-nil, backs the adhoc.publish/retract/resolve
+	// request/reply subjects and the adhoc.event.* announcements. Nil
+	// leaves only the in-process Go methods.
 	Bus *inprocbus.Inst
-	// Registry is where dataset handles register as EncryptedEntry
-	// providers; defaults to introspect.Default.
+	// Registry is where dataset handles register as providers; defaults to
+	// introspect.Default.
 	Registry *introspect.Registry
-	// Keys is the broker key store; required.
-	Keys KeyRegistrarI
-	// Dir overrides the store directory; empty resolves from sealed.BaseDir.
+	// Dir is the directory whose filesystem holds the unnamed sealed files;
+	// empty resolves from sealed.BaseDir. Nothing is ever listable in it.
 	Dir string
 	// Log is the service logger.
 	Log zerolog.Logger
-	// RetractGrace is how long a retracted dataset stays queryable after it
-	// stops resolving (ADR-0188 §SD3); zero means DefaultRetractGrace.
+	// RetractGrace overrides DefaultRetractGrace; zero keeps the default.
 	RetractGrace time.Duration
 }
 
-// dataset is the service's authoritative record of one live dataset.
-type dataset struct {
-	handle          string
-	alias           string
-	publisher       string
-	schema          *arrow.Schema
-	structure       string
-	path            string
-	revision        uint64
-	rows            uint64
-	bytes           uint64 // ciphertext file size
-	createdAtUnixUs int64
-	entry           *introspect.EncryptedEntry
-}
-
-// Service owns the encrypted dataset store: it validates and encrypts
-// published data, mints ephemeral handles, custodies keys with the
-// broker, registers handles as queryable providers, and retracts on
-// request (ADR-0134 SD2). It is safe for concurrent use.
-type Service struct {
-	reg  *introspect.Registry
-	keys KeyRegistrarI
-	dir  string
-	log  zerolog.Logger
-
-	busClient *inprocbus.Client
-	unsub     func()
-
-	mu         sync.RWMutex
-	datasets   map[string]*dataset
-	totalBytes uint64
-
-	// retractGrace is how long a retracted dataset's provider, key and file
-	// stay in place after it has left resolution (ADR-0188 §SD3): a query
-	// that had already resolved the handle completes; nothing new can find
-	// it. Zero in Config means DefaultRetractGrace.
-	retractGrace time.Duration
-	// unloading holds the datasets that have left but not yet unloaded,
-	// with the timer that will unload them. FlushRetracts and Close run
-	// them early.
-	unloading map[string]*pendingUnload
-}
-
-// pendingUnload is a retracted dataset between its LEAVE and UNLOAD steps.
-type pendingUnload struct {
-	ds    *dataset
-	timer *time.Timer
-}
-
-// DefaultRetractGrace is the RetractGrace applied when Config leaves it
-// zero: one bus request timeout, the longest a consumer's already-issued
-// query can be waiting on the transport (ADR-0188 §SD3, its F1).
-const DefaultRetractGrace = inprocbus.DefaultRequestTimeout
-
 // PublishInput is the in-process shape of a publish (the bus wire mirrors
-// it). Handle empty mints a new dataset; a known Handle republishes it.
+// it). Handle empty mints a new dataset; a known Handle republishes it,
+// which its publisher alone may do.
 type PublishInput struct {
 	Alias          string
 	Handle         string
 	ArrowIPCStream []byte
-	// Publisher attributes the dataset in the catalog. Over the bus it is
-	// the authenticated sender; an in-process embedder passes a composed
-	// stamp (embedder id carrying the applet slug, ADR-0134 SD7). It is
-	// recorded on first publish and kept across republishes.
-	Publisher string
+	// By is the publisher. The bus handler fills it from the envelope; an
+	// in-process caller leaves it zero and publishes as the runtime.
+	By Identity
+	// KeepAfterClose marks the dataset as owned by the publishing app
+	// rather than the publishing instance: any instance of the app may
+	// republish or retract it, and it survives the publishing window
+	// (ADR-0240 §SD5). Sticky across republishes.
+	KeepAfterClose bool
 }
 
 // PublishResult reports the minted (or reused) handle and dataset stats.
@@ -148,32 +122,112 @@ type PublishResult struct {
 	Bytes    uint64
 }
 
-// GrantResult is the metadata a grant hands back.
-type GrantResult struct {
-	Structure     string
-	SchemaSummary string
-	Revision      uint64
-	Alias         string
+// ResolveResult is Resolve's answer: the newest live dataset under an alias.
+type ResolveResult struct {
+	Handle          string
+	Revision        uint64
+	Rows            uint64
+	Bytes           uint64
+	CreatedAtUnixUs int64
 }
 
-// NewService builds the Service, creates and sweeps the store directory
-// (ADR-0134 SD1: crash residue is ciphertext without a key, but the sweep
-// removes it anyway), and, when a bus is supplied, subscribes to the
-// capability subjects.
-func NewService(cfg Config) (inst *Service, err error) {
-	if cfg.Keys == nil {
-		return nil, eh.Errorf("adhocdata: key registrar is required")
+// record is the one record of a dataset: the registry provider, the owner,
+// the stats and the sealed file, under one lock (ADR-0240 §SD2). It
+// implements introspect.EncryptedDatasetI, so the registry entry *is* the
+// record and /table opens it directly.
+type record struct {
+	handle string
+
+	mu             sync.RWMutex
+	alias          string
+	owner          Identity
+	keepAfterClose bool
+	schema         *arrow.Schema
+	structure      string
+	revision       uint64
+	rows           uint64
+	bytes          uint64 // ciphertext
+	createdAt      int64  // unix µs
+	file           *sealed.File
+}
+
+var _ introspect.EncryptedDatasetI = (*record)(nil)
+
+// Name is the dataset's handle — a valid keelson table name.
+func (inst *record) Name() (s string) { return inst.handle }
+
+// Freshness is always Live: a republish must never serve a cached snapshot.
+func (inst *record) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+
+// Schema returns the dataset's Arrow schema.
+func (inst *record) Schema() (s *arrow.Schema) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.schema
+}
+
+// Structure returns the explicit ClickHouse structure string.
+func (inst *record) Structure() (s string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.structure
+}
+
+// Revision returns the current dataset revision.
+func (inst *record) Revision() (r uint64) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.revision
+}
+
+// Snapshot is never valid for a sealed dataset; the honest answer to an
+// accidental snapshot is an error, not ciphertext.
+func (inst *record) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+	return nil, eb.Build().Str("name", inst.handle).Errorf("adhocdata: the table is a sealed dataset; it is read through /table, not Snapshot")
+}
+
+// Open returns a reader over the plaintext and the revision it belongs to,
+// taken together under the record's lock so a republish cannot split them.
+func (inst *record) Open() (rc io.ReadSeekCloser, revision uint64, err error) {
+	inst.mu.RLock()
+	f, rev := inst.file, inst.revision
+	inst.mu.RUnlock()
+	r, err := f.Open()
+	if err != nil {
+		return nil, 0, err
 	}
+	return r, rev, nil
+}
+
+// Service owns the live datasets: it validates and seals published data,
+// mints handles, registers them as providers, resolves aliases and
+// withdraws in two phases. It is safe for concurrent use.
+type Service struct {
+	reg          *introspect.Registry
+	dir          string
+	log          zerolog.Logger
+	retractGrace time.Duration
+
+	busClient *inprocbus.Client
+	unsubs    []func()
+
+	mu         sync.RWMutex
+	live       map[string]*record
+	leaving    map[string]*time.Timer // left, still registered until the timer unloads
+	totalBytes uint64
+	closed     bool
+}
+
+// NewService builds the Service and, when a bus is supplied, subscribes to
+// the capability subjects. Nothing is swept: a sealed file has no name.
+func NewService(cfg Config) (inst *Service, err error) {
 	reg := cfg.Registry
 	if reg == nil {
 		reg = introspect.Default
 	}
 	dir := cfg.Dir
 	if dir == "" {
-		dir = resolveStoreDir()
-	}
-	if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
-		return nil, eb.Build().Str("dir", dir).Errorf("adhocdata: mkdir store dir: %w", mkErr)
+		dir = sealed.BaseDirPath()
 	}
 	grace := cfg.RetractGrace
 	if grace <= 0 {
@@ -181,18 +235,20 @@ func NewService(cfg Config) (inst *Service, err error) {
 	}
 	inst = &Service{
 		reg:          reg,
-		keys:         cfg.Keys,
 		dir:          dir,
 		log:          cfg.Log,
-		datasets:     make(map[string]*dataset),
 		retractGrace: grace,
-		unloading:    make(map[string]*pendingUnload),
+		live:         make(map[string]*record),
+		leaving:      make(map[string]*time.Timer),
 	}
-	if removed := inst.sweep(); removed > 0 {
-		inst.log.Info().Int("removed", removed).Str("dir", dir).Msg("adhocdata: swept leftover dataset files on start")
+	// A probe publish is not worth a start-up dependency on the base
+	// directory, but an unusable one must not surface as the first app's
+	// publish error: allocate and drop one unnamed file now.
+	probe, pErr := sealed.CreateIn(dir)
+	if pErr != nil {
+		return nil, eh.Errorf("adhocdata: sealed store unavailable: %w", pErr)
 	}
-	// Register the keelson('adhoc') catalog over the live dataset table
-	// (ADR-0134 SD6).
+	_ = probe.Close()
 	if regErr := reg.Register(newCatalogProvider(inst)); regErr != nil {
 		return nil, eb.Build().Str("catalogTableName", CatalogTableName).Errorf("adhocdata: register catalog: %w", regErr)
 	}
@@ -204,302 +260,349 @@ func NewService(cfg Config) (inst *Service, err error) {
 	return inst, nil
 }
 
-// Close unsubscribes, deregisters every key and provider, and deletes all
-// store files (best-effort; the ephemerality guarantee does not rest on
-// this — after a crash the files are ciphertext whose key is gone).
+// Close unsubscribes, unregisters every provider and closes every sealed
+// file at once — readers mid-flight fail rather than outlive the service.
+// Idempotent; every later operation returns ErrClosed.
 func (inst *Service) Close(context.Context) (err error) {
-	if inst.unsub != nil {
-		inst.unsub()
-		inst.unsub = nil
-	}
-	inst.FlushRetracts()
 	inst.mu.Lock()
-	handles := make([]string, 0, len(inst.datasets))
-	for h := range inst.datasets {
-		handles = append(handles, h)
+	if inst.closed {
+		inst.mu.Unlock()
+		return
 	}
-	inst.datasets = make(map[string]*dataset)
+	inst.closed = true
+	recs := make([]*record, 0, len(inst.live)+len(inst.leaving))
+	for _, r := range inst.live {
+		recs = append(recs, r)
+	}
+	for h, timer := range inst.leaving {
+		timer.Stop()
+		if r, ok := inst.reg.Lookup(h); ok {
+			if rec, isRec := r.(*record); isRec {
+				recs = append(recs, rec)
+			}
+		}
+	}
+	inst.live = make(map[string]*record)
+	inst.leaving = make(map[string]*time.Timer)
 	inst.totalBytes = 0
+	unsubs := inst.unsubs
+	inst.unsubs = nil
 	inst.mu.Unlock()
 
-	for _, h := range handles {
-		inst.keys.DeregisterDatasetKey(h)
-		inst.reg.Unregister(h)
+	for _, u := range unsubs {
+		u()
+	}
+	for _, r := range recs {
+		inst.reg.Unregister(r.handle)
+		r.mu.RLock()
+		f := r.file
+		r.mu.RUnlock()
+		_ = f.Close()
 	}
 	inst.reg.Unregister(CatalogTableName)
-	removed := inst.sweep()
-	inst.log.Info().Int("removed", removed).Msg("adhocdata: deleted dataset files on close")
+	inst.log.Info().Int("datasets", len(recs)).Msg("adhocdata: closed")
 	return nil
 }
 
 // FlushRetracts runs the UNLOAD step now for every dataset that has left
-// but whose grace has not elapsed. Close calls it; tests call it to make
-// the two-phase withdrawal synchronous.
+// but whose grace has not elapsed, closing their files regardless of open
+// readers. Tests use it to make the two-phase withdrawal synchronous.
 func (inst *Service) FlushRetracts() {
 	inst.mu.Lock()
-	pend := make([]*pendingUnload, 0, len(inst.unloading))
-	for h, pu := range inst.unloading {
-		pu.timer.Stop()
-		pend = append(pend, pu)
-		delete(inst.unloading, h)
+	handles := make([]string, 0, len(inst.leaving))
+	for h, timer := range inst.leaving {
+		timer.Stop()
+		handles = append(handles, h)
 	}
+	inst.leaving = make(map[string]*time.Timer)
 	inst.mu.Unlock()
-	for _, pu := range pend {
-		inst.unloadDataset(pu.ds)
+	for _, h := range handles {
+		inst.unload(h, 0)
 	}
 }
 
-// unloadDataset is the UNLOAD step: deregister the key and the provider,
-// delete the file. It runs after RetractGrace, or at once from
-// FlushRetracts / Close.
-func (inst *Service) unloadDataset(ds *dataset) {
-	inst.keys.DeregisterDatasetKey(ds.handle)
-	inst.reg.Unregister(ds.handle)
-	if rmErr := os.Remove(ds.path); rmErr != nil && !os.IsNotExist(rmErr) {
-		inst.log.Warn().Err(rmErr).Str("handle", ds.handle).Msg("adhocdata: remove file on retract")
-	}
-	inst.emitAudit("unload", ds.handle, ds.alias, ds.revision)
-}
-
-// Publish validates and encrypts a dataset, mints or reuses a handle,
-// registers the key and a queryable provider, and returns the handle and
-// stats (ADR-0134 SD1/SD2). A republish (known Handle) bumps the revision
-// and swaps the file/key in place under the same handle.
+// Publish seals in.ArrowIPCStream into a new unnamed file and registers
+// it under a fresh handle, or — with in.Handle set — swaps it into that
+// dataset's record, bumping the revision (ADR-0240 §SD2). The stream is
+// decoded batch by batch into the sealed writer; no canonical copy is
+// held. A republish or a publish onto an unknown, retracted or foreign
+// handle is refused before any byte is sealed.
 func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	if !validAlias(in.Alias) {
 		return res, eb.Build().Str("alias", in.Alias).Errorf("adhocdata: invalid alias (want [A-Za-z_][A-Za-z0-9_]*, <=64)")
 	}
-	schema, structure, plaintext, rows, err := canonicalize(in.ArrowIPCStream)
-	if err != nil {
-		return res, err
-	}
-	if uint64(len(plaintext)) > PerDatasetMaxBytes {
+	if uint64(len(in.ArrowIPCStream)) > PerDatasetMaxBytes {
 		return res, eb.Build().Int("quotaBytes", PerDatasetMaxBytes).Errorf("adhocdata: dataset exceeds the per-dataset quota")
 	}
 
-	// Resolve the handle and reserve quota under the lock; encrypt outside.
-	inst.mu.Lock()
-	var existing *dataset
-	handle := in.Handle
-	if handle != "" {
-		existing = inst.datasets[handle]
+	// Admission under the lock: identity, ownership, count and an estimate
+	// of the byte budget (the stream's own length; the ciphertext is
+	// re-checked exactly at commit). Nothing is reserved — a concurrent
+	// publish is re-admitted at commit against the state it then finds.
+	inst.mu.RLock()
+	if inst.closed {
+		inst.mu.RUnlock()
+		return res, ErrClosed
+	}
+	var existing *record
+	if in.Handle != "" {
+		existing = inst.live[in.Handle]
 		if existing == nil {
-			inst.mu.Unlock()
-			return res, eb.Build().Str("handle", handle).Errorf("adhocdata: unknown handle to republish")
+			inst.mu.RUnlock()
+			return res, eb.Build().Str("handle", in.Handle).Errorf("adhocdata: unknown handle to republish")
 		}
-	} else {
-		handle, err = inst.mintHandleLocked()
-		if err != nil {
-			inst.mu.Unlock()
-			return res, err
+		if ownErr := existing.checkOwner(in.By); ownErr != nil {
+			inst.mu.RUnlock()
+			return res, ownErr
 		}
 	}
-	if quErr := inst.checkQuotaLocked(existing, uint64(len(plaintext))); quErr != nil {
-		inst.mu.Unlock()
-		return res, quErr
+	err = inst.checkQuotaLocked(existing, uint64(len(in.ArrowIPCStream)))
+	inst.mu.RUnlock()
+	if err != nil {
+		return res, err
 	}
-	revision := uint64(1)
-	if existing != nil {
-		revision = existing.revision + 1
-	}
-	inst.mu.Unlock()
 
-	key := make([]byte, KeySize)
-	if _, rErr := rand.Read(key); rErr != nil {
-		return res, eh.Errorf("adhocdata: generate key: %w", rErr)
+	f, err := sealed.CreateIn(inst.dir)
+	if err != nil {
+		return res, eh.Errorf("adhocdata: allocate sealed file: %w", err)
 	}
-	path := filepath.Join(inst.dir, handle+".bxad")
-	nbytesI64, encErr := encryptToFile(path, key, plaintext)
-	if encErr != nil {
-		return res, eh.Errorf("adhocdata: write dataset: %w", encErr)
+	schema, structure, rows, err := sealStream(f, in.ArrowIPCStream)
+	if err != nil {
+		_ = f.Close()
+		return res, err
 	}
-	nbytes := uint64(nbytesI64)
+	nbytes := uint64(f.Size())
+	if nbytes > PerDatasetMaxBytes {
+		_ = f.Close()
+		return res, eb.Build().Int("quotaBytes", PerDatasetMaxBytes).Errorf("adhocdata: dataset exceeds the per-dataset quota")
+	}
 
+	// Commit under the lock, against the state as it is now.
 	inst.mu.Lock()
-	// Re-check against the actual ciphertext size before committing.
-	if quErr := inst.checkQuotaLocked(existing, nbytes); quErr != nil {
+	if inst.closed {
 		inst.mu.Unlock()
-		_ = os.Remove(path)
+		_ = f.Close()
+		return res, ErrClosed
+	}
+	var old *sealed.File
+	var rec *record
+	if in.Handle != "" {
+		rec = inst.live[in.Handle]
+		if rec == nil {
+			inst.mu.Unlock()
+			_ = f.Close()
+			return res, eb.Build().Str("handle", in.Handle).Errorf("adhocdata: handle retracted during publish")
+		}
+	}
+	if quErr := inst.checkQuotaLocked(rec, nbytes); quErr != nil {
+		inst.mu.Unlock()
+		_ = f.Close()
 		return res, quErr
 	}
-	inst.keys.RegisterDatasetKey(handle, key)
-	if existing != nil {
-		inst.totalBytes -= existing.bytes
-		existing.alias = in.Alias
-		existing.schema = schema
-		existing.structure = structure
-		existing.path = path
-		existing.revision = revision
-		existing.rows = rows
-		existing.bytes = nbytes
+	var revision uint64
+	var publisher Identity
+	if rec != nil {
+		rec.mu.Lock()
+		old = rec.file
+		inst.totalBytes -= rec.bytes
+		rec.alias = in.Alias
+		rec.schema, rec.structure = schema, structure
+		rec.revision++
+		rec.rows, rec.bytes = rows, nbytes
+		rec.file = f
+		rec.keepAfterClose = rec.keepAfterClose || in.KeepAfterClose
+		revision, publisher = rec.revision, rec.owner
+		rec.mu.Unlock()
 		inst.totalBytes += nbytes
-		existing.entry.Update(schema, structure, path, revision)
 	} else {
-		entry := introspect.NewEncryptedEntry(handle, schema, structure, path, revision)
-		if regErr := inst.reg.Register(entry); regErr != nil {
+		handle, hErr := inst.mintHandleLocked()
+		if hErr != nil {
 			inst.mu.Unlock()
-			inst.keys.DeregisterDatasetKey(handle)
-			_ = os.Remove(path)
+			_ = f.Close()
+			return res, hErr
+		}
+		rec = &record{
+			handle: handle, alias: in.Alias, owner: in.By, keepAfterClose: in.KeepAfterClose,
+			schema: schema, structure: structure, revision: 1, rows: rows, bytes: nbytes,
+			createdAt: time.Now().UnixMicro(), file: f,
+		}
+		if regErr := inst.reg.Register(rec); regErr != nil {
+			inst.mu.Unlock()
+			_ = f.Close()
 			return res, eb.Build().Str("handle", handle).Errorf("adhocdata: register: %w", regErr)
 		}
-		inst.datasets[handle] = &dataset{
-			handle: handle, alias: in.Alias, publisher: in.Publisher,
-			schema: schema, structure: structure,
-			path: path, revision: revision, rows: rows, bytes: nbytes,
-			createdAtUnixUs: time.Now().UnixMicro(), entry: entry,
-		}
+		inst.live[handle] = rec
 		inst.totalBytes += nbytes
+		revision, publisher = 1, in.By
 	}
-	publisher := in.Publisher
-	if existing != nil {
-		publisher = existing.publisher
-	}
+	handle := rec.handle
+	grace := inst.retractGrace
 	inst.mu.Unlock()
 
+	if old != nil {
+		// Readers of the previous revision finish; the file goes with the
+		// last of them, or at the ceiling.
+		old.Retire(grace)
+	}
 	inst.emitAudit("publish", handle, in.Alias, revision)
 	inst.publishEvent(SubjectEventPublished, Event{
-		Op: EventOpPublished, Handle: handle, Alias: in.Alias, Publisher: publisher, Revision: revision,
+		Op: EventOpPublished, Handle: handle, Alias: in.Alias, Publisher: string(publisher.App), Revision: revision,
 	})
 	return PublishResult{Handle: handle, Revision: revision, Rows: rows, Bytes: nbytes}, nil
 }
 
-// Grant returns a dataset's binding metadata and records the audit event
-// that is the grant (ADR-0134 SD2: audited, not enforced).
-func (inst *Service) Grant(handle string) (res GrantResult, err error) {
+// checkOwner is the ownership rule (ADR-0240 §SD2/§SD5): the runtime may
+// touch anything; otherwise the app must match, and the instance too
+// unless the dataset is kept after close, which makes it the app's.
+func (inst *record) checkOwner(by Identity) (err error) {
+	if by.IsRuntime() {
+		return nil
+	}
 	inst.mu.RLock()
-	ds := inst.datasets[handle]
-	if ds == nil {
-		inst.mu.RUnlock()
-		return res, eb.Build().Str("handle", handle).Errorf("adhocdata: unknown handle")
+	defer inst.mu.RUnlock()
+	if inst.owner.App != by.App || (!inst.keepAfterClose && inst.owner.Instance != by.Instance) {
+		return eb.Build().Str("handle", inst.handle).Str("app", string(by.App)).Uint64("instance", by.Instance).
+			Errorf("adhocdata: %w", ErrNotOwner)
 	}
-	res = GrantResult{
-		Structure:     ds.structure,
-		SchemaSummary: fmt.Sprintf("%d columns, %d rows", len(ds.schema.Fields()), ds.rows),
-		Revision:      ds.revision,
-		Alias:         ds.alias,
-	}
-	inst.mu.RUnlock()
-	inst.emitAudit("grant", handle, res.Alias, res.Revision)
-	return res, nil
+	return nil
 }
-
-// ResolveResult is what an alias resolves to: the newest live dataset
-// published under it.
-type ResolveResult struct {
-	Handle          string
-	Revision        uint64
-	Rows            uint64
-	Bytes           uint64
-	CreatedAtUnixUs int64
-}
-
-// ErrNoLiveDataset is Resolve's answer when nothing is published under the
-// alias (or everything under it has been retracted). It travels the wire as
-// its own flag so a bus caller can tell it from a transport failure with
-// errors.Is — the difference between "wait" and "retry".
-var ErrNoLiveDataset = errors.New("no live dataset under alias")
 
 // IsLive reports whether handle names a dataset in the live set — published
-// and not retracted. A dataset in its retract grace (left, not yet unloaded)
-// is not live: it still answers queries but no longer resolves, and a
-// consumer verifying its binding should rebind (ADR-0188 §SD3).
+// and not retracted. A dataset that has left but is still registered for
+// its grace is not live: it still answers queries but no longer resolves,
+// and a consumer verifying its binding should rebind (ADR-0188 §SD3).
 func (inst *Service) IsLive(handle string) (live bool) {
 	inst.mu.RLock()
-	_, live = inst.datasets[handle]
+	_, live = inst.live[handle]
+	inst.mu.RUnlock()
+	return
+}
+
+// LiveCount reports how many datasets are live.
+func (inst *Service) LiveCount() (n int) {
+	inst.mu.RLock()
+	n = len(inst.live)
 	inst.mu.RUnlock()
 	return
 }
 
 // Resolve maps a stable alias to the newest live dataset published under
 // it — newest by creation instant, ties broken on handle for determinism.
-// It is what lets a committed applet declare `datasets: [pprof_cpu]` and
-// bind at open time without ever learning a handle ahead of time
-// (ADR-0134 §SD4 for standalone applets, update 2026-08-01). Republishing
-// onto a handle keeps its creation instant, so a producer that reuses one
-// handle per alias — the imzrt Profiles pattern — stays the resolution
-// target across re-captures.
+// A republish keeps its creation instant, so a producer that reuses one
+// handle per alias stays the resolution target across re-captures.
 func (inst *Service) Resolve(alias string) (res ResolveResult, err error) {
 	inst.mu.RLock()
-	var best *dataset
-	for _, ds := range inst.datasets {
-		if ds.alias != alias {
+	if inst.closed {
+		inst.mu.RUnlock()
+		return res, ErrClosed
+	}
+	var best *record
+	var bestAt int64
+	for _, r := range inst.live {
+		r.mu.RLock()
+		match := r.alias == alias
+		at := r.createdAt
+		r.mu.RUnlock()
+		if !match {
 			continue
 		}
-		if best == nil ||
-			ds.createdAtUnixUs > best.createdAtUnixUs ||
-			(ds.createdAtUnixUs == best.createdAtUnixUs && ds.handle > best.handle) {
-			best = ds
+		if best == nil || at > bestAt || (at == bestAt && r.handle > best.handle) {
+			best, bestAt = r, at
 		}
 	}
 	if best == nil {
 		inst.mu.RUnlock()
 		return res, eb.Build().Str("alias", alias).Errorf("adhocdata: resolve: %w", ErrNoLiveDataset)
 	}
+	best.mu.RLock()
 	res = ResolveResult{
-		Handle:          best.handle,
-		Revision:        best.revision,
-		Rows:            best.rows,
-		Bytes:           best.bytes,
-		CreatedAtUnixUs: best.createdAtUnixUs,
+		Handle: best.handle, Revision: best.revision, Rows: best.rows, Bytes: best.bytes, CreatedAtUnixUs: best.createdAt,
 	}
+	best.mu.RUnlock()
 	inst.mu.RUnlock()
 	inst.emitAudit("resolve", res.Handle, alias, res.Revision)
 	return res, nil
 }
 
-// Retract withdraws a dataset in two phases (ADR-0134 SD2 as revised by
-// ADR-0188 §SD3). LEAVE, now: the record leaves the live set, so the
-// catalog and Resolve stop naming it, the quota is released, and an
-// adhoc.event.retracted goes out to consumers. UNLOAD, after RetractGrace:
-// the key, the provider and the file go, so a query that had already
-// resolved the handle completes instead of failing mid-flight. A republish
-// onto a retracted handle is refused as unknown from the leave step on; a
-// producer that wants the data back publishes afresh.
-func (inst *Service) Retract(handle string) (err error) {
+// Retract withdraws a dataset in two phases (ADR-0188 §SD3, ADR-0240
+// §SD4). LEAVE, now: the record leaves the live set, so the catalog and
+// Resolve stop naming it, its quota is released, and adhoc.event.retracted
+// goes out. UNLOAD, after the grace: the provider is unregistered and the
+// sealed file retires — at once if no reader is open, else with the last
+// reader or at a second grace, whichever comes first. Only the publisher
+// (or the runtime) may retract; a republish onto a retracted handle is
+// refused as unknown from the leave step on.
+func (inst *Service) Retract(handle string, by Identity) (err error) {
 	inst.mu.Lock()
-	ds := inst.datasets[handle]
-	if ds == nil {
+	if inst.closed {
+		inst.mu.Unlock()
+		return ErrClosed
+	}
+	rec := inst.live[handle]
+	if rec == nil {
 		inst.mu.Unlock()
 		return eb.Build().Str("handle", handle).Errorf("adhocdata: unknown handle")
 	}
-	delete(inst.datasets, handle)
-	inst.totalBytes -= ds.bytes
-	pu := &pendingUnload{ds: ds}
-	pu.timer = time.AfterFunc(inst.retractGrace, func() {
-		inst.mu.Lock()
-		if inst.unloading[handle] != pu {
-			// Flushed or closed in the meantime; that path unloaded it.
-			inst.mu.Unlock()
-			return
-		}
-		delete(inst.unloading, handle)
+	if ownErr := rec.checkOwner(by); ownErr != nil {
 		inst.mu.Unlock()
-		inst.unloadDataset(ds)
+		return ownErr
+	}
+	delete(inst.live, handle)
+	rec.mu.RLock()
+	alias, revision, publisher, nbytes := rec.alias, rec.revision, rec.owner, rec.bytes
+	rec.mu.RUnlock()
+	inst.totalBytes -= nbytes
+	grace := inst.retractGrace
+	inst.leaving[handle] = time.AfterFunc(grace, func() {
+		inst.mu.Lock()
+		if _, pending := inst.leaving[handle]; !pending {
+			inst.mu.Unlock()
+			return // flushed or closed meanwhile; that path unloaded it
+		}
+		delete(inst.leaving, handle)
+		inst.mu.Unlock()
+		inst.unload(handle, grace)
 	})
-	inst.unloading[handle] = pu
 	inst.mu.Unlock()
 
-	inst.emitAudit("retract", handle, ds.alias, ds.revision)
+	inst.emitAudit("retract", handle, alias, revision)
 	inst.publishEvent(SubjectEventRetracted, Event{
-		Op: EventOpRetracted, Handle: handle, Alias: ds.alias, Publisher: ds.publisher, Revision: ds.revision,
+		Op: EventOpRetracted, Handle: handle, Alias: alias, Publisher: string(publisher.App), Revision: revision,
 	})
 	return nil
+}
+
+// unload is the UNLOAD step: the provider leaves the registry and the file
+// retires once its readers are gone, bounded by ceiling (zero: at once).
+func (inst *Service) unload(handle string, ceiling time.Duration) {
+	p, ok := inst.reg.Lookup(handle)
+	if !ok {
+		return
+	}
+	rec, isRec := p.(*record)
+	if !isRec {
+		return
+	}
+	inst.reg.Unregister(handle)
+	rec.mu.RLock()
+	f, alias, revision := rec.file, rec.alias, rec.revision
+	rec.mu.RUnlock()
+	f.Retire(ceiling)
+	inst.emitAudit("unload", handle, alias, revision)
 }
 
 // checkQuotaLocked verifies the count and byte budgets for a publish of
 // newBytes, treating existing (nil for a new dataset) as being replaced.
 // The caller holds inst.mu.
-func (inst *Service) checkQuotaLocked(existing *dataset, newBytes uint64) (err error) {
-	count := len(inst.datasets)
-	if existing == nil {
-		count++
-	}
-	if count > MaxDatasets {
-		return eb.Build().Int("quota", MaxDatasets).Errorf("adhocdata: dataset count quota exceeded")
+func (inst *Service) checkQuotaLocked(existing *record, newBytes uint64) (err error) {
+	if existing == nil && len(inst.live) >= MaxDatasets {
+		return eb.Build().Int("quotaCount", MaxDatasets).Errorf("adhocdata: dataset count quota exceeded")
 	}
 	total := inst.totalBytes
 	if existing != nil {
+		existing.mu.RLock()
 		total -= existing.bytes
+		existing.mu.RUnlock()
 	}
 	total += newBytes
 	if total > StoreMaxBytes {
@@ -515,10 +618,10 @@ func (inst *Service) mintHandleLocked() (handle string, err error) {
 		if hErr != nil {
 			return "", hErr
 		}
-		if _, exists := inst.datasets[h]; exists {
+		if _, exists := inst.live[h]; exists {
 			continue
 		}
-		if _, leaving := inst.unloading[h]; leaving {
+		if _, leaving := inst.leaving[h]; leaving {
 			continue
 		}
 		return h, nil
@@ -526,29 +629,8 @@ func (inst *Service) mintHandleLocked() (handle string, err error) {
 	return "", eh.Errorf("adhocdata: could not mint a unique handle")
 }
 
-// sweep removes every file in the store directory, returning the count.
-func (inst *Service) sweep() (removed int) {
-	entries, err := os.ReadDir(inst.dir)
-	if err != nil {
-		inst.log.Warn().Err(err).Str("dir", inst.dir).Msg("adhocdata: read store dir")
-		return
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if rmErr := os.Remove(filepath.Join(inst.dir, e.Name())); rmErr != nil {
-			inst.log.Warn().Err(rmErr).Str("file", e.Name()).Msg("adhocdata: remove file")
-			continue
-		}
-		removed++
-	}
-	return
-}
-
 // emitAudit logs one structured event per capability operation; the log
-// bridge routes it into the audit surface (the grant IS the audit event,
-// ADR-0134 SD2).
+// bridge routes it into the audit surface.
 func (inst *Service) emitAudit(op, handle, alias string, revision uint64) {
 	inst.log.Info().
 		Str("op", op).
@@ -558,83 +640,45 @@ func (inst *Service) emitAudit(op, handle, alias string, revision uint64) {
 		Msg("adhocdata: " + op)
 }
 
-// canonicalize decodes an Arrow IPC stream, validates its type set,
-// re-encodes it to a canonical stream, and counts its rows.
-func canonicalize(streamBytes []byte) (schema *arrow.Schema, structure string, canonical []byte, rows uint64, err error) {
+// sealStream decodes an Arrow IPC stream, validates its type set, and
+// writes it batch by batch into the sealed file — one pass, no canonical
+// copy — returning the schema, its ClickHouse structure and the row count.
+// The writer is closed on success; on failure the caller closes the file.
+func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, structure string, rows uint64, err error) {
 	rdr, err := ipc.NewReader(bytes.NewReader(streamBytes))
 	if err != nil {
-		return nil, "", nil, 0, eh.Errorf("adhocdata: decode arrow stream: %w", err)
+		return nil, "", 0, eh.Errorf("adhocdata: decode arrow stream: %w", err)
 	}
 	defer rdr.Release()
 	schema = rdr.Schema()
 	structure, err = StructureFor(schema)
 	if err != nil {
-		return nil, "", nil, 0, err
+		return nil, "", 0, err
 	}
-	var buf bytes.Buffer
-	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	sw, err := f.Writer()
+	if err != nil {
+		return nil, "", 0, err
+	}
+	w := ipc.NewWriter(sw, ipc.WithSchema(schema))
 	for rdr.Next() {
 		rec := rdr.RecordBatch()
 		rows += uint64(rec.NumRows())
 		if wErr := w.Write(rec); wErr != nil {
 			_ = w.Close()
-			return nil, "", nil, 0, eh.Errorf("adhocdata: re-encode arrow stream: %w", wErr)
+			return nil, "", 0, eh.Errorf("adhocdata: seal arrow stream: %w", wErr)
 		}
 	}
 	if rErr := rdr.Err(); rErr != nil {
 		_ = w.Close()
-		return nil, "", nil, 0, eh.Errorf("adhocdata: read arrow stream: %w", rErr)
+		return nil, "", 0, eh.Errorf("adhocdata: read arrow stream: %w", rErr)
 	}
 	if cErr := w.Close(); cErr != nil {
-		return nil, "", nil, 0, eh.Errorf("adhocdata: finalize arrow stream: %w", cErr)
+		return nil, "", 0, eh.Errorf("adhocdata: finalize arrow stream: %w", cErr)
 	}
-	return schema, structure, buf.Bytes(), rows, nil
-}
-
-// encryptToFile writes the chunk-AEAD encryption of plaintext under key to
-// <path>.tmp and renames it into place, returning the ciphertext size.
-func encryptToFile(path string, key, plaintext []byte) (n int64, err error) {
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return 0, err
+	if cErr := sw.Close(); cErr != nil {
+		return nil, "", 0, eh.Errorf("adhocdata: seal: %w", cErr)
 	}
-	w, err := NewWriter(f, key)
-	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return 0, err
-	}
-	if _, err = w.Write(plaintext); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return 0, err
-	}
-	if err = w.Close(); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return 0, err
-	}
-	if err = f.Sync(); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return 0, err
-	}
-	fi, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return 0, err
-	}
-	if err = f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return 0, err
-	}
-	if err = os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return 0, err
-	}
-	return fi.Size(), nil
+	return schema, structure, rows, nil
 }
 
 // newHandle mints an unguessable handle: adhoc_ + 16 lowercase hex chars
@@ -642,16 +686,11 @@ func encryptToFile(path string, key, plaintext []byte) (n int64, err error) {
 func newHandle() (handle string, err error) {
 	var b [8]byte
 	if _, err = rand.Read(b[:]); err != nil {
-		return "", eh.Errorf("adhocdata: generate handle: %w", err)
+		return "", eh.Errorf("adhocdata: random handle: %w", err)
 	}
 	return "adhoc_" + hex.EncodeToString(b[:]), nil
 }
 
-// resolveStoreDir returns the directory the v1 named-file store writes
-// under: the sealed store's base directory (ADR-0240 §SD1), until M2 moves
-// the records onto unnamed sealed files and this path goes.
-func resolveStoreDir() string { return sealed.BaseDirPath() }
-
 // validAlias reports whether s is a bare identifier usable as a stable
-// alias in an applet's frontmatter and rewrite.
-func validAlias(s string) bool { return validColumnName(s) }
+// alias in an applet's frontmatter and rewrite — the table-name rule.
+func validAlias(s string) bool { return introspect.ValidTableName(s) }

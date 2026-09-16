@@ -17,17 +17,17 @@ import (
 // the survivor, and an alias nobody published errors.
 func TestResolveNewestPerAlias(t *testing.T) {
 	svc, err := NewService(Config{
-		Registry: introspect.NewRegistry(), Keys: newFakeKeys(),
-		Dir: t.TempDir(), Log: testLogger(t),
+		Registry: introspect.NewRegistry(),
+		Dir:      t.TempDir(), Log: testLogger(t),
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 
-	first, err := svc.Publish(PublishInput{Alias: "prof", Publisher: "a", ArrowIPCStream: int64Stream(t, false, 1)})
+	first, err := svc.Publish(PublishInput{Alias: "prof", By: Identity{App: "a"}, ArrowIPCStream: int64Stream(t, false, 1)})
 	require.NoError(t, err)
 	// Creation instants are microsecond-resolution; keep them distinct.
 	time.Sleep(2 * time.Millisecond)
-	second, err := svc.Publish(PublishInput{Alias: "prof", Publisher: "b", ArrowIPCStream: int64Stream(t, false, 2)})
+	second, err := svc.Publish(PublishInput{Alias: "prof", By: Identity{App: "b"}, ArrowIPCStream: int64Stream(t, false, 2)})
 	require.NoError(t, err)
 	require.NotEqual(t, first.Handle, second.Handle)
 
@@ -45,7 +45,7 @@ func TestResolveNewestPerAlias(t *testing.T) {
 	assert.Equal(t, rep.Revision, res.Revision)
 
 	// Retracting the winner falls back to the older survivor.
-	require.NoError(t, svc.Retract(second.Handle))
+	require.NoError(t, svc.Retract(second.Handle, Identity{}))
 	res, err = svc.Resolve("prof")
 	require.NoError(t, err)
 	assert.Equal(t, first.Handle, res.Handle)

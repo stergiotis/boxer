@@ -222,15 +222,17 @@ are hints and request/reply is truth.
   gains an `adhoc` segment.
 
 - **SD4 — Withdrawal is exact for readers, bounded for everyone else.**
-  ADR-0188 §SD3's leave → notify → unload stands. Unload no longer
-  waits a fixed grace copied from the bus timeout: the `/table` handler
-  counts open plaintext readers per handle, and unload fires when the
-  dataset has left *and* no reader is open, under a ceiling so a stuck
-  reader cannot pin a key forever. On the axis the OS-analogues page draws
-  (refuse → cooperate → count references → count down → revoke) this moves
-  the reader case from count-down to count-references, because the party
-  that withdraws does hold this list; consumers that will query later stay
-  on events, unchanged.
+  ADR-0188 §SD3's leave → notify → unload stands, and unload splits in
+  two. The provider stays registered for one grace after leave, so a query
+  that resolved the handle but has not fetched yet still finds it — the
+  case a countdown is right for, because the withdrawer cannot see that
+  query. Then the sealed file retires when its last open reader closes, or
+  at a second grace, whichever comes first — the case the withdrawer *can*
+  see, since every open and close passes through the file. A republish
+  retires the previous revision's file the same way. On the axis the
+  OS-analogues page draws (refuse → cooperate → count references → count
+  down → revoke) this moves the reader case from count-down to
+  count-references and leaves the not-yet-fetched case where it was.
 
 - **SD5 — An instance owns its datasets; the runtime retracts them.**
   The bus envelope already carries the sender's instance key; the
@@ -289,8 +291,10 @@ are hints and request/reply is truth.
   linear, hardening in hostboot.
 - **M2 — the capability over the store:** one record, ownership,
   streaming publish, payload cap, closed flag, grant retired, boot
-  decoupled, status segment.
-- **M3 — `/table` on the opener; reader-counted unload.**
+  decoupled, status segment. With custody by ownership M3 is the same
+  change — the record's `Open()` is what `/table` needs and the unload is
+  the file's retirement — so the two land together.
+- **M3 — `/table` opens the record; reader-counted unload** (with M2).
 - **M4 — lifecycle event and runtime retract;** `KeepAfterClose`;
   publishers stop retracting in `Unmount`.
 - **M5 — follower and publisher in the platform;** sqlapplet, the
@@ -316,7 +320,7 @@ are hints and request/reply is truth.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | package `sealed` (new, keelson runtime) | added: `File` (`Create`, `Writer`, `Open`, `Retire`, `Close`), `Writer`, `Reader`, `BaseDir` (the env var moves here), `ErrUnsupported` | tally's recording stage; `adhocdata` |
-| `adhocdata` exported API | reshaped: `Config.Keys` and `Config.Dir` removed; `Publish` streams; `PublishInput.KeepAfterClose` added; `Grant`, `GrantResult` removed; `ErrNotOwner` added; `NewWriter`/`NewReader`/`NewSeekableReader`/`KeySize`/`ResolveStoreDir`/`DisableCoreDumps`/`StoreDir`/`Ref`/`PlaintextI`/`DecryptorI`/`KeyRegistrarI` removed | hostboot wiring; tally |
+| `adhocdata` exported API | reshaped: `Config.Keys` removed; `Publish` streams; `PublishInput.Publisher` becomes `By Identity` and `KeepAfterClose` is added; `Retract` takes the caller's `Identity`; `Grant`, `GrantResult` removed; `ErrNotOwner`, `ErrClosed`, `LiveCount` added; `NewWriter`/`NewReader`/`NewSeekableReader`/`KeySize`/`ResolveStoreDir`/`DisableCoreDumps`/`StoreDir`/`Ref`/`PlaintextI`/`DecryptorI`/`KeyRegistrarI` removed | hostboot wiring; tally |
 | `adhocdata.Follower`, `adhocdata.Publisher`, `adhocdata.EncodeRecords` | added | sqlapplet's binder, the embedder demo, the five publishers |
 | Capability subjects | removed: `adhoc.grant`; added: `runtime.instance.closed` (published by the bus) | manifests that carried `Pub adhoc.grant` (none in tree); the dataset service subscribes |
 | `buscodec` wire for `adhoc.*` | reshaped: generated codecs over new vdd memberships; publisher field removed from the publish request | `keelson/vdd`, `runtime/codec/adhoc*`, both client helpers and handlers |

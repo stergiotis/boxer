@@ -17,7 +17,7 @@ func TestPublishAndRetractViaBus(t *testing.T) {
 	logger := testLogger(t)
 	bus := inprocbus.NewInst(logger)
 	svc, err := NewService(Config{
-		Bus: bus, Registry: introspect.NewRegistry(), Keys: newFakeKeys(), Dir: t.TempDir(), Log: logger,
+		Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })

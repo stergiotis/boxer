@@ -122,10 +122,10 @@ func TestRegistry(t *testing.T) {
 
 func TestValidTableName(t *testing.T) {
 	for _, n := range []string{"env", "apps", "_x", "T1"} {
-		assert.True(t, validTableName(n), "want valid: %q", n)
+		assert.True(t, ValidTableName(n), "want valid: %q", n)
 	}
 	for _, n := range []string{"", "1x", "a-b", "a b", "a.b", "system "} {
-		assert.False(t, validTableName(n), "want invalid: %q", n)
+		assert.False(t, ValidTableName(n), "want invalid: %q", n)
 	}
 }
 
