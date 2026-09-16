@@ -90,6 +90,20 @@ func TestRewriteAliases(t *testing.T) {
 	got = RewriteAliases("SELECT (SELECT count() FROM keelson('items')) + (SELECT count() FROM keelson('env'))", b)
 	assert.Contains(t, got, "keelson('adhoc_deadbeef01234567')")
 	assert.Contains(t, got, "keelson('env')")
+
+	// A bare, unqualified relation named like a bound alias is rewritten
+	// too — the placement wall inspects both spellings, so an alias must
+	// reach it under neither (ADR-0240 §SD7) — and keeps its SQL alias.
+	got = RewriteAliases("SELECT i.x FROM items AS i JOIN other ON other.k = i.k", b)
+	assert.Contains(t, got, "FROM keelson('adhoc_deadbeef01234567') AS i")
+	assert.Contains(t, got, "JOIN other ON", "an unbound relation passes through")
+	assert.NotContains(t, got, "FROM items")
+
+	// A qualified name, a CTE and a table function of that name are not
+	// aliases and are left alone.
+	assert.Equal(t, "SELECT * FROM db.items", RewriteAliases("SELECT * FROM db.items", b))
+	assert.Equal(t, "WITH items AS (SELECT 1) SELECT * FROM items", RewriteAliases("WITH items AS (SELECT 1) SELECT * FROM items", b))
+	assert.Equal(t, "SELECT * FROM items(3)", RewriteAliases("SELECT * FROM items(3)", b))
 }
 
 func TestReferences(t *testing.T) {

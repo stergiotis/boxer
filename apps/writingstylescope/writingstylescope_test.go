@@ -626,11 +626,12 @@ func TestPairsArrowRefusesAnEmptyMatrix(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestHandoverSqlNamesTheHandle(t *testing.T) {
-	// Handle form, not alias form: the opened window inherits no alias binding.
-	sql := handoverSql("adhoc_deadbeef")
-	assert.Contains(t, sql, "keelson('adhoc_deadbeef')")
-	assert.NotContains(t, sql, datasetAlias+"'")
+func TestHandoverSqlNamesTheAlias(t *testing.T) {
+	// Alias form: the launch config declares the alias and the opened window
+	// binds and follows it (ADR-0240 §SD7).
+	sql := handoverSql(datasetAlias)
+	assert.Contains(t, sql, "keelson('"+datasetAlias+"')")
+	assert.NotContains(t, sql, "adhoc_")
 	assert.Contains(t, sql, "ORDER BY ncd ASC")
 	assert.Contains(t, sql, fmt.Sprintf("LIMIT %d", maxRankedPairs))
 }

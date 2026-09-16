@@ -11,6 +11,8 @@
 //   - [vdd.MembPlayLaunchAutoRun] / [vdd.MembPlayLaunchLive] — bool
 //     flags.
 //   - [vdd.MembPlayLaunchTab] — symbol, the initially focused tab id.
+//   - [vdd.MembPlayLaunchDatasets] — string list, the dataset aliases the
+//     window follows (ADR-0240 §SD7).
 //
 // Seeding priority in play's Mount: a window opened WITH a config
 // applies it above both the BOXER_PLAY_* env overrides and the
@@ -87,9 +89,16 @@ type PlayLaunch struct {
 
 	// Endpoint binds the opened window's client to a query target:
 	// EndpointIntrospection points it at the in-process keelson `/query`
-	// endpoint (where ad-hoc `keelson('<handle>')` datasets resolve,
-	// ADR-0134); empty or EndpointDefault keeps play's env-configured
-	// ClickHouse. An "introspection" request with no such endpoint up is a
-	// warning, not a mount error — the window opens on the default target.
+	// endpoint (where ad-hoc datasets resolve, ADR-0240); empty or
+	// EndpointDefault keeps play's env-configured ClickHouse. An
+	// "introspection" request with no such endpoint up is a warning, not a
+	// mount error — the window opens on the default target.
 	Endpoint string `lw:"playLaunchEndpoint,symbol"`
+
+	// Datasets lists the ad-hoc dataset aliases the window keeps bound
+	// (ADR-0240 §SD7): Sql names `keelson('<alias>')`, the window resolves
+	// each alias to the newest live dataset at mount and follows publish
+	// and retract from then on, exactly as a declared applet does. Empty
+	// follows nothing.
+	Datasets []string `lw:"playLaunchDatasets,stringArray"`
 }

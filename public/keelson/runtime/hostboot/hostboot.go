@@ -104,8 +104,8 @@ type Services struct {
 	// co-located /proc scraper, or a bridge from NATS when
 	// IMZERO2_SYSMETRICS_NATS_URL is set.
 	Sysmetrics bool
-	// Introspect serves the keelson introspection tables over HTTP when
-	// KEELSON_INTROSPECT_HTTP_LISTEN is set (ADR-0094).
+	// Introspect serves the keelson introspection tables over loopback HTTP
+	// (ADR-0094); KEELSON_INTROSPECT_ENABLE turns it off.
 	Introspect bool
 }
 

@@ -164,11 +164,13 @@ func TestPlayApp_RestorePersistedSql_EmptyValue_KeepsDefault(t *testing.T) {
 
 func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
-	// Six declared Caps: fs dialog + chlocalbroker pool for the time-range
+	// Eight declared Caps: fs dialog + chlocalbroker pool for the time-range
 	// evaluator + windowhost.open for the Save-as-applet launch (ADR-0135
 	// §SD7) + adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7) +
-	// clipboard.write for the Copy buttons + the regex explorer's own
-	// chlocalbroker pool, which gloss/regexp's block face embeds. The applet-store save cap moved
+	// adhoc.resolve and adhoc.event.> for a launched window that follows
+	// dataset aliases (ADR-0240 §SD7) + clipboard.write for the Copy buttons
+	// + the regex explorer's own chlocalbroker pool, which gloss/regexp's
+	// block face embeds. The applet-store save cap moved
 	// out with the O4 authoring form (now apps/sqlappletcreator); the
 	// fs.handle.> wildcard came out once the broker's dynamic per-handle
 	// grant was shown to be sufficient.
@@ -176,7 +178,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// The count is asserted on purpose: a capability is an authority this app
 	// is granted, so adding one has to be a deliberate edit here rather than
 	// something that rides along with a feature.
-	require.Len(t, m.Caps, 6)
+	require.Len(t, m.Caps, 8)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
@@ -194,6 +196,8 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
 	assert.Contains(t, patterns, windowhost.OpenSubject)
 	assert.Contains(t, patterns, adhocdata.SubjectPublish)
+	assert.Contains(t, patterns, adhocdata.SubjectResolve)
+	assert.Contains(t, patterns, adhocdata.SubjectEventAll)
 	// clipboard.write — the Definition pane's per-fence Copy buttons and
 	// gloss/taggedid's block face both request it. It was missing until
 	// 2026-08-16, which made those Copy buttons render and then be denied;

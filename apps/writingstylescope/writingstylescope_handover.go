@@ -95,10 +95,10 @@ func pairsArrow(res *Analysis) (stream []byte, err error) {
 }
 
 // handoverSql is the buffer the opened play window is seeded with: the ranked
-// table the reader clicked from, over the full dataset. Handle-form rather
-// than alias-form because the opened window inherits no alias binding
-// (ADR-0134 §SD4).
-func handoverSql(handle string) (sql string) {
+// table the reader clicked from, over the full dataset. Alias form: the
+// launch config declares the alias, so the window binds and follows it
+// (ADR-0240 §SD7).
+func handoverSql(alias string) (sql string) {
 	return fmt.Sprintf(`-- Section pairs from writingstylescope, closest first.
 -- The dataset holds every pair; this is the panel's ranked view of it.
 SELECT
@@ -110,7 +110,7 @@ SELECT
     b_bytes
 FROM keelson('%s')
 ORDER BY ncd ASC
-LIMIT %d`, handle, handoverLimit)
+LIMIT %d`, alias, handoverLimit)
 }
 
 // requestHandover publishes the current sweep and opens a play window on it.
@@ -161,9 +161,10 @@ func (inst *App) handover(res *Analysis) (note string, err error) {
 	}
 
 	cfg := launchcfg.PlayLaunch{
-		Sql:      handoverSql(pub.Handle),
+		Sql:      handoverSql(datasetAlias),
 		AutoRun:  true,
 		Endpoint: launchcfg.EndpointIntrospection,
+		Datasets: []string{datasetAlias},
 	}
 	cfgBytes, err := buscodec.Encode(cfg)
 	if err != nil {

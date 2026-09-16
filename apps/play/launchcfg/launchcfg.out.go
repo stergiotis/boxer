@@ -39,6 +39,7 @@ var (
 	kindPlayLaunchBandsSql uint64
 	kindPlayLaunchTab      uint64
 	kindPlayLaunchEndpoint uint64
+	kindPlayLaunchDatasets uint64
 )
 
 func init() {
@@ -48,6 +49,7 @@ func init() {
 	kindPlayLaunchBandsSql = vdd.MembPlayLaunchBandsSql.GetId().Value()
 	kindPlayLaunchTab = vdd.MembPlayLaunchTab.GetId().Value()
 	kindPlayLaunchEndpoint = vdd.MembPlayLaunchEndpoint.GetId().Value()
+	kindPlayLaunchDatasets = vdd.MembPlayLaunchDatasets.GetId().Value()
 	buscodec.Register[PlayLaunch](playLaunchBusCodec)
 }
 
@@ -56,7 +58,7 @@ func init() {
 // PlayLaunchActiveSections is the dml_cbor section-index subset this kind
 // populates. Passed to InEntityFacts.SetActiveSections so the
 // builder skips beginSection list-slot work for inactive sections.
-var PlayLaunchActiveSections = []int{1, 10, 12}
+var PlayLaunchActiveSections = []int{1, 9, 10, 12}
 
 // PlayLaunchActiveFields is the column-index subset this kind populates
 // in the boxer.facts Arrow schema. Lazily computed once via
@@ -65,7 +67,7 @@ var PlayLaunchActiveSections = []int{1, 10, 12}
 // plain prefixes (id:, ts:, lc:). Driven through RecordBuilder.
 // SetActiveFields to skip per-row emit walks for unused columns.
 var PlayLaunchActiveFields = sync.OnceValue(func() []int {
-	active := map[string]bool{"bool": true, "symbol": true, "textArray": true}
+	active := map[string]bool{"bool": true, "stringArray": true, "symbol": true, "textArray": true}
 	schema := cbdml.CreateSchemaFacts()
 	out := make([]int, 0, 4+len(active)*8)
 	for i, f := range schema.Fields() {
@@ -117,6 +119,7 @@ type PlayLaunchColumns struct {
 	BandsSql []string
 	Tab      []string
 	Endpoint []string
+	Datasets [][]string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -138,6 +141,7 @@ func (c *PlayLaunchColumns) Append(row PlayLaunch) {
 	c.BandsSql = append(c.BandsSql, row.BandsSql)
 	c.Tab = append(c.Tab, row.Tab)
 	c.Endpoint = append(c.Endpoint, row.Endpoint)
+	c.Datasets = append(c.Datasets, row.Datasets)
 }
 
 // Row reconstructs entity i as an AoS PlayLaunch record. Inverse of
@@ -153,6 +157,7 @@ func (c *PlayLaunchColumns) Row(i int) (row PlayLaunch) {
 	row.BandsSql = c.BandsSql[i]
 	row.Tab = c.Tab[i]
 	row.Endpoint = c.Endpoint[i]
+	row.Datasets = c.Datasets[i]
 	return
 }
 
@@ -214,6 +219,22 @@ type PlayLaunchSymbolSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// PlayLaunchStringArrayAttrI is the InAttr-side view of the stringArray section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type PlayLaunchStringArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	AddToContainerP(value string)
+	EndAttributeP()
+}
+
+// PlayLaunchStringArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type PlayLaunchStringArraySecI[Attr any, Ent any] interface {
+	BeginAttribute() Attr
+	EndSection() Ent
+}
+
 // PlayLaunchEntityI is the entity-builder surface PlayLaunchAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -228,6 +249,8 @@ type PlayLaunchEntityI[
 	BoolSec PlayLaunchBoolSecI[BoolAttr, Ent],
 	SymbolAttr PlayLaunchSymbolAttrI,
 	SymbolSec PlayLaunchSymbolSecI[SymbolAttr, Ent],
+	StringArrayAttr PlayLaunchStringArrayAttrI,
+	StringArraySec PlayLaunchStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -236,6 +259,7 @@ type PlayLaunchEntityI[
 	GetSectionTextArray() TextArraySec
 	GetSectionBool() BoolSec
 	GetSectionSymbol() SymbolSec
+	GetSectionStringArray() StringArraySec
 	CommitEntity() (err error)
 }
 
@@ -250,11 +274,14 @@ func PlayLaunchBuildEntities[
 	BoolSec PlayLaunchBoolSecI[BoolAttr, Ent],
 	SymbolAttr PlayLaunchSymbolAttrI,
 	SymbolSec PlayLaunchSymbolSecI[SymbolAttr, Ent],
+	StringArrayAttr PlayLaunchStringArrayAttrI,
+	StringArraySec PlayLaunchStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
 	DML PlayLaunchEntityI[
 		TextArrayAttr, TextArraySec,
 		BoolAttr, BoolSec,
 		SymbolAttr, SymbolSec,
+		StringArrayAttr, StringArraySec,
 		Ent,
 	],
 ](dml DML, c *PlayLaunchColumns) (err error) {
@@ -290,6 +317,17 @@ func PlayLaunchBuildEntities[
 		symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindPlayLaunchEndpoint)
 		symbolSecAttr_Endpoint.EndAttributeP()
 		symbolSec.EndSection()
+		// --- stringArray. ---
+		stringArraySec := dml.GetSectionStringArray()
+		if len(c.Datasets[i]) > 0 {
+			stringArraySecAttr_Datasets := stringArraySec.BeginAttribute()
+			for _, v := range c.Datasets[i] {
+				stringArraySecAttr_Datasets.AddToContainerP(v)
+			}
+			stringArraySecAttr_Datasets.AddMembershipLowCardRefP(kindPlayLaunchDatasets)
+			stringArraySecAttr_Datasets.EndAttributeP()
+		}
+		stringArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
 			err = eh.Errorf("commit row %d: %w", i, err)
@@ -353,6 +391,26 @@ func PlayLaunchEmitSectionSymbol[
 	return
 }
 
+// PlayLaunchEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func PlayLaunchEmitSectionStringArray[
+	StringArrayAttr PlayLaunchStringArrayAttrI,
+	StringArraySec PlayLaunchStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row PlayLaunch) (err error) {
+	if len(row.Datasets) > 0 {
+		stringArraySecAttr_Datasets := stringArraySec.BeginAttribute()
+		for _, v := range row.Datasets {
+			stringArraySecAttr_Datasets.AddToContainerP(v)
+		}
+		stringArraySecAttr_Datasets.AddMembershipLowCardRefP(kindPlayLaunchDatasets)
+		stringArraySecAttr_Datasets.EndAttributeP()
+	}
+	return
+}
+
 // PlayLaunchAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -363,11 +421,14 @@ func PlayLaunchAddSections[
 	BoolSec PlayLaunchBoolSecI[BoolAttr, Ent],
 	SymbolAttr PlayLaunchSymbolAttrI,
 	SymbolSec PlayLaunchSymbolSecI[SymbolAttr, Ent],
+	StringArrayAttr PlayLaunchStringArrayAttrI,
+	StringArraySec PlayLaunchStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
 	DML PlayLaunchEntityI[
 		TextArrayAttr, TextArraySec,
 		BoolAttr, BoolSec,
 		SymbolAttr, SymbolSec,
+		StringArrayAttr, StringArraySec,
 		Ent,
 	],
 ](dml DML, row PlayLaunch) (err error) {
@@ -392,6 +453,13 @@ func PlayLaunchAddSections[
 		return
 	}
 	symbolSec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	err = PlayLaunchEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
+	stringArraySec.EndSection()
 	return
 }
 
@@ -435,6 +503,17 @@ type PlayLaunchSymbolMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// PlayLaunchStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
+type PlayLaunchStringArrayAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[string]
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// PlayLaunchStringArrayMembsReadI is the Memberships-side view of the stringArray section.
+type PlayLaunchStringArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // PlayLaunchFillFromArrow walks rec row-by-row and appends each entity's
 // plain + tagged-section values into c. Plain columns enter as
 // concrete Arrow accessors; per-section Attrs + Membs bind through
@@ -446,6 +525,8 @@ func PlayLaunchFillFromArrow[
 	BoolMembs PlayLaunchBoolMembsReadI,
 	SymbolAttrs PlayLaunchSymbolAttrsReadI,
 	SymbolMembs PlayLaunchSymbolMembsReadI,
+	StringArrayAttrs PlayLaunchStringArrayAttrsReadI,
+	StringArrayMembs PlayLaunchStringArrayMembsReadI,
 ](
 	c *PlayLaunchColumns,
 	n int,
@@ -458,6 +539,8 @@ func PlayLaunchFillFromArrow[
 	boolMembs BoolMembs,
 	symbolAttrs SymbolAttrs,
 	symbolMembs SymbolMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
@@ -590,6 +673,30 @@ func PlayLaunchFillFromArrow[
 			return
 		}
 		c.Endpoint = append(c.Endpoint, symbolEndpointVal)
+		// --- stringArray. ---
+		var stringArrayDatasetsSlice []string
+		var stringArrayDatasetsCount int
+		var stringArrayDatasetsLastAttr int64
+		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				switch membID {
+				case kindPlayLaunchDatasets:
+					if stringArrayDatasetsLastAttr != attrJ+1 {
+						stringArrayDatasetsLastAttr = attrJ + 1
+						stringArrayDatasetsCount++
+					}
+					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+						stringArrayDatasetsSlice = append(stringArrayDatasetsSlice, v)
+					}
+				}
+			}
+		}
+		if stringArrayDatasetsCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "playLaunchDatasets").Int("got", stringArrayDatasetsCount).Errorf("slot stringArray@playLaunchDatasets (field Datasets) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDatasetsCount)
+			return
+		}
+		c.Datasets = append(c.Datasets, stringArrayDatasetsSlice)
 	}
 	return
 }
@@ -609,6 +716,8 @@ func PlayLaunchReadRow[
 	BoolMembs PlayLaunchBoolMembsReadI,
 	SymbolAttrs PlayLaunchSymbolAttrsReadI,
 	SymbolMembs PlayLaunchSymbolMembsReadI,
+	StringArrayAttrs PlayLaunchStringArrayAttrsReadI,
+	StringArrayMembs PlayLaunchStringArrayMembsReadI,
 ](
 	i int,
 	textArrayAttrs TextArrayAttrs,
@@ -617,6 +726,8 @@ func PlayLaunchReadRow[
 	boolMembs BoolMembs,
 	symbolAttrs SymbolAttrs,
 	symbolMembs SymbolMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
 ) (row PlayLaunch, present bool, err error) {
 	// --- textArray. ---
 	var textArraySqlVal string
@@ -758,6 +869,33 @@ func PlayLaunchReadRow[
 		row.Endpoint = symbolEndpointVal
 		present = true
 	}
+	// --- stringArray. ---
+	var stringArrayDatasetsSlice []string
+	var stringArrayDatasetsCount int
+	var stringArrayDatasetsLastAttr int64
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindPlayLaunchDatasets:
+				if stringArrayDatasetsLastAttr != attrJ+1 {
+					stringArrayDatasetsLastAttr = attrJ + 1
+					stringArrayDatasetsCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayDatasetsSlice = append(stringArrayDatasetsSlice, v)
+				}
+			}
+		}
+	}
+	if stringArrayDatasetsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "playLaunchDatasets").Int("got", stringArrayDatasetsCount).Errorf("slot stringArray@playLaunchDatasets (field Datasets) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDatasetsCount)
+		return
+	}
+	if stringArrayDatasetsSlice != nil {
+		row.Datasets = stringArrayDatasetsSlice
+		present = true
+	}
 	return
 }
 
@@ -801,6 +939,7 @@ type playLaunchReader struct {
 	TextArray       *ra.ReadAccessFactsTaggedTextArray
 	Bool            *ra.ReadAccessFactsTaggedBool
 	Symbol          *ra.ReadAccessFactsTaggedSymbol
+	StringArray     *ra.ReadAccessFactsTaggedStringArray
 }
 
 func newPlayLaunchReader() *playLaunchReader {
@@ -810,6 +949,7 @@ func newPlayLaunchReader() *playLaunchReader {
 		TextArray:       ra.NewReadAccessFactsTaggedTextArray(),
 		Bool:            ra.NewReadAccessFactsTaggedBool(),
 		Symbol:          ra.NewReadAccessFactsTaggedSymbol(),
+		StringArray:     ra.NewReadAccessFactsTaggedStringArray(),
 	}
 }
 
@@ -839,6 +979,11 @@ func (r *playLaunchReader) loadFromRecord(rec arrow.Record) (err error) {
 		err = eh.Errorf("launchcfg: load Symbol: %w", err)
 		return
 	}
+	err = r.StringArray.LoadFromRecord(rec)
+	if err != nil {
+		err = eh.Errorf("launchcfg: load StringArray: %w", err)
+		return
+	}
 	return
 }
 
@@ -860,6 +1005,9 @@ func (r *playLaunchReader) release() {
 	}
 	if r.Symbol != nil {
 		r.Symbol.Release()
+	}
+	if r.StringArray != nil {
+		r.StringArray.Release()
 	}
 }
 
@@ -883,6 +1031,7 @@ func (c *PlayLaunchColumns) Unmarshal(rec arrow.Record) (err error) {
 		r.TextArray.Attributes, r.TextArray.Memberships,
 		r.Bool.Attributes, r.Bool.Memberships,
 		r.Symbol.Attributes, r.Symbol.Memberships,
+		r.StringArray.Attributes, r.StringArray.Memberships,
 	)
 	return
 }

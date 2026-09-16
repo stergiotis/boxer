@@ -209,11 +209,12 @@ const profileExploreTab = "icicle"
 // its unit. The window carries every other tab too, so Table reads the same
 // rows unfolded.
 //
-// One statement — grammar1 parses nothing else — and the handle is spliced
-// as a literal (keelson() resolution runs before parameter substitution).
-// The inner alias is load-bearing: `value / d AS value` reads to ClickHouse
-// as a cyclic alias.
-func profileSeedSql(handle string, spec profileKindSpec) string {
+// One statement — grammar1 parses nothing else — and the dataset is named
+// by its ALIAS: the launch config declares it, so the window resolves and
+// follows the newest capture under it (ADR-0240 §SD7) rather than pinning
+// one handle. The inner alias is load-bearing: `value / d AS value` reads
+// to ClickHouse as a cyclic alias.
+func profileSeedSql(alias string, spec profileKindSpec) string {
 	value := "v"
 	if spec.divisor != 0 {
 		value = fmt.Sprintf("v / %d", spec.divisor)
@@ -221,7 +222,7 @@ func profileSeedSql(handle string, spec profileKindSpec) string {
 	return fmt.Sprintf(
 		"WITH s AS (SELECT stack, value AS v FROM keelson('%s'))\n"+
 			"SELECT stack, %s AS value, '%s' AS unit\n"+
-			"FROM s", handle, value, spec.unit)
+			"FROM s", alias, value, spec.unit)
 }
 
 // startCapture launches the capture→convert→publish job for one kind. The
@@ -262,15 +263,15 @@ func (h *profilesHub) startCapture(spec profileKindSpec, bus app.BusI, tasks tas
 	}
 }
 
-// explore opens a play window seeded on the kind's current dataset, bound
-// to the introspection endpoint where keelson('<handle>') resolves.
+// explore opens a play window seeded on the kind's dataset alias, bound to
+// the introspection endpoint where ad-hoc datasets resolve and following
+// the alias (ADR-0240 §SD7), so a later re-capture reaches the open window.
 // RequestOpen blocks on the bus round-trip, so it runs off the frame loop.
 func (h *profilesHub) explore(spec profileKindSpec, bus app.BusI) {
 	key := spec.key
 	e := h.entry(key)
 	h.mu.Lock()
-	handle := e.pub.Handle()
-	if handle == "" || e.opening || bus == nil {
+	if e.pub.Handle() == "" || e.opening || bus == nil {
 		h.mu.Unlock()
 		return
 	}
@@ -278,12 +279,14 @@ func (h *profilesHub) explore(spec profileKindSpec, bus app.BusI) {
 	h.mu.Unlock()
 
 	go func() {
+		alias := e.pub.Alias()
 		cfgBytes, err := buscodec.Encode(launchcfg.PlayLaunch{
 			At:       time.Now().UTC(),
-			Sql:      profileSeedSql(handle, spec),
+			Sql:      profileSeedSql(alias, spec),
 			AutoRun:  true,
 			Tab:      profileExploreTab,
 			Endpoint: launchcfg.EndpointIntrospection,
+			Datasets: []string{alias},
 		})
 		if err == nil {
 			_, err = windowhost.RequestOpen(bus, launchcfg.AppId, launchcfg.Kind, cfgBytes)

@@ -2,7 +2,9 @@ package play
 
 import (
 	"embed"
+	"fmt"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
@@ -167,6 +169,9 @@ func NewLivePlayApp(client *Client, initialSQL string, maxHistory int, rules *gl
 // can't be captured cleanly at init time before the cli flag parser has run.
 type PlayLauncher struct {
 	inner *PlayApp
+	// follower keeps the launch config's dataset aliases bound for the life
+	// of the window (ADR-0240 §SD7); nil when the config declared none.
+	follower *adhocdata.Follower
 	// Rules is the gloss rule repository every window this launcher opens is
 	// built over (ADR-0186); nil takes DefaultRepository. The factory
 	// registered in init leaves it nil, so a deployment that links play
@@ -246,7 +251,17 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			{
 				Pattern:   adhocdata.SubjectPublish,
 				Direction: app.CapDirectionPub,
-				Reason:    "publish the generated timeseries fixture as ad-hoc datasets (ADR-0163 §SD7)",
+				Reason:    "publish the generated timeseries fixture and the projection as ad-hoc datasets (ADR-0163 §SD7, ADR-0238)",
+			},
+			{
+				Pattern:   adhocdata.SubjectResolve,
+				Direction: app.CapDirectionPub,
+				Reason:    "a window opened with a launch config that declares dataset aliases resolves them (ADR-0240 §SD7)",
+			},
+			{
+				Pattern:   adhocdata.SubjectEventAll,
+				Direction: app.CapDirectionSub,
+				Reason:    "and follows their publish and retract events",
 			},
 			{
 				Pattern:   regexsummary.ChLocalCapPattern,
@@ -439,6 +454,23 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 			}
 		}
 	}
+	// A launch config that declares dataset aliases (ADR-0240 §SD7) gets a
+	// follower: subscribe, resolve each alias to the newest live dataset,
+	// bind, and keep the bindings in step with the service from then on.
+	// A miss binds nothing — the notice says what the window waits for —
+	// and the follower picks the dataset up when it is published.
+	if launch != nil && len(launch.Datasets) > 0 {
+		follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
+			Bus: ctx.Bus(), Log: ctx.Log(), Aliases: launch.Datasets,
+		})
+		for alias, handle := range bindings {
+			if bErr := inner.BindDataset(alias, handle); bErr != nil {
+				logger := ctx.Log()
+				logger.Warn().Err(bErr).Str("alias", alias).Msg("play: launch config dataset not bound")
+			}
+		}
+		inst.follower = follower
+	}
 	inst.inner = inner
 	return
 }
@@ -448,6 +480,17 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 		err = eh.Errorf("playlauncher: Frame called before Mount")
 		return
 	}
+	if inst.follower != nil {
+		bound, pendingChanged := inst.follower.Sync(inst.inner)
+		if pendingChanged {
+			inst.inner.SetDatasetNotice(launchDatasetNotice(inst.follower.Pending()))
+		}
+		if bound {
+			// AutoRun already fired against the unbound buffer at open, so
+			// a newly bound alias needs its own run to become visible.
+			inst.inner.RequestRun()
+		}
+	}
 	// Every per-frame capability the engine reads off the context — the
 	// window-focus gate, the column-width store — is PlayApp.Frame's job, so
 	// this launcher and an out-of-tree re-host discharge it identically.
@@ -455,11 +498,35 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	return
 }
 
+// launchDatasetNotice is what a launched window shows over empty panes
+// while an alias its config declared has no live dataset. play cannot know
+// what produces the alias — the launcher did, and a launcher that wants to
+// say so seeds a comment in its SQL.
+func launchDatasetNotice(pending []string) (md []byte) {
+	if len(pending) == 0 {
+		return nil
+	}
+	quoted := make([]string, 0, len(pending))
+	for _, alias := range pending {
+		quoted = append(quoted, "`"+alias+"`")
+	}
+	noun, verb := "dataset", "is"
+	if len(pending) > 1 {
+		noun, verb = "datasets", "are"
+	}
+	return []byte(fmt.Sprintf("**Waiting for %s %s.** No dataset %s live under that alias — none published yet, or its producer withdrew it. The window binds it and re-runs by itself once it appears.",
+		noun, strings.Join(quoted, ", "), verb))
+}
+
 func (inst *PlayLauncher) Unmount(ctx app.MountContextI) (err error) {
 	// Nothing is saved here any more: the window host pulls the
 	// workingset through ComposeWorkingset before it calls Unmount
 	// (ADR-0148 §SD4), which is why that ordering is load-bearing —
 	// the inner app is released below.
+	if inst.follower != nil {
+		inst.follower.Close()
+		inst.follower = nil
+	}
 	if inst.inner != nil {
 		// Tear down the async machinery: cancel in-flight queries and the
 		// projector, release held results, close every lane.

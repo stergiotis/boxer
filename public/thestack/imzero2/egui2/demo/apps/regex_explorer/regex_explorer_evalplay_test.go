@@ -216,8 +216,11 @@ func TestBuildEvalSQLJoinsBothEngines(t *testing.T) {
 	snap := evalSnapshot{pattern: `(a)`, haystack: "ab", hasCH: true}
 	sql := buildEvalSQL(snap, evalHandles{goHandle: "h_go", chHandle: "h_ch"})
 
-	assert.Contains(t, sql, "FROM keelson('h_go') AS g")
-	assert.Contains(t, sql, "FULL OUTER JOIN keelson('h_ch') AS c")
+	// The buffer names the aliases the launch config declares, never the
+	// handles (ADR-0240 §SD7).
+	assert.Contains(t, sql, "FROM keelson('"+goDatasetAlias+"') AS g")
+	assert.Contains(t, sql, "FULL OUTER JOIN keelson('"+chDatasetAlias+"') AS c")
+	assert.NotContains(t, sql, "h_go")
 	assert.Contains(t, sql, "ON g.match_idx = c.match_idx AND g.group_idx = c.group_idx")
 	assert.Contains(t, sql, "ORDER BY match_idx, group_idx")
 	// Load-bearing, not decoration: without it a missing side comes back
@@ -231,7 +234,8 @@ func TestBuildEvalSQLDegradesToGoAlone(t *testing.T) {
 	snap := evalSnapshot{pattern: `(a)`, haystack: "ab"}
 	sql := buildEvalSQL(snap, evalHandles{goHandle: "h_go"})
 
-	assert.Contains(t, sql, "FROM keelson('h_go')")
+	assert.Contains(t, sql, "FROM keelson('"+goDatasetAlias+"')")
+	assert.NotContains(t, sql, chDatasetAlias, "the absent side is not named")
 	assert.NotContains(t, sql, "FULL OUTER JOIN")
 	assert.NotContains(t, sql, "join_use_nulls")
 	// A partial result has to say it is partial (ADR-0017 §SD3).
@@ -380,10 +384,14 @@ func TestEvalHandoffPublishesBothAndOpensPlay(t *testing.T) {
 	cfg, err := buscodec.Decode[launchcfg.PlayLaunch](reqs[0].Config)
 	require.NoError(t, err)
 	assert.True(t, cfg.AutoRun, "the join should be on screen when the window appears")
-	// Ad-hoc handles only resolve at the in-process keelson endpoint.
+	// Ad-hoc datasets only resolve at the in-process keelson endpoint, and
+	// the window follows the aliases the buffer names (ADR-0240 §SD7).
 	assert.Equal(t, launchcfg.EndpointIntrospection, cfg.Endpoint)
-	assert.Contains(t, cfg.Sql, "keelson('"+goHandle+"')")
-	assert.Contains(t, cfg.Sql, "keelson('"+chHandle+"')")
+	assert.Equal(t, []string{goDatasetAlias, chDatasetAlias}, cfg.Datasets)
+	assert.Contains(t, cfg.Sql, "keelson('"+goDatasetAlias+"')")
+	assert.Contains(t, cfg.Sql, "keelson('"+chDatasetAlias+"')")
+	assert.NotContains(t, cfg.Sql, goHandle, "the buffer names aliases, never handles")
+	assert.NotContains(t, cfg.Sql, chHandle)
 	assert.Contains(t, cfg.Sql, "FULL OUTER JOIN")
 }
 

@@ -71,6 +71,15 @@ var (
 	// Appended after MembPlayLaunchTab per the id-ordering note above.
 	MembPlayLaunchEndpoint = KeelsonHrNkRegistry.MustBegin("playLaunchEndpoint", 138).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+
+	// MembPlayLaunchDatasets lists the ad-hoc dataset aliases the opened
+	// window keeps bound (ADR-0240 §SD7): the window resolves each to the
+	// newest live dataset at mount and follows publish and retract from
+	// then on, so a launcher seeds alias SQL rather than splicing handles.
+	// Arbitrary cardinality; empty means the window follows nothing.
+	// Appended with the next free id, out of the ADR-0135 block.
+	MembPlayLaunchDatasets = KeelsonHrNkRegistry.MustBegin("playLaunchDatasets", 195).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
 )
 
 // AppletCreate config columns (ADR-0132 Update "O4" / ADR-0135 §SD7) — the

@@ -356,8 +356,9 @@ func buildProjectionRules(in projectionPublishInput, alloc memory.Allocator) arr
 	return out
 }
 
-// syncProjectionPublish offers the scaffold once per publish, on the
-// render thread, where the delivery ops belong.
+// syncProjectionPublish binds the aliases to the handles the round minted
+// and offers the scaffold once per publish. Render thread — BindDataset
+// and InsertSqlAtCaret both belong there.
 func (inst *PlayApp) syncProjectionPublish() {
 	if inst.projPublish == nil {
 		return
@@ -371,21 +372,31 @@ func (inst *PlayApp) syncProjectionPublish() {
 	if rowsHandle == "" || rulesHandle == "" {
 		return
 	}
-	inst.InsertSqlAtCaret(projectionScaffold(rowsHandle, rulesHandle))
+	// The scaffold names the aliases; the binding makes them this window's
+	// datasets, so the same text reads the same way in a window that
+	// follows the aliases by launch config (ADR-0240 §SD7).
+	for _, b := range []struct{ alias, handle string }{
+		{projectionAlias, rowsHandle},
+		{projectionRulesAlias, rulesHandle},
+	} {
+		if bErr := inst.BindDataset(b.alias, b.handle); bErr != nil {
+			return
+		}
+	}
+	inst.InsertSqlAtCaret(projectionScaffold())
 }
 
 // projectionScaffold is the query offered after a publish: the clusters
-// with their sizes and rules, ready to narrow to one. The handles are
-// spliced as literals, as imzrt's explore seed does: a handle is the
-// dataset's name on every endpoint that resolves ad-hoc datasets.
-func projectionScaffold(rowsHandle, rulesHandle string) string {
+// with their sizes and rules, ready to narrow to one. It names the
+// aliases, which this window binds to the handles it minted.
+func projectionScaffold() string {
 	return fmt.Sprintf(`
 -- the projection as data: one row per entity, one per cluster and rule
 SELECT p.cluster, count() AS entities, any(r.rule) AS rule
 FROM keelson('%s') AS p
 LEFT JOIN keelson('%s') AS r ON r.cluster = p.cluster AND r.kind = 'attributes'
 GROUP BY p.cluster ORDER BY entities DESC
-`, rowsHandle, rulesHandle)
+`, projectionAlias, projectionRulesAlias)
 }
 
 // renderProjectionPublish is the toolbar affordance: the button while a

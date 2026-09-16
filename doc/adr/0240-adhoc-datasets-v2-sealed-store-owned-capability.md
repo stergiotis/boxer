@@ -498,9 +498,33 @@ On acceptance, ADR-0134 flips to `superseded` with a pointer here; ADR-0145
 and ADR-0188 gain a dated Update naming which of their statements this ADR
 carries forward.
 
-<!--
 ## Updates
--->
+
+### 2026-09-16 — M1–M6 shipped; what diverged from the text
+
+Every milestone is in the tree. Three things landed differently from the
+sections above and are recorded here rather than rewritten into them:
+
+- **M2 and M3 are one change.** With custody by ownership the record's
+  `Open()` is what `/table` needs and the unload is the file's retirement,
+  so the two milestones have no seam between them.
+- **The applet's knobs stayed with the applet.** §SD6 said the follower's
+  fault-injection and interval knobs would move with it; they are
+  `BOXER_SQLAPPLET_*` variables with an applet-shaped name and stayed,
+  passed into `FollowerConfig`. A launched play window follows with the
+  defaults.
+- **The wire is not yet generated.** §SD8's generated codecs for the
+  `adhoc.*` request/reply pairs and the lifecycle event are the one piece
+  of M6 still open; the hand-rolled CBOR structs carry `KeepAfterClose`
+  and are otherwise unchanged. It is a mechanical change with no
+  behavioural content and lands on its own.
+
+Found on the way and fixed under this ADR: the v1 seekable reader accepted
+a header-plus-empty-chunk prefix as a valid empty stream (the final chunk
+is now authenticated at open); `PublishRequest` dropped `KeepAfterClose`
+on the wire (the M4 lifecycle test caught it); and every ClickHouse-backed
+test in the repository skipped silently on a host where the binary was not
+at the packaged path (the guards now resolve as the pool does).
 
 ## References
 

@@ -190,7 +190,11 @@ func chExtractRows(out listOutcome) (rows []chExtractRow) {
 func (inst *App) requestEvalInPlay(snap evalSnapshot) {
 	handles, err := inst.publishEvalDatasets(snap)
 	if err == nil {
-		err = inst.openEvalPlayground(buildEvalSQL(snap, handles))
+		datasets := []string{goDatasetAlias}
+		if handles.chHandle != "" {
+			datasets = append(datasets, chDatasetAlias)
+		}
+		err = inst.openEvalPlayground(buildEvalSQL(snap, handles), datasets)
 	}
 
 	inst.mu.Lock()
@@ -289,9 +293,11 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 }
 
 // openEvalPlayground opens a play window on sql, bound to the
-// introspection endpoint — the one that resolves `keelson('<handle>')`
-// (ADR-0134). AutoRun so the join is on screen when the window appears.
-func (inst *App) openEvalPlayground(sql string) (err error) {
+// introspection endpoint — the one that resolves ad-hoc datasets — and
+// following the dataset aliases sql names (ADR-0240 §SD7), so a later
+// hand-off from this window reaches the open playground. AutoRun so the
+// join is on screen when the window appears.
+func (inst *App) openEvalPlayground(sql string, datasets []string) (err error) {
 	bus := inst.busSnapshot()
 	if bus == nil {
 		err = eh.Errorf("no bus wired")
@@ -302,6 +308,7 @@ func (inst *App) openEvalPlayground(sql string) (err error) {
 		Sql:      sql,
 		AutoRun:  true,
 		Endpoint: launchcfg.EndpointIntrospection,
+		Datasets: datasets,
 	})
 	if err != nil {
 		err = eh.Errorf("encode launch config: %w", err)
@@ -337,7 +344,7 @@ func buildEvalSQL(snap evalSnapshot, handles evalHandles) (sql string) {
 		b.WriteString("-- (query in flight, or no bus), so only the Go side was published.\n")
 		b.WriteString("-- Re-run the hand-off once the List tab shows a result to get the join.\n")
 		b.WriteString("SELECT match_idx, group_idx, group_name, text, start_byte, stop_byte, matched\n")
-		b.WriteString("FROM keelson('" + handles.goHandle + "')\n")
+		b.WriteString("FROM keelson('" + goDatasetAlias + "')\n")
 		b.WriteString("ORDER BY match_idx, group_idx\n")
 		sql = b.String()
 		return
@@ -354,8 +361,8 @@ func buildEvalSQL(snap evalSnapshot, handles evalHandles) (sql string) {
 	b.WriteString("       g.text AS go_text,\n")
 	b.WriteString("       c.text AS ch_text,\n")
 	b.WriteString("       g.start_byte, g.stop_byte\n")
-	b.WriteString("FROM keelson('" + handles.goHandle + "') AS g\n")
-	b.WriteString("FULL OUTER JOIN keelson('" + handles.chHandle + "') AS c\n")
+	b.WriteString("FROM keelson('" + goDatasetAlias + "') AS g\n")
+	b.WriteString("FULL OUTER JOIN keelson('" + chDatasetAlias + "') AS c\n")
 	b.WriteString("  ON g.match_idx = c.match_idx AND g.group_idx = c.group_idx\n")
 	b.WriteString("ORDER BY match_idx, group_idx\n")
 	b.WriteString("SETTINGS join_use_nulls = 1\n")

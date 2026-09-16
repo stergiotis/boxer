@@ -86,12 +86,12 @@ func BareNamePass(reg *introspect.Registry) nanopass.Pass {
 
 // URLPass rewrites keelson('x') -> url('<baseURL>/table/x','ArrowStream'),
 // injecting baseURL (the running HTTP table source's BaseURL()). Used by a
-// preprocessor in front of an external clickhouse-local/-server. An
-// ad-hoc dataset (introspect.EncryptedDatasetI) additionally carries its
-// explicit structure as the third url() argument, so clickhouse applies
-// the controlled bounded-type mapping (ADR-0134 SD1) rather than its own
-// Arrow inference, and the /table endpoint streams the decrypt
-// (ADR-0134 §SD3, revised).
+// preprocessor in front of an external clickhouse-local/-server. A sealed
+// dataset (introspect.EncryptedDatasetI) additionally carries its explicit
+// structure as the third url() argument, so clickhouse applies the publish
+// gate's bounded-type mapping rather than its own Arrow inference, and the
+// /table endpoint serves the plaintext by opening the record (ADR-0240
+// §SD2/§SD3).
 func URLPass(reg *introspect.Registry, baseURL string) nanopass.Pass {
 	base := strings.TrimRight(baseURL, "/")
 	return nanopass.LiftBodyPass(
@@ -116,16 +116,19 @@ func sqlQuoteLiteral(s string) string {
 	return "'" + r.Replace(s) + "'"
 }
 
-// RewriteAliases rewrites keelson('<alias>') to keelson('<handle>') for
-// each alias present in bindings, leaving every other keelson(...) call —
-// and all other SQL — untouched (ADR-0134 §SD4). It is the client-side
-// indirection that lets an applet's buffer name a stable alias while an
-// instance binds it to an ephemeral dataset handle. Unlike expand, an
-// unbound or unknown name is not an error: it passes through for the
-// downstream (server-side) keelson pass to resolve or reject. Best-effort
-// — a parse failure returns the input unchanged, since the same SQL will
-// surface a clear error when it executes. The handles come from a
-// validated binding map, so no quoting or escaping is needed.
+// RewriteAliases rewrites every reference to a bound alias — the
+// `keelson('<alias>')` call and the bare, unqualified table name `<alias>`
+// alike — to `keelson('<handle>')`, leaving every other keelson(...) call
+// and all other SQL untouched (ADR-0240 §SD7, from ADR-0134 §SD4). It is
+// the client-side indirection that lets a buffer name a stable alias while
+// an instance binds it to an ephemeral dataset handle. Both spellings are
+// rewritten because the placement wall (ADR-0145) inspects both, so an
+// alias must reach the wall under neither. Unlike expand, an unbound or
+// unknown name is not an error: it passes through for the downstream
+// (server-side) keelson pass to resolve or reject. Best-effort — a parse
+// failure returns the input unchanged, since the same SQL will surface a
+// clear error when it executes. The handles come from a validated binding
+// map, so no quoting or escaping is needed.
 func RewriteAliases(sql string, bindings map[string]string) (result string) {
 	if len(bindings) == 0 {
 		return sql
@@ -134,13 +137,9 @@ func RewriteAliases(sql string, bindings map[string]string) (result string) {
 	if err != nil {
 		return sql
 	}
-	calls := findCalls(pr)
-	if len(calls) == 0 {
-		return sql
-	}
 	rw := nanopass.NewRewriter(pr)
 	changed := false
-	for _, fn := range calls {
+	for _, fn := range findCalls(pr) {
 		name, argErr := tableArg(fn)
 		if argErr != nil {
 			continue // leave a malformed call for the server to reject
@@ -151,6 +150,24 @@ func RewriteAliases(sql string, bindings map[string]string) (result string) {
 		}
 		nanopass.ReplaceNode(rw, fn, FuncName+"('"+handle+"')")
 		changed = true
+	}
+	// Bare names: a plain, unqualified relation in any FROM/JOIN — not a
+	// CTE, a subquery or a table function. The node is the identifier
+	// alone, so `items AS i` keeps its alias.
+	if scopes, sErr := nanopass.BuildScopes(pr, ""); sErr == nil {
+		for _, scope := range nanopass.FlattenScopes(scopes) {
+			for _, ts := range scope.Tables {
+				if ts.IsCTE || ts.IsSubquery || ts.IsFunction || ts.Database != "" || ts.Node == nil {
+					continue
+				}
+				handle, ok := bindings[ts.Table]
+				if !ok {
+					continue
+				}
+				nanopass.ReplaceNode(rw, ts.Node, FuncName+"('"+handle+"')")
+				changed = true
+			}
+		}
 	}
 	if !changed {
 		return sql
