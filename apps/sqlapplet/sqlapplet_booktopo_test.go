@@ -2,7 +2,6 @@ package sqlapplet
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -83,7 +82,7 @@ func TestMintAllEmbeddedBooks(t *testing.T) {
 // fixture bundle the engine's own topology test publishes. This is the
 // live half of the corpus gate: the buffers not only parse, they answer.
 func TestTopologyBookQueriesExecute(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))

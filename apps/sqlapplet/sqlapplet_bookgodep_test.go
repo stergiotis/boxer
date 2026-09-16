@@ -2,7 +2,6 @@ package sqlapplet
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -101,7 +100,7 @@ func TestMintGodepBook(t *testing.T) {
 // a SET line prepended to the buffer, which is what the param channel does
 // with a signal value at execute time.
 func TestGodepBookQueriesExecute(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t)).Level(zerolog.WarnLevel)

@@ -2,7 +2,6 @@ package introspectengine
 
 import (
 	"context"
-	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -115,7 +114,7 @@ func TestPlan_JoinUsesAllColumns(t *testing.T) {
 
 func newEngineWithBroker(t *testing.T) *Engine {
 	t.Helper()
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))

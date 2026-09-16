@@ -2,7 +2,6 @@ package sqlapplet
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -163,7 +162,7 @@ func (f *fakeCoverageGateSource) Seq() uint64                    { return f.seq 
 // buffer that parses, classifies and mints can still name a column that
 // does not exist.
 func TestCoverageBookQueriesExecute(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 

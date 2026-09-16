@@ -2,7 +2,6 @@ package providersgodep
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -29,7 +28,7 @@ import (
 // and that a recursive walk over go_imports — the shape every graph lens in
 // the applet book is built from — runs.
 func TestQuery_GodepTables(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))

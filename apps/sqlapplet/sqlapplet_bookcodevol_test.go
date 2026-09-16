@@ -2,7 +2,6 @@ package sqlapplet
 
 import (
 	"context"
-	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -141,7 +140,7 @@ func (codevolGateSource) Get() ([]codevol.ModuleInfo, codevol.SymbolReport) {
 // and the shipped-vs-executed buffer exercises its uninstrumented path — the
 // shape every appliance build has.
 func TestCodevolBookQueries(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))

@@ -3,7 +3,6 @@ package chlocal
 import (
 	"bytes"
 	"context"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -54,7 +53,7 @@ func arrowFileWithRows(t *testing.T, rows int32) (b []byte) {
 
 func requireBinary(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed at %s: %v", chlocalpool.DefaultBinaryPath, err)
 	}
 }

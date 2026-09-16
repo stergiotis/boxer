@@ -3,7 +3,6 @@ package chlocalbroker
 import (
 	"context"
 	"io"
-	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -21,7 +20,7 @@ import (
 
 func requireBinary(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed at %s: %v", chlocalpool.DefaultBinaryPath, err)
 	}
 }

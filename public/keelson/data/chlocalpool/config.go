@@ -104,3 +104,14 @@ func resolveBinaryPath() string {
 	}
 	return DefaultBinaryPath
 }
+
+// LookupBinary resolves the `clickhouse` binary the way New does and
+// reports whether it exists, so a test that needs a live engine skips on
+// the same answer the pool would fail on — not on the packaged path alone.
+func LookupBinary() (path string, err error) {
+	path = resolveBinaryPath()
+	if _, err = os.Stat(path); err != nil {
+		return "", eb.Build().Str("binaryPath", path).Errorf("chlocalpool: binary: %w", err)
+	}
+	return path, nil
+}

@@ -2,7 +2,6 @@ package introspectengine
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +25,7 @@ import (
 // SQL surface serves — keelson('procs') filtered by component, and a
 // procs⋈sockets join walking a listener back to its component.
 func TestQuery_TopologyTables(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))

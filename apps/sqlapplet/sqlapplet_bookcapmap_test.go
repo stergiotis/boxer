@@ -3,7 +3,6 @@ package sqlapplet
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -187,7 +186,7 @@ func overSink(sql string, sink string) (out string) {
 // is the half of the corpus gate a parse cannot reach: a buffer that parses,
 // classifies and mints can still name a column that does not exist.
 func TestCapmapBookQueriesExecute(t *testing.T) {
-	if _, err := exec.LookPath(chlocalpool.DefaultBinaryPath); err != nil {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)
 	}
 	capmapTestVault(t)
