@@ -363,7 +363,7 @@ func TestEvalHandoffPublishesBothAndOpensPlay(t *testing.T) {
 	inst.requestEvalInPlay(snap)
 
 	inst.mu.RLock()
-	evalErr, goHandle, chHandle := inst.evalErr, inst.evalGoHandle, inst.evalChHandle
+	evalErr, goHandle, chHandle := inst.evalErr, inst.goPub.Handle(), inst.chPub.Handle()
 	busy := inst.evalBusy
 	inst.mu.RUnlock()
 	require.Empty(t, evalErr)
@@ -405,7 +405,7 @@ func TestEvalHandoffReusesHandles(t *testing.T) {
 		inst.mu.RLock()
 		defer inst.mu.RUnlock()
 		require.Empty(t, inst.evalErr)
-		return inst.evalGoHandle, inst.evalChHandle
+		return inst.goPub.Handle(), inst.chPub.Handle()
 	}
 
 	firstGo, firstCh := run()
@@ -428,7 +428,7 @@ func TestEvalHandoffDegradesWithoutClickHouseResult(t *testing.T) {
 	inst.requestEvalInPlay(snap)
 
 	inst.mu.RLock()
-	evalErr, goHandle, chHandle := inst.evalErr, inst.evalGoHandle, inst.evalChHandle
+	evalErr, goHandle, chHandle := inst.evalErr, inst.goPub.Handle(), inst.chPub.Handle()
 	inst.mu.RUnlock()
 	require.Empty(t, evalErr, "a missing CH result is a partial answer, not a failure")
 	assert.NotEmpty(t, goHandle)
@@ -502,7 +502,7 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	inst.requestEvalInPlay(snap)
 
 	inst.mu.RLock()
-	evalErr, goHandle := inst.evalErr, inst.evalGoHandle
+	evalErr, goHandle := inst.evalErr, inst.goPub.Handle()
 	inst.mu.RUnlock()
 	require.NotEmpty(t, evalErr, "the ClickHouse publish must have been refused")
 	assert.NotEmptyf(t, goHandle,

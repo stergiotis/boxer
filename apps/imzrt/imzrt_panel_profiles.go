@@ -64,7 +64,6 @@ const cpuCaptureDuration = 10 * time.Second
 // profileCapture is one finished capture→convert→publish run (the bgjob
 // result type).
 type profileCapture struct {
-	handle   string
 	revision uint64
 	rows     uint64
 }
@@ -113,8 +112,11 @@ var profileKinds = []profileKindSpec{
 // profileEntry is the shared per-kind state. The embedded Runner has its
 // own lock; the hub mutex guards the rest.
 type profileEntry struct {
-	job      bgjob.Runner[profileCapture]
-	handle   string
+	job bgjob.Runner[profileCapture]
+	// pub holds the kind's dataset: one alias, one handle across
+	// re-captures, kept after close because the hub is process-global and
+	// a profile stays explorable after the dashboard closes (ADR-0240 §SD5).
+	pub      *adhocdata.Publisher
 	revision uint64
 	rows     uint64
 	opening  bool
@@ -134,7 +136,7 @@ func (h *profilesHub) entry(key string) (e *profileEntry) {
 	h.mu.Lock()
 	e = h.entries[key]
 	if e == nil {
-		e = &profileEntry{}
+		e = &profileEntry{pub: adhocdata.NewPublisher(profileAliasPrefix+key, true)}
 		h.entries[key] = e
 	}
 	h.mu.Unlock()
@@ -228,10 +230,6 @@ func profileSeedSql(handle string, spec profileKindSpec) string {
 // frames.
 func (h *profilesHub) startCapture(spec profileKindSpec, bus app.BusI, tasks task.TaskApiI) {
 	e := h.entry(spec.key)
-	h.mu.Lock()
-	prevHandle := e.handle
-	h.mu.Unlock()
-
 	started := e.job.StartReporting(tasks, bgjob.Spec{
 		Kind:  "imzrt-pprof",
 		Title: "pprof capture: " + spec.key,
@@ -251,21 +249,12 @@ func (h *profilesHub) startCapture(spec profileKindSpec, bus app.BusI, tasks tas
 			err = eh.Errorf("no bus wired (unmounted window?)")
 			return
 		}
-		res, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-			Alias:          profileAliasPrefix + spec.key,
-			Handle:         prevHandle,
-			ArrowIPCStream: conv.IPCStream,
-			// The hub is process-global and republishes from whichever
-			// Profiles tab is open, and a profile stays explorable after the
-			// dashboard closes: the dataset is the app's, not the window's
-			// (ADR-0240 §SD5).
-			KeepAfterClose: true,
-		})
+		res, err := e.pub.Publish(bus, conv.IPCStream)
 		if err != nil {
 			err = eh.Errorf("publish: %w", err)
 			return
 		}
-		out = &profileCapture{handle: res.Handle, revision: res.Revision, rows: res.Rows}
+		out = &profileCapture{revision: res.Revision, rows: res.Rows}
 		return
 	})
 	if !started {
@@ -280,7 +269,7 @@ func (h *profilesHub) explore(spec profileKindSpec, bus app.BusI) {
 	key := spec.key
 	e := h.entry(key)
 	h.mu.Lock()
-	handle := e.handle
+	handle := e.pub.Handle()
 	if handle == "" || e.opening || bus == nil {
 		h.mu.Unlock()
 		return
@@ -316,7 +305,6 @@ func (h *profilesHub) explore(spec profileKindSpec, bus app.BusI) {
 func (h *profilesHub) syncEntry(e *profileEntry) {
 	if res, _, ok := e.job.TakeResult(); ok {
 		h.mu.Lock()
-		e.handle = res.handle
 		e.revision = res.revision
 		e.rows = res.rows
 		e.lastErr = ""
@@ -337,7 +325,7 @@ func (inst *App) renderProfilesPanel() {
 		snap := e.job.Snapshot()
 
 		profiles.mu.Lock()
-		handle, revision, rows, lastErr := e.handle, e.revision, e.rows, e.lastErr
+		handle, revision, rows, lastErr := e.pub.Handle(), e.revision, e.rows, e.lastErr
 		profiles.mu.Unlock()
 
 		for range c.Horizontal().KeepIter() {

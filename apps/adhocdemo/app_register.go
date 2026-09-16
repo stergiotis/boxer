@@ -29,7 +29,17 @@ var manifest = app.Manifest{
 		{
 			Pattern:   adhocdata.SubjectPublish,
 			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: publish and republish an ephemeral dataset the embedded applet queries (ADR-0134)",
+			Reason:    "adhocdemo: publish and republish an ephemeral dataset the embedded applet queries (ADR-0240)",
+		},
+		{
+			Pattern:   adhocdata.SubjectResolve,
+			Direction: app.CapDirectionPub,
+			Reason:    "adhocdemo: the embedded applet's follower resolves the alias it declares (ADR-0240 §SD6)",
+		},
+		{
+			Pattern:   adhocdata.SubjectEventAll,
+			Direction: app.CapDirectionSub,
+			Reason:    "adhocdemo: the follower hears publish and retract events for the alias",
 		},
 		// The embedded applet's two escape hatches ride this manifest
 		// (ADR-0132 §SD8: an embedded applet's capabilities are the

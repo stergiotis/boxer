@@ -1,21 +1,21 @@
-// Package adhocdemo dogfoods ADR-0134: it generates a computed series,
-// publishes it as an ephemeral encrypted dataset over the adhoc.publish
-// capability, and embeds a SQL applet that queries it by the stable alias
-// `items`. A Regenerate button republishes fresh data under the same
-// handle; the embedded applet runs Live, so it re-queries and shows the
-// new rows. The applet is a committed, gated, classified document — the
-// ADR-0132 §SD8 embedder shape — bound to the ephemeral handle pre-mount.
+// Package adhocdemo dogfoods ad-hoc datasets (ADR-0240): it generates a
+// computed series, publishes it as a sealed dataset through an
+// adhocdata.Publisher, and embeds a SQL applet that queries it by the
+// stable alias `items`, kept bound by an adhocdata.Follower exactly as a
+// standalone applet would be. A Regenerate button republishes fresh data
+// under the same handle; the follower sees the service's `published` event
+// and the Live applet re-queries — no hand-delivered notification. The
+// applet is a committed, gated, classified document — the ADR-0132 §SD8
+// embedder shape.
 package adhocdemo
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 
@@ -27,8 +27,8 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// datasetAlias is the stable alias the applet buffer names; the embedder
-// binds it to the ephemeral handle pre-mount (ADR-0134 §SD4).
+// datasetAlias is the stable alias the applet buffer names and the
+// publisher publishes under; the follower binds one to the other.
 const datasetAlias = "items"
 
 // itemsDoc is the embedded applet document: an introspection-endpoint
@@ -54,17 +54,14 @@ type App struct {
 	runId string
 	log   zerolog.Logger
 
-	inner  *play.PlayApp
-	handle string
+	inner    *play.PlayApp
+	pub      *adhocdata.Publisher
+	follower *adhocdata.Follower
 
-	mu            sync.Mutex
-	gen           int
-	revision      uint64
-	rows          uint64
-	busy          bool
-	pendingRev    uint64
-	pendingNotify bool
-	statusErr     string
+	mu        sync.Mutex
+	gen       int
+	busy      bool
+	statusErr string
 
 	// The tree half (ADR-0222 §SD7), under the same lock: the mount the
 	// published tree lives in — held so a republish writes another snapshot
@@ -96,28 +93,34 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		return
 	}
 
-	res, pubErr := adhocdata.PublishRequest(inst.bus, adhocdata.PublishInput{Alias: datasetAlias, ArrowIPCStream: inst.series(0)})
-	if pubErr != nil {
+	inst.pub = adhocdata.NewPublisher(datasetAlias, false)
+	if _, pubErr := inst.pub.Publish(inst.bus, inst.series(0)); pubErr != nil {
 		inst.statusErr = "publish: " + pubErr.Error()
 		return
 	}
-	inst.handle = res.Handle
-	inst.revision = res.Revision
-	inst.rows = res.Rows
-
+	// The follower subscribes, then resolves the alias — to the dataset just
+	// published — and hands back the binding the applet mounts with; from
+	// here on it keeps the alias in step with the service.
+	follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
+		Bus: inst.bus, Log: inst.log, Aliases: []string{datasetAlias},
+	})
 	inner, embErr := sqlapplet.NewEmbedded(def, sqlapplet.EmbedConfig{
 		StampAppId: string(ManifestId) + "#" + def.Slug,
 		RunId:      inst.runId,
 		Bus:        inst.bus,
 		Log:        inst.log,
-		Bindings:   map[string]string{datasetAlias: res.Handle},
+		Bindings:   bindings,
 	})
 	if embErr != nil {
+		if follower != nil {
+			follower.Close()
+		}
 		inst.statusErr = "embed applet: " + embErr.Error()
 		return
 	}
+	inst.follower = follower
 	// Run Live so a republish (Regenerate) re-queries without an explicit
-	// Run — the ADR-0134 §SD5 freshness path via NotifyDatasetRevision.
+	// Run: the follower notifies the revision, Live re-runs.
 	inner.SetLiveMain(true)
 	inst.inner = inner
 	return
@@ -125,20 +128,19 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.mu.Lock()
-	if inst.pendingNotify && inst.inner != nil {
-		// Deliver the revision bump on the render thread (NotifyDatasetRevision
-		// touches PlayApp state the render loop reads).
-		inst.inner.NotifyDatasetRevision(datasetAlias, inst.pendingRev)
-		inst.revision = inst.pendingRev
-		inst.pendingNotify = false
-	}
 	inner := inst.inner
-	handle := inst.handle
-	revision := inst.revision
-	rows := inst.rows
 	busy := inst.busy
 	statusErr := inst.statusErr
 	inst.mu.Unlock()
+	if inner != nil && inst.follower != nil {
+		inst.follower.Sync(inner)
+	}
+	var handle string
+	var revision, rows uint64
+	if inst.pub != nil {
+		last, _, _ := inst.pub.Last()
+		handle, revision, rows = last.Handle, last.Revision, last.Rows
+	}
 
 	for range c.PanelTopInside(inst.ids.PrepareStr("adhoc-bar")).Resizable(false).KeepIter() {
 		for range c.Horizontal().KeepIter() {
@@ -194,44 +196,40 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 }
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
+	if inst.follower != nil {
+		inst.follower.Close()
+		inst.follower = nil
+	}
 	if inst.inner != nil {
 		inst.inner.Close()
 		inst.inner = nil
 	}
 	// The dataset is not retracted here: the runtime retracts what this
 	// window published when the host closes its bus client (ADR-0240 §SD5).
-	inst.handle = ""
 	return
 }
 
-// regenerate republishes a fresh series under the same handle and flags a
-// revision notification for the render thread to deliver. Runs off the
-// render thread — bus.Request is synchronous and would stall the frame.
+// regenerate republishes a fresh series under the same handle. Runs off
+// the render thread — bus.Request is synchronous and would stall the
+// frame. The embedded applet learns of the new revision from the service's
+// event through its follower, like any other consumer.
 func (inst *App) regenerate() {
 	inst.mu.Lock()
-	if inst.busy || inst.handle == "" {
+	if inst.busy || inst.pub == nil {
 		inst.mu.Unlock()
 		return
 	}
 	inst.busy = true
 	inst.gen++
 	gen := inst.gen
-	handle := inst.handle
 	inst.mu.Unlock()
 
-	res, err := adhocdata.PublishRequest(inst.bus, adhocdata.PublishInput{
-		Alias: datasetAlias, Handle: handle, ArrowIPCStream: inst.series(gen),
-	})
+	if _, err := inst.pub.Publish(inst.bus, inst.series(gen)); err != nil {
+		inst.log.Warn().Err(err).Msg("adhocdemo: regenerate failed")
+	}
 
 	inst.mu.Lock()
 	inst.busy = false
-	if err != nil {
-		inst.log.Warn().Err(err).Msg("adhocdemo: regenerate failed")
-	} else {
-		inst.rows = res.Rows
-		inst.pendingRev = res.Revision
-		inst.pendingNotify = true
-	}
 	inst.mu.Unlock()
 }
 
@@ -254,13 +252,9 @@ func (inst *App) series(gen int) []byte {
 	}
 	rec := rb.NewRecordBatch()
 	defer rec.Release()
-	var buf bytes.Buffer
-	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
-	if werr := w.Write(rec); werr != nil {
-		inst.log.Warn().Err(werr).Msg("adhocdemo: encode series")
+	stream, err := adhocdata.EncodeRecord(rec)
+	if err != nil {
+		inst.log.Warn().Err(err).Msg("adhocdemo: encode series")
 	}
-	if cerr := w.Close(); cerr != nil {
-		inst.log.Warn().Err(cerr).Msg("adhocdemo: close series stream")
-	}
-	return buf.Bytes()
+	return stream
 }

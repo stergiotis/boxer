@@ -645,7 +645,7 @@ func TestHandoverWithoutABusFailsCleanly(t *testing.T) {
 	assert.False(t, busy, "the busy flag must clear even on the failure path")
 	assert.Empty(t, note)
 	assert.Contains(t, errText, "no bus")
-	assert.Empty(t, inst.handle, "nothing was published")
+	assert.Empty(t, inst.pub.Handle(), "nothing was published")
 }
 
 func TestManifestDeclaresTheHandoverCaps(t *testing.T) {

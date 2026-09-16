@@ -39,6 +39,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
@@ -217,7 +218,8 @@ type App struct {
 	handoverBusy bool
 	handoverErr  string
 	handoverNote string
-	handle       string
+	// pub holds the pairs dataset: one alias, one handle across presses.
+	pub *adhocdata.Publisher
 }
 
 var _ app.AppI = (*App)(nil)
@@ -231,6 +233,7 @@ func newApp() (inst *App) {
 		minSectionBytes: defaultMinSectionBytes,
 		pending:         true,
 		bandKey:         fmt.Sprintf("writingstylescope/%d", bandJobSeq.Add(1)),
+		pub:             adhocdata.NewPublisher(datasetAlias, false),
 	}
 	return
 }

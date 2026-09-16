@@ -36,18 +36,27 @@ const (
 	projectionRulesAlias = "projection_rules"
 )
 
-// projectionPublishState is the publish round's state, shared between the
-// render thread and the goroutine under mu.
+// projectionPublishState is the publish round's state: the two publishers
+// — one handle each across rounds, republished onto rather than replaced —
+// and the round's outcome, shared between the render thread and the
+// goroutine under mu.
 type projectionPublishState struct {
-	mu          sync.Mutex
-	publishing  bool
-	err         error
-	summary     string
-	rowsHandle  string
-	rulesHandle string
-	// generation counts successful publishes, so the render thread binds
-	// the aliases exactly once per publish.
+	rows, rules *adhocdata.Publisher
+
+	mu         sync.Mutex
+	publishing bool
+	err        error
+	summary    string
+	// generation counts successful publishes, so the render thread offers
+	// the scaffold exactly once per publish.
 	generation uint64
+}
+
+func newProjectionPublishState() *projectionPublishState {
+	return &projectionPublishState{
+		rows:  adhocdata.NewPublisher(projectionAlias, false),
+		rules: adhocdata.NewPublisher(projectionRulesAlias, false),
+	}
 }
 
 func (inst *projectionPublishState) status() (publishing bool, summary string, gen uint64, err error) {
@@ -65,9 +74,6 @@ type projectionPublishInput struct {
 	perCluster bool
 	// x, y are the widget's positions per slot, world units.
 	x, y []float32
-	// prevRows, prevRules are the handles of this projector's last publish,
-	// republished onto rather than replaced.
-	prevRows, prevRules string
 }
 
 // publishProjection encodes and publishes the current run. A second click
@@ -84,33 +90,25 @@ func (inst *PlayApp) publishProjection(in projectionPublishInput) {
 	}
 	st.publishing = true
 	st.err = nil
-	in.prevRows, in.prevRules = st.rowsHandle, st.rulesHandle
 	st.mu.Unlock()
 	in.rec.Retain()
 	go func() {
 		defer in.rec.Release()
-		out, err := doPublishProjection(inst.bus, in)
+		summary, err := doPublishProjection(inst.bus, in, st)
 		st.mu.Lock()
 		st.publishing = false
 		st.err = err
 		if err == nil {
-			st.summary = out.summary
-			st.rowsHandle = out.rowsHandle
-			st.rulesHandle = out.rulesHandle
+			st.summary = summary
 			st.generation++
 		}
 		st.mu.Unlock()
 	}()
 }
 
-type projectionPublished struct {
-	rowsHandle  string
-	rulesHandle string
-	summary     string
-}
-
-// doPublishProjection is one round: encode both datasets, publish both.
-func doPublishProjection(bus busPublisherI, in projectionPublishInput) (out projectionPublished, err error) {
+// doPublishProjection is one round: encode both datasets, publish both onto
+// the publishers' held handles.
+func doPublishProjection(bus busPublisherI, in projectionPublishInput, st *projectionPublishState) (summary string, err error) {
 	alloc := memory.NewGoAllocator()
 	rows, err := buildProjectionRows(in, alloc)
 	if err != nil {
@@ -127,23 +125,17 @@ func doPublishProjection(bus busPublisherI, in projectionPublishInput) (out proj
 	if err != nil {
 		return
 	}
-	rowsRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: projectionAlias, Handle: in.prevRows, ArrowIPCStream: rowsIPC,
-	})
+	rowsRes, err := st.rows.Publish(bus, rowsIPC)
 	if err != nil {
-		return out, eb.Build().Str("alias", projectionAlias).Errorf("play: projection: publish: %w", err)
+		return "", eb.Build().Str("alias", projectionAlias).Errorf("play: projection: publish: %w", err)
 	}
-	rulesRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: projectionRulesAlias, Handle: in.prevRules, ArrowIPCStream: rulesIPC,
-	})
+	rulesRes, err := st.rules.Publish(bus, rulesIPC)
 	if err != nil {
-		return out, eb.Build().Str("alias", projectionRulesAlias).Errorf("play: projection: publish: %w", err)
+		return "", eb.Build().Str("alias", projectionRulesAlias).Errorf("play: projection: publish: %w", err)
 	}
-	out.rowsHandle = rowsRes.Handle
-	out.rulesHandle = rulesRes.Handle
-	out.summary = fmt.Sprintf("keelson('%s'): %d rows (rev %d) · keelson('%s'): %d rules (rev %d)",
+	summary = fmt.Sprintf("keelson('%s'): %d rows (rev %d) · keelson('%s'): %d rules (rev %d)",
 		rowsRes.Handle, rowsRes.Rows, rowsRes.Revision, rulesRes.Handle, rulesRes.Rows, rulesRes.Revision)
-	return
+	return summary, nil
 }
 
 // buildProjectionRows is the per-entity dataset: the result's row index
@@ -375,10 +367,7 @@ func (inst *PlayApp) syncProjectionPublish() {
 		return
 	}
 	inst.projPublishSeen = gen
-	st := inst.projPublish
-	st.mu.Lock()
-	rowsHandle, rulesHandle := st.rowsHandle, st.rulesHandle
-	st.mu.Unlock()
+	rowsHandle, rulesHandle := inst.projPublish.rows.Handle(), inst.projPublish.rules.Handle()
 	if rowsHandle == "" || rulesHandle == "" {
 		return
 	}

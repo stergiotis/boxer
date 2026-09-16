@@ -1,14 +1,12 @@
 package play
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/adscore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
@@ -84,23 +82,27 @@ type fixtureSpec struct {
 	seed uint64
 }
 
-// fixtureState is the lab's state: the last publish's outcome, held for the
-// chrome to report.
+// fixtureState is the lab's state: the two publishers — one alias, one
+// handle each across re-generations — and the last round's outcome, held
+// for the chrome to report.
 type fixtureState struct {
+	series, truth *adhocdata.Publisher
+
 	mu         sync.Mutex
 	publishing bool
 	err        error
 	// summary describes the last successful publish, for the chrome.
 	summary string
-	// seriesHandle / truthHandle are the MINTED handles the publish returned.
-	// They are what the buffer's keelson('<alias>') has to be rewritten to:
-	// the alias is the readable name, the handle is the dataset, and binding
-	// the alias to itself names something that was never published.
-	seriesHandle string
-	truthHandle  string
-	// generation counts successful publishes, so the caller can re-bind and
+	// generation counts successful rounds, so the caller can re-bind and
 	// re-run exactly once per publish.
 	generation uint64
+}
+
+func newFixtureState() *fixtureState {
+	return &fixtureState{
+		series: adhocdata.NewPublisher(fixtureSeriesAlias, false),
+		truth:  adhocdata.NewPublisher(fixtureTruthAlias, false),
+	}
 }
 
 func (inst *fixtureState) status() (publishing bool, summary string, gen uint64, err error) {
@@ -109,11 +111,12 @@ func (inst *fixtureState) status() (publishing bool, summary string, gen uint64,
 	return inst.publishing, inst.summary, inst.generation, inst.err
 }
 
-// handles returns the minted handles of the last successful publish.
+// handles returns the minted handles of the last successful publish. They
+// are what the buffer's keelson('<alias>') has to be rewritten to: the
+// alias is the readable name, the handle is the dataset, and binding the
+// alias to itself names something that was never published.
 func (inst *fixtureState) handles() (series string, truth string) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	return inst.seriesHandle, inst.truthHandle
+	return inst.series.Handle(), inst.truth.Handle()
 }
 
 // buildFixtureArrow renders one generated fixture as the two Arrow IPC
@@ -209,18 +212,10 @@ func fixtureSampleMS(i int) int64 {
 	return fixtureEpoch.UnixMilli() + int64(i)*fixtureStepSec*1000
 }
 
-// encodeArrowStream serialises one record as an Arrow IPC stream, which is
-// what PublishInput carries.
+// encodeArrowStream serialises one record as the Arrow IPC stream a
+// publish carries.
 func encodeArrowStream(rec arrow.RecordBatch) (out []byte, err error) {
-	buf := &bytes.Buffer{}
-	w := ipc.NewWriter(buf, ipc.WithSchema(rec.Schema()))
-	if err = w.Write(rec); err != nil {
-		return nil, eh.Errorf("play: fixture: arrow write: %w", err)
-	}
-	if err = w.Close(); err != nil {
-		return nil, eh.Errorf("play: fixture: arrow close: %w", err)
-	}
-	return buf.Bytes(), nil
+	return adhocdata.EncodeRecord(rec)
 }
 
 // generateFixture builds the labelled series from a spec. Pure and
@@ -267,30 +262,22 @@ func (inst *PlayApp) publishFixture(spec fixtureSpec) {
 	st.mu.Unlock()
 
 	go func() {
-		res, err := doPublishFixture(inst.bus, spec)
+		summary, err := doPublishFixture(inst.bus, spec, st)
 		st.mu.Lock()
 		st.publishing = false
 		st.err = err
 		if err == nil {
-			st.summary = res.summary
-			st.seriesHandle = res.seriesHandle
-			st.truthHandle = res.truthHandle
+			st.summary = summary
 			st.generation++
 		}
 		st.mu.Unlock()
 	}()
 }
 
-// fixturePublished is what one successful round produced: the minted handles
-// and the line the chrome shows.
-type fixturePublished struct {
-	seriesHandle string
-	truthHandle  string
-	summary      string
-}
-
-// doPublishFixture is one round: generate, encode, publish both datasets.
-func doPublishFixture(bus busPublisherI, spec fixtureSpec) (out fixturePublished, err error) {
+// doPublishFixture is one round: generate, encode, publish both datasets
+// onto the publishers' held handles, so re-generating replaces the fixture
+// rather than minting two more datasets against the quotas.
+func doPublishFixture(bus busPublisherI, spec fixtureSpec, st *fixtureState) (summary string, err error) {
 	fixture, err := generateFixture(spec)
 	if err != nil {
 		return
@@ -300,24 +287,18 @@ func doPublishFixture(bus busPublisherI, spec fixtureSpec) (out fixturePublished
 	if err != nil {
 		return
 	}
-	seriesRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: fixtureSeriesAlias, ArrowIPCStream: seriesIPC,
-	})
+	seriesRes, err := st.series.Publish(bus, seriesIPC)
 	if err != nil {
-		return out, eb.Build().Str("alias", fixtureSeriesAlias).Errorf("play: fixture: publish: %w", err)
+		return "", eb.Build().Str("alias", fixtureSeriesAlias).Errorf("play: fixture: publish: %w", err)
 	}
-	truthRes, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: fixtureTruthAlias, ArrowIPCStream: truthIPC,
-	})
+	truthRes, err := st.truth.Publish(bus, truthIPC)
 	if err != nil {
-		return out, eb.Build().Str("alias", fixtureTruthAlias).Errorf("play: fixture: publish: %w", err)
+		return "", eb.Build().Str("alias", fixtureTruthAlias).Errorf("play: fixture: publish: %w", err)
 	}
-	out.seriesHandle = seriesRes.Handle
-	out.truthHandle = truthRes.Handle
-	out.summary = fmt.Sprintf("%s: %d samples · %s: %d planted extent(s) · %.1f%% anomalous",
+	summary = fmt.Sprintf("%s: %d samples · %s: %d planted extent(s) · %.1f%% anomalous",
 		fixtureSeriesAlias, seriesRes.Rows, fixtureTruthAlias, truthRes.Rows,
 		fixture.AnomalyFraction()*100)
-	return out, nil
+	return summary, nil
 }
 
 // busPublisherI is the bus a publish rides. Named here so the publish round

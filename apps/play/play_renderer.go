@@ -1141,8 +1141,8 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.tsCollisions = newTsCollisionProbe(client)
 	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
-	inst.fixtures = &fixtureState{}
-	inst.projPublish = &projectionPublishState{}
+	inst.fixtures = newFixtureState()
+	inst.projPublish = newProjectionPublishState()
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
 	inst.detailTimeline = NewDetailTimeline(mk())

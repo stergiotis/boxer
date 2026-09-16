@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
@@ -123,18 +124,17 @@ type App struct {
 
 	// Extraction hand-off state (ADR-0017). Written by the worker
 	// goroutine that publishes and opens, read by the render thread —
-	// so it belongs to the mu group above. evalGoHandle / evalChHandle
-	// are retained across republishes so one window holds at most two
-	// datasets against the ADR-0134 MaxDatasets cap.
+	// so it belongs to the mu group above.
 	evalBusy   bool
 	evalErr    string
 	evalStatus string
 	// evalKey fingerprints the inputs evalStatus / evalErr describe, so
 	// an outcome is retired when the editors move on rather than
 	// presented as current — the [queryLane] freshness rule.
-	evalKey      queryKey
-	evalGoHandle string
-	evalChHandle string
+	evalKey queryKey
+	// goPub / chPub hold the two datasets, one handle each across
+	// republishes, so one window holds at most two against the quotas.
+	goPub, chPub *adhocdata.Publisher
 
 	alloc memory.Allocator
 
@@ -203,6 +203,8 @@ func newApp() (inst *App) {
 	inst = &App{
 		ids:         c.NewWidgetIdStack(),
 		alloc:       memory.NewGoAllocator(),
+		goPub:       adhocdata.NewPublisher(goDatasetAlias, false),
+		chPub:       adhocdata.NewPublisher(chDatasetAlias, false),
 		tabPanes:    make(map[uint64]*lazypane.Pane, 3),
 		instanceSeq: appInstanceSeq.Add(1),
 	}

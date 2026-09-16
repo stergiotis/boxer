@@ -136,8 +136,8 @@ reusable by its consumers — while keeping the guarantee it exists for?
 ## Decision
 
 We supersede ADR-0134 as a whole and re-state the feature in three parts
-with one concern each: a **sealed store** that owns the file format, the
-keys and a process-scoped directory; an **ad-hoc dataset capability** that
+with one concern each: a **sealed store** that owns the file format and
+the keys, in files that never have a name; an **ad-hoc dataset capability** that
 owns handles, aliases, quotas, ownership and lifecycle over that store; and
 a **platform follower and publisher** that every consumer uses instead of
 its own copy. ADR-0145 (placement) and ADR-0188 §SD3 (withdrawal with
@@ -252,12 +252,15 @@ are hints and request/reply is truth.
   state machine leaves sqlapplet and becomes `adhocdata.Follower`: events as
   hints, resolve as truth, replay in order, periodic reconcile, a pending
   set the host renders as it likes, over a target interface of bind /
-  unbind / revision. sqlapplet keeps only its notice text and its re-run
-  glue; an embedded applet runs the same follower over the embedder's
-  client instead of receiving hand-delivered revision notifies.
-  `adhocdata.Publisher` holds alias → handle, single flight and a
-  generation counter, exposes publish and retract, and `EncodeRecords`
-  writes an Arrow record batch to an IPC stream once for everyone.
+  unbind / revision. sqlapplet keeps only its notice text, its
+  fault-injection and interval knobs, and its re-run glue; an embedded
+  applet runs the same follower over the embedder's client instead of
+  receiving hand-delivered revision notifies. `adhocdata.Publisher` holds
+  one alias's handle across republishes, the last outcome and a generation
+  counter the render thread reacts to once per publish — the round's busy
+  flag stays with the app, which may publish two datasets per click — and
+  `EncodeRecord` writes an Arrow record batch to an IPC stream once for
+  everyone.
 
 - **SD7 — A launched window binds by alias.** `PlayLaunch`
   ([ADR-0135](./0135-app-launch-requests.md) §SD7) gains a `Datasets` list;
@@ -321,7 +324,7 @@ are hints and request/reply is truth.
 | --- | --- | --- |
 | package `sealed` (new, keelson runtime) | added: `File` (`Create`, `Writer`, `Open`, `Retire`, `Close`), `Writer`, `Reader`, `BaseDir` (the env var moves here), `ErrUnsupported` | tally's recording stage; `adhocdata` |
 | `adhocdata` exported API | reshaped: `Config.Keys` removed; `Publish` streams; `PublishInput.Publisher` becomes `By Identity` and `KeepAfterClose` is added; `Retract` takes the caller's `Identity`; `Grant`, `GrantResult` removed; `ErrNotOwner`, `ErrClosed`, `LiveCount` added; `NewWriter`/`NewReader`/`NewSeekableReader`/`KeySize`/`ResolveStoreDir`/`DisableCoreDumps`/`StoreDir`/`Ref`/`PlaintextI`/`DecryptorI`/`KeyRegistrarI` removed | hostboot wiring; tally |
-| `adhocdata.Follower`, `adhocdata.Publisher`, `adhocdata.EncodeRecords` | added | sqlapplet's binder, the embedder demo, the five publishers |
+| `adhocdata.Follower` (`NewFollower`, `FollowerConfig`, `TargetI`, `EventsModeE`), `adhocdata.Publisher`, `adhocdata.EncodeRecord` | added | sqlapplet's binder, the embedder demo, the five publishers |
 | Capability subjects | removed: `adhoc.grant`; added: `runtime.instance.closed` (`app.SubjectInstanceClosed`, payload `app.InstanceClosed`, published by the bus in the closed client's name) | manifests that carried `Pub adhoc.grant` (none in tree); the dataset service subscribes; the three publishers that retracted in `Unmount` drop `Pub adhoc.retract` |
 | `buscodec` wire for `adhoc.*` | reshaped: generated codecs over new vdd memberships; publisher field removed from the publish request | `keelson/vdd`, `runtime/codec/adhoc*`, both client helpers and handlers |
 | `chlocalbroker` | removed: `KeyStore`, `OpenDatasetPlaintext`, the `adhocdata` import | `introspecthost` wiring |

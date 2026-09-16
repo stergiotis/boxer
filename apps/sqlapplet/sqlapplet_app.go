@@ -3,6 +3,7 @@ package sqlapplet
 import (
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -96,7 +97,7 @@ type appletApp struct {
 	// the life of the window and carries the notice the window shows while
 	// one is missing (sqlapplet_datasets.go). nil for the dataset-less
 	// applet, which is most of them.
-	binder *datasetBinder
+	binder *adhocdata.Follower
 }
 
 var _ app.AppI = (*appletApp)(nil)
@@ -110,14 +111,13 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 	// The minted per-applet id rides the log_comment stamp, so captured
 	// query runs attribute to the applet, not to a shared host (ADR-0132
 	// §SD9 over ADR-0115). Declared `datasets:` aliases are kept bound to
-	// live datasets for the life of the window by the binder
-	// (sqlapplet_datasets.go): it subscribes to the service's events, then
-	// resolves each alias at open to the newest live dataset (ADR-0134
-	// §SD4); a miss stays pending, a later withdrawal unbinds (ADR-0188
-	// §SD3), and the window says what it is waiting for in either case. An
-	// embedder still overrides all of that by binding explicit handles
-	// instead (§SD7).
-	binder, bindings := newDatasetBinder(ctx.Bus(), ctx.Log(), inst.def.DatasetsHint, inst.def.Datasets)
+	// live datasets for the life of the window by the follower (ADR-0240
+	// §SD6): it subscribes to the service's events, then resolves each
+	// alias at open to the newest live dataset; a miss stays pending, a
+	// later withdrawal unbinds (ADR-0188 §SD3), and the window says what it
+	// is waiting for in either case. An embedder still overrides all of
+	// that by binding explicit handles instead (§SD7).
+	binder, bindings := newDatasetFollower(ctx.Bus(), ctx.Log(), inst.def.Datasets)
 	inner, err := NewEmbedded(inst.def, EmbedConfig{
 		StampAppId:  string(inst.m.Id),
 		RunId:       ctx.RunId(),
@@ -129,7 +129,7 @@ func (inst *appletApp) Mount(ctx app.MountContextI) (err error) {
 	})
 	if err != nil {
 		if binder != nil {
-			binder.close()
+			binder.Close()
 		}
 		return
 	}
@@ -144,9 +144,11 @@ func (inst *appletApp) Frame(ctx app.FrameContextI) (err error) {
 		return
 	}
 	if inst.binder != nil {
-		bound, notice, noticeChanged := inst.binder.sync(inst.inner)
-		if noticeChanged {
-			inst.inner.SetDatasetNotice(notice)
+		bound, pendingChanged := inst.binder.Sync(inst.inner)
+		if pendingChanged {
+			// SetDatasetNotice reparses, and this runs every frame — so
+			// only on a change.
+			inst.inner.SetDatasetNotice(renderDatasetNotice(inst.binder.Pending(), inst.def.DatasetsHint))
 		}
 		if bound {
 			// AutoRun already fired against the unbound buffer at open, so
@@ -167,11 +169,8 @@ func (inst *appletApp) Unmount(ctx app.MountContextI) (err error) {
 		inst.inner.Close()
 	}
 	inst.inner = nil
-	// Releasing the binder drops its events subscription; a poll that is
-	// still in flight finishes against a closed window, parks a result
-	// nobody reads, and is collected with the struct.
 	if inst.binder != nil {
-		inst.binder.close()
+		inst.binder.Close()
 		inst.binder = nil
 	}
 	return

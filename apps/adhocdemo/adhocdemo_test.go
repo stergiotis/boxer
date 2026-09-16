@@ -61,6 +61,7 @@ func TestManifestCapsCoverEmbeddedApplet(t *testing.T) {
 
 	for _, want := range []string{
 		adhocdata.SubjectPublish,
+		adhocdata.SubjectResolve,
 		clipboardbroker.SubjectWrite,
 		windowhost.OpenSubject,
 	} {
@@ -68,6 +69,9 @@ func TestManifestCapsCoverEmbeddedApplet(t *testing.T) {
 		assert.True(t, ok, want)
 		assert.Equal(t, app.CapDirectionPub, dir, want)
 	}
+	dir, ok := patterns[adhocdata.SubjectEventAll]
+	assert.True(t, ok, "the follower's events subscription")
+	assert.Equal(t, app.CapDirectionSub, dir)
 }
 
 // TestManifestCapsAuthorizeEscapeHatches runs the declaration through the

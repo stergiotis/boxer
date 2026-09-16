@@ -225,7 +225,7 @@ func (inst *recordingBus) Request(subject string, payload []byte) (reply []byte,
 
 func TestPublishFixtureAsksTheCapability(t *testing.T) {
 	bus := &recordingBus{}
-	_, err := doPublishFixture(bus, fixtureSpec{kind: adscore.AnomalyKindTransplant, seed: 2})
+	_, err := doPublishFixture(bus, fixtureSpec{kind: adscore.AnomalyKindTransplant, seed: 2}, newFixtureState())
 
 	require.Error(t, err, "a refused publish is reported, never swallowed")
 	assert.Equal(t, fixtureSeriesAlias, ebtest.Fields(t, err)["alias"], "the error names which dataset failed")
@@ -239,7 +239,7 @@ func TestPublishFixtureAsksTheCapability(t *testing.T) {
 // the capability for anything.
 func TestPublishFixtureValidatesBeforeAsking(t *testing.T) {
 	bus := &recordingBus{}
-	_, err := doPublishFixture(bus, fixtureSpec{kind: adscore.AnomalyKindE(200), seed: 1})
+	_, err := doPublishFixture(bus, fixtureSpec{kind: adscore.AnomalyKindE(200), seed: 1}, newFixtureState())
 	require.Error(t, err)
 	assert.Empty(t, bus.subjects, "an unbuildable fixture never reaches the bus")
 }

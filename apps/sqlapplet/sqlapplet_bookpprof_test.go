@@ -238,9 +238,11 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 		{Pattern: adhocdata.SubjectResolve, Direction: app.CapDirectionPub, Reason: "test"},
 		{Pattern: adhocdata.SubjectEventAll, Direction: app.CapDirectionSub, Reason: "test"},
 	})
-	bindings, unresolved := resolveDatasetAliases(appletBus, logger, []string{"pprof_cpu", "pprof_heap", "pprof_goroutineleak"})
+	openFollower, bindings := newDatasetFollower(appletBus, logger, []string{"pprof_cpu", "pprof_heap", "pprof_goroutineleak"})
+	require.NotNil(t, openFollower)
+	t.Cleanup(openFollower.Close)
 	require.Len(t, bindings, 3)
-	require.Empty(t, unresolved)
+	require.Empty(t, openFollower.Pending())
 
 	query := func(sql string, format string) (out string) {
 		t.Helper()
@@ -290,18 +292,17 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 	// A miss binds nothing and fails nothing, and reports the alias back so
 	// the open window can keep trying: the applet-open path over an alias
 	// never captured.
-	missBindings, missUnresolved := resolveDatasetAliases(appletBus, logger, []string{"pprof_goroutine"})
-	assert.Empty(t, missBindings)
-	assert.Equal(t, []string{"pprof_goroutine"}, missUnresolved)
+	_, missErr := adhocdata.ResolveRequest(appletBus, "pprof_goroutine")
+	require.Error(t, missErr, "nothing live under the alias yet")
 
-	// And the after-open path closes it: a binder over that alias picks up
+	// And the after-open path closes it: a follower over that alias picks up
 	// the dataset published after open through the service's `published`
-	// event (ADR-0188 §SD3), without the window being reopened.
-	binder, openBindings := newDatasetBinder(appletBus, logger, "hint.", []string{"pprof_goroutine"})
+	// event (ADR-0188 §SD3, ADR-0240 §SD6), without the window being reopened.
+	binder, openBindings := newDatasetFollower(appletBus, logger, []string{"pprof_goroutine"})
 	require.NotNil(t, binder)
 	assert.Empty(t, openBindings, "nothing published under the alias yet")
-	assert.Equal(t, []string{"pprof_goroutine"}, binder.pendingAliases())
-	t.Cleanup(binder.close)
+	assert.Equal(t, []string{"pprof_goroutine"}, binder.Pending())
+	t.Cleanup(binder.Close)
 	// Any instance will do as the bind target — the binder's contract is
 	// with the play instance's dataset ops, not with this buffer's aliases.
 	inner, err := NewEmbedded(pprofDefsBySlug(t)["profile-top"], EmbedConfig{
@@ -315,13 +316,13 @@ func TestPprofBookQueriesExecute(t *testing.T) {
 
 	var boundOK bool
 	for range 100 {
-		bound, _, _ := binder.sync(inner)
+		bound, _ := binder.Sync(inner)
 		if bound {
 			boundOK = true
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	assert.True(t, boundOK, "the binder never picked up the after-open publish")
-	assert.Empty(t, binder.pendingAliases())
+	assert.True(t, boundOK, "the follower never picked up the after-open publish")
+	assert.Empty(t, binder.Pending())
 }

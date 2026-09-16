@@ -8,12 +8,10 @@ package writingstylescope
 // what opens matches what was clicked from.
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
@@ -93,18 +91,7 @@ func pairsArrow(res *Analysis) (stream []byte, err error) {
 
 	rec := rb.NewRecordBatch()
 	defer rec.Release()
-	var buf bytes.Buffer
-	w := ipc.NewWriter(&buf, ipc.WithSchema(pairsSchema))
-	if err = w.Write(rec); err != nil {
-		err = eh.Errorf("writingstylescope: write arrow record: %w", err)
-		return
-	}
-	if err = w.Close(); err != nil {
-		err = eh.Errorf("writingstylescope: close arrow stream: %w", err)
-		return
-	}
-	stream = buf.Bytes()
-	return
+	return adhocdata.EncodeRecord(rec)
 }
 
 // handoverSql is the buffer the opened play window is seeded with: the ranked
@@ -139,10 +126,9 @@ func (inst *App) requestHandover() {
 	inst.handoverBusy = true
 	inst.handoverErr = ""
 	inst.handoverNote = ""
-	handle := inst.handle
 	inst.handoverMu.Unlock()
 
-	handle, note, err := inst.handover(handle, inst.res)
+	note, err := inst.handover(inst.res)
 
 	inst.handoverMu.Lock()
 	inst.handoverBusy = false
@@ -150,17 +136,16 @@ func (inst *App) requestHandover() {
 		inst.handoverErr = err.Error()
 		inst.logger.Warn().Err(err).Msg("writingstylescope: handover to play failed")
 	} else {
-		inst.handle = handle
 		inst.handoverNote = note
 	}
 	inst.handoverMu.Unlock()
 }
 
-// handover is the blocking body: publish (republishing under the same handle
-// when one is already held, so repeated presses do not leak datasets) and then
-// ask the window host for a play window bound to the introspection endpoint,
-// which is where `keelson('<handle>')` resolves.
-func (inst *App) handover(handle string, res *Analysis) (outHandle string, note string, err error) {
+// handover is the blocking body: publish (the publisher republishes onto
+// the handle it holds, so repeated presses do not leak datasets) and then
+// ask the window host for a play window bound to the introspection
+// endpoint, which is where `keelson('<handle>')` resolves.
+func (inst *App) handover(res *Analysis) (note string, err error) {
 	if inst.bus == nil {
 		err = eh.Errorf("no bus wired — the handover needs the app runtime")
 		return
@@ -169,16 +154,11 @@ func (inst *App) handover(handle string, res *Analysis) (outHandle string, note 
 	if err != nil {
 		return
 	}
-	pub, err := adhocdata.PublishRequest(inst.bus, adhocdata.PublishInput{
-		Alias:          datasetAlias,
-		Handle:         handle,
-		ArrowIPCStream: stream,
-	})
+	pub, err := inst.pub.Publish(inst.bus, stream)
 	if err != nil {
 		err = eh.Errorf("publish pairs dataset: %w", err)
 		return
 	}
-	outHandle = pub.Handle
 
 	cfg := launchcfg.PlayLaunch{
 		Sql:      handoverSql(pub.Handle),

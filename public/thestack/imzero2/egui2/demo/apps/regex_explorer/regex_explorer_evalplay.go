@@ -18,7 +18,6 @@ package regex_explorer
 // publishes and opens. Nothing here calls c.*.
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -26,7 +25,6 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
@@ -246,9 +244,13 @@ type evalHandles struct {
 	chHandle string
 }
 
-// publishEvalDatasets publishes both datasets, reusing this instance's
-// prior handles so republishing does not consume a new slot against the
-// ADR-0134 MaxDatasets cap. One window therefore holds at most two.
+// publishEvalDatasets publishes both datasets through this instance's
+// publishers, which republish onto their held handles so a re-run does not
+// consume a new slot against the MaxDatasets cap. One window therefore
+// holds at most two. The two publishes fail independently — the ClickHouse
+// one can hit the quota the Go one just made tighter — and each publisher
+// records its handle the moment its own publish succeeds, so a handle is
+// never minted and lost.
 func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, err error) {
 	bus := inst.busSnapshot()
 	if bus == nil {
@@ -261,26 +263,12 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 		err = eb.Build().Str("goDatasetAlias", goDatasetAlias).Errorf("encode: %w", err)
 		return
 	}
-	inst.mu.RLock()
-	priorGo, priorCh := inst.evalGoHandle, inst.evalChHandle
-	inst.mu.RUnlock()
-
-	res, err := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-		Alias: goDatasetAlias, Handle: priorGo, ArrowIPCStream: stream,
-	})
+	res, err := inst.goPub.Publish(bus, stream)
 	if err != nil {
 		err = eb.Build().Str("goDatasetAlias", goDatasetAlias).Errorf("publish: %w", err)
 		return
 	}
 	handles.goHandle = res.Handle
-	// Record it before attempting the second publish, not after both
-	// succeed. The two publishes fail independently — the ClickHouse one
-	// can hit the MaxDatasets or byte quota that the first one just made
-	// tighter — and a handle minted but not recorded is one nothing can
-	// retract: Unmount cannot see it, and the next attempt mints another.
-	inst.mu.Lock()
-	inst.evalGoHandle = handles.goHandle
-	inst.mu.Unlock()
 
 	if snap.hasCH {
 		var chStream []byte
@@ -290,17 +278,12 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 			return
 		}
 		var chRes adhocdata.PublishResult
-		chRes, err = adhocdata.PublishRequest(bus, adhocdata.PublishInput{
-			Alias: chDatasetAlias, Handle: priorCh, ArrowIPCStream: chStream,
-		})
+		chRes, err = inst.chPub.Publish(bus, chStream)
 		if err != nil {
 			err = eb.Build().Str("chDatasetAlias", chDatasetAlias).Errorf("publish: %w", err)
 			return
 		}
 		handles.chHandle = chRes.Handle
-		inst.mu.Lock()
-		inst.evalChHandle = handles.chHandle
-		inst.mu.Unlock()
 	}
 	return
 }
@@ -477,17 +460,5 @@ func encodeRecord(schema *arrow.Schema, fill func(rb *array.RecordBuilder)) (out
 	fill(rb)
 	rec := rb.NewRecordBatch()
 	defer rec.Release()
-
-	var buf bytes.Buffer
-	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
-	if err = w.Write(rec); err != nil {
-		err = eh.Errorf("write arrow record: %w", err)
-		return
-	}
-	if err = w.Close(); err != nil {
-		err = eh.Errorf("close arrow stream: %w", err)
-		return
-	}
-	out = buf.Bytes()
-	return
+	return adhocdata.EncodeRecord(rec)
 }
