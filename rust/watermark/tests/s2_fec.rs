@@ -1,8 +1,8 @@
 //! Stage 2 acceptance — Golay [24,12,8] error correction.
 //!
 //! - ≤3 bit errors per word are always corrected exactly.
-//! - 4+ errors are either detected (`uncorrectable`) or caught by the CRC
-//!   downstream — never returned as a clean-but-wrong payload.
+//! - Exactly four errors are detected. Larger error patterns can map to another
+//!   valid message; CRC is not authentication.
 //! - Full 80-bit info word survives encode → (corrupt) → decode.
 
 use rand::rngs::StdRng;
@@ -108,34 +108,56 @@ fn info_word_survives_3_errors_per_word() {
 }
 
 #[test]
-fn four_errors_never_silently_wrong() {
-    // Inject 4 errors into one word. Allowed outcomes: CRC error, or the correct
-    // payload (lucky). FORBIDDEN: a clean Ok of a *different* payload.
-    let mut rng = StdRng::seed_from_u64(33);
-    let mut crc_caught = 0u32;
-    let mut lucky = 0u32;
-    for _ in 0..20_000 {
-        let payload = Payload(rng.random());
-        let info = payload.to_info_bits();
-        let mut cws = encode_info(&info);
-        let victim = rng.random_range(0..N_WORDS);
-        let mut mask = 0u32;
-        while mask.count_ones() < 4 {
-            mask |= 1u32 << rng.random_range(0..BITS_PER_WORD as u32);
-        }
-        cws[victim] = apply(cws[victim], mask);
-        match decode_payload(&cws) {
-            Err(_) => crc_caught += 1,
-            Ok(got) => {
-                assert_eq!(got, payload, "silent WRONG payload — forbidden");
-                lucky += 1;
+fn every_weight_four_pattern_is_detected() {
+    // Linearity makes one codeword sufficient for exhaustive error syndromes.
+    let p = Payload([17; 8]);
+    let original = encode_info(&p.to_info_bits());
+    for i in 0..24 {
+        for j in i + 1..24 {
+            for k in j + 1..24 {
+                for l in k + 1..24 {
+                    let mask = (1 << i) | (1 << j) | (1 << k) | (1 << l);
+                    assert_eq!(
+                        decode_word(original[0] ^ mask).1,
+                        watermark::fec::UNCORRECTABLE
+                    );
+                    let mut words = original;
+                    words[0] ^= mask;
+                    assert!(matches!(
+                        decode_payload(&words),
+                        Err(watermark::Error::Uncorrectable)
+                    ));
+                }
             }
         }
     }
-    // Sanity: the CRC must actually be doing work here.
-    assert!(
-        crc_caught > 0,
-        "expected some 4-error words to be CRC-caught"
+}
+
+#[test]
+fn padding_is_checked_even_when_information_crc_is_valid() {
+    let p = Payload([17; 8]);
+    let mut words = encode_info(&p.to_info_bits());
+    let (last, errors) = decode_word(words[N_WORDS - 1]);
+    assert_eq!(errors, 0);
+    words[N_WORDS - 1] = encode_word(last | 1);
+    assert!(matches!(
+        decode_payload(&words),
+        Err(watermark::Error::InvalidPadding)
+    ));
+}
+
+#[test]
+fn checksum_failure_and_valid_replacement_are_distinct() {
+    let p = Payload([17; 8]);
+    let mut info = p.to_info_bits();
+    info[0] = !info[0];
+    assert!(matches!(
+        decode_payload(&encode_info(&info)),
+        Err(watermark::Error::CrcMismatch)
+    ));
+    let replacement = Payload([18; 8]);
+    assert_eq!(
+        decode_payload(&encode_info(&replacement.to_info_bits())).unwrap(),
+        replacement
     );
-    eprintln!("4-error: crc_caught={crc_caught} lucky_correct={lucky}");
 }

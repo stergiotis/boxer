@@ -6,7 +6,12 @@
 //!
 //! ffmpeg is expensive, cropping is cheap: we encode a handful of oversized
 //! frames per codec, then sweep many crop offsets over each decoded frame.
-//! Skipped (not failed) when ffmpeg is absent.
+//!
+//! Ignored by default (shells out to `ffmpeg` and is comparatively slow);
+//! `scripts/ci/watermark_test.sh` runs it explicitly, by name, in its release
+//! codec lane. Once explicitly selected, a missing `ffmpeg` is a hard failure
+//! rather than a silent skip — the lane exists specifically to exercise the
+//! codec path, so a green run without ffmpeg would be a false pass.
 
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -26,7 +31,10 @@ struct Outcome {
 fn sweep_codec(codec: Codec, crf: u32, frames: u32, crops_per_frame: u32, seed: u64) -> Outcome {
     let spec = TileSpec::default();
     // Oversized so any 464×432 crop with offset up to a full period fits.
-    let (fw, fh) = (spec.window_w() + spec.tile_w, spec.window_h() + spec.tile_h); // 696×648
+    let (fw, fh) = (
+        spec.window_w() + spec.tile_w(),
+        spec.window_h() + spec.tile_h(),
+    ); // 696×648
     let mut rng = StdRng::seed_from_u64(seed);
     let mut out = Outcome {
         crops: 0,
@@ -36,19 +44,21 @@ fn sweep_codec(codec: Codec, crf: u32, frames: u32, crops_per_frame: u32, seed: 
 
     for f in 0..frames {
         let payload = Payload(rng.random());
-        let base = LumaFrame::synthetic_natural(fw, fh, seed.wrapping_add(f as u64));
-        let wm = encode_frame(&base, &payload, &spec);
+        let base = LumaFrame::synthetic_natural(fw, fh, seed.wrapping_add(f as u64)).unwrap();
+        let wm = encode_frame(&base, &payload, &spec).unwrap();
         let dec_full = roundtrip(&wm, codec, crf).expect("ffmpeg round-trip");
 
         for _ in 0..crops_per_frame {
-            let ox = rng.random_range(0..=spec.tile_w);
-            let oy = rng.random_range(0..=spec.tile_h);
-            let crop = dec_full.crop(ox, oy, spec.window_w(), spec.window_h());
+            let ox = rng.random_range(0..=spec.tile_w());
+            let oy = rng.random_range(0..=spec.tile_h());
+            let crop = dec_full
+                .crop(ox, oy, spec.window_w(), spec.window_h())
+                .unwrap();
 
             // Track whether this offset exposes a single tile (the worst case).
-            let loc = locate(&crop, &spec);
+            let loc = locate(&crop, &spec).unwrap();
             if spec
-                .complete_tile_origins(crop.w, crop.h, loc.phase_x, loc.phase_y)
+                .complete_tile_origins(crop.w(), crop.h(), loc.phase_x, loc.phase_y)
                 .len()
                 == 1
             {
@@ -65,11 +75,12 @@ fn sweep_codec(codec: Codec, crf: u32, frames: u32, crops_per_frame: u32, seed: 
 }
 
 #[test]
+#[ignore = "shells out to ffmpeg; run explicitly (see scripts/ci/watermark_test.sh)"]
 fn every_crop_recovers_payload() {
-    if !ffmpeg_available() {
-        eprintln!("ffmpeg not found on PATH — skipping Stage 9 crop test");
-        return;
-    }
+    assert!(
+        ffmpeg_available(),
+        "ffmpeg not found on PATH — this test was explicitly selected and requires it"
+    );
     // 5 frames × 110 crops = 550 crops per codec (> 500), 3 codecs.
     for codec in Codec::all() {
         let crf = codec.default_crf();

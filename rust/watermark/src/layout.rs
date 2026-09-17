@@ -55,31 +55,34 @@ pub struct Cell {
 /// [`TileSpec::default`].
 #[derive(Clone, Debug)]
 pub struct TileSpec {
-    pub cell_px: u32,
-    pub inner_px: u32,
-    pub cols: u32,
-    pub rows: u32,
-    pub guard: u32,
-    pub tile_w: u32,
-    pub tile_h: u32,
-    /// Luma delta applied to data cells (±delta on the inner block).
-    pub delta: f32,
+    cell_px: u32,
+    inner_px: u32,
+    cols: u32,
+    rows: u32,
+    guard: u32,
+    tile_w: u32,
+    tile_h: u32,
+    /// Target inner-minus-ring contrast; not a pixel-change budget.
+    delta: f32,
     cells: Vec<Cell>,
 }
 
-/// Default luma delta (0..255 scale) — subtle but codec-survivable.
+/// Default target contrast; codec tolerance depends on content and settings.
 pub const DEFAULT_DELTA: f32 = 8.0;
 
 impl Default for TileSpec {
     fn default() -> Self {
-        TileSpec::new(DEFAULT_DELTA)
+        TileSpec::new(DEFAULT_DELTA).expect("valid default contrast")
     }
 }
 
 impl TileSpec {
     /// Build the spec'd 14×13 grid (cell 16, inner 8, guard 8 → tile 232×216)
     /// with the given luma delta.
-    pub fn new(delta: f32) -> Self {
+    pub fn new(delta: f32) -> Result<Self, crate::Error> {
+        if !delta.is_finite() || !(2.0..=127.0).contains(&delta) {
+            return Err(crate::Error::InvalidDelta);
+        }
         const COLS: u32 = 14;
         const ROWS: u32 = 13;
         const CELL: u32 = 16;
@@ -87,7 +90,7 @@ impl TileSpec {
         const GUARD: u32 = 8;
 
         let cells = build_cells(COLS, ROWS);
-        TileSpec {
+        Ok(TileSpec {
             cell_px: CELL,
             inner_px: INNER,
             cols: COLS,
@@ -97,7 +100,32 @@ impl TileSpec {
             tile_h: ROWS * CELL + GUARD, // 216
             delta,
             cells,
-        }
+        })
+    }
+
+    pub fn cell_px(&self) -> u32 {
+        self.cell_px
+    }
+    pub fn inner_px(&self) -> u32 {
+        self.inner_px
+    }
+    pub fn cols(&self) -> u32 {
+        self.cols
+    }
+    pub fn rows(&self) -> u32 {
+        self.rows
+    }
+    pub fn guard(&self) -> u32 {
+        self.guard
+    }
+    pub fn tile_w(&self) -> u32 {
+        self.tile_w
+    }
+    pub fn tile_h(&self) -> u32 {
+        self.tile_h
+    }
+    pub fn delta(&self) -> f32 {
+        self.delta
     }
 
     /// All 182 cells in raster (row-major) order.
@@ -116,7 +144,7 @@ impl TileSpec {
         self.rows * self.cell_px
     }
 
-    /// The guaranteed-recovery window size: `2 × tile` (464×432).
+    /// The guaranteed-containment window size: `2 × tile` (464×432).
     pub fn window_w(&self) -> u32 {
         2 * self.tile_w
     }
@@ -171,6 +199,9 @@ impl TileSpec {
 /// Tile-origin x (or y) coordinates fully inside `[0, win)` for period `period`
 /// and phase `phase ∈ [0, period)`.
 fn axis_origins(win: u32, period: u32, phase: f32) -> Vec<u32> {
+    if !phase.is_finite() {
+        return Vec::new();
+    }
     let p = (phase as f64).rem_euclid(period as f64);
     let mut out = Vec::new();
     let mut x = p;
@@ -181,7 +212,7 @@ fn axis_origins(win: u32, period: u32, phase: f32) -> Vec<u32> {
         // check is the real containment contract. Rounding the origin first means
         // a fractional phase can't admit a tile that overhangs the window edge.
         let o = x.round() as u32;
-        if o + period <= win {
+        if o as u64 + period as u64 <= win as u64 {
             out.push(o);
         }
         x += per;
@@ -204,8 +235,8 @@ fn build_cells(cols: u32, rows: u32) -> Vec<Cell> {
             .collect();
         assert_eq!(members.len(), 26, "class {class} must hold 26 cells");
 
-        // Two reference cells per class, spread ~1/3 and ~2/3 down the member
-        // list (which is itself spread diagonally across the tile).
+        // Fixed reference positions in rows 4 and 8. Keep the layout compatible
+        // with existing images; these visible bands are not spatially uniform.
         let ref_local = [members.len() / 3, (2 * members.len()) / 3]; // [8, 17]
         let mut data_bit: u8 = 0;
         for (local, &(col, row)) in members.iter().enumerate() {

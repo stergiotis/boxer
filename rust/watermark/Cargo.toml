@@ -3,7 +3,7 @@ name = "watermark"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Tiled luminance-grid watermark: 64 bits embedded so every 464x432 crop recovers the payload after H.264/VP9/AV1 compression. See EXPLANATION.md."
+description = "Cooperative image/session identification through tiled luminance contrast."
 license = "MIT OR Apache-2.0"
 
 # Library (src/lib.rs) + CLI binary (src/main.rs, target name `watermark`).
@@ -17,11 +17,14 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 clap = { version = "4", features = ["derive"] }
 # Deterministic, seedable RNG for payload generation in the CLI and tests.
 rand = "0.10"
+# RAII scratch directories for the ffmpeg round-trip (codec.rs): the encode/
+# decode intermediates are cleaned up on drop, including on an early `?`
+# return, instead of the previous manual `create_dir_all` + best-effort
+# `remove_dir_all` pair.
+tempfile = "3"
 
-# NOTE: no `crc` or `rustfft` dependency. CRC-16/CCITT is hand-rolled in
-# payload.rs (~10 lines); the Stage-7 locator evaluates a single Fourier
-# coefficient at the *known* tile period (Goertzel-style, O(N)) in locate.rs, so
-# a full FFT crate is unnecessary. Golay FEC is likewise in-crate (fec.rs).
+# CRC and Golay are implemented in-crate. The locator searches reference-cell
+# covariance at a fixed tile period; no FFT dependency is needed.
 
 [profile.release]
 opt-level = 3

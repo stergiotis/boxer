@@ -1,40 +1,67 @@
-//! Hardening — adversarial inputs to the public decode API must return an error,
-//! never panic, and never a wrong payload.
-
-use watermark::decode::decode_frame;
-use watermark::render::encode_frame;
-use watermark::{LumaFrame, Payload, TileSpec};
+//! Invalid input is rejected, including mutation after checked construction.
+use watermark::{decode_frame, encode_frame, Error, LumaFrame, Payload, TileSpec};
 
 #[test]
-fn all_nan_frame_errors_without_panic() {
+fn nonfinite_mutation_is_rejected_by_encode_and_decode() {
     let spec = TileSpec::default();
-    let f = LumaFrame {
-        w: spec.window_w(),
-        h: spec.window_h(),
-        y: vec![f32::NAN; (spec.window_w() * spec.window_h()) as usize],
-    };
-    // Must not panic; a garbage frame cannot yield a valid payload.
-    assert!(decode_frame(&f, &spec).is_err());
+    for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0, 256.0] {
+        let mut frame = LumaFrame::filled(464, 432, 128.0).unwrap();
+        frame.pixels_mut()[0] = value;
+        assert!(matches!(
+            decode_frame(&frame, &spec),
+            Err(Error::InvalidLuma)
+        ));
+        assert!(matches!(
+            encode_frame(&frame, &Payload([0; 8]), &spec),
+            Err(Error::InvalidLuma)
+        ));
+    }
 }
 
 #[test]
-fn nan_poked_into_watermark_does_not_panic() {
-    let spec = TileSpec::default();
-    let base = LumaFrame::filled(spec.window_w(), spec.window_h(), 128.0);
-    let mut wm = encode_frame(&base, &Payload([1, 2, 3, 4, 5, 6, 7, 8]), &spec);
-    // Corrupt a swathe of pixels with non-finite values.
-    for v in wm.y.iter_mut().step_by(7) {
-        *v = f32::NAN;
+fn constructors_reject_invalid_dimensions_storage_and_contrast() {
+    for (w, h) in [(0, 1), (1, 0), (u32::MAX, u32::MAX)] {
+        assert!(LumaFrame::filled(w, h, 128.0).is_err());
     }
-    let _ = decode_frame(&wm, &spec); // only requirement: no panic
+    for n in [0, 3, 5] {
+        assert!(LumaFrame::from_luma(2, 2, vec![128.0; n]).is_err());
+    }
+    assert!(LumaFrame::from_luma(2, 2, vec![f32::NAN; 4]).is_err());
+    for delta in [f32::NAN, f32::INFINITY, -8.0, 0.0, 1.99, 127.01] {
+        assert!(matches!(TileSpec::new(delta), Err(Error::InvalidDelta)));
+    }
+    for delta in [2.0, 8.0, 127.0] {
+        assert!(TileSpec::new(delta).is_ok());
+    }
 }
 
 #[test]
-fn sub_window_frames_report_no_complete_tile() {
-    let spec = TileSpec::default();
-    for &(w, h) in &[(1u32, 1u32), (100, 100), (spec.tile_w, spec.tile_h)] {
-        let f = LumaFrame::filled(w, h, 128.0);
-        // Smaller than the 2×tile window → no fully contained tile, no panic.
-        assert!(decode_frame(&f, &spec).is_err(), "{w}x{h} should error");
+fn one_aligned_tile_is_valid_below_guaranteed_window() {
+    let s = TileSpec::default();
+    let p = Payload([42; 8]);
+    let base = LumaFrame::filled(s.tile_w(), s.tile_h(), 255.0).unwrap();
+    let wm = encode_frame(&base, &p, &s).unwrap();
+    assert_eq!(decode_frame(&wm, &s).unwrap(), p);
+    for (w, h) in [(1, 1), (231, 216), (232, 215)] {
+        let small = LumaFrame::filled(w, h, 128.0).unwrap();
+        assert!(matches!(
+            decode_frame(&small, &s),
+            Err(Error::NoCompleteTile)
+        ));
+        assert!(matches!(
+            encode_frame(&small, &p, &s),
+            Err(Error::NoCompleteTile)
+        ));
     }
+}
+
+#[test]
+fn out_of_bounds_crop_and_origins_are_errors() {
+    let frame = LumaFrame::filled(464, 432, 128.0).unwrap();
+    let s = TileSpec::default();
+    assert!(frame.crop(u32::MAX, 0, 1, 1).is_err());
+    assert!(frame.crop(0, 0, 0, 1).is_err());
+    assert!(watermark::decode::recover_words(&frame, &[(u32::MAX, 0)], &s).is_err());
+    assert!(watermark::sample::inner_mean(&frame, u32::MAX, 0, 0, 0, &s).is_none());
+    assert!(watermark::sample::inner_and_ring(&frame, 0, 0, u32::MAX, 0, &s).is_none());
 }

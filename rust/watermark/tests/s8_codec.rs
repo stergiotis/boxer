@@ -2,7 +2,11 @@
 //! → decode first frame → decode the watermark from a SINGLE full-frame tile.
 //! Reports pre-Golay BER and asserts CRC-clean recovery at the chosen quality.
 //!
-//! Skipped (not failed) when `ffmpeg` is absent.
+//! Ignored by default (shells out to `ffmpeg` and is comparatively slow);
+//! `scripts/ci/watermark_test.sh` runs it explicitly, by name, in its release
+//! codec lane. Once explicitly selected, a missing `ffmpeg` is a hard failure
+//! rather than a silent skip — the lane exists specifically to exercise the
+//! codec path, so a green run without ffmpeg would be a false pass.
 
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -17,7 +21,7 @@ use watermark::{LumaFrame, Payload, TileSpec};
 /// full-frame tile. Returns `(pre_golay_ber, payload_ok_count)`.
 fn measure(codec: Codec, crf: u32, n: u32, seed: u64) -> (f64, u32) {
     let spec = TileSpec::default();
-    let base = LumaFrame::synthetic_natural(spec.window_w(), spec.window_h(), seed);
+    let base = LumaFrame::synthetic_natural(spec.window_w(), spec.window_h(), seed).unwrap();
     let mut rng = StdRng::seed_from_u64(seed ^ crf as u64);
     let mut bit_errors = 0u64;
     let mut total_bits = 0u64;
@@ -26,10 +30,10 @@ fn measure(codec: Codec, crf: u32, n: u32, seed: u64) -> (f64, u32) {
     for _ in 0..n {
         let payload = Payload(rng.random());
         let truth = encode_info(&payload.to_info_bits());
-        let wm = encode_frame(&base, &payload, &spec);
+        let wm = encode_frame(&base, &payload, &spec).unwrap();
         let dec = roundtrip(&wm, codec, crf).expect("ffmpeg round-trip");
 
-        let rec = recover_words(&dec, &[(0, 0)], &spec);
+        let rec = recover_words(&dec, &[(0, 0)], &spec).unwrap();
         for (r, t) in rec.words.iter().zip(truth.iter()) {
             bit_errors += (r ^ t).count_ones() as u64;
         }
@@ -42,11 +46,12 @@ fn measure(codec: Codec, crf: u32, n: u32, seed: u64) -> (f64, u32) {
 }
 
 #[test]
+#[ignore = "shells out to ffmpeg; run explicitly (see scripts/ci/watermark_test.sh)"]
 fn codec_roundtrip_single_tile() {
-    if !ffmpeg_available() {
-        eprintln!("ffmpeg not found on PATH — skipping Stage 8 codec test");
-        return;
-    }
+    assert!(
+        ffmpeg_available(),
+        "ffmpeg not found on PATH — this test was explicitly selected and requires it"
+    );
     const N: u32 = 30;
     println!("codec  crf  pre_golay_BER  payload_ok/{N}");
     for codec in Codec::all() {
@@ -63,14 +68,11 @@ fn codec_roundtrip_single_tile() {
 }
 
 /// Opt-in quality sweep (`cargo test -- --ignored`) — documents where each codec
-/// starts failing. No hard assertions beyond what Stage 8 already guarantees.
+/// starts failing. Separate from the fixed-quality acceptance cases.
 #[test]
 #[ignore]
 fn codec_quality_sweep() {
-    if !ffmpeg_available() {
-        eprintln!("ffmpeg not found — skipping sweep");
-        return;
-    }
+    assert!(ffmpeg_available(), "quality sweep requires ffmpeg");
     const N: u32 = 12;
     println!("codec  crf  pre_golay_BER  payload_ok/{N}");
     for codec in Codec::all() {

@@ -10,8 +10,9 @@
 //! Limited-range quantization (the `yuv420p` default) scales/offsets our luma,
 //! but the reference-cell calibration absorbs exactly that affine change.
 
-use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use crate::frame::LumaFrame;
 use crate::Error;
@@ -99,56 +100,108 @@ pub fn ffmpeg_available() -> bool {
         .unwrap_or(false)
 }
 
-static COUNTER: AtomicU64 = AtomicU64::new(0);
+/// Upper bound on a single `ffmpeg` invocation (encode or decode) before we
+/// kill it and surface an error, rather than hang the caller on a wedged
+/// subprocess indefinitely.
+const FFMPEG_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// How often to poll the child for exit while waiting on it below.
+const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 /// Encode `frame` with `codec` at `crf`, decode the first frame, and return the
 /// recovered luma. Errors if `ffmpeg` fails or the resolution changes.
+///
+/// A private temporary directory holds intermediates and is removed on drop.
 pub fn roundtrip(frame: &LumaFrame, codec: Codec, crf: u32) -> Result<LumaFrame, Error> {
-    let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("wm_codec_{}_{}", std::process::id(), id));
-    std::fs::create_dir_all(&dir)?;
+    let dir = tempfile::Builder::new()
+        .prefix("wm_codec_")
+        .tempdir()
+        .map_err(Error::Io)?;
 
-    let inp = dir.join("in.png");
-    let enc = dir.join("enc.mkv");
-    let dec = dir.join("dec.png");
+    let inp = dir.path().join("in.png");
+    let enc = dir.path().join("enc.mkv");
+    let dec = dir.path().join("dec.png");
 
-    let result = (|| {
-        frame.save_png(&inp)?;
+    frame.save_png(&inp)?;
 
-        let mut e = Command::new("ffmpeg");
-        e.args(["-y", "-loglevel", "error", "-i"]).arg(&inp);
-        e.args(codec.encode_args(crf));
-        e.args(["-pix_fmt", "yuv420p", "-frames:v", "1"]).arg(&enc);
-        run(e)?;
+    let mut e = Command::new("ffmpeg");
+    e.args(["-y", "-loglevel", "error", "-i"]).arg(&inp);
+    e.args(codec.encode_args(crf));
+    e.args(["-pix_fmt", "yuv420p", "-frames:v", "1"]).arg(&enc);
+    run(e)?;
 
-        let mut d = Command::new("ffmpeg");
-        d.args(["-y", "-loglevel", "error", "-i"]).arg(&enc);
-        d.args(["-vf", "format=gray", "-frames:v", "1"]).arg(&dec);
-        run(d)?;
+    let mut d = Command::new("ffmpeg");
+    d.args(["-y", "-loglevel", "error", "-i"]).arg(&enc);
+    d.args(["-vf", "format=gray", "-frames:v", "1"]).arg(&dec);
+    run(d)?;
 
-        let out = LumaFrame::load_png(&dec)?;
-        if out.w != frame.w || out.h != frame.h {
-            return Err(Error::Ffmpeg(format!(
-                "resolution changed {}x{} -> {}x{}",
-                frame.w, frame.h, out.w, out.h
-            )));
-        }
-        Ok(out)
-    })();
-
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+    let out = LumaFrame::load_png(&dec)?;
+    // `dir` drops here (success or error above already returned), removing
+    // the scratch directory.
+    if out.w() != frame.w() || out.h() != frame.h() {
+        return Err(Error::Ffmpeg(format!(
+            "resolution changed {}x{} -> {}x{}",
+            frame.w(),
+            frame.h(),
+            out.w(),
+            out.h()
+        )));
+    }
+    Ok(out)
 }
 
+/// Run `c` to completion, bounded by [`FFMPEG_TIMEOUT`]. Stderr is drained on
+/// a background thread while we poll for exit, so a chatty `ffmpeg` can't wedge
+/// on a full pipe while we wait; stdout is discarded (`-loglevel error` sends
+/// nothing there worth keeping).
 fn run(mut c: Command) -> Result<(), Error> {
-    let o = c
-        .output()
+    c.stdin(Stdio::null());
+    c.stdout(Stdio::null());
+    c.stderr(Stdio::piped());
+
+    let mut child = c
+        .spawn()
         .map_err(|e| Error::Ffmpeg(format!("spawn ffmpeg: {e}")))?;
-    if !o.status.success() {
+
+    let mut stderr_pipe = child.stderr.take();
+    let stderr_reader = std::thread::spawn(move || {
+        let mut buf = String::new();
+        if let Some(s) = stderr_pipe.as_mut() {
+            let _ = s.read_to_string(&mut buf);
+        }
+        buf
+    });
+
+    let deadline = Instant::now() + FFMPEG_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stderr_reader.join();
+                return Err(Error::Ffmpeg(format!("wait ffmpeg: {e}")));
+            }
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = stderr_reader.join();
+            return Err(Error::Ffmpeg(format!(
+                "ffmpeg exceeded {}s — killed",
+                FFMPEG_TIMEOUT.as_secs()
+            )));
+        }
+        std::thread::sleep(POLL_INTERVAL);
+    };
+
+    let stderr = stderr_reader.join().unwrap_or_default();
+    if !status.success() {
         return Err(Error::Ffmpeg(format!(
             "ffmpeg exited {}: {}",
-            o.status,
-            String::from_utf8_lossy(&o.stderr).trim()
+            status,
+            stderr.trim()
         )));
     }
     Ok(())

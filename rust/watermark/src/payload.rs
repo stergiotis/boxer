@@ -2,9 +2,9 @@
 //!
 //! A [`Payload`] is 8 bytes. We append a 16-bit CRC to form the **80-bit info
 //! word** that the FEC layer protects. The CRC is the final clean/not-clean
-//! gate after Golay decoding (Golay can *mis-correct* >3-error words into a
-//! valid-but-wrong codeword; only the CRC catches that), with a 1/65536
-//! missed-detection floor.
+//! gate after Golay decoding. Higher-weight damage can become another valid
+//! codeword or message. A checksum is not authentication; its width alone does
+//! not establish a false-detection rate for a particular image channel.
 
 use crate::Error;
 
@@ -78,18 +78,21 @@ impl Payload {
 
     /// Parse a 16-hex-digit string into a payload.
     pub fn from_hex(s: &str) -> Result<Payload, Error> {
-        let s = s.trim().trim_start_matches("0x");
-        if s.len() != PAYLOAD_BYTES * 2 {
-            return Err(Error::BadDimensions(format!(
-                "payload hex must be {} chars, got {}",
-                PAYLOAD_BYTES * 2,
-                s.len()
-            )));
+        let s = s.trim();
+        let s = s.strip_prefix("0x").unwrap_or(s).as_bytes();
+        if s.len() != PAYLOAD_BYTES * 2 || !s.iter().all(u8::is_ascii_hexdigit) {
+            return Err(Error::InvalidPayload);
         }
+        let digit = |b: u8| {
+            if b.is_ascii_digit() {
+                b - b'0'
+            } else {
+                b.to_ascii_lowercase() - b'a' + 10
+            }
+        };
         let mut bytes = [0u8; PAYLOAD_BYTES];
-        for (i, byte) in bytes.iter_mut().enumerate() {
-            *byte = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
-                .map_err(|e| Error::BadDimensions(format!("bad hex: {e}")))?;
+        for (pair, byte) in s.chunks_exact(2).zip(bytes.iter_mut()) {
+            *byte = (digit(pair[0]) << 4) | digit(pair[1]);
         }
         Ok(Payload(bytes))
     }

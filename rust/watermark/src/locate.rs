@@ -8,12 +8,9 @@
 //! We score a candidate phase by the **covariance between the reference cells'
 //! measured inner means and their nominal levels**. At the true phase the bold
 //! black/mid/white reference cells land exactly on their known levels, so this
-//! covariance is strongly positive; at a wrong phase the cells sample arbitrary
-//! content and it collapses to ~0. Base-image structure cannot fake the
-//! 14-cell pattern, and because the score only needs the transfer to be
-//! monotonic, it is robust to brightness/gamma. A coarse 4-px sweep finds the
-//! peak; a 1-px refinement pins it. False locates are harmless — they produce
-//! garbage bits that the CRC rejects, never a wrong payload.
+//! covariance tends to be positive. Content can also correlate with this pattern;
+//! the score is not a detection probability. A coarse sweep and local refinement
+//! estimate phase; calibration, FEC and CRC subsequently check the evidence.
 
 use crate::frame::LumaFrame;
 use crate::layout::{CellKind, TileSpec};
@@ -27,10 +24,16 @@ pub struct Locate {
     pub period_y: f32,
     pub phase_x: f32,
     pub phase_y: f32,
+    /// Raw reference covariance; diagnostic only, not a probability.
+    pub score: f32,
 }
 
 /// Locate the tile grid in `frame`.
-pub fn locate(frame: &LumaFrame, spec: &TileSpec) -> Locate {
+pub fn locate(frame: &LumaFrame, spec: &TileSpec) -> Result<Locate, crate::Error> {
+    frame.validate()?;
+    if frame.w() < spec.tile_w() || frame.h() < spec.tile_h() {
+        return Err(crate::Error::NoCompleteTile);
+    }
     // Reference cells: (col, row, nominal level).
     let refs: Vec<(u32, u32, f32)> = spec
         .cells()
@@ -46,6 +49,11 @@ pub fn locate(frame: &LumaFrame, spec: &TileSpec) -> Locate {
     // nominal levels. Since Σ(nom − nom_mean) = 0, the measured mean drops out:
     // cov = Σ measured·(nom − nom_mean), a single pass with no per-call storage.
     let score = |px: u32, py: u32| -> f32 {
+        if px as u64 + spec.tile_w() as u64 > frame.w() as u64
+            || py as u64 + spec.tile_h() as u64 > frame.h() as u64
+        {
+            return f32::NEG_INFINITY;
+        }
         let mut cov = 0f32;
         for &(col, row, nom) in &refs {
             match sample::inner_mean(frame, px, py, col, row, spec) {
@@ -60,9 +68,9 @@ pub fn locate(frame: &LumaFrame, spec: &TileSpec) -> Locate {
     const COARSE: u32 = 4;
     let (mut bx, mut by, mut bs) = (0u32, 0u32, f32::NEG_INFINITY);
     let mut py = 0;
-    while py < spec.tile_h {
+    while py < spec.tile_h() {
         let mut px = 0;
-        while px < spec.tile_w {
+        while px < spec.tile_w() {
             let s = score(px, py);
             if s > bs {
                 bs = s;
@@ -79,12 +87,13 @@ pub fn locate(frame: &LumaFrame, spec: &TileSpec) -> Locate {
     // make the coarse winner land at 0, a couple px away on the *other* side.
     let (rx, ry) = refine(&score, bx, by, COARSE + 1, spec);
 
-    Locate {
-        period_x: spec.tile_w as f32,
-        period_y: spec.tile_h as f32,
+    Ok(Locate {
+        period_x: spec.tile_w() as f32,
+        period_y: spec.tile_h() as f32,
         phase_x: rx as f32,
         phase_y: ry as f32,
-    }
+        score: score(rx, ry),
+    })
 }
 
 fn refine(
@@ -95,7 +104,7 @@ fn refine(
     spec: &TileSpec,
 ) -> (u32, u32) {
     let r = radius as i32;
-    let (pw, ph) = (spec.tile_w as i32, spec.tile_h as i32);
+    let (pw, ph) = (spec.tile_w() as i32, spec.tile_h() as i32);
     let (mut bx, mut by, mut bs) = (cx, cy, f32::NEG_INFINITY);
     for dy in -r..=r {
         let py = (cy as i32 + dy).rem_euclid(ph) as u32;
@@ -113,7 +122,7 @@ fn refine(
 }
 
 /// Convenience: the pixel origins of every complete tile in `frame`.
-pub fn complete_tiles(frame: &LumaFrame, spec: &TileSpec) -> Vec<(u32, u32)> {
-    let loc = locate(frame, spec);
-    spec.complete_tile_origins(frame.w, frame.h, loc.phase_x, loc.phase_y)
+pub fn complete_tiles(frame: &LumaFrame, spec: &TileSpec) -> Result<Vec<(u32, u32)>, crate::Error> {
+    let loc = locate(frame, spec)?;
+    Ok(spec.complete_tile_origins(frame.w(), frame.h(), loc.phase_x, loc.phase_y))
 }

@@ -11,13 +11,12 @@
 //! Codeword layout is **info in the high 12 bits**: `codeword = info<<12 |
 //! parity`. Decoding is syndrome → coset-leader table lookup. The four 4096-entry
 //! tables are built once on first use (`LazyLock`); no GF(256), no
-//! Berlekamp–Massey, no external FEC crate — exactly what `EXPLANATION.md` mandates.
+//! Berlekamp–Massey or external FEC crate.
 //!
 //! Each word corrects ≤3 bit errors and *detects* 4 (reported as
-//! `n_errors == UNCORRECTABLE`). A word hit by >3 errors can also be
-//! *mis-corrected* into a valid-but-wrong codeword with a low error count — that
-//! is caught downstream by the payload CRC (`EXPLANATION.md` §Guardrails 9), never
-//! surfaced as a clean decode.
+//! `n_errors == UNCORRECTABLE`). Larger error patterns can become a different
+//! codeword. Padding and CRC add checks, not a guarantee against every wrong
+//! payload or deliberately replaced identifier.
 
 use std::sync::LazyLock;
 
@@ -168,6 +167,8 @@ pub struct DecodeStats {
     pub corrected: u32,
     /// Number of words flagged uncorrectable (≥4 errors detected).
     pub uncorrectable: usize,
+    /// Whether the decoded reserved low four bits of the last word are zero.
+    pub padding_ok: bool,
 }
 
 /// Decode 7 received codewords back to the 80-bit info word, with diagnostics.
@@ -183,17 +184,30 @@ pub fn decode_words(words: &[u32; N_WORDS]) -> ([bool; INFO_BITS], DecodeStats) 
             stats.corrected += e as u32;
         }
     }
+    stats.padding_ok = info12[N_WORDS - 1] & 0x0f == 0;
     (unpack_info(&info12), stats)
 }
 
 /// Decode 7 received codewords straight to a CRC-verified [`Payload`].
 ///
-/// Returns [`Error::CrcMismatch`] when the recovered info word fails its CRC —
-/// the only honest outcome when Golay may have mis-corrected a burst-damaged
-/// word (`EXPLANATION.md` §Guardrails 9).
+/// Reject explicitly uncorrectable words and invalid padding before CRC.
+/// Higher-weight errors can still turn one valid message into another.
 pub fn decode_payload(words: &[u32; N_WORDS]) -> Result<Payload, Error> {
-    let (info, _stats) = decode_words(words);
-    Payload::from_info_bits(&info)
+    let (info, stats) = decode_words(words);
+    checked_payload(&info, &stats)
+}
+
+pub(crate) fn checked_payload(
+    info: &[bool; INFO_BITS],
+    stats: &DecodeStats,
+) -> Result<Payload, Error> {
+    if stats.uncorrectable > 0 {
+        return Err(Error::Uncorrectable);
+    }
+    if !stats.padding_ok {
+        return Err(Error::InvalidPadding);
+    }
+    Payload::from_info_bits(info)
 }
 
 #[cfg(test)]
@@ -203,7 +217,7 @@ mod tests {
     #[test]
     fn golden_matches_go_encoding_table() {
         // Spot values lifted from public/fec/code/golay24/encoding_table.go.
-        // Proves the ported tables are byte-identical to the established impl.
+        // Pins representative values; this is not a full-table equivalence proof.
         const GOLDEN: &[(u16, u32)] = &[
             (0, 0x000000),
             (1, 0x0018eb),

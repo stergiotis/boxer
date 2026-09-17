@@ -1,40 +1,24 @@
 #!/bin/bash
-# Build, clippy, and test the rust/watermark crate (tiled luminance-grid
-# watermark). Standalone — deliberately NOT wired into scripts/ci/lint.sh,
-# because the codec round-trip tests shell out to ffmpeg and the noise sweep is
-# slow; run this explicitly in CI or before touching the crate.
-#
-# Graceful skip when cargo (or the pinned toolchain) is absent: prints a
-# 'skipped' line and exits 0, so contributors without the Rust toolchain still
-# see green. The Stage 8/9 codec tests self-skip when ffmpeg is not on PATH.
-
-set -e
-set -o pipefail
-
+# Required watermark correctness and codec lanes (ADR-0241). Missing tools fail;
+# use cargo test --locked directly for the dependency-free correctness lane.
+set -euo pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
-crate_dir="$here/../../rust/watermark"
-cd "$crate_dir"
-
-if ! command -v cargo >/dev/null 2>&1; then
-    echo "watermark_test: skipped (cargo not installed)"
-    exit 0
-fi
-
-# The crate pins toolchain 1.92 via rust-toolchain.toml; if it is not installed
-# and cannot be resolved, skip rather than fail a toolchain-less environment.
-if ! cargo --version >/dev/null 2>&1; then
-    echo "watermark_test: skipped (pinned toolchain unavailable)"
-    exit 0
-fi
-
-if ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "watermark_test: note: ffmpeg not on PATH — Stage 8/9 codec tests will self-skip"
-fi
-
-echo "watermark_test: clippy"
-cargo clippy --all-targets -- -D warnings
-
-echo "watermark_test: test (release)"
-cargo test --release
-
-echo "watermark_test: ok"
+repo_root="$here/../.."
+cd "$repo_root/rust/watermark"
+source "$repo_root/scripts/dev/rust-repro-env.sh"
+cargo --version
+ffmpeg -version >/dev/null
+encoders=$(ffmpeg -hide_banner -encoders 2>/dev/null)
+for encoder in libx264 libvpx-vp9 libsvtav1; do
+    if ! grep -q " $encoder " <<<"$encoders"; then
+        printf 'watermark_test: missing encoder %s\n' "$encoder" >&2
+        exit 1
+    fi
+done
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+# Select acceptance tests exactly, leaving the optional quality sweep out.
+cargo test --locked --release --test s8_codec codec_roundtrip_single_tile -- --ignored --exact
+cargo test --locked --release --test s9_crop every_crop_recovers_payload -- --ignored --exact
+cargo test --locked --release --test codec_pathological -- --ignored
