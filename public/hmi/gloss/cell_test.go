@@ -1,6 +1,8 @@
 package gloss
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -131,3 +133,21 @@ func TestKindOfArrow(t *testing.T) {
 // byteCell is a cell of raw bytes, the shape an Arrow binary column hands a
 // face. TextCell.Raw returns S as-is, so it carries bytes as well as text.
 func byteCell(s string) TextCell { return TextCell{S: s, K: ValueKindBytes} }
+
+// The un-glossed rendering of bytes is whole for identifier-sized values and
+// bounded past that: it runs per visible cell per frame (ADR-0245).
+func TestFormatArrowElemBoundsBinary(t *testing.T) {
+	b := array.NewBinaryBuilder(memory.NewGoAllocator(), arrow.BinaryTypes.Binary)
+	defer b.Release()
+	small := bytes.Repeat([]byte{0xab}, FormatBinaryMaxBytes)
+	b.Append(small)
+	b.Append(bytes.Repeat([]byte{0xcd}, 1<<20))
+	arr := b.NewArray()
+	defer arr.Release()
+
+	assert.Equal(t, strings.Repeat("ab", FormatBinaryMaxBytes), FormatArrowElem(arr, 0), "at the bound: whole")
+	big := FormatArrowElem(arr, 1)
+	assert.True(t, strings.HasPrefix(big, strings.Repeat("cd", FormatBinaryMaxBytes)))
+	assert.True(t, strings.HasSuffix(big, "… (1.0 MiB)"), big)
+	assert.Less(t, len(big), 2*FormatBinaryMaxBytes+32)
+}

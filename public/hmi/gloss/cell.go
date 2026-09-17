@@ -1,12 +1,14 @@
 package gloss
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
@@ -227,6 +229,27 @@ func (inst TextCell) Uint64() (v uint64, ok bool) {
 	return v, err == nil
 }
 
+// FormatBinaryMaxBytes is how much of a binary value the un-glossed rendering
+// spells out. Identifiers, hashes and packed addresses fit under it whole; a
+// stored document or image does not, and its cell names the size instead.
+const FormatBinaryMaxBytes = 256
+
+// formatBinary is the un-glossed rendering of bytes: lowercase hex, whole up
+// to [FormatBinaryMaxBytes] and the head plus the size past it.
+//
+// The bound is there because this runs per visible cell per frame with no
+// cache behind it, at two bytes of text per byte of value: a grid over a
+// column of recordings built megabytes of hex every frame, all of it to be
+// truncated to a cell's width (ADR-0245, found while implementing). Nothing
+// reads the text back as data — a gloss takes the bytes from the cell
+// accessor, never from here.
+func formatBinary(b []byte) string {
+	if len(b) <= FormatBinaryMaxBytes {
+		return hex.EncodeToString(b)
+	}
+	return hex.EncodeToString(b[:FormatBinaryMaxBytes]) + "… (" + humanize.IBytes(uint64(len(b))) + ")"
+}
+
 // FormatArrowElem formats the row-th element of an arbitrary Arrow array as
 // its plain display string, empty for NULL or out of range. It is the
 // un-glossed rendering every grid falls back to, and the one `gloss/raw`
@@ -270,15 +293,15 @@ func FormatArrowElem(arr arrow.Array, row int64) string {
 	case *array.LargeString:
 		return utfsafe.EnsureUTF8(a.Value(int(row)))
 	case *array.Binary:
-		return fmt.Sprintf("%x", a.Value(int(row)))
+		return formatBinary(a.Value(int(row)))
 	case *array.LargeBinary:
 		// LargeBinary.ValueStr() returns string(rawBytes) without UTF-8
 		// validation — feeding that through a label ships non-UTF-8 to the
 		// renderer and breaks the FFFI protocol mid-frame. Hex-encode like
 		// *array.Binary.
-		return fmt.Sprintf("%x", a.Value(int(row)))
+		return formatBinary(a.Value(int(row)))
 	case *array.FixedSizeBinary:
-		return fmt.Sprintf("%x", a.Value(int(row)))
+		return formatBinary(a.Value(int(row)))
 	case *array.Timestamp:
 		ts := a.Value(int(row))
 		unit := arrow.Second
