@@ -25,6 +25,12 @@ The categories below correspond to distinct redistribution mechanics:
   repository whose source lives elsewhere (or in a sibling directory).
 - **Module-level Go dependencies** are pulled by `go.mod` at build time
   and are not redistributed in source form by this repository.
+- **Build-time native and Rust dependencies of a shipped artifact**
+  (section 4) are neither committed nor resolved by `go.mod`: they are
+  built from pinned upstream source, or taken from the build host, and
+  placed beside an executable. Their notices travel in the artifact
+  rather than in this tree, so this document records what those
+  obligations are and which script discharges them.
 
 ## 1. Inline ports (committed source)
 
@@ -570,6 +576,86 @@ binary's distributor must propagate the upstream NOTICE contents per
 Apache-2.0 section 4(d). boxer's own [NOTICE](NOTICE) is not a
 substitute for the upstream NOTICEs; both must travel with the binary.
 
+## 4. Windows viewer redistributables (rust/imzero2-viewer)
+
+This material is neither committed to the tree nor pulled by `go.mod`.
+[`scripts/dev/build-viewer-deps.sh`](scripts/dev/build-viewer-deps.sh)
+builds it from pinned, checksummed upstream source and
+[`scripts/dev/build-viewer.sh`](scripts/dev/build-viewer.sh) assembles
+it into the crate's `target/windows-portable/` -- the directory a
+distributor would ship. Nothing here reaches a binary built from the Go
+tree. See [ADR-0243](doc/adr/0243-imzero2-native-windows-viewer.md).
+
+The obligations below attach to whoever distributes that directory, and
+the material that discharges them is placed in it by the two scripts.
+
+### 4.1 FFmpeg -- libavcodec / libavutil (LGPL-2.1-or-later)
+
+- Built shared (`--enable-shared --disable-static`) and configured
+  without `--enable-gpl`, `--enable-nonfree` and `--enable-version3`, so
+  the libraries are LGPL-2.1-or-later and the viewer links them
+  dynamically. `--enable-gpl` would make them GPL, `--enable-nonfree`
+  undistributable and `--enable-version3` LGPL-3; the first two cannot
+  ship beside an MIT binary, and none of the three is needed for the
+  codecs this viewer decodes.
+- `COPYING.LGPLv2.1` is placed at `licenses/FFmpeg-LGPL-2.1.txt`; the
+  upstream tarball and the exact build script are placed under
+  `sources/`, which is what LGPL-2.1 section 6 asks of a distributor who
+  links the library dynamically.
+- Distributing a *modified* FFmpeg requires distributing its
+  corresponding source; the pinned tarball alone no longer suffices.
+
+### 4.2 dav1d (BSD-2-Clause)
+
+- Built shared from pinned upstream source as FFmpeg's AV1 decoder.
+- `COPYING` is placed at `licenses/dav1d.txt` and the upstream tarball
+  under `sources/`. Attribution is the whole of the obligation.
+
+### 4.3 MinGW-w64 runtime (GCC Runtime Library Exception; winpthreads)
+
+- `libgcc_s_seh-1.dll` and `libwinpthread-1.dll` are copied from the
+  build host's toolchain, not built here. `libgcc_s` is
+  GPL-3.0-or-later under the GCC Runtime Library Exception, which is
+  what permits shipping it beside an MIT binary -- the exception text
+  must travel with it. winpthreads carries its own permissive notice.
+- Because the files come from the host, their notices depend on the
+  packager's distribution: `MINGW_LICENSE_DIR` supplies them and is
+  copied to `licenses/mingw/`. `build-viewer.sh` refuses to build
+  without it; `--skip-runtime-licenses` proceeds for a local build and
+  writes a `NOT-FOR-REDISTRIBUTION.txt` marker into the directory.
+
+### 4.4 Rust dependencies (locked crate tree)
+
+- `rust/imzero2-viewer/Cargo.lock` is the source of truth. `boxer gov
+  cargo-licenses`
+  ([`public/gov/cargolicenses`](public/gov/cargolicenses/cargolicenses.go))
+  copies the notice files out of the *locked sources* -- not the registry
+  metadata -- into `licenses/rust/`, one directory per crate plus an
+  `INDEX.txt` recording each crate's declared SPDX expression.
+- The tree is predominantly `MIT OR Apache-2.0`, with Unicode-3.0,
+  BSD-3-Clause, ISC, WTFPL and CDLA-Permissive-2.0 also declared
+  outright. Copying files rather than electing an identifier also
+  discharges the conjunctions, such as `ring` (`Apache-2.0 AND ISC`),
+  where both notices are required.
+- **Declaration-only crates.** A crate that publishes no notice file
+  gets no directory under `licenses/rust/`; its `INDEX.txt` line is the
+  whole record. `ffmpeg-sys-next` is one (WTFPL, which asks nothing of a
+  distributor), but `prost-reflect` and `r-efi` are the case that
+  matters: their elected MIT terms do require a copyright notice, and
+  upstream ships none to copy. Recovering it from the upstream
+  repository falls to whoever distributes the artifact; `INDEX.txt` is
+  what surfaces the case.
+- **Election.** `r-efi` offers `MIT OR Apache-2.0 OR LGPL-2.1-or-later`;
+  boxer elects MIT, on the same reasoning as the `freetype` election in
+  section 3.1.
+- **Not gated.** The section 3.1 CI gate reads a Go SBOM and does not
+  see this tree; `gov cargo-licenses` collects notices but classifies
+  nothing. A lockfile bump that introduces a copyleft crate would not
+  fail CI, so the `INDEX.txt` warrants a read on dependency changes.
+  Two identifiers already in this tree, Unicode-3.0 and
+  CDLA-Permissive-2.0, are absent from the section 3.1 policy map and
+  would need adding before it could classify the tree.
+
 ## Maintaining this document
 
 - When adding an inline port of third-party code, append a subsection
@@ -579,3 +665,7 @@ substitute for the upstream NOTICEs; both must travel with the binary.
   section 2 with the build provenance and license chain.
 - Module-level dependency updates do not require edits here: `go.mod`
   is the source of truth and the `boxer gov license-gate` CI gate is the guard.
+- When a build script starts placing a new third-party file beside a
+  shipped artifact, append a subsection under section 4 naming the
+  terms, the script that supplies the notice, and where it lands in the
+  artifact. Unlike section 3 there is no gate behind this one.
