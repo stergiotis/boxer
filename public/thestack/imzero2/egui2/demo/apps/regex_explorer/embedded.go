@@ -124,9 +124,10 @@ func (inst *EmbeddedApp) Render() {
 // Close abandons in-flight queries. Hosts that know when their embedded
 // explorer dies should call it.
 //
-// It does not retract what the explorer published: that is the runtime's
-// job when the embed's bus client closes (ADR-0240 §SD5; the embed handle
-// closes it, ADR-0155 §SD4). In practice the embedded case never publishes
+// It does not retract what the explorer published: an embedded explorer
+// has no bus client of its own — it publishes over its host's — so its
+// datasets belong to the host's window and the runtime retracts them when
+// that window closes (ADR-0240 §SD5). In practice the embedded case never publishes
 // anyway — the host's bus client carries the *host app's* manifest caps,
 // which will not include adhoc.publish, so the publish is refused with a
 // reason in the status line rather than silently doing nothing.
