@@ -25,7 +25,7 @@ scripts/dev/build-viewer.sh
 
 The dependency script verifies pinned archives and builds Windows FFmpeg/dav1d shared libraries. Without `--fetch`, it works from previously staged sources. `FFMPEG_DIR` can select a matching Windows development prefix; build-time `CC_x86_64_pc_windows_gnu` selects a MinGW compiler. Set `LIBCLANG_PATH` when libclang is outside the dynamic loader's search path.
 
-The portable directory is `target/windows-portable/` under this crate. Keep the DLLs beside the executable. It includes FFmpeg/dav1d license and source material; distributing modified libraries also requires distributing their corresponding source. Rust dependency license files are collected from the locked package sources. Set `MINGW_LICENSE_DIR` to supply the toolchain's runtime notices; these must accompany a redistribution using those components. This is not a dependency-free single-file application.
+The portable directory is `target/windows-portable/` under this crate. Keep the DLLs beside the executable. It includes FFmpeg/dav1d license and source material; distributing modified libraries also requires distributing their corresponding source. Rust dependency license files are collected from the locked package sources. `MINGW_LICENSE_DIR` must point at the toolchain's runtime notices, because the directory also ships MinGW's `libgcc_s` and `libwinpthread`; the build refuses to run without it. `--skip-runtime-licenses` builds without them and marks the result as not redistributable. This is not a dependency-free single-file application.
 
 Shader HLSL is embedded and compiled once on the target using `d3dcompiler_47.dll`. A missing runtime prevents GPU startup; cross-compilation does not run a Windows shader compiler.
 
