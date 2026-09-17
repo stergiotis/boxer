@@ -1,8 +1,12 @@
 package adhocdata
 
 import (
+	"time"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocreply"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocrequest"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -14,28 +18,35 @@ import (
 // caller's bus client needs Pub on adhoc.publish. The publisher is the
 // envelope's sender and instance; in.By is ignored on this path.
 func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error) {
-	payload, err := buscodec.Encode(wirePublishReq{
-		V:              wireVersion,
-		Alias:          in.Alias,
-		Handle:         in.Handle,
-		KeepAfterClose: in.KeepAfterClose,
-		ArrowIPCStream: in.ArrowIPCStream,
-	})
+	rep, err := request(bus, SubjectPublish, adhocrequest.AdhocRequest{
+		At: time.Now().UTC(), Op: adhocrequest.OpPublish, Alias: in.Alias, Handle: in.Handle,
+		KeepAfterClose: in.KeepAfterClose, ArrowStream: in.ArrowIPCStream,
+	}, "publish")
 	if err != nil {
-		return res, eh.Errorf("adhocdata: encode publish: %w", err)
-	}
-	replyBytes, err := bus.Request(SubjectPublish, payload)
-	if err != nil {
-		return res, eh.Errorf("adhocdata: publish request: %w", err)
-	}
-	rep, err := buscodec.Decode[wirePublishRep](replyBytes)
-	if err != nil {
-		return res, eh.Errorf("adhocdata: decode publish reply: %w", err)
-	}
-	if !rep.OK {
-		return res, eb.Build().Str("reason", rep.Error).Errorf("adhocdata: publish rejected")
+		return
 	}
 	return PublishResult{Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows, Bytes: rep.Bytes}, nil
+}
+
+// request encodes req, sends it on subject and decodes the reply; a reply
+// with Ok false comes back as an error carrying its reason.
+func request(bus app.BusI, subject string, req adhocrequest.AdhocRequest, verb string) (rep adhocreply.AdhocReply, err error) {
+	payload, err := buscodec.Encode(req)
+	if err != nil {
+		return rep, eh.Errorf("adhocdata: encode %s: %w", verb, err)
+	}
+	replyBytes, err := bus.Request(subject, payload)
+	if err != nil {
+		return rep, eh.Errorf("adhocdata: %s request: %w", verb, err)
+	}
+	rep, err = buscodec.Decode[adhocreply.AdhocReply](replyBytes)
+	if err != nil {
+		return rep, eh.Errorf("adhocdata: decode %s reply: %w", verb, err)
+	}
+	if !rep.Ok {
+		return rep, eb.Build().Str("reason", rep.Reason).Errorf("adhocdata: %s rejected", verb)
+	}
+	return rep, nil
 }
 
 // ResolveRequest maps a stable alias to the newest live dataset published
@@ -44,25 +55,8 @@ func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error
 // `datasets:` aliases at open; the caller's bus client needs Pub on
 // adhoc.resolve.
 func ResolveRequest(bus app.BusI, alias string) (res ResolveResult, err error) {
-	payload, err := buscodec.Encode(wireResolveReq{V: wireVersion, Alias: alias})
-	if err != nil {
-		return res, eh.Errorf("adhocdata: encode resolve: %w", err)
-	}
-	replyBytes, err := bus.Request(SubjectResolve, payload)
-	if err != nil {
-		return res, eh.Errorf("adhocdata: resolve request: %w", err)
-	}
-	rep, err := buscodec.Decode[wireResolveRep](replyBytes)
-	if err != nil {
-		return res, eh.Errorf("adhocdata: decode resolve reply: %w", err)
-	}
-	if !rep.OK {
-		return res, eb.Build().Str("reason", rep.Error).Errorf("adhocdata: resolve rejected")
-	}
-	return ResolveResult{
-		Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
-		Bytes: rep.Bytes, CreatedAtUnixUs: rep.CreatedAtUnixUs,
-	}, nil
+	res, _, err = resolve(bus, alias, "")
+	return
 }
 
 // ResolveVerifyRequest is ResolveRequest with a second question in the same
@@ -75,55 +69,45 @@ func ResolveRequest(bus app.BusI, alias string) (res ResolveResult, err error) {
 // transport failures and for "no live dataset under alias"; boundLive is
 // meaningful in both cases.
 func ResolveVerifyRequest(bus app.BusI, alias string, boundHandle string) (res ResolveResult, boundLive bool, err error) {
-	payload, err := buscodec.Encode(wireResolveReq{V: wireVersion, Alias: alias, Handle: boundHandle})
+	return resolve(bus, alias, boundHandle)
+}
+
+// resolve is the shared body of the two resolve helpers: a typed
+// ErrNoLiveDataset for "nothing under the alias", a transport or refusal
+// error otherwise, and the bound handle's liveness whenever the service
+// answered.
+func resolve(bus app.BusI, alias string, boundHandle string) (res ResolveResult, boundLive bool, err error) {
+	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
+		At: time.Now().UTC(), Op: adhocrequest.OpResolve, Alias: alias, Handle: boundHandle,
+	})
 	if err != nil {
-		err = eh.Errorf("adhocdata: encode resolve: %w", err)
-		return
+		return res, false, eh.Errorf("adhocdata: encode resolve: %w", err)
 	}
 	replyBytes, err := bus.Request(SubjectResolve, payload)
 	if err != nil {
-		err = eh.Errorf("adhocdata: resolve request: %w", err)
-		return
+		return res, false, eh.Errorf("adhocdata: resolve request: %w", err)
 	}
-	rep, err := buscodec.Decode[wireResolveRep](replyBytes)
+	rep, err := buscodec.Decode[adhocreply.AdhocReply](replyBytes)
 	if err != nil {
-		err = eh.Errorf("adhocdata: decode resolve reply: %w", err)
-		return
+		return res, false, eh.Errorf("adhocdata: decode resolve reply: %w", err)
 	}
 	boundLive = rep.HandleLive
-	if !rep.OK {
+	if !rep.Ok {
 		if rep.NoLive {
-			err = eb.Build().Str("alias", alias).Errorf("adhocdata: resolve: %w", ErrNoLiveDataset)
-			return
+			return res, boundLive, eb.Build().Str("alias", alias).Errorf("adhocdata: resolve: %w", ErrNoLiveDataset)
 		}
-		err = eb.Build().Str("reason", rep.Error).Errorf("adhocdata: resolve rejected")
-		return
+		return res, boundLive, eb.Build().Str("reason", rep.Reason).Errorf("adhocdata: resolve rejected")
 	}
-	res = ResolveResult{
-		Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
-		Bytes: rep.Bytes, CreatedAtUnixUs: rep.CreatedAtUnixUs,
-	}
-	return
+	res = ResolveResult{Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows, Bytes: rep.Bytes, CreatedAtUnixUs: rep.CreatedAtUs}
+	return res, boundLive, nil
 }
 
 // RetractRequest retracts a dataset via the adhoc.retract subject.
 func RetractRequest(bus app.BusI, handle string) (err error) {
-	payload, err := buscodec.Encode(wireRetractReq{V: wireVersion, Handle: handle})
-	if err != nil {
-		return eh.Errorf("adhocdata: encode retract: %w", err)
-	}
-	replyBytes, err := bus.Request(SubjectRetract, payload)
-	if err != nil {
-		return eh.Errorf("adhocdata: retract request: %w", err)
-	}
-	rep, err := buscodec.Decode[wireRetractRep](replyBytes)
-	if err != nil {
-		return eh.Errorf("adhocdata: decode retract reply: %w", err)
-	}
-	if !rep.OK {
-		return eb.Build().Str("reason", rep.Error).Errorf("adhocdata: retract rejected")
-	}
-	return nil
+	_, err = request(bus, SubjectRetract, adhocrequest.AdhocRequest{
+		At: time.Now().UTC(), Op: adhocrequest.OpRetract, Handle: handle,
+	}, "retract")
+	return
 }
 
 // SubscribeEvents delivers every dataset transition the service publishes

@@ -2,16 +2,22 @@ package adhocdata
 
 import (
 	"errors"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocevent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocreply"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocrequest"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/instanceclosed"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Capability subjects (request/reply, CBOR, audited — ADR-0240 §SD2, the
-// ADR-0026 taxonomy). The resolve step is the audited hand-out moment;
+// Capability subjects (request/reply, audited — ADR-0240 §SD2, the
+// ADR-0026 taxonomy). The wire is the generated adhocrequest / adhocreply
+// codec pair (§SD8); the resolve step is the audited hand-out moment;
 // there is no grant.
 const (
 	SubjectPublish = "adhoc.publish"
@@ -19,7 +25,8 @@ const (
 	SubjectResolve = "adhoc.resolve"
 )
 
-// Event subjects (fire-and-forget, CBOR — ADR-0188 §SD3). The service
+// Event subjects (fire-and-forget, the generated adhocevent codec —
+// ADR-0188 §SD3). The service
 // publishes one event per dataset transition so consumers react in a frame
 // instead of polling: `published` on every publish and republish (the
 // push notification ADR-0134 deferred), `retracted` at the LEAVE step of a
@@ -70,19 +77,10 @@ func (inst EventOpE) String() (s string) {
 	return
 }
 
-type wireEvent struct {
-	V         uint8  `json:"v"`
-	Op        string `json:"op"`
-	Handle    string `json:"handle"`
-	Alias     string `json:"alias,omitempty"`
-	Publisher string `json:"publisher,omitempty"`
-	Revision  uint64 `json:"revision,omitempty"`
-}
-
 // DecodeEvent decodes an adhoc.event.* payload. Consumers that subscribe
 // directly (rather than through SubscribeEvents) call it in their handler.
 func DecodeEvent(subject string, payload []byte) (ev Event, err error) {
-	w, err := buscodec.Decode[wireEvent](payload)
+	w, err := buscodec.Decode[adhocevent.AdhocEvent](payload)
 	if err != nil {
 		err = eh.Errorf("adhocdata: decode event: %w", err)
 		return
@@ -111,8 +109,8 @@ func (inst *Service) publishEvent(subject string, ev Event) {
 	if inst.busClient == nil {
 		return
 	}
-	payload, err := buscodec.Encode(wireEvent{
-		V: wireVersion, Op: ev.Op.String(), Handle: ev.Handle, Alias: ev.Alias,
+	payload, err := buscodec.Encode(adhocevent.AdhocEvent{
+		At: time.Now().UTC(), Op: ev.Op.String(), Handle: ev.Handle, Alias: ev.Alias,
 		Publisher: ev.Publisher, Revision: ev.Revision,
 	})
 	if err != nil {
@@ -122,65 +120,6 @@ func (inst *Service) publishEvent(subject string, ev Event) {
 	if pubErr := inst.busClient.Publish(subject, payload); pubErr != nil {
 		inst.log.Warn().Err(pubErr).Str("subject", subject).Msg("adhocdata: publish event")
 	}
-}
-
-const wireVersion uint8 = 1
-
-type wirePublishReq struct {
-	V              uint8  `json:"v"`
-	Alias          string `json:"alias"`
-	Handle         string `json:"handle,omitempty"`
-	KeepAfterClose bool   `json:"keep_after_close,omitempty"`
-	ArrowIPCStream []byte `json:"arrow_ipc_stream"`
-}
-
-type wirePublishRep struct {
-	V        uint8  `json:"v"`
-	OK       bool   `json:"ok"`
-	Error    string `json:"error,omitempty"`
-	Handle   string `json:"handle,omitempty"`
-	Revision uint64 `json:"revision,omitempty"`
-	Rows     uint64 `json:"rows,omitempty"`
-	Bytes    uint64 `json:"bytes,omitempty"`
-}
-
-type wireResolveReq struct {
-	V     uint8  `json:"v"`
-	Alias string `json:"alias"`
-	// Handle, when set, asks the service to report in the reply whether
-	// this handle is still live (ADR-0188 §SD3 reconcile): a consumer bound
-	// to it verifies its binding and learns the alias's newest dataset in
-	// one round trip, without a grant.
-	Handle string `json:"handle,omitempty"`
-}
-
-type wireResolveRep struct {
-	V               uint8  `json:"v"`
-	OK              bool   `json:"ok"`
-	Error           string `json:"error,omitempty"`
-	Handle          string `json:"handle,omitempty"`
-	Revision        uint64 `json:"revision,omitempty"`
-	Rows            uint64 `json:"rows,omitempty"`
-	Bytes           uint64 `json:"bytes,omitempty"`
-	CreatedAtUnixUs int64  `json:"created_at_unix_us,omitempty"`
-	// HandleLive answers wireResolveReq.Handle: true when that handle is
-	// still in the live set (not left, not unloading). Meaningful whether
-	// or not the alias itself resolved.
-	HandleLive bool `json:"handle_live,omitempty"`
-	// NoLive marks a failed resolve as ErrNoLiveDataset rather than a
-	// malformed request, so the caller can wait instead of retrying.
-	NoLive bool `json:"no_live,omitempty"`
-}
-
-type wireRetractReq struct {
-	V      uint8  `json:"v"`
-	Handle string `json:"handle"`
-}
-
-type wireRetractRep struct {
-	V     uint8  `json:"v"`
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
 }
 
 // subscribe binds the three request subjects on the bus — each on its
@@ -226,13 +165,13 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 // keep goes with it. A dataset lives as long as the window that published
 // it, unless the publisher said otherwise.
 func (inst *Service) handleInstanceClosed(msg *app.Msg) {
-	ev, err := buscodec.Decode[app.InstanceClosed](msg.Payload)
+	ev, err := buscodec.Decode[instanceclosed.InstanceClosed](msg.Payload)
 	if err != nil {
 		inst.log.Warn().Err(err).Msg("adhocdata: decode instance-closed")
 		return
 	}
-	if n := inst.retractOwnedBy(Identity{App: ev.App, Instance: ev.Instance}); n > 0 {
-		inst.log.Info().Str("app", string(ev.App)).Uint64("instance", ev.Instance).Int("retracted", n).
+	if n := inst.retractOwnedBy(Identity{App: app.AppIdT(ev.AppId), Instance: ev.InstanceKey}); n > 0 {
+		inst.log.Info().Str("app", ev.AppId).Uint64("instance", ev.InstanceKey).Int("retracted", n).
 			Msg("adhocdata: instance closed; its datasets retracted")
 	}
 }
@@ -254,7 +193,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	case SubjectResolve:
 		inst.handleResolve(msg)
 	default:
-		inst.reply(msg.Reply, wireRetractRep{V: wireVersion, OK: false, Error: "unknown adhoc subject: " + msg.Subject})
+		inst.refuse(msg, "unknown adhoc subject: "+msg.Subject)
 	}
 }
 
@@ -262,66 +201,74 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 // decoded: the stream plus a generous allowance for the envelope fields.
 const maxPublishPayload = PerDatasetMaxBytes + 4096
 
+// refuse answers a request with a reason and nothing else.
+func (inst *Service) refuse(msg *app.Msg, reason string) {
+	inst.reply(msg.Reply, adhocreply.AdhocReply{At: time.Now().UTC(), Reason: reason})
+}
+
 func (inst *Service) handlePublish(msg *app.Msg) {
 	if len(msg.Payload) > maxPublishPayload {
-		inst.reply(msg.Reply, wirePublishRep{V: wireVersion, Error: "publish payload exceeds the per-dataset quota"})
+		inst.refuse(msg, "publish payload exceeds the per-dataset quota")
 		return
 	}
-	req, err := buscodec.Decode[wirePublishReq](msg.Payload)
+	req, err := buscodec.Decode[adhocrequest.AdhocRequest](msg.Payload)
 	if err != nil {
-		inst.reply(msg.Reply, wirePublishRep{V: wireVersion, Error: "decode: " + err.Error()})
+		inst.refuse(msg, "decode: "+err.Error())
 		return
 	}
 	// The publisher is the envelope's sender, never a client-supplied field.
 	res, pErr := inst.Publish(PublishInput{
-		Alias: req.Alias, Handle: req.Handle, ArrowIPCStream: req.ArrowIPCStream,
+		Alias: req.Alias, Handle: req.Handle, ArrowIPCStream: req.ArrowStream,
 		KeepAfterClose: req.KeepAfterClose, By: sender(msg),
 	})
 	if pErr != nil {
-		inst.reply(msg.Reply, wirePublishRep{V: wireVersion, Error: pErr.Error()})
+		inst.refuse(msg, pErr.Error())
 		return
 	}
-	inst.reply(msg.Reply, wirePublishRep{
-		V: wireVersion, OK: true, Handle: res.Handle, Revision: res.Revision, Rows: res.Rows, Bytes: res.Bytes,
+	inst.reply(msg.Reply, adhocreply.AdhocReply{
+		At: time.Now().UTC(), Ok: true, Handle: res.Handle, Revision: res.Revision, Rows: res.Rows, Bytes: res.Bytes,
 	})
 }
 
 func (inst *Service) handleResolve(msg *app.Msg) {
-	req, err := buscodec.Decode[wireResolveReq](msg.Payload)
+	req, err := buscodec.Decode[adhocrequest.AdhocRequest](msg.Payload)
 	if err != nil {
-		inst.reply(msg.Reply, wireResolveRep{V: wireVersion, Error: "decode: " + err.Error()})
+		inst.refuse(msg, "decode: "+err.Error())
 		return
 	}
 	live := req.Handle != "" && inst.IsLive(req.Handle)
 	res, rErr := inst.Resolve(req.Alias)
 	if rErr != nil {
-		inst.reply(msg.Reply, wireResolveRep{
-			V: wireVersion, Error: rErr.Error(), HandleLive: live, NoLive: errors.Is(rErr, ErrNoLiveDataset),
+		inst.reply(msg.Reply, adhocreply.AdhocReply{
+			At: time.Now().UTC(), Reason: rErr.Error(), HandleLive: live, NoLive: errors.Is(rErr, ErrNoLiveDataset),
 		})
 		return
 	}
-	inst.reply(msg.Reply, wireResolveRep{
-		V: wireVersion, OK: true, Handle: res.Handle, Revision: res.Revision,
-		Rows: res.Rows, Bytes: res.Bytes, CreatedAtUnixUs: res.CreatedAtUnixUs, HandleLive: live,
+	inst.reply(msg.Reply, adhocreply.AdhocReply{
+		At: time.Now().UTC(), Ok: true, Handle: res.Handle, Revision: res.Revision,
+		Rows: res.Rows, Bytes: res.Bytes, CreatedAtUs: res.CreatedAtUnixUs, HandleLive: live,
 	})
 }
 
 func (inst *Service) handleRetract(msg *app.Msg) {
-	req, err := buscodec.Decode[wireRetractReq](msg.Payload)
+	req, err := buscodec.Decode[adhocrequest.AdhocRequest](msg.Payload)
 	if err != nil {
-		inst.reply(msg.Reply, wireRetractRep{V: wireVersion, Error: "decode: " + err.Error()})
+		inst.refuse(msg, "decode: "+err.Error())
 		return
 	}
 	if rErr := inst.Retract(req.Handle, sender(msg)); rErr != nil {
-		inst.reply(msg.Reply, wireRetractRep{V: wireVersion, Error: rErr.Error()})
+		inst.refuse(msg, rErr.Error())
 		return
 	}
-	inst.reply(msg.Reply, wireRetractRep{V: wireVersion, OK: true})
+	inst.reply(msg.Reply, adhocreply.AdhocReply{At: time.Now().UTC(), Ok: true})
 }
 
-// reply encodes v and publishes it to the caller's inbox.
-func (inst *Service) reply(replySubject string, v any) {
-	payload, err := buscodec.Encode(v)
+// reply encodes rep and publishes it to the caller's inbox. The parameter
+// is the concrete DTO on purpose: buscodec.Encode picks the registered
+// codec by the static type, and an `any` here would erase it and fall to
+// the CBOR default the consumer's decoder does not speak.
+func (inst *Service) reply(replySubject string, rep adhocreply.AdhocReply) {
+	payload, err := buscodec.Encode(rep)
 	if err != nil {
 		inst.log.Warn().Err(err).Msg("adhocdata: encode reply")
 		return

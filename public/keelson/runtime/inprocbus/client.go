@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/instanceclosed"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -101,7 +102,7 @@ func (inst *Client) announceClosed() {
 	if key == 0 {
 		return
 	}
-	payload, err := buscodec.Encode(app.InstanceClosed{App: inst.appId, Instance: key})
+	payload, err := buscodec.Encode(instanceclosed.InstanceClosed{At: time.Now().UTC(), AppId: string(inst.appId), InstanceKey: key})
 	if err != nil {
 		inst.inst.log.Warn().Err(err).Str("app", string(inst.appId)).Msg("inprocbus: encode instance-closed")
 		return

@@ -513,11 +513,16 @@ sections above and are recorded here rather than rewritten into them:
   `BOXER_SQLAPPLET_*` variables with an applet-shaped name and stayed,
   passed into `FollowerConfig`. A launched play window follows with the
   defaults.
-- **The wire is not yet generated.** §SD8's generated codecs for the
-  `adhoc.*` request/reply pairs and the lifecycle event are the one piece
-  of M6 still open; the hand-rolled CBOR structs carry `KeepAfterClose`
-  and are otherwise unchanged. It is a mechanical change with no
-  behavioural content and lands on its own.
+- **The wire is one request kind and one reply kind, not four pairs.**
+  §SD8 spoke of codecs for "the four request/reply pairs"; what landed
+  follows the watchbill shape (ADR-0234): `adhocRequest` carries publish,
+  resolve and retract under an op symbol, `adhocReply` answers all three
+  with a refusal as `Ok false` plus a reason, and `adhocEvent` and
+  `instanceClosed` are the two announcements. The instance key reuses the
+  shared `tileKey` membership — the host's window/tile identifier is what
+  an instance key is — and the publisher reuses `appId`. A reply is
+  encoded from its concrete type: an `any` parameter erased the type, fell
+  to the CBOR default, and the consumer's generated decoder refused it.
 
 Found on the way and fixed under this ADR: the v1 seekable reader accepted
 a header-plus-empty-chunk prefix as a valid empty stream (the final chunk

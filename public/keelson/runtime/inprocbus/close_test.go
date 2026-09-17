@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/instanceclosed"
 )
 
 // ADR-0188 §SD1: a client is the accumulator of one INSTANCE's bus effects.
@@ -147,13 +148,13 @@ func TestClientClose_RacingSubscribeDoesNotOutliveClient(t *testing.T) {
 // without an instance key announces nothing.
 func TestClientClose_AnnouncesInstanceClosed(t *testing.T) {
 	bus := NewInst(zerolog.Nop())
-	var got []app.InstanceClosed
+	var got []instanceclosed.InstanceClosed
 	var senders []uint64
 	listener := bus.NewClient("test.listener", []app.SubjectFilter{
 		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub},
 	})
 	_, err := listener.Subscribe(app.SubjectInstanceClosed, func(msg *app.Msg) {
-		ev, dErr := buscodec.Decode[app.InstanceClosed](msg.Payload)
+		ev, dErr := buscodec.Decode[instanceclosed.InstanceClosed](msg.Payload)
 		require.NoError(t, dErr)
 		got = append(got, ev)
 		senders = append(senders, msg.SenderInstance)
@@ -164,7 +165,8 @@ func TestClientClose_AnnouncesInstanceClosed(t *testing.T) {
 	window.SetInstanceKey(42)
 	require.NoError(t, window.Close())
 	require.Len(t, got, 1, "the announcement is delivered before Close returns")
-	assert.Equal(t, app.InstanceClosed{App: "test.app", Instance: 42}, got[0])
+	assert.Equal(t, "test.app", got[0].AppId)
+	assert.Equal(t, uint64(42), got[0].InstanceKey)
 	assert.Equal(t, uint64(42), senders[0], "spoken in the closed client's name")
 	require.NoError(t, window.Close())
 	assert.Len(t, got, 1, "a second Close announces nothing")

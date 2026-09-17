@@ -198,3 +198,16 @@
 193	wb-launch-kind	12884902081
 194	wb-launch-state	12884902082
 195	play-launch-datasets	12884902083
+196	adhoc-req-op	12884902084
+197	adhoc-alias	12884902085
+198	adhoc-handle	12884902086
+199	adhoc-keep-after-close	12884902087
+200	adhoc-arrow-stream	12884902088
+201	adhoc-reply-ok	12884902089
+202	adhoc-revision	12884902090
+203	adhoc-rows	12884902091
+204	adhoc-bytes	12884902092
+205	adhoc-created-at-us	12884902093
+206	adhoc-handle-live	12884902094
+207	adhoc-no-live	12884902095
+208	adhoc-event-op	12884902096
