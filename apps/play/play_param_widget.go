@@ -114,8 +114,7 @@ func formatChDateTime(t time.Time) string {
 //
 // State per slot lives on a dateTimePairSlotState — packed uint64
 // (stable pointer for SendRespVal), the last draft value we saw
-// (for change detection), the last packed value we rendered with
-// (for click detection), parseOK (whether the current draft was
+// (for change detection), parseOK (whether the current draft was
 // last seen as parseable; mirror-writeback is gated on it so an
 // unparseable user typo survives the round-trip), and seeded
 // (whether updatePackedFromDraft has run at least once).
@@ -124,11 +123,10 @@ type dateTimePairWidget struct {
 }
 
 type dateTimePairSlotState struct {
-	packed           uint64
-	lastDraft        string
-	lastRenderPacked uint64
-	parseOK          bool
-	seeded           bool
+	packed    uint64
+	lastDraft string
+	parseOK   bool
+	seeded    bool
 }
 
 func newDateTimePairWidget() *dateTimePairWidget {
@@ -318,31 +316,33 @@ func (w *dateTimePairWidget) renderOne(ids *c.WidgetIdStack, slot paramSlot, dra
 		st = &dateTimePairSlotState{}
 		w.state[slot.Name] = st
 	}
-	// Picker click detected via packed delta since last render:
-	// SendRespVal apply runs at end-of-frame, so a click at frame N
-	// shows as `packed != lastRenderPacked` at the start of frame
-	// N+1. Picker output is always parseable so parseOK flips back
-	// on after a click.
-	if st.seeded && st.packed != st.lastRenderPacked {
-		st.parseOK = true
-	}
 	// External draft mutation (debounce-driven refresh from a
 	// hand-typed SET prelude). updatePackedFromDraft owns the
 	// four-way dispatch (successful parse / fresh-state seed-to-now
 	// / unparseable-with-stale-packed / no-change).
 	updatePackedFromDraft(st, *draft, time.Now())
 
+	var flags c.ResponseFlagsE
 	for range c.Vertical().KeepIter() {
 		for rt := range c.RichTextLabel(slot.Name + " : " + slot.Type) {
 			rt.Small().Weak()
 		}
-		c.DateTimePickerButton(ids.PrepareStr("paramSlotDt-"+slot.Name), st.packed).
+		flags = c.DateTimePickerButton(ids.PrepareStr("paramSlotDt-"+slot.Name), st.packed).
 			SendRespVal(&st.packed)
 	}
 
-	// Capture packed-before-apply so next frame's click detection
-	// sees the delta the end-of-frame Sync introduces.
-	st.lastRenderPacked = st.packed
+	// Picker interaction is read off the Changed response flag, which
+	// the widget raises on exactly the frames it pushes a value (the
+	// calendar's Save, an h:m:s drag). A packed-value delta cannot
+	// stand in for it: saving the date the picker already showed —
+	// today, on a freshly seeded slot — pushes the same bits, and
+	// accepting the offered date is as much a decision as picking
+	// another one. Picker output is always parseable, so parseOK
+	// flips back on. One-frame lag: flag and value land in the same
+	// Sync, so they are read together here.
+	if flags.HasChanged() {
+		st.parseOK = true
+	}
 
 	// Mirror packed → draft only when we trust packed reflects user
 	// intent. parseOK=false means the user typed something

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
 
 // stubEvaluator is a minimal timeRangeEvaluatorI used in tests.
@@ -251,5 +253,89 @@ func TestDateTimeRangeWidgetClearStateForAbsent(t *testing.T) {
 	w.ClearStateForAbsent(map[string]struct{}{"from": {}})
 	if w.state != nil {
 		t.Error("state should be cleared when one of the pair disappears")
+	}
+}
+
+// The regression behind ADR-0016's picker: an apply whose expressions
+// equal the ones already held is still an apply. The presets are
+// relative, so `Today` (and the `Last 1 hour` the state seeds itself
+// with) must re-resolve against the moved anchor rather than be
+// swallowed as "no change".
+func TestDateTimeRangeWidgetReapplyingSameRangeReEvaluates(t *testing.T) {
+	w := newDateTimeRangeWidget()
+	stub := &stubEvaluator{fromMs: 1_700_000_000_000, toMs: 1_700_003_600_000}
+	w.SetTimeRangeEvaluator(stub)
+	w.state = newDateTimeRangeState("from", "to", nil)
+
+	// The picker pushes exactly what the state already carries.
+	w.state.packedRange = timerangepicker.PackRange("UTC", w.state.fromExpr, w.state.toExpr)
+
+	if !w.consumePickerApply(true) {
+		t.Fatal("an apply carrying the active range should still evaluate")
+	}
+	if stub.calls != 1 {
+		t.Errorf("stub called %d times, want 1", stub.calls)
+	}
+	if !w.state.lastEvalSet {
+		t.Error("lastEvalSet should be true after the re-apply")
+	}
+
+	// A second apply of the same payload evaluates again — the anchor
+	// moves under a relative expression between clicks.
+	if !w.consumePickerApply(true) {
+		t.Fatal("a repeated apply should evaluate again")
+	}
+	if stub.calls != 2 {
+		t.Errorf("stub called %d times, want 2", stub.calls)
+	}
+}
+
+func TestDateTimeRangeWidgetConsumePickerApplyNeedsAnEdge(t *testing.T) {
+	w := newDateTimeRangeWidget()
+	stub := &stubEvaluator{}
+	w.SetTimeRangeEvaluator(stub)
+	w.state = newDateTimeRangeState("from", "to", nil)
+	w.state.packedRange = timerangepicker.PackRange("UTC", "anchor_now - INTERVAL 5 MINUTE", "anchor_now")
+
+	// No Changed flag: the payload is last frame's, already consumed.
+	if w.consumePickerApply(false) {
+		t.Error("consumePickerApply should be a no-op without the Changed flag")
+	}
+	if stub.calls != 0 {
+		t.Errorf("stub called %d times, want 0", stub.calls)
+	}
+	if w.state.fromExpr != "anchor_now - INTERVAL 1 HOUR" {
+		t.Errorf("fromExpr = %q, want the seeded default untouched", w.state.fromExpr)
+	}
+
+	// Changed with an empty payload: the binding has never been
+	// written (pre-first-interaction), so there is nothing to apply.
+	w.state.packedRange = ""
+	if w.consumePickerApply(true) {
+		t.Error("consumePickerApply should be a no-op on an empty payload")
+	}
+	if stub.calls != 0 {
+		t.Errorf("stub called %d times, want 0", stub.calls)
+	}
+}
+
+func TestDateTimeRangeWidgetConsumePickerApplyAdoptsTz(t *testing.T) {
+	w := newDateTimeRangeWidget()
+	stub := &stubEvaluator{fromMs: 1, toMs: 2}
+	w.SetTimeRangeEvaluator(stub)
+	w.state = newDateTimeRangeState("from", "to", nil)
+	w.state.packedRange = timerangepicker.PackRange("Asia/Tokyo", "toStartOfDay(anchor_now)", "anchor_now")
+
+	if !w.consumePickerApply(true) {
+		t.Fatal("expected the apply to be consumed")
+	}
+	if w.state.tzName != "Asia/Tokyo" {
+		t.Errorf("tzName = %q, want Asia/Tokyo", w.state.tzName)
+	}
+	if w.state.tzID == timerangepicker.TzIDUTC {
+		t.Error("tzID should have moved off UTC")
+	}
+	if w.state.fromExpr != "toStartOfDay(anchor_now)" {
+		t.Errorf("fromExpr = %q, want the pushed expression", w.state.fromExpr)
 	}
 }

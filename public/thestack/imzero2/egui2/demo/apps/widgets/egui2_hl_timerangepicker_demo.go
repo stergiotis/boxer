@@ -118,10 +118,18 @@ func renderTimeRangePickerInstance(ids *c.WidgetIdStack, st *timeRangePickerDemo
 	for _, p := range st.presets.All() {
 		fluid = fluid.AddPreset(p.Label(), p.FromSQL(), p.ToSQL())
 	}
-	fluid.SendRespVal(&inst.packedRange)
+	flags := fluid.SendRespVal(&inst.packedRange)
 
-	tzWire, from, to := timerangepicker.UnpackRange(inst.packedRange)
-	if inst.packedRange != "" && (from != inst.fromExpr || to != inst.toExpr || tzWire != inst.tzName) {
+	// The picker raises Changed on exactly the frames it pushes a
+	// payload, so the flag — not a compare of the pushed expressions
+	// against the ones already held — is the apply edge. The presets
+	// are relative expressions: re-picking the active range has to
+	// re-resolve against the moved anchor, and both instances here are
+	// seeded with a preset's own SQL ("Last 1 hour", "Today so far"),
+	// so a compare would swallow the first click on that preset
+	// outright.
+	if flags.HasChanged() && inst.packedRange != "" {
+		tzWire, from, to := timerangepicker.UnpackRange(inst.packedRange)
 		inst.fromExpr, inst.toExpr = from, to
 		// The dropdown carries the user's tz pick on the wire; fall back
 		// to the picker's configured TzID when the wire is empty (legacy

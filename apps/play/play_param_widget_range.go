@@ -24,10 +24,10 @@ import (
 // already prunes repeated names). Slot rename or removal triggers a
 // state reset in ClearStateForAbsent / Render's identity check.
 //
-// Eval runs synchronously from Render on each packedRange change
-// (Apply click, preset click, tz change). The warm chlocalbroker
-// pool typically responds in <10 ms; the 5 s context budget is the
-// hard ceiling and matches the demo's wiring.
+// Eval runs synchronously from Render on each picker push (Apply
+// click, preset click, tz change) — see consumePickerApply. The warm
+// chlocalbroker pool typically responds in <10 ms; the 5 s context
+// budget is the hard ceiling and matches the demo's wiring.
 type dateTimeRangeWidget struct {
 	eval    timeRangeEvaluatorI
 	presets *presets.Registry
@@ -120,26 +120,10 @@ func (w *dateTimeRangeWidget) Render(ctx *paramCtx) {
 	for _, p := range w.presets.All() {
 		fluid = fluid.AddPreset(p.Label(), p.FromSQL(), p.ToSQL())
 	}
-	fluid.SendRespVal(&w.state.packedRange)
+	flags := fluid.SendRespVal(&w.state.packedRange)
 
-	// Bi-directional sync direction (b): widget → SQL. Apply /
-	// preset click sets packedRange; the empty-payload skip avoids
-	// running Eval before the user has interacted with the picker
-	// even once.
-	tzWire, from, to := timerangepicker.UnpackRange(w.state.packedRange)
-	rangeChanged := w.state.packedRange != "" &&
-		(from != w.state.fromExpr || to != w.state.toExpr || tzWire != w.state.tzName)
-	if rangeChanged {
-		w.state.fromExpr = from
-		w.state.toExpr = to
-		if tzWire != "" {
-			if id, lerr := timerangepicker.LookupTz(tzWire); lerr == nil {
-				w.state.tzID = id
-				w.state.tzName = tzWire
-			}
-		}
-		w.runEval()
-	}
+	// Bi-directional sync direction (b): widget → SQL.
+	w.consumePickerApply(flags.HasChanged())
 
 	// Mirror resolved bounds into drafts so SyncParamPrelude picks
 	// them up on the post-render drift check. Skipped on error so
@@ -168,6 +152,39 @@ func (w *dateTimeRangeWidget) ClearStateForAbsent(present map[string]struct{}) {
 	if !hasFrom || !hasTo {
 		w.state = nil
 	}
+}
+
+// consumePickerApply folds one picker push (Apply click, preset
+// click, tz change) into the widget state and re-resolves it.
+//
+// changed is the picker's Changed response flag, which the widget
+// raises on exactly the frames it pushes a payload. A compare of the
+// pushed expressions against the ones already held cannot stand in
+// for it: the presets are relative expressions, so re-picking the
+// range that is already active is a real apply — `Today` has to
+// re-resolve against the moved anchor, and on a state seeded with a
+// preset's own SQL (`Last 1 hour` is the default seed) the very first
+// click on that preset would otherwise resolve nothing at all.
+//
+// One-frame lag: the flag and the r9_s payload land in the same Sync,
+// so the caller reads them together. An empty payload means the
+// binding has never been written — the user has not touched the
+// picker yet — and is skipped. Returns true when an Eval ran.
+func (w *dateTimeRangeWidget) consumePickerApply(changed bool) bool {
+	if !changed || w.state.packedRange == "" {
+		return false
+	}
+	tzWire, from, to := timerangepicker.UnpackRange(w.state.packedRange)
+	w.state.fromExpr = from
+	w.state.toExpr = to
+	if tzWire != "" {
+		if id, lerr := timerangepicker.LookupTz(tzWire); lerr == nil {
+			w.state.tzID = id
+			w.state.tzName = tzWire
+		}
+	}
+	w.runEval()
+	return true
 }
 
 // runEval is the synchronous Eval call. Errors land on
