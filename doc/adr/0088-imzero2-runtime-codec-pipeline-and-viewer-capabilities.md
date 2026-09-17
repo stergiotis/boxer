@@ -173,6 +173,14 @@ The `videooutput` control grew from the bare picker (SD10) into a full settings 
 
 The deferred demo-tour registration is done: a `videooutput` gallery scene renders the dialog over a representative model, so the tour captures it. Still deferred: bitrate / encoder-backend / cadence on `setVideoPipeline` (codec-only today — the rest of the originally-scoped control surface), and per-viewer reconciliation (SD12).
 
+### 2026-09-17 — Encoder generation and recovery
+
+ADR-0242 separates supervision from pixel deduplication: a stopped encoder is
+observed even when the screen is unchanged, and a new generation receives the
+current frame. Producer-stamped generations prevent obsolete encoded output
+from being interpreted under a newer hello. Codec selection and the single
+shared encoder are unchanged.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless render + ffmpeg + browser WebCodecs foundation this ADR extends; SD3/SD4/SD5 (encoder, Annex-B framing, WebCodecs), SD8 (input edge bent here), SD11 (encoder-backend selection deferred — revisited here), and the acceptance notes (VAAPI ENOSYS, resize teardown/rebuild, SD9 mailbox).

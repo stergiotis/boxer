@@ -157,6 +157,15 @@ chosen at each encoder (re)spawn from a `want_periodic` flag the carrier
 maintains from the roster; a raw `IMZERO2_HEADLESS_ENCODER_ARGS` override
 without a `-g` opts out (keeps ffmpeg's default GOP).
 
+### 2026-09-17 — Delivery and owner lifetimes
+
+ADR-0242 refines roster delivery to retain the latest authoritative state outside
+the lossy frame queue. Active-owner changes cancel held input and invalidate
+queued input from the previous owner. The conditional GOP remains, but an idle
+join temporarily advances unchanged frames until a keyframe is delivered; a
+finite passive GOP also applies when raw encoder arguments omitted `-g`.
+Origin, authentication and TLS policy are unchanged.
+
 ## References
 
 - [ADR-0024 — ImZero2 remote access via headless render + ffmpeg + browser viewer](./0024-imzero2-remote-access-browser-viewer.md) — the shipped pipeline this tier reuses; SD3 (no mid-stream IDR), SD6 (wire framing), SD9 (frame mailbox) are load-bearing here.

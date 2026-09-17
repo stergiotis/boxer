@@ -9,7 +9,10 @@
 //!   container; [`drain_to_channel_nut`] demuxes each coded frame (native
 //!   bitstream + container key-frame flag, for any codec — ADR-0088 SD4),
 //!   wraps it in the ADR-0024 SD4 protobuf envelope with the 0x01 prefix,
-//!   and pushes it into the WebSocket carrier's bounded channel.
+//!   and pushes it into the WebSocket carrier's bounded channel as an
+//!   [`EncodedFrame`] — the payload plus the key-frame flag and the
+//!   *producing* encoder generation, so the carrier can recognise output
+//!   from an encoder it has already retired (ADR-0242 SD3).
 //! - [`EncoderTarget::File`] — a raw H.264 elementary-stream dump for
 //!   verification (`IMZERO2_HEADLESS_H264_OUT`; meaningful for H.264).
 //!
@@ -29,19 +32,30 @@
 //! samples the latest frame as fast as the pipe sustains, rather than at
 //! a fixed sub-rate.
 //!
-//! Supervision (SD3): the feeder marks the mailbox `dead` on a write
-//! failure and exits; the render thread observes that on its next
-//! `on_frame` and reaps + respawns (off any blocking path). A geometry
-//! change (viewport resize) takes the same reap+respawn path, since
-//! rawvideo dimensions are fixed per ffmpeg invocation. Every (re)spawn
-//! begins the stream at SPS/PPS + IDR, satisfying the SD4 (re)connect
-//! rule.
+//! **Supervision is its own step** ([`EncoderSink::prepare_frame`],
+//! ADR-0242 SD3), separate from handing over pixels
+//! ([`EncoderSink::submit_frame`]). The caller runs it *before* its own
+//! frame deduplication, because the three things that can kill an encoder
+//! are all invisible to the pixels: the feeder marks the mailbox `dead` on
+//! a write failure, ffmpeg can exit on its own (observed via
+//! `Child::try_wait` — on an idle screen nothing is ever written, so a
+//! write failure would never be reached), and the drain thread can end
+//! early (stdout EOF, an unparseable stream). A geometry change (viewport
+//! resize) takes the same reap+respawn path, since rawvideo dimensions are
+//! fixed per ffmpeg invocation. Every (re)spawn begins the stream at
+//! SPS/PPS + IDR, satisfying the SD4 (re)connect rule — and carries a
+//! fresh [`EncoderSink::generation`], which is how the caller knows the
+//! new encoder needs the current frame even when its pixels are unchanged.
+//! Only a submission the sink *accepted* may advance the caller's dedup
+//! state.
 //!
-//! That respawn is *budgeted* ([`restart_action`]). `dead` stays set until a
-//! spawn installs a fresh mailbox, so the frame path is itself the retry loop:
-//! an encoder that can never start — an ffmpeg missing the lane's encoder, a
-//! bad [`crate::imzero2::codeclane::ffmpeg_bin`] — would otherwise be reaped
-//! and respawned on every frame, at frame rate, forever, one error line each.
+//! That respawn is *budgeted* ([`restart_action`], composed with the death
+//! observation by [`supervise`]). A dead encoder stays dead until a spawn
+//! installs a fresh mailbox and child, so the frame path is itself the retry
+//! loop: an encoder that can never start — an ffmpeg missing the lane's
+//! encoder, a bad [`crate::imzero2::codeclane::ffmpeg_bin`] — would otherwise
+//! be reaped and respawned on every frame, at frame rate, forever, one error
+//! line each.
 //! Attempts are spaced by [`RESTART_BACKOFF`], a run lasting
 //! [`RESTART_STABLE_AFTER`] clears the streak (so transient deaths always
 //! recover), and [`MAX_FAST_RESTARTS`] consecutive fast deaths stop the retries
@@ -69,10 +83,66 @@ const FREE_LIST_CAP: usize = 2;
 /// congestion, where the mailbox is already coalescing frames pre-encoder.
 const DRAIN_BACKPRESSURE_POLL: std::time::Duration = std::time::Duration::from_millis(2);
 
+/// One coded frame leaving the encoder, as the carrier receives it
+/// (ADR-0242 SD3).
+///
+/// The `payload` alone was ambiguous in two ways the carrier has to resolve.
+/// It could not tell *which* encoder produced it — after a resize, a codec
+/// switch or a supervised restart, frames of the retired encoder are still in
+/// flight behind the new hello, and delivering them would feed a viewer
+/// bitstream for the wrong geometry/codec. And joining progress could not be
+/// measured: whether a waiting viewer has a decodable start is a question
+/// about *key frames*, which only the container knows, not about how many
+/// frames were submitted (the SD9 mailbox coalesces those).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EncodedFrame {
+    /// Generation of the encoder that produced this frame, stamped at the
+    /// producer. Deliberately not assigned at fan-out time: a frame relabelled
+    /// when it is distributed would claim to belong to whichever encoder is
+    /// current then, which is exactly the stale frame the stamp exists to
+    /// catch.
+    pub generation: u64,
+    /// Container-level key-frame flag (NUT — ADR-0088 SD4), for any codec.
+    pub keyframe: bool,
+    /// Pre-framed WebSocket payload: the 0x01 prefix + `VideoChunk`.
+    pub payload: Vec<u8>,
+}
+
 pub enum EncoderTarget {
     File(std::path::PathBuf),
-    /// Pre-framed WebSocket payloads (0x01 + `VideoChunk`) for the carrier.
-    Channel(tokio::sync::mpsc::Sender<Vec<u8>>),
+    /// [`EncodedFrame`]s for the carrier's bounded fan-out channel.
+    Channel {
+        tx: tokio::sync::mpsc::Sender<EncodedFrame>,
+        /// The encoder-generation counter, shared with the carrier that owns
+        /// it. The sink allocates from it on every spawn attempt; the carrier
+        /// reads it to know which generation is current and can bump it itself
+        /// to retire one without spawning ([`advance_generation`]).
+        ///
+        /// Living on the carrier's side rather than inside the sink is what
+        /// makes generations monotonic *across sink replacements*: dropping
+        /// the sink (last viewer leaves, lane switch to mesh) and building a
+        /// new one continues the sequence instead of restarting it, so a frame
+        /// from the old sink can never carry a number the new one will reuse.
+        generation: Arc<AtomicU64>,
+    },
+}
+
+/// Allocate the next encoder generation from a shared counter, returning it.
+///
+/// The counter starts at 0 and the first allocation yields 1, so 0 is usable
+/// as "no encoder has ever run". [`EncoderSink::spawn`] calls this *before*
+/// the child exists — a frame of generation N therefore cannot reach the
+/// channel before the counter reads N, which is what lets the carrier publish
+/// a hello for the new generation and then treat everything older as stale
+/// (ADR-0242 SD1/SD3). A spawn that then fails burns a number, which is
+/// harmless: generations are only ever compared, never counted.
+///
+/// The carrier calls it directly to retire a generation without spawning
+/// anything — dropping the encoder when the last viewer leaves, or switching
+/// to the encoderless mesh lane, both of which must invalidate work already
+/// queued for the old generation.
+pub fn advance_generation(counter: &AtomicU64) -> u64 {
+    counter.fetch_add(1, Ordering::AcqRel).wrapping_add(1)
 }
 
 /// Depth-1, latest-wins handoff from the render thread to the feeder
@@ -197,6 +267,19 @@ pub struct EncoderSink {
     fps: f32,
     lane: CodecLane,
     target: EncoderTarget,
+    /// The generation counter this sink allocates from — the carrier's for a
+    /// [`EncoderTarget::Channel`], a private one for a file dump (which has no
+    /// consumer that cares).
+    gen_counter: Arc<AtomicU64>,
+    /// Generation of the running encoder: the stamp on its output, and the
+    /// caller's signal that a fresh encoder needs the current frame. 0 until
+    /// the first spawn succeeds.
+    generation: u64,
+    /// One-shot guard on the geometry-mismatch warning in
+    /// [`Self::submit_frame`], cleared per spawn: a caller passing a
+    /// wrong-sized buffer does so every frame, and the first line already says
+    /// everything the later 59 a second would.
+    len_warned: bool,
     restarts: u32,
     /// When the current ffmpeg was spawned — the supervisor's clock for
     /// [`RESTART_BACKOFF`] and [`RESTART_STABLE_AFTER`].
@@ -264,6 +347,95 @@ fn restart_action(
     }
 }
 
+/// Everything the supervisor can observe about the current encoder, gathered
+/// by [`EncoderSink::observe`]. Split out as plain data so the rule that reads
+/// it is a function of its inputs, testable without an ffmpeg, a codec or a
+/// process (ADR-0242 verification plan).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct SinkHealth {
+    /// A child process is installed (a spawn succeeded and nothing reaped it).
+    spawned: bool,
+    /// The feeder failed a write to ffmpeg's stdin and exited.
+    feeder_dead: bool,
+    /// ffmpeg exited by itself — the death an idle screen would otherwise
+    /// hide, since a mailbox with no traffic never attempts a write.
+    child_exited: bool,
+    /// The drain thread returned: stdout EOF, an unparseable stream, or a
+    /// dropped receiver. Whatever the reason, encoded output is going nowhere.
+    drain_finished: bool,
+}
+
+/// Why the supervisor considers the current encoder dead. Carried into the log
+/// line so "restarting" names what was actually observed rather than assuming
+/// the feeder-write case that used to be the only one detected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeathCause {
+    /// No child at all: the first spawn failed, a respawn failed, or the sink
+    /// gave up and reaped.
+    NotSpawned,
+    FeederWrite,
+    ChildExited,
+    DrainEnded,
+}
+
+/// Classify [`SinkHealth`], most informative cause first. A dying ffmpeg
+/// usually trips several of these within a frame or two of each other (the
+/// child exits, then its stdout EOFs and the drain returns, then the next
+/// write fails), so the order decides only which one the log names.
+fn death_cause(h: SinkHealth) -> Option<DeathCause> {
+    if !h.spawned {
+        Some(DeathCause::NotSpawned)
+    } else if h.feeder_dead {
+        Some(DeathCause::FeederWrite)
+    } else if h.child_exited {
+        Some(DeathCause::ChildExited)
+    } else if h.drain_finished {
+        Some(DeathCause::DrainEnded)
+    } else {
+        None
+    }
+}
+
+/// What [`EncoderSink::prepare_frame`] should do this frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Supervision {
+    /// The encoder is running — submit to it.
+    Ready,
+    /// Dead, but not to be respawned now (inside the backoff, or the lane has
+    /// been given up on): this frame goes nowhere.
+    Wait,
+    Restart {
+        cause: DeathCause,
+        fast_restarts: u32,
+    },
+    GiveUp {
+        cause: DeathCause,
+    },
+}
+
+/// The whole per-frame supervision rule: observe, then apply the restart
+/// budget. Keeping it a function of ([`SinkHealth`], budget state, elapsed) is
+/// what makes "an exited child is noticed on a frame identical to the last
+/// one" a test that needs neither an encoder nor a clock.
+fn supervise(
+    health: SinkHealth,
+    gave_up: bool,
+    ran_for: std::time::Duration,
+    fast_restarts: u32,
+) -> Supervision {
+    let Some(cause) = death_cause(health) else {
+        return Supervision::Ready;
+    };
+    match restart_action(gave_up, ran_for, fast_restarts) {
+        RestartAction::Wait => Supervision::Wait,
+        RestartAction::GiveUp => Supervision::GiveUp { cause },
+        RestartAction::Restart { fast_restarts } => Supervision::Restart {
+            cause,
+            fast_restarts,
+        },
+    }
+}
+
 impl EncoderSink {
     pub fn new(
         width: u32,
@@ -272,6 +444,12 @@ impl EncoderSink {
         lane: CodecLane,
         target: EncoderTarget,
     ) -> std::io::Result<Self> {
+        // A file dump has no consumer that compares generations, so it gets a
+        // private counter rather than making every caller supply one.
+        let gen_counter = match &target {
+            EncoderTarget::Channel { generation, .. } => generation.clone(),
+            EncoderTarget::File(_) => Arc::new(AtomicU64::new(0)),
+        };
         let mut sink = Self {
             child: None,
             feeder: None,
@@ -283,6 +461,9 @@ impl EncoderSink {
             fps,
             lane,
             target,
+            gen_counter,
+            generation: 0,
+            len_warned: false,
             restarts: 0,
             last_spawn: std::time::Instant::now(),
             fast_restarts: 0,
@@ -292,7 +473,6 @@ impl EncoderSink {
         Ok(sink)
     }
 
-    /// Frames coalesced (dropped) before the encoder under congestion (SD9).
     /// True once the supervisor spent its fast-restart budget on this lane:
     /// the encoder cannot be made to run and the stream is dead until the
     /// lane changes. The carrier reads this to degrade to the mesh lane.
@@ -300,11 +480,177 @@ impl EncoderSink {
         self.gave_up
     }
 
+    /// Frames coalesced (dropped) before the encoder under congestion (SD9).
     pub fn dropped(&self) -> u64 {
         self.mailbox.dropped()
     }
 
+    /// Generation of the running encoder — the stamp on every
+    /// [`EncodedFrame`] it produces, and 0 while none runs.
+    ///
+    /// A value that differs from the one the caller last submitted under means
+    /// a fresh encoder: it starts at an IDR and has seen no pixels, so it
+    /// needs *this* frame even if nothing changed. That is the signal
+    /// deduplication must not swallow (ADR-0242 SD3).
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Supervise the encoder and make it ready for a frame of `width` ×
+    /// `height`; returns whether it can accept one now.
+    ///
+    /// Call this **every** frame and **before** deciding the frame is a
+    /// duplicate. It is the only place the supervisor runs, and none of the
+    /// three deaths it looks for (see the module docs) shows up in the pixels,
+    /// so a dedup-gated supervisor stops progressing exactly when it is needed
+    /// most: on a static screen. Respawning is still budgeted — a `false`
+    /// return is either "inside the backoff", "the respawn attempt failed", or
+    /// "this lane has been given up on" ([`Self::gave_up`]).
+    ///
+    /// A geometry change reaps and respawns regardless of the budget: rawvideo
+    /// dimensions are fixed per invocation, so the new size is a genuinely new
+    /// configuration that may well encode where the old one could not
+    /// (hardware encoders reject sizes below their coded minimum).
+    pub fn prepare_frame(&mut self, width: u32, height: u32) -> bool {
+        if width != self.width || height != self.height {
+            tracing::info!(
+                from_w = self.width,
+                from_h = self.height,
+                to_w = width,
+                to_h = height,
+                "frame geometry changed — restarting encoder"
+            );
+            self.gave_up = false;
+            self.fast_restarts = 0;
+            self.reap();
+            self.width = width;
+            self.height = height;
+            return self.respawn();
+        }
+        let health = self.observe();
+        match supervise(
+            health,
+            self.gave_up,
+            self.last_spawn.elapsed(),
+            self.fast_restarts,
+        ) {
+            Supervision::Ready => true,
+            Supervision::Wait => false,
+            Supervision::GiveUp { cause } => {
+                self.gave_up = true;
+                self.reap();
+                tracing::error!(
+                    restarts = self.restarts,
+                    ?cause,
+                    lane = ?self.lane.codec,
+                    ffmpeg = %crate::imzero2::codeclane::ffmpeg_bin(),
+                    "ffmpeg encoder died {MAX_FAST_RESTARTS} times without staying up — \
+                     giving up on this lane. The stream is dead until the viewport \
+                     resizes or the codec is switched; the mesh lane needs no encoder."
+                );
+                false
+            }
+            Supervision::Restart {
+                cause,
+                fast_restarts,
+            } => {
+                self.fast_restarts = fast_restarts;
+                self.restarts += 1;
+                tracing::error!(
+                    restarts = self.restarts,
+                    fast_restarts = self.fast_restarts,
+                    ?cause,
+                    "ffmpeg encoder died — restarting encoder"
+                );
+                self.reap();
+                self.respawn()
+            }
+        }
+    }
+
+    /// Hand one tightly-packed BGRA frame to the encoder; returns whether it
+    /// was **accepted**.
+    ///
+    /// Only an accepted frame may advance the caller's deduplication state: a
+    /// rejected one never reached an encoder, so remembering it as "sent"
+    /// would make the next identical frame a duplicate of something nobody
+    /// encoded — a frozen stream that looks like an idle one. Rejected when no
+    /// encoder is running, when the feeder has since died, or when the buffer
+    /// does not match the geometry [`Self::prepare_frame`] was given (feeding
+    /// a wrong-sized buffer to `-f rawvideo` desynchronises every later frame).
+    ///
+    /// Non-blocking (SD9): the frame is copied into the depth-1 mailbox and a
+    /// feeder thread does the writing.
+    pub fn submit_frame(&mut self, bgra: &[u8]) -> bool {
+        if self.child.is_none() || self.mailbox.dead.load(Ordering::Acquire) {
+            return false;
+        }
+        let expected = self.width as usize * self.height as usize * 4;
+        if bgra.len() != expected {
+            if !self.len_warned {
+                self.len_warned = true;
+                tracing::warn!(
+                    got = bgra.len(),
+                    expected,
+                    width = self.width,
+                    height = self.height,
+                    "frame buffer does not match the prepared geometry — not submitted"
+                );
+            }
+            return false;
+        }
+        self.mailbox.submit(bgra);
+        true
+    }
+
+    /// Poll everything that can report the encoder dead. Cheap enough for
+    /// every frame: two atomic loads, a `waitpid(WNOHANG)` and a thread-handle
+    /// check.
+    fn observe(&mut self) -> SinkHealth {
+        // Read the flags before borrowing the child mutably for try_wait.
+        let feeder_dead = self.mailbox.dead.load(Ordering::Acquire);
+        let drain_finished = self.drain.as_ref().is_some_and(|d| d.is_finished());
+        let (spawned, child_exited) = match self.child.as_mut() {
+            None => (false, false),
+            // Nothing is logged here: while the backoff holds this runs on
+            // every frame, and `reap` reports the exit status once, when the
+            // decision to restart has actually been taken.
+            Some(child) => match child.try_wait() {
+                Ok(exited) => (true, exited.is_some()),
+                Err(e) => {
+                    tracing::warn!(error=%e, "cannot poll ffmpeg encoder status");
+                    (true, false)
+                }
+            },
+        };
+        SinkHealth {
+            spawned,
+            feeder_dead,
+            child_exited,
+            drain_finished,
+        }
+    }
+
+    /// Spawn after a reap, charging a failed attempt to the backoff clock so
+    /// the next frame waits rather than retrying immediately.
+    fn respawn(&mut self) -> bool {
+        match self.spawn(true) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::error!(error=%e, "ffmpeg encoder respawn failed; will retry after backoff");
+                self.last_spawn = std::time::Instant::now();
+                false
+            }
+        }
+    }
+
     fn spawn(&mut self, restart: bool) -> std::io::Result<()> {
+        // Allocate this encoder's generation *before* the child exists: no
+        // frame can then carry a number the carrier has not already been able
+        // to read, which is what makes "publish the hello, then treat older
+        // generations as stale" sound (ADR-0242 SD1/SD3). A failed spawn below
+        // burns the number — harmless, since generations are only compared.
+        let generation = advance_generation(&self.gen_counter);
         let mut cmd = std::process::Command::new(ffmpeg_bin());
         cmd.arg("-hide_banner")
             .arg("-loglevel")
@@ -329,7 +675,7 @@ impl EncoderSink {
         // no latency. The File verification dump stays a raw H.264 elementary
         // stream (IMZERO2_HEADLESS_H264_OUT; meaningful for the H.264 codec).
         let out_fmt = match &self.target {
-            EncoderTarget::Channel(_) => {
+            EncoderTarget::Channel { .. } => {
                 cmd.arg("-flush_packets").arg("1");
                 "nut"
             }
@@ -359,12 +705,15 @@ impl EncoderSink {
                     .name("imzero2-h264-drain".to_owned())
                     .spawn(move || drain_to_file(stdout, &path, restart))?
             }
-            EncoderTarget::Channel(tx) => {
+            EncoderTarget::Channel { tx, .. } => {
                 let tx = tx.clone();
                 let stop = drain_stop.clone();
+                // The generation travels into the drain thread *by value*, so
+                // every frame it emits is stamped with the encoder that
+                // produced it however long it spends in the channel.
                 std::thread::Builder::new()
                     .name("imzero2-video-drain".to_owned())
-                    .spawn(move || drain_to_channel_nut(stdout, &tx, &stop))?
+                    .spawn(move || drain_to_channel_nut(stdout, &tx, &stop, generation))?
             }
         };
         // Fresh mailbox per spawn: a new generation cleanly separates the
@@ -382,6 +731,8 @@ impl EncoderSink {
         self.drain_stop = drain_stop;
         self.feeder = Some(feeder);
         self.drain = Some(drain);
+        self.generation = generation;
+        self.len_warned = false;
         // Supervisor clock: how long this encoder survives decides whether its
         // death counts as transient or as another fast restart.
         self.last_spawn = std::time::Instant::now();
@@ -418,69 +769,16 @@ impl EncoderSink {
 }
 
 impl FrameSink for EncoderSink {
+    /// The plain sink path, for callers that feed every frame (the
+    /// verification file dump): supervise, then submit. A caller that
+    /// deduplicates pixels must instead call [`EncoderSink::prepare_frame`]
+    /// and [`EncoderSink::submit_frame`] itself, so that supervision runs on
+    /// frames it is about to drop and only accepted frames advance its hash
+    /// (ADR-0242 SD3).
     fn on_frame(&mut self, bgra: &[u8], width: u32, height: u32, _frame_idx: u64) {
-        let geometry_changed = width != self.width || height != self.height;
-        let died = self.mailbox.dead.load(Ordering::Acquire);
-        if geometry_changed || died {
-            if geometry_changed {
-                tracing::info!(
-                    from_w = self.width,
-                    from_h = self.height,
-                    to_w = width,
-                    to_h = height,
-                    "frame geometry changed — restarting encoder"
-                );
-                // A resize is a new configuration, not a retry of the failed
-                // one: it may well encode where the old geometry could not
-                // (hardware encoders reject sizes below their coded minimum),
-                // so it re-arms a sink that had given up.
-                self.gave_up = false;
-                self.fast_restarts = 0;
-            } else {
-                // Supervised restart. `died` stays set until a spawn installs a
-                // fresh mailbox, so without rate limiting this branch runs on
-                // every frame for as long as the encoder stays broken.
-                match restart_action(self.gave_up, self.last_spawn.elapsed(), self.fast_restarts) {
-                    RestartAction::Wait => return,
-                    RestartAction::GiveUp => {
-                        self.gave_up = true;
-                        self.reap();
-                        tracing::error!(
-                            restarts = self.restarts,
-                            lane = ?self.lane.codec,
-                            ffmpeg = %crate::imzero2::codeclane::ffmpeg_bin(),
-                            "ffmpeg encoder died {MAX_FAST_RESTARTS} times without staying up — \
-                             giving up on this lane. The stream is dead until the viewport \
-                             resizes or the codec is switched; the mesh lane needs no encoder."
-                        );
-                        return;
-                    }
-                    RestartAction::Restart { fast_restarts } => {
-                        self.fast_restarts = fast_restarts;
-                        self.restarts += 1;
-                        tracing::error!(
-                            restarts = self.restarts,
-                            fast_restarts = self.fast_restarts,
-                            "ffmpeg encoder feeder died — restarting encoder"
-                        );
-                    }
-                }
-            }
-            self.reap();
-            self.width = width;
-            self.height = height;
-            if let Err(e) = self.spawn(true) {
-                tracing::error!(error=%e, "ffmpeg encoder respawn failed; will retry after backoff");
-                // Count the failed attempt against the budget: spawn() never
-                // installed a fresh mailbox, so `died` is still set and this
-                // branch is what the next frame re-enters.
-                self.last_spawn = std::time::Instant::now();
-                return;
-            }
+        if self.prepare_frame(width, height) {
+            self.submit_frame(bgra);
         }
-        // Non-blocking handoff (SD9): the render thread never waits on the
-        // encoder or the wire.
-        self.mailbox.submit(bgra);
     }
 }
 
@@ -557,9 +855,9 @@ enum SendOutcome {
 /// `reap()` triggered by a resize or a runtime codec switch never waits on
 /// a viewer that has stopped reading the socket. `try_send` + a short poll
 /// gives the sync drain thread a wakeup it can re-check the flag on.
-fn cancellable_send(
-    tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
-    payload: Vec<u8>,
+fn cancellable_send<T>(
+    tx: &tokio::sync::mpsc::Sender<T>,
+    payload: T,
     stop: &AtomicBool,
 ) -> SendOutcome {
     let mut pending = payload;
@@ -584,12 +882,19 @@ fn cancellable_send(
 /// is the single drain that serves H.264, VP9, AV1, and future lanes.
 /// Returns when ffmpeg's stdout closes, the channel is dropped (viewer
 /// disconnected), or the stream is unparseable.
-fn drain_to_channel_nut(
-    stdout: Option<std::process::ChildStdout>,
-    tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
+///
+/// `generation` is the encoder generation this drain belongs to, fixed when
+/// its ffmpeg was spawned: every frame carries it, so output that outlives its
+/// encoder is recognisable as stale wherever it is eventually read
+/// (ADR-0242 SD3). Generic over the reader only so a test can drive it from a
+/// NUT stream in memory.
+fn drain_to_channel_nut<R: std::io::Read>(
+    stdout: Option<R>,
+    tx: &tokio::sync::mpsc::Sender<EncodedFrame>,
     stop: &AtomicBool,
+    generation: u64,
 ) {
-    use std::io::Read as _;
+    // `Read` needs no import here: the generic bound brings `read` into scope.
     let Some(mut so) = stdout else { return };
     let started = std::time::Instant::now();
     let mut reader = NutReader::new();
@@ -609,10 +914,16 @@ fn drain_to_channel_nut(
         loop {
             match reader.next_frame() {
                 Ok(Some(frame)) => {
-                    let framed = frame_payload(frame_index, started, frame.keyframe, frame.data);
+                    let keyframe = frame.keyframe;
+                    let framed = frame_payload(frame_index, started, keyframe, frame.data);
                     frame_index += 1;
                     sent_bytes += framed.len() as u64;
-                    match cancellable_send(tx, framed, stop) {
+                    let encoded = EncodedFrame {
+                        generation,
+                        keyframe,
+                        payload: framed,
+                    };
+                    match cancellable_send(tx, encoded, stop) {
                         SendOutcome::Sent => {}
                         SendOutcome::Closed => {
                             tracing::info!(
@@ -783,5 +1094,318 @@ mod tests {
             SendOutcome::Sent
         ));
         assert_eq!(rx.try_recv().expect("delivered"), vec![3u8; 4]);
+    }
+
+    // ---------------------------------------------------------------------
+    // ADR-0242 SD3: supervision independent of the pixels.
+    //
+    // Before this, the only death the sink noticed was a *feeder write
+    // failure* — and the frame path that noticed it ran after the carrier's
+    // blake3 dedup. Two consequences, both invisible to the tests that
+    // existed: an ffmpeg that exits on its own was never observed at all on a
+    // screen that is not changing (an idle mailbox never writes, so no write
+    // can fail), and even a noticed death was only acted on when some pixel
+    // moved. A static dashboard therefore kept a dead encoder forever.
+
+    #[test]
+    fn a_child_that_exited_is_a_death_even_with_no_write_failure() {
+        // The idle case: ffmpeg quit, the feeder never wrote, the pixels never
+        // changed. Nothing but the child poll can see this.
+        let h = SinkHealth {
+            spawned: true,
+            child_exited: true,
+            ..Default::default()
+        };
+        assert_eq!(death_cause(h), Some(DeathCause::ChildExited));
+        assert_eq!(
+            supervise(h, false, RESTART_BACKOFF, 0),
+            Supervision::Restart {
+                cause: DeathCause::ChildExited,
+                fast_restarts: 1
+            }
+        );
+    }
+
+    #[test]
+    fn a_finished_drain_and_a_dead_feeder_are_deaths_too() {
+        // stdout EOF / an unparseable stream ends the drain: encoded output is
+        // going nowhere even if the child is somehow still alive.
+        assert_eq!(
+            death_cause(SinkHealth {
+                spawned: true,
+                drain_finished: true,
+                ..Default::default()
+            }),
+            Some(DeathCause::DrainEnded)
+        );
+        assert_eq!(
+            death_cause(SinkHealth {
+                spawned: true,
+                feeder_dead: true,
+                ..Default::default()
+            }),
+            Some(DeathCause::FeederWrite)
+        );
+        // A failed spawn leaves no child, which is its own cause (and is what
+        // keeps the retry loop running after `spawn` returned an error).
+        assert_eq!(
+            death_cause(SinkHealth::default()),
+            Some(DeathCause::NotSpawned)
+        );
+    }
+
+    #[test]
+    fn a_running_encoder_is_ready() {
+        let healthy = SinkHealth {
+            spawned: true,
+            ..Default::default()
+        };
+        assert_eq!(death_cause(healthy), None);
+        // Ready regardless of the clock and the streak — the budget only ever
+        // gates *restarts*, never submission to an encoder that is alive.
+        assert_eq!(
+            supervise(healthy, false, Duration::ZERO, MAX_FAST_RESTARTS),
+            Supervision::Ready
+        );
+    }
+
+    #[test]
+    fn supervision_reuses_the_existing_backoff_and_budget() {
+        let dead = SinkHealth {
+            spawned: true,
+            child_exited: true,
+            ..Default::default()
+        };
+        // Inside the backoff: this frame goes nowhere, no spawn attempt.
+        assert_eq!(supervise(dead, false, Duration::ZERO, 0), Supervision::Wait);
+        // Budget spent: stop, and name what killed it.
+        assert_eq!(
+            supervise(dead, false, RESTART_BACKOFF, MAX_FAST_RESTARTS),
+            Supervision::GiveUp {
+                cause: DeathCause::ChildExited
+            }
+        );
+        // Already given up: quiet forever.
+        assert_eq!(
+            supervise(dead, true, RESTART_STABLE_AFTER * 100, 0),
+            Supervision::Wait
+        );
+    }
+
+    #[test]
+    fn generations_are_monotonic_across_sink_replacement() {
+        // The counter is the carrier's, not the sink's: dropping a sink (last
+        // viewer left, lane switched to mesh) and building another must not
+        // rewind the sequence, or a frame from the old encoder could carry a
+        // number the new one will claim.
+        let counter = Arc::new(AtomicU64::new(0));
+        assert_eq!(counter.load(Ordering::Acquire), 0, "0 means no encoder yet");
+        let first = advance_generation(&counter);
+        let second = advance_generation(&counter);
+        assert_eq!((first, second), (1, 2));
+        // The carrier retiring a generation by hand (no spawn) still advances.
+        assert_eq!(advance_generation(&counter), 3);
+        assert_eq!(counter.load(Ordering::Acquire), 3);
+    }
+
+    /// A sink with no live encoder, built field-by-field so the frame path can
+    /// be driven against a chosen death and a chosen clock without an ffmpeg,
+    /// a codec or a GPU anywhere near the test.
+    fn down_sink(
+        child: Option<std::process::Child>,
+        last_spawn: std::time::Instant,
+    ) -> EncoderSink {
+        EncoderSink {
+            child,
+            feeder: None,
+            drain: None,
+            mailbox: FrameMailbox::new(),
+            drain_stop: Arc::new(AtomicBool::new(false)),
+            width: 2,
+            height: 2,
+            fps: 30.0,
+            lane: CodecLane::software(crate::imzero2::codeclane::VideoCodec::H264),
+            // Never written: nothing in these tests spawns or drains.
+            target: EncoderTarget::File(std::path::PathBuf::from("/dev/null")),
+            gen_counter: Arc::new(AtomicU64::new(7)),
+            generation: 7,
+            len_warned: false,
+            restarts: 0,
+            last_spawn,
+            fast_restarts: 0,
+            gave_up: false,
+        }
+    }
+
+    /// A child process that has already exited, standing in for an ffmpeg that
+    /// quit on its own: this test binary re-invoked with `--list`, which prints
+    /// its test names and exits without running any. No ffmpeg, no codec, no
+    /// external binary — the only thing needed is a process that dies.
+    /// `wait` here leaves the exit status cached, so the sink's own `try_wait`
+    /// is what has to notice it.
+    fn exited_child() -> Option<std::process::Child> {
+        let exe = std::env::current_exe().ok()?;
+        let mut child = std::process::Command::new(exe)
+            .arg("--list")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .ok()?;
+        child.wait().ok()?;
+        Some(child)
+    }
+
+    #[test]
+    fn prepare_frame_observes_an_exited_child() {
+        let Some(child) = exited_child() else {
+            eprintln!("cannot spawn a child process here; skipping exited-child observation");
+            return;
+        };
+        // Inside the backoff on purpose: the point is the *observation*, and a
+        // restart decision here would spawn a real ffmpeg.
+        let mut sink = down_sink(Some(child), std::time::Instant::now());
+        let health = sink.observe();
+        assert!(health.spawned, "the child is installed");
+        assert!(health.child_exited, "an exited child must be observed");
+        assert!(
+            !health.feeder_dead,
+            "nothing wrote to it — the pre-SD3 detector would have seen nothing"
+        );
+        assert_eq!(death_cause(health), Some(DeathCause::ChildExited));
+        // Within the backoff the frame is simply dropped, and no generation is
+        // burned because no spawn was attempted.
+        assert!(!sink.prepare_frame(2, 2));
+        assert_eq!(sink.gen_counter.load(Ordering::Acquire), 7);
+    }
+
+    #[test]
+    fn nothing_is_submitted_while_the_encoder_is_down() {
+        // A failed spawn leaves no child. The frame must not land in the
+        // mailbox, and the caller must be told so — a caller that advanced its
+        // dedup hash here would treat the next identical frame as already
+        // sent, freezing the stream until the pixels happen to change twice.
+        let mut sink = down_sink(None, std::time::Instant::now());
+        assert!(!sink.prepare_frame(2, 2), "inside the backoff");
+        assert!(!sink.submit_frame(&[0u8; 16]), "no encoder to submit to");
+        assert!(
+            sink.mailbox.inner.lock().expect("mailbox").latest.is_none(),
+            "no frame may reach the mailbox"
+        );
+        // No spawn attempt, so the generation is untouched and the caller sees
+        // no reason to re-send.
+        assert_eq!(sink.generation(), 7);
+        assert_eq!(sink.gen_counter.load(Ordering::Acquire), 7);
+    }
+
+    #[test]
+    fn submit_frame_rejects_a_buffer_that_does_not_match_the_geometry() {
+        let Some(child) = exited_child() else {
+            eprintln!("cannot spawn a child process here; skipping geometry-mismatch check");
+            return;
+        };
+        let mut sink = down_sink(Some(child), std::time::Instant::now());
+        // 2×2 BGRA is 16 bytes. Anything else desynchronises `-f rawvideo`
+        // for every later frame, so it is refused rather than written.
+        assert!(!sink.submit_frame(&[]));
+        assert!(!sink.submit_frame(&[0u8; 12]));
+        assert!(!sink.submit_frame(&[0u8; 20]));
+        assert!(
+            sink.mailbox.inner.lock().expect("mailbox").latest.is_none(),
+            "a mismatched buffer must not be written"
+        );
+        assert!(sink.submit_frame(&[0u8; 16]), "the prepared geometry fits");
+        assert!(sink.mailbox.inner.lock().expect("mailbox").latest.is_some());
+    }
+
+    /// Encode a short NUT stream with the host ffmpeg, or None if none of the
+    /// software encoders this repo ships a lane for is built into it.
+    /// Nothing here reimplements a muxer: NUT frame boundaries and the
+    /// container key-frame flag are exactly what is under test, and the stamp
+    /// is codec-independent by construction (ADR-0088 SD4), so whichever
+    /// encoder the host has is a valid witness.
+    fn nut_fixture() -> Option<Vec<u8>> {
+        for codec in ["libopenh264", "libsvtav1", "libvpx-vp9"] {
+            let path = std::env::temp_dir().join(format!(
+                "imzero2_encoderpipe_stamp_{}_{}.nut",
+                codec.replace('-', "_"),
+                std::process::id()
+            ));
+            let ok = std::process::Command::new(crate::imzero2::codeclane::ffmpeg_bin())
+                .args([
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=size=128x128:rate=10",
+                    "-frames:v",
+                    "10",
+                    "-c:v",
+                    codec,
+                    "-bf",
+                    "0",
+                    "-g",
+                    "5",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-flush_packets",
+                    "1",
+                    "-f",
+                    "nut",
+                ])
+                .arg(&path)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            let data = if ok { std::fs::read(&path).ok() } else { None };
+            let _ = std::fs::remove_file(&path);
+            if let Some(d) = data.filter(|d| !d.is_empty()) {
+                eprintln!("drain stamp fixture encoded with {codec}");
+                return Some(d);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn the_drain_stamps_every_frame_with_its_producing_generation() {
+        // The stamp is applied where the frame is produced. Assigning it at
+        // fan-out instead would label a frame with whichever encoder is
+        // current by then — precisely the stale frame it exists to catch.
+        let Some(nut) = nut_fixture() else {
+            eprintln!("no usable ffmpeg/libopenh264 here; skipping drain stamp test");
+            return;
+        };
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<EncodedFrame>(64);
+        let stop = AtomicBool::new(false);
+        drain_to_channel_nut(Some(std::io::Cursor::new(nut)), &tx, &stop, 42);
+        let mut frames = Vec::new();
+        while let Ok(f) = rx.try_recv() {
+            frames.push(f);
+        }
+        assert!(
+            frames.len() >= 2,
+            "expected coded frames, got {}",
+            frames.len()
+        );
+        assert!(
+            frames.iter().all(|f| f.generation == 42),
+            "every frame carries its producer's generation"
+        );
+        assert!(frames[0].keyframe, "a stream starts decodable");
+        assert!(
+            frames.iter().any(|f| !f.keyframe),
+            "-g 5 over 10 frames must also produce non-key frames"
+        );
+        assert!(
+            frames.iter().all(|f| f.payload.first() == Some(&pb::PREFIX_VIDEO)),
+            "the payload bytes are unchanged: 0x01 + VideoChunk"
+        );
     }
 }

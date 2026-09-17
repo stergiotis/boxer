@@ -39,6 +39,8 @@ message InputEvent {
     PinchZoom pinch_zoom = 7;
     // ADR-0154 SD3: actuate a widget by node id instead of by position.
     AccessKitAction accesskit_action = 8;
+    // ADR-0242 SD2: the remote input surface gained or lost keyboard focus.
+    Focus focus = 9;
   }
 }
 
@@ -53,8 +55,11 @@ message MouseMove {
 message MouseButton {
   float x = 1;
   float y = 2;
-  // 0=primary, 1=secondary, 2=middle, 3=extra1, 4=extra2 (matches
-  // browser MouseEvent.button order and egui::PointerButton).
+  // 0=primary, 1=secondary, 2=middle, 3=extra1, 4=extra2 — egui::PointerButton
+  // order, which is NOT the DOM's: `MouseEvent.button` numbers the auxiliary
+  // (middle) button 1 and the secondary 2. The sender translates; these wire
+  // numbers are frozen (ADR-0242 SD2) because the host and both existing
+  // senders already agree on them.
   uint32 button = 3;
   bool pressed = 4;
   uint32 modifiers = 5;
@@ -69,6 +74,12 @@ message MouseWheel {
   uint32 modifiers = 4;
 }
 
+// A keydown/keyup. ADR-0242 SD2: a keydown the host recognises as copy or cut
+// (command+C / command+X, or a dedicated Copy/Cut key) is translated into the
+// corresponding egui clipboard action instead of a key press, so senders need
+// not — and should not — special-case those shortcuts. Paste is the exception:
+// contents cannot travel on a keydown, so the sender answers command+V with a
+// ClipboardData message and sends the keystroke unchanged.
 message KeyEvent {
   // Browser KeyboardEvent.key (also accepted spelled-out by
   // egui::Key::from_name: "ArrowDown", "Enter", "A", ...).
@@ -87,6 +98,18 @@ message TextInput {
 
 // Pointer left the canvas (browser pointerleave) — clears hover state.
 message PointerGone {
+}
+
+// Client→server (ADR-0242 SD2): keyboard focus of the remote input surface,
+// ordered with the other input events so the host can tell which keystrokes
+// belong to a focused interval. `false` cancels held keys and buttons instead
+// of letting the next release complete a click. The surface is the sender's
+// whole input arrangement, not one DOM element: a viewer that moves focus
+// between its canvas and a hidden paste trap has not left it and must not
+// report a blur. Old senders never send this, and a host that never receives
+// it stays focused.
+message Focus {
+  bool focused = 1;
 }
 
 // Pinch gesture (touch clients): multiplicative zoom factor for this

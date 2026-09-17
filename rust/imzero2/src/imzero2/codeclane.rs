@@ -104,8 +104,12 @@ const H264_BSF: &str = "dump_extra=freq=keyframe";
 /// cadence (ADR-0062) mean the encoder only sees changed frames, so on a
 /// mostly-static dashboard a key frame (and a joiner's start) can lag in real
 /// time — acceptable for the demo (a static screen has nothing to watch).
-/// Field-tunable without a rebuild via `IMZERO2_HEADLESS_ENCODER_ARGS` (a full
-/// encoder-arg override, which can set its own `-g`).
+///
+/// `IMZERO2_HEADLESS_ENCODER_ARGS` is a full encoder-arg override, but the GOP
+/// is the one knob it does not keep: [`CodecLane::with_gop`] sets it for the
+/// viewer mix, and while a passive viewer is present supplies one even if the
+/// override named none (ADR-0242 SD3 — a viewer cannot join a stream with no
+/// scheduled key frame). Changing this constant needs a rebuild.
 const PERIODIC_IDR_GOP: &str = "120";
 
 /// Effectively-infinite GOP (a single IDR at stream start) — ADR-0024 SD3's
@@ -175,9 +179,21 @@ impl CodecLane {
     /// viewer is present, so the shared stream needs periodic key frames for it
     /// to join) selects [`PERIODIC_IDR_GOP`]; otherwise [`INFINITE_GOP`] keeps
     /// the lone active stream pulse-free (ADR-0024 SD3). The carrier applies
-    /// this at each encoder (re)spawn. A no-op when the args carry no `-g` (a
-    /// raw `ENCODER_ARGS` override without one keeps ffmpeg's default GOP and so
-    /// opts out of the toggle).
+    /// this at each encoder (re)spawn.
+    ///
+    /// When the args carry no GOP at all — a raw `ENCODER_ARGS` override — the
+    /// two directions are deliberately asymmetric (ADR-0242 SD3):
+    ///
+    /// - `periodic` **appends** one. A passive viewer joins at a scheduled key
+    ///   frame, so "whatever GOP this ffmpeg defaults to" is not something the
+    ///   host can promise bounded joining against; a finite GOP is the narrow
+    ///   thing the override does not get to opt out of.
+    /// - non-`periodic` leaves the argv alone. Nobody is waiting to join, and
+    ///   injecting an effectively-infinite GOP into an override that never
+    ///   asked about GOPs would silently change what it encodes.
+    ///
+    /// Nothing else in the argv is interpreted; see [`set_gop`] for what
+    /// counts as the GOP knob.
     pub fn with_gop(&self, periodic: bool) -> Self {
         let gop = if periodic {
             PERIODIC_IDR_GOP
@@ -185,11 +201,7 @@ impl CodecLane {
             INFINITE_GOP
         };
         let mut lane = self.clone();
-        if let Some(i) = lane.encoder_args.iter().position(|a| a == "-g")
-            && let Some(v) = lane.encoder_args.get_mut(i + 1)
-        {
-            *v = gop.to_owned();
-        }
+        lane.encoder_args = set_gop(&lane.encoder_args, gop, periodic);
         lane
     }
 
@@ -371,6 +383,53 @@ impl CodecLane {
     pub fn is_hardware(&self) -> bool {
         self.encoder_args.iter().any(|a| a.ends_with("_vaapi"))
     }
+}
+
+/// Set the GOP knob in an ffmpeg encoder argv to `gop`, appending it when
+/// absent if `append_when_absent`.
+///
+/// The knob is `-g`, or `-g:<stream-spec>` (`-g:v`), and nothing else: this is
+/// not an ffmpeg argument parser, and a raw `ENCODER_ARGS` override may name
+/// options it knows nothing about. Three details are what make it usable
+/// against an argv it did not write:
+///
+/// - **Only the first occurrence survives.** ffmpeg applies the *last* value
+///   given for an option, so rewriting the first `-g` and leaving a later
+///   duplicate in place changed nothing at all — and a stream-specific
+///   `-g:v` outranks a generic `-g` regardless of order, so appending next to
+///   one would be ignored too. Later GOP pairs are therefore dropped, and the
+///   surviving one keeps the spelling it was written with.
+/// - **A value is only consumed when it looks like one.** In a malformed
+///   `-g -bf 0` the following token is another option; eating it as the GOP's
+///   value would delete an unrelated flag. Tokens starting with `-` (and a
+///   trailing `-g` with nothing after it) are left where they are.
+/// - **An empty argv is left empty.** That is the encoderless mesh lane
+///   ([`CodecLane::mesh`]), which spawns no ffmpeg; inventing arguments for it
+///   would only make a nonsense command line if anything ever ran it.
+fn set_gop(args: &[String], gop: &str, append_when_absent: bool) -> Vec<String> {
+    let is_gop = |a: &String| a == "-g" || a.starts_with("-g:");
+    let mut out: Vec<String> = Vec::with_capacity(args.len() + 2);
+    let mut seen = false;
+    let mut i = 0;
+    while let Some(a) = args.get(i) {
+        if !is_gop(a) {
+            out.push(a.clone());
+            i += 1;
+            continue;
+        }
+        let has_value = args.get(i + 1).is_some_and(|v| !v.starts_with('-'));
+        if !seen {
+            out.push(a.clone());
+            out.push(gop.to_owned());
+            seen = true;
+        }
+        i += 1 + usize::from(has_value);
+    }
+    if !seen && append_when_absent && !args.is_empty() {
+        out.push("-g".to_owned());
+        out.push(gop.to_owned());
+    }
+    out
 }
 
 /// Why an encoder lane passed or failed its [`probe_lane`] trial encode.
@@ -748,6 +807,123 @@ mod tests {
         assert_eq!(LaneProbe::NoDevice.reason_code(), 2);
         assert_eq!(LaneProbe::EncodeRejected.reason_code(), 3);
         assert_eq!(LaneProbe::Other.reason_code(), 4);
+    }
+
+    // The conditional GOP against an argv the host did not write (ADR-0242
+    // SD3). `with_gop` used to rewrite the value after the *first* `-g` and do
+    // nothing when there was none, which loses the GOP in both of the shapes a
+    // raw IMZERO2_HEADLESS_ENCODER_ARGS override actually takes.
+
+    fn args(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn gop_replaces_the_baked_value_in_both_directions() {
+        let lane = CodecLane::software(VideoCodec::Vp9);
+        let periodic = lane.with_gop(true).encoder_args;
+        let alone = lane.with_gop(false).encoder_args;
+        let gop_of = |a: &[String]| {
+            let i = a.iter().position(|x| x == "-g").expect("-g present");
+            a[i + 1].clone()
+        };
+        assert_eq!(gop_of(&periodic), PERIODIC_IDR_GOP);
+        assert_eq!(gop_of(&alone), INFINITE_GOP);
+        // Nothing else moves: same length, same neighbours.
+        assert_eq!(periodic.len(), lane.encoder_args.len());
+        assert_eq!(alone.len(), lane.encoder_args.len());
+    }
+
+    #[test]
+    fn gop_is_appended_for_a_passive_viewer_when_the_override_named_none() {
+        // A raw override with no -g left ffmpeg's default GOP, so a passive
+        // viewer had no scheduled key frame to join at.
+        let raw = args(&["-c:v", "libopenh264", "-bf", "0"]);
+        let lane = CodecLane::h264(raw.clone());
+        assert_eq!(
+            lane.with_gop(true).encoder_args,
+            args(&["-c:v", "libopenh264", "-bf", "0", "-g", PERIODIC_IDR_GOP])
+        );
+        // Alone, the override is left exactly as written: no viewer is waiting
+        // to join, and an injected GOP would change what it encodes.
+        assert_eq!(lane.with_gop(false).encoder_args, raw);
+    }
+
+    #[test]
+    fn gop_drops_later_duplicates_because_ffmpeg_takes_the_last() {
+        // Rewriting only the first -g left the later one in force, so the
+        // conditional GOP was silently whatever the override said.
+        let lane = CodecLane::h264(args(&[
+            "-c:v",
+            "libopenh264",
+            "-g",
+            "30",
+            "-bf",
+            "0",
+            "-g",
+            "7",
+        ]));
+        assert_eq!(
+            lane.with_gop(true).encoder_args,
+            args(&["-c:v", "libopenh264", "-g", PERIODIC_IDR_GOP, "-bf", "0"])
+        );
+    }
+
+    #[test]
+    fn gop_handles_the_stream_specified_spelling() {
+        // -g:v outranks a generic -g for the video stream, so appending one
+        // next to it would have been ignored; the spelling is kept and the
+        // value replaced.
+        let lane = CodecLane::h264(args(&["-c:v", "libopenh264", "-g:v", "30"]));
+        assert_eq!(
+            lane.with_gop(true).encoder_args,
+            args(&["-c:v", "libopenh264", "-g:v", PERIODIC_IDR_GOP])
+        );
+    }
+
+    #[test]
+    fn gop_does_not_eat_a_neighbouring_flag_or_invent_mesh_args() {
+        // Malformed override: `-g` with no value of its own. The GOP is
+        // supplied and -bf survives.
+        let lane = CodecLane::h264(args(&["-c:v", "libopenh264", "-g", "-bf", "0"]));
+        assert_eq!(
+            lane.with_gop(true).encoder_args,
+            args(&["-c:v", "libopenh264", "-g", PERIODIC_IDR_GOP, "-bf", "0"])
+        );
+        // Trailing -g with nothing after it.
+        let lane = CodecLane::h264(args(&["-c:v", "libopenh264", "-g"]));
+        assert_eq!(
+            lane.with_gop(true).encoder_args,
+            args(&["-c:v", "libopenh264", "-g", PERIODIC_IDR_GOP])
+        );
+        // The mesh lane has no encoder at all — it must stay argument-free.
+        assert!(CodecLane::mesh().with_gop(true).encoder_args.is_empty());
+        assert!(CodecLane::mesh().with_gop(false).encoder_args.is_empty());
+    }
+
+    #[test]
+    fn every_encoder_lane_has_a_finite_gop_for_a_passive_viewer() {
+        // All supported lanes, hardware and software: while a passive is
+        // present each must carry exactly one finite -g. A lane that grew args
+        // without one would silently stop bounding joins.
+        for codec in [
+            VideoCodec::H264,
+            VideoCodec::Vp9,
+            VideoCodec::Av1,
+            VideoCodec::Av1Hi444,
+        ] {
+            for lane in [CodecLane::software(codec), CodecLane::hardware(codec)] {
+                let a = lane.with_gop(true).encoder_args;
+                let gops: Vec<usize> =
+                    (0..a.len()).filter(|&i| a[i] == "-g" || a[i].starts_with("-g:")).collect();
+                assert_eq!(gops.len(), 1, "{codec:?}: exactly one GOP knob in {a:?}");
+                assert_eq!(a[gops[0] + 1], PERIODIC_IDR_GOP, "{codec:?}: {a:?}");
+                assert!(
+                    a[gops[0] + 1].parse::<u32>().is_ok_and(|g| g > 0),
+                    "{codec:?}: GOP must be a finite frame count"
+                );
+            }
+        }
     }
 
     /// M2: the codec-string level must scale with resolution. A fixed ~4.x

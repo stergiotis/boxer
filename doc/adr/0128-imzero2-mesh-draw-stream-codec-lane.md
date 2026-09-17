@@ -89,8 +89,14 @@ input machinery are unchanged.
 
 ### SD1 — Wire format: quantized meshes, content-addressed bodies
 
+ADR-0242 refines the implemented lane's delivery and retention: frame-scoped
+batches make bootstrap progress under backpressure, and an additive retirement
+message bounds cached bodies to the preceding frame and textures to explicit
+live keys. Body/texture layouts and quantization remain unchanged. Texture frees
+apply after their dependent frame, including for a joining viewer's bootstrap.
+
 The spike format is v1: per frame, an ordered list of per-mesh content
-hashes plus the bodies this connection has not seen. Bodies are immutable
+hashes plus the bodies this connection does not retain. Bodies are immutable
 once named, so client-side they become static GPU buffers. A joiner
 bootstraps from the current texture store plus one all-bodies frame — no
 keyframe scheduling, no GOP.

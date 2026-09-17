@@ -34,6 +34,18 @@
 //! demotes the prior active; a slot freed by a disconnect auto-promotes a
 //! lone passive.
 //!
+//! Two lifetime guarantees separate authoritative session state from
+//! disposable frame traffic (ADR-0242 SD1/SD2). The roster rides a
+//! per-connection **latest-value mailbox** rather than that connection's
+//! bounded payload queue, so a stalled viewer's full queue can no longer
+//! drop the role change that tells it what it is; the writer prefers the
+//! mailbox over payload and keeps the existing write timeout, so the state
+//! is either delivered or the peer is reaped. And input ownership carries an
+//! **owner epoch** in the registry itself: the authority check, the epoch
+//! stamp and the enqueue happen under one lock, and a change of owner
+//! discards what the previous one queued and makes the next drain ask the
+//! host to cancel held keys, buttons and modifiers first.
+//!
 //! One **shared** periodic-IDR encoder serves the whole session (ADR-0086
 //! SD5): it spawns on the 0→1 transition (a fresh SPS/PPS + IDR for the
 //! first viewer) and stops on N→0. Its NAL units are broadcast by a
@@ -47,18 +59,14 @@
 //! bounded encoder channel.
 
 use crate::imzero2::codeclane::{CodecLane, VideoCodec};
-use crate::imzero2::encoderpipe::{EncoderSink, EncoderTarget};
-use crate::imzero2::framesink::FrameSink as _;
+use crate::imzero2::encoderpipe::{EncodedFrame, EncoderSink, EncoderTarget, advance_generation};
 use crate::imzero2::inputproto as pb;
 use crate::imzero2::meshlane;
 use futures_util::{SinkExt as _, StreamExt as _};
 use prost::Message as _;
 
-/// Per-connection outbound queue depth: video NAL units and per-recipient
-/// control (roster, clipboard, hello re-announce) share it. A connection
-/// that stops draining (a stalled viewer) overflows this and is dropped to
-/// (recovering on its own decode-error reconnect) rather than backing up
-/// the encoder or the other viewers.
+/// Bounded video and transient-control queues. Roster/hello use latest-state
+/// mailboxes; mesh delivery has one queued frame batch (ADR-0242).
 const VIDEO_CHANNEL_CAP: usize = 16;
 
 /// Default bound on simultaneously-parked connections (ADR-0086 SD2 /
@@ -75,6 +83,42 @@ const DEFAULT_MAX_CONNECTIONS: usize = 8;
 /// browser auto-replies); a peer that cannot accept a write in time is reaped.
 const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 const WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const JOIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+#[derive(Clone)]
+struct StreamHello {
+    generation: u64,
+    payload: Vec<u8>,
+}
+
+struct MeshBatch {
+    generation: u64,
+    messages: std::collections::VecDeque<Vec<u8>>,
+}
+
+impl MeshBatch {
+    fn next(&mut self, generation: u64) -> Option<Vec<u8>> {
+        if self.generation != generation {
+            self.messages.clear();
+        }
+        self.messages.pop_front()
+    }
+}
+
+/// One drained item of remote input, in arrival order (ADR-0242 SD2). Paste
+/// shares the queue with the events rather than sitting in its own
+/// latest-wins cell, so a focus change that preceded it is honoured instead
+/// of the text landing on a surface the viewer has already left.
+// No `Eq`: the wire events carry `f32` coordinates, so prost derives only
+// `PartialEq` for them.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InputItem {
+    /// A wire input event from the connection that owned input when it
+    /// arrived.
+    Event(pb::input_event::Event),
+    /// A clipboard paste from that owner (ADR-0082 SD6).
+    Paste(String),
+}
 
 /// Sentinel for [`Inner::cursor_sent`] meaning "no shape has been delivered to
 /// the current active connection" — not a valid wire code, so the next pass
@@ -96,9 +140,23 @@ struct Conn {
     label: String,
     /// Outbound queue for this connection (video + per-recipient control).
     tx: tokio::sync::mpsc::Sender<Vec<u8>>,
-    /// Draw-stream lane (ADR-0128 SD2): the content hashes of mesh bodies
-    /// already sent to this connection — bodies are content-addressed and
-    /// immutable, so each crosses the wire once per connection.
+    /// Latest-value mailbox for this connection's authoritative session state
+    /// — the per-recipient roster today — independent of the payload queue
+    /// above (ADR-0242 SD1). A `watch` channel, so a change that lands while
+    /// the writer is mid-send **replaces** the pending copy instead of
+    /// queueing behind it or being dropped: the peer converges on the newest
+    /// state, and two changes in one tick coalesce into one write.
+    state: tokio::sync::watch::Sender<Option<Vec<u8>>>,
+    stream: tokio::sync::watch::Sender<Option<StreamHello>>,
+    video_tx: tokio::sync::mpsc::Sender<EncodedFrame>,
+    video_rx: Option<tokio::sync::mpsc::Receiver<EncodedFrame>>,
+    mesh_tx: tokio::sync::mpsc::Sender<MeshBatch>,
+    mesh_rx: Option<tokio::sync::mpsc::Receiver<MeshBatch>>,
+    awaiting_keyframe: bool,
+    video_ready: bool,
+    video_failed: bool,
+    joining_since: std::time::Instant,
+    /// Bodies retained by the last accepted mesh frame (ADR-0242 SD5).
     mesh_sent: std::collections::HashSet<u64>,
     /// Needs the mesh bootstrap (full texture store + all-bodies frame):
     /// set on admit and again whenever a queued mesh send is dropped — a
@@ -115,9 +173,27 @@ struct Registry {
     conns: Vec<Conn>,
     /// `Some(id)` of the active connection, or `None` when the slot is empty
     /// (several passives present, none promoted — each keeps its button).
+    /// Written only by [`Registry::set_active`], which keeps the input-owner
+    /// epoch below in step with it.
     active_id: Option<u64>,
     next_id: u64,
     max: usize,
+    /// Input-owner epoch (ADR-0242 SD2): advanced by every change of
+    /// `active_id` — admission, disconnect, auto-promotion, takeover — and
+    /// stamped on each accepted input item, so an item queued by a departed
+    /// owner cannot be consumed under the next one. Living here rather than
+    /// beside the queue is the point: ownership, the authority check, the
+    /// stamp and the enqueue are then all decided under one mutex.
+    owner_epoch: u64,
+    /// Input accepted from the owner, in arrival order, each item stamped
+    /// with the epoch that owned input when it arrived. Drained by the render
+    /// thread ([`WsCarrier::drain_input`]).
+    input: Vec<(u64, InputItem)>,
+    /// Latched by every owner change, cleared by the drain that reports it:
+    /// the host cancels held keys, buttons and modifiers *before* consuming
+    /// anything the new owner sent. Sticky, so a change that lands between
+    /// two render passes is never missed.
+    owner_reset: bool,
 }
 
 impl Registry {
@@ -127,7 +203,51 @@ impl Registry {
             active_id: None,
             next_id: 1,
             max,
+            owner_epoch: 0,
+            input: Vec::new(),
+            owner_reset: false,
         }
+    }
+
+    /// The single writer of `active_id` (ADR-0242 SD2). A real change advances
+    /// the owner epoch, drops the input the previous owner had queued, and
+    /// latches the reset the next drain reports. This also covers the change
+    /// to `None`: a disconnecting owner's held press is cancelled here,
+    /// server-side, rather than depending on a departing browser to deliver an
+    /// unload message.
+    fn set_active(&mut self, next: Option<u64>) {
+        if self.active_id == next {
+            return;
+        }
+        self.active_id = next;
+        self.owner_epoch = self.owner_epoch.wrapping_add(1);
+        self.input.clear();
+        self.owner_reset = true;
+    }
+
+    /// Accept one wire input event from `id`, iff `id` owns input right now
+    /// (ADR-0086 SD2 — a passive connection's input is dropped at the server).
+    /// The check and the stamp share this critical section: the check-then-push
+    /// pair they replaced could straddle a takeover and file a departed owner's
+    /// event under the new owner's epoch. Returns whether it was accepted, so
+    /// the caller only wakes the render thread for input that will be consumed.
+    fn accept_input(&mut self, id: u64, ev: pb::input_event::Event) -> bool {
+        self.accept(id, InputItem::Event(ev))
+    }
+
+    /// As [`Registry::accept_input`], for a viewer→host paste (ADR-0082 SD6),
+    /// which is ordered with the events around it rather than held in its own
+    /// latest-wins cell.
+    fn accept_paste(&mut self, id: u64, text: String) -> bool {
+        self.accept(id, InputItem::Paste(text))
+    }
+
+    fn accept(&mut self, id: u64, item: InputItem) -> bool {
+        if !self.is_active(id) {
+            return false;
+        }
+        self.input.push((self.owner_epoch, item));
+        true
     }
 
     fn find(&self, id: u64) -> Option<&Conn> {
@@ -145,20 +265,34 @@ impl Registry {
         let id = self.next_id;
         self.next_id += 1;
         let role = if self.active_id.is_none() {
-            self.active_id = Some(id);
             pb::Role::Active
         } else {
             pb::Role::Passive
         };
+        let (video_tx, video_rx) = tokio::sync::mpsc::channel(VIDEO_CHANNEL_CAP);
+        let (mesh_tx, mesh_rx) = tokio::sync::mpsc::channel(1);
         self.conns.push(Conn {
             id,
             role,
             webcodecs: false,
             label: String::new(),
             tx,
+            state: tokio::sync::watch::channel(None).0,
+            stream: tokio::sync::watch::channel(None).0,
+            video_tx,
+            video_rx: Some(video_rx),
+            mesh_tx,
+            mesh_rx: Some(mesh_rx),
+            awaiting_keyframe: true,
+            video_ready: false,
+            video_failed: false,
+            joining_since: std::time::Instant::now(),
             mesh_sent: std::collections::HashSet::new(),
             mesh_fresh: true,
         });
+        if role == pb::Role::Active {
+            self.set_active(Some(id));
+        }
         Some(id)
     }
 
@@ -168,23 +302,27 @@ impl Registry {
     /// empty (each keeps its button). This covers both removing the active and
     /// removing a passive that leaves a single connection — so the last
     /// remaining viewer always drives.
+    /// Removing a connection that is **not** the owner, and does not leave a
+    /// lone survivor to promote, leaves the epoch alone — so unrelated
+    /// membership churn never cancels the owner's in-progress drag.
     fn remove(&mut self, id: u64) {
         self.conns.retain(|c| c.id != id);
         if self.active_id == Some(id) {
-            self.active_id = None;
+            self.set_active(None);
         }
         if self.active_id.is_none()
             && let [only] = self.conns.as_mut_slice()
         {
             only.role = pb::Role::Active;
-            self.active_id = Some(only.id);
+            let promoted = only.id;
+            self.set_active(Some(promoted));
         }
     }
 
     /// Make `id` the active connection and demote the prior active to passive
     /// (SD2 — unilateral takeover). Returns whether anything changed.
     fn take_session(&mut self, id: u64) -> bool {
-        if self.active_id == Some(id) {
+        if self.active_id == Some(id) || self.find(id).is_none() {
             return false;
         }
         for c in &mut self.conns {
@@ -194,7 +332,7 @@ impl Registry {
                 c.role = pb::Role::Passive;
             }
         }
-        self.active_id = Some(id);
+        self.set_active(Some(id));
         true
     }
 
@@ -217,9 +355,6 @@ impl Registry {
 }
 
 struct Inner {
-    /// Raw wire events from the **active** connection, drained by the render
-    /// thread each tick (passive input is dropped at the server, SD2/SD8).
-    events: std::sync::Mutex<Vec<pb::input_event::Event>>,
     /// Latest viewport-resize from the active connection; drained by the
     /// render thread, which applies it (target rebuild + hello re-announce +
     /// encoder restart) and answers with a fresh [`pb::SessionHello`].
@@ -227,9 +362,6 @@ struct Inner {
     /// Latest runtime cadence request (0 continuous / 1 reactive) from the
     /// active connection, drained by the render thread.
     cadence_request: std::sync::Mutex<Option<u32>>,
-    /// Latest clipboard paste from the active connection (ADR-0082 SD6),
-    /// drained by the render thread and injected as `egui::Event::Paste`.
-    paste: std::sync::Mutex<Option<String>>,
     /// Wakes the render thread out of its reactive sleep when anything
     /// arrives that wants a pass soon: input, resize, cadence change,
     /// connect/disconnect, takeover, paste. Sends are fire-and-forget.
@@ -245,6 +377,9 @@ struct Inner {
     /// effectively-infinite (pulse-free) otherwise. Set in `broadcast_roster`,
     /// read each frame by `on_frame`.
     want_periodic: std::sync::atomic::AtomicBool,
+    generation: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    join_pending: std::sync::atomic::AtomicBool,
+    join_failed: std::sync::atomic::AtomicBool,
     /// First-class connections + the single active slot (ADR-0086 SD1).
     registry: std::sync::Mutex<Registry>,
     /// Current stream geometry; sent on connect and after each applied
@@ -289,7 +424,8 @@ pub struct WsCarrier {
     /// Stable input to the [`distribute`] fan-out task; every (re)spawned
     /// encoder targets a clone of this, so the distributor outlives any single
     /// encoder generation.
-    encoder_tx: tokio::sync::mpsc::Sender<Vec<u8>>,
+    encoder_tx: tokio::sync::mpsc::Sender<EncodedFrame>,
+    encoder_generation: u64,
     /// GOP mode of the current encoder (true = periodic IDR). Tracked so the
     /// render thread restarts the encoder when passive presence flips
     /// (`Inner::want_periodic`) — the conditional GOP, ADR-0086 SD10 Update.
@@ -337,15 +473,17 @@ impl WsCarrier {
             .unwrap_or(DEFAULT_MAX_CONNECTIONS);
         // The encoder→distributor channel is created once and lives for the
         // carrier's lifetime, independent of any single encoder generation.
-        let (encoder_tx, encoder_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(VIDEO_CHANNEL_CAP);
+        let (encoder_tx, encoder_rx) =
+            tokio::sync::mpsc::channel::<EncodedFrame>(VIDEO_CHANNEL_CAP);
         let inner = std::sync::Arc::new(Inner {
-            events: std::sync::Mutex::new(Vec::new()),
             resize: std::sync::Mutex::new(None),
             cadence_request: std::sync::Mutex::new(None),
-            paste: std::sync::Mutex::new(None),
             waker,
             connected: std::sync::atomic::AtomicBool::new(false),
             want_periodic: std::sync::atomic::AtomicBool::new(false),
+            generation: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            join_pending: std::sync::atomic::AtomicBool::new(false),
+            join_failed: std::sync::atomic::AtomicBool::new(false),
             registry: std::sync::Mutex::new(Registry::new(max)),
             hello: std::sync::Mutex::new(pb::SessionHello {
                 width_px,
@@ -408,6 +546,7 @@ impl WsCarrier {
             inner,
             encoder: None,
             encoder_tx,
+            encoder_generation: 0,
             encoder_periodic: false,
             fps,
             lane,
@@ -440,6 +579,15 @@ impl WsCarrier {
         }
     }
 
+    pub fn finish_texture_frame(&mut self) {
+        self.mesh_textures.finish_frame();
+    }
+
+    /// Idle video joins temporarily need the configured cadence, not a heartbeat.
+    pub fn needs_join_progress(&self) -> bool {
+        !self.is_mesh() && self.inner.join_pending.load(std::sync::atomic::Ordering::Acquire)
+    }
+
     /// True while ≥ 1 viewer is connected — the host skips rendering pixels
     /// entirely when nothing consumes them.
     pub fn connected(&self) -> bool {
@@ -459,24 +607,34 @@ impl WsCarrier {
         }
     }
 
-    /// Drain active-connection wire input events into `out` for the render thread.
-    pub fn drain_events(&mut self, out: &mut Vec<pb::input_event::Event>) {
-        if let Ok(mut events) = self.inner.events.lock() {
-            out.append(&mut events);
-        }
+    /// Drain the input owner's pending items into `out`, in arrival order, and
+    /// report whether **input ownership changed** since the previous drain
+    /// (ADR-0242 SD2).
+    ///
+    /// The contract the host relies on, in order:
+    ///
+    /// 1. A `true` return means the caller must cancel held keys, buttons and
+    ///    modifiers *before* consuming `out` — a press that crossed the wire
+    ///    under the previous owner must not complete as a click under the next.
+    /// 2. Everything in `out` then belongs to the **current** owner: items
+    ///    stamped with a superseded epoch are discarded here rather than
+    ///    translated. (They are also cleared when the epoch advances; this is
+    ///    the consumption-side half of the same check, so no queue that
+    ///    outlives an owner change can revive a held press after the reset.)
+    /// 3. Paste keeps its place in that order instead of being appended after
+    ///    the events, so a focus change that preceded it is honoured.
+    ///
+    /// The epoch read, the reset take and the move into `out` are one critical
+    /// section, so a takeover cannot land between them; the registry lock is
+    /// held for that move and nothing else.
+    pub fn drain_input(&mut self, out: &mut Vec<InputItem>) -> bool {
+        drain_input(&self.inner, out)
     }
 
     /// Latest pending viewport-resize from the active connection (latest wins).
     pub fn take_resize(&mut self) -> Option<pb::ViewportResize> {
         let mut r = self.inner.resize.lock().ok()?;
         r.take()
-    }
-
-    /// Latest pending clipboard paste from the active connection (ADR-0082
-    /// SD6), drained by the render thread to inject `egui::Event::Paste`.
-    pub fn take_paste(&mut self) -> Option<String> {
-        let mut p = self.inner.paste.lock().ok()?;
-        p.take()
     }
 
     /// Send host-copied text to the **active** connection's clipboard
@@ -576,9 +734,8 @@ impl WsCarrier {
             hello.cadence = guard.cadence; // geometry changes don't touch cadence
             *guard = hello.clone();
         }
-        // Drop first: reap blocks until the old drain flushed its remaining
-        // (old-geometry) access units into the encoder channel, so the hello
-        // below lands after them at the distributor.
+        // Stop the producer, then retire its generation. Already queued old
+        // payloads are filtered rather than reinterpreted under the new hello.
         if self.encoder.take().is_some() {
             tracing::info!(
                 width_px,
@@ -588,6 +745,8 @@ impl WsCarrier {
             );
         }
         self.last_frame_hash = None;
+        advance_generation(&self.inner.generation);
+        self.last_mesh_sig = None;
         broadcast_hello(&self.inner, hello);
     }
 
@@ -632,7 +791,8 @@ impl WsCarrier {
             let (w, ht) = (h.width_px, h.height_px);
             h.codec = self.lane.webcodecs_codec_string(w, ht);
         }
-        self.encoder.take(); // flush old stream; on_frame respawns the new lane
+        self.encoder.take(); // stop the old producer before retiring its generation
+        advance_generation(&self.inner.generation);
         self.last_frame_hash = None;
         // Mesh-lane per-session state restarts with the codec switch; viewers
         // reconnect on the announced codec-class change (canvas contexts are
@@ -684,11 +844,16 @@ impl WsCarrier {
         if self.is_mesh() {
             return;
         }
+        if self.inner.join_failed.swap(false, Relaxed) {
+            self.degrade_to_mesh("encoder produced no joinable keyframe before the join deadline");
+            return;
+        }
         let connected = self.inner.connected.load(Acquire);
         if !connected {
             if self.encoder.take().is_some() {
                 tracing::info!("all viewers disconnected — stopping shared encoder");
                 self.last_frame_hash = None;
+                advance_generation(&self.inner.generation);
                 // Telemetry is per-session: clear it so the next 0→1 spawn
                 // starts a fresh byte/frame count (the EMA bitrate the Go
                 // control reads). Done here, not on every (re)spawn, so a
@@ -722,7 +887,10 @@ impl WsCarrier {
                 height,
                 self.fps,
                 lane,
-                EncoderTarget::Channel(self.encoder_tx.clone()),
+                EncoderTarget::Channel {
+                    tx: self.encoder_tx.clone(),
+                    generation: self.inner.generation.clone(),
+                },
             ) {
                 Ok(enc) => {
                     tracing::info!(periodic_idr = want_periodic, "shared encoder started");
@@ -736,31 +904,35 @@ impl WsCarrier {
                 }
             }
         }
-        let hash = blake3::hash(bgra);
-        if self.last_frame_hash == Some(hash) {
-            return; // pixel-identical to the last fed frame
+        let _ = frame_idx;
+        let Some(enc) = &mut self.encoder else { return };
+        let ready = enc.prepare_frame(width, height);
+        let generation = enc.generation();
+        if generation != self.encoder_generation {
+            self.encoder_generation = generation;
+            self.last_frame_hash = None;
+            let hello = self.inner.hello.lock().map(|h| h.clone()).unwrap_or_default();
+            broadcast_hello(&self.inner, hello);
         }
-        let gave_up = if let Some(enc) = &mut self.encoder {
-            enc.on_frame(bgra, width, height, frame_idx);
-            self.last_frame_hash = Some(hash);
-            enc.gave_up()
-        } else {
-            false
-        };
-        if gave_up {
+        if enc.gave_up() {
             self.degrade_to_mesh("encoder supervisor gave up on the lane");
+            return;
+        }
+        if !ready {
+            return;
+        }
+        let hash = blake3::hash(bgra);
+        if (self.last_frame_hash != Some(hash) || self.inner.join_pending.load(Acquire))
+            && enc.submit_frame(bgra)
+        {
+            self.last_frame_hash = Some(hash);
         }
     }
 
-    /// Broadcast one tessellated frame on the draw-stream lane (ADR-0128
-    /// SD2). Per connection: a fresh one first gets the whole texture store
-    /// (joiner bootstrap), others get this frame's incremental texture
-    /// updates; then a frame message carrying the full draw order plus only
-    /// the bodies that connection has not seen. All sends are non-blocking
-    /// `try_send` (SD9); any drop marks the connection fresh, so the next
-    /// frame is its full resync — content-addressed streams have no
-    /// retransmit. An unchanged frame with no pending textures and no fresh
-    /// connection sends nothing (the measured idle silence).
+    /// Queue an atomic frame batch (ADR-0242): textures, draw order/bodies,
+    /// then retirement. A full queue rejects the whole batch and requests a
+    /// fresh snapshot. Accepted batches drain incrementally without restarting
+    /// the texture prefix; retained hashes track only the last accepted frame.
     ///
     /// The host calls this only while the mesh lane is active and ≥ 1 viewer
     /// is connected; [`Self::mesh_reap`] covers the N→0 transition.
@@ -772,36 +944,40 @@ impl WsCarrier {
         }
         let sig = sig_h.finalize();
         let pending_tex = std::mem::take(&mut self.mesh_pending_tex);
+        let retiring = self.mesh_textures.has_pending_frees();
+        let live_keys = self.mesh_textures.live_keys();
+        let generation = self.inner.generation.load(std::sync::atomic::Ordering::Acquire);
         let Ok(mut reg) = self.inner.registry.lock() else {
             return;
         };
         let fresh_any = reg.conns.iter().any(|c| c.mesh_fresh);
-        if pending_tex.is_empty() && !fresh_any && self.last_mesh_sig == Some(sig) {
+        if pending_tex.is_empty() && !retiring && !fresh_any && self.last_mesh_sig == Some(sig) {
             return;
         }
         let active_id = reg.active_id;
         for c in &mut reg.conns {
-            let mut ok = true;
-            if c.mesh_fresh {
-                c.mesh_sent.clear();
-                for m in self.mesh_textures.full_messages() {
-                    ok &= c.tx.try_send(m).is_ok();
-                }
+            let textures = if c.mesh_fresh {
+                self.mesh_textures.full_messages()
             } else {
-                for m in &pending_tex {
-                    ok &= c.tx.try_send(m.clone()).is_ok();
-                }
-            }
+                pending_tex.clone()
+            };
             let missing: Vec<usize> = (0..frame.hashes.len())
-                .filter(|&i| !c.mesh_sent.contains(&frame.hashes[i]))
+                .filter(|&i| c.mesh_fresh || !c.mesh_sent.contains(&frame.hashes[i]))
                 .collect();
             let msg = meshlane::frame_message(ppp, w_px, h_px, frame, &missing);
             let msg_len = msg.len() as u64;
-            ok &= c.tx.try_send(msg).is_ok();
-            if ok {
-                for &i in &missing {
-                    c.mesh_sent.insert(frame.hashes[i]);
-                }
+            let mut messages: std::collections::VecDeque<_> = textures.into();
+            messages.push_back(msg);
+            messages.push_back(meshlane::retirement_message(&live_keys));
+            if c.mesh_tx
+                .try_send(MeshBatch {
+                    generation,
+                    messages,
+                })
+                .is_ok()
+            {
+                c.mesh_sent.clear();
+                c.mesh_sent.extend(frame.hashes.iter().copied());
                 c.mesh_fresh = false;
                 if Some(c.id) == active_id {
                     // Stream-rate telemetry (not aggregate egress), mirroring
@@ -835,37 +1011,73 @@ impl WsCarrier {
     }
 }
 
-/// Fan the shared encoder's pre-framed NAL units (0x01 + `VideoChunk`) out to
-/// every connection's queue (ADR-0086 SD5 broadcast). Each connection's send
-/// is non-blocking `try_send`: a stalled viewer drops the unit (and recovers
-/// at its next decode-error reconnect) without backing up the encoder or the
-/// other viewers. Telemetry counts each unit once (stream bitrate, not egress).
+/// Fan out current-generation video without blocking other viewers. A missing
+/// reference closes that peer rather than relying on a decoder error to recover.
 async fn distribute(
-    mut encoder_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    mut encoder_rx: tokio::sync::mpsc::Receiver<EncodedFrame>,
     inner: std::sync::Arc<Inner>,
 ) {
-    use std::sync::atomic::Ordering::Relaxed;
-    while let Some(payload) = encoder_rx.recv().await {
-        inner.bytes_sent.fetch_add(payload.len() as u64, Relaxed);
-        inner.frames_sent.fetch_add(1, Relaxed);
-        // Clone the senders under the lock, send outside it — never hold the
-        // registry mutex across a (non-blocking, but still) channel op.
-        let txs: Vec<tokio::sync::mpsc::Sender<Vec<u8>>> = match inner.registry.lock() {
-            Ok(r) => r.conns.iter().map(|c| c.tx.clone()).collect(),
-            Err(_) => continue,
-        };
-        for tx in txs {
-            let _ = tx.try_send(payload.clone());
-        }
+    while let Some(frame) = encoder_rx.recv().await {
+        distribute_frame(&inner, frame);
     }
 }
 
-/// Re-announce a hello to every connection from the render thread (geometry /
-/// codec change). Strictly non-blocking (SD9): a per-connection `try_send`
-/// that finds a full queue drops the re-announce for that viewer, which
-/// resyncs on its own decode-error reconnect. The SD9 ride-out retry the
-/// single-session path used is intentionally not applied here — it cannot be
-/// summed across N connections without risking an N×-bounded render stall.
+fn refresh_join_pending(inner: &Inner, reg: &Registry) {
+    inner.join_pending.store(
+        reg.conns.iter().any(|c| c.awaiting_keyframe),
+        std::sync::atomic::Ordering::Release,
+    );
+}
+
+fn keyframe_delivered(inner: &Inner, id: u64, generation: u64) {
+    if let Ok(mut reg) = inner.registry.lock() {
+        if generation != inner.generation.load(std::sync::atomic::Ordering::Acquire) {
+            return;
+        }
+        if let Some(c) = reg.conns.iter_mut().find(|c| c.id == id) {
+            c.awaiting_keyframe = false;
+        }
+        refresh_join_pending(inner, &reg);
+    }
+}
+
+fn distribute_frame(inner: &Inner, frame: EncodedFrame) {
+    use std::sync::atomic::Ordering::{Acquire, Relaxed};
+    if frame.generation != inner.generation.load(Acquire) {
+        return;
+    }
+    inner.bytes_sent.fetch_add(frame.payload.len() as u64, Relaxed);
+    inner.frames_sent.fetch_add(1, Relaxed);
+    let Ok(mut reg) = inner.registry.lock() else {
+        return;
+    };
+    // A new hello may have reset the join state while we waited for the lock.
+    if frame.generation != inner.generation.load(Acquire) {
+        return;
+    }
+    for c in &mut reg.conns {
+        if c.video_failed || (!c.video_ready && !frame.keyframe) {
+            continue;
+        }
+        let copy = EncodedFrame {
+            generation: frame.generation,
+            keyframe: frame.keyframe,
+            payload: frame.payload.clone(),
+        };
+        if c.video_tx.try_send(copy).is_ok() {
+            c.video_ready = true;
+        } else {
+            // A dropped reference cannot be repaired by passing later deltas.
+            // Close this peer and let its next connection join at a keyframe.
+            c.video_failed = true;
+            c.awaiting_keyframe = false;
+        }
+    }
+    refresh_join_pending(inner, &reg);
+}
+
+/// Publish a generation's hello independently of payload queue capacity.
+/// The writer discards obsolete payloads and delivers this before the new stream.
 fn broadcast_hello(inner: &Inner, hello: pb::SessionHello) {
     let msg = pb::SessionControl {
         control: Some(pb::session_control::Control::Hello(hello)),
@@ -873,17 +1085,23 @@ fn broadcast_hello(inner: &Inner, hello: pb::SessionHello) {
     let mut framed = Vec::with_capacity(1 + msg.encoded_len());
     framed.push(pb::PREFIX_SESSION);
     let _ = msg.encode(&mut framed);
-    let Ok(reg) = inner.registry.lock() else {
+    let Ok(mut reg) = inner.registry.lock() else {
         return;
     };
-    for c in &reg.conns {
-        if c.tx.try_send(framed.clone()).is_err() {
-            tracing::debug!(
-                id = c.id,
-                "hello re-announce skipped — viewer stalled or mid-teardown"
-            );
-        }
+    let generation = inner.generation.load(std::sync::atomic::Ordering::Acquire);
+    for c in &mut reg.conns {
+        c.stream.send_replace(Some(StreamHello {
+            generation,
+            payload: framed.clone(),
+        }));
+        c.mesh_sent.clear();
+        c.mesh_fresh = true;
+        c.awaiting_keyframe = true;
+        c.video_ready = false;
+        c.video_failed = false;
+        c.joining_since = std::time::Instant::now();
     }
+    refresh_join_pending(inner, &reg);
 }
 
 /// Body of [`WsCarrier::send_cursor_to_active`], split out so it can be
@@ -945,9 +1163,42 @@ fn push_cursor(inner: &Inner, shape: u32) {
     }
 }
 
+/// Body of [`WsCarrier::drain_input`], split out so it can be exercised
+/// against a bare [`Inner`] (a whole carrier needs bound sockets and a tokio
+/// runtime). See that method for the ordering contract.
+fn drain_input(inner: &Inner, out: &mut Vec<InputItem>) -> bool {
+    let Ok(mut reg) = inner.registry.lock() else {
+        return false;
+    };
+    let epoch = reg.owner_epoch;
+    let reset = std::mem::take(&mut reg.owner_reset);
+    let mut stale = 0usize;
+    for (stamp, item) in reg.input.drain(..) {
+        if stamp == epoch {
+            out.push(item);
+        } else {
+            stale += 1;
+        }
+    }
+    if stale > 0 {
+        tracing::debug!(stale, "discarded input queued by a departed owner");
+    }
+    reset
+}
+
 /// Build and send each connection its own per-recipient [`pb::Roster`]
 /// (ADR-0086 SD1/SD8): every copy shares the connection list but carries its
 /// own `you_id`/`you_role`. Called on every membership/role change.
+///
+/// The roster goes into each connection's `state` mailbox, **not** its
+/// bounded payload queue (ADR-0242 SD1): a role change is the one message a
+/// viewer cannot recover from losing — it is what tells the viewer whether it
+/// drives or watches — so it must not share a fate with disposable frame
+/// traffic that a stalled viewer's full queue drops. The mailbox holds the
+/// latest value only, and the writer prefers it over payload, so the peer
+/// converges on the current roster or its write timeout reaps it. Ordering
+/// against a queued hello is not a concern: the roster carries no geometry or
+/// codec, and a viewer applies the two independently.
 fn broadcast_roster(inner: &Inner) {
     let Ok(reg) = inner.registry.lock() else {
         return;
@@ -962,6 +1213,7 @@ fn broadcast_roster(inner: &Inner) {
     // there is more than one connection (≤1-active + lone-survivor auto-promote
     // ⇒ a single connection is always the active one). On a change, wake the
     // render thread so it re-picks the shared encoder's GOP promptly.
+    refresh_join_pending(inner, &reg);
     let want_periodic = reg.conns.len() >= 2;
     if inner.want_periodic.swap(want_periodic, std::sync::atomic::Ordering::Release)
         != want_periodic
@@ -996,7 +1248,10 @@ fn broadcast_roster(inner: &Inner) {
         let mut framed = Vec::with_capacity(1 + msg.encoded_len());
         framed.push(pb::PREFIX_SESSION);
         let _ = msg.encode(&mut framed);
-        let _ = c.tx.try_send(framed); // drop-on-full (stalled viewer)
+        // `send_replace` rather than `send`: it stores (and notifies) whether
+        // or not a receiver is currently subscribed, so a roster published
+        // while a session task is mid-teardown is not an error to handle.
+        c.state.send_replace(Some(framed));
     }
 }
 
@@ -1085,6 +1340,31 @@ async fn accept_loop(
     }
 }
 
+async fn send_payload<S>(
+    sink: &mut S,
+    payload: Vec<u8>,
+) -> Result<(), tokio_tungstenite::tungstenite::Error>
+where
+    S: futures_util::Sink<
+            tokio_tungstenite::tungstenite::Message,
+            Error = tokio_tungstenite::tungstenite::Error,
+        > + Unpin,
+{
+    tokio::time::timeout(
+        WRITE_TIMEOUT,
+        sink.send(tokio_tungstenite::tungstenite::Message::Binary(
+            payload.into(),
+        )),
+    )
+    .await
+    .map_err(|elapsed| {
+        tokio_tungstenite::tungstenite::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            elapsed,
+        ))
+    })?
+}
+
 async fn handle_session(
     stream: tokio::net::TcpStream,
     peer: std::net::SocketAddr,
@@ -1097,7 +1377,22 @@ async fn handle_session(
 
     // Admit into the registry. A full roster (MAX_CONNECTIONS) refuses the
     // connection — the loser is dropped (its viewer reconnects with backoff).
-    let Some(id) = inner.registry.lock().ok().and_then(|mut r| r.admit(tx)) else {
+    // The state mailbox receiver is taken under the same lock as the admission
+    // (ADR-0242 SD1), so no roster published between the two can be missed:
+    // `subscribe` marks only what is already there as seen, and `admit` leaves
+    // the mailbox empty.
+    let admitted = inner.registry.lock().ok().and_then(|mut r| {
+        let id = r.admit(tx)?;
+        let c = r.conns.iter_mut().find(|c| c.id == id)?;
+        Some((
+            id,
+            c.state.subscribe(),
+            c.stream.subscribe(),
+            c.video_rx.take()?,
+            c.mesh_rx.take()?,
+        ))
+    });
+    let Some((id, mut state_rx, mut stream_rx, mut video_rx, mut mesh_rx)) = admitted else {
         tracing::info!(%peer, "rejecting connection — MAX_CONNECTIONS reached");
         return Ok(());
     };
@@ -1110,6 +1405,7 @@ async fn handle_session(
     // First wire message: the session hello with current stream geometry
     // (SD6 0x03), sent directly so it precedes any queued video/roster — the
     // viewer needs it to size its canvas and configure its decoder.
+    let initial_generation = inner.generation.load(std::sync::atomic::Ordering::Acquire);
     let current_hello = inner.hello.lock().map(|h| (*h).clone()).unwrap_or_default();
     let hello = pb::SessionControl {
         control: Some(pb::session_control::Control::Hello(current_hello)),
@@ -1139,8 +1435,82 @@ async fn handle_session(
         // goes a whole interval unanswered, the peer has stopped reading its
         // socket and is reaped.
         let mut awaiting_pong = false;
+        let mut mesh_batch: Option<MeshBatch> = None;
+        let mut mesh_started = std::time::Instant::now();
+        let mut sent_generation = initial_generation;
         loop {
+            let failed = inner
+                .registry
+                .lock()
+                .map(|r| r.find(id).is_some_and(|c| c.video_failed))
+                .unwrap_or(true);
+            if failed || (mesh_batch.is_some() && mesh_started.elapsed() > JOIN_TIMEOUT) {
+                break Ok(());
+            }
+            let current_generation = inner.generation.load(std::sync::atomic::Ordering::Acquire);
+            if mesh_batch.as_ref().is_some_and(|b| b.generation != current_generation) {
+                mesh_batch = None;
+            }
+            if mesh_batch.as_ref().is_some_and(|b| b.messages.is_empty()) {
+                mesh_batch = None;
+            }
             tokio::select! {
+                // Authoritative state before disposable frame traffic
+                // (ADR-0242 SD1). `biased` makes that preference explicit
+                // rather than leaving it to the random branch order: when a
+                // role change and a queued video unit are both ready, the role
+                // change goes first. It cannot starve the payload branch — the
+                // mailbox is only ready when a *new* state has been published,
+                // which happens on membership/role changes, not per frame.
+                biased;
+                changed = state_rx.changed() => {
+                    if changed.is_err() {
+                        // The sender lives in this connection's `Conn`, so this
+                        // only resolves once the registry has removed it.
+                        break Ok(());
+                    }
+                    // Latest-value: if several rosters were published while the
+                    // previous write was in flight, only the newest is sent.
+                    // Cloned out of the borrow so no watch guard is held across
+                    // the await below.
+                    let state = state_rx.borrow_and_update().clone();
+                    if let Some(payload) = state {
+                        match tokio::time::timeout(WRITE_TIMEOUT, ws_tx.send(tokio_tungstenite::tungstenite::Message::Binary(payload.into()))).await {
+                            Ok(Ok(())) => {}
+                            Ok(Err(e)) => break Err(e),
+                            Err(_) => {
+                                // Retried until written or the peer's existing
+                                // timeout closes it (SD1) — never dropped.
+                                tracing::info!(%peer, id, "viewer unresponsive (state send timed out) — reaping connection");
+                                break Ok(());
+                            }
+                        }
+                    }
+                }
+                changed = stream_rx.changed() => {
+                    if changed.is_err() { break Ok(()); }
+                    let state = stream_rx.borrow_and_update().clone();
+                    if let Some(state) = state {
+                        if state.generation != inner.generation.load(std::sync::atomic::Ordering::Acquire)
+                            || state.generation == sent_generation { continue; }
+                        match send_payload(&mut ws_tx, state.payload.clone()).await {
+                            Ok(()) => {
+                                sent_generation = state.generation;
+                                mesh_batch = None;
+                            }
+                            Err(e) => break Err(e),
+                        }
+                    }
+                }
+                msg = ws_rx.next() => {
+                    awaiting_pong = false;
+                    match msg {
+                        Some(Ok(tokio_tungstenite::tungstenite::Message::Binary(data))) => handle_client_message(&data, &inner, id),
+                        Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_))) | None => break Ok(()),
+                        Some(Ok(_)) => {},
+                        Some(Err(e)) => break Err(e),
+                    }
+                }
                 out = rx.recv() => {
                     match out {
                         Some(payload) => {
@@ -1156,18 +1526,18 @@ async fn handle_session(
                         None => break Ok(()), // all senders gone (only after registry removal)
                     }
                 }
-                msg = ws_rx.next() => {
-                    awaiting_pong = false; // any inbound frame proves the peer is reading
-                    match msg {
-                        Some(Ok(tokio_tungstenite::tungstenite::Message::Binary(data))) => {
-                            handle_client_message(&data, &inner, id);
-                        }
-                        Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_))) | None => break Ok(()),
-                        Some(Ok(_)) => {} // text/ping/pong — ignore
-                        Some(Err(e)) => break Err(e),
-                    }
-                }
                 _ = ping.tick() => {
+                    let join_expired = inner.registry.lock().map(|r| r.find(id).is_some_and(|c| c.awaiting_keyframe && c.joining_since.elapsed() > JOIN_TIMEOUT)).unwrap_or(false);
+                    let video = inner.hello.lock().map(|h| h.codec != "mesh").unwrap_or(false);
+                    if video && join_expired {
+                        tracing::warn!(id, "viewer join timed out without a delivered keyframe");
+                        let no_keyframe = inner.registry.lock().map(|r| r.find(id).is_some_and(|c| !c.video_ready)).unwrap_or(false);
+                        if no_keyframe {
+                            inner.join_failed.store(true, std::sync::atomic::Ordering::Release);
+                            let _ = inner.waker.send(());
+                        }
+                        break Ok(());
+                    }
                     if awaiting_pong {
                         // Our previous keepalive ping went a full interval
                         // unanswered — the peer has stopped reading its socket (a
@@ -1188,6 +1558,38 @@ async fn handle_session(
                             break Ok(());
                         }
                     }
+                }
+                out = video_rx.recv() => {
+                    let Some(frame) = out else { break Ok(()); };
+                    if frame.generation != inner.generation.load(std::sync::atomic::Ordering::Acquire) { continue; }
+                    if sent_generation != frame.generation {
+                        let pending = stream_rx.borrow_and_update().clone();
+                        let Some(state) = pending.filter(|s| s.generation == frame.generation) else { continue; };
+                        if let Err(e) = send_payload(&mut ws_tx, state.payload).await { break Err(e); }
+                        sent_generation = frame.generation;
+                    }
+                    if frame.generation != inner.generation.load(std::sync::atomic::Ordering::Acquire) { continue; }
+                    if let Err(e) = send_payload(&mut ws_tx, frame.payload).await { break Err(e); }
+                    if frame.keyframe { keyframe_delivered(&inner, id, frame.generation); }
+                }
+                batch = mesh_rx.recv(), if mesh_batch.is_none() => {
+                    let Some(batch) = batch else { break Ok(()); };
+                    mesh_batch = Some(batch);
+                    mesh_started = std::time::Instant::now();
+                }
+                _ = std::future::ready(()), if mesh_batch.is_some() => {
+                    let generation = inner.generation.load(std::sync::atomic::Ordering::Acquire);
+                    if let Some(payload) = mesh_batch.as_mut().and_then(|b| b.next(generation)) {
+                        if sent_generation != generation {
+                            let pending = stream_rx.borrow_and_update().clone();
+                            let Some(state) = pending.filter(|s| s.generation == generation) else { mesh_batch = None; continue; };
+                            if let Err(e) = send_payload(&mut ws_tx, state.payload).await { break Err(e); }
+                            sent_generation = generation;
+                        }
+                        if generation != inner.generation.load(std::sync::atomic::Ordering::Acquire) { mesh_batch = None; continue; }
+                        if let Err(e) = send_payload(&mut ws_tx, payload).await { break Err(e); }
+                    }
+                    tokio::task::yield_now().await;
                 }
             }
         }
@@ -1220,20 +1622,29 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
     // Input, resize, cadence, decode-caps and clipboard are honoured ONLY from
     // the active connection (ADR-0086 SD2/SD8) — a passive connection's are
     // dropped here at the server. ClientHello and TakeSession are accepted from
-    // any connection.
+    // any connection. Input and paste are the exception to this lookup: they
+    // are checked *and* epoch-stamped inside the registry lock itself
+    // (ADR-0242 SD2), so an authority answer cannot go stale before the
+    // enqueue.
     let active = inner.registry.lock().map(|r| r.is_active(id)).unwrap_or(false);
     match prefix {
         pb::PREFIX_INPUT => {
-            if !active {
-                return;
-            }
             match pb::InputEvent::decode(payload) {
                 Ok(ev) => {
                     if let Some(ev) = ev.event {
-                        if let Ok(mut events) = inner.events.lock() {
-                            events.push(ev);
+                        // Ownership is checked inside the registry lock that
+                        // also stamps the epoch and enqueues (ADR-0242 SD2):
+                        // the hot input path takes that lock once, and there is
+                        // no window between the check and the push for a
+                        // takeover to slip through.
+                        let accepted = inner
+                            .registry
+                            .lock()
+                            .map(|mut r| r.accept_input(id, ev))
+                            .unwrap_or(false);
+                        if accepted {
+                            let _ = inner.waker.send(()); // input wants a pass now
                         }
-                        let _ = inner.waker.send(()); // input wants a pass now
                     }
                 }
                 Err(e) => tracing::debug!(error=%e, "undecodable input event"),
@@ -1317,11 +1728,14 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
                     }
                 }
                 Some(pb::session_control::Control::Clipboard(c)) => {
-                    // Viewer→host paste (active-only, ADR-0082 SD6).
-                    if active {
-                        if let Ok(mut p) = inner.paste.lock() {
-                            *p = Some(c.text);
-                        }
+                    // Viewer→host paste (active-only, ADR-0082 SD6), ordered
+                    // and stamped with the input it arrives among (SD2).
+                    let accepted = inner
+                        .registry
+                        .lock()
+                        .map(|mut r| r.accept_paste(id, c.text))
+                        .unwrap_or(false);
+                    if accepted {
                         let _ = inner.waker.send(());
                     }
                 }
@@ -1364,6 +1778,191 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn carrier_for_test(lane: CodecLane) -> WsCarrier {
+        WsCarrier {
+            inner: std::sync::Arc::new(mk_inner()),
+            encoder: None,
+            encoder_tx: tokio::sync::mpsc::channel(16).0,
+            encoder_generation: 0,
+            encoder_periodic: false,
+            fps: 30.0,
+            lane,
+            last_frame_hash: None,
+            mesh_textures: meshlane::TextureStore::default(),
+            mesh_pending_tex: Vec::new(),
+            last_mesh_sig: None,
+        }
+    }
+
+    fn triangle(at: f32) -> meshlane::SerializedFrame {
+        let mut mesh = egui::epaint::Mesh::default();
+        for pos in [
+            egui::pos2(at, 0.0),
+            egui::pos2(at + 10.0, 0.0),
+            egui::pos2(at, 10.0),
+        ] {
+            mesh.vertices.push(egui::epaint::Vertex {
+                pos,
+                uv: egui::pos2(0.0, 0.0),
+                color: egui::Color32::WHITE,
+            });
+        }
+        mesh.indices.extend([0, 1, 2]);
+        meshlane::serialize(
+            &[egui::ClippedPrimitive {
+                clip_rect: egui::Rect::EVERYTHING,
+                primitive: egui::epaint::Primitive::Mesh(mesh),
+            }],
+            1.0,
+        )
+    }
+
+    #[test]
+    fn mesh_bootstrap_larger_than_queue_drains_once_and_in_order() {
+        let mut c = carrier_for_test(CodecLane::mesh());
+        let id = c.inner.registry.lock().unwrap().admit(mk_tx()).unwrap();
+        let mut rx = c.inner.registry.lock().unwrap().conns[0].mesh_rx.take().unwrap();
+        let mut delta = egui::TexturesDelta::default();
+        for n in 0..40 {
+            delta.set.push((
+                egui::TextureId::Managed(n),
+                egui::epaint::ImageDelta::full(
+                    egui::ColorImage::filled([1, 1], egui::Color32::WHITE),
+                    egui::TextureOptions::LINEAR,
+                ),
+            ));
+        }
+        c.ingest_textures(&delta);
+        c.on_meshes(1.0, 640.0, 480.0, &triangle(0.0));
+        c.finish_texture_frame();
+        // No room for a second batch. Reject it without corrupting the first.
+        c.on_meshes(1.0, 640.0, 480.0, &triangle(1.0));
+        assert!(c.inner.registry.lock().unwrap().find(id).unwrap().mesh_fresh);
+        let mut batch = rx.try_recv().unwrap();
+        for _ in 0..40 {
+            assert_eq!(batch.next(0).unwrap()[1], meshlane::MESH_MSG_TEXTURE);
+        }
+        assert_eq!(batch.next(0).unwrap()[1], meshlane::MESH_MSG_FRAME);
+        assert_eq!(batch.next(0).unwrap()[1], meshlane::MESH_MSG_RETIRE);
+        assert!(batch.next(0).is_none());
+        c.on_meshes(1.0, 640.0, 480.0, &triangle(1.0));
+        assert!(rx.try_recv().is_ok());
+        assert!(!c.inner.registry.lock().unwrap().find(id).unwrap().mesh_fresh);
+    }
+
+    #[test]
+    fn mesh_retention_is_bounded_and_free_only_frames_are_delivered() {
+        let mut c = carrier_for_test(CodecLane::mesh());
+        c.inner.registry.lock().unwrap().admit(mk_tx()).unwrap();
+        let mut rx = c.inner.registry.lock().unwrap().conns[0].mesh_rx.take().unwrap();
+        for n in 0..200 {
+            c.on_meshes(1.0, 640.0, 480.0, &triangle(n as f32));
+            assert!(rx.try_recv().is_ok());
+            assert_eq!(c.inner.registry.lock().unwrap().conns[0].mesh_sent.len(), 1);
+        }
+        let delta = egui::TexturesDelta {
+            set: Vec::new(),
+            free: vec![egui::TextureId::Managed(77)],
+        };
+        c.ingest_textures(&delta);
+        c.on_meshes(1.0, 640.0, 480.0, &triangle(199.0));
+        let mut batch = rx.try_recv().expect("free-only changes are not deduped");
+        assert_eq!(
+            batch.messages.pop_back().unwrap(),
+            meshlane::retirement_message(&[])
+        );
+        c.finish_texture_frame();
+    }
+
+    #[test]
+    fn obsolete_mesh_batch_cannot_finish_after_a_new_hello() {
+        let mut batch = MeshBatch {
+            generation: 1,
+            messages: vec![vec![4, 2], vec![4, 1], vec![4, 3]].into(),
+        };
+        assert!(batch.next(1).is_some());
+        assert!(batch.next(2).is_none());
+        assert!(batch.messages.is_empty());
+    }
+
+    #[test]
+    fn late_idle_video_join_drives_progress_until_keyframe_delivery() {
+        let inner = mk_inner();
+        inner.generation.store(7, std::sync::atomic::Ordering::Release);
+        let mut reg = inner.registry.lock().unwrap();
+        for _ in 0..2 {
+            reg.admit(mk_tx()).unwrap();
+            let c = reg.conns.last_mut().unwrap();
+            c.awaiting_keyframe = false;
+            c.video_ready = true;
+        }
+        let id = reg.admit(mk_tx()).unwrap();
+        let mut rx = reg.conns.last_mut().unwrap().video_rx.take().unwrap();
+        drop(reg);
+        broadcast_roster(&inner);
+        assert!(inner.join_pending.load(std::sync::atomic::Ordering::Acquire));
+        let frame = |keyframe| EncodedFrame {
+            generation: 7,
+            keyframe,
+            payload: vec![1],
+        };
+        distribute_frame(&inner, frame(false));
+        assert!(
+            rx.try_recv().is_err(),
+            "joining decoder never receives a delta first"
+        );
+        distribute_frame(&inner, frame(true));
+        assert!(rx.try_recv().unwrap().keyframe);
+        assert!(
+            inner.join_pending.load(std::sync::atomic::Ordering::Acquire),
+            "queue admission is not delivery"
+        );
+        keyframe_delivered(&inner, id, 6);
+        assert!(
+            inner.join_pending.load(std::sync::atomic::Ordering::Acquire),
+            "old generation cannot complete a join"
+        );
+        keyframe_delivered(&inner, id, 7);
+        assert!(!inner.join_pending.load(std::sync::atomic::Ordering::Acquire));
+        assert_eq!(
+            inner.generation.load(std::sync::atomic::Ordering::Acquire),
+            7,
+            "joining did not force an encoder restart"
+        );
+        distribute_frame(&inner, frame(false));
+        assert!(!rx.try_recv().unwrap().keyframe);
+    }
+
+    #[test]
+    fn stale_video_is_filtered_and_a_dropped_reference_reaps_only_its_peer() {
+        let inner = mk_inner();
+        inner.generation.store(2, std::sync::atomic::Ordering::Release);
+        let mut reg = inner.registry.lock().unwrap();
+        reg.admit(mk_tx()).unwrap();
+        let mut rx = reg.conns[0].video_rx.take().unwrap();
+        drop(reg);
+        distribute_frame(
+            &inner,
+            EncodedFrame {
+                generation: 1,
+                keyframe: true,
+                payload: vec![1],
+            },
+        );
+        assert!(rx.try_recv().is_err());
+        for n in 0..=VIDEO_CHANNEL_CAP {
+            distribute_frame(
+                &inner,
+                EncodedFrame {
+                    generation: 2,
+                    keyframe: n == 0,
+                    payload: vec![1],
+                },
+            );
+        }
+        assert!(inner.registry.lock().unwrap().conns[0].video_failed);
+    }
 
     fn mk_tx() -> tokio::sync::mpsc::Sender<Vec<u8>> {
         tokio::sync::mpsc::channel::<Vec<u8>>(1).0
@@ -1436,13 +2035,14 @@ mod tests {
     /// touch, without binding sockets or starting a runtime.
     fn mk_inner() -> Inner {
         Inner {
-            events: std::sync::Mutex::new(Vec::new()),
             resize: std::sync::Mutex::new(None),
             cadence_request: std::sync::Mutex::new(None),
-            paste: std::sync::Mutex::new(None),
             waker: std::sync::mpsc::channel().0,
             connected: std::sync::atomic::AtomicBool::new(false),
             want_periodic: std::sync::atomic::AtomicBool::new(false),
+            generation: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            join_pending: std::sync::atomic::AtomicBool::new(false),
+            join_failed: std::sync::atomic::AtomicBool::new(false),
             registry: std::sync::Mutex::new(Registry::new(8)),
             hello: std::sync::Mutex::new(pb::SessionHello::default()),
             decode_caps: std::sync::Mutex::new(None),
@@ -1545,7 +2145,6 @@ mod tests {
 
         inner.registry.lock().unwrap().take_session(b);
         broadcast_roster(&inner);
-        while brx.try_recv().is_ok() {} // discard b's roster frames
 
         push_cursor(&inner, 17); // unchanged shape, new active → must be sent
         assert_eq!(
@@ -1553,6 +2152,261 @@ mod tests {
             17,
             "the promoted connection is told the current shape"
         );
+    }
+
+    // ---- roster mailbox (ADR-0242 SD1) ----
+
+    /// Decode a framed session-control message back to its roster.
+    fn framed_roster(framed: &[u8]) -> pb::Roster {
+        assert_eq!(
+            framed[0],
+            pb::PREFIX_SESSION,
+            "the roster rides the session prefix"
+        );
+        match pb::SessionControl::decode(&framed[1..]).expect("decodes").control {
+            Some(pb::session_control::Control::Roster(r)) => r,
+            other => panic!("expected Roster, got {other:?}"),
+        }
+    }
+
+    /// The mailbox receiver a session task would hold for connection `id`.
+    fn state_rx(inner: &Inner, id: u64) -> tokio::sync::watch::Receiver<Option<Vec<u8>>> {
+        inner.registry.lock().unwrap().find(id).expect("admitted").state.subscribe()
+    }
+
+    /// A viewer whose payload queue is completely full still learns that it was
+    /// promoted and then demoted: the roster rides its own latest-value mailbox
+    /// (SD1), so the queue that drops video cannot drop the message that tells
+    /// the viewer whether it drives or watches.
+    #[test]
+    fn roster_survives_a_saturated_payload_queue() {
+        let inner = mk_inner();
+        // Capacity 1, filled: every `try_send` on this connection now fails.
+        let (btx, mut brx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        let (a, b) = {
+            let mut reg = inner.registry.lock().unwrap();
+            (reg.admit(mk_tx()).unwrap(), reg.admit(btx.clone()).unwrap())
+        };
+        btx.try_send(vec![0xff]).expect("fill the queue");
+        let mut rx = state_rx(&inner, b);
+
+        inner.registry.lock().unwrap().take_session(b);
+        broadcast_roster(&inner);
+        let promoted = framed_roster(rx.borrow_and_update().clone().expect("state").as_slice());
+        assert_eq!(promoted.you_id, b);
+        assert_eq!(promoted.you_role, pb::Role::Active as i32);
+
+        inner.registry.lock().unwrap().take_session(a);
+        broadcast_roster(&inner);
+        let demoted = framed_roster(rx.borrow_and_update().clone().expect("state").as_slice());
+        assert_eq!(demoted.you_role, pb::Role::Passive as i32);
+        assert_eq!(demoted.active_id, a);
+
+        // Nothing was smuggled onto the payload queue either way.
+        assert_eq!(brx.try_recv().expect("the filler"), vec![0xff]);
+        assert!(brx.try_recv().is_err(), "the roster did not use the queue");
+    }
+
+    /// Changes that land before the writer wakes coalesce: the peer sends one
+    /// write carrying the *latest* roster, never a backlog of superseded ones.
+    #[test]
+    fn roster_mailbox_coalesces_to_the_latest() {
+        let inner = mk_inner();
+        let (a, b) = {
+            let mut reg = inner.registry.lock().unwrap();
+            (reg.admit(mk_tx()).unwrap(), reg.admit(mk_tx()).unwrap())
+        };
+        let mut rx = state_rx(&inner, a);
+
+        inner.registry.lock().unwrap().take_session(b);
+        broadcast_roster(&inner);
+        inner.registry.lock().unwrap().take_session(a);
+        broadcast_roster(&inner);
+
+        assert!(rx.has_changed().unwrap(), "the writer has state to send");
+        let latest = framed_roster(rx.borrow_and_update().clone().expect("state").as_slice());
+        assert_eq!(latest.you_role, pb::Role::Active as i32, "the newest role");
+        assert!(
+            !rx.has_changed().unwrap(),
+            "two changes coalesced into one write, not a queued backlog"
+        );
+    }
+
+    // ---- input ownership (ADR-0242 SD2) ----
+
+    fn mk_move(x: f32) -> pb::input_event::Event {
+        pb::input_event::Event::MouseMove(pb::MouseMove { x, y: 0.0 })
+    }
+
+    /// Input is accepted only from the owner, and the check happens under the
+    /// same lock that decides ownership — a passive connection's events never
+    /// reach the queue at all.
+    #[test]
+    fn only_the_owner_can_enqueue_input() {
+        let inner = mk_inner();
+        let (a, b) = {
+            let mut reg = inner.registry.lock().unwrap();
+            (reg.admit(mk_tx()).unwrap(), reg.admit(mk_tx()).unwrap())
+        };
+        {
+            let mut reg = inner.registry.lock().unwrap();
+            assert!(reg.accept_input(a, mk_move(1.0)), "the owner is honoured");
+            assert!(!reg.accept_input(b, mk_move(2.0)), "the passive is dropped");
+            assert!(!reg.accept_paste(b, "nope".to_owned()), "and its paste");
+        }
+        let mut out = Vec::new();
+        drain_input(&inner, &mut out);
+        assert_eq!(out, vec![InputItem::Event(mk_move(1.0))]);
+    }
+
+    /// A takeover discards what the previous owner had queued and asks the host
+    /// to cancel held input *before* the new owner's events — the failure this
+    /// prevents is a press sent by one device completing as a click under
+    /// another.
+    #[test]
+    fn takeover_resets_before_new_owner_input() {
+        let inner = mk_inner();
+        let (a, b) = {
+            let mut reg = inner.registry.lock().unwrap();
+            (reg.admit(mk_tx()).unwrap(), reg.admit(mk_tx()).unwrap())
+        };
+        let mut out = Vec::new();
+        assert!(drain_input(&inner, &mut out), "admission opens an interval");
+        out.clear();
+
+        {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.accept_input(a, mk_move(1.0));
+            reg.accept_paste(a, "departing".to_owned());
+            reg.take_session(b);
+            reg.accept_input(b, mk_move(2.0));
+        }
+        assert!(drain_input(&inner, &mut out), "the owner changed");
+        assert_eq!(
+            out,
+            vec![InputItem::Event(mk_move(2.0))],
+            "only the new owner's input survives the change"
+        );
+
+        // A steady interval reports no further reset — cancellation must not
+        // fire every pass, or no drag could ever complete.
+        out.clear();
+        inner.registry.lock().unwrap().accept_input(b, mk_move(3.0));
+        assert!(!drain_input(&inner, &mut out));
+        assert_eq!(out, vec![InputItem::Event(mk_move(3.0))]);
+    }
+
+    /// Paste keeps its place among the events it arrived between, so a focus
+    /// change that preceded it is honoured instead of the text landing after
+    /// everything else.
+    #[test]
+    fn paste_is_drained_in_arrival_order() {
+        let inner = mk_inner();
+        let a = inner.registry.lock().unwrap().admit(mk_tx()).unwrap();
+        {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.accept_input(a, mk_move(1.0));
+            reg.accept_paste(a, "middle".to_owned());
+            reg.accept_input(a, mk_move(2.0));
+        }
+        let mut out = Vec::new();
+        drain_input(&inner, &mut out);
+        assert_eq!(
+            out,
+            vec![
+                InputItem::Event(mk_move(1.0)),
+                InputItem::Paste("middle".to_owned()),
+                InputItem::Event(mk_move(2.0)),
+            ]
+        );
+    }
+
+    /// The owner disconnecting cancels its held input server-side: the epoch
+    /// advances when the slot empties, without waiting for an unload message
+    /// the departing browser may never send. The lone survivor's promotion is
+    /// the same kind of change.
+    #[test]
+    fn disconnect_and_auto_promotion_reset_the_owner() {
+        let inner = mk_inner();
+        let (a, b, c) = {
+            let mut reg = inner.registry.lock().unwrap();
+            (
+                reg.admit(mk_tx()).unwrap(),
+                reg.admit(mk_tx()).unwrap(),
+                reg.admit(mk_tx()).unwrap(),
+            )
+        };
+        let mut out = Vec::new();
+        drain_input(&inner, &mut out); // consume the admission reset
+        out.clear();
+
+        {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.accept_input(a, mk_move(1.0));
+            reg.remove(a); // two passives remain → the slot empties
+            assert_eq!(reg.active_id, None);
+        }
+        assert!(drain_input(&inner, &mut out), "the owner left");
+        assert!(out.is_empty(), "its queued input went with it");
+
+        inner.registry.lock().unwrap().remove(c); // b is now the lone survivor
+        assert!(
+            drain_input(&inner, &mut out),
+            "auto-promotion is an owner change too"
+        );
+        assert_eq!(inner.registry.lock().unwrap().active_id, Some(b));
+    }
+
+    /// Removing a connection that neither owns input nor leaves a lone
+    /// survivor to promote must *not* report a reset: cancelling held input on
+    /// unrelated membership churn would break the owner's in-progress drag.
+    #[test]
+    fn unrelated_disconnect_does_not_reset_the_owner() {
+        let inner = mk_inner();
+        let (a, _b, c) = {
+            let mut reg = inner.registry.lock().unwrap();
+            (
+                reg.admit(mk_tx()).unwrap(),
+                reg.admit(mk_tx()).unwrap(),
+                reg.admit(mk_tx()).unwrap(),
+            )
+        };
+        let mut out = Vec::new();
+        drain_input(&inner, &mut out); // consume the admission reset
+        out.clear();
+
+        {
+            let mut reg = inner.registry.lock().unwrap();
+            reg.accept_input(a, mk_move(1.0));
+            reg.remove(c); // a passive leaves; two connections and the owner remain
+        }
+        assert!(!drain_input(&inner, &mut out), "the owner did not change");
+        assert_eq!(
+            out,
+            vec![InputItem::Event(mk_move(1.0))],
+            "the owner's input is untouched"
+        );
+    }
+
+    /// The consumption-side half of the authority check (the plan's
+    /// "checked at consumption as well as admission"): an item that outlives
+    /// its epoch is discarded at the drain, not translated under the next
+    /// owner — even if it reached the queue by some other route than
+    /// [`Registry::accept_input`].
+    #[test]
+    fn stale_epoch_items_are_discarded_at_the_drain() {
+        let inner = mk_inner();
+        let a = inner.registry.lock().unwrap().admit(mk_tx()).unwrap();
+        {
+            let mut reg = inner.registry.lock().unwrap();
+            let stale = reg.owner_epoch.wrapping_sub(1);
+            reg.input.push((stale, InputItem::Event(mk_move(1.0))));
+            reg.input.push((stale, InputItem::Paste("stale".to_owned())));
+            reg.accept_input(a, mk_move(2.0));
+        }
+        let mut out = Vec::new();
+        drain_input(&inner, &mut out);
+        assert_eq!(out, vec![InputItem::Event(mk_move(2.0))]);
     }
 
     /// With the active slot empty the memo is cleared rather than left

@@ -78,7 +78,7 @@ use crate::imzero2::framesink::{self, FrameSink, NullSink, PngDumpSink};
 use crate::imzero2::inputmap::{self, InputTranslator};
 use crate::imzero2::interpreter::InterpretError;
 use crate::imzero2::treemap;
-use crate::imzero2::wscarrier::WsCarrier;
+use crate::imzero2::wscarrier::{InputItem, WsCarrier};
 
 #[derive(thiserror::Error, Debug)]
 pub enum HeadlessError {
@@ -962,7 +962,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     #[cfg(feature = "headless_raster")]
     let mut raster_stats = RasterStats::from_env();
     let mut translator = InputTranslator::default();
-    let mut wire_events: Vec<crate::imzero2::inputproto::input_event::Event> = Vec::new();
+    let mut wire_input: Vec<InputItem> = Vec::new();
     let mut egui_events: Vec<egui::Event> = Vec::new();
     let mut screen_rect = egui::Rect::from_min_size(
         egui::Pos2::ZERO,
@@ -995,7 +995,12 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 // heartbeat — whichever is sooner, floored by the fps cap.
                 // Wire activity (input/resize/connect) wakes us early.
                 let min_next = last_pass + frame_dt;
-                let deadline = (last_pass + repaint_hint.min(IDLE_HEARTBEAT)).max(min_next);
+                let hint = if carrier.as_ref().is_some_and(|c| c.needs_join_progress()) {
+                    frame_dt
+                } else {
+                    repaint_hint.min(IDLE_HEARTBEAT)
+                };
+                let deadline = (last_pass + hint).max(min_next);
                 sleep_until_or_wake(deadline, min_next, &waker_rx);
                 // Keep the continuous anchor fresh so a runtime switch
                 // doesn't burst to catch up.
@@ -1049,21 +1054,48 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             );
         }
 
-        // Remote input (ADR-0024 SD8): drain wire events from the carrier
-        // and translate at the host edge; the interpreter sees ordinary
-        // egui events.
+        // Remote input (ADR-0024 SD8): drain the input owner's items from the
+        // carrier and translate at the host edge; the interpreter sees
+        // ordinary egui events.
         egui_events.clear();
         if let Some(c) = &mut carrier {
-            wire_events.clear();
-            c.drain_events(&mut wire_events);
-            for ev in wire_events.drain(..) {
-                translator.translate(ev, &mut egui_events);
+            wire_input.clear();
+            // An owner change — admission, takeover, disconnect,
+            // auto-promotion — cancels the previous owner's held keys,
+            // buttons and modifiers *before* anything the new owner sent is
+            // translated (ADR-0242 SD2). A press that crossed the wire under
+            // the old owner must not complete as a click under the new one,
+            // and the carrier reports this rather than the browser, so a
+            // device that vanished without an unload message is covered.
+            if c.drain_input(&mut wire_input) {
+                // The focus interval ends with its owner: a `Focus(false)`
+                // latched by the departed connection would otherwise leave a
+                // new owner that never reports focus — an agent driver, or the
+                // old viewer page ADR-0242's Migration allows — permanently
+                // unfocused, with keyboard input silently dead.
+                translator.reset_focus();
+                translator.cancel(&mut egui_events);
             }
-            // Clipboard paste from the active session (ADR-0082 SD6): the
-            // viewer read its clipboard on a paste gesture and sent the text;
-            // inject it as the egui paste event the interpreter expects.
-            if let Some(text) = c.take_paste() {
-                egui_events.push(egui::Event::Paste(text));
+            for item in wire_input.drain(..) {
+                match item {
+                    InputItem::Event(ev) => translator.translate(ev, &mut egui_events),
+                    // Clipboard paste from the active session (ADR-0082 SD6):
+                    // the viewer read its clipboard on a paste gesture and sent
+                    // the text; inject it as the egui paste event the
+                    // interpreter expects. It is consumed at its arrival
+                    // position, so a focus loss that preceded it drops it here
+                    // instead of the text landing on a surface the viewer has
+                    // already left.
+                    InputItem::Paste(text) => {
+                        if translator.focused() {
+                            egui_events.push(egui::Event::Paste(text));
+                        } else {
+                            tracing::debug!(
+                                "dropping paste — the remote input surface is not focused"
+                            );
+                        }
+                    }
+                }
             }
         }
 
@@ -1072,7 +1104,10 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             max_texture_side: Some(max_texture_side),
             time: Some(start.elapsed().as_secs_f64()),
             predicted_dt: frame_dt.as_secs_f32(),
-            focused: true,
+            // ADR-0242 SD2: focus is an ordered input event, so the translator
+            // holds it. It defaults to focused, which is what a host with no
+            // carrier (local, screenshot, test driver) keeps reporting.
+            focused: translator.focused(),
             events: std::mem::take(&mut egui_events),
             modifiers: translator.modifiers,
             ..Default::default()
@@ -1243,6 +1278,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                     c.mesh_reap();
                 }
             }
+            c.finish_texture_frame();
         }
         // Pixel path — full build only. The lean build already emitted this
         // frame on the mesh lane above (or has no viewer), and has no GPU to

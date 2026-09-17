@@ -308,6 +308,7 @@ function sendKey(key, code, pressed, repeat, mods) {
 function sendText(text) { sendFramed(PREFIX_INPUT, new Writer().sub(5, new Writer().str(1, text))); }
 function sendPointerGone() { sendFramed(PREFIX_INPUT, new Writer().sub(6, new Writer())); }
 function sendPinchZoom(factor) { sendFramed(PREFIX_INPUT, new Writer().sub(7, new Writer().float(1, factor))); }
+function sendFocus(focused) { sendFramed(PREFIX_INPUT, new Writer().sub(9, new Writer().bool(1, focused))); }
 // Runtime render-cadence switch: 0 = continuous, 1 = reactive. Host
 // scope (survives reconnects). Full idle savings need a server launched
 // with IMZERO2_RENDER_CADENCE=reactive — see the .proto note.
@@ -454,9 +455,8 @@ function setupDecoder(codec) {
       }
     },
     error(e) {
-      // The stream runs an effectively infinite GOP (key frame only at
-      // encoder start), so recovery = reconnect: the server starts a
-      // fresh encoder (SPS/PPS + IDR) for every connection.
+      // Reconnect requests a fresh join. The carrier advances the scheduled
+      // GOP if other viewers remain; a lone viewer starts a fresh encoder.
       statusEl.textContent = "decoder error: " + e.message + " — reconnecting";
       try { ws.close(); } catch (_) {}
     },
@@ -493,11 +493,25 @@ function onVideo(payload) {
 // PREFIX_MESH payloads: [1] = mesh frame (ordered u64 hash list + the bodies
 // this connection has not seen), [2] = texture whole/partial update. Bodies
 // are content-addressed: each is parsed once into static GL buffers and
-// reused by hash for the rest of the session (and across reconnects — same
-// content, same name).
+// reused while retained by the server's frame-liveness contract (ADR-0242).
+// Reconnects discard GPU objects and start from a full bootstrap.
 let gl = null, glAttrs = null, glURes = null;
 const glMeshes = new Map();   // hashHex -> {vb, cb, eb, n, wide, clip, texKey}
 const glTextures = new Map(); // texKey -> {tex, w, h}
+let glOrder = [];
+
+function deleteMesh(m) {
+  gl.deleteBuffer(m.vb); gl.deleteBuffer(m.cb); gl.deleteBuffer(m.eb);
+}
+function clearMeshCache() {
+  if (gl) {
+    for (const m of glMeshes.values()) deleteMesh(m);
+    for (const t of glTextures.values()) gl.deleteTexture(t.tex);
+  }
+  glMeshes.clear();
+  glTextures.clear();
+  glOrder = [];
+}
 
 function glInit() {
   if (gl) return true;
@@ -578,7 +592,7 @@ function meshRegisterBody(hh, dv, raw, off, len) {
   else { idx = new Uint32Array(ni); for (let i = 0; i < ni; i++) { idx[i] = dv.getUint32(off, true); off += 4; } }
   if (off !== end) return; // malformed body — drop it, the order list skips
   const prev = glMeshes.get(hh);
-  if (prev) { gl.deleteBuffer(prev.vb); gl.deleteBuffer(prev.cb); gl.deleteBuffer(prev.eb); }
+  if (prev) deleteMesh(prev);
   const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
   gl.bufferData(gl.ARRAY_BUFFER, posuv, gl.STATIC_DRAW);
   const cb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, cb);
@@ -619,7 +633,7 @@ function meshDraw(order) {
 }
 
 function onMesh(raw) {
-  if (!glInit()) return;
+  if (contextLost || !glInit()) return;
   const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
   if (raw[0] === 2) {
     // texture update: key u32, full_w, full_h, x, y, w, h, rgba
@@ -630,6 +644,21 @@ function onMesh(raw) {
     const t = glTexFor(key, fullW, fullH);
     gl.bindTexture(gl.TEXTURE_2D, t.tex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, raw.subarray(29));
+    return;
+  }
+  if (raw[0] === 3) {
+    // ADR-0242: prune only on an explicit server retirement. Old servers may
+    // still omit any historical body, so independent client eviction is unsafe.
+    const liveBodies = new Set(glOrder);
+    for (const [key, m] of glMeshes) {
+      if (!liveBodies.has(key)) { deleteMesh(m); glMeshes.delete(key); }
+    }
+    const n = dv.getUint32(1, true);
+    const liveTextures = new Set();
+    for (let i = 0; i < n; i++) liveTextures.add(dv.getUint32(5 + i * 4, true));
+    for (const [key, t] of glTextures) {
+      if (!liveTextures.has(key)) { gl.deleteTexture(t.tex); glTextures.delete(key); }
+    }
     return;
   }
   if (raw[0] !== 1) return;
@@ -647,6 +676,7 @@ function onMesh(raw) {
     off += len;
   }
   meshDraw(order);
+  glOrder = order;
   framesDecoded++;
   if (framesDecoded === 1 || framesDecoded % 5 === 0) sendPing(framesDecoded);
   const now = performance.now();
@@ -657,6 +687,9 @@ function onMesh(raw) {
 }
 
 // ---- input capture ----
+// The wire follows egui: secondary=1, middle=2; DOM uses the reverse.
+function domButtonToWire(button) { return button === 1 ? 2 : button === 2 ? 1 : button; }
+
 function mods(e) {
   let m = 0;
   if (e.altKey) m |= 1;
@@ -667,6 +700,7 @@ function mods(e) {
 }
 
 function logicalPos(e) {
+  if (!hello) return [0, 0];
   const rect = canvas.getBoundingClientRect();
   const lw = hello.width / hello.ppp, lh = hello.height / hello.ppp;
   return [
@@ -766,6 +800,7 @@ function centroidAndSpread() {
 }
 
 function touchDown(e, pos) {
+  if (myRole !== "active") return;
   touchPoints.set(e.pointerId, pos);
   if (touchPoints.size === 1) {
     touchDownSent = true;
@@ -808,23 +843,51 @@ function touchEnd(e, pos) {
   if (touchPoints.size === 2) [lastCentroid, lastSpread] = centroidAndSpread();
 }
 
+// ADR-0242: the canvas and paste trap form one remote input surface.
+let inputFocused = false;
+function clearInputState() {
+  pendingMove = null;
+  touchPoints.clear();
+  touchDownSent = false;
+  lastCentroid = null;
+  lastSpread = null;
+}
+function updateInputFocus() {
+  const focused = myRole === "active" && document.hasFocus() && !document.hidden
+    && (document.activeElement === canvas || document.activeElement === pasteTrap);
+  if (focused === inputFocused) return;
+  inputFocused = focused;
+  if (!focused) clearInputState();
+  sendFocus(focused);
+}
+
 function setupInput() {
+  // Defer focusout until an internal canvas↔pasteTrap transfer has finished.
+  document.addEventListener("focusin", updateInputFocus);
+  document.addEventListener("focusout", () => queueMicrotask(updateInputFocus));
+  window.addEventListener("focus", updateInputFocus);
+  window.addEventListener("blur", () => {
+    clearInputState();
+    inputFocused = false;
+    sendFocus(false);
+  });
+  document.addEventListener("visibilitychange", updateInputFocus);
   canvas.addEventListener("pointermove", (e) => {
     if (e.pointerType === "touch") { touchMove(e, logicalPos(e)); e.preventDefault(); return; }
-    pendingMove = logicalPos(e);
+    if (myRole === "active") pendingMove = logicalPos(e);
   });
   canvas.addEventListener("pointerdown", (e) => {
     canvas.focus();
     canvas.setPointerCapture(e.pointerId);
     if (e.pointerType === "touch") { touchDown(e, logicalPos(e)); e.preventDefault(); return; }
     const [x, y] = logicalPos(e);
-    sendMouseButton(x, y, e.button, true, mods(e));
+    sendMouseButton(x, y, domButtonToWire(e.button), true, mods(e));
     e.preventDefault();
   });
   const upOrCancel = (e) => {
     if (e.pointerType === "touch") { touchEnd(e, logicalPos(e)); e.preventDefault(); return; }
     const [x, y] = logicalPos(e);
-    sendMouseButton(x, y, e.button, false, mods(e));
+    sendMouseButton(x, y, domButtonToWire(e.button), false, mods(e));
     e.preventDefault();
   };
   canvas.addEventListener("pointerup", upOrCancel);
@@ -885,9 +948,27 @@ function setupInput() {
   requestAnimationFrame(flushMove);
 }
 
+// A lost context invalidates every GPU object. Reconnect only after restoration
+// so the new session's full bootstrap populates a newly initialized painter.
+let contextLost = false;
+canvas.addEventListener("webglcontextlost", (e) => {
+  e.preventDefault();
+  contextLost = true;
+  clearMeshCache();
+  gl = null;
+  glAttrs = null;
+  glURes = null;
+  if (ws) ws.close();
+});
+canvas.addEventListener("webglcontextrestored", () => {
+  contextLost = false;
+  if (!ws || ws.readyState === WebSocket.CLOSED) connect();
+});
+
 // ---- connection ----
 let reconnectDelay = 1000;
 function connect() {
+  if (contextLost || (ws && ws.readyState !== WebSocket.CLOSED)) return;
   ws = new WebSocket(WS_URL);
   ws.binaryType = "arraybuffer";
   ws.onopen = () => {
@@ -902,10 +983,18 @@ function connect() {
   ws.onclose = () => {
     statusEl.textContent = "disconnected — reconnecting…";
     configured = false;
+    clearInputState();
+    clearMeshCache();
+    inputFocused = false;
+    pendingClipboardWrite = null;
+    myRole = "passive";
+    myId = 0n;
+    renderRoster();
     resetCursor();
     if (decoder) { try { decoder.close(); } catch (_) {} decoder = null; }
-    // A restarted server forgets the applied geometry; clear the echo
-    // guard so the post-reconnect hello triggers a fresh viewport report.
+    // Reset session state so even an identical hello reprobes this viewer.
+    hello = null;
+    framesDecoded = 0;
     lastSentGeometry = null;
     setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 2, 5000);
@@ -991,20 +1080,26 @@ function applyRoster(roster) {
     // guard so the report is not suppressed.
     lastSentGeometry = null;
     measureAndSend();
+    probeAndSendCapabilities();
+    canvas.focus();
+    updateInputFocus();
   }
-  // Demotion needs no teardown beyond the cursor: input/resize/cadence are
-  // gated by myRole, but the CSS cursor is page state the host set and will
-  // now stop addressing, so it has to be cleared here.
-  if (myRole !== "active" && wasActive) resetCursor();
+  if (myRole !== "active" && wasActive) {
+    // The server cancels the old owner's input; discard its browser-side tail.
+    clearInputState();
+    inputFocused = false;
+    pendingClipboardWrite = null;
+    resetCursor();
+  }
 }
 
 function renderRoster() {
   const active = myRole === "active";
   roleEl.textContent = active ? "ACTIVE — you drive" : "passive — view only";
   roleEl.style.color = active ? "#9ccc65" : "#b58a6a";
-  // Offer "Take session" only while passive (a WebCodecs-capable viewer; this
-  // page requires WebCodecs to connect at all, so the capability is implied).
-  takeBtn.style.display = active ? "none" : "";
+  // This page connects only when WebCodecs or WebGL2 is available.
+  // The stylesheet hides the button initially; passive mode must override it.
+  takeBtn.style.display = active ? "none" : "inline-block";
   const parts = rosterConns.map((c) => {
     const you = c.id === myId ? "▸" : "";
     const name = c.label || ("#" + c.id);
