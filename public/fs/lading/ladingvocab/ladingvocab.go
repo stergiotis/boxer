@@ -92,7 +92,11 @@ const NamingStyle = naming.LowerSpinalCase
 // application supplies (ADR-0198 §SD3), and a claim of its own is what keeps
 // a mount's body from colliding with a membership ordinal under one tag.
 //
-// The next free value is 2178339.
+// **…339 is taken** by shadow-boxer's `claudefacts` vocabulary, claimed
+// 2026-09-17 as `shadowboxerClaudelog` — the four kinds its Claude Code
+// session model writes to `shadowboxer.facts` (its ADR-0009, proposed).
+//
+// The next free value is 2178340.
 var TagValueClaim = tagmint.MustClaim("lading", 2178315, MaxExpectedMemberships)
 
 // MaxExpectedMemberships is what this vocabulary tells the mint it will need.
