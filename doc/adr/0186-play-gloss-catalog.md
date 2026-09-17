@@ -438,6 +438,41 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-09-17 — row values: a binding tier above the alias, and `audio/wav`
+
+[ADR-0245](./0245-play-cards-panel-and-row-value-glosses.md) adds a fifth
+route to a gloss, at the top of §SD3's precedence: for a column whose gloss
+label is `L`, a text column named `L_gloss` names the gloss **per row**, in
+the alias's spelling, and outranks the alias, the directives, the rule sets
+and the affinities for the rows where it is set. It exists because one result
+can mix kinds — a picture on one row, a recording on the next — and every
+route above is keyed on the column.
+
+What it changes here is §SD1's "bound once per column, not per cell". A row
+value binds once per *distinct token* per result, as a synthesized column
+resolution, so the faces and the artifact caches take it unchanged; the
+distinct tokens of one companion are capped, which is what stands in for the
+bound that bind-once-per-column gave by construction. §SD2's slash gate
+applies per value outside a reserved namespace, and a value with a slash that
+does not bind marks its grid cell in the warning tone rather than rendering
+plain in silence. The per-row Table grid, the ad-hoc Detail pane and the Chat
+bubble read it; the leeway paths do not, a leeway column's name being its
+encoding. The Glosses tab names a column's companion under its spec line.
+
+The content family gains the four WAVE spellings (`audio/wav`, `audio/x-wav`,
+`audio/wave`, `audio/vnd.wave`), registered after `application/cbor`. The
+inline face reads the header from a bounded prefix of the cell — length, rate,
+channels — and falls back to the image family's descriptor; the block face is
+the recording's waveform with play and pause, bound in play beside the other
+faces, with one now-playing session across panes. No affinity, for
+`application/cbor`'s reason.
+
+One finding belongs to this ADR's own surface: `gloss.FormatArrowElem`, the
+un-glossed rendering, now spells out at most `FormatBinaryMaxBytes` of a
+binary value and names the size past that. It runs per visible cell per frame
+with no cache, and a grid over a column of media was building megabytes of
+hex to truncate to a cell's width (ADR-0245 §SD9).
+
 ### 2026-09-03 — `gloss/regexp`, and the explorer on a tether
 
 A twelfth presentation gloss: `gloss/regexp` shows a stored RE2 pattern as a

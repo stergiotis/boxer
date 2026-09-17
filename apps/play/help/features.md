@@ -18,7 +18,7 @@ The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 into three groups: the **editor** (Editor, History), the **tool panes** beside
 it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Experiments — each reads
 the buffer, or something derived from it, while you type), and the **result
-panes** below (Table, Projection, Timeline, Map, World, Kanban, Chat, Network,
+panes** below (Table, Projection, Timeline, Map, World, Kanban, Chat, Cards, Network,
 Graphview, Sankey, Distribution, Icicle, Files, Graph, Schema, and Detail
 alongside them). Drag a tab to
 re-dock or split it; the layout holds for the session and starts fresh next
@@ -661,6 +661,45 @@ pins it again. Clicking a bubble selects its row, driving Detail and Table;
 clicking a quote strip jumps to the quoted message. The **Snippets** library
 carries a ready-to-run example ("Chat transcript").
 
+### Cards
+
+A paged grid of uniform cards (ADR-0245) over a result naming a `card_title`
+or a `card_hero` column — for results whose rows are items with a face:
+pictures, recordings, documents. The slots are `card_hero`, `card_overline`,
+`card_title`, `card_subtitle`, `card_body`, `card_tags` (an array, or one
+string), `card_tone` (`success`, `warning`, `error`, `info`, `accent`,
+`neutral`, `disabled` — an accent edge) and `card_footer`, each optional and
+each matched on the gloss label, so `card_body@text/markdown` still claims
+`card_body`. `card_` is a reserved namespace: a misspelt slot (`card_titel`)
+is refused by name rather than shown as something else.
+
+**Every other column is a fact** — a `label  value` line on the card through
+the column's gloss, inline face only, NULLs skipped, and `+k more` where they
+do not all fit; Detail is where the rest is read, and clicking a card selects
+its row there.
+
+**Each row can say what it is.** A text column named `<label>_gloss` holds the
+media type of that row's value in `<label>` — `content AS card_hero, mime AS
+card_hero_gloss` — so one result can carry a picture on one card and a
+recording on the next (see *Glosses* below: the row value is a gloss route of
+its own, and the Table, Detail and Chat read it too). A value that does not
+bind — `image/pgn`, `png` — is refused on that card, with the reason, not
+rendered as something plausible.
+
+An image hero is contained in a fixed-aspect box (16:9, 4:3 or 1:1 from the
+toolbar) — never cropped, stretched or scaled past its own size — and only a
+thumbnail of it is kept, so a page costs thumbnails rather than originals. An
+`audio/wav` hero is the recording's waveform with play and pause; click the
+waveform to seek, and starting one recording stops the other. Every card on a
+page has the same height whatever it carries: long titles are cut at two lines
+and bodies at the density's budget (**S / M / L**), with the whole text on
+hover. The pager (12 / 24 / 48 / 96 cards) bounds what is decoded at once; a
+page fills in over a few frames rather than in one long one. Arrow keys move
+the selection once a card is clicked, and **Space** plays or pauses the
+selected recording. With nothing to draw the pane offers **publish sample
+cards**: an ordinary ad-hoc dataset, `keelson('fixture_cards')`, of images and
+recordings chosen to be awkward, and the query that reads it.
+
 ### Map
 
 An in-database-rendered geo raster over a pannable map (ADR-0096), for tables with
@@ -870,7 +909,18 @@ has a one-line face for the Table grids and, some, a block face for Detail —
 in the ad-hoc pane and, stacked under the row's other values, in the leeway
 card.
 
-Three routes bind a column to a gloss, in precedence order:
+Five routes bind a value to a gloss, in precedence order:
+
+- **a row value** — a text column named `<label>_gloss` beside the column whose
+  label is `<label>` names the gloss *per row*, in the alias's spelling
+  (`image/png`, `gloss/duration;unit=ms`), and outranks everything below for
+  the rows where it is set (ADR-0245); NULL or empty falls through to the
+  column's own binding. It is how a table that stores `(content, mime)` pairs
+  is shown with no projection per kind. A token binds once per result, and one
+  companion binds at most 32 distinct tokens. The slash rule applies per
+  value: outside the `card_` namespace a value with no slash is a value, not a
+  declaration, since a table may simply have a `lip` and a `lip_gloss`; one
+  with a slash that does not bind marks its cell in the warning tone;
 
 - **an alias** — `` AS `label@gloss/temperature;unit=C` ``. The token after `@`
   is a media type: an IANA one for content (`text/markdown`) or play's private

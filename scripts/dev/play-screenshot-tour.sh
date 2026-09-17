@@ -1088,6 +1088,27 @@ scene_08_series_fixture() {
 	settle=2000
 }
 
+scene_08_cards() {
+	desc="The Cards pane (ADR-0245) from an EMPTY workbench: the sample cards published as an ORDINARY ad-hoc dataset, then the scaffold run — a paged grid of uniform cards whose heroes are images and recordings, each row naming its own media type in card_hero_gloss, and whose awkward rows (a panorama, a strip, an icon, a header over the pixel budget, a truncated file, a misspelt type, a NULL hero, a path for a title) keep their line"
+	# The empty-autorun idiom of scene_08_series_fixture: no run, no result,
+	# which is the state the pane offers its samples in.
+	senv=(BOXER_PLAY_FOCUS_CARDS=1 BOXER_PLAY_AUTORUN=)
+	sql="-- Nothing has run yet. The Cards tab below publishes sample cards as an
+-- ordinary ad-hoc dataset and writes the query that reads them."
+	# `contains`, not `name`: the button's accessible name leads with its
+	# glyph. WAIT on Run for the reason the series-fixture scene gives.
+	steps='{"do":"capture","text":"08_cards_empty","settleMs":600}
+{"do":"click","contains":"publish sample cards"}
+{"do":"sleep","settleMs":3000}
+{"do":"click","name":"Run"}
+{"do":"wait","name":"Run","comment":"Run is Cancel while the query runs, so this resolves when it lands"}
+{"do":"sleep","settleMs":1500,"comment":"the page fills in over a few frames: artifacts are built under a per-frame budget"}
+{"do":"capture","text":"08_cards"}
+{"do":"click","valueContains":"Panorama","pointer":true,"comment":"a label carries its text as the accessible VALUE, and the click sense is the card behind it: press the bounds centre"}
+{"do":"capture","text":"08_cards_detail_follows","settleMs":800}'
+	settle=2000
+}
+
 scene_07_keelson_introspection() {
 	desc="A keelson() read routed to the in-process introspection plane (ADR-0094 / ADR-0141): the dispatch resolver moves a keelson-only statement off the pinned ClickHouse and answers it from this process, which the toolbar names"
 	# The one path the tour never covered. Everything else here queries a

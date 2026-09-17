@@ -940,6 +940,51 @@ ORDER BY s.code_refs DESC, s.num
 LIMIT 25
 ```
 
+## Cards (items with a face, glossed per row)
+
+A result naming a `card_title` or a `card_hero` column renders as a paged grid
+of uniform cards in the **Cards** tab (ADR-0245). `card_*` names the slots;
+every other column becomes a fact on the card through its gloss; and a
+`<label>_gloss` column names that row's media type, so a table that stores
+`(content, mime)` pairs shows pictures and recordings side by side with no
+projection per kind.
+
+The first block reads the sample dataset — press **publish sample cards** in
+the Cards tab first; it is an ordinary ad-hoc dataset, and its rows are chosen
+to be awkward (a panorama, a strip, an icon, a header over the pixel budget, a
+truncated file, a misspelt type, a NULL hero, a path for a title).
+
+```sql
+SELECT name    AS card_title,
+       kind    AS card_overline,
+       content AS card_hero,
+       mime    AS card_hero_gloss,
+       note    AS `card_body@text/markdown`,
+       tags    AS card_tags,
+       tone    AS card_tone,
+       recorded AS card_footer,
+       length_ms AS `length@gloss/duration;unit=ms`,
+       bytes     AS `size@gloss/bytes`,
+       width, height, sample_rate, channels
+FROM keelson('fixture_cards')
+```
+
+The second is table-free and runs against any server: text-only cards, a tone
+per row, tags from an array, and one fact whose gloss is a row value.
+
+```sql
+SELECT title AS card_title, area AS card_overline, summary AS card_body,
+       tags AS card_tags, tone AS card_tone,
+       amount, amount_gloss, owner
+FROM values(
+  'title String, area String, summary String, tags Array(String), tone Nullable(String), amount UInt64, amount_gloss Nullable(String), owner String',
+  ('Ingest lag',        'pipeline', 'The overnight load finished late; the view was cached.', ['ops', 'etl'],     'warning', 65000,   'gloss/duration;unit=ms', 'ada'),
+  ('Archive size',      'storage',  'Grew by a tenth this week.',                             ['capacity'],       NULL,      40858000, 'gloss/bytes',            'bob'),
+  ('Open incidents',    'on-call',  'Nothing paging.',                                        [],                 'success', 0,        NULL,                     'cy'),
+  ('A misspelt gloss',  'demo',     'The row value does not bind, so the fact says why.',      ['demo'],           'error',   12,       'gloss/durration;unit=ms', 'ada')
+)
+```
+
 ## Chat transcript (messages, replies, reactions)
 
 A result naming a `ts`, a `sender` and a `body` column renders as a message
