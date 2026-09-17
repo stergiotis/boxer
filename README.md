@@ -36,7 +36,7 @@ Boxer is a collection of packages under `public/`. The larger subsystems:
 * `keelson` — application runtime for imzero2 apps: an `AppI` registry with dock/CLI hosts, an in-process bus, a bus-codec, a facts store, background-task supervision, and a help system.
 * `fs/lading` — filesystem snapshot store: an `io/fs` tree landed into three facts-shaped ClickHouse tables addressed by `(mount, snapshot, path)`, with per-mount content policy, declarative retention, and read paths via `io/fs`, SQL macros and an SFTP head (ADR-0198). `apps/tally` browses it.
 * `observability/sysmetrics` — Linux system-metrics collectors (cpu, mem, disk, net, proc, sensors, battery, container, opt-in GPU backends) (ADR-0019).
-* `science/geo/swisstopo` — Swiss LV95 ⇄ WGS84 coordinate transforms, GeoTIFF elevation sampling, and line-of-sight queries.
+* `science/geo/swisstopo` — Swiss LV95 / LV03 ⇄ WGS84 coordinate transforms, in Go and as a ClickHouse UDF family (ADR-0244), GeoTIFF elevation sampling, and line-of-sight queries.
 * `fec` — forward error correction (e.g. `fec/ea/golay24`).
 * `eb`, `eh` — structured error building and error handling.
 * `batching`, `containers`, `hashing`, `identity`, `logical`, `observability`, `parsing`, `slices`, `statespace`, `unsafeperf`, … — utility packages.
