@@ -1,10 +1,20 @@
 ---
 type: adr
-status: accepted
+status: superseded
 date: 2026-07-20
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-07-20
 ---
+
+> **Superseded by [ADR-0240](./0240-adhoc-datasets-v2-sealed-store-owned-capability.md) (2026-09-17).**
+> The requirements decided here stand and are restated there: ephemerality
+> by cryptography, the disk as the threat model, keys that never reach a
+> disk or a wire, unguessable handles, aliases in committed text, a bounded
+> type set at publish. What changed is nearly everything beneath them — the
+> store, key custody, the transport, ownership, withdrawal, the consumer
+> machinery — and this body and its Updates had come to disagree on
+> substance. Retained for history and for the kill-reasons of O1, O3, O4
+> and O5; new work references ADR-0240.
 
 # ADR-0134: Ad-hoc datasets — capability-mediated ephemeral data for SQL applets
 
@@ -728,6 +738,21 @@ newest dataset in one round trip; the applet binder resolves on a
 `published` hint instead of trusting its handle, replays hints in arrival
 order, and reconciles every 30 s — a lost or stale event costs at most one
 tick under a lossy transport (ADR-0188 §SD3).
+
+### 2026-09-17 — superseded by ADR-0240
+
+[ADR-0240](./0240-adhoc-datasets-v2-sealed-store-owned-capability.md) was
+accepted and replaces this ADR whole. It keeps every requirement in the
+Decision's first paragraph and in §SD2's threat model, and replaces the
+mechanisms: sealed files are unnamed inodes whose key is a private field of
+the file object (no key store, no registrar/executor split); the capability
+holds one record per dataset and enforces the publisher's ownership;
+`adhoc.grant` is retired; withdrawal is reader-counted; the runtime
+retracts a window's datasets when the window closes; the alias follower
+and the publisher bookkeeping are platform types; a launched window binds
+by alias; the wire is generated. The subjects, the handle prefix, the
+catalog name and the frontmatter keys §SD9 left open are closed there as
+they shipped.
 
 Internal:
 

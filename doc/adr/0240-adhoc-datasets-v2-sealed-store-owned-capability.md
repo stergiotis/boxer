@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-17
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0240: Ad-hoc datasets v2 — a sealed store, an owned capability, a platform follower
 
@@ -488,15 +486,15 @@ are hints and request/reply is truth.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-09-17.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-On acceptance, ADR-0134 flips to `superseded` with a pointer here; ADR-0145
-and ADR-0188 gain a dated Update naming which of their statements this ADR
-carries forward.
+ADR-0134 is `superseded` with a pointer here; ADR-0145 and ADR-0188 each
+carry a dated Update naming which of their statements this ADR carries
+forward.
 
 ## Updates
 

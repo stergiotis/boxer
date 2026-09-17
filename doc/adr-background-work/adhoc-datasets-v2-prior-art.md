@@ -8,7 +8,7 @@ status: draft
 
 > **Status: draft — pre-human-review.** Compiled 2026-09-15 to feed
 > [ADR-0240](../adr/0240-adhoc-datasets-v2-sealed-store-owned-capability.md)
-> (proposed); nothing here is a decision. Provenance is two-tiered: (a)
+> (accepted 2026-09-17); nothing here is a decision. Provenance is two-tiered: (a)
 > claims about this repository were checked against the working tree on the
 > compile date; (c) claims about other systems are general knowledge — the
 > product, API or manual-page names are given so a reader can verify each

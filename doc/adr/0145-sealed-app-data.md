@@ -427,6 +427,25 @@ All three milestones are now landed. The requirements catalog's E6 and E9
 both have consumers; R2, R3 and R6's sensitivity axis are implemented rather
 than merely observed.
 
+### 2026-09-17 — what ADR-0240 changes underneath, and what it does not
+
+[ADR-0240](./0240-adhoc-datasets-v2-sealed-store-owned-capability.md)
+supersedes ADR-0134 and leaves this ADR's decisions standing: the
+sensitivity label derived from a registry lookup (§SD3), the two refusals
+(§SD4), locality proven by probe (§SD5) and the unclaimed threat model
+(§SD6) are unchanged, and the wall still keys on `EncryptedDatasetI`.
+
+Two things here are overtaken. §SD1's "one vocabulary, in `adhocdata`" —
+`Ref`, `PlaintextI`, `DecryptorI`, `KeyRegistrarI` — is gone: custody is
+ownership of a `sealed.File` whose key is a private field, the marker
+interface gains `Open()` over standard library types, and `/table` opens
+the registry entry directly, so neither host wires a decryptor. And the
+2026-07-26 note that a custody interface spanning register and lookup was
+refused to keep the policy owner from looking keys up is moot rather than
+reversed: no operation resolves a key by name at all. The client-side alias
+rewrite now covers a bare relation as well as the `keelson('…')` call, so
+an alias reaches the wall under neither spelling.
+
 ## References
 
 - [ADR-0134](./0134-adhoc-datasets.md) — ad-hoc datasets; §SD1–SD3 and the 2026-07-20 query-path revision this ADR completes.

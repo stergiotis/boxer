@@ -13,8 +13,8 @@ status: draft
 The task-oriented walk: hand a table your app computed to SQL without
 storing it anywhere, read it from a committed applet or a play window you
 open, and let go of it when the window closes. Why it is shaped this way is
-[ADR-0240](../adr/0240-adhoc-datasets-v2-sealed-store-owned-capability.md)
-(proposed); the placement rule a query naming one is subject to is
+[ADR-0240](../adr/0240-adhoc-datasets-v2-sealed-store-owned-capability.md);
+the placement rule a query naming one is subject to is
 [ADR-0145](../adr/0145-sealed-app-data.md).
 
 One fact carries the page. **A dataset lives as long as the window that

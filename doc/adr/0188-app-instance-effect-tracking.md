@@ -393,6 +393,31 @@ entries.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-09-17 — two deferrals taken up by ADR-0240
+
+[ADR-0240](./0240-adhoc-datasets-v2-sealed-store-owned-capability.md)
+keeps §SD3's leave → notify → unload and its events-as-hints rule, and
+takes up two items from *Deferred*:
+
+- **Lifecycle subjects.** The trigger — "the first broker that needs to
+  observe an instance closing rather than be closed by it" — fired. The
+  in-process bus announces `runtime.instance.closed` when a client carrying
+  an instance key closes (§SD1's `Close`), and the dataset service retracts
+  what that instance published. `natsbus` does not announce; the instance
+  dimension under NATS is still the open item below it.
+- **Exact withdrawal guard.** Taken up in part, by another route than
+  `adhoc.bind`/`unbind`: the sealed file counts its open readers, so the
+  file outlives the leave step for exactly as long as someone is reading
+  it, under a ceiling. A consumer that has resolved a handle but not yet
+  fetched is still covered by the grace, as before; recording bindings
+  stays deferred with its trigger.
+
+§SD3's follower is no longer the applet host's: it is
+`adhocdata.Follower`, and a play window opened with dataset aliases in its
+launch config runs it too.
+
 ## References
 
 - [spatiotemporal-composability-lessons](../explanation/spatiotemporal-composability-lessons.md)

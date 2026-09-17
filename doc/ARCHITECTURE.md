@@ -355,7 +355,7 @@ answered 30 access units and no mesh frames, the other 0 and 30); the images
 are not booted by CI, there is no size or per-frame assertion, and the CJK
 font fallback (~20 MB) is dropped. The pair carries no ClickHouse and comes up
 `facts:mem` / `persist:mem`. The third image answers the question
-[ADR-0134 §SD8](./adr/0134-adhoc-datasets.md) had deferred to this probe:
+[ADR-0134 §SD8](./adr/0134-adhoc-datasets.md) (superseded by ADR-0240) had deferred to this probe:
 `clickhouse-local` rides the A/B roots, not `/perm` — an update swaps the
 engine and the app that expects it together, the root is read-only and
 verified, and gokrazy leaves `/perm` unformatted in a file image (§SD6). It
@@ -663,36 +663,46 @@ answered.
 ### 3.5 Ad-hoc datasets — ephemeral by cryptography
 
 ```text
- producer app ── adhoc.publish ──▶ adhocdata service ──▶ BOXER_ADHOC_DIR/<handle>
- (imzrt, play, a demo)             (runtime.adhoc)        AEAD-chunked Arrow IPC; a fresh key
-                                       │                  per dataset, held only in RAM
+ producer app ── adhoc.publish ──▶ adhocdata service ──▶ sealed.File: an unnamed inode (O_TMPFILE)
+ (Publisher: one alias, one handle)  (runtime.adhoc)      AEAD-chunked Arrow IPC; the key is a field
+                                       │                  of the file object, nowhere else
+                                       ├── one record per dataset: owner (app, instance) · revision
                                        ├── catalog keelson('adhoc') · handle adhoc_<random>
                                        └── adhoc.event.published / .retracted (hints)
- applet doc:  datasets: [items]  ── alias → handle bound at mount (adhoc.resolve = truth)
- query:  SELECT … FROM keelson('items')
+ consumer:  datasets: [items]  (applet frontmatter, or a play launch config)
+            Follower: subscribe, resolve alias → handle (adhoc.resolve = truth), bind, keep in step
+ query:  SELECT … FROM keelson('items')      — or a bare `items`
            ─▶ alias → handle ─▶ url('http://127.0.0.1:<p>/table/<handle>','ArrowStream','<structure>')
-           ─▶ /table decrypts in-process by handle; plaintext rides loopback only ─▶ a chlocal worker
- retract:  leave (catalog, resolve) ─▶ notify ─▶ unload after one bus request timeout
+           ─▶ /table opens the record; plaintext rides loopback only ─▶ a chlocal worker
+ window closes ─▶ bus: runtime.instance.closed ─▶ the service retracts what that instance published
+ retract:  leave (catalog, resolve) ─▶ notify ─▶ unregister after a grace ─▶ file goes with its last reader
 ```
 
-[ADR-0134](./adr/0134-adhoc-datasets.md) (accepted 2026-07-20) answers how an
-app hands a computed table to a SQL applet without creating durable state,
-durable names, or plaintext at rest — and does so for the crash case too, which
-cleanup-on-exit cannot: each dataset is an encrypted Arrow file whose key never
-leaves process memory, so after a crash what remains is ciphertext without a
-key. Buffers name a stable alias, never a handle; the binding is instance
-state, applied like a tab binding, so the engine's classification still sees a
-plain `keelson` read. The only engine that can see such a dataset is the
-in-process plane; a confined run pinned anywhere else is refused above the
-resolver with a reason, rather than failing at a server that does not know
-`keelson()` ([ADR-0145](./adr/0145-sealed-app-data.md)). Withdrawal is
-two-phase and bounded — leave, notify, unload after a grace of one bus request
-timeout — because NATS core is at-most-once and "events are hints;
-request/reply is truth" ([ADR-0188 §SD3](./adr/0188-app-instance-effect-tracking.md)).
-Limits: 256 MiB per dataset, 1 GiB per store, 64 datasets; a bounded Arrow type
-set at the publish gate. Data that should outlive the session is ingested
+[ADR-0240](./adr/0240-adhoc-datasets-v2-sealed-store-owned-capability.md)
+(superseding ADR-0134) answers how an app hands a computed table to SQL
+without creating durable state, durable names, or plaintext at rest — and
+does so for the crash case too, which cleanup-on-exit cannot: each dataset
+is a sealed file with no name on any filesystem, under a key that exists
+only inside the process, so the kernel frees it on last close and after a
+crash there is nothing to find. Buffers name a stable alias, never a handle;
+a follower keeps the alias bound for the life of the consumer, and the
+binding is instance state, so the engine's classification still sees a
+plain `keelson` read. A dataset belongs to the instance that published it —
+only its publisher may republish or retract it — and lives as long as that
+window, unless the publisher marks it kept. The only engine that can see
+such a dataset is the in-process plane; a confined run pinned anywhere else
+is refused above the resolver with a reason, rather than failing at a server
+that does not know `keelson()` ([ADR-0145](./adr/0145-sealed-app-data.md)).
+Withdrawal is two-phase — leave, notify, unload — because NATS core is
+at-most-once and "events are hints; request/reply is truth"
+([ADR-0188 §SD3](./adr/0188-app-instance-effect-tracking.md)); the file
+itself outlives the leave step for as long as a reader has it open, under
+a ceiling. Limits: 256 MiB per dataset, 1 GiB and 64 datasets live; a
+bounded Arrow type set at the publish gate. Data that should outlive the
+session is ingested
 ([ADR-0089](./adr/0089-rowdml-serialization-clickhouse-native-ingestion.md)) —
-"an explicit act, not a default".
+"an explicit act, not a default". The task-oriented walk is
+[doc/howto/adhoc-datasets.md](./howto/adhoc-datasets.md).
 
 ### 3.6 The filesystem in ClickHouse — the lading store
 
