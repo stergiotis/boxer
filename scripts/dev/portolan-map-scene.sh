@@ -66,6 +66,17 @@ trap cleanup EXIT
 
 mkdir -p "$OUT/logs"
 
+# --- the camera oracle --------------------------------------------------------
+# Reading the demo's readout lines, and checking a gesture against what Leaflet
+# says it must do, is `boxer dev portolan-cam`. Built once: the scene reads and
+# checks per gesture.
+TOOL="${PORTOLANSCENE_TOOL:-$OUT/bin/boxer}"
+if [[ -z "${PORTOLANSCENE_TOOL:-}" ]]; then
+	mkdir -p "$(dirname "$TOOL")"
+	( cd "$root" && CGO_ENABLED=0 go build -tags "$(tr -d '\n' < ./tags)" \
+		-o "$TOOL" ./public/app ) || die "go build (boxer) failed"
+fi
+
 # --- binaries ----------------------------------------------------------------
 # A private pair by default, for the reason the tree scene builds one: a Go
 # host paired with a Rust client from a different egui2 codegen desyncs the
@@ -123,125 +134,32 @@ done
 TILE_PORT=$(awk '/^ready /{print $2; exit}' "$OUT/logs/tiles.log")
 [[ -n "$TILE_PORT" ]] || die "the tile stub did not start — see $OUT/logs/tiles.log"
 
-# --- the camera reader and its arithmetic -----------------------------------
-# The demo's readout lines are the instrument: "centre LAT, LON   zoom Z …",
-# "canvas at X,Y · W × H px", "tiles: … E errors … loading B", "… re-ships R
-# …". `read` turns the accessibility tree into one JSON line; the other
-# subcommands compare two such readings against what a gesture must have
-# done, in web-mercator pixels at the zoom of the reading.
-cam="$OUT/logs/cam.py"
-cat >"$cam" <<'PY'
-import json, math, re, sys
-
-def read(path):
-    out = {}
-    for line in open(path):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            d = json.loads(line)
-        except ValueError:
-            continue
-        if d.get("role") != "label":
-            continue
-        v = str(d.get("value", ""))
-        m = re.match(r"centre (-?[\d.]+), (-?[\d.]+)\s+zoom ([\d.]+)", v)
-        if m:
-            out["lat"], out["lon"], out["zoom"] = float(m[1]), float(m[2]), float(m[3])
-        m = re.match(r"canvas at (-?[\d.]+),(-?[\d.]+) · (\d+) × (\d+) px", v)
-        if m:
-            out["ox"], out["oy"], out["w"], out["h"] = (float(m[1]), float(m[2]), int(m[3]), int(m[4]))
-        m = re.search(r"(\d+) requested · (\d+) loaded · (\d+) errors .* loading (\w+)", v)
-        if m:
-            out["requested"], out["loaded"], out["errors"], out["loading"] = int(m[1]), int(m[2]), int(m[3]), m[4]
-        m = re.search(r"re-ships (\d+)", v)
-        if m:
-            out["reships"] = int(m[1])
-    return out
-
-def px(lat, lon, z):
-    s = 256 * 2 ** z
-    x = (lon + 180) / 360 * s
-    y = (1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * s
-    return x, y
-
-def dist_px(a, b, z):
-    ax, ay = px(a["lat"], a["lon"], z)
-    bx, by = px(b["lat"], b["lon"], z)
-    return bx - ax, by - ay
-
-def need(r, *keys):
-    for k in keys:
-        if k not in r:
-            sys.exit("readout lacks %r in %s" % (k, r))
-
-cmd = sys.argv[1]
-if cmd == "read":
-    r = read(sys.argv[2])
-    need(r, "lat", "lon", "zoom", "ox", "oy", "w", "h", "loading", "errors", "reships")
-    print(json.dumps(r))
-    sys.exit(0)
-a = json.load(open(sys.argv[2]))
-b = json.load(open(sys.argv[3]))
-if cmd == "baseline":
-    ok = abs(a["lat"] - 51.0992) < 1e-4 and abs(a["lon"] - 17.0366) < 1e-4 and abs(a["zoom"] - 12) < 0.006
-    ok = ok and a["w"] == 720 and a["h"] == 460 and a["loading"] == "false" and a["errors"] == 0
-    print("baseline: centre %.5f,%.5f zoom %.2f canvas %dx%d at %.0f,%.0f errors %d" % (a["lat"], a["lon"], a["zoom"], a["w"], a["h"], a["ox"], a["oy"], a["errors"]))
-    sys.exit(0 if ok else 1)
-if cmd == "drag":
-    dx, dy, tol = float(sys.argv[4]), float(sys.argv[5]), float(sys.argv[6])
-    mx, my = dist_px(a, b, a["zoom"])
-    # dragging the map by (+dx,+dy) moves the centre by (-dx,-dy) pixels
-    ex, ey = mx + dx, my + dy
-    print("drag: centre moved %.2f,%.2f px (expected %.0f,%.0f ± %.0f; inertia on a slow drag is a pixel or two)" % (mx, my, -dx, -dy, tol))
-    sys.exit(0 if abs(ex) <= tol and abs(ey) <= tol and abs(a["zoom"] - b["zoom"]) < 0.006 else 1)
-if cmd == "wheel":
-    lo, hi, tol = float(sys.argv[4]), float(sys.argv[5]), float(sys.argv[6])
-    dz = b["zoom"] - a["zoom"]
-    mx, my = dist_px(a, b, a["zoom"])
-    print("wheel: zoom %+.2f (expected %.2f..%.2f), centre moved %.2f,%.2f px (within %.0f: the notch is about the centre)" % (dz, lo, hi, mx, my, tol))
-    sys.exit(0 if lo <= dz <= hi and abs(mx) <= tol and abs(my) <= tol else 1)
-if cmd == "dblclick":
-    tol = float(sys.argv[4])
-    dz = b["zoom"] - a["zoom"]
-    mx, my = dist_px(a, b, a["zoom"])
-    print("double click: zoom %+.2f (expected +1.00), centre moved %.2f,%.2f px (within %.0f: anchored at the centre)" % (dz, mx, my, tol))
-    sys.exit(0 if abs(dz - 1) < 0.011 and abs(mx) <= tol and abs(my) <= tol else 1)
-if cmd == "key":
-    dx, tol = float(sys.argv[4]), float(sys.argv[5])
-    mx, my = dist_px(a, b, a["zoom"])
-    print("ArrowRight: centre moved %.2f,%.2f px (expected %.0f,0 within %.1f)" % (mx, my, dx, tol))
-    sys.exit(0 if abs(mx - dx) <= tol and abs(my) <= tol and abs(a["zoom"] - b["zoom"]) < 0.006 else 1)
-if cmd == "pipeline":
-    print("tiles: %d requested, %d loaded, %d errors, re-ships %d, loading %s" % (b["requested"], b["loaded"], b["errors"], b["reships"], b["loading"]))
-    sys.exit(0 if b["errors"] == 0 and b["reships"] == 0 and b["loading"] == "false" and b["loaded"] >= 12 else 1)
-sys.exit("unknown command " + cmd)
-PY
-
 drive() { # drive <trace file>
 	timeout "$TIMEOUT" "$MAIN_GO" --logFormat=console --logLevel=info \
 		imzero2 drive --url "ws://127.0.0.1:$PORT/" --trace "$1" --settle "$SETTLE_MS" \
 		>>"$OUT/logs/drive.log" 2>&1
 }
+# r names a reading on disk; the demo's readout lines are the instrument, and
+# `portolan-cam read` turns one accessibility-tree dump into one reading.
+r() { printf '%s' "$OUT/logs/$1.json"; }
 snapshot() { # snapshot <name>  → $OUT/logs/<name>.json
 	# The node lines are log output, so they arrive on stderr.
 	timeout 60 "$MAIN_GO" imzero2 drive --url "ws://127.0.0.1:$PORT/" --dumpTree \
 		>"$OUT/logs/$1.tree.jsonl" 2>&1
-	python3 "$cam" read "$OUT/logs/$1.tree.jsonl" >"$OUT/logs/$1.json" || die "cannot read the camera ($1) — see $OUT/logs/$1.tree.jsonl"
+	"$TOOL" dev portolan-cam read "$OUT/logs/$1.tree.jsonl" >"$(r "$1")" ||
+		die "cannot read the camera ($1) — see $OUT/logs/$1.tree.jsonl"
 }
-check() { # check <cmd> <a> <b> [args…]
-	local cmd=$1 a=$2 b=$3; shift 3
+check() { # check <verb> [flags…] <reading…>
 	local msg
-	if msg=$(python3 "$cam" "$cmd" "$OUT/logs/$a.json" "$OUT/logs/$b.json" "$@"); then
+	if msg=$("$TOOL" dev portolan-cam "$@"); then
 		log "  ok   $msg"
 	else
 		log "  FAIL $msg"
-		die "$cmd did not do what it must — see $OUT/logs/"
+		die "$1 did not do what it must — see $OUT/logs/"
 	fi
 }
 # canvas-relative → screen, from a snapshot's canvas rect
-at() { python3 -c "import json; r=json.load(open('$OUT/logs/$1.json')); print(int(r['ox']+$2), int(r['oy']+$3))"; }
+at() { "$TOOL" dev portolan-cam at --dx "$2" --dy "$3" "$(r "$1")"; }
 
 # --- run ---------------------------------------------------------------------
 log "launching the widget gallery headless on 127.0.0.1:$PORT (tiles from the stub on $TILE_PORT)"
@@ -285,7 +203,7 @@ cat >"$t" <<'TRACE'
 TRACE
 drive "$t" || die "the demo did not come up — see $OUT/logs/drive.log and host.log"
 snapshot s0
-check baseline s0 s0
+check baseline "$(r s0)"
 
 # 2. A slow 240 × 120 px drag from the canvas centre: the centre moves by
 #    exactly that, bar a few pixels of inertia at 200 px/s (a measured run
@@ -296,7 +214,7 @@ printf '%s\n' "{\"do\":\"drag\",\"x\":$cx,\"y\":$cy,\"toX\":$((cx + 240)),\"toY\
        '{"do":"wait","valueContains":"loading false","role":"label","settleMs":400}' >"$t"
 drive "$t" || die "the drag step failed — see $OUT/logs/drive.log"
 snapshot s1
-check drag s0 s1 240 120 6
+check drag --dx 240 --dy 120 --tol 6 "$(r s0)" "$(r s1)"
 
 # 3. One wheel notch at the canvas centre: a zoom of Leaflet's sigmoid,
 #    chunked by egui's smoothing, about the centre.
@@ -306,7 +224,7 @@ printf '%s\n' "{\"do\":\"hover\",\"x\":$cx,\"y\":$cy,\"settleMs\":200}" \
        '{"do":"scroll","x":0,"y":60,"settleMs":1500,"comment":"one notch, 60 px: +0.6..0.8 levels through the sigmoid"}' >"$t"
 drive "$t" || die "the wheel step failed"
 snapshot s2
-check wheel s1 s2 0.55 0.80 3
+check wheel --lo 0.55 --hi 0.80 --tol 3 "$(r s1)" "$(r s2)"
 
 # 4. A double click at the canvas centre: one level in, animated, anchored.
 read -r cx cy < <(at s2 360 230)
@@ -315,14 +233,14 @@ printf '%s\n' "{\"do\":\"click\",\"x\":$cx,\"y\":$cy,\"settleMs\":60}" \
        "{\"do\":\"click\",\"x\":$cx,\"y\":$cy,\"settleMs\":1500,\"comment\":\"two clicks within egui's double-click window\"}" >"$t"
 drive "$t" || die "the double-click step failed"
 snapshot s3
-check dblclick s2 s3 3
+check dblclick --tol 3 "$(r s2)" "$(r s3)"
 
 # 5. ArrowRight after the click left the map focused: 80 px, animated.
 t="$OUT/logs/t5.jsonl"
 printf '%s\n' '{"do":"key","text":"ArrowRight","settleMs":1200,"comment":"the map took focus on the click; Leaflet pans 80 px per arrow"}' >"$t"
 drive "$t" || die "the key step failed"
 snapshot s4
-check key s3 s4 80 1.5
+check key --dx 80 --tol 1.5 "$(r s3)" "$(r s4)"
 
 # 6. The pipeline: no errors, no re-ships, and a capture of where we ended.
 t="$OUT/logs/t6.jsonl"
@@ -330,7 +248,7 @@ printf '%s\n' '{"do":"wait","valueContains":"loading false","role":"label","sett
        '{"do":"capture","text":"portolan-scene","comment":"the end state: stub tiles, overlays, the readout"}' >"$t"
 drive "$t" || die "the capture step failed"
 snapshot s5
-check pipeline s5 s5
+check pipeline "$(r s5)"
 
 cleanup
 log "PASS — drag, wheel, double click and arrow key each moved the camera as Leaflet says"

@@ -8,7 +8,7 @@ cc=${CC_x86_64_pc_windows_gnu:-x86_64-w64-mingw32-gcc}
 export CC_x86_64_pc_windows_gnu="$cc"
 export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="$cc"
 missing=0
-for tool in cargo python3 "$cc" x86_64-w64-mingw32-objdump; do
+for tool in cargo go "$cc" x86_64-w64-mingw32-objdump; do
     if ! command -v "$tool" >/dev/null; then printf 'missing prerequisite: %s\n' "$tool" >&2; missing=1; fi
 done
 for file in "$FFMPEG_DIR/include/libavcodec/avcodec.h" "$FFMPEG_DIR/lib/libavcodec.dll.a"; do
@@ -34,20 +34,9 @@ cp -R "$FFMPEG_DIR/licenses" "$FFMPEG_DIR/sources" "$out/"
 cp README.md "$out/README.md"
 # Preserve license files from the exact locked Rust dependency sources.
 cargo metadata --locked --format-version 1 > "$crate/target/dependency-metadata.json"
-python3 - "$crate/target/dependency-metadata.json" "$out/licenses/rust" <<'PY'
-import json, pathlib, shutil, sys
-metadata=json.loads(pathlib.Path(sys.argv[1]).read_text())
-out=pathlib.Path(sys.argv[2]); out.mkdir(parents=True, exist_ok=True)
-lines=[]
-for package in metadata['packages']:
-    name=f"{package['name']}-{package['version']}"
-    lines.append(f"{name}: {package.get('license') or 'see supplied license files'}")
-    source=pathlib.Path(package['manifest_path']).parent
-    for path in source.iterdir():
-        if path.is_file() and path.name.lower().startswith(('license','copying','notice','unlicense')):
-            dest=out/name; dest.mkdir(exist_ok=True); shutil.copyfile(path,dest/path.name)
-(out/'INDEX.txt').write_text('\n'.join(lines)+'\n')
-PY
+(cd "$repo" && ./boxer.sh gov cargo-licenses \
+    --metadata "$crate/target/dependency-metadata.json" \
+    --out "$out/licenses/rust")
 # A packager may supply toolchain-specific runtime notices without hardcoding a distro.
 if [[ -n "${MINGW_LICENSE_DIR:-}" ]]; then cp -R "$MINGW_LICENSE_DIR" "$out/licenses/mingw"; fi
 for file in "$out"/*.exe "$out"/*.dll; do
