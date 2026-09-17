@@ -149,7 +149,7 @@ x11 = ["eframe?/x11"]
 # 0.36.1, egui_table 0.10 and egui_dock 0.21.1 are all out already, but
 # egui_graphs 0.31.0 (its newest, and its master branch) still asks for egui
 # 0.35. Move all of them, and the wgpu/egui-wgpu pins below, in one commit.
-egui = "0.35"
+egui = "0.36"
 eframe = { version = "0.35", optional = true, default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed trust-analyzer.cargo.featureshe default egui fonts.
