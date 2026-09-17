@@ -8,25 +8,31 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func NewCliCommand() *cli.Command {
-	return &cli.Command{
-		Name: "dev",
-		Subcommands: []*cli.Command{
-			{
-				Name: "panic",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:  "message",
-						Value: "default panic message",
-					},
-				},
-				Action: func(context *cli.Context) error {
-					log.Panic().Str("str", "strval").Uint64("uint64", 0xdeadbeef).Msg(context.String("message"))
-					return nil
+// NewCliCommand returns the `dev` parent command. extraSubcommands lets
+// sibling packages mount their own developer tools — the scene and CI
+// helpers under public/app/commands — without forming an import edge back
+// to `dev`.
+func NewCliCommand(extraSubcommands ...*cli.Command) *cli.Command {
+	subs := make([]*cli.Command, 0, 2+len(extraSubcommands))
+	subs = append(subs,
+		&cli.Command{
+			Name: "panic",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  "message",
+					Value: "default panic message",
 				},
 			},
-			newEntryPointsSubcommand(),
+			Action: func(context *cli.Context) error {
+				log.Panic().Str("str", "strval").Uint64("uint64", 0xdeadbeef).Msg(context.String("message"))
+				return nil
+			},
 		},
+		newEntryPointsSubcommand())
+	subs = append(subs, extraSubcommands...)
+	return &cli.Command{
+		Name:        "dev",
+		Subcommands: subs,
 	}
 }
 

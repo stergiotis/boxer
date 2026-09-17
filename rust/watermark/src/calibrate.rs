@@ -6,12 +6,11 @@
 //! piecewise-linear interpolation through those anchors and apply it to both the
 //! inner-block and ring means before differencing.
 //!
-//! The bit decision (`sign(inner − ring)`) is already invariant to any monotonic
-//! transform, so calibration is not what makes brightness/gamma decode *work* —
-//! it linearizes the delta so its magnitude is uniform across brightness, which
-//! improves the worst-case noise margin and lets multi-tile soft-combine weight
-//! tiles fairly. A failed fit (reference cells don't span ≥2 distinct levels)
-//! also flags a tile that is not a trustworthy watermark tile.
+//! Applying a monotonic map to two measured means preserves their order. A
+//! pixelwise nonlinear channel does not generally preserve the order of means
+//! over different textures, however. This fit normalizes contrast magnitudes;
+//! it does not undo arbitrary gamma/texture interactions. Failed fits exclude a
+//! tile from the soft combine.
 
 use crate::layout::RefLevel;
 

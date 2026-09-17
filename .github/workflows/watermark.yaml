@@ -1,0 +1,62 @@
+name: watermark
+
+# Standalone, like scripts/ci/watermark_test.sh itself (not wired into the
+# default test.yaml/lint.yaml lanes): the codec round-trip tests shell out to
+# ffmpeg and are comparatively slow. Run explicitly, or on a release tag.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  watermark:
+    name: watermark
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Reads the crate's own pin rather than hardcoding it here, the same way
+      # lint.yaml reads rust/h3bridge/rust-toolchain.toml — one file to update
+      # when the crate's toolchain moves.
+      - name: Install the pinned Rust toolchain
+        run: |
+          set -euo pipefail
+          ch=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust/watermark/rust-toolchain.toml | head -1)
+          [ -n "$ch" ] || { echo "no channel pin in rust/watermark/rust-toolchain.toml" >&2; exit 1; }
+          rustup toolchain install "$ch" --profile minimal --component rustfmt,clippy
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      # The Stage 8/9 codec tests need libx264, libvpx-vp9 and libsvtav1
+      # specifically (src/codec.rs::Codec::encode_args) — checking `ffmpeg
+      # -version` is not enough, a build can lack any one encoder while still
+      # running. Fail fast here rather than mid-suite with a wall of ffmpeg
+      # stderr per missing encoder.
+      - name: Preflight ffmpeg encoders
+        run: |
+          set -euo pipefail
+          encoders=$(ffmpeg -hide_banner -encoders 2>/dev/null)
+          missing=""
+          for enc in libx264 libvpx-vp9 libsvtav1; do
+            if ! grep -q " $enc " <<<"$encoders"; then
+              missing="$missing $enc"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::apt's ffmpeg is missing encoder(s):$missing"
+            exit 1
+          fi
+
+      - name: Test
+        run: ./scripts/ci/watermark_test.sh

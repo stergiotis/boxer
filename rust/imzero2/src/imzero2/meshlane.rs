@@ -17,6 +17,8 @@
 //!   w u32, h u32, rgba bytes` (whole when `x=y=0, w/h = full`). Keys use
 //!   [`fold_key`]: user-texture ids fold their marker into bit 31, matching
 //!   the `u32` texture field of mesh bodies.
+//! - `3` — retirement (ADR-0242): `count u32, count×texture-key u32`. After
+//!   drawing, retain only the preceding frame's bodies and these live textures.
 //!
 //! Mesh body layout: `clip u16×4` (1/8 px), `tex u32`, `n_verts u32`,
 //! `idx_width u8` (2|4), `n_idx u32`, vertices n×(`pos u16×2` @ 1/8 px,
@@ -30,6 +32,19 @@ use std::hash::Hasher as _;
 
 pub const MESH_MSG_FRAME: u8 = 1;
 pub const MESH_MSG_TEXTURE: u8 = 2;
+/// ADR-0242: retire bodies outside the preceding frame and textures outside
+/// the supplied live-key set. Existing frame and texture layouts are unchanged.
+pub const MESH_MSG_RETIRE: u8 = 3;
+
+pub fn retirement_message(live_keys: &[u32]) -> Vec<u8> {
+    let mut msg = Vec::with_capacity(6 + live_keys.len() * 4);
+    msg.extend_from_slice(&[PREFIX_MESH, MESH_MSG_RETIRE]);
+    msg.extend_from_slice(&(live_keys.len() as u32).to_le_bytes());
+    for key in live_keys {
+        msg.extend_from_slice(&key.to_le_bytes());
+    }
+    msg
+}
 
 /// Collapse egui's two-sided texture id into one store key. User-textures set
 /// the top bit so they can never collide with managed ids.
@@ -180,11 +195,12 @@ fn texture_message(
 #[derive(Default)]
 pub struct TextureStore {
     textures: HashMap<u64, Tex>,
+    pending_free: Vec<u64>,
 }
 
 impl TextureStore {
-    /// Apply one frame's deltas; returns the framed incremental messages
-    /// (empty on the vast majority of frames).
+    /// Apply sets and defer frees until `finish_frame`: egui permits this
+    /// frame to use a texture it frees. Returns incremental texture updates.
     pub fn ingest(&mut self, delta: &egui::TexturesDelta) -> Vec<Vec<u8>> {
         let mut msgs = Vec::new();
         for (id, d) in &delta.set {
@@ -234,10 +250,32 @@ impl TextureStore {
                 }
             }
         }
-        for id in &delta.free {
-            self.textures.remove(&tex_key(*id));
-        }
+        self.pending_free.extend(delta.free.iter().map(|id| tex_key(*id)));
         msgs
+    }
+
+    /// Keys retained after this frame is drawn. Unused but live textures stay.
+    pub fn live_keys(&self) -> Vec<u32> {
+        let pending: std::collections::HashSet<_> = self.pending_free.iter().copied().collect();
+        let mut keys: Vec<_> = self
+            .textures
+            .keys()
+            .filter(|key| !pending.contains(key))
+            .map(|key| fold_key(*key))
+            .collect();
+        keys.sort_unstable();
+        keys
+    }
+
+    pub fn has_pending_frees(&self) -> bool {
+        !self.pending_free.is_empty()
+    }
+
+    /// Call after assembling this frame's delivery, including in non-mesh modes.
+    pub fn finish_frame(&mut self) {
+        for key in self.pending_free.drain(..) {
+            self.textures.remove(&key);
+        }
     }
 
     /// Framed whole-texture messages for the entire store — a fresh
@@ -268,6 +306,100 @@ mod tests {
             clip_rect: egui::Rect::from_min_max(egui::pos2(1.0, 2.0), egui::pos2(100.0, 200.0)),
             primitive: egui::epaint::Primitive::Mesh(mesh),
         }
+    }
+
+    #[test]
+    fn retirement_message_shape() {
+        assert_eq!(
+            retirement_message(&[7, 42]),
+            vec![4, 3, 2, 0, 0, 0, 7, 0, 0, 0, 42, 0, 0, 0]
+        );
+        assert_eq!(retirement_message(&[]), vec![4, 3, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn freed_texture_survives_its_frame_bootstrap() {
+        let mut store = TextureStore::default();
+        store.textures.insert(
+            7,
+            Tex {
+                w: 1,
+                h: 1,
+                rgba: vec![255; 4],
+            },
+        );
+        store.textures.insert(
+            8,
+            Tex {
+                w: 1,
+                h: 1,
+                rgba: vec![0; 4],
+            },
+        );
+        let delta = egui::TexturesDelta {
+            set: Vec::new(),
+            free: vec![egui::TextureId::Managed(7)],
+        };
+        assert!(store.ingest(&delta).is_empty());
+        assert!(store.has_pending_frees());
+        assert_eq!(
+            store.full_messages().len(),
+            2,
+            "bootstrap still needs the freed texture"
+        );
+        assert_eq!(
+            store.live_keys(),
+            vec![8],
+            "retirement preserves the unused live texture"
+        );
+        store.finish_frame();
+        assert_eq!(store.full_messages().len(), 1);
+        assert!(!store.has_pending_frees());
+    }
+
+    #[test]
+    fn partial_update_is_preserved_in_later_bootstrap() {
+        let mut store = TextureStore::default();
+        store.textures.insert(
+            3,
+            Tex {
+                w: 2,
+                h: 1,
+                rgba: vec![0; 8],
+            },
+        );
+        let image = egui::ColorImage::filled([1, 1], egui::Color32::WHITE);
+        let delta = egui::TexturesDelta {
+            set: vec![(
+                egui::TextureId::Managed(3),
+                egui::epaint::ImageDelta::partial([1, 0], image, egui::TextureOptions::LINEAR),
+            )],
+            free: Vec::new(),
+        };
+        let updates = store.ingest(&delta);
+        assert_eq!(updates.len(), 1);
+        store.finish_frame();
+        let full = store.full_messages();
+        assert_eq!(&full[0][30..], &[0, 0, 0, 0, 255, 255, 255, 255]);
+        assert_eq!(store.live_keys(), vec![3]);
+    }
+
+    #[test]
+    fn set_use_free_texture_is_in_bootstrap_before_retirement() {
+        let mut store = TextureStore::default();
+        let image = egui::ColorImage::filled([1, 1], egui::Color32::WHITE);
+        let delta = egui::TexturesDelta {
+            set: vec![(
+                egui::TextureId::Managed(9),
+                egui::epaint::ImageDelta::full(image, egui::TextureOptions::LINEAR),
+            )],
+            free: vec![egui::TextureId::Managed(9)],
+        };
+        assert_eq!(store.ingest(&delta).len(), 1);
+        assert_eq!(store.full_messages().len(), 1);
+        assert!(store.live_keys().is_empty());
+        store.finish_frame();
+        assert!(store.full_messages().is_empty());
     }
 
     /// Quantization round-trips at 1/8 px and body hashes are stable across

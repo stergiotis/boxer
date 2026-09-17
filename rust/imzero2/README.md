@@ -215,7 +215,23 @@ feature entirely. Full steps and the security note:
 | `build.rs` | protox + prost-build codegen of the wire types (headless feature only) |
 | `../../proto/boxer/imzero2/v1/input.proto` | Canonical wire contract (Rust generated from it; viewer hand-codes it) |
 
+## Viewer regression checks
+
+The opt-in [browser runner](src/imzero2/viewer/tests/run.sh) uses installed
+Chromium and Python's standard library, without a frontend build step:
+
+```sh
+src/imzero2/viewer/tests/run.sh --all
+```
+
+It executes the viewer's CSS and JavaScript against controlled transport/codec
+inputs and checks interaction, focus and GPU-cache lifetime. Its report names
+the synthetic-event and animation-timing substitutions; it is not an end-to-end
+video-decode test. Missing prerequisites return a skip status, not a pass.
+
 ## Related decisions
+
+- [ADR-0242](../../doc/adr/0242-imzero2-session-and-stream-lifetimes.md) — input ownership, stream recovery and bounded mesh retention; origin/auth policy unchanged.
 
 - [ADR-0024](../../doc/adr/0024-imzero2-remote-access-browser-viewer.md) — remote access via pixel streaming (accepted; v1 record in Updates).
 - [ADR-0081](../../doc/adr/0081-imzero2-headless-rdp-egfx-head.md) — RDP head on the same foundation (withdrawn 2026-06-12; kept as reference analysis).

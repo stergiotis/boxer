@@ -21,14 +21,17 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/key"
 	"github.com/stergiotis/boxer/public/app/commands/ladingfs"
 	"github.com/stergiotis/boxer/public/app/commands/markdown"
+	"github.com/stergiotis/boxer/public/app/commands/portolancam"
 	"github.com/stergiotis/boxer/public/app/commands/protogen"
 	"github.com/stergiotis/boxer/public/app/commands/queryrunsd"
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
 	"github.com/stergiotis/boxer/public/app/commands/sample"
 	"github.com/stergiotis/boxer/public/app/commands/swisstopo"
 	"github.com/stergiotis/boxer/public/app/commands/sysmetricsd"
+	"github.com/stergiotis/boxer/public/app/commands/viewerfixture"
 	"github.com/stergiotis/boxer/public/app/commands/watch"
 	watchbillcli "github.com/stergiotis/boxer/public/app/commands/watchbill"
+	"github.com/stergiotis/boxer/public/app/commands/waveformscene"
 	"github.com/stergiotis/boxer/public/code"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/config/env/envdoc"
@@ -101,7 +104,13 @@ func mainC() (exitCode int) {
 			lw.NewCliCommand(),
 			observability.NewCliCommand(),
 			docgen.NewDocCli(),
-			dev.NewCliCommand(),
+			// The scene and CI helpers the shell scripts under scripts/ call
+			// instead of carrying their own interpreter.
+			dev.NewCliCommand(
+				portolancam.NewCliCommand(),
+				waveformscene.NewCliCommand(),
+				viewerfixture.NewCliCommand(),
+			),
 			env.NewCliCommand(envdoc.NewGenDocsCommand()),
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),

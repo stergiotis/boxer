@@ -7,6 +7,27 @@ use watermark::payload::INFO_BITS;
 use watermark::Payload;
 
 #[test]
+fn malformed_hex_is_an_error_not_a_panic() {
+    for s in [
+        "0é0000000000000",
+        "éééééééé",
+        "000000000000000g",
+        "0x0xdeadbeef12345678",
+        "",
+        "deadbeef",
+    ] {
+        assert!(
+            matches!(Payload::from_hex(s), Err(watermark::Error::InvalidPayload)),
+            "{s}"
+        );
+    }
+    assert_eq!(
+        Payload::from_hex(" 0xDEADBEEF12345678 ").unwrap().to_hex(),
+        "deadbeef12345678"
+    );
+}
+
+#[test]
 fn roundtrip_bit_exact_1000() {
     let mut rng = StdRng::seed_from_u64(0x5151_5151);
     for _ in 0..1000 {

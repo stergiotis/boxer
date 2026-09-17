@@ -2,120 +2,104 @@
 type: reference
 audience: watermark crate user / developer
 status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
 ---
 
-> **Status: draft — pre-human-review.** Not yet verified against the current documentation standard. Do not cite as authoritative.
+> **Status: draft — pre-human-review.** Recovery depends on content and the capture channel; the geometric crop bound is not a universal decoding guarantee.
 
 # watermark
 
-A Rust library + CLI that embeds a **64-bit payload** into a frame as a
-periodically tiled grid of luma deltas, so that **every 464×432 px crop** of the
-frame recovers the payload after H.264 / VP9 / AV1 compression and a screenshot.
+An experimental Rust library and CLI for **cooperative image/session
+identification**. It embeds an eight-byte identifier into repeated luminance cells
+and decodes without the original image. It does not authenticate the identifier
+or resist deliberate replacement.
 
-The full design — geometry, the Golay FEC budget, and the single-tile decode
-guarantee that the crop size rests on — is in [`EXPLANATION.md`](./EXPLANATION.md). This
-README covers how to build, run, and what the measured limits are.
+A 464×432 unscaled, axis-aligned crop contains a complete 232×216 tile at any
+phase. Recovery also needs usable reference cells and enough surviving data
+contrast. Smaller images can decode when they contain an aligned tile.
 
-## Status
+[EXPLANATION.md](./EXPLANATION.md) describes the geometry and signal model;
+[ADR-0241](../../doc/adr/0241-cooperative-image-identification-watermark.md)
+records the recovery-over-appearance contract. There is no live-stream integration.
 
-The test-driven staircase in `EXPLANATION.md` is implemented through Stage 9 (the
-crop requirement) plus CLI/polish. Stage 10 (perspective/homography for skewed
-screenshots) is deferred — decode assumes axis-aligned, unscaled crops. The
-numbers below were measured on synthetic content with single-tile decode; treat
-them as indicative, not a guarantee across all imagery.
+## Signal and appearance
 
-## How it works (one paragraph)
+The encoder establishes a target inner-versus-ring contrast rather than blindly
+adding a delta. It adjusts saturated rings to leave headroom and changes inner
+pixels relative to the measured ring. This can substantially change text, texture
+and saturated colors. Reference blocks are absolute dark/mid/bright levels and
+can be visible even at low contrast settings.
 
-`Payload(8 bytes)` → CRC-16 → 80-bit info word → extended Golay [24,12,8] FEC
-(7 codewords, in-crate) → a 2D interleaver scatters the 168 coded bits across a
-14×13 cell grid → each data cell adds `±Δ` to the luma of its inner 8×8 block,
-leaving a 4-px ring as the local-DC reference → the tile (232×216, incl. an 8-px
-guard) repeats across the frame. Decode reverses it: locate the tile grid
-(reference-cell covariance search), calibrate brightness/gamma from the
-reference cells, read `inner − ring` per cell, soft-combine across whatever
-complete tiles the crop holds (one in the worst case), threshold, Golay-decode,
-and verify the CRC. A failed CRC returns an error — never a guessed payload.
+`--delta` is target luminance contrast, **not a per-pixel distortion budget**.
+The default is 8; finite values in 2..127 are accepted. Acceptance is not codec
+qualification. The pathological codec acceptance test uses delta 16: at delta 8,
+a one-pixel checkerboard can lose minimum-crop recovery after H.264 compression.
+The default remains 8 for compatibility; use `sweep` to choose contrast for the
+intended content and codec. `roundtrip` and `sweep` report mean and maximum absolute luminance
+change, not a perceptual-invisibility score.
 
-The Golay FEC is a direct in-crate port of this repo's IRIG-106 Appendix Q
-implementation (`doc/golay24/*.c`, `public/fec/code/golay24`); the encode table
-is checked byte-for-byte against the Go `Encoding` table in `tests/s2_fec.rs`.
-
-## Build & test
-
-The crate pins Rust **1.92** via `rust-toolchain.toml`. That is independent of
-`rust/imzero2`, which pins 1.96 for h3o's const `f64::mul_add`; nothing here
-pulls h3o, so this crate stays on the older toolchain it builds clean under.
-
-```sh
-cd rust/watermark
-cargo test          # Stages 1–7 need no external deps
-cargo clippy --all-targets -- -D warnings
-```
-
-Stages 8–9 shell out to **ffmpeg** (libx264 / libvpx-vp9 / libsvtav1). If
-`ffmpeg` is not on `PATH`, those tests print a skip notice and pass. The
-`scripts/ci/watermark_test.sh` helper runs clippy + the full suite, skipping
-gracefully when cargo is absent.
-
-The opt-in quality sweep (`cargo test --release -- --ignored
-codec_quality_sweep`) prints the BER-vs-CRF table the limits below come from.
+Encoding retains color for RGB/RGBA PNGs. Inputs must be opaque; composite partial
+alpha against the intended background first. Output is 8-bit, with large changes
+potentially reducing color saturation. Decode uses the same gamma-domain
+luminance convention as encode.
 
 ## CLI
 
 ```sh
-# Embed (uses a synthetic base if --input is omitted)
-watermark encode --input base.png --output wm.png --payload deadbeef12345678
-watermark encode --output wm.png --size 1280x720          # random payload
-
-# Recover (works on the full frame or any 464×432+ crop of it)
-watermark decode --input wm.png                            # prints the hex payload
-
-# Codec round-trip report (pre-Golay BER + recovery, per codec)
-watermark roundtrip --input base.png --codec all
-
-# Visibility/robustness trade-off across Δ
-watermark sweep --input base.png
+watermark encode --input base.png --output marked.png --payload deadbeef12345678
+watermark decode --input marked.png
+watermark roundtrip --input base.png --codec all --payload deadbeef12345678
+watermark sweep --input base.png --seed 1
 ```
 
-## Δ — the visibility knob
+Without `--input`, encoding uses a smooth synthetic base of `--size` (default
+1280x720). Without `--payload`, `encode` generates a random identifier.
 
-`Δ` is the luma swing applied to each data cell (0–255 scale). The default is
-**Δ = 8**: subtle on natural content (the data grid is barely visible; the
-reference cells are the more noticeable feature) yet leaving large margin after
-compression. At the default CRFs below, single-tile decode shows **0 pre-Golay
-bit errors** at Δ = 8 — i.e. Golay's error budget is untouched, so there is room
-to lower Δ for less visibility if a use case needs it. Lower Δ trades margin for
-invisibility; `watermark sweep` quantifies it for your content.
+`roundtrip` distinguishes first-tile BER, first-tile recovery and whole-frame
+recovery. `sweep` shares a seeded payload across contrast/codec arms so changes
+are not confounded by independently drawn payloads. Both are experiments at
+particular settings, not certification of the crop bound.
 
-## Measured codec-quality limits
+## Library
 
-Single-tile decode, synthetic-natural base, 12 payloads per point. "Clean" means
-0 pre-Golay BER and full recovery.
+Use `TileSpec::new` for checked contrast, `LumaFrame::from_luma` for checked
+storage, and `encode_frame` / `decode_frame` at the crate root. Construction and
+encoding return `Result`; geometry is immutable. Fixed-length pixel mutation is
+available, and entry points reject non-finite or out-of-range samples after
+mutation. `decode_report` exposes tile counts, correction information and the
+raw location score; that score is not a probability.
 
-| Codec | Default CRF | Clean through | First failure |
-|------:|:-----------:|:-------------:|:--------------|
-| h264 (libx264)    | 23 | CRF 33 | CRF 36 (BER 0.18, 0/12) |
-| vp9 (libvpx-vp9)  | 31 | CRF 50 | none observed up to 50 |
-| av1 (libsvtav1)   | 30 | CRF 42 | CRF 48 degraded (7/12), CRF 52 (0/12) |
+## Build and tests
 
-The defaults sit well inside the clean range. Over ≥500 random crop offsets per
-codec at the default CRF (`tests/s9_crop.rs`), every 464×432 crop recovered the
-payload CRC-clean, with the single-tile worst case covering ~98% of offsets.
+The crate pins its own Rust toolchain in `rust-toolchain.toml`, independently of
+the other Rust crates. From the crate directory:
 
-## Module map
+```sh
+source ../../scripts/dev/rust-repro-env.sh
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo fmt --check
+```
 
-| File | Stage | Role |
-|---|---|---|
-| `payload.rs`   | 1 | payload ↔ bytes, CRC-16/CCITT |
-| `fec.rs`       | 2 | Golay [24,12,8] encode/decode (ported in-crate) |
-| `layout.rs`    | 3 | tile geometry, the 2D interleaver, reference-cell placement |
-| `frame.rs`     | 4 | the luma plane + PNG I/O + synthetic bases |
-| `render.rs`    | 4 | coded bits → tiled luma cells |
-| `sample.rs`    | 5 | per-cell inner/ring means |
-| `decode.rs`    | 5 | sample → soft-combine → Golay-decode → CRC |
-| `calibrate.rs` | 6 | brightness/gamma transfer from reference cells |
-| `locate.rs`    | 7 | tile-grid phase recovery |
-| `codec.rs`     | 8 | ffmpeg round-trip harness |
-| `cli.rs` / `main.rs` | 11 | `encode` / `decode` / `roundtrip` / `sweep` |
+Fast tests cover FEC, layout, pathological content, PNG/color I/O and CLI input.
+Codec integration tests are ignored by default, rather than conditionally running
+on a developer's PATH. Run the full required lane with:
+
+```sh
+../../scripts/ci/watermark_test.sh
+```
+
+That lane requires ffmpeg with libx264, libvpx-vp9 and libsvtav1. Missing required
+dependencies are failures. A dedicated workflow runs it on manual dispatch and
+release tags, following the repository's CI trigger policy.
+
+The longer quality sweep remains explicitly opt-in:
+
+```sh
+cargo test --locked --release --test s8_codec codec_quality_sweep -- --ignored --nocapture
+```
+
+Earlier codec-quality figures measured the additive encoder on smooth synthetic
+content. They are not carried forward as limits of the recovery-first encoder.
+Scale, rotation, perspective and arbitrary screenshot processing remain outside
+the qualified path. Consumer-specific imagery and codec settings need their own
+measurement.

@@ -37,6 +37,17 @@ die() { log "waveform-scene: $*"; exit 1; }
 
 mkdir -p "$OUT/logs"
 
+# --- the scene's arithmetic ---------------------------------------------------
+# Where the canvas is, and where a press lands inside a tone burst, is
+# `boxer dev waveform-scene`: the demo's burst cadence lives there rather than
+# in the traces below, and both answers are read back as whole pixels.
+TOOL="${WFSCENE_TOOL:-$OUT/bin/boxer}"
+if [[ -z "${WFSCENE_TOOL:-}" ]]; then
+	mkdir -p "$(dirname "$TOOL")"
+	( cd "$root" && CGO_ENABLED=0 go build -tags "$(tr -d '\n' < ./tags)" \
+		-o "$TOOL" ./public/app ) || die "go build (boxer) failed"
+fi
+
 # --- binaries (a private pair, for the reason the tree scene builds one) ------
 if [[ "$BUILD" == 1 ]]; then
 	mkdir -p "$BIN"
@@ -172,8 +183,8 @@ read -r px py < <(node_xy 'value="position: 0:00.000 · paused"')
 [[ -n "${by:-}" && -n "${py:-}" ]] || die "could not locate the button row and the readout in the tree dump"
 # The canvas is the 220 px strip between the button row and the first readout
 # line; its midpoint is inside it regardless of the row heights around it.
-CX=$(python3 -c "print(round(float('$bx')))")
-CY=$(python3 -c "print(round((float('$by')+float('$py'))/2))")
+read -r CX CY < <("$TOOL" dev waveform-scene canvas-point \
+	--button-x "$bx" --button-y "$by" --readout-y "$py") || die "cannot place the canvas point"
 log "canvas point: ($CX, $CY) — button row at y=$by, readout at y=$py"
 
 # --- phase B: the assertions ---------------------------------------------------
@@ -215,12 +226,8 @@ drive "" --dumpTree >"$OUT/logs/tree-b.txt" 2>&1 || die "tree dump failed"
 hover_t=$(grep -F 'value="hover: ' "$OUT/logs/tree-b.txt" | head -1 | sed -n 's/.*value="hover: \([0-9]*\):\([0-9.]*\)".*/\1 \2/p')
 [[ -n "$hover_t" ]] || die "no hover readout after the measurement hover"
 read -r hm hs <<<"$hover_t"
-EX=$(python3 -c "
-t = $hm*60 + float('$hs')
-import math
-k = math.ceil(t / 0.9)
-target = k*0.9 + 0.17
-print(round($CX + (target - t) / 0.010))")
+EX=$("$TOOL" dev waveform-scene region-press \
+	--canvas-x "$CX" --hover-min "$hm" --hover-sec "$hs") || die "cannot place the region press"
 log "time under the pointer: $hm:$hs — pressing at x=$EX for a region"
 
 traceB2="$OUT/logs/b2-assert.jsonl"

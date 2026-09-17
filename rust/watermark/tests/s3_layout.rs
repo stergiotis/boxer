@@ -22,8 +22,8 @@ fn cells_tile_active_area_without_overlap() {
     let mut cover = vec![0u8; aw * ah];
     for c in s.cells() {
         let (x0, y0) = s.cell_origin(c.col as u32, c.row as u32);
-        for y in y0..y0 + s.cell_px {
-            for x in x0..x0 + s.cell_px {
+        for y in y0..y0 + s.cell_px() {
+            for x in x0..x0 + s.cell_px() {
                 assert!((x as usize) < aw && (y as usize) < ah, "cell spills guard");
                 cover[y as usize * aw + x as usize] += 1;
             }
@@ -40,8 +40,8 @@ fn no_two_bits_of_one_word_are_neighbours() {
     // The burst-robustness property: 4-neighbours and diagonals of a data cell
     // must belong to a different Golay word.
     let s = TileSpec::default();
-    let cols = s.cols as i32;
-    let rows = s.rows as i32;
+    let cols = s.cols() as i32;
+    let rows = s.rows() as i32;
     let word_at = |col: i32, row: i32| -> Option<u8> {
         if col < 0 || row < 0 || col >= cols || row >= rows {
             return None;
@@ -89,8 +89,8 @@ fn worst_case_offset_exposes_exactly_one_tile() {
     assert_eq!(s.complete_tile_origins(w, h, 0.0, 0.0).len(), 4);
 
     // Worst case — half a period offset on each axis — yields exactly one tile.
-    let pworst_x = s.tile_w as f32 / 2.0;
-    let pworst_y = s.tile_h as f32 / 2.0;
+    let pworst_x = s.tile_w() as f32 / 2.0;
+    let pworst_y = s.tile_h() as f32 / 2.0;
     assert_eq!(s.complete_tile_origins(w, h, pworst_x, pworst_y).len(), 1);
 
     // Any nonzero phase on both axes gives a single complete tile at this window

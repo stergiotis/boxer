@@ -4,9 +4,11 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+use rand::{RngExt, SeedableRng};
 use watermark::codec::{ffmpeg_available, roundtrip, Codec};
-use watermark::decode::{decode_frame, recover_words};
+use watermark::decode::{decode_at_origins, decode_frame, recover_words};
 use watermark::fec::{encode_info, BITS_PER_WORD, N_WORDS};
+use watermark::image_io::ImageFrame;
 use watermark::render::encode_frame;
 use watermark::{Error, LumaFrame, Payload, TileSpec};
 
@@ -75,6 +77,9 @@ enum Cmd {
         codec: String,
         #[arg(long, default_value = "1280x720")]
         size: String,
+        /// Seed shared across contrast and codec arms.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
     },
 }
 
@@ -88,11 +93,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             delta,
             size,
         } => {
-            let spec = TileSpec::new(delta);
-            let base = load_or_synth(input.as_ref(), &size)?;
+            let spec = TileSpec::new(delta)?;
+            let image = input.as_ref().map(ImageFrame::load_png).transpose()?;
+            let base = match &image {
+                Some(i) => i.luma()?,
+                None => load_or_synth(None, &size)?,
+            };
             let p = parse_or_random(payload.as_deref())?;
-            let wm = encode_frame(&base, &p, &spec);
-            wm.save_png(&output)?;
+            let wm = encode_frame(&base, &p, &spec)?;
+            match image {
+                Some(i) => i.save_with_luma(&wm, &output)?,
+                None => wm.save_png(&output)?,
+            };
             println!("encoded payload {} -> {}", p.to_hex(), output.display());
             Ok(())
         }
@@ -119,41 +131,58 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             if !ffmpeg_available() {
                 return Err("ffmpeg not found on PATH".into());
             }
-            let spec = TileSpec::new(delta);
+            let spec = TileSpec::new(delta)?;
             let base = load_or_synth(input.as_ref(), &size)?;
             let p = parse_or_random(payload.as_deref())?;
-            let wm = encode_frame(&base, &p, &spec);
+            let wm = encode_frame(&base, &p, &spec)?;
             let truth = encode_info(&p.to_info_bits());
 
-            println!("payload {}  ({}x{} frame)", p.to_hex(), base.w, base.h);
-            println!("codec  crf  pre_golay_BER  single_tile_OK");
+            println!("payload {}  ({}x{} frame)", p.to_hex(), base.w(), base.h());
+            println!("codec  crf  pre_golay_BER  single_tile_OK  frame_OK  mean_abs_luma_change  max_abs_luma_change");
+            let (mean, max) = distortion(&base, &wm);
             for c in codecs(&codec)? {
                 let q = crf.unwrap_or_else(|| c.default_crf());
                 let dec = roundtrip(&wm, c, q)?;
-                let ber = single_tile_ber(&dec, &truth, &spec);
-                let ok = decode_frame(&dec, &spec).ok() == Some(p);
-                println!("{:5}  {q:3}  {ber:13.5}  {ok}", c.name());
+                let ber = single_tile_ber(&dec, &truth, &spec)?;
+                let (single, ok) = recovery(&dec, &p, &spec);
+                println!(
+                    "{:5}  {q:3}  {ber:13.5}  {single}  {ok}  {mean:.3}  {max:.3}",
+                    c.name()
+                );
             }
             Ok(())
         }
-        Cmd::Sweep { input, codec, size } => {
+        Cmd::Sweep {
+            input,
+            codec,
+            size,
+            seed,
+        } => {
             if !ffmpeg_available() {
                 return Err("ffmpeg not found on PATH".into());
             }
             let base = load_or_synth(input.as_ref(), &size)?;
-            println!("delta is the visibility knob; BER is single-tile pre-Golay.");
-            println!("codec  crf  delta  pre_golay_BER  OK");
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let p = Payload(rng.random());
+            println!(
+                "seed {seed} payload {}; delta is target contrast, not distortion",
+                p.to_hex()
+            );
+            println!("codec  crf  delta  pre_golay_BER  single_tile_OK  frame_OK  mean_abs_luma_change  max_abs_luma_change");
             for c in codecs(&codec)? {
                 let q = c.default_crf();
                 for delta in [2.0f32, 4.0, 6.0, 8.0, 10.0, 12.0, 16.0] {
-                    let spec = TileSpec::new(delta);
-                    let p = Payload(rand::random());
-                    let wm = encode_frame(&base, &p, &spec);
+                    let spec = TileSpec::new(delta)?;
+                    let wm = encode_frame(&base, &p, &spec)?;
                     let truth = encode_info(&p.to_info_bits());
                     let dec = roundtrip(&wm, c, q)?;
-                    let ber = single_tile_ber(&dec, &truth, &spec);
-                    let ok = decode_frame(&dec, &spec).ok() == Some(p);
-                    println!("{:5}  {q:3}  {delta:5.1}  {ber:13.5}  {ok}", c.name());
+                    let ber = single_tile_ber(&dec, &truth, &spec)?;
+                    let (single, ok) = recovery(&dec, &p, &spec);
+                    let (mean, max) = distortion(&base, &wm);
+                    println!(
+                        "{:5}  {q:3}  {delta:5.1}  {ber:13.5}  {single}  {ok}  {mean:.3}  {max:.3}",
+                        c.name()
+                    );
                 }
             }
             Ok(())
@@ -161,15 +190,15 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn single_tile_ber(dec: &LumaFrame, truth: &[u32; N_WORDS], spec: &TileSpec) -> f64 {
-    let rec = recover_words(dec, &[(0, 0)], spec);
+fn single_tile_ber(dec: &LumaFrame, truth: &[u32; N_WORDS], spec: &TileSpec) -> Result<f64, Error> {
+    let rec = recover_words(dec, &[(0, 0)], spec)?;
     let errs: u64 = rec
         .words
         .iter()
         .zip(truth.iter())
         .map(|(r, t)| (r ^ t).count_ones() as u64)
         .sum();
-    errs as f64 / (N_WORDS * BITS_PER_WORD) as f64
+    Ok(errs as f64 / (N_WORDS * BITS_PER_WORD) as f64)
 }
 
 fn load_or_synth(
@@ -180,7 +209,7 @@ fn load_or_synth(
         Some(p) => Ok(LumaFrame::load_png(p)?),
         None => {
             let (w, h) = parse_size(size)?;
-            Ok(LumaFrame::synthetic_natural(w, h, 1))
+            Ok(LumaFrame::synthetic_natural(w, h, 1)?)
         }
     }
 }
@@ -206,5 +235,54 @@ fn codecs(arg: &str) -> Result<Vec<Codec>, Box<dyn std::error::Error>> {
         Ok(vec![
             Codec::parse(arg).ok_or_else(|| format!("unknown codec '{arg}'"))?
         ])
+    }
+}
+
+fn distortion(base: &LumaFrame, marked: &LumaFrame) -> (f64, f32) {
+    let mut sum = 0.0;
+    let mut max = 0.0f32;
+    for (&a, &b) in base.pixels().iter().zip(marked.pixels()) {
+        let d = (a - b).abs();
+        sum += d as f64;
+        max = max.max(d);
+    }
+    (sum / base.pixels().len() as f64, max)
+}
+
+fn recovery(frame: &LumaFrame, payload: &Payload, spec: &TileSpec) -> (bool, bool) {
+    (
+        decode_at_origins(frame, &[(0, 0)], spec).ok() == Some(*payload),
+        decode_frame(frame, spec).ok() == Some(*payload),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn first_tile_failure_is_not_reported_as_single_tile_success() {
+        let s = TileSpec::default();
+        let p = Payload([9; 8]);
+        let base = LumaFrame::filled(928, 864, 128.0).unwrap();
+        let mut wm = encode_frame(&base, &p, &s).unwrap();
+        // Flip four data bits in one word of the first tile only. The other
+        // fifteen tiles still recover; single-tile correction must reject four.
+        for cell in s.cells().iter().filter(|c| {
+            matches!(
+                c.kind,
+                watermark::layout::CellKind::Data {
+                    word: 0,
+                    bit: 0..=3
+                }
+            )
+        }) {
+            let (x, y, n) = s.inner_rect(cell.col as u32, cell.row as u32);
+            for dy in 0..n {
+                for dx in 0..n {
+                    wm.set(x + dx, y + dy, 256.0 - wm.at(x + dx, y + dy));
+                }
+            }
+        }
+        assert_eq!(recovery(&wm, &p, &s), (false, true));
     }
 }

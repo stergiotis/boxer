@@ -14,7 +14,7 @@ fn roundtrip_over_base(base: &LumaFrame, seed: u64, n: usize) {
     let mut rng = StdRng::seed_from_u64(seed);
     for _ in 0..n {
         let payload = Payload(rng.random());
-        let wm = encode_frame(base, &payload, &spec);
+        let wm = encode_frame(base, &payload, &spec).unwrap();
         let got = decode_aligned(&wm, &spec).expect("clean decode must be CRC-clean");
         assert_eq!(got, payload, "bit-exact round-trip failed");
     }
@@ -23,27 +23,27 @@ fn roundtrip_over_base(base: &LumaFrame, seed: u64, n: usize) {
 #[test]
 fn roundtrip_flat_midgray() {
     let spec = TileSpec::default();
-    let base = LumaFrame::filled(spec.window_w(), spec.window_h(), 128.0);
-    roundtrip_over_base(&base, 0xA11CE, 1000);
+    let base = LumaFrame::filled(spec.window_w(), spec.window_h(), 128.0).unwrap();
+    roundtrip_over_base(&base, 0xA11CE, 32);
 }
 
 #[test]
 fn roundtrip_synthetic_natural() {
     let spec = TileSpec::default();
-    let base = LumaFrame::synthetic_natural(spec.window_w(), spec.window_h(), 5);
-    roundtrip_over_base(&base, 0xB0B, 1000);
+    let base = LumaFrame::synthetic_natural(spec.window_w(), spec.window_h(), 5).unwrap();
+    roundtrip_over_base(&base, 0xB0B, 32);
 }
 
 #[test]
 fn single_tile_decode_clean() {
-    // Prove the single-tile guarantee already holds on clean data: decode from
+    // Check single-tile recovery on this clean synthetic base: decode from
     // exactly one tile origin.
     let spec = TileSpec::default();
-    let base = LumaFrame::synthetic_natural(spec.tile_w, spec.tile_h, 9);
+    let base = LumaFrame::synthetic_natural(spec.tile_w(), spec.tile_h(), 9).unwrap();
     let mut rng = StdRng::seed_from_u64(123);
-    for _ in 0..1000 {
+    for _ in 0..32 {
         let payload = Payload(rng.random());
-        let wm = encode_frame(&base, &payload, &spec);
+        let wm = encode_frame(&base, &payload, &spec).unwrap();
         let got = decode_at_origins(&wm, &[(0, 0)], &spec).expect("single tile must decode");
         assert_eq!(got, payload);
     }

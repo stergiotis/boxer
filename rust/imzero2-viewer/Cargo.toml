@@ -1,0 +1,39 @@
+[package]
+name = "imzero2-viewer"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.96"
+license = "MIT OR Apache-2.0"
+description = "Native Windows viewer for the imzero2 WebSocket protocol"
+
+[dependencies]
+anyhow = "1"
+prost = "0.13"
+futures-util = { version = "0.3", features = ["sink"] }
+tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros"] }
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+url = "2"
+
+[build-dependencies]
+protox = "0.7"
+prost-build = "0.13"
+bindgen = "0.72"
+
+[target.'cfg(windows)'.dependencies]
+ffmpeg-sys-next = { version = "8", default-features = false, features = ["avcodec"] }
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D_Fxc",
+  "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common",
+  "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_LibraryLoader",
+  "Win32_System_Memory", "Win32_System_DataExchange", "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_HiDpi", "Win32_UI_Controls", "Win32_Security"
+] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
