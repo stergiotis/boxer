@@ -314,6 +314,20 @@ func (inst *PlayApp) renderGlossColumns(schema *arrow.Schema) {
 		for rt := range c.RichTextLabel("spec: " + gc.specLine) {
 			rt.Small().Weak().Monospace()
 		}
+		// A companion outranks everything above, per row (ADR-0245 §SD2);
+		// and a companion is itself a column of this list.
+		if st := inst.rowGlossSync(schema); st != nil {
+			if comp, ok := st.companionOf[i]; ok {
+				for rt := range c.RichTextLabel("row values: `" + schema.Field(comp).Name + "` names this column's gloss per row, and wins where it does") {
+					rt.Small().Weak()
+				}
+			}
+			if _, isCompanion := st.companions[i]; isCompanion {
+				for rt := range c.RichTextLabel("a `" + rowGlossSuffix + "` companion: its values are media types, not data") {
+					rt.Small().Weak()
+				}
+			}
+		}
 		if len(gc.shadowed) > 0 {
 			for rt := range c.RichTextLabel("shadowed: " + glossShadowedLine(gc.shadowed)) {
 				rt.Small().Weak()

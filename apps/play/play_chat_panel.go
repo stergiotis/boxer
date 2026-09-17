@@ -818,16 +818,19 @@ func chatStatusOf(s string) chatview.StatusE {
 func (inst *ChatDriver) bubbleBlock(app *PlayApp, rec arrow.RecordBatch, schema *arrow.Schema, cols []glossColumn, k chatClaim, ord int) (chatview.Block, bool) {
 	row := inst.rows[ord]
 	var parts []func()
-	if k.bodyCol < len(cols) && cardBlockFace(&cols[k.bodyCol]) {
-		if part, ok := inst.blockPart(app, rec, schema, &cols[k.bodyCol], k.bodyCol, row, ord, ""); ok {
+	// Each cell resolves through its row value where a `<label>_gloss`
+	// companion names one (ADR-0245 §SD2): the answer to a transcript whose
+	// attachments are of several kinds.
+	if body := app.rowGloss(rec, cols, k.bodyCol, row); body != nil && cardBlockFace(body) {
+		if part, ok := inst.blockPart(app, rec, schema, body, k.bodyCol, row, ord, ""); ok {
 			parts = append(parts, part)
 		}
 	}
 	for _, ci := range k.extraCols {
-		if ci >= len(cols) || rec.Column(ci).IsNull(int(row)) {
+		if ci >= len(cols) || rec.Column(ci).IsNull(int(row)) || app.isRowGlossCompanion(schema, ci) {
 			continue
 		}
-		gc := &cols[ci]
+		gc := app.rowGloss(rec, cols, ci, row)
 		caption := shortColumnLabel(schema.Field(ci).Name)
 		if gc.label != "" {
 			caption = gc.label

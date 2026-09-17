@@ -133,6 +133,7 @@ const (
 	dockTabFiles       uint64 = 29
 	dockTabGraphview   uint64 = 30
 	dockTabChat        uint64 = 31
+	dockTabCards       uint64 = 32
 )
 
 type PlayApp struct {
@@ -452,6 +453,19 @@ type PlayApp struct {
 	// shape as the board — a PanelI observer of the active result with two
 	// optional CTE channels on their own lanes.
 	chatDriver *ChatDriver
+	// cardgridDriver is the ADR-0245 card-grid panel (Cards dock tab): a
+	// plain observer of the active result — no lane, nothing to Close.
+	cardgridDriver *CardGridDriver
+	// audio is the one recording play is playing (ADR-0245 §SD6), shared by
+	// every pane; frameResult is the result the frame is drawing, which a
+	// session is tied to. audioNoDevice keeps a session on the device-less
+	// clock — tests and scripted scenes.
+	// rowGlossSt is the row-value gloss resolution of the result on screen
+	// (ADR-0245 §SD2), shared by the grids, Detail and Chat.
+	rowGlossSt    rowGlossState
+	audio         *audioSession
+	frameResult   ResultID
+	audioNoDevice bool
 
 	// netSource is the pair of lanes the graph contract is fed from — the
 	// `edges` and `vertices` CTEs of the user's query — SHARED by the two graph
@@ -522,6 +536,10 @@ type PlayApp struct {
 	fixtures     *fixtureState
 	fixtureSpec  fixtureSpec
 	fixturesSeen uint64
+	// cardFixtures is the Cards pane's sample data (ADR-0245 §SD7): the same
+	// publish-and-get-out-of-the-way shape, over `fixture_cards`.
+	cardFixtures     *cardgridFixtureState
+	cardFixturesSeen uint64
 	// projPublish publishes a projection run as ad-hoc datasets (ADR-0238
 	// update); inert without the bus, like the fixture lab.
 	projPublish     *projectionPublishState
@@ -1125,6 +1143,13 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
 	inst.chatDriver = NewChatDriver(mk(), client)
+	// The Cards pane has a pager of its own, and a pager derives the same ids
+	// from whatever stack it is given — so beside the Table's it needs a
+	// stack salted differently, or the two collide silently and one of them
+	// stops hearing its clicks.
+	cardgridPagerIds := mk()
+	cardgridPagerIds.SetBaseSalt(salt ^ cardgridPagerSalt)
+	inst.cardgridDriver = NewCardGridDriver(mk(), cardgridPagerIds, inst.glossCatalog())
 	inst.netSource = newNetworkSource(client)
 	inst.networkDriver = NewNetworkDriver(mk(), inst.netSource)
 	inst.graphviewDriver = NewGraphviewDriver(mk(), inst.netSource)
@@ -1142,6 +1167,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
 	inst.fixtures = newFixtureState()
+	inst.cardFixtures = newCardgridFixtureState()
 	inst.projPublish = newProjectionPublishState()
 	inst.flow = newFlowDriver(mk(), client)
 	inst.richCells = newRichCellCache(mk())
@@ -1213,6 +1239,7 @@ func (inst *PlayApp) Close() {
 		inst.kanbanDriver.lanesLane.close()
 	}
 	inst.chatDriver.close()
+	inst.audioStop()
 	inst.netSource.close()
 	if inst.sankeyDriver != nil {
 		if inst.sankeyDriver.flowsLane != nil {
@@ -1521,6 +1548,7 @@ func (inst *PlayApp) render() error {
 			// reorder over the body zone, and every tab body renders from
 			// the same per-frame view. First Render freezes the set (D4).
 			inst.tabs.freeze()
+			inst.audioFollowResult(resultID)
 			frame := TabFrame{
 				Rec: rec, Schema: schema, NumRows: numRows,
 				Loading: loading, Elapsed: elapsed, Summary: summary,
@@ -3550,8 +3578,11 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 				// ADR-0186: the cell text is the column's gloss inline face when
 				// one resolves (and the raw toggle is off), else formatCell; a
 				// gloss/url cell is a hyperlink to its value.
-				text, tone := inst.glossCell(&glossCols[arrowCol], rec.Column(arrowCol), absRow, false)
-				link := inst.glossLink(&glossCols[arrowCol], rec.Column(arrowCol), absRow)
+				// A `<label>_gloss` companion may name this row's gloss
+				// (ADR-0245 §SD2); without one this is the column's own.
+				cellGloss := inst.rowGloss(rec, glossCols, arrowCol, absRow)
+				text, tone := inst.glossCell(cellGloss, rec.Column(arrowCol), absRow, false)
+				link := inst.glossLink(cellGloss, rec.Column(arrowCol), absRow)
 				if refit {
 					// The untruncated re-fit cell must not size a column to a
 					// paragraph: cut what egui measures at the runes that fit
@@ -3693,7 +3724,7 @@ func (inst *PlayApp) ensureColWidths(rec arrow.RecordBatch, schema *arrow.Schema
 			maxChars += 1 + utf8.RuneCountInString(gc.mediaType)
 		}
 		for r := range sampleN {
-			text, _ := inst.glossCell(gc, rec.Column(col), pageStart+r, false)
+			text, _ := inst.glossCell(inst.rowGloss(rec, glossCols, col, pageStart+r), rec.Column(col), pageStart+r, false)
 			if n := utf8.RuneCountInString(text); n > maxChars {
 				maxChars = n
 			}

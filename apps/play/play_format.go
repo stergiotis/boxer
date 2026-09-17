@@ -1,8 +1,13 @@
 package play
 
 import (
+	"unicode/utf8"
+
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/dustin/go-humanize"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
+	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
 // formatCell turns (col, row) of a RecordBatch into a display string.
@@ -20,6 +25,52 @@ func formatCell(rec arrow.RecordBatch, col int, row int64) string {
 // per-DB-row cell.
 func formatArrayElem(arr arrow.Array, row int64) string {
 	return gloss.FormatArrowElem(arr, row)
+}
+
+// displayCellMaxBytes bounds the text a one-line display cell is built from.
+const displayCellMaxBytes = 1 << 10
+
+// formatDisplayCell is formatArrayElem for a cell that shows ONE LINE and
+// truncates it: both Table grids, and the ad-hoc Detail pane's plain rows.
+//
+// Those paths run per visible cell per frame with no cache behind them, and
+// a ClickHouse String is byte-arbitrary — a stored image or recording arrives
+// as an Arrow String as readily as a Binary. Formatting one whole means
+// validating and copying it, every frame, to show its first few dozen
+// characters: a page of recordings measured at a hundred megabytes of garbage
+// a second (ADR-0245, found while implementing). So a long text or bytes
+// value is read by its head, and the cell says how much there was.
+//
+// Everything else — and every value under the bound — formats exactly as
+// formatArrayElem does, so sorting, selection keys and the glosses, which
+// read the value itself, are untouched.
+func formatDisplayCell(arr arrow.Array, row int64) string {
+	if row < 0 || int(row) >= arr.Len() || arr.IsNull(int(row)) {
+		return formatArrayElem(arr, row)
+	}
+	var v string
+	switch a := arr.(type) {
+	case *array.String:
+		v = a.Value(int(row))
+	case *array.LargeString:
+		v = a.Value(int(row))
+	default:
+		return formatArrayElem(arr, row)
+	}
+	if len(v) <= displayCellMaxBytes {
+		return utfsafe.EnsureUTF8(v)
+	}
+	head := v[:displayCellMaxBytes]
+	// Do not cut a rune in half: back off to the last rune start.
+	for i := len(head) - 1; i >= len(head)-utf8.UTFMax && i >= 0; i-- {
+		if utf8.RuneStart(head[i]) {
+			if !utf8.FullRuneInString(head[i:]) {
+				head = head[:i]
+			}
+			break
+		}
+	}
+	return utfsafe.EnsureUTF8(head) + "… (" + humanize.IBytes(uint64(len(v))) + ")"
 }
 
 // stringLikeArrowType reports whether values of this Arrow type render as free

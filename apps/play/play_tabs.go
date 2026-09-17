@@ -389,6 +389,10 @@ var builtinTabDefs = []builtinTabDef{
 	// named-column contract like the board's, with two optional CTEs.
 	{id: "chat", dockID: dockTabChat, title: "Chat", lazy: true, shapeContract: true,
 		writes: []SignalID{signalSelection}},
+	// The Cards tab draws the result as a paged grid of cards (ADR-0245):
+	// `card_*` slot columns, every other column a fact, glosses per row.
+	{id: "cards", dockID: dockTabCards, title: "Cards", lazy: true, shapeContract: true,
+		writes: []SignalID{signalSelection}},
 	// The Network tab draws the result as a node-link graph (ADR-0129). Its
 	// title is deliberately not "Graph" — that is the dataflow chrome below.
 	// It publishes the clicked vertex id as `selection_key` (a value); the
@@ -644,6 +648,9 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 		case "chat":
 			spec.Panel = chatPanel{app: inst}
 			spec.Render = func(f *TabFrame) { inst.renderChatTab(f.Rec, f.Schema, f.Loading, f.Err, f.Result) }
+		case "cards":
+			spec.Panel = cardgridPanel{app: inst}
+			spec.Render = func(f *TabFrame) { inst.renderCardgridTab(f.Rec, f.Schema, f.Loading, f.Err, f.Result) }
 		case "network":
 			// The panel reads its two named CTEs off the split (not the active
 			// result), so the body ignores the frame; scrollTab mirrors the

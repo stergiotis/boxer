@@ -118,7 +118,7 @@ func hasBlockFace(mediaType string) bool {
 		gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
 		return true
 	}
-	return false
+	return gloss.IsWAVMediaType(mediaType)
 }
 
 // isImageType reports the media types whose block face is a decoded image.
@@ -167,6 +167,9 @@ type richEntry struct {
 	heightPx uint32
 	text     string
 	reason   string
+	// audio is a recording, reduced (ADR-0245 §SD6); its face is drawn by
+	// the app, which owns the now-playing session, not by renderBody.
+	audio *audioArtifact
 }
 
 // richCellCache memoises the artifacts for the columns of ONE row.
@@ -271,6 +274,12 @@ func buildRichEntry(d gloss.Declaration, raw string) *richEntry {
 	}
 	mt := mediaTypeOnly(d.MediaType)
 	isImage := mt == gloss.MediaTypePNG || mt == gloss.MediaTypeJPEG || mt == gloss.MediaTypeGIF
+	if gloss.IsWAVMediaType(mt) {
+		// Bounded by its own limit, not the text one: a recording is bytes.
+		e.audio = buildAudioArtifact(raw)
+		e.reason = e.audio.reason
+		return e
+	}
 	if !isImage && len(raw) > richMaxTextBytes {
 		e.reason = fmt.Sprintf("%s is over the %s inline limit",
 			humanize.IBytes(uint64(len(raw))), humanize.IBytes(richMaxTextBytes))
@@ -433,6 +442,12 @@ func (inst *PlayApp) renderRichCell(col int, d gloss.Declaration, cell gloss.Arr
 			for rt := range c.RichTextLabel(e.reason) {
 				rt.Small().Weak()
 			}
+			return
+		}
+		if e.audio != nil {
+			row := inst.richCells.forRow
+			inst.renderAudioFace(inst.richCells.ids, "play-detail-audio-"+key.String(), audioKey("detail", col, row, 0),
+				e.audio, audioFaceWidth, audioDetailHeight, func() string { r, _ := cell.Raw(); return r })
 			return
 		}
 		inst.richCells.renderBody(key, d, e)
@@ -726,6 +741,14 @@ func (inst *PlayApp) glossBlock(cache *richCellCache, prefix string, gc *glossCo
 	}
 	mt := gc.mediaType
 	scope := "play-" + prefix + "-block-" + key.String()
+	if e.audio != nil {
+		// text is the caller's for the frame, and the face reads it only
+		// inside this frame's Render, when the user starts the recording.
+		akey := audioKey(prefix, key.col, int64(cache.generation), key.ord)
+		return leewaywidgets.CellBlock{Height: audioDetailHeight + cardBlockPad, Render: func() {
+			inst.renderAudioFace(cache.ids, scope, akey, e.audio, audioFaceWidth, audioDetailHeight, func() string { return text })
+		}}
+	}
 	if isImageType(mt) {
 		return leewaywidgets.CellBlock{Height: float32(min(e.heightPx, cardImageMaxH)) + cardBlockPad, Render: func() {
 			for range c.PushId(cache.ids.PrepareStr(scope)).KeepIter() {

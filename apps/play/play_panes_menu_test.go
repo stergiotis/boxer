@@ -36,7 +36,7 @@ func TestPaneMenuGroups(t *testing.T) {
 	for _, r := range shows {
 		showIDs = append(showIDs, r.TabID)
 	}
-	assert.Equal(t, []string{"table", "projection", "timeline", "world", "kanban", "chat", "network", "graphview",
+	assert.Equal(t, []string{"table", "projection", "timeline", "world", "kanban", "chat", "cards", "network", "graphview",
 		"sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"},
 		showIDs, "one row per PanelI-bearing tab, in strip order")
 

@@ -297,7 +297,9 @@ func (inst *PlayApp) renderDetailSection(rec arrow.RecordBatch, schema *arrow.Sc
 		// A glossed column — declared by alias or bound by a rule — renders
 		// through its gloss: a block face when the pane binds one, else the
 		// inline face; a declaration that could not be honoured says why.
-		if d, glossed := glossCols[i].declaration(shortColumnLabel(name)); glossed && !inst.tableOpts.rawCells {
+		// The row's own gloss where a `<label>_gloss` companion names one
+		// (ADR-0245 §SD2), so a selected card reads here as it does there.
+		if d, glossed := inst.rowGloss(rec, glossCols, i, row).declaration(shortColumnLabel(name)); glossed && !inst.tableOpts.rawCells {
 			raw, ok := cellRaw(rec, i, row)
 			if !ok || raw == "" {
 				continue
@@ -306,7 +308,8 @@ func (inst *PlayApp) renderDetailSection(rec arrow.RecordBatch, schema *arrow.Sc
 			inst.renderRichCell(i, d, gloss.ArrowCell{Arr: rec.Column(i), Row: int(row)})
 			continue
 		}
-		val := formatCell(rec, i, row)
+		// One truncated line: read by its head (formatDisplayCell).
+		val := formatDisplayCell(rec.Column(i), row)
 		if val == "" || val == "[len=0]" {
 			continue
 		}

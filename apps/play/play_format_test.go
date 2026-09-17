@@ -1,12 +1,14 @@
 package play
 
 import (
+	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stretchr/testify/assert"
 )
 
 // recOfColumn wraps a single Arrow array in a one-column record batch.
@@ -187,4 +189,35 @@ func TestShortArrowTypeNeverWidensTheHeader(t *testing.T) {
 			t.Errorf("shortArrowType(%s) = %q is wider than the full type it replaces", dt, short)
 		}
 	}
+}
+
+// A one-line display cell is read by its head: the grids build this per
+// visible cell per frame, and a stored recording arrives as an Arrow String
+// as readily as a Binary (ADR-0245).
+func TestFormatDisplayCellBoundsLongValues(t *testing.T) {
+	alloc := memory.NewGoAllocator()
+	b := array.NewStringBuilder(alloc)
+	defer b.Release()
+	b.Append("short")
+	b.Append(strings.Repeat("x", displayCellMaxBytes))
+	b.Append(strings.Repeat("ä", displayCellMaxBytes)) // 2 bytes each: the cut lands mid-rune
+	b.Append(strings.Repeat("\xff", 1<<20))
+	b.AppendNull()
+	arr := b.NewArray()
+	defer arr.Release()
+
+	assert.Equal(t, "short", formatDisplayCell(arr, 0))
+	assert.Equal(t, strings.Repeat("x", displayCellMaxBytes), formatDisplayCell(arr, 1), "at the bound: whole")
+	cut := formatDisplayCell(arr, 2)
+	assert.True(t, utf8.ValidString(cut), "never half a rune")
+	assert.True(t, strings.HasSuffix(cut, "… (2.0 KiB)"), cut[len(cut)-20:])
+	blob := formatDisplayCell(arr, 3)
+	assert.True(t, utf8.ValidString(blob))
+	assert.True(t, strings.HasSuffix(blob, "… (1.0 MiB)"))
+	assert.Less(t, len(blob), 4*displayCellMaxBytes)
+	assert.Equal(t, "", formatDisplayCell(arr, 4))
+	assert.Equal(t, formatArrayElem(arr, 0), formatDisplayCell(arr, 0))
+
+	allocs := testing.AllocsPerRun(20, func() { _ = formatDisplayCell(arr, 3) })
+	assert.Less(t, allocs, float64(8))
 }

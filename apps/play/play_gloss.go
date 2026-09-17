@@ -249,7 +249,12 @@ func (inst *PlayApp) glossCell(gc *glossColumn, arr arrow.Array, row int64, elem
 		}
 	}
 	if !ok {
-		return gloss.FormatArrowElem(arr, row), gloss.ToneNeutral
+		// A row value that does not bind keeps the cell plain and marks it:
+		// the header's hover speaks for the column, not for one row of it.
+		if gc.fromRowValue() && !inst.tableOpts.rawCells && (gc.reason != "" || !gc.rowOK) {
+			return formatDisplayCell(arr, row), gloss.ToneWarning
+		}
+		return formatDisplayCell(arr, row), gloss.ToneNeutral
 	}
 	cell := gloss.ArrowCell{Arr: arr, Row: int(row)}
 	if cell.IsNull() {
@@ -372,7 +377,7 @@ func (inst *PlayApp) renderGlossControl(schema *arrow.Schema) {
 // and instance, or the reason nothing renders. ok is false for a plain
 // column.
 func (inst *glossColumn) declaration(caption string) (d gloss.Declaration, ok bool) {
-	if inst.mediaType == "" {
+	if inst == nil || inst.mediaType == "" {
 		return d, false
 	}
 	if inst.label != "" {
