@@ -111,6 +111,24 @@ func (inst *Pager) GoToLast() {
 	inst.lastSentJumpValue = 0
 }
 
+// GoToIndex jumps to the page holding item index i — how a host makes the
+// page follow a selection that moved elsewhere. Out-of-range indices clamp.
+// Seeds the jump databinding for the reason GoToLast does. Reports whether
+// the page changed.
+func (inst *Pager) GoToIndex(i int64) (changed bool) {
+	if inst.pageSize <= 0 {
+		return false
+	}
+	page := min(max(i, 0)/inst.pageSize, inst.NumPages()-1)
+	if page == inst.currentPage {
+		return false
+	}
+	inst.currentPage = page
+	inst.jumpValue = uint64(page + 1)
+	inst.lastSentJumpValue = 0
+	return true
+}
+
 // Range returns [start, end) indices for the current page, clamped to total.
 func (inst *Pager) Range() (start, end int64) {
 	start = inst.currentPage * inst.pageSize
