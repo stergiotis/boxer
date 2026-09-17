@@ -141,7 +141,9 @@ func contentFamily() []GlossI {
 	image := func(mt, doc string) GlossI {
 		return &simpleGloss{mediaType: mt, doc: doc, params: encoding, accepts: textLike, inline: imageFace(mt), refuseParam: ParamEncoding}
 	}
-	return []GlossI{
+	// The WAVE spellings (ADR-0245 §SD6) come last of all, for the same
+	// reason `application/cbor` follows ADR-0123's eight.
+	return append([]GlossI{
 		text(MediaTypeMarkdown, "rendered markdown (block); first line (inline)", nil),
 		text(MediaTypePlain, "wrapped, untruncated text (block); first line (inline)", nil),
 		text(MediaTypeJSON, "pretty-printed, highlighted JSON (block); first line (inline)",
@@ -154,5 +156,5 @@ func contentFamily() []GlossI {
 		// Past ADR-0123's eight, so it registers after them and the pinned
 		// prefix of the default order does not move.
 		&cborGloss{},
-	}
+	}, wavFamily()...)
 }

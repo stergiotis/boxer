@@ -158,7 +158,7 @@ func TestDefaultOrderPresentation(t *testing.T) {
 		MediaTypeTemperature, MediaTypeLength, MediaTypeVelocity, MediaTypePlaneAngle, MediaTypeCoordinate,
 		MediaTypeEpoch, MediaTypeDuration,
 		MediaTypeBytes, MediaTypeTaggedId, MediaTypeLuhn, MediaTypeMasked, MediaTypeURL, MediaTypeIPAddr, MediaTypeRegexp, MediaTypeRaw,
-	}, order[9:])
+	}, order[13:]) // past the content family: ADR-0123's eight, application/cbor, the four WAVE spellings
 }
 
 // AcceptedKinds is the catalog listing's "accepts:" line: probed once per
