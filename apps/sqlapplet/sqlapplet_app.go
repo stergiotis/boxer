@@ -34,7 +34,7 @@ var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "
 // cannot prune it and it rides along on every applet. TestTabPolicyCoversEveryRegisteredTab
 // pins that, because the failure is silent: a new panel in play just quietly
 // appears in every applet window.
-var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "network", "graphview", "sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"}
+var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "chat", "cards", "network", "graphview", "sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"}
 
 // autoOffResultTabIDs are result panels `tabs: auto` does NOT show. They are
 // still listable — an applet that names one in `tabs:` gets it — so this is a
