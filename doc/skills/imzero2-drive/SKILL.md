@@ -63,6 +63,12 @@ Filters, all optional: `--treeText` (name or value contains, case ignored),
 out. The header says `nodes=200 of 640` when the limit cut the list — narrow
 the filter rather than reading a partial scene as the whole one.
 
+A script that parses the dump wants `--treeFormat jsonl` instead: one JSON
+object per node (`id`, `role`, `name`, `value`, `cx`, `cy`, `x`, `y`, `w`, `h`,
+`flags`, `depth`), nothing clipped or rounded, no header, and no limit unless
+one is given. The lines format is for reading and may change shape; the JSONL
+fields are the ones to build on.
+
 ## Steps
 
 One JSON object per step. The anchor fields are `id`, `name`, `contains` (name

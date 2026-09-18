@@ -124,3 +124,23 @@ func TestFormatNodeQuotesAsJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(quoted), &back))
 	assert.Equal(t, name, back)
 }
+
+func TestWriteTreeJSONLIsOneUnclippedObjectPerNode(t *testing.T) {
+	long := strings.Repeat("x", maxTreeText+50)
+	n := &TreeNode{Id: 1<<63 + 5, Role: "label", Value: long, X: 10, Y: 20, W: 5, H: 5}
+	var buf bytes.Buffer
+	require.NoError(t, WriteTreeJSONL(&buf, SelectNodes(&TreeSnapshot{Nodes: []*TreeNode{n}}, TreeFilter{})))
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	require.Len(t, lines, 1)
+	var got struct {
+		ID    uint64  `json:"id"`
+		Role  string  `json:"role"`
+		Value string  `json:"value"`
+		CX    float32 `json:"cx"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &got))
+	assert.Equal(t, uint64(1<<63+5), got.ID)
+	assert.Equal(t, "label", got.Role)
+	assert.Equal(t, long, got.Value)
+	assert.InDelta(t, 12.5, got.CX, 1e-6)
+}

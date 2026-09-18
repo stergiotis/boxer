@@ -173,13 +173,13 @@ rc=${PIPESTATUS[0]}
 ((rc == 0)) || { log "FAIL — could not reach the demo; see $OUT/logs/drive-a.log"; exit "$rc"; }
 
 # --- locate the canvas from the tree -----------------------------------------
-drive "" --dumpTree >"$OUT/logs/tree.txt" 2>&1 || die "tree dump failed"
+drive "" --dumpTree --treeFormat jsonl >"$OUT/logs/tree.jsonl" 2>"$OUT/logs/tree.log" || die "tree dump failed"
 node_xy() { # node_xy <grep pattern> → "cx cy"
-	grep -F "$1" "$OUT/logs/tree.txt" | head -1 |
-		sed -n 's/.* cx=\([0-9.]*\) cy=\([0-9.]*\) .*/\1 \2/p'
+	grep -F "$1" "$OUT/logs/tree.jsonl" | head -1 |
+		sed -n 's/.*"cx":\([0-9.]*\),"cy":\([0-9.]*\),.*/\1 \2/p'
 }
-read -r bx by < <(node_xy 'name="10 ms/px"')
-read -r px py < <(node_xy 'value="position: 0:00.000 · paused"')
+read -r bx by < <(node_xy '"name":"10 ms/px"')
+read -r px py < <(node_xy '"value":"position: 0:00.000 · paused"')
 [[ -n "${by:-}" && -n "${py:-}" ]] || die "could not locate the button row and the readout in the tree dump"
 # The canvas is the 220 px strip between the button row and the first readout
 # line; its midpoint is inside it regardless of the row heights around it.
@@ -222,8 +222,8 @@ rc=${PIPESTATUS[0]}
 # for the edit starts where the middle of the next burst is.
 printf '%s\n' "{\"do\":\"hover\",\"x\":$CX,\"y\":$CY,\"settleMs\":300}" >"$OUT/logs/b-hover.jsonl"
 drive "$OUT/logs/b-hover.jsonl" >"$OUT/logs/drive-b-hover.log" 2>&1 || die "hover for the measurement failed"
-drive "" --dumpTree >"$OUT/logs/tree-b.txt" 2>&1 || die "tree dump failed"
-hover_t=$(grep -F 'value="hover: ' "$OUT/logs/tree-b.txt" | head -1 | sed -n 's/.*value="hover: \([0-9]*\):\([0-9.]*\)".*/\1 \2/p')
+drive "" --dumpTree --treeFormat jsonl --treeText 'hover: ' >"$OUT/logs/tree-b.jsonl" 2>"$OUT/logs/tree-b.log" || die "tree dump failed"
+hover_t=$(grep -F '"value":"hover: ' "$OUT/logs/tree-b.jsonl" | head -1 | sed -n 's/.*"value":"hover: \([0-9]*\):\([0-9.]*\)".*/\1 \2/p')
 [[ -n "$hover_t" ]] || die "no hover readout after the measurement hover"
 read -r hm hs <<<"$hover_t"
 EX=$("$TOOL" dev waveform-scene region-press \

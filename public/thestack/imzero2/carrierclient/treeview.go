@@ -1,12 +1,15 @@
 package carrierclient
 
 import (
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf16"
+
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // treeview.go renders a tree snapshot for a reader that pays per character —
@@ -245,4 +248,44 @@ func WriteTree(w io.Writer, view TreeView) (err error) {
 	}
 	_, err = io.WriteString(w, b.String())
 	return err
+}
+
+// nodeRecord is one line of [WriteTreeJSONL]. Field names are the ones a step
+// uses where the two overlap.
+type nodeRecord struct {
+	ID    uint64  `json:"id"`
+	Role  string  `json:"role"`
+	Name  string  `json:"name"`
+	Value string  `json:"value"`
+	CX    float32 `json:"cx"`
+	CY    float32 `json:"cy"`
+	X     float32 `json:"x"`
+	Y     float32 `json:"y"`
+	W     float32 `json:"w"`
+	H     float32 `json:"h"`
+	Flags uint32  `json:"flags"`
+	Depth int     `json:"depth"`
+}
+
+// WriteTreeJSONL prints a view as one JSON object per node, for a program
+// rather than a reader: nothing is clipped or rounded, and there is no header
+// line to skip. The id is a JSON number, as a step takes it, and exceeds 2^53
+// — decode it into a uint64, not a float.
+func WriteTreeJSONL(w io.Writer, view TreeView) (err error) {
+	for i, n := range view.Nodes {
+		cx, cy := Center(n)
+		var b []byte
+		b, err = json.Marshal(nodeRecord{
+			ID: n.GetId(), Role: n.GetRole(), Name: n.GetName(), Value: n.GetValue(),
+			CX: cx, CY: cy, X: n.GetX(), Y: n.GetY(), W: n.GetW(), H: n.GetH(),
+			Flags: n.GetFlags(), Depth: view.Depth[i],
+		})
+		if err != nil {
+			return eh.Errorf("unable to encode a tree node: %w", err)
+		}
+		if _, err = w.Write(append(b, '\n')); err != nil {
+			return err
+		}
+	}
+	return nil
 }

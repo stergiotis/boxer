@@ -143,9 +143,10 @@ drive() { # drive <trace file>
 # `portolan-cam read` turns one accessibility-tree dump into one reading.
 r() { printf '%s' "$OUT/logs/$1.json"; }
 snapshot() { # snapshot <name>  → $OUT/logs/<name>.json
-	# The node lines are log output, so they arrive on stderr.
-	timeout 60 "$MAIN_GO" imzero2 drive --url "ws://127.0.0.1:$PORT/" --dumpTree \
-		>"$OUT/logs/$1.tree.jsonl" 2>&1
+	# One JSON object per label on stdout; the driver's log goes to stderr.
+	timeout 60 "$MAIN_GO" imzero2 drive --url "ws://127.0.0.1:$PORT/" \
+		--dumpTree --treeFormat jsonl --treeRole label \
+		>"$OUT/logs/$1.tree.jsonl" 2>>"$OUT/logs/drive.log"
 	"$TOOL" dev portolan-cam read "$OUT/logs/$1.tree.jsonl" >"$(r "$1")" ||
 		die "cannot read the camera ($1) — see $OUT/logs/$1.tree.jsonl"
 }

@@ -9,6 +9,7 @@
 package drivecmd
 
 import (
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ const (
 	flagTreeUnder  = "treeUnder"
 	flagTreeLimit  = "treeLimit"
 	flagTreeHidden = "treeHidden"
+	flagTreeFormat = "treeFormat"
 )
 
 // NewCommand builds the `drive` subcommand.
@@ -123,6 +125,11 @@ func NewCommand() *cli.Command {
 				Value: carrierclient.DefaultTreeLimit,
 				Usage: "--" + flagDumpTree + ": print at most this many nodes",
 			},
+			&cli.StringFlag{
+				Name:  flagTreeFormat,
+				Value: treeFormatLines,
+				Usage: "--" + flagDumpTree + ": '" + treeFormatLines + "' for a reader, '" + treeFormatJSONL + "' for a program (one object per node, nothing clipped)",
+			},
 			&cli.BoolFlag{
 				Name:  flagTreeHidden,
 				Usage: "--" + flagDumpTree + ": include nodes that are laid out but not on screen",
@@ -137,7 +144,16 @@ func NewCommand() *cli.Command {
 	}
 }
 
+const (
+	treeFormatLines = "lines"
+	treeFormatJSONL = "jsonl"
+)
+
 func run(ctx *cli.Context) (err error) {
+	treeFormat := ctx.String(flagTreeFormat)
+	if treeFormat != treeFormatLines && treeFormat != treeFormatJSONL {
+		return eb.Build().Str("format", treeFormat).Errorf("unknown --" + flagTreeFormat)
+	}
 	tracePath := ctx.Path(flagTrace)
 	dumpTree := ctx.Bool(flagDumpTree)
 	inline := ctx.StringSlice(flagStep)
@@ -209,11 +225,22 @@ func run(ctx *cli.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	return carrierclient.WriteTree(ctx.App.Writer, carrierclient.SelectNodes(snap, carrierclient.TreeFilter{
+	limit := ctx.Int(flagTreeLimit)
+	if treeFormat == treeFormatJSONL && !ctx.IsSet(flagTreeLimit) {
+		// The lines format says so in its header when the limit cut the list;
+		// JSONL has no header, and a program reading a silently shortened list
+		// would take it for the scene. Unbounded unless the caller bounds it.
+		limit = math.MaxInt
+	}
+	view := carrierclient.SelectNodes(snap, carrierclient.TreeFilter{
 		Under:  ctx.Uint64(flagTreeUnder),
 		Text:   ctx.String(flagTreeText),
 		Role:   ctx.String(flagTreeRole),
 		Hidden: ctx.Bool(flagTreeHidden),
-		Limit:  ctx.Int(flagTreeLimit),
-	}))
+		Limit:  limit,
+	})
+	if treeFormat == treeFormatJSONL {
+		return carrierclient.WriteTreeJSONL(ctx.App.Writer, view)
+	}
+	return carrierclient.WriteTree(ctx.App.Writer, view)
 }

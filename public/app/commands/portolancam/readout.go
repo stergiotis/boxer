@@ -44,9 +44,10 @@ var (
 	reshipRe = regexp.MustCompile(`re-ships (\d+)`)
 )
 
-// node is the subset of a dumped accessibility node this reads. The dump
-// interleaves log lines with JSON objects, so anything that does not parse as
-// an object, or is not a label, is skipped rather than reported.
+// node is the subset of a dumped accessibility node this reads — one object
+// per line, as `imzero2 drive --dumpTree --treeFormat jsonl` prints them.
+// Anything that does not parse as an object, or is not a label, is skipped
+// rather than reported.
 type node struct {
 	Role  string `json:"role"`
 	Value any    `json:"value"`
