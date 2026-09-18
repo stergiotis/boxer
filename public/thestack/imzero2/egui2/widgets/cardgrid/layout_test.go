@@ -1,6 +1,11 @@
 package cardgrid
 
-import "testing"
+import (
+	"math"
+	"testing"
+
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/keycodes"
+)
 
 func TestPlanColumns(t *testing.T) {
 	cases := []struct {
@@ -130,5 +135,57 @@ func TestFit(t *testing.T) {
 		if w > box.W || h > box.H {
 			t.Errorf("%s: %v × %v escapes the box", tc.name, w, h)
 		}
+	}
+}
+
+func TestStep(t *testing.T) {
+	l := Plan(1100, DensityMedium, Aspect16x9, SlotsTitle) // 4 columns
+	const n = 10                                           // rows of 4, 4, 2
+	cases := []struct {
+		name            string
+		i               int
+		key             keycodes.Code
+		wantNext, wantP int
+	}{
+		{"nothing selected selects the first", -1, keycodes.ArrowUp, 0, 0},
+		{"→ inside the page moves", 3, keycodes.ArrowRight, 4, 0},
+		{"→ on the last card is past the page", 9, keycodes.ArrowRight, 9, 1},
+		{"← on the first card is past the page", 0, keycodes.ArrowLeft, 0, -1},
+		{"↓ on the last row is a row past", 8, keycodes.ArrowDown, 8, 4},
+		{"↓ onto a short last row stays inside", 7, keycodes.ArrowDown, 9, 0},
+		{"↑ on the first row is a row before", 2, keycodes.ArrowUp, 2, -4},
+		{"↑ inside the page moves", 6, keycodes.ArrowUp, 2, 0},
+		{"PageDown is a page away", 5, keycodes.PageDown, 5, n},
+		{"PageUp likewise", 5, keycodes.PageUp, 5, -n},
+		{"Home stays in the page", 5, keycodes.Home, 0, 0},
+		{"End likewise", 5, keycodes.End, 9, 0},
+	}
+	for _, tc := range cases {
+		next, past := l.step(tc.i, n, tc.key)
+		if next != tc.wantNext || past != tc.wantP {
+			t.Errorf("%s: step(%d) = (%d, %d), want (%d, %d)", tc.name, tc.i, next, past, tc.wantNext, tc.wantP)
+		}
+	}
+}
+
+func TestVisibleRange(t *testing.T) {
+	l := Plan(1100, DensityMedium, Aspect16x9, SlotsTitle) // 4 columns
+	pitch := l.CardH + cardGap
+	const n = 40 // ten rows
+	lo, hi := l.VisibleRange(n, 3*pitch+1, 2*pitch, 0)
+	if lo != 12 || hi != 24 {
+		t.Errorf("rows 3–5 visible: got [%d, %d), want [12, 24)", lo, hi)
+	}
+	lo, hi = l.VisibleRange(n, 3*pitch+1, 2*pitch, 1)
+	if lo != 8 || hi != 28 {
+		t.Errorf("one row of slack: got [%d, %d), want [8, 28)", lo, hi)
+	}
+	lo, hi = l.VisibleRange(n, 0, 100*pitch, 1)
+	if lo != 0 || hi != n {
+		t.Errorf("a tall viewport draws all: got [%d, %d)", lo, hi)
+	}
+	lo, hi = l.VisibleRange(n, 0, float32(math.Inf(1)), 1)
+	if lo != 0 || hi != n {
+		t.Errorf("an unbounded host draws all: got [%d, %d)", lo, hi)
 	}
 }

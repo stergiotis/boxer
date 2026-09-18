@@ -37,20 +37,26 @@ const (
 	tagIdBase uint64 = 0x200
 )
 
-// gridKeyMask is what the grid eats while focused. Escape and Tab are
-// absent for the tree's reasons (ADR-0177 §SD9): a container is one focus
-// stop, not a trap.
+// cullSlackRows is how many rows past the viewport are still drawn on each
+// side: the viewport is last frame's, so a scroll this frame shows a row
+// that is already there rather than a gap.
+const cullSlackRows = 1
+
+// gridKeyMask is what the grid eats while focused — only keys it acts on.
+// Escape and Tab are absent for the tree's reasons (ADR-0177 §SD9): a
+// container is one focus stop, not a trap.
 var gridKeyMask = keycodes.MaskOf(
 	keycodes.ArrowUp, keycodes.ArrowDown,
 	keycodes.ArrowLeft, keycodes.ArrowRight,
 	keycodes.Home, keycodes.End,
-	keycodes.Enter, keycodes.Space,
+	keycodes.PageUp, keycodes.PageDown,
+	keycodes.Space,
 )
 
 // Render draws the page where it is called and reports the frame's click and
 // keys. See the package doc for the layout.
 func Render(in Input) (res Result) {
-	res = Result{Clicked: -1, Moved: -1, Activated: -1, Toggled: -1}
+	res = Result{Clicked: -1, Moved: -1, Toggled: -1}
 	m, st, ids := in.Model, in.State, in.Ids
 	if m == nil || st == nil || ids == nil {
 		return
@@ -66,8 +72,14 @@ func Render(in Input) (res Result) {
 		// The pane probe goes first: the rect is the room left for the next
 		// widget, and it answers one frame late — hold the last good width
 		// so the grid does not reflow to the fallback on a hidden→shown edge.
-		if w, _, ok := c.CapturePaneSize(c.ProbeSeq(in.ScopeKey, "cardgrid")); ok {
+		paneSeq := c.ProbeSeq(in.ScopeKey, "cardgrid")
+		if w, _, ok := c.CapturePaneSize(paneSeq); ok {
 			st.paneW = w
+		}
+		// The same probe's top and height are the scroll viewport's.
+		view, viewOK := c.CurrentApplicationState.StateManager.GetUiRect(paneSeq)
+		if viewOK {
+			st.viewTop, st.viewH = view.MinY, view.MaxY-view.MinY
 		}
 		paneW := st.paneW
 		if paneW <= 0 {
@@ -88,14 +100,35 @@ func Render(in Input) (res Result) {
 				c.UiSetMinHeight(minHeight)
 			}
 			for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+				// The content's top, before anything moves the cursor: with
+				// the viewport's, it gives the scroll offset.
+				contentSeq := c.ProbeSeq(in.ScopeKey, "cardgrid-content")
+				c.CaptureUiAvailableRect(contentSeq)
+				content, contentOK := c.CurrentApplicationState.StateManager.GetUiRect(contentSeq)
+				if contentOK {
+					st.contentTop = content.MinY
+				}
+				st.haveView = viewOK && contentOK
 				// Pin the content to the grid's size: the cards are placed
 				// at computed rects, and an unpinned parent would size to
-				// whichever of them was laid out last.
+				// whichever of them was laid out last — and the cards the
+				// cull skips would otherwise take their room with them.
 				c.UiSetMinWidth(lay.GridWidth())
 				c.UiSetMinHeight(lay.GridHeight(m.Count))
 				reveal := st.reveal
 				st.reveal = 0
+				lo, hi := 0, m.Count
+				if st.haveView {
+					lo, hi = lay.VisibleRange(m.Count, st.viewTop-st.contentTop, st.viewH, cullSlackRows)
+				}
 				for i := range m.Count {
+					// Off-screen cards are not emitted: a page of 96 costs
+					// what the viewport shows. The card being revealed is
+					// drawn wherever it is, since the scroll is asked from
+					// inside it.
+					if (i < lo || i >= hi) && reveal != int32(i)+1 {
+						continue
+					}
 					for range c.IdScope(ids.PrepareSeq(uint64(i))) {
 						renderCard(in, lay, i, reveal == int32(i)+1, &res)
 					}
@@ -113,39 +146,24 @@ func Render(in Input) (res Result) {
 }
 
 // applyKeys turns last frame's captured keys into selection moves. Key
-// repeat delivers several per frame; each starts where the last one landed.
+// repeat delivers several per frame; each starts where the last one landed,
+// and a key the page cannot hold ends the frame's keys (Result.Past).
 func applyKeys(st *State, lay Layout, n int, res *Result) {
 	if st.keyFrameID == 0 || n == 0 {
 		return
 	}
 	for _, k := range c.CurrentApplicationState.StateManager.GetCapturedKeys(widgethandle.Make(st.keyFrameID)) {
 		cur := int(st.Selected())
-		next := cur
-		switch k.Code {
-		case keycodes.ArrowRight:
-			next = lay.Neighbour(cur, n, 1, 0)
-		case keycodes.ArrowLeft:
-			next = lay.Neighbour(cur, n, -1, 0)
-		case keycodes.ArrowDown:
-			next = lay.Neighbour(cur, n, 0, 1)
-		case keycodes.ArrowUp:
-			next = lay.Neighbour(cur, n, 0, -1)
-		case keycodes.Home:
-			next = 0
-		case keycodes.End:
-			next = n - 1
-		case keycodes.Enter:
-			if cur >= 0 {
-				res.Activated = int32(cur)
-			}
-			continue
-		case keycodes.Space:
+		if k.Code == keycodes.Space {
 			if cur >= 0 {
 				res.Toggled = int32(cur)
 			}
 			continue
-		default:
-			continue
+		}
+		next, past := lay.step(cur, n, k.Code)
+		if past != 0 {
+			res.Past = int32(past)
+			return
 		}
 		if next >= 0 && next != cur {
 			st.SetSelected(int32(next))
@@ -153,6 +171,51 @@ func applyKeys(st *State, lay Layout, n int, res *Result) {
 			res.Moved = int32(next)
 		}
 	}
+}
+
+// step is where a navigation key takes the selection from ordinal i among n
+// cards: next, or — for a move past the page's edge — the ordinal delta the
+// host pages by (Result.Past), next staying i. ← and → walk the reading
+// order, ↑ and ↓ the rows, Home and End the page; PageUp and PageDown are
+// always a page away. With nothing selected any key selects the first card.
+func (inst Layout) step(i, n int, key keycodes.Code) (next int, past int) {
+	if n <= 0 || inst.Cols <= 0 {
+		return -1, 0
+	}
+	if i < 0 {
+		return 0, 0
+	}
+	switch key {
+	case keycodes.ArrowRight:
+		if i == n-1 {
+			return i, 1
+		}
+		return inst.Neighbour(i, n, 1, 0), 0
+	case keycodes.ArrowLeft:
+		if i == 0 {
+			return i, -1
+		}
+		return inst.Neighbour(i, n, -1, 0), 0
+	case keycodes.ArrowDown:
+		if i/inst.Cols == inst.Rows(n)-1 {
+			return i, inst.Cols
+		}
+		return inst.Neighbour(i, n, 0, 1), 0
+	case keycodes.ArrowUp:
+		if i < inst.Cols {
+			return i, -inst.Cols
+		}
+		return inst.Neighbour(i, n, 0, -1), 0
+	case keycodes.PageDown:
+		return i, n
+	case keycodes.PageUp:
+		return i, -n
+	case keycodes.Home:
+		return 0, 0
+	case keycodes.End:
+		return n - 1, 0
+	}
+	return i, 0
 }
 
 // renderCard draws card i at its computed rect: the click-sensing surface
@@ -344,8 +407,7 @@ func renderBody(in Input, lay Layout, i int, x0, y0, x1, y1 float32, res *Result
 	// Cut by lines as well as by runes: a body of short lines runs out of
 	// rows long before it runs out of runes.
 	lines := int((y1 - y0) / lineBody)
-	text := Lines(m.Body[i], lines*lay.lineRunes(), lines)
-	cut := len(text) != len(m.Body[i])
+	text, cut := clampCut(m.Body[i], lines*lay.lineRunes(), max(1, lines))
 	for range slot(x0, y0, x1, y1) {
 		hover(cut, m.Body[i], func() {
 			c.LabelAtoms(c.Atoms().BeginRichTextColored(tok(styletokens.NeutralTextSecondary), color.Transparent, text).

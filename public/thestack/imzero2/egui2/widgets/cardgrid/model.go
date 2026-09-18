@@ -184,6 +184,13 @@ type State struct {
 	paneW      float32
 	keyFrameID uint64
 	focused    bool
+
+	// The scroll viewport as last frame's probes saw it, in screen
+	// coordinates: its top and height, and the grid content's top, which
+	// sits above the viewport by the scroll offset. haveView is false until
+	// both probes have answered, and every card is drawn until then.
+	viewTop, viewH, contentTop float32
+	haveView                   bool
 }
 
 // Focused reports whether the grid held the keyboard focus last frame — when
@@ -281,8 +288,12 @@ type Result struct {
 	// Moved is the ordinal the keyboard moved the selection to this frame,
 	// -1 for none. The selection has already moved and a reveal is pending.
 	Moved int32
-	// Activated is the ordinal Enter was pressed on, -1 for none.
-	Activated int32
+	// Past is a keyboard move the page cannot hold, as an ordinal delta from
+	// the selection: -1 or +1 for ← or → at the page's ends, ∓Cols for ↑ on
+	// the first row or ↓ on the last, ∓Count for PageUp and PageDown; 0 for
+	// none. The selection has not moved — the host, which owns the paging,
+	// turns the page and selects the card the delta lands on.
+	Past int32
 	// Toggled is the ordinal Space was pressed on, -1 for none — the host's
 	// cue to play or pause a hero that can.
 	Toggled int32

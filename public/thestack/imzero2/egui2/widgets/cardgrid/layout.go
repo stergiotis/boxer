@@ -175,6 +175,25 @@ func (inst Layout) textW() float32 { return inst.CardW - 2*cardPad }
 func (inst Layout) lineRunes() int  { return max(8, int(inst.textW()/runePx)) }
 func (inst Layout) smallRunes() int { return max(8, int(inst.textW()/runeSmallPx)) }
 
+// VisibleRange is the ordinals [lo, hi) of the cards whose row meets the
+// viewport — offset down the grid and viewH tall — widened by slack rows on
+// each side.
+func (inst Layout) VisibleRange(n int, offset, viewH float32, slack int) (lo, hi int) {
+	if n <= 0 || inst.Cols <= 0 {
+		return 0, 0
+	}
+	pitch := inst.CardH + cardGap
+	// An unbounded host reports no usable viewport: draw everything.
+	if pitch <= 0 || !(viewH > 0) || math.IsInf(float64(viewH), 0) || math.IsNaN(float64(offset)) {
+		return 0, n
+	}
+	first := int(math.Floor(float64(offset/pitch))) - slack
+	last := int(math.Floor(float64((offset+viewH)/pitch))) + slack
+	lo = min(max(first, 0)*inst.Cols, n)
+	hi = min(max(last+1, 0)*inst.Cols, n)
+	return
+}
+
 // Neighbour is the ordinal an arrow key moves the selection to from ordinal
 // i among n cards. dx walks the reading order, so → at a row's end goes to
 // the next row's first card; dy moves by rows, staying put at the grid's

@@ -69,7 +69,7 @@ func cardgridDemoPixels(w, h uint32, hue int) (px []uint32) {
 }
 
 func newCardgridDemoState() *cardgridDemoState {
-	st := &cardgridDemoState{tracker: c.NewImageVersionTracker[int](), last: cardgrid.Result{Clicked: -1, Moved: -1, Activated: -1, Toggled: -1}, model: &cardgrid.Model{
+	st := &cardgridDemoState{tracker: c.NewImageVersionTracker[int](), last: cardgrid.Result{Clicked: -1, Moved: -1, Toggled: -1}, model: &cardgrid.Model{
 		Slots: cardgrid.SlotsHero | cardgrid.SlotsOverline | cardgrid.SlotsTitle | cardgrid.SlotsSubtitle |
 			cardgrid.SlotsBody | cardgrid.SlotsFacts | cardgrid.SlotsTags | cardgrid.SlotsFooter,
 		FactOff: []int32{0}, TagOff: []int32{0},

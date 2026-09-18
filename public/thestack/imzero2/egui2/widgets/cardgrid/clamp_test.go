@@ -80,3 +80,22 @@ func TestDisplayCut(t *testing.T) {
 		t.Errorf("displayCut = %q, %v", got, cut)
 	}
 }
+
+// A hover is for text that was dropped, not for whitespace that was folded.
+func TestClampCut(t *testing.T) {
+	cases := []struct {
+		name, in     string
+		runes, lines int
+		wantCut      bool
+	}{
+		{"clean text is not cut", "a b", 40, 2, false},
+		{"folded whitespace is not a cut", "a   b\r\n", 40, 2, false},
+		{"dropped runes are", "abcdef", 3, 2, true},
+		{"dropped lines are", "a\nb\nc", 40, 2, true},
+	}
+	for _, tc := range cases {
+		if _, cut := clampCut(tc.in, tc.runes, tc.lines); cut != tc.wantCut {
+			t.Errorf("%s: clampCut(%q) cut = %v, want %v", tc.name, tc.in, cut, tc.wantCut)
+		}
+	}
+}

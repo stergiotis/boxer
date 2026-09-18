@@ -42,17 +42,24 @@ func Lines(s string, maxRunes int, maxLines int) string {
 }
 
 func clamp(s string, maxRunes int, maxLines int) string {
+	out, _ := clampCut(s, maxRunes, maxLines)
+	return out
+}
+
+// clampCut is clamp reporting whether it cut — dropped text, as opposed to
+// only folding whitespace or controls — which is when a hover is worth
+// showing.
+func clampCut(s string, maxRunes int, maxLines int) (out string, cut bool) {
 	if maxRunes <= 0 || s == "" {
-		return ""
+		return "", s != ""
 	}
 	if clean(s, maxRunes, maxLines) {
-		return s
+		return s, false
 	}
 	var b strings.Builder
 	b.Grow(min(len(s), 4*maxRunes) + len(ellipsis))
 	runes, lines := 0, 1
 	space := true // swallows leading spaces, and the second of a run
-	cut := false
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		i += size
@@ -88,11 +95,11 @@ func clamp(s string, maxRunes int, maxLines int) string {
 		b.WriteRune(r) // utf8.RuneError for an invalid byte, which is the point
 		runes++
 	}
-	out := strings.TrimRight(b.String(), " \n")
+	out = strings.TrimRight(b.String(), " \n")
 	if cut {
 		out += ellipsis
 	}
-	return out
+	return out, cut
 }
 
 // clean reports whether s can be returned as it is: valid, within the rune
