@@ -267,6 +267,9 @@ func (v *View) Tick(now time.Time) (animating bool) {
 // setSilently moves the view without recording events — Leaflet's _move
 // with suppressEvent, what a zoom animation's frames do.
 func (v *View) setSilently(center LatLng, zoom float64) {
+	if !v.keepFinite(center, zoom) {
+		return
+	}
 	v.center, v.zoom = center, zoom
 	v.pixelOrigin = v.newPixelOrigin(center, zoom)
 }
@@ -400,6 +403,19 @@ func (v *View) tryAnimatedZoom(center LatLng, zoom float64, opts AnimateOptions)
 	}
 	scale := v.ZoomScale(zoom)
 	offset := v.centerOffset(center).DivideBy(1 - 1/scale)
+	if !finite(offset.X) || !finite(offset.Y) {
+		// A zoom to the scale the view already holds keeps every point where
+		// it is, so it has no one fixed point to animate about: 1 − 1/scale
+		// is 0 there, and the offset comes out ±Inf — NaN on an axis whose
+		// centre offset is 0 as well. Leaflet cannot reach this (setView
+		// sends an unchanged zoom to the pan instead); AnimateZoomTo can, at
+		// the end of a pinch that netted out. Refusing it here is what keeps
+		// the non-finite offset out of anchorGeo and from there out of the
+		// centre, which every later projection would keep — the view would
+		// never recover and the pyramid would refuse every update from then
+		// on.
+		return false
+	}
 	if opts.Animate != AnimateYes && !v.size.Contains(offset) {
 		return false
 	}
@@ -423,13 +439,18 @@ func (v *View) tryAnimatedZoom(center LatLng, zoom float64, opts AnimateOptions)
 // AnimateZoomTo animates to a centre and zoom about their fixed point even
 // when that point lies outside the viewport — the pinch's end (Leaflet's
 // _animateZoom called directly). A target equal to the current view just
-// records the end events.
+// records the end events, whether or not a zoom animation is running: there
+// is nothing to animate about, and another gesture's animation — a wheel
+// notch that arrived while the fingers were down — is left to finish at its
+// own target. What cannot animate is a hard reset, which supersedes a running
+// zoom animation as SetViewAnimated's does.
 func (v *View) AnimateZoomTo(center LatLng, zoom float64) {
-	if v.anim.zoom == nil && zoom == v.zoom && center.Equals(v.center) {
+	if zoom == v.zoom && center.Equals(v.center) {
 		v.MoveEnd(true)
 		return
 	}
 	if !v.tryAnimatedZoom(center, zoom, AnimateOptions{Animate: AnimateYes}) {
+		v.anim.zoom = nil
 		v.resetView(center, zoom, false)
 	}
 }
