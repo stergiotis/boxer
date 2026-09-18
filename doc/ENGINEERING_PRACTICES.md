@@ -56,6 +56,19 @@ Analyzers are declared as `go tool` directives in
 script [scripts/ci/lint.sh](../scripts/ci/lint.sh) runs them sequentially and
 emits a pass/warn/fail summary trailer.
 
+**One step, one script.** `lint.sh` holds the step list, the banners, the
+timing and the trailer; each step lives under
+[scripts/ci/lint/](../scripts/ci/lint/), or beside the driver for the four that
+predate the split (`h3_wasm_parity.sh`, `rust_imzero2_check.sh`,
+`repro_build_parity.sh`, `fetcher-discipline.sh`). A step takes no argument,
+prints its own findings, and reports its verdict through its exit status: `0`
+pass, non-zero fail. A warn-only step exits `2` *and* carries the `warn` marker
+on its line in `lint.sh` — both, because under `set -e` the status is whatever
+tool died last (`tar` exits 2 on a write error), and because whether a check
+blocks is the gate's decision rather than the checker's. So a step runs on its
+own, `scripts/ci/lint.sh <step> ...` runs a subset, and the gate stays one list
+in one file; `--list` names the steps and the scripts behind them.
+
 | Tool | Invocation | Status |
 |---|---|---|
 | `gofmt` | `-l` over the tree, generated files skipped by their header | error on drift |
@@ -77,8 +90,8 @@ differently once generic and non-generic ones mix, and `SA4023` then indexes
 past the end of a fact belonging to another method — taking the process, and
 every other package's analysis, with it. `-checks` cannot dodge it, since
 staticcheck runs every analyzer and filters diagnostics afterwards.
-[lint.sh](../scripts/ci/lint.sh) therefore carries a named skip list, prints what
-it withheld, and stays `warn` while the list is non-empty; the `DID NOT RUN`
+The [staticcheck step](../scripts/ci/lint/staticcheck.sh) therefore carries a
+named skip list, prints what it withheld, and stays `warn` while the list is non-empty; the `DID NOT RUN`
 branch remains as the backstop for a package the list does not name yet. The
 mis-attribution is silent elsewhere, so treat a fact-carrying finding (`U1000`)
 naming a method of `marshallreflect.SectionReaders` or `ecsdemo/stage2.FatRow`
@@ -424,9 +437,10 @@ into this repository's CI:
   2026-08-06 (§ the linter table above); the stricter pair, and import grouping
   in particular, remain a dev-only convenience via
   [scripts/dev/goimports.sh](../scripts/dev/goimports.sh).
-- `nilaway` is wired up but currently commented out in
-  [scripts/ci/lint.sh](../scripts/ci/lint.sh); the `dev/` script preserves
-  the local runner.
+- `nilaway` is wired up but absent from
+  [lint.sh](../scripts/ci/lint.sh)'s step list: the step itself,
+  [scripts/ci/lint/nilaway.sh](../scripts/ci/lint/nilaway.sh), runs, and the
+  `dev/` script preserves the wider local runner over `./...`.
 - No `CODEOWNERS`, PR template, or branch-protection automation. The
   documentation standard records an explicit "AI-assisted, direct-to-`main`"
   workflow assumption
