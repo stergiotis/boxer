@@ -81,8 +81,24 @@ if [ -f scripts/dev/launcher-local.sh ]; then
     . scripts/dev/launcher-local.sh
 fi
 
-app=$(mktemp)
-trap 'rm -f -- "$app"' EXIT
+# The binary lives at one stable path per checkout and is exec'd from there.
+# exec keeps the launcher transparent: the app is the process, so a signal, a
+# timeout or a supervisor addressing this PID reaches it. The price is that an
+# exec'd shell never runs its EXIT trap, so a binary built to a fresh mktemp
+# path is never removed — one leaked copy per invocation. A stable path holds
+# at most one. The build lands under a unique name and is renamed into place,
+# so a concurrent invocation never execs a half-written file; the trap covers
+# the unique name only until the rename, which is every exit that is not the
+# exec. The directory is keyed by the checkout's path so two worktrees of one
+# repository never run each other's build.
+cache="${XDG_CACHE_HOME:-${HOME:-${TMPDIR:-/tmp}}/.cache}/boxer-launcher"
+cache="$cache/{{.Name}}-$(printf '%s' "$here" | cksum | cut -d' ' -f1)"
+mkdir -p "$cache"
+app="$cache/app"
+build=$(mktemp "$cache/build.XXXXXXXXXX")
+trap 'rm -f -- "$build"' EXIT
+# A build whose launcher was killed outright has no trap to remove it.
+find "$cache" -maxdepth 1 -name 'build.*' -mmin +60 -delete 2>/dev/null || true
 
 # An empty tags file is the normal state since boxer retired its last required
 # tag: pass no -tags at all rather than an empty argument.
@@ -91,7 +107,8 @@ tagflag=()
 [ -n "$tags" ] && tagflag=(-tags "$tags")
 
 go build "${EXTRA_BUILD_FLAGS[@]+"${EXTRA_BUILD_FLAGS[@]}"}" \
-    "${tagflag[@]+"${tagflag[@]}"}" -o "$app" {{.AppPackage}} 1>&2
+    "${tagflag[@]+"${tagflag[@]}"}" -o "$build" {{.AppPackage}} 1>&2
+mv -f -- "$build" "$app"
 exec "$app" "$@"
 `
 

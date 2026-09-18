@@ -186,6 +186,42 @@ Accepted 2026-08-08.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-09-18 — the emitted launcher leaked one binary per run
+
+The launcher built the app to a `mktemp` path, trapped its removal on `EXIT`,
+and then `exec`'d it. An exec'd shell is replaced, not exited, so the trap
+never ran: every invocation left a binary of about 104 MB in `/tmp`. It
+surfaced in a consuming repository as `No space left on device` from an
+unrelated link step, with 44 copies on a 7.3 GB tmpfs. Both generated
+launchers in use had it; `boxer.sh` and the hand-written launchers elsewhere
+run the app as a child, where the trap does fire, and were not affected.
+
+`exec` stays. It is what makes the launcher transparent — a signal, a
+`timeout` or a supervisor addressing the launcher's PID reaches the app, and
+the exit status is the app's — and running the app as a child instead would
+have changed that for every consumer. What changed is the path: the binary
+now lives at one stable location per checkout,
+`${XDG_CACHE_HOME:-$HOME/.cache}/boxer-launcher/<name>-<checksum of the checkout path>/app`,
+so there is at most one. The build lands under a unique name beside it and is
+renamed into place, so a concurrent invocation never execs a half-written
+file, and the trap covers that unique name for every exit that is not the
+exec. The directory is keyed by checkout so two worktrees of one repository
+never run each other's build. A residual race is accepted: two invocations in
+one checkout with different `EXTRA_BUILD_FLAGS`, microseconds apart, can exec
+each other's binary.
+
+`TestLauncherLeavesOneBinaryHoweverOftenItRuns` and
+`TestLauncherRemovesTheOutputOfAFailedBuild` in
+[`public/gov/skeleton`](../../public/gov/skeleton) hold it. Consumers pick the
+template up with their next pin bump and `gov skeleton --write`; until then
+`--check` against an older pin reports the regenerated launcher as drift.
+
+In the same change `boxer.sh` stopped leaving an empty file in `/tmp` per
+run: it took only the *name* of a `mktemp` file for a binary it builds beside
+the sources, and never removed the file it took the name from.
+
 ## References
 
 - [doc/adr-background-work/downstream-adoption-skeleton.md](../adr-background-work/downstream-adoption-skeleton.md) — evidence, measurements, rejected options.

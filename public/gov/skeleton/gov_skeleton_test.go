@@ -296,7 +296,7 @@ func TestLauncherHonoursTheLocalSeam(t *testing.T) {
 		[]byte("#!/bin/bash\necho \"go $* seam=${SEAM_RAN:-0}\" > \"$(dirname \"$0\")/../observed.txt\"\ntouch \"${!#}\" 2>/dev/null || true\nexit 0\n"), 0o755))
 
 	cmd := exec.Command("bash", filepath.Join(dir, "thing.sh"))
-	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "XDG_CACHE_HOME="+filepath.Join(dir, "cache"))
 	_ = cmd.Run() // the stubbed build produces no runnable binary; only the flags matter
 
 	observed, err := os.ReadFile(filepath.Join(dir, "observed.txt"))
@@ -321,12 +321,90 @@ func TestLauncherWithoutTheSeamPassesNoStrayArgument(t *testing.T) {
 		[]byte("#!/bin/bash\nfor a in \"$@\"; do [ -z \"$a\" ] && { echo EMPTY-ARG > \"$(dirname \"$0\")/../observed.txt\"; exit 3; }; done\necho ok > \"$(dirname \"$0\")/../observed.txt\"\nexit 0\n"), 0o755))
 
 	cmd := exec.Command("bash", filepath.Join(dir, "thing.sh"))
-	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "XDG_CACHE_HOME="+filepath.Join(dir, "cache"))
 	_ = cmd.Run()
 
 	observed, err := os.ReadFile(filepath.Join(dir, "observed.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "ok\n", string(observed))
+}
+
+// The launcher execs the app, and an exec'd shell never runs its EXIT trap —
+// so whatever path the binary is built to must not be a fresh one per run. A
+// launcher that built to mktemp and trapped its removal left one binary behind
+// per invocation, which on a tmpfs /tmp ends as "No space left on device" in an
+// unrelated link step. The observable is the cache directory after several
+// runs: one binary, no build leftovers, and the app still gets its arguments
+// and its exit status through.
+func TestLauncherLeavesOneBinaryHoweverOftenItRuns(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash unavailable")
+	}
+	dir := t.TempDir()
+	_, err := WriteE(dir, DefaultFiles(), testParams())
+	require.NoError(t, err)
+
+	// Stub `go build`: write a runnable "app" to the -o path that records its
+	// arguments and exits 7.
+	bin := filepath.Join(dir, "stubbin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	stub := "#!/bin/bash\n" +
+		"out=\nwhile [ $# -gt 0 ]; do [ \"$1\" = -o ] && out=$2; shift; done\n" +
+		"printf '#!/bin/bash\\necho \"$@\" >> \"%s\"\\nexit 7\\n' \"" + filepath.Join(dir, "ran.txt") + "\" > \"$out\"\n" +
+		"chmod +x \"$out\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte(stub), 0o755))
+
+	cache := filepath.Join(dir, "cache")
+	for range 3 {
+		cmd := exec.Command("bash", filepath.Join(dir, "thing.sh"), "sub", "--flag")
+		cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "XDG_CACHE_HOME="+cache)
+		runErr := cmd.Run()
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, runErr, &exitErr, "the app's exit status did not come through")
+		assert.Equal(t, 7, exitErr.ExitCode())
+	}
+
+	ran, err := os.ReadFile(filepath.Join(dir, "ran.txt"))
+	require.NoError(t, err, "the launcher never ran the app")
+	assert.Equal(t, "sub --flag\nsub --flag\nsub --flag\n", string(ran))
+
+	var files []string
+	require.NoError(t, filepath.WalkDir(cache, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr == nil && !d.IsDir() {
+			files = append(files, filepath.Base(path))
+		}
+		return walkErr
+	}))
+	assert.Equal(t, []string{"app"}, files, "three runs must leave exactly one binary and no build leftovers")
+}
+
+// A failed build must not leave its half-made output behind either; that exit
+// is the one the trap does cover.
+func TestLauncherRemovesTheOutputOfAFailedBuild(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash unavailable")
+	}
+	dir := t.TempDir()
+	_, err := WriteE(dir, DefaultFiles(), testParams())
+	require.NoError(t, err)
+
+	bin := filepath.Join(dir, "stubbin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte("#!/bin/bash\nexit 2\n"), 0o755))
+
+	cache := filepath.Join(dir, "cache")
+	cmd := exec.Command("bash", filepath.Join(dir, "thing.sh"))
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "XDG_CACHE_HOME="+cache)
+	require.Error(t, cmd.Run())
+
+	var files []string
+	require.NoError(t, filepath.WalkDir(cache, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr == nil && !d.IsDir() {
+			files = append(files, filepath.Base(path))
+		}
+		return walkErr
+	}))
+	assert.Empty(t, files)
 }
 
 // The adoption ADR's path hardcodes a number. Seeding it into a repository that

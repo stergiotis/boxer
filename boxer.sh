@@ -3,7 +3,10 @@ set -e
 set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
-appfile=$(realpath "$here/$(basename "$(mktemp)")")
+# Built beside the sources rather than under /tmp, which is often a small
+# tmpfs; /tmp.* is git-ignored. mktemp -p creates the file where it is used —
+# borrowing only the name of a /tmp file leaves that file behind, one per run.
+appfile=$(mktemp -p "$here" tmp.XXXXXXXXXX)
 cleanup() {
     rv=$?
     rm -f -- "$appfile"
