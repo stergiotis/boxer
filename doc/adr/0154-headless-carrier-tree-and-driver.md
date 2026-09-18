@@ -285,6 +285,50 @@ Two limits found while building, neither of them blocking:
   usually a node that is present but not yet enabled, which a single resolution
   fails on.
 
+## Updates
+
+### 2026-09-18 — the driver is the agent surface; M5 stays deferred, now with a reason
+
+The question §SD8 left open — how an agent drives a headless instance — was
+costed against an MCP server and answered with the driver itself. The trace
+step stays the one action vocabulary, and `imzero2 drive` grew what an agent
+without a trace yet was missing:
+
+- a **tree view**, as `--dumpTree` with filters and as a `tree` verb: one line
+  per node, every field in the spelling a step takes it in, unnamed containers
+  and `text_run` duplicates left out, a header that says when a limit cut the
+  list;
+- **inline steps** (`--step`, repeatable), and `--dumpTree` printing *after* the
+  steps rather than instead of them, so one connection acts and then reports;
+- `click` gained `button` and `count`. AccessKit's click action has neither, so
+  both take the pointer rung.
+
+Why not MCP. What it would add is a session that outlives a tool call and a
+tool list the client discovers. What it costs here: tool schemas resident in
+every session's context; a daemon that must keep answering the carrier's
+keepalive between calls, which the client's synchronous pump does not do; a Go
+MCP dependency under the license and vulnerability gates, or a hand-rolled
+JSON-RPC beside the hand-rolled WebSocket; and a second vocabulary that can
+drift from the step. One invocation carrying several steps replaces the round
+trips a session would save, captures landing as files is what an agent with a
+shell reads anyway, and CI, the screenshot tour and an agent then share one
+executor. Agent-facing instructions live in
+[the imzero2-drive skill](../skills/imzero2-drive/SKILL.md).
+
+It becomes worth revisiting for an agent that has no shell, or if exploration
+shows the per-invocation cost dominating — each connect retakes the active role
+and re-enables AccessKit generation. If it is built, each tool call should be
+exactly one step, JSON-identical, so a session log is a trace.
+
+One limit found, not blocking: **input is not acknowledged.** The render loop
+drains input and checks for a pending `TreeRequest` independently, and an
+action's effect reaches the tree only on a pass after the one that applied it,
+because the Go side reacts at readback. The settle pause covers immediate
+effects and `wait` is the deterministic form for slow ones. An acknowledgement
+carrying the pass number would let a driver ask for "a tree no older than my
+last input" and drop the pause; it is a host-side change, deferred until the
+pause is shown to cost something.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless host

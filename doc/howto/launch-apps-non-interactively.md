@@ -151,21 +151,28 @@ join (`toUInt64(w.key)`) — the canonical queries are in
 
 ## 5. Steer it
 
-The driver reads the accessibility tree and synthesises input, replaying a
-JSON Lines trace (one step per line, `#` comments allowed):
+The driver reads the accessibility tree and synthesises input. Steps are JSON
+objects, given inline with `--step` (repeatable) or as a JSON Lines trace file
+(one step per line, `#` comments allowed):
 
 ```sh
-"$S/main_go" imzero2 drive --url "ws://127.0.0.1:$PORT/" --dumpTree     # every node: id, name, role, value, centre
+"$S/main_go" imzero2 drive --url "ws://127.0.0.1:$PORT/" --dumpTree                    # one line per node: role, name, =value, #id, @centre
+"$S/main_go" imzero2 drive --url "ws://127.0.0.1:$PORT/" --dumpTree --treeText task    # only nodes whose name or value contains "task"
 ```
+
+The tree goes to stdout and the log to stderr. `--dumpTree` prints after any
+steps given in the same invocation, so one connection can act and then report
+what the action left on screen; `--treeRole`, `--treeUnder <id>` and
+`--treeLimit` narrow it further. The line format, the anchoring rules and the
+ways a step misses are in the
+[imzero2-drive skill](../skills/imzero2-drive/SKILL.md).
 
 Anchor a step by an exact `id` from the dump, or by `name` / `contains`
 plus `role`; egui window title bars expose their ✕ as a button named
 `Close window`, one per window, so with several windows use the id. Dock
 tabs are buttons named by their title (`{"do":"click","name":"Controls",
 "role":"button"}` switches to that tab) — egui_dock registers no node for a
-tab on its own; the host adds the label from its tab viewer. Ids
-print signed in the dump but the trace field is unsigned — convert a
-negative id by adding 2⁶⁴ (`python3 -c 'print(2**64 + (ID))'`).
+tab on its own; the host adds the label from its tab viewer.
 
 ```sh
 printf '%s\n' '{"do":"click","name":"Start steps task","settleMs":1500}' > "$S/t1.jsonl"
@@ -176,8 +183,10 @@ printf '%s\n' '{"do":"click","id":14343085323791920335,"settleMs":2500}' > "$S/t
 
 `capture` steps write PNGs into `IMZERO2_HEADLESS_DUMP_DIR`; the full verb
 list (`click`, `hover`, `drag`, `type`, `set_value`, `focus`,
-`scroll_into_view`, `key`, `scroll`, `wait`, `capture`, `cadence`, `resize`,
-`note`, `sleep`) is documented on `carrierclient.Step`. `drag` presses at
+`scroll_into_view`, `key`, `scroll`, `wait`, `tree`, `capture`, `cadence`,
+`resize`, `note`, `sleep`) is documented on `carrierclient.Step`. A `click`
+takes `"button":"secondary"` for a context menu and `"count":2` for a double
+click. `drag` presses at
 `x`,`y`, moves to `toX`,`toY` in `steps` moves over `durationMs` and releases
 — the gesture for a map pan, a plot brush or a slider; anchored on a node it
 starts at the node's centre and reads `x`,`y` as the delta.
@@ -235,7 +244,7 @@ printf '%s
 "$S/main_go" imzero2 drive --url "ws://127.0.0.1:$PORT/" --trace "$S/e.jsonl" --settle 200
 ```
 
-Then poll `--dumpTree` for the notice every two seconds. On 2026-08-15:
+Then poll `--dumpTree --treeText Waiting` for the notice every two seconds. On 2026-08-15:
 applet mounted 22:33:26, dataset published 22:33:30, the notice stayed for
 38 s, and the applet bound at 22:34:08 — the first tick after mount, the
 `sqlapplet: dataset alias bound after open` line in `host.log` giving the
