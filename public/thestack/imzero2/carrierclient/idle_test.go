@@ -57,8 +57,9 @@ func TestReadBinaryTimeoutBetweenFramesLeavesTheStreamUsable(t *testing.T) {
 	assert.Equal(t, "after", string(got))
 }
 
-func TestSettleBeforeOnlyForCapture(t *testing.T) {
+func TestSettleBeforeOnlyForObservations(t *testing.T) {
 	assert.True(t, settleBefore("capture"))
+	assert.True(t, settleBefore("tree"))
 	for _, do := range []string{"click", "sleep", "wait", "note", "type", "drag"} {
 		assert.False(t, settleBefore(do), do)
 	}

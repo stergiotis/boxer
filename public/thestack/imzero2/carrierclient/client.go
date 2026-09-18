@@ -330,17 +330,47 @@ func (inst *Client) MoveMouse(x, y float32) (err error) {
 // sent back to back; the host applies every event queued since the last pass in
 // one batch, so egui sees the press and release together.
 func (inst *Client) ClickAt(x, y float32) (err error) {
+	return inst.PointerClick(x, y, ButtonPrimary, 1, 0)
+}
+
+// Pointer buttons, in the wire's numbering — egui::PointerButton order, which
+// is not the DOM's (see MouseButton in input.proto).
+const (
+	// ButtonPrimary is the left button on a right-handed mouse.
+	ButtonPrimary uint32 = 0
+	// ButtonSecondary is the button that opens a context menu.
+	ButtonSecondary uint32 = 1
+	// ButtonMiddle is the wheel button.
+	ButtonMiddle uint32 = 2
+	// ButtonExtra1 is the first side button, "back" by convention.
+	ButtonExtra1 uint32 = 3
+	// ButtonExtra2 is the second side button, "forward" by convention.
+	ButtonExtra2 uint32 = 4
+)
+
+// PointerClick is [Client.ClickAt] with the button, the click count and the
+// held modifiers chosen: a secondary click opens a context menu, count 2 is a
+// double click. There is no AccessKit action for either, so these are
+// positions even when the caller started from a node. The presses of a
+// multi-click go out back to back like a single click's; egui counts clicks by
+// the time between them, and events of one pass share a timestamp.
+func (inst *Client) PointerClick(x, y float32, button uint32, count int, modifiers uint32) (err error) {
 	if err = inst.MoveMouse(x, y); err != nil {
 		return err
 	}
-	for _, pressed := range []bool{true, false} {
-		err = inst.SendInput(&InputEvent{
-			Event: &InputEvent_MouseButton{MouseButton: &MouseButton{
-				X: x, Y: y, Button: 0, Pressed: pressed,
-			}},
-		})
-		if err != nil {
-			return err
+	if count < 1 {
+		count = 1
+	}
+	for i := 0; i < count; i++ {
+		for _, pressed := range []bool{true, false} {
+			err = inst.SendInput(&InputEvent{
+				Event: &InputEvent_MouseButton{MouseButton: &MouseButton{
+					X: x, Y: y, Button: button, Pressed: pressed, Modifiers: modifiers,
+				}},
+			})
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

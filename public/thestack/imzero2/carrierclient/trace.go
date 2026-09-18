@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -27,8 +28,8 @@ import (
 // Step is one line of a trace.
 type Step struct {
 	// Do is the verb: click, hover, drag, type, set_value, focus,
-	// scroll_into_view, key, scroll, wait, capture, cadence, resize, note,
-	// sleep.
+	// scroll_into_view, key, scroll, wait, tree, capture, cadence, resize,
+	// note, sleep.
 	Do string `json:"do"`
 
 	// Anchor (ADR-0127 §SD4). Id wins; then name/contains plus role; nth
@@ -84,8 +85,17 @@ type Step struct {
 	// position, and a tooltip or an overlay in the way will take it.
 	Pointer bool `json:"pointer,omitempty"`
 
+	// Button and Count make a `click` something other than one primary press:
+	// "secondary" (or "right") opens a context menu, "middle", "extra1" and
+	// "extra2" are the rest, and count 2 is a double click. Either one turns
+	// an anchored click into a pointer press at the node's centre, as Pointer
+	// does — AccessKit's click action has no button and no count.
+	Button string `json:"button,omitempty"`
+	Count  int    `json:"count,omitempty"`
+
 	// Modifiers is the key modifier bitmask (1=alt, 2=ctrl, 4=shift,
-	// 8=mac_cmd, 16=command), matching egui::Modifiers.
+	// 8=mac_cmd, 16=command), matching egui::Modifiers. `key` holds it for
+	// the key press; a pointer `click` holds it for the click.
 	Modifiers uint32 `json:"modifiers,omitempty"`
 
 	// Cadence for the `cadence` verb: 0 continuous, 1 reactive.
@@ -184,6 +194,21 @@ func ParseTrace(r io.Reader) (steps []Step, err error) {
 	return steps, nil
 }
 
+// ParseSteps reads steps from a JSON array, for a caller that holds them as
+// values rather than as a file. Same decoder and same checks as [ParseTrace],
+// so a step means the same thing whichever way it arrived.
+func ParseSteps(array []byte) (steps []Step, err error) {
+	if err = json.Unmarshal(array, &steps); err != nil {
+		return nil, eh.Errorf("unable to parse steps: %w", err)
+	}
+	for i, st := range steps {
+		if st.Do == "" {
+			return nil, eb.Build().Int("index", i).Errorf("step has no \"do\" verb")
+		}
+	}
+	return steps, nil
+}
+
 // RunOptions tunes a trace run.
 type RunOptions struct {
 	// Timeout bounds each individual request to the host.
@@ -194,6 +219,10 @@ type RunOptions struct {
 	// sending input or writing captures. The cheap way to find out whether a
 	// trace still matches the app after a UI change.
 	DryRun bool
+	// Out receives what a `tree` step prints; nil means os.Stdout. Separate
+	// from Logger because it is the run's result rather than its narration: a
+	// caller reads it to decide the next step.
+	Out    io.Writer
 	Logger zerolog.Logger
 }
 
@@ -205,6 +234,9 @@ type RunOptions struct {
 func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 	if opts.Timeout <= 0 {
 		opts.Timeout = 10 * time.Second
+	}
+	if opts.Out == nil {
+		opts.Out = os.Stdout
 	}
 	var tree *TreeSnapshot
 	// stale marks the cached tree as needing a refresh before the next anchor
@@ -249,6 +281,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 
 		var node *TreeNode
 		switch {
+		case st.Do == "tree":
+			// Its id, role and text are a filter over the tree rather than an
+			// anchor into it: no match, or forty, is an answer.
 		case st.hasAnchor():
 			if err = refresh(); err != nil {
 				return eb.Build().Int("step", i+1).Errorf("unable to fetch the tree: %w", err)
@@ -265,7 +300,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 				Errorf("step needs an anchor (id, name, contains or role)")
 		}
 
-		if opts.DryRun {
+		// A `tree` step only reads, and what it prints is what a dry run is
+		// for, so it is the one verb a dry run still executes.
+		if opts.DryRun && st.Do != "tree" {
 			log.Info().Msg("dry run: " + st.describe())
 			continue
 		}
@@ -285,7 +322,7 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 		}
 		// Every verb but a pure observation can move the UI, so the cached
 		// tree is assumed stale unless the verb only read.
-		if st.Do != "wait" && st.Do != "note" && st.Do != "capture" {
+		if st.Do != "wait" && st.Do != "note" && st.Do != "capture" && st.Do != "tree" {
 			stale = true
 		}
 		if !settleBefore(st.Do) && settle > 0 {
@@ -304,9 +341,10 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 // settleBefore reports whether a verb's settle runs before it rather than
 // after. A capture's pause exists so the frame it takes has settled — an
 // animation finished, a debounced fetch landed — which is only useful before
-// the shot; every other verb settles afterwards, for what it set in motion.
+// the shot, and a `tree` is the same observation in text; every other verb
+// settles afterwards, for what it set in motion.
 func settleBefore(do string) bool {
-	return do == "capture"
+	return do == "capture" || do == "tree"
 }
 
 // waitFor polls the tree until the step's anchor resolves to a node that is
@@ -369,19 +407,43 @@ func requiresAnchor(do string) bool {
 	}
 }
 
+// pointerButton maps a step's button name to the wire's number. "left" and
+// "right" are accepted because that is what a trace author types first.
+func pointerButton(name string) (button uint32, err error) {
+	switch name {
+	case "", "primary", "left":
+		return ButtonPrimary, nil
+	case "secondary", "right":
+		return ButtonSecondary, nil
+	case "middle":
+		return ButtonMiddle, nil
+	case "extra1":
+		return ButtonExtra1, nil
+	case "extra2":
+		return ButtonExtra2, nil
+	default:
+		return 0, eb.Build().Str("button", name).Errorf("unknown pointer button")
+	}
+}
+
 func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 	switch st.Do {
 	case "click":
-		switch {
-		case node != nil && st.Pointer:
-			// Anchored, but actuated where the node was drawn — see Step.Pointer.
-			x, y := nodeCentre(node)
-			return c.ClickAt(x, y)
-		case node != nil:
+		button, e := pointerButton(st.Button)
+		if e != nil {
+			return e
+		}
+		plain := button == ButtonPrimary && st.Count <= 1
+		if node != nil && plain && !st.Pointer {
 			return c.ClickNode(node.GetId())
 		}
-		// No anchor given: the coordinate rung, for a painter-only target.
-		return c.ClickAt(st.X, st.Y)
+		// The coordinate rung: a painter-only target with no anchor, or an
+		// anchored node actuated where it was drawn — see Step.Pointer.
+		x, y := st.X, st.Y
+		if node != nil {
+			x, y = nodeCentre(node)
+		}
+		return c.PointerClick(x, y, button, st.Count, st.Modifiers)
 	case "hover":
 		// Move the pointer without pressing. Coordinate-only, and for the
 		// same reason `click` keeps that rung: a hover affordance drawn on the
@@ -429,6 +491,16 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 			dur = defaultDragDurationMs
 		}
 		return c.Drag(x0, y0, x1, y1, steps, time.Duration(dur)*time.Millisecond)
+	case "tree":
+		// Always a fresh snapshot: the step exists to see what the steps before
+		// it did, and the runner's cached tree predates them.
+		snap, e := c.Tree(opts.Timeout)
+		if e != nil {
+			return e
+		}
+		return WriteTree(opts.Out, SelectNodes(snap, TreeFilter{
+			Under: st.ID, Text: st.Text, Role: st.Role,
+		}))
 	case "capture":
 		name := st.Text
 		if name == "" {

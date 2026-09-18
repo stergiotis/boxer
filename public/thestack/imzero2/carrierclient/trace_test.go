@@ -104,3 +104,37 @@ func TestStepLocatorCarriesNth(t *testing.T) {
 	// resolve to the first match.
 	assert.False(t, Step{Name: "Close"}.locator().HasNth)
 }
+
+func TestParseTraceClickButtonAndCount(t *testing.T) {
+	steps, err := ParseTrace(strings.NewReader(`{"do":"click","name":"Row 3","button":"secondary","count":2,"modifiers":4}`))
+	require.NoError(t, err)
+	require.Len(t, steps, 1)
+	assert.Equal(t, "secondary", steps[0].Button)
+	assert.Equal(t, 2, steps[0].Count)
+	assert.Equal(t, uint32(4), steps[0].Modifiers)
+}
+
+func TestPointerButtonNames(t *testing.T) {
+	for name, want := range map[string]uint32{
+		"": ButtonPrimary, "primary": ButtonPrimary, "left": ButtonPrimary,
+		"secondary": ButtonSecondary, "right": ButtonSecondary,
+		"middle": ButtonMiddle, "extra1": ButtonExtra1, "extra2": ButtonExtra2,
+	} {
+		got, err := pointerButton(name)
+		require.NoError(t, err, name)
+		assert.Equal(t, want, got, name)
+	}
+	_, err := pointerButton("tertiary")
+	require.Error(t, err)
+}
+
+func TestParseStepsReadsAnArrayAndChecksTheVerb(t *testing.T) {
+	steps, err := ParseSteps([]byte(`[{"do":"click","name":"a,b"},{"do":"tree","text":"rows"}]`))
+	require.NoError(t, err)
+	require.Len(t, steps, 2)
+	assert.Equal(t, "a,b", steps[0].Name)
+
+	_, err = ParseSteps([]byte(`[{"name":"Run"}]`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no \"do\" verb")
+}
