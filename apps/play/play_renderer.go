@@ -1149,7 +1149,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	// stops hearing its clicks.
 	cardgridPagerIds := mk()
 	cardgridPagerIds.SetBaseSalt(salt ^ cardgridPagerSalt)
-	inst.cardgridDriver = NewCardGridDriver(mk(), cardgridPagerIds, inst.glossCatalog())
+	inst.cardgridDriver = NewCardGridDriver(mk(), cardgridPagerIds)
 	inst.netSource = newNetworkSource(client)
 	inst.networkDriver = NewNetworkDriver(mk(), inst.netSource)
 	inst.graphviewDriver = NewGraphviewDriver(mk(), inst.netSource)

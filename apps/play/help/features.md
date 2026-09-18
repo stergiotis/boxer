@@ -688,15 +688,18 @@ rendered as something plausible.
 
 An image hero is contained in a fixed-aspect box (16:9, 4:3 or 1:1 from the
 toolbar) — never cropped, stretched or scaled past its own size — and only a
-thumbnail of it is kept, so a page costs thumbnails rather than originals. An
+thumbnail the size of its box is kept, so a page costs thumbnails rather than
+originals. An
 `audio/wav` hero is the recording's waveform with play and pause; click the
 waveform to seek, and starting one recording stops the other. Every card on a
 page has the same height whatever it carries: long titles are cut at two lines
 and bodies at the density's budget (**S / M / L**), with the whole text on
 hover. The pager (12 / 24 / 48 / 96 cards) bounds what is decoded at once; a
-page fills in over a few frames rather than in one long one. Arrow keys move
-the selection once a card is clicked, and **Space** plays or pauses the
-selected recording. With nothing to draw the pane offers **publish sample
+page fills in over a few frames rather than in one long one, cards scrolled
+out of view waiting until they are scrolled to. Arrow keys move the selection
+once a card is clicked, turning the page at its edges; **PageUp** /
+**PageDown** turn it outright, and **Space** plays or pauses the selected
+recording. With nothing to draw the pane offers **publish sample
 cards**: an ordinary ad-hoc dataset, `keelson('fixture_cards')`, of images and
 recordings chosen to be awkward, and the query that reads it.
 

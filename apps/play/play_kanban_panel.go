@@ -2,7 +2,6 @@ package play
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -60,23 +59,6 @@ const (
 	kanbanMaxCards = 2000
 )
 
-// kanbanDotTokens is the `@token` colour vocabulary (ADR-0122 §SD2): the
-// foreground semantic tones only.
-//
-// The *Subtle tones are deliberately absent. They are background fills
-// (L≈0.2 — NeutralSubtle is 27/27/27) and land within a few points of the
-// card's own NeutralBgSurface, so a dot painted in one is invisible. The
-// vocabulary excludes them by construction rather than warning about them.
-var kanbanDotTokens = map[string]styletokens.RGBA8{
-	"success":  styletokens.SuccessDefault,
-	"warning":  styletokens.WarningDefault,
-	"error":    styletokens.ErrorDefault,
-	"info":     styletokens.InfoDefault,
-	"accent":   styletokens.AccentDefault,
-	"neutral":  styletokens.NeutralDefault,
-	"disabled": styletokens.NeutralTextDisabled,
-}
-
 // kanbanDotRamp colours dot columns carrying no `@token`, by position. It reads
 // as progress — settled, in flight, neither — which is the shape a tally of
 // buckets usually has. `@token` is the escape when it is not.
@@ -84,19 +66,6 @@ var kanbanDotRamp = [kanbanMaxDots]styletokens.RGBA8{
 	styletokens.SuccessDefault,
 	styletokens.WarningDefault,
 	styletokens.NeutralTextDisabled,
-}
-
-func kanbanTokenColor(t styletokens.RGBA8) color.Color { return color.Hex(t.AsHex()) }
-
-// kanbanTokenNames lists the vocabulary for a reject message, sorted so the
-// text is stable across runs (map order is not).
-func kanbanTokenNames() string {
-	names := make([]string, 0, len(kanbanDotTokens))
-	for k := range kanbanDotTokens {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ", ")
 }
 
 // kanbanDotSpec is one resolved `dot_*` column.
@@ -333,14 +302,14 @@ func resolveKanbanDot(f arrow.Field, ci, pos int) (spec kanbanDotSpec, reason st
 	}
 	spec = kanbanDotSpec{col: ci, name: f.Name, label: label}
 	if !hasToken {
-		spec.color = kanbanTokenColor(kanbanDotRamp[pos])
+		spec.color = toneTokenColor(kanbanDotRamp[pos])
 		return spec, ""
 	}
-	t, known := kanbanDotTokens[token]
+	t, known := toneTokens[token]
 	if !known {
-		return spec, fmt.Sprintf("Dot column `%s` names an unknown colour %q. Known tokens: %s.", f.Name, kanbanTokenSep+token, kanbanTokenNames())
+		return spec, fmt.Sprintf("Dot column `%s` names an unknown colour %q. Known tokens: %s.", f.Name, kanbanTokenSep+token, toneTokenNames())
 	}
-	spec.color = kanbanTokenColor(t)
+	spec.color = toneTokenColor(t)
 	return spec, ""
 }
 

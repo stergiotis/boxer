@@ -530,6 +530,41 @@ here, changes land as dated entries under `## Updates`.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-09-18 — review: reasons, thumbnails, culling, keys across pages
+
+An adversarial review of the built pane found the following, each fixed.
+
+- **A one-line slot's reason could go unsaid (§SD2).** It is reported as a
+  fact, and a result with no unclaimed column had no facts. The facts are
+  now declared whenever a one-line slot carries a companion or its column's
+  own resolution is refused. Both are properties of the schema, so the card
+  height still follows from the schema and the density (§SD4). A body's
+  reason is drawn in the body box only, not repeated as a fact.
+- **The thumbnail bound follows the box, not a constant (§SD4).** A fixed
+  512-pixel bound fell short of the largest hero box, since cards stretch to
+  fill a row. A retained image is now reduced to its box's longer side,
+  rounded up to a step so resizing does not decode again, and rebuilt when
+  the box grows. The bound is in points: a denser display still scales the
+  thumbnail up. The bound became an option of play's shared artifact cache,
+  which the Chat pane also sets, so its many-row transcript keeps thumbnails
+  too.
+- **Off-screen cards are not drawn.** This narrows §SD5's per-frame cost
+  and is not the deferred off-thread build. The viewport comes from the
+  existing rect probes, one frame late, with a row of slack. Artifacts are
+  built for the cards that are drawn.
+- **Keys cross the page (§SD5).** An arrow key past the page's edge, and
+  PageUp / PageDown, turn the page and select the card the move lands on.
+  Home and End stay within the page. Enter is no longer captured, since it
+  had no action.
+- **One row-value resolution.** The pane reads row values through the same
+  app-level resolution as the grids, Detail and Chat (§SD8 M6), rather than
+  a binder of its own.
+- The tone vocabulary is shared with Kanban under neutral names. Only real
+  builds are charged to the frame budget. The text slots, facts, tone and
+  tags read a long text cell by its head, as §SD9's display paths do.
+
 ## References
 
 - [ADR-0123](./0123-play-content-typed-detail-cells.md) — `label@mime`, the slash gate, image caps.

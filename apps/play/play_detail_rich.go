@@ -165,8 +165,14 @@ type richEntry struct {
 	pixels   []uint32
 	widthPx  uint32
 	heightPx uint32
-	text     string
-	reason   string
+	// srcW and srcH are the decoded image's own size, which is what it is
+	// laid out by; widthPx and heightPx are the retained pixels', smaller
+	// when the entry was reduced to a thumbnail no longer than side on its
+	// longer edge (side 0: not reduced).
+	srcW, srcH uint32
+	side       uint32
+	text       string
+	reason     string
 	// audio is a recording, reduced (ADR-0245 §SD6); its face is drawn by
 	// the app, which owns the now-playing session, not by renderBody.
 	audio *audioArtifact
@@ -198,6 +204,13 @@ type richCellCache struct {
 	// PanelI Render signature carries no result metadata (the World and Kanban
 	// panes' noteExecuted handoff).
 	pendingExecuted time.Time
+
+	// thumbSide, when not zero, reduces every image this cache decodes to a
+	// thumbnail no longer than thumbSide on its longer edge, and only the
+	// thumbnail is retained: a cache serving many rows at a bounded box
+	// (Chat, ADR-0239; Cards, ADR-0245) then costs thumbnails, not
+	// originals. Detail, one row at a large box, leaves it zero.
+	thumbSide uint32
 
 	// generation bumps whenever the cache is dropped, and is the image
 	// widget's contentVersion. The tracker keys by widget id, which is stable
@@ -258,15 +271,22 @@ func (inst *richCellCache) entryFor(key richKey, d gloss.Declaration, raw string
 	if e, ok := inst.entries[key]; ok {
 		return e
 	}
-	e := buildRichEntry(d, raw)
+	e := buildRichEntry(d, raw, inst.thumbSide)
 	inst.entries[key] = e
 	return e
 }
 
+// shortOf reports whether an image entry was reduced below side while its
+// source is larger — built for a box that has since grown.
+func (inst *richEntry) shortOf(side uint32) bool {
+	return inst.side != 0 && inst.side < side && max(inst.widthPx, inst.heightPx) < max(inst.srcW, inst.srcH)
+}
+
 // buildRichEntry does the once-per-(result, row, column) work: parse, highlight
 // or decode. A failure is not an error to log but a string to show — the cell
-// falls back to the truncated label carrying the reason.
-func buildRichEntry(d gloss.Declaration, raw string) *richEntry {
+// falls back to the truncated label carrying the reason. thumbSide, when not
+// zero, reduces an image to a thumbnail (richCellCache.thumbSide).
+func buildRichEntry(d gloss.Declaration, raw string, thumbSide uint32) *richEntry {
 	e := &richEntry{}
 	if d.Reason != "" {
 		e.reason = d.Reason
@@ -325,12 +345,22 @@ func buildRichEntry(d gloss.Declaration, raw string) *richEntry {
 		e.job = codeview.BuildCborDiagSpans(spans)
 		e.hasJob, e.lines = true, countSpanLines(spans)
 	case gloss.MediaTypePNG, gloss.MediaTypeJPEG, gloss.MediaTypeGIF:
+		if thumbSide > 0 {
+			t, err := imagedecode.DecodeThumbnailRGBA8([]byte(raw), richMaxImagePixels, int(thumbSide))
+			if err != nil {
+				e.reason = err.Error()
+				return e
+			}
+			e.pixels, e.widthPx, e.heightPx = t.Pixels, t.WidthPx, t.HeightPx
+			e.srcW, e.srcH, e.side = t.SrcWidthPx, t.SrcHeightPx, thumbSide
+			return e
+		}
 		pixels, w, h, err := imagedecode.DecodeRGBA8([]byte(raw), richMaxImagePixels)
 		if err != nil {
 			e.reason = err.Error()
 			return e
 		}
-		e.pixels, e.widthPx, e.heightPx = pixels, w, h
+		e.pixels, e.widthPx, e.heightPx, e.srcW, e.srcH = pixels, w, h, w, h
 	}
 	return e
 }
@@ -619,9 +649,11 @@ func (inst *richCellCache) renderImage(key richKey, e *richEntry, maxW, maxH uin
 	// variant consults the host's starved-texture report and re-ships.
 	pixels := inst.tracker.PixelsToSendFor(imgKey, imgId, inst.generation, e.pixels)
 	// Clamp the box to the native size: FitAspectMaxE scales up to fill the
-	// box, and a favicon rendered 640 wide is not a detail view.
-	boxW := min(e.widthPx, maxW)
-	boxH := min(e.heightPx, maxH)
+	// box, and a favicon rendered 640 wide is not a detail view. The
+	// source's size, not the retained pixels': a thumbnail is laid out as
+	// the image it stands for.
+	boxW := min(e.srcW, maxW)
+	boxH := min(e.srcH, maxH)
 	c.Image(inst.ids.PrepareStr(imgKey),
 		e.widthPx, e.heightPx, inst.generation,
 		uint8(c.FitAspectMaxE), boxW, boxH,
@@ -686,8 +718,15 @@ const (
 // card: bound, its items accepted, and a media type this pane has a face
 // for.
 func cardBlockFace(gc *glossColumn) bool {
-	return gc.glossedElem() && (hasBlockFace(gc.mediaType) ||
-		gc.mediaType == gloss.MediaTypeURL || gc.mediaType == gloss.MediaTypeTaggedId)
+	return gc.glossedElem() && drawsAsBlock(gc.mediaType)
+}
+
+// drawsAsBlock reports the media types glossBlock draws as a block outside
+// the ad-hoc Detail pane: every block face, and the presentation glosses
+// whose block is a control — a link, a tagged id. The leeway card and the
+// Cards pane (ADR-0245) both ask it.
+func drawsAsBlock(mediaType string) bool {
+	return hasBlockFace(mediaType) || mediaType == gloss.MediaTypeURL || mediaType == gloss.MediaTypeTaggedId
 }
 
 // cardBlock builds the block face for one card value: the same artifact
@@ -750,7 +789,7 @@ func (inst *PlayApp) glossBlock(cache *richCellCache, prefix string, gc *glossCo
 		}}
 	}
 	if isImageType(mt) {
-		return leewaywidgets.CellBlock{Height: float32(min(e.heightPx, cardImageMaxH)) + cardBlockPad, Render: func() {
+		return leewaywidgets.CellBlock{Height: float32(min(e.srcH, cardImageMaxH)) + cardBlockPad, Render: func() {
 			for range c.PushId(cache.ids.PrepareStr(scope)).KeepIter() {
 				cache.renderImage(key, e, cardImageMaxW, cardImageMaxH)
 			}

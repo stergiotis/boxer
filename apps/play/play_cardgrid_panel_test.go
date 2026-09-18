@@ -1,6 +1,7 @@
 package play
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -112,7 +113,7 @@ func TestCardgridAcceptContract(t *testing.T) {
 		assert.Equal(t, 1, k.overline)
 		assert.Equal(t, 2, k.hero)
 		assert.Equal(t, 4, k.body, "the slot is matched on the gloss label")
-		assert.Equal(t, map[int]int{2: 3}, k.companionOf)
+		assert.False(t, k.lineCompanion, "the hero's companion is not a one-line slot's")
 		assert.Equal(t, []int{5, 6}, k.factCols, "unclaimed columns are facts; the companion is not one")
 		assert.True(t, k.slots().Has(cardgrid.SlotsHero|cardgrid.SlotsTitle|cardgrid.SlotsBody|cardgrid.SlotsFacts))
 		assert.False(t, k.slots().Has(cardgrid.SlotsFooter))
@@ -121,6 +122,12 @@ func TestCardgridAcceptContract(t *testing.T) {
 		k, reason := resolveCardgridColumns(cardgridSchema(binField("card_hero@image/png")))
 		require.Empty(t, reason)
 		assert.Equal(t, cardgrid.SlotsHero, k.slots())
+	})
+	t.Run("a one-line slot's companion is noted", func(t *testing.T) {
+		k, reason := resolveCardgridColumns(cardgridSchema(strField("card_title"), strField("card_title_gloss")))
+		require.Empty(t, reason)
+		assert.True(t, k.lineCompanion)
+		assert.Empty(t, k.factCols)
 	})
 
 	rejects := []struct {
@@ -215,7 +222,7 @@ func cardgridFold(t *testing.T, rec arrow.RecordBatch, start, end int64) (*CardG
 	app := &PlayApp{}
 	k, reason := resolveCardgridColumns(rec.Schema())
 	require.Empty(t, reason)
-	d := NewCardGridDriver(nil, nil, app.glossCatalog())
+	d := NewCardGridDriver(nil, nil)
 	d.refold(app, rec, rec.Schema(), app.glossColumns(rec.Schema()), ResultID(1), k, start, end, false)
 	require.NoError(t, d.model.Validate())
 	return d, d.model
@@ -243,10 +250,10 @@ func TestCardgridFold(t *testing.T) {
 	assert.LessOrEqual(t, len([]rune(m.Title[1])), cardgrid.MaxTitleRunes+1, "a long title is bounded before it enters the model")
 	assert.Equal(t, "", m.Title[2], "NULL is an unfilled slot")
 
-	// The body: a block-faced one leaves the text to the block; one whose
-	// row value does not bind keeps its plain text.
+	// The body: a block-faced one leaves the text to the block, and so does
+	// one whose row value does not bind — the body box says why.
 	assert.Equal(t, "", m.Body[0], "markdown is drawn by the body block")
-	assert.Equal(t, "plain", m.Body[1])
+	assert.Equal(t, "", m.Body[1], "the reason is drawn in the body box")
 
 	// Tones: the ADR-0122 vocabulary, case- and space-insensitive; unknown
 	// ones draw neutral and are counted.
@@ -266,13 +273,13 @@ func TestCardgridFold(t *testing.T) {
 	}
 	// Row 0: both facts through their glosses — one by alias, one by row value.
 	assert.Equal(t, []string{"length=1m 05s", "bytes=40 KiB"}, facts(0))
-	// Row 1: the body's unbound row value is reported as a fact, ahead of the
-	// result's own; NULL facts are skipped; `large` has no slash, so outside
-	// the card_ namespace it is not a declaration.
-	f1 := facts(1)
-	require.Len(t, f1, 2)
-	assert.True(t, strings.HasPrefix(f1[0], "card_body=unknown media type"), f1[0])
-	assert.Equal(t, "bytes=1", f1[1])
+	// Row 1: the body's unbound row value is said in the body box, not again
+	// as a fact; NULL facts are skipped; `large` has no slash, so outside the
+	// card_ namespace it is not a declaration.
+	assert.Equal(t, []string{"bytes=1"}, facts(1))
+	b, ok := d.slotBlock(&PlayApp{}, rec, rec.Schema(), (&PlayApp{}).glossColumns(rec.Schema()), 3, 1, cardgrid.Box{W: 200, H: 60}, false, false)
+	require.True(t, ok)
+	assert.Contains(t, b.Reason, "unknown media type")
 	// Row 3: a row value with a slash that does not bind is loud as the
 	// fact's value.
 	f3 := facts(3)
@@ -286,22 +293,22 @@ func TestCardgridFoldIsPerPageAndCached(t *testing.T) {
 	app := &PlayApp{}
 	k, _ := resolveCardgridColumns(rec.Schema())
 	cols := app.glossColumns(rec.Schema())
-	d := NewCardGridDriver(nil, nil, app.glossCatalog())
+	d := NewCardGridDriver(nil, nil)
 
 	d.refold(app, rec, rec.Schema(), cols, ResultID(1), k, 2, 4, false)
 	first := d.model
 	assert.Equal(t, []string{"c", "d"}, first.Title, "only the page is folded")
-	gen := d.generation
+	gen := d.cache.generation
 	d.refold(app, rec, rec.Schema(), cols, ResultID(1), k, 2, 4, false)
 	assert.Same(t, first, d.model, "unchanged inputs keep the fold")
-	assert.Equal(t, gen, d.generation, "and the page's artifacts")
+	assert.Equal(t, gen, d.cache.generation, "and the page's artifacts")
 
 	d.refold(app, rec, rec.Schema(), cols, ResultID(1), k, 4, 5, false)
 	assert.Equal(t, []string{"e"}, d.model.Title)
-	assert.Greater(t, d.generation, gen, "a page turn drops the page's artifacts")
-	gen = d.generation
+	assert.Greater(t, d.cache.generation, gen, "a page turn drops the page's artifacts")
+	gen = d.cache.generation
 	d.refold(app, rec, rec.Schema(), cols, ResultID(2), k, 4, 5, false)
-	assert.Greater(t, d.generation, gen, "so does a new result")
+	assert.Greater(t, d.cache.generation, gen, "so does a new result")
 }
 
 func TestCardgridSlotBlockStandIns(t *testing.T) {
@@ -316,11 +323,11 @@ func TestCardgridSlotBlockStandIns(t *testing.T) {
 	k, reason := resolveCardgridColumns(rec.Schema())
 	require.Empty(t, reason)
 	cols := app.glossColumns(rec.Schema())
-	d := NewCardGridDriver(nil, nil, app.glossCatalog())
+	d := NewCardGridDriver(nil, nil)
 	box := cardgrid.Box{W: 320, H: 180}
 	block := func(row int64) (cardgrid.Block, bool) {
 		d.spent, d.builds = 0, 0
-		return d.slotBlock(app, rec, rec.Schema(), cols, k, k.hero, row, box, false, true)
+		return d.slotBlock(app, rec, rec.Schema(), cols, k.hero, row, box, false, true)
 	}
 
 	b, ok := block(0)
@@ -342,13 +349,86 @@ func TestCardgridSlotBlockStandIns(t *testing.T) {
 	// The frame budget: once it is spent, an unbuilt artifact is a skeleton.
 	d.dropArtifacts()
 	d.spent, d.builds = cardgridFrameBudget, 1
-	b, _ = d.slotBlock(app, rec, rec.Schema(), cols, k, k.hero, 0, box, false, true)
+	b, _ = d.slotBlock(app, rec, rec.Schema(), cols, k.hero, 0, box, false, true)
 	assert.True(t, b.Pending)
 	assert.True(t, d.pending)
 	d.spent, d.builds = cardgridFrameBudget, 0
-	b, _ = d.slotBlock(app, rec, rec.Schema(), cols, k, k.hero, 0, box, false, true)
+	b, _ = d.slotBlock(app, rec, rec.Schema(), cols, k.hero, 0, box, false, true)
 	assert.False(t, b.Pending, "the first build of a frame always runs")
-	assert.LessOrEqual(t, len(d.thumbs[richKey{col: k.hero, ord: 0}].pixels), cardgridThumbMaxSide*cardgridThumbMaxSide)
+	side := int(cardgridThumbSide(box))
+	assert.LessOrEqual(t, len(d.cache.entries[richKey{col: k.hero, ord: 0}].pixels), side*side)
+
+	// A cached artifact costs the frame nothing: the next unbuilt one is
+	// still the frame's first build.
+	d.spent, d.builds = 0, 0
+	b, _ = d.slotBlock(app, rec, rec.Schema(), cols, k.hero, 0, box, false, true)
+	assert.NotNil(t, b.Render)
+	assert.Zero(t, d.builds, "drawing a built thumbnail is not a build")
+}
+
+// §SD4: the retained image follows the box it is drawn in, and a box that
+// grows has it rebuilt rather than scaled up.
+func TestCardgridThumbnailFollowsTheBox(t *testing.T) {
+	big := tinyPNG(t, 1600, 900)
+	rec := cardgridRec(t,
+		cardgridCol{strField("card_title"), []any{"big"}},
+		cardgridCol{binField("card_hero@image/png"), []any{big}},
+	)
+	defer rec.Release()
+	app := &PlayApp{}
+	k, reason := resolveCardgridColumns(rec.Schema())
+	require.Empty(t, reason)
+	cols := app.glossColumns(rec.Schema())
+	d := NewCardGridDriver(nil, nil)
+	key := richKey{col: k.hero, ord: 0}
+
+	b, _ := d.slotBlock(app, rec, rec.Schema(), cols, k.hero, 0, cardgrid.Box{W: 256, H: 144}, false, true)
+	require.NotNil(t, b.Render)
+	small := d.cache.entries[key]
+	assert.Equal(t, uint32(256), max(small.widthPx, small.heightPx), "reduced to the box, rounded up to the step")
+	assert.Equal(t, float32(256), b.W, "laid out by the source, contained in the box")
+
+	d.spent, d.builds = 0, 0
+	d.slotBlock(app, rec, rec.Schema(), cols, k.hero, 0, cardgrid.Box{W: 700, H: 394}, false, true)
+	assert.Equal(t, uint32(768), max(d.cache.entries[key].widthPx, d.cache.entries[key].heightPx), "a grown box rebuilds")
+
+	d.spent, d.builds = 0, 0
+	d.slotBlock(app, rec, rec.Schema(), cols, k.hero, 0, cardgrid.Box{W: 256, H: 144}, false, true)
+	assert.Zero(t, d.builds, "a shrunk box keeps the larger one")
+}
+
+// §SD2: a one-line slot whose row value does not bind says so even when
+// the result has no column of its own to become a fact.
+func TestCardgridOneLineReasonWithoutFacts(t *testing.T) {
+	rec := cardgridRec(t,
+		cardgridCol{strField("card_title"), []any{"Sweep"}},
+		cardgridCol{strField("card_title_gloss"), []any{"gloss/nope"}},
+	)
+	defer rec.Release()
+	_, m := cardgridFold(t, rec, 0, 1)
+	assert.Equal(t, "Sweep", m.Title[0], "the slot keeps its plain text")
+	require.True(t, m.Slots.Has(cardgrid.SlotsFacts), "facts are declared for the reason")
+	require.Len(t, m.FactValue, 1)
+	assert.Contains(t, m.FactValue[0], "unknown media type")
+
+	plain := cardgridRec(t, cardgridCol{strField("card_title"), []any{"Sweep"}})
+	defer plain.Release()
+	_, m = cardgridFold(t, plain, 0, 1)
+	assert.False(t, m.Slots.Has(cardgrid.SlotsFacts), "nothing can raise, so no room is reserved")
+}
+
+// §SD4: past the fact cap, columns are counted rather than rendered.
+func TestCardgridFactCap(t *testing.T) {
+	cols := []cardgridCol{{strField("card_title"), []any{"many"}}}
+	for i := range cardgridMaxFacts + 5 {
+		cols = append(cols, cardgridCol{strField("f" + strconv.Itoa(i)), []any{"v"}})
+	}
+	cols = append(cols, cardgridCol{strField("nothing"), []any{nil}})
+	rec := cardgridRec(t, cols...)
+	defer rec.Release()
+	_, m := cardgridFold(t, rec, 0, 1)
+	assert.Len(t, m.FactLabel, cardgridMaxFacts)
+	assert.Equal(t, []int32{5}, m.FactMore, "the NULL column is not counted")
 }
 
 // ADR-0245 §SD8 M6: the grids, Detail and Chat read the companion through the

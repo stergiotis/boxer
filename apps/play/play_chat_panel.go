@@ -258,6 +258,9 @@ type ChatDriver struct {
 // roster or reactions.
 func NewChatDriver(ids *c.WidgetIdStack, client *Client) (inst *ChatDriver) {
 	inst = &ChatDriver{ids: ids, cache: newRichCellCache(ids)}
+	// A transcript holds many images, each drawn in the card-sized box
+	// glossBlock gives it: keep that much of each.
+	inst.cache.thumbSide = cardImageMaxW
 	if client != nil {
 		alloc := memory.NewGoAllocator()
 		inst.participantsLane = newNodeLane(clientExecutor{client: client, opts: newExecOptions("chat-participants")}, alloc, 0)

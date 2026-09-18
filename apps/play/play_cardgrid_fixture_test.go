@@ -35,10 +35,10 @@ func TestCardgridFixtureRows(t *testing.T) {
 		assert.Equal(t, r.width, int64(cfg.Width), name)
 		assert.Equal(t, r.height, int64(cfg.Height), name)
 	}
-	_, err = imagedecode.DecodeThumbnailRGBA8(byName["Over the pixel budget"].content, richMaxImagePixels, cardgridThumbMaxSide)
+	_, err = imagedecode.DecodeThumbnailRGBA8(byName["Over the pixel budget"].content, richMaxImagePixels, cardgridThumbStep)
 	assert.ErrorContains(t, err, "pixel budget", "refused from the header")
 	assert.Less(t, len(byName["Over the pixel budget"].content), 64, "and the file is only a header")
-	_, err = imagedecode.DecodeThumbnailRGBA8(byName["Truncated PNG"].content, richMaxImagePixels, cardgridThumbMaxSide)
+	_, err = imagedecode.DecodeThumbnailRGBA8(byName["Truncated PNG"].content, richMaxImagePixels, cardgridThumbStep)
 	assert.Error(t, err)
 	assert.Nil(t, byName["No hero on this card"].content)
 	assert.Equal(t, "image/pgn", byName["Misspelt media type"].mime)

@@ -175,8 +175,8 @@ func (inst *rowGlossBinder) bind(field arrow.Field, companion string, token stri
 
 // rowGlossState is the app's row-value resolution for the result on screen:
 // the companions of its schema and the tokens bound so far. The Table grids,
-// the ad-hoc Detail pane and the Chat bubble share it (ADR-0245 §SD8 M6); the
-// Cards pane keeps a binder of its own, tied to its page fold.
+// the ad-hoc Detail pane, the Chat bubble and the Cards pane share it
+// (ADR-0245 §SD8 M6).
 type rowGlossState struct {
 	seen        bool
 	forSchema   *arrow.Schema

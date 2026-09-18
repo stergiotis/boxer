@@ -114,7 +114,7 @@ func TestKanbanAcceptDotColumns(t *testing.T) {
 	assert.Equal(t, "done", k.dots[0].label, "the label is the name minus prefix and token")
 	assert.Equal(t, "cited", k.dots[1].label)
 	assert.Equal(t, "todo", k.dots[2].label)
-	assert.Equal(t, kanbanTokenColor(styletokens.SuccessDefault), k.dots[0].color)
+	assert.Equal(t, toneTokenColor(styletokens.SuccessDefault), k.dots[0].color)
 	assert.Equal(t, "dot_done@success", k.dots[0].name, "the legend tooltip names the physical column")
 
 	// Bare names fall back to the ramp, by position.
@@ -125,8 +125,8 @@ func TestKanbanAcceptDotColumns(t *testing.T) {
 	k = claim.(kanbanClaim)
 	require.Len(t, k.dots, 2)
 	assert.Equal(t, "a", k.dots[0].label)
-	assert.Equal(t, kanbanTokenColor(kanbanDotRamp[0]), k.dots[0].color)
-	assert.Equal(t, kanbanTokenColor(kanbanDotRamp[1]), k.dots[1].color)
+	assert.Equal(t, toneTokenColor(kanbanDotRamp[0]), k.dots[0].color)
+	assert.Equal(t, toneTokenColor(kanbanDotRamp[1]), k.dots[1].color)
 
 	// Mixed: the ramp index is the dot's position, not a count of bare ones.
 	claim, reason = p.AcceptForChannel(chMain, kanbanSchema(
@@ -134,7 +134,7 @@ func TestKanbanAcceptDotColumns(t *testing.T) {
 	), sigNone())
 	require.Empty(t, reason)
 	k = claim.(kanbanClaim)
-	assert.Equal(t, kanbanTokenColor(kanbanDotRamp[1]), k.dots[1].color, "position 1 takes ramp[1]")
+	assert.Equal(t, toneTokenColor(kanbanDotRamp[1]), k.dots[1].color, "position 1 takes ramp[1]")
 }
 
 // The rejections §SD2 turns into messages rather than a quietly wrong board.
@@ -170,16 +170,16 @@ func TestKanbanAcceptDotRejections(t *testing.T) {
 // The *Subtle background tones are excluded from the vocabulary by
 // construction: a dot painted in one is invisible on the card.
 func TestKanbanDotTokensAreForegroundOnly(t *testing.T) {
-	for name := range kanbanDotTokens {
+	for name := range toneTokens {
 		assert.NotContains(t, name, "subtle", "the vocabulary must not expose a background tone")
 	}
 	for _, want := range []string{"success", "warning", "error", "info", "accent", "neutral", "disabled"} {
-		_, ok := kanbanDotTokens[want]
+		_, ok := toneTokens[want]
 		assert.True(t, ok, "token %q is part of the vocabulary", want)
 	}
 	// The reject message lists them in a stable order (map order is not).
-	assert.Equal(t, kanbanTokenNames(), kanbanTokenNames())
-	assert.Equal(t, "accent, disabled, error, info, neutral, success, warning", kanbanTokenNames())
+	assert.Equal(t, toneTokenNames(), toneTokenNames())
+	assert.Equal(t, "accent, disabled, error, info, neutral, success, warning", toneTokenNames())
 }
 
 func TestParseKanbanDot(t *testing.T) {

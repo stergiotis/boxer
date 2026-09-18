@@ -147,21 +147,21 @@ func TestCellRawFallsBackForOtherTypes(t *testing.T) {
 func TestBuildRichEntryReasons(t *testing.T) {
 	t.Run("carries the declaration's own reason", func(t *testing.T) {
 		d, _ := richDeclFor("x@text/markdwn")
-		e := buildRichEntry(d, "whatever")
+		e := buildRichEntry(d, "whatever", 0)
 		assert.Contains(t, e.reason, "unknown media type")
 		assert.Nil(t, e.doc)
 	})
 
 	t.Run("oversized text declines in writing", func(t *testing.T) {
 		d, _ := richDeclFor("x@text/markdown")
-		e := buildRichEntry(d, strings.Repeat("a", richMaxTextBytes+1))
+		e := buildRichEntry(d, strings.Repeat("a", richMaxTextBytes+1), 0)
 		assert.Contains(t, e.reason, "over the")
 		assert.Nil(t, e.doc, "no parse is attempted past the limit")
 	})
 
 	t.Run("undecodable image names the failure", func(t *testing.T) {
 		d, _ := richDeclFor("x@image/png")
-		e := buildRichEntry(d, "not a png")
+		e := buildRichEntry(d, "not a png", 0)
 		assert.NotEmpty(t, e.reason)
 		assert.Empty(t, e.pixels)
 	})
@@ -171,7 +171,7 @@ func TestBuildRichEntryReasons(t *testing.T) {
 func TestBuildRichEntryArtifacts(t *testing.T) {
 	t.Run("markdown parses", func(t *testing.T) {
 		d, _ := richDeclFor("x@text/markdown")
-		e := buildRichEntry(d, "# Title\n\nsome *body*")
+		e := buildRichEntry(d, "# Title\n\nsome *body*", 0)
 		require.Empty(t, e.reason)
 		require.NotNil(t, e.doc)
 		headings := e.doc.Headings()
@@ -181,21 +181,21 @@ func TestBuildRichEntryArtifacts(t *testing.T) {
 
 	t.Run("plain text is kept whole", func(t *testing.T) {
 		d, _ := richDeclFor("x@text/plain")
-		e := buildRichEntry(d, "line one\nline two")
+		e := buildRichEntry(d, "line one\nline two", 0)
 		require.Empty(t, e.reason)
 		assert.Equal(t, "line one\nline two", e.text)
 	})
 
 	t.Run("json is highlighted", func(t *testing.T) {
 		d, _ := richDeclFor("x@application/json")
-		e := buildRichEntry(d, `{"a":1}`)
+		e := buildRichEntry(d, `{"a":1}`, 0)
 		require.Empty(t, e.reason)
 		assert.True(t, e.hasJob)
 	})
 
 	t.Run("image decodes to pixels", func(t *testing.T) {
 		d, _ := richDeclFor("x@image/png")
-		e := buildRichEntry(d, string(tinyPNG(t, 3, 2)))
+		e := buildRichEntry(d, string(tinyPNG(t, 3, 2)), 0)
 		require.Empty(t, e.reason)
 		assert.Equal(t, uint32(3), e.widthPx)
 		assert.Equal(t, uint32(2), e.heightPx)
@@ -211,7 +211,7 @@ func TestBuildRichEntryCbor(t *testing.T) {
 
 	t.Run("well-formed", func(t *testing.T) {
 		d, _ := richDeclFor("x@application/cbor")
-		e := buildRichEntry(d, item)
+		e := buildRichEntry(d, item, 0)
 		require.Empty(t, e.reason)
 		assert.True(t, e.hasJob)
 		assert.Positive(t, e.lines)
@@ -219,7 +219,7 @@ func TestBuildRichEntryCbor(t *testing.T) {
 
 	t.Run("malformed degrades rather than declines", func(t *testing.T) {
 		d, _ := richDeclFor("x@application/cbor")
-		e := buildRichEntry(d, item[:4])
+		e := buildRichEntry(d, item[:4], 0)
 		assert.Empty(t, e.reason, "the failure is rendered, not a reason")
 		assert.True(t, e.hasJob)
 	})
@@ -236,7 +236,7 @@ func TestBuildRichEntryCbor(t *testing.T) {
 
 	t.Run("oversized declines like any other text cell", func(t *testing.T) {
 		d, _ := richDeclFor("x@application/cbor")
-		e := buildRichEntry(d, strings.Repeat("\x00", richMaxTextBytes+1))
+		e := buildRichEntry(d, strings.Repeat("\x00", richMaxTextBytes+1), 0)
 		assert.Contains(t, e.reason, "over the")
 		assert.False(t, e.hasJob)
 	})
@@ -250,7 +250,7 @@ func TestBuildRichEntryRegexp(t *testing.T) {
 	t.Run("highlights and keeps the pattern", func(t *testing.T) {
 		d, _ := richDeclFor("x@gloss/regexp")
 		pattern := `^(\d{3})-(\d{4})$`
-		e := buildRichEntry(d, pattern)
+		e := buildRichEntry(d, pattern, 0)
 		require.Empty(t, e.reason)
 		assert.True(t, e.hasJob)
 		assert.Equal(t, pattern, e.text)
@@ -263,7 +263,7 @@ func TestBuildRichEntryRegexp(t *testing.T) {
 
 	t.Run("a pattern that does not compile still highlights", func(t *testing.T) {
 		d, _ := richDeclFor("x@gloss/regexp")
-		e := buildRichEntry(d, `\d{3}-(\d{4}`)
+		e := buildRichEntry(d, `\d{3}-(\d{4}`, 0)
 		assert.Empty(t, e.reason, "the lexer is not the validity authority")
 		assert.True(t, e.hasJob)
 	})
@@ -277,7 +277,7 @@ func TestBuildRichEntryRegexp(t *testing.T) {
 // indented JSON and CBOR notation both come from a one-line source.
 func TestRichEntryLinesAreTheRenderedSource(t *testing.T) {
 	d, _ := richDeclFor("x@application/json")
-	e := buildRichEntry(d, `{"a":1,"b":[2,3]}`)
+	e := buildRichEntry(d, `{"a":1,"b":[2,3]}`, 0)
 	require.True(t, e.hasJob)
 	assert.Greater(t, e.lines, 1, "the source is one line; the indented rendering is not")
 	assert.Equal(t, 1, countLines("no newline"))
