@@ -54,6 +54,23 @@ type MarshallWriterI interface {
 	WriteSliceLength(l int)
 	WriteNilSlice()
 }
+
+// MarshallSliceWriterI is the optional bulk half of a [MarshallWriterI]: the
+// elements of a slice in one call, in the writer's byte order, WITHOUT the
+// length prefix — the caller has written that. The bytes are exactly those of
+// the matching Write method called once per element; only the cost differs.
+// Signed integers, floats and runes go through the unsigned method of their
+// width, as their bit patterns.
+//
+// It is optional so that an implementation of MarshallWriterI outside this
+// module keeps compiling: the Put*SliceArg helpers use it when the writer has
+// it and write element by element when it has not.
+type MarshallSliceWriterI interface {
+	WriteUint16Elements(vs []uint16)
+	WriteUint32Elements(vs []uint32)
+	WriteUint64Elements(vs []uint64)
+}
+
 type UnmarshallReaderI interface {
 	SetInput(r io.Reader)
 	SetEndianness(endi binary.ByteOrder)

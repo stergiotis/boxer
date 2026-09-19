@@ -169,6 +169,20 @@ func (inst *RetainedFffiBuilder) WriteNilSlice() {
 
 var _ runtime.MarshallWriterI = (*RetainedFffiBuilder)(nil)
 
+func (inst *RetainedFffiBuilder) WriteUint16Elements(vs []uint16) {
+	inst.builder.marshaller.WriteUint16Elements(vs)
+}
+
+func (inst *RetainedFffiBuilder) WriteUint32Elements(vs []uint32) {
+	inst.builder.marshaller.WriteUint32Elements(vs)
+}
+
+func (inst *RetainedFffiBuilder) WriteUint64Elements(vs []uint64) {
+	inst.builder.marshaller.WriteUint64Elements(vs)
+}
+
+var _ runtime.MarshallSliceWriterI = (*RetainedFffiBuilder)(nil)
+
 type retainedFffiBuilderPooled struct {
 	buf        *bytes.Buffer
 	marshaller *runtime.Marshaller

@@ -161,3 +161,10 @@ To achieve maximum speed, Go must avoid allocating slices when reading massive a
 *   FFFI2 uses Go generics (`T ~uint64`) and iterators (`iter.Seq`).
 *   Instead of `ReadUint64Slice()[]uint64`, it uses `IterateUint64SliceRetr() iter.Seq[uint64]`. This yields directly from the `bufio.Reader` connected to the OS Pipe, bypassing the Go Garbage Collector entirely.
 *   **Rule:** Always prefer `FetcherNode` for state retrieval, and utilize the generated iterator methods to update Go's logic state at the top of the frame loop.
+
+### D. Slice Arguments Are Written in One Call
+A homogeneous slice argument (`F32h`, `U32h`, …) is a `u32` length and then the elements in the wire's byte order. The generated factories encode it through `runtime.Put*SliceArg`, which hands the whole slice to the writer's bulk half, `runtime.MarshallSliceWriterI`, when the writer has one — `Marshaller` and `RetainedFffiBuilder` both do. Where the wire's byte order is the machine's the slice's memory is written as it is, in one `Write`; where it is not, it is encoded in chunks. The bytes are exactly those of writing element by element, which is what a writer without the bulk half still gets.
+*   **Consequence:** pass large data as ONE slice argument rather than as many scalar arguments or many opcodes. Before this, a slice cost an `io.Writer.Write` per element and was about 60 % of the Go side of a slice-heavy frame (measured in `doc/trials/flow-particles-frame-cost`).
+*   The slice is read during the call and not kept; the caller may reuse its buffer on the next frame.
+*   Under the `extrasafe` build tag no view of the slice's memory is taken and the element-by-element path is used.
+*   The reading side (`Get*SliceRetr`) still reads an element at a time; nothing on the draw path uses it.

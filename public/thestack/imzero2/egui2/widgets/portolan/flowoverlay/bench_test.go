@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 )
 
@@ -15,6 +17,12 @@ import (
 // doc/trials/flow-particles-frame-cost measures the same thing in a running
 // host; this is where to look for where the time goes.
 func BenchmarkDraw(b *testing.B) {
+	// The harness renders frame after frame without the host's frame
+	// boundary, so the id checker warns on every one; the warning is noise
+	// here, and writing it is time.
+	level := zerolog.GlobalLevel()
+	zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	defer zerolog.SetGlobalLevel(level)
 	src, err := vectorfield.NewPyramidE(context.Background(),
 		vectorfield.Meta{SpeedMax: 30, Steps: hourly(1)},
 		vectorfield.NewGlobalAnalyticLoader(1, vectorfield.Swirl(0)), vectorfield.PyramidOptions{})

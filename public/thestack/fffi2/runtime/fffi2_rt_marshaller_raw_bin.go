@@ -14,9 +14,23 @@ type Marshaller struct {
 	errHandler func(err error)
 	buf        []byte
 	written    int
+	// native says the wire's byte order is the machine's, so a slice's memory
+	// is already its encoding.
+	native bool
+	// chunk is the scratch a slice is encoded into when it is not, allocated
+	// on first use.
+	chunk []byte
 }
 
 var _ MarshallWriterI = (*Marshaller)(nil)
+var _ MarshallSliceWriterI = (*Marshaller)(nil)
+
+// chunkBytes is how much of a slice is encoded per write when its memory
+// cannot be written as it is.
+const chunkBytes = 8192
+
+// nativeLittleEndian is the machine's byte order, found once.
+var nativeLittleEndian = binary.NativeEndian.Uint16([]byte{1, 0}) == 1
 
 func NewMarshaller(w io.Writer, bin binary.ByteOrder, errHandler func(err error)) *Marshaller {
 	return &Marshaller{
@@ -25,6 +39,8 @@ func NewMarshaller(w io.Writer, bin binary.ByteOrder, errHandler func(err error)
 		buf:        make([]byte, 8),
 		errHandler: errHandler,
 		written:    0,
+		native: (bin == binary.ByteOrder(binary.LittleEndian) && nativeLittleEndian) ||
+			(bin == binary.ByteOrder(binary.BigEndian) && !nativeLittleEndian),
 	}
 }
 
@@ -138,4 +154,68 @@ func (inst *Marshaller) WriteSliceLength(l int) {
 
 func (inst *Marshaller) WriteNilSlice() {
 	inst.WriteUint32(math.MaxUint32)
+}
+
+// WriteUint16Elements implements [MarshallSliceWriterI].
+func (inst *Marshaller) WriteUint16Elements(vs []uint16) {
+	if inst.native {
+		if b, ok := unsafeperf.UnsafeSliceToBytes(vs); ok {
+			inst.WriteVerbatim(b)
+			return
+		}
+	}
+	for len(vs) > 0 {
+		n := min(len(vs), chunkBytes/2)
+		b := inst.scratch()
+		for i, v := range vs[:n] {
+			inst.bin.PutUint16(b[2*i:], v)
+		}
+		inst.WriteVerbatim(b[:2*n])
+		vs = vs[n:]
+	}
+}
+
+// WriteUint32Elements implements [MarshallSliceWriterI].
+func (inst *Marshaller) WriteUint32Elements(vs []uint32) {
+	if inst.native {
+		if b, ok := unsafeperf.UnsafeSliceToBytes(vs); ok {
+			inst.WriteVerbatim(b)
+			return
+		}
+	}
+	for len(vs) > 0 {
+		n := min(len(vs), chunkBytes/4)
+		b := inst.scratch()
+		for i, v := range vs[:n] {
+			inst.bin.PutUint32(b[4*i:], v)
+		}
+		inst.WriteVerbatim(b[:4*n])
+		vs = vs[n:]
+	}
+}
+
+// WriteUint64Elements implements [MarshallSliceWriterI].
+func (inst *Marshaller) WriteUint64Elements(vs []uint64) {
+	if inst.native {
+		if b, ok := unsafeperf.UnsafeSliceToBytes(vs); ok {
+			inst.WriteVerbatim(b)
+			return
+		}
+	}
+	for len(vs) > 0 {
+		n := min(len(vs), chunkBytes/8)
+		b := inst.scratch()
+		for i, v := range vs[:n] {
+			inst.bin.PutUint64(b[8*i:], v)
+		}
+		inst.WriteVerbatim(b[:8*n])
+		vs = vs[n:]
+	}
+}
+
+func (inst *Marshaller) scratch() []byte {
+	if inst.chunk == nil {
+		inst.chunk = make([]byte, chunkBytes)
+	}
+	return inst.chunk
 }

@@ -1,6 +1,10 @@
 package runtime
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/stergiotis/boxer/public/unsafeperf"
+)
 
 // FFFI2 wire format encodes uintptr in a fixed 8-byte slot (PutUintptrArg
 // writes 8, ReadUintptr reads 8 and casts back). Correct iff the platform's
@@ -105,6 +109,10 @@ func PutUint8SliceArg[D MarshallWriterI, T ~uint8](marshaller D, vs []T) {
 		m.WriteNilSlice()
 		return
 	}
+	if raw, ok := unsafeperf.UnsafeSliceReinterpret[uint8](vs); ok && len(vs) > 0 {
+		m.WriteBytes(raw)
+		return
+	}
 	m.WriteSliceLength(len(vs))
 	for _, v := range vs {
 		m.WriteUint8(uint8(v))
@@ -118,6 +126,9 @@ func PutUint16SliceArg[D MarshallWriterI, T ~uint16](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements16(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteUint16(uint16(v))
 	}
@@ -130,6 +141,9 @@ func PutUint32SliceArg[D MarshallWriterI, T ~uint32](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements32(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteUint32(uint32(v))
 	}
@@ -139,6 +153,10 @@ func PutInt8SliceArg[D MarshallWriterI, T ~int8](marshaller D, vs []T) {
 	m := marshaller
 	if vs == nil {
 		m.WriteNilSlice()
+		return
+	}
+	if raw, ok := unsafeperf.UnsafeSliceReinterpret[uint8](vs); ok && len(vs) > 0 {
+		m.WriteBytes(raw)
 		return
 	}
 	m.WriteSliceLength(len(vs))
@@ -154,6 +172,9 @@ func PutInt16SliceArg[D MarshallWriterI, T ~int16](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements16(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteInt16(int16(v))
 	}
@@ -166,6 +187,9 @@ func PutInt32SliceArg[D MarshallWriterI, T ~int32](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements32(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteInt32(int32(v))
 	}
@@ -178,6 +202,9 @@ func PutFloat32SliceArg[D MarshallWriterI, T ~float32](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements32(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteFloat32(float32(v))
 	}
@@ -190,6 +217,9 @@ func PutFloat64SliceArg[D MarshallWriterI, T ~float64](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements64(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteFloat64(float64(v))
 	}
@@ -202,6 +232,9 @@ func PutUint64SliceArg[D MarshallWriterI, T ~uint64](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements64(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteUint64(uint64(v))
 	}
@@ -214,6 +247,9 @@ func PutInt64SliceArg[D MarshallWriterI, T ~int64](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements64(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteInt64(int64(v))
 	}
@@ -238,6 +274,9 @@ func PutRuneSliceArg[D MarshallWriterI, T ~rune](marshaller D, vs []T) {
 		return
 	}
 	m.WriteSliceLength(len(vs))
+	if putElements32(m, vs) {
+		return
+	}
 	for _, v := range vs {
 		m.WriteInt32(int32(v))
 	}
@@ -276,4 +315,47 @@ func PutComplex128Arg[D MarshallWriterI, T ~complex128](marshaller D, v T) {
 func PutComplex64Array2Arg[D MarshallWriterI, T ~complex64](marshaller D, v [2]T) {
 	marshaller.WriteComplex64(complex64(v[0]))
 	marshaller.WriteComplex64(complex64(v[1]))
+}
+
+// putElements16, 32 and 64 write a slice's elements through the writer's bulk
+// half when it has one ([MarshallSliceWriterI]) and the slice can be viewed as
+// the unsigned integers of its bit patterns. done false leaves the caller to
+// write element by element, which produces the same bytes.
+func putElements16[D MarshallWriterI, T unsafeperf.FixedSize](m D, vs []T) (done bool) {
+	bulk, ok := any(m).(MarshallSliceWriterI)
+	if !ok {
+		return
+	}
+	raw, ok := unsafeperf.UnsafeSliceReinterpret[uint16](vs)
+	if !ok {
+		return
+	}
+	bulk.WriteUint16Elements(raw)
+	return true
+}
+
+func putElements32[D MarshallWriterI, T unsafeperf.FixedSize](m D, vs []T) (done bool) {
+	bulk, ok := any(m).(MarshallSliceWriterI)
+	if !ok {
+		return
+	}
+	raw, ok := unsafeperf.UnsafeSliceReinterpret[uint32](vs)
+	if !ok {
+		return
+	}
+	bulk.WriteUint32Elements(raw)
+	return true
+}
+
+func putElements64[D MarshallWriterI, T unsafeperf.FixedSize](m D, vs []T) (done bool) {
+	bulk, ok := any(m).(MarshallSliceWriterI)
+	if !ok {
+		return
+	}
+	raw, ok := unsafeperf.UnsafeSliceReinterpret[uint64](vs)
+	if !ok {
+		return
+	}
+	bulk.WriteUint64Elements(raw)
+	return true
 }
