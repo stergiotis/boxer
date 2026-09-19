@@ -454,11 +454,11 @@ func newApp() (inst *App) {
 	// The lading connection is lane-owned: the lane releases what it holds
 	// when invalidated, superseded or closed, so nobody else may close it
 	// (the lane's own contract).
-	inst.files.conn.dispose = func(sc *storeConn) {
+	inst.files.conn.SetDispose(func(sc *storeConn) {
 		if sc != nil {
 			sc.close()
 		}
-	}
+	})
 	return
 }
 
@@ -498,9 +498,9 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 
 	// The files pane's lanes: cancel what runs, release the connection the
 	// conn lane owns (its dispose closes the stores).
-	inst.files.load.close()
-	inst.files.mounts.close()
-	inst.files.conn.close()
+	inst.files.load.Close()
+	inst.files.mounts.Close()
+	inst.files.conn.Close()
 
 	if inst.store == nil || inst.src == inst.persistedSrc {
 		return

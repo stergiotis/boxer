@@ -1,16 +1,17 @@
 package mdedit
 
 // The lading connection (F: browse snapshots). A trimmed copy of tally's
-// storeConn and lane (apps/tally/tally_store.go, tally_lane.go) rather than a
-// shared package — both are deliberately app-local there (ADR-0200 kept the
-// widget generic and the store plumbing per-host), and the trim is real:
-// mdedit reads mounts and files, never audits, sizes or problem reports.
+// storeConn (apps/tally/tally_store.go) rather than a shared package — it is
+// deliberately app-local there (ADR-0200 kept the widget generic and the
+// store plumbing per-host), and the trim is real: mdedit reads mounts and
+// files, never audits, sizes or problem reports. The lanes the connection
+// and its reads run on are bgjob.Keyed, shared since ADR-0200's 2026-09-19
+// update.
 
 import (
 	"context"
 	"fmt"
 	"io/fs"
-	"sync"
 	"time"
 
 	"github.com/stergiotis/boxer/public/fs/lading"
@@ -167,95 +168,4 @@ func (sc *storeConn) listMounts(ctx context.Context) (rows []mountRow, err error
 		rows = append(rows, row)
 	}
 	return
-}
-
-// lane runs one background computation at a time, keyed by what it is for,
-// and hands the render thread the result when it is there — tally's lane,
-// copied whole (its header records why a value with a disposer is
-// lane-owned).
-type lane[T any] struct {
-	mu      sync.Mutex
-	key     string
-	gen     uint64
-	running bool
-	done    bool
-	val     T
-	err     error
-	cancel  context.CancelFunc
-	dispose func(T)
-}
-
-// demand returns the state for key, starting run when key is new. busy is
-// true while the run is in flight; done and err are meaningful once it is
-// not. A nil run is a question, not an order: it polls without starting.
-func (l *lane[T]) demand(key string, run func(ctx context.Context) (T, error)) (val T, done bool, err error, busy bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if key != l.key || (!l.done && !l.running) {
-		if run == nil {
-			var zero T
-			return zero, false, nil, false
-		}
-		l.start(key, run)
-	}
-	return l.val, l.done, l.err, l.running
-}
-
-// invalidate forgets the current key so the next demand re-runs it.
-func (l *lane[T]) invalidate() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.cancel != nil {
-		l.cancel()
-		l.cancel = nil
-	}
-	l.key, l.running = "", false
-	l.clearLocked()
-}
-
-func (l *lane[T]) clearLocked() {
-	if l.done && l.dispose != nil {
-		l.dispose(l.val)
-	}
-	l.done = false
-	var zero T
-	l.val, l.err = zero, nil
-}
-
-func (l *lane[T]) start(key string, run func(ctx context.Context) (T, error)) {
-	if l.cancel != nil {
-		l.cancel()
-	}
-	l.gen++
-	gen := l.gen
-	ctx, cancel := context.WithCancel(context.Background())
-	l.cancel = cancel
-	l.clearLocked()
-	l.key, l.running = key, true
-	go func() {
-		v, err := run(ctx)
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		if l.gen != gen {
-			// Superseded, and nobody will ever be handed this: a value that
-			// owns something has to be released here or it leaks.
-			if l.dispose != nil {
-				l.dispose(v)
-			}
-			return
-		}
-		l.val, l.err, l.done, l.running = v, err, true, false
-	}()
-}
-
-// close cancels whatever is in flight and releases what the lane holds.
-func (l *lane[T]) close() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.cancel != nil {
-		l.cancel()
-		l.cancel = nil
-	}
-	l.key, l.running = "", false
-	l.clearLocked()
 }

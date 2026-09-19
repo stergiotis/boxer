@@ -25,9 +25,11 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/fs/lading/ladingview"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 )
 
@@ -64,9 +66,9 @@ const filesToggleLabel = icons.PhFolders + " Files"
 
 // filesState is the pane's own state, one field on App.
 type filesState struct {
-	conn   lane[*storeConn]
-	mounts lane[[]mountRow]
-	load   lane[string]
+	conn   bgjob.Keyed[*storeConn]
+	mounts bgjob.Keyed[[]mountRow]
+	load   bgjob.Keyed[string]
 
 	// mountKey pins the selection across mount-list refreshes; "" means the
 	// first mount.
@@ -109,7 +111,7 @@ func (inst *App) renderFiles() {
 
 	// The lazy connect. The lane caches success forever (dispose closes it if
 	// superseded) and failure until retried.
-	sc, done, cerr, busy := f.conn.demand("connect", func(ctx context.Context) (*storeConn, error) {
+	sc, done, cerr, busy := f.conn.Demand("connect", func(ctx context.Context) (*storeConn, error) {
 		cctx, cancel := context.WithTimeout(ctx, filesConnectTimeout)
 		defer cancel()
 		return connectLading(cctx)
@@ -128,20 +130,24 @@ func (inst *App) renderFiles() {
 		c.Label("Take a snapshot with `boxer fs snapshot <dir> --mount …` and set CLICKHOUSE_ENDPOINT.").Send()
 		if c.Button(inst.ids.PrepareStr("files-retry"), c.Atoms().Text("Retry").Keep()).
 			Small().SendResp().HasPrimaryClicked() {
-			f.conn.invalidate()
+			f.conn.Invalidate()
 		}
 		return
 	}
 
-	rows, done, merr, busy := f.mounts.demand("mounts", func(ctx context.Context) ([]mountRow, error) {
+	rows, done, merr, busy := f.mounts.Demand("mounts", func(ctx context.Context) ([]mountRow, error) {
 		cctx, cancel := context.WithTimeout(ctx, filesConnectTimeout)
 		defer cancel()
 		return sc.listMounts(cctx)
 	})
 	switch {
 	case busy:
-		c.RequestRepaint()
-		c.Label("listing mounts…").Selectable(false).Send()
+		// The standard job row: a store that does not answer can be given
+		// up on, and the Retry below is the way back.
+		bgjobrow.Render(&f.mounts, bgjobrow.Input{
+			Note:     "listing mounts…",
+			CancelId: inst.ids.PrepareStr("files-mounts-cancel"),
+		})
 		return
 	case !done:
 		return
@@ -149,7 +155,7 @@ func (inst *App) renderFiles() {
 		c.Label(merr.Error()).Send()
 		if c.Button(inst.ids.PrepareStr("files-mounts-retry"), c.Atoms().Text("Retry").Keep()).
 			Small().SendResp().HasPrimaryClicked() {
-			f.mounts.invalidate()
+			f.mounts.Invalidate()
 		}
 		return
 	}
@@ -254,7 +260,7 @@ func (inst *App) requestSnapshotLoad(fsys fs.FS, label, cacheKey, path string) {
 	f.loadKey = cacheKey + ":" + path
 	f.loadLabel = label + ":" + path + " @ latest"
 	inst.status = "loading " + path + "…"
-	f.load.demand(f.loadKey, func(ctx context.Context) (string, error) {
+	f.load.Demand(f.loadKey, func(ctx context.Context) (string, error) {
 		h, err := ladingview.ReadHead(fsys, path, maxSnapshotDocBytes, 0)
 		if err != nil {
 			return "", err
@@ -279,11 +285,11 @@ func (inst *App) drainSnapshotLoad() {
 	if f.loadKey == "" {
 		return
 	}
-	text, done, err, busy := f.load.demand(f.loadKey, nil)
+	text, done, err, busy := f.load.Demand(f.loadKey, nil)
 	if busy || !done {
 		return
 	}
-	f.load.invalidate()
+	f.load.Invalidate()
 	f.loadKey = ""
 	label := f.loadLabel
 	f.loadLabel = ""

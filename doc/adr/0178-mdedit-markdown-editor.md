@@ -822,6 +822,15 @@ each gesture is one goroutine draining into the status line like every other
 gesture here, and mdedit gains its first — and indirect — ClickHouse
 dependency, entirely inside that goroutine.
 
+### 2026-09-19 — the lane is no longer a copy
+
+The files-pane update above records `storeConn` and the `lane` as tally's,
+copied rather than shared. The lane half is withdrawn: both apps now use
+`bgjob.Keyed` ([ADR-0200](./0200-tally-lading-browser.md)'s update of this
+date has the reasons), and the mount listing waits behind the standard job
+row with Cancel. `storeConn` stays a trimmed copy. mdedit declares no task
+caps, so its lanes are not tasks on the bus.
+
 ## References
 
 - [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline
