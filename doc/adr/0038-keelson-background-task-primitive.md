@@ -202,6 +202,21 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## Updates
 
+### 2026-09-19 — a keyed producer, and one place that draws a job
+
+`bgjob` gained `Keyed` beside `Runner`: a value a frame demands every frame,
+computed off the render thread when the demand's key changes, superseding
+the run in flight. It is the lane tally and mdedit each carried privately
+([ADR-0200](./0200-tally-lading-browser.md), update of this date), moved
+onto `Runner`'s task spawn and estimator so that such a wait is a task like
+any other. A run whose context ends while it is still the current one is a
+cancel — the caller's or the bus's — and leaves the key answered with
+`ErrCancelled` rather than idle, since a demand-driven producer would
+otherwise start it again on the next frame.
+
+`widgets/bgjobrow` draws a `Runner` or a `Keyed` as the `jobprogress` row and
+cancels it on click, so the mapping from a snapshot to the row exists once.
+
 ### 2026-09-19 — the estimator is Holt smoothing, shared (ADR-0247)
 
 `task/estimator` no longer keeps a sliding window. Its throughput and ETA come

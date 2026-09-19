@@ -14,6 +14,10 @@
 //     result instead of clobbering a newer run's state.
 //   - Results are handed to the render thread consume-once via TakeResult,
 //     so render code always reads a stable value.
+//
+// [Runner] is a job somebody starts; [Keyed] is a value a frame demands every
+// frame and that is computed when the demand changes, under the same
+// contract. widgets/bgjobrow draws either as the standard job row.
 package bgjob
 
 import (
@@ -257,47 +261,18 @@ func (r *Runner[T]) run(ctx context.Context, tasks task.TaskApiI, token uint64, 
 // stages — the compute callback owns the progress signal through the
 // Reporter it receives.
 func (r *Runner[T]) runReporting(ctx context.Context, tasks task.TaskApiI, token uint64, spec Spec, compute func(ctx context.Context, report Reporter) (*T, error)) {
-	var h task.HandleI
-	if tasks != nil {
-		h, _ = tasks.Spawn(ctx, task.SpawnOpts{
-			Kind:        spec.Kind,
-			Title:       spec.Title,
-			Cancellable: true,
-		})
-	}
+	ctx, h := spawnTask(ctx, tasks, spec)
 	if h != nil {
-		ctx = h.Ctx()
 		defer func() { _ = h.Done(nil) }() // idempotent if Error() ran first
 	}
 
-	// Fresh estimator per phase (total change): a new phase's ETA must
-	// not be computed from the previous phase's throughput.
-	est := estimator.New()
-	lastTotal := ^uint64(0)
-	report := func(done uint64, total uint64, note string) {
-		nowMs := time.Now().UnixMilli()
+	report := newReporter(h, func(fraction float32, etaMs int64, rate float64, note string) {
 		r.mu.Lock()
 		if r.token == token {
-			if total != lastTotal {
-				est = estimator.New()
-				lastTotal = total
-			}
-			est.Add(done, nowMs)
-			if total > 0 {
-				r.fraction = float32(float64(done) / float64(total))
-				r.etaMs = max(est.EtaMs(done, total), 0)
-			} else {
-				r.fraction = -1
-				r.etaMs = 0
-			}
-			r.rate = est.ThroughputPerSec()
-			r.note = note
+			r.fraction, r.etaMs, r.rate, r.note = fraction, etaMs, rate, note
 		}
 		r.mu.Unlock()
-		if h != nil {
-			h.Report(task.ProgressReport{Current: done, Total: total, Unit: task.UnitItems, Note: note})
-		}
-	}
+	})
 
 	result, err := compute(ctx, report)
 	// Without trailing pacing stages the cancel signal must be checked
@@ -308,6 +283,52 @@ func (r *Runner[T]) runReporting(ctx context.Context, tasks task.TaskApiI, token
 		return
 	}
 	r.finish(token, spec, result, err, h)
+}
+
+// newReporter builds the Reporter for one run, the part [Runner] and [Keyed]
+// share: the figures go to sink, which decides whether the run is still the
+// current one, and the report goes on to the task handle when there is one.
+// A fresh estimator per phase (a changed total): a new phase's ETA must not
+// be computed from the previous phase's throughput.
+func newReporter(h task.HandleI, sink func(fraction float32, etaMs int64, rate float64, note string)) Reporter {
+	var mu sync.Mutex
+	est := estimator.New()
+	lastTotal := ^uint64(0)
+	return func(done uint64, total uint64, note string) {
+		nowMs := time.Now().UnixMilli()
+		mu.Lock()
+		if total != lastTotal {
+			est = estimator.New()
+			lastTotal = total
+		}
+		est.Add(done, nowMs)
+		fraction, etaMs := float32(-1), int64(0)
+		if total > 0 {
+			fraction = float32(float64(done) / float64(total))
+			etaMs = max(est.EtaMs(done, total), 0)
+		}
+		rate := est.ThroughputPerSec()
+		mu.Unlock()
+		sink(fraction, etaMs, rate, note)
+		if h != nil {
+			h.Report(task.ProgressReport{Current: done, Total: total, Unit: task.UnitItems, Note: note})
+		}
+	}
+}
+
+// spawnTask publishes a run as a cancellable keelson task when the host gave a
+// task API, and returns the context the run should honour: the handle's, which
+// also ends on a cancel from the bus. h is nil without an API or when the
+// spawn failed; the run goes on either way.
+func spawnTask(ctx context.Context, tasks task.TaskApiI, spec Spec) (context.Context, task.HandleI) {
+	if tasks == nil {
+		return ctx, nil
+	}
+	h, _ := tasks.Spawn(ctx, task.SpawnOpts{Kind: spec.Kind, Title: spec.Title, Cancellable: true})
+	if h == nil {
+		return ctx, nil
+	}
+	return h.Ctx(), h
 }
 
 // finish records a completed compute under the run's token: Done with the
