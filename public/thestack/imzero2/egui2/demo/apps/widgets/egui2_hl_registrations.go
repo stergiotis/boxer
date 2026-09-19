@@ -227,6 +227,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "flowonmap", Category: "Maps & geo", Title: icons.IconGlobe + " flow on a map (vector field particles)",
+		Stage:       [2]float32{1024, 760},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindUX,
+		Description: "A gridded vector field drawn as particles on the portolan map (ADR-0249): portolan/flowoverlay is one more guest in the map's overlay callback, reading a windowed, step-indexed source — here an analytic jet and drifting vortices served through the in-memory pyramid of science/geo/vectorfield — and painting every trail in one paintSegments opcode. Particles live in projected world coordinates, advance on a fixed tick by the midpoint rule, and move at a pace that is a screen quantity; colour follows the scalar mean of the magnitude. The animation shows direction and relative speed, not transport, and a trail is a streamlet, not a trajectory. Offline country outlines stand in for tiles, so the capture needs no network; under the tour the layer runs a fixed number of ticks synchronously and rests.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newFlowOnMapState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoFlowOnMap(ids, state.(*flowOnMapState))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "mapraster", Category: "Maps & geo", Title: icons.IconGlobe + " mapRaster (in-DB geo raster)",
 		Stage:       [2]float32{760, 600},
 		Flags:       registry.DemoFlagNeedsLargeArea,
