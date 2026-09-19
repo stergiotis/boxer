@@ -96,7 +96,15 @@ const NamingStyle = naming.LowerSpinalCase
 // 2026-09-17 as `shadowboxerClaudelog` — the four kinds its Claude Code
 // session model writes to `shadowboxer.facts` (its ADR-0009, proposed).
 //
-// The next free value is 2178340.
+// **…340 and …341 are taken** by shadow-boxer's `petrelstore`, claimed
+// 2026-09-19: …340 is its `shadowboxerPetrel` vocabulary — the `vp` kind of
+// its bird-profile table `shadowboxer.petrelprofile` — and …341 is
+// `shadowboxerPetrelRadar`, the tag its radar ids are minted under, separate
+// for the reason a mount's is (its ADR-0008, proposed). That repository's
+// ADR-0006 (proposed) names …339 through …341 for a download manager that
+// has written no rows; it takes fresh values when it is built.
+//
+// The next free value is 2178342.
 var TagValueClaim = tagmint.MustClaim("lading", 2178315, MaxExpectedMemberships)
 
 // MaxExpectedMemberships is what this vocabulary tells the mint it will need.
