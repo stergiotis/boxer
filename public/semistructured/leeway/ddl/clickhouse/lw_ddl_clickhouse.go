@@ -71,8 +71,42 @@ func (inst *TechnologySpecificCodeGenerator) GenerateType(canonicalType canonica
 	}
 	return
 }
-func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType canonicaltypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, list bool) (err error) {
+
+// generateColumnType writes the column's ClickHouse type alone — Array(…)
+// around a tagged lane's element type, LowCardinality(…) per the encoding
+// hints — with no CODEC clause. It is the half of a column declaration a
+// view shares with the table (ComposeCreateView casts to it).
+func (inst *TechnologySpecificCodeGenerator) generateColumnType(canonicalType canonicaltypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, list bool) (err error) {
 	lowCard := false
+	for _, hint := range encodingaspects2.IterateAspects(hints) {
+		switch hint {
+		case encodingaspects2.AspectInterRecordLowCardinality, encodingaspects2.AspectIntraRecordLowCardinality:
+			lowCard = true
+		}
+	}
+	if list {
+		inst.typeProlog = "Array("
+		inst.typeEpilog = ")"
+	}
+	if lowCard {
+		inst.typeProlog += "LowCardinality("
+		inst.typeEpilog += ")"
+	}
+	if list {
+		canonicalTypeScalar := canonicaltypes.DemoteToScalarPrim(canonicalType)
+		err = inst.GenerateType(canonicalTypeScalar)
+	} else {
+		err = inst.GenerateType(canonicalType)
+	}
+	inst.typeProlog = ""
+	inst.typeEpilog = ""
+	if err != nil {
+		err = eh.Errorf("unable to generate type: %w", err)
+	}
+	return
+}
+
+func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType canonicaltypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, list bool) (err error) {
 	compr := 0
 	delta := 0
 	floatc := 0
@@ -87,8 +121,6 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 			compr = max(compr, 3)
 		case encodingaspects2.AspectUltraHeavyGeneralCompression:
 			compr = 4
-		case encodingaspects2.AspectInterRecordLowCardinality, encodingaspects2.AspectIntraRecordLowCardinality:
-			lowCard = true
 		case encodingaspects2.AspectDeltaEncoding:
 			delta = max(delta, 1)
 		case encodingaspects2.AspectDoubleDeltaEncoding:
@@ -108,24 +140,8 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 		}
 	}
 	b := inst.codeBuilder
-	if list {
-		inst.typeProlog = "Array("
-		inst.typeEpilog = ")"
-	}
-	if lowCard {
-		inst.typeProlog += "LowCardinality("
-		inst.typeEpilog += ")"
-	}
-	if list {
-		canonicalTypeScalar := canonicaltypes.DemoteToScalarPrim(canonicalType)
-		err = inst.GenerateType(canonicalTypeScalar)
-	} else {
-		err = inst.GenerateType(canonicalType)
-	}
-	inst.typeProlog = ""
-	inst.typeEpilog = ""
+	err = inst.generateColumnType(canonicalType, hints, list)
 	if err != nil {
-		err = eh.Errorf("unable to generate type: %w", err)
 		return
 	}
 
@@ -214,6 +230,42 @@ func (inst *TechnologySpecificCodeGenerator) generateTypeAndCodec(canonicalType 
 
 	return
 }
+
+// columnShape reads what a physical column's type rendering depends on: its
+// canonical type, its encoding hints, and whether it is a tagged lane (an
+// Array per row) rather than a plain column.
+func columnShape(phy common.PhysicalColumnDesc) (ct canonicaltypes.PrimitiveAstNodeI, hints encodingaspects2.AspectSet, list bool, err error) {
+	ct, err = phy.GetCanonicalType()
+	if err != nil {
+		err = eb.Build().Stringer("column", phy).Errorf("unable to get canonical type from physical column: %w", err)
+		return
+	}
+	hints, err = phy.GetEncodingHints()
+	if err != nil {
+		err = eb.Build().Stringer("column", phy).Errorf("unable to get encoding hints from physical column: %w", err)
+		return
+	}
+	var tableRowConfig common.TableRowConfigE
+	tableRowConfig, err = phy.GetTableRowConfig()
+	if err != nil {
+		err = eh.Errorf("unable to get table row config")
+		return
+	}
+	switch tableRowConfig {
+	case common.TableRowConfigMultiAttributesPerRow:
+		var plainItemType common.PlainItemTypeE
+		plainItemType, err = phy.GetPlainItemType()
+		if err != nil {
+			err = eh.Errorf("unable to get plain item type: %w", err)
+			return
+		}
+		list = plainItemType == common.PlainItemTypeNone
+	default:
+		err = eb.Build().Stringer("tableRowConfig", tableRowConfig).Errorf("unhandled table row config")
+	}
+	return
+}
+
 func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy common.PhysicalColumnDesc) (err error) {
 	b := inst.codeBuilder
 	if b == nil {
@@ -237,36 +289,8 @@ func (inst *TechnologySpecificCodeGenerator) GenerateColumnCode(idx int, phy com
 	if err != nil {
 		return
 	}
-	var ct canonicaltypes.PrimitiveAstNodeI
-	ct, err = phy.GetCanonicalType()
+	ct, hints, list, err := columnShape(phy)
 	if err != nil {
-		err = eb.Build().Stringer("column", phy).Errorf("unable to get canonical type from physical column: %w", err)
-		return
-	}
-	var hints encodingaspects2.AspectSet
-	hints, err = phy.GetEncodingHints()
-	if err != nil {
-		err = eb.Build().Stringer("column", phy).Errorf("unable to get encoding hints from physical column: %w", err)
-		return
-	}
-	var tableRowConfig common.TableRowConfigE
-	tableRowConfig, err = phy.GetTableRowConfig()
-	if err != nil {
-		err = eh.Errorf("unable to get table row config")
-		return
-	}
-	var list bool
-	switch tableRowConfig {
-	case common.TableRowConfigMultiAttributesPerRow:
-		var plainItemType common.PlainItemTypeE
-		plainItemType, err = phy.GetPlainItemType()
-		if err != nil {
-			err = eh.Errorf("unable to get plain item type: %w", err)
-			return
-		}
-		list = plainItemType == common.PlainItemTypeNone
-	default:
-		err = eb.Build().Stringer("tableRowConfig", tableRowConfig).Errorf("unhandled table row config")
 		return
 	}
 	err = inst.generateTypeAndCodec(ct, hints, list)

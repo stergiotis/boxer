@@ -157,6 +157,44 @@ sections.
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 See `doc/DOCUMENTATION_STANDARD.md` for the edit-policy tiers.
 
+## Updates
+
+### 2026-09-18 — the seam composes views too: `ComposeCreateView`
+
+A leeway table that is *derived* from another — a per-kind cut of a shared
+table, a bridge between two layouts — has no writer and follows its source,
+so it is a view. It is still a leeway table: tooling classifies its columns
+by their physical (encoded) names. Such a view had the footgun this ADR
+removed from `ORDER BY`, at full width: every physical name spelled by hand,
+with a test beside it to catch drift.
+
+- `ComposeCreateView` walks the same IR as `ComposeCreateTable` and emits
+  one `SELECT` item per physical column — the table's names, in the table's
+  order. The caller supplies a callback that returns the expression for a
+  column, told the column's leeway coordinates (section, name, role, plain
+  lane) and its declared ClickHouse type, and the raw `FROM`.
+- Each expression is wrapped in `CAST(… AS <type>)` to the type the table's
+  DDL declares, rendered through the same generator with the `CODEC` clause
+  split off, so a view's types cannot drift from the table's. A callback may
+  mark an expression `Exact` to pass it through uncast — for a same-typed
+  source column, where the cast would stand between a filter on the view and
+  the source's primary key.
+- A column whose callback returns no expression fails the composition. There
+  is no default and no partial view.
+- `ViewOptions.Settings` closes the view's `SELECT` with a `SETTINGS` clause.
+  It is needed wherever the table needs
+  `allow_suspicious_low_cardinality_types=1`: the cast to a non-string
+  `LowCardinality` lane is refused without it, at `CREATE VIEW` and at every
+  read, and a setting inside the view travels with it.
+- `Clauses` (between the name and `AS`, e.g. `SQL SECURITY DEFINER`) and
+  `From` are raw passthrough, the v1 posture `PartitionBy` and `TTL` have.
+- Verified over `clickhouse-local`: a cast view over a table of the same
+  shape reports the table's own names and types in `system.columns`, a
+  `LowCardinality` membership lane included, with no session setting.
+- Not decided here: absence inside an attribute (a nullable element type).
+  ADR-0071 B2 and ADR-0201 stand; a derived view zero-fills or carries a
+  presence column, as its source's schema decides.
+
 ## References
 
 - [ADR-0100: recordstore](0100-recordstore-generated-leeway-clickhouse-store.md)
