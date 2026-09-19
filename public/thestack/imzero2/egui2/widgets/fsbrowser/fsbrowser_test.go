@@ -1,9 +1,12 @@
 package fsbrowser
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -13,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/fs/fsmatch"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
@@ -56,19 +60,19 @@ func TestListingIsReadOnceAndOrdinalsAreStable(t *testing.T) {
 func TestViewHidesDotNamesSortsDirsFirstAndFilters(t *testing.T) {
 	var st State
 	fsys := fixture()
-	rows := st.view(st.read(fsys, "."), false, nil)
+	rows := st.view(st.read(fsys, "."), false, nil, nil)
 	assert.Equal(t, []string{"docs", "empty", "src", "zeta", "big.bin", "readme.md"}, names(rows),
 		"directories first, then files, by name; .hidden out")
-	rows = st.view(st.read(fsys, "."), true, nil)
+	rows = st.view(st.read(fsys, "."), true, nil, nil)
 	assert.Contains(t, names(rows), ".hidden")
 
 	st.SetFilter("RE")
-	rows = st.view(st.read(fsys, "."), false, nil)
+	rows = st.view(st.read(fsys, "."), false, nil, nil)
 	assert.Equal(t, []string{"readme.md"}, names(rows), "a plain word is a case-insensitive match anywhere in the path")
 	st.SetFilter("")
 
 	st.SetSort(SortBySize, true)
-	rows = st.view(st.read(fsys, "."), false, nil)
+	rows = st.view(st.read(fsys, "."), false, nil, nil)
 	assert.Equal(t, []string{"zeta", "src", "empty", "docs", "big.bin", "readme.md"}, names(rows),
 		"descending flips within each group and directories stay first")
 }
@@ -78,29 +82,29 @@ func TestFilterIsARegexOverThePath(t *testing.T) {
 	fsys := fixture()
 
 	st.SetFilter(`\.md$`)
-	rows := st.view(st.read(fsys, "."), false, nil)
+	rows := st.view(st.read(fsys, "."), false, nil, nil)
 	assert.Equal(t, []string{"readme.md"}, names(rows), "an anchored extension pattern")
 	assert.False(t, st.FilterLiteral())
 
 	st.SetFilter("^SRC/U")
-	rows = st.view(st.read(fsys, "src"), false, nil)
+	rows = st.view(st.read(fsys, "src"), false, nil, nil)
 	assert.Equal(t, []string{"util"}, names(rows), "the pattern sees the path from the root with / between segments, case-insensitively")
 
 	st.SetFilter("md$|^big")
-	rows = st.view(st.read(fsys, "."), false, nil)
+	rows = st.view(st.read(fsys, "."), false, nil, nil)
 	assert.Equal(t, []string{"big.bin", "readme.md"}, names(rows), "alternation; the sort still holds")
 
 	st.SetFilter("read(")
-	rows = st.view(st.read(fsys, "."), false, nil)
+	rows = st.view(st.read(fsys, "."), false, nil, nil)
 	assert.Empty(t, names(rows), "a pattern that does not compile matches as a literal")
 	assert.True(t, st.FilterLiteral(), "and says so")
 	st.SetFilter("big.")
-	rows = st.view(st.read(fsys, "."), false, nil)
+	rows = st.view(st.read(fsys, "."), false, nil, nil)
 	assert.Equal(t, []string{"big.bin"}, names(rows))
 	assert.False(t, st.FilterLiteral(), "the flag clears once the text compiles again")
 
 	st.SetFilter("  ")
-	rows = st.view(st.read(fsys, "."), false, nil)
+	rows = st.view(st.read(fsys, "."), false, nil, nil)
 	assert.Len(t, rows, 6, "whitespace is no filter")
 	assert.False(t, st.FilterLiteral())
 }
@@ -150,79 +154,231 @@ func (m *matchFS) MatchPaths(dir, pattern string, hidden bool, limit int) (out [
 	return
 }
 
-func TestFilterSearchesTheSubtreeByWalking(t *testing.T) {
-	var st State
+func TestKeepDecidesWhatIsARow(t *testing.T) {
 	fsys := fixture()
+	dirsOnly := func(e Entry) bool { return e.IsDir }
+	noSrc := func(e Entry) bool { return e.Path != "src" }
 
-	st.SetFilter(`\.go$`)
-	rows, s := st.search(fsys, false, 1, nil)
-	assert.False(t, s.done, "one uncached read per call: the root alone is not the answer")
-	assert.True(t, s.walking)
-	for !s.done {
-		rows, s = st.search(fsys, false, 1, nil)
+	var st State
+	rows := st.view(st.read(fsys, "."), false, dirsOnly, nil)
+	assert.Equal(t, []string{"docs", "empty", "src", "zeta"}, names(rows), "a refused entry is not a row")
+	rows = st.view(st.read(fsys, "."), true, dirsOnly, nil)
+	assert.NotContains(t, names(rows), ".hidden", "and showing dot-names does not bring it back")
+
+	_, nodes := st.buildOutline(fsys, false, dirsOnly)
+	for _, e := range nodes {
+		assert.True(t, e.IsDir || e.Ord < 0, "the outline lists what the list does: %q", e.Path)
 	}
-	assert.Equal(t, []string{"src/main.go", "src/util/u.go"}, paths(rows), "matches at any depth, in path order")
-	assert.False(t, s.more)
-	assert.Equal(t, []int{0, 1}, []int{rows[0].Ord, rows[1].Ord}, "search rows carry their own ordinals")
 
-	rows, s = st.search(fsys, false, 1, nil)
-	assert.True(t, s.done, "the same key is the same answer, not another walk")
-	assert.Len(t, rows, 2)
+	re := regexp.MustCompile(`(?i)\.go$`)
+	res, err := walkSearch(context.Background(), fsys, ".", re, false, noSrc, &searchFeed{}, noReport)
+	require.NoError(t, err)
+	assert.Empty(t, res.rows, "a refused directory is not walked, so nothing beneath it matches")
 
-	st.SetFilter("keep")
-	rows, s = st.search(fsys, false, 100, nil)
-	assert.True(t, s.done)
-	assert.Empty(t, rows, "a dot-name is hidden, below the root as at it")
-	rows, _ = st.search(fsys, true, 100, nil)
-	assert.Equal(t, []string{"empty/.keep"}, paths(rows), "unless hidden names are shown")
-
-	st.SetDir("src")
-	st.SetFilter("u\\.go$")
-	rows, _ = st.search(fsys, false, 100, nil)
-	assert.Equal(t, []string{"src/util/u.go"}, paths(rows), "under the current directory, through a directory the pattern does not name")
-	assert.Equal(t, "util/u.go", relTo(st.Dir(), rows[0].Path), "and shown relative to it")
-
-	st.SetFilter("^zeta")
-	rows, _ = st.search(fsys, false, 100, nil)
-	assert.Empty(t, rows, "the search is rooted at the current directory")
+	m := &matchFS{MapFS: fixture()}
+	onlyMain := func(e Entry) bool { return e.Name == "main.go" }
+	res, err = runSearch(context.Background(), m, ".", re, false, onlyMain, &searchFeed{}, noReport)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src/main.go"}, paths(res.rows), "a store's answer passes the predicate match by match")
 }
 
-func TestFilterIsPushedDownWhenTheFileSystemCanRunIt(t *testing.T) {
+func TestSingleSelectClicksOnlyReplace(t *testing.T) {
+	// No modifiers are read on this path, so it needs no render context.
+	assert.Equal(t, selectModeReplace, Input{SingleSelect: true}.clickMode())
+}
+
+func noReport(uint64, uint64, string) {}
+
+func sortedPaths(es []Entry) (out []string) {
+	out = paths(es)
+	sort.Strings(out)
+	return
+}
+
+func TestWalkSearchFindsMatchesAtAnyDepth(t *testing.T) {
+	fsys := fixture()
+	ctx := context.Background()
+	re := regexp.MustCompile(`(?i)\.go$`)
+
+	var shares []uint64
+	var notes []string
+	report := func(done, total uint64, note string) {
+		assert.Equal(t, uint64(progressScale), total, "a constant total, or the job's estimator starts over")
+		shares = append(shares, done)
+		notes = append(notes, note)
+	}
+	feed := &searchFeed{}
+	res, err := walkSearch(ctx, fsys, ".", re, false, nil, feed, report)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src/main.go", "src/util/u.go"}, sortedPaths(res.rows))
+	assert.False(t, res.more)
+	assert.ElementsMatch(t, []int{0, 1}, []int{res.rows[0].Ord, res.rows[1].Ord}, "search rows carry their own ordinals")
+	fed, _, _ := feed.take(^uint64(0), nil)
+	assert.Equal(t, paths(res.rows), paths(fed), "what was fed while walking is what came back")
+	assert.True(t, sort.SliceIsSorted(shares, func(i, j int) bool { return shares[i] < shares[j] }), "the share never goes back: %v", shares)
+	assert.Equal(t, uint64(progressScale), shares[len(shares)-1], "and ends whole")
+	assert.Contains(t, notes[len(notes)-1], "2 matches")
+
+	res, err = walkSearch(ctx, fsys, ".", regexp.MustCompile("(?i)keep"), false, nil, &searchFeed{}, noReport)
+	require.NoError(t, err)
+	assert.Empty(t, res.rows, "a dot-name is hidden, below the root as at it")
+	res, err = walkSearch(ctx, fsys, ".", regexp.MustCompile("(?i)keep"), true, nil, &searchFeed{}, noReport)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"empty/.keep"}, paths(res.rows), "unless hidden names are shown")
+
+	res, err = walkSearch(ctx, fsys, "src", regexp.MustCompile(`(?i)u\.go$`), false, nil, &searchFeed{}, noReport)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src/util/u.go"}, paths(res.rows), "under the directory given, through one the pattern does not name")
+	assert.Equal(t, "util/u.go", relTo("src", res.rows[0].Path), "and shown relative to it")
+
+	res, err = walkSearch(ctx, fsys, "src", regexp.MustCompile("(?i)^zeta"), false, nil, &searchFeed{}, noReport)
+	require.NoError(t, err)
+	assert.Empty(t, res.rows, "the search is rooted at the directory given")
+
+	_, err = walkSearch(ctx, fsys, "no/such", re, false, nil, &searchFeed{}, noReport)
+	assert.Error(t, err, "an unreadable first directory is the search's error")
+
+	gone, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = walkSearch(gone, fsys, ".", re, false, nil, &searchFeed{}, noReport)
+	assert.ErrorIs(t, err, context.Canceled, "a cancelled walk stops before its next read")
+}
+
+func TestWalkSearchSaysWhichCapStoppedIt(t *testing.T) {
+	// A tree wider than the walk reads: every directory holds one match.
+	wide := fstest.MapFS{}
+	for i := 0; i < walkMaxDirs+10; i++ {
+		wide["d"+strconv.Itoa(i)+"/hit.txt"] = &fstest.MapFile{}
+	}
+	res, err := walkSearch(context.Background(), wide, ".", regexp.MustCompile(`hit`), false, nil, &searchFeed{}, noReport)
+	require.NoError(t, err)
+	assert.True(t, res.more, "more matches than the list shows: the pattern is too wide")
+	assert.False(t, res.unread)
+
+	res, err = walkSearch(context.Background(), wide, ".", regexp.MustCompile(`nothing-is-called-this`), false, nil, &searchFeed{}, noReport)
+	require.NoError(t, err)
+	assert.True(t, res.unread, "directories left unread: the tree is too big, whatever the pattern")
+	assert.False(t, res.more)
+
 	var st State
+	st.SetFilter("x")
+	st.found = searchT{key: "k", done: true, unread: true}
+	assert.Contains(t, st.searchStatus(), "search from further down")
+	st.found = searchT{key: "k", done: true, more: true}
+	assert.Contains(t, st.searchStatus(), "narrow the pattern")
+}
+
+func TestRunSearchAsksTheFileSystemFirst(t *testing.T) {
+	ctx := context.Background()
 	m := &matchFS{MapFS: fixture()}
+	re := regexp.MustCompile(`(?i)\.GO$`)
 
-	st.SetFilter(`\.GO$`)
-	rows, s := st.search(m, false, 0, nil)
-	assert.True(t, s.done, "one call answers, whatever the budget")
-	assert.False(t, s.walking)
-	assert.Equal(t, 1, m.calls)
-	assert.Equal(t, []string{"src/main.go", "src/util/u.go"}, paths(rows), "the file system got the compiled pattern, case fold included")
-	assert.True(t, rows[0].ModTime.After(rows[1].ModTime) || !rows[0].ModTime.IsZero(), "rows carry the info the answer had")
-
-	st.search(m, false, 0, nil)
-	assert.Equal(t, 1, m.calls, "a repeated frame is not a repeated query")
-	st.SetFilter("main")
-	st.search(m, false, 0, nil)
-	assert.Equal(t, 2, m.calls, "a changed pattern is")
-
-	st.Invalidate()
-	st.search(m, false, 0, nil)
-	assert.Equal(t, 3, m.calls, "Invalidate drops the answer with the listings")
+	var totals []uint64
+	res, err := runSearch(ctx, m, ".", re, false, nil, &searchFeed{}, func(_, total uint64, _ string) { totals = append(totals, total) })
+	require.NoError(t, err)
+	assert.Equal(t, 1, m.calls, "one call answers")
+	assert.Equal(t, []uint64{0}, totals, "of a length nobody can see into: indeterminate")
+	assert.Equal(t, []string{"src/main.go", "src/util/u.go"}, paths(res.rows), "the file system got the compiled pattern, case fold included")
+	assert.False(t, res.rows[0].ModTime.IsZero(), "rows carry the info the answer had")
 
 	m.err = errors.ErrUnsupported
-	st.SetFilter("u\\.go$")
-	rows, s = st.search(m, false, 100, nil)
-	assert.True(t, s.walking, "ErrUnsupported is the cue to walk")
-	assert.True(t, s.done)
-	assert.NoError(t, s.err)
-	assert.Equal(t, []string{"src/util/u.go"}, paths(rows))
+	res, err = runSearch(ctx, m, ".", regexp.MustCompile(`(?i)u\.go$`), false, nil, &searchFeed{}, noReport)
+	require.NoError(t, err, "ErrUnsupported is the cue to walk")
+	assert.Equal(t, []string{"src/util/u.go"}, paths(res.rows))
 
 	m.err = errors.New("server gone")
+	_, err = runSearch(ctx, m, ".", re, false, nil, &searchFeed{}, noReport)
+	assert.ErrorContains(t, err, "server gone", "any other failure is reported, not walked around")
+}
+
+// frames calls search as the render loop would until cond holds.
+func frames(t *testing.T, st *State, fsys fs.FS, cond func(s *searchT) bool) (rows []Entry, s *searchT) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		rows, s = st.search(fsys, false, nil, nil, nil)
+		if cond(s) {
+			return
+		}
+		require.True(t, time.Now().Before(deadline), "the search did not get there")
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestSearchRunsAsAJob(t *testing.T) {
+	defer func(d time.Duration) { searchDebounce = d }(searchDebounce)
+	searchDebounce = 20 * time.Millisecond
+	done := func(s *searchT) bool { return s.done }
+
+	var st State
+	m := &matchFS{MapFS: fixture()}
+	st.SetFilter(`\.go$`)
+	_, s := st.search(m, false, nil, nil, nil)
+	assert.False(t, s.started, "a filter just typed waits: a reader typing starts one search, not one per key")
+	assert.Zero(t, m.calls)
+
+	rows, s := frames(t, &st, m, done)
+	assert.Equal(t, []string{"src/main.go", "src/util/u.go"}, paths(rows), "sorted by path for the list")
+	assert.False(t, s.cancelled)
+	assert.Equal(t, 1, m.calls)
+	assert.Equal(t, "2 matches", st.searchStatus())
+
+	st.search(m, false, nil, nil, nil)
+	assert.Equal(t, 1, m.calls, "a repeated frame is not a repeated search")
 	st.SetFilter("main")
-	rows, s = st.search(m, false, 100, nil)
-	assert.True(t, s.done)
-	assert.ErrorContains(t, s.err, "server gone", "any other failure is reported, not walked around")
-	assert.Empty(t, rows)
+	frames(t, &st, m, done)
+	assert.Equal(t, 2, m.calls, "a changed pattern is")
+	st.Invalidate()
+	frames(t, &st, m, done)
+	assert.Equal(t, 3, m.calls, "Invalidate drops the answer with the listings")
+
+	m.err = errors.New("server gone")
+	st.SetFilter("u\\.go$")
+	_, s = frames(t, &st, m, done)
+	assert.ErrorContains(t, s.err, "server gone")
+	assert.Equal(t, bgjob.StateFailed, st.job.Snapshot().State)
+}
+
+// gateFS is a file system whose directory reads wait for the test, so a
+// search can be caught while it runs.
+type gateFS struct {
+	fstest.MapFS
+	gate chan struct{}
+}
+
+func (g gateFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	<-g.gate
+	return g.MapFS.ReadDir(name)
+}
+
+func TestSearchStreamsAndCancels(t *testing.T) {
+	defer func(d time.Duration) { searchDebounce = d }(searchDebounce)
+	searchDebounce = 0
+
+	var st State
+	g := gateFS{MapFS: fixture(), gate: make(chan struct{})}
+	st.SetFilter(`\.(md|go)$`)
+	_, s := st.search(g, false, nil, nil, nil)
+	require.True(t, s.started)
+	assert.True(t, st.searching())
+
+	g.gate <- struct{}{} // the root is read: readme.md is a match
+	rows, s := frames(t, &st, g, func(s *searchT) bool { return len(s.rows) > 0 })
+	assert.Equal(t, []string{"readme.md"}, paths(rows), "matches arrive while the walk goes on")
+	assert.False(t, s.done)
+
+	st.cancelSearch()
+	close(g.gate)
+	rows, s = frames(t, &st, g, func(s *searchT) bool { return s.done })
+	assert.True(t, s.cancelled)
+	assert.Contains(t, paths(rows), "readme.md", "what was found before the cancel stands")
+	assert.Contains(t, st.searchStatus(), "cancelled")
+	st.search(g, false, nil, nil, nil)
+	assert.False(t, st.searching(), "and the same filter does not start over")
+
+	st.SetFilter("")
+	st.StopSearch()
+	assert.Equal(t, bgjob.StateIdle, st.job.Snapshot().State)
 }
 
 func TestNavigationClearsTheSelection(t *testing.T) {
@@ -261,7 +417,7 @@ func TestErrorsAreRowsNotPanics(t *testing.T) {
 	l := st.read(fixture(), "nope")
 	assert.Error(t, l.err)
 	assert.True(t, errors.Is(l.err, fs.ErrNotExist))
-	assert.Empty(t, st.view(l, false, nil))
+	assert.Empty(t, st.view(l, false, nil, nil))
 	l2 := st.read(nil, ".")
 	assert.Error(t, l2.err, "no file system is an error row, not a nil deref")
 }
@@ -269,7 +425,7 @@ func TestErrorsAreRowsNotPanics(t *testing.T) {
 func TestOutlineLoadsOnExpandAndShowsDisclosureBeforeThat(t *testing.T) {
 	var st State
 	fsys := fixture()
-	tr, nodes := st.buildOutline(fsys, false)
+	tr, nodes := st.buildOutline(fsys, false, nil)
 	require.NoError(t, tr.Validate())
 	// Root children, then one placeholder per unread directory.
 	assert.Equal(t, []string{"docs", "empty", "src", "zeta", "big.bin", "readme.md"}, names(nodes[:6]))
@@ -286,7 +442,7 @@ func TestOutlineLoadsOnExpandAndShowsDisclosureBeforeThat(t *testing.T) {
 
 	// Open src: its real children replace the placeholder in the same build.
 	st.tree.SetExpanded(byKey["src"].Node, true)
-	tr, nodes = st.buildOutline(fsys, false)
+	tr, nodes = st.buildOutline(fsys, false, nil)
 	require.NoError(t, tr.Validate())
 	rows, err = tree.Flatten(tr, &st.tree, nil)
 	require.NoError(t, err)
@@ -308,7 +464,7 @@ func TestOutlineLoadsOnExpandAndShowsDisclosureBeforeThat(t *testing.T) {
 			st.tree.SetExpanded(r.Node, true)
 		}
 	}
-	tr, _ = st.buildOutline(fsys, false)
+	tr, _ = st.buildOutline(fsys, false, nil)
 	rows, err = tree.Flatten(tr, &st.tree, nil)
 	require.NoError(t, err)
 	for _, r := range rows {
@@ -321,7 +477,7 @@ func TestOutlineLoadsOnExpandAndShowsDisclosureBeforeThat(t *testing.T) {
 func TestOutlineErrorIsAChildRow(t *testing.T) {
 	var st State
 	fsys := fstest.MapFS{"d/f": {Data: []byte("x")}}
-	tr, _ := st.buildOutline(fsys, false)
+	tr, _ := st.buildOutline(fsys, false, nil)
 	rows, err := tree.Flatten(tr, &st.tree, nil)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -330,7 +486,7 @@ func TestOutlineErrorIsAChildRow(t *testing.T) {
 	// invalidate first.
 	st.Invalidate()
 	broken := fstest.MapFS{"d": {Data: []byte("not a dir")}}
-	tr, nodes := st.buildOutline(broken, false)
+	tr, nodes := st.buildOutline(broken, false, nil)
 	assert.Len(t, nodes, 1, "d is now a file, so there is nothing to expand")
 	_ = tr
 }

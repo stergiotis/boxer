@@ -9,11 +9,12 @@ import (
 	"regexp"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/fs/fsmatch"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
@@ -94,11 +95,28 @@ type Input struct {
 	Columns  []Column
 	// ShowHidden includes dot-names.
 	ShowHidden bool
+	// Keep, when set, decides entry by entry what is a row at all: an entry
+	// it refuses is listed in neither mode, and a refused directory is not
+	// walked by the filter. While a filter is searching it is called from
+	// the search's goroutine as well as the render thread, so it reads
+	// nothing the render thread writes. It is the host's standing restriction — a dialog
+	// that opens only some extensions, or lists only directories — where the
+	// quick filter is the user's passing one. Keep it cheap, it runs per
+	// entry per frame. Over a [fsmatch.FS] answer it sees each match alone,
+	// so a match beneath a refused directory stays. The widget cannot see a
+	// predicate change its mind: a host whose Keep starts answering
+	// differently calls [State.Invalidate].
+	Keep func(e Entry) bool
+	// SingleSelect makes every click replace the selection: ctrl and shift
+	// are not read, and the selection never holds more than one path.
+	SingleSelect bool
 	// RowHeight, MaxHeight and Striped are passed to the table; zero means
 	// the defaults (one text line; the table's own auto-fit, capped at
 	// ETABLE_AUTOFIT_CAP_PX; plain). MaxHeight is a ceiling — a listing
 	// shorter than it renders at its own size — so feed it the pane's
-	// measured height to bound the browser by its pane.
+	// measured height to bound the browser by its pane. It bounds the whole
+	// widget: what the breadcrumb and the filter row take comes off the
+	// table's share.
 	RowHeight float32
 	MaxHeight float32
 	Striped   bool
@@ -113,6 +131,18 @@ type Input struct {
 	// defaults and persists nothing.
 	Widths   *colwidth.Resolver
 	WidthTag string
+	// Tasks, when set, publishes a filter's search as a keelson background
+	// task (ADR-0038), so the host's task monitor lists it and can cancel
+	// it. nil keeps the search a job of the widget's own: it still runs off
+	// the render thread and shows its progress and Cancel in the filter row.
+	Tasks task.TaskApiI
+	// FillWidth makes the columns span the pane — what a dialog wants, where
+	// fixed columns beside empty space read as unfinished. The name column
+	// takes what the others leave and is the one that gives when the pane
+	// is resized; a dragged edge takes from the column to its right, and
+	// the last column's edge is the pane's. The name column's width is
+	// therefore never persisted; the others' are. See fill.go.
+	FillWidth bool
 }
 
 // Result is what one Render reports.
@@ -165,6 +195,20 @@ type State struct {
 	filterLiteral bool
 	filterHl      regexedit.Edit
 	found         searchT
+	// job runs the filter's search off the render thread (search.go). A
+	// pointer, made in ensure: the runner holds a mutex, and a State is
+	// reset by assignment in places.
+	job *bgjob.Runner[searchResult]
+
+	// the height of what stands above the table and the width the table
+	// has, measured by two probes (see Input.probeTable), and their slots
+	chromeH  float32
+	tableW   float32
+	topSeq   uint64
+	tableSeq uint64
+	// FillWidth: the layout per view
+	fillList    fillT
+	fillOutline fillT
 
 	// list-mode scratch and the key capture's id
 	keyFrameID      uint64
@@ -182,6 +226,10 @@ type State struct {
 	widthsSeenOutline bool
 	widthSigList      string
 	widthSigOutline   string
+	// without a resolver: whether the view has had its first frame, which
+	// is when the seed generation moves (see seedWidthEpoch)
+	widthSeededList    bool
+	widthSeededOutline bool
 }
 
 func (st *State) ensure() {
@@ -193,6 +241,9 @@ func (st *State) ensure() {
 	}
 	if st.dir == "" {
 		st.dir = "."
+	}
+	if st.job == nil {
+		st.job = &bgjob.Runner[searchResult]{}
 	}
 }
 
@@ -327,7 +378,7 @@ func (st *State) SetCursor(p string) { st.cursor = p }
 // shows. The selection and the directory stay.
 func (st *State) Invalidate() {
 	st.cache = nil
-	st.found = searchT{}
+	st.StopSearch()
 	st.ensure()
 }
 
@@ -397,18 +448,27 @@ func joinPath(dir, name string) string {
 	return dir + "/" + name
 }
 
-// view filters and sorts a listing into dst: hidden names out unless asked
-// for, the quick filter as a regex over the entry's path (see
+// shown reports whether e is a row at all, before any quick filter: a
+// dot-name only when asked for, and nothing the host's Keep refuses.
+func shown(e Entry, showHidden bool, keep func(Entry) bool) bool {
+	if !showHidden && strings.HasPrefix(e.Name, ".") {
+		return false
+	}
+	return keep == nil || keep(e)
+}
+
+// view filters and sorts a listing into dst: what [shown] refuses is out,
+// then the quick filter as a regex over the entry's path (see
 // [State.Filter]), directories first, then the chosen order. A directory
 // whose path does not match is out along with its subtree, in both modes.
-func (st *State) view(l *listing, showHidden bool, dst []Entry) []Entry {
+func (st *State) view(l *listing, showHidden bool, keep func(Entry) bool, dst []Entry) []Entry {
 	dst = dst[:0]
 	if l == nil {
 		return dst
 	}
 	re := st.matcher()
 	for _, e := range l.entries {
-		if !showHidden && strings.HasPrefix(e.Name, ".") {
+		if !shown(e, showHidden, keep) {
 			continue
 		}
 		if re != nil && !re.MatchString(e.Path) {
@@ -418,109 +478,6 @@ func (st *State) view(l *listing, showHidden bool, dst []Entry) []Entry {
 	}
 	sortEntries(dst, st.sortBy, st.sortDesc, false)
 	return dst
-}
-
-// searchLimit caps what a filter shows, and walkMaxDirs what a walk reads
-// for it: a filter is for narrowing, and a pattern that matches thousands
-// of paths is one the user refines rather than scrolls. walkReadsPerFrame
-// bounds the walk's uncached directory reads per frame, so a plain tree the
-// file system cannot search itself is walked across frames rather than
-// within one.
-const (
-	searchLimit       = 2000
-	walkMaxDirs       = 4096
-	walkReadsPerFrame = 32
-)
-
-// searchT is what a non-empty filter shows: the entries under the current
-// directory whose path matches, in the order found. The file system
-// answers in one call when it can ([fsmatch.FS] — a snapshot store runs the
-// pattern in ClickHouse); otherwise the cached listings are walked
-// breadth-first, budgeted per frame, and done is false until the walk ends.
-// key names what the rows are for; a different key starts over.
-type searchT struct {
-	key  string
-	rows []Entry
-	more bool
-	done bool
-	err  error
-
-	// the walk, when there is one: directories still to read, how many
-	// were, and the next row's ordinal.
-	walking bool
-	pending []string
-	dirs    int
-	next    int
-}
-
-// search advances the filter's search for the current directory and returns
-// its rows sorted into dst. The file system's own match is tried first and
-// answers in one call; the walk reads at most budget uncached directories
-// per call and is resumed by the next one. Only called with a non-empty
-// filter.
-func (st *State) search(fsys fs.FS, showHidden bool, budget int, dst []Entry) (rows []Entry, s *searchT) {
-	st.ensure()
-	re := st.matcher()
-	s = &st.found
-	key := strings.Join([]string{st.cacheKey, st.Dir(), st.filterSrc, strconv.FormatBool(showHidden)}, "\x00")
-	if s.key != key {
-		*s = searchT{key: key, pending: []string{st.Dir()}}
-	}
-	if !s.done && !s.walking {
-		if m, ok := fsys.(fsmatch.FS); ok {
-			matches, more, err := m.MatchPaths(st.Dir(), re.String(), showHidden, searchLimit)
-			if err == nil || !errors.Is(err, errors.ErrUnsupported) {
-				s.done, s.more, s.err = true, more, err
-				s.rows = s.rows[:0]
-				for i, m := range matches {
-					s.rows = append(s.rows, entryOfMatch(m, i))
-				}
-			}
-		}
-		if !s.done {
-			s.walking = true
-		}
-	}
-	for s.walking && !s.done && budget > 0 {
-		dir := s.pending[0]
-		s.pending = s.pending[1:]
-		if _, cached := st.cache[dir]; !cached {
-			budget--
-		}
-		l := st.read(fsys, dir)
-		s.dirs++
-		if l.err != nil {
-			if s.dirs == 1 {
-				s.err = l.err
-			}
-		} else {
-			for _, e := range l.entries {
-				if !showHidden && strings.HasPrefix(e.Name, ".") {
-					continue
-				}
-				if e.IsDir {
-					s.pending = append(s.pending, e.Path)
-				}
-				if re.MatchString(e.Path) {
-					e.Ord = s.next
-					s.next++
-					s.rows = append(s.rows, e)
-				}
-			}
-		}
-		if len(s.pending) == 0 {
-			s.done = true
-		} else if s.dirs >= walkMaxDirs || len(s.rows) >= searchLimit {
-			s.done, s.more = true, true
-			s.pending = s.pending[:0]
-		}
-	}
-	rows = append(dst[:0], s.rows...)
-	if len(rows) > searchLimit {
-		rows = rows[:searchLimit]
-	}
-	sortEntries(rows, st.sortBy, st.sortDesc, true)
-	return
 }
 
 // entryOfMatch is an [Entry] for a match the file system answered. The

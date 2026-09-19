@@ -21,7 +21,7 @@ const placeholderKeySuffix = "\x00"
 //
 // nodes is parallel to the tree: nodes[i] is the entry at node i. A
 // placeholder node has Ord -1 and an empty Path.
-func (st *State) buildOutline(fsys fs.FS, showHidden bool) (t tree.Tree, nodes []Entry) {
+func (st *State) buildOutline(fsys fs.FS, showHidden bool, keep func(Entry) bool) (t tree.Tree, nodes []Entry) {
 	st.ensure()
 	t = tree.Tree{
 		Labels:  st.outlineT.Labels[:0],
@@ -39,7 +39,7 @@ func (st *State) buildOutline(fsys fs.FS, showHidden bool) (t tree.Tree, nodes [
 			nodes = append(nodes, Entry{Name: l.err.Error(), Ord: -1, InfoErr: l.err})
 			return
 		}
-		scratch = st.view(l, showHidden, scratch)
+		scratch = st.view(l, showHidden, keep, scratch)
 		for _, e := range scratch {
 			t.Labels = append(t.Labels, e.Name)
 			t.Parents = append(t.Parents, parent)

@@ -21,6 +21,13 @@ const (
 
 	widthViewList    = ";view=list"
 	widthViewOutline = ";view=outline"
+
+	// fillSlack is kept off the width FillWidth fills, so a rounding of the
+	// columns' sum cannot tip the table into a horizontal scroll bar.
+	fillSlack float32 = 2
+	// fillStep is how far a reported width is from the one sent before it
+	// is read as a drag; below it, it is the crate's rounding.
+	fillStep float32 = 0.5
 )
 
 // MinColumnWidth is the drag floor for the density: content plus both cell
@@ -78,16 +85,33 @@ type widthPlan struct {
 	cols   []colwidth.Column
 	widths []float64
 	epoch  uint32
+	// fill is the view's FillWidth layout, nil when that is off; floor the
+	// drag floor it keeps. resolvedName is the name column's width before
+	// the layout replaced it: what the resolver believes it sent, and so
+	// what it is told came back.
+	fill         *fillT
+	floor        float32
+	resolvedName float64
 }
 
 // planWidths resolves the view's widths through the host's resolver, opening
 // the resolver's settle window when the column set changed (a report that
 // follows a change describes the previous columns). Without a resolver the
-// plan is the defaults and nothing is observed.
-func (in Input) planWidths(st *State, view string) (plan widthPlan) {
+// plan is the defaults under [seedWidthEpoch] and nothing is observed.
+func (in Input) planWidths(st *State, view string, density styletokens.DensityE) (plan widthPlan) {
+	defer func() { in.fillName(st, &plan, view, density) }()
 	plan.widths = in.widthDefaults()
 	plan.cols = in.widthColumns(view)
 	if in.Widths == nil {
+		seeded := &st.widthSeededList
+		if view == widthViewOutline {
+			seeded = &st.widthSeededOutline
+		}
+		plan.epoch = seedWidthEpoch
+		if *seeded {
+			plan.epoch++
+		}
+		*seeded = true
 		return
 	}
 	tag := in.WidthTag
@@ -114,9 +138,46 @@ func (in Input) planWidths(st *State, view string) (plan widthPlan) {
 	return
 }
 
-// observeWidths feeds the table's reported widths back to the resolver.
+// fillName hands the plan to the view's FillWidth layout (fill.go): the
+// widths become the layout's, and its generation is added to the plan's so
+// the binding re-applies when either moves.
+func (in Input) fillName(st *State, plan *widthPlan, view string, density styletokens.DensityE) {
+	if len(plan.widths) == 0 {
+		return
+	}
+	plan.resolvedName = plan.widths[0]
+	if !in.FillWidth {
+		return
+	}
+	f := &st.fillList
+	if view == widthViewOutline {
+		f = &st.fillOutline
+	}
+	plan.fill, plan.floor = f, MinColumnWidth(density)
+	f.plan(plan.widths, plan.epoch, st.tableW, plan.floor)
+	for i, w := range f.w {
+		plan.widths[i] = float64(w)
+	}
+	plan.epoch += f.epoch
+}
+
+// observeWidths takes the table's reported widths: to the FillWidth layout
+// first, which reads a drag out of them, then to the resolver. Under
+// FillWidth the resolver is told the layout rather than the report — a column
+// that gave to its neighbour's drag moved as surely as the dragged one — and
+// for the name column what the resolver itself sent: that width follows the
+// pane, and captured it would be written on every resize as though dragged.
 func (in Input) observeWidths(st *State, plan widthPlan, fetched []float32, view string) {
-	if !plan.on || len(fetched) == 0 {
+	if len(fetched) == 0 {
+		return
+	}
+	if plan.fill != nil {
+		plan.fill.dragged(fetched, plan.floor)
+		if len(plan.fill.w) == len(fetched) {
+			fetched = plan.fill.w
+		}
+	}
+	if !plan.on {
 		return
 	}
 	seen := &st.widthsSeenList
@@ -128,6 +189,9 @@ func (in Input) observeWidths(st *State, plan widthPlan, fetched []float32, view
 	widths := make([]float64, len(fetched))
 	for i, w := range fetched {
 		widths[i] = float64(w)
+	}
+	if plan.fill != nil {
+		widths[0] = plan.resolvedName
 	}
 	in.Widths.Observe(plan.tag, plan.cols, widths, 0, firstShow, time.Now())
 }

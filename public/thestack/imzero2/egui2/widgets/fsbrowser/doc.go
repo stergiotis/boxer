@@ -17,6 +17,15 @@
 // mount are browsed at the same path — synchronized browsing is the default
 // the location model gives for free.
 //
+// The host also says what is a row at all. [Input.ShowHidden] admits
+// dot-names, and [Input.Keep] is the host's standing restriction, a predicate
+// over each entry: a dialog that opens only some extensions, or that lists
+// directories alone, is a browser with a Keep (the filepicker package is that
+// host). [Input.SingleSelect] holds the selection to one path.
+// [Input.MaxHeight] bounds the whole widget, breadcrumb and filter included.
+// [Input.FillWidth] makes the columns span the pane, the name column taking
+// what the others leave; fill.go says why that has to be a splitter.
+//
 // # What the widget decides, and what it reports
 //
 // A click selects (ctrl toggles, shift extends from the cursor), a double
@@ -37,10 +46,18 @@
 // be entered. Where the pattern runs is the file system's choice: one that
 // implements [fsmatch.FS] answers in one call — the lading adapter hands
 // the pattern to ClickHouse's match() over the path column — and any other
-// is walked from the cached listings, a bounded number of directory reads
-// per frame, so a large plain tree fills in over frames rather than
-// stalling one. Both stop at a cap and say so; a filter narrows, and a
-// pattern matching thousands of paths is one to refine.
+// is walked. Both stop at a cap and say which: a pattern matching thousands
+// of paths is one to refine, and a tree too big to walk is one to search
+// from further down.
+//
+// Either way the search is a background job (search.go): it starts once the
+// filter text has stood still, runs off the render thread, shows the
+// standard job row — bar, share, time left, Cancel — in the filter row, and
+// lists its matches as they are found. With [Input.Tasks] it is also a
+// keelson task (ADR-0038) the host's task monitor lists and can cancel. Two
+// things follow for a host: its file system is read from the job's goroutine
+// as well as the render thread, and so is its [Input.Keep]; and a host that
+// stops rendering a browser calls [State.StopSearch].
 //
 // # Modes
 //

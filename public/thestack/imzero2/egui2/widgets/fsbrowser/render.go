@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
@@ -19,6 +20,7 @@ const (
 	defaultTimeWidth   float32 = 140
 	defaultColumnWidth float32 = 120
 	filterWidth        float32 = 180
+	searchBarWidth     float32 = 120
 
 	// Widget-id seeds, one namespace per id kind (ADR-0200 in the prefix).
 	seqRowBase    uint64 = 0x0200_0100_0000_0000
@@ -36,6 +38,28 @@ var (
 
 // builtinColumns is how many columns precede the host's: name, size, time.
 const builtinColumns = 3
+
+// seedWidthEpoch is the apply generation a table gets when the host persists
+// no widths. A table the crate has not seen is auto-fitted to its content on
+// first show, and these cells truncate, so their content is a few points
+// wide: every column opened collapsed. Applying the defaults under a
+// generation stores them as the table's state, which suppresses that fit and
+// leaves the reader's later drags alone.
+//
+// The generation moves once, on the view's second frame. A table that opens
+// inside a new egui Window is laid out first in that window's sizing pass,
+// where the crate overwrites every width with the content's after the apply
+// has been counted as done; the second generation writes the defaults over
+// what that left. Outside a window it re-applies what is already there.
+//
+// deferred: the etable binding could skip the apply during a sizing pass, as
+// the ctable binding skips its render; that is an IDL change, and this goes
+// when it is made.
+const seedWidthEpoch uint32 = 1
+
+// minTableHeight keeps a few rows on screen when the host's MaxHeight is
+// smaller than the chrome above the table.
+const minTableHeight float32 = 3 * defaultRowHeight
 
 // Render draws the browser for one frame and reports what happened.
 func Render(in Input) (res Result) {
@@ -55,11 +79,21 @@ func Render(in Input) (res Result) {
 	}
 	density := styletokens.ActiveDensity()
 	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
+		if in.MaxHeight > 0 || in.FillWidth {
+			st.topSeq = in.Ids.PrepareStr("probe-top").Derive()
+			st.tableSeq = in.Ids.PrepareStr("probe-table").Derive()
+			c.CaptureUiAvailableRect(st.topSeq)
+		}
 		if !in.HideBreadcrumb {
 			if in.renderBreadcrumb(st, density) {
 				res.Navigated = true
 				res.SelectionChanged = true
 			}
+		}
+		if st.matcher() == nil {
+			// No filter, no search: one still running is for a filter the
+			// reader has cleared.
+			st.StopSearch()
 		}
 		if !in.HideFilter {
 			in.renderFilter(st, density)
@@ -156,7 +190,9 @@ func (in Input) renderFilter(st *State, density styletokens.DensityE) {
 				rt.Small().Weak()
 			}
 		}
-		if note := st.searchStatus(); note != "" {
+		if st.searching() {
+			in.renderSearchProgress(st)
+		} else if note := st.searchStatus(); note != "" {
 			for rt := range c.RichTextLabel(note) {
 				rt.Small().Weak()
 			}
@@ -166,18 +202,36 @@ func (in Input) renderFilter(st *State, density styletokens.DensityE) {
 	}
 }
 
-// searchStatus is the filter's standing in words, empty with no filter.
+// renderSearchProgress draws the running search as the standard job row —
+// bar, share and time left, Cancel — inline, so the filter row keeps its
+// height and the table below it does not move when a search starts and ends.
+// The figures are the job's, a frame old like the rest of this row.
+func (in Input) renderSearchProgress(st *State) {
+	bgjobrow.Render(st.job, bgjobrow.Input{
+		CancelId: in.Ids.PrepareStr("filter-cancel"),
+		Inline:   true,
+		BarWidth: searchBarWidth,
+	})
+}
+
+// searchStatus is the filter's standing in words once its search has ended,
+// empty with no filter and while the search waits or runs (the job row says
+// that).
 func (st *State) searchStatus() string {
-	if st.matcher() == nil || st.found.key == "" {
+	if st.matcher() == nil || st.found.key == "" || !st.found.done {
 		return ""
 	}
 	s := &st.found
 	n := min(len(s.rows), searchLimit)
 	switch {
-	case !s.done:
-		return itoa(n) + " so far…"
+	case s.err != nil:
+		return ""
+	case s.cancelled:
+		return "cancelled — " + itoa(n) + " found before"
 	case s.more:
 		return "first " + itoa(n) + " — narrow the pattern"
+	case s.unread:
+		return itoa(n) + " found in the first " + itoa(walkMaxDirs) + " directories — search from further down"
 	case n == 1:
 		return "1 match"
 	}
@@ -229,9 +283,18 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 	searching := st.matcher() != nil
 	if searching {
 		var s *searchT
-		rows, s = st.search(in.FS, in.ShowHidden, walkReadsPerFrame, st.rows[:0])
+		rows, s = st.search(in.FS, in.ShowHidden, in.Keep, in.Tasks, st.rows[:0])
 		if !s.done {
+			// The job runs on its own goroutine and cannot ask for a frame;
+			// the render thread keeps them coming while it waits.
 			c.RequestRepaint()
+			if in.HideFilter && st.searching() {
+				// The host draws its own filter chrome; the job row still
+				// has to be somewhere, and Cancel with it.
+				for range c.Horizontal().KeepIter() {
+					in.renderSearchProgress(st)
+				}
+			}
 		}
 		if s.err != nil {
 			c.Label("Cannot search " + st.Dir() + ": " + s.err.Error()).Selectable(false).Send()
@@ -239,7 +302,7 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 		}
 	} else {
 		l := st.read(in.FS, st.Dir())
-		rows = st.view(l, in.ShowHidden, st.rows[:0])
+		rows = st.view(l, in.ShowHidden, in.Keep, st.rows[:0])
 		if l.err != nil {
 			c.Label("Cannot read " + st.Dir() + ": " + l.err.Error()).Selectable(false).Send()
 			res.Err = l.err
@@ -254,18 +317,21 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 	}
 
 	clickedRow, activatedRow := -1, -1
-	mode := clickMode()
+	mode := in.clickMode()
 	kf := c.Frame(in.Ids.PrepareStr("keys")).CaptureKeys(uint64(listKeyMask))
 	st.keyFrameID = kf.Id()
-	plan := in.planWidths(st, widthViewList)
 	for range kf.KeepIter() {
+		// Probed inside the key frame, where the table goes, and before the
+		// plan, which fills against what the probe measured.
+		ceiling := in.probeTable(st)
+		plan := in.planWidths(st, widthViewList, density)
 		in.pushColumns(plan, density)
 		et := c.EndETable(in.Ids.PrepareStr("t"), uint64(len(rows)), rowH, 1, 0)
-		if in.MaxHeight > 0 {
-			et = et.MaxHeight(in.MaxHeight)
+		if ceiling > 0 {
+			et = et.MaxHeight(ceiling)
 		}
-		if plan.on {
-			et = et.ApplyWidths(plan.epoch)
+		et = et.ApplyWidths(plan.epoch)
+		if plan.on || plan.fill != nil {
 			if fetched, ok := et.ColumnWidths(); ok {
 				in.observeWidths(st, plan, fetched, widthViewList)
 			}
@@ -319,6 +385,32 @@ func (in Input) renderList(st *State, density styletokens.DensityE, res *Result)
 	}
 }
 
+// probeTable measures the room the table is about to get and returns the
+// height left for it under the host's MaxHeight, zero for no ceiling.
+// MaxHeight bounds the browser, and the breadcrumb, the filter row and any
+// error line stand above the table inside that bound, so their height comes
+// off it. It is measured rather than computed: a probe at the top of the
+// widget and one here, a frame late like every probe, the difference held on
+// the State. The same rect's width is what FillWidth fills. Call it where the
+// table is about to go, before the widths are planned.
+func (in Input) probeTable(st *State) (ceiling float32) {
+	if in.MaxHeight <= 0 && !in.FillWidth {
+		return 0
+	}
+	c.CaptureUiAvailableRect(st.tableSeq)
+	sm := c.CurrentApplicationState.StateManager
+	if table, ok := sm.GetUiRect(st.tableSeq); ok {
+		st.tableW = table.MaxX - table.MinX
+		if top, ok := sm.GetUiRect(st.topSeq); ok && table.MinY >= top.MinY {
+			st.chromeH = table.MinY - top.MinY
+		}
+	}
+	if in.MaxHeight <= 0 {
+		return 0
+	}
+	return max(in.MaxHeight-st.chromeH, minTableHeight)
+}
+
 // activate enters a directory or reports a file; true when it navigated.
 func (in Input) activate(st *State, rows []Entry, row int, res *Result) (navigated bool) {
 	e := rows[row]
@@ -345,7 +437,16 @@ func (in Input) pushColumns(plan widthPlan, density styletokens.DensityE) {
 		if hi := i - builtinColumns; hi >= 0 && hi < len(in.Columns) {
 			resizable = in.Columns[hi].Resizable || in.Widths != nil
 		}
-		c.EtColumn(width).RangeMinMax(floor, MaxColumnWidth).Resizable(resizable).Send()
+		ceil := MaxColumnWidth
+		if plan.fill != nil {
+			// A splitter (fill.go): every edge but the pane's is dragged,
+			// and the name column is as wide as the pane asks.
+			resizable = i < len(plan.widths)-1
+			if i == 0 {
+				ceil = max(ceil, width)
+			}
+		}
+		c.EtColumn(width).RangeMinMax(floor, ceil).Resizable(resizable).Send()
 	}
 }
 
@@ -498,14 +599,15 @@ func timeCell(e Entry) {
 
 // renderOutline is outline mode: the tree under the current directory.
 func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Result) {
-	t, nodes := st.buildOutline(in.FS, in.ShowHidden)
+	t, nodes := st.buildOutline(in.FS, in.ShowHidden, in.Keep)
 	res.Rows = nodes
 	if t.Len() == 0 {
 		return
 	}
 	// The outline's columns are the list's; the resolver keys them under the
 	// outline view, and a host column keeps its place even with no Cell.
-	plan := in.planWidths(st, widthViewOutline)
+	ceiling := in.probeTable(st)
+	plan := in.planWidths(st, widthViewOutline, density)
 	widthAt := func(i int, deflt float32) float32 {
 		if i < len(plan.widths) && plan.widths[i] > 0 {
 			return float32(plan.widths[i])
@@ -549,11 +651,12 @@ func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Resu
 			}},
 		Columns:   cols,
 		RowHeight: in.RowHeight,
-		MaxHeight: in.MaxHeight,
+		MaxHeight: ceiling,
 		Striped:   in.Striped,
+		// The epoch is the resolver's, or the seed when there is none.
+		WidthEpoch: plan.epoch,
 	}
 	if plan.on {
-		treeIn.WidthEpoch = plan.epoch
 		treeIn.MinColumnWidth = MinColumnWidth(density)
 		treeIn.MaxColumnWidth = MaxColumnWidth
 	}
@@ -562,8 +665,18 @@ func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Resu
 		res.Err = tr.Err
 		return
 	}
-	if plan.on && tr.Widths != nil {
+	if (plan.on || plan.fill != nil) && tr.Widths != nil {
 		in.observeWidths(st, plan, tr.Widths, widthViewOutline)
+	}
+	// The tree widget selects by its own rules, ctrl and shift included, so
+	// SingleSelect is held here: a selection that grew past one is cut back
+	// to the cursor, and the next frame paints it so.
+	if in.SingleSelect && st.tree.SelectionLen() > 1 {
+		if cur := st.tree.Cursor(); cur >= 0 {
+			st.tree.SelectOnly(cur)
+		} else {
+			st.tree.ClearSelection()
+		}
 	}
 	// Mirror the tree's selection and cursor onto the path-keyed State, so
 	// State.Selection reads the same in both modes.
@@ -599,7 +712,12 @@ const (
 	selectModeExtend
 )
 
-func clickMode() selectModeE {
+// clickMode reads what the modifiers make of a click; under SingleSelect a
+// click only ever replaces.
+func (in Input) clickMode() selectModeE {
+	if in.SingleSelect {
+		return selectModeReplace
+	}
 	mods := c.CurrentApplicationState.StateManager.GetModifiers()
 	switch {
 	case mods.Command || mods.Ctrl:
