@@ -75,3 +75,11 @@ SD1 kept certificate validation on, and the README deferred self-signed hosts to
 - **Skip.** `--insecure`, or a menu toggle, accepts any certificate and still verifies the handshake signatures against it, which is what `curl -k` checks. The result is a channel encrypted to whoever holds that key, not an authenticated host. This client sends keystrokes and clipboard as well as receiving video, so whoever intercepts an unverified session can also send it input. The unverified state is therefore shown for the whole session, in the title bar and on every session status line.
 - When both are set, the pin wins in the GUI and the command line refuses the combination. Nothing is stored; each connect reads the current choice.
 - Trusting a named CA file — for a private CA issuing many hosts — is not built.
+
+### 2026-09-19 — presentation neither waits for a vblank nor paces decoding
+
+SD4 allowed presentation to discard superseded pictures but left decode and present in lockstep: each access unit was decoded, drawn and presented, with a vblank-synchronised present, before the next was taken. With the display powered off, no vblanks arrive, so the present blocked once both swap-chain buffers were in use. Decode stopped, the frame queue filled, and the session rejoined in a loop. This was observed under Wine with the display in DPMS off; a minimised window was not affected, because its zero-size client area already skips presenting.
+
+- The video worker drains everything already queued, decodes every access unit (later pictures reference them), and then presents the newest picture once. Presentation costs one present per batch rather than one per frame.
+- Presents use sync interval 0. The stream paces the worker, and nothing waits for a vblank. On the flip model without `DXGI_PRESENT_ALLOW_TEARING` this does not tear: a picture still reaches the screen at the next vblank, and one not yet shown is replaced by its successor.
+- The status line reports pictures shown beside pictures decoded, so the difference is visible.

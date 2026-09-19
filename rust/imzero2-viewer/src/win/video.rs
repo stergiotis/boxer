@@ -22,7 +22,11 @@ use windows::{
 pub struct Stats {
     pub decoder: String,
     pub adapter: String,
+    /// Pictures decoded since the stream (re)started.
     pub frames: u64,
+    /// Of those, how many reached the screen. Fewer is normal: presentation
+    /// shows the newest picture of each batch (ADR-0243 §SD4).
+    pub presented: u64,
 }
 pub struct Video {
     decoder: Option<Decoder>,
@@ -44,6 +48,7 @@ pub struct Video {
     mode: DecodeMode,
     adapter: String,
     frames: u64,
+    presented: u64,
     last: Option<Frame>,
     suppress_present: bool,
 }
@@ -211,6 +216,7 @@ impl Video {
                 mode,
                 adapter,
                 frames: 0,
+                presented: 0,
                 last: None,
                 suppress_present: false,
             };
@@ -233,6 +239,7 @@ impl Video {
         self.decoder = None;
         self.hello = None;
         self.frames = 0;
+        self.presented = 0;
         Ok(())
     }
     pub fn configure(&mut self, hello: &pb::SessionHello) -> Result<()> {
@@ -253,6 +260,7 @@ impl Video {
         self.decoder = Some(Decoder::new(&self.device, codec, self.mode)?);
         self.hello = Some(hello.clone());
         self.frames = 0;
+        self.presented = 0;
         Ok(())
     }
     pub fn set_fit(&mut self, fit: bool) {
@@ -267,6 +275,7 @@ impl Video {
                 .unwrap_or_else(|| "waiting for stream".into()),
             adapter: self.adapter.clone(),
             frames: self.frames,
+            presented: self.presented,
         }
     }
     pub fn resize(&mut self, width: u32, height: u32) -> Result<()> {
@@ -293,18 +302,24 @@ impl Video {
         self.size = (width, height);
         self.repaint()
     }
-    pub fn push(&mut self, chunk: &pb::VideoChunk) -> Result<()> {
+    /// Decode one access unit without presenting it. Every unit must be
+    /// decoded — later pictures reference it — but only the newest decoded
+    /// picture is kept for [`Self::repaint`]. Returns whether a new picture
+    /// is waiting to be shown.
+    pub fn decode(&mut self, chunk: &pb::VideoChunk) -> Result<bool> {
         let decoder = self
             .decoder
             .as_mut()
             .context("video arrived before stream hello")?;
         let frames = decoder.push(chunk)?;
+        let new = !frames.is_empty();
         for frame in frames {
+            // The previous picture may still be referenced by GPU work.
             self.finish()?;
             self.last = Some(frame);
             self.frames += 1;
         }
-        self.repaint()
+        Ok(new)
     }
     pub fn repaint(&mut self) -> Result<()> {
         if self.size.0 == 0 || self.size.1 == 0 || self.last.is_none() {
@@ -432,7 +447,17 @@ impl Video {
                 .PSSetShaderResources(0, Some(&[None, None, None]));
             self.finish()?;
             if !self.suppress_present {
-                self.swap.Present(1, DXGI_PRESENT(0)).ok()?;
+                // Sync interval 0: never wait for a vblank. The stream, not
+                // the display, paces this worker, and a display that stops
+                // producing vblanks (powered off, asleep) would otherwise
+                // block here once both buffers are in use — stalling decode
+                // until the frame queue overflows and the session rejoins
+                // (ADR-0243 §SD4). On the flip model without
+                // DXGI_PRESENT_ALLOW_TEARING this does not tear: a picture
+                // still reaches the screen at the next vblank, and one not
+                // yet shown is replaced by its successor.
+                self.swap.Present(0, DXGI_PRESENT(0)).ok()?;
+                self.presented += 1;
             }
         }
         Ok(())

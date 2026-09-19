@@ -418,74 +418,104 @@ fn video_worker(
                 Err(mpsc::TrySendError::Disconnected(_)) => break,
             }
         }
-        let command = match rx.recv_timeout(Duration::from_millis(50)) {
+        let first = match rx.recv_timeout(Duration::from_millis(50)) {
             Ok(c) => c,
             Err(mpsc::RecvTimeoutError::Timeout) => continue,
             Err(_) => break,
         };
-        let result = match command {
-            VideoCommand::Reset(g) => {
-                generation = g;
-                if failed {
-                    // A failed device/swap chain cannot be healed by decoder reset.
-                    // Recreate on the owning worker while the UI keeps pumping.
-                    drop(v.take());
-                    match Video::new(HWND(raw as *mut _), mode) {
-                        Ok(mut next) => {
-                            next.set_fit(fit);
-                            let result = next.resize(size.0, size.1);
-                            v = Some(next);
-                            failed = false;
-                            result
+        // Drain what is already queued before presenting, and present once:
+        // every access unit is decoded, but only the newest picture of the
+        // batch is shown (ADR-0243 §SD4). Presentation cost is then paid per
+        // batch rather than per frame, so a slow present cannot let the queue
+        // grow until the session rejoins. Bounded by the channel's capacity.
+        let mut picture = false;
+        let mut next = Some(first);
+        let mut handled = 0;
+        while let Some(command) = next.take() {
+            let result = match command {
+                VideoCommand::Reset(g) => {
+                    generation = g;
+                    picture = false;
+                    if failed {
+                        // A failed device/swap chain cannot be healed by decoder reset.
+                        // Recreate on the owning worker while the UI keeps pumping.
+                        drop(v.take());
+                        match Video::new(HWND(raw as *mut _), mode) {
+                            Ok(mut next) => {
+                                next.set_fit(fit);
+                                let result = next.resize(size.0, size.1);
+                                v = Some(next);
+                                failed = false;
+                                result
+                            }
+                            Err(e) => Err(e),
                         }
-                        Err(e) => Err(e),
+                    } else {
+                        v.as_mut().unwrap().reset()
                     }
-                } else {
-                    v.as_mut().unwrap().reset()
                 }
-            }
-            VideoCommand::Hello(g, h) if g == generation && v.is_some() => {
-                failed = false;
-                v.as_mut().unwrap().configure(&h)
-            }
-            VideoCommand::Frame(g, f) if g == generation && !failed => v.as_mut().unwrap().push(&f),
-            VideoCommand::Resize(w, h) => {
-                size = (w, h);
-                if let Some(v) = v.as_mut() {
-                    v.resize(w, h)
-                } else {
-                    Ok(())
+                VideoCommand::Hello(g, h) if g == generation && v.is_some() => {
+                    failed = false;
+                    picture = false;
+                    v.as_mut().unwrap().configure(&h)
                 }
-            }
-            VideoCommand::Fit(next_fit) => {
-                fit = next_fit;
-                if let Some(v) = v.as_mut() {
-                    v.set_fit(fit);
-                    v.repaint()
-                } else {
-                    Ok(())
+                VideoCommand::Frame(g, f) if g == generation && !failed => {
+                    v.as_mut().unwrap().decode(&f).map(|new| picture |= new)
                 }
+                VideoCommand::Resize(w, h) => {
+                    size = (w, h);
+                    if let Some(v) = v.as_mut() {
+                        v.resize(w, h)
+                    } else {
+                        Ok(())
+                    }
+                }
+                VideoCommand::Fit(next_fit) => {
+                    fit = next_fit;
+                    if let Some(v) = v.as_mut() {
+                        v.set_fit(fit);
+                        v.repaint()
+                    } else {
+                        Ok(())
+                    }
+                }
+                VideoCommand::Capture(path) if v.is_some() => {
+                    v.as_mut().unwrap().capture(&path).map(|_| {
+                        terminal_event = Some(VideoEvent::Captured(generation));
+                    })
+                }
+                _ => Ok(()),
+            };
+            if let Err(e) = result {
+                failed = true;
+                picture = false;
+                terminal_event = Some(VideoEvent::Error(generation, format!("{e:#}")));
             }
-            VideoCommand::Capture(path) if v.is_some() => {
-                v.as_mut().unwrap().capture(&path).map(|_| {
-                    terminal_event = Some(VideoEvent::Captured(generation));
-                })
+            handled += 1;
+            // A terminal event goes out before anything else is processed,
+            // as it did when every command was its own iteration.
+            if terminal_event.is_none() && handled < 32 {
+                next = rx.try_recv().ok();
             }
-            _ => Ok(()),
-        };
-        if let Err(e) = result {
-            failed = true;
-            terminal_event = Some(VideoEvent::Error(generation, format!("{e:#}")));
-        } else if let Some(v) = v.as_ref() {
-            let s = v.stats();
-            let _ = tx.try_send(VideoEvent::Status(
-                generation,
-                format!(
-                    "{} · GPU presentation: {} · {} frames",
-                    s.decoder, s.adapter, s.frames
-                ),
-                s.frames,
-            ));
+        }
+        if picture && !failed {
+            if let Some(Err(e)) = v.as_mut().map(Video::repaint) {
+                failed = true;
+                terminal_event = Some(VideoEvent::Error(generation, format!("{e:#}")));
+            }
+        }
+        if !failed {
+            if let Some(v) = v.as_ref() {
+                let s = v.stats();
+                let _ = tx.try_send(VideoEvent::Status(
+                    generation,
+                    format!(
+                        "{} · GPU presentation: {} · {} frames, {} shown",
+                        s.decoder, s.adapter, s.frames, s.presented
+                    ),
+                    s.frames,
+                ));
+            }
         }
     }
 }
