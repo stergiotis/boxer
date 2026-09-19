@@ -43,6 +43,34 @@ jobs:
             exit 1
           fi
 
+  viewer:
+    name: viewer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Reads the crate's own pin rather than hardcoding it here, the same way
+      # watermark.yaml and lint.yaml read theirs — one file to update when the
+      # crate's toolchain moves.
+      - name: Install the pinned Rust toolchain
+        run: |
+          set -euo pipefail
+          ch=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust/imzero2-viewer/rust-toolchain.toml | head -1)
+          [ -n "$ch" ] || { echo "no channel pin in rust/imzero2-viewer/rust-toolchain.toml" >&2; exit 1; }
+          rustup toolchain install "$ch" --profile minimal --component rustfmt,clippy
+
+      # No ffmpeg, MinGW or Windows libraries: this lane is the ADR-0243 §SD5
+      # "Linux unit tests cover framing, session transitions, geometry and input
+      # state without Windows dependencies" half. Everything under src/win is
+      # cfg(windows), so neither these tests nor the clippy step reach it — the
+      # cross-build and Wine lanes are separate and are not run here.
+      - name: Test
+        run: ./scripts/ci/viewer_test.sh
+
   gotest-binary-log:
     name: gotest (binary_log)
     runs-on: ubuntu-24.04
