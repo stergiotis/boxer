@@ -64,3 +64,14 @@ Linux unit tests cover framing, session transitions, geometry and input state wi
 ## Status
 
 Accepted — 2026-09-17, following approval of the implementation plan and its initial compatibility boundary.
+
+## Updates
+
+### 2026-09-19 — a certificate can be pinned, or verification skipped, per connection
+
+SD1 kept certificate validation on, and the README deferred self-signed hosts to a trust configuration rather than a bypass. Nothing of that kind was built, so a self-signed host could not be reached at all. Two ways in now exist. Web-roots validation stays the default, and a connection uses exactly one of the three.
+
+- **Pin.** `--pin-sha256`, or the Pin field beside the endpoint, names the SHA-256 of the one certificate to accept, over its DER encoding — the fingerprint a browser's certificate viewer and `openssl x509 -fingerprint -sha256` show. The pin replaces the chain, name and expiry checks, which is what lets it serve a self-signed host. The handshake signatures are still verified, so the session is authenticated to the holder of that certificate's key. A mismatch reports the fingerprint the server presented. Replacing the certificate means replacing the pin.
+- **Skip.** `--insecure`, or a menu toggle, accepts any certificate and still verifies the handshake signatures against it, which is what `curl -k` checks. The result is a channel encrypted to whoever holds that key, not an authenticated host. This client sends keystrokes and clipboard as well as receiving video, so whoever intercepts an unverified session can also send it input. The unverified state is therefore shown for the whole session, in the title bar and on every session status line.
+- When both are set, the pin wins in the GUI and the command line refuses the combination. Nothing is stored; each connect reads the current choice.
+- Trusting a named CA file — for a private CA issuing many hosts — is not built.

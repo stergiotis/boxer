@@ -12,8 +12,70 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 
+/// How a `wss://` endpoint's certificate is checked (ADR-0243 §SD1; see its
+/// 2026-09-19 update). Irrelevant to `ws://`, which has no certificate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TlsVerification {
+    /// Chain to the public web roots and match the host name.
+    #[default]
+    Verify,
+    /// Accept whatever certificate the server presents: no chain, no name,
+    /// no expiry. The handshake signatures are still checked, so the session
+    /// is still encrypted to *whoever* holds that certificate's key — which
+    /// is exactly what goes unestablished. Anyone on the path can terminate
+    /// the connection themselves and read the video and inject keystrokes
+    /// and clipboard. For a self-signed host on a network you trust.
+    SkipInsecure,
+    /// Accept exactly one certificate: the one whose SHA-256 over its DER
+    /// encoding is this value (the fingerprint a browser's certificate viewer
+    /// and `openssl x509 -fingerprint -sha256` show). The pin replaces the
+    /// chain, name and expiry checks rather than adding to them — that is
+    /// what makes it work for a self-signed host — and the handshake
+    /// signatures are checked as usual, so this is an authenticated channel
+    /// to the holder of that certificate's key. Replacing the certificate
+    /// means updating the pin.
+    Pinned([u8; 32]),
+}
+
+/// Parse a SHA-256 certificate fingerprint as people copy it: 64 hex digits,
+/// with or without `:`/`-`/space separators, either case, optionally still
+/// carrying the `sha256 Fingerprint=` prefix `openssl x509` prints.
+pub fn parse_sha256_fingerprint(text: &str) -> anyhow::Result<[u8; 32]> {
+    let text = text.rsplit('=').next().unwrap_or_default();
+    let digits: String = text
+        .chars()
+        .filter(|c| !matches!(c, ':' | '-') && !c.is_whitespace())
+        .collect();
+    anyhow::ensure!(
+        digits.len() == 64 && digits.bytes().all(|b| b.is_ascii_hexdigit()),
+        "a SHA-256 pin is 64 hex digits (colons optional); got {} characters",
+        digits.len()
+    );
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&digits[2 * i..2 * i + 2], 16)?;
+    }
+    Ok(out)
+}
+
+/// The colon-separated uppercase spelling browsers and openssl display.
+pub fn format_sha256_fingerprint(fingerprint: &[u8; 32]) -> String {
+    fingerprint
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
+fn certificate_sha256(der: &[u8]) -> [u8; 32] {
+    let digest = ring::digest::digest(&ring::digest::SHA256, der);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(digest.as_ref());
+    out
+}
+
 pub enum Command {
-    Connect(String),
+    Connect(String, TlsVerification),
     Disconnect,
     Send(pb::SessionControl),
     Input(pb::InputEvent),
@@ -94,7 +156,7 @@ async fn terminal(
             Err(TrySendError::Full(e)) => event = e,
         }
         tokio::select! {
-            c=command(&mut *rx)=>match c{Command::Stop=>return Some(Command::Stop),Command::Connect(_)=>next=Some(c),_=>{}},
+            c=command(&mut *rx)=>match c{Command::Stop=>return Some(Command::Stop),Command::Connect(..)=>next=Some(c),_=>{}},
             _=tokio::time::sleep(Duration::from_millis(2))=>{},
         }
     }
@@ -106,9 +168,9 @@ async fn run(mut rx: tokio::sync::mpsc::Receiver<Command>, events: SyncSender<Ev
             Some(c) => c,
             None => command(&mut rx).await,
         };
-        let endpoint = match c {
+        let (endpoint, tls) = match c {
             Command::Stop => return,
-            Command::Connect(e) => e,
+            Command::Connect(e, tls) => (e, tls),
             _ => continue,
         };
         let url = match validate_endpoint(&endpoint) {
@@ -121,14 +183,31 @@ async fn run(mut rx: tokio::sync::mpsc::Receiver<Command>, events: SyncSender<Ev
         let config = WebSocketConfig::default()
             .max_message_size(Some(MAX_BYTES))
             .max_frame_size(Some(MAX_BYTES));
+        // None keeps tokio-tungstenite's own verifying rustls setup; only an
+        // explicit skip on a wss:// endpoint replaces it.
+        let connector = match certificate_rule(tls) {
+            Some(rule) if url.scheme() == "wss" => match custom_tls(rule) {
+                Ok(c) => Some(tokio_tungstenite::Connector::Rustls(c)),
+                Err(e) => {
+                    pending = terminal(&mut rx, &events, format!("TLS setup failed: {e}")).await;
+                    continue;
+                }
+            },
+            _ => None,
+        };
         let connect = tokio::time::timeout(
             Duration::from_secs(10),
-            tokio_tungstenite::connect_async_with_config(url.as_str(), Some(config), true),
+            tokio_tungstenite::connect_async_tls_with_config(
+                url.as_str(),
+                Some(config),
+                true,
+                connector,
+            ),
         );
         tokio::pin!(connect);
         let socket = loop {
             tokio::select! {
-                c=command(&mut rx)=>match c {Command::Stop=>return,Command::Disconnect=>break Err("Disconnected".into()),Command::Connect(e)=>{pending=Some(Command::Connect(e));break Err("Connection replaced".into());},_=>{}},
+                c=command(&mut rx)=>match c {Command::Stop=>return,Command::Disconnect=>break Err("Disconnected".into()),Command::Connect(e,t)=>{pending=Some(Command::Connect(e,t));break Err("Connection replaced".into());},_=>{}},
                 result=&mut connect=>break match result{Ok(Ok((ws,_)))=>Ok(ws),Ok(Err(e))=>Err(format!("Connection to {} failed: {}",redact(&url),describe_connect_error(&e,url.scheme()))),Err(_)=>Err("Connection timed out".into())},
             }
         };
@@ -173,7 +252,7 @@ async fn connected(
                 let message=match c{
                     Command::Stop=>return ("Stopped".into(),Some(Command::Stop)),
                     Command::Disconnect=>return ("Disconnected".into(),None),
-                    Command::Connect(e)=>return ("Connection replaced".into(),Some(Command::Connect(e))),
+                    Command::Connect(e,t)=>return ("Connection replaced".into(),Some(Command::Connect(e,t))),
                     Command::Send(c)=>Message::Binary(wire::framed(wire::PREFIX_SESSION,&c).into()),
                     Command::Input(i)=>Message::Binary(wire::framed(wire::PREFIX_INPUT,&i).into()),
                 };
@@ -228,6 +307,134 @@ fn validate_endpoint(raw: &str) -> anyhow::Result<url::Url> {
 fn redact(url: &url::Url) -> String {
     url.origin().ascii_serialization()
 }
+/// Which certificate a non-default connection accepts; `None` is the
+/// default (tokio-tungstenite's own web-roots verifier, left untouched).
+#[derive(Clone, Copy, Debug)]
+enum CertificateRule {
+    AcceptAny,
+    Pinned([u8; 32]),
+}
+
+fn certificate_rule(tls: TlsVerification) -> Option<CertificateRule> {
+    match tls {
+        TlsVerification::Verify => None,
+        TlsVerification::SkipInsecure => Some(CertificateRule::AcceptAny),
+        TlsVerification::Pinned(pin) => Some(CertificateRule::Pinned(pin)),
+    }
+}
+
+/// Client TLS configuration for [`TlsVerification::SkipInsecure`] and
+/// [`TlsVerification::Pinned`].
+fn custom_tls(rule: CertificateRule) -> anyhow::Result<std::sync::Arc<rustls::ClientConfig>> {
+    let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+    let config = rustls::ClientConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()?
+        .dangerous()
+        .with_custom_certificate_verifier(std::sync::Arc::new(CertificateCheck { rule, provider }))
+        .with_no_client_auth();
+    Ok(std::sync::Arc::new(config))
+}
+
+/// Replaces the chain/name/expiry checks with [`CertificateRule`], and keeps
+/// the handshake-signature checks, which prove the server holds the key of
+/// the certificate it presented. For `AcceptAny` that is what `curl -k`
+/// checks; for `Pinned` it makes the pin an identity check. Only
+/// [`custom_tls`] constructs it.
+#[derive(Debug)]
+struct CertificateCheck {
+    rule: CertificateRule,
+    provider: std::sync::Arc<rustls::crypto::CryptoProvider>,
+}
+
+/// The rejection a pin produces, carried inside rustls's error so
+/// [`describe_connect_error`] can report what the server presented.
+#[derive(Debug)]
+struct PinMismatch {
+    presented: [u8; 32],
+}
+
+impl std::fmt::Display for PinMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the server presented certificate SHA-256 {}, which is not the pinned one",
+            format_sha256_fingerprint(&self.presented)
+        )
+    }
+}
+
+impl std::error::Error for PinMismatch {}
+
+impl rustls::client::danger::ServerCertVerifier for CertificateCheck {
+    fn verify_server_cert(
+        &self,
+        end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        match self.rule {
+            CertificateRule::AcceptAny => {}
+            CertificateRule::Pinned(pin) => {
+                let presented = certificate_sha256(end_entity.as_ref());
+                if presented != pin {
+                    return Err(rustls::Error::InvalidCertificate(
+                        rustls::CertificateError::Other(rustls::OtherError(std::sync::Arc::new(
+                            PinMismatch { presented },
+                        ))),
+                    ));
+                }
+            }
+        }
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.provider
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
+}
+
+/// The [`PinMismatch`] inside a failed TLS handshake, if that is what failed.
+fn pin_mismatch(io: &std::io::Error) -> Option<&PinMismatch> {
+    match io.get_ref()?.downcast_ref::<rustls::Error>()? {
+        rustls::Error::InvalidCertificate(rustls::CertificateError::Other(other)) => {
+            other.0.downcast_ref::<PinMismatch>()
+        }
+        _ => None,
+    }
+}
+
 /// Name a failed connect in terms of what to check next.
 ///
 /// Three failures with unrelated fixes used to share one message — nothing
@@ -257,12 +464,24 @@ fn describe_connect_error(e: &tokio_tungstenite::tungstenite::Error, scheme: &st
             // tokio-rustls reports a failed handshake as InvalidData
             // wrapping the rustls error, whose text names the cause
             // ("invalid peer certificate: UnknownIssuer", …).
-            ErrorKind::InvalidData if scheme == "wss" => format!(
-                "the TLS handshake failed ({io}). This viewer trusts only the public \
-                 web roots, not the Windows certificate store, so a certificate a browser \
-                 accepts can still fail here; if nothing terminates TLS in front of the \
-                 host, use ws:// instead"
-            ),
+            ErrorKind::InvalidData if scheme == "wss" => {
+                if let Some(mismatch) = pin_mismatch(io) {
+                    return format!(
+                        "{mismatch}. If the host's certificate was replaced, update the pin; \
+                         if not, something between here and the host is presenting its own"
+                    );
+                }
+                let hint = if io.to_string().contains("invalid peer certificate") {
+                    "This viewer trusts only the public web roots, not the Windows \
+                     certificate store, so a certificate a browser accepts can still fail \
+                     here. For a self-signed host, pin its SHA-256 fingerprint (the Pin \
+                     field, or --pin-sha256); skipping verification (menu, or --insecure) \
+                     also connects, but to anyone who answers"
+                } else {
+                    "If nothing terminates TLS in front of the host, use ws:// instead"
+                };
+                format!("the TLS handshake failed ({io}). {hint}")
+            }
             _ => format!("network error ({io})"),
         },
         Error::Http(response) => {
@@ -421,8 +640,11 @@ mod tests {
         });
         let (tx, rx, worker) = spawn();
         let port = port_rx.recv_timeout(Duration::from_secs(5)).unwrap();
-        tx.blocking_send(Command::Connect(format!("ws://127.0.0.1:{port}")))
-            .unwrap();
+        tx.blocking_send(Command::Connect(
+            format!("ws://127.0.0.1:{port}"),
+            TlsVerification::Verify,
+        ))
+        .unwrap();
         assert_eq!(
             rx.recv_timeout(Duration::from_secs(5)).unwrap(),
             Event::Connected
@@ -467,8 +689,12 @@ mod tests {
 
     /// Connect through the real worker and return the reason it reports.
     fn connect_failure(endpoint: String) -> String {
+        connect_failure_with(endpoint, TlsVerification::Verify)
+    }
+
+    fn connect_failure_with(endpoint: String, tls: TlsVerification) -> String {
         let (tx, rx, worker) = spawn();
-        tx.blocking_send(Command::Connect(endpoint)).unwrap();
+        tx.blocking_send(Command::Connect(endpoint, tls)).unwrap();
         let reason = match rx.recv_timeout(Duration::from_secs(10)).unwrap() {
             Event::Disconnected(reason) => reason,
             other => panic!("expected a failed connect, got {other:?}"),
@@ -538,6 +764,138 @@ mod tests {
             !reason.contains("secret") && !reason.contains("prefix"),
             "{reason}"
         );
+    }
+
+    /// A TLS WebSocket peer presenting `testdata/self-signed-localhost.*`:
+    /// a throwaway P-256 key, committed only for these tests, with a
+    /// certificate for `localhost` and `127.0.0.1` valid until 2126. Made with
+    /// `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes
+    /// -days 36500 -subj /CN=localhost -addext
+    /// subjectAltName=DNS:localhost,IP:127.0.0.1`, then converted to DER.
+    fn self_signed_wss_server() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async move {
+                    use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+                    let cert = CertificateDer::from(FIXTURE_CERT.to_vec());
+                    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+                        include_bytes!("../testdata/self-signed-localhost.key.der").to_vec(),
+                    ));
+                    let config = rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(
+                        rustls::crypto::ring::default_provider(),
+                    ))
+                    .with_safe_default_protocol_versions()
+                    .unwrap()
+                    .with_no_client_auth()
+                    .with_single_cert(vec![cert], key)
+                    .unwrap();
+                    let acceptor = tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config));
+                    let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+                    let (tcp, _) = listener.accept().await.unwrap();
+                    // A verifying client aborts here; that is the point.
+                    let Ok(tls) = acceptor.accept(tcp).await else {
+                        return;
+                    };
+                    let Ok(mut ws) = tokio_tungstenite::accept_async(tls).await else {
+                        return;
+                    };
+                    let _ = ws.close(None).await;
+                })
+        });
+        port
+    }
+
+    #[test]
+    fn self_signed_certificate_is_refused_by_default() {
+        let reason = connect_failure(format!("wss://127.0.0.1:{}/ws", self_signed_wss_server()));
+        assert!(reason.contains("invalid peer certificate"), "{reason}");
+        assert!(reason.contains("--insecure"), "{reason}");
+    }
+
+    #[test]
+    fn skip_insecure_connects_to_a_self_signed_host() {
+        let port = self_signed_wss_server();
+        let (tx, rx, worker) = spawn();
+        tx.blocking_send(Command::Connect(
+            format!("wss://127.0.0.1:{port}/ws"),
+            TlsVerification::SkipInsecure,
+        ))
+        .unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+            Event::Connected
+        );
+        tx.blocking_send(Command::Stop).unwrap();
+        worker.join().unwrap();
+    }
+
+    const FIXTURE_CERT: &[u8] = include_bytes!("../testdata/self-signed-localhost.cert.der");
+
+    #[test]
+    fn fingerprint_parses_the_spellings_people_paste() {
+        let pin = certificate_sha256(FIXTURE_CERT);
+        let canonical = format_sha256_fingerprint(&pin);
+        assert_eq!(canonical.len(), 95, "32 pairs and 31 colons");
+        let bare: String = canonical.chars().filter(|c| *c != ':').collect();
+        for spelling in [
+            canonical.clone(),
+            canonical.to_lowercase(),
+            bare.clone(),
+            format!("  {bare}\n"),
+            canonical.replace(':', " "),
+            format!("sha256 Fingerprint={canonical}"),
+        ] {
+            assert_eq!(
+                parse_sha256_fingerprint(&spelling).unwrap(),
+                pin,
+                "{spelling:?}"
+            );
+        }
+        for bad in [
+            "",
+            &bare[..62],
+            &format!("{bare}00"),
+            &bare.replace('A', "G"),
+        ] {
+            assert!(parse_sha256_fingerprint(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn matching_pin_connects_to_a_self_signed_host() {
+        let port = self_signed_wss_server();
+        let (tx, rx, worker) = spawn();
+        tx.blocking_send(Command::Connect(
+            format!("wss://127.0.0.1:{port}/ws"),
+            TlsVerification::Pinned(certificate_sha256(FIXTURE_CERT)),
+        ))
+        .unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+            Event::Connected
+        );
+        tx.blocking_send(Command::Stop).unwrap();
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn wrong_pin_is_refused_and_names_what_was_presented() {
+        let mut wrong = certificate_sha256(FIXTURE_CERT);
+        wrong[0] ^= 0xff;
+        let reason = connect_failure_with(
+            format!("wss://127.0.0.1:{}/ws", self_signed_wss_server()),
+            TlsVerification::Pinned(wrong),
+        );
+        let presented = format_sha256_fingerprint(&certificate_sha256(FIXTURE_CERT));
+        assert!(reason.contains(&presented), "{reason}");
+        assert!(reason.contains("not the pinned one"), "{reason}");
+        assert!(reason.contains("update the pin"), "{reason}");
     }
 
     /// Pins the two contracts [`command`] has to keep now that it awaits the

@@ -31,7 +31,7 @@ Shader HLSL is embedded and compiled once on the target using `d3dcompiler_47.dl
 
 ## Connect
 
-Launch `imzero2-viewer.exe`, enter a full `ws://` or `wss://` endpoint and select Connect. The endpoint path is preserved, including proxy prefixes. Certificates are verified with the TLS library's public trust roots; a private CA needs an explicit future trust configuration, not a validation bypass. Stored credentials and proxy-specific authentication are not implemented. Do not expose an unauthenticated host publicly merely because this client supports TLS.
+Launch `imzero2-viewer.exe`, enter a full `ws://` or `wss://` endpoint and select Connect. The endpoint path is preserved, including proxy prefixes. Certificates are verified against the TLS library's public trust roots, not the Windows certificate store, so a private CA or a self-signed certificate is refused. For such a host, enter its certificate's SHA-256 fingerprint in the *Pin SHA-256* field, or pass `--pin-sha256`: that one certificate is then accepted, and no other. Paste the fingerprint as a browser's certificate viewer shows it or as `openssl x509 -noout -fingerprint -sha256` prints it. A mismatch reports the fingerprint the server presented; when the host's certificate is replaced, the pin must be too. `--insecure`, or the *Skip TLS certificate verification* menu item, skips the check entirely for the next connect: any certificate is accepted, and the handshake is still checked against whichever certificate was presented. That is encryption to an unauthenticated peer, and the session carries input and clipboard as well as video, so anyone on the network path can read the session and inject input. An unverified session says so in the title bar and on each status line (ADR-0243, update of 2026-09-19). A pin takes precedence over the menu item; the two flags together are refused. Stored credentials and proxy-specific authentication are not implemented. Do not expose an unauthenticated host publicly merely because this client supports TLS.
 
 Menus provide session takeover, fullscreen, fit/1:1 display, explicit remote resize, and clipboard opt-in. Clipboard transfer is text-only: incoming text is accepted only when enabled and active; outgoing paste requires the Paste clipboard command. F11 switches fullscreen. Input is sent only while active. Losing focus cancels held input using the additive focus message from ADR-0242; use a host implementing that contract.
 
@@ -39,6 +39,8 @@ Command-line options:
 
 ```text
 --url wss://example.invalid/app/ws
+--pin-sha256 FINGERPRINT   accept only the certificate with this SHA-256 (see above)
+--insecure                 skip TLS certificate verification (see above)
 --software                 force software decoding
 --hardware                 require D3D11VA decoding
 --capture frame.bmp        save a scripted capture

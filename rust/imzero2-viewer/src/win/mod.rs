@@ -4,7 +4,7 @@ mod video;
 use crate::{
     geometry::Viewport,
     input::{InputState, Modifiers, MouseButton, Utf16Assembler},
-    session::{self, Command, Event},
+    session::{self, Command, Event, TlsVerification},
     wire::pb,
 };
 use anyhow::{bail, Context, Result};
@@ -25,7 +25,12 @@ use windows::{
     Win32::{
         Foundation::*,
         Graphics::Gdi::*,
-        System::{DataExchange::*, LibraryLoader::GetModuleHandleW, Memory::*},
+        System::{
+            DataExchange::*,
+            LibraryLoader::GetModuleHandleW,
+            Memory::*,
+            SystemServices::{SS_CENTERIMAGE, SS_RIGHT},
+        },
         UI::{
             Controls::WM_MOUSELEAVE, HiDpi::*, Input::KeyboardAndMouse::*, WindowsAndMessaging::*,
         },
@@ -40,7 +45,13 @@ const FIT: usize = 105;
 const CLIP: usize = 106;
 const PASTE: usize = 107;
 const RESIZE_REMOTE: usize = 108;
+const INSECURE: usize = 109;
 thread_local! {static APP:RefCell<Option<App>>=const {RefCell::new(None)};}
+fn window_text(hwnd: HWND) -> String {
+    let mut text = vec![0u16; 4096];
+    let len = unsafe { GetWindowTextW(hwnd, &mut text) } as usize;
+    String::from_utf16_lossy(&text[..len.min(text.len())])
+}
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
 }
@@ -59,6 +70,10 @@ struct App {
     window: HWND,
     video: HWND,
     endpoint: HWND,
+    // Optional SHA-256 certificate pin for the endpoint beside it; read at
+    // each connect, like the endpoint.
+    pin_label: HWND,
+    pin: HWND,
     status: HWND,
     connect_button: HWND,
     // Commands are a tokio channel so the network worker sleeps on it rather
@@ -78,6 +93,13 @@ struct App {
     desired: bool,
     fit: bool,
     clipboard: bool,
+    // The user's choice, applied at each Connect; `unverified` is whether the
+    // connection now open actually skipped verification (a wss:// endpoint).
+    // Only the second is shown, and it is shown everywhere the session is:
+    // the title bar and every steady-state status line.
+    insecure: bool,
+    unverified: bool,
+    pinned: bool,
     fullscreen: Option<RECT>,
     // The whole input path lives in `crate::input`, which builds every wire
     // message and owns the held-key/button/modifier/focus state. This shell
@@ -119,6 +141,8 @@ pub fn run() -> Result<()> {
     let mut capture = None;
     let mut exit_frames = None;
     let mut timeout = None;
+    let mut insecure = false;
+    let mut pin = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str(){
@@ -127,9 +151,18 @@ pub fn run() -> Result<()> {
         "--capture"=>capture=Some(PathBuf::from(args.next().context("--capture needs a BMP path")?)),
         "--exit-after-frames"=>exit_frames=Some(args.next().context("missing frame count")?.parse::<u64>()?),
         "--timeout"=>timeout=Some(Duration::from_secs(args.next().context("missing timeout")?.parse::<u64>()?)),
-        _=>bail!("unknown option {arg}; options: --url URL --software --hardware --capture FILE.bmp --exit-after-frames N --timeout SECONDS"),
+        "--insecure"=>insecure=true,
+        "--pin-sha256"=>pin=Some(session::parse_sha256_fingerprint(&args.next().context("--pin-sha256 needs a certificate fingerprint")?)?),
+        _=>bail!("unknown option {arg}; options: --url URL --insecure --pin-sha256 FINGERPRINT --software --hardware --capture FILE.bmp --exit-after-frames N --timeout SECONDS"),
     }
     }
+    if insecure && pin.is_some() {
+        bail!("--insecure and --pin-sha256 are alternatives: a pin checks the certificate, --insecure does not; pass one");
+    }
+    let pin_text = pin
+        .as_ref()
+        .map(session::format_sha256_fingerprint)
+        .unwrap_or_default();
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let instance: HINSTANCE = GetModuleHandleW(None)?.into();
@@ -177,6 +210,34 @@ pub fn run() -> Result<()> {
             8,
             8,
             880,
+            26,
+            Some(window),
+            None,
+            Some(instance),
+            None,
+        )?;
+        let pin_label = CreateWindowExW(
+            WINDOW_EX_STYLE::default(),
+            w!("STATIC"),
+            w!("Pin SHA-256"),
+            WS_CHILD | WS_VISIBLE | WINDOW_STYLE(SS_RIGHT.0 | SS_CENTERIMAGE.0),
+            0,
+            8,
+            90,
+            26,
+            Some(window),
+            None,
+            Some(instance),
+            None,
+        )?;
+        let pin_control = CreateWindowExW(
+            WS_EX_CLIENTEDGE,
+            w!("EDIT"),
+            PCWSTR(wide(&pin_text).as_ptr()),
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WINDOW_STYLE(ES_AUTOHSCROLL as u32),
+            0,
+            8,
+            300,
             26,
             Some(window),
             None,
@@ -235,6 +296,7 @@ pub fn run() -> Result<()> {
             (RESIZE_REMOTE, "Resize remote to window"),
             (CLIP, "Enable clipboard"),
             (PASTE, "Paste clipboard"),
+            (INSECURE, "Skip TLS certificate verification (insecure)"),
         ] {
             AppendMenuW(menu, MF_STRING, id, PCWSTR(wide(title).as_ptr()))?;
         }
@@ -251,6 +313,8 @@ pub fn run() -> Result<()> {
                 window,
                 video,
                 endpoint: endpoint_control,
+                pin_label,
+                pin: pin_control,
                 status,
                 connect_button,
                 commands,
@@ -266,6 +330,9 @@ pub fn run() -> Result<()> {
                 desired: false,
                 fit: true,
                 clipboard: false,
+                insecure,
+                unverified: false,
+                pinned: false,
                 fullscreen: None,
                 input: InputState::new(),
                 text: Utf16Assembler::new(),
@@ -287,6 +354,7 @@ pub fn run() -> Result<()> {
         SetTimer(Some(window), 1, 10, None);
         APP.with(|a| {
             if let Some(a) = a.borrow_mut().as_mut() {
+                a.show_insecure_choice();
                 a.layout();
                 if !endpoint.is_empty() {
                     a.connect();
@@ -474,9 +542,23 @@ impl App {
             .is_err();
     }
     fn connect(&mut self) {
-        let mut text = vec![0u16; 4096];
-        let len = unsafe { GetWindowTextW(self.endpoint, &mut text) } as usize;
-        let endpoint = String::from_utf16_lossy(&text[..len]);
+        let endpoint = window_text(self.endpoint);
+        let pin_text = window_text(self.pin);
+        // Parsed before anything is torn down: a mistyped pin refuses to
+        // connect, and a session already open stays open.
+        let pin = if pin_text.trim().is_empty() {
+            None
+        } else {
+            match session::parse_sha256_fingerprint(&pin_text) {
+                Ok(pin) => Some(pin),
+                Err(e) => {
+                    self.desired = false;
+                    self.retry_at = None;
+                    self.status(&format!("Not connecting: the pin is not usable — {e}"));
+                    return;
+                }
+            }
+        };
         self.cancel_input();
         self.connected = false;
         self.reset_video();
@@ -485,8 +567,58 @@ impl App {
         self.desired = true;
         self.retry_at = None;
         self.last_progress = Instant::now();
-        self.send(Command::Connect(endpoint));
-        self.status("Connecting…");
+        // A pin is the stricter, more specific choice, so it wins over the
+        // skip-verification toggle rather than the two combining.
+        let tls = match pin {
+            Some(pin) => TlsVerification::Pinned(pin),
+            None if self.insecure => TlsVerification::SkipInsecure,
+            None => TlsVerification::Verify,
+        };
+        let wss = endpoint
+            .trim_start()
+            .get(..6)
+            .is_some_and(|s| s.eq_ignore_ascii_case("wss://"));
+        self.unverified = wss && tls == TlsVerification::SkipInsecure;
+        self.pinned = wss && matches!(tls, TlsVerification::Pinned(_));
+        unsafe {
+            let _ = SetWindowTextW(
+                self.window,
+                if self.unverified {
+                    w!("imzero2 viewer — TLS certificate NOT verified")
+                } else if self.pinned {
+                    w!("imzero2 viewer — TLS certificate pinned")
+                } else {
+                    w!("imzero2 viewer")
+                },
+            );
+        }
+        let note = match tls {
+            TlsVerification::Pinned(_) if !wss => " (the pin applies to wss:// only)",
+            TlsVerification::Pinned(_) if self.insecure => {
+                " (pinned: the skip-verification setting does not apply)"
+            }
+            _ => "",
+        };
+        self.send(Command::Connect(endpoint, tls));
+        self.status(&format!("{}Connecting…{note}", self.tls_note()));
+    }
+    /// Prefix for every status line about an open session.
+    fn tls_note(&self) -> &'static str {
+        if self.unverified {
+            "UNVERIFIED TLS · "
+        } else {
+            ""
+        }
+    }
+    fn show_insecure_choice(&self) {
+        let state = if self.insecure {
+            MF_CHECKED
+        } else {
+            MF_UNCHECKED
+        };
+        unsafe {
+            CheckMenuItem(GetMenu(self.window), INSECURE as u32, state.0);
+        }
     }
     fn disconnect(&mut self) {
         self.cancel_input();
@@ -585,7 +717,10 @@ impl App {
                     self.connected = true;
                     self.send(Command::Send(session::client_hello("Windows viewer")));
                     self.last_progress = Instant::now();
-                    self.status("Connected — waiting for stream and roster");
+                    self.status(&format!(
+                        "{}Connected — waiting for stream and roster",
+                        self.tls_note()
+                    ));
                 }
                 Event::Disconnected(reason) => {
                     self.cancel_input();
@@ -638,11 +773,15 @@ impl App {
                             let _ = self.input.focus(false);
                             self.focus(has_focus);
                         }
-                        self.status(if active {
-                            "Active session"
-                        } else {
-                            "Passive viewer — use Take session to control"
-                        });
+                        self.status(&format!(
+                            "{}{}",
+                            self.tls_note(),
+                            if active {
+                                "Active session"
+                            } else {
+                                "Passive viewer — use Take session to control"
+                            }
+                        ));
                     }
                     Some(pb::session_control::Control::Clipboard(c))
                         if self.clipboard && self.active =>
@@ -676,7 +815,8 @@ impl App {
                 VideoEvent::Status(g, status, frames) if g == self.generation => {
                     if self.connected {
                         self.status(&format!(
-                            "{} · {status}",
+                            "{}{} · {status}",
+                            self.tls_note(),
                             if self.active { "Active" } else { "Passive" }
                         ));
                     }
@@ -739,7 +879,13 @@ impl App {
             let bar = (42.0 * scale) as i32;
             let bottom = (28.0 * scale) as i32;
             let full = self.fullscreen.is_some();
-            for h in [self.endpoint, self.connect_button, self.status] {
+            for h in [
+                self.endpoint,
+                self.pin_label,
+                self.pin,
+                self.connect_button,
+                self.status,
+            ] {
                 let _ = ShowWindow(h, if full { SW_HIDE } else { SW_SHOW });
             }
             let top = if full { 0 } else { bar };
@@ -747,14 +893,23 @@ impl App {
             let _ = MoveWindow(self.video, 0, top, r.right, height, true);
             if !full {
                 let button = (100.0 * scale) as i32;
+                let label = (90.0 * scale) as i32;
+                // A full fingerprint is 95 characters; the field scrolls, and
+                // gives way to the endpoint on a narrow window.
+                let pin = ((300.0 * scale) as i32).min(r.right / 3);
+                let gap = 8;
+                let pin_x = r.right - gap - button - gap - pin;
+                let label_x = pin_x - gap - label;
                 let _ = MoveWindow(
                     self.endpoint,
+                    gap,
                     8,
-                    8,
-                    (r.right - button - 24).max(1),
+                    (label_x - 2 * gap).max(1),
                     bar - 16,
                     true,
                 );
+                let _ = MoveWindow(self.pin_label, label_x, 8, label, bar - 16, true);
+                let _ = MoveWindow(self.pin, pin_x, 8, pin, bar - 16, true);
                 let _ = MoveWindow(
                     self.connect_button,
                     (r.right - button - 8).max(0),
@@ -853,6 +1008,16 @@ impl App {
             FIT => {
                 self.fit = !self.fit;
                 self.enqueue_video(VideoCommand::Fit(self.fit));
+            }
+            INSECURE => {
+                self.insecure = !self.insecure;
+                self.show_insecure_choice();
+                self.status(if self.insecure {
+                    "Certificate verification will be skipped from the next wss:// connect: \
+                     anyone on the network path could read the session and send it input"
+                } else {
+                    "Certificate verification is on from the next connect"
+                });
             }
             CLIP => {
                 self.clipboard = !self.clipboard;
