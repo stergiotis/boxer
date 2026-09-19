@@ -79,6 +79,11 @@ func displayTitle(d registry.Demo) (label string) {
 
 const interactiveEmbedFirstFrame = 2
 
+// filterCaretAtEnd is the packed caret range [c.TextEditFluid.SetCursor]
+// takes, both halves saturated so the editor clamps them to the end of its
+// text (ADR-0130's caret channel).
+const filterCaretAtEnd = uint64(0xffff_ffff_ffff_ffff)
+
 // App is the per-window Demo-gallery instance. Each Open() yields a
 // fresh App with its own filter selection, frame counter, and per-demo
 // state map — two open windows of the gallery have independent filters
@@ -114,6 +119,11 @@ type App struct {
 	demoState map[string]any
 
 	filter string
+	// focusFilter asks the next Frame to put the caret in the filter field,
+	// so typing narrows the gallery without a click first. Set at Mount and
+	// spent on the first frame: a standing request would take focus back
+	// from every widget a demo shows, every frame.
+	focusFilter bool
 	// Bodies always emit per ADR-0012 (the structural BLOCK_SKIPPED
 	// gate was removed to fix click-to-open flicker), so this counter
 	// short-circuits the expensive per-demo work itself: frame 1 has
@@ -146,6 +156,7 @@ func (inst *App) Manifest() (m runtimeapp.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.bus = ctx.Bus()
+	inst.focusFilter = true
 	for _, d := range registry.All() {
 		switch {
 		case d.BusInit != nil:
@@ -174,8 +185,15 @@ func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) { return }
 func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	inst.frame++
 	c.Label("Filter (substring match on demo name or category):").Send()
-	c.TextEdit(inst.ids.PrepareStr("demo-filter"), inst.filter, false).
-		SendRespVal(&inst.filter)
+	filterEdit := c.TextEdit(inst.ids.PrepareStr("demo-filter"), inst.filter, false)
+	if inst.focusFilter {
+		// The caret channel, not c.RequestFocus: RequestFocus addresses a
+		// Focusable Frame's id (ADR-0177 §SD7), which a TextEdit never holds,
+		// and misses silently. setCursor's focus half asks the editor's own id.
+		filterEdit = filterEdit.SetCursor(filterCaretAtEnd, true)
+		inst.focusFilter = false
+	}
+	filterEdit.SendRespVal(&inst.filter)
 
 	needle := strings.ToLower(strings.TrimSpace(inst.filter))
 	grouped := galleryGroupByCategory(registry.All(), needle)
