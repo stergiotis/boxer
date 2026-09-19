@@ -33,10 +33,11 @@ func init() {
 		Flags:    registry.DemoFlagNeedsLargeArea,
 		Kind:     registry.DemoKindUX,
 		Description: "In-app open / save / pick-folder dialog rendered as an " +
-			"egui::Window. Directory listing is walked Go-side (default " +
-			"os.ReadDir; swap fsBackend for sandboxed/remote sources). " +
-			"Click one of the four triggers to drive the picker — multi-select " +
-			"toggles files in/out on each click.",
+			"egui::Window around the fsbrowser widget. The tree is any io/fs.FS " +
+			"(default os.DirFS; swap the backend for sandboxed/remote sources). " +
+			"Click one of the four triggers to drive the picker — double-click " +
+			"enters a directory or opens a file; in multi-select, ctrl-click " +
+			"adds and shift-click extends.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			state = &filepickerDemoState{
 				open: filepicker.New("demo-open", filepicker.ModeOpen,

@@ -10,15 +10,17 @@ status: draft
 
 # imzero2 filepicker — Explanation
 
-The `filepicker` package composes an in-app file open / save /
-pick-folder dialog from the imzero2 / egui2 widget primitives — a
-top-level `egui::Window` holding an inside-panel layout (top
-breadcrumb, bottom footer, optional bottom filename row, optional
-right stat pane, central listing). The filesystem is walked Go-side
-via the stdlib [`io/fs.FS`] interface, so the default `os.DirFS("/")`
-backend trades trivially with a sandboxed `os.DirFS(root)`, an
-`embed.FS`, a `testing/fstest.MapFS`, or a custom remote backend
-without touching `Render`.
+The `filepicker` package is an in-app file open / save / pick-folder
+dialog: a top-level `egui::Window` holding an inside-panel layout
+(bottom footer, optional bottom filename row, optional right stat
+pane) around the `fsbrowser` widget, which fills the central panel
+with the breadcrumb, the quick filter and the listing
+([ADR-0200](../../../../../../doc/adr/0200-tally-lading-browser.md),
+2026-09-18 update). The filesystem is walked Go-side via the stdlib
+[`io/fs.FS`] interface, so the default `os.DirFS("/")` backend trades
+with a sandboxed `os.DirFS(root)`, an `embed.FS`, a
+`testing/fstest.MapFS`, or a custom remote backend without touching
+`Render`.
 
 [`io/fs.FS`]: https://pkg.go.dev/io/fs#FS
 
@@ -29,9 +31,15 @@ The framework offers no native "file dialog" widget; OS-native pickers
 window and bypass the Go side's permission/visibility model. Both are
 deal-breakers for hosts that want a sandboxed view, a remote source, or
 just consistent in-egui chrome. The filepicker therefore composes
-existing primitives — `Window`, `Panel*Inside`, `ScrollArea`, `Button`,
-`TextEdit`, `UiWithLayout` — and walks the filesystem Go-side so the
-host stays authoritative over what the user can see.
+existing primitives and walks the filesystem Go-side so the host stays
+authoritative over what the user can see.
+
+The dialog first carried its own navigation — current directory,
+breadcrumb, listing cache, sort, selection set. `fsbrowser` later grew
+the same things for the browser panes, and the two drifted apart in
+ways a user saw (size units, icons, which click enters a directory).
+The dialog now keeps only what makes it a dialog: the window, the
+modes, the filename row, the stat pane, and what a commit returns.
 
 The `io/fs` adoption (commit `eff5b52f`) is the lynchpin that makes the
 backend interchangeable. `fs.ReadDir(fsys, name)` and `fs.Stat(fsys,
@@ -47,26 +55,41 @@ treats every backend uniformly.
 body layout, the primary-button label, the listing filter, and what
 `commitPaths` returns:
 
-| Mode             | Listing               | Stat pane | Filename row | Primary             | commitPaths       |
-|------------------|-----------------------|-----------|--------------|---------------------|-------------------|
-| `ModeOpen`       | dirs + files          | yes       | no           | "Open"              | `[selected]`      |
-| `ModeOpen` (multi) | dirs + files        | yes       | no           | "Open"              | set, click-order  |
-| `ModeSave`       | dirs + files          | no        | yes          | "Save"              | `[cwd/filename]`  |
-| `ModePickFolder` | dirs only             | no        | no           | "Pick This Folder"  | `[cwd]`           |
+| Mode             | Listing               | Stat pane | Filename row | Primary             | commitPaths                    |
+|------------------|-----------------------|-----------|--------------|---------------------|--------------------------------|
+| `ModeOpen`       | dirs + files          | yes       | no           | "Open"              | `[picked file]`                |
+| `ModeOpen` (multi) | dirs + files        | yes       | no           | "Open"              | picked files, in pick order    |
+| `ModeSave`       | dirs + files          | no        | yes          | "Save"              | `[cwd/filename]`               |
+| `ModePickFolder` | dirs only             | no        | no           | "Pick This Folder"  | `[selected dir]`, else `[cwd]` |
 
-`WithMultiSelect(true)` is meaningful only for `ModeOpen`. Each click
-in the listing toggles a file in / out of `selectedSet` (membership)
-and appends / removes from `selectedOrdered` (commit order). The
-`Selected(true)` highlight reflects set membership, and the footer
-status flips from `selected: <name>` to `N selected`. Navigation
-(breadcrumb / `..` / folder click) calls `clearSelection`, matching
-the Nautilus / Files convention — selection is per-directory.
+In every mode a single click selects a row and a double click or Enter
+*activates* it: a directory is entered; a file commits in open mode
+and gives its name to the filename row in save mode (a single click
+does that too). Pick-folder commits the one selected directory when
+there is one, because a click now selects rather than enters —
+committing the cwd alone would return the parent of the folder the
+user just clicked. The footer names the folder a commit would return.
+
+`WithMultiSelect(true)` is meaningful only for `ModeOpen`; it is what
+turns the browser's `SingleSelect` off, so ctrl-click toggles and
+shift-click extends. Navigation clears the selection — the browser's
+rule, and the Nautilus / Files convention: selection is per-directory.
+
+### Picks
+
+The browser's selection is a set of paths, files and directories
+alike. The dialog derives three things from it whenever the browser
+reports a change (`syncPicks`): `picked`, the selected *files* in the
+order they were first selected, which is what a multi-select commit
+returns; `pickedDir`, the selection when it is exactly one directory;
+and `selected`, the file under the cursor, which drives the stat pane.
+`reconcilePicks` is the pure part and carries the ordering rules.
 
 ### Path model
 
 Internally the picker uses **io/fs paths**: forward slashes only, no
-leading `/`, no `..`, with `"."` as the FS root. `cwd`, `pendingCwd`,
-`selected`, cache keys, breadcrumb segments, and `commitPath`'s
+leading `/`, no `..`, with `"."` as the FS root — the browser's path
+model, so the cwd, the selection, the picks and `commitPaths`'
 intermediate result all live in this domain. The `path` package (not
 `path/filepath`) provides `Join` / `Dir` / `Base` / `Clean`.
 
@@ -90,29 +113,21 @@ keyed on the picker's instance string. Inside the scope every
 `ids.PrepareStr("foo")` XORs against the pushed scope key, yielding
 distinct IDs across instances even when the host shares one ids stack.
 
-### Listing-click semantics
-
-Listing rows are `Button`s, not `NodeLeaf`s. `egui_ltreeview` retains
-its selection set across frames, so `HasNodelikeSelected` fires every
-frame the node is selected — the click is indistinguishable from
-"still selected from last frame." A `Button`'s `HasPrimaryClicked`
-fires exactly once per click, which is the semantic the picker
-needs.
-
 ### Visibility filters
 
-The listing applies three predicates per entry, AND-combined inside
-`Inst.entryVisible`:
+Three restrictions decide what is a row, and a fourth is the user's:
 
-1. **Hidden-file toggle** — when `inst.showHidden` is false, names
-   matching `isHiddenName` (POSIX dot-prefix) hide regardless of
-   mode. Default off; seeded by [`WithShowHiddenFiles`] and flipped
-   at runtime by the `Hidden` Checkbox in the footer.
+1. **Hidden-file toggle** — the browser's `ShowHidden`, fed from
+   `inst.showHidden`. Default off; seeded by [`WithShowHiddenFiles`]
+   and flipped at runtime by the `Hidden` Checkbox in the footer.
 2. **Mode-driven filter** — `ModePickFolder` hides non-directory
-   entries entirely so the listing only offers cd-targets.
-3. **User filter (single predicate slot)** — directories always
-   bypass this; non-directories run through `inst.fileFilter`. Only
-   one filter is active at a time:
+   entries entirely so the listing only offers directories.
+3. **Host filter (single predicate slot)** — directories always
+   bypass this; non-directories run through `inst.fileFilter`. 2 and
+   3 together are `Inst.keep`, handed to the browser as its `Keep`.
+   The predicates are written against `fs.DirEntry`; `entryAsDirEntry`
+   presents the browser's cached entry as one. Only one filter is
+   active at a time:
    - `WithExtensionFilter(".go", ".md")` — case-insensitive suffix
      match (back-compat shape).
    - `WithGlobFilter("*.go", "test_*.go")` — `path.Match` per
@@ -125,20 +140,55 @@ The listing applies three predicates per entry, AND-combined inside
 
    Last-Option-wins: passing several `With*Filter*` options overwrites
    the slot; the footer label always reflects the *last* one set.
+4. **Quick filter** — the browser's regex box, over the paths of the
+   subtree under the cwd. It narrows within what 1–3 admit. Its search
+   is a background job with the standard progress row and Cancel in the
+   filter row; with `WithTasks` / `SetTasks` it is also a keelson task
+   (ADR-0038) under the dialog's `AppId`, which `hostboot` wires. The
+   dialog stops a search in `Hide` and on commit, since nobody renders
+   a closed dialog's search. Because the search runs on its own
+   goroutine, `Inst.keep` — and so a host's `WithFilter` predicate — is
+   called off the render thread too and must read nothing the render
+   thread writes; the built-in filters read only what `New` set.
 
-### Staged cwd changes
+### A live tree behind a caching widget
 
-Breadcrumb / dir-button clicks set `inst.pendingCwd` rather than
-mutating `inst.cwd` mid-iteration. `Render` applies the staged change
-once at the top of the frame (clearing the selection and the cache
-entry for the new cwd), then renders consistently.
+`fsbrowser` caches a directory listing until its host says otherwise,
+which suits the snapshot stores it was built for. A dialog browses a
+live tree, so it calls `State.Invalidate` in `Show` and after every
+navigation the browser reports — the moments the dialog's own cache
+used to be dropped.
+
+### Column widths
+
+The listing spans the dialog: the browser's `FillWidth`, under which the
+name column takes what the size and modified columns leave, a dragged
+edge takes from the column to its right, and a resize of the dialog
+moves the name column alone (`fsbrowser/fill.go` has the reasoning,
+including the construction that does not work).
+
+Dragged widths persist through the standard column-width persistence
+(ADR-0151) when the host supplies a resolver — `WithColumnWidths`, or
+`SetColumnWidths` for a dialog built before the store was known. The
+dialog is not an app, so its widths are not keyed by one: the resolver
+comes from `NewColumnWidths`, which fixes the identity
+(`AppId`, `runtime.filepicker`) and the drag bounds the
+browser uses. A host builds one, shares it between every dialog it
+raises, and flushes it every frame — also while no dialog is open, since
+a drag made just before a commit is written after the dialog has gone.
+The instance tier is tagged by mode (`filepicker/open`, `…/save`,
+`…/pick-folder`), not by dialog instance, because a host may mint a
+dialog per request. Without a resolver the listing still fills, and
+nothing persists.
 
 ### Stat caching
 
 `refreshStat()` runs once per frame at the top of `Render` and uses
 `selectedStatPath` as a cache key — if it equals `selected`, the cached
 `fs.FileInfo` is reused. Switching files invalidates once; staying on
-the same file is a free no-op.
+the same file is a free no-op. The pane stats rather than reading the
+listing's entry: the listing reports a symlink as the link, and the
+pane describes what Open would open. Sizes are IEC, as in the listing.
 
 ## Invariants
 
@@ -146,8 +196,18 @@ the same file is a free no-op.
   `"filepicker:" + idStr`; it does not push onto the WidgetIdStack and
   must therefore be paired with an explicit `IdScope` for the body's
   widgets to be uniquely identified per instance.
-- Listing rows must be `Button`s (one-shot click), not
-  `NodeLeaf`s — see the click-semantics rationale above.
+- `Inst` holds the browser's `State` by value and the browser binds
+  pointers into it across frames (the filter text), so an `Inst` is
+  only ever handled by pointer.
+- `renderBrowser` runs after the footer and the filename row, because
+  panels are declared before the central panel. What it derives this
+  frame is what they show next frame; a save-mode click that rewrites
+  `inst.filename` must override the filename row's databinding, which
+  was registered earlier in the same frame.
+- The browser's `MaxHeight` is fed from a probe of the central panel
+  placed *before* the browser. Without a ceiling the table takes its
+  auto-fit cap, the window's content grows, and the next probe reads
+  the grown panel.
 - Bottom panels stack from the bottom edge inward in declaration
   order; the footer must be declared **before** the optional filename
   row so the footer sits at the very bottom of the Window.
@@ -156,18 +216,10 @@ the same file is a free no-op.
   middle band (between top breadcrumb and bottom footer) rather than
   the full window height. The right panel is `ModeOpen`-only;
   `ModeSave` and `ModePickFolder` skip it.
-- The listing's `c.UiWithLayout().MainDirTopDown().CrossJustify(true)`
-  wrapper is required for the buttons to fill the central panel's
-  full horizontal width; without it the ScrollArea reserves its
-  scrollbar gutter mid-panel.
-- Internal cwd `"."` means "FS root"; `splitBreadcrumbs` returns empty
-  slices for it. `path.Dir(".")` is `"."`, so the up-button must guard
-  against `cwd == "."` to avoid a no-op tap.
-- `inst.selected` (the "active" path) and `inst.selectedSet` /
-  `inst.selectedOrdered` (the commit set + click order) are kept in
-  sync by `pickFile`. Tests and helpers that mutate selection state
-  must go through `pickFile` (or directly through `clearSelection`)
-  to avoid drift between the three.
+- `inst.picked`, `inst.pickedDir` and `inst.selected` are derived
+  from the browser's selection by `syncPicks` and by nothing else.
+  Tests that need a selection set it on the browser `State` and call
+  `syncPicks`, as the `selectRows` test helper does.
 - `inst.fileFilter` and `inst.filterDesc` always move together — each
   `With*Filter*` option writes both or neither. The footer reads
   `filterDesc` (not the predicate), so a custom predicate registered
@@ -184,19 +236,22 @@ Go-side from a single render-loop goroutine.
   render-loop goroutine. On a directory with tens of thousands of
   entries, the first-emit frame visibly stalls. Listing cache makes
   subsequent frames cheap, but the initial walk is unavoidably
-  bounded by FS latency × entry count.
+  bounded by FS latency × entry count. The browser asks every entry
+  for its info when it reads a directory — that is where the size and
+  modified columns come from — so the bound is one stat per entry
+  where the dialog's earlier name-only listing paid none.
 - **One-frame lag on selection / typed input.** `Button.SendResp` and
   `TextEdit.SendRespVal` both report the previous frame's state — the
   picker observes the user's click on frame N+1, not N. For
   user-initiated commits (button clicks), this is invisible; for
   programmatic round-trips, the host must wait an extra frame.
-- **`fs.FS` has no `Lstat` analogue.** `fs.Stat` follows symlinks, so
-  a symlinked file appears as its target. Distinguishing the link
-  from the target needs an OS-level call outside the `fs.FS`
-  interface.
-- **One selection at a time.** `inst.selected` is a single string; the
-  egui_ltreeview-style selection set isn't surfaced because we use
-  Buttons for click semantics.
+- **A symlink to a directory is not a directory.** The listing
+  reports an entry's type as `fs.ReadDir` gives it, the link itself,
+  so such a link lists as a file: it cannot be entered, and
+  pick-folder does not show it.
+- **The WASM props follow the browser's.** The dialog imports
+  `fsbrowser`, `tree` and `regexedit`, which are declared blocked
+  under TinyGo, so the dialog's declaration is blocked by entailment.
 
 ## Out of scope (potential roadmap)
 
@@ -216,16 +271,6 @@ rewrite, but none are blocking the v1 use case.
   `Inst.idStr`, surfaced as a left panel. Needs a host-supplied
   persistence shim (writing to disk inside `filepicker` would
   contradict the "host owns IO" stance).
-- **Vim-style keybindings** — `j`/`k` to move selection, `Enter` to
-  commit, `Esc` to cancel, `g`/`G` to jump. Needs a focused-row state
-  machine and access to the egui keyboard event stream for a
-  non-focused widget — not currently exposed.
-- **Modifier-aware multi-select** — the v1 multi-select implementation
-  toggles on every plain click because `ResponseFlagsE` does not
-  surface Ctrl/Shift state. Wiring modifier bits through the FFFI2
-  click response would let the picker offer the classic file-manager
-  semantics (plain click replaces, Ctrl+click toggles, Shift+click
-  range-extends) on top of the existing set.
 - **"New folder" UI** — `+` button next to the breadcrumb; opens a
   small inline TextEdit for the new dir name; calls `os.Mkdir` (or a
   hypothetical `fs.MkdirFS` extension when one exists). Save mode
@@ -240,9 +285,17 @@ rewrite, but none are blocking the v1 use case.
   per-frame ReadDir count so a malicious cyclic symlink can't blow
   memory or stall the loop. Low priority — fs.Stat already follows
   links, and `os.ReadDir` doesn't recurse on its own.
-- **"This is a symlink to X" indication** — separate from preview;
-  shows the link target inline in the stat pane. Needs `os.Lstat`
-  (or an `fs.LstatFS` interface), so it's backend-coupled.
+- **"This is a symlink to X" indication** — the listing marks a link
+  with its own glyph; showing the target inline in the stat pane
+  needs `os.Readlink` (or an `fs.ReadLinkFS`), so it's
+  backend-coupled.
+- **Following a symlink to a directory** — see Trade-offs.
+- **Keys beyond the browser's** — arrows, Home / End, Page Up / Down,
+  Enter and Backspace work once the listing has focus. Esc to cancel
+  and focus on open are the dialog's to add.
+- **Persisted sort and hidden-files toggle** — the column widths
+  persist; the sort order and the `Hidden` toggle still start from
+  their defaults in each dialog.
 - **Tunable Window size / theme** — currently hardcoded
   `820×500` (open) / `640×480` (save). Options like
   `WithDefaultWindowSize(w, h)` would let hosts override.

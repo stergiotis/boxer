@@ -4,45 +4,41 @@ import (
 	"io/fs"
 	"path"
 	"slices"
-	"sort"
 	"strings"
+	"time"
 
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 )
 
-// readDirSorted returns dir's children from fsys, sorted via
-// sortDirEntries (directories first, then case-insensitive name order).
-//
-// dir is an io/fs path: "." for the FS root, "home/test-user" for nested,
-// no leading "/", forward slashes, no "..". The fs.ReadDir helper
-// dispatches to fsys's ReadDirFS implementation when present and falls
-// back to Open + ReadDir otherwise, so any [fs.FS] works — including
-// [os.DirFS], [embed.FS], [testing/fstest.MapFS], or a remote backend.
-func readDirSorted(fsys fs.FS, dir string) (entries []fs.DirEntry, err error) {
-	entries, err = fs.ReadDir(fsys, dir)
-	if err != nil {
-		err = eb.Build().Str("dir", dir).Errorf("read dir: %w", err)
-		return
-	}
-	sortDirEntries(entries)
-	return
+// entryAsDirEntry presents a browser [fsbrowser.Entry] as the
+// [fs.DirEntry] the With*Filter predicates are written against, so the
+// option signatures did not change when the listing became the
+// widget's. Everything answers from the entry the browser cached when
+// it read the directory; nothing here touches the file system.
+type entryAsDirEntry struct {
+	e fsbrowser.Entry
 }
 
-// sortDirEntries places directories before files; within each group,
-// sorts by case-insensitive name with a tiebreak on the original case
-// so order is deterministic and stable across frames.
-func sortDirEntries(es []fs.DirEntry) {
-	sort.Slice(es, func(i, j int) bool {
-		if es[i].IsDir() != es[j].IsDir() {
-			return es[i].IsDir()
-		}
-		ai := strings.ToLower(es[i].Name())
-		aj := strings.ToLower(es[j].Name())
-		if ai != aj {
-			return ai < aj
-		}
-		return es[i].Name() < es[j].Name()
-	})
+var _ fs.DirEntry = entryAsDirEntry{}
+var _ fs.FileInfo = entryAsDirEntry{}
+
+func (inst entryAsDirEntry) Name() string       { return inst.e.Name }
+func (inst entryAsDirEntry) IsDir() bool        { return inst.e.IsDir }
+func (inst entryAsDirEntry) Type() fs.FileMode  { return inst.e.Mode.Type() }
+func (inst entryAsDirEntry) Size() int64        { return inst.e.Size }
+func (inst entryAsDirEntry) Mode() fs.FileMode  { return inst.e.Mode }
+func (inst entryAsDirEntry) ModTime() time.Time { return inst.e.ModTime }
+func (inst entryAsDirEntry) Sys() any           { return nil }
+
+// Info reports the error the listing met when it asked for this entry's
+// info, as [fs.DirEntry.Info] would have.
+func (inst entryAsDirEntry) Info() (info fs.FileInfo, err error) {
+	if inst.e.InfoErr != nil {
+		err = inst.e.InfoErr
+		return
+	}
+	info = inst
+	return
 }
 
 // normalizeExtensions lower-cases and strips leading dots from a list
@@ -78,62 +74,6 @@ func passesExtFilter(de fs.DirEntry, filter []string) (ok bool) {
 	if slices.Contains(filter, ext) {
 		ok = true
 		return
-	}
-	return
-}
-
-// isHiddenName reports whether name follows the POSIX hidden-file
-// convention (starts with a dot). ReadDir doesn't surface "." or ".."
-// itself, so the simple prefix check is enough — no need to special-case
-// the navigation entries.
-func isHiddenName(name string) (ok bool) {
-	ok = strings.HasPrefix(name, ".")
-	return
-}
-
-// removeOrdered drops the first occurrence of victim from xs and
-// returns the trimmed slice. Used by pickFile to keep the
-// click-ordered companion of selectedSet consistent when the user
-// toggles a file out. Allocations are cheap: the multi-select set
-// is bounded by what fits on screen × the user's patience.
-func removeOrdered(xs []string, victim string) (out []string) {
-	for i, x := range xs {
-		if x != victim {
-			continue
-		}
-		out = append(xs[:i], xs[i+1:]...)
-		return
-	}
-	out = xs
-	return
-}
-
-// splitBreadcrumbs splits an io/fs path into segment names plus the
-// path prefix at each segment, suitable for rendering a clickable
-// breadcrumb bar.
-//
-// Example: "home/test-user" → (["home","test-user"], ["home","home/test-user"]).
-// The FS root ("." or "") returns empty slices — the caller is at root.
-func splitBreadcrumbs(cwd string) (segs, prefixes []string) {
-	clean := path.Clean(cwd)
-	if clean == "." || clean == "" {
-		return
-	}
-	parts := strings.Split(clean, "/")
-	segs = make([]string, 0, len(parts))
-	prefixes = make([]string, 0, len(parts))
-	cur := ""
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		segs = append(segs, p)
-		if cur == "" {
-			cur = p
-		} else {
-			cur = cur + "/" + p
-		}
-		prefixes = append(prefixes, cur)
 	}
 	return
 }

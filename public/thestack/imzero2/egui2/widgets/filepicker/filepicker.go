@@ -5,6 +5,11 @@
 // [testing/fstest.MapFS] for tests, [os.DirFS](root) for sandboxed
 // roots, [embed.FS] for static content, or a custom remote backend.
 //
+// The dialog is a shell around the fsbrowser widget (ADR-0200, 2026-09-18
+// update): breadcrumb, quick filter, listing, sort, selection and keys
+// are the widget's, in list mode; the window, the modes, the filename
+// row, the stat pane and what a commit returns are this package's.
+//
 // One [Inst] models one dialog. Hosts construct it once (typically as a
 // package-level variable), call [Inst.Show] to make it visible, and
 // call [Inst.Render] every frame inside their render loop, passing the
@@ -14,19 +19,24 @@
 //
 // # Modes
 //
-// [ModeOpen] picks an existing file. The right-side stat pane shows
-// metadata for the active selection. With [WithMultiSelect] enabled,
-// each click toggles the file in/out of the commit set — commit returns
-// all picked paths in click order. [ModeSave] asks for a destination:
-// the user types a filename and commit returns cwd-joined-name.
-// [ModePickFolder] picks a directory: files are hidden from the
-// listing, the primary button reads "Pick This Folder", and commit
-// returns the current cwd.
+// [ModeOpen] picks an existing file; a double click or Enter on a file
+// commits it. The right-side stat pane shows metadata for the active
+// selection. With [WithMultiSelect] enabled, ctrl-click toggles a file
+// in/out of the commit set and shift-click extends it — commit returns
+// all picked paths in the order picked. [ModeSave] asks for a
+// destination: the user types a filename (or clicks an existing file to
+// take its name) and commit returns cwd-joined-name. [ModePickFolder]
+// picks a directory: files are hidden from the listing, the primary
+// button reads "Pick This Folder", and commit returns the one selected
+// directory, or the cwd when none is selected. In every mode a
+// directory is entered by a double click or Enter; a single click
+// selects it.
 //
-// State that survives frames (cwd, selection, filename buffer, listing
-// cache) lives on Inst. Per-instance ID isolation comes from an
-// internal [bindings.IdScope] keyed on the instance's scope string —
-// two pickers passed the same ids stack get distinct sub-widget IDs.
+// State that survives frames (the browser's State — cwd, selection,
+// listing cache — and the filename buffer) lives on Inst. Per-instance
+// ID isolation comes from an internal [bindings.IdScope] keyed on the
+// instance's scope string — two pickers passed the same ids stack get
+// distinct sub-widget IDs.
 //
 // Visibility is owned entirely by Go. There is no [X] close button on
 // the Window — the framework's egui::Window is constructed without an
@@ -43,6 +53,17 @@
 // resolves [os.UserHomeDir] and (if no display root has been set yet)
 // auto-sets a "/" display root, matching the conventional OS dialog
 // experience.
+//
+// # Column widths
+//
+// The listing's name column takes the width the size and modified
+// columns leave, so the table spans the dialog; a dragged column edge
+// takes from the column to its right. With [WithColumnWidths] (or
+// [Inst.SetColumnWidths]) a drag is kept through the standard
+// column-width persistence (ADR-0151): build
+// the resolver with [NewColumnWidths], share it between every dialog
+// the host shows, and flush it once per frame. Without one the dialog
+// renders at its defaults and nothing persists.
 //
 // # Stat pane (open mode)
 //
@@ -62,13 +83,48 @@ import (
 	"math"
 	"os"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/dustin/go-humanize"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 )
+
+// AppId is the identity the dialog acts under: its column widths are stored
+// under it, and its searches are tasks of it. The dialog is the host's, not an
+// app's: whichever app's request raised it, it is one dialog to its user, so
+// it has a synthetic id of its own, the way the fs broker is "runtime.fs".
+const AppId app.AppIdT = "runtime.filepicker"
+
+// NewColumnWidths builds the resolver a host hands to its dialogs through
+// [WithColumnWidths], over the host's column-width store (a facts store
+// satisfies it), and loads what is stored. It exists so the two things a
+// call site can get wrong are decided here: the identity, and the bounds —
+// which must be the ones the browser drags against, or a stored width and a
+// dragged one disagree (ADR-0151).
+//
+// res is nil only when the resolver could not be built. A failed load
+// returns the resolver with the error: the dialog then starts from its
+// defaults and still captures.
+func NewColumnWidths(store colwidth.StoreI) (res *colwidth.Resolver, err error) {
+	res, err = colwidth.New(store, colwidth.Opts{
+		AppId:     AppId,
+		MinPoints: float64(fsbrowser.MinColumnWidth(styletokens.ActiveDensity())),
+		MaxPoints: float64(fsbrowser.MaxColumnWidth),
+	})
+	if err != nil {
+		res = nil
+		return
+	}
+	err = res.Load()
+	return
+}
 
 // fullWidth tells egui TextEdit to fill the available horizontal space
 // in its parent layout. Mirrors regex_explorer.go's convention.
@@ -263,10 +319,10 @@ func WithGlobFilter(patterns ...string) (opt Option) {
 // every cwd child each frame — keep it cheap (no stat, no allocation
 // per call). nil disables filtering (everything passes).
 //
-// Predicates receive the raw [fs.DirEntry] from the listing cache,
-// so they can inspect [fs.DirEntry.Type] without an additional stat.
-// For full-path filtering, close over inst.cwd or capture it from
-// your host's render context. desc is shown in the footer as
+// Predicates receive an [fs.DirEntry] view of the browser's cached
+// entry, so [fs.DirEntry.Type] and [fs.DirEntry.Info] answer from the
+// listing without another stat. The entry carries no directory, so a
+// predicate sees the name alone. desc is shown in the footer as
 // `filter: <desc>` — empty means "no label".
 //
 // Last-Option-wins: see [WithExtensionFilter].
@@ -323,12 +379,13 @@ func WithDefaultFilename(name string) (opt Option) {
 }
 
 // WithMultiSelect lets the user accumulate several files into one commit.
-// Each click in the listing toggles a file in or out of the commit set;
-// the picker reflects membership via the selected-button highlight, and
-// commit emits every set member in click order. Only meaningful in
-// [ModeOpen] — silently ignored in [ModeSave] and [ModePickFolder].
+// A plain click replaces the selection, ctrl-click toggles a file in or
+// out of it and shift-click extends it from the cursor — the browser
+// widget's selection — and commit emits every selected file in the order
+// picked. Only meaningful in [ModeOpen] — silently ignored in
+// [ModeSave] and [ModePickFolder].
 //
-// Defaults off (single-pick): a click replaces the prior selection.
+// Defaults off (single-pick): every click replaces the prior selection.
 func WithMultiSelect(enabled bool) (opt Option) {
 	opt = func(inst *Inst) {
 		inst.multiSelect = enabled
@@ -336,9 +393,35 @@ func WithMultiSelect(enabled bool) (opt Option) {
 	return
 }
 
+// WithColumnWidths persists the listing's column widths through res, which
+// the host builds once with [NewColumnWidths] and flushes once per frame —
+// every frame, not only while a dialog is open, since a width dragged just
+// before a commit is written after the dialog has gone. nil persists
+// nothing. See [Inst.SetColumnWidths] for a dialog built before the store
+// is known.
+func WithColumnWidths(res *colwidth.Resolver) (opt Option) {
+	opt = func(inst *Inst) {
+		inst.widths = res
+	}
+	return
+}
+
+// WithTasks publishes the quick filter's search as a keelson background task
+// (ADR-0038) through tasks, so the host's task monitor lists it and can
+// cancel it. The host builds the API under [AppId] with the task producer
+// caps. nil keeps the search the dialog's own: it still runs off the render
+// thread, with its progress and Cancel in the filter row. See
+// [Inst.SetTasks] for a dialog built before the bus is known.
+func WithTasks(tasks task.TaskApiI) (opt Option) {
+	opt = func(inst *Inst) {
+		inst.tasks = tasks
+	}
+	return
+}
+
 // Inst is one file-dialog instance. Construct via [New] — the zero
-// value is unusable (the listing cache map is unallocated and the
-// absId is zero, which would produce illegal sub-widget IDs).
+// value is unusable (the absId is zero, which would produce illegal
+// sub-widget IDs).
 //
 // Inst is not safe for concurrent use; restrict access to the host's
 // single render-loop goroutine.
@@ -359,6 +442,10 @@ type Inst struct {
 	fsys          fs.FS
 	statPaneWidth float32
 	multiSelect   bool
+	// widths is the host's column-width resolver, nil for none; tasks its
+	// task API for the filter's search, nil for none.
+	widths *colwidth.Resolver
+	tasks  task.TaskApiI
 	// fileFilter is the visibility predicate for non-directory entries.
 	// nil means "everything passes". filterDesc is the human-readable
 	// footer label ("filter: <desc>"). Both are written exclusively by
@@ -372,20 +459,28 @@ type Inst struct {
 	// and similar hide.
 	showHidden bool
 
-	// Mutable state, persists across frames.
-	open       bool
-	cwd        string
-	pendingCwd string
-	// selected is the "active" path — last click in single-select mode,
-	// last click (regardless of set membership) in multi-select mode.
-	// It drives the stat-pane refresh and the "selected: …" footer
-	// label; commit pulls from selectedSet/selectedOrdered.
-	selected        string
-	selectedSet     map[string]struct{}
-	selectedOrdered []string
-	filename        string
-	cache           map[string]cachedDir
-	lastErr         error
+	// Mutable state, persists across frames. The browser state holds
+	// where the dialog is: current directory, listing cache, selection,
+	// cursor, sort and quick filter (ADR-0200, 2026-09-18 update). It
+	// is bound by pointer into the render loop, so it lives here and
+	// Inst is only ever handled by pointer.
+	open    bool
+	started bool
+	st      fsbrowser.State
+	// picked is the selected files in the order they were picked, which
+	// is what a multi-select commit returns; the browser's own selection
+	// is a set. pickedDir is the one selected directory, when the
+	// selection is exactly that — what pick-folder commits instead of
+	// the cwd. selected is the file the cursor is on: it drives the stat
+	// pane and the "selected: …" footer label. All three are derived
+	// from the browser's selection by syncPicks.
+	picked    []string
+	pickedDir string
+	selected  string
+	filename  string
+	// browserH is the central panel's measured height, a frame late and
+	// held across frames; zero until the first measurement.
+	browserH float32
 
 	// Stat cache for the currently-selected file (open mode only).
 	// selectedStatPath is the cache key — if it equals inst.selected,
@@ -394,14 +489,6 @@ type Inst struct {
 	selectedInfo     fs.FileInfo
 	selectedStatErr  error
 	selectedStatPath string
-}
-
-// cachedDir holds one ReadDir result. Cached to avoid re-stat'ing on
-// every frame; refreshed when the user navigates into the directory or
-// when Show is called on the cwd directly.
-type cachedDir struct {
-	entries []fs.DirEntry
-	err     error
 }
 
 // New constructs a picker instance. idStr is a stable identity for this
@@ -418,8 +505,6 @@ func New(idStr string, mode ModeE, opts ...Option) (inst *Inst) {
 		scopeKey:      scopeKey,
 		mode:          mode,
 		fsys:          os.DirFS("/"),
-		cache:         make(map[string]cachedDir, 8),
-		selectedSet:   make(map[string]struct{}, 4),
 		statPaneWidth: 240,
 	}
 	switch mode {
@@ -438,7 +523,9 @@ func New(idStr string, mode ModeE, opts ...Option) (inst *Inst) {
 
 // Show requests the dialog to be drawn from the next frame onwards.
 // First-Show resolves the initial cwd; subsequent Show calls leave cwd
-// in place but drop the cached listing so the user sees a fresh stat.
+// in place. Either way the cached listings are dropped: the browser
+// caches a directory until told otherwise, and the tree behind a dialog
+// is a live one that changed while the dialog was away.
 //
 // Idempotent on an already-visible dialog.
 func (inst *Inst) Show() {
@@ -446,36 +533,32 @@ func (inst *Inst) Show() {
 		return
 	}
 	inst.open = true
-	inst.lastErr = nil
-	if inst.cwd == "" {
-		if inst.startDir != "" {
-			inst.cwd = path.Clean(inst.startDir)
-		} else {
-			inst.cwd = "."
-		}
+	if !inst.started {
+		inst.started = true
+		inst.st.SetDir(inst.startDir)
 	}
-	delete(inst.cache, inst.cwd)
+	inst.st.Invalidate()
 }
 
-// Hide closes the dialog without emitting an action. Selection and
-// last-error are cleared; cwd, filename buffer, and listing cache are
-// preserved so the next Show resumes where the user left off.
+// Hide closes the dialog without emitting an action. The selection is
+// cleared; cwd, filename buffer, sort and quick filter are preserved so
+// the next Show resumes where the user left off.
 func (inst *Inst) Hide() {
 	inst.open = false
 	inst.clearSelection()
-	inst.lastErr = nil
+	// Nobody renders a hidden dialog, so nobody would see its search
+	// through or cancel it.
+	inst.st.StopSearch()
 }
 
-// clearSelection wipes the active path, the multi-select set, and its
-// ordered companion. Called whenever the picker is dismissed or
-// navigates to a different cwd — keeps cross-frame selection state
-// confined to one location instead of three.
+// clearSelection wipes the browser's selection and what the dialog
+// derives from it. Navigation needs no call: the browser clears its
+// selection on a directory change and syncPicks follows.
 func (inst *Inst) clearSelection() {
+	inst.st.ClearSelection()
+	inst.picked = inst.picked[:0]
+	inst.pickedDir = ""
 	inst.selected = ""
-	for k := range inst.selectedSet {
-		delete(inst.selectedSet, k)
-	}
-	inst.selectedOrdered = inst.selectedOrdered[:0]
 }
 
 // IsOpen reports whether the dialog is currently visible.
@@ -493,6 +576,28 @@ func (inst *Inst) SetFilename(name string) {
 	inst.filename = name
 }
 
+// SetColumnWidths is [WithColumnWidths] for a dialog constructed before the
+// host's store was known. Safe to call at any time; takes effect on the
+// next Render frame.
+func (inst *Inst) SetColumnWidths(res *colwidth.Resolver) {
+	inst.widths = res
+}
+
+// SetTasks is [WithTasks] for a dialog constructed before the host's bus was
+// known. Safe to call at any time; takes effect with the next search.
+func (inst *Inst) SetTasks(tasks task.TaskApiI) {
+	inst.tasks = tasks
+}
+
+// widthTag names the dialog's table for the resolver's instance tier. It is
+// the mode, not the instance: a host may mint a dialog per request, and a
+// width dragged in one open dialog is wanted in the next.
+func (inst *Inst) widthTag() (tag string) {
+	_, action := primaryButtonFor(inst.mode)
+	tag = "filepicker/" + action.String()
+	return
+}
+
 // Render draws the dialog this frame and reports any committed action.
 // Non-commit frames return ActionNone with a nil slice; the host should
 // keep calling Render every frame until something other than ActionNone
@@ -508,22 +613,16 @@ func (inst *Inst) SetFilename(name string) {
 // when WithStartAtOsHome or WithDisplayRoot("/") was set):
 //
 //   - ModeOpen single-pick     → exactly one path
-//   - ModeOpen + WithMultiSelect → one or more, in click order
+//   - ModeOpen + WithMultiSelect → one or more, in the order picked
 //   - ModeSave                  → exactly one path (cwd + filename)
-//   - ModePickFolder            → exactly one path (cwd)
+//   - ModePickFolder            → exactly one path (the selected
+//     directory, or the cwd when none is selected)
 //
 // On ActionCancel, paths is empty. The dialog auto-hides on commit —
 // the host does not need to call Hide.
 func (inst *Inst) Render(ids *c.WidgetIdStack) (action ActionE, paths []string) {
 	if !inst.open {
 		return
-	}
-
-	// pendingCwd: a click in the previous frame staged a new cwd.
-	// Apply it before iteration starts so the listing we render this
-	// frame is consistent.
-	if inst.pendingCwd != "" {
-		inst.applyPendingCwd()
 	}
 	inst.refreshStat()
 
@@ -558,6 +657,7 @@ func (inst *Inst) Render(ids *c.WidgetIdStack) (action ActionE, paths []string) 
 				if action != ActionCancel {
 					inst.clearSelection()
 				}
+				inst.st.StopSearch()
 			}
 		}
 	}
@@ -568,7 +668,9 @@ func (inst *Inst) Render(ids *c.WidgetIdStack) (action ActionE, paths []string) 
 // inst.selected has changed since the last call. Called once per
 // frame at the top of Render. fs.Stat is a syscall (or equivalent)
 // per backend, so the cache-key check matters — without it we'd
-// re-stat on every frame that the picker is open.
+// re-stat on every frame that the picker is open. The listing's own
+// entry is not used: it reports a symlink as the link, and the pane
+// describes what Open would open.
 func (inst *Inst) refreshStat() {
 	if inst.selected == "" {
 		inst.selectedInfo = nil
@@ -585,40 +687,20 @@ func (inst *Inst) refreshStat() {
 	inst.selectedStatPath = inst.selected
 }
 
-// applyPendingCwd commits a staged directory change. Called once at the
-// start of Render before any layout work — keeps the cwd switch out of
-// the middle of an iteration. Drops the multi-select set too: matches
-// the Nautilus / Files convention that navigating away clears the
-// in-flight selection.
-func (inst *Inst) applyPendingCwd() {
-	target := path.Clean(inst.pendingCwd)
-	inst.pendingCwd = ""
-	inst.cwd = target
-	inst.clearSelection()
-	inst.lastErr = nil
-	delete(inst.cache, target)
-}
-
 // renderBody draws the dialog interior inside the Window+IdScope scope.
 //
 // Layout uses the panel pattern from regex_explorer:
-// PanelTopInside pins the breadcrumbs to the top, PanelBottomInside
-// pins the footer (and, in save mode, the filename row above it) to
-// the bottom, and PanelCentralInside fills whatever's left for the
-// scrolled listing. egui's panel system auto-splits the available
+// PanelBottomInside pins the footer (and, in save mode, the filename
+// row above it) to the bottom, and PanelCentralInside fills whatever's
+// left for the browser. egui's panel system auto-splits the available
 // rect — a Vertical layout would not, since Vertical's children grow
-// with content and the ScrollArea would push everything below it off
+// with content and the listing would push everything below it off
 // the bottom of the Window.
 //
 // Bottom panels stack from the bottom edge inward in declaration
 // order — the FIRST PanelBottomInside sits at the very bottom, so
 // the footer is declared before the (optional) filename row.
 func (inst *Inst) renderBody(ids *c.WidgetIdStack) (action ActionE, paths []string) {
-	for range c.PanelTopInside(ids.PrepareStr("crumbs-panel")).
-		Resizable(false).KeepIter() {
-		inst.renderBreadcrumbs(ids)
-	}
-
 	for range c.PanelBottomInside(ids.PrepareStr("footer-panel")).
 		Resizable(false).KeepIter() {
 		action, paths = inst.renderFooter(ids)
@@ -636,7 +718,7 @@ func (inst *Inst) renderBody(ids *c.WidgetIdStack) (action ActionE, paths []stri
 		// from its available rect. Declared AFTER the bottom panels
 		// so the stat pane spans only the middle band, not the
 		// full window height. ModePickFolder skips the stat pane
-		// (commit is cwd; per-entry metadata isn't actionable).
+		// (commit is a directory; per-entry metadata isn't actionable).
 		for range c.PanelRightInside(ids.PrepareStr("stat-panel")).
 			DefaultSize(inst.statPaneWidth).
 			Resizable(true).
@@ -646,163 +728,151 @@ func (inst *Inst) renderBody(ids *c.WidgetIdStack) (action ActionE, paths []stri
 	}
 
 	for range c.PanelCentralInside().KeepIter() {
-		if inst.lastErr != nil {
-			c.Label("error: " + inst.lastErr.Error()).Send()
-			c.Separator().Horizontal().Send()
-		}
-		for range c.ScrollArea().Vscroll(true).KeepIter() {
-			// CrossJustify(true) makes the listing buttons fill the
-			// full horizontal width of the ScrollArea's inner ui.
-			// Without it each button is text-wide and left-aligned,
-			// which pushes the ScrollArea's reserved scrollbar gutter
-			// in to where the longest button ends — leaving an empty
-			// strip to the right of the scrollbar.
-			for range c.UiWithLayout().
-				MainDirTopDown().
-				CrossJustify(true).
-				KeepIter() {
-				inst.renderListing(ids)
-			}
+		if a, p := inst.renderBrowser(ids); action == ActionNone {
+			action, paths = a, p
 		}
 	}
 	return
 }
 
-// renderBreadcrumbs draws the path bar as a row of clickable segments.
-// A click stages the new cwd via pendingCwd; the actual switch happens
-// on the next Render call (via applyPendingCwd).
-func (inst *Inst) renderBreadcrumbs(ids *c.WidgetIdStack) {
-	for range c.Horizontal().KeepIter() {
-		// Root crumb is always present; navigates to FS root (".").
-		if c.Button(ids.PrepareStr("crumb-root"), c.Atoms().Text("/").Keep()).
-			SendResp().HasPrimaryClicked() {
-			inst.pendingCwd = "."
-		}
-		segs, prefixes := splitBreadcrumbs(inst.cwd)
-		for i, seg := range segs {
-			c.Label("›").Send()
-			if c.Button(ids.PrepareStr("crumb:"+prefixes[i]), c.Atoms().Text(seg).Keep()).
-				SendResp().HasPrimaryClicked() {
-				inst.pendingCwd = prefixes[i]
-			}
-		}
-	}
-}
-
-// renderListing emits the cwd's children as Button rows (dirs and
-// files alike). Click on a dir stages cd; click on a file selects (or
-// toggles, in multi-select mode). Files are hidden in ModePickFolder.
-// The currently-selected file(s) show as "selected" buttons via
-// .Selected(true) so users see the active pick before committing.
+// renderBrowser draws the breadcrumb, the quick filter and the listing —
+// all of it the fsbrowser widget in list mode — and turns what the widget
+// reports into the dialog's terms: a navigation drops the cached
+// listings, a selection change re-derives the picks, a click on a file
+// in save mode offers its name, and an activated file (double click or
+// Enter) commits in open mode.
 //
-// Buttons are deliberate, and the reason outlived the widget that
-// prompted it. The retired egui_ltreeview binding reported its
-// selection as a per-frame STATE, so a picked node re-fired every
-// frame it stayed picked — which walked pendingCwd ".." up to "/".
-// Buttons have one-shot HasPrimaryClicked semantics, which is what a
-// navigation needs. widgets/tree (ADR-0176) reports Result.Clicked as
-// the one-shot event this wants, so it is now a candidate here; what
-// keeps the buttons is that a picker lists ONE directory at a time,
-// which is a list and not a hierarchy.
-func (inst *Inst) renderListing(ids *c.WidgetIdStack) {
-	cached, ok := inst.cache[inst.cwd]
-	if !ok {
-		es, err := readDirSorted(inst.fsys, inst.cwd)
-		cached = cachedDir{entries: es, err: err}
-		inst.cache[inst.cwd] = cached
-		inst.lastErr = err
+// This runs after the footer and the filename row, which panels declare
+// first, so what it derives is what they show next frame.
+func (inst *Inst) renderBrowser(ids *c.WidgetIdStack) (action ActionE, paths []string) {
+	// The probe reports the room left for the next widget, so it goes
+	// before the browser; the answer is a frame late, hence held.
+	if _, h, ok := c.CapturePaneSize(c.ProbeSeq(inst.scopeKey, "browser")); ok && h > 0 {
+		inst.browserH = h
 	}
-
-	// ".." entry — navigate to parent dir, except at FS root.
-	if inst.cwd != "." && inst.cwd != "" {
-		upAtoms := c.Atoms().Text(icons.IconFolder + "  ..").Keep()
-		if c.Button(ids.PrepareStr("up"), upAtoms).
-			SendResp().HasPrimaryClicked() {
-			inst.pendingCwd = path.Dir(inst.cwd)
-		}
+	rootLabel := inst.displayRoot
+	if rootLabel == "" {
+		rootLabel = "/"
 	}
-
-	for _, de := range cached.entries {
-		if !inst.entryVisible(de) {
-			continue
+	res := fsbrowser.Render(fsbrowser.Input{
+		Ids:          ids,
+		ScopeKey:     "browser",
+		FS:           inst.fsys,
+		RootLabel:    rootLabel,
+		State:        &inst.st,
+		Mode:         fsbrowser.ModeList,
+		ShowHidden:   inst.showHidden,
+		Keep:         inst.keep,
+		SingleSelect: !(inst.multiSelect && inst.mode == ModeOpen),
+		MaxHeight:    inst.browserH,
+		FillWidth:    true,
+		Widths:       inst.widths,
+		WidthTag:     inst.widthTag(),
+		Tasks:        inst.tasks,
+	})
+	if res.Navigated {
+		// The widget caches a listing until told otherwise, which suits
+		// a snapshot; behind a dialog is a live tree.
+		inst.st.Invalidate()
+	}
+	if res.Navigated || res.SelectionChanged {
+		inst.syncPicks(res.Rows)
+	}
+	if inst.mode == ModeSave {
+		// Clicking an existing file offers its name, the usual way to
+		// save over it or to start from it.
+		if row := max(res.Clicked, res.Activated); row >= 0 && row < len(res.Rows) && !res.Rows[row].IsDir {
+			inst.filename = res.Rows[row].Name
+			// The filename row registered its binding earlier this
+			// frame; without the override the frontend's buffer would
+			// write the old text back over the new.
+			c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.filename)
 		}
-		full := path.Join(inst.cwd, de.Name())
-
-		var labelText string
-		if de.IsDir() {
-			labelText = icons.IconFolder + "  " + de.Name() + "/"
-		} else {
-			labelText = icons.IconFile + "  " + de.Name()
-		}
-		labelAtoms := c.Atoms().Text(labelText).Keep()
-		isSelected := !de.IsDir() && inst.isInSelectedSet(full)
-		if c.Button(ids.PrepareStr("entry:"+full), labelAtoms).
-			Selected(isSelected).
-			SendResp().HasPrimaryClicked() {
-			if de.IsDir() {
-				inst.pendingCwd = full
-			} else {
-				inst.pickFile(full)
+		return
+	}
+	if inst.mode == ModeOpen && res.Activated >= 0 && res.Activated < len(res.Rows) {
+		p := res.Rows[res.Activated].Path
+		if !slices.Contains(inst.picked, p) {
+			if !inst.multiSelect {
+				inst.picked = inst.picked[:0]
 			}
+			inst.picked = append(inst.picked, p)
 		}
+		action = ActionOpen
+		paths = inst.commitPaths()
 	}
+	return
 }
 
-// entryVisible reports whether de should appear in the listing. The
-// three predicates compose AND-style: dot-prefixed names hide unless
-// inst.showHidden is true; non-directories hide entirely in
-// ModePickFolder; the user-supplied fileFilter has the final say on
-// non-directory entries. Directories always bypass fileFilter so
-// users can still navigate into a tree whose leaves the filter would
-// reject.
-func (inst *Inst) entryVisible(de fs.DirEntry) (ok bool) {
-	if !inst.showHidden && isHiddenName(de.Name()) {
+// keep is the browser's row predicate: pick-folder lists directories
+// only, and the host's filter has the final say on non-directory
+// entries. Directories always bypass the filter so users can still
+// navigate into a tree whose leaves the filter would reject. Hidden
+// names are the browser's own concern (its ShowHidden).
+func (inst *Inst) keep(e fsbrowser.Entry) (ok bool) {
+	if inst.mode == ModePickFolder && !e.IsDir {
 		return
 	}
-	if inst.mode == ModePickFolder && !de.IsDir() {
-		return
-	}
-	if inst.fileFilter == nil || de.IsDir() {
+	if inst.fileFilter == nil || e.IsDir {
 		ok = true
 		return
 	}
-	ok = inst.fileFilter(de)
+	ok = inst.fileFilter(entryAsDirEntry{e: e})
 	return
 }
 
-// isInSelectedSet reports whether p is part of the in-flight commit
-// set. Used by renderListing to drive the per-row Selected(...)
-// highlight; ModeOpen multi-select shows every set member highlighted,
-// single-pick highlights at most one.
-func (inst *Inst) isInSelectedSet(p string) (ok bool) {
-	_, ok = inst.selectedSet[p]
-	return
-}
-
-// pickFile records a click on a file row. In single-pick mode the set
-// is replaced by {full}; in multi-select mode membership is toggled.
-// inst.selected always tracks the latest click (so the stat pane and
-// "selected: …" footer reflect what the user just touched, even when
-// the click toggled the file *out* of the multi-select set).
-func (inst *Inst) pickFile(full string) {
-	inst.selected = full
-	if inst.multiSelect {
-		if _, in := inst.selectedSet[full]; in {
-			delete(inst.selectedSet, full)
-			inst.selectedOrdered = removeOrdered(inst.selectedOrdered, full)
-			return
+// syncPicks re-derives picked, pickedDir and selected from the browser's
+// selection. rows is what the browser showed this frame; it says which
+// selected paths are directories.
+func (inst *Inst) syncPicks(rows []fsbrowser.Entry) {
+	sel := inst.st.Selection()
+	dirs := make(map[string]bool, len(sel))
+	for i := range rows {
+		if inst.st.IsSelected(rows[i].Path) {
+			dirs[rows[i].Path] = rows[i].IsDir
 		}
-		inst.selectedSet[full] = struct{}{}
-		inst.selectedOrdered = append(inst.selectedOrdered, full)
-		return
 	}
-	// Single-pick: collapse to one.
-	for k := range inst.selectedSet {
-		delete(inst.selectedSet, k)
+	inst.picked = reconcilePicks(inst.picked, sel, dirs)
+	inst.pickedDir = ""
+	if len(sel) == 1 && dirs[sel[0]] {
+		inst.pickedDir = sel[0]
 	}
-	inst.selectedOrdered = inst.selectedOrdered[:0]
-	inst.selectedSet[full] = struct{}{}
-	inst.selectedOrdered = append(inst.selectedOrdered, full)
+	inst.selected = ""
+	if cur := inst.st.Cursor(); cur != "" && slices.Contains(inst.picked, cur) {
+		inst.selected = cur
+	}
+}
+
+// reconcilePicks brings the ordered picks in line with a selection: a
+// pick no longer selected goes, a newly selected file is appended — the
+// order of first selection is the order a multi-select commit returns.
+// dirs says, for the selected paths the listing shows, whether each is
+// a directory; a directory is never a pick, and a selected path the
+// listing no longer shows (a quick filter took its row) stays a pick if
+// it was one and is not made one otherwise. sel is sorted, so files
+// selected in one gesture (a shift-click range) are appended in listing
+// order by path.
+func reconcilePicks(prev []string, sel []string, dirs map[string]bool) (out []string) {
+	selected := make(map[string]struct{}, len(sel))
+	for _, p := range sel {
+		selected[p] = struct{}{}
+	}
+	out = prev[:0]
+	for _, p := range prev {
+		if _, ok := selected[p]; ok {
+			out = append(out, p)
+			delete(selected, p)
+		}
+	}
+	for _, p := range sel {
+		if _, fresh := selected[p]; !fresh {
+			continue
+		}
+		if isDir, shown := dirs[p]; shown && !isDir {
+			out = append(out, p)
+		}
+	}
+	return
 }
 
 // renderStatPane draws the open-mode right pane with metadata for the
@@ -834,8 +904,9 @@ func (inst *Inst) renderStatPane() {
 		}
 		c.Separator().Horizontal().Send()
 
+		// IEC units, as the listing's size column shows them.
 		size := max(info.Size(), 0)
-		c.Label("Size: " + humanize.Bytes(uint64(size))).Send()
+		c.Label("Size: " + humanize.IBytes(uint64(size))).Send()
 		c.Label("Mode: " + info.Mode().String()).Send()
 
 		c.Label("Modified:").Send()
@@ -918,17 +989,17 @@ func primaryButtonFor(mode ModeE) (label string, action ActionE) {
 
 // renderFooterStatus draws the small status text at the left edge of
 // the footer row. Priority: filter summary > mode-specific selection
-// preview > placeholder. ModePickFolder shows the active cwd;
-// multi-select Open shows the count; single-select Open shows the
-// selected basename.
+// preview > placeholder. ModePickFolder shows the folder a commit
+// would return; multi-select Open shows the count; single-select Open
+// shows the selected basename.
 func (inst *Inst) renderFooterStatus() {
 	switch {
 	case inst.filterDesc != "":
 		c.Label("filter: " + inst.filterDesc).Send()
 	case inst.mode == ModePickFolder:
-		c.Label("folder: " + inst.applyDisplayRoot(inst.cwd)).Send()
-	case inst.mode == ModeOpen && inst.multiSelect && len(inst.selectedSet) > 0:
-		c.Label(fmt.Sprintf("%d selected", len(inst.selectedSet))).Send()
+		c.Label("folder: " + inst.applyDisplayRoot(inst.folderToCommit())).Send()
+	case inst.mode == ModeOpen && inst.multiSelect && len(inst.picked) > 0:
+		c.Label(fmt.Sprintf("%d selected", len(inst.picked))).Send()
 	case inst.mode == ModeOpen && inst.selected != "":
 		c.Label("selected: " + path.Base(inst.selected)).Send()
 	default:
@@ -937,13 +1008,14 @@ func (inst *Inst) renderFooterStatus() {
 }
 
 // canCommit reports whether the primary (Open/Save/Pick) button is
-// enabled. Open requires at least one file in the selection set; Save
-// requires a non-empty filename input; PickFolder is always commitable
-// (the user can always pick the current folder, including the FS root).
+// enabled. Open requires at least one picked file — a selected
+// directory is not one; Save requires a non-empty filename input;
+// PickFolder is always commitable (the user can always pick the current
+// folder, including the FS root).
 func (inst *Inst) canCommit() (ok bool) {
 	switch inst.mode {
 	case ModeOpen:
-		ok = len(inst.selectedSet) > 0
+		ok = len(inst.picked) > 0
 	case ModeSave:
 		ok = strings.TrimSpace(inst.filename) != ""
 	case ModePickFolder:
@@ -952,27 +1024,35 @@ func (inst *Inst) canCommit() (ok bool) {
 	return
 }
 
+// folderToCommit is what pick-folder returns: the one selected
+// directory when there is one, the cwd otherwise. A click selects a
+// directory rather than entering it, so committing the cwd alone would
+// hand back the parent of the folder the user just clicked.
+func (inst *Inst) folderToCommit() (dir string) {
+	dir = inst.pickedDir
+	if dir == "" {
+		dir = inst.st.Dir()
+	}
+	return
+}
+
 // commitPaths produces the path(s) to return for the active mode, with
 // the configured display root applied to each. The slice always has
 // exactly one element for ModeSave / ModePickFolder / single-pick
-// ModeOpen; in multi-select ModeOpen it carries every selected entry
-// in click order.
+// ModeOpen; in multi-select ModeOpen it carries every picked file in
+// the order picked.
 func (inst *Inst) commitPaths() (out []string) {
 	switch inst.mode {
 	case ModeOpen:
-		if inst.multiSelect {
-			out = make([]string, 0, len(inst.selectedOrdered))
-			for _, p := range inst.selectedOrdered {
-				out = append(out, inst.applyDisplayRoot(p))
-			}
-			return
+		out = make([]string, 0, len(inst.picked))
+		for _, p := range inst.picked {
+			out = append(out, inst.applyDisplayRoot(p))
 		}
-		out = []string{inst.applyDisplayRoot(inst.selected)}
 	case ModeSave:
-		p := path.Clean(path.Join(inst.cwd, strings.TrimSpace(inst.filename)))
+		p := path.Clean(path.Join(inst.st.Dir(), strings.TrimSpace(inst.filename)))
 		out = []string{inst.applyDisplayRoot(p)}
 	case ModePickFolder:
-		out = []string{inst.applyDisplayRoot(inst.cwd)}
+		out = []string{inst.applyDisplayRoot(inst.folderToCommit())}
 	}
 	return
 }
