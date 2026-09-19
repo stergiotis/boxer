@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/public/hmi/progressest"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/audio/pcm"
@@ -100,6 +101,9 @@ type Track struct {
 	buildCancel context.CancelFunc
 	// buildStart is when the build began; zero for a cache hit.
 	buildStart time.Time
+	// eta is sampled by BuildProgress, which any goroutine may call.
+	etaMu sync.Mutex
+	eta   progressest.Tracker
 	// buildDone is closed when the background build's goroutine has exited;
 	// nil when there is no such goroutine.
 	buildDone chan struct{}

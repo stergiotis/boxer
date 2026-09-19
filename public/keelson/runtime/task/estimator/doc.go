@@ -5,8 +5,8 @@
 // representation and the sliding-window throughput.
 //
 // Inputs are raw (Current, AtMs) samples; outputs are throughput in
-// units/sec, ETA in ms (or -1 when unknown), and a humanized string
-// formatted via dustin/go-humanize. The package has no bus or codec
-// dependency — it is pure data and may be reused outside the task
-// primitive if a second consumer ever needs the same gate.
+// units/sec, ETA in ms (or -1 when unknown), and a humanized string. The
+// estimate and the spellings are hmi/progressest's (ADR-0247), so the
+// figures a task publishes match what any widget estimating the same
+// counter would show. The package has no bus or codec dependency.
 package estimator

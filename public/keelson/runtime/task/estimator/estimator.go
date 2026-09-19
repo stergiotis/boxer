@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/hmi/progressest"
 )
 
 // UnitE mirrors task.UnitE one level down so the estimator stays free of
@@ -33,133 +34,59 @@ func (inst UnitE) String() (s string) {
 	return
 }
 
-// DefaultWindowMs is the sliding-window size for throughput averaging.
-// Long enough to smooth single-step jitter; short enough that a stalled
-// producer's ETA reflects the stall quickly.
-const DefaultWindowMs int64 = 2_000
-
-// DefaultMaxSamples caps the per-task sample buffer. A 2 s window with a
-// hot producer reporting at 1 kHz yields 2 000 samples; cap at 256 to
-// bound memory while keeping the throughput estimate well-conditioned.
-const DefaultMaxSamples int32 = 256
-
-type sample struct {
-	current uint64
-	atMs    int64
-}
-
-// Inst holds the sliding-window state for one in-flight task. Not
+// Inst estimates one in-flight task's throughput and ETA from its reported
+// counter. It is a thin millisecond-clock face on progressest.Tracker —
+// Holt smoothing with a damped ETA, the estimator every progress readout in
+// boxer shares — so a task's wire figures and a widget's own agree. Not
 // goroutine-safe — the caller (task.Handle) guards access with its own
 // mutex.
 type Inst struct {
-	samples    []sample
-	head       int32
-	filled     int32
-	maxSamples int32
-	windowMs   int64
+	tracker progressest.Tracker
+	view    progressest.View
+	atMs    int64
 }
 
-// New returns an Inst sized at DefaultMaxSamples with DefaultWindowMs.
+// New returns an Inst with no samples.
 func New() (inst *Inst) {
-	inst = NewWith(DefaultWindowMs, DefaultMaxSamples)
+	inst = &Inst{}
 	return
 }
 
-// NewWith returns an Inst configured for the given window + buffer size.
-// Tests use this to dial both knobs.
-func NewWith(windowMs int64, maxSamples int32) (inst *Inst) {
-	if windowMs <= 0 {
-		windowMs = DefaultWindowMs
-	}
-	if maxSamples <= 0 {
-		maxSamples = DefaultMaxSamples
-	}
-	inst = &Inst{
-		samples:    make([]sample, maxSamples),
-		maxSamples: maxSamples,
-		windowMs:   windowMs,
-	}
-	return
-}
-
-// Add records a (current, atMs) sample. Samples are kept in insertion
-// order in a ring buffer; throughput/ETA are computed lazily from the
-// oldest sample still inside the window.
+// Add records a (current, atMs) sample. A counter that goes backwards
+// starts the estimate afresh.
 func (inst *Inst) Add(current uint64, atMs int64) {
-	inst.samples[inst.head] = sample{current: current, atMs: atMs}
-	inst.head = (inst.head + 1) % inst.maxSamples
-	if inst.filled < inst.maxSamples {
-		inst.filled++
-	}
+	inst.atMs = atMs
+	inst.view = inst.tracker.Observe(time.UnixMilli(atMs), int64(current), 0)
 }
 
-// ThroughputPerSec returns the windowed rate-of-change of Current in
-// units per second. Zero when fewer than two samples or when the window
-// span is degenerate (single timestamp). Negative deltas (a producer
-// resetting its counter) yield zero — a stalled-or-restarted task should
-// not show negative throughput to a user.
+// ThroughputPerSec returns the smoothed rate of change of Current in units
+// per second. Zero until two samples have landed, and never negative — a
+// stalled-or-restarted task should not show negative throughput to a user.
 func (inst *Inst) ThroughputPerSec() (rate float64) {
-	if inst.filled < 2 {
-		return
-	}
-	oldest, newest, ok := inst.windowBounds()
-	if !ok {
-		return
-	}
-	dCur := int64(newest.current) - int64(oldest.current)
-	if dCur <= 0 {
-		return
-	}
-	dMs := newest.atMs - oldest.atMs
-	if dMs <= 0 {
-		return
-	}
-	rate = float64(dCur) * 1000.0 / float64(dMs)
+	rate = inst.view.Rate
 	return
 }
 
 // EtaMs returns the estimated milliseconds-remaining for a task with the
 // given total, or -1 when unknown (insufficient samples, zero throughput,
 // indeterminate total, or current already past total). Caller passes the
-// most recent Current value alongside total.
+// most recent Current value alongside total; it re-observes the last sample
+// against that total without folding a new one in.
 func (inst *Inst) EtaMs(current, total uint64) (etaMs int64) {
 	etaMs = -1
-	if total == 0 || current >= total {
+	if total == 0 || current >= total || inst.view.Rate <= 0 {
 		return
 	}
-	rate := inst.ThroughputPerSec()
-	if rate <= 0 {
-		return
-	}
-	remaining := total - current
-	etaMs = int64(float64(remaining) * 1000.0 / rate)
+	v := inst.tracker.Observe(time.UnixMilli(inst.atMs), int64(current), int64(total))
+	etaMs = v.EtaMs()
 	return
 }
 
 // Reset clears the sample history. Tests use it to simulate a paused
 // task resuming; production code does not call it.
 func (inst *Inst) Reset() {
-	inst.head = 0
-	inst.filled = 0
-}
-
-func (inst *Inst) windowBounds() (oldest, newest sample, ok bool) {
-	if inst.filled < 2 {
-		return
-	}
-	newestIdx := (inst.head - 1 + inst.maxSamples) % inst.maxSamples
-	newest = inst.samples[newestIdx]
-	cutoff := newest.atMs - inst.windowMs
-	for i := int32(0); i < inst.filled; i++ {
-		idx := (newestIdx - i + inst.maxSamples) % inst.maxSamples
-		s := inst.samples[idx]
-		if s.atMs < cutoff && i > 0 {
-			break
-		}
-		oldest = s
-	}
-	ok = true
-	return
+	inst.tracker.Reset()
+	inst.view = progressest.View{}
 }
 
 // Humanize formats the (current, total, unit, throughput, etaMs) tuple
@@ -237,20 +164,7 @@ func humanizeProgress(current, total uint64, unit UnitE) (s string) {
 }
 
 func humanizeRate(throughput float64, unit UnitE) (s string) {
-	if throughput <= 0 {
-		return
-	}
-	switch unit {
-	case UnitBytes:
-		s = humanize.IBytes(uint64(throughput)) + "/s"
-	default:
-		unitLabel := unit.String()
-		if throughput >= 100 {
-			s = fmt.Sprintf("%s %s/s", humanize.Comma(int64(throughput)), unitLabel)
-		} else {
-			s = fmt.Sprintf("%.1f %s/s", throughput, unitLabel)
-		}
-	}
+	s = progressest.FormatRate(throughput, unit.String())
 	return
 }
 
@@ -258,35 +172,6 @@ func humanizeEta(etaMs int64) (s string) {
 	if etaMs < 0 {
 		return
 	}
-	if etaMs < 1000 {
-		s = "<1s left"
-		return
-	}
-	d := time.Duration(etaMs) * time.Millisecond
-	s = formatDuration(d) + " left"
-	return
-}
-
-func formatDuration(d time.Duration) (s string) {
-	switch {
-	case d < time.Minute:
-		s = fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		m := int(d.Minutes())
-		sec := int(d.Seconds()) - m*60
-		if sec == 0 {
-			s = fmt.Sprintf("%dm", m)
-		} else {
-			s = fmt.Sprintf("%dm%ds", m, sec)
-		}
-	default:
-		h := int(d.Hours())
-		m := int(d.Minutes()) - h*60
-		if m == 0 {
-			s = fmt.Sprintf("%dh", h)
-		} else {
-			s = fmt.Sprintf("%dh%dm", h, m)
-		}
-	}
+	s = progressest.FormatRemaining(time.Duration(etaMs) * time.Millisecond)
 	return
 }

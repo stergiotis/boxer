@@ -13,8 +13,8 @@ func TestInst_ThroughputZeroWithFewerThanTwoSamples(t *testing.T) {
 	assert.Equal(t, 0.0, e.ThroughputPerSec())
 }
 
-func TestInst_ThroughputComputedFromWindow(t *testing.T) {
-	e := NewWith(2_000, 64)
+func TestInst_ThroughputFromSmoothedRate(t *testing.T) {
+	e := New()
 	e.Add(0, 0)
 	e.Add(50, 1_000)
 	e.Add(100, 2_000)
@@ -23,14 +23,14 @@ func TestInst_ThroughputComputedFromWindow(t *testing.T) {
 }
 
 func TestInst_ThroughputClampsNegativeDeltaToZero(t *testing.T) {
-	e := NewWith(2_000, 64)
+	e := New()
 	e.Add(100, 0)
 	e.Add(0, 1_000) // counter reset
 	assert.Equal(t, 0.0, e.ThroughputPerSec())
 }
 
 func TestInst_EtaMsFromThroughput(t *testing.T) {
-	e := NewWith(2_000, 64)
+	e := New()
 	e.Add(0, 0)
 	e.Add(50, 1_000)
 	e.Add(100, 2_000)
@@ -40,21 +40,21 @@ func TestInst_EtaMsFromThroughput(t *testing.T) {
 }
 
 func TestInst_EtaMsNegativeWhenIndeterminate(t *testing.T) {
-	e := NewWith(2_000, 64)
+	e := New()
 	e.Add(0, 0)
 	e.Add(100, 1_000)
 	assert.EqualValues(t, -1, e.EtaMs(100, 0))
 }
 
 func TestInst_EtaMsNegativeWhenCurrentPastTotal(t *testing.T) {
-	e := NewWith(2_000, 64)
+	e := New()
 	e.Add(0, 0)
 	e.Add(100, 1_000)
 	assert.EqualValues(t, -1, e.EtaMs(150, 100))
 }
 
 func TestInst_EtaMsNegativeWhenStalled(t *testing.T) {
-	e := NewWith(2_000, 64)
+	e := New()
 	e.Add(100, 0)
 	e.Add(100, 1_000)
 	assert.EqualValues(t, -1, e.EtaMs(100, 1000))
@@ -102,4 +102,9 @@ func TestHumanize_PercentGate_IntegerSteps(t *testing.T) {
 	c := Humanize(480, 1000, UnitItems, 100, 5_200)
 	assert.Equal(t, a, b, "47.0%% and 47.4%% should humanize identically")
 	assert.NotEqual(t, a, c, "47%% and 48%% should differ")
+}
+
+func TestHumanize_SharesProgressestSpellings(t *testing.T) {
+	assert.Equal(t, "47% · 1.2 k items/s · 2m05s left", Humanize(470, 1000, UnitItems, 1_200, 125_000))
+	assert.Equal(t, "47% · <1s left", Humanize(470, 1000, UnitItems, 0, 500))
 }

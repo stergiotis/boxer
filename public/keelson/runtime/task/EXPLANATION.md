@@ -150,10 +150,13 @@ Three consequences fall out:
    last progress observers see matches the final state, not a stale
    one from two ticks earlier.
 
-The estimator is its own subpackage so its sliding-window throughput
-+ humanizer can be unit-tested without the bus, and so a second
-consumer (a future REPL widget, an export status line) can reuse the
-exact same humanization logic.
+The estimator is its own subpackage so its throughput estimate and
+humanizer can be unit-tested without the bus. The estimate itself is
+`hmi/progressest`'s — Holt smoothing with a damped ETA, shared with the
+CLI bar, `bgjob` and the imzero2 job widgets
+([ADR-0247](../../../../doc/adr/0247-one-progress-estimator.md)) — so a
+task's wire figures agree with what a widget estimating the same counter
+shows.
 
 ## What is intentionally NOT in M1
 

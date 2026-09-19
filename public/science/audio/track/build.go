@@ -46,20 +46,12 @@ type BuildProgress struct {
 	// Elapsed is the build's running time so far, or its total once done;
 	// zero for a pyramid that came from the cache.
 	Elapsed time.Duration
-	// EtaMs is the rate-based estimate of the milliseconds left, from the
-	// frames built over Elapsed; zero when unknown, done, or failed.
+	// EtaMs is the damped estimate of the milliseconds left and Rate the
+	// smoothed build rate in frames per second, both from the shared
+	// progress estimator (hmi/progressest, ADR-0247) sampled on every
+	// BuildProgress call; zero when unknown, done, or failed.
 	EtaMs int64
-}
-
-// EstimateEtaMs is the rate-based remaining time: built frames over elapsed
-// time extrapolated to the remainder. Zero until anything is built and once
-// everything is.
-func EstimateEtaMs(elapsed time.Duration, built, total int64) (etaMs int64) {
-	if elapsed <= 0 || built <= 0 || total <= built {
-		return 0
-	}
-	perFrame := float64(elapsed) / float64(built)
-	return int64(perFrame * float64(total-built) / float64(time.Millisecond))
+	Rate  float64
 }
 
 // buildOutcome is what one build run ended with, published as a whole so a
@@ -91,7 +83,11 @@ func (inst *Track) BuildProgress() (bp BuildProgress) {
 		}
 		bp.Elapsed = end.Sub(inst.buildStart)
 		if !bp.Complete && bp.Err == nil {
-			bp.EtaMs = EstimateEtaMs(bp.Elapsed, bp.BuiltFrames, bp.TotalFrames)
+			inst.etaMu.Lock()
+			v := inst.eta.Observe(end, bp.BuiltFrames, bp.TotalFrames)
+			inst.etaMu.Unlock()
+			bp.EtaMs = max(v.EtaMs(), 0)
+			bp.Rate = v.Rate
 		}
 	}
 	return bp

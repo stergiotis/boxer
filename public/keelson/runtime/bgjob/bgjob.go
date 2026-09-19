@@ -44,6 +44,7 @@ type Snapshot struct {
 	State    StateE
 	Fraction float32 // [0,1] progress; negative = indeterminate (jobprogress renders an animated bar)
 	EtaMs    int64   // estimated ms remaining; <=0 = unknown
+	Rate     float64 // smoothed Reporter units per second; 0 = unknown (and always 0 for paced Start runs)
 	Note     string  // current phase note; empty when the job has none
 	Err      error   // set when State == StateFailed
 }
@@ -85,6 +86,7 @@ type Runner[T any] struct {
 	state    StateE
 	fraction float32
 	etaMs    int64
+	rate     float64
 	note     string
 	token    uint64
 	result   *T
@@ -109,8 +111,9 @@ func (r *Runner[T]) Start(tasks task.TaskApiI, spec Spec, compute func(ctx conte
 // real progress through a Reporter, for jobs whose work dominates any
 // pacing stages (Spec.StageNotes/StageDelay are ignored). The Snapshot
 // starts indeterminate (Fraction < 0) until the first determinate report;
-// the ETA comes from a windowed throughput estimate over the reported
-// units, restarted whenever the reported total changes (phase change).
+// the ETA and Rate come from the task estimator (Holt smoothing, ADR-0247)
+// over the reported units, restarted whenever the reported total changes
+// (phase change).
 // Reports are also forwarded to the keelson task handle, so the host's
 // background-task UI shows the same live progress.
 func (r *Runner[T]) StartReporting(tasks task.TaskApiI, spec Spec, compute func(ctx context.Context, report Reporter) (*T, error)) bool {
@@ -136,6 +139,7 @@ func (r *Runner[T]) begin(fraction float32, etaMs int64) (token uint64, ctx cont
 	r.state = StateRunning
 	r.fraction = fraction
 	r.etaMs = etaMs
+	r.rate = 0
 	r.note = ""
 	r.err = nil
 	ctx, r.cancel = context.WithCancel(context.Background())
@@ -181,7 +185,7 @@ func (r *Runner[T]) Running() bool {
 func (r *Runner[T]) Snapshot() Snapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return Snapshot{State: r.state, Fraction: r.fraction, EtaMs: r.etaMs, Note: r.note, Err: r.err}
+	return Snapshot{State: r.state, Fraction: r.fraction, EtaMs: r.etaMs, Rate: r.rate, Note: r.note, Err: r.err}
 }
 
 // TakeResult hands a completed result to the caller exactly once and
@@ -278,14 +282,15 @@ func (r *Runner[T]) runReporting(ctx context.Context, tasks task.TaskApiI, token
 				est = estimator.New()
 				lastTotal = total
 			}
+			est.Add(done, nowMs)
 			if total > 0 {
-				est.Add(done, nowMs)
 				r.fraction = float32(float64(done) / float64(total))
 				r.etaMs = max(est.EtaMs(done, total), 0)
 			} else {
 				r.fraction = -1
 				r.etaMs = 0
 			}
+			r.rate = est.ThroughputPerSec()
 			r.note = note
 		}
 		r.mu.Unlock()

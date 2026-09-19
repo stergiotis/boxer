@@ -166,10 +166,3 @@ func TestSpawnBuildTaskOnACompleteBuildIsNoop(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, h)
 }
-
-func TestBuildProgressEta(t *testing.T) {
-	require.Equal(t, int64(0), track.EstimateEtaMs(0, 0, 100))
-	require.Equal(t, int64(0), track.EstimateEtaMs(time.Second, 100, 100))
-	// Half done after two seconds → two seconds to go.
-	require.Equal(t, int64(2000), track.EstimateEtaMs(2*time.Second, 50, 100))
-}

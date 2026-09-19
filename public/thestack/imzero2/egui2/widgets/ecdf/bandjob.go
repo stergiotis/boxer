@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/analytics/stats/ecdfbands"
+	"github.com/stergiotis/boxer/public/hmi/progressest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 )
 
@@ -186,15 +187,12 @@ func runBandWarm(ctx context.Context, jobKey string, j *bandJob, tasks task.Task
 		solveCtx = h.Ctx()
 	}
 
-	start := time.Now()
+	// The inversion reports from one goroutine, so the tracker needs no lock.
+	var tracker progressest.Tracker
 	onProgress := func(done, total int) {
-		eta := int64(-1)
-		switch {
-		case done >= total:
-			eta = 0
-		case done > 0:
-			perEval := time.Since(start) / time.Duration(done)
-			eta = (perEval * time.Duration(total-done)).Milliseconds()
+		eta := int64(0)
+		if done < total {
+			eta = tracker.Observe(time.Now(), int64(done), int64(total)).EtaMs()
 		}
 		j.store(BandJobSnapshot{
 			State:    BandJobRunning,
