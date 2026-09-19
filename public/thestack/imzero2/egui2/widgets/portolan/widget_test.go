@@ -17,7 +17,7 @@ import (
 
 // The Map's seams that need no host: the arrival path between the loader
 // and the pyramid. Drawing and input are exercised by the headless scene
-// (scripts/dev/portolan-map-scene.sh).
+// (TestScenePortolanCamera, in the integration lane).
 
 // errorTileTransport 404s every tile and serves one 2×2 PNG at the error URL.
 type errorTileTransport struct {
