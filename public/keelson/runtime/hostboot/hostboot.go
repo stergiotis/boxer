@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
@@ -49,6 +50,8 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
 	imzhost "github.com/stergiotis/boxer/public/thestack/imzero2/host"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
@@ -511,10 +514,35 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// picker overlay, so none of them derives stale ids from another.
 	bodyIds := c.NewWidgetIdStack()
 	menuIds := c.NewWidgetIdStack()
+	// The file dialogs are the host's own UI, raised by the window host (the
+	// SVG-save picker) and by the fs Powerbox bridge. One column-width
+	// resolver serves both (ADR-0151; ADR-0200's 2026-09-19 update), so a
+	// column dragged in one is the width of the next, and it is flushed from
+	// the frame below whether or not a dialog is open.
+	var dialogWidths *colwidth.Resolver
+	if rt.Facts != nil {
+		var werr error
+		dialogWidths, werr = filepicker.NewColumnWidths(rt.Facts)
+		if werr != nil {
+			logger.Warn().Err(werr).Bool("usable", dialogWidths != nil).Msg("hostboot: file dialog column widths: stored widths unavailable")
+		}
+		host.SetDialogColumnWidths(dialogWidths)
+	}
+	// The dialogs' filter searches are background tasks (ADR-0038) of the
+	// dialog's own identity, so the task monitor lists and cancels them.
+	var dialogTasks task.TaskApiI
+	if rt.Bus != nil {
+		dialogTasks = task.NewBusApi(task.ApiConfig{
+			Bus:   rt.Bus.NewClient(filepicker.AppId, task.ProducerCaps()),
+			AppId: filepicker.AppId,
+			RunId: rt.RunInfo.RunId,
+		})
+		host.SetDialogTasks(dialogTasks)
+	}
 	var bridgeIds *c.WidgetIdStack
 	var fsBridge *pickerbridge.Bridge
 	if rt.Fs != nil {
-		fsBridge = pickerbridge.NewBridge(rt.Fs, logger, pickerbridge.Config{})
+		fsBridge = pickerbridge.NewBridge(rt.Fs, logger, pickerbridge.Config{ColumnWidths: dialogWidths, Tasks: dialogTasks})
 		bridgeIds = c.NewWidgetIdStack()
 	}
 	clip := rt.Clipboard
@@ -524,6 +552,12 @@ func (rt *Runtime) bootWindowHost() (err error) {
 		if fsBridge != nil {
 			bridgeIds.Reset()
 			fsBridge.Render(bridgeIds)
+		}
+		if dialogWidths != nil {
+			// A failed write stays dirty and is retried next frame.
+			if _, ferr := dialogWidths.Flush(time.Now()); ferr != nil {
+				logger.Warn().Err(ferr).Msg("hostboot: storing file dialog column widths failed; will retry")
+			}
 		}
 		// Copies the broker accumulated off the bus this frame become one
 		// CopyTextToClipboard op each; the op rides the frame-scoped egui

@@ -25,7 +25,9 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
 )
 
@@ -43,6 +45,15 @@ type Config struct {
 	// TitleOverride replaces the per-op default title ("Open file" /
 	// "Save as" / "Pick folder"). Empty leaves the default.
 	TitleOverride string
+	// ColumnWidths persists the dialogs' column widths (ADR-0151). Build
+	// it with filepicker.NewColumnWidths; the bridge hands it to every
+	// dialog it raises, and whoever built it flushes it each frame. nil
+	// persists nothing.
+	ColumnWidths *colwidth.Resolver
+	// Tasks publishes the dialogs' filter searches as background tasks
+	// (ADR-0038), built under filepicker.AppId. nil keeps them local to
+	// the dialog.
+	Tasks task.TaskApiI
 }
 
 // Bridge couples the fsbroker.Service queue with a filepicker.Inst.
@@ -132,6 +143,8 @@ func (inst *Bridge) startPicker(req *fsbroker.PendingRequest) {
 		filepicker.WithFsBackend(inst.fsys),
 		filepicker.WithStartDir(inst.cfg.StartDir),
 		filepicker.WithTitle(title),
+		filepicker.WithColumnWidths(inst.cfg.ColumnWidths),
+		filepicker.WithTasks(inst.cfg.Tasks),
 	}
 	// Pre-fill the "Save as" filename when the requesting app suggested one.
 	if hint := saveFilenameHint(mode, req.SuggestedName); hint != "" {

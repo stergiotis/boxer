@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
+	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -269,6 +270,27 @@ func (inst *Inst) SetAudit(runId string, facts factsstore.FactsStoreI) {
 	defer inst.mu.Unlock()
 	inst.runId = runId
 	inst.facts = facts
+}
+
+// SetDialogColumnWidths persists the column widths of the dialogs the window
+// host raises itself (the SVG-save picker) through res, which the caller
+// builds with filepicker.NewColumnWidths, shares with any other dialog host
+// and flushes each frame. It is separate from the per-app capability the
+// frame context carries: these dialogs are the host's, not an app's.
+func (inst *Inst) SetDialogColumnWidths(res *colwidth.Resolver) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.fpSaveSvg.SetColumnWidths(res)
+}
+
+// SetDialogTasks publishes the filter searches of the dialogs the window host
+// raises itself as background tasks (ADR-0038) through tasks, an API the
+// caller builds under filepicker.AppId — these dialogs are the host's, so
+// their tasks are not any app's.
+func (inst *Inst) SetDialogTasks(tasks task.TaskApiI) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.fpSaveSvg.SetTasks(tasks)
 }
 
 // Open allocates a new window for the given AppId. Returns the fresh
