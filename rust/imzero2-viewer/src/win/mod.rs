@@ -10,6 +10,7 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use std::{
     cell::RefCell,
+    collections::VecDeque,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -46,6 +47,10 @@ const CLIP: usize = 106;
 const PASTE: usize = 107;
 const RESIZE_REMOTE: usize = 108;
 const INSECURE: usize = 109;
+/// How long the video worker may leave its queue full before the session
+/// rejoins. Shorter than the network worker's own deadline, so a video stall
+/// is reported as one.
+const VIDEO_STALL: Duration = Duration::from_secs(2);
 thread_local! {static APP:RefCell<Option<App>>=const {RefCell::new(None)};}
 fn window_text(hwnd: HWND) -> String {
     let mut text = vec![0u16; 4096];
@@ -76,12 +81,12 @@ struct App {
     pin: HWND,
     status: HWND,
     connect_button: HWND,
-    // Commands are a tokio channel so the network worker sleeps on it rather
-    // than polling; `try_send`/`blocking_send` need no runtime, so this side
-    // stays an ordinary Win32 message loop. Events stay a std channel, drained
-    // without blocking from WM_TIMER. See `session::spawn`.
+    // Both are tokio channels, so the network worker can wait on either end
+    // rather than poll; `try_send`, `try_recv` and `blocking_send` need no
+    // runtime, so this side stays an ordinary Win32 message loop that drains
+    // events without blocking from WM_TIMER. See `session::spawn`.
     commands: tokio::sync::mpsc::Sender<Command>,
-    events: Receiver<Event>,
+    events: session::EventReceiver,
     network: Option<thread::JoinHandle<()>>,
     video_commands: SyncSender<VideoCommand>,
     video_events: Receiver<VideoEvent>,
@@ -119,7 +124,13 @@ struct App {
     closing: bool,
     command_overflow: std::cell::Cell<bool>,
     awaiting_frame: bool,
-    pending_reset: bool,
+    // Commands the video worker's queue could not take yet, in order. While
+    // any wait, network events are left undrained (see `tick`), so a slow
+    // video worker pushes back on the network worker, and it on TCP, rather
+    // than overflowing; only a stall lasting VIDEO_STALL rejoins (ADR-0243
+    // §SD4). A reset clears it: what was queued belongs to the old stream.
+    video_outbox: VecDeque<VideoCommand>,
+    video_stalled_since: Option<Instant>,
 }
 enum VideoCommand {
     Reset(u64),
@@ -347,7 +358,8 @@ pub fn run() -> Result<()> {
                 closing: false,
                 command_overflow: std::cell::Cell::new(false),
                 awaiting_frame: false,
-                pending_reset: false,
+                video_outbox: VecDeque::new(),
+                video_stalled_since: None,
             })
         });
         let _ = ShowWindow(window, SW_SHOW);
@@ -566,10 +578,11 @@ impl App {
     fn reset_video(&mut self) {
         self.generation = self.generation.wrapping_add(1);
         self.awaiting_frame = false;
-        self.pending_reset = self
-            .video_commands
-            .try_send(VideoCommand::Reset(self.generation))
-            .is_err();
+        self.video_outbox.clear();
+        self.video_stalled_since = None;
+        // Through the outbox like everything else, so the new generation's
+        // hello can never overtake its reset.
+        self.enqueue_video(VideoCommand::Reset(self.generation));
     }
     fn connect(&mut self) {
         let endpoint = window_text(self.endpoint);
@@ -685,14 +698,40 @@ impl App {
         let event = self.input.focus(on);
         self.send_input(event);
     }
+    /// Queue a command for the video worker. Never blocks and never drops:
+    /// what its queue cannot take yet waits in order in `video_outbox`.
     fn enqueue_video(&mut self, c: VideoCommand) {
-        if self.video_commands.try_send(c).is_err() {
-            self.status("Video backlog exceeded limit; rejoining at next keyframe");
-            self.send(Command::Disconnect);
-            self.connected = false;
-            self.retry_at = Some(Instant::now() + Duration::from_secs(1));
-            self.reset_video();
+        self.video_outbox.push_back(c);
+        self.flush_video();
+    }
+    /// Hand waiting commands to the video worker, in order, as far as its
+    /// queue allows. True when nothing is left waiting.
+    fn flush_video(&mut self) -> bool {
+        while let Some(c) = self.video_outbox.pop_front() {
+            match self.video_commands.try_send(c) {
+                Ok(()) => {}
+                Err(mpsc::TrySendError::Full(c)) => {
+                    self.video_outbox.push_front(c);
+                    break;
+                }
+                // The worker has exited and reported why (VideoEvent::Error).
+                Err(mpsc::TrySendError::Disconnected(_)) => self.video_outbox.clear(),
+            }
         }
+        if self.video_outbox.is_empty() {
+            self.video_stalled_since = None;
+            true
+        } else {
+            self.video_stalled_since.get_or_insert_with(Instant::now);
+            false
+        }
+    }
+    fn rejoin_video(&mut self, reason: &str) {
+        self.status(reason);
+        self.send(Command::Disconnect);
+        self.connected = false;
+        self.retry_at = Some(Instant::now() + Duration::from_secs(1));
+        self.reset_video();
     }
     fn tick(&mut self) {
         if self.closing {
@@ -718,13 +757,15 @@ impl App {
             }
             return;
         }
-        if self.pending_reset
+        if !self.flush_video()
             && self
-                .video_commands
-                .try_send(VideoCommand::Reset(self.generation))
-                .is_ok()
+                .video_stalled_since
+                .is_some_and(|t| t.elapsed() > VIDEO_STALL)
         {
-            self.pending_reset = false;
+            self.rejoin_video(&format!(
+                "Video fell behind the stream for {} s; rejoining at the next keyframe",
+                VIDEO_STALL.as_secs()
+            ));
         }
         if self.awaiting_frame && self.last_progress.elapsed() > Duration::from_secs(15) {
             self.status("Timed out waiting for a decodable keyframe; reconnecting");
@@ -739,6 +780,11 @@ impl App {
             return;
         }
         for _ in 0..64 {
+            // Leave network events queued while the video worker is behind:
+            // the network worker then stops reading the socket.
+            if !self.video_outbox.is_empty() {
+                break;
+            }
             let Ok(event) = self.events.try_recv() else {
                 break;
             };
@@ -884,7 +930,9 @@ impl App {
                 _ => {}
             }
         }
-        if self.retry_at.is_some_and(|t| Instant::now() >= t) && self.desired && !self.pending_reset
+        if self.retry_at.is_some_and(|t| Instant::now() >= t)
+            && self.desired
+            && self.video_outbox.is_empty()
         {
             self.connect();
         }

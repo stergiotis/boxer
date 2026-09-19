@@ -83,3 +83,11 @@ SD4 allowed presentation to discard superseded pictures but left decode and pres
 - The video worker drains everything already queued, decodes every access unit (later pictures reference them), and then presents the newest picture once. Presentation costs one present per batch rather than one per frame.
 - Presents use sync interval 0. The stream paces the worker, and nothing waits for a vblank. On the flip model without `DXGI_PRESENT_ALLOW_TEARING` this does not tear: a picture still reaches the screen at the next vblank, and one not yet shown is replaced by its successor.
 - The status line reports pictures shown beside pictures decoded, so the difference is visible.
+
+### 2026-09-19 — a burst waits; only a sustained stall rejoins
+
+SD4 bounds every queue and rejoins on overflow. As built, "overflow" meant an instant one. The network worker's 16-event queue to the shell is drained on a 10 ms timer, so any burst of roughly 16 messages — a network stall releasing its backlog — ended the session, however briefly the shell was behind. A stall of about 0.3 s at 60 fps was enough.
+
+- A full queue is now waited on, not treated as failure. The network worker holds the event it could not deliver and stops reading the socket, so the backlog stays in TCP and the host's writer slows. Input and pings are still served meanwhile. The shell does the same towards the video worker, keeping commands in order and leaving network events undrained while any wait, so a slow video worker pushes back through both hops.
+- Bounds are unchanged, and nothing is dropped or reordered. What rejoins is a consumer that stays stuck: the video worker for 2 s, reported as the video falling behind, or the shell for 5 s, reported as events not being taken.
+- A stream reset travels in the same ordered queue as the frames, so a new stream's hello cannot reach the video worker ahead of the reset.

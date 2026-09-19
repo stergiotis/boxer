@@ -2,11 +2,7 @@
 //! (ADR-0243 §SD4). The terminal event remains pending while Stop stays serviceable.
 use crate::wire::{self, pb};
 use futures_util::{SinkExt, StreamExt};
-use std::{
-    sync::mpsc::{self, Receiver, SyncSender, TrySendError},
-    thread,
-    time::Duration,
-};
+use std::{collections::VecDeque, thread, time::Duration};
 use tokio_tungstenite::{
     tungstenite::{protocol::WebSocketConfig, Message},
     MaybeTlsStream, WebSocketStream,
@@ -92,6 +88,21 @@ pub enum Event {
 const MAX_BYTES: usize = 16 * 1024 * 1024;
 const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
 type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+type EventSender = tokio::sync::mpsc::Sender<Event>;
+/// The shell's end of the event channel.
+pub type EventReceiver = tokio::sync::mpsc::Receiver<Event>;
+/// How long the shell may leave the event queue full before the session is
+/// given up. Until then a burst simply waits: the worker stops reading the
+/// socket, so the backlog stays in TCP and the host's writer slows, and
+/// nothing is dropped or reordered. Only a consumer that stays stuck ends the
+/// session — the case ADR-0243 §SD4's bounded queues exist to detect. Longer
+/// than the shell's own video deadline, which names the cause when the video
+/// worker is what fell behind.
+const CONSUMER_STALL: Duration = if cfg!(test) {
+    Duration::from_millis(500)
+} else {
+    Duration::from_secs(5)
+};
 
 /// Start the network worker.
 ///
@@ -103,15 +114,16 @@ type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 ///   receiver and is woken by the send. The sender half is still usable from
 ///   the Win32 message loop without a runtime: `try_send`/`blocking_send`
 ///   are not `async`.
-/// - **Events** (worker → shell) stay a [`std::sync::mpsc`] pair, because
-///   the consumer is a `WM_TIMER` handler that must never block or await;
-///   it drains with `try_recv` on the shell's own cadence.
+/// - **Events** (worker → shell) are one too, so that a full queue is
+///   something the worker can *wait on* ([`CONSUMER_STALL`]) rather than a
+///   failure. The shell drains with `try_recv`, which needs no runtime, from
+///   a `WM_TIMER` handler that must never block or await.
 ///
 /// Both are bounded (ADR-0243 §SD4); nothing here ever blocks the render
 /// thread or the message loop.
 pub fn spawn() -> (
     tokio::sync::mpsc::Sender<Command>,
-    Receiver<Event>,
+    EventReceiver,
     thread::JoinHandle<()>,
 ) {
     // Explicit rather than left to rustls's feature-based auto-detection,
@@ -119,7 +131,7 @@ pub fn spawn() -> (
     // graph. Err means one is already installed, which is equally fine.
     let _ = rustls::crypto::ring::default_provider().install_default();
     let (tx, rx) = tokio::sync::mpsc::channel(64);
-    let (events, out) = mpsc::sync_channel(16);
+    let (events, out) = tokio::sync::mpsc::channel(16);
     let worker = thread::spawn(move || {
         match tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -142,26 +154,25 @@ pub fn spawn() -> (
 async fn command(rx: &mut tokio::sync::mpsc::Receiver<Command>) -> Command {
     rx.recv().await.unwrap_or(Command::Stop)
 }
+/// Deliver a session's end, waiting for queue space as long as it takes,
+/// while Stop (and a replacing Connect) stay serviceable.
 async fn terminal(
     rx: &mut tokio::sync::mpsc::Receiver<Command>,
-    events: &SyncSender<Event>,
+    events: &EventSender,
     reason: String,
 ) -> Option<Command> {
-    let mut event = Event::Disconnected(reason);
+    let event = Event::Disconnected(reason);
     let mut next = None;
     loop {
-        match events.try_send(event) {
-            Ok(()) => return next,
-            Err(TrySendError::Disconnected(_)) => return Some(Command::Stop),
-            Err(TrySendError::Full(e)) => event = e,
-        }
         tokio::select! {
+            // reserve() rather than send(): the event stays ours until there
+            // is room, so losing the race to a command cannot drop it.
+            permit=events.reserve()=>return match permit{Ok(p)=>{p.send(event);next},Err(_)=>Some(Command::Stop)},
             c=command(&mut *rx)=>match c{Command::Stop=>return Some(Command::Stop),Command::Connect(..)=>next=Some(c),_=>{}},
-            _=tokio::time::sleep(Duration::from_millis(2))=>{},
         }
     }
 }
-async fn run(mut rx: tokio::sync::mpsc::Receiver<Command>, events: SyncSender<Event>) {
+async fn run(mut rx: tokio::sync::mpsc::Receiver<Command>, events: EventSender) {
     let mut pending = None;
     loop {
         let c = match pending.take() {
@@ -213,13 +224,9 @@ async fn run(mut rx: tokio::sync::mpsc::Receiver<Command>, events: SyncSender<Ev
         };
         let reason = match socket {
             Ok(mut ws) => {
-                if events.try_send(Event::Connected).is_err() {
-                    "Event backlog exceeded limit".into()
-                } else {
-                    let (reason, next) = connected(&mut ws, &mut rx, &events).await;
-                    pending = next;
-                    reason
-                }
+                let (reason, next) = connected(&mut ws, &mut rx, &events).await;
+                pending = next;
+                reason
             }
             Err(reason) => reason,
         };
@@ -241,13 +248,45 @@ async fn write(ws: &mut Socket, msg: Message) -> anyhow::Result<()> {
 async fn connected(
     ws: &mut Socket,
     rx: &mut tokio::sync::mpsc::Receiver<Command>,
-    events: &SyncSender<Event>,
+    events: &EventSender,
 ) -> (String, Option<Command>) {
     let mut clock = tokio::time::interval(Duration::from_secs(5));
     clock.tick().await;
     let mut activity = tokio::time::Instant::now();
+    // Events read but not yet accepted by the shell. While any wait, the
+    // socket is not read — that is the backpressure — so this never holds
+    // more than one message's worth (a hello is two events).
+    let mut outbox = VecDeque::from([Event::Connected]);
+    let mut stalled_since: Option<tokio::time::Instant> = None;
     loop {
+        while let Some(event) = outbox.pop_front() {
+            match events.try_send(event) {
+                Ok(()) => {}
+                Err(tokio::sync::mpsc::error::TrySendError::Full(event)) => {
+                    outbox.push_front(event);
+                    break;
+                }
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                    return ("Stopped".into(), Some(Command::Stop));
+                }
+            }
+        }
+        let held = !outbox.is_empty();
+        let give_up = if held {
+            *stalled_since.get_or_insert_with(tokio::time::Instant::now) + CONSUMER_STALL
+        } else {
+            stalled_since = None;
+            // Not polled while nothing is held; select! still builds it.
+            tokio::time::Instant::now()
+        };
         tokio::select! {
+            permit=events.reserve(), if held=>match permit{
+                Ok(p)=>{if let Some(event)=outbox.pop_front(){p.send(event);}},
+                Err(_)=>return ("Stopped".into(),Some(Command::Stop)),
+            },
+            _=tokio::time::sleep_until(give_up), if held=>{
+                return (format!("The viewer stopped taking stream events for {} s; rejoining at the next keyframe",CONSUMER_STALL.as_secs_f32()),None);
+            },
             c=command(&mut *rx)=>{
                 let message=match c{
                     Command::Stop=>return ("Stopped".into(),Some(Command::Stop)),
@@ -263,7 +302,7 @@ async fn connected(
                 if activity.elapsed()>Duration::from_secs(20){return ("Peer liveness timeout".into(),None);}
                 if write(ws,Message::Ping(Vec::new().into())).await.is_err(){return ("WebSocket ping failed".into(),None);}
             },
-            incoming=ws.next()=>{
+            incoming=ws.next(), if !held=>{
                 activity=tokio::time::Instant::now();
                 let message=match incoming{Some(Ok(m))=>m,Some(Err(_))=>return ("WebSocket receive failed".into(),None),None=>return ("Peer disconnected".into(),None)};
                 let event=match message {
@@ -271,7 +310,7 @@ async fn connected(
                         Ok(wire::ServerMessage::Video(f))=>Event::Video(f),
                         Ok(wire::ServerMessage::Control(c))=>{
                             if let Some(pb::session_control::Control::Hello(h))=&c.control {
-                                if events.try_send(Event::Hello(h.clone())).is_err(){return ("Stream state backlog exceeded limit".into(),None);}
+                                outbox.push_back(Event::Hello(h.clone()));
                             }
                             Event::Control(c)
                         },
@@ -282,7 +321,7 @@ async fn connected(
                     Message::Close(_)=>return ("Peer closed the connection".into(),None),
                     _=>return ("Unexpected non-binary server message".into(),None),
                 };
-                if events.try_send(event).is_err(){return ("Event backlog exceeded limit; reconnect for a fresh keyframe".into(),None);}
+                outbox.push_back(event);
             }
         }
     }
@@ -566,6 +605,7 @@ pub fn capabilities(width: u32, height: u32) -> pb::SessionControl {
 mod tests {
     use super::*;
     use prost::Message as _;
+    use std::sync::mpsc;
     #[test]
     fn endpoint_validation_and_redaction() {
         for s in [
@@ -638,7 +678,7 @@ mod tests {
                     ws.close(None).await.unwrap();
                 })
         });
-        let (tx, rx, worker) = spawn();
+        let (tx, mut rx, worker) = spawn();
         let port = port_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         tx.blocking_send(Command::Connect(
             format!("ws://127.0.0.1:{port}"),
@@ -646,25 +686,25 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(
-            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            next_event(&mut rx, Duration::from_secs(5)),
             Event::Connected
         );
         tx.blocking_send(Command::Send(client_hello("test")))
             .unwrap();
         assert!(matches!(
-            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            next_event(&mut rx, Duration::from_secs(5)),
             Event::Hello(_)
         ));
         assert!(matches!(
-            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            next_event(&mut rx, Duration::from_secs(5)),
             Event::Control(_)
         ));
         assert!(matches!(
-            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            next_event(&mut rx, Duration::from_secs(5)),
             Event::Video(_)
         ));
         assert!(matches!(
-            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            next_event(&mut rx, Duration::from_secs(5)),
             Event::Disconnected(_)
         ));
         tx.blocking_send(Command::Stop).unwrap();
@@ -674,8 +714,8 @@ mod tests {
     #[test]
     fn terminal_backpressure_does_not_block_stop() {
         let (tx, mut rx) = tokio::sync::mpsc::channel(2);
-        let (events, _out) = mpsc::sync_channel(1);
-        events.send(Event::Connected).unwrap();
+        let (events, _out) = tokio::sync::mpsc::channel(1);
+        events.try_send(Event::Connected).unwrap();
         tx.try_send(Command::Stop).unwrap();
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -687,15 +727,31 @@ mod tests {
         ));
     }
 
+    /// The shell drains with `try_recv` from a timer; tests wait the same way.
+    fn next_event(rx: &mut EventReceiver, within: Duration) -> Event {
+        let deadline = std::time::Instant::now() + within;
+        loop {
+            match rx.try_recv() {
+                Ok(event) => return event,
+                Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+                    if std::time::Instant::now() < deadline =>
+                {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                Err(e) => panic!("no event within {within:?}: {e}"),
+            }
+        }
+    }
+
     /// Connect through the real worker and return the reason it reports.
     fn connect_failure(endpoint: String) -> String {
         connect_failure_with(endpoint, TlsVerification::Verify)
     }
 
     fn connect_failure_with(endpoint: String, tls: TlsVerification) -> String {
-        let (tx, rx, worker) = spawn();
+        let (tx, mut rx, worker) = spawn();
         tx.blocking_send(Command::Connect(endpoint, tls)).unwrap();
-        let reason = match rx.recv_timeout(Duration::from_secs(10)).unwrap() {
+        let reason = match next_event(&mut rx, Duration::from_secs(10)) {
             Event::Disconnected(reason) => reason,
             other => panic!("expected a failed connect, got {other:?}"),
         };
@@ -821,14 +877,14 @@ mod tests {
     #[test]
     fn skip_insecure_connects_to_a_self_signed_host() {
         let port = self_signed_wss_server();
-        let (tx, rx, worker) = spawn();
+        let (tx, mut rx, worker) = spawn();
         tx.blocking_send(Command::Connect(
             format!("wss://127.0.0.1:{port}/ws"),
             TlsVerification::SkipInsecure,
         ))
         .unwrap();
         assert_eq!(
-            rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+            next_event(&mut rx, Duration::from_secs(10)),
             Event::Connected
         );
         tx.blocking_send(Command::Stop).unwrap();
@@ -870,14 +926,14 @@ mod tests {
     #[test]
     fn matching_pin_connects_to_a_self_signed_host() {
         let port = self_signed_wss_server();
-        let (tx, rx, worker) = spawn();
+        let (tx, mut rx, worker) = spawn();
         tx.blocking_send(Command::Connect(
             format!("wss://127.0.0.1:{port}/ws"),
             TlsVerification::Pinned(certificate_sha256(FIXTURE_CERT)),
         ))
         .unwrap();
         assert_eq!(
-            rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+            next_event(&mut rx, Duration::from_secs(10)),
             Event::Connected
         );
         tx.blocking_send(Command::Stop).unwrap();
@@ -896,6 +952,111 @@ mod tests {
         assert!(reason.contains(&presented), "{reason}");
         assert!(reason.contains("not the pinned one"), "{reason}");
         assert!(reason.contains("update the pin"), "{reason}");
+    }
+
+    /// A peer that sends a stream hello and then `frames` frames back to back,
+    /// then stays open until the client leaves.
+    fn burst_server(frames: u64) -> (u16, thread::JoinHandle<()>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        let server = thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(async move {
+                    let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+                    let (tcp, _) = listener.accept().await.unwrap();
+                    let mut ws = tokio_tungstenite::accept_async(tcp).await.unwrap();
+                    let hello = pb::SessionControl {
+                        control: Some(pb::session_control::Control::Hello(pb::SessionHello {
+                            width_px: 320,
+                            height_px: 180,
+                            pixels_per_point: 1.0,
+                            ..Default::default()
+                        })),
+                    };
+                    ws.send(Message::Binary(
+                        wire::framed(wire::PREFIX_SESSION, &hello).into(),
+                    ))
+                    .await
+                    .unwrap();
+                    for frame_index in 0..frames {
+                        let f = pb::VideoChunk {
+                            frame_index,
+                            keyframe: true,
+                            data: vec![0; 64],
+                            ..Default::default()
+                        };
+                        ws.send(Message::Binary(wire::framed(wire::PREFIX_VIDEO, &f).into()))
+                            .await
+                            .unwrap();
+                    }
+                    // Stay open until the client leaves.
+                    while let Some(Ok(_)) = ws.next().await {}
+                })
+        });
+        (port, server)
+    }
+
+    /// A burst larger than the event queue — what a network stall followed by
+    /// its backlog looks like — while the shell is briefly not draining. It
+    /// must arrive whole and in order: the worker holds back and lets TCP
+    /// buffer, rather than ending the session (ADR-0243 §SD4).
+    #[test]
+    fn a_burst_while_the_shell_is_busy_is_delivered_whole() {
+        const BURST: u64 = 100;
+        let (port, server) = burst_server(BURST);
+        let (tx, mut rx, worker) = spawn();
+        tx.blocking_send(Command::Connect(
+            format!("ws://127.0.0.1:{port}/ws"),
+            TlsVerification::Verify,
+        ))
+        .unwrap();
+        // The shell is busy (a modal loop, a slow tick) while the burst lands.
+        thread::sleep(Duration::from_millis(200));
+        let mut frames = Vec::new();
+        while (frames.len() as u64) < BURST {
+            match next_event(&mut rx, Duration::from_secs(5)) {
+                Event::Video(f) => frames.push(f.frame_index),
+                Event::Disconnected(reason) => {
+                    panic!("session ended after {} frames: {reason}", frames.len())
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(
+            frames,
+            (0..BURST).collect::<Vec<_>>(),
+            "in order, none lost"
+        );
+        tx.blocking_send(Command::Stop).unwrap();
+        worker.join().unwrap();
+        server.join().unwrap();
+    }
+
+    /// The other half of the contract: a shell that stays stuck past
+    /// [`CONSUMER_STALL`] ends the session, and says why, once it drains.
+    #[test]
+    fn a_shell_that_stays_stuck_ends_the_session() {
+        let (port, server) = burst_server(100);
+        let (tx, mut rx, worker) = spawn();
+        tx.blocking_send(Command::Connect(
+            format!("ws://127.0.0.1:{port}/ws"),
+            TlsVerification::Verify,
+        ))
+        .unwrap();
+        thread::sleep(CONSUMER_STALL * 3);
+        let reason = loop {
+            if let Event::Disconnected(reason) = next_event(&mut rx, Duration::from_secs(5)) {
+                break reason;
+            }
+        };
+        assert!(reason.contains("stopped taking stream events"), "{reason}");
+        tx.blocking_send(Command::Stop).unwrap();
+        worker.join().unwrap();
+        server.join().unwrap();
     }
 
     /// Pins the two contracts [`command`] has to keep now that it awaits the
