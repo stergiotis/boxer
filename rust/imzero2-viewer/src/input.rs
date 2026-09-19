@@ -2,14 +2,23 @@
 //! (ADR-0024 SD7/SD8, ADR-0242 SD2, ADR-0243 SD2).
 //!
 //! Nothing here touches a Windows API type — every function takes plain
-//! integers (a virtual-key code, a UTF-16 code unit, a modifier bitmask) so
-//! it is usable from the native Windows shell ADR-0243 describes without
-//! this crate depending on `windows-sys`/`winapi`, and is exercised by the
-//! unit tests below on any host.
+//! integers (a virtual-key code, a UTF-16 code unit, a modifier bitmask), so
+//! the native Windows shell in [`crate::win`] routes its whole input path
+//! through this module without the module itself depending on
+//! `windows-sys`/`winapi`. That is what makes the shipped input path
+//! testable on any host: the shell translates a `WM_*` message into a raw
+//! transition and everything below — the held sets, the modifier bitmask,
+//! the wire message — is built here, under the unit tests below.
+//!
+//! Nothing lives here that the shell has no way to reach. The wire carries
+//! AccessKit actions and pinch-zoom gestures; this client has neither an
+//! accessibility tree to source node ids from nor gesture handling, so it
+//! does not model them. Adding either means adding it to both halves.
 //!
 //! Three independent concerns live here:
 //! - [`Modifiers`] / [`MouseButton`]: the wire's small bitmask and button
-//!   numbering, in both directions.
+//!   numbering. Encode only — every message here is client→server, so the
+//!   decode halves would have no caller.
 //! - [`key_name_from_vk`]: a Win32 virtual-key code → the wire's `key`
 //!   string (the spelling `egui::Key::from_name` and the browser's
 //!   `KeyboardEvent.key` already agree on — see `input.proto`'s `KeyEvent`
@@ -38,10 +47,11 @@
 //! ## Clipboard (ADR-0082 SD6, ADR-0242 SD2)
 //!
 //! Copy/cut shortcuts are translated to clipboard actions *at the host* from
-//! the ordinary keydown — this client must not special-case them. Paste is
-//! the one exception: contents cannot ride a keydown, so [`is_paste_shortcut`]
-//! flags command+V so the caller can also send a
-//! [`crate::wire::pb::ClipboardData`] alongside the unmodified keystroke.
+//! the ordinary keydown — this client must not special-case them, and this
+//! module therefore has no clipboard surface at all. Paste cannot ride a
+//! keydown (the contents have to travel), so it is an explicit command on
+//! the shell's menu rather than a recognised chord: keystrokes go on the
+//! wire unmodified whether or not the clipboard is enabled.
 
 use crate::wire::pb;
 
@@ -57,16 +67,6 @@ pub struct Modifiers {
 }
 
 impl Modifiers {
-    pub fn from_bits(bits: u32) -> Self {
-        Self {
-            alt: bits & 1 != 0,
-            ctrl: bits & 2 != 0,
-            shift: bits & 4 != 0,
-            mac_cmd: bits & 8 != 0,
-            command: bits & 16 != 0,
-        }
-    }
-
     pub fn to_bits(self) -> u32 {
         (self.alt as u32)
             | ((self.ctrl as u32) << 1)
@@ -106,47 +106,6 @@ impl MouseButton {
     pub fn to_wire(self) -> u32 {
         self as u32
     }
-
-    pub fn from_wire(v: u32) -> Option<Self> {
-        Some(match v {
-            0 => Self::Primary,
-            1 => Self::Secondary,
-            2 => Self::Middle,
-            3 => Self::Extra1,
-            4 => Self::Extra2,
-            _ => return None,
-        })
-    }
-}
-
-/// `AccessKitAction.action` wire codes (`input.proto`'s doc comment) — pinned
-/// independently of `accesskit::Action`'s own numbering for the same reason
-/// `CursorShape.shape` is (an upstream reorder must not silently renumber
-/// the wire).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AccessKitAction {
-    Click = 0,
-    Focus = 1,
-    SetValue = 2,
-    ScrollIntoView = 3,
-}
-
-impl AccessKitAction {
-    pub fn to_wire(self) -> u32 {
-        self as u32
-    }
-}
-
-/// Whether this key-down is the client's cue to also send a
-/// [`crate::wire::pb::ClipboardData`] paste (ADR-0082 SD6 / ADR-0242 SD2):
-/// command+V (Ctrl+V on Windows, since [`Modifiers::windows`] mirrors `ctrl`
-/// into `command`), without Alt (a common "paste as plain text" chord on
-/// some apps is Ctrl+Shift+V, which this still matches — the host decides
-/// what to do with the pasted text, this only decides whether to attach it).
-pub fn is_paste_shortcut(key: &str, modifiers: Modifiers) -> bool {
-    (key.eq_ignore_ascii_case("v"))
-        && (modifiers.ctrl || modifiers.command || modifiers.mac_cmd)
-        && !modifiers.alt
 }
 
 /// Win32 virtual-key code → the wire's `KeyEvent.key` spelling. US-layout
@@ -310,6 +269,14 @@ impl Utf16Assembler {
             Some(char::from_u32(u32::from(unit)).unwrap_or('\u{FFFD}'))
         }
     }
+
+    /// Discard a half-assembled pair. The shell calls this wherever it
+    /// cancels input (focus loss, a session change): the low half is never
+    /// coming, and carrying the stale high surrogate across the gap would
+    /// corrupt the first character typed afterwards.
+    pub fn reset(&mut self) {
+        self.pending_high = None;
+    }
 }
 
 fn combine_surrogates(high: u16, low: u16) -> char {
@@ -352,6 +319,14 @@ impl InputState {
 
     pub fn is_button_held(&self, button: MouseButton) -> bool {
         self.held_buttons[button as usize]
+    }
+
+    /// Whether any button is down — the shell's cue to hold the OS pointer
+    /// capture, and to keep mapping positions outside the video rectangle
+    /// (a drag that leaves the letterbox is still that drag; see
+    /// [`crate::geometry::Viewport::logical`]'s `captured`).
+    pub fn any_button_held(&self) -> bool {
+        self.held_buttons.iter().any(|held| *held)
     }
 
     /// Build a [`pb::MouseMove`] event. Stateless (no modifiers/held-set on
@@ -426,25 +401,6 @@ impl InputState {
         event(pb::input_event::Event::PointerGone(pb::PointerGone {}))
     }
 
-    pub fn pinch_zoom(&self, factor: f32) -> pb::InputEvent {
-        event(pb::input_event::Event::PinchZoom(pb::PinchZoom { factor }))
-    }
-
-    pub fn accesskit_action(
-        &self,
-        node_id: u64,
-        action: AccessKitAction,
-        value: impl Into<String>,
-    ) -> pb::InputEvent {
-        event(pb::input_event::Event::AccesskitAction(
-            pb::AccessKitAction {
-                node_id,
-                action: action.to_wire(),
-                value: value.into(),
-            },
-        ))
-    }
-
     /// ADR-0242 SD2: report a focus transition. On losing focus, clears this
     /// session's locally tracked keys/buttons — *not* by emitting synthetic
     /// releases onto the wire (the host does the cancellation; see the
@@ -477,8 +433,22 @@ mod tests {
             mac_cmd: false,
             command: true,
         };
-        assert_eq!(Modifiers::from_bits(m.to_bits()), m);
+        // 1=alt, 2=ctrl, 4=shift, 8=mac_cmd, 16=command — the numbering is
+        // `input.proto`'s, so it is asserted literally rather than against
+        // an inverse this crate does not ship.
         assert_eq!(m.to_bits(), 1 | 4 | 16);
+        assert_eq!(Modifiers::default().to_bits(), 0);
+        assert_eq!(
+            Modifiers {
+                alt: true,
+                ctrl: true,
+                shift: true,
+                mac_cmd: true,
+                command: true,
+            }
+            .to_bits(),
+            31
+        );
     }
 
     #[test]
@@ -493,8 +463,8 @@ mod tests {
         assert_eq!(MouseButton::Primary.to_wire(), 0);
         assert_eq!(MouseButton::Secondary.to_wire(), 1);
         assert_eq!(MouseButton::Middle.to_wire(), 2);
-        assert_eq!(MouseButton::from_wire(4), Some(MouseButton::Extra2));
-        assert_eq!(MouseButton::from_wire(99), None);
+        assert_eq!(MouseButton::Extra1.to_wire(), 3);
+        assert_eq!(MouseButton::Extra2.to_wire(), 4);
     }
 
     #[test]
@@ -511,20 +481,6 @@ mod tests {
     #[test]
     fn key_name_from_vk_unmapped_is_none() {
         assert_eq!(key_name_from_vk(0xFF00), None);
-    }
-
-    #[test]
-    fn is_paste_shortcut_matches_ctrl_v_not_alt_v() {
-        let ctrl_v = Modifiers::windows(false, true, false);
-        assert!(is_paste_shortcut("v", ctrl_v));
-        assert!(is_paste_shortcut("V", ctrl_v));
-        let alt_v = Modifiers::windows(true, false, false);
-        assert!(!is_paste_shortcut("v", alt_v));
-        let ctrl_alt_v = Modifiers::windows(true, true, false);
-        assert!(
-            !is_paste_shortcut("v", ctrl_alt_v),
-            "Alt held rules it out even with Ctrl"
-        );
     }
 
     #[test]
@@ -604,5 +560,28 @@ mod tests {
             }
             other => panic!("unexpected event {other:?}"),
         }
+    }
+
+    #[test]
+    fn any_button_held_tracks_every_button_including_the_extras() {
+        let mut s = InputState::new();
+        assert!(!s.any_button_held());
+        let _ = s.mouse_button(0.0, 0.0, MouseButton::Extra2, true);
+        assert!(s.any_button_held(), "side buttons count as held");
+        let _ = s.mouse_button(0.0, 0.0, MouseButton::Primary, true);
+        let _ = s.mouse_button(0.0, 0.0, MouseButton::Extra2, false);
+        assert!(s.any_button_held(), "primary is still down");
+        let _ = s.mouse_button(0.0, 0.0, MouseButton::Primary, false);
+        assert!(!s.any_button_held());
+    }
+
+    #[test]
+    fn utf16_reset_drops_a_pending_high_surrogate() {
+        let mut a = Utf16Assembler::new();
+        assert_eq!(a.push(0xD83D), None);
+        a.reset();
+        // Without the reset this low half would complete the stale pair and
+        // emit the wrong character instead of reporting it unpaired.
+        assert_eq!(a.push(0xDE00), Some('\u{FFFD}'));
     }
 }

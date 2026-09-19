@@ -3,13 +3,13 @@ mod decoder;
 mod video;
 use crate::{
     geometry::Viewport,
+    input::{InputState, Modifiers, MouseButton, Utf16Assembler},
     session::{self, Command, Event},
     wire::pb,
 };
 use anyhow::{bail, Context, Result};
 use std::{
     cell::RefCell,
-    collections::HashMap,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -75,10 +75,13 @@ struct App {
     fit: bool,
     clipboard: bool,
     fullscreen: Option<RECT>,
-    focused: bool,
-    buttons: u8,
-    keys: HashMap<u32, String>,
-    surrogate: Option<u16>,
+    // The whole input path lives in `crate::input`, which builds every wire
+    // message and owns the held-key/button/modifier/focus state. This shell
+    // translates a `WM_*` message into a raw transition and sends what comes
+    // back; it keeps no parallel copy, so what the unit tests exercise is
+    // what ships.
+    input: InputState,
+    text: Utf16Assembler,
     generation: u64,
     retry_at: Option<Instant>,
     retry_delay: Duration,
@@ -260,10 +263,8 @@ pub fn run() -> Result<()> {
                 fit: true,
                 clipboard: false,
                 fullscreen: None,
-                focused: false,
-                buttons: 0,
-                keys: HashMap::new(),
-                surrogate: None,
+                input: InputState::new(),
+                text: Utf16Assembler::new(),
                 generation: 0,
                 retry_at: None,
                 retry_delay: Duration::from_secs(1),
@@ -437,9 +438,27 @@ impl App {
             control: Some(control),
         }));
     }
-    fn input(&self, event: pb::input_event::Event) {
+    /// Send one wire event built by [`InputState`]. Events are built
+    /// unconditionally and dropped here when the session is not ours: the
+    /// state tracking has to stay correct across a takeover either way, and
+    /// ADR-0242 SD2 makes the *host* responsible for cancelling what a
+    /// departing owner held.
+    fn send_input(&self, event: pb::InputEvent) {
         if self.active && self.connected {
-            self.send(Command::Input(pb::InputEvent { event: Some(event) }));
+            self.send(Command::Input(event));
+        }
+    }
+    /// Read the live modifier state from Win32 into [`InputState`], so the
+    /// next event it builds carries the bitmask. Called at the top of every
+    /// handler that produces input: `GetKeyState` reports the state as of
+    /// the message being dispatched, not the state now.
+    fn sync_modifiers(&mut self) {
+        unsafe {
+            self.input.set_modifiers(Modifiers::windows(
+                GetKeyState(VK_MENU.0 as i32) < 0,
+                GetKeyState(VK_CONTROL.0 as i32) < 0,
+                GetKeyState(VK_SHIFT.0 as i32) < 0,
+            ));
         }
     }
     fn reset_video(&mut self) {
@@ -476,28 +495,29 @@ impl App {
         self.send(Command::Disconnect);
         self.status("Disconnected");
     }
+    /// Drop everything this connection was holding. Unlike [`Self::focus`]
+    /// this clears unconditionally — a caller reaching for it is cancelling
+    /// a session, not reporting a transition — and only the wire event is
+    /// conditional on there having been one.
     fn cancel_input(&mut self) {
-        if self.focused {
-            self.input(pb::input_event::Event::Focus(pb::Focus { focused: false }));
+        let announce = self.input.is_focused();
+        let event = self.input.focus(false);
+        if announce {
+            self.send_input(event);
         }
-        self.focused = false;
-        self.buttons = 0;
-        self.keys.clear();
-        self.surrogate = None;
+        self.text.reset();
         unsafe {
             let _ = ReleaseCapture();
         }
     }
     fn focus(&mut self, on: bool) {
-        if self.focused != on {
-            self.focused = on;
-            self.input(pb::input_event::Event::Focus(pb::Focus { focused: on }));
+        if self.input.is_focused() == on {
+            return;
         }
-        if !on {
-            self.buttons = 0;
-            self.keys.clear();
-            self.surrogate = None;
-        }
+        // `InputState::focus(false)` clears the held sets itself — locally
+        // only, never as synthetic releases on the wire (ADR-0242 SD2).
+        let event = self.input.focus(on);
+        self.send_input(event);
     }
     fn enqueue_video(&mut self, c: VideoCommand) {
         if self.video_commands.try_send(c).is_err() {
@@ -520,10 +540,12 @@ impl App {
             return;
         }
         if self.command_overflow.get() {
+            // Clear the session flags first: cancel_input builds its focus
+            // event as usual, and send_input drops it rather than pushing
+            // onto the very channel that just overflowed.
             self.connected = false;
             self.active = false;
-            self.keys.clear();
-            self.buttons = 0;
+            self.cancel_input();
             if self.commands.try_send(Command::Disconnect).is_ok() {
                 self.command_overflow.set(false);
                 self.reset_video();
@@ -606,7 +628,10 @@ impl App {
                         if gained {
                             self.caps();
                             let has_focus = unsafe { GetFocus() } == self.video;
-                            self.focused = false;
+                            // Gaining the role resets the host's view of this
+                            // connection's focus, so re-announce it instead of
+                            // suppressing it as an unchanged value.
+                            let _ = self.input.focus(false);
                             self.focus(has_focus);
                         }
                         self.status(if active {
@@ -811,7 +836,7 @@ impl App {
             h.pixels_per_point,
             self.fit,
         )?
-        .logical(x as f32, y as f32, self.buttons != 0)
+        .logical(x as f32, y as f32, self.input.any_button_held())
     }
     fn menu(&mut self, id: usize) {
         match id {
@@ -946,7 +971,7 @@ unsafe extern "system" fn video_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM)
             }
             WM_CAPTURECHANGED => {
                 with_app(|a| {
-                    if a.buttons != 0 {
+                    if a.input.any_button_held() {
                         a.cancel_input();
                     }
                 });
@@ -955,7 +980,8 @@ unsafe extern "system" fn video_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM)
             WM_MOUSEMOVE => {
                 with_app(|a| {
                     if let Some((x, y)) = a.position(l.0 as i16 as i32, (l.0 >> 16) as i16 as i32) {
-                        a.input(pb::input_event::Event::MouseMove(pb::MouseMove { x, y }));
+                        let event = a.input.mouse_move(x, y);
+                        a.send_input(event);
                     }
                 });
                 let mut track = TRACKMOUSEEVENT {
@@ -968,54 +994,71 @@ unsafe extern "system" fn video_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM)
                 LRESULT(0)
             }
             WM_MOUSELEAVE => {
-                with_app(|a| a.input(pb::input_event::Event::PointerGone(pb::PointerGone {})));
+                with_app(|a| {
+                    let event = a.input.pointer_gone();
+                    a.send_input(event);
+                });
                 LRESULT(0)
             }
-            WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_LBUTTONUP | WM_RBUTTONUP
-            | WM_MBUTTONUP => {
-                let down = matches!(msg, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN);
+            WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN | WM_LBUTTONUP
+            | WM_RBUTTONUP | WM_MBUTTONUP | WM_XBUTTONUP => {
+                let down = matches!(
+                    msg,
+                    WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+                );
                 if down {
                     let _ = SetFocus(Some(hwnd));
                 }
-                with_app(|a| {
-                    if !a.active {
-                        return;
-                    }
-                    let button = match msg {
-                        WM_LBUTTONDOWN | WM_LBUTTONUP => 0,
-                        WM_RBUTTONDOWN | WM_RBUTTONUP => 1,
-                        _ => 2,
-                    };
-                    if let Some((x, y)) = a.position(l.0 as i16 as i32, (l.0 >> 16) as i16 as i32) {
-                        if down {
-                            a.buttons |= 1 << button;
-                            SetCapture(hwnd);
-                        } else {
-                            a.buttons &= !(1 << button);
+                // The X messages pack which side button in the high word;
+                // an unknown one is dropped rather than guessed at.
+                let button = match msg {
+                    WM_LBUTTONDOWN | WM_LBUTTONUP => Some(MouseButton::Primary),
+                    WM_RBUTTONDOWN | WM_RBUTTONUP => Some(MouseButton::Secondary),
+                    WM_MBUTTONDOWN | WM_MBUTTONUP => Some(MouseButton::Middle),
+                    _ => match (w.0 >> 16) as u16 {
+                        XBUTTON1 => Some(MouseButton::Extra1),
+                        XBUTTON2 => Some(MouseButton::Extra2),
+                        _ => None,
+                    },
+                };
+                if let Some(button) = button {
+                    with_app(|a| {
+                        if !a.active {
+                            return;
                         }
-                        a.input(pb::input_event::Event::MouseButton(pb::MouseButton {
-                            x,
-                            y,
-                            button,
-                            pressed: down,
-                            modifiers: modifiers(),
-                        }));
-                        if a.buttons == 0 {
+                        let Some((x, y)) = a.position(l.0 as i16 as i32, (l.0 >> 16) as i16 as i32)
+                        else {
+                            return;
+                        };
+                        if down {
+                            SetCapture(hwnd);
+                        }
+                        a.sync_modifiers();
+                        let event = a.input.mouse_button(x, y, button, down);
+                        a.send_input(event);
+                        if !a.input.any_button_held() {
                             let _ = ReleaseCapture();
                         }
-                    }
-                });
-                LRESULT(0)
+                    });
+                }
+                // MSDN: an application that processes WM_XBUTTON* returns TRUE.
+                if matches!(msg, WM_XBUTTONDOWN | WM_XBUTTONUP) {
+                    LRESULT(1)
+                } else {
+                    LRESULT(0)
+                }
             }
             WM_MOUSEWHEEL | WM_MOUSEHWHEEL => {
                 let delta = (w.0 >> 16) as i16 as f32 / 120.0 * 3.0;
                 with_app(|a| {
-                    a.input(pb::input_event::Event::MouseWheel(pb::MouseWheel {
-                        dx: if msg == WM_MOUSEHWHEEL { -delta } else { 0.0 },
-                        dy: if msg == WM_MOUSEWHEEL { delta } else { 0.0 },
-                        unit: 1,
-                        modifiers: modifiers(),
-                    }))
+                    a.sync_modifiers();
+                    // unit 1 = lines (`MouseWheel.unit` doc comment).
+                    let event = a.input.mouse_wheel(
+                        if msg == WM_MOUSEHWHEEL { -delta } else { 0.0 },
+                        if msg == WM_MOUSEWHEEL { delta } else { 0.0 },
+                        1,
+                    );
+                    a.send_input(event);
                 });
                 LRESULT(0)
             }
@@ -1038,45 +1081,36 @@ unsafe extern "system" fn video_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM)
                     return LRESULT(0);
                 }
                 with_app(|a| {
-                    let vk = w.0 as u32;
-                    let name = if down {
-                        key_name(vk)
-                    } else {
-                        a.keys.remove(&vk).or_else(|| key_name(vk))
+                    // key_name_from_vk is a pure mapping, so the key-up
+                    // spelling matches the key-down's without the shell
+                    // remembering it; InputState holds the held set.
+                    let Some(key) = crate::input::key_name_from_vk(w.0 as u32) else {
+                        return;
                     };
-                    if let Some(key) = name {
-                        if down {
-                            a.keys.insert(vk, key.clone());
-                        }
-                        a.input(pb::input_event::Event::Key(pb::KeyEvent {
-                            key,
-                            code: String::new(),
-                            pressed: down,
-                            repeat: down && repeat,
-                            modifiers: modifiers(),
-                        }));
-                    }
+                    a.sync_modifiers();
+                    // `code` is empty: the v1 host mapper reads only `key`
+                    // (`input.proto`'s KeyEvent.code doc comment).
+                    let event = a.input.key(key, "", down, down && repeat);
+                    a.send_input(event);
                 });
                 LRESULT(0)
             }
             WM_CHAR => {
                 with_app(|a| {
                     let unit = w.0 as u16;
+                    // Control characters arrive as key events instead.
                     if unit < 32 {
                         return;
                     }
-                    if (0xd800..=0xdbff).contains(&unit) {
-                        a.surrogate = Some(unit);
-                        return;
-                    }
-                    let text = if let Some(high) = a.surrogate.take() {
-                        String::from_utf16_lossy(&[high, unit])
-                    } else {
-                        String::from_utf16_lossy(&[unit])
+                    let Some(c) = a.text.push(unit) else {
+                        return; // high surrogate; its low half completes it
                     };
+                    a.sync_modifiers();
                     // AltGr commonly appears as Ctrl+Alt but still produces text.
-                    if modifiers() & 2 == 0 || modifiers() & 1 != 0 {
-                        a.input(pb::input_event::Event::Text(pb::TextInput { text }));
+                    let m = a.input.modifiers();
+                    if !m.ctrl || m.alt {
+                        let event = a.input.text(c.to_string());
+                        a.send_input(event);
                     }
                 });
                 LRESULT(0)
@@ -1085,25 +1119,6 @@ unsafe extern "system" fn video_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM)
         }
     }
 }
-fn modifiers() -> u32 {
-    unsafe {
-        let mut m = 0;
-        if GetKeyState(VK_MENU.0 as i32) < 0 {
-            m |= 1;
-        }
-        if GetKeyState(VK_CONTROL.0 as i32) < 0 {
-            m |= 2 | 16;
-        }
-        if GetKeyState(VK_SHIFT.0 as i32) < 0 {
-            m |= 4;
-        }
-        m
-    }
-}
-fn key_name(v: u32) -> Option<String> {
-    crate::input::key_name_from_vk(v).map(str::to_owned)
-}
-
 struct Clipboard;
 impl Drop for Clipboard {
     fn drop(&mut self) {
