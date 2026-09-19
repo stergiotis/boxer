@@ -583,7 +583,7 @@ func (in Input) renderHeaders(et c.EndETableFluid, density styletokens.DensityE)
 //     stripes tile with no seam, where the old constant left a point of the
 //     backdrop showing between every pair.
 //
-// Pinned by `scripts/dev/play-screenshot-tour.sh 34_fsbrowser`: the
+// Pinned by `scripts/dev/scene.sh --only 34_fsbrowser apps/play/scenes`: the
 // reproduction is select a row, expand its parent, look at both edges.
 func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, r Row, rowH float32, selected bool) c.ResponseFlagsE {
 	fill := clearFill

@@ -169,7 +169,7 @@ kind (`tallyLaunch`, ADR-0135) so a window restores as a workingset
 | `public/thestack/imzero2/egui2/widgets/fsbrowser` | new exported widget package | the gallery (`registry.Demo`), glyph baseline, designlint scope |
 | `apps/tally` | new app id, manifest (caps `windowhost.open`, `clipboard.write`), help book | the host's app roster and the capslock check's import list; the Apps menu |
 | `public/fs/lading/ladingview` | new exported package: `Guard` / `Locked` (one lock over a store's adapter views) and `ReadHead` (a bounded stat-and-read for previews) | nothing else; it is what keeps file-handle plumbing out of the app package (see the 2026-08-20 update) |
-| `scripts/dev/fsbrowser-widget-scene.sh`, `scripts/dev/tally-scene.sh` | new headless scenes (ADR-0154 lane) | the verification plan below |
+| `apps/play/scenes/34_fsbrowser.scene.md`, `apps/tally/scenes/tally.scene.md` | new headless scenes (ADR-0154 lane) | the verification plan below |
 | `public/keelson/vdd` (the facts vocabulary, ADR-0135 §SD2) | eight members added to the windowhost cohort: `tallyLaunchMountA/SnapA/DirA/MountB/SnapB/DirB` (textArray), `tallyLaunchSync` (bool), `tallyLaunchTarget` (symbol), ordinals 141–148 | the committed assignment golden; `apps/tally/launchcfg` (kind `tallyLaunch`, generated codec, `kindcheck` registration) |
 | `apps/sqlapplet/booklading` | new book id `lading` | the book corpus test |
 | `boxer fs snapshot` (CLI, `public/app/commands/ladingfs`) | new verb: walk a directory or an rclone remote into the store, optionally recording the policy under `--name` — the ingest route SD5 relies on | the how-to §3 |
@@ -250,10 +250,10 @@ Accepted 2026-08-21. Milestones:
 - **M1 — `fsbrowser`.** ✓ SD2 as `widgets/fsbrowser` (list and outline,
   breadcrumb, quick filter, sort, selection, keyboard, host columns), the
   gallery demo "file browser" over an in-memory tree, the headless scene
-  `scripts/dev/fsbrowser-widget-scene.sh` (2026-08-20).
+  `apps/play/scenes/34_fsbrowser.scene.md` (2026-08-20).
 - **M2 — the app.** ✓ `apps/tally`: manifest, dock (Pane A over Preview /
   Info), Mounts with snapshots and follow-latest, Preview by type, Info from
-  `fs()`, help book, the headless scene `scripts/dev/tally-scene.sh` against
+  `fs()`, help book, the headless scene `apps/tally/scenes/tally.scene.md` against
   a seeded store (2026-08-20).
 - **M3 — two panes and time.** ✓ Pane B beside Pane A (always shown; the
   dock divider is the collapse), a Target switch for which pane the Mounts
@@ -440,7 +440,7 @@ snippet for the panel takes a literal mount meanwhile, and says why.
 
 Verification gained a lane the other scenes do not have — one that needs a
 server, because a result panel has nothing to draw without a result.
-`scripts/dev/files-pane-scene.sh` runs two: `synthetic`, whose rows are
+`apps/play/scenes/files-pane` holds two: `synthetic`, whose rows are
 literals, asserts the synthesised directories, Enter, the outline, and that a
 click on a row-backed entry moves the Detail pane to the right row; `lading`
 browses whatever the store holds and asserts the pane's own chrome. Both skip
@@ -455,9 +455,9 @@ mount ids and `size@gloss/bytes` would otherwise miss the contract entirely.
 
 ### 2026-08-21 — the widget scene moved into the play tour
 
-§M1's headless scene now lives in `scripts/dev/play-screenshot-tour.sh` as
-`34_fsbrowser`, and `scripts/dev/fsbrowser-widget-scene.sh` — the path this ADR
-names — is a wrapper that selects it. One runner owns the private-binary build,
+§M1's headless scene now lives in the play tour as `34_fsbrowser`
+(`apps/play/scenes/34_fsbrowser.scene.md` since ADR-0248, which also removed the
+wrapper script this ADR first named). One runner owns the private-binary build,
 the FFFI staleness guard, the port-teardown wait and the capture index for
 every headless scene; a second copy of that machinery per scene is what the
 move removes, not the scene.
@@ -542,7 +542,7 @@ and it is not made here.
 
 `scripts/dev/tally-audio-scene.sh` drives both staging shapes and the release,
 asserting on the readouts: the waveform is painter output and the headless
-client cannot capture it, the same gap `waveform-scene.sh` has.
+client cannot capture it, the same gap the waveform scene has.
 
 ### 2026-09-02 — the widget's third host
 

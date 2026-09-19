@@ -264,7 +264,7 @@ Accepted 2026-07-31, with M1–M4 built and verified the same day.
   ship in the headless host; `ws_probe` gained matching verbs.
 - **M2/M3** — `public/thestack/imzero2/carrierclient` speaks the wire, and
   `imzero2 drive` replays traces against it.
-- **M4 — `scripts/dev/play-screenshot-tour.sh`** captures 29 scenes of `play`,
+- **M4 — the play tour** (`apps/play/scenes`) captures 29 scenes of `play`,
   five of them states no launch knob can reach, with no compositor running.
 
 Verified across the two seams: the same widget resolves to the same node id

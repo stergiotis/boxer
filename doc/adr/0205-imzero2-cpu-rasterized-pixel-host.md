@@ -251,7 +251,7 @@ outside it.
 - **What it does not cover, and why that is accepted.**
   - **Fidelity against wgpu.** The strongest property found — that the two hosts
     agree pixel-for-pixel — needs a GPU, which CI does not have. It stays a
-    manual gallery diff (`scripts/dev/play-screenshot-tour.sh` on each host,
+    manual gallery diff (the play tour (`apps/play/scenes`) on each host,
     compared against a per-scene reproducibility floor built from two wgpu runs;
     exact equality is the wrong test, since several play panels draw
     time-dependent content and one scene disagrees with itself by 14.8 %).

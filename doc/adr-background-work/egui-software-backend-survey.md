@@ -400,7 +400,7 @@ vendored Rust source in this tree:
 
 ### 10.3 Fidelity, measured on the real gallery
 
-`scripts/dev/play-screenshot-tour.sh` run end to end on each host: 66 scenes,
+the play tour (`apps/play/scenes`) run end to end on each host: 66 scenes,
 92 PNGs, and **the same single failure on both** — `03_detail_glosses`, a
 driver-trace locator miss, so pre-existing and host-independent.
 

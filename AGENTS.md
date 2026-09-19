@@ -39,6 +39,7 @@ the linked document wins.
 | Snapshot a file tree into ClickHouse and query it | [doc/howto/lading-snapshot-store.md](./doc/howto/lading-snapshot-store.md) |
 | Ingest a markdown vault and query its graph, tags and properties | [doc/howto/markdown-facts-obsidian-queries.md](./doc/howto/markdown-facts-obsidian-queries.md) |
 | Draw a graph over a slippy map | [doc/howto/graph-on-a-map.md](./doc/howto/graph-on-a-map.md) |
+| Drive a running app, or write a headless scene that asserts and captures | [doc/skills/imzero2-drive/SKILL.md](./doc/skills/imzero2-drive/SKILL.md) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
 | Report a vulnerability | [SECURITY.md](./SECURITY.md) |
 
@@ -178,18 +179,30 @@ need:
    `IMZERO2_SCREENSHOT_DIR` (plus `IMZERO2_SCREENSHOT_SIZE`,
    `IMZERO2_SCREENSHOT_DETERMINISTIC`; see [doc/env-vars.md](./doc/env-vars.md))
    and run `hmi.sh`. Captures one PNG + one SVG per registered `Demo`.
-2. **One app, a real scenario.** An app's own scripted-capture env vars,
-   declared per [ADR-0009](./doc/adr/0009-environment-variable-registry.md) —
-   e.g. play's `BOXER_PLAY_SCREENSHOT` / `BOXER_PLAY_SHOT_SETTLE` /
-   `BOXER_PLAY_EXIT_ON_SHOT` / `BOXER_PLAY_FOCUS_*`
-   (`apps/play/play_renderer.go`), which also race a PNG capture against an
-   SVG export. `play` is the only app with this today — a new app that needs
-   scripted screenshots should follow its pattern rather than skip to (3) or
-   (4).
-3. **Interactive / exploratory.** [`egui-mcp`](./doc/howto/egui-mcp.md) —
-   `EGUI_INSPECTION=1` attaches an agent to the live widget tree to click,
-   type, and `screenshot` mid-session. Use it to drive the UI into a state,
-   not to capture one you already know how to reach directly.
+2. **One app, a real scenario.** The headless host and its driver
+   ([ADR-0154](./doc/adr/0154-headless-carrier-tree-and-driver.md)): launch
+   the app with no compositor, then `imzero2 drive` reads the accessibility
+   tree, clicks and types by widget name, and writes a PNG on a `capture`
+   step. A repeatable scenario is a *scene document* — a launch spec, an
+   optional query and a trace in one markdown file — run by
+   `scripts/dev/scene.sh`
+   ([ADR-0248](./doc/adr/0248-imzero2-scenes-one-runner-and-assertions-in-the-trace.md));
+   [apps/play/scenes](./apps/play/scenes) is the maintained tour. The format
+   and the step vocabulary are in the
+   [imzero2-drive skill](./doc/skills/imzero2-drive/SKILL.md); driving a host
+   by hand is
+   [launch-apps-non-interactively](./doc/howto/launch-apps-non-interactively.md).
+   An app's seed variables (play's `BOXER_PLAY_SQL`,
+   `BOXER_PLAY_FOCUS_*`, declared per
+   [ADR-0009](./doc/adr/0009-environment-variable-registry.md)) put it in a
+   starting state; the driver does the rest. A new app needs no capture knobs
+   of its own — play's `BOXER_PLAY_SCREENSHOT` family predates the driver and
+   is not a pattern to copy.
+3. **Interactive, on the desktop host.** [`egui-mcp`](./doc/howto/egui-mcp.md) —
+   `EGUI_INSPECTION=1` attaches an agent to the live eframe window to click,
+   type, and `screenshot` mid-session. Use it when the thing under test is the
+   desktop build itself; the headless driver in (2) covers everything else and
+   needs no display.
 4. **OS-level screenshot.** Last resort, for when 1–3 genuinely can't reach
    the target state (e.g. a transient dialog outside imzero2's control).
    This is the generic method the other three exist to avoid — if you land

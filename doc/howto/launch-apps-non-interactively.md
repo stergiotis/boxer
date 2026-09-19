@@ -113,10 +113,14 @@ env -u DISPLAY -u WAYLAND_DISPLAY \
 echo $! > "$S/host.pid"
 ```
 
-Fonts: resolve `$MAIN_FONT` / `$MONO_FONT` with `fc-match` the way
-[scripts/dev/play-screenshot-tour.sh](../../scripts/dev/play-screenshot-tour.sh)
-does (`Noto Sans`, `DejaVu Sans Mono`); the tour script is the maintained
-reference for this whole launch line. `IMZERO2_HEADLESS_DUMP_EVERY` is
+Fonts: resolve `$MAIN_FONT` / `$MONO_FONT` with `fc-match` (`Noto Sans`,
+`DejaVu Sans Mono`). If what you want is a repeatable scenario rather than a
+process to poke at, skip this launch line altogether: a scene document run by
+`scripts/dev/scene.sh` does the launch, the ports, the fonts and the teardown
+itself ([ADR-0248](../adr/0248-imzero2-scenes-one-runner-and-assertions-in-the-trace.md);
+the [imzero2-drive skill](../skills/imzero2-drive/SKILL.md) has the format).
+This page is for the by-hand case — several apps, a long-lived host, queries
+against the runtime while it runs. `IMZERO2_HEADLESS_DUMP_EVERY` is
 pushed out of the way so nothing lands in the dump directory except what a
 trace asks for. Wait for the carrier before doing anything else:
 
@@ -271,8 +275,8 @@ port attaches the driver to the old scene.
 
 ## Related
 
-- [scripts/dev/play-screenshot-tour.sh](../../scripts/dev/play-screenshot-tour.sh)
-  — the maintained, multi-scene form of §3–§5 for play.
+- `scripts/dev/scene.sh apps/play/scenes` — the maintained, multi-scene form
+  of §3–§5 for play: one scene document per launch (ADR-0248).
 - [topology-queries](./topology-queries.md) — the canonical queries over the
   introspection tables, including the effect tables.
 - [ADR-0154](../adr/0154-headless-carrier-tree-and-driver.md) — the driver

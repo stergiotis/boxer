@@ -519,7 +519,7 @@ func (inst *MapDriver) renderTableEditor() {
 // row of its own). Unpinned, a long expression re-fetches the raster on the
 // keystroke that adds a line.
 //
-// Measured through scripts/dev/play-screenshot-tour.sh (scene 05_map_custom_color):
+// Measured through the play tour (apps/play/scenes/05_map_custom_color.scene.md):
 // with the pin in place the raster's top edge lands on the same y for the
 // default three-line expression and for one several times too tall for the
 // pane — the overflow scrolls inside it instead.

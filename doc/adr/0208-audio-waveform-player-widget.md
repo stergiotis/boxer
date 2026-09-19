@@ -482,7 +482,7 @@ in memory, no mmap — the cost is a fifth higher than stated.
 
 M1 shipped as `public/science/audio/{pcm,wavfile,peaks,sink,track}` with
 `pcm/pcmtest` as the shared source-contract check; M2 as `widgets/waveform`
-with its gallery demo and the headless scene `scripts/dev/waveform-scene.sh`,
+with its gallery demo and the headless scene `TestSceneWaveformPlayer` (`widgets/waveform`, integration lane),
 which asserts hover, click-to-seek, an exact 300 px drag and the null-sink
 transport through the demo's readouts; M3 as `sink/pulsesink` — the stream is
 opened at the source's own rate and the server resamples, so the `pcm`

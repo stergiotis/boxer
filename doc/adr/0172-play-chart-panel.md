@@ -423,7 +423,7 @@ Unit (pure, no Arrow, no rendering where possible):
 7. Fold caching: same `(executed, schema)` does not re-fold; either moving does.
 
 Live, through the ADR-0154 headless carrier — no compositor, so it runs where
-the tour does. Six scenes were added to `scripts/dev/play-screenshot-tour.sh`
+the tour does. Six scenes were added to the play tour (`apps/play/scenes`)
 (`08_chart_bars`, `_series`, `_heatmap`, `_numeric`, `_reject`, `_duplicate`),
 nine captures in all, which is also what keeps the panel in the gallery as it
 changes:

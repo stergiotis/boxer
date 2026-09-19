@@ -85,9 +85,26 @@ substring), `value`, `valueContains`, `role`, `nth`.
 | `drag` | `x`,`y`,`toX`,`toY`; anchored: `x`,`y` is the delta | press, moves, release |
 | `scroll` | `x`,`y` as the wheel delta | scrolls under the pointer — `hover` first |
 | `wait` | anchor | polls until the node is present and enabled |
+| `read` | anchor, `pattern`, `on` | polls until the node's value (or name, with `"on":"name"`) matches the regular expression, then binds every named group `(?P<zoom>[\d.]+)` for the rest of the run |
+| `expect` | `of`, `minus`; `eq`, `approx`+`tol`, `min`, `max`, `is`, `matches` | compares a bound name — less another, with `minus` — with a constant; fails with what was read and what was expected |
 | `tree` | `text`, `role`, `id` (as *under*) | prints matching nodes mid-run |
 | `capture` | `text` as the file name | PNG into the host's `IMZERO2_HEADLESS_DUMP_DIR` |
 | `resize`, `cadence`, `sleep`, `note` | see `carrierclient.Step` | |
+
+Coordinate steps (`click`, `hover`, `drag`) also take `xFrom` / `yFrom`: the
+names of bound numbers added to `x`,`y` (and `toX`,`toY`). That is how a trace
+aims into a painter-only canvas whose origin the app prints — `read` the
+origin, then give offsets into the canvas:
+
+```
+{"do":"read","valueContains":"canvas at","role":"label","pattern":"canvas at (?P<ox>[\\d.]+),(?P<oy>[\\d.]+)"}
+{"do":"click","x":360,"y":230,"xFrom":"ox","yFrom":"oy"}
+{"do":"read","valueContains":"zoom","role":"label","pattern":"zoom (?P<z>[\\d.]+)"}
+{"do":"expect","of":"z","approx":13,"tol":0.011}
+```
+
+Addition is all the arithmetic there is. A check that needs more — a
+projection, a period — is a Go test over the same executor (see *Scenes*).
 
 `settleMs` on any step overrides `--settle` (default 250): a pause after the
 step, or before it for `capture` and `tree`. `modifiers` is a bitmask: 1 alt,
@@ -135,9 +152,56 @@ step, or before it for `capture` and `tree`. `modifiers` is a bitmask: 1 alt,
   representation`, the Rust client predates the last codegen; rebuild it before
   suspecting the app.
 
-## Keeping what worked
+## Scenes: keeping what worked
 
-A sequence of steps that did the job is already a trace: write the same JSON
-objects one per line to a `.jsonl` file (`#` comments allowed) and replay it
-with `--trace`. [scripts/dev/play-screenshot-tour.sh](../../../scripts/dev/play-screenshot-tour.sh)
-is the maintained example of scenes driven this way.
+`drive` needs a host that is already running. A *scene* is `drive` plus the
+launch ([ADR-0248](../../adr/0248-imzero2-scenes-one-runner-and-assertions-in-the-trace.md)):
+one markdown document, one launch.
+
+````
+---
+type: reference
+audience: contributor
+status: draft
+scene:
+  launch: play                 # the app alias
+  size: 1600x1000
+  env: {BOXER_PLAY_FOCUS_TABLE: "1", BOXER_PLAY_AUTORUN: "1"}
+  requires: [clickhouse, "table:default.some_table"]   # unmet → skipped, not failed
+---
+
+# What the scene shows
+
+Prose: it becomes the gallery entry.
+
+```sql
+SELECT 1 AS a          -- seeds the app's buffer (BOXER_PLAY_SQL unless `sqlEnv` says otherwise)
+```
+
+```jsonl trace
+{"do":"wait","name":"Run"}
+{"do":"capture","text":"my-scene"}
+```
+````
+
+```sh
+scripts/dev/scene.sh apps/play/scenes                  # a directory is a tour, in name order
+scripts/dev/scene.sh --only history apps/play/scenes
+scripts/dev/scene.sh --dryRun path/to/x.scene.md       # resolve anchors, capture nothing
+```
+
+The runner allocates ports, picks a client that can do what the scene needs,
+refuses one older than the generated interpreter, tears the host down on every
+exit path, and writes `index.md` with each scene's prose, captures and trace.
+Exit status is the assertion. So: steps that worked under `drive` become a
+maintained scene by being pasted into a `jsonl trace` fence.
+
+Other spec keys: `fps`, `needs: [raster]` (implied by a `capture`), `services:
+[tilestub]` for a map scene, `settleMs` (held before the first step),
+`stepSettleMs` (the default pause after a step). A document cannot run
+commands; preconditions and services are names the runner knows.
+
+A scene whose oracle is a computation is a Go test instead, in the
+`//go:build integration` lane, over the same harness: `scenetest.Launch`, trace
+fragments through `scenetest.Run`, readings back out through
+`scenetest.Number`. The portolan and waveform widget packages hold the examples.

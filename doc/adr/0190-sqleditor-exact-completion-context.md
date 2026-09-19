@@ -431,7 +431,7 @@ editor. Keyboard acceptance is one captured key. This amends ADR-0147 §SD5 and
   form must run wherever the canonical form does; and each catalogue probe must
   come back with rows, so a `system.*` query whose columns changed surfaces here
   rather than as a pane that quietly says "waiting".
-- **The ADR-0154 driver** (`scripts/dev/completion-pane-scene.sh`) renders three
+- **The ADR-0154 driver** (`apps/play/scenes/completion-pane`) renders three
   scenes headless: the kind domain with its heading, rows and provenance column;
   the field domain decided by the sibling argument, with element types; and a
   position no provider answers, showing its reason rather than an empty table.

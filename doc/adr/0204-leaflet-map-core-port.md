@@ -422,7 +422,7 @@ how it gets bytes, not a separate design.
   compile — lowering is a separate decision). `scripts/ci/
   rust_imzero2_check.sh` passes.
 - **M5 — regression net.** ✓ Done 2026-08-23.
-  `scripts/dev/portolan-map-scene.sh` drives the gallery's portolan demo
+  `TestScenePortolanCamera` (`widgets/portolan`, integration lane) drives the gallery's portolan demo
   headless (a private Go host paired with the CPU-rasterised client, tiles
   from `scripts/dev/tile-stub-server.py` — a generated PNG per `{z}/{x}/{y}`
   on a loopback port, so the scene is offline and its pixels repeat) and
@@ -565,7 +565,7 @@ camera readback's consumers other than through the new package's view state.
 - **Lane.** Default `go test` for the kernel, with Leaflet's geo, geometry,
   CRS, projection, handler, animation and `GridLayerSpec` cases as Go tests
   (525 in the package, plus `h3overlay`'s and the bridge's dissolve tests);
-  `scripts/dev/portolan-map-scene.sh`, the headless scene that drags and
+  `TestScenePortolanCamera` (`widgets/portolan`, integration lane), the headless scene that drags and
   zooms through §SD10's verb and asserts the camera readback (M5, on stub
   tiles, exit status the verdict); the screenshot tour's `scene_35_portolan`;
   `cargo tree` and the musl check from

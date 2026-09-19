@@ -471,7 +471,7 @@ check for us: a shared key is a shared identity), and that a filter emptying a
 population keeps the population's row while dropping its emptied families. The
 rendering is the part no automated lane reaches, and this ADR said a scripted
 capture was worth adding "once the layout settles" — it has, so
-`scripts/dev/play-screenshot-tour.sh` gained a `15_vocabulary` scene: the
+the play tour (`apps/play/scenes`) gained a `15_vocabulary` scene: the
 outline as launched, and filtered to a term that leaves the play section on
 screen at zero matches.
 

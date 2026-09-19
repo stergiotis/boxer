@@ -83,5 +83,5 @@ git -C /tmp/esb diff 1ab06af4..HEAD -- src/ Cargo.toml
 ```
 
 Re-apply the table above to whatever that diff shows, bump the commit recorded
-here, and re-run `scripts/dev/play-screenshot-tour.sh` — a rasterizer
+here, and re-run the play tour (`apps/play/scenes`) — a rasterizer
 regression shows up as a pixel diff in the gallery, not as a build failure.

@@ -35,8 +35,8 @@ The verification shape that catches it — walk the tabs *interactively*:
 
 3. For **each** tab, in an order where every tab is entered FROM another
    tab (the default-active tab must also be left and re-entered):
-   - click the tab's title cell (`query_tree` the tab-bar row for cells;
-     titles are painted, not accessible — locate positionally),
+   - click the tab by its title — a dock tab is a button named by its title
+     in the accessibility tree (`click` with `role: Button` and the title),
    - `wait_for` a tab-specific content marker,
    - assert the pane's content nodes have **non-trivial bounds** (the
      lost-send signature is a 0×0 content node where a texture should be).

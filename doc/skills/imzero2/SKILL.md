@@ -1565,7 +1565,7 @@ The audio player of ADR-0208 is a Go widget on the painter lane, package
 [`widgets/waveform`](../../../public/thestack/imzero2/egui2/widgets/waveform/),
 over the audio subtree `public/science/audio/{pcm,wavfile,peaks,sink,track}`.
 No opcode, no Rust. The gallery demo `egui2_hl_waveform_demo.go` and the
-headless scene `scripts/dev/waveform-scene.sh` exercise it.
+headless scene `TestSceneWaveformPlayer` (`widgets/waveform`, integration lane) exercise it.
 
 ### 19.1 Usage
 

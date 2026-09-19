@@ -355,7 +355,7 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
 | Exported Go API under `public/` | added: `widgets/tree` | nothing yet — no downstream module compiles against it on day one. `render.go` shares the package with the model rather than sitting in a `view/` subpackage the way icicle and sankey split theirs, so the package's ADR-0080 properties flip to `WASMBlocked` at M2 — the trade is a WASM-compilable flatten, which nothing wants, for one import at each of M3's call sites |
 | Exported Go API under `public/` — `fieldview.Renderer.Render` | changed at M3: takes a new `*fieldview.State` first | the widget's expansion left egui's memory for the caller's hands (SD2), and a `Renderer` is a value whose setters copy, so view state could not ride along in it. Both call sites move with it: `logviewer` retains one `State` per instance, the demo one per sample list. The demo also needed a distinct `idPrefix` per list, which it should have had already — three lists through one prefix were sharing widget ids before the port |
 | `carrierclient` — `Locator.Value` / `.ValueContains`, `Step.Pointer` | added at M4 (see SD13) | the ADR-0154 trace vocabulary gains three fields; all three are additive, so every existing trace resolves exactly as before |
-| `scripts/dev/tree-widget-scene.sh` | added at M4 | the headless assertion the verification plan asks for; it needs a current `rust/imzero2/target/headless/release/imzero2`, and fails loudly rather than desyncing when the client predates the codegen |
+| `public/thestack/imzero2/egui2/widgets/tree/scenes/tree-outline.scene.md` | added at M4 | the headless assertion the verification plan asks for; it needs a current `rust/imzero2/target/headless/release/imzero2`, and fails loudly rather than desyncing when the client predates the codegen |
 | imzero2 skill §7 "The Node & Tree System" | rewritten at M5 | `.claude/skills/imzero2/SKILL.md`; §13.1's register table loses its `r3_node_cmds` row |
 
 ## Alternatives
@@ -485,7 +485,7 @@ we will remove the `egui_ltreeview` binding and its crate dependency.
   here can assert about it.
 
   **M4 built the scene, and it asserts state rather than pixels.**
-  `scripts/dev/tree-widget-scene.sh` launches the widget gallery through the
+  `public/thestack/imzero2/egui2/widgets/tree/scenes/tree-outline.scene.md` launches the widget gallery through the
   headless host with no compositor, narrows it to the tree demo, and then:
   collapse-all leaves one row; clicking the root's disclosure control leaves
   four; a pointer click on the *Chordata* row makes the readout say
@@ -622,7 +622,7 @@ edit in place.
   `componentview` is not a tree and stays a `CollapsingHeader` accordion; the
   Context paragraph that counted it as a fourth adopter is corrected in place.
 - **M4 — the `tree` demo and its scene script.** The catch-all demo's node
-  section, and `scripts/dev/tree-widget-scene.sh`. Cost two additive rungs on ADR-0154's
+  section, and `public/thestack/imzero2/egui2/widgets/tree/scenes/tree-outline.scene.md`. Cost two additive rungs on ADR-0154's
   anchor ladder (SD13), and its capture caught the outline defect the
   assertions could not.
 - **M5 — `egui_ltreeview` gone.** The IDL nodes, the register, the enum, the
@@ -920,8 +920,8 @@ disclosure control and the label, on top of the row's own item spacing. The
 caret's ink is unchanged at 16, so the trim is gap rather than glyph.
 
 Found by reading a screenshot, like the 2026-08-16 defect above, and pinned the
-same way: `scripts/dev/play-screenshot-tour.sh 34_fsbrowser` and
-`scripts/dev/tree-widget-scene.sh`, whose capture is the four-sided-outline
+same way: `scripts/dev/scene.sh --only 34_fsbrowser apps/play/scenes` and
+`public/thestack/imzero2/egui2/widgets/tree/scenes/tree-outline.scene.md`, whose capture is the four-sided-outline
 check.
 
 ## References

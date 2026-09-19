@@ -52,7 +52,7 @@ the Timeline bands query, start Preview in *as sent* mode, and arm a capture
 that fires once a result lands.
 
 Together they express **the state an app can be launched into**. Built out as
-`scripts/dev/play-screenshot-tour.sh`, one launch per scene:
+the play tour (`apps/play/scenes`), one launch per scene:
 
 | Measure | Value |
 | --- | --- |
@@ -304,4 +304,4 @@ condition so a blocked Run and a zero-row result can be captured at all.
   the headless-weston arrangement the tour reuses.
 - [ADR-0009](../adr/0009-environment-variable-registry.md) — why every knob in
   option A is permanent registered surface.
-- `scripts/dev/play-screenshot-tour.sh` — option A as built.
+- the play tour (`apps/play/scenes`) — option A as built.

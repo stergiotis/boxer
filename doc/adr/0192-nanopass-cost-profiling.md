@@ -349,7 +349,7 @@ pane.
   negative or over-long span. The model is pure, so all of that is asserted
   without a renderer.
 - **Second lane — the screenshot tour.**
-  `scripts/dev/play-screenshot-tour.sh` gained `12_passes_cost`, on a
+  the play tour (`apps/play/scenes`) gained `12_passes_cost`, on a
   deliberately expensive buffer (`slow_rewrite_buffer`: twelve chained CTEs over
   `numbers()`, no fixture, measured at ~545 ms). It is what covers the drawn
   surface end to end — the amber unit on the schematic, the badge, the run split
