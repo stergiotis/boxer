@@ -61,7 +61,11 @@ struct App {
     endpoint: HWND,
     status: HWND,
     connect_button: HWND,
-    commands: SyncSender<Command>,
+    // Commands are a tokio channel so the network worker sleeps on it rather
+    // than polling; `try_send`/`blocking_send` need no runtime, so this side
+    // stays an ordinary Win32 message loop. Events stay a std channel, drained
+    // without blocking from WM_TIMER. See `session::spawn`.
+    commands: tokio::sync::mpsc::Sender<Command>,
     events: Receiver<Event>,
     network: Option<thread::JoinHandle<()>>,
     video_commands: SyncSender<VideoCommand>,
@@ -885,7 +889,10 @@ impl App {
     fn shutdown(&mut self) {
         self.cancel_input();
         self.video_stop.store(true, Ordering::Release);
-        let _ = self.commands.send(Command::Stop);
+        // Shutdown is the one place that may wait for channel space: the
+        // message loop has already ended, and a worker that exited on its own
+        // closes the channel, so this returns an error rather than hanging.
+        let _ = self.commands.blocking_send(Command::Stop);
         if let Some(t) = self.network.take() {
             let _ = t.join();
         }

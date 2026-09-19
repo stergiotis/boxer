@@ -3,7 +3,7 @@
 use crate::wire::{self, pb};
 use futures_util::{SinkExt, StreamExt};
 use std::{
-    sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
+    sync::mpsc::{self, Receiver, SyncSender, TrySendError},
     thread,
     time::Duration,
 };
@@ -31,8 +31,28 @@ const MAX_BYTES: usize = 16 * 1024 * 1024;
 const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
 type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
-pub fn spawn() -> (SyncSender<Command>, Receiver<Event>, thread::JoinHandle<()>) {
-    let (tx, rx) = mpsc::sync_channel(64);
+/// Start the network worker.
+///
+/// The two channels are deliberately of different kinds, because their two
+/// ends are:
+///
+/// - **Commands** (shell → worker) are a [`tokio::sync::mpsc`] pair. The
+///   worker's only job while idle is to wait for one, so it awaits the
+///   receiver and is woken by the send. The sender half is still usable from
+///   the Win32 message loop without a runtime: `try_send`/`blocking_send`
+///   are not `async`.
+/// - **Events** (worker → shell) stay a [`std::sync::mpsc`] pair, because
+///   the consumer is a `WM_TIMER` handler that must never block or await;
+///   it drains with `try_recv` on the shell's own cadence.
+///
+/// Both are bounded (ADR-0243 §SD4); nothing here ever blocks the render
+/// thread or the message loop.
+pub fn spawn() -> (
+    tokio::sync::mpsc::Sender<Command>,
+    Receiver<Event>,
+    thread::JoinHandle<()>,
+) {
+    let (tx, rx) = tokio::sync::mpsc::channel(64);
     let (events, out) = mpsc::sync_channel(16);
     let worker = thread::spawn(move || {
         match tokio::runtime::Builder::new_current_thread()
@@ -47,17 +67,17 @@ pub fn spawn() -> (SyncSender<Command>, Receiver<Event>, thread::JoinHandle<()>)
     });
     (tx, out, worker)
 }
-async fn command(rx: &Receiver<Command>) -> Command {
-    loop {
-        match rx.try_recv() {
-            Ok(c) => return c,
-            Err(TryRecvError::Disconnected) => return Command::Stop,
-            Err(TryRecvError::Empty) => tokio::time::sleep(Duration::from_millis(2)).await,
-        }
-    }
+/// Await the next command. A closed channel means the shell is gone, which
+/// is [`Command::Stop`].
+///
+/// Cancel-safe, which every `tokio::select!` below relies on:
+/// `Receiver::recv` guarantees no message is consumed when another branch
+/// wins the race.
+async fn command(rx: &mut tokio::sync::mpsc::Receiver<Command>) -> Command {
+    rx.recv().await.unwrap_or(Command::Stop)
 }
 async fn terminal(
-    rx: &Receiver<Command>,
+    rx: &mut tokio::sync::mpsc::Receiver<Command>,
     events: &SyncSender<Event>,
     reason: String,
 ) -> Option<Command> {
@@ -70,17 +90,17 @@ async fn terminal(
             Err(TrySendError::Full(e)) => event = e,
         }
         tokio::select! {
-            c=command(rx)=>match c{Command::Stop=>return Some(Command::Stop),Command::Connect(_)=>next=Some(c),_=>{}},
+            c=command(&mut *rx)=>match c{Command::Stop=>return Some(Command::Stop),Command::Connect(_)=>next=Some(c),_=>{}},
             _=tokio::time::sleep(Duration::from_millis(2))=>{},
         }
     }
 }
-async fn run(rx: Receiver<Command>, events: SyncSender<Event>) {
+async fn run(mut rx: tokio::sync::mpsc::Receiver<Command>, events: SyncSender<Event>) {
     let mut pending = None;
     loop {
         let c = match pending.take() {
             Some(c) => c,
-            None => command(&rx).await,
+            None => command(&mut rx).await,
         };
         let endpoint = match c {
             Command::Stop => return,
@@ -90,7 +110,7 @@ async fn run(rx: Receiver<Command>, events: SyncSender<Event>) {
         let url = match validate_endpoint(&endpoint) {
             Ok(u) => u,
             Err(e) => {
-                pending = terminal(&rx, &events, e.to_string()).await;
+                pending = terminal(&mut rx, &events, e.to_string()).await;
                 continue;
             }
         };
@@ -104,7 +124,7 @@ async fn run(rx: Receiver<Command>, events: SyncSender<Event>) {
         tokio::pin!(connect);
         let socket = loop {
             tokio::select! {
-                c=command(&rx)=>match c {Command::Stop=>return,Command::Disconnect=>break Err("Disconnected".into()),Command::Connect(e)=>{pending=Some(Command::Connect(e));break Err("Connection replaced".into());},_=>{}},
+                c=command(&mut rx)=>match c {Command::Stop=>return,Command::Disconnect=>break Err("Disconnected".into()),Command::Connect(e)=>{pending=Some(Command::Connect(e));break Err("Connection replaced".into());},_=>{}},
                 result=&mut connect=>break match result{Ok(Ok((ws,_)))=>Ok(ws),Ok(Err(_))=>Err(format!("Connection to {} failed (transport/TLS/handshake)",redact(&url))),Err(_)=>Err("Connection timed out".into())},
             }
         };
@@ -113,7 +133,7 @@ async fn run(rx: Receiver<Command>, events: SyncSender<Event>) {
                 if events.try_send(Event::Connected).is_err() {
                     "Event backlog exceeded limit".into()
                 } else {
-                    let (reason, next) = connected(&mut ws, &rx, &events).await;
+                    let (reason, next) = connected(&mut ws, &mut rx, &events).await;
                     pending = next;
                     reason
                 }
@@ -123,7 +143,7 @@ async fn run(rx: Receiver<Command>, events: SyncSender<Event>) {
         if matches!(pending, Some(Command::Stop)) {
             return;
         }
-        let next = terminal(&rx, &events, reason).await;
+        let next = terminal(&mut rx, &events, reason).await;
         if next.is_some() {
             pending = next;
         }
@@ -137,7 +157,7 @@ async fn write(ws: &mut Socket, msg: Message) -> anyhow::Result<()> {
 }
 async fn connected(
     ws: &mut Socket,
-    rx: &Receiver<Command>,
+    rx: &mut tokio::sync::mpsc::Receiver<Command>,
     events: &SyncSender<Event>,
 ) -> (String, Option<Command>) {
     let mut clock = tokio::time::interval(Duration::from_secs(5));
@@ -145,7 +165,7 @@ async fn connected(
     let mut activity = tokio::time::Instant::now();
     loop {
         tokio::select! {
-            c=command(rx)=>{
+            c=command(&mut *rx)=>{
                 let message=match c{
                     Command::Stop=>return ("Stopped".into(),Some(Command::Stop)),
                     Command::Disconnect=>return ("Disconnected".into(),None),
@@ -342,13 +362,14 @@ mod tests {
         });
         let (tx, rx, worker) = spawn();
         let port = port_rx.recv_timeout(Duration::from_secs(5)).unwrap();
-        tx.send(Command::Connect(format!("ws://127.0.0.1:{port}")))
+        tx.blocking_send(Command::Connect(format!("ws://127.0.0.1:{port}")))
             .unwrap();
         assert_eq!(
             rx.recv_timeout(Duration::from_secs(5)).unwrap(),
             Event::Connected
         );
-        tx.send(Command::Send(client_hello("test"))).unwrap();
+        tx.blocking_send(Command::Send(client_hello("test")))
+            .unwrap();
         assert!(matches!(
             rx.recv_timeout(Duration::from_secs(5)).unwrap(),
             Event::Hello(_)
@@ -365,23 +386,57 @@ mod tests {
             rx.recv_timeout(Duration::from_secs(5)).unwrap(),
             Event::Disconnected(_)
         ));
-        tx.send(Command::Stop).unwrap();
+        tx.blocking_send(Command::Stop).unwrap();
         worker.join().unwrap();
         server.join().unwrap();
     }
     #[test]
     fn terminal_backpressure_does_not_block_stop() {
-        let (tx, rx) = mpsc::sync_channel(2);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(2);
         let (events, _out) = mpsc::sync_channel(1);
         events.send(Event::Connected).unwrap();
-        tx.send(Command::Stop).unwrap();
+        tx.try_send(Command::Stop).unwrap();
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
         assert!(matches!(
-            rt.block_on(terminal(&rx, &events, "overflow".into())),
+            rt.block_on(terminal(&mut rx, &events, "overflow".into())),
             Some(Command::Stop)
         ));
+    }
+
+    /// Pins the two contracts [`command`] has to keep now that it awaits the
+    /// channel instead of polling it: an empty channel yields nothing (it
+    /// must not invent a command to break its own wait), and a closed one is
+    /// [`Command::Stop`], which is the worker's only exit when the shell is
+    /// gone. That second mapping was explicit in the polling version
+    /// (`TryRecvError::Disconnected`) and is now `recv`'s `None`.
+    ///
+    /// It does not, and cannot from in here, observe *how* the wait is
+    /// implemented — a 2 ms poll loop would satisfy both assertions too.
+    #[test]
+    fn command_waits_when_empty_and_stops_when_closed() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            assert!(
+                tokio::time::timeout(Duration::from_millis(100), command(&mut rx))
+                    .await
+                    .is_err(),
+                "an idle worker must not produce a command"
+            );
+            tx.send(Command::Disconnect).await.unwrap();
+            assert!(matches!(
+                tokio::time::timeout(Duration::from_millis(100), command(&mut rx)).await,
+                Ok(Command::Disconnect)
+            ));
+        });
+        // A dropped shell is Stop, so the worker always has a way to exit.
+        drop(tx);
+        assert!(matches!(rt.block_on(command(&mut rx)), Command::Stop));
     }
 }
