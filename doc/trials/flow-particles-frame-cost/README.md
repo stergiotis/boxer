@@ -60,14 +60,23 @@ free.
   logbook). A marshaller that writes a slice at once would move every Go-side
   figure in this table, the shipped arm's most.
 - **Not the desktop host, and not a remote viewer.** Neither was measured.
-- **Not reviewed, not replicated.** One machine — a low-power APU — that was
-  not idle; one launch per cell; differences between neighbouring counts of
-  one arm are inside the noise (the wgpu mesh arm's Go side reads 10.4 ms at
-  5 000 particles and 13.5 ms at 10 000). The claims above rest on
-  differences of three to seven times, not on those.
+- **Not reviewed, and replicated only in part.** One machine — a low-power
+  APU — that was not idle; one launch per cell in the table above. A second
+  run repeated five of the cells four times each: launches of one cell differ
+  by about a tenth of the median, the CPU frequency governor makes no
+  difference inside that, and both claims above held in every launch (the
+  [logbook](./logbook.md) has the ranges). Differences between neighbouring
+  counts of one arm are inside that spread — the wgpu mesh arm's Go side
+  reads 10.4 ms at 5 000 particles in the table and 6.4 to 6.7 ms in the
+  repeats. The claims rest on differences of three to seven times, not on
+  those.
+- **Not the dispatch figure at 20 000 particles.** It is bimodal between
+  launches — about 12 ms or about 25 ms for the same cell — for a reason not
+  found.
 
-**If you need a number**, take it from
-[results.tsv](./runs/2026-09-19-first-run/results.tsv), which holds raw
+**If you need a number**, take it from the first run's
+[results.tsv](./runs/2026-09-19-first-run/results.tsv) or the repeats'
+[results.tsv](./runs/2026-09-19-governor/results.tsv), which hold raw
 microseconds and bytes per cell. **No figure from this trial travels without
 the pair of arms it compares and the host it was measured on.**
 
