@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/taskprogress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 )
 
 // DefaultMaxHistory caps the rolling history pane. Older terminal
@@ -306,22 +307,19 @@ func (inst *Inst) renderInflight(rows []inflightRow) {
 }
 
 func (inst *Inst) renderInflightRow(row inflightRow) {
-	c.Label(row.created.Title).Send()
-	c.ProgressBar(progressFraction(row.latest)).Send()
-	c.Label(humanizeRow(row.latest, row.pending)).Send()
-
-	for range c.Horizontal().KeepIter() {
-		c.Label(fmt.Sprintf("id %s · kind %s", row.created.TaskId, row.created.Kind)).Send()
-		if !row.pending {
-			if c.Button(inst.ids.PrepareStr(inst.idPrefix+":cancel-"+row.created.TaskId),
-				c.Atoms().Text("Cancel").Keep()).
-				SendResp().HasPrimaryClicked() {
-				id := task.TaskIdT(row.created.TaskId)
-				go func() {
-					_ = inst.api.RequestCancel(id, "user clicked cancel")
-				}()
-			}
-		}
+	in := progressInput(row.latest, row.pending)
+	in.Title = row.created.Title
+	if !row.pending {
+		in.CancelId = inst.ids.PrepareStr(inst.idPrefix + ":cancel-" + row.created.TaskId)
+	}
+	if jobprogress.Render(in) {
+		id := task.TaskIdT(row.created.TaskId)
+		go func() {
+			_ = inst.api.RequestCancel(id, "user clicked cancel")
+		}()
+	}
+	for rt := range c.RichTextLabel(fmt.Sprintf("id %s · kind %s", row.created.TaskId, row.created.Kind)) {
+		rt.Small().Weak()
 	}
 }
 
@@ -344,7 +342,7 @@ func (inst *Inst) renderHistory(rows []historyRow) {
 
 func (inst *Inst) renderHistoryRow(row historyRow, idx int) {
 	label := fmt.Sprintf("[%s] %s · %s",
-		row.final, row.created.Title, humanizeRow(row.progress, false))
+		row.final, row.created.Title, jobprogress.StatusLine(progressInput(row.progress, false)))
 	if row.reason != "" {
 		label = label + " — " + row.reason
 	}
@@ -363,64 +361,46 @@ func (inst *Inst) renderHistoryRow(row historyRow, idx int) {
 	}
 }
 
-// progressFraction returns a [0..1] float for the progress bar.
-// Indeterminate tasks (Total=0) render as 0.0; the humanized note
-// carries the "indeterminate" signal.
-func progressFraction(p taskprogress.TaskProgress) (frac float32) {
-	if p.Total == 0 {
-		return
-	}
-	if p.Current >= p.Total {
-		frac = 1
-		return
-	}
-	frac = float32(float64(p.Current) / float64(p.Total))
-	return
-}
-
-// humanizeRow composes a visible string from a wire TaskProgress.
-// Lightweight inverse of the estimator's emission gate: percent or
-// raw count + optional ETA + optional note. Observers re-humanize
-// per their own locale; this is the widget's house format.
-func humanizeRow(p taskprogress.TaskProgress, pending bool) (s string) {
-	if pending {
-		s = "cancelling…"
-		return
-	}
+// progressInput maps a wire TaskProgress onto the shared job-progress
+// row: the producer's estimate (task/estimator — the same Holt smoothing
+// jobprogress's own callers use, ADR-0247) supplies rate and ETA, and a
+// count-shaped task (indeterminate, or measured in bytes) leads with its
+// amount instead of a bare percentage.
+func progressInput(p taskprogress.TaskProgress, pending bool) (in jobprogress.Input) {
+	in.Fraction = -1
 	if p.At.IsZero() {
-		s = "starting…"
+		in.Note = "starting…"
+		if pending {
+			in.Note = "cancelling…"
+		}
 		return
 	}
-	var head string
+	defer func() {
+		if pending {
+			// Hold the bar where it was; the figures no longer describe a
+			// running task.
+			in.Rate, in.EtaMs, in.Note = 0, 0, "cancelling…"
+		}
+	}()
+	if p.Total > 0 {
+		in.Fraction = float32(float64(min(p.Current, p.Total)) / float64(p.Total))
+		in.EtaMs = p.EtaMs
+	}
 	switch {
 	case p.Unit == "bytes" && p.Total > 0:
-		head = fmt.Sprintf("%s / %s", humanize.IBytes(p.Current), humanize.IBytes(p.Total))
+		in.Amount = fmt.Sprintf("%s / %s · %d%%", humanize.IBytes(p.Current), humanize.IBytes(p.Total), int(in.Fraction*100))
 	case p.Unit == "bytes":
-		head = humanize.IBytes(p.Current)
-	case p.Total > 0:
-		pct := int(float64(p.Current) * 100.0 / float64(p.Total))
-		head = fmt.Sprintf("%d%%", pct)
-	default:
-		head = fmt.Sprintf("%d %s", p.Current, p.Unit)
+		in.Amount = humanize.IBytes(p.Current)
+	case p.Unit == "steps" && p.Total > 0:
+		in.Amount = fmt.Sprintf("step %d of %d", p.Current, p.Total)
+	case p.Total == 0:
+		in.Amount = fmt.Sprintf("%s %s", humanize.Comma(int64(p.Current)), p.Unit)
 	}
-	if p.EtaMs > 0 {
-		head = head + " · " + formatDurationMs(p.EtaMs) + " left"
+	if p.Unit != "steps" {
+		// A rate of steps says nothing a reader can use.
+		in.Rate = p.ThroughputPerSec
+		in.RateUnit = p.Unit
 	}
-	if p.Note != "" {
-		head = head + " · " + p.Note
-	}
-	s = head
-	return
-}
-
-func formatDurationMs(ms int64) (s string) {
-	switch {
-	case ms < 1000:
-		s = fmt.Sprintf("%dms", ms)
-	case ms < 60_000:
-		s = fmt.Sprintf("%ds", ms/1000)
-	default:
-		s = fmt.Sprintf("%dm%02ds", ms/60_000, (ms%60_000)/1000)
-	}
+	in.Note = p.Note
 	return
 }

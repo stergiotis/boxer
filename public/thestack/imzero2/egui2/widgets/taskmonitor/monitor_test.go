@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 )
 
 // busFixture wires an in-proc bus + producer + monitor-side api so
@@ -194,10 +195,25 @@ func TestInst_SeedFromSupervisor_PopulatesInflight(t *testing.T) {
 	assert.Zero(t, m.InflightCount(), "no supervisor ⇒ empty seed")
 }
 
-func TestProgressFraction_BoundsAndIndeterminate(t *testing.T) {
-	// Total=0 ⇒ 0; current>=total ⇒ 1; otherwise ratio.
-	assert.EqualValues(t, 0, progressFraction(taskprogress.TaskProgress{Current: 50, Total: 0}))
-	assert.EqualValues(t, 1, progressFraction(taskprogress.TaskProgress{Current: 100, Total: 100}))
-	assert.EqualValues(t, 1, progressFraction(taskprogress.TaskProgress{Current: 200, Total: 100}))
-	assert.InDelta(t, 0.5, progressFraction(taskprogress.TaskProgress{Current: 50, Total: 100}), 0.001)
+func TestProgressInput(t *testing.T) {
+	at := time.Unix(1, 0)
+	line := func(p taskprogress.TaskProgress, pending bool) string {
+		return jobprogress.StatusLine(progressInput(p, pending))
+	}
+	assert.Equal(t, "cancelling…", line(taskprogress.TaskProgress{}, true))
+	assert.Equal(t, "47% · cancelling…",
+		line(taskprogress.TaskProgress{At: at, Current: 470, Total: 1000, Unit: "items", ThroughputPerSec: 240, EtaMs: 2_200}, true))
+	assert.Equal(t, "starting…", line(taskprogress.TaskProgress{}, false))
+	assert.Equal(t, "47% · 240 items/s · 2s left",
+		line(taskprogress.TaskProgress{At: at, Current: 470, Total: 1000, Unit: "items", ThroughputPerSec: 240, EtaMs: 2_200}, false))
+	assert.Equal(t, "1,234 items · 12 items/s · note",
+		line(taskprogress.TaskProgress{At: at, Current: 1234, Unit: "items", ThroughputPerSec: 12, Note: "note"}, false))
+	assert.Equal(t, "1.0 KiB / 2.0 KiB · 50% · 512 B/s",
+		line(taskprogress.TaskProgress{At: at, Current: 1024, Total: 2048, Unit: "bytes", ThroughputPerSec: 512}, false))
+	assert.Equal(t, "step 3 of 5",
+		line(taskprogress.TaskProgress{At: at, Current: 3, Total: 5, Unit: "steps", ThroughputPerSec: 1}, false))
+
+	// Indeterminate tasks draw the animated bar; over-reported ones clamp.
+	assert.EqualValues(t, -1, progressInput(taskprogress.TaskProgress{At: at, Current: 50}, false).Fraction)
+	assert.EqualValues(t, 1, progressInput(taskprogress.TaskProgress{At: at, Current: 200, Total: 100}, false).Fraction)
 }
