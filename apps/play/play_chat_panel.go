@@ -90,7 +90,8 @@ type chatReactionsClaim struct {
 // timestamps because a ClickHouse DateTime arrives as a bare integer that
 // cannot be told from a count (the Timeline's rule), and the flags must be
 // booleans because a string flag would need a vocabulary the contract does
-// not have.
+// not have. A flag may also be the 8-bit integer a ClickHouse Bool or a
+// comparison arrives as (isBooleanType), read as 0-or-not.
 func resolveChatColumns(schema *arrow.Schema) (k chatClaim, reason string) {
 	k = chatClaim{tsCol: -1, senderCol: -1, bodyCol: -1, idCol: -1, replyCol: -1, systemCol: -1,
 		deletedCol: -1, editedCol: -1, statusCol: -1, convCol: -1, selRow: -1}
@@ -114,13 +115,13 @@ func resolveChatColumns(schema *arrow.Schema) (k chatClaim, reason string) {
 		case chatReplyToCol:
 			k.replyCol = ci
 		case chatSystemCol:
-			if f.Type.ID() != arrow.BOOL {
-				return k, fmt.Sprintf("`%s` must be a Bool; it is %s.", f.Name, f.Type)
+			if !isBooleanType(f.Type) {
+				return k, fmt.Sprintf("`%s` must be a Bool or a UInt8; it is %s.", f.Name, f.Type)
 			}
 			k.systemCol = ci
 		case chatDeletedCol:
-			if f.Type.ID() != arrow.BOOL {
-				return k, fmt.Sprintf("`%s` must be a Bool; it is %s.", f.Name, f.Type)
+			if !isBooleanType(f.Type) {
+				return k, fmt.Sprintf("`%s` must be a Bool or a UInt8; it is %s.", f.Name, f.Type)
 			}
 			k.deletedCol = ci
 		case chatEditedAtCol:
@@ -685,15 +686,13 @@ func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, react
 		return idx
 	}
 
-	var (
-		systemArr, deletedArr *array.Boolean
-		editedArr             *array.Timestamp
-	)
-	if k.systemCol >= 0 {
-		systemArr, _ = rec.Column(k.systemCol).(*array.Boolean)
-	}
-	if k.deletedCol >= 0 {
-		deletedArr, _ = rec.Column(k.deletedCol).(*array.Boolean)
+	var editedArr *array.Timestamp
+	flag := func(col int, row int64) bool {
+		if col < 0 {
+			return false
+		}
+		v, set := booleanCellValue(rec, col, row)
+		return set && v
 	}
 	if k.editedCol >= 0 {
 		editedArr, _ = rec.Column(k.editedCol).(*array.Timestamp)
@@ -715,8 +714,7 @@ func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, react
 		if _, dup := ordOfID[idOf(row)]; !dup {
 			ordOfID[idOf(row)] = int32(ord)
 		}
-		system := systemArr != nil && !systemArr.IsNull(int(row)) && systemArr.Value(int(row))
-		if system {
+		if flag(k.systemCol, row) {
 			m.Flags[ord] |= chatview.FlagSystem
 			m.Sender[ord] = -1
 		} else {
@@ -725,7 +723,7 @@ func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, react
 		// Cloned: formatCell may hand back a string aliasing the Arrow
 		// buffer, and the model outlives the frame.
 		m.Body[ord] = strings.Clone(formatCell(rec, k.bodyCol, row))
-		if deletedArr != nil && !deletedArr.IsNull(int(row)) && deletedArr.Value(int(row)) {
+		if flag(k.deletedCol, row) {
 			m.Flags[ord] |= chatview.FlagDeleted
 		}
 		if editedArr != nil && !editedArr.IsNull(int(row)) {

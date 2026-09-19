@@ -186,7 +186,9 @@ is how an attachment reaches the bubble in the first cut: one column per
 attachment kind, `photo@image/png` beside `body`, null where the row has none.
 
 Type gates follow the Timeline's rule: `ts` and `edited_at` must be Arrow
-timestamps; `system` and `deleted` must be booleans; everything else is
+timestamps; `system` and `deleted` must be booleans or `UInt8` — the
+width a ClickHouse `Bool` or a comparison can arrive as, read as
+0-or-not; everything else is
 any type, because the cell formatter is total. A wrong type rejects with the
 contract in the reason, and the reject names the shortest query that
 satisfies it.

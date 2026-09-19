@@ -54,6 +54,17 @@ func chatRec(t *testing.T, cols ...chatCol) arrow.RecordBatch {
 			}
 			arrs = append(arrs, b.NewArray())
 			b.Release()
+		case *arrow.Uint8Type:
+			b := array.NewUint8Builder(alloc)
+			for _, v := range col.vals {
+				if v == nil {
+					b.AppendNull()
+				} else {
+					b.Append(v.(uint8))
+				}
+			}
+			arrs = append(arrs, b.NewArray())
+			b.Release()
 		case *arrow.BooleanType:
 			b := array.NewBooleanBuilder(alloc)
 			for _, v := range col.vals {
@@ -92,7 +103,7 @@ func TestChatAcceptContract(t *testing.T) {
 	assert.Contains(t, reason, "`ts` must be a DateTime")
 
 	_, reason = p.AcceptForChannel(chMain, schemaWith(chatTsField("ts"), strField("sender"), strField("body"), strField("system")), nil)
-	assert.Contains(t, reason, "`system` must be a Bool")
+	assert.Contains(t, reason, "`system` must be a Bool or a UInt8")
 
 	// A glossed body still claims `body`; unclaimed columns are kept in order.
 	claim, reason := p.AcceptForChannel(chMain, schemaWith(chatTsField("ts"), strField("photo@image/png"),
@@ -202,6 +213,26 @@ func TestChatFold(t *testing.T) {
 	assert.Equal(t, []string{"👍", "❤️"}, keysOf)
 	assert.Equal(t, []int32{2, 1}, counts)
 	assert.Equal(t, []string{"ada, cy", "ada"}, who)
+}
+
+// A ClickHouse Bool or comparison can arrive as UInt8; the flags read it as
+// 0-or-not.
+func TestChatFoldUint8Flags(t *testing.T) {
+	u8 := func(n string) arrow.Field { return arrow.Field{Name: n, Type: arrow.PrimitiveTypes.Uint8} }
+	rec := chatRec(t,
+		chatCol{chatTsField("ts"), []any{int64(1), int64(2), int64(3)}},
+		chatCol{strField("sender"), []any{"a", "b", "a"}},
+		chatCol{strField("body"), []any{"x", "y", "z"}},
+		chatCol{u8("system"), []any{uint8(0), uint8(1), nil}},
+		chatCol{u8("deleted"), []any{uint8(1), uint8(0), uint8(0)}},
+	)
+	defer rec.Release()
+	k, reason := resolveChatColumns(rec.Schema())
+	require.Empty(t, reason)
+	m, _, _, _, _, _ := foldChat(rec, k, nil, nil, "", 0)
+	require.NoError(t, m.Validate())
+	assert.Equal(t, []chatview.FlagsE{chatview.FlagDeleted, chatview.FlagSystem, 0}, m.Flags)
+	assert.Equal(t, []int32{0, -1, 0}, m.Sender)
 }
 
 // Without an `id` column the row number is the identity, which is what a
