@@ -202,6 +202,17 @@ ADRs are append-only; supersession is recorded, not deleted.
 
 ## Updates
 
+### 2026-09-19 — the estimator is Holt smoothing, shared (ADR-0247)
+
+`task/estimator` no longer keeps a sliding window. Its throughput and ETA come
+from `hmi/progressest` — Holt's double exponential smoothing with a damped
+ETA, the estimator the CLI progress bar already used — so the figures a task
+publishes match what a widget estimating the same counter shows. The
+emission gate and `Humanize` are unchanged in role; the rate and ETA
+spellings are progressest's. The estimate is no longer keelson-private:
+[ADR-0247](./0247-one-progress-estimator.md) has the consolidation and what
+it costs.
+
 ### 2026-09-09 — the River update of 2026-06-22 is withdrawn (ADR-0223)
 
 The optional durable backend recorded on 2026-06-22 — River (open-core) on

@@ -552,6 +552,14 @@ restart.
 This does not change SD5's routing, only what an input may be. A path-shaped
 recording still goes through `OpenE` and pays nothing for the seam.
 
+### 2026-09-19 — the peaks build's ETA is the shared estimator (ADR-0247)
+
+`BuildProgress` no longer extrapolates a straight line from the build's start.
+Each call samples a `progressest.Tracker` over built against total frames, so
+the ETA is Holt-smoothed and damped like every other progress readout, and a
+`Rate` in frames per second rides beside it. `track.EstimateEtaMs` is removed.
+See [ADR-0247](./0247-one-progress-estimator.md).
+
 ## References
 
 - [ADR-0003](./0003-h3-wasm-bridge.md) — the no-cgo stance and the wasm route for native libraries.
