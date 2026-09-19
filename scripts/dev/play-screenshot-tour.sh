@@ -1139,9 +1139,9 @@ scene_07_keelson_introspection() {
 
 scene_08_series_vocabulary_graph() {
 	desc="The same buffer read as a graph: the client node badged 'computed in play', the honesty caption naming what was actually sent, and the input CTE beneath it as ordinary SQL"
-	# A second launch rather than a click: the dock's tab strip is drawn by
-	# egui_dock on the Rust side and is not in the accessibility tree, so the
-	# FOCUS knob is how a scripted capture reaches another tab.
+	# A second launch rather than a click: the tab is known before the scene
+	# starts, so the FOCUS knob selects it at launch and the trace stays a
+	# single capture. A dock tab can also be clicked by its title (scene 29).
 	senv=(BOXER_PLAY_FOCUS_GRAPH=1 BOXER_PLAY_OBSERVE=scored)
 	sql="WITH
   base AS (
@@ -1767,13 +1767,11 @@ scene_29_history_two_runs() {
 	desc="History — more than one run in the list, which needs a second Run and so cannot be seeded at launch"
 	senv=(BOXER_PLAY_FOCUS_TABLE=1)
 	sql="SELECT t, count() AS n FROM default.planes_mercator_sample100 WHERE t != '' GROUP BY t ORDER BY n DESC LIMIT 20"
-	# The dock's tab strip is custom-painted and carries no accessibility nodes,
-	# so a tab cannot be resolved by name — this is the ladder's last rung, and
-	# the honest use for it. The coordinate holds because the window size is
-	# pinned; it is also why the BOXER_PLAY_FOCUS_* knobs still earn their keep
-	# for body tabs, which they can select at launch without any of this.
+	# A dock tab is a button named by its title, so it resolves by name. The
+	# BOXER_PLAY_FOCUS_* knobs remain the cheaper way to select a body tab that
+	# is known at launch; this one has to be selected after the second run.
 	steps='{"do":"click","name":"Run","comment":"a second run, so History has two entries"}
-{"do":"click","x":164,"y":149,"comment":"History tab — no node, so by position"}
+{"do":"click","name":"History","role":"button","comment":"the History tab of the editor leaf"}
 {"do":"capture","text":"29_history_two_runs","settleMs":800}'
 }
 

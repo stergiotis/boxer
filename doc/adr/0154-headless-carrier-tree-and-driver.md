@@ -329,6 +329,18 @@ carrying the pass number would let a driver ask for "a tree no older than my
 last input" and drop the pause; it is a host-side change, deferred until the
 pause is shown to cost something.
 
+### 2026-09-19 — dock tabs resolve by name; the first limit under Status no longer holds
+
+§Status records that `egui_dock`'s tab strip emits no AccessKit nodes, so a
+dock tab resolves by position only. The host has since named them: its
+`TabViewer::on_tab_button` registers each tab's title as a button label on the
+response `egui_dock` hands back, so `{"do":"click","name":"History",
+"role":"button"}` selects a tab, and an AccessKit click is enough — no pointer
+rung. The scenes that still clicked tabs by coordinate now anchor them; the
+tally scene's had already drifted about 12 px from where the tabs are drawn,
+still inside the tab and with nothing to say so. The `BOXER_PLAY_FOCUS_*` knobs
+stay the cheaper choice for a tab known at launch.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless host

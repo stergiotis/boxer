@@ -81,21 +81,21 @@ cat >"$trace" <<EOF
 {"do":"click","value":"$FILE","role":"label","pointer":true,"nth":0,"settleMs":300}
 {"do":"wait","valueContains":"$FILE  ·","role":"label","settleMs":1500,"comment":"the preview header names the file and its size"}
 {"do":"capture","text":"tally-preview","comment":"pane A inside $DIR with $FILE selected, its preview below"}
-{"do":"click","x":465,"y":523,"settleMs":400,"comment":"the Info tab of the bottom leaf — egui_dock tabs are not in the accessibility tree, so the tab strip is hit by position; the coordinates are for the default 1400x1000 window and the layout as committed (Preview 388, Info 465, History 540, Diff 613 at y 523)"}
+{"do":"click","name":"Info","role":"button","settleMs":400,"comment":"the Info tab of the bottom leaf — a dock tab is a button named by its title, so it resolves wherever the layout puts it"}
 {"do":"wait","value":"content_hash","role":"label","settleMs":1500,"comment":"the Info grid carries the recorded BLAKE3 hash"}
 {"do":"capture","text":"tally-info","comment":"the Info tab: the entry's attributes from fs()"}
 {"do":"note","text":"--- History: the selected path across every snapshot of the mount ---"}
-{"do":"click","x":540,"y":523,"settleMs":400}
+{"do":"click","name":"History","role":"button","settleMs":400}
 {"do":"wait","valueContains":" across ","role":"label","settleMs":1500,"comment":"the history header: N snapshot(s) carry the path"}
 {"do":"capture","text":"tally-history","comment":"the History tab: timeline flags and the versions table"}
 {"do":"note","text":"--- Diff: point pane B at the other mount and compare pane A's directory against it ---"}
 {"do":"click","name":"B","role":"button","settleMs":300,"comment":"the Mounts clicks now address pane B"}
 {"do":"click","contains":"$MOUNT2  ·","role":"button","settleMs":600}
-{"do":"click","x":613,"y":523,"settleMs":400}
+{"do":"click","name":"Diff","role":"button","settleMs":400}
 {"do":"wait","valueContains":"added · ","role":"label","settleMs":2500,"comment":"the diff summary: counts of added / removed / modified"}
 {"do":"capture","text":"tally-diff","comment":"the Diff tab: pane A's directory against pane B's snapshot, coloured by change"}
 {"do":"note","text":"--- Find: a name search under pane A's directory ---"}
-{"do":"click","x":675,"y":523,"settleMs":400}
+{"do":"click","name":"Find","role":"button","settleMs":400}
 {"do":"click","name":"A","role":"button","settleMs":300,"comment":"search in pane A's directory, not B's"}
 {"do":"focus","role":"text_input","nth":3,"comment":"the find pattern box. Measured, not reasoned: with the Find tab up the accessibility tree lists the bottom leaf's inputs first and in reverse (needle, min, ext, pattern), then the pane filters"}
 {"do":"type","role":"text_input","nth":3,"text":"$FINDPATTERN","settleMs":200}
@@ -103,11 +103,11 @@ cat >"$trace" <<EOF
 {"do":"wait","value":"1 result(s) in this directory","role":"label","settleMs":1500,"comment":"the pattern matched exactly the one ADR"}
 {"do":"capture","text":"tally-find","comment":"the Find tab: results of the name search"}
 {"do":"note","text":"--- Du: directory totals and the treemap ---"}
-{"do":"click","x":740,"y":523,"settleMs":400}
+{"do":"click","name":"Du","role":"button","settleMs":400}
 {"do":"wait","valueContains":"Disk usage","role":"label","settleMs":2500}
 {"do":"capture","text":"tally-du","comment":"the Du tab: the one-pass du table and the file treemap"}
 {"do":"note","text":"--- Problems: unreadable entries, and the audit on demand ---"}
-{"do":"click","x":815,"y":523,"settleMs":400}
+{"do":"click","name":"Problems","role":"button","settleMs":400}
 {"do":"wait","valueContains":"unreadable entries","role":"label","settleMs":1500}
 {"do":"capture","text":"tally-problems","comment":"the Problems tab"}
 EOF
