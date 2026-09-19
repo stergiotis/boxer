@@ -109,3 +109,39 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
   rows with the governor and the round as columns; the floor, launched twice
   a round, is kept once.
 - **Run dir:** [runs/2026-09-19-governor/](./runs/2026-09-19-governor/)
+
+## 2026-09-19 — after the bulk slice marshaller — the first finding is closed; the Go side of the shipped arm is about 40 % less in the host
+
+- **Build under test:** boxer at the commit that adds this entry: the FFFI
+  runtime writes a slice argument's elements in one call where the wire's
+  byte order is the machine's, and in chunks where it is not. Hosts not
+  rebuilt; the bytes on the wire are unchanged, which the runtime's tests pin.
+- **Environment:** as the first run; a browser open, load average about 3.6.
+- **Attempted:** the cells the change can move — both hosts, all three arms
+  at 5 000 particles, the mesh arm at 20 000, the floor — two launches each.
+  All 20 launches completed.
+- **Outcome:** the Go side of `segments-mesh` at 5 000 particles is 3.6 to
+  5.0 ms over four launches, against 6.4 to 8.2 ms in the governor run's four
+  launches of the same cell on the build before; at 20 000 particles 18 to
+  24 ms against 28 to 37 ms. `segments-tessellated` reads the same as the
+  mesh arm on the Go side, as it should. `line-per-segment`, which sends no
+  slices, is where it was: 42 to 47 ms. Bytes written, dispatch and
+  rasterisation are unchanged. Under `go test`, where nothing is written to a
+  pipe, the same frame went from 7.2 ms to 2.6 ms at 10 000 particles; the
+  host shows less of it because there `Draw` also pays for the pipe.
+- **Findings:**
+  - **[note boxer-toolbelt → proposed:fffi2-slice-marshalling]** closes the
+    first run's S2 finding: the cost was one `io.Writer.Write` per element,
+    and the remedy a bulk half of the writer interface, optional so that an
+    outside implementation keeps compiling (evidence:
+    runs/2026-09-19-bulk-slices/environment.md)
+  - **[pain boxer-toolbelt → proposed:fffi2-slice-marshalling / performance-efficiency.time-behaviour / S4]**
+    the reading side, `Get*SliceRetr`, still reads a slice an element at a
+    time; nothing on the draw path uses it, so nothing here measured it
+    (evidence: none — read from the code)
+- **Solution size:** about 250 lines across the runtime, its two
+  `unsafeperf` views and the typed builder's forwarders, and 230 lines of
+  tests.
+- **Results:** [results.tsv](./runs/2026-09-19-bulk-slices/results.tsv) — 20
+  rows with the round as a column.
+- **Run dir:** [runs/2026-09-19-bulk-slices/](./runs/2026-09-19-bulk-slices/)

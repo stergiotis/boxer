@@ -13,11 +13,11 @@ status: draft
 
 ## 0 The claim, and how to cite it
 
-**On one machine and one launch per cell, painting a flow layer's trails as
-one `paintLine` opcode per segment costs the Go side about 1 µs per segment —
-44 ms a frame at 5 000 particles (43 000 segments), more than a 30 Hz tick
-allows — where one `paintSegments` for the layer costs 6 to 10 ms for the same
-frame; the batched opcode was needed.** The per-line arm also writes 32 bytes
+**On one machine, painting a flow layer's trails as one `paintLine` opcode per
+segment costs the Go side about 1 µs per segment — 42 to 47 ms a frame at
+5 000 particles (43 000 segments), more than a 30 Hz tick allows — where one
+`paintSegments` for the layer costs 3.6 to 5 ms for the same frame; the
+batched opcode was needed.** The per-line arm also writes 32 bytes
 per segment across the FFFI boundary against 20, and its opcode dispatch in
 the host is one and a third to nearly three times as long. These hold on both
 hosts, because none of it is the host's rasteriser.
@@ -32,7 +32,7 @@ free.
 
 | At 5 000 particles, ~43 000 segments, medians per frame | `segments-mesh` | `segments-tessellated` | `line-per-segment` — the baseline decided against |
 | --- | --- | --- | --- |
-| Go side of the layer, cpu host / wgpu host | 6.2 ms / 10.4 ms | 7.3 ms / 9.1 ms | 43.8 ms / 44.3 ms |
+| Go side of the layer, range over two launches on each host | 3.6–5.0 ms | 5.0–5.2 ms | 42–47 ms |
 | Bytes written, whole frame | 868 kB | 870 kB | 1 389 kB |
 | Host opcode dispatch, whole frame, cpu / wgpu (floor 0.8 ms) | 5.6 ms / 9.0 ms | 5.3 ms / 6.8 ms | 8.6 ms / 10.2 ms |
 | Rasterise, whole frame, **cpu host** (floor 3.1 ms) | 13.5 ms | 37.7 ms | 37.8 ms |
@@ -40,44 +40,48 @@ free.
 
 **What this trial does not say.**
 
-- **Not "the flow layer costs 44 ms a frame."** That figure is the
+- **Not "the flow layer costs 45 ms a frame."** That figure is the
   `line-per-segment` arm, a paint path that exists only so this trial could
   measure what the ADR decided against.
 - **Not a frame rate.** The rows are different stages of one frame, some for
   the layer alone and some for the whole frame with the gallery around it;
   they were not measured as a sum and overlap in time across two processes.
   What they do support: on this machine the shipped arm's stages add to about
-  25 ms at 5 000 particles on the cpu host and to about 50 ms at 10 000, so
-  on a CPU rasteriser of this class a 30 Hz tick holds to roughly 5 000
+  24 ms at 5 000 particles on the cpu host, most of it the rasteriser, so on
+  a CPU rasteriser of this class a 30 Hz tick holds to roughly 5 000
   particles; on the wgpu host the Go side and the dispatch are the limit, not
-  the GPU, and they pass 33 ms between 10 000 and 20 000.
+  the GPU, and at 20 000 particles they are about 20 ms each.
 - **Not a statement about tessellation cost.** The hosts' `tess_p50_us`
   column disagrees between the two hosts for identical work (3.0 ms against
   11.7 ms at 20 000 particles in the mesh arm) and is not monotonic in the
   count. It is in the results and is not used for any claim here.
-- **Not the layer's own efficiency.** About 60 % of the Go side's time in
-  every arm is FFFI slice marshalling, one element per write (see the
-  logbook). A marshaller that writes a slice at once would move every Go-side
-  figure in this table, the shipped arm's most.
+- **Not the Go side's figures of the first run.** The first run found about
+  60 % of the Go side of the two `paintSegments` arms to be FFFI slice
+  marshalling, an element per write. The runtime now writes a slice's
+  elements in one call, and the Go-side row above was measured after that;
+  the first run's `results.tsv` holds that row's figures for the build before
+  and they are not the system's cost any more. The per-line arm sends no
+  slices and did not move. What is left of the Go side in a host is the layer
+  building its batch and the pipe it is written to.
 - **Not the desktop host, and not a remote viewer.** Neither was measured.
 - **Not reviewed, and replicated only in part.** One machine — a low-power
-  APU — that was not idle; one launch per cell in the table above. A second
-  run repeated five of the cells four times each: launches of one cell differ
-  by about a tenth of the median, the CPU frequency governor makes no
-  difference inside that, and both claims above held in every launch (the
-  [logbook](./logbook.md) has the ranges). Differences between neighbouring
-  counts of one arm are inside that spread — the wgpu mesh arm's Go side
-  reads 10.4 ms at 5 000 particles in the table and 6.4 to 6.7 ms in the
-  repeats. The claims rest on differences of three to seven times, not on
-  those.
+  APU — that was not idle. The dispatch and rasterisation rows are one launch
+  per cell, from the first run; the Go-side row is two launches per host. A
+  second run repeated five of the first run's cells four times each: launches
+  of one cell differ by about a tenth of the median, the CPU frequency
+  governor makes no difference inside that, and both claims above held in
+  every launch (the [logbook](./logbook.md) has the ranges). Differences
+  between neighbouring counts of one arm are inside that spread. The claims
+  rest on differences of three to ten times, not on those.
 - **Not the dispatch figure at 20 000 particles.** It is bimodal between
   launches — about 12 ms or about 25 ms for the same cell — for a reason not
   found.
 
-**If you need a number**, take it from the first run's
-[results.tsv](./runs/2026-09-19-first-run/results.tsv) or the repeats'
-[results.tsv](./runs/2026-09-19-governor/results.tsv), which hold raw
-microseconds and bytes per cell. **No figure from this trial travels without
+**If you need a number**, take it from a run's `results.tsv` — the
+[first run](./runs/2026-09-19-first-run/results.tsv) for dispatch, bytes and
+rasterisation, the [repeats](./runs/2026-09-19-governor/results.tsv) for the
+spread, and the run [after the marshaller change](./runs/2026-09-19-bulk-slices/results.tsv)
+for the Go side — which hold raw microseconds and bytes per cell. **No figure from this trial travels without
 the pair of arms it compares and the host it was measured on.**
 
 ## 1 Question and scope

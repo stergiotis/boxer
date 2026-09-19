@@ -570,6 +570,15 @@ and states what that is worth. What this record takes from it:
 - **Still unknown:** the desktop host, and what an animating layer costs a
   remote viewer on the mesh lane.
 
+### 2026-09-19 — the marshalling finding was taken up
+
+The FFFI runtime now writes a slice argument's elements in one call. The
+trial's Go-side figures quoted in the entry above are of the build before:
+after it, one `paintSegments` costs the Go side 3.6 to 5 ms at 5 000 particles
+in a host, against 42 to 47 ms for a `paintLine` per segment, which sends no
+slices and did not move. The decisions of that entry stand, the first one by
+a wider margin; the trial's §0 has the current figures.
+
 ## References
 
 - [Drawing a large vector field on a map — what the state of the art does, and what it had to fix](../adr-background-work/vector-field-flow-visualization-survey.md)
