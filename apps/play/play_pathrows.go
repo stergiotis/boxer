@@ -294,7 +294,14 @@ func (inst *rowFS) intern(p string, row int64, e rowEntry) {
 	}
 }
 
+// count tallies the tree once it is built, and sorts every directory's
+// children while it is there. sortedChildren fills its cache on first use,
+// which was safe while only the render thread read the tree; the browser's
+// filter now reads it from a job's goroutine as well (ADR-0200, 2026-09-19),
+// so the cache is filled here, before the tree is handed to anyone, and every
+// read after it is a read.
 func (inst *rowFS) count(n *rowNode) {
+	n.sortedChildren()
 	for _, kid := range n.children {
 		if kid.isDir {
 			inst.dirs++
