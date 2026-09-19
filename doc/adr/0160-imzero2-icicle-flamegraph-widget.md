@@ -543,6 +543,35 @@ Built: the widget, and the `play` panel of SD9 (2026-08-02) — SD9 was written
 against the panel rather than ahead of it, so it records what the binding
 conceded rather than proposing it.
 
+## Updates
+
+### 2026-09-19 — the default colouring follows the branch (SD6)
+
+By-label, the SD6 default, made the picture look noisy: a child's colour had no
+relation to its parent's, so the eye saw yellow and deep red alternating down
+one call path and could not follow a subtree by colour. What the hash buys,
+one function's colour across two captures, matters when comparing profiles,
+not when first reading a hierarchy. And the `play` panel mostly shows
+hierarchies that are not profiles.
+
+A third scheme, **by branch** (`ColorByBranch`), is now the zero value and so
+the default in the widget, the demo and the `play` panel. It still samples the
+same Lajolla flame band. The trunk (the chain down to the first fan-out) sits
+at the middle of the band. The heads of the branches below that fan-out are
+spread across it by a golden-ratio sequence over sibling order. Below a head,
+the first sibling keeps its parent's colour and the rest step away on
+alternating sides. The step is scaled by the square root of the parent's share
+of its branch's value, not by its depth. A first cut decayed the step per
+level, and then per fan-out. Both left the wide subtrees further down with too
+small a step to tell apart, because narrow siblings higher up had already
+used it up.
+
+What it costs: a frame's colour depends on its position, so it changes when
+the order or the pruning changes, and one function has different colours at
+two call sites. By-label and by-depth stay as options, unchanged. The
+hairline gap stays as well: under by-branch, siblings deep in a small subtree
+are close in colour by design.
+
 ## References
 
 ### Method sources (clean room — papers and public documentation only)
