@@ -1,8 +1,11 @@
-package progressbar
+package progressest
 
 import (
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 func FormatDuration(d time.Duration) string {
@@ -62,4 +65,41 @@ func FormatBytes(b int64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+// FormatRemaining is the ETA as a readout clause: "<1s left", "2m05s left",
+// "~15m left" — FormatETA's precision with the sub-second case spelled out
+// rather than shown as "0s".
+func FormatRemaining(d time.Duration) string {
+	if d < time.Second {
+		return "<1s left"
+	}
+	return FormatETA(d) + " left"
+}
+
+// FormatRate spells a rate for a readout that moves: IEC bytes for the unit
+// "bytes" ("18 MiB/s"), otherwise an SI magnitude and the unit ("1.2 k rows/s",
+// "240 items/s", "0.4 frames/s"; "1.2 k/s" without a unit). Only the magnitude
+// matters at a glance, so digits past the first decimal are dropped. Empty for
+// a rate that is not positive.
+func FormatRate(rate float64, unit string) string {
+	if rate <= 0 {
+		return ""
+	}
+	if unit == "bytes" {
+		return humanize.IBytes(uint64(rate)) + "/s"
+	}
+	var mag string
+	if rate < 1 {
+		// SIWithDigits would spell 0.4 as "400 m" — milli-items.
+		mag = fmt.Sprintf("%.1f", rate)
+	} else {
+		// SIWithDigits pads a bare magnitude with the space its (empty) unit
+		// would have taken; trimming keeps "500 rows/s" from doubling it.
+		mag = strings.TrimSpace(humanize.SIWithDigits(rate, 1, ""))
+	}
+	if unit == "" {
+		return mag + "/s"
+	}
+	return mag + " " + unit + "/s"
 }

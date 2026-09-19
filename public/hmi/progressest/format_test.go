@@ -1,4 +1,4 @@
-package progressbar
+package progressest
 
 import (
 	"testing"
@@ -71,6 +71,45 @@ func TestFormatBytes(t *testing.T) {
 		got := FormatBytes(tc.b)
 		if got != tc.want {
 			t.Errorf("FormatBytes(%d) = %q; want %q", tc.b, got, tc.want)
+		}
+	}
+}
+
+func TestFormatRemaining(t *testing.T) {
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "<1s left"},
+		{900 * time.Millisecond, "<1s left"},
+		{2 * time.Second, "2s left"},
+		{125 * time.Second, "2m05s left"},
+		{15 * time.Minute, "~15m left"},
+	}
+	for _, c := range cases {
+		if got := FormatRemaining(c.d); got != c.want {
+			t.Errorf("FormatRemaining(%v) = %q, want %q", c.d, got, c.want)
+		}
+	}
+}
+
+func TestFormatRate(t *testing.T) {
+	cases := []struct {
+		rate float64
+		unit string
+		want string
+	}{
+		{0, "rows", ""},
+		{-3, "rows", ""},
+		{0.4, "frames", "0.4 frames/s"},
+		{240, "items", "240 items/s"},
+		{1_200_000, "rows", "1.2 M rows/s"},
+		{1_500, "", "1.5 k/s"},
+		{18 * 1024 * 1024, "bytes", "18 MiB/s"},
+	}
+	for _, c := range cases {
+		if got := FormatRate(c.rate, c.unit); got != c.want {
+			t.Errorf("FormatRate(%v, %q) = %q, want %q", c.rate, c.unit, got, c.want)
 		}
 	}
 }

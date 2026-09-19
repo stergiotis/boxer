@@ -1,4 +1,4 @@
-package progressbar
+package progressest
 
 import "time"
 
@@ -13,8 +13,9 @@ const (
 // plus a display-dampening layer that prevents the shown ETA from oscillating.
 //
 // It has no I/O and no concurrency story of its own — callers drive it with
-// Update and read back SmoothedRate / SmoothedTrend / EstimateETA. The CLI
-// renderer and the egui2 demo both use it this way.
+// Update and read back SmoothedRate / SmoothedTrend / EstimateETA. A caller
+// holding a job's reported counters rather than a sampling loop of its own
+// wants [Tracker], which decides when to anchor, re-anchor and fold.
 //
 // Use NewEstimator to construct one with tqdm/Rich-style defaults.
 type Estimator struct {

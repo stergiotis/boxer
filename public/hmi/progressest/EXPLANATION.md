@@ -8,18 +8,23 @@ status: draft
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
-# Progress Bar ETA Estimation
+# Progress ETA and rate estimation
 
 ## Background
 
-The initial implementation used a sliding-window linear rate estimator (ring
-buffer of 20 samples, computing Δcount/Δtime between oldest and newest). This
-approach has two drawbacks:
+This estimator started inside the CLI progress bar (`hmi/progressbar`), where
+it replaced a sliding-window linear rate estimator (a ring buffer of samples,
+Δcount/Δtime between oldest and newest). That approach has two drawbacks:
 
 1. **No trend awareness:** it cannot anticipate acceleration or deceleration.
    During TCP slow-start or cache warm-up phases, the ETA lags reality.
 2. **Window-size tradeoff:** a small window reacts fast but is noisy; a large
    window is smooth but sluggish.
+
+The keelson task estimator kept a sliding window of its own, and several
+job producers extrapolated a straight line from their start time. ADR-0247
+moved the estimator out of the terminal package so every progress readout
+uses this one; the CLI bar re-exports it under its old names.
 
 ## How it works
 
@@ -48,9 +53,28 @@ forecasting.
 
 ### Sampling
 
-The estimator is updated at each render tick (~250 ms), not on every `Tick()` /
-`Add()` call. This decouples estimation frequency from processing throughput
-and makes α/β behavior predictable regardless of workload.
+The CLI bar updates the estimator at each render tick (~250 ms), not on every
+`Tick()` / `Add()` call. This decouples estimation frequency from processing
+throughput and makes α/β behavior predictable regardless of workload.
+
+A caller that holds a job's counters instead of a sampling loop drives it
+through `Tracker`, which is called whenever the caller looks — per frame on
+a render thread, per report on a producer — and decides what each look
+means:
+
+- The first observation anchors; a counter that goes **backwards** is a new
+  run and re-anchors, so the old run's level does not bias the new one.
+- An **unchanged** counter is not folded in until `StallAfter` (1 s by
+  default) has passed. A frame loop re-reads the same counter many times
+  between reports; folding each read would drag the rate to zero. After
+  `StallAfter`, the stall is real and is folded in as a zero-rate sample.
+- A **changed total** does not re-anchor: some producers refine their total
+  while the rate holds. A caller whose total change means a new phase calls
+  `Reset`.
+- Rate and ETA both wait for the **second** sample, so they appear together.
+
+Callers whose samples carry their own identity (a tick with a server-side
+clock) gate the estimator themselves rather than use `Tracker`.
 
 ### Display Dampening
 
@@ -79,8 +103,10 @@ from Harrison et al. (UIST 2007) that coarser granularity feels faster:
 
 ## Invariants
 
-- Smoothing state is only mutated at render-tick boundaries, so `α` / `β`
-  behaviour is independent of upstream throughput.
+- Smoothing state is mutated only when a caller samples — a render tick, or a
+  `Tracker` observation whose counter moved or stalled — and never for
+  samples closer than 50 ms, so `α` / `β` behaviour does not scale with how
+  often a producer reports.
 - Monotonic-clamping never increases the displayed ETA by less than the 10%
   threshold; decreases are always immediate.
 

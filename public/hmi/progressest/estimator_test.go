@@ -1,4 +1,4 @@
-package progressbar
+package progressest
 
 import (
 	"math"
