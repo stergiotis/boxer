@@ -203,6 +203,9 @@ func (idleTimeoutError) Temporary() bool { return true }
 
 var errIdleTimeout error = idleTimeoutError{}
 
+// frameGrace is how long a frame that has started may take to arrive in full.
+const frameGrace = 15 * time.Second
+
 // readBinary returns the next binary message, answering ping frames and
 // reassembling fragments on the way. Control frames the peer sends between
 // fragments are handled where they arrive, as the RFC requires.
@@ -217,6 +220,9 @@ func (inst *wsConn) readBinary(deadline time.Time) (payload []byte, err error) {
 	var assembling bool
 	for {
 		if !assembling {
+			if err = inst.conn.SetReadDeadline(deadline); err != nil {
+				return nil, eh.Errorf("unable to set read deadline: %w", err)
+			}
 			// Wait for the next frame without consuming it: a deadline that
 			// expires here leaves the stream at a frame boundary, so the
 			// connection is still usable — the case an idle pause relies on.
@@ -226,6 +232,17 @@ func (inst *wsConn) readBinary(deadline time.Time) (payload []byte, err error) {
 					return nil, errIdleTimeout
 				}
 				return nil, err // io.EOF passes through for the caller's loop
+			}
+		}
+		// A frame has started, so it is read to its end. The caller's deadline
+		// bounds the wait *for* a frame; applied to the frame's body it turns
+		// a short idle pause into a truncated read and an unusable stream —
+		// which a video keyframe of a few megabytes, from a host that is busy
+		// encoding it, reliably produces. frameGrace bounds a peer that stops
+		// mid-frame instead.
+		if grace := time.Now().Add(frameGrace); grace.After(deadline) {
+			if err = inst.conn.SetReadDeadline(grace); err != nil {
+				return nil, eh.Errorf("unable to set read deadline: %w", err)
 			}
 		}
 		var b [2]byte

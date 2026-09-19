@@ -28,8 +28,8 @@ import (
 // Step is one line of a trace.
 type Step struct {
 	// Do is the verb: click, hover, drag, type, set_value, focus,
-	// scroll_into_view, key, scroll, wait, tree, capture, cadence, resize,
-	// note, sleep.
+	// scroll_into_view, key, scroll, wait, read, expect, tree, capture,
+	// cadence, resize, note, sleep.
 	Do string `json:"do"`
 
 	// Anchor (ADR-0127 §SD4). Id wins; then name/contains plus role; nth
@@ -67,6 +67,35 @@ type Step struct {
 	ToY        float32 `json:"toY,omitempty"`
 	Steps      int     `json:"steps,omitempty"`
 	DurationMs int     `json:"durationMs,omitempty"`
+
+	// XFrom and YFrom name numbers an earlier `read` bound; they are added to
+	// X, Y (and to ToX, ToY of a drag) of a coordinate step. It is how a trace
+	// aims into a painter-only canvas whose origin the app prints: read the
+	// origin, then give offsets into the canvas. Addition is the whole of it
+	// (ADR-0248 §SD2); an anchored step ignores them.
+	XFrom string `json:"xFrom,omitempty"`
+	YFrom string `json:"yFrom,omitempty"`
+
+	// Pattern is `read`'s regular expression (RE2). It is matched against the
+	// anchored node's value — or its name with "on":"name" — and every named
+	// group, (?P<zoom>[\d.]+), is bound for the rest of the run. `read` polls
+	// like `wait` until the pattern matches.
+	Pattern string `json:"pattern,omitempty"`
+	On      string `json:"on,omitempty"`
+
+	// `expect` compares the name in Of — less the name in Minus, when given,
+	// which is also how two readings are compared — with a constant. Eq is
+	// exact, Approx is within Tol, Min and Max bound it; several may be given
+	// and all must hold. Is and Matches compare the captured text instead.
+	Of      string   `json:"of,omitempty"`
+	Minus   string   `json:"minus,omitempty"`
+	Eq      *float64 `json:"eq,omitempty"`
+	Approx  *float64 `json:"approx,omitempty"`
+	Tol     float64  `json:"tol,omitempty"`
+	Min     *float64 `json:"min,omitempty"`
+	Max     *float64 `json:"max,omitempty"`
+	Is      string   `json:"is,omitempty"`
+	Matches string   `json:"matches,omitempty"`
 
 	// Pointer makes an anchored `click` press the resolved node's bounds
 	// centre with a synthetic pointer instead of sending it an AccessKit
@@ -163,6 +192,15 @@ func (inst Step) describe() (s string) {
 	if inst.Text != "" {
 		b.WriteString(" " + strconv.Quote(inst.Text))
 	}
+	if inst.Pattern != "" {
+		b.WriteString(" /" + inst.Pattern + "/")
+	}
+	if inst.Of != "" {
+		b.WriteString(" " + inst.Of)
+		if inst.Minus != "" {
+			b.WriteString(" - " + inst.Minus)
+		}
+	}
 	return b.String()
 }
 
@@ -222,7 +260,11 @@ type RunOptions struct {
 	// Out receives what a `tree` step prints; nil means os.Stdout. Separate
 	// from Logger because it is the run's result rather than its narration: a
 	// caller reads it to decide the next step.
-	Out    io.Writer
+	Out io.Writer
+	// Vars carries what `read` binds. Nil means a fresh set for this run; a
+	// caller that runs a trace in fragments, or wants the readings back to do
+	// its own arithmetic on them, passes one in and keeps it.
+	Vars   *Vars
 	Logger zerolog.Logger
 }
 
@@ -237,6 +279,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 	}
 	if opts.Out == nil {
 		opts.Out = os.Stdout
+	}
+	if opts.Vars == nil {
+		opts.Vars = NewVars()
 	}
 	var tree *TreeSnapshot
 	// stale marks the cached tree as needing a refresh before the next anchor
@@ -274,6 +319,26 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 					Errorf("wait failed: %w", err)
 			}
 			stale = true // the tree it settled on is newer than any we cached
+			tree = nil
+			log.Info().Msg(st.describe())
+			continue
+		}
+
+		// `read` polls for the same reason `wait` does: what it reads is
+		// usually the consequence of the step before it, a pass or more away.
+		if st.Do == "read" {
+			if !st.hasAnchor() {
+				return eb.Build().Int("step", i+1).Errorf("read needs an anchor")
+			}
+			if opts.DryRun {
+				log.Info().Msg("dry run: " + st.describe())
+				continue
+			}
+			if err = readInto(c, st, opts); err != nil {
+				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
+					Errorf("read failed: %w", err)
+			}
+			stale = true
 			tree = nil
 			log.Info().Msg(st.describe())
 			continue
@@ -322,7 +387,7 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 		}
 		// Every verb but a pure observation can move the UI, so the cached
 		// tree is assumed stale unless the verb only read.
-		if st.Do != "wait" && st.Do != "note" && st.Do != "capture" && st.Do != "tree" {
+		if st.Do != "wait" && st.Do != "note" && st.Do != "capture" && st.Do != "tree" && st.Do != "expect" {
 			stale = true
 		}
 		if !settleBefore(st.Do) && settle > 0 {
@@ -381,6 +446,47 @@ func waitFor(c *Client, st Step, opts RunOptions) (err error) {
 	}
 }
 
+// readInto polls the tree until the step's anchor resolves and its pattern
+// matches, then binds the pattern's named groups.
+func readInto(c *Client, st Step, opts RunOptions) (err error) {
+	re, err := compilePattern(st.Pattern)
+	if err != nil {
+		return err
+	}
+	if st.On != "" && st.On != "value" && st.On != "name" {
+		return eb.Build().Str("on", st.On).Errorf("read \"on\" is \"value\" or \"name\"")
+	}
+	deadline := time.Now().Add(opts.Timeout)
+	var last error
+	for attempt := 0; ; attempt++ {
+		var snap *TreeSnapshot
+		if snap, err = c.Tree(opts.Timeout); err != nil {
+			return err
+		}
+		node, e := Resolve(snap, st.locator())
+		if e != nil {
+			last = e
+		} else {
+			text := node.GetValue()
+			if st.On == "name" {
+				text = node.GetName()
+			}
+			if opts.Vars.bindMatch(re, text) {
+				return nil
+			}
+			last = eb.Build().Str("read", text).Str("pattern", st.Pattern).
+				Errorf("the node's text does not match the pattern")
+		}
+		if time.Now().After(deadline) {
+			return eb.Build().Int("attempts", attempt+1).
+				Stringer("timeout", opts.Timeout).Errorf("nothing to read before the timeout: %w", last)
+		}
+		if err = c.Idle(150 * time.Millisecond); err != nil {
+			return err
+		}
+	}
+}
+
 // Defaults for a `drag` step that sets neither: sixteen moves over 320 ms is
 // a brisk pan — slow enough that a 20 fps host sees a handful of dragged
 // frames, fast enough not to dominate a trace.
@@ -400,7 +506,7 @@ func fmtPoint(x, y float32) string {
 // last rung of the ladder and the only way to reach a painter-only widget.
 func requiresAnchor(do string) bool {
 	switch do {
-	case "type", "set_value", "focus", "scroll_into_view", "wait":
+	case "type", "set_value", "focus", "scroll_into_view", "wait", "read":
 		return true
 	default:
 		return false
@@ -439,9 +545,11 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		}
 		// The coordinate rung: a painter-only target with no anchor, or an
 		// anchored node actuated where it was drawn — see Step.Pointer.
-		x, y := st.X, st.Y
+		var x, y float32
 		if node != nil {
 			x, y = nodeCentre(node)
+		} else if x, y, err = opts.Vars.offset(st, st.X, st.Y); err != nil {
+			return err
 		}
 		return c.PointerClick(x, y, button, st.Count, st.Modifiers)
 	case "hover":
@@ -454,7 +562,11 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		// Without this verb no hover affordance in any imzero2 app was
 		// reachable from a trace at all, which is how a heatmap shipped with
 		// none: the tour could click a cell but never point at one.
-		return c.MoveMouse(st.X, st.Y)
+		x, y, e := opts.Vars.offset(st, st.X, st.Y)
+		if e != nil {
+			return e
+		}
+		return c.MoveMouse(x, y)
 	case "type":
 		// Focus first: text goes to whatever egui thinks is focused, which
 		// without this is whatever the previous step left.
@@ -482,6 +594,13 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		if node != nil {
 			x0, y0 = nodeCentre(node)
 			x1, y1 = x0+st.X, y0+st.Y
+		} else {
+			if x0, y0, err = opts.Vars.offset(st, x0, y0); err != nil {
+				return err
+			}
+			if x1, y1, err = opts.Vars.offset(st, x1, y1); err != nil {
+				return err
+			}
 		}
 		steps, dur := st.Steps, st.DurationMs
 		if steps <= 0 {
@@ -514,6 +633,8 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 			Uint32("width", done.GetWidth()).Uint32("height", done.GetHeight()).
 			Msg("captured")
 		return nil
+	case "expect":
+		return opts.Vars.expect(st)
 	case "cadence":
 		return c.SetCadence(st.Cadence)
 	case "resize":

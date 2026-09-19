@@ -138,3 +138,17 @@ func TestParseStepsReadsAnArrayAndChecksTheVerb(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no \"do\" verb")
 }
+
+func TestParseTraceReadAndExpect(t *testing.T) {
+	steps, err := ParseTrace(strings.NewReader(`{"do":"read","valueContains":"zoom","role":"label","pattern":"zoom (?P<z0>[\\d.]+)"}
+{"do":"expect","of":"z1","minus":"z0","approx":1,"tol":0.011}
+{"do":"click","x":360,"y":230,"xFrom":"ox","yFrom":"oy"}`))
+	require.NoError(t, err)
+	require.Len(t, steps, 3)
+	assert.Equal(t, `zoom (?P<z0>[\d.]+)`, steps[0].Pattern)
+	require.NotNil(t, steps[1].Approx)
+	assert.Equal(t, 1.0, *steps[1].Approx)
+	assert.Nil(t, steps[1].Eq, "an absent comparison stays absent: eq 0 is a real assertion")
+	assert.Equal(t, "ox", steps[2].XFrom)
+	assert.True(t, requiresAnchor("read"))
+}

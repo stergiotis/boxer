@@ -64,3 +64,20 @@ func TestSettleBeforeOnlyForObservations(t *testing.T) {
 		assert.False(t, settleBefore(do), do)
 	}
 }
+
+func TestReadBinaryFinishesAFrameThatOutlivesTheDeadline(t *testing.T) {
+	// The deadline bounds the wait for a frame, not the frame. A short idle
+	// pause that expires while a large video chunk is still arriving must not
+	// truncate it: that leaves the stream mid-frame and the connection dead.
+	ws, server := pipeConn(t)
+	payload := []byte("a frame that arrives in two halves")
+	go func() {
+		frame := append([]byte{0x80 | opBinary, byte(len(payload))}, payload...)
+		_, _ = server.Write(frame[:8])
+		time.Sleep(200 * time.Millisecond)
+		_, _ = server.Write(frame[8:])
+	}()
+	got, err := ws.readBinary(time.Now().Add(60 * time.Millisecond))
+	require.NoError(t, err)
+	assert.Equal(t, string(payload), string(got))
+}
