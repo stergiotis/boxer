@@ -188,11 +188,21 @@ var (
 		InstallHint: "part of policycoreutils (SELinux)",
 	})
 
-	// FcMatch resolves a font file path via fontconfig for the deploy showcase.
+	// FcMatch resolves a font file path via fontconfig for the deploy showcase
+	// and for the imzero2 scene runner's host launch.
 	FcMatch = Declare(Program{
 		Name:        "fc-match",
 		Kind:        Host,
 		InstallHint: "install fontconfig",
+	})
+
+	// Python3 runs the map scenes' tile stub server (scripts/dev/tile-stub-server.py),
+	// which the imzero2 scene runner starts for a scene that names the
+	// `tilestub` service (ADR-0248 §SD6).
+	Python3 = Declare(Program{
+		Name:        "python3",
+		Kind:        Host,
+		InstallHint: "install python 3; only map scenes need it",
 	})
 
 	// Systemctl restarts the service after an atomic deploy swap.
