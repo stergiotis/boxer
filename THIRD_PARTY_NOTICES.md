@@ -528,7 +528,10 @@ go run ./public/app gov license-gate --sbom sbom.json --csv third_party_licenses
 
 This is not committed to the repository because it is fully derived
 from `go.mod` + `go.sum` and would otherwise drift on every dependency
-update. The CSV columns are `module,version,spdx_id,category`.
+update. The CSV columns are
+`module,version,spdx_id,category,ecosystem,declared`: `ecosystem` is `go`
+for these rows and `declared` repeats the identifier. The Rust crate
+trees join the same inventory (section 4.4).
 
 ### 3.1 Compliance gate
 
@@ -541,7 +544,9 @@ license is incompatible with copyleft inbound dependencies, and the
 gate enforces this prospectively. See
 `.github/workflows/licenses.yaml` and `scripts/ci/license_gate.sh`;
 the design rationale is in
-[ADR-0004](doc/adr/0004-license-gate-cyclonedx.md).
+[ADR-0004](doc/adr/0004-license-gate-cyclonedx.md). The same gate, under
+the same policy map, classifies the Rust crate trees
+([ADR-0246](doc/adr/0246-license-gate-rust-crate-trees.md), section 4.4).
 
 The gate does **not** fail on `unknown` classifications. A handful of
 upstream modules ship their `LICENSE` in a form `cyclonedx-gomod`'s
@@ -645,16 +650,21 @@ the material that discharges them is placed in it by the two scripts.
   upstream ships none to copy. Recovering it from the upstream
   repository falls to whoever distributes the artifact; `INDEX.txt` is
   what surfaces the case.
-- **Election.** `r-efi` offers `MIT OR Apache-2.0 OR LGPL-2.1-or-later`;
-  boxer elects MIT, on the same reasoning as the `freetype` election in
-  section 3.1.
-- **Not gated.** The section 3.1 CI gate reads a Go SBOM and does not
-  see this tree; `gov cargo-licenses` collects notices but classifies
-  nothing. A lockfile bump that introduces a copyleft crate would not
-  fail CI, so the `INDEX.txt` warrants a read on dependency changes.
-  Two identifiers already in this tree, Unicode-3.0 and
-  CDLA-Permissive-2.0, are absent from the section 3.1 policy map and
-  would need adding before it could classify the tree.
+- **Gated.** `scripts/ci/license_gate.sh` runs `cargo metadata --locked`
+  over every `rust/*/Cargo.lock` and hands each document to the section
+  3.1 gate beside the Go SBOM, so a lockfile bump that brings in a
+  copyleft crate fails CI. What the gate classifies is each crate's own
+  declaration: a crate that mis-declares passes, and the files
+  `gov cargo-licenses` ships remain what a distributor actually reads.
+- **Elections are automatic and recorded.** The gate evaluates each
+  crate's SPDX expression rather than splitting it into identifiers
+  ([ADR-0246](doc/adr/0246-license-gate-rust-crate-trees.md) SD3): a
+  disjunction elects its most permissive branch, and a conjunction is
+  bound by its most restrictive, so an unclassifiable conjunct can never
+  clear a copyleft one. `r-efi`'s `MIT OR Apache-2.0 OR
+  LGPL-2.1-or-later` elects MIT. Unlike the Go side's
+  `moduleLicenseElection`, no entry is kept by hand; the inventory's
+  `declared` column holds the expression each election was made from.
 
 ## Maintaining this document
 
@@ -668,4 +678,5 @@ the material that discharges them is placed in it by the two scripts.
 - When a build script starts placing a new third-party file beside a
   shipped artifact, append a subsection under section 4 naming the
   terms, the script that supplies the notice, and where it lands in the
-  artifact. Unlike section 3 there is no gate behind this one.
+  artifact. The gate covers the crate tree in section 4.4, not files a
+  build script places, so this section is the only record of those.
