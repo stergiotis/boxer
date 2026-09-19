@@ -12,6 +12,13 @@ prost = "0.13"
 futures-util = { version = "0.3", features = ["sink"] }
 tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros"] }
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# tokio-tungstenite's rustls feature leaves the crypto provider to the
+# application. Without one, rustls panics on the first wss:// connect — inside
+# the network worker, so the viewer sat at "Connecting…" and the host saw no
+# request at all. `ring` is the provider (session::spawn installs it
+# explicitly), and `tls12` matches what a browser will negotiate with an older
+# TLS-terminating proxy.
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 url = "2"
 
 [build-dependencies]

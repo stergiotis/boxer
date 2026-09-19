@@ -52,6 +52,10 @@ pub fn spawn() -> (
     Receiver<Event>,
     thread::JoinHandle<()>,
 ) {
+    // Explicit rather than left to rustls's feature-based auto-detection,
+    // which panics once a second provider feature appears anywhere in the
+    // graph. Err means one is already installed, which is equally fine.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let (tx, rx) = tokio::sync::mpsc::channel(64);
     let (events, out) = mpsc::sync_channel(16);
     let worker = thread::spawn(move || {
@@ -125,7 +129,7 @@ async fn run(mut rx: tokio::sync::mpsc::Receiver<Command>, events: SyncSender<Ev
         let socket = loop {
             tokio::select! {
                 c=command(&mut rx)=>match c {Command::Stop=>return,Command::Disconnect=>break Err("Disconnected".into()),Command::Connect(e)=>{pending=Some(Command::Connect(e));break Err("Connection replaced".into());},_=>{}},
-                result=&mut connect=>break match result{Ok(Ok((ws,_)))=>Ok(ws),Ok(Err(_))=>Err(format!("Connection to {} failed (transport/TLS/handshake)",redact(&url))),Err(_)=>Err("Connection timed out".into())},
+                result=&mut connect=>break match result{Ok(Ok((ws,_)))=>Ok(ws),Ok(Err(e))=>Err(format!("Connection to {} failed: {}",redact(&url),describe_connect_error(&e,url.scheme()))),Err(_)=>Err("Connection timed out".into())},
             }
         };
         let reason = match socket {
@@ -223,6 +227,61 @@ fn validate_endpoint(raw: &str) -> anyhow::Result<url::Url> {
 }
 fn redact(url: &url::Url) -> String {
     url.origin().ascii_serialization()
+}
+/// Name a failed connect in terms of what to check next.
+///
+/// Three failures with unrelated fixes used to share one message — nothing
+/// listening, a TLS handshake that did not complete, and an HTTP answer that
+/// was not an upgrade — and the host logs none of them, because in each the
+/// request never reaches its session handler. So the only place the cause is
+/// known is here.
+///
+/// Nothing in the returned text comes from the URL: I/O and TLS errors carry
+/// no URL, and an HTTP answer is reduced to its status. The caller prefixes
+/// [`redact`]'s origin, which keeps the path and query (where a proxy token
+/// would ride) out of the status bar.
+fn describe_connect_error(e: &tokio_tungstenite::tungstenite::Error, scheme: &str) -> String {
+    use std::io::ErrorKind;
+    use tokio_tungstenite::tungstenite::Error;
+    match e {
+        Error::Io(io) => match io.kind() {
+            ErrorKind::ConnectionRefused => {
+                "nothing accepted the connection at that host and port. Check the port, and \
+                 that the host's IMZERO2_HEADLESS_LISTEN is not a loopback address when this \
+                 viewer runs on another machine"
+                    .into()
+            }
+            ErrorKind::TimedOut | ErrorKind::HostUnreachable | ErrorKind::NetworkUnreachable => {
+                format!("the host is unreachable from here ({io})")
+            }
+            // tokio-rustls reports a failed handshake as InvalidData
+            // wrapping the rustls error, whose text names the cause
+            // ("invalid peer certificate: UnknownIssuer", …).
+            ErrorKind::InvalidData if scheme == "wss" => format!(
+                "the TLS handshake failed ({io}). This viewer trusts only the public \
+                 web roots, not the Windows certificate store, so a certificate a browser \
+                 accepts can still fail here; if nothing terminates TLS in front of the \
+                 host, use ws:// instead"
+            ),
+            _ => format!("network error ({io})"),
+        },
+        Error::Http(response) => {
+            let status = response.status();
+            let hint = if status.is_redirection() {
+                "a redirect, usually a login or authentication proxy that the browser \
+                 satisfied with a cookie"
+            } else if status == 401 || status == 403 {
+                "an authentication proxy that the browser satisfied and this viewer cannot"
+            } else if status.is_success() {
+                "an HTTP server that did not treat the request as a WebSocket upgrade"
+            } else {
+                "something in front of the host, or a different service on this port"
+            };
+            format!("the server answered HTTP {status} instead of switching protocols: {hint}")
+        }
+        Error::Protocol(p) => format!("the WebSocket handshake was rejected ({p})"),
+        other => other.to_string(),
+    }
 }
 pub fn client_hello(label: impl Into<String>) -> pb::SessionControl {
     pb::SessionControl {
@@ -404,6 +463,81 @@ mod tests {
             rt.block_on(terminal(&mut rx, &events, "overflow".into())),
             Some(Command::Stop)
         ));
+    }
+
+    /// Connect through the real worker and return the reason it reports.
+    fn connect_failure(endpoint: String) -> String {
+        let (tx, rx, worker) = spawn();
+        tx.blocking_send(Command::Connect(endpoint)).unwrap();
+        let reason = match rx.recv_timeout(Duration::from_secs(10)).unwrap() {
+            Event::Disconnected(reason) => reason,
+            other => panic!("expected a failed connect, got {other:?}"),
+        };
+        tx.blocking_send(Command::Stop).unwrap();
+        worker.join().unwrap();
+        reason
+    }
+
+    /// A one-shot peer that answers whatever arrives the way the carrier's
+    /// page branch (`serve_page`) does: an HTML page, never an upgrade.
+    fn page_server() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        thread::spawn(move || {
+            use std::io::{Read as _, Write as _};
+            let (mut s, _) = listener.accept().unwrap();
+            let _ = s.read(&mut [0u8; 4096]);
+            let body = "<!doctype html>";
+            let _ = write!(
+                s,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        });
+        port
+    }
+
+    #[test]
+    fn refused_connect_says_nothing_is_listening() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port(); // listener dropped here: the port is now closed
+        let reason = connect_failure(format!("ws://127.0.0.1:{port}/ws"));
+        assert!(reason.contains("nothing accepted"), "{reason}");
+    }
+
+    #[test]
+    fn page_instead_of_upgrade_names_the_status() {
+        let reason = connect_failure(format!("ws://127.0.0.1:{}/ws", page_server()));
+        assert!(reason.contains("HTTP 200"), "{reason}");
+        assert!(
+            reason.contains("did not treat the request as a WebSocket"),
+            "{reason}"
+        );
+    }
+
+    /// `wss://` against the carrier itself, which has no TLS: its sniff finds
+    /// no upgrade header in a ClientHello and answers with the page. The host
+    /// logs nothing, so this message is the only record of the cause.
+    #[test]
+    fn wss_against_a_plain_carrier_names_tls() {
+        let reason = connect_failure(format!("wss://127.0.0.1:{}/ws", page_server()));
+        assert!(reason.contains("TLS handshake failed"), "{reason}");
+        assert!(reason.contains("use ws://"), "{reason}");
+    }
+
+    #[test]
+    fn connect_failures_do_not_leak_path_or_query() {
+        let reason = connect_failure(format!(
+            "ws://127.0.0.1:{}/prefix/ws?token=secret",
+            page_server()
+        ));
+        assert!(
+            !reason.contains("secret") && !reason.contains("prefix"),
+            "{reason}"
+        );
     }
 
     /// Pins the two contracts [`command`] has to keep now that it awaits the
