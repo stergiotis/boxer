@@ -124,6 +124,12 @@ type PresenceStoreConfig struct {
 	// descriptor fact (resolution self-heals on the dimension's own flush).
 	// The default keeps the descriptor durable no later than the row.
 	BestEffortStampFlush bool
+	// FlushEvery is the buffered-row count at which FlushIfDue flushes, so
+	// a caller streaming a source bounds the Arrow memory it holds without
+	// a counter of its own. Zero (the default) makes FlushIfDue a no-op.
+	// Nothing flushes behind the caller's back: Commit takes no context and
+	// never inserts, so the due check runs where the caller asks for it.
+	FlushEvery int
 }
 
 // PresenceStore is single-goroutine, like every part it composes. Batched
@@ -274,6 +280,27 @@ func (inst *PresenceStore) VerifySchema(ctx context.Context) (err error) {
 			return
 		}
 	}
+	return
+}
+
+// OpenPresenceStore is NewPresenceStore plus the startup check: it runs VerifySchema and
+// returns a store ready to Begin. This store cannot create its table
+// (generated ExternallyProvisioned), so a missing table fails here.
+//
+// On failure the store is closed and nil is returned. It takes an
+// executor, not a client — which executor reaches the server is the
+// caller's layer (ADR-0105 D1). NewPresenceStore panics on a malformed config
+// and so does this. A caller that cannot afford the DESCRIBE at startup
+// keeps using NewPresenceStore.
+func OpenPresenceStore(ctx context.Context, exec recordstore.ExecutorI, alloc memory.Allocator, cfg PresenceStoreConfig) (inst *PresenceStore, err error) {
+	st := NewPresenceStore(exec, alloc, cfg)
+	err = st.VerifySchema(ctx)
+	if err != nil {
+		st.Close()
+		err = eh.Errorf("open presenceStore: %w", err)
+		return
+	}
+	inst = st
 	return
 }
 
@@ -483,6 +510,19 @@ func (inst *PresenceStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	return
+}
+
+// FlushIfDue is Flush once cfg.FlushEvery rows are buffered, and a no-op
+// before that — or always, when FlushEvery is zero. Call it between
+// entities (after Commit): like Flush it errors on an open frame. A
+// failure leaves the rows retained exactly as Flush does, so the next
+// FlushIfDue or Flush retries them. Flush stays the end-of-run call —
+// FlushIfDue leaves up to FlushEvery-1 rows buffered.
+func (inst *PresenceStore) FlushIfDue(ctx context.Context) (n int, err error) {
+	if inst.cfg.FlushEvery <= 0 || inst.buffered < inst.cfg.FlushEvery {
+		return
+	}
+	return inst.Flush(ctx)
 }
 
 // DiscardPending drops every committed-but-unflushed row: records

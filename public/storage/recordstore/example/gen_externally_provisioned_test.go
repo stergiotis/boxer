@@ -95,14 +95,29 @@ func TestGenerateProvisioningSwitchIsLocal(t *testing.T) {
 	// Strip the four DDL-bearing regions from the self-provisioning store;
 	// what remains must be exactly the ExternallyProvisioned emission apart
 	// from VerifySchema's own doc paragraph (which states which regime it is
-	// guarding).
+	// guarding) and OpenValcheckStore, whose startup sequence is the regime:
+	// EnsureTable then VerifySchema, or VerifySchema alone.
 	stripped := self
 	stripped = cutRegion(t, stripped, "\t_ \"embed\"\n", "")
 	stripped = cutRegion(t, stripped, "// The complete CREATE TABLE composed", "// ValcheckTableName is")
 	stripped = cutRegion(t, stripped, "\t// DDLTail is a raw suffix", "\t// Stampers are consulted")
 	stripped = cutRegion(t, stripped, "// EnsureTable applies", "// VerifySchema compares")
 
-	require.Equal(t, dropVerifySchemaDoc(t, external), dropVerifySchemaDoc(t, stripped))
+	require.Equal(t, dropOpen(t, dropVerifySchemaDoc(t, external)), dropOpen(t, dropVerifySchemaDoc(t, stripped)))
+}
+
+// TestGenerateOpenFollowsProvisioning: Open<Store> runs the startup sequence
+// the regime allows — it must not call an EnsureTable the store does not
+// have.
+func TestGenerateOpenFollowsProvisioning(t *testing.T) {
+	external, _ := generateProvisioning(t, true)
+	self, _ := generateProvisioning(t, false)
+
+	require.Contains(t, self, "func OpenValcheckStore(")
+	require.Contains(t, self, "\terr = st.EnsureTable(ctx)")
+	require.Contains(t, external, "func OpenValcheckStore(")
+	require.NotContains(t, external, "EnsureTable(ctx)")
+	require.Contains(t, external, "\terr = st.VerifySchema(ctx)")
 }
 
 // cutRegion removes src[start:end), both located by their first occurrence.
@@ -120,6 +135,13 @@ func cutRegion(t *testing.T, src, start, end string) string {
 		j += rel
 	}
 	return src[:i] + src[j:]
+}
+
+// dropOpen removes OpenValcheckStore's doc and body up to the tail both
+// regimes share.
+func dropOpen(t *testing.T, src string) string {
+	t.Helper()
+	return cutRegion(t, src, "// OpenValcheckStore is NewValcheckStore plus", "\tinst = st\n")
 }
 
 // dropVerifySchemaDoc removes VerifySchema's leading doc paragraph — the one

@@ -1095,6 +1095,43 @@ pair: the u8 column stays Live, the pair marks). Default-binding behaviour
 is pinned by the pre-existing device / widget / pushoutstore suites, which
 pass unchanged over the regenerated stores.
 
+### 2026-09-18 — the startup sequence and the due check are emitted: `Open<Store>`, `FlushIfDue`
+
+Two things every caller of a generated store wrote beside it. The startup
+sequence — construct, `EnsureTable`, `VerifySchema` — was hand-written in
+`pushoutstore.Open` and again in `persist`'s store backend. The due check —
+flush once enough rows are buffered — was hand-written in `sysmtee` and in
+`ladingingest`. `Flush`'s contract already says when a flush is *legal* (no
+open frame, retryable on failure); when one is *due* is the same
+responsibility, and the store is what holds the count.
+
+- `Open<Store>(ctx, exec, alloc, cfg)` is `New<Store>` plus `EnsureTable`
+  then `VerifySchema`, closing the store and returning nil on failure. Under
+  `ExternallyProvisioned` it verifies only — the store has no `EnsureTable`
+  to call. `New<Store>` stays for a caller that cannot afford the `DESCRIBE`
+  at startup.
+- It takes an **executor, not a client**. A client-taking `Open` was asked for
+  and refused: the generated package would import keelson's `chclient`, and
+  ADR-0105 D1 keeps that direction one-way. Building the executor is one line
+  on the caller's side, and the executor-taking form also serves
+  `chexec.LocalExecutor` and `ipcexec` without a second constructor.
+- `<Store>StoreConfig.FlushEvery` and `FlushIfDue(ctx)`: a `Flush` once
+  `FlushEvery` rows are buffered, a no-op before that, and always a no-op at
+  the zero value — so an undeclared store behaves as before.
+- **`Commit` does not flush**, which was the other shape asked for. The
+  builder's `Commit()` takes no context and `Flush(ctx)` needs one; flushing
+  there would change every store's `Commit` signature or insert under a
+  context the caller never saw. With `FlushIfDue` the insert error and its
+  retry stay at a call site that has a context, and a caller coordinating two
+  stores (`ladingingest`) still decides when both go.
+- The count is rows (`Buffered()`), not bytes: the DML builder does not report
+  its size. A byte bound is deferred until it does.
+- Verified over `clickhouse-local`: five commits under `FlushEvery: 3` leave
+  three rows durable and two buffered; `Open` over a table of another shape
+  fails with the schema-drift error and hands back no store. All in-tree
+  stores regenerated; no in-tree caller was moved onto the helpers in this
+  pass.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)
