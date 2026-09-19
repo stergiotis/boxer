@@ -18,7 +18,7 @@
 #                           no bytes.
 #   0x…002  boxer-doc       doc/, content stored. Rooted at doc/, so an ADR is
 #                           adr/0198-….md — two segments deep, which is what
-#                           scripts/dev/tally-scene.sh drives. All text, so
+#                           apps/tally/scenes/tally.scene.md drives. All text, so
 #                           grep with real line numbers has something to find.
 #   0x…003  lading-src      public/fs/lading, content stored. A second mount,
 #                           so fs('*') and the ledger have more than one row
@@ -282,7 +282,7 @@ stage_20_tree() {
 }
 
 stage_30_doc() {
-	desc="mount $NAME_DOC: doc/ with content — the tree tally-scene.sh drives"
+	desc="mount $NAME_DOC: doc/ with content — the tree the tally scene drives"
 	if ((DESC_ONLY)); then return 0; fi
 	snap "$MOUNT_DOC" "$NAME_DOC" "$root/doc"
 	return 0
@@ -471,7 +471,7 @@ stage_70_report() {
 	log "        lad-problems, lad-audit, lad-ledger."
 	log ""
 	log "  Headless, no display, and it asserts as well as captures:"
-	log "    scripts/dev/tally-scene.sh"
+	log "    scripts/dev/scene.sh apps/tally/scenes/tally.scene.md"
 	log "        drives tally over $NAME_DOC and $NAME_SRC — the two mounts its"
 	log "        defaults name — and writes seven PNGs."
 	log ""
