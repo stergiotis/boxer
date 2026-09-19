@@ -25,5 +25,18 @@ jobs:
           cache-dependency-path: 'go.sum'
       - name: Setup
         run: ./scripts/ci/install.sh
+      # The gate classifies every Rust crate tree too (ADR-0246), and
+      # `cargo metadata` runs under each tree's own pin, so every pinned
+      # channel has to be present. Read from the toolchain files, as lint.yaml
+      # does, so a pin moves in one place. license_gate.sh fails rather than
+      # skipping when cargo is absent.
+      - name: Install the pinned Rust toolchains
+        run: |
+          set -euo pipefail
+          channels=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust/*/rust-toolchain.toml rust/*/rust-toolchain 2>/dev/null | sort -u)
+          [ -n "$channels" ] || { echo "no channel pin under rust/*/rust-toolchain{,.toml}" >&2; exit 1; }
+          for ch in $channels; do
+            rustup toolchain install "$ch" --profile minimal --component rustfmt,clippy
+          done
       - name: Check Licenses
         run: ./scripts/ci/license_gate.sh
