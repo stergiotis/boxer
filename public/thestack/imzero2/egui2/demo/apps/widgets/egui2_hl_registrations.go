@@ -240,6 +240,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "flowbench", Category: "Maps & geo", Title: icons.IconGlobe + " flow bench (ADR-0249 trial harness)",
+		Stage:       [2]float32{1024, 760},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagSkipInTour | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindDX,
+		Description: "The measurement harness of the flow-particles trial (doc/trials/flow-particles-frame-cost): one map, one flow layer, a particle count and a paint arm — one paintSegments as a mesh, the same opcode tessellated, or a paintLine per segment — and a window of frames summarised into a label and a log line. Not a showcase; the trial's run script drives it.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newFlowBenchState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoFlowBench(ids, state.(*flowBenchState))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "mapraster", Category: "Maps & geo", Title: icons.IconGlobe + " mapRaster (in-DB geo raster)",
 		Stage:       [2]float32{760, 600},
 		Flags:       registry.DemoFlagNeedsLargeArea,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -63,6 +64,10 @@ type Options struct {
 	// Tessellated hints the host to draw feathered line shapes instead of one
 	// mesh (see paintSegments); a host may ignore it.
 	Tessellated bool
+	// LinePerSegment paints a trail segment per paintLine opcode instead of
+	// one paintSegments for the layer. It is the arm the ADR-0249 trial
+	// measures the batched opcode against, and has no other use.
+	LinePerSegment bool
 
 	// Seed seeds the layer's own random stream.
 	Seed uint64
@@ -171,6 +176,7 @@ type Layer struct {
 
 	x0s, y0s, x1s, y1s []float32
 	cols               color.Colors
+	alphas             []uint32
 
 	stats Stats
 	now   func() time.Time
@@ -545,7 +551,8 @@ func (inst *Layer) paint(origin portolan.Point, scale float64, size portolan.Poi
 	}
 
 	k := params.trail
-	alphas := make([]uint32, k)
+	inst.alphas = slices.Grow(inst.alphas[:0], k)[:k]
+	alphas := inst.alphas
 	for j := range alphas {
 		t := 1 - float64(j)/float64(k-1)
 		alphas[j] = uint32(math.Round(255 * float64(opacity) * math.Pow(t, 1.3)))
@@ -581,6 +588,12 @@ func (inst *Layer) paint(origin portolan.Point, scale float64, size portolan.Poi
 	}
 	inst.stats.Segments = len(inst.cols)
 	if len(inst.cols) == 0 {
+		return
+	}
+	if o.LinePerSegment {
+		for i := range inst.cols {
+			c.PaintLine(inst.x0s[i], inst.y0s[i], inst.x1s[i], inst.y1s[i], color.Hex(inst.cols[i]), width).Send()
+		}
 		return
 	}
 	seg := c.PaintSegments(inst.x0s, inst.y0s, inst.x1s, inst.y1s, inst.cols, width)

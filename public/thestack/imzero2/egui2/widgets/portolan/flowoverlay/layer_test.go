@@ -42,8 +42,16 @@ type scene struct {
 
 func newScene(t *testing.T, src vectorfield.SourceI, opts Options) *scene {
 	t.Helper()
+	s := newBenchScene(t, src, opts)
+	s.t = t
+	return s
+}
+
+// newBenchScene is newScene for a test or a benchmark.
+func newBenchScene(t testing.TB, src vectorfield.SourceI, opts Options) *scene {
+	t.Helper()
 	t.Cleanup(scenetest.Install())
-	s := &scene{t: t, clock: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+	s := &scene{clock: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	s.m = portolan.New(c.NewWidgetIdStack(), portolan.Options{NoTiles: true, Center: portolan.LL(45, 10), Zoom: 4})
 	s.layer = New(src, opts)
 	s.layer.now = func() time.Time { return s.clock }
