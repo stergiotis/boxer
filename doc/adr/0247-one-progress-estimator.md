@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-19
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-19
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0247: one progress estimator — Holt smoothing for every rate and ETA, one job row to show them
 
@@ -113,7 +111,7 @@ each drew their own rows for want of a speed figure and an inline layout.
 
 ## Status
 
-Proposed — 2026-09-19. Implemented in the working tree alongside this record.
+Accepted 2026-09-19 (reviewed by p@stergiotis). Implemented in the same change set: the estimator package, its adopters, the `jobprogress` fields and the `taskmonitor` and play rows.
 
 ## References
 
