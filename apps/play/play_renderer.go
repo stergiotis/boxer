@@ -27,7 +27,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -198,21 +197,9 @@ type PlayApp struct {
 	docs     *docsDriver
 	docsPane *docsPaneState
 
-	// Snippets-tab filter state (ADR-0164 §SD4). snippetsFilter backs the
-	// box; snippetsQuery is the trimmed query snippetsAccepted (matching
-	// section slugs, descendants expanded) was computed for — recompute on
-	// change, not per frame. snippetsLiteral flags a token that degraded
-	// to a literal match so the tab can say so; snippetsCoverage is how
-	// much of the snippets doc the accepted set selects (the filter's
-	// selectivity meter); snippetsHl is the filter box's regexedit
-	// highlight-job cache. Zero values = unfiltered.
-	snippetsFilter   string
-	snippetsQuery    string
-	snippetsAccepted map[string]bool
-	snippetsLiteral  bool
-	snippetsAltHint  string
-	snippetsCoverage search.Coverage
-	snippetsHl       regexedit.Edit
+	// snippets is the built-in Snippets tab's pane: its source and its filter
+	// state (play_snippets.go). Contributed libraries own theirs.
+	snippets snippetPane
 
 	// editor is the SQL editing surface (ADR-0147). It owns what follows
 	// from the buffer and the caret alone — the colour tiers, the statement
@@ -322,7 +309,7 @@ type PlayApp struct {
 	passesTab passesTabState
 	// Vocabulary-tab state (play_vocab_panel.go, ADR-0174): the filter and
 	// its accepted set; vocabHl is the filter box's regexedit state, held
-	// per-instance like snippetsHl for the same reason (the widget owns a
+	// per-instance like a snippet pane's for the same reason (the widget owns a
 	// compiled pattern across frames).
 	vocabTab vocabTabState
 	// completion is the ADR-0190 pane's state and this frame's answer. It is
@@ -1198,6 +1185,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
 	inst.tabs = defaultTabs(inst)
+	addSnippetLibraryTabs(inst, inst.tabs)
 	inst.vizSeed = nextVizSeed()
 	return inst
 }

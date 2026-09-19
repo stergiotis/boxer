@@ -1,6 +1,8 @@
 package play
 
 import (
+	"io/fs"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -8,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help/search"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
@@ -46,21 +49,43 @@ func sqlBlockActionable(_ string, lang string) bool {
 	return lang == "sql" || lang == ""
 }
 
-// snippetDoc memoizes the parsed "snippets" help doc — plus its section
-// list and a search index over the book — for the whole package. The
-// corpus is embedded and immutable, so one parse serves every PlayApp
-// instance. The book is built straight from the embedded FS (helpFS)
-// rather than via help.DefaultLibrary, so it does not depend on
-// registry-sync timing — but it is the same help.Book + markdown
-// machinery the Help center uses. snippetDocCached stays nil when the
-// doc is absent or fails to parse, which renderSnippetsTab degrades to
-// a short notice.
-var (
-	snippetDocOnce   sync.Once
-	snippetDocCached *markdown.Doc
-	snippetSections  []help.SectionInfo
-	snippetIndex     *search.Index
+// snippetSource is one snippet library, parsed: a doc of a help book, its
+// section list, and a search index over the book. It is immutable and shared
+// by every PlayApp instance; what differs per window — the filter — is
+// [snippetPane]. The book is built straight from an fs.FS rather than via
+// help.DefaultLibrary, so it does not depend on registry-sync timing — but it
+// is the same help.Book + markdown machinery the Help center uses. doc stays
+// nil when the doc is absent or fails to parse, which the pane degrades to a
+// short notice.
+type snippetSource struct {
+	appId    app.AppIdT
+	docName  string
+	doc      *markdown.Doc
+	sections []help.SectionInfo
+	index    *search.Index
+}
 
+func newSnippetSource(appId app.AppIdT, fsys fs.FS, docName string) (src *snippetSource) {
+	src = &snippetSource{appId: appId, docName: docName}
+	book, err := help.NewBook(appId, fsys)
+	if err != nil {
+		return
+	}
+	if doc, info, ok := book.Doc(docName); ok {
+		src.doc = doc
+		src.sections = info.Sections
+		src.index = search.NewIndexBooks(book)
+	}
+	return
+}
+
+// builtinSnippetSource memoizes play's own library for the whole package:
+// the corpus is embedded and immutable, so one parse serves every PlayApp.
+var builtinSnippetSource = sync.OnceValue(func() *snippetSource {
+	return newSnippetSource(playAppId, help.MustSub(helpFS, "help"), "snippets")
+})
+
+var (
 	// snippetThOnce/snippetTh memoise the thesaurus (ADR-0164 §SD7)
 	// separately from the doc parse: the app registry must be complete
 	// when it is built, and the first filter keystroke — well past
@@ -74,19 +99,115 @@ func snippetThesaurus() search.Thesaurus {
 	return snippetTh
 }
 
-func loadSnippetDoc() *markdown.Doc {
-	snippetDocOnce.Do(func() {
-		book, err := help.NewBook(playAppId, help.MustSub(helpFS, "help"))
-		if err != nil {
+// builtinSnippetsKey is the built-in pane's key. Widget ids are derived from
+// the key, and the built-in's spell exactly what they did before panes could
+// be contributed, so its egui state survives.
+const builtinSnippetsKey = "snippets"
+
+// snippetPane is one Snippets-class dock tab of one window: a source plus the
+// filter state (ADR-0164 §SD4). filter backs the box; query is the trimmed
+// query accepted (matching section slugs, descendant-expanded) was computed
+// for — refreshed on change, not per frame. literal flags a token that
+// degraded to a literal match so the tab can say so; coverage is how much of
+// the doc the filter keeps (the selectivity meter); hl is the filter box's
+// regexedit highlighter, per pane because the widget owns a highlight cache.
+type snippetPane struct {
+	key      string
+	src      *snippetSource
+	filter   string
+	query    string
+	accepted map[string]bool
+	literal  bool
+	altHint  string
+	coverage search.Coverage
+	hl       regexedit.Edit
+}
+
+// SnippetLibrary is a snippet pane contributed to every play window: a doc of
+// a help book, shown in a dock tab of its own beside the built-in Snippets tab
+// with the same filter and the same Insert and Replace buttons.
+//
+// It is the seam for a repository that mounts play as it is and wants its own
+// table names and recipes one click from the editor, without those names
+// entering this repository's corpus. An app that embeds a PlayApp and drives
+// its tab registry itself needs none of this.
+type SnippetLibrary struct {
+	// TabID is the tab's slug, unique among a window's tabs.
+	TabID string
+	// DockID is the tab's frozen dock identity. The persisted dock layout
+	// keys on it, so it never changes once shipped; built-ins hold 1..63 and
+	// a contributed library takes 64 or above.
+	DockID uint64
+	// Title is what the tab says.
+	Title string
+	// AppId names the contributor. It keys the help book the library is read
+	// through and need not be a registered app.
+	AppId app.AppIdT
+	// Help is the root of a help book: a directory of markdown documents.
+	Help fs.FS
+	// Doc is the document within it, its path less the `.md`, whose fenced
+	// SQL blocks are the snippets.
+	Doc string
+}
+
+var (
+	snippetLibrariesMu sync.Mutex
+	snippetLibraries   []registeredSnippetLibrary
+)
+
+type registeredSnippetLibrary struct {
+	lib SnippetLibrary
+	src func() *snippetSource
+}
+
+// RegisterSnippetLibraryE contributes a snippet pane to every play window
+// opened afterwards. Call it at init, the way a book or a pass is registered;
+// a window already open keeps the tab set it was built with.
+func RegisterSnippetLibraryE(lib SnippetLibrary) (err error) {
+	if lib.TabID == "" || lib.Title == "" || lib.Doc == "" || lib.Help == nil || lib.DockID < 64 {
+		err = eb.Build().Str("tabId", lib.TabID).Uint64("dockId", lib.DockID).Errorf("snippet library needs a tab id, a title, a help book, a doc and a dock id of 64 or above")
+		return
+	}
+	snippetLibrariesMu.Lock()
+	defer snippetLibrariesMu.Unlock()
+	for _, r := range snippetLibraries {
+		if r.lib.TabID == lib.TabID || r.lib.DockID == lib.DockID {
+			err = eb.Build().Str("tabId", lib.TabID).Uint64("dockId", lib.DockID).Errorf("snippet library collides with one already registered")
 			return
 		}
-		if doc, info, ok := book.Doc("snippets"); ok {
-			snippetDocCached = doc
-			snippetSections = info.Sections
-			snippetIndex = search.NewIndexBooks(book)
-		}
+	}
+	snippetLibraries = append(snippetLibraries, registeredSnippetLibrary{
+		lib: lib,
+		// Parsed at first use, not here: init runs before anyone has asked
+		// for a window.
+		src: sync.OnceValue(func() *snippetSource { return newSnippetSource(lib.AppId, lib.Help, lib.Doc) }),
 	})
-	return snippetDocCached
+	return
+}
+
+func registeredSnippetLibraries() (libs []registeredSnippetLibrary) {
+	snippetLibrariesMu.Lock()
+	defer snippetLibrariesMu.Unlock()
+	libs = slices.Clone(snippetLibraries)
+	return
+}
+
+// addSnippetLibraryTabs gives a new window one tab per contributed library,
+// in the tools zone beside the built-in Snippets tab. A library whose tab
+// cannot be added — its dock id taken by an embedder's own tab — is skipped:
+// a missing reference pane is not a reason to refuse a window.
+func addSnippetLibraryTabs(inst *PlayApp, reg *TabRegistry) {
+	for _, r := range registeredSnippetLibraries() {
+		pane := &snippetPane{key: r.lib.TabID}
+		src := r.src
+		_ = reg.Add(TabSpec{
+			ID: r.lib.TabID, DockID: r.lib.DockID, Title: r.lib.Title, Zone: TabZoneTools, Lazy: true,
+			Render: func(f *TabFrame) {
+				pane.src = src()
+				pane.render(inst)
+			},
+		})
+	}
 }
 
 // renderSnippetsTab draws the snippet library in the Snippets dock tab: the
@@ -114,30 +235,39 @@ func loadSnippetDoc() *markdown.Doc {
 // The UNfiltered render keeps its historical "snippets-doc" scope, so
 // state there survives exactly as before the filter existed.
 func (inst *PlayApp) renderSnippetsTab() {
-	doc := loadSnippetDoc()
+	if inst.snippets.src == nil {
+		inst.snippets.key = builtinSnippetsKey
+		inst.snippets.src = builtinSnippetSource()
+	}
+	inst.snippets.render(inst)
+}
+
+// render is the body of a Snippets-class tab.
+func (pane *snippetPane) render(inst *PlayApp) {
+	doc := pane.src.doc
 	if doc == nil {
 		for rt := range c.RichTextLabel("No snippets available.") {
 			rt.Small().Weak()
 		}
 		return
 	}
-	inst.renderSnippetsFilterRow()
+	pane.renderFilterRow(inst)
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 		switch {
-		case inst.snippetsQuery == "":
+		case pane.query == "":
 			// IdScope isolates the doc's derived widget ids (markdown.Doc.Render's
 			// documented invariant), so the Snippets tab can't collide ids with
 			// the Help center rendering the same doc.
-			for range c.IdScope(inst.ids.PrepareStr("snippets-doc")) {
+			for range c.IdScope(inst.ids.PrepareStr(pane.key + "-doc")) {
 				inst.renderSnippetsDoc(doc, nil)
 			}
-		case len(inst.snippetsAccepted) == 0:
+		case len(pane.accepted) == 0:
 			for rt := range c.RichTextLabel("(no matching snippets)") {
 				rt.Small().Weak()
 			}
 		default:
-			accepted := inst.snippetsAccepted
-			for range c.IdScope(inst.ids.PrepareStr("snippets-f-" + inst.snippetsQuery)) {
+			accepted := pane.accepted
+			for range c.IdScope(inst.ids.PrepareStr(pane.key + "-f-" + pane.query)) {
 				inst.renderSnippetsDoc(doc, markdown.WithSectionFilter(func(slug string) bool {
 					return accepted[slug]
 				}))
@@ -185,61 +315,61 @@ const snippetsCoverageBarWidth = 120.0
 // snippets doc survives it: byte-share bar, numbers in the adjacent
 // label (never on the bar — ProgressBar's own text is illegible at low
 // fractions).
-func (inst *PlayApp) renderSnippetsFilterRow() {
+func (pane *snippetPane) renderFilterRow(inst *PlayApp) {
 	for range c.Horizontal().KeepIter() {
 		// regexedit paints the battery shape: one independent pattern
 		// per whitespace-separated token, monospace (ADR-0164 §SD4).
-		inst.snippetsHl.Prepare(inst.ids.PrepareStr("snippetsFilter"), inst.snippetsFilter, false, regexedit.ModeTokens).
+		pane.hl.Prepare(inst.ids.PrepareStr(pane.key+"Filter"), pane.filter, false, regexedit.ModeTokens).
 			HintText("Filter (regex, space = AND)").
-			SendRespVal(&inst.snippetsFilter)
-		if inst.snippetsFilter != "" {
-			if c.Button(inst.ids.PrepareStr("snippetsFilterClear"), c.Atoms().Text("×").Keep()).
+			SendRespVal(&pane.filter)
+		if pane.filter != "" {
+			if c.Button(inst.ids.PrepareStr(pane.key+"FilterClear"), c.Atoms().Text("×").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.snippetsFilter = ""
+				pane.filter = ""
 			}
 		}
 	}
-	if inst.snippetsLiteral {
+	if pane.literal {
 		for rt := range c.RichTextLabel("some tokens are not valid regexps and match literally") {
 			rt.Small().Weak()
 		}
 	}
-	if inst.snippetsAltHint != "" {
-		for rt := range c.RichTextLabel("also matching: " + inst.snippetsAltHint) {
+	if pane.altHint != "" {
+		for rt := range c.RichTextLabel("also matching: " + pane.altHint) {
 			rt.Small().Weak()
 		}
 	}
-	q := strings.TrimSpace(inst.snippetsFilter)
-	if q != inst.snippetsQuery {
-		inst.snippetsQuery = q
-		inst.snippetsAccepted = nil
-		inst.snippetsLiteral = false
-		inst.snippetsAltHint = ""
-		inst.snippetsCoverage = search.Coverage{}
-		if q != "" && snippetIndex != nil {
+	q := strings.TrimSpace(pane.filter)
+	if q != pane.query {
+		pane.query = q
+		pane.accepted = nil
+		pane.literal = false
+		pane.altHint = ""
+		pane.coverage = search.Coverage{}
+		if q != "" && pane.src.index != nil {
 			battery := search.ParseQueryWith(q, snippetThesaurus())
-			inst.snippetsAltHint = battery.AlternatesHint()
+			pane.altHint = battery.AlternatesHint()
 			for i := range battery.Patterns {
 				if battery.Patterns[i].Literal {
-					inst.snippetsLiteral = true
+					pane.literal = true
 					break
 				}
 			}
 			accepted := make(map[string]bool, 8)
-			for _, h := range snippetIndex.Search(battery, 0) {
-				// The index spans the whole play book; the tab shows one doc.
-				if h.Ref.Doc == "snippets" && h.Ref.Section != "" {
+			for _, h := range pane.src.index.Search(battery, 0) {
+				// The index spans the whole book; the tab shows one doc.
+				if h.Ref.Doc == pane.src.docName && h.Ref.Section != "" {
 					accepted[h.Ref.Section] = true
 				}
 			}
-			inst.snippetsAccepted = search.ExpandDescendants(snippetSections, accepted)
-			inst.snippetsCoverage = snippetIndex.DocCoverage(playAppId, "snippets", inst.snippetsAccepted)
+			pane.accepted = search.ExpandDescendants(pane.src.sections, accepted)
+			pane.coverage = pane.src.index.DocCoverage(pane.src.appId, pane.src.docName, pane.accepted)
 		}
 	}
-	if inst.snippetsQuery == "" {
+	if pane.query == "" {
 		return
 	}
-	cov := inst.snippetsCoverage
+	cov := pane.coverage
 	for range c.Horizontal().KeepIter() {
 		c.ProgressBar(cov.Frac()).DesiredWidth(snippetsCoverageBarWidth).Send()
 		c.Label(strconv.Itoa(cov.SelSections) + "/" + strconv.Itoa(cov.TotalSections) +

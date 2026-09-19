@@ -2137,6 +2137,40 @@ flips a mark mid-edit — correct as feedback, possibly jittery as layout.
 Whether the mark needs a fixed-width slot is a question for use, not for
 this entry.
 
+### 2026-09-19 — Contributed snippet libraries: the Snippets tab becomes instantiable
+
+**The gap.** The 2026-07-17 delivery ops let an *embedder* — an app that
+constructs a `PlayApp` and drives its tab registry — build a snippet-class
+pane of its own, and one consuming repository did. A repository that mounts
+play as it is has no `PlayApp` in hand: the launcher constructs it at mount.
+Its only route to "our tables, one click from the editor" was a whole
+embedding app, or putting its table names into this repository's corpus —
+the thing the delivery ops were exported to avoid.
+
+**The seam.** `play.RegisterSnippetLibraryE(SnippetLibrary)` — tab id, frozen
+dock id of 64 or above, title, and a doc of a help book — is called at init,
+the way a book or a pass is registered, and every window opened afterwards
+gains one tools-zone tab per library beside the built-in Snippets tab.
+Registration validates and refuses a second claim on a tab id or a dock id. A
+library whose tab cannot be added to a particular window — an embedder's own
+tab already holds the dock id — is skipped there rather than failing the
+window.
+
+**It is the same pane, not a second one.** The built-in tab's state moved
+off `PlayApp` into a `snippetPane` — a parsed, shared, immutable
+`snippetSource` plus the per-window filter state — and the built-in library
+is that type's first instance. A contributed library therefore has the
+filter, the selectivity meter, the SQL-only Insert/Replace gate and the
+delivery path the built-in has, by construction rather than by copy; the
+embedder-side copy that predates this has the buttons and not the filter.
+Widget ids derive from the pane's key, and the built-in's key reproduces the
+strings it used before, so its egui state survives the change.
+
+Held by `play_snippet_libraries_test.go`: registration's refusals, a
+registered library appearing in windows opened after it and not before, in
+the built-in's zone, and a contributed source parsing, listing sections and
+answering a search.
+
 ## References
 
 Internal:
