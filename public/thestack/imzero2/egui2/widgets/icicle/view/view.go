@@ -21,6 +21,7 @@ package view
 
 import (
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -35,14 +36,27 @@ import (
 type ColorModeE uint8
 
 const (
+	// ColorByBranch gives each branch of the tree its own place in the flame
+	// band and keeps its descendants near it, so a subtree reads as one
+	// colour family and a child is never a jump away from its parent. The
+	// branches are the frames where the tree first fans out; they are spread
+	// across the band by sibling order, and every frame below one sits a small
+	// step from its parent — a step that shrinks with depth, so deep siblings
+	// are told apart by the gap rather than by colour. See branchBand.
+	//
+	// A frame's colour therefore depends on where it sits, and moves when the
+	// order or the pruning changes; ColorByLabel is the mode for comparing
+	// one function across two captures.
+	ColorByBranch ColorModeE = iota
 	// ColorByLabel hashes the frame's label into the warm band of the
 	// Lajolla sequential scale — the flamegraph's conventional red-through-
 	// yellow gamut, realised from the IDS tokens rather than the classic
 	// random warm RGB. The hash keeps what the randomness never had: a given
 	// function keeps its colour everywhere it appears, including across two
-	// captures, which is what makes two pictures comparable. The scale is
-	// pinned; Opts.Sequential configures only ColorByDepth.
-	ColorByLabel ColorModeE = iota
+	// captures, which is what makes two pictures comparable. What it gives up
+	// is the structure: a child's colour is unrelated to its parent's. The
+	// scale is pinned; Opts.Sequential configures only ColorByDepth.
+	ColorByLabel
 	// ColorByDepth ramps a sequential palette over the depth, which reads the
 	// structure rather than the identity.
 	ColorByDepth
@@ -68,7 +82,7 @@ func NodeHit(i int) Hit { return Hit{Node: int32(i), Ok: true} }
 // plot area returns.
 func (h Hit) None() bool { return !h.Ok }
 
-// Opts configures one draw. The zero value is usable: colour by label,
+// Opts configures one draw. The zero value is usable: colour by branch,
 // labels shown, no legend, nothing highlighted.
 type Opts struct {
 	// RowPx is the row height in canvas pixels. It is a *minimum*: when the
@@ -492,6 +506,12 @@ type state struct {
 	// and set by collectFrames, so whichever custom item runs first fills
 	// them and the other reads them.
 	collected bool
+	// branchU is branchBand over branchFor, kept across draws: it is a pass
+	// over every node, and a frame's work is meant to track the nodes on
+	// screen (ADR-0160 C4). Keyed on the layout's identity, which Compute
+	// hands out fresh; a layout is not mutated after it is drawn.
+	branchFor *icicle.Layout
+	branchU   []float32
 }
 
 func (s *state) prepare(lay *icicle.Layout, opts Opts) {
@@ -503,8 +523,9 @@ func (s *state) prepare(lay *icicle.Layout, opts Opts) {
 	}
 }
 
-// fill resolves a frame's colour.
-func (s *state) fill(n *icicle.Node) uint32 {
+// fill resolves the colour of the frame at lay.Nodes[idx].
+func (s *state) fill(idx int) uint32 {
+	n := &s.lay.Nodes[idx]
 	if s.opts.NodeColor != nil {
 		if col, ok := s.opts.NodeColor(n); ok {
 			return col
@@ -517,7 +538,14 @@ func (s *state) fill(n *icicle.Node) uint32 {
 		}
 		return styletokens.Sequential(s.seq, t).AsHex()
 	}
-	return styletokens.Sequential(styletokens.SequentialLajolla, flameT(labelHash(n.Label))).AsHex()
+	if s.opts.Color == ColorByLabel {
+		return styletokens.Sequential(styletokens.SequentialLajolla, flameT(labelHash(n.Label))).AsHex()
+	}
+	if s.branchFor != s.lay || len(s.branchU) != len(s.lay.Nodes) {
+		s.branchU = branchBand(s.lay, s.branchU)
+		s.branchFor = s.lay
+	}
+	return styletokens.Sequential(styletokens.SequentialLajolla, flameBandT(s.branchU[idx])).AsHex()
 }
 
 // The flame band is the slice of the Lajolla scale a label hash lands in.
@@ -538,7 +566,109 @@ const (
 // topmost hashes onto 1 exactly — fine, because the band ceiling is itself a
 // flame colour and Sequential clamps.
 func flameT(h uint32) float32 {
-	return flameBandLo + (flameBandHi-flameBandLo)*(float32(h)/(1<<31))
+	return flameBandT(float32(h) / (1 << 31))
+}
+
+// flameBandT maps u ∈ [0, 1] across the flame band onto the Lajolla scale.
+func flameBandT(u float32) float32 {
+	return flameBandLo + (flameBandHi-flameBandLo)*u
+}
+
+// Branch colouring, in band units: 0 and 1 are the flame band's ends.
+const (
+	// branchStep is the furthest a child may sit from its parent, either way,
+	// when the parent is the whole of its branch. Wide enough that siblings
+	// are told apart by colour, narrow enough that they still read as one
+	// family beside the next branch.
+	branchStep = 0.3
+	// goldenFrac spaces a sequence of siblings so that any two consecutive
+	// ones land far apart, however many there are.
+	goldenFrac = 0.61803398875
+)
+
+// branchBand places every node of lay in the flame band, in band units, for
+// ColorByBranch. buf is reused when it is large enough.
+//
+// The trunk — the chain from the root down to the first frame with more than
+// one child, which in a profile is main and its wrappers — sits at the middle
+// of the band. The children of that first fan-out are the branch heads: the
+// k-th sits at frac(1/2 + k·φ⁻¹), so the widest head in value order shares
+// the trunk's colour and each further head lands far from the one before it.
+//
+// Below a head, siblings step from their parent by the same golden sequence,
+// centred so the first sibling — and so an only child — keeps the parent's
+// colour and the rest alternate sides. The step is branchStep scaled by the
+// square root of the parent's share of its branch's value: where the tree
+// fans out wide the siblings are told apart by colour, and a small subtree
+// deep down stays close to its parent, the row gap separating them. Scaling
+// by value rather than by depth is what keeps a sliver sibling high up from
+// using up the room its wide neighbour needs further down. A step past a band
+// end folds back in. The layout's pre-order is what makes one forward pass
+// enough: a parent is placed before any of its children, and siblings arrive
+// left to right.
+func branchBand(lay *icicle.Layout, buf []float32) []float32 {
+	n := len(lay.Nodes)
+	u := slices.Grow(buf[:0], n)[:n]
+	kids := make([]int32, n)
+	roots := int32(0)
+	for i := range lay.Nodes {
+		if p := lay.Nodes[i].Parent; p >= 0 {
+			kids[p]++
+		} else {
+			roots++
+		}
+	}
+	// ordinal counts the children seen so far per parent; head is the
+	// node's branch head, -1 on the trunk.
+	ordinal := make([]int32, n)
+	head := make([]int32, n)
+	rootOrdinal := int32(0)
+	for i := range lay.Nodes {
+		p := lay.Nodes[i].Parent
+		var k int32
+		var fans bool
+		if p < 0 {
+			k, fans = rootOrdinal, roots > 1
+			rootOrdinal++
+		} else {
+			k, fans = ordinal[p], kids[p] > 1
+			ordinal[p]++
+		}
+		switch {
+		case p >= 0 && head[p] >= 0:
+			head[i] = head[p]
+			step := float32(0)
+			if ht := lay.Nodes[head[p]].Total; ht > 0 {
+				step = branchStep * float32(math.Sqrt(lay.Nodes[p].Total/ht))
+			}
+			u[i] = foldUnit(u[p] + step*(2*goldenAt(0.5, k)-1))
+		case fans:
+			head[i] = int32(i)
+			u[i] = goldenAt(0.5, k)
+		default:
+			head[i] = -1
+			u[i] = 0.5
+		}
+	}
+	return u
+}
+
+// goldenAt is the k-th term of the golden-ratio sequence from start, in [0, 1).
+func goldenAt(start float64, k int32) float32 {
+	_, f := math.Modf(start + float64(k)*goldenFrac)
+	return float32(f)
+}
+
+// foldUnit reflects x into [0, 1] at the ends. One fold is enough: a step is
+// at most branchStep, far below the band's width.
+func foldUnit(x float32) float32 {
+	if x < 0 {
+		x = -x
+	}
+	if x > 1 {
+		x = 2 - x
+	}
+	return min(max(x, 0), 1)
 }
 
 // labelHash is FNV-1a over the label. Any stable hash would do; what matters
@@ -682,7 +812,7 @@ func (s *state) collectFrames(f frame) {
 		s.rMinY = append(s.rMinY, y0)
 		s.rMaxX = append(s.rMaxX, x1)
 		s.rMaxY = append(s.rMaxY, y1)
-		s.rCols = append(s.rCols, s.fill(n))
+		s.rCols = append(s.rCols, s.fill(idx))
 		s.rNode = append(s.rNode, int32(idx))
 	})
 	s.collected = true

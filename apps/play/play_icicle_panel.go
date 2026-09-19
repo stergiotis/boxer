@@ -410,6 +410,7 @@ func (inst *IcicleDriver) renderControls() {
 		selector.Segmented(inst.ids, "icicle-color", &inst.colorBy).
 			Inline().
 			Style(selector.StyleSelectable).
+			Option(icicleview.ColorByBranch, "branch").
 			Option(icicleview.ColorByLabel, "label").
 			Option(icicleview.ColorByDepth, "depth").
 			SendResp()

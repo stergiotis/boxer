@@ -370,7 +370,7 @@ func TestCollectFramesCarriesTheNodeAndFill(t *testing.T) {
 		n := &lay.Nodes[idx]
 		seen[n.Label] = true
 		// The carried fill is the one the node would have got on its own.
-		if got := s.fill(n); got != s.rCols[i] {
+		if got := s.fill(int(idx)); got != s.rCols[i] {
 			t.Errorf("%s: carried fill %08x, want %08x", n.Label, s.rCols[i], got)
 		}
 		// And the carried rect is the one rectOf produces for it.
@@ -533,11 +533,11 @@ func TestFillByLabelIsPositionIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
-	s := newState(t, lay, Opts{})
+	s := newState(t, lay, Opts{Color: ColorByLabel})
 	var shared []uint32
 	for i := range lay.Nodes {
 		if lay.Nodes[i].Label == "shared" {
-			shared = append(shared, s.fill(&lay.Nodes[i]))
+			shared = append(shared, s.fill(i))
 		}
 	}
 	if len(shared) != 2 {
@@ -548,7 +548,7 @@ func TestFillByLabelIsPositionIndependent(t *testing.T) {
 	}
 	// And different names are told apart. Deterministic, so this is a real
 	// pin, not a flake: it would catch the hash-to-band mapping collapsing.
-	if a, b := s.fill(&lay.Nodes[0]), s.fill(&lay.Nodes[1]); a == b {
+	if a, b := s.fill(0), s.fill(1); a == b {
 		t.Errorf("%q and %q share a colour: %08x", lay.Nodes[0].Label, lay.Nodes[1].Label, a)
 	}
 }
@@ -575,8 +575,8 @@ func TestFillModesAndOverride(t *testing.T) {
 	lay := mustLayout(t, icicle.Options{})
 
 	byDepth := newState(t, lay, Opts{Color: ColorByDepth})
-	root, leaf := &lay.Nodes[0], &lay.Nodes[2]
-	if root.Depth == leaf.Depth {
+	const root, leaf = 0, 2
+	if lay.Nodes[root].Depth == lay.Nodes[leaf].Depth {
 		t.Fatal("the fixture lost its depth range")
 	}
 	if byDepth.fill(root) == byDepth.fill(leaf) {
@@ -754,5 +754,84 @@ func TestNilSafety(t *testing.T) {
 	var r Renderer
 	if h, c, clicked := r.Show(nil, "t", 10, 10, nil, Opts{}); h.Ok || c.Ok || clicked {
 		t.Error("Show on a nil layout reported a hit")
+	}
+}
+
+// The default colours by branch: a subtree stays near its parent's colour,
+// the heads of different branches are far apart, and a sibling after the
+// first steps away from it.
+func TestBranchBandKeepsSubtreesTogether(t *testing.T) {
+	// main → {a → {a1, a2}, b → {b1}}. main is the trunk; a and b are the
+	// branch heads.
+	tr := icicle.Tree{
+		Labels:  []string{"main", "a", "a1", "a2", "b", "b1"},
+		Parents: []int32{-1, 0, 1, 1, 0, 4},
+		Self:    []float64{0, 0, 3, 2, 0, 4},
+	}
+	lay, err := icicle.Compute(tr, icicle.Options{Order: icicle.OrderInput})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	u := branchBand(lay, nil)
+	at := map[string]float32{}
+	for i := range lay.Nodes {
+		if u[i] < 0 || u[i] > 1 {
+			t.Errorf("%s: band position %v outside [0, 1]", lay.Nodes[i].Label, u[i])
+		}
+		at[lay.Nodes[i].Label] = u[i]
+	}
+	abs := func(x float32) float32 { return max(x, -x) }
+	if at["main"] != 0.5 {
+		t.Errorf("the trunk sits at %v, want the band middle", at["main"])
+	}
+	if d := abs(at["a"] - at["b"]); d < 0.3 {
+		t.Errorf("branch heads a and b are only %v apart", d)
+	}
+	// The first sibling and an only child keep the parent's colour; a
+	// further sibling steps away, but no further than branchStep.
+	if at["a1"] != at["a"] || at["b1"] != at["b"] {
+		t.Errorf("a1 %v / b1 %v, want their parents' %v / %v", at["a1"], at["b1"], at["a"], at["b"])
+	}
+	if d := abs(at["a2"] - at["a"]); d == 0 || d > branchStep {
+		t.Errorf("a2 is %v from its parent a, want within (0, %v]", d, branchStep)
+	}
+
+	// fill reads it through, and caches it per layout.
+	s := newState(t, lay, Opts{})
+	if s.fill(1) == s.fill(4) {
+		t.Error("ColorByBranch gave the two branch heads the same colour")
+	}
+	if s.branchFor != lay {
+		t.Error("the branch positions were not cached against the layout")
+	}
+}
+
+// Several roots fan out at depth 0, so they are the heads; a single chain
+// never fans out and stays on the trunk.
+func TestBranchBandRootsAndChains(t *testing.T) {
+	multi, err := icicle.Compute(icicle.Tree{
+		Labels:  []string{"x", "y"},
+		Parents: []int32{-1, -1},
+		Self:    []float64{2, 1},
+	}, icicle.Options{Order: icicle.OrderInput})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if u := branchBand(multi, nil); u[0] == u[1] {
+		t.Errorf("two roots share a band position: %v", u)
+	}
+
+	chain, err := icicle.Compute(icicle.Tree{
+		Labels:  []string{"a", "b", "c"},
+		Parents: []int32{-1, 0, 1},
+		Self:    []float64{0, 0, 1},
+	}, icicle.Options{})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	for i, v := range branchBand(chain, nil) {
+		if v != 0.5 {
+			t.Errorf("chain node %d at %v, want the trunk's 0.5", i, v)
+		}
 	}
 }
