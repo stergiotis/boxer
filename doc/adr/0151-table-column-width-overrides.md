@@ -774,6 +774,29 @@ than by use: the widget's test runs the real resolver over an in-memory
 store through resolve, settle, capture, flush and a fresh load, and the
 scenes only prove the protocol runs every frame without complaint.
 
+## Update — 2026-09-19: a host-owned table, and the round trip seen in use
+
+Two things, both from giving the file dialog persistent widths
+([ADR-0200](./0200-tally-lading-browser.md)'s update of the same date).
+
+The design assumed every table belongs to an app: overrides are scoped by
+`AppId`, and the store reaches an app through `colwidth.HostI` on its frame
+context. The file dialog is the host's own UI — raised by the window host and
+by the fs Powerbox bridge on behalf of whichever app asked — and has neither.
+It resolves under a synthetic identity, `runtime.filepicker`, through a
+resolver `hostboot` builds directly over the facts store and flushes each
+frame. Nothing in the resolver or the fact kind changed; what is new is that
+an `AppId` in these rows need not be a registered app.
+
+The 2026-08-21 update recorded that the headless lane cannot drag, so the
+rendered round trip was covered by tests rather than by use. The carrier
+driver has a `drag` step now (ADR-0154), and the round trip has been seen: a
+column edge dragged in a running headless window, the debounce written, the
+host restarted, the width back — and the same width in a second table of a
+different tag, through the column tier. What remains unseen is the reset
+gesture: the header context menu did not open under the driver's secondary
+click, and whether that is the driver or the menu was not established.
+
 ## Status
 
 Accepted 2026-07-30. The fact kind and M1–M6 are all implemented (Updates

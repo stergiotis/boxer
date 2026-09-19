@@ -580,6 +580,239 @@ thousands of paths is one to refine, not scroll. `fs.Glob` stays a walk
 (ADR-0198 §SD8's reasoning — a glob in RE2 is a divergence nobody would
 see); the seam is for a pattern that already is RE2 on both sides.
 
+### 2026-09-18 — the dialog adopts the widget
+
+Alternatives left "the dialog may adopt it" open, and until now it had not:
+`filepicker` kept its own current directory, breadcrumb, listing cache,
+directories-first sort, hidden-name check and selection set beside the
+widget's. The two copies had drifted where a user sees it — SI sizes in one
+and IEC in the other, two icon sets, a single click entering a directory in
+the dialog and a double click in every browser pane — and three entries on
+the dialog's deferred list (keys, modifier-aware multi-select, a symlink shown
+as a link) were things the widget already did.
+
+The dialog is now a shell around the widget. The window, the panels, the
+modes and options, the filename row, the stat pane, the commit and the display
+root stay the dialog's; everything between the breadcrumb and the last row is
+`fsbrowser.Render` in list mode over a `State` the dialog owns. Its exported
+surface is unchanged: the `With*Filter` predicates are still written against
+`fs.DirEntry`, and the dialog presents the widget's cached `Entry` as one.
+The package's explanation page carries the rest.
+
+A third package holding a navigation model for both was the alternative. It
+is rejected because `State` already is that model, and a model shared by two
+renderers would have kept the half that drifted.
+
+§SD2's contract gains two fields, both general rather than the dialog's:
+
+- **`Input.Keep`** — a host predicate over an `Entry`; an entry it refuses is
+  not a row in either mode, and a refused directory is not walked by a filter.
+  It sits beside `ShowHidden` and runs wherever that does, including over what
+  an `fsmatch.FS` answered, since the store cannot run a Go predicate — there
+  it sees each match alone, so a match beneath a refused directory stays. The
+  dialog's extension, glob and host filters and pick-folder's directories-only
+  listing are this.
+- **`Input.SingleSelect`** — every click replaces the selection; ctrl and
+  shift are not read. The outline's selection is the tree widget's, so there
+  the widget cuts a selection that grew past one back to the cursor, a frame
+  after it grew.
+
+What a user of the dialog sees change:
+
+- A directory is entered by a double click or Enter, not a single click; a
+  single click selects it. A double click or Enter on a file commits it in
+  open mode; in save mode a click on a file gives the filename row its name.
+- Pick-folder commits the one selected directory when there is one and the
+  current directory otherwise, and the footer names which. With a click now
+  selecting rather than entering, committing the current directory alone
+  would return the parent of what the user just clicked.
+- Multi-select is the widget's — a plain click replaces, ctrl toggles, shift
+  extends — where every click used to toggle. The commit still returns files
+  in the order they were picked, which the dialog keeps beside the widget's
+  selection, a set.
+- The listing has size and modified columns, sortable, and the quick filter.
+  The cost is the widget's: each entry is stat'ed when its directory is read,
+  which the dialog's name-only listing did not do.
+- The widget caches a listing until told otherwise, which suits a snapshot and
+  not the live tree a dialog browses. The dialog invalidates when it is shown
+  and after each navigation, which is when its own cache used to be dropped.
+
+Putting the widget in a window corrected two things about the widget itself,
+and both reach its other hosts:
+
+- **`MaxHeight` bounds the widget, not the table.** Its comment always said
+  to feed it the pane's height "to bound the browser by its pane", and the
+  table took all of it, so the browser stood taller than its pane by the
+  breadcrumb and the filter row. A dock tab clips that; a window grows to fit
+  its content, the next measurement reads the grown panel, and the dialog
+  walked to the height of the screen. The widget now measures what stands
+  above its table — two layout probes, their difference held on the `State` —
+  and takes it off the table's share.
+- **Default widths are applied when the host persists none.** `egui_table`
+  fits a table it has not seen to its content, and these cells truncate, so
+  their content is a few points wide: a host without a `colwidth.Resolver`
+  opened with every column collapsed onto its ellipsis — seen in the gallery
+  demo and the dialog; mdedit's files pane passes none either. Such a host's table now gets the
+  defaults through the ADR-0151 apply, under a generation that moves once, on
+  the view's second frame, and then never — so a drag stays. The second
+  generation is for a table inside a new `egui::Window`: that window's sizing
+  pass overwrites every width with the content's after the apply has been
+  counted as done. The etable binding skipping its apply during a sizing pass,
+  as the ctable binding skips its render, would retire the second generation;
+  it is an IDL change and is deferred, marked `// deferred:` at
+  `seedWidthEpoch`. The IDL stays as "Surfaces" left it.
+
+`filepicker`'s WASM declaration (ADR-0080) moves to blocked: it imports
+`fsbrowser`, `tree` and `regexedit`, which are declared so. That is by
+entailment; no TinyGo run was made. None of its importers declared a verdict
+that rested on it.
+
+Verified in the unit lane of both packages, by the tour's `34_fsbrowser`
+scene for the widget's existing contract, and by driving the gallery's filepicker
+demo through `imzero2 drive` (ADR-0154) — the four modes' commits, pick order
+under ctrl-click, the save-mode name, and the window holding its size. No
+scene asserts the dialog; one beside that scene would.
+
+### 2026-09-19 — the dialog's table spans it, and its layout is kept
+
+Two things the first day of use asked for. The listing stopped short of the
+dialog's right edge, fixed columns beside empty space; and a column dragged
+in the dialog was forgotten with it, where every browser pane keeps its
+widths through ADR-0151.
+
+**`Input.FillWidth`** makes the columns span the pane, the name column taking
+what the others leave. The first construction was the obvious one and is
+recorded because it fails quietly: derive the name column and let the others
+be dragged. With the name column derived, the right edge of every later
+column stands at a position the pane fixes; the crate computes a dragged
+width from the pointer and the column's *left* edge, the left edge moves as
+the name column gives, the edge under the pointer never arrives, and the
+width changes each frame by the pointer's offset — rate control where the
+reader expects position control, running to the floor. What the widget does
+instead is a splitter: a dragged edge takes from the column to its right, so
+everything left of the edge stands still and the edge follows the pointer;
+the last column's edge is the pane's and is not dragged; only a resize of the
+pane moves the name column on its own. The layout is the widget's while
+`FillWidth` is on, held per view on the `State`. The resolver is told that
+layout, so a column that gave to its neighbour's drag persists as surely as
+the dragged one, and is told for the name column what it sent itself: that
+width follows the pane, and captured it would be written on every resize.
+
+**The dialog's widths are the host's, under an identity of their own.**
+ADR-0151 scopes overrides by app and hands the store to an app through its
+frame context. A file dialog is not an app and has no frame context: the
+window host raises one and the fs Powerbox bridge raises the rest, for
+whichever app asked. Keying by the asking app would give one dialog a layout
+per caller. It is keyed `runtime.filepicker`, a synthetic id as the fs
+broker's `runtime.fs` is; `filepicker.NewColumnWidths` builds the resolver
+with that identity and the widget's drag bounds, `hostboot` builds one over
+the facts store, hands it to both dialog hosts and flushes it every frame —
+not only while a dialog is open, since a width dragged just before a commit
+is written after the dialog has gone. The instance tier is tagged by mode,
+not by dialog instance: the bridge mints a dialog per request. A host that
+passes no resolver gets the fill and no persistence.
+
+Verified by use, through `imzero2 drive`: both interior edges land where the
+pointer went, the right-hand neighbour gives, a resize of the dialog moves
+the name column alone, the layout comes back after a restart of the host,
+and a width dragged in the window host's save dialog is the width of the
+bridge's open dialog. Not reached: the header's reset menu, which did not
+open under the driver's secondary click; and `FillWidth` in outline mode,
+which shares the layout code and has no host.
+
+### 2026-09-19 — the filter's search is a background job
+
+The 2026-09-03 update put the filter's search on the render thread: the
+store's answer as one blocking call, a plain tree's walk as a budget of
+directory reads per frame. The dialog made the second one felt — a walk from
+a home directory stats every entry of thousands of directories, a frame's
+share at a time — and neither had a way to be stopped.
+
+The search is now a `bgjob` run (ADR-0038's producer, through the runner
+every other inline job uses). It starts once the filter text has stood still
+for a moment, because with `Input.Tasks` set each search is a task on the
+bus and a reader typing a pattern would otherwise start and cancel one per
+key. The filter row shows the standard `jobprogress` row inline — bar, share,
+time left, the counts, Cancel — so the table does not move when a search
+starts and ends; matches are listed as they are found, as before; a cancelled
+search keeps what it found and says so. tally passes its task API, the file
+dialog one `hostboot` builds under `runtime.filepicker`; mdedit's files pane
+and play's Files tab pass none, and their searches are jobs of the widget's
+own, off the render thread all the same.
+
+A walk does not know how much it has left. Its share is the directories read
+over the directories known, read and unread, reported as the most it has
+been, so the bar can wait and does not go back; the time left is the
+estimator's over that share and is as rough as the share is, most of all
+early in a wide tree. The store's single call is indeterminate.
+
+Three consequences, the first two now part of §SD2's contract:
+
+- The host's `fs.FS` is read from the job's goroutine as well as the render
+  thread. `os.DirFS` and a `ladingview.Locked` view allow that. play's result
+  tree did not quite: it sorted a directory's children on first read into an
+  unguarded cache, and now sorts them when the tree is built.
+- `Input.Keep` is called from that goroutine too.
+- A host that stops rendering a browser calls `State.StopSearch`, as the
+  dialog does when it closes. The goroutine reads the file system itself
+  rather than through the `State`'s listing cache, which stays the render
+  thread's alone; a walk therefore re-reads directories the browser has
+  listed.
+
+The two caps are told apart where they were one message: more matches than
+the list shows asks for a narrower pattern, directories left unread for a
+search from further down — the usual outcome from a home directory, where
+"narrow the pattern" was the wrong advice.
+
+Verified in the unit lane under the race detector — the walk and the
+store's call as functions, the job's start, streaming, cancel and failure
+against a real runner — and by use in the dialog over a home directory: the
+job row, the task in `keelson('tasks')` under the dialog's identity, Cancel.
+The carrier driver could not focus the filter box, so the live run seeded
+the filter in a scratch build; typing a pattern was not driven.
+
+### 2026-09-19 — the lane is shared, and every wait is the standard row
+
+§SD4 kept tally's store plumbing app-local, and the 2026-09-02 update
+confirmed it when mdedit copied `storeConn` and `lane` rather than share
+them. That stands for `storeConn`, whose trim per app is real. It is
+withdrawn for the lane, for two reasons the day's earlier work produced.
+
+The copies had stopped being the only ones of their kind. The widget's search
+(the update above) needed the same thing — cancellable work off the render
+thread, polled by the frame — and took it from `bgjob`, which also makes a
+run a keelson task and estimates its progress. tally's lane, a line-for-line
+twin in mdedit, did neither: twelve store-bound waits in tally were a spinner
+and a sentence, with no way to stop a query and no entry in the task monitor.
+A reader could cancel a filter in a browse pane and not the Find tab beside
+it.
+
+The lane is now `bgjob.Keyed` — tally's contract unchanged (a new key
+supersedes, a repeated key is a cache hit, a nil run is a poll, a value with
+a disposer is lane-owned), on the task and estimator plumbing `bgjob.Runner`
+uses, plus the two things a wait needs: a snapshot the standard row draws,
+and `Cancel`. A cancelled key stays answered, with `bgjob.ErrCancelled`, so
+the next frame's demand does not start it again; tally says "was cancelled"
+with a Run again, and Find's Search button re-runs a cancelled or failed
+search with nothing changed. Each of tally's lanes is a task of its own kind
+(`tally-find`, `tally-diff`, …); the connection is left out, being the app
+coming up rather than work the reader asked for. mdedit's files pane has no
+task caps and its lanes stay local; its mount listing shows the row.
+
+Drawing a job is shared too: `widgets/bgjobrow` is the one mapping of a
+`bgjob` snapshot onto `jobprogress`, used by tally, mdedit and the widget's
+filter row. `jobprogress` keeps its charter of knowing no producer; the
+adapter is a package beside it.
+
+tally's queries report no progress of their own — they run through the
+chlocal pool, which exposes none — so their rows are indeterminate: a bar
+that moves, the sentence, Cancel. Verified in the unit lane under the race
+detector, `Keyed` against a real bus for the task and its cancel. tally was
+brought up headless on the shared lane and connected and listed the store
+through it, but the store at hand held no mounts, so none of its waits was
+reached; the row itself was seen in the widget's filter, through the same
+adapter.
+
 ## References
 
 - [ADR-0198](./0198-fs-snapshot-store.md) and

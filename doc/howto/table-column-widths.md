@@ -17,10 +17,11 @@ status: draft
 > run against the real `boxer.facts` — one captured a width, the other
 > resolved it.
 >
-> Not verified: the rendered behaviour. Nobody has dragged a column in a
-> running window and seen the width come back. Everything between the drag
-> and the store — the read-back register, the epoch apply, the capture
-> gate — is covered by tests rather than by use.
+> The rendered behaviour was first seen on 2026-09-19, in the file dialog
+> under the headless driver: a column edge dragged in a running window, the
+> host restarted, the width back (ADR-0151's update of that date). Not seen:
+> the reset gesture below — the header menu did not open under the driver's
+> secondary click — and a drag in the play grid this page's snippets follow.
 
 # Controlling table column widths
 
@@ -219,6 +220,20 @@ Construct with `ctx.AppId()`, never an identity you compose: ADR-0155 §SD3
 makes it the keying identity for embedded and windowed instances alike, so a
 column dragged in one follows the content to the other. A composed identity
 would fork the rows per embedder.
+
+## A table that is the host's, not an app's
+
+Some tables belong to no app: the file dialog is raised by the window host
+and by the fs Powerbox bridge, for whichever app asked, and has no frame
+context to take a store from. Such a table resolves under a synthetic
+identity through a resolver its host builds directly over the facts store —
+`filepicker.NewColumnWidths(store)` for the dialog, which fixes the identity
+(`runtime.filepicker`) and the drag bounds — and the host flushes it on every
+frame, not only while the table is up: a width dragged just before a dialog
+commits is written after the dialog has gone. `hostboot` is the call site.
+
+Do not key such a table by the app that asked for it. It is one dialog to
+its user, and a layout per caller is not what they dragged.
 
 ## See also
 
