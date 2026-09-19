@@ -2595,6 +2595,18 @@ func (inst PaintRectsFilledFluid) Send() {
 
 	r.SendIntermediate()
 }
+func (inst PaintSegmentsFluid) Tessellated() PaintSegmentsFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintSegmentsMethodIdTessellated))
+
+	return inst
+}
+
+func (inst PaintSegmentsFluid) Send() {
+	r := inst.r
+	r.WriteOpCode(uint32(PaintSegmentsMethodIdBuild))
+	r.SendIntermediate()
+}
 func (inst PaintSenseRegionFluid) Send() {
 	r := inst.r
 

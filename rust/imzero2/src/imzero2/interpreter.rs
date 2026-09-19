@@ -38,16 +38,16 @@ use crate::imzero2::enums_out::{
     HyperlinkBuilderMethodId, HyperlinkToBuilderMethodId, LabelAtomsBuilderMethodId,
     LabelBuilderMethodId, NewTableBuilderMethodId, NewTableColumnBuilderMethodId,
     PaintCanvasBuilderMethodId, PaintImageBuilderMethodId, PaintPolygonFilledBuilderMethodId,
-    PaintTextBuilderMethodId, PanelBottomBuilderMethodId, PanelBottomInsideBuilderMethodId,
-    PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId, PanelRightBuilderMethodId,
-    PanelRightInsideBuilderMethodId, PanelTopBuilderMethodId, PanelTopInsideBuilderMethodId,
-    ProgressBarBuilderMethodId, ScalarSizeBuilderMethodId, ScrollAreaBuilderMethodId,
-    ScrollingTextureBuilderMethodId, SeparatorBuilderMethodId, SliderF64BuilderMethodId,
-    SliderI64BuilderMethodId, SliderU64BuilderMethodId, SpinnerBuilderMethodId,
-    StyledSectionsBuilderMethodId, TableBuilderMethodId, TableColumnBuilderMethodId,
-    TextEditBuilderMethodId, TimeRangePickerBuilderMethodId, TintedScopeBuilderMethodId,
-    UiWithLayoutBuilderMethodId, VectorSizeBuilderMethodId, WidgetTextBuilderMethodId,
-    WindowBuilderMethodId,
+    PaintSegmentsBuilderMethodId, PaintTextBuilderMethodId, PanelBottomBuilderMethodId,
+    PanelBottomInsideBuilderMethodId, PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId,
+    PanelRightBuilderMethodId, PanelRightInsideBuilderMethodId, PanelTopBuilderMethodId,
+    PanelTopInsideBuilderMethodId, ProgressBarBuilderMethodId, ScalarSizeBuilderMethodId,
+    ScrollAreaBuilderMethodId, ScrollingTextureBuilderMethodId, SeparatorBuilderMethodId,
+    SliderF64BuilderMethodId, SliderI64BuilderMethodId, SliderU64BuilderMethodId,
+    SpinnerBuilderMethodId, StyledSectionsBuilderMethodId, TableBuilderMethodId,
+    TableColumnBuilderMethodId, TextEditBuilderMethodId, TimeRangePickerBuilderMethodId,
+    TintedScopeBuilderMethodId, UiWithLayoutBuilderMethodId, VectorSizeBuilderMethodId,
+    WidgetTextBuilderMethodId, WindowBuilderMethodId,
 };
 use crate::imzero2::fenums::ResponseFlags;
 use crate::imzero2::image::ImageCache;
@@ -1070,6 +1070,15 @@ pub enum PaintCmd {
         max_xs: Vec<f32>,
         max_ys: Vec<f32>,
         cols: Vec<u32>,
+    },
+    Segments {
+        x0s: Vec<f32>,
+        y0s: Vec<f32>,
+        x1s: Vec<f32>,
+        y1s: Vec<f32>,
+        cols: Vec<u32>,
+        width: f32,
+        tessellated: bool,
     },
     Image {
         id: u64,
@@ -7998,6 +8007,50 @@ egui::Grid::new(i);
                     cols,
                 });
             }
+            FuncProcId::PaintSegments => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::PaintSegments");
+                // arguments
+                let mut x0s = self.io.read_plain_f32h()?;
+                let mut y0s = self.io.read_plain_f32h()?;
+                let mut x1s = self.io.read_plain_f32h()?;
+                let mut y1s = self.io.read_plain_f32h()?;
+                let mut cols = self.io.read_plain_u32h()?;
+                let mut stroke_width = self.io.read_plain_f32()?;
+                // construct
+
+                let mut w = 0u8;
+                let mut tessellated = false;
+                // methods
+                loop {
+                    let (m, _) = self.read_from_repr(PaintSegmentsBuilderMethodId::from_repr)?;
+                    match m {
+                        PaintSegmentsBuilderMethodId::Build => {
+                            break;
+                        }
+                        PaintSegmentsBuilderMethodId::Tessellated => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!(
+                                "match PaintSegmentsBuilderMethodId::Tessellated"
+                            );
+                            tessellated = true;
+                        }
+                    }
+                }
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                self.paint_cmds.push(PaintCmd::Segments {
+                    x0s,
+                    y0s,
+                    x1s,
+                    y1s,
+                    cols,
+                    width: stroke_width,
+                    tessellated,
+                });
+            }
             FuncProcId::PaintSenseRegion => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::PaintSenseRegion");
@@ -11946,6 +11999,62 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                             0.0,
                             color32_from_rgba_u32(cols[k]),
                         );
+                    }
+                }
+                PaintCmd::Segments {
+                    x0s,
+                    y0s,
+                    x1s,
+                    y1s,
+                    cols,
+                    width,
+                    tessellated,
+                } => {
+                    let n = x0s.len().min(y0s.len()).min(x1s.len()).min(y1s.len()).min(cols.len());
+                    if *tessellated {
+                        // The hinted path: a feathered epaint line per segment.
+                        for k in 0..n {
+                            cur.line_segment(
+                                [
+                                    egui::Pos2::new(origin.x + x0s[k], origin.y + y0s[k]),
+                                    egui::Pos2::new(origin.x + x1s[k], origin.y + y1s[k]),
+                                ],
+                                egui::Stroke::new(*width, color32_from_rgba_u32(cols[k])),
+                            );
+                        }
+                    } else {
+                        // One untextured mesh for the batch: a quad per segment,
+                        // no feathering (ADR-0249 SD5). A degenerate segment has
+                        // no direction to extrude along and is skipped.
+                        let half = 0.5 * width.max(0.0);
+                        let mut mesh = egui::Mesh::default();
+                        mesh.vertices.reserve(4 * n);
+                        mesh.indices.reserve(6 * n);
+                        for k in 0..n {
+                            let dx = x1s[k] - x0s[k];
+                            let dy = y1s[k] - y0s[k];
+                            let len = (dx * dx + dy * dy).sqrt();
+                            if !(len > 0.0) || !len.is_finite() {
+                                continue;
+                            }
+                            let nx = -dy / len * half;
+                            let ny = dx / len * half;
+                            let ax = origin.x + x0s[k];
+                            let ay = origin.y + y0s[k];
+                            let bx = origin.x + x1s[k];
+                            let by = origin.y + y1s[k];
+                            let col = color32_from_rgba_u32(cols[k]);
+                            let base = mesh.vertices.len() as u32;
+                            mesh.colored_vertex(egui::Pos2::new(ax + nx, ay + ny), col);
+                            mesh.colored_vertex(egui::Pos2::new(bx + nx, by + ny), col);
+                            mesh.colored_vertex(egui::Pos2::new(bx - nx, by - ny), col);
+                            mesh.colored_vertex(egui::Pos2::new(ax - nx, ay - ny), col);
+                            mesh.add_triangle(base, base + 1, base + 2);
+                            mesh.add_triangle(base, base + 2, base + 3);
+                        }
+                        if !mesh.indices.is_empty() {
+                            cur.add(egui::Shape::mesh(mesh));
+                        }
                     }
                 }
             }

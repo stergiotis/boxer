@@ -376,6 +376,11 @@ type PaintRectsFilledFluid struct {
 }
 type PaintRectsFilledMethodIdE uint32
 
+type PaintSegmentsFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type PaintSegmentsMethodIdE uint32
+
 type PaintSenseRegionFluid struct {
 	r     *typed.RetainedFffiBuilder
 	id    uint64

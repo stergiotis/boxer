@@ -365,6 +365,37 @@ self.paint_cmds.push(PaintCmd::PolygonFilled { points, fill: color32_from_rgba_u
 		WithReturnType(structPaintCmd()).
 		Build())
 
+	// paintSegments — one straight line segment per index, from (x0s[i], y0s[i])
+	// to (x1s[i], y1s[i]), each with its own colour, all at one width; one
+	// opcode for a whole layer of short strokes (ADR-0249 SD5: particle trails,
+	// where trail fade and magnitude colouring give nearly every segment a
+	// colour of its own). Arrays are truncated to the shortest length
+	// Rust-side. The opcode does not promise feathered antialiasing: the host
+	// draws the batch as one untextured mesh of quads. tessellated() is a hint
+	// to draw each segment as an epaint line shape instead — feathered, and a
+	// shape per segment through the tessellator — which a host may ignore.
+	registered = append(registered, idl.NewBuilderFactoryNode("paintSegments").
+		AddArguments(idl.NewArgumentsBuilder().
+			PlainArg("x0s", ctabb.F32h).
+			PlainArg("y0s", ctabb.F32h).
+			PlainArg("x1s", ctabb.F32h).
+			PlainArg("y1s", ctabb.F32h).
+			PlainArg("cols", ctabb.U32h).AsColors().
+			PlainArg("strokeWidth", ctabb.F32).
+			Build()).
+		AddMethods(idl.NewMethodBuilder().
+			BeginMethod("tessellated").
+			CodeClientRust(rustClientCode("tessellated = true;\n")).EndMethod().
+			Build()...).
+		WithConstructionCodeClientRust(rustClientCode(`0u8;
+let mut tessellated = false;
+`)).
+		WithApplyCodeClientRust(rustClientCode(`self.paint_cmds.push(PaintCmd::Segments { x0s, y0s, x1s, y1s, cols, width: stroke_width, tessellated });
+`)).
+		WithSettingImmediate(true).
+		WithReturnType(structPaintCmd()).
+		Build())
+
 	// paintImage — a textured rect by image id, clipped like any other paint
 	// command (ADR-0149 SD5: the in-plot raster route — large heatmaps, map
 	// underlays). Generalizes the mapRaster protocol: pixels are 0xRRGGBBAA

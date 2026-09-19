@@ -52,6 +52,7 @@ status: draft
 | ExportSvgWindow | Procedural | Yes | 4 | 0 | - | - |
 | FetchCommandEnterPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchF1KeyPressed | Fetcher | No | 0 | 0 | - | - |
+| FetchF2KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchFrameMetrics | Fetcher | No | 0 | 0 | - | - |
 | FetchGraphEvents | Fetcher | No | 0 | 0 | - | - |
 | FetchGraphMetrics | Fetcher | No | 0 | 0 | - | - |
@@ -125,6 +126,7 @@ status: draft
 | PaintRectFilled | BuilderFactory | No | 6 | 0 | 0 | Immediate |
 | PaintRectStroke | BuilderFactory | No | 7 | 0 | 0 | Immediate |
 | PaintRectsFilled | BuilderFactory | No | 5 | 0 | 0 | Immediate |
+| PaintSegments | BuilderFactory | No | 6 | 0 | 1 | Immediate |
 | PaintSenseRegion | BuilderFactory | Yes | 4 | 0 | 0 | Immediate |
 | PaintText | BuilderFactory | No | 7 | 0 | 1 | Immediate |
 | PanelBottom | BuilderFactory | Yes | 0 | 0 | 3 | Immediate, BlockIterator |
@@ -171,7 +173,7 @@ status: draft
 | TableCellText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
 | TableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
 | TableHeaderText | BuilderFactory | No | 1 | 0 | 0 | Immediate, Retained |
-| TextEdit | BuilderFactory | Yes | 2 | 0 | 18 | Immediate |
+| TextEdit | BuilderFactory | Yes | 2 | 0 | 19 | Immediate |
 | TimeRangePicker | BuilderFactory | Yes | 2 | 0 | 4 | Immediate, Retained |
 | TintedScope | BuilderFactory | Yes | 1 | 0 | 4 | Immediate, Retained, BlockIterator |
 | UiClipToMaxRect | Procedural | No | 0 | 0 | - | - |
@@ -1685,6 +1687,33 @@ PaintCmd
 
 ---
 
+### PaintSegments
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| x0s | plain | f32h |
+| y0s | plain | f32h |
+| x1s | plain | f32h |
+| y1s | plain | f32h |
+| cols | plain | u32h |
+| strokeWidth | plain | f32 |
+
+#### Builder Methods
+
+- **Tessellated**()
+
+#### Return Type
+
+PaintCmd
+
+---
+
 ### PaintSenseRegion
 
 - **Type:** BuilderFactory
@@ -2387,6 +2416,7 @@ TableHeaderText
 - **ReportCursor**()
 - **SetCursor**(sel: u64, focus: b)
 - **CaptureTab**()
+- **CaptureKeys**(mask: u64)
 
 #### Return Type
 
@@ -3110,6 +3140,18 @@ Block
 ---
 
 ### FetchF1KeyPressed
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| pressed | b |
+
+---
+
+### FetchF2KeyPressed
 
 - **Type:** Fetcher
 

@@ -1145,6 +1145,23 @@ func PaintRectsFilled(minXs []float32, minYs []float32, maxXs []float32, maxYs [
 	return
 }
 
+func PaintSegments(x0s []float32, y0s []float32, x1s []float32, y1s []float32, cols color.Colors, strokeWidth float32) (inst PaintSegmentsFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdPaintSegments))
+	runtime.PutFloat32SliceArg(r, x0s)
+	runtime.PutFloat32SliceArg(r, y0s)
+	runtime.PutFloat32SliceArg(r, x1s)
+	runtime.PutFloat32SliceArg(r, y1s)
+	color.PutColorsSlice(r, cols)
+	r.WriteFloat32(strokeWidth)
+
+	inst = PaintSegmentsFluid{
+		r: r,
+	}
+
+	return
+}
+
 func PaintSenseRegion(i WidgetIdCreatorI, px float32, py float32, sw float32, sh float32) (inst PaintSenseRegionFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPaintSenseRegion))
