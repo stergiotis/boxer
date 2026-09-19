@@ -201,7 +201,7 @@ func TestFormatProgressLine(t *testing.T) {
 	// used to say KB/GB (humanBytes, retired 2026-08-05 for humanize.IBytes).
 	require.Contains(t, s, "14 GiB read")
 	require.Contains(t, s, "1.2 M rows/s")
-	require.Contains(t, s, "ETA 1m20s")
+	require.Contains(t, s, "1m20s left")
 	require.Contains(t, s, "mem 1.1 MiB")
 	require.Contains(t, s, "300ms")
 
@@ -212,7 +212,7 @@ func TestFormatProgressLine(t *testing.T) {
 	// The top bar's short form carries the percentage the bar cannot show
 	// legibly, then prefers the ETA, falling back to the rate and to the bare
 	// row count while both warm up.
-	require.Equal(t, "77% · ETA 1m20s", formatProgressBrief(v))
+	require.Equal(t, "77% · 1m20s left", formatProgressBrief(v))
 	require.Equal(t, "1% · 1.2 M rows/s",
 		formatProgressBrief(progressView{fresh: true, knownTotal: true, percent: 1, rate: 1_200_000}))
 	require.Equal(t, "1%", formatProgressBrief(progressView{fresh: true, knownTotal: true, percent: 1}))
@@ -222,7 +222,7 @@ func TestFormatProgressLine(t *testing.T) {
 
 	// The pane strip drops the memory/elapsed tail the status bar carries.
 	strip := formatProgressStrip(v)
-	require.Equal(t, "1.9 G / 2.5 G rows · 1.2 M rows/s · ETA 1m20s", strip)
+	require.Equal(t, "1.9 G / 2.5 G rows · 1.2 M rows/s · 1m20s left", strip)
 }
 
 // The landed-run readout that takes the progress row's slot between fetches:

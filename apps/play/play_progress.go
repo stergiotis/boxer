@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/stergiotis/boxer/public/hmi/progressbar"
+	"github.com/stergiotis/boxer/public/hmi/progressest"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
 )
 
 // play_progress.go — what play MAKES of a run's live progress, and what it
@@ -29,8 +30,8 @@ import (
 //
 // A tick on its own says how far the server has got, not how long the rest
 // will take. [progressTracker] folds the ticks into a
-// [progressbar.Estimator] (Holt's double exponential smoothing plus display
-// damping — the estimator the CLI progress bar uses) so the counters gain a
+// [progressest.Estimator] (Holt's double exponential smoothing plus display
+// damping — the estimator every progress readout shares, ADR-0247) so the counters gain a
 // smoothed rate and a non-oscillating ETA. One tracker per OBSERVED LANE,
 // driven once per frame: the app's follows `main`/the observed intermediate,
 // and a panel that runs its own node on its own [nodeLane] (ADR-0097 SD5) keeps
@@ -54,7 +55,7 @@ type progressView struct {
 	// ticks have landed (or when the smoothing dips below zero on a stall).
 	rate float64
 	// eta is the DAMPED estimate: decreases pass through, small increases
-	// are suppressed, large ones break through — see progressbar's
+	// are suppressed, large ones break through — see progressest's
 	// EXPLANATION.md. etaValid is false while the estimator warms up.
 	eta      time.Duration
 	etaValid bool
@@ -66,7 +67,7 @@ type progressView struct {
 // backwards, or a run clock that restarted. Without that re-anchor the
 // previous run's level and trend bias the new run's first estimates.
 type progressTracker struct {
-	est  *progressbar.Estimator
+	est  *progressest.Estimator
 	lane string
 	// anchor + useElapsed define the estimator's clock. The server's own
 	// ElapsedNs is preferred over wall time: it is the clock the counters
@@ -94,7 +95,7 @@ func (inst *progressTracker) observe(now time.Time, lane string, p runstream.Pro
 		return
 	}
 	if inst.est == nil {
-		inst.est = progressbar.NewEstimator()
+		inst.est = progressest.NewEstimator()
 	}
 	switch {
 	case !inst.tracking || lane != inst.lane ||
@@ -180,8 +181,8 @@ func formatProgressLine(v progressView) string {
 		b.WriteString(formatRate(v.rate))
 	}
 	if v.etaValid {
-		b.WriteString(" · ETA ")
-		b.WriteString(progressbar.FormatETA(v.eta))
+		b.WriteString(" · ")
+		b.WriteString(progressest.FormatRemaining(v.eta))
 	}
 	if p.MemoryUsage > 0 {
 		b.WriteString(" · mem ")
@@ -206,7 +207,7 @@ func formatProgressBrief(v progressView) string {
 	tail := ""
 	switch {
 	case v.etaValid:
-		tail = "ETA " + progressbar.FormatETA(v.eta)
+		tail = progressest.FormatRemaining(v.eta)
 	case v.rate >= 1:
 		tail = formatRate(v.rate)
 	case !v.knownTotal:
@@ -221,26 +222,37 @@ func formatProgressBrief(v progressView) string {
 	return b.String()
 }
 
-// formatProgressStrip is the pane strip's line: the numbers a reader of a
-// pane that is about to be replaced wants, without the memory/elapsed tail
-// the status bar carries.
-func formatProgressStrip(v progressView) string {
-	var b strings.Builder
-	b.WriteString(countAtAGlance(v.p.ReadRows))
-	if v.knownTotal {
-		b.WriteString(" / ")
-		b.WriteString(countAtAGlance(v.p.TotalRowsToRead))
+// laneInput is what the inline progress row (jobprogress, ADR-0247) draws of
+// one tick: the bar, and the numbers a reader of a pane that is about to be
+// replaced wants — rows against the total, the rate, the ETA — without the
+// memory/elapsed tail the status bar carries. Without a tick it is the
+// animated bar alone, which reads as "running, no idea how far".
+func laneInput(v progressView) (in jobprogress.Input) {
+	in.Inline = true
+	in.Fraction = -1
+	if !v.fresh {
+		return
 	}
-	b.WriteString(" rows")
+	if v.knownTotal {
+		in.Fraction = v.fraction
+		in.Amount = countAtAGlance(v.p.ReadRows) + " / " + countAtAGlance(v.p.TotalRowsToRead) + " rows"
+	} else {
+		in.Amount = countAtAGlance(v.p.ReadRows) + " rows"
+	}
 	if v.rate >= 1 {
-		b.WriteString(" · ")
-		b.WriteString(formatRate(v.rate))
+		in.Rate, in.RateUnit = v.rate, "rows"
 	}
 	if v.etaValid {
-		b.WriteString(" · ETA ")
-		b.WriteString(progressbar.FormatETA(v.eta))
+		// jobprogress treats 0 as unknown; a finished estimate still reads.
+		in.EtaMs = max(v.eta.Milliseconds(), 1)
 	}
-	return b.String()
+	return
+}
+
+// formatProgressStrip is the pane strip's line, spelled by jobprogress so
+// it reads the same as every other job row.
+func formatProgressStrip(v progressView) string {
+	return jobprogress.StatusLine(laneInput(v))
 }
 
 // Bar footprints. The toolbar's is compact enough to sit beside Cancel
@@ -306,13 +318,12 @@ func (inst *PlayApp) renderPaneProgressStrip(numbers bool) {
 	v := inst.frameProgress
 	pad := styletokens.PaddingTight(inst.density)
 	for range c.Horizontal().KeepIter() {
+		in := jobprogress.Input{Inline: true, Fraction: -1, Note: "executing…"}
 		if numbers && v.fresh {
-			renderProgressBar(v, paneProgressWidth)
-			diagWeak(formatProgressStrip(v))
-		} else {
-			renderProgressBar(progressView{}, paneProgressWidth)
-			diagWeak("executing…")
+			in = laneInput(v)
 		}
+		in.BarWidth = paneProgressWidth
+		jobprogress.Render(in)
 	}
 	c.AddSpace(pad)
 	c.Separator().Send()
@@ -339,19 +350,10 @@ func (inst *PlayApp) renderPaneProgressStrip(numbers bool) {
 // the caller's.
 func renderLaneProgress(ids *c.WidgetIdStack, cancelID string, v progressView) (cancelled bool) {
 	c.Spinner().Size(14).Send()
-	if c.Button(ids.PrepareStr(cancelID), c.Atoms().Text("Cancel").Keep()).
-		SendResp().HasPrimaryClicked() {
-		cancelled = true
-	}
-	if v.fresh {
-		renderProgressBar(v, paneProgressWidth)
-		diagWeak(formatProgressStrip(v))
-		return
-	}
-	// No tick yet — a run that just started, or an endpoint that streams none
-	// (chlocal, mocks). The animated bar reads as "running, no idea how far",
-	// which is all that is known.
-	renderProgressBar(progressView{}, paneProgressWidth)
+	in := laneInput(v)
+	in.BarWidth = paneProgressWidth
+	in.CancelId = ids.PrepareStr(cancelID)
+	cancelled = jobprogress.Render(in)
 	return
 }
 
@@ -450,5 +452,5 @@ func countAtAGlance(n uint64) string {
 // live formatters and the landed readouts so a run reads the same during and
 // after. Always a glance magnitude: nobody reads the units digit of a rate.
 func formatRate(rate float64) string {
-	return strings.TrimSpace(humanize.SIWithDigits(rate, 1, "")) + " rows/s"
+	return progressest.FormatRate(rate, "rows")
 }
