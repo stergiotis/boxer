@@ -171,7 +171,7 @@ func TestPreviewLaneClosesTheRecordingItReplaces(t *testing.T) {
 	stage := func(key string) (seal *sealed.File) {
 		deadline := time.Now().Add(10 * time.Second)
 		for time.Now().Before(deadline) {
-			content, done, lerr, busy := app.preview.demand(key, func(ctx context.Context) (previewContent, error) {
+			content, done, lerr, busy := app.preview.Demand(key, func(ctx context.Context) (previewContent, error) {
 				staged, serr := stageRecording(ctx, os.DirFS(dir), "tone.wav", info.Size())
 				if serr != nil {
 					return previewContent{}, serr
@@ -195,6 +195,6 @@ func TestPreviewLaneClosesTheRecordingItReplaces(t *testing.T) {
 	require.NotSame(t, first, second)
 	assert.True(t, first.Closed(), "the replaced recording is released")
 
-	app.preview.close()
+	app.preview.Close()
 	assert.True(t, second.Closed(), "and so is the one held at unmount")
 }

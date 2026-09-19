@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -121,7 +122,15 @@ func (inst *App) renderFind(sc *storeConn) {
 		}
 		c.AddSpace(styletokens.GapInline(inst.density))
 		if c.Button(inst.ids.PrepareStr("find-go"), c.Atoms().Text("Search").Keep()).SendResp().HasPrimaryClicked() {
-			f.armed = inst.findKey(loc, p.st.Dir())
+			// Search is an order: a search that was cancelled, or that
+			// failed, runs again even with nothing changed.
+			if key := inst.findKey(loc, p.st.Dir()); key == f.armed {
+				if snap := inst.findLane.Snapshot(); snap.State == bgjob.StateFailed {
+					inst.findLane.Invalidate()
+				}
+			} else {
+				f.armed = key
+			}
 		}
 	}
 	if f.armed == "" {
@@ -129,22 +138,18 @@ func (inst *App) renderFind(sc *storeConn) {
 		return
 	}
 	sql := f.armedSQL(loc, p.st.Dir())
-	res, done, ferr, busy := inst.findLane.demand(f.armed, func(ctx context.Context) (tableResult, error) {
+	res, done, ferr, busy := inst.findLane.Demand(f.armed, func(ctx context.Context) (tableResult, error) {
 		return runTable(ctx, sc.exec, sc.sql, sql)
 	})
 	if busy {
-		c.RequestRepaint()
-		for range c.HorizontalTop().KeepIter() {
-			c.Spinner().Send()
-			c.Label("Searching…").Send()
-		}
+		inst.waiting(&inst.findLane, "findLane", "Searching…")
 		return
 	}
 	if !done {
 		return
 	}
 	if ferr != nil {
-		c.Label("Search failed: " + ferr.Error()).Send()
+		inst.laneFailed(&inst.findLane, "findLane", "Searching", ferr)
 		return
 	}
 	c.Label(fmt.Sprintf("%d result(s) in %s", len(res.rows), f.scope.String())).Selectable(false).Send()

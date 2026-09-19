@@ -401,22 +401,18 @@ func (inst *App) renderResults(sc *storeConn) {
 	if hasAnchor {
 		key += "@" + anchor.key()
 	}
-	rs, done, qerr, busy := inst.resultLane.demand(key, func(ctx context.Context) (resultSet, error) {
+	rs, done, qerr, busy := inst.resultLane.Demand(key, func(ctx context.Context) (resultSet, error) {
 		return runPathSet(ctx, sc.exec, sc.sql, inst.querySql, anchor, inst.mountLabel)
 	})
 	if busy {
-		c.RequestRepaint()
-		for range c.HorizontalTop().KeepIter() {
-			c.Spinner().Send()
-			c.Label("Running the query…").Send()
-		}
+		inst.waiting(&inst.resultLane, "resultLane", "Running the query…")
 		return
 	}
 	if !done {
 		return
 	}
 	if qerr != nil {
-		c.Label("The query did not run: " + qerr.Error()).Send()
+		inst.laneFailed(&inst.resultLane, "resultLane", "Running the query", qerr)
 		return
 	}
 	if inst.resultKey != key {
@@ -442,6 +438,7 @@ func (inst *App) renderResults(sc *storeConn) {
 		label = "query result"
 	}
 	res := fsbrowser.Render(fsbrowser.Input{
+		Tasks:      inst.tasks,
 		Ids:        inst.ids,
 		ScopeKey:   "pane-results",
 		FS:         inst.resultFS,

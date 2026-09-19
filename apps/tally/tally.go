@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -80,8 +81,8 @@ type App struct {
 	// named, or the default. Fixed at Mount — the connection is opened over
 	// it — and reported back by the workingset.
 	layout    ladingschema.Layout
-	conn      lane[*storeConn]
-	mounts    lane[[]mountRow]
+	conn      bgjob.Keyed[*storeConn]
+	mounts    bgjob.Keyed[[]mountRow]
 	mountRows []mountRow
 
 	panes       [paneCount]pane
@@ -96,7 +97,7 @@ type App struct {
 	// rebuilt when the lane answers.
 	querySql   string
 	queryLabel string
-	resultLane lane[resultSet]
+	resultLane bgjob.Keyed[resultSet]
 	resultSet  resultSet
 	resultFS   *resultFS
 	resultKey  string
@@ -110,10 +111,10 @@ type App struct {
 	// readable from here.
 	raisedTab uint64
 
-	preview lane[previewContent]
-	info    lane[[]infoRow]
-	history lane[tableResult]
-	diff    lane[tableResult]
+	preview bgjob.Keyed[previewContent]
+	info    bgjob.Keyed[[]infoRow]
+	history bgjob.Keyed[tableResult]
+	diff    bgjob.Keyed[tableResult]
 
 	historyTable stringTable
 	diffTable    stringTable
@@ -121,19 +122,19 @@ type App struct {
 	historyTLKey string
 
 	find          findState
-	findLane      lane[tableResult]
-	duLane        lane[tableResult]
-	duFilesLane   lane[tableResult]
+	findLane      bgjob.Keyed[tableResult]
+	duLane        bgjob.Keyed[tableResult]
+	duFilesLane   bgjob.Keyed[tableResult]
 	duTable       stringTable
 	duTree        *treemap.Treemap
 	duTreeKey     string
 	duPaneW       float32
 	duPaneH       float32
-	problemsLane  lane[tableResult]
+	problemsLane  bgjob.Keyed[tableResult]
 	problemsTable stringTable
-	auditLane     lane[tableResult]
+	auditLane     bgjob.Keyed[tableResult]
 	auditArmed    string
-	components    lane[[]componentHit]
+	components    bgjob.Keyed[[]componentHit]
 
 	// tasks reports a recording's peaks build as a keelson task (ADR-0038);
 	// nil when the host gave no bus.
@@ -207,14 +208,14 @@ func newApp() (inst *App) {
 	// The preview lane is the only owner of an open recording: it closes the
 	// one it replaces, so browsing away from a track releases its staged
 	// bytes, its decoders and the output device.
-	inst.preview.dispose = func(content previewContent) {
+	inst.preview.SetDispose(func(content previewContent) {
 		if content.audio == nil {
 			return
 		}
 		if err := content.audio.closeE(); err != nil {
 			inst.log.Warn().Err(err).Msg("tally: closing a recording")
 		}
-	}
+	})
 	inst.historyTable = stringTable{scopeKey: "history-table", selected: -1}
 	inst.diffTable = stringTable{scopeKey: "diff-table", selected: -1}
 	inst.find.table = stringTable{scopeKey: "find-table", selected: -1}
@@ -232,6 +233,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	if inst.bus != nil {
 		inst.tasks = task.NewBusApi(task.ApiConfig{Bus: inst.bus})
 	}
+	inst.configureLanes()
 	inst.status = "connecting…"
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
 		cfg, dErr := buscodec.Decode[launchcfg.TallyLaunch](raw)
@@ -242,7 +244,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		inst.applyLaunch(cfg)
 	}
 	layout := inst.layout
-	inst.conn.demand("connect", func(cctx context.Context) (*storeConn, error) {
+	inst.conn.Demand("connect", func(cctx context.Context) (*storeConn, error) {
 		cctx, cancel := context.WithTimeout(cctx, connectTimeout)
 		defer cancel()
 		return connect(cctx, layout)
@@ -251,22 +253,22 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 }
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	inst.preview.close()
-	inst.info.close()
-	inst.history.close()
-	inst.diff.close()
-	inst.findLane.close()
-	inst.duLane.close()
-	inst.duFilesLane.close()
-	inst.problemsLane.close()
-	inst.auditLane.close()
-	inst.resultLane.close()
-	inst.components.close()
-	inst.mounts.close()
-	if sc, done, _, _ := inst.conn.demand("connect", nil); done && sc != nil {
+	inst.preview.Close()
+	inst.info.Close()
+	inst.history.Close()
+	inst.diff.Close()
+	inst.findLane.Close()
+	inst.duLane.Close()
+	inst.duFilesLane.Close()
+	inst.problemsLane.Close()
+	inst.auditLane.Close()
+	inst.resultLane.Close()
+	inst.components.Close()
+	inst.mounts.Close()
+	if sc, done, _, _ := inst.conn.Demand("connect", nil); done && sc != nil {
 		sc.close()
 	}
-	inst.conn.close()
+	inst.conn.Close()
 	return
 }
 
@@ -333,7 +335,7 @@ func (inst *App) flushColWidths() {
 
 // store is the connection once it is there; nil while connecting or failed.
 func (inst *App) store() *storeConn {
-	sc, done, cerr, busy := inst.conn.demand("connect", nil)
+	sc, done, cerr, busy := inst.conn.Demand("connect", nil)
 	switch {
 	case busy:
 		inst.status = "connecting…"
@@ -472,7 +474,7 @@ func (inst *App) lazyBody(dockID uint64, title string) (skip bool) {
 // pollMounts keeps the mount list current: it runs once on connect and again
 // on Refresh.
 func (inst *App) pollMounts(sc *storeConn) {
-	rows, done, merr, busy := inst.mounts.demand("mounts", func(ctx context.Context) ([]mountRow, error) {
+	rows, done, merr, busy := inst.mounts.Demand("mounts", func(ctx context.Context) ([]mountRow, error) {
 		return sc.listMounts(ctx)
 	})
 	if busy {
@@ -532,7 +534,7 @@ func (inst *App) renderToolbar(sc *storeConn) {
 		c.AddSpace(styletokens.GapInline(inst.density))
 		if c.Button(inst.ids.PrepareStr("tb-refresh"), c.Atoms().Text(icons.PhArrowsClockwise+" Refresh").Keep()).
 			SendResp().HasPrimaryClicked() && sc != nil {
-			inst.mounts.invalidate()
+			inst.mounts.Invalidate()
 		}
 		c.AddSpace(styletokens.GapInline(inst.density))
 		if c.Button(inst.ids.PrepareStr("tb-open-play"), c.Atoms().Text(icons.PhArrowSquareOut+" Open in play").Keep()).
@@ -791,6 +793,7 @@ func (inst *App) renderPane(sc *storeConn, id paneIDE) {
 		p.paneH = h
 	}
 	res := fsbrowser.Render(fsbrowser.Input{
+		Tasks:      inst.tasks,
 		Ids:        inst.ids,
 		ScopeKey:   "pane-" + id.String(),
 		FS:         fsys,
@@ -869,22 +872,18 @@ func (inst *App) renderPreview(sc *storeConn) {
 	}
 	laneKey := fmt.Sprintf("%x@%d:%s", key.mount.Value(), key.snap, p.selected)
 	path := p.selected
-	content, done, perr, busy := inst.preview.demand(laneKey, func(ctx context.Context) (previewContent, error) {
+	content, done, perr, busy := inst.preview.Demand(laneKey, func(ctx context.Context) (previewContent, error) {
 		return loadPreview(ctx, fsys, path)
 	})
 	if busy {
-		c.RequestRepaint()
-		for range c.HorizontalTop().KeepIter() {
-			c.Spinner().Send()
-			c.Label("Loading " + path + "…").Send()
-		}
+		inst.waiting(&inst.preview, "preview", "Loading "+path+"…")
 		return
 	}
 	if !done {
 		return
 	}
 	if perr != nil {
-		c.Label("Cannot preview " + path + ": " + perr.Error()).Send()
+		inst.laneFailed(&inst.preview, "preview", "Previewing "+path, perr)
 		return
 	}
 	header := fmt.Sprintf("%s  ·  %s", path, humanSize(content.size))
@@ -945,22 +944,18 @@ func (inst *App) renderInfo(sc *storeConn) {
 	}
 	laneKey := fmt.Sprintf("%x@%d:%s", p.mount.Value(), snap.UnixNano(), p.selected)
 	mount, path := p.mount, p.selected
-	rows, done, ierr, busy := inst.info.demand(laneKey, func(ctx context.Context) ([]infoRow, error) {
+	rows, done, ierr, busy := inst.info.Demand(laneKey, func(ctx context.Context) ([]infoRow, error) {
 		return loadInfo(ctx, sc.exec, sc.sql, mount, snap, path)
 	})
 	if busy {
-		c.RequestRepaint()
-		for range c.HorizontalTop().KeepIter() {
-			c.Spinner().Send()
-			c.Label("Reading " + path + "…").Send()
-		}
+		inst.waiting(&inst.info, "info", "Reading "+path+"…")
 		return
 	}
 	if !done {
 		return
 	}
 	if ierr != nil {
-		c.Label("Cannot read the entry: " + ierr.Error()).Send()
+		inst.laneFailed(&inst.info, "info", "Reading the entry", ierr)
 		return
 	}
 	c.LabelAtoms(c.Atoms().BeginRichText(path).Strong().End().Keep()).Selectable(false).Send()
@@ -986,7 +981,7 @@ func (inst *App) renderInfo(sc *storeConn) {
 func (inst *App) renderComponents(sc *storeConn, mount identifier.TaggedId, snap time.Time, path, laneKey string) {
 	c.AddSpace(styletokens.GapInline(inst.density) * 2)
 	c.LabelAtoms(c.Atoms().BeginRichText("Components").Strong().End().Keep()).Selectable(false).Send()
-	hits, done, herr, busy := inst.components.demand(laneKey, func(ctx context.Context) ([]componentHit, error) {
+	hits, done, herr, busy := inst.components.Demand(laneKey, func(ctx context.Context) ([]componentHit, error) {
 		return loadComponents(ctx, sc, componentsql.Default, mount, snap, path)
 	})
 	switch {
@@ -1020,22 +1015,18 @@ func (inst *App) renderHistory(sc *storeConn) {
 	}
 	laneKey := fmt.Sprintf("%x:%s", p.mount.Value(), target)
 	mount := p.mount
-	res, done, herr, busy := inst.history.demand(laneKey, func(ctx context.Context) (tableResult, error) {
+	res, done, herr, busy := inst.history.Demand(laneKey, func(ctx context.Context) (tableResult, error) {
 		return runTable(ctx, sc.exec, sc.sql, historySQL(mount, target))
 	})
 	if busy {
-		c.RequestRepaint()
-		for range c.HorizontalTop().KeepIter() {
-			c.Spinner().Send()
-			c.Label("Reading the history of " + target + "…").Send()
-		}
+		inst.waiting(&inst.history, "history", "Reading the history of "+target+"…")
 		return
 	}
 	if !done {
 		return
 	}
 	if herr != nil {
-		c.Label("Cannot read the history: " + herr.Error()).Send()
+		inst.laneFailed(&inst.history, "history", "Reading the history", herr)
 		return
 	}
 	header := fmt.Sprintf("%s across %d snapshot(s) of %s", target, len(res.rows), inst.mountLabel(mount))
@@ -1142,22 +1133,18 @@ func (inst *App) renderDiff(sc *storeConn) {
 		dir = a.st.Dir()
 	}
 	laneKey := locB.key() + "|" + locA.key() + "|" + dir
-	res, done, derr, busy := inst.diff.demand(laneKey, func(ctx context.Context) (tableResult, error) {
+	res, done, derr, busy := inst.diff.Demand(laneKey, func(ctx context.Context) (tableResult, error) {
 		return runTable(ctx, sc.exec, sc.sql, diffSQL(locB, locA, dir))
 	})
 	if busy {
-		c.RequestRepaint()
-		for range c.HorizontalTop().KeepIter() {
-			c.Spinner().Send()
-			c.Label("Comparing…").Send()
-		}
+		inst.waiting(&inst.diff, "diff", "Comparing…")
 		return
 	}
 	if !done {
 		return
 	}
 	if derr != nil {
-		c.Label("Cannot compare: " + derr.Error()).Send()
+		inst.laneFailed(&inst.diff, "diff", "Comparing", derr)
 		return
 	}
 	if len(res.rows) == 0 {

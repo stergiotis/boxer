@@ -118,17 +118,16 @@ func (inst *App) renderDu(sc *storeConn) {
 	}
 	dir := p.st.Dir()
 	key := loc.key() + "|" + dir
-	res, done, derr, busy := inst.duLane.demand(key, func(ctx context.Context) (tableResult, error) {
+	res, done, derr, busy := inst.duLane.Demand(key, func(ctx context.Context) (tableResult, error) {
 		return runTable(ctx, sc.exec, sc.sql, duSQL(loc, dir))
 	})
-	files, fdone, ferr, fbusy := inst.duFilesLane.demand(key, func(ctx context.Context) (tableResult, error) {
+	files, fdone, ferr, fbusy := inst.duFilesLane.Demand(key, func(ctx context.Context) (tableResult, error) {
 		return runTable(ctx, sc.exec, sc.sql, duFilesSQL(loc, dir))
 	})
 	if busy || fbusy {
-		c.RequestRepaint()
-		for range c.HorizontalTop().KeepIter() {
-			c.Spinner().Send()
-			c.Label("Summing " + dir + "…").Send()
+		// One row at a time: the sums first, then the file list.
+		if !inst.waiting(&inst.duLane, "duLane", "Summing "+dir+"…") {
+			inst.waiting(&inst.duFilesLane, "duFilesLane", "Summing "+dir+"…")
 		}
 		return
 	}
@@ -136,11 +135,11 @@ func (inst *App) renderDu(sc *storeConn) {
 		return
 	}
 	if derr != nil {
-		c.Label("Cannot sum: " + derr.Error()).Send()
+		inst.laneFailed(&inst.duLane, "duLane", "Summing", derr)
 		return
 	}
 	if ferr != nil {
-		c.Label("Cannot list files: " + ferr.Error()).Send()
+		inst.laneFailed(&inst.duFilesLane, "duFilesLane", "Listing the files", ferr)
 		return
 	}
 	c.LabelAtoms(c.Atoms().BeginRichText(fmt.Sprintf("Disk usage%s — %d directories, %d files drawn", scopeNote(dir), len(res.rows), len(files.rows))).Strong().End().Keep()).Selectable(false).Send()

@@ -2,10 +2,13 @@ package tally
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
 )
 
 // problemsSQL lists the entries the walker could not read (ADR-0198 §7).
@@ -31,22 +34,18 @@ func (inst *App) renderProblems(sc *storeConn) {
 		c.Label("Pick a mount on the left.").Send()
 		return
 	}
-	res, done, perr, busy := inst.problemsLane.demand(loc.key(), func(ctx context.Context) (tableResult, error) {
+	res, done, perr, busy := inst.problemsLane.Demand(loc.key(), func(ctx context.Context) (tableResult, error) {
 		return runTable(ctx, sc.exec, sc.sql, problemsSQL(loc))
 	})
 	if busy {
-		c.RequestRepaint()
-		for range c.HorizontalTop().KeepIter() {
-			c.Spinner().Send()
-			c.Label("Reading…").Send()
-		}
+		inst.waiting(&inst.problemsLane, "problemsLane", "Reading…")
 		return
 	}
 	if !done {
 		return
 	}
 	if perr != nil {
-		c.Label("Cannot read: " + perr.Error()).Send()
+		inst.laneFailed(&inst.problemsLane, "problemsLane", "Reading the problems", perr)
 		return
 	}
 	for range c.HorizontalTop().KeepIter() {
@@ -56,14 +55,20 @@ func (inst *App) renderProblems(sc *storeConn) {
 			inst.auditArmed = loc.key()
 		}
 		if inst.auditArmed == loc.key() {
-			audit, adone, aerr, abusy := inst.auditLane.demand(loc.key(), func(ctx context.Context) (tableResult, error) {
+			audit, adone, aerr, abusy := inst.auditLane.Demand(loc.key(), func(ctx context.Context) (tableResult, error) {
 				return runTable(ctx, sc.exec, sc.sql, auditSQL(loc))
 			})
 			switch {
 			case abusy:
-				c.RequestRepaint()
-				c.Spinner().Send()
-				c.Label("Recomputing BLAKE3 over every block…").Send()
+				bgjobrow.Render(&inst.auditLane, bgjobrow.Input{
+					Note:     "Recomputing BLAKE3 over every block…",
+					CancelId: inst.ids.PrepareStr("cancel-auditLane"),
+					Inline:   true,
+				})
+			case adone && errors.Is(aerr, bgjob.ErrCancelled):
+				// Arming again is the way back; the button is right here.
+				inst.auditArmed = ""
+				inst.auditLane.Invalidate()
 			case adone && aerr != nil:
 				c.Label("Audit failed: " + aerr.Error()).Send()
 			case adone && len(audit.rows) == 1 && len(audit.rows[0]) == 2:

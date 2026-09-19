@@ -1,9 +1,7 @@
 package tally
 
 import (
-	"context"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -69,53 +67,6 @@ func TestInfoSQLExpands(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "fromUnixTimestamp64Nano", "the snapshot is pinned by nanoseconds, never toDateTime64 on a number")
 	assert.Contains(t, out, "boxer.fsmeta")
-}
-
-func TestLaneRunsOncePerKeyAndSupersedes(t *testing.T) {
-	var l lane[int]
-	var runs atomic.Int32
-	slow := func(ctx context.Context) (int, error) {
-		runs.Add(1)
-		select {
-		case <-ctx.Done():
-			return 0, ctx.Err()
-		case <-time.After(20 * time.Millisecond):
-			return 7, nil
-		}
-	}
-	eventually := func(cond func() bool) {
-		t.Helper()
-		deadline := time.Now().Add(2 * time.Second)
-		for !cond() {
-			require.True(t, time.Now().Before(deadline), "condition not reached")
-			time.Sleep(2 * time.Millisecond)
-		}
-	}
-	_, done, _, busy := l.demand("a", slow)
-	assert.False(t, done)
-	assert.True(t, busy)
-	_, _, _, busy = l.demand("a", slow)
-	assert.True(t, busy, "the same key does not start a second run")
-	eventually(func() bool { return runs.Load() == 1 })
-	// A new key supersedes: the old result never lands.
-	_, _, _, _ = l.demand("b", slow)
-	eventually(func() bool { return runs.Load() == 2 })
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		v, d, err, b := l.demand("b", slow)
-		if d && !b {
-			require.NoError(t, err)
-			assert.Equal(t, 7, v)
-			break
-		}
-		require.True(t, time.Now().Before(deadline), "lane did not complete")
-		time.Sleep(5 * time.Millisecond)
-	}
-	assert.Equal(t, int32(2), runs.Load(), "a done key is a cache hit")
-	l.invalidate()
-	_, _, _, busy = l.demand("b", slow)
-	assert.True(t, busy, "invalidate re-runs the key")
-	l.close()
 }
 
 func TestHumanSize(t *testing.T) {
