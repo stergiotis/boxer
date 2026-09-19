@@ -698,10 +698,13 @@ func TestGridLayer_NoWrapOption(t *testing.T) {
 
 func TestGridLayer_SanityChecksForInfinity(t *testing.T) {
 	// Upstream's throw is Point's own ("Invalid Point object: (NaN, NaN)" —
-	// the map has no zoom yet); here the view takes the infinite centre and
-	// the pyramid refuses the infinite tile range. Where upstream throws, the
-	// port logs and refuses the update pass — a widget's frame must not die
-	// of a degenerate view — which RefusedUpdates counts.
+	// the map has no zoom yet). Where upstream throws, the port logs and
+	// refuses: a widget's frame must not die of a degenerate view. There are
+	// two refusals, and a caller meets the first — the view keeps a centre
+	// it can project rather than take one it cannot, because a NaN centre
+	// projects and unprojects to NaN for ever and no gesture would get the
+	// map back. The pyramid's own refusal of a non-finite tile range, which
+	// RefusedUpdates counts, is the second.
 	for _, tc := range []struct {
 		name   string
 		center LatLng
@@ -716,10 +719,22 @@ func TestGridLayer_SanityChecksForInfinity(t *testing.T) {
 				g.v.PanTo(tc.center)
 				g.sync()
 			})
-			assert.Positive(t, g.p.Stats().RefusedUpdates)
+			assert.False(t, g.v.Loaded(), "the view refused the centre, so nothing loaded")
 			assert.Empty(t, g.createdKeys(), "no tile is requested for an infinite range")
 		})
 	}
+
+	t.Run("Refuses the update pass of a view that went degenerate anyway", func(t *testing.T) {
+		// The pyramid's net, reached here by writing the centre past the
+		// view's own — which is the only way in now that MoveTo refuses one.
+		g := newGridTest(t, Pt(800, 600), gridSource())
+		g.setView(LL(0, 0), 2)
+		g.created = nil
+		g.v.center = LL(math.NaN(), math.NaN())
+		assert.NotPanics(t, func() { g.p.Update(g.v) })
+		assert.Positive(t, g.p.Stats().RefusedUpdates)
+		assert.Empty(t, g.createdKeys(), "no tile is requested for an infinite range")
+	})
 }
 
 func TestGridLayer_DoesNotCallGetZoomScaleWithNullAfterInvalidateAll(t *testing.T) {

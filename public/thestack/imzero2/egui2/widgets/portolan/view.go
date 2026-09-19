@@ -3,6 +3,7 @@ package portolan
 import (
 	"math"
 
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/camera"
 )
@@ -42,6 +43,8 @@ type View struct {
 	// as Leaflet's _enforcingBounds does.
 	enforcingBounds bool
 	anim            animState
+	// reportedNonFinite keeps keepFinite's log to the first refusal.
+	reportedNonFinite bool
 }
 
 // ViewEvents are the Leaflet map events a frame produced, as flags. Move
@@ -569,10 +572,34 @@ func (v *View) MoveStart(zoomChanged bool) {
 	v.events.MoveStart = true
 }
 
+// keepFinite reports whether a centre and zoom can be projected at all, and
+// refuses them when they cannot. NaN is absorbing — every projection of a
+// NaN centre is NaN too, and unprojecting it back gives NaN again — so a view
+// that once takes one never recovers: it cannot be dragged, zoomed or reset
+// out of, and the pyramid refuses every update from then on (which is how
+// such a bug shows up, as a log line per update rather than as a stuck map).
+// Keeping the view the caller last had leaves a map that still moves. It is
+// a net under a bug upstream of here, not a licence to pass one: the first
+// refusal is logged.
+func (v *View) keepFinite(center LatLng, zoom float64) bool {
+	if finite(center.Lat) && finite(center.Lng) && finite(zoom) {
+		return true
+	}
+	if !v.reportedNonFinite {
+		v.reportedNonFinite = true
+		log.Error().Float64("zoom", zoom).Float64("lat", center.Lat).Float64("lng", center.Lng).
+			Msg("portolan: a non-finite view was refused; the view stays where it was")
+	}
+	return false
+}
+
 // MoveTo is a gesture's per-frame view change (Leaflet's _move): the centre
 // and zoom are taken as given — no limits, no rounding — and only move and
 // zoom are recorded. The handlers pair it with MoveStart and MoveEnd.
 func (v *View) MoveTo(center LatLng, zoom float64) {
+	if !v.keepFinite(center, zoom) {
+		return
+	}
 	zoomChanged := v.zoom != zoom
 	v.zoom = zoom
 	v.center = center
@@ -597,6 +624,9 @@ func (v *View) MoveEnd(zoomChanged bool) {
 // resetView is Leaflet's _resetView: a hard view change with its full event
 // sequence.
 func (v *View) resetView(center LatLng, zoom float64, noMoveStart bool) {
+	if !v.keepFinite(center, zoom) {
+		return
+	}
 	loading := !v.loaded
 	v.loaded = true
 	zoom = v.LimitZoom(zoom)
