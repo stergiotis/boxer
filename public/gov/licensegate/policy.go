@@ -163,6 +163,12 @@ var spdxCategory = map[string]CategoryE{
 	"CC-BY-SA-4.0": CategoryReciprocal,
 	"CECILL-2.0":   CategoryReciprocal,
 	"CECILL-2.1":   CategoryReciprocal,
+	// Font licenses: a derivative font must keep the terms, software that
+	// merely embeds the font is left alone -- reciprocity at the font file
+	// (ADR-0246 SD6). The repository ships OFL fonts itself
+	// (THIRD_PARTY_NOTICES.md section 2.2).
+	"OFL-1.1":         CategoryReciprocal,
+	"Ubuntu-font-1.0": CategoryReciprocal,
 
 	// Notice: permissive with attribution requirement.
 	"Apache-1.0":                CategoryNotice,
@@ -210,6 +216,8 @@ var spdxCategory = map[string]CategoryE{
 	"Unicode-DFS-2015":          CategoryNotice,
 	"Unicode-DFS-2016":          CategoryNotice,
 	"Unicode-TOU":               CategoryNotice,
+	"Unicode-3.0":               CategoryNotice,
+	"CDLA-Permissive-2.0":       CategoryNotice,
 
 	// Unencumbered: public-domain-equivalent.
 	"0BSD":             CategoryUnencumbered,
