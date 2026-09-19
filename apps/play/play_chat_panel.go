@@ -889,9 +889,28 @@ func (inst *ChatDriver) blockPart(app *PlayApp, rec arrow.RecordBatch, schema *a
 				rt.Small().Weak()
 			}
 		}
-		block.Render()
+		// A ceiling, set in a scope of the block's own before anything is
+		// placed (the Map table editor's idiom). The face scrolls
+		// vertically inside a transcript that itself scrolls, and egui
+		// sizes a nested scroll area from the space left below the cursor
+		// in its parent — about none, inside the transcript — falling back
+		// to its 64-point minimum: a long message showed three lines and
+		// hid the rest behind a scrollbar. With the ceiling a short body
+		// shrinks to its own height and only a longer one scrolls, so no
+		// estimate of wrapped height is needed, and the Detail and Cards
+		// faces, which their cells already bound, are untouched.
+		for range c.Vertical().KeepIter() {
+			c.UiSetMaxHeight(chatBlockMaxHeight)
+			block.Render()
+		}
 	}, true
 }
+
+// chatBlockMaxHeight is the ceiling on one block face in a bubble. It is a
+// readability bound rather than a cost one — egui lays the whole body out
+// either way — at a height that shows a long paragraph or a screenful of a
+// command whole while keeping a transcript of tool output scannable.
+const chatBlockMaxHeight = 28*cardBlockLineHeight + cardBlockPad
 
 // chatCaptionLine is an unclaimed column's one-line rendering in the bubble:
 // the caption weak, the value in its tone.

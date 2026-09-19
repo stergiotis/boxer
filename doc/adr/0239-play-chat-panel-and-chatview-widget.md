@@ -473,6 +473,31 @@ bubbles to the right, a wheel movement released the tail, a bubble click
 drove Detail, and a quote strip jumped to the quoted message. The "older"
 widening is the one interaction left to a transcript longer than the window.
 
+## Updates
+
+### 2026-09-19 — a bubble's body is bounded by a ceiling, not by its line budget
+
+§SD6's line budget never bounded a bubble. The widget treats a block's
+declared height as advisory, and the body's vertical scroll area sits inside
+the transcript's own; egui sizes a nested scroll area from the space left
+below the cursor in its parent, which inside the transcript is about none, and
+falls back to its 64-point minimum. A long single-paragraph message — one
+source line, so a small budget either way — showed three lines behind a
+scrollbar, observed in a Claude-transcript lens on real sessions.
+
+The pane now gives each body a ceiling in a scope of its own before the face is
+placed, the idiom the Map's table editor uses: a short body shrinks to its own
+height, and only a body past the ceiling — 28 lines of the card's constants —
+scrolls. No estimate of wrapped height is involved, so the Go-side
+approximation the Context names does not enter, and the Detail and Cards faces,
+whose cells already bound them, are unchanged.
+
+The integration lane checks it headlessly over node bounds rather than
+pixels: while a bubble shows its whole text, the distance to the next message
+is that text's height plus a constant chrome, and a body several screens long
+occupies the ceiling. Without the ceiling the test reports messages 99, 189
+and 279 points short of their text.
+
 ## References
 
 - [ADR-0186](./0186-play-gloss-catalog.md) — the gloss catalog, faces and the
