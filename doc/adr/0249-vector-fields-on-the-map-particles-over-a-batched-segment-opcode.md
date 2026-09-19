@@ -351,7 +351,7 @@ trails on screen.
   deterministic capture.
 - **M4 — time.** ✓ Bracketing windows, interpolation, a display-time setter a
   host binds to its own scrubber.
-- **M5 — the trial.** Under [doc/trials](../trials/): frame cost against
+- **M5 — the trial.** ✓ Under [doc/trials](../trials/): frame cost against
   particle count, O1's `paintLine`-per-segment arm against `paintSegments`,
   mesh against tessellated segments, on the wgpu and CPU-rasterizer hosts.
   Its §0 is the figure this ADR's Updates will cite; SD5's host choice and the
@@ -539,6 +539,36 @@ Accepted 2026-09-19.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-09-19 — M5: the opcode was needed, the mesh stays, the cap comes down
+
+The [trial](../trials/flow-particles-frame-cost/README.md) ran once, on one
+low-power machine that was not idle, one launch per cell; its §0 is the claim
+and states what that is worth. What this record takes from it:
+
+- **O1 stays rejected, now on a measurement.** Painting a `paintLine` per
+  trail segment costs the Go side about 1 µs a segment on both hosts — 44 ms a
+  frame at 5 000 particles against 6 to 10 ms for one `paintSegments` — and
+  writes 32 bytes a segment against 20. The arm remains in the layer as
+  `Options.LinePerSegment`, for the trial only.
+- **SD5's host draw is settled: the mesh is the default.** On the
+  CPU-rasterizer host the mesh rasterises in about a third of the time of the
+  same segments as feathered line shapes; on the wgpu host the two do not
+  differ. `tessellated()` stays a hint, for a GPU host that wants the
+  antialiasing.
+- **The default cap on the particle count comes down from 20 000 to 10 000**,
+  and the default density stays. On the machine measured, the shipped arm's
+  stages pass a 30 Hz tick between 10 000 and 20 000 particles on the GPU
+  host, where the limit is the Go side and the host's dispatch and not the
+  GPU; a CPU-rasterizer host holds the tick to about 5 000.
+- **The largest cost on the Go side is not the layer's.** About 60 % of it is
+  FFFI slice marshalling, an element per write; the trial files it as a
+  finding against the runtime and this ADR does not decide it. It would move
+  every arm, the shipped one most.
+- **Still unknown:** the desktop host, and what an animating layer costs a
+  remote viewer on the mesh lane.
 
 ## References
 

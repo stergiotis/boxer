@@ -1,0 +1,4 @@
+label ="bench done arm=segments-mesh particles=1000 segments=8652 frames=300"
+label ="bench go draw_p50_us=1908 draw_p95_us=2281"
+label ="bench host interpret_p50_us=1840 interpret_p95_us=2283 written_p50_bytes=179182"
+raster stats (per frame: rasterize, then tessellate separately) backend="wgpu" frames=540 width_px=1100 height_px=900 mean_us=3063 p50_us=3027 p90_us=3441 p99_us=3931 min_us=2344 max_us=7335 tess_mean_us=271 tess_p50_us=274 prims=11 tris=20975

@@ -22,7 +22,11 @@ type Options struct {
 	// Density is particles per thousand square pixels of canvas, so a larger
 	// window shows the same picture and not a sparser one. Zero takes 5.
 	Density float32
-	// MaxParticles caps the count whatever the canvas. Zero takes 20000.
+	// MaxParticles caps the count whatever the canvas. Zero takes 10000: on
+	// the one machine the ADR-0249 trial measured, a low-power APU, the Go
+	// side and the host's dispatch together pass a 30 Hz tick between 10000
+	// and 20000 particles on a GPU host, and a CPU-rasterizer host holds the
+	// tick to about 5000 (doc/trials/flow-particles-frame-cost §0).
 	MaxParticles int
 
 	// TickHz is the simulation's rate, independent of the display's. Zero
@@ -184,7 +188,7 @@ type Layer struct {
 
 const (
 	defaultDensity   = 5
-	defaultMaxCount  = 20000
+	defaultMaxCount  = 10000
 	defaultTickHz    = 30
 	defaultTrail     = 12
 	defaultMaxAge    = 150
