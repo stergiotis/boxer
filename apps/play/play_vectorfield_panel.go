@@ -620,7 +620,9 @@ func (inst *PlayApp) renderVectorFieldTab() {
 }
 
 // openVectorFieldQuery opens a served window statement in a playground of its
-// own; the round-trip blocks, so it leaves the frame loop.
+// own; the round-trip blocks, so it leaves the frame loop. It opens run: the
+// statement is there to be looked at with its result, and its parameters show
+// in the pane only once a Run has parsed them.
 func (inst *PlayApp) openVectorFieldQuery(sql string) {
-	go inst.requestOpenPlayground(launchcfg.PlayLaunch{Sql: sql})
+	go inst.requestOpenPlayground(launchcfg.PlayLaunch{At: time.Now().UTC(), Sql: sql, AutoRun: true})
 }
