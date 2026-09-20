@@ -1515,7 +1515,7 @@ func (inst *PlayApp) render() error {
 		// widget ids stay single-writer. refreshParamSlotsFromParse runs in
 		// updatePreview, so the slots are fresh without an editor.
 		if !inst.editorTabPresent() {
-			inst.renderParamSlots()
+			inst.renderParamSlots(paramBlockMaxHeightStrip)
 		}
 	}
 	for range c.PanelBottomInside(ids.PrepareStr("status")).Resizable(false).KeepIter() {
@@ -2553,7 +2553,7 @@ func (inst *PlayApp) renderEditorTab() {
 		// Param-slot widgets render above the editor; they author the
 		// leading SET prelude. Rendered first so the editor below claims
 		// the remaining vertical space.
-		inst.renderParamSlots()
+		inst.renderParamSlots(paramBlockMaxHeightEditor)
 
 		// Editor binding. Default mode keeps the leading SET prelude
 		// inside the main editor; hide-prelude mode slices the prelude

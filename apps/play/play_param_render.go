@@ -139,18 +139,42 @@ func (inst *PlayApp) signalRawFor(name string) (raw string, held bool) {
 	return p.Raw, ok
 }
 
+// Ceilings on the params block, one per render site (see renderParamSlots).
+// Both are CEILINGS, not sizes: a one-slot buffer occupies one row, and only a
+// block taller than its ceiling scrolls.
+//
+// They differ because the two sites spend the height against different things.
+// In the Editor tab the block competes with the SQL editor below it, which
+// measures its own pane and can give a few rows back; in an applet's params
+// strip it competes with every result pane in the window at once, and the
+// strip sits in a top panel that grows without asking anyone.
+// A row is about 38 points at Standard density, so the editor's ceiling shows
+// most of six claims and the strip's most of five — the part-row at the fold
+// is what says there is more below.
+const (
+	paramBlockMaxHeightEditor float32 = 220
+	paramBlockMaxHeightStrip  float32 = 180
+)
+
 // renderParamSlots draws the per-slot widgets above the SQL editor,
 // closed by a horizontal rule that divides them from the editor below.
 // Each registered widget is offered the remaining (unconsumed) slots in
 // editor order; the scalarTextWidget at the tail is the catch-all so
 // every slot renders something.
 //
+// maxHeight bounds the claims, which scroll past it: a buffer declaring a
+// dozen slots would otherwise push the editor off the bottom of its tab, and
+// in an applet — where the block re-homes to a strip in the top panel
+// (ADR-0132 §SD3) — grow the chrome until the result panes have nowhere to
+// go. The heading row and the divider stay outside the scrolled region, so
+// Reset and the boundary with the editor never scroll away.
+//
 // After dispatch, the function compares each draft to its last
 // prelude-synced value; on drift it calls SyncParamPrelude and
 // commits the new sql + updated cache. Widget-driven mutations
 // surface one frame after the click (the FFFI2 SendRespVal apply
 // runs at end-of-frame), which is acceptable for picker UX.
-func (inst *PlayApp) renderParamSlots() {
+func (inst *PlayApp) renderParamSlots(maxHeight float32) {
 	slots := inst.paramSlots
 	if len(slots) == 0 {
 		return
@@ -184,6 +208,27 @@ func (inst *PlayApp) renderParamSlots() {
 		}
 	}
 
+	// The ceiling belongs to the scroll area itself, NOT to a uiSetMaxHeight
+	// on a scope around it. That idiom bounds what the area is allocated and
+	// bounds its content with it, so the area reports that everything fits:
+	// no scrollbar, the wheel goes to whatever encloses the block, and the
+	// rows past the ceiling are simply unreachable — measured here, which is
+	// what put maxHeight on the binding. Vertical auto-shrink stays ON, so a
+	// two-slot buffer occupies two rows and only a taller one scrolls.
+	for range c.ScrollArea().Vscroll(true).MaxHeight(maxHeight).AutoShrink(false, true).KeepIter() {
+		inst.renderParamClaims(slots, enums, exprs)
+	}
+
+	// Divider between the parameter block and the SQL editor below it.
+	c.Separator().Horizontal().Send()
+
+	inst.syncParamDriftToPrelude()
+}
+
+// renderParamClaims runs one dispatch pass over the registered widgets and
+// closes with the near-miss note. It is the scrolled part of the params block
+// — everything whose height grows with the number of slots.
+func (inst *PlayApp) renderParamClaims(slots []paramSlot, enums map[string][]enumOption, exprs map[string]string) {
 	consumed := make([]bool, len(slots))
 	// grouped tracks the slots a group widget folded, which is what §SD7's
 	// near-miss pass reports on. It cannot read `consumed` instead: the tail
@@ -282,11 +327,6 @@ func (inst *PlayApp) renderParamSlots() {
 
 	inst.renderNearMissNote(slots, grouped, ungroup, mixed,
 		orphanEnumHints(enums, slots), orphanExprHints(exprs, slots))
-
-	// Divider between the parameter block and the SQL editor below it.
-	c.Separator().Horizontal().Send()
-
-	inst.syncParamDriftToPrelude()
 }
 
 // renderFoldLabel names a fold the registry inferred and its opt-out, so the

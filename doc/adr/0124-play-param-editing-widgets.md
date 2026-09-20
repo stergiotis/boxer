@@ -755,6 +755,35 @@ vocabulary gains a fourth member on the same argument it made for the third —
 nothing in `{name:Type}` can say what the values are, and here nothing can say
 what the *text* is.
 
+### 2026-09-20 — the claims scroll under a ceiling
+
+The block grew with the number of slots and nothing bounded it: a buffer
+declaring a dozen names pushed the SQL editor off the bottom of its tab, and in
+an applet — where the block re-homes to the top panel's params strip
+([ADR-0132](./0132-sqlapplet-sql-defined-applets.md) §SD3) — it pushed the
+result panes down with nothing to stop it. The dispatch pass now draws inside a
+scroll area with a maximum height, one per site: the strip's is the shorter,
+because there the block competes with every pane in the window at once, while in
+the Editor tab it competes with an editor that measures its own pane and can
+give rows back.
+
+It is a ceiling, not a size — vertical auto-shrink stays on, so a two-slot
+buffer still occupies two rows. The heading row, the reset control and the rule
+that divides the block from the editor stay outside it, so the gestures that act
+on the whole block never scroll away.
+
+The ceiling is the *scroll area's* `maxHeight`, which is new on the binding, and
+the detour is worth recording because the tree's existing idiom for "a pane that
+stops here and scrolls past it" does not scroll. A `uiSetMaxHeight` on a scope
+around the area bounds what the area is allocated and bounds its content with
+it, so the area reports that everything fits: no scrollbar, the wheel goes to
+whatever encloses the block, and the rows past the ceiling cannot be reached at
+all. Measured here in the headless lane, which is also where the working version
+is verified (`apps/play/scenes/19_params_overflow.scene.md`). Two sites in the
+tree pair `uiSetMaxHeight` with a scroll area the same way and claim the same
+scrolling — the Map's table-source editor and the Projection pane's explanation
+— and they have not been re-measured.
+
 ## References
 
 - [ADR-0016](./0016-imzero2-time-range-picker.md) — the range picker and its
