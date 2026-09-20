@@ -151,7 +151,7 @@ status: draft
 | RequestScreenshotRect | Procedural | No | 5 | 0 | - | - |
 | ScalarSize | BuilderFactory | No | 0 | 0 | 2 | Retained |
 | Scope | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
-| ScrollArea | BuilderFactory | No | 0 | 0 | 4 | Immediate, BlockIterator |
+| ScrollArea | BuilderFactory | No | 0 | 0 | 5 | Immediate, BlockIterator |
 | ScrollToCursor | Procedural | No | 1 | 0 | - | - |
 | ScrollingTexture | BuilderFactory | Yes | 9 | 0 | 2 | Immediate |
 | ScrollingTextureRelease | BuilderFactory | Yes | 0 | 0 | 0 | Immediate |
@@ -2031,6 +2031,7 @@ Block
 - **Vscroll**(val: b)
 - **Animated**(val: b)
 - **AutoShrink**(horiz: b, vert: b)
+- **MaxHeight**(height: f32)
 
 #### Return Type
 

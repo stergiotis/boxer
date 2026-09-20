@@ -663,6 +663,7 @@ const (
 	ScrollAreaMethodIdVscroll    ScrollAreaMethodIdE = 2
 	ScrollAreaMethodIdAnimated   ScrollAreaMethodIdE = 3
 	ScrollAreaMethodIdAutoShrink ScrollAreaMethodIdE = 4
+	ScrollAreaMethodIdMaxHeight  ScrollAreaMethodIdE = 5
 )
 
 const (

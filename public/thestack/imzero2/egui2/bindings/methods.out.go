@@ -3202,6 +3202,14 @@ func (inst ScrollAreaFluid) AutoShrink(horiz bool, vert bool) ScrollAreaFluid {
 	return inst
 }
 
+func (inst ScrollAreaFluid) MaxHeight(height float32) ScrollAreaFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ScrollAreaMethodIdMaxHeight))
+	r.WriteFloat32(height)
+
+	return inst
+}
+
 func (inst ScrollAreaFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(ScrollAreaMethodIdBuild))

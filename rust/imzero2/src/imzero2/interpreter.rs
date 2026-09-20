@@ -8927,6 +8927,13 @@ self.apply_widget(w,u,f,Some(i));
                             // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                             w = w.auto_shrink([horiz, vert]);
                         }
+                        ScrollAreaBuilderMethodId::MaxHeight => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ScrollAreaBuilderMethodId::MaxHeight");
+                            let mut height = self.io.read_plain_f32()?;
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            w = w.max_height(height);
+                        }
                     }
                 }
                 if d == 0 {

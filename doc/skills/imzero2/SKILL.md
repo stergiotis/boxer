@@ -1037,6 +1037,44 @@ That `UiSetMinHeight(...)`-before-a-`DockArea` floor is a **scroll-host device**
 
   A widget that wraps an etable and cannot know its host's intent (`widgets/tree`, `widgets/fsbrowser`) takes the ceiling as an `Input.MaxHeight` and leaves the choice to the embedder, which feeds it a pane height from `c.CapturePaneSize`.
 
+## A Pane That Clips but Does Not Scroll (ScrollArea Bounded From Outside)
+
+* **The Symptom:** A block that should stop at a ceiling and scroll past it —
+  `c.UiSetMaxHeight(h)` in a scope of its own, a `c.ScrollArea().Vscroll(true)`
+  inside it — stops at `h` exactly as asked, and the content past `h` is
+  **unreachable**. No scrollbar appears, the wheel over the block scrolls
+  whatever encloses it (the dock leaf, the window) or nothing at all, and
+  `scroll_into_view` on a node below the fold does nothing. Changing `h` moves
+  the boundary, which is what makes it look like the ceiling is working.
+* **The Cause:** `set_max_height` on the ui that *holds* the area bounds what
+  the area is allocated, and the area's content ui is bounded with it. The area
+  then measures its content as fitting its viewport, so by its own account there
+  is nothing to scroll: no bar, and no claim on the wheel — which is why the
+  gesture lands on the enclosing scroll area instead. The clip you see is the
+  area clipping content it does not believe overflows.
+* **The Pattern:** **Put the ceiling on the scroll area, not around it.**
+  `MaxHeight(h)` is egui's `ScrollArea::max_height`, and it bounds the viewport
+  while leaving the content free to be taller — which is the whole definition of
+  scrollable. Leave vertical auto-shrink ON so it stays a ceiling: short content
+  occupies its own height and only taller content scrolls.
+  ```go
+  // WRONG: stops at 220 and hides the rest for good
+  for range c.Vertical().KeepIter() {
+      c.UiSetMaxHeight(220)
+      for range c.ScrollArea().Vscroll(true).AutoShrink(false, true).KeepIter() { body() }
+  }
+
+  // RIGHT: a ceiling on the viewport; the overflow scrolls
+  for range c.ScrollArea().Vscroll(true).MaxHeight(220).AutoShrink(false, true).KeepIter() { body() }
+  ```
+  `UiSetMaxHeight` keeps its other uses — a ceiling on a block that is *meant*
+  to clip, a fixed box for a glyph (§12 "Content Drawn at the Left…") — it is
+  only the pairing with a scroll area that does not do what it reads as.
+* **Diagnosing it:** the tell is in the accessibility tree, which reports layout
+  rects: dump it, scroll, dump again. A scrolling area moves its content's `y`
+  by the wheel delta; a clipping one leaves every row where it was. A capture
+  alone cannot tell the two apart, because both show the same picture.
+
 ---
 
 # 13. Culling, Block Skipping, and Register Mechanics

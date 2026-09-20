@@ -368,6 +368,19 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 				BeginMethod("autoShrink").Arg("horiz", ctabb.B).Arg("vert", ctabb.B).
 				CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.auto_shrink([horiz, vert]);\n")).
 				EndMethod().
+				// maxHeight mirrors egui::ScrollArea::max_height — a CEILING on the
+				// viewport, which with vertical auto-shrink left on is what "as tall
+				// as its content, and no taller than this" means.
+				//
+				// It is not the same as a uiSetMaxHeight on the ui that holds the
+				// area, and the difference is the whole reason it exists: that call
+				// shrinks what the area is ALLOCATED, and the content is bounded with
+				// it, so the area reports that everything fits — no scrollbar, and the
+				// wheel goes to whatever encloses it. Measured in play's params block,
+				// where the rows past the ceiling were simply unreachable.
+				BeginMethod("maxHeight").Arg("height", ctabb.F32).
+				CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.max_height(height);\n")).
+				EndMethod().
 				Build()...).
 		WithSettingImmediate(true).
 		WithSettingBlockIterator(true).

@@ -952,6 +952,7 @@ pub enum ScrollAreaBuilderMethodId {
     Vscroll = 2,
     Animated = 3,
     AutoShrink = 4,
+    MaxHeight = 5,
 }
 
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
