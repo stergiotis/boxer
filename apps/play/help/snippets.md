@@ -2631,6 +2631,75 @@ ORDER BY total_stmts DESC
 LIMIT 50
 ```
 
+## Vector field (wind, currents)
+
+The **Vector field** tab draws the `vector_field` CTE — `lat`, `lon`, `u`, `v`
+and optionally `t` — as particles drifting on a map (ADR-0250). This one needs
+no table: the field is computed from `numbers()`, a one-degree global grid over
+nine three-hourly steps. Focus the Vector field tab and Run; step through time
+with `<` and `>`, or tick **play**.
+
+The columns `dx`, `dy` and `eddy` are only there to build `u` and `v`; the pane
+reads the five it names and ignores the rest. The final `SELECT` is what the
+other tabs show — the pane does not read it.
+
+```sql
+WITH
+  nodes AS (
+    -- a one-degree global grid, nine three-hourly steps, no table behind it
+    SELECT
+      intDiv(number, 181 * 360) AS s,
+      90 - toFloat64(intDiv(number % (181 * 360), 360)) AS lat,
+      -180 + toFloat64(number % 360) AS lon
+    FROM numbers(9 * 181 * 360)
+  ),
+  vector_field AS (
+    SELECT
+      toDateTime('2026-03-01 00:00:00', 'UTC') + toIntervalHour(3 * s) AS t,
+      lat,
+      lon,
+      -- a meandering westerly jet in each hemisphere, the trades between them,
+      -- and one vortex that drifts east with the step
+      lon - (-60 + 6 * s) AS dx,
+      lat - 38 AS dy,
+      exp(-(dx * dx + dy * dy) / 160) AS eddy,
+      22 * exp(-pow((abs(lat) - 45 - 7 * sin(radians(3 * lon + 25 * s))) / 11, 2))
+        - 7 * exp(-pow(lat / 14, 2))
+        - 2.2 * dy * eddy AS u,
+      5 * cos(radians(3 * lon + 25 * s)) * exp(-pow((abs(lat) - 45) / 16, 2))
+        + 2.2 * dx * eddy AS v
+    FROM nodes
+  ),
+  vector_field_opts AS (
+    SELECT 'synthetic jets and an eddy' AS name, 'm/s' AS unit, 28 AS speed_max
+  )
+SELECT t, round(max(sqrt(u * u + v * v)), 1) AS strongest, round(avg(sqrt(u * u + v * v)), 1) AS mean_speed
+FROM vector_field
+GROUP BY t
+ORDER BY t
+```
+
+Over a table the CTE is a projection and a filter. Keep it to that where you
+can: the pane wraps the CTE in a query that bounds `t`, `lat` and `lon`, and
+those bounds reach the table's primary key only through columns the CTE passes
+along unchanged.
+
+```sql
+WITH
+  vector_field AS (
+    SELECT valid_time AS t, latitude AS lat, longitude AS lon, u10 AS u, v10 AS v
+    FROM weather.wind
+    WHERE level = {level:UInt16} AND run = {run:DateTime}
+  )
+SELECT count() FROM vector_field
+```
+
+`{level:UInt16}` makes the level a parameter with a widget above the editor;
+changing it describes the new field and redraws. A second query can follow the
+map — `WHERE obs_time = {vf_t:DateTime64(3, 'UTC')} AND lat BETWEEN
+{vf_min_lat:Float64} AND {vf_max_lat:Float64}` reads the step on display and the
+settled view.
+
 ## ADS-B geo-raster (demo loader)
 
 These target `planes_mercator`, the aircraft-position table loaded by

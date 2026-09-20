@@ -18,7 +18,7 @@ The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 into three groups: the **editor** (Editor, History), the **tool panes** beside
 it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Experiments — each reads
 the buffer, or something derived from it, while you type), and the **result
-panes** below (Table, Projection, Timeline, Map, World, Kanban, Chat, Cards, Network,
+panes** below (Table, Projection, Timeline, Map, Vector field, World, Kanban, Chat, Cards, Network,
 Graphview, Sankey, Distribution, Icicle, Files, Graph, Schema, and Detail
 alongside them). Drag a tab to
 re-dock or split it; the layout holds for the session and starts fresh next
@@ -320,7 +320,8 @@ A placeholder *without* a `SET` line is a **signal**: a live value shared by
 name across every query and panel. Panels write them as you interact —
 clicking a row (Table), a node (Projection), an event (Timeline), or a
 country (World) writes `selection`; the Map's settled viewport writes the
-`vp_*` set; the Timeline publishes the events extent as `tl_min`/`tl_max` —
+`vp_*` set; the Timeline publishes the events extent as `tl_min`/`tl_max`; the
+Vector field pane publishes its display time and view as `vf_*` —
 and any query referencing the name picks the value up on its next run. The
 parameter widgets above the editor write the same values, so a signal has a
 typed control as well as a raw one.
@@ -713,6 +714,40 @@ controls — this tab queries on its own, independent of the editor's result. Th
 settled viewport is published as the `vp_*` signals (packed-mercator bounds plus
 output dimensions), so any query can reference `{vp_min_x:UInt32}` … to
 cross-filter against the visible extent.
+
+### Vector field
+
+A gridded two-component field — a wind, an ocean current — drawn as particles
+drifting on a map (ADR-0250). It reads the `vector_field` CTE of the query **by
+name**: `lat` and `lon` in degrees, `u` and `v` as the eastward and northward
+components, and optionally `t` (a `Date`, `DateTime` or `DateTime64`) for a time
+series. The grid must be regular in latitude and longitude with one row per
+node per step; filter a table that holds several levels, runs or members down
+to one, or the pane refuses it rather than average them together. `NULL` and
+non-finite components are missing data, and the particles stop short of them.
+
+The pane never fetches the field. It reads the CTE's column names, and then asks
+ClickHouse for a reduced window of the current view — one query per settled
+pan, zoom or time step, with every value sent as a parameter. The status line
+counts those requests and reports the last one's rows and duration, and
+**Window query…** opens the last one in a playground of its own, ready for
+`EXPLAIN indexes = 1`. A table ordered by `(t, lat, lon)` and a CTE that only
+renames columns let the window read a small part of the table; a CTE that
+computes `lat` from something else reads the whole step.
+
+What the picture does not say: the animation shows direction and relative
+speed, not transport. A particle's pace is a screen quantity and the same at
+every zoom; colour follows the speed. Between two steps the field is blended,
+so a moving front fades across instead of travelling.
+
+An optional `vector_field_opts` CTE is one row of settings: `name`, `unit` and
+`speed_max`, the magnitude at the top of the palette (without it, a high
+quantile of the first step). Hover reads the field under the pointer.
+
+The pane publishes the valid time of the step on display as `vf_t`
+(`DateTime64(3, 'UTC')`) and the settled view as `vf_min_lat`, `vf_max_lat`,
+`vf_min_lon`, `vf_max_lon`, so another query can follow the map; writing `vf_t`
+— a `SET`, the signals section — moves the display time.
 
 ### Graph
 
