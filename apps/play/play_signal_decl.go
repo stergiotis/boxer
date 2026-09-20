@@ -35,6 +35,10 @@ const (
 	// seedEmptyArray is seedEmpty for an array slot: `[]`, the empty
 	// selection, rather than a missing value.
 	seedEmptyArray
+	// seedEpoch is seedZero for a time slot: the epoch, which no step of a
+	// field is at, so a query filtering on it returns nothing until the
+	// pane has written the step on display (ADR-0250 §SD6).
+	seedEpoch
 )
 
 // raw is the literal an unwritten signal with this seed resolves to, and
@@ -47,6 +51,8 @@ func (inst signalSeedE) raw() (raw string, ok bool) {
 		return "0", true
 	case seedEmptyArray:
 		return "[]", true
+	case seedEpoch:
+		return "1970-01-01 00:00:00.000", true
 	}
 	return "", false
 }
@@ -117,14 +123,16 @@ var reservedSignals = []reservedSignal{
 	{Name: signalGvMaxLon, Type: "Float64", Seed: seedZero, Owner: "graphview"},
 
 	// The Vector field pane's display time and settled view (ADR-0250 §SD6).
-	// They block like the Map's viewport and the Timeline's extent: there is
-	// no time that means "any step" and no view that means "anywhere", and
-	// the pane writes all five once its field is described.
-	{Name: signalVfT, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "vectorfield"},
-	{Name: signalVfMinLat, Type: "Float64", Seed: seedBlocks, Owner: "vectorfield"},
-	{Name: signalVfMaxLat, Type: "Float64", Seed: seedBlocks, Owner: "vectorfield"},
-	{Name: signalVfMinLon, Type: "Float64", Seed: seedBlocks, Owner: "vectorfield"},
-	{Name: signalVfMaxLon, Type: "Float64", Seed: seedBlocks, Owner: "vectorfield"},
+	// Seeded, for the Graphview's reason and against the Map's: the pane
+	// learns of its CTE from a Run, so a buffer whose sink reads `vf_t` could
+	// never run if the name blocked until the pane had written it. The seeds
+	// select nothing — the epoch, an empty box — and the pane overwrites them
+	// once its field is described.
+	{Name: signalVfT, Type: "DateTime64(3, 'UTC')", Seed: seedEpoch, Owner: "vectorfield"},
+	{Name: signalVfMinLat, Type: "Float64", Seed: seedZero, Owner: "vectorfield"},
+	{Name: signalVfMaxLat, Type: "Float64", Seed: seedZero, Owner: "vectorfield"},
+	{Name: signalVfMinLon, Type: "Float64", Seed: seedZero, Owner: "vectorfield"},
+	{Name: signalVfMaxLon, Type: "Float64", Seed: seedZero, Owner: "vectorfield"},
 
 	// The selection family (slice 5b). No owner: the row cursor is written by
 	// every pane whose rows ARE result rows, and the three companions are

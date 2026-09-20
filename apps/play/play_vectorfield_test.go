@@ -137,7 +137,14 @@ func TestVectorFieldSignalsAreDeclared(t *testing.T) {
 	types := reservedSignalTypes()
 	assert.Equal(t, "DateTime64(3, 'UTC')", types[string(signalVfT)])
 	assert.Equal(t, "Float64", types[string(signalVfMinLat)])
-	assert.False(t, signalHasSeed(string(signalVfT)), "there is no time that means any step")
+	// Seeded, or a buffer whose sink reads vf_t could never run: the pane
+	// learns of its CTE from the Run that the unfilled name would block.
+	raw, seeded := signalSeedRaw(string(signalVfT))
+	assert.True(t, seeded)
+	assert.Equal(t, "1970-01-01 00:00:00.000", raw, "the epoch: no step is at it")
+	raw, seeded = signalSeedRaw(string(signalVfMinLat))
+	assert.True(t, seeded)
+	assert.Equal(t, "0", raw)
 }
 
 type recordedEmits struct {

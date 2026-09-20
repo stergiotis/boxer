@@ -767,7 +767,10 @@ quantile of the first step). Hover reads the field under the pointer.
 The pane publishes the valid time of the step on display as `vf_t`
 (`DateTime64(3, 'UTC')`) and the settled view as `vf_min_lat`, `vf_max_lat`,
 `vf_min_lon`, `vf_max_lon`, so another query can follow the map; writing `vf_t`
-— a `SET`, the signals section — moves the display time.
+— a `SET`, the signals section — moves the display time. Until the pane has
+written them the names hold seeds that select nothing (the epoch, an empty
+box), so a query that reads them runs from the start and returns no rows; tick
+**Live** and it follows the pane from then on.
 
 ### Graph
 

@@ -333,6 +333,29 @@ Accepted 2026-09-20.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-09-20 — the pane's signals are seeded, and a window query opens run
+
+Two defects found while writing the tour's scenes, both in what §SD6 and §SD5
+shipped.
+
+**§SD6's names blocked a Run until written, and could then never be
+written.** They were declared like the Map's viewport. The Map queries on its
+own and writes its viewport whatever the buffer does; this pane learns of its
+CTE from a Run. A buffer whose sink read `vf_t` was refused for the unfilled
+name, so the split never reached the pane, so the name stayed unfilled. They
+are seeded now, as the Graphview's are for the same reason: `vf_t` with the
+epoch, the four bounds with zero. A query filtering on the seeds selects
+nothing; the pane overwrites them once its field is described, and a Live
+sink follows from there. `TestVectorFieldSignalsAreDeclared` holds the seeds,
+and the tour's `36_vector_field_follow` scene runs the case end to end.
+
+**The served statement opened unrun showed its first line only.** The
+playground it opens in is now launched to run, which is also the more useful
+state: the result is the window's bins and the parameters are pinned in the
+pane. The `36_vector_field_window_query` scene covers it.
+
 ## References
 
 - ADR-0249 — the field contract, the flow layer, and the deferral taken up here.
