@@ -88,6 +88,35 @@ cannot tell whether you rotated your components correctly; test that against
 a fixture with a known answer (a uniform geographic westerly encoded in the
 grid's own frame is the classic one).
 
+## 2a Or leave the field in ClickHouse
+
+When the field is already in a table, skip the loader and the pyramid:
+[the sqlfield package](../../public/science/geo/vectorfield/sqlfield/) is a
+source whose every window is one reduction query
+([ADR-0250](../adr/0250-a-sql-backed-vector-field-source-and-plays-vector-field-pane.md)),
+so nothing larger than a window leaves the server and the field may be any
+size. It costs a query per step for each settled view, where the pyramid
+costs none.
+
+```go
+src, err := sqlfield.NewSourceE(ctx, queryer, sqlfield.Relation{From: "weather.wind_10m"},
+	sqlfield.Options{Meta: vectorfield.Meta{Name: "10 m wind", Unit: "m/s", SpeedMax: 40}})
+```
+
+The relation yields `lat`, `lon`, `u`, `v` and optionally `t`, one row per node
+per step, on a grid regular in latitude and longitude. Everything §1 makes the
+loader's job is the relation's here — rotate, filter to one level and run,
+`nullIf` the sentinels — and `Relation.Head` carries a `WITH` list when that
+takes a query. `NewSourceE` refuses a step with more rows than the grid has
+nodes and nodes off a regular grid; it cannot tell whether components were
+rotated. `queryer` is whatever runs a statement with parameters and returns
+Arrow. Run the conformance suite of §2 against your relation and a real
+server, as the package's integration test does.
+
+In the `play` app this is the **Vector field** pane: name the relation
+`vector_field` in a CTE and the pane does the rest. Its help page has a query
+that needs no table.
+
 ## 3 Draw it
 
 ```go
@@ -158,5 +187,7 @@ the first frame.
   — the decisions, and what each guards against.
 - [The survey](../adr-background-work/vector-field-flow-visualization-survey.md)
   — what other implementations do and the defects they shipped.
+- [ADR-0250](../adr/0250-a-sql-backed-vector-field-source-and-plays-vector-field-pane.md)
+  — the ClickHouse-backed source and play's pane.
 - [ADR-0204](../adr/0204-leaflet-map-core-port.md) — the map and its projector.
 - The `flowonmap` demo in the widget gallery.
