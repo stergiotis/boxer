@@ -223,8 +223,41 @@ FROM (SELECT number AS s FROM numbers(3)) AS a, (SELECT number AS r FROM numbers
 		}
 	}
 
+	t.Run("a summary is the area-weighted mean of the decimated nodes, per step", func(t *testing.T) {
+		req := vectorfield.Request{West: -30, East: 40, South: 30, North: 70, MaxCols: 20, MaxRows: 12}
+		sums, err := src.SummarizeE(ctx, req)
+		require.NoError(t, err)
+		require.Len(t, sums, 3)
+		p := src.grid.plan(req)
+		require.Greater(t, p.factor, 1)
+		for step := range 3 {
+			var sum, weights, peak float64
+			n := 0
+			for r := 0; r < 181; r += p.factor {
+				lat := 90 - float64(r)
+				if lat < p.latRange[0] || lat > p.latRange[1] {
+					continue
+				}
+				for c := 0; c < 360; c += p.factor {
+					lon := -180 + float64(c)
+					if lon < p.lonRanges[0][0] || lon > p.lonRanges[0][1] {
+						continue
+					}
+					speed := math.Hypot(float64(analyticU(lon, lat, step)), float64(analyticV(lon, lat)))
+					w := math.Cos(lat * math.Pi / 180)
+					sum, weights, peak, n = sum+w*speed, weights+w, math.Max(peak, speed), n+1
+				}
+			}
+			require.Equal(t, uint32(n), sums[step].Valid, "step %d", step)
+			require.InDelta(t, sum/weights, sums[step].Mean, 1e-3, "step %d", step)
+			require.InDelta(t, peak, sums[step].Max, 1e-3, "step %d", step)
+		}
+	})
+
 	t.Run("the statement text does not change with the request", func(t *testing.T) {
-		served, _ := src.LastServed()
+		_, err := src.SampleE(ctx, vectorfield.Request{West: 0, East: 20, South: 0, North: 20, Step: 1, MaxCols: 50, MaxRows: 50})
+		require.NoError(t, err)
+		served, _ := src.LastServed(PurposeWindow)
 		require.Equal(t, src.WindowStatement(), served.Statement)
 	})
 

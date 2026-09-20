@@ -35,6 +35,7 @@ type fakeField struct {
 
 	mu         sync.Mutex
 	statements []string
+	purposes   []PurposeE
 }
 
 func (inst *fakeField) value(col, row, step int) (u, v float64) {
@@ -42,8 +43,9 @@ func (inst *fakeField) value(col, row, step int) (u, v float64) {
 	return 10*math.Sin(lon*math.Pi/90) + float64(step), 8 * math.Cos(lat*math.Pi/60)
 }
 
-func (inst *fakeField) QueryE(_ context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst *fakeField) QueryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	inst.mu.Lock()
+	inst.purposes = append(inst.purposes, PurposeOf(ctx))
 	inst.statements = append(inst.statements, statement)
 	inst.mu.Unlock()
 	alloc := memory.NewGoAllocator()
@@ -76,6 +78,8 @@ func (inst *fakeField) QueryE(_ context.Context, statement string, params map[st
 		return b.record(), nil
 	case windowStatement(inst.rel, inst.timeTypeOrNone()):
 		return inst.window(alloc, params)
+	case summaryStatement(inst.rel, inst.timeTypeOrNone()):
+		return inst.summary(alloc, params)
 	}
 	return nil, eh.Errorf("the fake was sent a statement it does not know")
 }
@@ -164,6 +168,54 @@ func (inst *fakeField) window(alloc memory.Allocator, params map[string]string) 
 		}
 		n := float64(b.n)
 		out.add(key[0], key[1], float32(b.u/n), float32(b.v/n), float32(b.s/n), b.n)
+	}
+	return out.record(), nil
+}
+
+// summary answers the summary statement the way the server does: every step,
+// the nodes inside the bounds whose grid index the factor divides, a mean
+// weighted by the cosine of latitude.
+func (inst *fakeField) summary(alloc memory.Allocator, params map[string]string) (rec arrow.RecordBatch, err error) {
+	flt := func(name string) float64 {
+		v, pErr := strconv.ParseFloat(params[name], 64)
+		if pErr != nil {
+			err = pErr
+		}
+		return v
+	}
+	factor := int(flt("ff_factor"))
+	latMin, latMax := flt("ff_lat_min"), flt("ff_lat_max")
+	lon1, lon2 := [2]float64{flt("ff_lon_min1"), flt("ff_lon_max1")}, [2]float64{flt("ff_lon_min2"), flt("ff_lon_max2")}
+	if err != nil {
+		return
+	}
+	out := newRecordBuilder(alloc, "ff_text:s", "ff_mean_speed:g", "ff_max_speed:g", "ff_valid:w")
+	for step := range max(len(inst.steps), 1) {
+		var sum, weights, peak float64
+		var n uint32
+		for row := 0; row < inst.g.rows; row += factor {
+			lat := inst.g.north - float64(row)*inst.g.dLat
+			if lat < latMin || lat > latMax {
+				continue
+			}
+			for col := 0; col < inst.storedCols; col += factor {
+				lon := inst.g.west + float64(col)*inst.g.dLon
+				if !(lon >= lon1[0] && lon <= lon1[1]) && !(lon >= lon2[0] && lon <= lon2[1]) {
+					continue
+				}
+				if inst.missing != nil && inst.missing(col, row) {
+					continue
+				}
+				u, v := inst.value(col, row, step)
+				w := math.Max(math.Cos(lat*math.Pi/180), 0)
+				sum, weights, peak, n = sum+w*math.Hypot(u, v), weights+w, math.Max(peak, math.Hypot(u, v)), n+1
+			}
+		}
+		text := ""
+		if len(inst.steps) > 0 {
+			text = inst.steps[step].Format("2006-01-02 15:04:05")
+		}
+		out.add(text, float32(sum/weights), float32(peak), n)
 	}
 	return out.record(), nil
 }
@@ -333,7 +385,7 @@ func TestEveryRequestSendsTheSameText(t *testing.T) {
 	}
 	require.Len(t, fake.statements, 2)
 	require.Equal(t, fake.statements[0], fake.statements[1], "a request's values ride parameters (ADR-0250 §SD3)")
-	served, queries := src.LastServed()
+	served, queries := src.LastServed(PurposeWindow)
 	require.Equal(t, "2026-01-01 09:00:00", served.Params["ff_t"])
 	require.Equal(t, uint64(2+4), queries)
 }
@@ -455,4 +507,42 @@ func TestPlanHoldsTheWindowContract(t *testing.T) {
 			require.True(t, carried, "a turn carries native column %d to %d", col, ciu)
 		}
 	})
+}
+
+// A summary is one value per described step, in step order, and the trend the
+// fixture adds with each step shows in it.
+func TestSummaryIsPerStepAndInOrder(t *testing.T) {
+	fake := &fakeField{
+		rel: Relation{From: "wind"}, timeType: "DateTime", steps: threeSteps(),
+		g: grid{west: -180, north: 90, dLon: 1, dLat: 1, cols: 360, rows: 181, periodic: true}, storedCols: 360,
+	}
+	ctx := context.Background()
+	src, err := NewSourceE(ctx, fake, fake.rel, Options{})
+	require.NoError(t, err)
+
+	sums, err := src.SummarizeE(ctx, vectorfield.Request{West: -30, East: 40, South: 30, North: 70, MaxCols: 40, MaxRows: 30})
+	require.NoError(t, err)
+	require.Len(t, sums, 3)
+	for i, s := range sums {
+		require.Greater(t, s.Valid, uint32(100), "step %d", i)
+		require.GreaterOrEqual(t, s.Max, s.Mean)
+	}
+	require.Greater(t, sums[2].Mean, sums[0].Mean, "the fixture's u grows with the step")
+	require.Equal(t, PurposeSummary, fake.purposes[len(fake.purposes)-1], "a host can tell a summary from a window")
+	require.Equal(t, PurposeDescribe, fake.purposes[0])
+	served, _ := src.LastServed(PurposeSummary)
+	require.NotContains(t, served.Params, "ff_t", "a summary reads every step")
+	require.Equal(t, "2", served.Params["ff_factor"], "decimated to what a window of that view would show")
+
+	// Bounds outside a regional field hold nothing, which is not an error.
+	regional := &fakeField{rel: Relation{From: "r"}, g: grid{west: 0, north: 10, dLon: 0.5, dLat: 0.5, cols: 21, rows: 21}, storedCols: 21}
+	rsrc, err := NewSourceE(ctx, regional, regional.rel, Options{})
+	require.NoError(t, err)
+	sums, err = rsrc.SummarizeE(ctx, vectorfield.Request{West: 100, East: 120, South: 0, North: 10, MaxCols: 20, MaxRows: 20})
+	require.NoError(t, err)
+	require.Len(t, sums, 1)
+	require.True(t, sums[0].Mean != sums[0].Mean)
+
+	_, err = src.SummarizeE(ctx, vectorfield.Request{West: 10, East: 10, South: 0, North: 1, MaxCols: 8, MaxRows: 8})
+	require.Error(t, err)
 }

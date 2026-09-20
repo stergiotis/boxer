@@ -25,6 +25,29 @@ type QueryerI interface {
 	QueryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error)
 }
 
+// PurposeE is what a statement the source sends is for.
+type PurposeE uint8
+
+const (
+	// PurposeDescribe is a statement of [NewSourceE].
+	PurposeDescribe PurposeE = iota
+	// PurposeWindow is a statement of [Source.SampleE].
+	PurposeWindow
+	// PurposeSummary is a statement of [Source.SummarizeE].
+	PurposeSummary
+)
+
+type purposeKey struct{}
+
+// PurposeOf is what the statement a [QueryerI] was handed ctx with is for. A
+// host that supersedes a running query by a stable identity reads it to keep
+// one identity per purpose: a window request may replace the window request
+// before it, and must not replace a summary that happens to be running.
+func PurposeOf(ctx context.Context) (purpose PurposeE) {
+	purpose, _ = ctx.Value(purposeKey{}).(PurposeE)
+	return
+}
+
 // Options tunes a [Source]; the zero value is usable.
 type Options struct {
 	// Meta names the field. Name, Quantity, Unit, Surface, Provenance,
@@ -69,7 +92,7 @@ type Source struct {
 	windowQ  string
 
 	mu      sync.Mutex
-	last    Served
+	last    [PurposeSummary + 1]Served
 	queries uint64
 }
 
@@ -105,7 +128,7 @@ func (inst *Source) describeE(ctx context.Context, opts Options) (err error) {
 	shape := opts.Shape
 	if shape == nil {
 		var rec arrow.RecordBatch
-		rec, err = inst.queryE(ctx, ProbeStatement(inst.rel), nil)
+		rec, err = inst.queryE(ctx, PurposeDescribe, ProbeStatement(inst.rel), nil)
 		if err != nil {
 			return
 		}
@@ -134,7 +157,7 @@ func (inst *Source) describeE(ctx context.Context, opts Options) (err error) {
 		params["ff_t"] = inst.stepText[0]
 	}
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, geometryStatement(inst.rel, inst.timeType), params)
+	rec, err = inst.queryE(ctx, PurposeDescribe, geometryStatement(inst.rel, inst.timeType), params)
 	if err != nil {
 		return
 	}
@@ -219,7 +242,7 @@ func (inst *Source) describeStepsE(ctx context.Context, opts Options) (counts []
 		maxSteps = defaultMaxSteps
 	}
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, stepsStatement(inst.rel), map[string]string{"ff_cap": formatInt(int64(maxSteps) + 1)})
+	rec, err = inst.queryE(ctx, PurposeDescribe, stepsStatement(inst.rel), map[string]string{"ff_cap": formatInt(int64(maxSteps) + 1)})
 	if err != nil {
 		return
 	}
@@ -280,7 +303,7 @@ func (inst *Source) checkRegularE(ctx context.Context, g grid, stepParams map[st
 		params[k] = v
 	}
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, regularityStatement(inst.rel, inst.timeType), params)
+	rec, err = inst.queryE(ctx, PurposeDescribe, regularityStatement(inst.rel, inst.timeType), params)
 	if err != nil {
 		return
 	}
@@ -308,10 +331,11 @@ func (inst *Source) checkRegularE(ctx context.Context, g grid, stepParams map[st
 // Describe implements [vectorfield.SourceI].
 func (inst *Source) Describe() (meta vectorfield.Meta) { return inst.meta }
 
-// LastServed is the statement sent most recently and what came of it.
-func (inst *Source) LastServed() (served Served, queries uint64) {
+// LastServed is the statement sent most recently for a purpose and what came
+// of it, and how many statements the source has sent in all.
+func (inst *Source) LastServed(purpose PurposeE) (served Served, queries uint64) {
 	inst.mu.Lock()
-	served, queries = inst.last, inst.queries
+	served, queries = inst.last[purpose], inst.queries
 	inst.mu.Unlock()
 	return
 }
@@ -344,7 +368,7 @@ func (inst *Source) SampleE(ctx context.Context, req vectorfield.Request) (win v
 		return
 	}
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, inst.windowQ, inst.grid.windowParams(&p, inst.stepText[req.Step], inst.hasTime))
+	rec, err = inst.queryE(ctx, PurposeWindow, inst.windowQ, inst.grid.windowParams(&p, inst.stepText[req.Step], inst.hasTime))
 	if err != nil {
 		return
 	}
@@ -358,15 +382,15 @@ func (inst *Source) SampleE(ctx context.Context, req vectorfield.Request) (win v
 	return
 }
 
-func (inst *Source) queryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst *Source) queryE(ctx context.Context, purpose PurposeE, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	started := time.Now()
-	rec, err = inst.queryer.QueryE(ctx, statement, params)
+	rec, err = inst.queryer.QueryE(context.WithValue(ctx, purposeKey{}, purpose), statement, params)
 	served := Served{Statement: statement, Params: params, Took: time.Since(started), Err: err}
 	if err == nil {
 		served.Rows = int(rec.NumRows())
 	}
 	inst.mu.Lock()
-	inst.last = served
+	inst.last[purpose] = served
 	inst.queries++
 	inst.mu.Unlock()
 	return

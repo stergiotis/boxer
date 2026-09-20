@@ -213,6 +213,7 @@ func Statements(rel Relation, timeType string) (statements []string) {
 		geometryStatement(rel, timeType),
 		regularityStatement(rel, timeType),
 		windowStatement(rel, timeType),
+		summaryStatement(rel, timeType),
 	}
 	if timeType != "" {
 		statements = append(statements, stepsStatement(rel))

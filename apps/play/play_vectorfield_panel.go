@@ -376,7 +376,7 @@ func (inst *VectorFieldDriver) statusLine(meta vectorfield.Meta, has bool, opts 
 	}
 	line := fmt.Sprintf("%s · %s grid %.4g° × %.4g° · %d steps · window %d × %d at level %d · %d requests",
 		name, kind, meta.DLon, meta.DLat, len(meta.Steps), stats.WindowCols, stats.WindowRows, stats.WindowLevel, stats.Fetches)
-	if served, _ := g.src.LastServed(); served.Err == nil && served.Took > 0 {
+	if served, _ := g.src.LastServed(sqlfield.PurposeWindow); served.Err == nil && served.Took > 0 {
 		line += fmt.Sprintf(" · last %d rows in %s", served.Rows, served.Took.Round(time.Millisecond))
 	}
 	if g.Loading() {
@@ -489,7 +489,7 @@ func (inst *VectorFieldDriver) emitWhenRested(meta vectorfield.Meta, has bool, e
 // own: every parameter it was sent with as a SET, then the statement. It is
 // what makes a window's cost a paste away from EXPLAIN.
 func (inst *VectorFieldDriver) servedBuffer() string {
-	served, _ := inst.guest.src.LastServed()
+	served, _ := inst.guest.src.LastServed(sqlfield.PurposeWindow)
 	params := make(map[string]string, len(served.Params)+len(inst.relParams))
 	for k, v := range inst.relParams {
 		params[k] = v
