@@ -160,15 +160,15 @@ type Layer struct {
 	missing map[int]bool
 	native  bool // the window is as fine as the source gets
 
-	gen         uint64
-	geomSerial  uint64
-	inflight    *geometry
-	inflightFor [2]int
-	inflightEnd int // the last step the request in flight will answer
-	cancel      context.CancelFunc
-	lastFetch   time.Time
-	retryAfter  time.Time
-	prefetched  map[int]bool
+	gen           uint64
+	geomSerial    uint64
+	inflight      *geometry
+	inflightSteps []int // the steps the request in flight has yet to answer
+	ahead         []int // steps to hold beside the bracket's, in the order wanted
+	cancel        context.CancelFunc
+	lastFetch     time.Time
+	retryAfter    time.Time
+	prefetched    map[int]bool
 
 	mailMu sync.Mutex
 	mail   []fetchReply
@@ -209,6 +209,8 @@ const (
 	// resting near a level boundary does not alternate.
 	coarserThan = 2.6
 	finerThan   = 0.55
+	// maxAhead bounds the windows held beside the bracket's.
+	maxAhead = 8
 	// fetchDebounce is the shortest time between two requests.
 	fetchDebounce = 120 * time.Millisecond
 	errorBackoff  = 2 * time.Second
@@ -301,6 +303,21 @@ func (inst *Layer) Time() (t time.Time) {
 	return a.Add(time.Duration((inst.pos - float64(i)) * float64(b.Sub(a))))
 }
 
+// SetAhead names the steps the display time will reach next, nearest first —
+// what a transport's look-ahead lists (ADR-0251 §SD9). The layer keeps their
+// windows beside the bracket's, fetches them once the bracket is served, in
+// the order given, and lets go of what is in neither; at most eight are
+// taken. With none it holds the bracket alone, which against a slow source
+// makes every bracket begin with a wait.
+func (inst *Layer) SetAhead(steps []int) {
+	inst.ahead = inst.ahead[:0]
+	for _, step := range steps {
+		if step >= 0 && step < len(inst.meta.Steps) && len(inst.ahead) < maxAhead {
+			inst.ahead = append(inst.ahead, step)
+		}
+	}
+}
+
 // StepStateE is what the layer has of one step for the view on screen.
 type StepStateE uint8
 
@@ -317,8 +334,8 @@ const (
 )
 
 // StepState says what the layer has of a step. The layer keeps the windows of
-// the steps around the display time and lets the others go, so at rest at
-// most two steps are held. A time control reads it to show what a move will
+// the steps around the display time, and of the steps SetAhead names, and
+// lets the others go. A time control reads it to show what a move will
 // cost, and to hold playback until the step it is about to enter has arrived.
 func (inst *Layer) StepState(step int) (state StepStateE) {
 	if _, ok := inst.steps[step]; ok {
@@ -327,7 +344,7 @@ func (inst *Layer) StepState(step int) (state StepStateE) {
 	if inst.missing[step] {
 		return StepStateMissing
 	}
-	if inst.inflight != nil && (step == inst.inflightFor[0] || step == inst.inflightFor[1]) {
+	if inst.inflight != nil && slices.Contains(inst.inflightSteps, step) {
 		return StepStateLoading
 	}
 	return StepStateIdle
@@ -658,7 +675,7 @@ func (inst *Layer) takeReplies() {
 				inst.stats.LastError = r.err
 				inst.retryAfter = inst.now().Add(errorBackoff)
 			}
-			inst.inflight = nil
+			inst.inflight, inst.inflightSteps = nil, inst.inflightSteps[:0]
 			continue
 		}
 		if r.geom.id != inst.geom.id {
@@ -675,14 +692,18 @@ func (inst *Layer) takeReplies() {
 			inst.stats.WindowLevel = r.data.win.Level
 			inst.stats.LastError = nil
 		}
-		if r.step == inst.inflightEnd {
+		if i := slices.Index(inst.inflightSteps, r.step); i >= 0 {
+			inst.inflightSteps = slices.Delete(inst.inflightSteps, i, i+1)
+		}
+		if len(inst.inflightSteps) == 0 {
 			inst.inflight = nil
 		}
 	}
-	// Windows of steps the display time has left are let go.
+	// Windows of steps the display time has left, and is not about to reach,
+	// are let go.
 	a, b, _ := inst.bracket()
 	for step := range inst.steps {
-		if step != a && step != b {
+		if step != a && step != b && !slices.Contains(inst.ahead, step) {
 			delete(inst.steps, step)
 		}
 	}
@@ -725,13 +746,33 @@ func (inst *Layer) ensureWindow(proj crsProjection, viewport rect, size portolan
 		fresh = true
 	case inst.resolutionIsOff(samplePx / scale):
 		fresh = true
-	case have(need[0]) && have(need[1]):
+	}
+	// want is what to ask for: the bracket's steps first, then the steps
+	// ahead, nearest first.
+	var want []int
+	for _, step := range need {
+		if step >= 0 && (fresh || !have(step)) {
+			want = append(want, step)
+		}
+	}
+	bracketWants := len(want)
+	for _, step := range inst.ahead {
+		if (fresh || !have(step)) && !slices.Contains(want, step) {
+			want = append(want, step)
+		}
+	}
+	if len(want) == 0 {
 		return
 	}
 
-	if inst.inflight != nil {
-		// Let it finish unless it no longer answers the view or the time.
-		if covers(inst.inflight) && inst.inflightFor == need {
+	if inst.inflight != nil && covers(inst.inflight) && fresh == (inst.inflight.id != inst.geom.id) {
+		// Let it finish if it will answer what the display time needs now —
+		// the time may have moved on to a step it was fetching ahead.
+		answers := true
+		for _, step := range want[:bracketWants] {
+			answers = answers && slices.Contains(inst.inflightSteps, step)
+		}
+		if answers {
 			return
 		}
 	}
@@ -746,15 +787,6 @@ func (inst *Layer) ensureWindow(proj crsProjection, viewport rect, size portolan
 		geom = inst.newGeometry(proj, viewport, size, samplePx)
 		geom.id = inst.geomSerial
 	}
-	var want []int
-	for _, step := range need {
-		if step >= 0 && (fresh || !have(step)) {
-			want = append(want, step)
-		}
-	}
-	if len(want) == 0 {
-		return
-	}
 	if inst.cancel != nil {
 		inst.cancel()
 	}
@@ -762,8 +794,7 @@ func (inst *Layer) ensureWindow(proj crsProjection, viewport rect, size portolan
 	ctx, cancel := context.WithCancel(context.Background())
 	inst.cancel = cancel
 	inst.inflight = &geom
-	inst.inflightFor = need
-	inst.inflightEnd = want[len(want)-1]
+	inst.inflightSteps = append(inst.inflightSteps[:0], want...)
 	inst.lastFetch = now
 	inst.stats.Fetches++
 	if o.Synchronous {

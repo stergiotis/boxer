@@ -401,3 +401,62 @@ func TestStepStateFollowsTheBracket(t *testing.T) {
 	require.Equal(t, StepStateMissing, s.layer.StepState(3))
 	require.Equal(t, StepStateIdle, s.layer.StepState(1), "a step the display time has left is let go")
 }
+
+// countingSource counts the windows asked for, per step.
+type countingSource struct {
+	vectorfield.SourceI
+	mu    sync.Mutex
+	asked map[int]int
+}
+
+func (inst *countingSource) SampleE(ctx context.Context, req vectorfield.Request) (vectorfield.Window, error) {
+	inst.mu.Lock()
+	inst.asked[req.Step]++
+	inst.mu.Unlock()
+	return inst.SourceI.SampleE(ctx, req)
+}
+
+func (inst *countingSource) count(step int) int {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.asked[step]
+}
+
+// The layer holds the steps it is told the display time will reach, so the
+// bracket the time moves into is there already (ADR-0251 §SD9).
+func TestStepsAheadAreHeldBeforeTheyAreNeeded(t *testing.T) {
+	src := &countingSource{SourceI: globalSource(t, vectorfield.Uniform(10, 0), 9), asked: map[int]int{}}
+	s := newScene(t, src, Options{Seed: 1})
+	held := func(steps ...int) func() bool {
+		return func() bool {
+			for _, step := range steps {
+				if s.layer.StepState(step) != StepStateHeld {
+					return false
+				}
+			}
+			return !s.layer.Stats().InFlight
+		}
+	}
+
+	s.layer.SetStepPosition(1.5)
+	s.layer.SetAhead([]int{3, 4, 5, 99, -1})
+	s.frame(0)
+	s.settle(held(1, 2))
+	s.frame(time.Second) // past the debounce: the steps ahead are a second request
+	s.settle(held(1, 2, 3, 4, 5))
+	require.Equal(t, StepStateIdle, s.layer.StepState(6))
+
+	s.layer.SetStepPosition(2.5)
+	s.layer.SetAhead([]int{4, 5, 6})
+	s.frame(time.Second)
+	require.Equal(t, StepStateHeld, s.layer.StepState(3), "the bracket the time moved into was there")
+	s.settle(held(2, 3, 4, 5, 6))
+	require.Equal(t, StepStateIdle, s.layer.StepState(1), "a step that is neither in the bracket nor ahead is let go")
+	for step := 1; step <= 6; step++ {
+		require.Equal(t, 1, src.count(step), "step %d", step)
+	}
+
+	s.layer.SetAhead(nil)
+	s.frame(time.Second)
+	require.Equal(t, StepStateIdle, s.layer.StepState(5), "with nothing ahead it holds the bracket alone")
+}
