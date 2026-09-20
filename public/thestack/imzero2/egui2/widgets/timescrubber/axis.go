@@ -19,7 +19,14 @@ type timeAxis struct {
 }
 
 func newTimeAxis(steps []Step, x0, x1 float32) (a timeAxis) {
+	return newAxis(steps, x0, x1, false)
+}
+
+// newAxis is newTimeAxis with the choice of laying the steps out by index
+// whatever their times (ADR-0251 §SD10).
+func newAxis(steps []Step, x0, x1 float32, byIndex bool) (a timeAxis) {
 	a.x0, a.x1 = x0, x1
+	a.byIndex = byIndex
 	a.ms = make([]int64, len(steps))
 	for i := range steps {
 		a.ms[i] = steps[i].At.UnixMilli()
@@ -31,6 +38,53 @@ func newTimeAxis(steps []Step, x0, x1 float32) (a timeAxis) {
 		a.byIndex = true
 	}
 	return
+}
+
+// ordered says the times strictly increase, so an instant has a position.
+func (inst timeAxis) ordered() bool {
+	for i := 1; i < len(inst.ms); i++ {
+		if inst.ms[i] <= inst.ms[i-1] {
+			return false
+		}
+	}
+	return len(inst.ms) >= 2
+}
+
+// sameSteps says two lists of instants are the same list.
+func sameSteps(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// midnights lists the local midnights strictly inside a span, at most limit
+// of them.
+func midnights(fromMS, toMS int64, loc *time.Location, limit int) (out []int64) {
+	t := time.UnixMilli(fromMS).In(loc)
+	y, m, d := t.Date()
+	for day := 1; len(out) < limit; day++ {
+		at := time.Date(y, m, d+day, 0, 0, 0, 0, loc).UnixMilli()
+		if at >= toMS {
+			return
+		}
+		if at > fromMS {
+			out = append(out, at)
+		}
+	}
+	return
+}
+
+// firstAtOrAfter is the first step at or after an instant, or the last step.
+func (inst timeAxis) firstAtOrAfter(ms int64) int {
+	n := len(inst.ms)
+	i := sort.Search(n, func(k int) bool { return inst.ms[k] >= ms })
+	return min(i, max(n-1, 0))
 }
 
 func (inst timeAxis) last() float64 { return float64(max(len(inst.ms)-1, 0)) }
