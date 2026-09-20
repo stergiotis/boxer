@@ -12033,8 +12033,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                         for k in 0..n {
                             let dx = x1s[k] - x0s[k];
                             let dy = y1s[k] - y0s[k];
-                            let len = (dx * dx + dy * dy).sqrt();
-                            if !(len > 0.0) || !len.is_finite() {
+                            let len = dx.hypot(dy);
+                            // NaN is not finite, so this skips it as well.
+                            if !len.is_finite() || len <= 0.0 {
                                 continue;
                             }
                             let nx = -dy / len * half;
