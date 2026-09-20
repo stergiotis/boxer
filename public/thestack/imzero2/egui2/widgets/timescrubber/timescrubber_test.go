@@ -13,7 +13,7 @@ import (
 func always(int) bool { return true }
 
 func TestPlaybackLoopsBouncesAndStops(t *testing.T) {
-	tr := Transport{Rate: 1, Playing: true}
+	tr := Transport{Rate: 1, Playing: true, Dwell: -1}
 	for range 10 { // 2.5 s at one step a second, over four steps
 		tr.Advance(0.25, 4, always)
 	}
@@ -23,7 +23,7 @@ func TestPlaybackLoopsBouncesAndStops(t *testing.T) {
 	}
 	assert.InDelta(t, 0.5, tr.Pos, 1e-9, "a loop starts over at the first step")
 
-	tr = Transport{Rate: 1, Playing: true, Mode: ModeBounce, Pos: 2.5}
+	tr = Transport{Rate: 1, Playing: true, Mode: ModeBounce, Pos: 2.5, Dwell: -1}
 	for range 4 {
 		tr.Advance(0.25, 4, always)
 	}
@@ -73,7 +73,7 @@ func TestPlaybackWaitsForTheNextStep(t *testing.T) {
 }
 
 func TestARangeBoundsPlaybackAndTheEnds(t *testing.T) {
-	tr := Transport{Rate: 2, Playing: true}
+	tr := Transport{Rate: 2, Playing: true, Dwell: -1}
 	tr.SetRange(6, 3)
 	lo, hi := tr.Bounds(10)
 	assert.Equal(t, [2]int{3, 6}, [2]int{lo, hi})
@@ -109,6 +109,192 @@ func TestSteppingFromBetweenTwoSteps(t *testing.T) {
 	assert.Equal(t, 0.0, tr.Pos)
 	tr.StepBy(9, 6)
 	assert.Equal(t, 5.0, tr.Pos)
+}
+
+// Playback holds the last step before a loop wraps, and each end before a
+// bounce turns (ADR-0251 §SD3): without it the last step is on screen for one
+// frame.
+func TestPlaybackDwellsAtTheEnds(t *testing.T) {
+	tr := Transport{Rate: 1, Playing: true, Pos: 2.5, Dwell: 0.5}
+	tr.Advance(0.25, 4, always)
+	tr.Advance(0.25, 4, always)
+	assert.Equal(t, 3.0, tr.Pos)
+	assert.True(t, tr.TakeSettled(), "arriving on a step settles")
+	tr.Advance(0.25, 4, always)
+	assert.Equal(t, 3.0, tr.Pos, "held")
+	assert.True(t, tr.Dwelling())
+	tr.Advance(0.25, 4, always)
+	tr.Advance(0.25, 4, always)
+	assert.InDelta(t, 0.25, tr.Pos, 1e-9, "then round again, and the time past the dwell is played")
+	assert.False(t, tr.Dwelling())
+
+	// A once-through stops and does not dwell; a seek lets go of a dwell.
+	tr = Transport{Rate: 1, Playing: true, Pos: 2.9, Dwell: 5, Mode: ModeOnce}
+	tr.Advance(0.25, 4, always)
+	assert.False(t, tr.Playing)
+	tr = Transport{Rate: 1, Playing: true, Pos: 3, Dwell: 5}
+	tr.Advance(0.1, 4, always)
+	require.True(t, tr.Dwelling())
+	tr.Seek(1, 4)
+	assert.False(t, tr.Dwelling())
+
+	// The literal order of a bounce over four steps, by the steps it settles on.
+	tr = Transport{Rate: 4, Playing: true, Mode: ModeBounce, Dwell: 0.2}
+	var visited []int
+	for range 80 {
+		tr.Advance(0.05, 4, always)
+		if tr.TakeSettled() {
+			visited = append(visited, int(math.Round(tr.Pos)))
+		}
+	}
+	require.GreaterOrEqual(t, len(visited), 9)
+	assert.Equal(t, []int{1, 2, 3, 2, 1, 0, 1, 2, 3}, visited[:9], "each end once per turn")
+}
+
+// Play pressed in the middle of a bracket whose far end is not there waits
+// where it is (ADR-0251 §SD3).
+func TestPlaybackFromMidBracketWaitsToo(t *testing.T) {
+	held := map[int]bool{2: true}
+	ready := func(step int) bool { return held[step] }
+	tr := Transport{Rate: 1, Pos: 2.4, Dwell: -1}
+	tr.Toggle(6)
+	tr.Advance(0.25, 6, ready)
+	assert.True(t, tr.Buffering)
+	assert.Equal(t, 2.4, tr.Pos)
+	assert.Equal(t, 3, tr.BufferingStep, "it names the step it waits for")
+	tr.Advance(0.25, 6, ready)
+	assert.InDelta(t, 0.5, tr.BufferingFor, 1e-9)
+	assert.Greater(t, tr.WaitShare, 0.0)
+	held[3] = true
+	tr.Advance(0.25, 6, ready)
+	assert.False(t, tr.Buffering)
+	assert.InDelta(t, 2.65, tr.Pos, 1e-9)
+	assert.Zero(t, tr.BufferingFor)
+}
+
+// Ahead lists what Advance will reach, in the order it reaches it.
+func TestAheadWalksTheRulesAdvanceDoes(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		steps := rapid.IntRange(2, 12).Draw(t, "steps")
+		// A dwell longer than a frame, so that an end is seen before the wrap.
+		tr := Transport{Rate: 4, Playing: true, Dwell: 0.06,
+			Mode: AllModes[rapid.IntRange(0, len(AllModes)-1).Draw(t, "mode")],
+			Pos:  float64(rapid.IntRange(0, steps-1).Draw(t, "pos"))}
+		if rapid.Bool().Draw(t, "range") {
+			tr.SetRange(rapid.IntRange(0, steps-1).Draw(t, "a"), rapid.IntRange(0, steps-1).Draw(t, "b"))
+		}
+		lo, hi := tr.Bounds(steps)
+		tr.Pos = clampPos(tr.Pos, lo, hi)
+		n := rapid.IntRange(1, 6).Draw(t, "n")
+		ahead := tr.Ahead(steps, n, nil)
+
+		at := int(tr.Pos)
+		inHand := at // the step it starts on is held already and is not listed
+		var reached []int
+		tr.TakeSettled()
+		for i := 0; i < 400 && tr.Playing && len(reached) < len(ahead); i++ {
+			tr.Advance(0.05, steps, always)
+			if tr.TakeSettled() && int(math.Round(tr.Pos)) != at {
+				at = int(math.Round(tr.Pos))
+				if at != inHand {
+					reached = append(reached, at)
+				}
+			}
+		}
+		if tr.Mode != ModeOnce && hi-lo >= 1 && len(ahead) == 0 && hi-lo > 1 {
+			t.Fatalf("nothing ahead of %v in %v over [%d,%d]", tr.Pos, tr.Mode, lo, hi)
+		}
+		for i := range reached {
+			if reached[i] != ahead[i] {
+				t.Fatalf("ahead %v, reached %v", ahead, reached)
+			}
+		}
+		for i, s := range ahead {
+			if s < lo || s > hi {
+				t.Fatalf("step %d of %v is outside [%d,%d]", i, ahead, lo, hi)
+			}
+		}
+	})
+
+	// At rest it is the way forward, so play finds the next step there.
+	tr := Transport{Pos: 2}
+	assert.Equal(t, []int{3, 4}, tr.Ahead(6, 2, nil))
+	tr = Transport{Pos: 4.5, Mode: ModeOnce}
+	assert.Empty(t, tr.Ahead(6, 3, nil), "a once-through has nothing past its end")
+	tr = Transport{Pos: 4.5}
+	assert.Equal(t, []int{0, 1, 2}, tr.Ahead(6, 3, nil), "a loop wraps")
+	tr = Transport{Pos: 4.5, Mode: ModeBounce}
+	assert.Equal(t, []int{3, 2}, tr.Ahead(6, 2, nil), "a bounce turns")
+}
+
+// The ends of a range are set from the playhead, the range slides whole, and
+// an edge stops short of the other (ADR-0251 §SD5).
+func TestTheRangeIsEdited(t *testing.T) {
+	var tr Transport
+	tr.SetIn(3, 10)
+	lo, hi := tr.Bounds(10)
+	assert.Equal(t, [2]int{3, 9}, [2]int{lo, hi}, "in alone runs to the end")
+	tr.SetOut(6, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{3, 6}, [2]int{lo, hi})
+	tr.SetIn(8, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{8, 9}, [2]int{lo, hi}, "an in past the out sends the out to the end")
+	tr.SetOut(2, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{0, 2}, [2]int{lo, hi})
+
+	tr.SetRange(3, 6)
+	tr.SlideRange(2, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{5, 8}, [2]int{lo, hi})
+	tr.SlideRange(9, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{6, 9}, [2]int{lo, hi}, "as far as the series lets it, length kept")
+	tr.SlideRange(-20, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{0, 3}, [2]int{lo, hi})
+
+	tr.MoveRangeEdge(false, 7, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{2, 3}, [2]int{lo, hi}, "an edge stops one short of the other")
+	tr.MoveRangeEdge(true, 0, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{2, 3}, [2]int{lo, hi})
+	tr.MoveRangeEdge(true, 40, 10)
+	lo, hi = tr.Bounds(10)
+	assert.Equal(t, [2]int{2, 9}, [2]int{lo, hi})
+
+	// A range set around a resting playhead leaves it alone (survey row 26).
+	tr = Transport{Pos: 5}
+	tr.SetRange(3, 8)
+	assert.Equal(t, 5.0, tr.Pos)
+}
+
+// No steps, one step, two: nothing spins and nothing moves that should not.
+func TestDegenerateSeries(t *testing.T) {
+	for _, n := range []int{0, 1, 2} {
+		for _, m := range AllModes {
+			tr := Transport{Playing: true, Mode: m, Rate: 4, Dwell: -1}
+			for range 50 {
+				tr.Advance(0.1, n, always)
+			}
+			tr.StepBy(1, n)
+			tr.First(n)
+			tr.Last(n)
+			tr.SetIn(0, n)
+			tr.SetOut(0, n)
+			tr.SlideRange(1, n)
+			assert.LessOrEqual(t, tr.Pos, float64(max(n-1, 0)))
+			assert.LessOrEqual(t, len(tr.Ahead(n, 3, nil)), 1)
+		}
+	}
+	// Times that stand still, run backward, or leap do not move it far.
+	tr := Transport{Playing: true, Rate: 1, Dwell: -1}
+	for _, dt := range []float64{0, -1, 1e-3, 10} {
+		tr.Advance(dt, 100, always)
+	}
+	assert.LessOrEqual(t, tr.Pos, 0.3, "a stalled frame loop resumes where it was")
 }
 
 func stepsAt(hours ...float64) (steps []Step) {
