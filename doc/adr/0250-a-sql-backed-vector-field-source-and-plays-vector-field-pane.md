@@ -176,6 +176,10 @@ reports the source's last statement, parameters, duration and error itself.
 
 #### SD5 — play binds the CTE `vector_field`, and an optional `vector_field_opts`
 
+> A third optional channel, `vector_field_sites`, was added on 2026-09-20; see
+> the Updates entry.
+
+
 The pane is a `PanelI` whose required channel is fed by name from the split,
 like the Network's `edges`. What the channel carries is the relation's
 **schema** — the fused node under `LIMIT 0` — so `AcceptForChannel` judges
@@ -355,6 +359,32 @@ and the tour's `36_vector_field_follow` scene runs the case end to end.
 playground it opens in is now launched to run, which is also the more useful
 state: the result is the window's bins and the parameters are pinned in the
 pane. The `36_vector_field_window_query` scene covers it.
+
+### 2026-09-20 — a third CTE: the points the field was measured at
+
+§SD5 named two channels. A third, optional one is added on the same ADR-0231
+§SD5 form: `vector_field_sites`, with `lat` and `lon` required and `label` and
+`radius_km` optional, drawn as a dot per station after the flow layer, with
+the reach as a circle behind a toggle and labels once few enough are in view.
+
+The reason is a gap this ADR's own §SD1 states and the drawing then hides. A
+field relation may be a model's native grid, where every node is computed, or
+an interpolation over scattered stations, where almost none is — and the pane
+renders the two identically. The particles are as smooth and as confident
+three hundred kilometres from the nearest measurement as on top of one, and
+nothing in the window says which is which. The source cannot supply the
+stations: by the time a window is reduced they are gone, and a relation that
+interpolated in SQL never told anyone where from. Only the query's author
+knows, so only the query can say.
+
+The channel is optional and silent by default, so a field off a real grid
+declares nothing and looks as it always did. What it costs is one more lane
+per settled run, over a relation of a few hundred rows.
+
+`lat` or `lon` missing is a stated reason rather than an empty overlay: a
+sites CTE that draws nothing is indistinguishable from one nobody wrote, and
+the failure mode of that confusion is a map that goes on implying the field
+was measured everywhere.
 
 ### 2026-09-20 — the pane reports the queries it runs
 

@@ -11,6 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield/sqlfield"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -48,11 +49,35 @@ const (
 	vectorFieldOptUnitCol     = "unit"
 	vectorFieldOptSpeedMaxCol = "speed_max"
 
+	// vector_field_sites columns. lat and lon are the contract; the other
+	// two are the ADR-0231 §SD5 optional form.
+	vectorFieldSiteLatCol    = "lat"
+	vectorFieldSiteLonCol    = "lon"
+	vectorFieldSiteLabelCol  = "label"
+	vectorFieldSiteRadiusCol = "radius_km"
+
 	vectorFieldSettle     = 250 * time.Millisecond
 	vectorFieldTimeLayout = "2006-01-02 15:04:05.000"
 	// vectorFieldSamplePx is the layer's default sample spacing; a summary is
 	// decimated to what a window of the same view shows.
 	vectorFieldSamplePx = 4
+
+	// vectorFieldSiteMarkerPx is a site's radius on screen. A site is a
+	// point at every zoom — its extent is the ring, not the dot.
+	vectorFieldSiteMarkerPx = 3.5
+	// vectorFieldSiteLabelMax is how many sites may be IN VIEW before their
+	// labels are dropped. A network of a hundred stations labels into an
+	// unreadable band at continental zoom and into something useful two zoom
+	// steps in, so the threshold is on what is visible rather than on the
+	// zoom itself.
+	vectorFieldSiteLabelMax = 24
+	// vectorFieldSiteRingPoints is the polygon a coverage ring is drawn as.
+	// Enough that a 300 km circle has no visible corners.
+	vectorFieldSiteRingPoints = 48
+	// earthRadiusKm is the sphere the rings are laid out on. The map's own
+	// projection is spherical Mercator, so a spherical ring is consistent
+	// with what it is drawn over.
+	earthRadiusKm = 6371.0
 )
 
 // vectorFieldClaim is the relation's shape, and the frame's signals for the
@@ -73,6 +98,22 @@ type vectorFieldOpts struct {
 	speedMax   float32
 }
 
+// vectorFieldSitesClaim is the resolved column indices of the sites relation;
+// -1 marks an absent optional column.
+type vectorFieldSitesClaim struct {
+	latCol, lonCol, labelCol, radiusCol int
+}
+
+// vectorFieldSite is one place the field was actually measured. The pane
+// cannot derive these: an interpolated field carries no record of the points
+// it was interpolated from, and the difference between the two is the whole
+// reason to draw them.
+type vectorFieldSite struct {
+	ll       portolan.LatLng
+	label    string
+	radiusKm float64
+}
+
 type vectorFieldPanel struct {
 	driver *VectorFieldDriver
 }
@@ -83,6 +124,7 @@ func (inst vectorFieldPanel) Channels() []ChannelSpec {
 	return []ChannelSpec{
 		{ID: chVectorField, Required: true, Label: "vector_field"},
 		{ID: chVectorFieldOpts, Required: false, Label: "vector_field_opts"},
+		{ID: chVectorFieldSites, Required: false, Label: "vector_field_sites"},
 	}
 }
 
@@ -116,6 +158,33 @@ func (inst vectorFieldPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema
 			}
 		}
 		claim = oc
+	case chVectorFieldSites:
+		if schema == nil {
+			reason = "no `vector_field_sites` CTE"
+			return
+		}
+		sc := vectorFieldSitesClaim{latCol: -1, lonCol: -1, labelCol: -1, radiusCol: -1}
+		for i, f := range schema.Fields() {
+			switch f.Name {
+			case vectorFieldSiteLatCol:
+				sc.latCol = i
+			case vectorFieldSiteLonCol:
+				sc.lonCol = i
+			case vectorFieldSiteLabelCol:
+				sc.labelCol = i
+			case vectorFieldSiteRadiusCol:
+				sc.radiusCol = i
+			}
+		}
+		if sc.latCol < 0 || sc.lonCol < 0 {
+			// Named rather than skipped: a sites CTE that draws nothing is
+			// indistinguishable from one the reader forgot to write, and the
+			// pane would go on claiming the field was measured everywhere.
+			reason = "`vector_field_sites` needs `lat` and `lon` in degrees, one row per place the field was measured; " +
+				"`label` and `radius_km` are optional"
+			return
+		}
+		claim = sc
 	default:
 		reason = "unknown channel"
 	}
@@ -135,7 +204,44 @@ func (inst vectorFieldPanel) Render(filled map[ChannelID]ChannelResult, emit Sig
 			opts = readVectorFieldOpts(o.Rec, oc)
 		}
 	}
-	d.Render(claim, opts, emit)
+	var sites []vectorFieldSite
+	if v, has := filled[chVectorFieldSites]; has {
+		if sc, isSites := v.Claim.(vectorFieldSitesClaim); isSites {
+			sites = readVectorFieldSites(v.Rec, sc)
+		}
+	}
+	d.Render(claim, opts, sites, emit)
+}
+
+// readVectorFieldSites reads the sites relation. A row whose coordinates are
+// not finite degrees is dropped rather than drawn at the equator: a marker is
+// a claim about where a measurement happened, and a wrong one is worse than
+// an absent one.
+func readVectorFieldSites(rec arrow.RecordBatch, sc vectorFieldSitesClaim) (sites []vectorFieldSite) {
+	if rec == nil || rec.NumRows() == 0 {
+		return
+	}
+	lat, lon := rec.Column(sc.latCol), rec.Column(sc.lonCol)
+	sites = make([]vectorFieldSite, 0, rec.NumRows())
+	for row := range rec.NumRows() {
+		la, okLa := numericCellValue(lat, row)
+		lo, okLo := numericCellValue(lon, row)
+		if !okLa || !okLo || math.IsNaN(la) || math.IsNaN(lo) ||
+			math.Abs(la) > 90 || math.Abs(lo) > 360 {
+			continue
+		}
+		site := vectorFieldSite{ll: portolan.LL(la, foldLon(lo))}
+		if sc.labelCol >= 0 {
+			site.label = formatCell(rec, sc.labelCol, row)
+		}
+		if sc.radiusCol >= 0 {
+			if r, ok := numericCellValue(rec.Column(sc.radiusCol), row); ok && r > 0 && !math.IsInf(r, 0) {
+				site.radiusKm = r
+			}
+		}
+		sites = append(sites, site)
+	}
+	return
 }
 
 // readVectorFieldOpts reads the settings row. A value a column cannot carry
@@ -170,6 +276,15 @@ type VectorFieldDriver struct {
 
 	probeLane *nodeLane
 	optsLane  *nodeLane
+	sitesLane *nodeLane
+
+	// sites are this frame's measurement points, and the two toggles over
+	// them. showSites defaults on because a sites CTE is an explicit
+	// request to see them; showRings defaults off because a ring per site
+	// is a lot of ink over a dense network.
+	sites     []vectorFieldSite
+	showSites bool
+	showRings bool
 
 	// Set by the tab body each frame, before the dispatch.
 	rel          sqlfield.Relation
@@ -231,6 +346,8 @@ func NewVectorFieldDriver(ids *c.WidgetIdStack, client *Client, openQuery func(s
 		openQuery:   openQuery,
 		probeLane:   newNodeLane(clientExecutor{client: client, opts: newExecOptions("vectorfield-shape")}, memory.NewGoAllocator(), vectorFieldFetchTimeout),
 		optsLane:    newNodeLane(clientExecutor{client: client, opts: newExecOptions("vectorfield-opts")}, memory.NewGoAllocator(), vectorFieldFetchTimeout),
+		sitesLane:   newNodeLane(clientExecutor{client: client, opts: newExecOptions("vectorfield-sites")}, memory.NewGoAllocator(), vectorFieldFetchTimeout),
+		showSites:   true,
 		land:        &landoverlay.Layer{},
 		scrubber:    timescrubber.New(ids, timescrubber.Options{ScopeKey: "vf-time", ValueName: "mean speed in view"}),
 		noTiles:     !basemap.Configured(),
@@ -257,6 +374,7 @@ func (inst *VectorFieldDriver) forgetLanes(auto bool) {
 	}
 	inst.probeLane.forget()
 	inst.optsLane.forget()
+	inst.sitesLane.forget()
 	if !auto || inst.guest.err != nil {
 		inst.guest.Forget()
 	}
@@ -268,6 +386,7 @@ func (inst *VectorFieldDriver) close() {
 	}
 	inst.probeLane.close()
 	inst.optsLane.close()
+	inst.sitesLane.close()
 	inst.guest.Close()
 	if inst.pm != nil {
 		inst.pm.Close()
@@ -275,7 +394,8 @@ func (inst *VectorFieldDriver) close() {
 }
 
 // Render draws the controls and the map with the guest on it.
-func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOpts, emit SignalEmitterI) {
+func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOpts, sites []vectorFieldSite, emit SignalEmitterI) {
+	inst.sites = sites
 	g := inst.guest
 	g.Ensure(inst.rel, inst.relParams, claim.shape)
 	g.Opts.Density = float32(inst.density)
@@ -290,7 +410,6 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 	if inst.hasSettled {
 		g.EnsureSummary(inst.settledView)
 	}
-
 	inst.syncProgress()
 
 	inst.renderControls(meta, has, opts)
@@ -328,7 +447,88 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 			inst.land.Draw(p, inst.atlas, ls)
 		}
 		g.Draw(p)
+		// After the layer, so a site is never painted under the flow it
+		// produced: call order is paint order.
+		inst.drawSites(p)
 	})
+}
+
+// drawSites marks the places the field was measured. Everything between them
+// is the source's interpolation (ADR-0250 §SD1), and nothing else on this map
+// distinguishes the two — the particles are equally smooth over a station and
+// three hundred kilometres from one.
+func (inst *VectorFieldDriver) drawSites(p portolan.Projector) {
+	if !inst.showSites || len(inst.sites) == 0 {
+		return
+	}
+	b := p.View().Bounds()
+	inView := 0
+	for i := range inst.sites {
+		if siteInBounds(inst.sites[i].ll, b) {
+			inView++
+		}
+	}
+	if inst.showRings {
+		for i := range inst.sites {
+			if r := inst.sites[i].radiusKm; r > 0 {
+				lats, lngs := ringAround(inst.sites[i].ll, r)
+				p.Polygon(lats, lngs, color.Hex(0x00000000), color.Hex(0xe8b34aa0), styletokens.StrokeHair)
+			}
+		}
+	}
+	for i := range inst.sites {
+		p.Marker(inst.sites[i].ll, vectorFieldSiteMarkerPx, color.Hex(0xf2f5f8ff))
+	}
+	if inView == 0 || inView > vectorFieldSiteLabelMax {
+		return
+	}
+	for i := range inst.sites {
+		if inst.sites[i].label == "" || !siteInBounds(inst.sites[i].ll, b) {
+			continue
+		}
+		p.Label(inst.sites[i].ll, 0, -vectorFieldSiteMarkerPx-2, 1, 2,
+			inst.sites[i].label, styletokens.MicroPt, color.Hex(0xf2f5f8e0))
+	}
+}
+
+// siteInBounds is the visibility test the label budget counts with. The
+// bounds a map reports may run past 180° after a pan across the seam, so the
+// longitude is compared in the frame the bounds are given in.
+func siteInBounds(ll portolan.LatLng, b portolan.LatLngBounds) bool {
+	if ll.Lat < b.GetSouth() || ll.Lat > b.GetNorth() {
+		return false
+	}
+	west, east := b.GetWest(), b.GetEast()
+	if east-west >= 360 {
+		return true
+	}
+	lon := ll.Lng
+	for lon < west {
+		lon += 360
+	}
+	return lon <= east
+}
+
+// ringAround returns a circle of radiusKm around ll as parallel latitude and
+// longitude slices, by the spherical destination-point formula. It is a
+// circle on the sphere, so it projects to the egg the Mercator makes of one
+// at high latitude — which is the true shape of a radar's reach on this map,
+// not a defect of the drawing.
+func ringAround(ll portolan.LatLng, radiusKm float64) (lats []float64, lngs []float64) {
+	lats = make([]float64, 0, vectorFieldSiteRingPoints+1)
+	lngs = make([]float64, 0, vectorFieldSiteRingPoints+1)
+	ang := radiusKm / earthRadiusKm
+	lat1, lon1 := ll.Lat*math.Pi/180, ll.Lng*math.Pi/180
+	sinLat1, cosLat1 := math.Sin(lat1), math.Cos(lat1)
+	sinAng, cosAng := math.Sin(ang), math.Cos(ang)
+	for i := range vectorFieldSiteRingPoints + 1 {
+		brg := 2 * math.Pi * float64(i) / vectorFieldSiteRingPoints
+		lat2 := math.Asin(sinLat1*cosAng + cosLat1*sinAng*math.Cos(brg))
+		lon2 := lon1 + math.Atan2(math.Sin(brg)*sinAng*cosLat1, cosAng-sinLat1*math.Sin(lat2))
+		lats = append(lats, lat2*180/math.Pi)
+		lngs = append(lngs, lon2*180/math.Pi)
+	}
+	return
 }
 
 // foldLon brings a longitude into -180…180, the frame the map frames in.
@@ -362,6 +562,12 @@ func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, o
 			Text("opacity").SendRespVal(&inst.opacity)
 		c.Checkbox(inst.ids.PrepareStr("vf-pause"), inst.paused, "pause").SendRespVal(&inst.paused)
 		c.Checkbox(inst.ids.PrepareStr("vf-notiles"), inst.noTiles, "no basemap").SendRespVal(&inst.noTiles)
+		if len(inst.sites) > 0 {
+			c.Checkbox(inst.ids.PrepareStr("vf-sites"), inst.showSites, "sites").SendRespVal(&inst.showSites)
+			if inst.showSites && inst.sitesHaveRadius() {
+				c.Checkbox(inst.ids.PrepareStr("vf-rings"), inst.showRings, "coverage").SendRespVal(&inst.showRings)
+			}
+		}
 		if inst.guest.src != nil && inst.openQuery != nil {
 			if c.Button(inst.ids.PrepareStr("vf-open-query"),
 				c.Atoms().Text("Window query…").Keep()).SendResp().HasPrimaryClicked() {
@@ -395,6 +601,17 @@ func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, o
 	}
 	c.Label(inst.statusLine(meta, has, opts)).Wrap().Send()
 	diagWeak(inst.hoverLine(meta, has, opts))
+}
+
+// sitesHaveRadius reports whether any site carries a reach, which is what
+// makes the coverage toggle worth offering.
+func (inst *VectorFieldDriver) sitesHaveRadius() bool {
+	for i := range inst.sites {
+		if inst.sites[i].radiusKm > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // renderTimeStrip hands the scrubber this frame's steps: each at its valid
@@ -498,6 +715,11 @@ func (inst *VectorFieldDriver) statusLine(meta vectorfield.Meta, has bool, opts 
 		line += fmt.Sprintf(" · window %d × %d at level %d", stats.WindowCols, stats.WindowRows, stats.WindowLevel)
 	}
 	line += fmt.Sprintf(" · %d requests", stats.Fetches)
+	if n := len(inst.sites); n > 0 {
+		// The count is the honest scale of the field: everything drawn
+		// between these n points is interpolation.
+		line += fmt.Sprintf(" · %d sites", n)
+	}
 	if served, _ := g.src.LastServed(sqlfield.PurposeWindow); served.Err == nil && served.Took > 0 {
 		line += fmt.Sprintf(" · last %d rows in %s", served.Rows, served.Took.Round(time.Millisecond))
 	}
@@ -670,8 +892,8 @@ func (inst *PlayApp) renderVectorFieldTab() {
 	if d == nil {
 		return
 	}
-	var fieldRec, optsRec arrow.RecordBatch
-	var fieldSchema, optsSchema *arrow.Schema
+	var fieldRec, optsRec, sitesRec arrow.RecordBatch
+	var fieldSchema, optsSchema, sitesSchema *arrow.Schema
 	d.probeLoading, d.probeErr = false, nil
 	if node, ok := findSplitNode(inst.currentSplit, vectorFieldNodeID); ok {
 		if rel, isRel := vectorFieldRelation(inst.currentSplit, vectorFieldNodeID); isRel {
@@ -690,12 +912,23 @@ func (inst *PlayApp) renderVectorFieldTab() {
 		})
 		optsRec, optsSchema = v.rec, v.schema
 	}
+	if node, ok := findSplitNode(inst.currentSplit, vectorFieldSitesNodeID); ok {
+		v := d.sitesLane.demand(compiledNode{
+			SQL:    fuseNode(inst.currentSplit, vectorFieldSitesNodeID),
+			NodeID: vectorFieldSitesNodeID,
+			Params: resolveSignalNamesWithDefaults(node.Reads, inst.lastRunBound, inst.frameSig),
+		})
+		sitesRec, sitesSchema = v.rec, v.schema
+	}
 	defer func() {
 		if fieldRec != nil {
 			fieldRec.Release()
 		}
 		if optsRec != nil {
 			optsRec.Release()
+		}
+		if sitesRec != nil {
+			sitesRec.Release()
 		}
 	}()
 
@@ -704,6 +937,9 @@ func (inst *PlayApp) renderVectorFieldTab() {
 	}
 	if optsRec != nil || optsSchema != nil {
 		inputs[chVectorFieldOpts] = channelInput{node: vectorFieldOptsNodeID, rec: optsRec, schema: optsSchema, sig: inst.frameSig}
+	}
+	if sitesRec != nil || sitesSchema != nil {
+		inputs[chVectorFieldSites] = channelInput{node: vectorFieldSitesNodeID, rec: sitesRec, schema: sitesSchema, sig: inst.frameSig}
 	}
 	reject := dispatchPanel(vectorFieldPanel{driver: d}, inputs, inst.sigEmit)
 	if reject == "" {

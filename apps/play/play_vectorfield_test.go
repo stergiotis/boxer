@@ -1,11 +1,14 @@
 package play
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield/sqlfield"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
 const vectorFieldBuffer = `SET param_level = 10;
@@ -241,6 +245,161 @@ func TestVectorFieldForgetKeepsTheFieldAcrossAutoRuns(t *testing.T) {
 	d.guest.identity, d.guest.err = "field", nil
 	d.forgetLanes(false)
 	assert.Empty(t, d.guest.identity)
+}
+
+// The sites relation is the third channel (ADR-0250 §SD5): `lat` and `lon`
+// are the contract, `label` and `radius_km` the optional form. It is a
+// sibling of the field, so it must not reach the field's relation.
+func TestVectorFieldSitesClaim(t *testing.T) {
+	p := vectorFieldPanel{}
+
+	full := arrow.NewSchema([]arrow.Field{
+		{Name: vectorFieldSiteLonCol, Type: arrow.PrimitiveTypes.Float64},
+		{Name: vectorFieldSiteLabelCol, Type: arrow.BinaryTypes.String},
+		{Name: vectorFieldSiteLatCol, Type: arrow.PrimitiveTypes.Float64},
+		{Name: vectorFieldSiteRadiusCol, Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+	claim, reason := p.AcceptForChannel(chVectorFieldSites, full, nil)
+	require.Empty(t, reason)
+	sc, ok := claim.(vectorFieldSitesClaim)
+	require.True(t, ok)
+	assert.Equal(t, vectorFieldSitesClaim{latCol: 2, lonCol: 0, labelCol: 1, radiusCol: 3}, sc,
+		"columns are claimed by name, in whatever order they arrive")
+
+	// The two optional columns are genuinely optional.
+	bare := arrow.NewSchema([]arrow.Field{
+		{Name: vectorFieldSiteLatCol, Type: arrow.PrimitiveTypes.Float64},
+		{Name: vectorFieldSiteLonCol, Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+	claim, reason = p.AcceptForChannel(chVectorFieldSites, bare, nil)
+	require.Empty(t, reason)
+	sc = claim.(vectorFieldSitesClaim)
+	assert.Equal(t, -1, sc.labelCol)
+	assert.Equal(t, -1, sc.radiusCol)
+
+	// A coordinate missing is a stated reason, not a silent empty overlay:
+	// a sites CTE that draws nothing reads exactly like one nobody wrote,
+	// and the map goes on implying the field was measured everywhere.
+	noLat := arrow.NewSchema([]arrow.Field{
+		{Name: vectorFieldSiteLonCol, Type: arrow.PrimitiveTypes.Float64},
+		{Name: "latitude", Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+	_, reason = p.AcceptForChannel(chVectorFieldSites, noLat, nil)
+	assert.Contains(t, reason, "`lat` and `lon`")
+
+	_, reason = p.AcceptForChannel(chVectorFieldSites, nil, nil)
+	assert.NotEmpty(t, reason, "an absent CTE is a reason, not a claim")
+}
+
+// readVectorFieldSites drops a row it cannot place. A marker asserts that a
+// measurement happened at a point; one drawn at the equator because a
+// coordinate was null asserts something false about the data.
+func TestReadVectorFieldSitesDropsWhatItCannotPlace(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	lat := array.NewFloat64Builder(mem)
+	lon := array.NewFloat64Builder(mem)
+	label := array.NewStringBuilder(mem)
+	radius := array.NewFloat64Builder(mem)
+	defer func() {
+		lat.Release()
+		lon.Release()
+		label.Release()
+		radius.Release()
+	}()
+	// Den Helder; a null latitude; a latitude off the sphere; no radius.
+	lat.AppendValues([]float64{52.95279, 0, 991.0, 51.1917}, []bool{true, false, true, true})
+	lon.AppendValues([]float64{4.79061, 5.0, 5.0, 3.0642}, nil)
+	label.AppendValues([]string{"nldhl", "broken", "impossible", "bejab"}, nil)
+	radius.AppendValues([]float64{200, 200, 200, 0}, []bool{true, true, true, false})
+
+	latArr, lonArr, labelArr, radiusArr := lat.NewArray(), lon.NewArray(), label.NewArray(), radius.NewArray()
+	defer func() {
+		latArr.Release()
+		lonArr.Release()
+		labelArr.Release()
+		radiusArr.Release()
+	}()
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: vectorFieldSiteLatCol, Type: arrow.PrimitiveTypes.Float64},
+		{Name: vectorFieldSiteLonCol, Type: arrow.PrimitiveTypes.Float64},
+		{Name: vectorFieldSiteLabelCol, Type: arrow.BinaryTypes.String},
+		{Name: vectorFieldSiteRadiusCol, Type: arrow.PrimitiveTypes.Float64, Nullable: true},
+	}, nil)
+	rec := array.NewRecordBatch(schema, []arrow.Array{latArr, lonArr, labelArr, radiusArr}, 4)
+	defer rec.Release()
+
+	sites := readVectorFieldSites(rec, vectorFieldSitesClaim{latCol: 0, lonCol: 1, labelCol: 2, radiusCol: 3})
+	require.Len(t, sites, 2, "the null and the out-of-range latitude are dropped")
+	assert.Equal(t, "nldhl", sites[0].label)
+	assert.InDelta(t, 52.95279, sites[0].ll.Lat, 1e-9)
+	assert.InDelta(t, 200, sites[0].radiusKm, 1e-9)
+	assert.Equal(t, "bejab", sites[1].label)
+	assert.Zero(t, sites[1].radiusKm, "an absent reach draws no ring")
+
+	assert.Empty(t, readVectorFieldSites(nil, vectorFieldSitesClaim{}))
+}
+
+// A coverage ring is a circle on the sphere: every point on it stands the
+// asked-for distance from the site, which is what makes it a statement about
+// the radar's reach rather than about the projection.
+func TestRingAroundIsAGreatCircleRadius(t *testing.T) {
+	site := portolan.LL(52.95279, 4.79061)
+	lats, lngs := ringAround(site, 200)
+	require.Len(t, lats, vectorFieldSiteRingPoints+1)
+	require.Len(t, lngs, vectorFieldSiteRingPoints+1)
+	for i := range lats {
+		// Haversine back from each vertex to the centre.
+		dLat := (lats[i] - site.Lat) * math.Pi / 180
+		dLon := (lngs[i] - site.Lng) * math.Pi / 180
+		a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+			math.Cos(site.Lat*math.Pi/180)*math.Cos(lats[i]*math.Pi/180)*math.Sin(dLon/2)*math.Sin(dLon/2)
+		km := 2 * earthRadiusKm * math.Asin(math.Sqrt(a))
+		assert.InDelta(t, 200, km, 0.01, "vertex %d", i)
+	}
+	assert.InDelta(t, lats[0], lats[len(lats)-1], 1e-9, "the ring closes")
+	assert.InDelta(t, lngs[0], lngs[len(lngs)-1], 1e-9)
+}
+
+// The label budget counts what is IN VIEW, so a hundred-station network
+// labels nothing at continental zoom and names them two steps in.
+func TestSiteInBounds(t *testing.T) {
+	b := portolan.LatLngBoundsOf(portolan.LL(50, 2), portolan.LL(54, 8))
+	assert.True(t, siteInBounds(portolan.LL(52.95, 4.79), b))
+	assert.False(t, siteInBounds(portolan.LL(41.9, 12.5), b), "south of the box")
+	assert.False(t, siteInBounds(portolan.LL(52.0, 20.0), b), "east of the box")
+
+	// A pan across the antimeridian reports bounds past 180°; a site is
+	// compared in the frame the bounds came in.
+	across := portolan.LatLngBoundsOf(portolan.LL(60, 170), portolan.LL(70, 190))
+	assert.True(t, siteInBounds(portolan.LL(65, -175), across), "-175° is 185° in this frame")
+}
+
+// A view that has not loaded reports bounds that are not finite, and this
+// runs on the frame goroutine. The first spelling shifted the longitude by
+// adding 360 until it cleared `west`, which against an infinite west never
+// terminated: the window froze mid-query and the client dropped its protocol
+// with an FFFI desync rather than merely losing a frame.
+//
+// What is asserted is that it RETURNS. The answer for a viewport that does
+// not exist is not interesting; the termination is.
+func TestSiteInBoundsTerminatesOnBoundsThatAreNotFinite(t *testing.T) {
+	cases := map[string]portolan.LatLngBounds{
+		"unloaded":      {},
+		"infinite west": portolan.LatLngBoundsOf(portolan.LL(0, math.Inf(1)), portolan.LL(1, math.Inf(1))),
+		"infinite east": portolan.LatLngBoundsOf(portolan.LL(0, math.Inf(-1)), portolan.LL(1, math.Inf(-1))),
+		"nan":           portolan.LatLngBoundsOf(portolan.LL(math.NaN(), math.NaN()), portolan.LL(math.NaN(), math.NaN())),
+	}
+	for name, b := range cases {
+		t.Run(name, func(t *testing.T) {
+			done := make(chan bool, 1)
+			go func() { done <- siteInBounds(portolan.LL(52.95, 4.79), b) }()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("siteInBounds did not return: the frame goroutine would be wedged here")
+			}
+		})
+	}
 }
 
 // A tick belongs to the purpose that produced it, and is shown only while a

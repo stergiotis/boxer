@@ -26,10 +26,12 @@ import (
 // guest that turns the two into a flow layer on somebody's map.
 
 const (
-	// vectorFieldNodeID is the CTE the pane binds to, and
-	// vectorFieldOptsNodeID its optional one-row settings table.
-	vectorFieldNodeID     NodeID = "vector_field"
-	vectorFieldOptsNodeID NodeID = "vector_field_opts"
+	// vectorFieldNodeID is the CTE the pane binds to,
+	// vectorFieldOptsNodeID its optional one-row settings table, and
+	// vectorFieldSitesNodeID the optional points the field was measured at.
+	vectorFieldNodeID      NodeID = "vector_field"
+	vectorFieldOptsNodeID  NodeID = "vector_field_opts"
+	vectorFieldSitesNodeID NodeID = "vector_field_sites"
 
 	// vectorFieldFetchTimeout bounds one statement of the source. Generous
 	// for the Map's reason: a remote() relation answers in tens of seconds.
