@@ -71,10 +71,14 @@ const (
 	bandH         = 11
 	// labelRowH is kept free under the band for the playhead's time and the
 	// calendar context, so neither is drawn across a bar.
-	labelRowH     = 15
-	rulerH        = 19
-	notchH        = 4
-	stemW         = 2
+	labelRowH = 15
+	rulerH    = 19
+	notchH    = 4
+	stemW     = 2
+	// flagReach and contextReach are how far the playhead's flag and the
+	// context label extend, generously: both are short texts at one size.
+	flagReach     = 84
+	contextReach  = 96
 	minBarW       = 2
 	maxBarW       = 22
 	canvasKey     = "timescrubber-canvas"
@@ -627,7 +631,11 @@ func (inst *Scrubber) paintAxis(axis timeAxis, steps []Step, w, baseY float32, v
 			x = xOf(at)
 			c.PaintLine(x, bandH, x, baseY, vis.band, styletokens.StrokeHair).Send()
 		}
-		c.PaintText(x+3, bandH+2, 0, 0, label.Label, st.FontSize, vis.context).Send()
+		// The playhead's flag shares this row; where the two would print over
+		// each other the flag wins, since it is the one that moves.
+		if px := axis.posToX(inst.Transport.Pos); px < x-flagReach || px > x+contextReach {
+			c.PaintText(x+3, bandH+2, 0, 0, label.Label, st.FontSize, vis.context).Send()
+		}
 		break // the first is the context the strip opens in; the rest are marked by their lines
 	}
 }
