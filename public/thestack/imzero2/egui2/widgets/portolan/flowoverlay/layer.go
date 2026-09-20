@@ -301,6 +301,38 @@ func (inst *Layer) Time() (t time.Time) {
 	return a.Add(time.Duration((inst.pos - float64(i)) * float64(b.Sub(a))))
 }
 
+// StepStateE is what the layer has of one step for the view on screen.
+type StepStateE uint8
+
+const (
+	// StepStateIdle is a step the layer has no window of and is not asking
+	// for.
+	StepStateIdle StepStateE = iota
+	// StepStateHeld is a step whose window is there.
+	StepStateHeld
+	// StepStateLoading is a step the request in flight will answer.
+	StepStateLoading
+	// StepStateMissing is a step the source lists and could not serve.
+	StepStateMissing
+)
+
+// StepState says what the layer has of a step. The layer keeps the windows of
+// the steps around the display time and lets the others go, so at rest at
+// most two steps are held. A time control reads it to show what a move will
+// cost, and to hold playback until the step it is about to enter has arrived.
+func (inst *Layer) StepState(step int) (state StepStateE) {
+	if _, ok := inst.steps[step]; ok {
+		return StepStateHeld
+	}
+	if inst.missing[step] {
+		return StepStateMissing
+	}
+	if inst.inflight != nil && (step == inst.inflightFor[0] || step == inst.inflightFor[1]) {
+		return StepStateLoading
+	}
+	return StepStateIdle
+}
+
 // bracket is the pair of steps around the display time and the weight of the
 // second. b is -1 when the time sits on a step.
 func (inst *Layer) bracket() (a, b int, weight float32) {

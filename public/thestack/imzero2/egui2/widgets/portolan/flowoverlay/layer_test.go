@@ -379,3 +379,25 @@ func TestSetTimeWithUnevenSteps(t *testing.T) {
 	require.InDelta(t, 2.5, layer.StepPosition(), 1e-9)
 	require.Equal(t, t0.Add(7*time.Hour), layer.Time())
 }
+
+// A time control reads what the layer has of each step: the bracket on screen
+// is held, a step that could not be served is missing, the rest are idle.
+func TestStepStateFollowsTheBracket(t *testing.T) {
+	src := missingStep{SourceI: globalSource(t, vectorfield.Uniform(10, 0), 5), step: 3}
+	s := newScene(t, src, Options{Seed: 1})
+	require.Equal(t, StepStateIdle, s.layer.StepState(0), "nothing is held before the first frame")
+
+	s.layer.SetStepPosition(1.5)
+	s.settle(func() bool { return len(s.layer.steps) == 2 })
+	require.Equal(t, StepStateHeld, s.layer.StepState(1))
+	require.Equal(t, StepStateHeld, s.layer.StepState(2))
+	require.Equal(t, StepStateIdle, s.layer.StepState(0))
+	require.Equal(t, StepStateIdle, s.layer.StepState(4))
+
+	s.layer.SetStepPosition(2.5)
+	s.frame(time.Second) // past the debounce: the layer's clock is the test's
+	s.settle(func() bool { return s.layer.missing[3] && !s.layer.Stats().InFlight })
+	require.Equal(t, StepStateHeld, s.layer.StepState(2))
+	require.Equal(t, StepStateMissing, s.layer.StepState(3))
+	require.Equal(t, StepStateIdle, s.layer.StepState(1), "a step the display time has left is let go")
+}
