@@ -657,6 +657,30 @@ Two of the competence book's documents use it, which is what it was built for:
 the browser puts its rows top-left, the focused note's detail beside them and
 the family graph underneath, and the map puts its table under the picture.
 
+## Update (2026-09-19) — a contributed snippet library is chrome an applet cannot name
+
+ADR-0097's contributed snippet libraries (`play.RegisterSnippetLibraryE`) give
+every play window opened after the registration a tools-zone tab beside the
+built-in Snippets tab. A consuming repository registers one at init, and its
+applet windows then carried it too: the tab is play's to add and the host's to
+name, and §SD3's attenuation removes chrome by a list of *play's* slugs —
+`snippets` among them — so the contributed pane was in neither list and rode
+along on every applet, the 2026-08-02 failure mode with a new cause. It is the
+same pane as the one already removed, and its Insert and Replace write at the
+caret of an editor an applet does not have.
+
+The slug cannot be listed here: it is chosen in another repository and is
+unknown at this line. So the classification travels on the tab instead —
+`play.TabSpec.Contributed`, set by the registration — and attenuation removes
+every marked pane after it has removed the named ones. The `tabs:` surface is
+untouched: a contributed pane is chrome, so no list could ever name it, and
+nothing a document can write changes this.
+
+The test that enumerates play's registry accepts the mark as a classification
+rather than demanding a slug, and a new case registers a library and asserts it
+is gone from an applet window under both `auto` and an explicit list — the
+failure stays silent otherwise, which is how it arrived.
+
 ## References
 
 Internal:

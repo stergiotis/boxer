@@ -2171,6 +2171,13 @@ registered library appearing in windows opened after it and not before, in
 the built-in's zone, and a contributed source parsing, listing sections and
 answering a search.
 
+**The tab says it was contributed.** `TabSpec.Contributed` is set on every
+library's tab, because an embedder that attenuates play's surface names the
+built-in slugs it means to drop and a contributed slug belongs to another
+repository. Without the mark there is no name to remove the pane by, which is
+how sqlapplet's applet windows first showed a host's library beside a query
+they cannot edit (ADR-0132 Update 2026-09-19).
+
 ## References
 
 Internal:

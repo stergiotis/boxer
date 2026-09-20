@@ -24,6 +24,10 @@ const appletMaxHistory = 25
 // editor — has no buffer for. Glosses (ADR-0186) is chrome for the same
 // reason: it explains how a buffer's rules resolved, an authoring view; the
 // glosses themselves still render in an applet's Table and Detail.
+// A snippet library a host contributed (ADR-0097's RegisterSnippetLibraryE)
+// is chrome by the same criterion as Snippets and goes with it, but it cannot
+// be listed here: its slug is the contributor's, chosen in another repository
+// and unknown at this line. attenuateTabs removes it by its Contributed mark.
 var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary", "glosses", "completion"}
 
 // orderedResultTabIDs is resultTabIDs in play's registration order, for
@@ -177,7 +181,9 @@ func (inst *appletApp) Unmount(ctx app.MountContextI) (err error) {
 }
 
 // attenuateTabs applies the ADR-0132 §SD3/§SD4 tab surface between
-// construction and mount: chrome removed wholesale; under `tabs: auto` the
+// construction and mount: chrome removed wholesale, by slug for play's own
+// and by the [play.TabSpec.Contributed] mark for the snippet libraries a host
+// registered, whose slugs belong to the contributor; under `tabs: auto` the
 // default-off panels removed; with an explicit `tabs:` list, unlisted result
 // panels removed and node bindings applied. A failed removal (a renamed
 // built-in) degrades to a warning — an applet with a stray tab beats one that
@@ -187,6 +193,14 @@ func attenuateTabs(inner *play.PlayApp, def *AppletDef, logger zerolog.Logger) (
 	for _, id := range chromeTabIDs {
 		if rerr := inner.Tabs().Remove(id); rerr != nil {
 			logger.Warn().Err(rerr).Str("tab", id).Msg("sqlapplet: chrome tab removal failed")
+		}
+	}
+	for _, spec := range inner.Tabs().Specs() {
+		if !spec.Contributed {
+			continue
+		}
+		if rerr := inner.Tabs().Remove(spec.ID); rerr != nil {
+			logger.Warn().Err(rerr).Str("tab", spec.ID).Msg("sqlapplet: contributed tab removal failed")
 		}
 	}
 	if len(def.Tabs) == 0 {

@@ -85,9 +85,14 @@ func TestRegisteredLibraryBecomesATabOfNewWindows(t *testing.T) {
 	require.Equal(t, uint64(96), spec.DockID)
 	require.Equal(t, TabZoneTools, spec.Zone)
 	require.Equal(t, "Test library", spec.Title)
+	// The mark an embedder that strips the editor removes the pane by: a
+	// contributed slug is the contributor's, so no list of built-ins names it
+	// (ADR-0132 §SD3, sqlapplet's attenuation).
+	require.True(t, spec.Contributed)
 	builtin, ok := find(after, "snippets")
 	require.True(t, ok, "the built-in tab is still there")
 	require.Equal(t, builtin.Zone, spec.Zone)
+	require.False(t, builtin.Contributed, "the built-in is play's own, removed by its slug")
 }
 
 // A contributed library is searched the way the built-in one is: a source

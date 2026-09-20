@@ -96,6 +96,13 @@ type TabSpec struct {
 	// only on interaction state ("select a row"), where a mark would be
 	// permanent and carry no information.
 	ShapeContract bool
+	// Contributed marks a tab an out-of-tree registration put on every
+	// window — today a snippet library (SnippetLibrary, ADR-0097). Its ID is
+	// the contributor's, so an embedder attenuating play's surface by naming
+	// built-in slugs has no name to remove it by; the mark is that name. An
+	// applet window drops the contributed panes with the built-in Snippets
+	// tab it is a sibling of (ADR-0132 §SD3).
+	Contributed bool
 	// Writes are the signal names this tab may publish — the write-back half
 	// of the reactive surface, declared so the strip can mark a pane that
 	// drives the current query BEFORE the first interaction (provenance knows

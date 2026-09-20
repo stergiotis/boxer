@@ -196,12 +196,17 @@ func registeredSnippetLibraries() (libs []registeredSnippetLibrary) {
 // in the tools zone beside the built-in Snippets tab. A library whose tab
 // cannot be added — its dock id taken by an embedder's own tab — is skipped:
 // a missing reference pane is not a reason to refuse a window.
+//
+// Each tab carries TabSpec.Contributed, which is how an embedder that strips
+// the editor recognises a pane whose id it cannot know: a snippet inserts at
+// the caret, so the pane is chrome wherever there is no editor to insert into.
 func addSnippetLibraryTabs(inst *PlayApp, reg *TabRegistry) {
 	for _, r := range registeredSnippetLibraries() {
 		pane := &snippetPane{key: r.lib.TabID}
 		src := r.src
 		_ = reg.Add(TabSpec{
 			ID: r.lib.TabID, DockID: r.lib.DockID, Title: r.lib.Title, Zone: TabZoneTools, Lazy: true,
+			Contributed: true,
 			Render: func(f *TabFrame) {
 				pane.src = src()
 				pane.render(inst)

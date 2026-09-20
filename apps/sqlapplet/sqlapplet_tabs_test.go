@@ -2,6 +2,7 @@ package sqlapplet
 
 import (
 	"testing"
+	"testing/fstest"
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/apps/play"
@@ -43,10 +44,42 @@ func TestTabPolicyCoversEveryRegisteredTab(t *testing.T) {
 		classified[id] = struct{}{}
 	}
 	for _, spec := range play.NewLivePlayApp(nil, "", appletMaxHistory, nil).Tabs().Specs() {
+		if spec.Contributed {
+			// A host's snippet library, whose slug no list here could carry.
+			// TestAttenuateTabsDropsAContributedLibrary is its classification.
+			continue
+		}
 		_, known := classified[spec.ID]
 		assert.Truef(t, known, "play registers tab %q, which sqlapplet classifies as neither chrome nor a "+
 			"result panel — it would survive attenuation on every applet and no `tabs:` list could prune it", spec.ID)
 	}
+}
+
+// A snippet library a host contributed is chrome by §SD3's criterion — its
+// Insert and Replace write into an editor an applet does not have — and the
+// only classification available for it is the mark play puts on the tab,
+// because the slug is chosen in the contributing repository.
+//
+// The registration is process-global and deliberately not undone: that is what
+// a host does at init, and a library standing for the rest of this binary is
+// the condition the other cases here should hold under anyway.
+func TestAttenuateTabsDropsAContributedLibrary(t *testing.T) {
+	const tabID = "contributed-snippets"
+	require.NoError(t, play.RegisterSnippetLibraryE(play.SnippetLibrary{
+		TabID: tabID, DockID: 4096, Title: "Contributed", AppId: "example.test/lib", Doc: "snippets",
+		Help: fstest.MapFS{"snippets.md": &fstest.MapFile{Data: []byte("# Contributed\n")}},
+	}))
+	var contributed bool
+	for _, spec := range play.NewLivePlayApp(nil, "", appletMaxHistory, nil).Tabs().Specs() {
+		if spec.ID == tabID {
+			contributed = spec.Contributed
+		}
+	}
+	require.True(t, contributed, "a registered library is a window's tab, marked as contributed")
+
+	assert.NotContains(t, attenuated(t, &AppletDef{Slug: "auto"}), tabID,
+		"a contributed snippet pane survived attenuation: every applet window carries the host's library")
+	assert.NotContains(t, attenuated(t, &AppletDef{Slug: "pinned", Tabs: []TabSel{{ID: "table"}}}), tabID)
 }
 
 // The result-panel allow-list and the ordered removal list are two spellings of
