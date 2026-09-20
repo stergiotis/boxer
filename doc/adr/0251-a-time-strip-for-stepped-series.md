@@ -183,6 +183,6 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## References
 
-- ADR-0249 — the flow layer and its steps; ADR-0250 (proposed) — the SQL source and play's pane.
+- ADR-0249 — the flow layer and its steps; ADR-0250 — the SQL source and play's pane.
 - ADR-0208 — the waveform player, whose input pattern the strip follows.
 - ADR-0043 — the timeline widget; ADR-0177 — focus-scoped keyboard capture.
