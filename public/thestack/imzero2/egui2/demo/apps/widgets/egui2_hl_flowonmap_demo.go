@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/flowoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timescrubber"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
@@ -58,14 +59,15 @@ type flowOnMapState struct {
 	edges  []graphview.EdgeSpec
 	origin portolan.Point
 
+	// scrub is the time strip (ADR-0251); it owns the display time.
+	scrub *timescrubber.Scrubber
+	steps []timescrubber.Step
+
 	capture   bool
 	tiles     bool
 	showGraph bool
-	playing   bool
 	paused    bool
-	pos       float64 // display time, as a fractional step
 	density   float64
-	lastFrame time.Time
 }
 
 func newFlowOnMapState(ids *c.WidgetIdStack) *flowOnMapState {
@@ -108,7 +110,12 @@ func newFlowOnMapState(ids *c.WidgetIdStack) *flowOnMapState {
 		// A capture must not depend on when a goroutine ran or on the clock.
 		st.layer.Opts.Synchronous = true
 		st.layer.Opts.FixedTicks = flowOnMapCaptureTicks
-		st.pos = 1.5
+	}
+	st.scrub = timescrubber.New(ids, timescrubber.Options{ScopeKey: "fom-time"})
+	if st.capture {
+		// Between two steps, so the capture shows the blend.
+		st.scrub.Opts.NoSnap = true
+		st.scrub.Transport.Pos = 1.5
 	}
 
 	// The graph guest: the located sites of the graph-on-a-map demo, pinned.
@@ -125,6 +132,21 @@ func newFlowOnMapState(ids *c.WidgetIdStack) *flowOnMapState {
 	return st
 }
 
+// flowStepState words the layer's step state for the time strip. The two
+// enums are spelled alike and are not the same type: neither package imports
+// the other.
+func flowStepState(s flowoverlay.StepStateE) timescrubber.StepStateE {
+	switch s {
+	case flowoverlay.StepStateHeld:
+		return timescrubber.StepStateHeld
+	case flowoverlay.StepStateLoading:
+		return timescrubber.StepStateLoading
+	case flowoverlay.StepStateMissing:
+		return timescrubber.StepStateMissing
+	}
+	return timescrubber.StepStateIdle
+}
+
 func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 	if st.err != nil {
 		c.Label("the field could not be built: " + st.err.Error()).Wrap().Send()
@@ -133,16 +155,7 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 	m, layer := st.m, st.layer
 	m.SetNoTiles(!st.tiles)
 
-	// Play moves the display time at an hour of field a second of wall clock.
-	now := time.Now()
-	if st.playing && !st.capture && !st.lastFrame.IsZero() {
-		st.pos += now.Sub(st.lastFrame).Seconds() / flowOnMapStepHours
-		if st.pos >= flowOnMapSteps-1 {
-			st.pos = 0
-		}
-	}
-	st.lastFrame = now
-	layer.SetStepPosition(st.pos)
+	layer.SetStepPosition(st.scrub.Transport.Pos)
 	layer.Opts.Paused = st.paused
 	layer.Opts.Density = float32(st.density)
 
@@ -184,6 +197,18 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 		}
 	}
 
+	// The time strip: each step at its valid time, with what the layer holds
+	// of it. This source has no per-step summary, so the strip has no bars.
+	meta := layer.Meta()
+	st.steps = st.steps[:0]
+	for i := range meta.Steps {
+		st.steps = append(st.steps, timescrubber.Step{
+			At: meta.Steps[i].Valid, State: flowStepState(layer.StepState(i)),
+			Value: float32(math.NaN()), Peak: float32(math.NaN()),
+		})
+	}
+	st.scrub.Render(flowOnMapW, st.steps)
+
 	stats := layer.Stats()
 	v := m.View()
 	c.Label(fmt.Sprintf("%s   ·   zoom %.2f   ·   %d particles, %d segments in one paintSegments   ·   window %d × %d at level %d   ·   %d requests, %d late replies dropped",
@@ -209,9 +234,7 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 		"Between two steps the field is blended linearly, so a vortex fades across instead of travelling.").Wrap().Send()
 
 	for range c.CollapsingHeader(ids.PrepareStr("fom-controls"), c.WidgetText().Text("controls").Keep()).DefaultOpen(true).KeepIter() {
-		c.SliderF64(ids.PrepareStr("fom-time"), st.pos, 0, flowOnMapSteps-1).Text("display time (step)").SendRespVal(&st.pos)
 		for range c.HorizontalTop().KeepIter() {
-			c.Checkbox(ids.PrepareStr("fom-play"), st.playing, "play").SendRespVal(&st.playing)
 			c.Checkbox(ids.PrepareStr("fom-pause"), st.paused, "pause the particles").SendRespVal(&st.paused)
 			c.Checkbox(ids.PrepareStr("fom-graph"), st.showGraph, "a graph on top (hosted canvas)").SendRespVal(&st.showGraph)
 			c.Checkbox(ids.PrepareStr("fom-tiles"), st.tiles, "basemap tiles (needs a tile server)").SendRespVal(&st.tiles)

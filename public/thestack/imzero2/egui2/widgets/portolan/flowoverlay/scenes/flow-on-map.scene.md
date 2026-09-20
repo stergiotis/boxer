@@ -31,5 +31,10 @@ The vector-field layer of ADR-0249 in the widget gallery: an analytic jet and a 
 {"do":"hover","x":560,"y":540,"settleMs":600,"comment":"over the map, which has no node of its own"}
 {"do":"read","valueContains":"vector mean","role":"label","pattern":"vector mean (?P<vmean>[\\d.]+) m/s .* scalar mean (?P<smean>[\\d.]+) m/s","comment":"the readout tells the two means apart"}
 {"do":"expect","of":"smean","minus":"vmean","min":-0.051,"comment":"the scalar mean is never the shorter, to the readout's rounding"}
+{"do":"wait","valueContains":"step 1 of 9","role":"label","comment":"the time strip (ADR-0251) reads the first step"}
+{"do":"click","contains":"Next","role":"button","comment":"a whole step on"}
+{"do":"wait","valueContains":"03:00 UTC · step 2 of 9","role":"label","comment":"the strip's readout is the step's valid time"}
+{"do":"click","contains":"Last","role":"button"}
+{"do":"wait","valueContains":"step 9 of 9","role":"label","settleMs":1500,"comment":"and the layer has fetched the last step's window"}
 {"do":"capture","text":"flow-on-map","comment":"jet, vortices and trails over the outlines"}
 ```
