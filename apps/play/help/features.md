@@ -740,6 +740,26 @@ speed, not transport. A particle's pace is a screen quantity and the same at
 every zoom; colour follows the speed. Between two steps the field is blended,
 so a moving front fades across instead of travelling.
 
+A field with more than one step gets a **time strip** under the transport
+buttons. Steps sit at their own times, so an hourly-then-three-hourly forecast
+looks uneven because it is. Each step has a bar for the mean speed *inside the
+current view* and a stem up to the largest speed read there, in the particles'
+colours — so the strip answers "when is it windy here", and changes when you
+pan or zoom. It costs one more query per settled view, over every step, and is
+decimated to what the map shows; the maximum is of the nodes read, not of every
+node. A notch under each step says whether its window is loaded, loading or
+missing.
+
+Drag the playhead to scrub (the field blends between steps; letting go settles
+on the nearest step), click to jump, or use **First / Prev / Play / Next /
+Last**. Drag along the strip's top band to limit playback to a range, and
+double-click to clear it. The speed menu and the **Loop / Bounce / Once**
+button set how playback runs; **Now** appears when the steps span the present.
+With the strip focused, Space plays and pauses, the arrows step (Shift for six
+at a time), Home and End go to the ends. Playback waits at a step until the
+next one's window has arrived rather than showing half of a blend; the readout
+says *waiting for data* while it does.
+
 An optional `vector_field_opts` CTE is one row of settings: `name`, `unit` and
 `speed_max`, the magnitude at the top of the palette (without it, a high
 quantile of the first step). Hover reads the field under the pointer.

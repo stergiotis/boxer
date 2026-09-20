@@ -2636,8 +2636,8 @@ LIMIT 50
 The **Vector field** tab draws the `vector_field` CTE — `lat`, `lon`, `u`, `v`
 and optionally `t` — as particles drifting on a map (ADR-0250). This one needs
 no table: the field is computed from `numbers()`, a one-degree global grid over
-nine three-hourly steps. Focus the Vector field tab and Run; step through time
-with `<` and `>`, or tick **play**.
+nine three-hourly steps. Focus the Vector field tab and Run; drag the playhead
+on the time strip, step with **Prev** and **Next**, or press **Play**.
 
 The columns `dx`, `dy` and `eddy` are only there to build `u` and `v`; the pane
 reads the five it names and ignores the rest. The final `SELECT` is what the
