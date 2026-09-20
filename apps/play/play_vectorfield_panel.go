@@ -184,6 +184,8 @@ type VectorFieldDriver struct {
 	// playback. pos and playing mirror it for the signal logic below.
 	scrubber    *timescrubber.Scrubber
 	steps       []timescrubber.Step
+	ahead       []int
+	marks       []timescrubber.Mark
 	barColors   *colormap.Config
 	barColorMax float32
 	settledView vectorfield.Request
@@ -386,7 +388,31 @@ func (inst *VectorFieldDriver) renderTimeStrip(meta vectorfield.Meta, opts vecto
 	if inst.barColors != nil {
 		sc.ValueColor = func(v float32) uint32 { return inst.barColors.At(float64(v)) | 0xff }
 	}
+	sc.Marks = inst.runMarks(meta)
 	sc.RenderFillWidth(inst.steps, 960)
+	// What playback will reach next, for the layer to have ready: a few
+	// seconds of it at the chosen rate.
+	ahead := min(max(int(math.Ceil(3*sc.Transport.Rate)), 2), 6)
+	inst.ahead = sc.Transport.Ahead(n, ahead, inst.ahead)
+	g.SetAhead(inst.ahead)
+}
+
+// runMarks names the model runs the series comes from, where a run's start
+// lies inside it: the line between what was analysed and what is forecast.
+func (inst *VectorFieldDriver) runMarks(meta vectorfield.Meta) []timescrubber.Mark {
+	inst.marks = inst.marks[:0]
+	n := len(meta.Steps)
+	for i := range meta.Steps {
+		ref := meta.Steps[i].Reference
+		if ref.IsZero() || ref.Before(meta.Steps[0].Valid) || ref.After(meta.Steps[n-1].Valid) {
+			continue
+		}
+		if i > 0 && ref.Equal(meta.Steps[i-1].Reference) {
+			continue
+		}
+		inst.marks = append(inst.marks, timescrubber.Mark{At: ref, Label: "run " + ref.UTC().Format("15:04")})
+	}
+	return inst.marks
 }
 
 // statusLine says what is on screen, or why nothing is.

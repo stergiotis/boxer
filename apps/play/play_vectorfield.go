@@ -356,6 +356,14 @@ func (inst *vectorFieldGuest) SetStepPosition(pos float64) {
 	}
 }
 
+// SetAhead names the steps the display time will reach next, so the layer
+// has them before playback gets there (ADR-0251 §SD9).
+func (inst *vectorFieldGuest) SetAhead(steps []int) {
+	if inst.layer != nil {
+		inst.layer.SetAhead(steps)
+	}
+}
+
 // SetTime sets the display time, and reports the step position it fell on.
 func (inst *vectorFieldGuest) SetTime(t time.Time) (pos float64) {
 	if inst.layer != nil {

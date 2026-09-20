@@ -743,26 +743,67 @@ so a moving front fades across instead of travelling.
 A field with more than one step gets a **time strip** under the transport
 buttons. Steps sit at their own times, so an hourly-then-three-hourly forecast
 looks uneven because it is. Each step has a bar for the mean speed *inside the
-current view* and a stem up to the largest speed read there, in the particles'
+current view* and a cap up to the largest speed read there, in the particles'
 colours — so the strip answers "when is it windy here", and changes when you
 pan or zoom. It costs one more query per settled view, over every step, and is
 decimated to what the map shows; the maximum is of the nodes read, not of every
-node. A notch under each step says whether its window is loaded, loading or
-missing.
+node. Bars are scaled to the largest mean, and a gust that runs past the top is
+drawn clipped with a mark; the hover readout has its number. Under each step a
+notch says what the layer has of it, by shape and not by colour, since the
+colours are the data's: filled for loaded, hollow for loading, a cross for
+missing, a short tick for a step nobody has asked for. The strip tints the time
+before now, shades alternate days, and marks each model run it can see.
 
-Drag the playhead to scrub (the field blends between steps; letting go settles
-on the nearest step), click to jump, or use **First / Prev / Play / Next /
-Last**. Drag along the strip's top band to limit playback to a range, and
-double-click to clear it. The speed menu and the **Loop / Bounce / Once**
-button set how playback runs; **Now** appears when the steps span the present.
-With the strip focused, Space plays and pauses, the arrows step (Shift for six
-at a time), Home and End go to the ends. Playback waits at a step until the
-next one's window has arrived rather than showing half of a blend; the readout
-says *waiting for data* while it does.
+Drag the playhead to scrub — the field blends between steps, the strip marks
+the step letting go would settle on, and the readout gives that step's speed —
+or click to jump, or use **First / Prev / Play / Next / Last**. The band along
+the top is the loop range's alone: drag it for a range, drag an edge or the
+body to change it, double-click to clear it, and Escape while dragging puts
+back what was there. **In** and **Out** set an end at the playhead without
+dragging, and **Clear range** and the buttons that do not apply stay in place
+greyed out rather than coming and going under your hand. The speed menu and the
+**Loop / Bounce / Once** button set how playback runs, and playback holds the
+last step for a second before a loop wraps; **Now** goes to the step nearest
+the present, and is lit when you are already there. The field beside the
+readout takes a time, a date, a clock time on the day shown, or a step as
+`#12`.
+
+With the strip focused: Space plays and pauses, the arrows step, Shift or
+PageUp and PageDown move a stride of them, Ctrl an arrow moves a day and Alt an
+arrow a model run, Shift+Home and Shift+End set the range's ends, and Delete
+clears it. Playback waits at a step until the next one's window has arrived
+rather than showing half of a blend; the readout names the step it waits for
+and how long it has waited, and says the rate it is achieving when waiting has
+pulled it under the one you chose. It does not wait for a step the source could
+not serve. Because the rate is in steps, the playhead covers more ground per
+second where the steps are further apart — the readout gives the length of the
+step under it, so that the change of pace has a number.
+
+The strip also tells the layer which steps playback reaches next, so they are
+fetched before the playhead arrives instead of at the moment it does. That is
+why stepping on often costs no wait, and why the request count in the status
+line grows a little faster than one per step visited.
 
 An optional `vector_field_opts` CTE is one row of settings: `name`, `unit` and
 `speed_max`, the magnitude at the top of the palette (without it, a high
 quantile of the first step). Hover reads the field under the pointer.
+
+An optional `vector_field_sites` CTE marks **where the field was measured** —
+one row per station, with `lat` and `lon` in degrees and an optional `label`
+and `radius_km`. Nothing else on the map separates measurement from
+interpolation: a field gathered from stations two hundred kilometres apart is
+drawn exactly as smoothly as a model's own grid, and the particles are as
+confident over an ocean nobody sampled as over an anemometer. The **sites**
+toggle draws a dot at each one, **coverage** draws the `radius_km` circle
+around it, and labels appear once few enough sites are in view to name. The
+status line counts them. A field that came off a regular grid has no sites to
+declare and should not declare any.
+
+Hover's bearing is the **direction the flow comes from**, the wind convention.
+For a field whose vectors are the direction something travels *towards* — a
+migration, a current of drifting objects — the readout is a hundred and eighty
+degrees from the quantity, and the CTE that fed it is the honest place to read
+the heading.
 
 The pane publishes the valid time of the step on display as `vf_t`
 (`DateTime64(3, 'UTC')`) and the settled view as `vf_min_lat`, `vf_max_lat`,
