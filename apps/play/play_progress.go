@@ -348,11 +348,18 @@ func (inst *PlayApp) renderPaneProgressStrip(numbers bool) {
 // follows a different lane and cannot stand in for it. Returns true on the frame
 // Cancel is clicked — what cancelling means is the caller's, since the lane is
 // the caller's.
+//
+// An empty cancelID draws the readout without the button, for a lane that would
+// be started again by the next frame's demand whatever the caller did with the
+// click: a cancel that undoes itself is worse than none, and the spinner and
+// the numbers are the half of the row that still says something.
 func renderLaneProgress(ids *c.WidgetIdStack, cancelID string, v progressView) (cancelled bool) {
 	c.Spinner().Size(14).Send()
 	in := laneInput(v)
 	in.BarWidth = paneProgressWidth
-	in.CancelId = ids.PrepareStr(cancelID)
+	if cancelID != "" {
+		in.CancelId = ids.PrepareStr(cancelID)
+	}
 	cancelled = jobprogress.Render(in)
 	return
 }

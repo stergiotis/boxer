@@ -1,6 +1,7 @@
 package play
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -201,6 +202,14 @@ type VectorFieldDriver struct {
 	// fitted is the identity of the field the view was last framed for.
 	fitted string
 
+	// The pane's own progress readout: which of the guest's phases it
+	// follows this frame, and what the estimator makes of that phase's
+	// ticks. The app's tracker follows `main` and cannot stand in for it.
+	progress        progressTracker
+	frameProgress   progressView
+	progressPurpose sqlfield.PurposeE
+	progressOn      bool
+
 	// The two write-when-rested signals.
 	lastViewHash  uint64
 	viewStableAt  time.Time
@@ -282,6 +291,8 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 		g.EnsureSummary(inst.settledView)
 	}
 
+	inst.syncProgress()
+
 	inst.renderControls(meta, has, opts)
 	inst.pos, inst.playing = inst.scrubber.Transport.Pos, inst.scrubber.Transport.Playing
 	g.SetStepPosition(inst.pos)
@@ -325,6 +336,21 @@ func foldLon(lon float64) float64 {
 	return lon - 360*math.Floor((lon+180)/360)
 }
 
+// syncProgress folds this frame's tick into the pane's estimator. Called once
+// per frame from Render, after the two Ensures have settled which phase is
+// running and before renderControls reads frameProgress: the damped ETA is
+// stateful, and folding the same remaining work twice a frame is only
+// harmlessly wrong by accident of the damping rule.
+//
+// The phase's label is the tracker's re-anchor witness, so a move from the
+// describe to the first window starts a fresh estimate instead of continuing
+// the describe's level — the two count different work.
+func (inst *VectorFieldDriver) syncProgress() {
+	purpose, running, p, fresh := inst.guest.Phase()
+	inst.progressPurpose, inst.progressOn = purpose, running
+	inst.frameProgress = inst.progress.observe(inst.now(), vectorFieldQueryLabels[purpose], p, fresh && running)
+}
+
 func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, opts vectorFieldOpts) {
 	if has && len(meta.Steps) > 1 {
 		inst.renderTimeStrip(meta, opts)
@@ -340,6 +366,30 @@ func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, o
 			if c.Button(inst.ids.PrepareStr("vf-open-query"),
 				c.Atoms().Text("Window query…").Keep()).SendResp().HasPrimaryClicked() {
 				inst.openQuery(inst.servedBuffer())
+			}
+		}
+		// A statement of the source in flight gets the mini-UI the main query
+		// has in the top bar — spinner, bar, numbers, and Cancel where
+		// cancelling means something — pointed at THIS pane's phases. Before
+		// it, the pane's only sign of the five round trips between opening
+		// the tab and the first particle was a sentence on the status line.
+		//
+		// It rides this row rather than taking one of its own: the map fills
+		// what the controls leave, and a row that came and went with the work
+		// would resize the map, move the view, and so ask for another window
+		// (the reason renderLaneProgress gives). Beside the sliders, which are
+		// always there, the row height cannot move.
+		//
+		// What the words are is the status line's business; this is the
+		// numbers.
+		if inst.progressOn {
+			c.Separator().Vertical().Send()
+			cancelID := ""
+			if inst.progressPurpose != sqlfield.PurposeWindow {
+				cancelID = "vf-cancel"
+			}
+			if renderLaneProgress(inst.ids, cancelID, inst.frameProgress) {
+				inst.guest.Cancel(inst.progressPurpose)
 			}
 		}
 	}
@@ -423,6 +473,8 @@ func (inst *VectorFieldDriver) statusLine(meta vectorfield.Meta, has bool, opts 
 		return "query error: " + inst.probeErr.Error()
 	case g.err != nil:
 		return "field error: " + g.err.Error()
+	case !has && g.cancelled:
+		return "describing the field was cancelled · Run to ask again"
 	case !has && (g.Loading() || inst.probeLoading):
 		return "describing the field…"
 	case !has:
@@ -437,15 +489,37 @@ func (inst *VectorFieldDriver) statusLine(meta vectorfield.Meta, has bool, opts 
 	if meta.PeriodicLon {
 		kind = "global"
 	}
-	line := fmt.Sprintf("%s · %s grid %.4g° × %.4g° · %d steps · window %d × %d at level %d · %d requests",
-		name, kind, meta.DLon, meta.DLat, len(meta.Steps), stats.WindowCols, stats.WindowRows, stats.WindowLevel, stats.Fetches)
+	line := fmt.Sprintf("%s · %s grid %.4g° × %.4g° · %d steps",
+		name, kind, meta.DLon, meta.DLat, len(meta.Steps))
+	// A described field with no window yet used to read "window 0 × 0 at
+	// level 0", which is a sentence about nothing over an empty map: the
+	// clause waits until there is a window to describe.
+	if stats.WindowCols > 0 {
+		line += fmt.Sprintf(" · window %d × %d at level %d", stats.WindowCols, stats.WindowRows, stats.WindowLevel)
+	}
+	line += fmt.Sprintf(" · %d requests", stats.Fetches)
 	if served, _ := g.src.LastServed(sqlfield.PurposeWindow); served.Err == nil && served.Took > 0 {
 		line += fmt.Sprintf(" · last %d rows in %s", served.Rows, served.Took.Round(time.Millisecond))
 	}
-	if g.Loading() {
-		line += " · describing the next field…"
+	// The three phases in words. The bar beside the sliders carries their
+	// numbers; a window is the one the reader is waiting on with a field
+	// already on screen, so it is named even though it has no Cancel.
+	if stats.InFlight {
+		line += " · a window is on the way"
 	}
-	if g.summaryErr != nil {
+	switch {
+	case g.Loading():
+		line += " · describing the next field…"
+	case g.cancelled:
+		line += " · the next field was cancelled"
+	}
+	if g.SummaryLoading() {
+		line += " · summarising the steps…"
+	}
+	switch {
+	case errors.Is(g.summaryErr, errVectorFieldCancelled):
+		line += " · the per-step summary was cancelled · move the view to ask again"
+	case g.summaryErr != nil:
 		line += " · the per-step summary failed: " + g.summaryErr.Error()
 	}
 	if stats.LastError != nil {

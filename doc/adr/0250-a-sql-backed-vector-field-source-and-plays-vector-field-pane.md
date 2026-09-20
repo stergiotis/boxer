@@ -356,6 +356,32 @@ playground it opens in is now launched to run, which is also the more useful
 state: the result is the window's bins and the parameters are pinned in the
 pane. The `36_vector_field_window_query` scene covers it.
 
+### 2026-09-20 — the pane reports the queries it runs
+
+Between a Run and the first particle the pane sends five statements one after
+another — §SD5's shape probe, the three §SD2 describes, and the first window —
+and said so with one sentence on the status line. Where the describe is two
+full scans, that reads as a pane that has stopped.
+
+It now carries the readout a lane-owning panel already has (ADR-0115 plane A,
+estimated by ADR-0247's estimator): a spinner, a bar and the statement's
+counters beside the controls, following one phase at a time — the describe
+first, since nothing is on screen for it, then a window, then the per-step
+summary of ADR-0251 §SD4. The status line keeps the words, and no longer
+prints a window clause before there is a window to describe.
+
+Two restrictions are the decision here:
+
+- **Only the describe and the summary ask the server for in-band progress.**
+  The transport that surfaces a progress line mid-run takes one request per
+  connection, and a window is short and fired several at a time by the
+  look-ahead. Windows stay on the pooled client and read as running without
+  numbers.
+- **Only the describe and the summary can be cancelled.** A window is asked
+  for from the view on screen, so the next frame would ask for it again. The
+  two that can be cancelled latch — the describe keeps its identity claimed
+  and the summary its view key — and a Run is what asks again.
+
 ## References
 
 - ADR-0249 — the field contract, the flow layer, and the deferral taken up here.

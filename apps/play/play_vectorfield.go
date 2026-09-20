@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield/sqlfield"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -33,6 +35,10 @@ const (
 	// for the Map's reason: a remote() relation answers in tens of seconds.
 	vectorFieldFetchTimeout = 60 * time.Second
 )
+
+// errVectorFieldCancelled marks work the reader stopped, which is not a
+// failure of the field and is spelled as itself on the status line.
+var errVectorFieldCancelled = errors.New("cancelled")
 
 // vectorFieldRelation is the split's `vector_field` node as a field relation:
 // the SET prelude, then one WITH list of the node's upstream CTEs with the
@@ -91,6 +97,96 @@ func vectorFieldIdentity(rel sqlfield.Relation, params map[string]string) string
 	return b.String()
 }
 
+// vectorFieldQueryLabels is what each purpose's statements are stamped with:
+// the executor's query id and label, and the name the pane's progress
+// readout follows the phase under. One vocabulary, so a row in the query log
+// and a bar in the pane name the same work.
+var vectorFieldQueryLabels = [sqlfield.PurposeSummary + 1]string{
+	sqlfield.PurposeDescribe: "vectorfield-describe",
+	sqlfield.PurposeWindow:   "vectorfield",
+	sqlfield.PurposeSummary:  "vectorfield-summary",
+}
+
+// vectorFieldQueryProgress says which purposes ask the server for in-band
+// progress. A describe is two full scans with nothing yet on screen, and a
+// summary one pass over every step, so their counters are worth what they
+// cost: the transport that surfaces progress lines mid-run takes one request
+// per connection (chserver's progress.go). A window is the opposite trade —
+// short, bounded by the view, and fired several at a time when playback looks
+// ahead — so it stays on the pooled client, and the readout shows it as
+// running without numbers, which is what it has always been able to say.
+var vectorFieldQueryProgress = [sqlfield.PurposeSummary + 1]bool{
+	sqlfield.PurposeDescribe: true,
+	sqlfield.PurposeSummary:  true,
+}
+
+// vectorFieldProgress is what the source's statements report while they run,
+// kept per purpose. The statements run on goroutines of the guest's and of
+// the layer's, and the pane reads one purpose's tick per frame on the render
+// thread, so a tick lands here under a lock rather than in a guest field.
+//
+// running is a count and not a flag: a superseded describe goes on unwinding
+// while its replacement starts, and the phase is over only when the last of
+// them is off the wire.
+//
+// A tick outlives the statement that reported it, and is dropped by the
+// [vectorFieldProgress.reset] the next PHASE begins with. A describe is three
+// statements one after another, several of them short enough to land no tick
+// at all, and counters cleared per statement left the readout mostly blank
+// and blinking (seen live, 2026-09-20). What the reader is told between two
+// of them is what the phase has read so far, which is the last thing known.
+type vectorFieldProgress struct {
+	mu    sync.Mutex
+	lanes [sqlfield.PurposeSummary + 1]struct {
+		running int
+		p       runstream.Progress
+		fresh   bool
+	}
+}
+
+// reset drops what a purpose reported, for a caller starting a new phase of
+// it. The statements of one phase share what they have read.
+func (inst *vectorFieldProgress) reset(purpose sqlfield.PurposeE) {
+	inst.mu.Lock()
+	l := &inst.lanes[purpose]
+	l.p, l.fresh = runstream.Progress{}, false
+	inst.mu.Unlock()
+}
+
+func (inst *vectorFieldProgress) begin(purpose sqlfield.PurposeE) {
+	inst.mu.Lock()
+	inst.lanes[purpose].running++
+	inst.mu.Unlock()
+}
+
+func (inst *vectorFieldProgress) end(purpose sqlfield.PurposeE) {
+	inst.mu.Lock()
+	l := &inst.lanes[purpose]
+	if l.running > 0 {
+		l.running--
+	}
+	inst.mu.Unlock()
+}
+
+func (inst *vectorFieldProgress) tick(purpose sqlfield.PurposeE, p runstream.Progress) {
+	inst.mu.Lock()
+	l := &inst.lanes[purpose]
+	if l.running > 0 {
+		l.p, l.fresh = p, true
+	}
+	inst.mu.Unlock()
+}
+
+// view is one purpose's latest tick, and whether a tick has landed for a
+// statement that is still running — the gate every display site checks.
+func (inst *vectorFieldProgress) view(purpose sqlfield.PurposeE) (p runstream.Progress, fresh bool) {
+	inst.mu.Lock()
+	l := &inst.lanes[purpose]
+	p, fresh = l.p, l.fresh
+	inst.mu.Unlock()
+	return
+}
+
 // vectorFieldQueryer runs the source's statements through play's client, so
 // the pre-execute passes, the dispatch decision and the log_comment stamp
 // apply to a window query as to any other (ADR-0250 §SD4). signals are the
@@ -101,14 +197,20 @@ func vectorFieldIdentity(rel sqlfield.Relation, params map[string]string) string
 // a superseded window request wants: the layer has one request in flight and
 // cancels it before the next. There is one identity per purpose, because a
 // summary runs beside the windows and neither may replace the other.
+//
+// A statement whose purpose [vectorFieldQueryProgress] names carries a
+// progress sink, which is what opts the request into the server's in-band
+// progress headers (ADR-0115 plane A): without one the two describe scans are
+// counted nowhere and the pane can only say that something is running.
 type vectorFieldQueryer struct {
-	exec    [sqlfield.PurposeSummary + 1]clientExecutor
-	signals map[string]string
+	exec     [sqlfield.PurposeSummary + 1]clientExecutor
+	signals  map[string]string
+	progress *vectorFieldProgress
 }
 
-func newVectorFieldQueryer(client *Client, signals map[string]string) (q vectorFieldQueryer) {
-	q.signals = signals
-	for purpose, label := range []string{"vectorfield-describe", "vectorfield", "vectorfield-summary"} {
+func newVectorFieldQueryer(client *Client, signals map[string]string, progress *vectorFieldProgress) (q vectorFieldQueryer) {
+	q.signals, q.progress = signals, progress
+	for purpose, label := range vectorFieldQueryLabels {
 		q.exec[purpose] = clientExecutor{client: client, opts: newExecOptions(label)}
 	}
 	return
@@ -124,10 +226,17 @@ func (inst vectorFieldQueryer) QueryE(ctx context.Context, statement string, par
 	for k, v := range params {
 		merged["param_"+k] = v
 	}
+	purpose := sqlfield.PurposeOf(ctx)
 	ctx, cancel := context.WithTimeout(ctx, vectorFieldFetchTimeout)
 	defer cancel()
 	alloc := memory.NewGoAllocator()
-	rec, schema, _, err := inst.exec[sqlfield.PurposeOf(ctx)].execute(ctx, compiledNode{SQL: statement, Params: merged}, alloc)
+	var onProgress func(p runstream.Progress)
+	if inst.progress != nil && vectorFieldQueryProgress[purpose] {
+		inst.progress.begin(purpose)
+		defer inst.progress.end(purpose)
+		onProgress = func(p runstream.Progress) { inst.progress.tick(purpose, p) }
+	}
+	rec, schema, _, err := inst.exec[purpose].executeWithProgress(ctx, compiledNode{SQL: statement, Params: merged}, alloc, onProgress)
 	if err != nil {
 		return
 	}
@@ -186,6 +295,14 @@ type vectorFieldGuest struct {
 	src      *sqlfield.Source
 	layer    *flowoverlay.Layer
 	err      error
+	// cancelled says the describe was stopped by hand. The identity stays
+	// claimed, so Ensure does not start it again until the relation or its
+	// signals change — or until a Run drops the field (forgetLanes).
+	cancelled bool
+
+	// progress carries what the statements of each purpose report while
+	// they run, for the pane's readout.
+	progress vectorFieldProgress
 
 	pos float64 // display time as a fractional step, carried across fields
 
@@ -227,11 +344,12 @@ func (inst *vectorFieldGuest) Ensure(rel sqlfield.Relation, params map[string]st
 		inst.building = nil
 	}
 	inst.identity = identity
-	inst.err = nil
+	inst.err, inst.cancelled = nil, false
+	inst.progress.reset(sqlfield.PurposeDescribe)
 	ctx, cancel := context.WithCancel(context.Background())
 	b := &vectorFieldBuild{identity: identity, cancel: cancel}
 	inst.building = b
-	queryer := newVectorFieldQueryer(inst.client, params)
+	queryer := newVectorFieldQueryer(inst.client, params, &inst.progress)
 	go func() {
 		src, err := sqlfield.NewSourceE(ctx, queryer, rel, sqlfield.Options{Shape: &shape})
 		b.mu.Lock()
@@ -295,6 +413,7 @@ func (inst *vectorFieldGuest) EnsureSummary(req vectorfield.Request) {
 		inst.summaryJob.cancel()
 	}
 	inst.summaryKey = key
+	inst.progress.reset(sqlfield.PurposeSummary)
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &vectorFieldSummaryJob{key: key, cancel: cancel}
 	inst.summaryJob = job
@@ -322,7 +441,56 @@ func (inst *vectorFieldGuest) Forget() {
 		inst.building.cancel()
 		inst.building = nil
 	}
-	inst.identity = ""
+	inst.identity, inst.cancelled = "", false
+}
+
+// Cancel stops the statements of a phase and leaves that phase alone: a
+// describe keeps its identity claimed and a summary its view key, so neither
+// is asked for again until the relation, its signals or the view change. A
+// Run clears both (VectorFieldDriver.forgetLanes).
+//
+// A window is not cancellable here. The layer asks for one from the view on
+// screen, so the next frame would ask again — a button that undoes itself —
+// and a window is bounded by the view where the other two are bounded by the
+// relation.
+func (inst *vectorFieldGuest) Cancel(purpose sqlfield.PurposeE) {
+	switch purpose {
+	case sqlfield.PurposeDescribe:
+		if inst.building != nil {
+			inst.building.cancel()
+			inst.building = nil
+			inst.cancelled = true
+		}
+	case sqlfield.PurposeSummary:
+		if inst.summaryJob != nil {
+			inst.summaryJob.cancel()
+			inst.summaryJob = nil
+			inst.summaryErr = errVectorFieldCancelled
+		}
+	}
+}
+
+// Phase is the statement purpose the pane should show this frame, and what
+// that purpose last reported. Describe comes first — it is the phase nothing
+// is on screen for — then a window, then the summary that runs beside them.
+//
+// The flags it switches on are the frame-visible ones rather than the wire's:
+// a describe is three statements one after another, and a phase that ended
+// between two of them would blink the readout off and on.
+func (inst *vectorFieldGuest) Phase() (purpose sqlfield.PurposeE, running bool, p runstream.Progress, fresh bool) {
+	switch {
+	case inst.building != nil:
+		purpose = sqlfield.PurposeDescribe
+	case inst.layer != nil && inst.layer.Stats().InFlight:
+		purpose = sqlfield.PurposeWindow
+	case inst.summaryJob != nil:
+		purpose = sqlfield.PurposeSummary
+	default:
+		return
+	}
+	running = true
+	p, fresh = inst.progress.view(purpose)
+	return
 }
 
 // Close ends the guest.
@@ -338,6 +506,9 @@ func (inst *vectorFieldGuest) Close() {
 
 // Loading reports a source being described.
 func (inst *vectorFieldGuest) Loading() bool { return inst.building != nil }
+
+// SummaryLoading reports the per-step summary being fetched.
+func (inst *vectorFieldGuest) SummaryLoading() bool { return inst.summaryJob != nil }
 
 // Meta is the field's description; ok is false until a source is there.
 func (inst *vectorFieldGuest) Meta() (meta vectorfield.Meta, ok bool) {

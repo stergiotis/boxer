@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield/sqlfield"
 )
@@ -240,4 +241,108 @@ func TestVectorFieldForgetKeepsTheFieldAcrossAutoRuns(t *testing.T) {
 	d.guest.identity, d.guest.err = "field", nil
 	d.forgetLanes(false)
 	assert.Empty(t, d.guest.identity)
+}
+
+// A tick belongs to the purpose that produced it, and is shown only while a
+// statement of that purpose is on the wire: the fresh gate is what tells
+// "running, no numbers yet" from "running, a third of the way".
+func TestVectorFieldProgressIsPerPurposeAndGatedOnRunning(t *testing.T) {
+	var p vectorFieldProgress
+
+	_, fresh := p.view(sqlfield.PurposeDescribe)
+	assert.False(t, fresh, "nothing has run")
+
+	p.tick(sqlfield.PurposeDescribe, runstream.Progress{ReadRows: 7})
+	_, fresh = p.view(sqlfield.PurposeDescribe)
+	assert.False(t, fresh, "a tick with no statement behind it is dropped")
+
+	p.reset(sqlfield.PurposeDescribe)
+	p.begin(sqlfield.PurposeDescribe)
+	p.tick(sqlfield.PurposeDescribe, runstream.Progress{ReadRows: 11})
+	got, fresh := p.view(sqlfield.PurposeDescribe)
+	require.True(t, fresh)
+	assert.Equal(t, uint64(11), got.ReadRows)
+
+	_, fresh = p.view(sqlfield.PurposeSummary)
+	assert.False(t, fresh, "a summary runs beside a describe and counts its own rows")
+
+	// A describe is three statements, and what it has read carries across
+	// them: the counters belong to the phase, not to one statement of it.
+	p.end(sqlfield.PurposeDescribe)
+	p.begin(sqlfield.PurposeDescribe)
+	got, fresh = p.view(sqlfield.PurposeDescribe)
+	assert.True(t, fresh)
+	assert.Equal(t, uint64(11), got.ReadRows, "the next statement of the phase does not blank the row")
+
+	// The next PHASE starts from nothing.
+	p.end(sqlfield.PurposeDescribe)
+	p.reset(sqlfield.PurposeDescribe)
+	got, fresh = p.view(sqlfield.PurposeDescribe)
+	assert.False(t, fresh)
+	assert.Zero(t, got.ReadRows)
+}
+
+// The phase the readout follows is the one the reader is waiting on: the
+// describe first, because nothing is on screen for it, then a window, then
+// the summary that runs beside them.
+func TestVectorFieldGuestPhasePrefersTheDescribe(t *testing.T) {
+	g := newVectorFieldGuest(nil)
+
+	_, running, _, _ := g.Phase()
+	assert.False(t, running, "an idle guest shows no row")
+
+	g.summaryJob = &vectorFieldSummaryJob{cancel: func() {}}
+	purpose, running, _, fresh := g.Phase()
+	require.True(t, running)
+	assert.Equal(t, sqlfield.PurposeSummary, purpose)
+	assert.False(t, fresh, "no tick has landed")
+
+	g.building = &vectorFieldBuild{cancel: func() {}}
+	purpose, _, _, _ = g.Phase()
+	assert.Equal(t, sqlfield.PurposeDescribe, purpose, "the describe outranks the summary beside it")
+
+	g.progress.begin(sqlfield.PurposeDescribe)
+	g.progress.tick(sqlfield.PurposeDescribe, runstream.Progress{ReadRows: 3, TotalRowsToRead: 9})
+	_, _, p, fresh := g.Phase()
+	require.True(t, fresh)
+	assert.Equal(t, uint64(3), p.ReadRows)
+}
+
+// Cancel latches the phase it stops. The describe keeps its identity claimed
+// and the summary its view key, so neither is asked for again by the next
+// frame's demand — a cancel undone by its own disappearance is worse than
+// none (the Map learned this live, 2026-08-05). A Run is what asks again.
+func TestVectorFieldCancelLatchesTheWorkItStops(t *testing.T) {
+	d := NewVectorFieldDriver(nil, nil, nil)
+	defer d.close()
+	g := d.guest
+	cancels := 0
+
+	g.identity = "field"
+	g.building = &vectorFieldBuild{identity: "field", cancel: func() { cancels++ }}
+	g.Cancel(sqlfield.PurposeDescribe)
+	assert.Equal(t, 1, cancels)
+	assert.Nil(t, g.building)
+	assert.True(t, g.cancelled)
+	assert.Equal(t, "field", g.identity, "the field stays claimed, so Ensure lets it be")
+
+	g.summaryKey = "a view"
+	g.summaryJob = &vectorFieldSummaryJob{key: "a view", cancel: func() { cancels++ }}
+	g.Cancel(sqlfield.PurposeSummary)
+	assert.Equal(t, 2, cancels)
+	assert.Nil(t, g.summaryJob)
+	assert.ErrorIs(t, g.summaryErr, errVectorFieldCancelled)
+	assert.Equal(t, "a view", g.summaryKey, "the view stays keyed, so EnsureSummary lets it be")
+
+	// A window has no latch to keep, and is not cancellable here.
+	g.building = &vectorFieldBuild{identity: "field", cancel: func() { cancels++ }}
+	g.Cancel(sqlfield.PurposeWindow)
+	assert.Equal(t, 2, cancels)
+	assert.NotNil(t, g.building)
+
+	// A Run drops both, and the next Ensure describes the field again.
+	g.building = nil
+	d.forgetLanes(false)
+	assert.Empty(t, g.identity)
+	assert.False(t, g.cancelled)
 }
