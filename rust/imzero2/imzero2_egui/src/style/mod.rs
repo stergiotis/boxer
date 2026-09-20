@@ -9,6 +9,7 @@
 //! 2026-08-23).
 
 pub mod data_encoding;
+pub mod slider;
 pub mod tokens;
 
 use egui::Context;

@@ -9383,7 +9383,7 @@ self.apply_widget(w,u,f,Some(i));
                 // apply
                 let resp =
 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-self.apply_widget(w,u,f,Some(i));
+self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                 if resp.is_some() && resp.unwrap().changed() {
                     // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                     self.r9_f64_push(i.value(), val);
@@ -9543,7 +9543,7 @@ self.apply_widget(w,u,f,Some(i));
                 // apply
                 let resp =
 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-self.apply_widget(w,u,f,Some(i));
+self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                 if resp.is_some() && resp.unwrap().changed() {
                     // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                     self.r9_i64_push(i.value(), val);
@@ -9703,7 +9703,7 @@ self.apply_widget(w,u,f,Some(i));
                 // apply
                 let resp =
 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-self.apply_widget(w,u,f,Some(i));
+self.apply_widget(imzero2_egui::style::slider::IdsSlider(w),u,f,Some(i));
                 if resp.is_some() && resp.unwrap().changed() {
                     // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
                     self.r9_u64_push(i.value(), val);

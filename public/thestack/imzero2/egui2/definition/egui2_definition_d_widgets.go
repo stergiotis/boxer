@@ -358,7 +358,10 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 					WithConstructionCodeClientRust(rustClientCode("egui::Slider::new(&mut val,range_begin_incl..=range_end_incl);\n")).
 					WithSettingImmediate(true).
 					WithSettingRetained(true).
-					WithApplyCodeClientRust(applyCodeWidgetRustOnEvent(true, respEventChanged,
+					// Added through the design system's wrapper: egui paints the
+					// rail in a fill the IDS overlay maps to the window's own,
+					// and the wrapper gives it one that can be seen.
+					WithApplyCodeClientRust(applyCodeWrappedWidgetRustOnEvent("imzero2_egui::style::slider::IdsSlider", respEventChanged,
 						rustClientCode("self.r9_"+ff.Convert(naming.LowerCamelCase).String()+"_push({{Id}}.value(),val);\n"))).
 					WithReturnType(structSlider()).
 					Build())

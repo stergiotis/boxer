@@ -339,6 +339,24 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## Updates
 
+### 2026-09-20 — the slider's rail takes `border.default`, inside the slider only
+
+§SD6 maps `widgets.inactive.bg_fill` to `bg.surface`. egui paints a slider's
+rail as a filled rectangle in that field with no stroke, and `bg.surface` is
+also `window_fill`: in a window the rail was drawn in its own background's
+colour, and on a panel at about 1.2:1. A slider showed as a handle beside a
+gap, which read as a slider collapsed to nothing.
+
+The mapping stays. Every other widget that takes the field — checkbox, radio
+button, collapsing header — draws an outline round it, so only the slider
+showed the defect, and remapping the field would refill all of those at rest.
+The host adds a slider through `imzero2_egui::style::slider::IdsSlider`, which
+sets the field to `border.default` for the slider's own `ui` call and puts it
+back. That token clears WCAG 1.4.11's 3:1 against both `bg.panel` and
+`bg.surface`; the wrapper's tests hold it to that and hold the override to the
+call. No token is added. At rest the handle is filled with the rail's colour,
+since egui reads one field for both, and is told from it by its outline.
+
 ### 2026-07-31 — §SD3's qualitative choice and §SD5's data-encoding exemption superseded by ADR-0156
 
 [ADR-0156](./0156-qualitative-palette-dark-surface.md) replaces `batlowS` as
