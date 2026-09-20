@@ -199,6 +199,8 @@ func splitFedChannel(ch ChannelID) (node NodeID, ok bool) {
 		return networkVerticesNodeID, true
 	case chLanes:
 		return kanbanLanesNodeID, true
+	case chVectorField:
+		return vectorFieldNodeID, true
 	}
 	return
 }

@@ -80,6 +80,9 @@ const (
 	chScores    ChannelID = "scores"     // the Series panel's score lane (ADR-0163, optional)
 	chSpans     ChannelID = "spans"      // the Series panel's flagged extents (ADR-0163, optional)
 
+	chVectorField     ChannelID = "vector_field"      // the Vector field pane's relation, schema only (ADR-0250 §SD5)
+	chVectorFieldOpts ChannelID = "vector_field_opts" // its settings row (ADR-0250 §SD5, optional)
+
 	chParticipants ChannelID = "participants" // the Chat pane's roster (ADR-0239 §SD1, optional)
 	chReactions    ChannelID = "reactions"    // the Chat pane's reactions, one row each (ADR-0239 §SD1, optional)
 )

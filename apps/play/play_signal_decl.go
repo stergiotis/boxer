@@ -116,6 +116,16 @@ var reservedSignals = []reservedSignal{
 	{Name: signalGvMinLon, Type: "Float64", Seed: seedZero, Owner: "graphview"},
 	{Name: signalGvMaxLon, Type: "Float64", Seed: seedZero, Owner: "graphview"},
 
+	// The Vector field pane's display time and settled view (ADR-0250 §SD6).
+	// They block like the Map's viewport and the Timeline's extent: there is
+	// no time that means "any step" and no view that means "anywhere", and
+	// the pane writes all five once its field is described.
+	{Name: signalVfT, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "vectorfield"},
+	{Name: signalVfMinLat, Type: "Float64", Seed: seedBlocks, Owner: "vectorfield"},
+	{Name: signalVfMaxLat, Type: "Float64", Seed: seedBlocks, Owner: "vectorfield"},
+	{Name: signalVfMinLon, Type: "Float64", Seed: seedBlocks, Owner: "vectorfield"},
+	{Name: signalVfMaxLon, Type: "Float64", Seed: seedBlocks, Owner: "vectorfield"},
+
 	// The selection family (slice 5b). No owner: the row cursor is written by
 	// every pane whose rows ARE result rows, and the three companions are
 	// stamped by the dispatcher on its behalf (selectionStamper) or published

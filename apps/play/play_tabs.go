@@ -383,6 +383,12 @@ var builtinTabDefs = []builtinTabDef{
 	// the case that puts Writes on the spec rather than on the panel.
 	{id: "map", dockID: dockTabMap, title: "Map", noScroll: true, lazy: true,
 		writes: signalsWrittenBy("map")},
+	// Vector field draws the `vector_field` CTE as particles drifting on a
+	// map (ADR-0250). NoScroll for the Map's reason: the map fills the leaf.
+	// Its channel is the CTE's schema, so it has a shape verdict like the
+	// other named-CTE panes and ignores the active result.
+	{id: "vectorfield", dockID: dockTabVectorField, title: "Vector field", noScroll: true, lazy: true, shapeContract: true,
+		writes: signalsWrittenBy("vectorfield")},
 	// Scrolls, unlike Map: the world choropleth now draws into a canvas it
 	// sizes from a ui-rect probe of the pane width (ADR-0114 Update
 	// 2026-08-01), so it no longer needs a bounded leaf to read an available
@@ -646,6 +652,9 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// The Map is a panel-authored node on its own lane (5c), not a
 			// PanelI: it renders the driver directly.
 			spec.Render = func(f *TabFrame) { inst.mapDriver.Render(f.Sig, inst.sigEmit.as(signalWriterMap)) }
+		case "vectorfield":
+			spec.Panel = vectorFieldPanel{driver: inst.vectorFieldDriver}
+			spec.Render = func(f *TabFrame) { inst.renderVectorFieldTab() }
 		case "world":
 			spec.Panel = worldPanel{driver: inst.worldDriver}
 			spec.Render = func(f *TabFrame) { inst.renderWorldTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) }

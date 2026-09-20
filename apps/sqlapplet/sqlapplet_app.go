@@ -38,7 +38,7 @@ var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "
 // cannot prune it and it rides along on every applet. TestTabPolicyCoversEveryRegisteredTab
 // pins that, because the failure is silent: a new panel in play just quietly
 // appears in every applet window.
-var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "kanban", "chat", "cards", "network", "graphview", "sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"}
+var orderedResultTabIDs = []string{"table", "projection", "timeline", "vectorfield", "world", "kanban", "chat", "cards", "network", "graphview", "sankey", "dist", "icicle", "series", "treemap", "chart", "files", "schema", "detail"}
 
 // autoOffResultTabIDs are result panels `tabs: auto` does NOT show. They are
 // still listable — an applet that names one in `tabs:` gets it — so this is a
@@ -76,6 +76,9 @@ var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "
 // Series is not here either, and for the stronger version of that reason: its
 // claim is TYPED (a temporal column plus any number, ADR-0163 §SD1), which many
 // applet results satisfy without being written for it.
+// Vector field is Sankey's case again (ADR-0250 §SD5): it binds the
+// convention-named `vector_field` CTE, which no applet in the corpus carries,
+// so under auto it would reject on every applet window.
 // Graphview is here for a reason none of the others share: its contract is
 // not its own. It reads the Network tab's two CTEs unchanged (ADR-0227 §SD1),
 // so every shape that would turn it on under auto already turns Network on,
@@ -87,7 +90,7 @@ var orderedResultTabIDs = []string{"table", "projection", "timeline", "world", "
 // This is a default, not a verdict on the panel: an owner who decides both
 // readings should appear together removes the entry, and only `tabs: auto`
 // applets change.
-var autoOffResultTabIDs = []string{"sankey", "dist", "chart", "graphview"}
+var autoOffResultTabIDs = []string{"sankey", "dist", "chart", "graphview", "vectorfield"}
 
 // appletApp is the minted AppI: a fresh attenuated PlayApp per open window
 // (factory dispatch), built in Mount so env-configured connection details

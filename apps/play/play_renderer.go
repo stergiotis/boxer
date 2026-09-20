@@ -133,6 +133,7 @@ const (
 	dockTabGraphview   uint64 = 30
 	dockTabChat        uint64 = 31
 	dockTabCards       uint64 = 32
+	dockTabVectorField uint64 = 33
 )
 
 type PlayApp struct {
@@ -473,6 +474,9 @@ type PlayApp struct {
 	// same two-private-lane shape as the Network's, over the `flows` and
 	// `nodes` CTEs (closed in Close, forgotten on Run).
 	sankeyDriver *SankeyDriver
+	// vectorFieldDriver is the ADR-0250 Vector field pane: the `vector_field`
+	// CTE drawn as a flow layer on a map, its windows reduced on the server.
+	vectorFieldDriver *VectorFieldDriver
 
 	// distDriver is the ADR-0161 distribution panel (Distribution dock tab):
 	// a plain observer of the active result claiming the series/n/ps/qs
@@ -1141,6 +1145,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.networkDriver = NewNetworkDriver(mk(), inst.netSource)
 	inst.graphviewDriver = NewGraphviewDriver(mk(), inst.netSource)
 	inst.sankeyDriver = NewSankeyDriver(mk(), client)
+	inst.vectorFieldDriver = NewVectorFieldDriver(mk(), client, inst.openVectorFieldQuery)
 	inst.distDriver = NewDistDriver(mk())
 	inst.icicleDriver = NewIcicleDriver(mk())
 	inst.treemapDriver = newTreemapDriver(mk())
@@ -1229,6 +1234,7 @@ func (inst *PlayApp) Close() {
 	inst.chatDriver.close()
 	inst.audioStop()
 	inst.netSource.close()
+	inst.vectorFieldDriver.close()
 	if inst.sankeyDriver != nil {
 		if inst.sankeyDriver.flowsLane != nil {
 			inst.sankeyDriver.flowsLane.close()
@@ -1821,6 +1827,9 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	inst.chatDriver.forgetLanes()
 	// The Sankey panel's `flows`/`nodes` CTEs are the same shape again.
 	inst.sankeyDriver.forgetLanes()
+	// The Vector field pane's shape probe, its settings row and the source
+	// described from them (ADR-0250 §SD5).
+	inst.vectorFieldDriver.forgetLanes(auto)
 	// And the Series panel's optional `scores`/`spans` CTEs (ADR-0163 §SD1).
 	inst.forgetSeriesLanes()
 	// The Flow tab's EXPLAIN lenses (ADR-0153) wrap this query on their own
