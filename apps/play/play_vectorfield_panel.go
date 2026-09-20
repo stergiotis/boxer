@@ -15,8 +15,11 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/flowoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timescrubber"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 )
 
@@ -44,10 +47,11 @@ const (
 	vectorFieldOptUnitCol     = "unit"
 	vectorFieldOptSpeedMaxCol = "speed_max"
 
-	vectorFieldSettle = 250 * time.Millisecond
-	// vectorFieldPlayStepSeconds is how long playback spends on one step.
-	vectorFieldPlayStepSeconds = 2.0
-	vectorFieldTimeLayout      = "2006-01-02 15:04:05.000"
+	vectorFieldSettle     = 250 * time.Millisecond
+	vectorFieldTimeLayout = "2006-01-02 15:04:05.000"
+	// vectorFieldSamplePx is the layer's default sample spacing; a summary is
+	// decimated to what a window of the same view shows.
+	vectorFieldSamplePx = 4
 )
 
 // vectorFieldClaim is the relation's shape, and the frame's signals for the
@@ -176,6 +180,15 @@ type VectorFieldDriver struct {
 	land  *landoverlay.Layer
 	atlas *worldmap.Atlas
 
+	// scrubber is the time strip (ADR-0251); it owns the display time and
+	// playback. pos and playing mirror it for the signal logic below.
+	scrubber    *timescrubber.Scrubber
+	steps       []timescrubber.Step
+	barColors   *colormap.Config
+	barColorMax float32
+	settledView vectorfield.Request
+	hasSettled  bool
+
 	noTiles bool
 	paused  bool
 	playing bool
@@ -184,8 +197,7 @@ type VectorFieldDriver struct {
 	pos     float64
 
 	// fitted is the identity of the field the view was last framed for.
-	fitted    string
-	lastFrame time.Time
+	fitted string
 
 	// The two write-when-rested signals.
 	lastViewHash  uint64
@@ -209,6 +221,7 @@ func NewVectorFieldDriver(ids *c.WidgetIdStack, client *Client, openQuery func(s
 		probeLane:   newNodeLane(clientExecutor{client: client, opts: newExecOptions("vectorfield-shape")}, memory.NewGoAllocator(), vectorFieldFetchTimeout),
 		optsLane:    newNodeLane(clientExecutor{client: client, opts: newExecOptions("vectorfield-opts")}, memory.NewGoAllocator(), vectorFieldFetchTimeout),
 		land:        &landoverlay.Layer{},
+		scrubber:    timescrubber.New(ids, timescrubber.Options{ScopeKey: "vf-time", ValueName: "mean speed in view"}),
 		noTiles:     !basemap.Configured(),
 		density:     5,
 		opacity:     0.9,
@@ -260,20 +273,16 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 	g.Opts.SpeedMax = opts.speedMax
 
 	meta, has := g.Meta()
-	steps := len(meta.Steps)
-	inst.followTimeSignal(claim.sig, has)
-	now := inst.now()
-	if inst.playing && has && steps > 1 && !inst.lastFrame.IsZero() {
-		inst.pos += now.Sub(inst.lastFrame).Seconds() / vectorFieldPlayStepSeconds
-		if inst.pos >= float64(steps-1) {
-			inst.pos = 0
-		}
+	if pos, moved := inst.followTimeSignal(claim.sig, has); moved {
+		inst.scrubber.Transport.Seek(pos, len(meta.Steps))
 	}
-	inst.lastFrame = now
+	if inst.hasSettled {
+		g.EnsureSummary(inst.settledView)
+	}
 
 	inst.renderControls(meta, has, opts)
+	inst.pos, inst.playing = inst.scrubber.Transport.Pos, inst.scrubber.Transport.Playing
 	g.SetStepPosition(inst.pos)
-	inst.pos = g.pos
 
 	if inst.pm == nil {
 		inst.pm = portolan.New(inst.ids, portolan.Options{
@@ -315,24 +324,8 @@ func foldLon(lon float64) float64 {
 }
 
 func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, opts vectorFieldOpts) {
-	steps := len(meta.Steps)
-	if has && steps > 1 {
-		for range c.Horizontal().KeepIter() {
-			// Whole steps by button: a drag cannot land on one exactly, and a
-			// scripted driver cannot drag a slider at all.
-			if c.Button(inst.ids.PrepareStr("vf-prev"), c.Atoms().Text("<").Keep()).SendResp().HasPrimaryClicked() {
-				inst.pos = max(math.Ceil(inst.pos)-1, 0)
-				inst.playing = false
-			}
-			if c.Button(inst.ids.PrepareStr("vf-next"), c.Atoms().Text(">").Keep()).SendResp().HasPrimaryClicked() {
-				inst.pos = min(math.Floor(inst.pos)+1, float64(steps-1))
-				inst.playing = false
-			}
-			c.SliderF64(inst.ids.PrepareStr("vf-time"), inst.pos, 0, float64(steps-1)).
-				Text("step").SendRespVal(&inst.pos)
-			c.Checkbox(inst.ids.PrepareStr("vf-play"), inst.playing, "play").SendRespVal(&inst.playing)
-			c.Label(inst.guest.layer.Time().UTC().Format("2006-01-02 15:04 UTC")).Send()
-		}
+	if has && len(meta.Steps) > 1 {
+		inst.renderTimeStrip(meta, opts)
 	}
 	for range c.Horizontal().KeepIter() {
 		c.SliderF64(inst.ids.PrepareStr("vf-density"), inst.density, 1, 12).
@@ -350,6 +343,50 @@ func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, o
 	}
 	c.Label(inst.statusLine(meta, has, opts)).Wrap().Send()
 	diagWeak(inst.hoverLine(meta, has, opts))
+}
+
+// renderTimeStrip hands the scrubber this frame's steps: each at its valid
+// time, with what the layer has of it and its speed inside the settled view.
+// The bars take the particles' palette and range, so a colour on the strip is
+// the colour that step's flow has on the map.
+func (inst *VectorFieldDriver) renderTimeStrip(meta vectorfield.Meta, opts vectorFieldOpts) {
+	g := inst.guest
+	n := len(meta.Steps)
+	if cap(inst.steps) < n {
+		inst.steps = make([]timescrubber.Step, n)
+	}
+	inst.steps = inst.steps[:n]
+	nan := float32(math.NaN())
+	for i := range inst.steps {
+		st := timescrubber.Step{At: meta.Steps[i].Valid, Value: nan, Peak: nan}
+		switch g.StepState(i) {
+		case flowoverlay.StepStateHeld:
+			st.State = timescrubber.StepStateHeld
+		case flowoverlay.StepStateLoading:
+			st.State = timescrubber.StepStateLoading
+		case flowoverlay.StepStateMissing:
+			st.State = timescrubber.StepStateMissing
+		}
+		if i < len(g.summary) {
+			st.Value, st.Peak = g.summary[i].Mean, g.summary[i].Max
+		}
+		inst.steps[i] = st
+	}
+	speedMax := opts.speedMax
+	if !(speedMax > 0) {
+		speedMax = meta.SpeedMax
+	}
+	if speedMax > 0 && (inst.barColors == nil || inst.barColorMax != speedMax) {
+		cfg := colormap.NewConfig(flowoverlay.DefaultPalette, 0, float64(speedMax))
+		inst.barColors, inst.barColorMax = cfg, speedMax
+	}
+	sc := inst.scrubber
+	sc.Opts.ValueUnit = opts.unit
+	sc.ValueColor = nil
+	if inst.barColors != nil {
+		sc.ValueColor = func(v float32) uint32 { return inst.barColors.At(float64(v)) | 0xff }
+	}
+	sc.RenderFillWidth(inst.steps, 960)
 }
 
 // statusLine says what is on screen, or why nothing is.
@@ -381,6 +418,9 @@ func (inst *VectorFieldDriver) statusLine(meta vectorfield.Meta, has bool, opts 
 	}
 	if g.Loading() {
 		line += " · describing the next field…"
+	}
+	if g.summaryErr != nil {
+		line += " · the per-step summary failed: " + g.summaryErr.Error()
 	}
 	if stats.LastError != nil {
 		line += " · last request failed: " + stats.LastError.Error()
@@ -418,7 +458,7 @@ func (inst *VectorFieldDriver) hoverLine(meta vectorfield.Meta, has bool, opts v
 // followTimeSignal moves the display time when someone else wrote vf_t — a
 // SET, the Signals editor, a history restore. The pane's own write comes back
 // one frame later and is told apart by its value.
-func (inst *VectorFieldDriver) followTimeSignal(sig SignalEnvI, has bool) {
+func (inst *VectorFieldDriver) followTimeSignal(sig SignalEnvI, has bool) (pos float64, moved bool) {
 	if sig == nil || !has {
 		return
 	}
@@ -437,8 +477,7 @@ func (inst *VectorFieldDriver) followTimeSignal(sig SignalEnvI, has bool) {
 	if err != nil {
 		return
 	}
-	inst.pos = inst.guest.SetTime(t)
-	inst.playing = false
+	return inst.guest.SetTime(t), true
 }
 
 // emitWhenRested publishes the nearest step's time and the view, each once it
@@ -473,6 +512,18 @@ func (inst *VectorFieldDriver) emitWhenRested(meta vectorfield.Meta, has bool, e
 		return
 	}
 	b := v.Bounds()
+	if west, east := b.GetWest(), b.GetEast(); west < east && b.GetSouth() < b.GetNorth() {
+		if east-west > 360 {
+			mid := (west + east) / 2
+			west, east = mid-180, mid+180
+		}
+		size := v.Size()
+		inst.settledView = vectorfield.Request{
+			West: west, East: east, South: b.GetSouth(), North: b.GetNorth(),
+			MaxCols: max(int(size.X/vectorFieldSamplePx), 2), MaxRows: max(int(size.Y/vectorFieldSamplePx), 2),
+		}
+		inst.hasSettled = true
+	}
 	round := func(x float64) float64 { return math.Round(x*1e6) / 1e6 }
 	bounds := [4]float64{round(b.GetSouth()), round(b.GetNorth()), round(b.GetWest()), round(b.GetEast())}
 	if bounds == inst.emittedBounds {

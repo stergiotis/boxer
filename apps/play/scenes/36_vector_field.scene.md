@@ -60,8 +60,9 @@ ORDER BY t
 {"do":"wait","valueContains":"global grid 1° × 1° · 9 steps","role":"label","timeoutMs":20000,"comment":"the relation was described: periodic, one degree, nine steps"}
 {"do":"wait","valueContains":"at level","role":"label","settleMs":2500,"comment":"a window arrived and the particles have run for a while"}
 {"do":"wait","valueContains":"synthetic jets and an eddy","role":"label","comment":"the name comes from vector_field_opts"}
-{"do":"click","name":">","role":"button","comment":"one step on: the layer asks for that step's window"}
-{"do":"wait","valueContains":"2026-03-01 03:00 UTC","role":"label","comment":"the display time is the second step's valid time"}
+{"do":"wait","valueContains":"step 1 of 9","role":"label","comment":"the time strip reads the first step"}
+{"do":"click","contains":"Next","role":"button","comment":"one step on: the layer asks for that step's window"}
+{"do":"wait","valueContains":"2026-03-01 03:00 UTC · step 2 of 9","role":"label","comment":"the display time is the second step's valid time"}
 {"do":"wait","valueContains":"2 requests","role":"label","timeoutMs":20000,"settleMs":2000,"comment":"a step is one request; the view did not move, so nothing else was asked"}
 {"do":"capture","text":"36_vector_field"}
 ```

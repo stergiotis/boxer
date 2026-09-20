@@ -200,17 +200,20 @@ func TestVectorFieldTimeSignalIsWrittenAtRest(t *testing.T) {
 // someone else's: only a value it did not publish moves the display time.
 func TestVectorFieldFollowsATimeItDidNotWrite(t *testing.T) {
 	g := newLiveQueryGraph(nil, nil, 1)
-	d := &VectorFieldDriver{emittedStep: -1, now: time.Now, guest: newVectorFieldGuest(nil), playing: true}
+	d := &VectorFieldDriver{emittedStep: -1, now: time.Now, guest: newVectorFieldGuest(nil)}
 	d.emittedT = "2026-03-01 03:00:00.000"
 
 	g.setSignalRawFrom(signalVfT, d.emittedT, "vectorfield")
-	d.followTimeSignal(g.signals(), true)
-	assert.True(t, d.playing, "its own value is not an instruction")
+	_, moved := d.followTimeSignal(g.signals(), true)
+	assert.False(t, moved, "its own value is not an instruction")
 
 	g.setSignalRawFrom(signalVfT, "2026-03-01 06:00:00.000", signalWriterEditor)
-	d.followTimeSignal(g.signals(), true)
-	assert.False(t, d.playing, "a written time stops playback and is followed")
+	_, moved = d.followTimeSignal(g.signals(), true)
+	assert.True(t, moved, "a written time is followed")
 	assert.Equal(t, "2026-03-01 06:00:00.000", d.seenT)
+
+	_, moved = d.followTimeSignal(g.signals(), true)
+	assert.False(t, moved, "and followed once")
 }
 
 // A Live auto-run keeps the described field; a Run a person asked for, or one

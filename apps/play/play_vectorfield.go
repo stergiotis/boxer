@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -96,12 +97,21 @@ func vectorFieldIdentity(rel sqlfield.Relation, params map[string]string) string
 // values the relation reads, resolved when the source was built; the
 // source's own parameters join them under the param_ prefix.
 //
-// The lane identity is stable and replaces a running predecessor, which is
-// what a superseded window request wants: the layer has one request in flight
-// and cancels it before the next.
+// A lane identity is stable and replaces a running predecessor, which is what
+// a superseded window request wants: the layer has one request in flight and
+// cancels it before the next. There is one identity per purpose, because a
+// summary runs beside the windows and neither may replace the other.
 type vectorFieldQueryer struct {
-	exec    clientExecutor
+	exec    [sqlfield.PurposeSummary + 1]clientExecutor
 	signals map[string]string
+}
+
+func newVectorFieldQueryer(client *Client, signals map[string]string) (q vectorFieldQueryer) {
+	q.signals = signals
+	for purpose, label := range []string{"vectorfield-describe", "vectorfield", "vectorfield-summary"} {
+		q.exec[purpose] = clientExecutor{client: client, opts: newExecOptions(label)}
+	}
+	return
 }
 
 var _ sqlfield.QueryerI = vectorFieldQueryer{}
@@ -117,7 +127,7 @@ func (inst vectorFieldQueryer) QueryE(ctx context.Context, statement string, par
 	ctx, cancel := context.WithTimeout(ctx, vectorFieldFetchTimeout)
 	defer cancel()
 	alloc := memory.NewGoAllocator()
-	rec, schema, _, err := inst.exec.execute(ctx, compiledNode{SQL: statement, Params: merged}, alloc)
+	rec, schema, _, err := inst.exec[sqlfield.PurposeOf(ctx)].execute(ctx, compiledNode{SQL: statement, Params: merged}, alloc)
 	if err != nil {
 		return
 	}
@@ -148,6 +158,17 @@ type vectorFieldBuild struct {
 	err  error
 }
 
+// vectorFieldSummaryJob is one per-step summary being fetched.
+type vectorFieldSummaryJob struct {
+	key    string
+	cancel context.CancelFunc
+
+	mu   sync.Mutex
+	done bool
+	out  []sqlfield.StepSummary
+	err  error
+}
+
 // vectorFieldGuest draws a field relation as a flow layer inside a map's
 // overlay callback (ADR-0250 §SD7). It owns no map and takes no pointer, so
 // what it lies over or under is its host's call order.
@@ -167,6 +188,13 @@ type vectorFieldGuest struct {
 	err      error
 
 	pos float64 // display time as a fractional step, carried across fields
+
+	// summary is the magnitude of every step inside the view it was last
+	// asked for (ADR-0251 §SD4); summaryKey says which view that was.
+	summary    []sqlfield.StepSummary
+	summaryKey string
+	summaryJob *vectorFieldSummaryJob
+	summaryErr error
 }
 
 func newVectorFieldGuest(client *Client) *vectorFieldGuest {
@@ -203,10 +231,7 @@ func (inst *vectorFieldGuest) Ensure(rel sqlfield.Relation, params map[string]st
 	ctx, cancel := context.WithCancel(context.Background())
 	b := &vectorFieldBuild{identity: identity, cancel: cancel}
 	inst.building = b
-	queryer := vectorFieldQueryer{
-		exec:    clientExecutor{client: inst.client, opts: newExecOptions("vectorfield")},
-		signals: params,
-	}
+	queryer := newVectorFieldQueryer(inst.client, params)
 	go func() {
 		src, err := sqlfield.NewSourceE(ctx, queryer, rel, sqlfield.Options{Shape: &shape})
 		b.mu.Lock()
@@ -222,12 +247,72 @@ func (inst *vectorFieldGuest) adopt(src *sqlfield.Source, err error) {
 		inst.layer = nil
 	}
 	inst.src, inst.err = src, err
+	inst.dropSummary()
 	if err != nil || src == nil {
 		return
 	}
 	inst.layer = flowoverlay.New(src, inst.Opts)
 	inst.layer.SetStepPosition(inst.pos)
 	inst.pos = inst.layer.StepPosition()
+}
+
+func (inst *vectorFieldGuest) dropSummary() {
+	if inst.summaryJob != nil {
+		inst.summaryJob.cancel()
+		inst.summaryJob = nil
+	}
+	inst.summary, inst.summaryKey, inst.summaryErr = nil, "", nil
+}
+
+// EnsureSummary asks for the magnitude of every step inside a view, once per
+// view: the caller hands it a view that has settled. It is one query over all
+// steps, so it runs beside the windows and the strip shows the last answer
+// meanwhile. A field of one step has nothing to compare.
+func (inst *vectorFieldGuest) EnsureSummary(req vectorfield.Request) {
+	if job := inst.summaryJob; job != nil {
+		job.mu.Lock()
+		done, out, err := job.done, job.out, job.err
+		job.mu.Unlock()
+		if done {
+			inst.summaryJob = nil
+			if job.key == inst.summaryKey {
+				inst.summaryErr = err
+				if err == nil {
+					inst.summary = out
+				}
+			}
+		}
+	}
+	src := inst.src
+	if src == nil || len(src.Describe().Steps) < 2 {
+		return
+	}
+	key := fmt.Sprintf("%.4f %.4f %.4f %.4f %d %d", req.West, req.East, req.South, req.North, req.MaxCols, req.MaxRows)
+	if key == inst.summaryKey {
+		return
+	}
+	if inst.summaryJob != nil {
+		inst.summaryJob.cancel()
+	}
+	inst.summaryKey = key
+	ctx, cancel := context.WithCancel(context.Background())
+	job := &vectorFieldSummaryJob{key: key, cancel: cancel}
+	inst.summaryJob = job
+	go func() {
+		out, err := src.SummarizeE(ctx, req)
+		job.mu.Lock()
+		job.done, job.out, job.err = true, out, err
+		job.mu.Unlock()
+		cancel()
+	}()
+}
+
+// StepState is what the layer has of a step.
+func (inst *vectorFieldGuest) StepState(step int) flowoverlay.StepStateE {
+	if inst.layer == nil {
+		return flowoverlay.StepStateIdle
+	}
+	return inst.layer.StepState(step)
 }
 
 // Forget drops the field, so that the next Ensure describes it again — what a
@@ -243,6 +328,7 @@ func (inst *vectorFieldGuest) Forget() {
 // Close ends the guest.
 func (inst *vectorFieldGuest) Close() {
 	inst.Forget()
+	inst.dropSummary()
 	if inst.layer != nil {
 		inst.layer.Close()
 		inst.layer = nil
@@ -281,8 +367,8 @@ func (inst *vectorFieldGuest) SetTime(t time.Time) (pos float64) {
 
 // Draw paints the layer; it is called inside the host map's overlay callback.
 func (inst *vectorFieldGuest) Draw(p portolan.Projector) {
-	if inst.building != nil {
-		// Nothing else wakes a frame when a build lands.
+	if inst.building != nil || inst.summaryJob != nil {
+		// Nothing else wakes a frame when a build or a summary lands.
 		c.RequestRepaintAfter(0.05)
 	}
 	if inst.layer == nil {
