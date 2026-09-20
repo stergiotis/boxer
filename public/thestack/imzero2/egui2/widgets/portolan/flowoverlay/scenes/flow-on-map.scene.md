@@ -24,7 +24,7 @@ The vector-field layer of ADR-0249 in the widget gallery: an analytic jet and a 
 {"do":"read","valueContains":"segments in one paintSegments","role":"label","pattern":"(?P<particles>\\d+) particles, (?P<segments>[1-9]\\d{3,}) segments","comment":"the window arrived and the trails have filled: thousands of segments, one opcode"}
 {"do":"expect","of":"particles","min":1000}
 {"do":"read","valueContains":"requests","role":"label","pattern":"(?P<before>\\d+) requests"}
-{"do":"expect","of":"before","eq":1,"comment":"one request served the first view"}
+{"do":"expect","of":"before","eq":2,"comment":"one request served the first view, and one fetched the steps the time strip says playback reaches next (ADR-0251 SD9)"}
 {"do":"drag","x":520,"y":420,"toX":620,"toY":460,"steps":12,"durationMs":500,"settleMs":1200,"comment":"a pan of 100 x 40 pixels, inside the margin the window was asked with"}
 {"do":"read","valueContains":"requests","role":"label","pattern":"(?P<after>\\d+) requests, (?P<dropped>\\d+) late"}
 {"do":"expect","of":"after","minus":"before","eq":0,"comment":"the margin is what a pan spends"}

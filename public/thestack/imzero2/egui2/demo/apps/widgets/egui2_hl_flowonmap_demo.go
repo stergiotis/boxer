@@ -62,6 +62,7 @@ type flowOnMapState struct {
 	// scrub is the time strip (ADR-0251); it owns the display time.
 	scrub *timescrubber.Scrubber
 	steps []timescrubber.Step
+	ahead []int
 
 	capture   bool
 	tiles     bool
@@ -208,6 +209,9 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 		})
 	}
 	st.scrub.Render(flowOnMapW, st.steps)
+	// What playback reaches next, so the layer has it before it gets there.
+	st.ahead = st.scrub.Transport.Ahead(len(st.steps), 3, st.ahead)
+	layer.SetAhead(st.ahead)
 
 	stats := layer.Stats()
 	v := m.View()
