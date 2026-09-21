@@ -65,14 +65,18 @@ func (inst *RuleDL008) Check(roots []string) iter.Seq2[Finding, error] {
 			return
 		}
 		for _, root := range roots {
+			ignored := gitIgnoredSet(root)
 			walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, we error) error {
 				if we != nil {
 					return we
 				}
 				if d.IsDir() {
-					if shouldSkipDir(d.Name()) {
+					if shouldSkipDir(d.Name()) || isGitIgnored(ignored, path) {
 						return filepath.SkipDir
 					}
+					return nil
+				}
+				if isGitIgnored(ignored, path) {
 					return nil
 				}
 				if !IsInScopeForDL009(path) {
@@ -100,20 +104,26 @@ func (inst *RuleDL008) Check(roots []string) iter.Seq2[Finding, error] {
 // files are intentionally INCLUDED here (unlike the lint pass) because
 // their declared symbols are real targets — only test files are
 // excluded.
+//
+// Git-ignored trees are excluded from both this walk and the lint walk, as
+// DL009 excludes them: a file a clean checkout does not have cannot carry a
+// finding anyone can fix, and a nested checkout of this same repository would
+// otherwise report every finding once per copy.
 func (inst *RuleDL008) buildIndex(roots []string) (err error) {
 	inst.pkgSymbols = make(map[string]map[string]struct{})
 	for _, root := range roots {
+		ignored := gitIgnoredSet(root)
 		err = filepath.WalkDir(root, func(path string, d fs.DirEntry, we error) error {
 			if we != nil {
 				return we
 			}
 			if d.IsDir() {
-				if shouldSkipDir(d.Name()) {
+				if shouldSkipDir(d.Name()) || isGitIgnored(ignored, path) {
 					return filepath.SkipDir
 				}
 				return nil
 			}
-			if !strings.HasSuffix(path, ".go") {
+			if !strings.HasSuffix(path, ".go") || isGitIgnored(ignored, path) {
 				return nil
 			}
 			base := filepath.Base(path)
