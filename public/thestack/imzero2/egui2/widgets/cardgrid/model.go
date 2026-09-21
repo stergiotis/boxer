@@ -89,10 +89,17 @@ type Model struct {
 
 // Validate checks the slice lengths against Count and Slots. A model that
 // fails it is not drawn; Render shows the reason instead.
+//
+// That makes every message below a text-only boundary: Render hands
+// err.Error() to RichTextLabel, and the host wiring the widget reads the slot
+// name and the two lengths out of the sentence. The values therefore stay in
+// the format string rather than moving to eb fields nothing on that path can
+// read, and each site carries a CS013 disable pointing here. validateRagged
+// is part of the same surface.
 func (inst *Model) Validate() error {
 	n := inst.Count
 	if n < 0 {
-		return eh.Errorf("cardgrid: negative Count %d", n)
+		return eh.Errorf("cardgrid: negative Count %d", n) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 	}
 	text := []struct {
 		slot SlotsE
@@ -108,26 +115,26 @@ func (inst *Model) Validate() error {
 	for _, t := range text {
 		switch {
 		case inst.Slots.Has(t.slot) && len(t.s) != n:
-			return eh.Errorf("cardgrid: %s has %d entries for %d cards", t.name, len(t.s), n)
+			return eh.Errorf("cardgrid: %s has %d entries for %d cards", t.name, len(t.s), n) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 		case !inst.Slots.Has(t.slot) && len(t.s) != 0:
-			return eh.Errorf("cardgrid: %s is filled but its slot is not declared", t.name)
+			return eh.Errorf("cardgrid: %s is filled but its slot is not declared", t.name) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 		}
 	}
 	if inst.Tone != nil && len(inst.Tone) != n {
-		return eh.Errorf("cardgrid: Tone has %d entries for %d cards", len(inst.Tone), n)
+		return eh.Errorf("cardgrid: Tone has %d entries for %d cards", len(inst.Tone), n) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 	}
 	if inst.Slots.Has(SlotsFacts) {
 		if err := validateRagged("Fact", inst.FactOff, len(inst.FactLabel), n); err != nil {
 			return err
 		}
 		if len(inst.FactValue) != len(inst.FactLabel) {
-			return eh.Errorf("cardgrid: %d fact values for %d labels", len(inst.FactValue), len(inst.FactLabel))
+			return eh.Errorf("cardgrid: %d fact values for %d labels", len(inst.FactValue), len(inst.FactLabel)) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 		}
 		if inst.FactColor != nil && len(inst.FactColor) != len(inst.FactLabel) {
-			return eh.Errorf("cardgrid: %d fact colours for %d labels", len(inst.FactColor), len(inst.FactLabel))
+			return eh.Errorf("cardgrid: %d fact colours for %d labels", len(inst.FactColor), len(inst.FactLabel)) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 		}
 		if inst.FactMore != nil && len(inst.FactMore) != n {
-			return eh.Errorf("cardgrid: FactMore has %d entries for %d cards", len(inst.FactMore), n)
+			return eh.Errorf("cardgrid: FactMore has %d entries for %d cards", len(inst.FactMore), n) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 		}
 	}
 	if inst.Slots.Has(SlotsTags) {
@@ -140,14 +147,14 @@ func (inst *Model) Validate() error {
 
 func validateRagged(name string, off []int32, values int, n int) error {
 	if len(off) != n+1 {
-		return eh.Errorf("cardgrid: %sOff has %d entries for %d cards", name, len(off), n)
+		return eh.Errorf("cardgrid: %sOff has %d entries for %d cards", name, len(off), n) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 	}
 	if off[0] != 0 || int(off[n]) != values {
-		return eh.Errorf("cardgrid: %sOff spans [%d, %d) for %d values", name, off[0], off[n], values)
+		return eh.Errorf("cardgrid: %sOff spans [%d, %d) for %d values", name, off[0], off[n], values) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 	}
 	for i := range n {
 		if off[i] > off[i+1] {
-			return eh.Errorf("cardgrid: %sOff is not monotone at card %d", name, i)
+			return eh.Errorf("cardgrid: %sOff is not monotone at card %d", name, i) //boxer:lint disable=CS013 reason="Render draws err.Error() in the pane instead of the grid — see the note on Validate"
 		}
 	}
 	return nil
