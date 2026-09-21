@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 ---
 
-> **Status: draft.** Runtime compatibility requires the target checks below.
+> **Status: draft — pre-human-review.** Runtime compatibility requires the target checks below.
 
 # imzero2 Windows viewer
 
