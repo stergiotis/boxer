@@ -8,11 +8,12 @@ import (
 
 // The estimator and the duration/byte spellings live in hmi/progressest, so
 // callers without a terminal (keelson tasks, imzero2 widgets) share them.
-// These names keep the CLI bar's API.
+// These names keep the CLI bar's API. The estimator itself is spelled
+// progressest.Estimator everywhere, including here: CODINGSTANDARDS
+// "Typing → No Aliases" rules out re-declaring it under a second name, and a
+// named type would shed the methods the caller wants.
 
-type Estimator = progressest.Estimator
-
-func NewEstimator() *Estimator { return progressest.NewEstimator() }
+func NewEstimator() *progressest.Estimator { return progressest.NewEstimator() }
 
 func FormatDuration(d time.Duration) string { return progressest.FormatDuration(d) }
 

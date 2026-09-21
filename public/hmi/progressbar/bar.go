@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/stergiotis/boxer/public/hmi/progressest"
 )
 
 const refreshInterval = 250 * time.Millisecond
@@ -30,7 +32,7 @@ type Bar struct {
 	w         io.Writer
 	isTTY     bool
 
-	eta *Estimator
+	eta *progressest.Estimator
 
 	// writeMu serialises every byte written to inst.w. Held by render() and
 	// by LogWriter.Write so log lines and bar frames never interleave
@@ -72,7 +74,7 @@ func (inst *Bar) SetWriter(w io.Writer) {
 
 // Estimator exposes the underlying ETA estimator so callers (e.g. the egui2
 // demo) can inspect smoothed rate/trend and the damped vs. raw ETA.
-func (inst *Bar) Estimator() *Estimator { return inst.eta }
+func (inst *Bar) Estimator() *progressest.Estimator { return inst.eta }
 
 func (inst *Bar) Start(ctx context.Context) {
 	inst.eta.Start(inst.startTime, 0)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/hmi/progressbar"
+	"github.com/stergiotis/boxer/public/hmi/progressest"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 )
@@ -13,7 +14,7 @@ import (
 // =============================================================================
 // progressbar package demo
 //
-// Drives a simulated worker through progressbar.Estimator (Holt's Double
+// Drives a simulated worker through progressest.Estimator (Holt's Double
 // Exponential Smoothing) and visualises the state with egui2's native
 // ProgressBar widget + live metric labels. The point is to show the ETA
 // algorithm that the CLI renderer uses, without the terminal.
@@ -48,7 +49,7 @@ type progressBarDemoState struct {
 	rateMode   pbRateMode
 	lastTick   time.Time
 	startTime  time.Time
-	estimator  *progressbar.Estimator
+	estimator  *progressest.Estimator
 	showRawETA bool
 }
 
