@@ -97,7 +97,7 @@ func (inst *Worker) opEnqueue(ctx context.Context, sender app.AppIdT, req watchb
 		r.RunAfter = time.UnixMilli(req.RunAfterMs).UTC()
 	}
 	if r.Backoff != "" && r.Backoff != watchbillstore.BackoffNone && r.Backoff != watchbillstore.BackoffLinear && r.Backoff != watchbillstore.BackoffExponential {
-		return reply, eh.Errorf("watchbill: unknown backoff class %q", r.Backoff)
+		return reply, eh.Errorf("watchbill: unknown backoff class %q", r.Backoff) //boxer:lint disable=CS013 reason="an op handler's message becomes the reply's Reason string and is the only thing that crosses the bus; a CBOR field stays on the worker"
 	}
 	id, err := Enqueue(ctx, inst.cfg.Store, r)
 	if err != nil {

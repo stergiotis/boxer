@@ -52,11 +52,11 @@ func (inst *Client) Enqueue(req Request) (job watchbillstore.Job, err error) {
 		return
 	}
 	if !r.Ok {
-		return job, eh.Errorf("%s", r.Reason)
+		return job, eh.New(r.Reason)
 	}
 	jobs := JobsOf(r)
 	if len(jobs) != 1 {
-		return job, eh.Errorf("watchbill: enqueue reply carries %d jobs", len(jobs))
+		return job, eb.Build().Int("jobs", len(jobs)).Errorf("watchbill: enqueue reply does not carry exactly one job")
 	}
 	job = jobs[0]
 	return
@@ -76,7 +76,7 @@ func (inst *Client) Retry(id string, note string) (ok bool, err error) {
 
 func (inst *Client) verb(op string, id string, note string) (ok bool, err error) {
 	if id == "" {
-		return false, eh.Errorf("watchbill: %s without a job id", op)
+		return false, eb.Build().Str("op", op).Errorf("watchbill: request without a job id")
 	}
 	r, err := inst.call(watchbillrequest.WatchbillRequest{Op: op, Id: id, Note: note})
 	if err != nil {
@@ -110,7 +110,7 @@ func (inst *Client) List(states []string, kinds []string, limit int) (jobs []wat
 		return
 	}
 	if !r.Ok {
-		return nil, eh.Errorf("%s", r.Reason)
+		return nil, eh.New(r.Reason)
 	}
 	jobs = JobsOf(r)
 	return

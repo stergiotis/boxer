@@ -33,18 +33,18 @@ func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error
 func request(bus app.BusI, subject string, req adhocrequest.AdhocRequest, verb string) (rep adhocreply.AdhocReply, err error) {
 	payload, err := buscodec.Encode(req)
 	if err != nil {
-		return rep, eh.Errorf("adhocdata: encode %s: %w", verb, err)
+		return rep, eb.Build().Str("verb", verb).Errorf("adhocdata: encode request: %w", err)
 	}
 	replyBytes, err := bus.Request(subject, payload)
 	if err != nil {
-		return rep, eh.Errorf("adhocdata: %s request: %w", verb, err)
+		return rep, eb.Build().Str("verb", verb).Errorf("adhocdata: request: %w", err)
 	}
 	rep, err = buscodec.Decode[adhocreply.AdhocReply](replyBytes)
 	if err != nil {
-		return rep, eh.Errorf("adhocdata: decode %s reply: %w", verb, err)
+		return rep, eb.Build().Str("verb", verb).Errorf("adhocdata: decode reply: %w", err)
 	}
 	if !rep.Ok {
-		return rep, eb.Build().Str("reason", rep.Reason).Errorf("adhocdata: %s rejected", verb)
+		return rep, eb.Build().Str("verb", verb).Str("reason", rep.Reason).Errorf("adhocdata: request rejected")
 	}
 	return rep, nil
 }
