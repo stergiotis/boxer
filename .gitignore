@@ -79,6 +79,10 @@ rust/*/target/
 # Local Claude Code settings (machine-specific); the .claude/skills symlink stays tracked.
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+# Agent worktrees: git checkouts of this repo nested inside it. Untracked and
+# unignored, every tree-walking check (doclint, file-naming) linted each copy
+# and reported the same finding once per worktree.
+.claude/worktrees/
 
 # Local `crush` agent config (machine-specific): points at a localhost model
 # server, so it is developer-environment state, not shared project config.
@@ -134,3 +138,6 @@ rust/*/target/
 # upstream READMEs as if they were repo docs. Anchored: repo root only.
 /_ffmpeg-src/
 /ffmpeg-static
+
+# LLM generated python temporaries
+*.py
