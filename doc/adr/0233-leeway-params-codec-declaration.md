@@ -115,8 +115,38 @@ answers `ParamsCodecUndeclared` when the section states none.
 | `TableValidator` | aspect requires a params-bearing channel |
 | `PopulateManipulator` / `generateExampleAspects` | free sample never emits the aspect; the populator declares it coherently |
 
+## Alternatives
+
+- **A type parameter or generic method on the generated DML (O1).** The codec
+  becomes a per-call choice the reader cannot see, which is the anti-pattern
+  this decision exists to close. It also fails on Go's own terms: a method
+  with type parameters cannot appear in an interface, is not in the type's
+  method set and is invisible to reflection, while `marshallreflect` reaches
+  the DML by `MethodByName`.
+- **A field on `common.TaggedValuesSection` (O2).** The DTO gains a field
+  every serialized table then has to move on, for a statement the names road
+  already round-trips.
+- **An encoding aspect on the params lane (O4).** Hints on membership lanes
+  are machine-derived output that the IR rebuild erases, so the declaration
+  would not survive a round trip.
+- **Fix the out-of-tree writer and leave the convention undeclared.** That is
+  the state this ADR is a response to: a convention without a declaration
+  produced four encodings in six weeks, and the next writer still has nothing
+  to read.
+- **Make the generators codec-aware in the same step.** Deferred rather than
+  rejected — it waits for a second codec with a named consumer, and its shape
+  is recorded where the Decision's last bullet points.
+
 ## Consequences
 
 A section can now say how its params are spelled, and the first consumer
 outside the tree reads it. The cost of the next codec is known and bounded,
 and it is paid only when someone needs one.
+
+## Status
+
+Proposed — 2026-09-14. Pre-acceptance: the front-matter `reviewed-by` and
+`reviewed-date` are filled when it flips to accepted.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
