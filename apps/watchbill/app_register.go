@@ -29,7 +29,7 @@ var manifest = app.Manifest{
 	},
 	LaunchKind: launchcfg.Kind,
 	// The split between the list and the detail, kept across the process
-	// (split.go); the host injects the persist cap for it.
+	// (watchbill_split.go); the host injects the persist cap for it.
 	PersistedKeys: []string{splitKey},
 	Caps:          append(append(wb.ClientCaps(), task.ObserverCaps()...), task.CancelerCaps()...),
 }
