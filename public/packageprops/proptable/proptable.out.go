@@ -6,6 +6,7 @@ import "github.com/stergiotis/boxer/public/packageprops"
 
 // Table is every package's declared PackageProps, harvested from source.
 var Table = packageprops.Table{
+	{ImportPath: "github.com/stergiotis/boxer/apps/appstate", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/apps/watchbill/launchcfg", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope/codectest", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles, Kind: packageprops.KindIntegrationTest}},

@@ -459,6 +459,38 @@ an audit row. The broker's Mount prompt and its copy are not covered by a
 lane — the manual check the verification plan names, due with M3, which is
 the first app to declare the capability.
 
+### 2026-09-22 — M3 built: the App state window
+
+[`apps/appstate`](../../apps/appstate) is SD6's window: the apps that keep
+state on the left with their entry count and size, the selected app's
+entries in the middle, a delete per entry and a forget per app. Forget's
+confirmation is an armed banner naming the app and the entry count, and only
+its own button clears. The window declares `appstate.ClientCaps()` and
+nothing else; it reads `keelson('app_state')` from the process's local query
+endpoint on an off-frame poller, and runs each verb in its own goroutine.
+
+Two things the record said that the build found otherwise:
+
+- **There is no `ch.query.*` subject.** The Context calls the introspection
+  tables "reachable by any app through `ch.query.*`"; apps reach them over
+  HTTP on the local endpoint, as the watchbill window does, and this one
+  does the same.
+- **That read is a network capability the manifest does not justify.** The
+  capslock gate reports `apps/appstate :: CAPABILITY_NETWORK`, the same entry
+  `apps/watchbill` carries for the same read. Accepting it, or giving the
+  endpoint read a declared cap, is a reviewer's decision and is left open.
+
+Verified in the default lane — the window mounted beside the service over
+the runtime's own backend on one bus: forget clears nothing while armed or
+after a cancel, and a confirmed forget clears exactly that app; a delete
+clears its entry; a refusal shows the service's reason. And in a headless
+host (`apps/appstate/scenes`, plus a one-off run over three seeded entries of
+a probe app): the window reads the live store without error, a delete
+lowers the count by one, and a confirmed forget clears the rest. Still
+unverified: that the broker's Mount prompt appears and reads well — the
+headless run granted the capability without showing one, so the manual
+check the verification plan names remains to be done on the desktop host.
+
 ## References
 
 - [ADR-0026: App runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD3 the subject taxonomy this family joins, §SD6 the facts table, §SD7 the broker that prompts.
