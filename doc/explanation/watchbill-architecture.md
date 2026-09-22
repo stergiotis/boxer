@@ -52,11 +52,11 @@ records it.
  │  │ list · cancel · retry  │   │ live progress, cancel    │   │ enqueue demo.sleep      │  │
  │  │ table · trail · workers│   └──────────────────────────┘   │ registers HandlerI      │  │
  │  └──────────┬─────────────┘                                  └─────────────────────────┘  │
- │             │ SQL over keelson('watchbill'), keelson('watchbill_event'),                   │
- │             │          keelson('watchbill_worker')                                         │
+ │             │ window: keelson.query.watchbill_event, …_worker (bus, ADR-0253)              │
+ │             │ book: SQL over keelson('watchbill'), keelson('watchbill_event'), … (HTTP)    │
  │  ┌──────────┴───────────────────────────────────────────────────────────────────────────┐ │
- │  │ introspection endpoint (local query, clickhouse-local) ◄── providers: jobs, events,  │ │
- │  │ workers = presence rows ⋈ heartbeat + this process's Worker.Status()                 │ │
+ │  │ introspection tables (in-process engine over clickhouse-local) ◄── providers: jobs, │ │
+ │  │ events, workers = presence rows ⋈ heartbeat + this process's Worker.Status()        │ │
  │  └──────────────────────────────────────────────────────────────────────────────────────┘ │
  │  sqlapplet book "watchbill": in flight · failed · by kind · abandoned · timeline · workers │
  └────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -71,8 +71,9 @@ handler stands a worker over them. The window host's worker also serves the
 client protocol on the in-process bus, which the two apps drive through the
 typed client. Live progress and cancel ride the task subjects, because every
 run is a keelson task with the job's id. Reads that are not client verbs, the
-trail and the workers, go through the introspection endpoint, which the book
-and the window both query.
+trail and the workers, are introspection tables: the window reads each
+through its `keelson.query.<table>` grant on the bus (ADR-0253), the book
+queries the same tables over the local query endpoint.
 
 What crosses a process boundary is the table and nothing else: the bus is
 in-process, so a job enqueued in one process is claimed in another at that

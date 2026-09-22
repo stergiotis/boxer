@@ -157,6 +157,20 @@ Build `apps/watchbill`, a windowed app on the runtime topic.
 
 Accepted 2026-09-15.
 
+## Updates
+
+### 2026-09-22 — the trail and the workers are read over the bus (ADR-0253)
+
+SD1's two reads no longer go to the local query endpoint. The window
+declares one sticky grant per table, `keelson.query.watchbill_event` and
+`keelson.query.watchbill_worker`, and reads each as a request served by the
+host over the ADR-0094 §SD4 engine
+([ADR-0253](0253-introspection-table-reads-as-a-bus-capability.md),
+proposed). The rows and the statements are as they were; the bus audits
+the read with the window as sender, and the capslock finding for
+`apps/watchbill` is gone. The Verification plan's "stand-in HTTP server" is
+now a stub on the bus that answers `keelson.query.*`.
+
 ## References
 
 - [ADR-0234](./0234-watchbill-client-protocol-and-worker-presence.md) — the protocol this window drives; §SD7 for what stays out.

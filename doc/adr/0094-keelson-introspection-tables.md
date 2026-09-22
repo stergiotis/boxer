@@ -450,3 +450,15 @@ a window that has been reaped leaves no row in any of them.
   provider follow-up, built in the 2026-07-30 update above
 </content>
 </invoke>
+
+## Update (2026-09-22) — the tables over the bus: `keelson.query.<table>` (ADR-0253)
+
+The §SD4 in-process engine gained its production caller. An app that has a
+fixed statement over one table now reads it as a request on
+`keelson.query.<table>` (ADR-0253, proposed), served by
+`introspect/keelsonquery` over the engine and stood up by `introspecthost`
+beside the HTTP source, independent of it. The grant is per table and
+sticky; the service holds the statement to that table before the engine
+sees it. §SD3's `url()` source, the `/query` endpoint and
+`LocalQueryEndpoint` are unchanged and remain the route for SQL consoles,
+joins, sealed datasets and external engines.
