@@ -103,7 +103,7 @@ import (
 const AppId app.AppIdT = "runtime.filepicker"
 
 // NewColumnWidths builds the resolver a host hands to its dialogs through
-// [WithColumnWidths], over the host's column-width store (a facts store
+// [WithColumnWidths], over the host's column-width store (its state store
 // satisfies it), and loads what is stored. It exists so the two things a
 // call site can get wrong are decided here: the identity, and the bounds —
 // which must be the ones the browser drags against, or a stored width and a
