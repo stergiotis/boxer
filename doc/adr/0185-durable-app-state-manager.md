@@ -16,23 +16,26 @@ Keelson apps now keep three kinds of durable state, and nothing shows a user
 what is stored or lets them remove it. Names below (`runtime.appstate`,
 `apps/appstate`) are open to review at acceptance.
 
-| kind | decided in | substrate today | live enumeration today |
+| kind | decided in | substrate | live enumeration |
 | --- | --- | --- | --- |
-| persist state | [ADR-0026](./0026-app-runtime-and-capability-subjects.md) §SD3 | `boxer.persiststate` | `ScanState` — the raw trail, not latest-wins |
-| workingsets | [ADR-0148](./0148-app-workingsets.md) §SD6 | `boxer.facts` | `ListWorkingsets()` — global, live |
-| column-width overrides | [ADR-0151](./0151-table-column-width-overrides.md) | `boxer.facts` | `ListColumnWidths(appId)` — needs the id |
+| persist state | [ADR-0026](./0026-app-runtime-and-capability-subjects.md) §SD3 | `boxer.persiststate` | `ScanLiveState` over the `state/` prefix |
+| workingsets | [ADR-0148](./0148-app-workingsets.md) §SD6 | `boxer.persiststate` | `ScanLiveWorkingset` over `ws/`; `ListWorkingsets()` |
+| column-width overrides | [ADR-0151](./0151-table-column-width-overrides.md) | `boxer.persiststate` | `ScanLiveColumnWidth` over `cw/`; `ListColumnWidths(appId)` per app |
 
-**The substrate split is one day old.** [ADR-0105](./0105-keelson-adopts-generated-record-stores.md)'s
-Update of 2026-08-14 landed D3a: persist state left `boxer.facts` for a
-generated record store on `boxer.persiststate`, and the `FactsStoreI` state
-verbs lost their last production caller. Any manager therefore spans two
-substrates rather than one table. The costed-options page this work started
-from,
+**One substrate.** All three kinds live on one generated store over
+`boxer.persiststate` (ADR-0105 D3a, and its Update of 2026-08-15, built
+2026-09-22): each kind is a component, every live row also carries an `Owner`
+component naming the app, and keys are kind-prefixed. The generated state view
+answers "what is live" per kind in one statement — `ScanLive<Kind>`, optionally
+narrowed by key prefix (ADR-0100's Update of 2026-09-22). This ADR was drafted
+against two substrates — persist state on its own table, the other two on
+`boxer.facts` — and was one of the reasons ADR-0105 unified them. The
+costed-options page this work started from,
 [persist-api-surface-recordstore](../adr-background-work/persist-api-surface-recordstore.md),
-predates that by two weeks and reads the old world; §2 and §5 of it are
-overtaken, §3's surface comparison and §4's app-boundary question are not.
+predates both moves; §2 and §5 of it are overtaken, §3's surface comparison
+and §4's app-boundary question are not.
 
-**The motivating case, verified against the tree on 2026-08-15.** play builds a
+**The motivating case, re-verified against the tree on 2026-09-22.** play builds a
 `colwidth.Resolver` and captures widths on drag-end
 ([`play_table_attr.go`](../../apps/play/play_table_attr.go)), but no call site
 anywhere invokes `Resolver.Clear` or `ClearAll`, and play contains no
@@ -61,21 +64,19 @@ that pattern does not cover: it must see every app's state by definition, and
 §SD1 capabilities go to whoever type-asserts them.
 
 *Deleting is tombstoning.* All three kinds are latest-wins over an append-only
-trail. The live read is `HAVING argMax(is_tomb, sk) = 0` on the winning row,
-never `WHERE NOT is_tomb` on the candidates — the latter combines with `argMax`
-to return the newest surviving non-tombstone row and silently resurrects a
-cleared entry. That rule is already shipped and commented in
-[`chstore/columnwidths.go`](../../public/keelson/runtime/factsstore/chstore/columnwidths.go);
-anything new copies it rather than re-deriving it.
+trail. The live read collapses each key to its newest row *before* testing
+what that row is — testing first skips a tombstone, which carries no
+component, and resurrects the row it cleared. The generated `ScanLive<Kind>`
+does exactly that and has a test that fails if the order is reversed, so
+nothing here writes the collapse by hand.
 
 **Two pieces already exist and shape the design.** `keelson('workingsets')`
 ([`providers/workingsets.go`](../../public/keelson/runtime/introspect/providers/workingsets.go),
-ADR-0148 §SD7) is a read-only introspection table over the facts store,
+ADR-0148 §SD7) is a read-only introspection table over the state store,
 registered in `introspecthost` and reachable by any app through `ch.query.*` —
-a browse path that needs no store in an app. And the persist store's DTO
-denormalises `AppId` and `Key` into their own filterable sections, its schema
-saying why: so that "every key this app owns" is a `WHERE` on a column rather
-than a prefix match on the entity id.
+a browse path that needs no store in an app. And every state row's `Owner`
+component carries the app id in plain form, so "everything this app owns" is
+one scan of one component, whichever kinds the rows are.
 
 Audit / log / lifecycle / grant rows are a *trail*, not state, and are out of
 scope. Dock-layout persistence stays the recorded ADR-0026 follow-up it is.
@@ -84,10 +85,10 @@ scope. Dock-layout persistence stays the recorded ADR-0026 follow-up it is.
 
 **Q1 — Where does the read surface come from?**
 
-- *Raw `boxer.facts` SQL in the manager.* Killed: hand-written membership
-  arithmetic is the code class ADR-0105 exists to delete, the trap in
-  ADR-0171's measured trial, and it cannot see persist state at all now that
-  D3a has moved it.
+- *Raw SQL over the state table in the manager.* Killed: hand-written
+  membership arithmetic is the code class ADR-0105 exists to delete and the
+  trap in ADR-0171's measured trial, and the live collapse is exactly the part
+  a hand-written query gets wrong.
 - *A store handed to the app.* Killed by the constraint above.
 - *Introspection providers, one table per kind.* Chosen — SD1. The pattern is
   shipped, read-only by contract, and costs no new capability.
@@ -100,6 +101,15 @@ scope. Dock-layout persistence stays the recorded ADR-0026 follow-up it is.
   concept ADR-0155 §SD1 does not have, it asks the user for nothing, and it
   produces no audit record — it grants silently exactly what ADR-0026 §SD7
   exists to make explicit.
+- *Reuse `runtime.persist.{alias}.{key}.delete` for the persist third.* It
+  exists, it is already request/reply and therefore audited, and the service
+  admits a client holding a broader `runtime.persist.>` cap — so a third of the
+  job needs no new subject at all. Killed: that cap is one `Pub` filter over
+  the whole family, so obtaining `delete` on a key also grants `get` and `set`
+  on every app's state — the manager would hold the power to read and overwrite
+  precisely what §SD7 refuses even to render. It also shrinks the new family
+  rather than removing it, since workingsets and column widths have no
+  subject to reuse.
 - *No app write path; deletion only from a `boxer appstate` subcommand*, on the
   [ADR-0170](./0170-data-catalog-competence.md) §SD6 precedent. Zero new
   capability surface, and the escalation question never arises. Killed as the
@@ -127,8 +137,9 @@ alongside the existing one ([ADR-0094](./0094-keelson-introspection-tables.md)
 for the provider contract):
 
 - `keelson('workingsets')` — exists, unchanged.
-- `keelson('column_widths')` — new, over the global list SD2 adds.
-- `keelson('app_state')` — new, over the persist reader SD2 adds.
+- `keelson('column_widths')` — new, over `ScanLiveColumnWidth` across every
+  app (SD2).
+- `keelson('app_state')` — new, over `ScanLiveState` across every app (SD2).
 
 Each answers *live* rows: the set a restore would find, not the write trail.
 The trail stays a query against the underlying table, which is ADR-0148 §SD7's
@@ -139,33 +150,21 @@ than an absent one — the `keelson('windows')` precedent the workingsets
 provider already follows, so the set of table names does not depend on what a
 host happened to wire.
 
-### SD2 — What the store surface grows, and what it does not
+### SD2 — What the store surface grows: nothing
 
-Precisely one new interface method, one new reader, and nothing for
-workingsets:
+The state store already answers every read the manager needs. The two new
+providers open their own read-only store on `introspecthost.Deps.PersistExec`
+— the path `keelson('runtime_events')` already takes (ADR-0191 §SD7), chosen
+there so a scan never contends with the writer's pending buffer — and call
+the generated `ScanLive<Kind>` with the kind's key prefix (`state/`, `cw/`).
+A host with no durable backend gets empty tables, the degradation every other
+nillable source already has.
 
-- **`FactsStoreI.ListAllColumnWidths()`** — the app-id-less sibling of
-  `ListColumnWidths(appId)`. A separate method rather than an empty-string
-  sentinel on the existing one: a stringly-typed "" meaning "all apps" is the
-  kind of overload a caller gets wrong once and silently. The `chstore`
-  implementation is `composeListColumnWidthsSql` with the app predicate
-  dropped and the app id read back as a column instead of being supplied;
-  the `HAVING argMax(is_tomb, sk) = 0` collapse is unchanged and is the part
-  that must not be rewritten.
-- **A live-state reader on the persist side.** `ScanState` returns the raw
-  trail ordered by `Order ASC`, and only per-key `GetLive` interprets the
-  tombstone, so there is no global live read. The fold is a Go pass over that
-  ascending sequence — last row per key wins, a tombstone means absent — behind
-  a small `persist` interface implemented by both `StoreBackend` and
-  `MemoryBackend`, which `introspecthost` takes as a nillable dep exactly as
-  it takes `Facts`.
-
-  A generated `ScanLive<Kind>` verb in `recordstore/gen` would serve every
-  future store and push the collapse into SQL. It is deliberately **not**
-  taken here: one consumer is not evidence for a generator feature, and the Go
-  fold is correct against the same ordering guarantee the generated verb would
-  rely on. Recorded as the exit if a second consumer appears.
-- **Workingsets: nothing.** `ListWorkingsets()` is already the global live list.
+No `FactsStoreI.ListAllColumnWidths` and no Go fold over the persist trail:
+both were the cost of the two substrates, and went with them. A cross-app
+list is the per-kind prefix with no app segment; a per-app one appends the
+escaped app id (`persiststore.ColumnWidthAppPrefix` and siblings), which is
+exact even for app ids that nest.
 
 ### SD3 — Deletion rides a subject family, requested not published
 
@@ -179,9 +178,14 @@ runtime.appstate.forget    one app: every kind at once
 There is no `list` verb. Reading is SD1's tables, and putting the same read on
 two surfaces buys nothing but a second thing to keep true.
 
-A host-side service owns the collaborators (the facts store, the persist
-backend) and dispatches; the manager declares the family in `Manifest.Caps`
-with a Reason, so the ADR-0026 §SD7 broker prompts on Mount. The grant is
+A host-side service owns the collaborator (the state backend,
+`persist.StoreBackend`) and dispatches; the manager declares the family in `Manifest.Caps`
+with a Reason, so the ADR-0026 §SD7 broker prompts on Mount. That arrangement
+has a worked precedent to copy rather than invent — watchbill
+([ADR-0234](./0234-watchbill-client-protocol-and-worker-presence.md),
+[ADR-0236](./0236-watchbill-management-app.md)) exports a `ClientCaps()` helper
+beside its subject constants, and its management app declares the result in
+`Manifest.Caps`. The grant is
 **not sticky**: a remembered, silent grant to delete every app's data is
 precisely what should not exist, and one prompt per session is proportionate
 for an app a user opens deliberately.
@@ -198,8 +202,9 @@ abandon the rest on the first failure, for the reason ADR-0151 §M6 records for
 `ClearAll`: a partial clear is the worst outcome of the gesture, leaving some
 entries cleared and others not with nothing to tell them apart.
 
-It is **not atomic and does not claim to be**. The kinds are tombstone appends
-across two substrates; there is no transaction spanning them, and the reply
+It is **not atomic and does not claim to be**. The kinds share one store, so
+their tombstones can be appended together and flushed as one insert, but this
+record does not rest a guarantee on ClickHouse's insert semantics; the reply
 says what happened per kind rather than pretending a single verdict.
 
 ### SD5 — "Forget" clears, it does not erase
@@ -220,10 +225,12 @@ question every fact kind already has.
 - **A sqlapplet book** over SD1's tables, on the ADR-0170 §SD7 precedent: one
   chapter per kind plus a per-app rollup. It needs only SD1 and SD2, so
   browse and inspect work before the delete seam is built.
-- **`apps/appstate`** afterwards, on the [`apps/capinspector`](../../apps/capinspector)
-  precedent — a registered app package, not a new `main()`
-  ([CODINGSTANDARDS § Entry Points](../../CODINGSTANDARDS.md#entry-points)) —
-  adding per-row delete and per-app forget over SD3.
+- **`apps/appstate`** afterwards, on the [`apps/watchbill`](../../apps/watchbill)
+  precedent (ADR-0236) — a registered app package, not a new `main()`
+  ([CODINGSTANDARDS § Entry Points](../../CODINGSTANDARDS.md#entry-points)),
+  browsing through introspection and mutating over the bus with its client's
+  caps declared in `Manifest.Caps` — adding per-row delete and per-app forget
+  over SD3.
 
 ### SD7 — Payloads are described, not served
 
@@ -243,32 +250,32 @@ size and kind are not enough to decide whether to delete something.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `factsstore.FactsStoreI` (exported Go API under `public/`) | +1 method, `ListAllColumnWidths` (SD2) | `chstore.Store`, `InMemoryFactsStore`, one test fake in `logbridge` |
-| `persist` (exported Go API under `public/`) | new live-state reader interface + impls on `StoreBackend` / `MemoryBackend` (SD2) | `introspecthost.Deps` |
-| `introspecthost.Deps` | +1 nillable dep (the persist reader) | the carousel's wiring call |
+| `introspecthost` | +2 provider registrations over `Deps.PersistExec`, which ADR-0191 §SD7 already put there | nothing — the host's wiring call is unchanged |
 | `keelson()` table set | +`app_state`, +`column_widths` (SD1) | the introspection table docs; any reader enumerating table names |
 | `runtime.appstate.>` subject family | new, mutation-only (SD3) | ADR-0026 §SD3 taxonomy; the capability registry and its capinspector description |
 | `Manifest.Caps` of the new app | declares `runtime.appstate.>`, non-sticky | the §SD7 broker prompt copy |
-| `boxer.facts` / `boxer.persiststate` DDL | **unchanged** — only tombstone appends | nothing; recorded because a manager that deletes rows would change it |
+| `boxer.persiststate` DDL | **unchanged** — only tombstone appends | nothing; recorded because a manager that deletes rows would change it |
 
 ## Alternatives
 
-Covered per question above. The standing rejections are raw facts SQL in an
-app (the code class ADR-0105 deletes, and blind to `boxer.persiststate`), a
+Covered per question above. The standing rejections are raw SQL over the state
+table in an app (the code class ADR-0105 deletes), a
 store handed to an app (outside the capability model), a privileged
 type-asserted capability (silent, unaudited, and a gating concept §SD1 lacks),
 and a capinspector tab (wrong subject, and it would give that app a privileged
 capability it currently does without).
 
-Two more, both declined rather than dismissed:
+One more, declined rather than dismissed:
 
 - **A `boxer appstate` subcommand as the sole delete path.** Rejected as the
   sole path only. It remains attractive as a *co-surface* — it needs no
   capability, works when the GUI cannot start, and is the natural home for
   bulk operations. Not scheduled here; adding it later costs a CLI wrapper
-  over the same host-side collaborators.
-- **A generated `ScanLive<Kind>` verb** instead of SD2's Go fold. Declined on
-  evidence, not merit: one consumer. Named as the exit.
+  over the same host-side collaborator.
+
+A Go fold over the persist trail and a `ListAllColumnWidths` facts verb were
+in an earlier draft of SD2. They answered two substrates, and ADR-0105's
+unification removed the reason for both.
 
 ## Consequences
 
@@ -282,9 +289,10 @@ Two more, both declined rather than dismissed:
 - Deleting another app's data is visible three ways: the user is prompted, the
   grant is recorded, and each call lands an audit row through a path that
   already exists.
-- `keelson('app_state')` is the first read path onto `boxer.persiststate` since
-  D3a moved it there; the table was otherwise reachable only by an app's own
-  `Get`.
+- `keelson('app_state')` is the first *live, cross-app* view of
+  `boxer.persiststate`. `keelson('runtime_events')` shows that store's trail
+  for the current run and an app can `Get` its own keys; neither answers what
+  is stored, for whom, right now.
 
 ### Negative
 
@@ -293,15 +301,8 @@ Two more, both declined rather than dismissed:
 - The manager depends on the introspection host being enabled. With it off,
   browse is empty even though delete would still work — a split-brain the app
   has to state rather than hide.
-- SD2's Go fold reads a key's whole trail to answer "what is live". For app
-  state that is small, and it is unbounded only in the sense the underlying
-  retention question is.
-- `forget` is a fan-out over two substrates with no transaction. SD4 makes the
-  partial outcome explicit rather than removing it.
-- One more `FactsStoreI` method, on an interface ADR-0105 D5 expects to hollow
-  out opportunistically. It is added to the shape that is being replaced —
-  accepted because the alternative is blocking a user-visible gap on a
-  migration with no schedule.
+- `forget` is several tombstones, not a transaction. SD4 makes a partial
+  outcome explicit rather than removing it.
 
 ### Neutral
 
@@ -314,34 +315,27 @@ Two more, both declined rather than dismissed:
 
 ## Migration — Tier 1
 
-- **Breaks.** Three compile sites, all in-repo: `chstore.Store`,
-  `InMemoryFactsStore`, and the `blockingStore` fake in `logbridge`'s tests
-  must each grow `ListAllColumnWidths`. Nothing breaks at rest.
-- **Path.** Additive otherwise. New providers register alongside existing ones;
-  the new `introspecthost` dep is nillable and defaults to today's behaviour;
-  the subject family is new, so no existing manifest changes.
-- **Data.** No DDL change and no row rewrite on either table. A clear is an
-  append, so rolling back this ADR leaves tombstones behind that the existing
-  read paths already interpret correctly.
-- **Old shape.** `ListColumnWidths(appId)` keeps its callers and its meaning;
-  the resolver is untouched.
+- **Breaks.** Nothing: SD2 adds no method to any interface.
+- **Path.** Additive. New providers register alongside existing ones
+  and read deps `introspecthost` already takes, so its `Deps` struct and every
+  caller of it are untouched; the subject family is new, so no existing
+  manifest changes.
+- **Data.** No DDL change and no row rewrite. A clear is an append, so rolling
+  back this ADR leaves tombstones behind that the existing read paths already
+  interpret correctly.
 
 ## Verification plan — Tier 1
 
-- **Lane.** Default `go test` for the fold, the providers and the service over
-  the in-memory backends; `clickhouse-local` for the `chstore` read;
+- **Lane.** Default `go test` for the providers and the service over the
+  in-memory backends; `clickhouse-local` for the providers' scans over a real
+  executor, guarded so a box without the binary skips rather than fails;
   `//go:build integration` for anything against a live server.
 - **What would fail.**
-  - A `ListAllColumnWidths` test that writes an override, tombstones it, and
-    asserts it is **absent** — the `WHERE NOT is_tomb` regression, which is
-    otherwise invisible until a user's cleared column comes back. Run against
-    both backends, since "latest" is insertion order in one and `(ts, id)` in
-    the other.
-  - The same assertion for the persist fold: a `Set`, a `Delete`, and a global
-    list that does not contain the key.
-  - A cross-app assertion: two app ids write overrides, the global list returns
-    both, and the per-app list still returns one — so the new method cannot be
-    quietly implemented by dropping the filter in the wrong place.
+  - A provider test that writes an entry, deletes it, and asserts it is
+    **absent** from the table — the resurrection the generated collapse
+    prevents, checked at the surface a user sees.
+  - A cross-app assertion: two app ids write overrides, the cross-app table
+    returns both, and the per-app list still returns one.
   - A service test asserting the delete verbs are refused without the
     capability, and that the refusal is itself audited (the bus records denials
     in `RequestWithTimeout`).
@@ -356,8 +350,8 @@ Two more, both declined rather than dismissed:
 
 ## Milestones
 
-- **M0 — read surface.** `ListAllColumnWidths` + the persist live fold + two
-  providers + the `introspecthost` dep. Browse works from play and sqlapplet.
+- **M0 — read surface.** Two providers over the generated live scans. Browse
+  works from play and sqlapplet.
 - **M1 — the book.** A `bookappstate` sqlapplet suite over the three tables.
 - **M2 — the seam.** `runtime.appstate.>` service, request DTOs, capability
   registration and its capinspector description.
@@ -366,8 +360,7 @@ Two more, both declined rather than dismissed:
 
 Not milestones here, recorded so they are not mistaken for oversights: play's
 header clear gesture (ADR-0151 M6 follow-through, small and independent), the
-`boxer appstate` co-surface, the payload-reveal verb (SD7), and a generated
-`ScanLive` verb (SD2).
+`boxer appstate` co-surface, and the payload-reveal verb (SD7).
 
 ## Status
 
@@ -375,6 +368,13 @@ Proposed 2026-08-15. Nothing implemented. The design dialogue settled three
 questions — the delete seam, the UI's home, and the delete granularity — and
 this record is the result; the sequencing in Milestones is deliberate, so M0
 can proceed without M2 being settled in code.
+
+Revised in place on 2026-09-22, still pre-acceptance, after ADR-0105's
+unification of the state kinds was built: one substrate, the generated
+`ScanLive<Kind>` in place of the fold, no new `FactsStoreI` method, and SD4's
+fan-out on one store. The same pass added Q2's `runtime.persist.>` option
+and moved SD6's app precedent to `apps/watchbill`. The motivating case was
+re-checked on that date and still holds.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
@@ -384,9 +384,12 @@ for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Update` entry / Ti
 
 - [ADR-0026: App runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD3 the subject taxonomy this family joins, §SD6 the facts table, §SD7 the broker that prompts.
 - [ADR-0094: keelson introspection tables](0094-keelson-introspection-tables.md) — the provider contract SD1 uses.
-- [ADR-0105: keelson adopts generated record stores](0105-keelson-adopts-generated-record-stores.md) — D3a, which moved persist state to its own table on 2026-08-14; D5, the opportunistic posture SD2 adds a method against.
+- [ADR-0105: keelson adopts generated record stores](0105-keelson-adopts-generated-record-stores.md) — D3a, which moved persist state to its own table on 2026-08-14, and its Update of 2026-08-15 (built 2026-09-22), which moved workingsets and column widths after it.
 - [ADR-0148: App workingsets](0148-app-workingsets.md) — §SD6 the kind, §SD7 the provider SD1 extends, and the data-centricity invariant.
 - [ADR-0151: Table column-width overrides](0151-table-column-width-overrides.md) — the kind, the tombstone rule, the blocked-M4 constraint, and the unwired clear gesture.
+- [ADR-0191: Runtime instance attribution](0191-runtime-instance-attribution.md) — §SD7, the read path over an executor that SD2 reuses.
+- [ADR-0100: Recordstore](0100-recordstore-generated-leeway-clickhouse-store.md) — Update 2026-09-22, `ScanLive<Kind>` and `ScanOpts.KeyPrefix`.
+- [ADR-0234](0234-watchbill-client-protocol-and-worker-presence.md) / [ADR-0236](0236-watchbill-management-app.md) — the client-caps helper and management-app shape SD3 and SD6 copy.
 - [ADR-0155: App embed seam](0155-app-embed-seam.md) — §SD1, the optional-capability pattern this case does not fit.
 - [ADR-0170: Data catalog competence](0170-data-catalog-competence.md) — §SD6 CLI placement, §SD7 the sqlapplet-book rendering SD6 copies.
 - [ADR-0025](0025-pushout-forget-architecture.md) / [ADR-0027](0027-pushout-forget-swiss-fadp.md) — where erasure vocabulary lives; SD5 stays out of it.
