@@ -228,18 +228,29 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	}
 
 	cfg := introspecthttp.Config{Registry: reg}
-	if deps.ChlocalAvailable && deps.Bus != nil {
-		// Back POST /query with the chlocal broker so a co-resident client
-		// (apps/play) can query `SELECT ... FROM keelson('env')` here and get
-		// ArrowStream back — no external server, no url() boilerplate
-		// (ADR-0094 §SD4). The broker runs the url()-rewritten SQL, which
-		// fetches tables from this server's own /table endpoints.
+	switch {
+	case querySvc != nil:
+		// Back POST /query with the same in-process engine the bus service
+		// answers on (ADR-0253 §SD5): an ordinary table is snapshotted and
+		// projected here rather than fetched back over url(); only a sealed
+		// dataset still goes through this server's /table route, which is
+		// the one place it is decrypted. The handler hands the macros over
+		// intact, and params ride the broker's SET-prelude channel
+		// (ADR-0133 §SD2).
+		engine := querySvc.Engine()
+		cfg.Runner = introspecthttp.MacroRunnerFunc(func(ctx context.Context, sql string, params map[string]string) (body []byte, runErr error) {
+			body, _, runErr = engine.QueryParams(ctx, sql, "", params)
+			return
+		})
+	case deps.ChlocalAvailable && deps.Bus != nil:
+		// The bus service failed to start; keep the historical route so
+		// /query still answers: the broker runs the url()-rewritten SQL,
+		// which fetches tables from this server's own /table endpoints
+		// (ADR-0094 §SD4).
 		queryBus := deps.Bus.NewClient(queryBusAppId, []runtimeapp.SubjectFilter{
 			{Pattern: chlocalbroker.SubjectExecAll, Direction: runtimeapp.CapDirectionPub, Reason: "introspect /query runs SQL via clickhouse-local"},
 		})
 		cfg.Runner = introspecthttp.RunnerFunc(func(ctx context.Context, sql string, params map[string]string) (body []byte, runErr error) {
-			// Params ride the broker's SET-prelude channel (ADR-0133 §SD2),
-			// binding {name:Type} placeholders engine-side.
 			rep, reqErr := chlocalbroker.ExecOnPool(ctx, queryBus, queryPoolName, chlocalbroker.ExecRequest{SQL: sql, Params: params})
 			if reqErr != nil {
 				return nil, reqErr
@@ -262,6 +273,11 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		return noopStop, startErr
 	}
 	endpoint := srv.BaseURL() + "/query"
+	if querySvc != nil {
+		// Known only now: the source binds an ephemeral port. A sealed
+		// dataset named on either transport is read from here by handle.
+		querySvc.Engine().SetSealedBaseURL(srv.BaseURL())
+	}
 	// Publish /query for co-resident apps (apps/play) only when it is backed
 	// by a runner — an unbacked endpoint answers 503, so offering it as a
 	// query target would be a foot-gun. External consumers still reach the

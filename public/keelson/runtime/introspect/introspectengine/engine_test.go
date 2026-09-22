@@ -2,6 +2,7 @@ package introspectengine
 
 import (
 	"context"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -208,3 +209,50 @@ func TestQuery_KeelsonMacroUnknownFailsFast(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown keelson table")
 }
+
+// A placeholder bound through QueryParams reaches the worker.
+func TestQuery_Params(t *testing.T) {
+	e := newEngineWithBroker(t)
+	first, _, err := e.Query(context.Background(), "SELECT name FROM keelson('env') WHERE name != '' ORDER BY name LIMIT 1", "TabSeparated")
+	require.NoError(t, err)
+	name := strings.TrimSpace(string(first))
+	require.NotEmpty(t, name)
+	body, _, err := e.QueryParams(context.Background(),
+		"SELECT name FROM keelson('env') WHERE name = {n:String}", "TabSeparated",
+		map[string]string{"n": name})
+	require.NoError(t, err)
+	assert.Equal(t, name, strings.TrimSpace(string(body)))
+}
+
+// A sealed dataset is refused until the engine knows the source it is
+// read from; with one, the statement goes to url() against it instead of
+// a snapshot, so what fails is the fetch, not the refusal.
+func TestQuery_SealedGoesToTheSourceWhenKnown(t *testing.T) {
+	e := newEngineWithBroker(t)
+	require.NoError(t, e.reg.Register(&sealedStub{name: "adhoc_deadbeef01234567", structure: "id Int64"}))
+	const sql = "SELECT count() FROM keelson('adhoc_deadbeef01234567')"
+	_, _, err := e.Query(context.Background(), sql, "TabSeparated")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sealed dataset")
+
+	e.SetSealedBaseURL("http://127.0.0.1:1")
+	_, _, err = e.Query(context.Background(), sql, "TabSeparated")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "sealed dataset", "the statement went to url(), and the fetch is what failed")
+}
+
+// sealedStub is the smallest introspect.EncryptedDatasetI.
+type sealedStub struct {
+	name      string
+	structure string
+}
+
+func (s *sealedStub) Name() string                         { return s.name }
+func (s *sealedStub) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (s *sealedStub) Schema() *arrow.Schema                { return arrow.NewSchema(nil, nil) }
+func (s *sealedStub) Structure() string                    { return s.structure }
+func (s *sealedStub) Revision() uint64                     { return 1 }
+func (s *sealedStub) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+	return nil, assert.AnError
+}
+func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) { return nil, 0, assert.AnError }

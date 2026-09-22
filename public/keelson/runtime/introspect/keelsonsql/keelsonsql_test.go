@@ -158,6 +158,21 @@ func TestRewriteToURLEncryptedDataset(t *testing.T) {
 	assert.Equal(t, "SELECT * FROM url('http://127.0.0.1:8097/table/env', 'ArrowStream')", got)
 }
 
+// The split rewrite sends a sealed dataset to url() and an ordinary table
+// to its bare name, in one statement.
+func TestRewriteSplit(t *testing.T) {
+	r := testReg(t)
+	require.NoError(t, r.Register(&sealedStub{name: "adhoc_deadbeef01234567", structure: "id Int64", revision: 1}))
+	got, err := RewriteSplit(r, "http://127.0.0.1:8097/",
+		"SELECT e.name, d.id FROM keelson('env') e JOIN keelson('adhoc_deadbeef01234567') d ON 1 = 1")
+	require.NoError(t, err)
+	assert.Equal(t,
+		`SELECT e.name, d.id FROM env e JOIN url('http://127.0.0.1:8097/table/adhoc_deadbeef01234567', 'ArrowStream', 'id Int64') d ON 1 = 1`,
+		got)
+	_, err = RewriteSplit(r, "http://127.0.0.1:8097/", "SELECT * FROM keelson('bogus')")
+	require.Error(t, err)
+}
+
 // sealedStub is the smallest introspect.EncryptedDatasetI: enough for the
 // rewrite to see a sealed provider and read its structure.
 type sealedStub struct {

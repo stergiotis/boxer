@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"sort"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -53,17 +54,51 @@ func (inst *RefusedError) Error() string {
 	return "keelson.query " + inst.Table + ": " + inst.Reason
 }
 
+// Request is one read as a Go value.
+type Request struct {
+	// Table is the introspection table the statement may read; the
+	// subject is derived from it.
+	Table string
+	// Sql is the statement, without a FORMAT clause.
+	Sql string
+	// Format is the ClickHouse FORMAT the body comes back in; empty for
+	// the engine's default.
+	Format string
+	// Params binds `{name:Type}` placeholders by bare name (ADR-0133
+	// §SD2); nil binds none.
+	Params map[string]string
+}
+
 // Query runs sql over table and returns the body in format (empty for the
 // engine's default). sql carries no FORMAT clause. A refusal is a
 // *RefusedError; any other err is a transport or codec failure.
 func (inst *Client) Query(ctx context.Context, table string, sql string, format string) (res Result, err error) {
+	return inst.QueryWith(ctx, Request{Table: table, Sql: sql, Format: format})
+}
+
+// QueryWith is Query over a Request, for a statement that binds
+// placeholders.
+func (inst *Client) QueryWith(ctx context.Context, r Request) (res Result, err error) {
+	table := r.Table
 	if inst == nil || inst.bus == nil {
 		return res, eh.Errorf("keelson.query: client without a bus")
 	}
 	if err = ctx.Err(); err != nil {
 		return res, eh.Errorf("keelson.query: before request: %w", err)
 	}
-	req := keelsonqueryrequest.KeelsonQueryRequest{At: time.Now().UTC(), Table: table, Sql: sql, Format: format}
+	req := keelsonqueryrequest.KeelsonQueryRequest{At: time.Now().UTC(), Table: table, Sql: r.Sql, Format: r.Format}
+	if len(r.Params) > 0 {
+		names := make([]string, 0, len(r.Params))
+		for n := range r.Params {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		req.ParamName = names
+		req.ParamValue = make([]string, len(names))
+		for i, n := range names {
+			req.ParamValue[i] = r.Params[n]
+		}
+	}
 	payload, err := buscodec.Encode(req)
 	if err != nil {
 		return res, eh.Errorf("encode request: %w", err)
@@ -81,14 +116,14 @@ func (inst *Client) Query(ctx context.Context, table string, sql string, format 
 	if err != nil {
 		return res, eb.Build().Str("table", table).Errorf("keelson.query request: %w", err)
 	}
-	r, err := buscodec.Decode[keelsonqueryreply.KeelsonQueryReply](raw)
+	rep, err := buscodec.Decode[keelsonqueryreply.KeelsonQueryReply](raw)
 	if err != nil {
 		return res, eh.Errorf("decode reply: %w", err)
 	}
-	if !r.Ok {
-		return res, &RefusedError{Table: table, Reason: r.Reason}
+	if !rep.Ok {
+		return res, &RefusedError{Table: table, Reason: rep.Reason}
 	}
-	res = Result{ContentType: r.ContentType, Body: r.Body}
+	res = Result{ContentType: rep.ContentType, Body: rep.Body}
 	return
 }
 
@@ -100,10 +135,18 @@ const FormatJSONEachRow = "JSONEachRow"
 // through its `json` tags. It is the whole of what a window with a fixed
 // statement needs.
 func Rows[T any](ctx context.Context, cli *Client, table string, sql string) (rows []T, err error) {
-	res, err := cli.Query(ctx, table, sql, FormatJSONEachRow)
+	return RowsWith[T](ctx, cli, Request{Table: table, Sql: sql})
+}
+
+// RowsWith is Rows over a Request, for a statement that binds
+// placeholders; the request's Format is replaced by JSONEachRow.
+func RowsWith[T any](ctx context.Context, cli *Client, r Request) (rows []T, err error) {
+	r.Format = FormatJSONEachRow
+	res, err := cli.QueryWith(ctx, r)
 	if err != nil {
 		return nil, err
 	}
+	table := r.Table
 	dec := jsontext.NewDecoder(bytes.NewReader(res.Body))
 	for {
 		var r T

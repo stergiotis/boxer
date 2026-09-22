@@ -16,6 +16,7 @@ package introspectengine
 import (
 	"context"
 	"sort"
+	"sync/atomic"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/rs/zerolog"
@@ -46,6 +47,10 @@ type Engine struct {
 	delivery *chlocal.Engine
 	poolName string
 	log      zerolog.Logger
+	// sealedBaseURL is the HTTP table source a sealed dataset is read from
+	// when this engine serves a statement naming one (see
+	// [Engine.SetSealedBaseURL]); empty refuses such a statement.
+	sealedBaseURL atomic.Pointer[string]
 }
 
 // Config parameterises an Engine.
@@ -79,25 +84,53 @@ func New(cfg Config, log zerolog.Logger) (e *Engine, err error) {
 	return &Engine{reg: reg, delivery: delivery, poolName: pool, log: log}, nil
 }
 
+// SetSealedBaseURL names the HTTP table source (its BaseURL) a sealed
+// dataset is read from: a keelson('<handle>') naming one is rewritten to
+// url() against it rather than snapshotted, which would hand back
+// ciphertext (ADR-0145 §SD2). The host sets it once the source is
+// listening, since the port is only known then; empty (the default) keeps
+// the refusal.
+func (e *Engine) SetSealedBaseURL(baseURL string) {
+	if baseURL == "" {
+		e.sealedBaseURL.Store(nil)
+		return
+	}
+	e.sealedBaseURL.Store(&baseURL)
+}
+
 // Query runs sql and returns the result body in the given ClickHouse
 // FORMAT (e.g. "ArrowStream", "JSONEachRow", "PrettyCompact"; empty for
 // the clickhouse-local default).
 func (e *Engine) Query(ctx context.Context, sql, format string) (body []byte, contentType string, err error) {
-	// Expand keelson('x') table-function macros to bare TEMPORARY-table
-	// names before analysis (ADR-0094 §SD4): keelson('env') and env are
-	// interchangeable, and an unknown keelson table fails fast here.
-	sql, err = keelsonsql.RewriteToBare(e.reg, sql)
+	return e.QueryParams(ctx, sql, format, nil)
+}
+
+// QueryParams is Query with `{name:Type}` placeholder bindings by bare
+// name (ADR-0133 §SD2): the broker prepends one SET param_<name> per
+// entry and folds the pairs into its cache key; typed substitution stays
+// the engine's job.
+func (e *Engine) QueryParams(ctx context.Context, sql, format string, params map[string]string) (body []byte, contentType string, err error) {
+	// Expand keelson('x') table-function macros before analysis (ADR-0094
+	// §SD4): an ordinary table to its bare TEMPORARY-table name —
+	// keelson('env') and env are interchangeable — and a sealed dataset,
+	// where a source is known, to url() against it. An unknown keelson
+	// table fails fast here.
+	if base := e.sealedBaseURL.Load(); base != nil {
+		sql, err = keelsonsql.RewriteSplit(e.reg, *base, sql)
+	} else {
+		sql, err = keelsonsql.RewriteToBare(e.reg, sql)
+	}
 	if err != nil {
 		return nil, "", err
 	}
 	p := e.plan(sql)
-	body, contentType, err = e.exec(ctx, sql, format, p.tables, p.proj)
+	body, contentType, err = e.exec(ctx, sql, format, params, p.tables, p.proj)
 	if err != nil && p.pruned {
 		// Conservative fallback (ADR-0094 §SD4): a pruned column set may
 		// have dropped a column the analyser missed. Retry once with all
 		// columns before surfacing the error.
 		e.log.Debug().Err(err).Str("sql", sql).Msg("introspectengine: pruned query failed; retrying with all columns")
-		body, contentType, err = e.exec(ctx, sql, format, p.tables, allColumns(p.tables))
+		body, contentType, err = e.exec(ctx, sql, format, params, p.tables, allColumns(p.tables))
 	}
 	return
 }
@@ -179,7 +212,7 @@ func (e *Engine) plan(sql string) (p queryPlan) {
 
 // exec snapshots the referenced tables under proj and runs sql via the
 // chlocal broker.
-func (e *Engine) exec(ctx context.Context, sql, format string, tables []string, proj map[string]introspect.Projection) (body []byte, contentType string, err error) {
+func (e *Engine) exec(ctx context.Context, sql, format string, params map[string]string, tables []string, proj map[string]introspect.Projection) (body []byte, contentType string, err error) {
 	var inputs map[string][]byte
 	for _, t := range tables {
 		prov, ok := e.reg.Lookup(t)
@@ -213,6 +246,7 @@ func (e *Engine) exec(ctx context.Context, sql, format string, tables []string, 
 	st, res, reqErr := e.delivery.Deliver(ctx, queryengine.Request{
 		SQL:    sql,
 		Format: format,
+		Params: params,
 		Inputs: inputs,
 	})
 	if reqErr != nil {

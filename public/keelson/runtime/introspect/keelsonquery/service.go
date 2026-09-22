@@ -64,6 +64,11 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, reg *introspect.Registr
 	return
 }
 
+// Engine is the engine the service answers on, so a host can serve its
+// HTTP /query endpoint over the same one (ADR-0253 §SD5) and tell it where
+// sealed datasets are read from.
+func (inst *Service) Engine() (e *introspectengine.Engine) { return inst.engine }
+
 // Close releases the subscription and the bus client. Safe to call more
 // than once.
 func (inst *Service) Close() {
@@ -111,8 +116,13 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	params, reason := zipParams(req.ParamName, req.ParamValue)
+	if reason != "" {
+		inst.refuse(msg, table, reason)
+		return
+	}
 	started := time.Now()
-	body, contentType, err := inst.engine.Query(ctx, bare, req.Format)
+	body, contentType, err := inst.engine.QueryParams(ctx, bare, req.Format, params)
 	if err != nil {
 		inst.log.Warn().Str("sender", string(msg.Sender)).Str("table", table).Err(err).Msg("keelson.query: engine failed")
 		inst.reply(msg.Reply, keelsonqueryreply.KeelsonQueryReply{At: time.Now().UTC(), Reason: err.Error()})
@@ -140,4 +150,21 @@ func (inst *Service) reply(inbox string, r keelsonqueryreply.KeelsonQueryReply) 
 	if err = inst.busClient.Publish(inbox, payload); err != nil {
 		inst.log.Warn().Err(err).Str("inbox", inbox).Msg("keelson.query: publish reply")
 	}
+}
+
+// zipParams pairs the request's parameter columns. Columns of unequal
+// length are refused rather than truncated: a binding silently dropped
+// would run the statement with a placeholder unbound.
+func zipParams(names []string, values []string) (params map[string]string, reason string) {
+	if len(names) != len(values) {
+		return nil, "parameter names and values differ in length"
+	}
+	if len(names) == 0 {
+		return nil, ""
+	}
+	params = make(map[string]string, len(names))
+	for i, n := range names {
+		params[n] = values[i]
+	}
+	return
 }

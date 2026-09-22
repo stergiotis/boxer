@@ -220,6 +220,37 @@ func TestServer_QueryEndpoint(t *testing.T) {
 	assert.Positive(t, rec.Column(0).(*array.Uint64).Value(0), "env should expose rows")
 }
 
+// A MacroRunnerI is handed the statement with its keelson() macros intact —
+// the in-process engine resolves them itself (ADR-0253 §SD5) — and its
+// error for an unknown table is still the client's 400.
+func TestServer_MacroRunnerGetsMacrosIntact(t *testing.T) {
+	r := introspect.NewRegistry()
+	require.NoError(t, providers.RegisterStatic(r))
+	var got string
+	runner := MacroRunnerFunc(func(_ context.Context, sql string, _ map[string]string) ([]byte, error) {
+		got = sql
+		if strings.Contains(sql, "bogus") {
+			return nil, assert.AnError
+		}
+		return []byte("1\n"), nil
+	})
+	s := New(Config{Registry: r, Runner: runner}, zerolog.Nop())
+	require.NoError(t, s.Start())
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	resp, err := http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT count() FROM keelson('env') FORMAT TabSeparated"))
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, got, "keelson('env')")
+	assert.NotContains(t, got, "url(")
+
+	resp, err = http.Post(s.BaseURL()+"/query", "text/plain", strings.NewReader("SELECT 1 FROM keelson('bogus')"))
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
 func TestServer_QueryNoRunner503(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(r))

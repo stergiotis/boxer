@@ -29,6 +29,15 @@ var (
 	// reader asks for is small and closed.
 	MembKqReqFormat = KeelsonHrNkRegistry.MustBegin("kqReqFormat", 220).
 			MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
+	// MembKqReqParamName is the bare names of the `{name:Type}` placeholders
+	// a statement binds (ADR-0133 §SD2), zipped by index with the values.
+	// Arbitrary cardinality — a statement may bind none. Appended after the
+	// reply cohort, since the ids were taken in that order.
+	MembKqReqParamName = KeelsonHrNkRegistry.MustBegin("kqReqParamName", 224).
+				MustAddRestriction("symbolArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+	// MembKqReqParamValue is the raw values, one per name.
+	MembKqReqParamValue = KeelsonHrNkRegistry.MustBegin("kqReqParamValue", 225).
+				MustAddRestriction("textArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
 
 	// MembKqReplyOk says the statement ran; the shared `reason` carries why
 	// not — a refusal by the service or a failure in the engine.

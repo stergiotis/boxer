@@ -93,20 +93,50 @@ func BareNamePass(reg *introspect.Registry) nanopass.Pass {
 // /table endpoint serves the plaintext by opening the record (ADR-0240
 // §SD2/§SD3).
 func URLPass(reg *introspect.Registry, baseURL string) nanopass.Pass {
-	base := strings.TrimRight(baseURL, "/")
+	target := urlTarget(baseURL)
 	return nanopass.LiftBodyPass(
 		"KeelsonExpandURL",
 		func(sql string) (string, error) {
+			return expand(reg, sql, target)
+		},
+		nanopass.PassProperties{Idempotent: true, Reads: nanopass.RegionBody, Writes: nanopass.RegionBody},
+	)
+}
+
+// SplitPass rewrites keelson('x') -> x for an ordinary provider and ->
+// url('<baseURL>/table/x', …) for a sealed dataset. It is the in-process
+// engine's rewrite once it also serves the HTTP endpoint (ADR-0253 §SD5):
+// an ordinary table arrives as a TEMPORARY table, projected in-process,
+// while a sealed dataset keeps the one route that decrypts it — the
+// loopback plane, by handle (ADR-0145 §SD2) — and is never snapshotted.
+func SplitPass(reg *introspect.Registry, baseURL string) nanopass.Pass {
+	url := urlTarget(baseURL)
+	return nanopass.LiftBodyPass(
+		"KeelsonExpandSplit",
+		func(sql string) (string, error) {
 			return expand(reg, sql, func(name string, p introspect.Provider) string {
-				u := "url('" + base + "/table/" + name + "', 'ArrowStream'"
-				if enc, isEnc := p.(introspect.EncryptedDatasetI); isEnc {
-					u += ", " + sqlQuoteLiteral(enc.Structure())
+				if _, isEnc := p.(introspect.EncryptedDatasetI); isEnc {
+					return url(name, p)
 				}
-				return u + ")"
+				return name
 			})
 		},
 		nanopass.PassProperties{Idempotent: true, Reads: nanopass.RegionBody, Writes: nanopass.RegionBody},
 	)
+}
+
+// urlTarget is the url() spelling of a table on the HTTP source at
+// baseURL. A sealed dataset additionally carries its explicit structure as
+// the third argument (see URLPass).
+func urlTarget(baseURL string) func(name string, p introspect.Provider) string {
+	base := strings.TrimRight(baseURL, "/")
+	return func(name string, p introspect.Provider) string {
+		u := "url('" + base + "/table/" + name + "', 'ArrowStream'"
+		if enc, isEnc := p.(introspect.EncryptedDatasetI); isEnc {
+			u += ", " + sqlQuoteLiteral(enc.Structure())
+		}
+		return u + ")"
+	}
 }
 
 // sqlQuoteLiteral single-quotes a ClickHouse string literal, escaping
@@ -183,6 +213,11 @@ func RewriteToBare(reg *introspect.Registry, sql string) (string, error) {
 // RewriteToURL runs URLPass over sql.
 func RewriteToURL(reg *introspect.Registry, baseURL, sql string) (string, error) {
 	return URLPass(reg, baseURL).Run(sql)
+}
+
+// RewriteSplit runs SplitPass over sql.
+func RewriteSplit(reg *introspect.Registry, baseURL, sql string) (string, error) {
+	return SplitPass(reg, baseURL).Run(sql)
 }
 
 // expand finds every keelson('x') table function in sql and replaces it

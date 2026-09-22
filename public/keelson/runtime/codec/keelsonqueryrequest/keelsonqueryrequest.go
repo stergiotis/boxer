@@ -36,4 +36,10 @@ type KeelsonQueryRequest struct {
 	// "ArrowStream", …). Empty takes the engine's default, and then the
 	// reply's content type is the only thing that says what came back.
 	Format string `lw:"kqReqFormat,symbol"`
+
+	// ParamName and ParamValue bind `{name:Type}` placeholders by bare name
+	// (ADR-0133 §SD2), zipped by index. Typed substitution stays the
+	// engine's job.
+	ParamName  []string `lw:"kqReqParamName,symbolArray"`
+	ParamValue []string `lw:"kqReqParamValue,textArray"`
 }

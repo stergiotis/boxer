@@ -14,6 +14,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 )
 
@@ -111,4 +114,34 @@ func TestNoGrantIsAPermissionError(t *testing.T) {
 	require.Error(t, err)
 	var refused *RefusedError
 	assert.False(t, errors.As(err, &refused), "a permission failure is the transport's, not a reply")
+}
+
+// A placeholder bound through the request reaches the engine, and a
+// request whose parameter columns disagree is refused, not truncated.
+func TestParamsBindPlaceholders(t *testing.T) {
+	bus, _ := serve(t)
+	cli := NewClient(bus.NewClient(readerId, ClientCaps("env")))
+	cli.Timeout = 15 * time.Second
+	ctx := context.Background()
+
+	all, err := Rows[envRow](ctx, cli, "env", "SELECT name FROM keelson('env') WHERE name != '' ORDER BY name LIMIT 2")
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	got, err := RowsWith[envRow](ctx, cli, Request{Table: "env",
+		Sql:    "SELECT name FROM keelson('env') WHERE name = {n:String}",
+		Params: map[string]string{"n": all[1].Name}})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, all[1].Name, got[0].Name)
+
+	svc := bus.NewClient("test.keelsonquery.raw", ClientCaps("env"))
+	payload, err := buscodec.Encode(keelsonqueryrequest.KeelsonQueryRequest{Table: "env", Sql: "SELECT 1 FROM env",
+		ParamName: []string{"a", "b"}, ParamValue: []string{"1"}})
+	require.NoError(t, err)
+	raw, err := svc.RequestWithTimeout(Subject("env"), payload, 5*time.Second)
+	require.NoError(t, err)
+	r, err := buscodec.Decode[keelsonqueryreply.KeelsonQueryReply](raw)
+	require.NoError(t, err)
+	assert.False(t, r.Ok)
+	assert.Contains(t, r.Reason, "differ in length")
 }

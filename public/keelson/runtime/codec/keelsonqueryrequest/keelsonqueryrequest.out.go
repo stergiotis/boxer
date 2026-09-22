@@ -33,15 +33,19 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindKqReqTable  uint64
-	kindKqReqSql    uint64
-	kindKqReqFormat uint64
+	kindKqReqTable      uint64
+	kindKqReqSql        uint64
+	kindKqReqFormat     uint64
+	kindKqReqParamName  uint64
+	kindKqReqParamValue uint64
 )
 
 func init() {
 	kindKqReqTable = vdd.MembKqReqTable.GetId().Value()
 	kindKqReqSql = vdd.MembKqReqSql.GetId().Value()
 	kindKqReqFormat = vdd.MembKqReqFormat.GetId().Value()
+	kindKqReqParamName = vdd.MembKqReqParamName.GetId().Value()
+	kindKqReqParamValue = vdd.MembKqReqParamValue.GetId().Value()
 	buscodec.Register[KeelsonQueryRequest](keelsonQueryRequestBusCodec)
 }
 
@@ -50,7 +54,7 @@ func init() {
 // KeelsonQueryRequestActiveSections is the dml_cbor section-index subset this kind
 // populates. Passed to InEntityFacts.SetActiveSections so the
 // builder skips beginSection list-slot work for inactive sections.
-var KeelsonQueryRequestActiveSections = []int{9, 10, 12}
+var KeelsonQueryRequestActiveSections = []int{9, 10, 11, 12}
 
 // KeelsonQueryRequestActiveFields is the column-index subset this kind populates
 // in the boxer.facts Arrow schema. Lazily computed once via
@@ -59,7 +63,7 @@ var KeelsonQueryRequestActiveSections = []int{9, 10, 12}
 // plain prefixes (id:, ts:, lc:). Driven through RecordBuilder.
 // SetActiveFields to skip per-row emit walks for unused columns.
 var KeelsonQueryRequestActiveFields = sync.OnceValue(func() []int {
-	active := map[string]bool{"stringArray": true, "symbol": true, "textArray": true}
+	active := map[string]bool{"stringArray": true, "symbol": true, "symbolArray": true, "textArray": true}
 	schema := cbdml.CreateSchemaFacts()
 	out := make([]int, 0, 4+len(active)*8)
 	for i, f := range schema.Fields() {
@@ -105,9 +109,11 @@ type KeelsonQueryRequestColumns struct {
 	NaturalKey [][]byte
 	At         []time.Time
 
-	Table  []string
-	Sql    []string
-	Format []string
+	Table      []string
+	Sql        []string
+	Format     []string
+	ParamName  [][]string
+	ParamValue [][]string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -126,6 +132,8 @@ func (c *KeelsonQueryRequestColumns) Append(row KeelsonQueryRequest) {
 	c.Table = append(c.Table, row.Table)
 	c.Sql = append(c.Sql, row.Sql)
 	c.Format = append(c.Format, row.Format)
+	c.ParamName = append(c.ParamName, row.ParamName)
+	c.ParamValue = append(c.ParamValue, row.ParamValue)
 }
 
 // Row reconstructs entity i as an AoS KeelsonQueryRequest record. Inverse of
@@ -138,6 +146,8 @@ func (c *KeelsonQueryRequestColumns) Row(i int) (row KeelsonQueryRequest) {
 	row.Table = c.Table[i]
 	row.Sql = c.Sql[i]
 	row.Format = c.Format[i]
+	row.ParamName = c.ParamName[i]
+	row.ParamValue = c.ParamValue[i]
 	return
 }
 
@@ -174,12 +184,14 @@ type KeelsonQueryRequestStringArraySecI[Attr any, Ent any] interface {
 // needed.
 type KeelsonQueryRequestTextArrayAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
+	AddToContainerP(value string)
 	EndAttributeP()
 }
 
 // KeelsonQueryRequestTextArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
 type KeelsonQueryRequestTextArraySecI[Attr any, Ent any] interface {
+	BeginAttribute() Attr
 	BeginAttributeSingle(value string) Attr
 	EndSection() Ent
 }
@@ -199,6 +211,22 @@ type KeelsonQueryRequestSymbolSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// KeelsonQueryRequestSymbolArrayAttrI is the InAttr-side view of the symbolArray section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type KeelsonQueryRequestSymbolArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	AddToContainerP(value string)
+	EndAttributeP()
+}
+
+// KeelsonQueryRequestSymbolArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type KeelsonQueryRequestSymbolArraySecI[Attr any, Ent any] interface {
+	BeginAttribute() Attr
+	EndSection() Ent
+}
+
 // KeelsonQueryRequestEntityI is the entity-builder surface KeelsonQueryRequestAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -213,6 +241,8 @@ type KeelsonQueryRequestEntityI[
 	TextArraySec KeelsonQueryRequestTextArraySecI[TextArrayAttr, Ent],
 	SymbolAttr KeelsonQueryRequestSymbolAttrI,
 	SymbolSec KeelsonQueryRequestSymbolSecI[SymbolAttr, Ent],
+	SymbolArrayAttr KeelsonQueryRequestSymbolArrayAttrI,
+	SymbolArraySec KeelsonQueryRequestSymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -221,6 +251,7 @@ type KeelsonQueryRequestEntityI[
 	GetSectionStringArray() StringArraySec
 	GetSectionTextArray() TextArraySec
 	GetSectionSymbol() SymbolSec
+	GetSectionSymbolArray() SymbolArraySec
 	CommitEntity() (err error)
 }
 
@@ -235,11 +266,14 @@ func KeelsonQueryRequestBuildEntities[
 	TextArraySec KeelsonQueryRequestTextArraySecI[TextArrayAttr, Ent],
 	SymbolAttr KeelsonQueryRequestSymbolAttrI,
 	SymbolSec KeelsonQueryRequestSymbolSecI[SymbolAttr, Ent],
+	SymbolArrayAttr KeelsonQueryRequestSymbolArrayAttrI,
+	SymbolArraySec KeelsonQueryRequestSymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
 	DML KeelsonQueryRequestEntityI[
 		StringArrayAttr, StringArraySec,
 		TextArrayAttr, TextArraySec,
 		SymbolAttr, SymbolSec,
+		SymbolArrayAttr, SymbolArraySec,
 		Ent,
 	],
 ](dml DML, c *KeelsonQueryRequestColumns) (err error) {
@@ -259,6 +293,14 @@ func KeelsonQueryRequestBuildEntities[
 		textArraySecAttr_Sql := textArraySec.BeginAttributeSingle(c.Sql[i])
 		textArraySecAttr_Sql.AddMembershipLowCardRefP(kindKqReqSql)
 		textArraySecAttr_Sql.EndAttributeP()
+		if len(c.ParamValue[i]) > 0 {
+			textArraySecAttr_ParamValue := textArraySec.BeginAttribute()
+			for _, v := range c.ParamValue[i] {
+				textArraySecAttr_ParamValue.AddToContainerP(v)
+			}
+			textArraySecAttr_ParamValue.AddMembershipLowCardRefP(kindKqReqParamValue)
+			textArraySecAttr_ParamValue.EndAttributeP()
+		}
 		textArraySec.EndSection()
 		// --- symbol. ---
 		symbolSec := dml.GetSectionSymbol()
@@ -266,6 +308,17 @@ func KeelsonQueryRequestBuildEntities[
 		symbolSecAttr_Format.AddMembershipLowCardRefP(kindKqReqFormat)
 		symbolSecAttr_Format.EndAttributeP()
 		symbolSec.EndSection()
+		// --- symbolArray. ---
+		symbolArraySec := dml.GetSectionSymbolArray()
+		if len(c.ParamName[i]) > 0 {
+			symbolArraySecAttr_ParamName := symbolArraySec.BeginAttribute()
+			for _, v := range c.ParamName[i] {
+				symbolArraySecAttr_ParamName.AddToContainerP(v)
+			}
+			symbolArraySecAttr_ParamName.AddMembershipLowCardRefP(kindKqReqParamName)
+			symbolArraySecAttr_ParamName.EndAttributeP()
+		}
+		symbolArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
 			err = eh.Errorf("commit row %d: %w", i, err)
@@ -302,6 +355,14 @@ func KeelsonQueryRequestEmitSectionTextArray[
 	textArraySecAttr_Sql := textArraySec.BeginAttributeSingle(row.Sql)
 	textArraySecAttr_Sql.AddMembershipLowCardRefP(kindKqReqSql)
 	textArraySecAttr_Sql.EndAttributeP()
+	if len(row.ParamValue) > 0 {
+		textArraySecAttr_ParamValue := textArraySec.BeginAttribute()
+		for _, v := range row.ParamValue {
+			textArraySecAttr_ParamValue.AddToContainerP(v)
+		}
+		textArraySecAttr_ParamValue.AddMembershipLowCardRefP(kindKqReqParamValue)
+		textArraySecAttr_ParamValue.EndAttributeP()
+	}
 	return
 }
 
@@ -320,6 +381,26 @@ func KeelsonQueryRequestEmitSectionSymbol[
 	return
 }
 
+// KeelsonQueryRequestEmitSectionSymbolArray writes this kind's symbolArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func KeelsonQueryRequestEmitSectionSymbolArray[
+	SymbolArrayAttr KeelsonQueryRequestSymbolArrayAttrI,
+	SymbolArraySec KeelsonQueryRequestSymbolArraySecI[SymbolArrayAttr, Ent],
+	Ent any,
+](symbolArraySec SymbolArraySec, row KeelsonQueryRequest) (err error) {
+	if len(row.ParamName) > 0 {
+		symbolArraySecAttr_ParamName := symbolArraySec.BeginAttribute()
+		for _, v := range row.ParamName {
+			symbolArraySecAttr_ParamName.AddToContainerP(v)
+		}
+		symbolArraySecAttr_ParamName.AddMembershipLowCardRefP(kindKqReqParamName)
+		symbolArraySecAttr_ParamName.EndAttributeP()
+	}
+	return
+}
+
 // KeelsonQueryRequestAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -330,11 +411,14 @@ func KeelsonQueryRequestAddSections[
 	TextArraySec KeelsonQueryRequestTextArraySecI[TextArrayAttr, Ent],
 	SymbolAttr KeelsonQueryRequestSymbolAttrI,
 	SymbolSec KeelsonQueryRequestSymbolSecI[SymbolAttr, Ent],
+	SymbolArrayAttr KeelsonQueryRequestSymbolArrayAttrI,
+	SymbolArraySec KeelsonQueryRequestSymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
 	DML KeelsonQueryRequestEntityI[
 		StringArrayAttr, StringArraySec,
 		TextArrayAttr, TextArraySec,
 		SymbolAttr, SymbolSec,
+		SymbolArrayAttr, SymbolArraySec,
 		Ent,
 	],
 ](dml DML, row KeelsonQueryRequest) (err error) {
@@ -359,6 +443,13 @@ func KeelsonQueryRequestAddSections[
 		return
 	}
 	symbolSec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	err = KeelsonQueryRequestEmitSectionSymbolArray(symbolArraySec, row)
+	if err != nil {
+		return
+	}
+	symbolArraySec.EndSection()
 	return
 }
 
@@ -382,6 +473,7 @@ type KeelsonQueryRequestStringArrayMembsReadI interface {
 
 // KeelsonQueryRequestTextArrayAttrsReadI is the Attributes-side view of the textArray section.
 type KeelsonQueryRequestTextArrayAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[string]
 	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
@@ -402,6 +494,17 @@ type KeelsonQueryRequestSymbolMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// KeelsonQueryRequestSymbolArrayAttrsReadI is the Attributes-side view of the symbolArray section.
+type KeelsonQueryRequestSymbolArrayAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[string]
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// KeelsonQueryRequestSymbolArrayMembsReadI is the Memberships-side view of the symbolArray section.
+type KeelsonQueryRequestSymbolArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // KeelsonQueryRequestFillFromArrow walks rec row-by-row and appends each entity's
 // plain + tagged-section values into c. Plain columns enter as
 // concrete Arrow accessors; per-section Attrs + Membs bind through
@@ -413,6 +516,8 @@ func KeelsonQueryRequestFillFromArrow[
 	TextArrayMembs KeelsonQueryRequestTextArrayMembsReadI,
 	SymbolAttrs KeelsonQueryRequestSymbolAttrsReadI,
 	SymbolMembs KeelsonQueryRequestSymbolMembsReadI,
+	SymbolArrayAttrs KeelsonQueryRequestSymbolArrayAttrsReadI,
+	SymbolArrayMembs KeelsonQueryRequestSymbolArrayMembsReadI,
 ](
 	c *KeelsonQueryRequestColumns,
 	n int,
@@ -425,6 +530,8 @@ func KeelsonQueryRequestFillFromArrow[
 	textArrayMembs TextArrayMembs,
 	symbolAttrs SymbolAttrs,
 	symbolMembs SymbolMembs,
+	symbolArrayAttrs SymbolArrayAttrs,
+	symbolArrayMembs SymbolArrayMembs,
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
@@ -466,6 +573,9 @@ func KeelsonQueryRequestFillFromArrow[
 		var textArraySqlVal string
 		var textArraySqlCount int
 		var textArraySqlLastAttr int64
+		var textArrayParamValueSlice []string
+		var textArrayParamValueCount int
+		var textArrayParamValueLastAttr int64
 		ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 			for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -481,6 +591,14 @@ func KeelsonQueryRequestFillFromArrow[
 						return
 					}
 					textArraySqlVal = val
+				case kindKqReqParamValue:
+					if textArrayParamValueLastAttr != attrJ+1 {
+						textArrayParamValueLastAttr = attrJ + 1
+						textArrayParamValueCount++
+					}
+					for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+						textArrayParamValueSlice = append(textArrayParamValueSlice, v)
+					}
 				}
 			}
 		}
@@ -489,6 +607,11 @@ func KeelsonQueryRequestFillFromArrow[
 			return
 		}
 		c.Sql = append(c.Sql, textArraySqlVal)
+		if textArrayParamValueCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "kqReqParamValue").Int("got", textArrayParamValueCount).Errorf("slot textArray@kqReqParamValue (field ParamValue) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayParamValueCount)
+			return
+		}
+		c.ParamValue = append(c.ParamValue, textArrayParamValueSlice)
 		// --- symbol. ---
 		var symbolFormatVal string
 		var symbolFormatCount int
@@ -512,6 +635,30 @@ func KeelsonQueryRequestFillFromArrow[
 			return
 		}
 		c.Format = append(c.Format, symbolFormatVal)
+		// --- symbolArray. ---
+		var symbolArrayParamNameSlice []string
+		var symbolArrayParamNameCount int
+		var symbolArrayParamNameLastAttr int64
+		nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+		for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
+			for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				switch membID {
+				case kindKqReqParamName:
+					if symbolArrayParamNameLastAttr != attrJ+1 {
+						symbolArrayParamNameLastAttr = attrJ + 1
+						symbolArrayParamNameCount++
+					}
+					for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+						symbolArrayParamNameSlice = append(symbolArrayParamNameSlice, v)
+					}
+				}
+			}
+		}
+		if symbolArrayParamNameCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "kqReqParamName").Int("got", symbolArrayParamNameCount).Errorf("slot symbolArray@kqReqParamName (field ParamName) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayParamNameCount)
+			return
+		}
+		c.ParamName = append(c.ParamName, symbolArrayParamNameSlice)
 	}
 	return
 }
@@ -531,6 +678,8 @@ func KeelsonQueryRequestReadRow[
 	TextArrayMembs KeelsonQueryRequestTextArrayMembsReadI,
 	SymbolAttrs KeelsonQueryRequestSymbolAttrsReadI,
 	SymbolMembs KeelsonQueryRequestSymbolMembsReadI,
+	SymbolArrayAttrs KeelsonQueryRequestSymbolArrayAttrsReadI,
+	SymbolArrayMembs KeelsonQueryRequestSymbolArrayMembsReadI,
 ](
 	i int,
 	stringArrayAttrs StringArrayAttrs,
@@ -539,6 +688,8 @@ func KeelsonQueryRequestReadRow[
 	textArrayMembs TextArrayMembs,
 	symbolAttrs SymbolAttrs,
 	symbolMembs SymbolMembs,
+	symbolArrayAttrs SymbolArrayAttrs,
+	symbolArrayMembs SymbolArrayMembs,
 ) (row KeelsonQueryRequest, present bool, err error) {
 	// --- stringArray. ---
 	var stringArrayTableVal string
@@ -574,6 +725,9 @@ func KeelsonQueryRequestReadRow[
 	var textArraySqlVal string
 	var textArraySqlCount int
 	var textArraySqlLastAttr int64
+	var textArrayParamValueSlice []string
+	var textArrayParamValueCount int
+	var textArrayParamValueLastAttr int64
 	ntextArray := textArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ntextArray; attrJ++ {
 		for membID := range textArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -589,6 +743,14 @@ func KeelsonQueryRequestReadRow[
 					return
 				}
 				textArraySqlVal = val
+			case kindKqReqParamValue:
+				if textArrayParamValueLastAttr != attrJ+1 {
+					textArrayParamValueLastAttr = attrJ + 1
+					textArrayParamValueCount++
+				}
+				for v := range textArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					textArrayParamValueSlice = append(textArrayParamValueSlice, v)
+				}
 			}
 		}
 	}
@@ -598,6 +760,14 @@ func KeelsonQueryRequestReadRow[
 	}
 	if textArraySqlCount == 1 {
 		row.Sql = textArraySqlVal
+		present = true
+	}
+	if textArrayParamValueCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "textArray").Str("membership", "kqReqParamValue").Int("got", textArrayParamValueCount).Errorf("slot textArray@kqReqParamValue (field ParamValue) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", textArrayParamValueCount)
+		return
+	}
+	if textArrayParamValueSlice != nil {
+		row.ParamValue = textArrayParamValueSlice
 		present = true
 	}
 	// --- symbol. ---
@@ -624,6 +794,33 @@ func KeelsonQueryRequestReadRow[
 	}
 	if symbolFormatCount == 1 {
 		row.Format = symbolFormatVal
+		present = true
+	}
+	// --- symbolArray. ---
+	var symbolArrayParamNameSlice []string
+	var symbolArrayParamNameCount int
+	var symbolArrayParamNameLastAttr int64
+	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
+		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindKqReqParamName:
+				if symbolArrayParamNameLastAttr != attrJ+1 {
+					symbolArrayParamNameLastAttr = attrJ + 1
+					symbolArrayParamNameCount++
+				}
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayParamNameSlice = append(symbolArrayParamNameSlice, v)
+				}
+			}
+		}
+	}
+	if symbolArrayParamNameCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "kqReqParamName").Int("got", symbolArrayParamNameCount).Errorf("slot symbolArray@kqReqParamName (field ParamName) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayParamNameCount)
+		return
+	}
+	if symbolArrayParamNameSlice != nil {
+		row.ParamName = symbolArrayParamNameSlice
 		present = true
 	}
 	return
@@ -669,6 +866,7 @@ type keelsonQueryRequestReader struct {
 	StringArray     *ra.ReadAccessFactsTaggedStringArray
 	TextArray       *ra.ReadAccessFactsTaggedTextArray
 	Symbol          *ra.ReadAccessFactsTaggedSymbol
+	SymbolArray     *ra.ReadAccessFactsTaggedSymbolArray
 }
 
 func newKeelsonQueryRequestReader() *keelsonQueryRequestReader {
@@ -678,6 +876,7 @@ func newKeelsonQueryRequestReader() *keelsonQueryRequestReader {
 		StringArray:     ra.NewReadAccessFactsTaggedStringArray(),
 		TextArray:       ra.NewReadAccessFactsTaggedTextArray(),
 		Symbol:          ra.NewReadAccessFactsTaggedSymbol(),
+		SymbolArray:     ra.NewReadAccessFactsTaggedSymbolArray(),
 	}
 }
 
@@ -707,6 +906,11 @@ func (r *keelsonQueryRequestReader) loadFromRecord(rec arrow.Record) (err error)
 		err = eh.Errorf("keelsonqueryrequest: load Symbol: %w", err)
 		return
 	}
+	err = r.SymbolArray.LoadFromRecord(rec)
+	if err != nil {
+		err = eh.Errorf("keelsonqueryrequest: load SymbolArray: %w", err)
+		return
+	}
 	return
 }
 
@@ -728,6 +932,9 @@ func (r *keelsonQueryRequestReader) release() {
 	}
 	if r.Symbol != nil {
 		r.Symbol.Release()
+	}
+	if r.SymbolArray != nil {
+		r.SymbolArray.Release()
 	}
 }
 
@@ -751,6 +958,7 @@ func (c *KeelsonQueryRequestColumns) Unmarshal(rec arrow.Record) (err error) {
 		r.StringArray.Attributes, r.StringArray.Memberships,
 		r.TextArray.Attributes, r.TextArray.Memberships,
 		r.Symbol.Attributes, r.Symbol.Memberships,
+		r.SymbolArray.Attributes, r.SymbolArray.Memberships,
 	)
 	return
 }

@@ -28,6 +28,7 @@ func TestGate(t *testing.T) {
 		"WITH e AS (SELECT name FROM keelson('env')) SELECT count() FROM e",
 		"SELECT * FROM (SELECT name FROM env) WHERE name != ''",
 		"SELECT a.name FROM env a JOIN env b ON a.name = b.name",
+		"SELECT name FROM keelson('env') WHERE name = {n:String} LIMIT {lim:UInt64}",
 	}
 	for _, sql := range admitted {
 		bare, reason := Gate(reg, sql, "env")

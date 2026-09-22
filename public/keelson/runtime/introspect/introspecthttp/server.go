@@ -81,6 +81,29 @@ func (f RunnerFunc) RunSQL(ctx context.Context, sql string, params map[string]st
 	return f(ctx, sql, params)
 }
 
+// MacroRunnerI is a QueryRunner that resolves the keelson() macros itself:
+// the handler hands it the statement with the macros intact instead of
+// rewriting them to url() first. The in-process engine is one (ADR-0253
+// §SD5): an ordinary table is snapshotted and projected in-process, and
+// only a sealed dataset goes back through this server's /table route.
+// An unknown table is the runner's error to report.
+type MacroRunnerI interface {
+	QueryRunner
+	// ResolvesMacros marks the type; it carries no behaviour.
+	ResolvesMacros()
+}
+
+// MacroRunnerFunc adapts a function to MacroRunnerI.
+type MacroRunnerFunc func(ctx context.Context, sql string, params map[string]string) ([]byte, error)
+
+// RunSQL implements QueryRunner.
+func (f MacroRunnerFunc) RunSQL(ctx context.Context, sql string, params map[string]string) ([]byte, error) {
+	return f(ctx, sql, params)
+}
+
+// ResolvesMacros implements MacroRunnerI.
+func (MacroRunnerFunc) ResolvesMacros() {}
+
 // New returns an unstarted Server.
 func New(cfg Config, log zerolog.Logger) (s *Server) {
 	reg := cfg.Registry
@@ -303,11 +326,15 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	// installed (identsql only emits them for real servers). Best-effort: a
 	// failing pass is skipped and the SQL from before it runs instead.
 	sql := s.passes.ApplyBestEffort(passreg.StagePreExecute, req.SQL, s.log)
-	rewritten, err := keelsonsql.RewriteToURL(s.reg, s.BaseURL(), sql)
-	if err != nil {
-		// unknown keelson table / malformed macro — a client error.
-		chhttp.WriteException(w, http.StatusBadRequest, err.Error())
-		return
+	rewritten := sql
+	if _, resolves := s.runner.(MacroRunnerI); !resolves {
+		var rerr error
+		rewritten, rerr = keelsonsql.RewriteToURL(s.reg, s.BaseURL(), sql)
+		if rerr != nil {
+			// unknown keelson table / malformed macro — a client error.
+			chhttp.WriteException(w, http.StatusBadRequest, rerr.Error())
+			return
+		}
 	}
 	start := time.Now()
 	body, err := s.runner.RunSQL(r.Context(), rewritten, req.Params)
