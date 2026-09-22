@@ -23,30 +23,71 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene"
 )
 
+// Host is the imzero2 host a test launches: the main package that links the
+// apps under test. The zero Host is boxer's own.
+type Host struct {
+	// Package is the host's main package as `go build` takes it, relative to
+	// ModuleDir. Empty means boxer's ./public/thestack/cmd/imzero2/.
+	Package string
+	// ModuleDir is where the host is built and the directory it runs in, so
+	// apps that read checkout-relative paths find them. Empty means ClientRoot.
+	ModuleDir string
+	// ClientRoot is the checkout holding rust/imzero2 — the headless client
+	// and the fonts. Empty means found by walking up from the test's directory.
+	ClientRoot string
+	// Tags are the build tags, comma-separated; binary_log is always added.
+	// Empty means the contents of ModuleDir/tags, when that file exists.
+	Tags string
+}
+
+type builtHost struct {
+	once sync.Once
+	host Host
+	path string
+	err  error
+	out  []byte
+}
+
 var (
-	hostOnce sync.Once
-	hostPath string
-	hostRoot string
-	hostErr  error
-	hostOut  []byte
+	builtMu sync.Mutex
+	built   = map[Host]*builtHost{}
 )
 
-func buildHost() {
-	if hostRoot, hostErr = scene.FindRepoRoot("."); hostErr != nil {
-		return
+// resolve fills in a Host's defaults.
+func (inst Host) resolve() (h Host, err error) {
+	h = inst
+	if h.ClientRoot == "" {
+		if h.ClientRoot, err = scene.FindRepoRoot("."); err != nil {
+			return h, err
+		}
 	}
+	if h.ModuleDir == "" {
+		h.ModuleDir = h.ClientRoot
+	}
+	if h.Package == "" {
+		h.Package = "./public/thestack/cmd/imzero2/"
+	}
+	if h.Tags == "" {
+		tags, _ := os.ReadFile(filepath.Join(h.ModuleDir, "tags"))
+		h.Tags = strings.TrimSpace(string(tags))
+	}
+	return h, nil
+}
+
+func (inst *builtHost) build() {
+	h := inst.host
 	cache, err := os.UserCacheDir()
 	if err != nil {
-		hostErr = err
+		inst.err = err
 		return
 	}
+	key := h.ModuleDir + "\x00" + h.Package + "\x00" + h.Tags
 	dir := filepath.Join(cache, "boxer-launcher",
-		"imzero2-scenetest-"+strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(hostRoot))), 10))
-	if hostErr = os.MkdirAll(dir, 0o755); hostErr != nil {
+		"imzero2-scenetest-"+strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(key))), 10))
+	if inst.err = os.MkdirAll(dir, 0o755); inst.err != nil {
 		return
 	}
-	tags, _ := os.ReadFile(filepath.Join(hostRoot, "tags"))
-	tagList := strings.TrimSpace(string(tags))
+	tagList := h.Tags
 	if tagList != "" {
 		tagList += ","
 	}
@@ -55,24 +96,51 @@ func buildHost() {
 	// process never launches a half-written binary.
 	tmp := filepath.Join(dir, "build."+strconv.Itoa(os.Getpid()))
 	env := append(os.Environ(), "CGO_ENABLED=0") //boxer:lint disable=CS011 reason="forwards the ambient process environment into the go build of the host"
-	hostOut, hostErr = extbin.Go.CombinedOutput(context.Background(), extbin.Opts{Dir: hostRoot, Env: env},
-		"build", "-tags", tagList, "-o", tmp, "./public/thestack/cmd/imzero2/")
-	if hostErr != nil {
+	inst.out, inst.err = extbin.Go.CombinedOutput(context.Background(), extbin.Opts{Dir: h.ModuleDir, Env: env},
+		"build", "-tags", tagList, "-o", tmp, h.Package)
+	if inst.err != nil {
 		_ = os.Remove(tmp)
 		return
 	}
-	hostPath = filepath.Join(dir, "app")
-	hostErr = os.Rename(tmp, hostPath)
+	inst.path = filepath.Join(dir, "app")
+	inst.err = os.Rename(tmp, inst.path)
 }
 
-// Launch starts a scene for a test and tears it down with the test. It skips
-// the test when the machine has no headless client to run against — that says
-// something about the machine, not about the widget.
+// buildHost builds each distinct host once per test process.
+func buildHost(host Host) (b *builtHost, err error) {
+	h, err := host.resolve()
+	if err != nil {
+		return nil, err
+	}
+	builtMu.Lock()
+	b = built[h]
+	if b == nil {
+		b = &builtHost{host: h}
+		built[h] = b
+	}
+	builtMu.Unlock()
+	b.once.Do(b.build)
+	return b, nil
+}
+
+// Launch starts a scene on boxer's own host for a test and tears it down with
+// the test. It skips the test when the machine has no headless client to run
+// against — that says something about the machine, not about the widget.
 func Launch(t testing.TB, spec scene.Spec) (s *scene.Session) {
 	t.Helper()
-	hostOnce.Do(buildHost)
-	if hostErr != nil {
-		t.Fatalf("unable to build the imzero2 host: %v\n%s", hostErr, hostOut)
+	return LaunchOn(t, Host{}, spec)
+}
+
+// LaunchOn is Launch on a host of the caller's choosing: a downstream module's
+// own main package, which links apps boxer's host does not.
+func LaunchOn(t testing.TB, host Host, spec scene.Spec) (s *scene.Session) {
+	t.Helper()
+	b, err := buildHost(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.err != nil {
+		t.Fatalf("unable to build the imzero2 host: %v\n%s", b.err, b.out)
 	}
 	for _, name := range spec.Requires {
 		unmet, err := scene.CheckRequire(name)
@@ -84,11 +152,12 @@ func Launch(t testing.TB, spec scene.Spec) (s *scene.Session) {
 		}
 	}
 	out := t.TempDir()
-	s, err := scene.Launch(spec, scene.Options{
+	s, err = scene.Launch(spec, scene.Options{
 		Name:       strings.NewReplacer("/", "-", " ", "-").Replace(t.Name()),
 		OutDir:     out,
-		HostBinary: hostPath,
-		RepoRoot:   hostRoot,
+		HostBinary: b.path,
+		RepoRoot:   b.host.ClientRoot,
+		HostDir:    b.host.ModuleDir,
 		Timeout:    90 * time.Second,
 		SettleMs:   300,
 		Out:        os.Stderr,

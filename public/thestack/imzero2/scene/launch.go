@@ -41,6 +41,10 @@ type Options struct {
 	// RepoRoot is the checkout holding the Rust client and the fonts. Empty
 	// means found by walking up from the working directory.
 	RepoRoot string
+	// HostDir is the host's working directory. Empty means RepoRoot, which is
+	// right when the host is boxer's own; a downstream host whose apps read
+	// paths relative to their checkout runs in that checkout instead.
+	HostDir string
 	// ClientBinary overrides client selection.
 	ClientBinary string
 	// SQL seeds the variable Spec.SQLEnv names.
@@ -158,6 +162,9 @@ func Launch(spec Spec, opts Options) (s *Session, err error) {
 			return nil, err
 		}
 	}
+	if opts.HostDir == "" {
+		opts.HostDir = opts.RepoRoot
+	}
 	if opts.HostBinary == "" {
 		if opts.HostBinary, err = os.Executable(); err != nil {
 			return nil, eh.Errorf("unable to find this executable: %w", err)
@@ -228,7 +235,7 @@ func Launch(spec Spec, opts Options) (s *Session, err error) {
 	}
 	s.cmd, err = hostProgram.Command(context.Background(), extbin.Opts{
 		Path: opts.HostBinary,
-		Dir:  opts.RepoRoot,
+		Dir:  opts.HostDir,
 		Env:  hostEnv(spec, opts, port, w, h, exported),
 	}, args...)
 	if err != nil {

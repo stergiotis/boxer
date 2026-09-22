@@ -349,6 +349,23 @@ Not done, and why:
   `SELECT LW_COMPONENT('Sys`. Carried over as found; it is the pane's to
   explain, not the runner's.
 
+### 2026-09-22 — a downstream host: its own directory, its own package
+
+The first downstream adopter (hackathon_2026's dspℓ host, which links apps
+boxer's host does not) found two places where "the repository root" meant two
+things. `Options.RepoRoot` located the Rust client and the fonts *and* was the
+host's working directory, so a downstream host ran in boxer's checkout and its
+apps' checkout-relative paths resolved there. `scenetest` built
+`./public/thestack/cmd/imzero2/` from that same root, so a downstream module
+could not launch its own apps from a test at all.
+
+Both are split, and the defaults are the old behaviour: `Options.HostDir` (the
+`--hostDir` flag) is the host's working directory, empty meaning `RepoRoot`;
+`scenetest.Host` names the package, the module directory it is built in and
+runs from, the client root and the tags, and `scenetest.LaunchOn` launches on
+it. `scenetest.Launch` is `LaunchOn` with the zero `Host`, which is boxer's own.
+No decision changes.
+
 ## References
 
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the carrier, the
