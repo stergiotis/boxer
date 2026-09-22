@@ -398,6 +398,23 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Update` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-09-22 — M0 built: `keelson('app_state')`
+
+The read surface is SD1 as accepted: one provider,
+[`providers/appstate.go`](../../public/keelson/runtime/introspect/providers/appstate.go),
+registered unconditionally in `introspecthost` over `Deps.PersistExec`, one
+live scan of `Owner` per query. No interface grew, as SD2 said.
+
+Verified over `clickhouse-local` through the runtime's own state backend: an
+entry of each kind for two apps reads back once each, under its own app and
+kind; a superseded version is not a row; a deleted entry is absent. A shape
+test pins the column set, so SD7's cut cannot be widened by a column. The
+live-server lane was not added for M0: the provider's only statement is the
+generated live scan, which ADR-0105's work already runs through the HTTP
+executor against a live server.
+
 ## References
 
 - [ADR-0026: App runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD3 the subject taxonomy this family joins, §SD6 the facts table, §SD7 the broker that prompts.

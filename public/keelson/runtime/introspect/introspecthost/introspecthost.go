@@ -96,7 +96,8 @@ type Deps struct {
 	// Same typed-nil trap: assign only a supervisor that started.
 	Tasks *supervisor.Supervisor
 	// PersistExec is the executor the app-state store was opened over,
-	// backing the persist half of keelson.runtime_events (ADR-0191 §SD7).
+	// backing the persist half of keelson.runtime_events (ADR-0191 §SD7)
+	// and keelson.app_state (ADR-0185 §SD1).
 	// nil is allowed and leaves the trail to its facts half — a host with no
 	// durable persist backend has no app-state rows to show anyway.
 	//
@@ -159,6 +160,9 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// with no runinfo all answer with an empty table.
 	if e := introspectproviders.RegisterRunEvents(reg, deps.Facts, deps.PersistExec); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: run-events provider registration failed")
+	}
+	if e := introspectproviders.RegisterAppState(reg, deps.PersistExec); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: app_state provider registration failed")
 	}
 	// ADR-0223 §SD7: the job table and its transitions. Registered
 	// unconditionally — a host with no worker answers with empty tables.
