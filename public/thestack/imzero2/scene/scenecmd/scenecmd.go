@@ -28,6 +28,7 @@ const (
 	flagOnly    = "only"
 	flagClient  = "clientBinary"
 	flagRoot    = "repoRoot"
+	flagHostDir = "hostDir"
 	flagIgnore  = "ignoreRequires"
 )
 
@@ -55,7 +56,8 @@ func NewCommand() *cli.Command {
 			&cli.BoolFlag{Name: flagIgnore, Usage: "run scenes whose preconditions do not hold instead of skipping them"},
 			&cli.StringSliceFlag{Name: flagOnly, Usage: "run only scenes whose name contains this; repeatable"},
 			&cli.PathFlag{Name: flagClient, Usage: "headless Rust client; default: the CPU rasterizer build, then the wgpu build"},
-			&cli.PathFlag{Name: flagRoot, Usage: "repository root; default: found from the working directory"},
+			&cli.PathFlag{Name: flagRoot, Usage: "checkout holding rust/imzero2 (the client, the fonts); default: found from the working directory"},
+			&cli.PathFlag{Name: flagHostDir, Usage: "working directory of the launched host; default: --" + flagRoot},
 		},
 		Action: run,
 	}
@@ -112,6 +114,7 @@ func run(ctx *cli.Context) (err error) {
 		res := scene.RunDoc(d, scene.Options{
 			OutDir:         out,
 			RepoRoot:       root,
+			HostDir:        ctx.Path(flagHostDir),
 			ClientBinary:   ctx.Path(flagClient),
 			Timeout:        ctx.Duration(flagTimeout),
 			SettleMs:       ctx.Int(flagSettle),
