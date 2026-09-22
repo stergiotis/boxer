@@ -3,8 +3,6 @@ package appstate
 import (
 	"context"
 	"iter"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -18,7 +16,12 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	as "github.com/stergiotis/boxer/public/keelson/runtime/appstate"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
@@ -28,10 +31,12 @@ import (
 
 func TestManifest(t *testing.T) {
 	require.NoError(t, manifest.Validate())
-	require.Len(t, manifest.Caps, 1)
+	require.Len(t, manifest.Caps, 2)
 	assert.Equal(t, as.SubjectAll, manifest.Caps[0].Pattern)
 	assert.Equal(t, app.CapDirectionPub, manifest.Caps[0].Direction)
 	assert.False(t, manifest.Caps[0].Sticky, "a remembered grant to clear every app's state must not exist (ADR-0185 §SD3)")
+	assert.Equal(t, keelsonquery.Subject(providers.TableAppState), manifest.Caps[1].Pattern)
+	assert.True(t, manifest.Caps[1].Sticky, "reading the table is the low end of what an app asks for (ADR-0253 §SD1)")
 	assert.LessOrEqual(t, utf8.RuneCountInString(manifest.Summary), 72)
 }
 
@@ -55,27 +60,34 @@ func TestDescribe(t *testing.T) {
 	assert.Equal(t, "not cleared: no live entry", describe(as.Result{Reason: "no live entry"}, "x"))
 }
 
-func TestEndpointReader(t *testing.T) {
-	var gotSQL string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b := make([]byte, r.ContentLength)
-		_, _ = r.Body.Read(b)
-		gotSQL = string(b)
-		if r.ContentLength == 0 {
-			gotSQL = r.URL.Query().Get("query")
-		}
-		_, _ = w.Write([]byte(`{"kind":"persist","app_id":"x/play","key":"tabs","entity_id":"state/x%2Fplay/tabs","payload_bytes":5,"detail":"","written_at":"2026-09-22T10:00:00Z","run_id":"r1","instance_key":3}` + "\n"))
-	}))
-	defer srv.Close()
-	ep := newEndpointReader(srv.URL)
-	require.NotNil(t, ep)
-	rows, err := ep.entries(context.Background())
+// The read travels as a keelson.query request on the table's subject and
+// decodes JSONEachRow from the reply.
+func TestTableReader(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	var gotSQL, gotTable string
+	svc := bus.NewClient(keelsonquery.ServiceAppId, keelsonquery.ServiceCaps("introspect"))
+	unsub, err := svc.Subscribe(keelsonquery.SubjectAll, func(msg *app.Msg) {
+		req, derr := buscodec.Decode[keelsonqueryrequest.KeelsonQueryRequest](msg.Payload)
+		require.NoError(t, derr)
+		gotSQL, gotTable = req.Sql, strings.TrimPrefix(msg.Subject, keelsonquery.SubjectPrefix)
+		payload, eerr := buscodec.Encode(keelsonqueryreply.KeelsonQueryReply{Ok: true,
+			Body: []byte(`{"kind":"persist","app_id":"x/play","key":"tabs","entity_id":"state/x%2Fplay/tabs","payload_bytes":5,"detail":"","written_at":"2026-09-22T10:00:00Z","run_id":"r1","instance_key":3}` + "\n")})
+		require.NoError(t, eerr)
+		require.NoError(t, svc.Publish(msg.Reply, payload))
+	})
 	require.NoError(t, err)
+	t.Cleanup(unsub)
+
+	reader := newTableReader(bus.NewClient(AppId, manifest.Caps))
+	require.NotNil(t, reader)
+	rows, err := reader.entries(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, providers.TableAppState, gotTable)
 	assert.Contains(t, gotSQL, "keelson('app_state')")
 	require.Len(t, rows, 1)
 	assert.Equal(t, entryRow{Kind: "persist", AppId: "x/play", Key: "tabs", EntityId: "state/x%2Fplay/tabs", PayloadBytes: 5,
 		WrittenAt: "2026-09-22T10:00:00Z", RunId: "r1", InstanceKey: 3}, rows[0])
-	assert.Nil(t, newEndpointReader(""), "no endpoint is nil, not a reader that fails")
+	assert.Nil(t, newTableReader(nil), "no bus is nil, not a reader that fails")
 }
 
 // storeReader lists the live entries straight from the store, standing in

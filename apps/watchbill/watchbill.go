@@ -1,6 +1,7 @@
 // Package watchbill is the management window over the watchbill
 // (ADR-0236): the queue across kinds from the list verb, one job's trail
-// and the process's worker row from the introspection endpoint, cancel and
+// and the process's worker row from the introspection tables over the bus
+// (ADR-0253), cancel and
 // retry through the client, and the task monitor for live runs. Nothing
 // here waits on a store from the frame goroutine: a poller refreshes on a
 // tick and on every watchbill.changed, and each verb runs in its own
@@ -20,7 +21,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
@@ -71,7 +71,9 @@ type snapshot struct {
 	lastNote  string
 	refreshed time.Time
 	inflight  int
-	endpoint  bool
+	// reads says the window has a bus to read the tables through; false
+	// only where the host minted none.
+	reads bool
 }
 
 // App is the per-window instance.
@@ -80,12 +82,12 @@ type App struct {
 	logger  zerolog.Logger
 	density styletokens.DensityE
 
-	client   *wb.Client
-	endpoint *endpointClient
-	tasks    task.TaskApiI
-	monitor  *taskmonitor.Inst
-	machine  *fsmview.Machine[string]
-	chip     *fsmview.Widget[string]
+	client  *wb.Client
+	reads   *tableReader
+	tasks   task.TaskApiI
+	monitor *taskmonitor.Inst
+	machine *fsmview.Machine[string]
+	chip    *fsmview.Widget[string]
 
 	appCtx    context.Context
 	cancelApp context.CancelFunc
@@ -137,14 +139,14 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 // Mount takes the host's bus client, reads a launch config, wires the
-// endpoint reader, the task monitor and the announcements, and starts the
+// table reader, the task monitor and the announcements, and starts the
 // poller.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.client = wb.NewClient(ctx.Bus())
 	inst.client.Timeout = requestTimeout
-	inst.endpoint = newEndpointClient(introspect.LocalQueryEndpoint())
+	inst.reads = newTableReader(ctx.Bus())
 	inst.tasks = task.ForApp(ctx)
 	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
 	inst.chip = fsmview.New(inst.ids, "job-state", inst.machine).Title("job state")
@@ -247,7 +249,7 @@ func (inst *App) ensureWidths(ctx app.FrameContextI) {
 	inst.widths = res
 }
 
-// --- the bus and endpoint side, off the frame goroutine ------------------
+// --- the bus side, off the frame goroutine --------------------------------
 
 func (inst *App) markDirty() {
 	select {
@@ -311,23 +313,23 @@ func (inst *App) refresh() {
 	inst.mu.Unlock()
 
 	var next snapshot
-	next.endpoint = inst.endpoint != nil
+	next.reads = inst.reads != nil
 	jobs, err := inst.client.List(states, nil, listLimit)
 	if err != nil {
 		next.lastError = "list: " + err.Error()
 	} else {
 		next.jobs = jobs
 	}
-	if inst.endpoint != nil {
+	if inst.reads != nil {
 		ctx := inst.appCtx
 		if selected != "" {
-			if evs, eerr := inst.endpoint.events(ctx, selected); eerr != nil {
+			if evs, eerr := inst.reads.events(ctx, selected); eerr != nil {
 				next.lastError = firstNonEmpty(next.lastError, "trail: "+eerr.Error())
 			} else {
 				next.events, next.eventsFor = evs, selected
 			}
 		}
-		if ws, werr := inst.endpoint.workers(ctx); werr != nil {
+		if ws, werr := inst.reads.workers(ctx); werr != nil {
 			next.lastError = firstNonEmpty(next.lastError, "workers: "+werr.Error())
 		} else {
 			next.workers = ws

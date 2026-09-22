@@ -6,13 +6,16 @@ import (
 	"github.com/stergiotis/boxer/apps/watchbill/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 )
 
 // manifest declares the management window (ADR-0236): the watchbill client
-// verbs, and the task observer's and canceller's sets so the embedded task
-// monitor sees the runs and can stop one from its row.
+// verbs, the task observer's and canceller's sets so the embedded task
+// monitor sees the runs and can stop one from its row, and the two
+// introspection tables the trail and the worker line are read from
+// (ADR-0253) — one grant per table, sticky.
 var manifest = app.Manifest{
 	Id:       launchcfg.AppId,
 	Version:  "0.1.0",
@@ -31,7 +34,8 @@ var manifest = app.Manifest{
 	// The split between the list and the detail, kept across the process
 	// (watchbill_split.go); the host injects the persist cap for it.
 	PersistedKeys: []string{splitKey},
-	Caps:          append(append(wb.ClientCaps(), task.ObserverCaps()...), task.CancelerCaps()...),
+	Caps: append(append(append(wb.ClientCaps(), task.ObserverCaps()...), task.CancelerCaps()...),
+		keelsonquery.ClientCaps(wb.TableEvent, wb.TableWorker)...),
 }
 
 func init() {

@@ -39,7 +39,7 @@ func (inst *App) renderStatus(snap snapshot, apps []appSummary) {
 			inst.markDirty()
 		}
 		switch {
-		case !snap.endpoint && snap.lastError != "":
+		case !snap.reads && snap.lastError != "":
 			c.Label(snap.lastError).Send()
 		case snap.refreshed.IsZero():
 			c.Label("Reading keelson('app_state')…").Send()
@@ -50,7 +50,7 @@ func (inst *App) renderStatus(snap snapshot, apps []appSummary) {
 	}
 	for range c.HorizontalTop().KeepIter() {
 		switch {
-		case snap.lastError != "" && snap.endpoint:
+		case snap.lastError != "" && snap.reads:
 			badge.New(inst.ids.PrepareStr("err"), snap.lastError).Tone(badge.ToneError).Variant(badge.VariantSoft).Send()
 		case snap.inflight > 0:
 			badge.New(inst.ids.PrepareStr("busy"), fmt.Sprintf("%d request(s) in flight", snap.inflight)).Tone(badge.ToneInfo).Variant(badge.VariantSoft).Send()

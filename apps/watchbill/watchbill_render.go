@@ -164,8 +164,8 @@ func (inst *App) renderDetail(snap snapshot, jobs []watchbillstore.Job) {
 func (inst *App) renderTrail(snap snapshot, job watchbillstore.Job) {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-trail"), c.WidgetText().Text("Trail").Keep()).DefaultOpen(true).KeepIter() {
 		switch {
-		case !snap.endpoint:
-			c.Label("The trail needs the introspection endpoint, which this process does not serve.").Send()
+		case !snap.reads:
+			c.Label("The trail needs a bus to read keelson('watchbill_event') through, and this window has none.").Send()
 			return
 		case snap.eventsFor != job.ID:
 			c.Label("Reading the trail…").Send()
@@ -215,8 +215,8 @@ func (inst *App) renderTrail(snap snapshot, job watchbillstore.Job) {
 // each, this process's own first with its live fields.
 func (inst *App) renderWorkers(snap snapshot) {
 	switch {
-	case !snap.endpoint:
-		c.Label("Workers: unknown, the introspection endpoint is not served in this process").Send()
+	case !snap.reads:
+		c.Label("Workers: unknown, this window has no bus to read keelson('watchbill_worker') through").Send()
 		return
 	case len(snap.workers) == 0:
 		c.Label("Workers: none alive on the cell (a worker needs a live ClickHouse)").Send()

@@ -6,14 +6,16 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	as "github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 )
 
 // AppId is the window's durable identity.
 const AppId app.AppIdT = "github.com/stergiotis/boxer/apps/appstate"
 
 // manifest declares the manager window (ADR-0185 §SD6): the delete seam's
-// client set, and nothing else — reading is the introspection endpoint.
-// The capability is not sticky, so the broker asks on every Mount.
+// client set, which is not sticky so the broker asks on every Mount, and
+// the read of keelson('app_state') it browses (ADR-0253), one sticky grant.
 var manifest = app.Manifest{
 	Id:       AppId,
 	Version:  "0.1.0",
@@ -28,7 +30,7 @@ var manifest = app.Manifest{
 		PreferredWidth:  1100,
 		PreferredHeight: 700,
 	},
-	Caps: as.ClientCaps(),
+	Caps: append(as.ClientCaps(), keelsonquery.ClientCaps(providers.TableAppState)...),
 }
 
 func init() {

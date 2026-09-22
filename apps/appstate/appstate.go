@@ -20,7 +20,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	as "github.com/stergiotis/boxer/public/keelson/runtime/appstate"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -91,7 +90,9 @@ type snapshot struct {
 	lastNote  string
 	refreshed time.Time
 	inflight  int
-	endpoint  bool
+	// reads says the window has a reader; false only where the host minted
+	// no bus for it.
+	reads bool
 }
 
 // App is the per-window instance.
@@ -125,8 +126,8 @@ func newApp() (inst *App) {
 
 func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
-// Mount takes the host's bus client and the local endpoint, and starts the
-// poller.
+// Mount takes the host's bus client, reads the table through it, and starts
+// the poller.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
@@ -134,9 +135,9 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.client.Timeout = requestTimeout
 	if inst.reader == nil {
 		// A test sets its own reader before Mount; the window reads the
-		// process's endpoint, or nothing when the process serves none.
-		if ep := newEndpointReader(introspect.LocalQueryEndpoint()); ep != nil {
-			inst.reader = ep
+		// table over the bus, or nothing when the host minted none.
+		if r := newTableReader(ctx.Bus()); r != nil {
+			inst.reader = r
 		}
 	}
 	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
@@ -161,7 +162,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	return
 }
 
-// --- the bus and endpoint side, off the frame goroutine ------------------
+// --- the bus side, off the frame goroutine --------------------------------
 
 func (inst *App) markDirty() {
 	select {
@@ -191,7 +192,7 @@ func (inst *App) refresh() {
 	var rows []entryRow
 	var readErr string
 	if inst.reader == nil {
-		readErr = "this process serves no introspection endpoint, so there is nothing to list"
+		readErr = "this window has no bus to read keelson('app_state') through, so there is nothing to list"
 	} else if got, err := inst.reader.entries(inst.appCtx); err != nil {
 		readErr = "read: " + err.Error()
 	} else {
@@ -199,7 +200,7 @@ func (inst *App) refresh() {
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	inst.snap.endpoint = inst.reader != nil
+	inst.snap.reads = inst.reader != nil
 	if readErr != "" {
 		inst.snap.lastError = readErr
 		return

@@ -2,8 +2,6 @@ package watchbill
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +12,11 @@ import (
 
 	"github.com/stergiotis/boxer/apps/watchbill/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
+	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryrequest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
@@ -56,6 +58,9 @@ func newFixture(t *testing.T) (f *fixture) {
 	require.NoError(t, w.Start(context.Background()))
 	t.Cleanup(w.Stop)
 	f.consumer = wb.NewClient(bus.NewClient("apps/consumer", wb.ClientCaps()))
+	// The tables answer empty: the fixture is about the verbs, and a
+	// window that reads nothing must still refresh clean.
+	stubTables(t, bus, func(string, string) string { return "" })
 
 	id := app.AppIdT(manifest.Id)
 	mc := app.NewStaticMountContext(id, zerolog.Nop(), nil, bus.NewClient(id, manifest.Caps), nil)
@@ -108,7 +113,7 @@ func TestListFilterRetryAndCancel(t *testing.T) {
 	require.NoError(t, f.store.Enqueue(context.Background(), watchbillstore.Job{ID: "other", Kind: "other.kind", State: watchbillstore.StateQueued, RunAfter: time.Now().Add(time.Hour)}))
 	f.a.markDirty()
 	s := f.eventuallyListed(t, 3)
-	assert.False(t, s.endpoint, "no local endpoint in a test process")
+	assert.True(t, s.reads, "the window reads the tables through the bus it was mounted with")
 
 	f.a.filters.kind = "MGR"
 	assert.Len(t, f.a.visibleJobs(s.jobs), 2)
@@ -165,47 +170,67 @@ func TestClearFilters(t *testing.T) {
 	}
 }
 
-// The two introspection reads decode JSONEachRow from the endpoint, and
-// the trail query carries the escaped job id.
-func TestEndpointReads(t *testing.T) {
-	var lastSQL string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b := make([]byte, r.ContentLength)
-		_, _ = r.Body.Read(b)
-		lastSQL = string(b)
-		if r.ContentLength == 0 {
-			lastSQL = r.URL.Query().Get("query")
-		}
-		switch {
-		case strings.Contains(lastSQL, "watchbill_event"):
-			_, _ = w.Write([]byte(`{"job_id":"j1","at":"2026-09-15T10:00:00Z","state":"running","attempt":1,"worker_run":"r1","note":"","error":""}` + "\n" +
-				`{"job_id":"j1","at":"2026-09-15T10:00:03Z","state":"discarded","attempt":1,"worker_run":"r1","note":"attempts exhausted","error":"boom\nat x"}` + "\n"))
-		default:
-			_, _ = w.Write([]byte(`{"run_id":"r1","host":"box","kinds":["a","b"],"queues":[],"max_workers":2,"started_at":"2026-09-15T09:00:00Z","alive":true,"local":true,"running":["j1"],"last_tick":"2026-09-15T10:00:00Z","poll_ms":5000,"serving":true,"sweeping":false}` + "\n"))
-		}
-	}))
-	defer srv.Close()
-	ep := newEndpointClient(srv.URL)
-	require.NotNil(t, ep)
-	evs, err := ep.events(context.Background(), "j'1")
+// stubTables stands in for the host's keelson.query service: it answers
+// every table read with the JSONEachRow body answer returns for the
+// subject's table and the statement, so the reader is exercised without a
+// clickhouse-local.
+func stubTables(t *testing.T, bus *inprocbus.Inst, answer func(table string, sql string) string) (lastSQL func() string) {
+	t.Helper()
+	var last string
+	svc := bus.NewClient(keelsonquery.ServiceAppId, keelsonquery.ServiceCaps("introspect"))
+	unsub, err := svc.Subscribe(keelsonquery.SubjectAll, func(msg *app.Msg) {
+		req, derr := buscodec.Decode[keelsonqueryrequest.KeelsonQueryRequest](msg.Payload)
+		require.NoError(t, derr)
+		last = req.Sql
+		table := strings.TrimPrefix(msg.Subject, keelsonquery.SubjectPrefix)
+		require.Equal(t, table, req.Table)
+		require.Equal(t, keelsonquery.FormatJSONEachRow, req.Format)
+		payload, eerr := buscodec.Encode(keelsonqueryreply.KeelsonQueryReply{Ok: true, Body: []byte(answer(table, req.Sql))})
+		require.NoError(t, eerr)
+		require.NoError(t, svc.Publish(msg.Reply, payload))
+	})
 	require.NoError(t, err)
-	assert.Contains(t, lastSQL, `'j\'1'`)
+	t.Cleanup(unsub)
+	return func() string { return last }
+}
+
+// The two introspection reads travel as keelson.query requests on the
+// table's own subject, decode JSONEachRow from the reply, and the trail
+// query carries the escaped job id.
+func TestTableReads(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	lastSQL := stubTables(t, bus, func(table string, _ string) string {
+		switch table {
+		case wb.TableEvent:
+			return `{"job_id":"j1","at":"2026-09-15T10:00:00Z","state":"running","attempt":1,"worker_run":"r1","note":"","error":""}` + "\n" +
+				`{"job_id":"j1","at":"2026-09-15T10:00:03Z","state":"discarded","attempt":1,"worker_run":"r1","note":"attempts exhausted","error":"boom\nat x"}` + "\n"
+		default:
+			return `{"run_id":"r1","host":"box","kinds":["a","b"],"queues":[],"max_workers":2,"started_at":"2026-09-15T09:00:00Z","alive":true,"local":true,"running":["j1"],"last_tick":"2026-09-15T10:00:00Z","poll_ms":5000,"serving":true,"sweeping":false}` + "\n"
+		}
+	})
+	reader := newTableReader(bus.NewClient("apps/reader", keelsonquery.ClientCaps(wb.TableEvent, wb.TableWorker)))
+	require.NotNil(t, reader)
+	evs, err := reader.events(context.Background(), "j'1")
+	require.NoError(t, err)
+	assert.Contains(t, lastSQL(), `'j\'1'`)
+	assert.NotContains(t, lastSQL(), "FORMAT", "the format is the request's, not the statement's")
 	require.Len(t, evs, 2)
 	assert.Equal(t, "discarded", evs[1].State)
 	assert.Equal(t, "boom", firstLine(evs[1].Error))
-	ws, err := ep.workers(context.Background())
+	ws, err := reader.workers(context.Background())
 	require.NoError(t, err)
 	require.Len(t, ws, 1)
 	assert.Equal(t, []string{"a", "b"}, ws[0].Kinds)
 	assert.True(t, ws[0].Serving)
-	assert.True(t, ws[0].Alive)
-	assert.True(t, ws[0].Local)
-	assert.Equal(t, "box", ws[0].Host)
-	assert.Nil(t, newEndpointClient(""), "no endpoint is nil, not a client that fails")
+
+	// Without the grant the bus refuses the publish, and the window shows
+	// that rather than rows.
+	ungranted := newTableReader(bus.NewClient("apps/ungranted", nil))
+	_, err = ungranted.workers(context.Background())
+	require.Error(t, err)
+	assert.Nil(t, newTableReader(nil), "no bus is nil, not a reader that fails")
 }
 
-// A header click cycles ascending, descending, unsorted, and the sort is a
-// stable permutation over the listed order.
 func TestSortJobs(t *testing.T) {
 	jobs := []watchbillstore.Job{{ID: "b", Attempt: 2, Kind: "x"}, {ID: "a", Attempt: 1, Kind: "y"}, {ID: "c", Attempt: 2, Kind: "x"}}
 	var s tableSort
