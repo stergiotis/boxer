@@ -125,6 +125,14 @@ var bookladingFS embed.FS
 //go:embed bookwatchbill
 var bookwatchbillFS embed.FS
 
+// bookappstate is the app-state book (ADR-0185 §SD6, M1): what each app
+// keeps across restarts — persisted values, workingsets, column-width
+// overrides — over `keelson('app_state')` and `keelson('workingsets')`, so
+// browsing works before the manager app and its delete seam exist.
+//
+//go:embed bookappstate
+var bookappstateFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -140,6 +148,9 @@ func init() {
 	}
 	if err := RegisterBook("watchbill", help.MustSub(bookwatchbillFS, "bookwatchbill"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register watchbill book")
+	}
+	if err := RegisterBook("appstate", help.MustSub(bookappstateFS, "bookappstate"), []app.TopicT{app.TopicRuntime}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register app-state book")
 	}
 	// TopicCode: the corpus describes what the toolbelt can do, which is the
 	// shape of the repository at a coarser grain than packages. It is not

@@ -415,6 +415,17 @@ live-server lane was not added for M0: the provider's only statement is the
 generated live scan, which ADR-0105's work already runs through the HTTP
 executor against a live server.
 
+### 2026-09-22 — M1 built: the `appstate` book
+
+Four chapters in [`apps/sqlapplet/bookappstate`](../../apps/sqlapplet/bookappstate),
+as SD6 describes: a per-app rollup and one chapter per kind. The workingsets
+chapter reads `keelson('workingsets')`, which already carries that kind's
+own columns; the others read `keelson('app_state')`. The column-width
+chapter splits the `tier/scope/column_key` key taking the middle as the
+scope, since a table tag may itself contain `/`. Every chapter is executed
+in the default lane against entries written through the runtime's state
+backend.
+
 ## References
 
 - [ADR-0026: App runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD3 the subject taxonomy this family joins, §SD6 the facts table, §SD7 the broker that prompts.
