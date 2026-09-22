@@ -426,6 +426,39 @@ scope, since a table tag may itself contain `/`. Every chapter is executed
 in the default lane against entries written through the runtime's state
 backend.
 
+### 2026-09-22 — M2 built: `runtime.appstate.{delete,forget}`
+
+The seam is SD3 and SD4 as accepted:
+[`runtime/appstate`](../../public/keelson/runtime/appstate) holds the
+subjects, `ClientCaps()` (not sticky), a `Client`, and the `Service` the host
+starts under `runtime.appstate` over `persist.StoreBackend`; the wire forms
+are the `appstaterequest` / `appstatereply` codecs over a new `asReq…` /
+`asOutcome…` vocabulary cohort. Four decisions SD3 left to the build:
+
+- **A delete names an entry as `keelson('app_state')` shows it** — kind and
+  key, or the store key for an `unknown` row — and `persiststore` owns the
+  one mapping both sides use (`KindOf`, `EntryKeyOf`, `EntityIdOf`), so the
+  table and the verb cannot drift apart.
+- **A delete must address a live entry of the named app and kind**, else it
+  is refused. Tombstoning a key that was never there, or another app's
+  entry, would record a clear that did not happen.
+- **Without a durable store the service still answers**, refusing with the
+  reason, rather than letting a request time out.
+- **The family is served whenever the host enables it**
+  (`hostboot.Services.AppState`), and capinspector describes it as its own
+  capability.
+
+Verified in the default lane over `clickhouse-local` through a bus client:
+a delete clears one entry and the owning app's own read sees it gone; a
+delete of nothing, of another app's entry, or of a malformed key is refused
+and lands nothing; an `unknown` row is cleared by its store key; forget
+clears every kind of one app and nothing of another; a forget whose first
+delete fails still attempts the rest and reports the failure per kind; a
+request from an app without the capability is refused and that refusal is
+an audit row. The broker's Mount prompt and its copy are not covered by a
+lane — the manual check the verification plan names, due with M3, which is
+the first app to declare the capability.
+
 ## References
 
 - [ADR-0026: App runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD3 the subject taxonomy this family joins, §SD6 the facts table, §SD7 the broker that prompts.

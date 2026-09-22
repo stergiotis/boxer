@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
@@ -27,6 +28,10 @@ const (
 	// sides as backends, the way CapTask pairs the primitive with its
 	// supervisor.
 	CapWatchbill CapId = "watchbill"
+	// CapAppState is the app-state manager's delete seam (ADR-0185 §SD3):
+	// the one capability that clears state other apps stored, so it is
+	// declared, prompted for on every Mount, and audited per request.
+	CapAppState CapId = "appstate"
 )
 
 // BackendImpl is one realisation of a capability's contract. A cap
@@ -134,10 +139,11 @@ var Registry = map[CapId]CapSpec{
 		Id:            CapFacts,
 		Display:       "Audit + facts backend",
 		SubjectFamily: "(audit backend — not a subject)",
-		Description: "Where grants, audit records, app-lifecycle rows, " +
-			"heartbeats, workingsets and column widths land (persist state " +
-			"has its own store, boxer.persiststate — see the persist " +
-			"capability). chstore.NewWithFallback returns a live " +
+		Description: "Where grants, audit records, app-lifecycle rows and " +
+			"heartbeats land — the trail. App state of every kind (persisted " +
+			"values, workingsets, column widths) has its own store, " +
+			"boxer.persiststate — see the persist capability. " +
+			"chstore.NewWithFallback returns a live " +
 			"ClickHouse-backed Store when reachable; otherwise " +
 			"InMemoryFactsStore. Read paths: LookupRunStart, LifecyclesByRun, " +
 			"LastHeartbeatForRun, RecentLogs.",
@@ -310,12 +316,39 @@ var Registry = map[CapId]CapSpec{
 			Load:     loadWatchbillTableDesc,
 		},
 	},
+	CapAppState: {
+		Id:            CapAppState,
+		Display:       "runtime.appstate.* clearing",
+		SubjectFamily: "runtime.appstate.{delete|forget} (request/reply)",
+		Description: "Clearing what other apps have stored (ADR-0185): delete " +
+			"clears one entry — a persisted value, a workingset or a " +
+			"column-width override, named as keelson('app_state') shows it — " +
+			"and forget clears every entry one app keeps, reporting per kind " +
+			"and never stopping at the first failure. A clear is a tombstone, " +
+			"not erasure: the trail keeps the superseded rows. An app holds " +
+			"the capability by declaring appstate.ClientCaps(), which is not " +
+			"sticky, so the broker asks on every Mount; the verbs are " +
+			"requests, so every call — refused ones included — lands an " +
+			"audit row. The host serves them under runtime.appstate over the " +
+			"durable state store and refuses with the reason when there is " +
+			"none. Reading is keelson('app_state'); the family has no list " +
+			"verb.",
+		Backend: "runtime/appstate over runtime/persist (StoreBackend)",
+		AppFilter: func(f app.SubjectFilter) bool {
+			return strings.HasPrefix(f.Pattern, appstate.SubjectPrefix)
+		},
+		// One service; the table it clears is the persist state table,
+		// whose schema CapPersist already renders.
+		Backends: []BackendImpl{
+			{Id: "service", Display: "appstate.Service"},
+		},
+	},
 }
 
 // allCapIdsOrdered returns the canonical render order so the
 // inspector picker UI doesn't shuffle entries across frames (Go map
 // iteration is randomised).
 func allCapIdsOrdered() (ids []CapId) {
-	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill}
+	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState}
 	return
 }

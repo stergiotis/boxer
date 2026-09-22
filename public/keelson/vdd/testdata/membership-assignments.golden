@@ -211,3 +211,12 @@
 206	adhoc-handle-live	12884902094
 207	adhoc-no-live	12884902095
 208	adhoc-event-op	12884902096
+209	as-req-op	12884902097
+210	as-req-kind	12884902098
+211	as-req-app-id	12884902099
+212	as-req-key	12884902100
+213	as-req-entity-id	12884902101
+214	as-reply-ok	12884902102
+215	as-outcome-kind	12884902103
+216	as-outcome-cleared	12884902104
+217	as-outcome-failed	12884902105

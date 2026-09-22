@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 )
 
@@ -174,6 +175,8 @@ func classify(subject string) (capId CapId) {
 		capId = CapFs
 	case strings.HasPrefix(subject, "runtime.persist."):
 		capId = CapPersist
+	case strings.HasPrefix(subject, appstate.SubjectPrefix):
+		capId = CapAppState
 	case strings.HasPrefix(subject, "task."):
 		capId = CapTask
 	case strings.HasPrefix(subject, "runtime.facts."):

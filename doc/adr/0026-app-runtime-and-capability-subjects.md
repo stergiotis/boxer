@@ -1060,6 +1060,15 @@ as absent is state; a kind that records what happened is trail. Both tables
 carry the app id, so "this app's state beside its facts" stays expressible —
 as a two-table query, the trade D3a took knowingly.
 
+### 2026-09-22 — §SD3 gains `runtime.appstate.*`
+
+A mutation-only request/reply family, `runtime.appstate.{delete,forget}`,
+through which a manager app clears state other apps stored (ADR-0185 §SD3).
+It is the first family whose purpose is to act on other apps' namespaces,
+so its capability is declared and not sticky — the broker asks on every
+Mount — and its verbs are requests, which the bus audits, refusals
+included.
+
 ## References
 
 - [ADR-0057](0057-demo-registry-and-drivers.md) — Demo registry pattern that `app.Registry` generalises.

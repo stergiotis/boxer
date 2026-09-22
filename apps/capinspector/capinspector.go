@@ -273,6 +273,8 @@ func diagramCapLabel(capId CapId) (s string) {
 		s = "Background task"
 	case CapWatchbill:
 		s = "Durable work"
+	case CapAppState:
+		s = "App-state manager"
 	}
 	return
 }

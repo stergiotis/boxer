@@ -23,17 +23,6 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
-// The kind labels the table shows (ADR-0185 §SD1). appStateKindUnknown is a
-// row carrying Owner and no kind this provider knows — shown, not skipped: a
-// kind added to the store before this provider learns it is still stored
-// state, and the manager is the one place it must not be invisible.
-const (
-	appStateKindPersist     = "persist"
-	appStateKindWorkingset  = "workingset"
-	appStateKindColumnWidth = "column_width"
-	appStateKindUnknown     = "unknown"
-)
-
 // RegisterAppState registers the app_state provider into r. persistExec is
 // the executor the state store was opened over, or nil: the provider opens
 // its own read-only store on it per query — the keelson('runtime_events')
@@ -109,10 +98,16 @@ func (p appStateProvider) collect() (rows []appStateRow, err error) {
 // served (ADR-0185 §SD7): workingset configs decode only under the owning
 // app's codec and persist values are bytes an app chose. A column width is
 // all metadata, so its detail carries it whole.
+//
+// The kind and key come from persiststore.KindOf / EntryKeyOf, the same
+// naming runtime.appstate.delete takes back, so a row read here addresses
+// its entry there. A row of a kind this build does not know is shown as
+// `unknown` under its store key — still stored state, so the manager must
+// not hide it.
 func appStateRowOf(ent *persiststore.PersistEntity) (r appStateRow) {
 	r = appStateRow{
-		kind:      appStateKindUnknown,
-		key:       ent.ID,
+		kind:      persiststore.KindOf(ent),
+		key:       persiststore.EntryKeyOf(ent),
 		entityId:  ent.ID,
 		writtenAt: ent.Ts,
 	}
@@ -122,15 +117,13 @@ func appStateRowOf(ent *persiststore.PersistEntity) (r appStateRow) {
 	}
 	switch {
 	case ent.State.Has:
-		v := ent.State.Val
-		r.kind, r.key, r.payloadBytes = appStateKindPersist, v.Key, int64(len(v.Value))
+		r.payloadBytes = int64(len(ent.State.Val.Value))
 	case ent.Workingset.Has:
 		v := ent.Workingset.Val
-		r.kind, r.key, r.payloadBytes = appStateKindWorkingset, v.Name, int64(len(v.Config))
+		r.payloadBytes = int64(len(v.Config))
 		r.detail = joinDetail(v.Kind, v.Reason)
 	case ent.ColumnWidth.Has:
 		v := ent.ColumnWidth.Val
-		r.kind, r.key = appStateKindColumnWidth, v.Tier+"/"+v.Scope+"/"+v.ColumnKey
 		r.detail = strconv.FormatFloat(v.Points, 'g', -1, 64) + " pt @ " + strconv.FormatFloat(v.FontSize, 'g', -1, 64)
 	}
 	return

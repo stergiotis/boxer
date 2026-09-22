@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
@@ -111,6 +112,10 @@ type Services struct {
 	// Introspect serves the keelson introspection tables over loopback HTTP
 	// (ADR-0094); KEELSON_INTROSPECT_ENABLE turns it off.
 	Introspect bool
+	// AppState is runtime.appstate.*: the app-state manager's delete seam
+	// over the state store (ADR-0185 §SD3). Without a durable store it
+	// still answers, refusing with the reason.
+	AppState bool
 }
 
 // AllServices is every service on — the carousel's configuration.
@@ -118,6 +123,7 @@ func AllServices() Services {
 	return Services{
 		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
+		AppState: true,
 	}
 }
 
@@ -205,6 +211,9 @@ type Runtime struct {
 	// PersistExec the executor behind a store backend, nil otherwise.
 	PersistBackend string
 	PersistExec    recordstore.ExecutorI
+	// AppState is the app-state manager's delete seam (ADR-0185 §SD3); nil
+	// when the service is off or failed to start.
+	AppState *appstate.Service
 	// State is where workingsets and column-width overrides live (ADR-0105
 	// Update 2026-08-15): the durable persist backend when ClickHouse is
 	// reachable, an in-memory twin otherwise. Never nil after Boot, and
@@ -403,6 +412,23 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.PersistBackend = label
 			rt.PersistExec = exec
 			rt.cleanups = append(rt.cleanups, persistSvc.Close)
+		}
+	}
+	if svc.AppState {
+		// Only the durable backend can clear what another run could see;
+		// the in-memory fallbacks leave the service refusing with the
+		// reason. Assigned only when it is one: a typed nil in the
+		// interface would read as a store.
+		var store appstate.StoreI
+		if sb, ok := backend.(*persist.StoreBackend); ok {
+			store = sb
+		}
+		asSvc, aErr := appstate.NewService(rt.Bus, logger, store)
+		if aErr != nil {
+			logger.Warn().Err(aErr).Msg("appstate: service start failed; runtime.appstate.* will be unbound")
+		} else {
+			rt.AppState = asSvc
+			rt.cleanups = append(rt.cleanups, asSvc.Close)
 		}
 	}
 	if svc.Watchbill {
