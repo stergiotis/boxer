@@ -74,6 +74,11 @@ var AllowedSpecialIds = map[string]bool{
 	// under this id, and its two subjects are NATS-aligned, so the id is a
 	// service name rather than the declaring package's import path.
 	"runtime.watchbill": true,
+	// runtime.appstate — the app-state manager's delete seam (ADR-0185
+	// §SD3). Same class: hostboot mints its bus client under this id and
+	// its family is NATS-aligned, so the id is a service name rather than
+	// the declaring package's import path. Missed when it landed.
+	"runtime.appstate": true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.

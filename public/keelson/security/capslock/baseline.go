@@ -24,7 +24,11 @@ import (
 //
 // # The shape of the current debt
 //
-// Both entries are real filesystem access from app code. Neither is dangerous;
+// The first two entries are real filesystem access from app code; the third
+// is reflection over the app's own values, which the classifier brands by
+// package and no subject could justify.
+//
+// Both filesystem entries are real filesystem access from app code. Neither is dangerous;
 // each is an app reaching past the §SD7 picker substrate to touch the disk
 // directly, which is the thing §SD10 exists to make visible. They differ in
 // kind: one is harness code compiled into a demo, the other is an app doing its
@@ -52,6 +56,9 @@ var baseline = map[string][]string{
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets": {
 		"CAPABILITY_FILES",
 	},
+	"github.com/stergiotis/boxer/apps/play": {
+		"CAPABILITY_REFLECT",
+	},
 }
 
 // baselineReasons documents why each accepted entry is accepted, keyed
@@ -70,6 +77,14 @@ var baselineReasons = map[string]string{
 		"widgets.RenderLoopHandlerTestDriver -> os.MkdirAll: the screenshot TestDriver " +
 		"(ADR-0057) creates its capture output directory. Harness code compiled into the " +
 		"demo app rather than a capability the demo itself exercises.",
+	"github.com/stergiotis/boxer/apps/play :: CAPABILITY_REFLECT": "" +
+		"play.dtoFields -> reflect.ValueOf: the component detail pane renders a decoded " +
+		"DTO's exported fields by walking the struct (ADR-0238), with reflect.TypeOf in " +
+		"play_graph naming a value's type and reflect.DeepEqual in play_workingset " +
+		"comparing two snapshots. Reflection over the app's own in-memory values, no " +
+		"subject to declare: the classifier brands the package, not an effect. The way " +
+		"this entry leaves is a generated field projection per DTO kind (ADR-0042's " +
+		"generator already emits the column list), which would make the walk static.",
 }
 
 // CompareToBaseline splits findings into drift (findings not accepted in the
