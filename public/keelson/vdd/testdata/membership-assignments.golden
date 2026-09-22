@@ -220,3 +220,9 @@
 215	as-outcome-kind	12884902103
 216	as-outcome-cleared	12884902104
 217	as-outcome-failed	12884902105
+218	kq-req-table	12884902106
+219	kq-req-sql	12884902107
+220	kq-req-format	12884902108
+221	kq-reply-ok	12884902109
+222	kq-reply-content-type	12884902110
+223	kq-reply-body	12884902111

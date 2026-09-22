@@ -73,7 +73,9 @@ boxer keelsoncodec \
     public/keelson/runtime/codec/persistreply/persistreply.go \
     public/keelson/runtime/codec/inflightsnapshotreply/inflightsnapshotreply.go \
     public/keelson/runtime/codec/launchrequest/launchrequest.go \
-    public/keelson/runtime/codec/launchreply/launchreply.go
+    public/keelson/runtime/codec/launchreply/launchreply.go \
+    public/keelson/runtime/codec/keelsonqueryrequest/keelsonqueryrequest.go \
+    public/keelson/runtime/codec/keelsonqueryreply/keelsonqueryreply.go
 
 # runtime/factsschema codegen (ADR-0026). Emits DDL / DML (Arrow and sparse
 # CBOR) / read-access wrappers for the runtime facts schema. Driven from here
