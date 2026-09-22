@@ -1,8 +1,9 @@
 // Package introspecthost is the in-process start hook for the keelson
-// introspection HTTP table source (ADR-0094 §SD3/§SD4). A keelson GUI host
-// calls [Start] once, and the introspection tables become queryable — both
-// by an external clickhouse-local/-server over `url()` and by a co-resident
-// app (apps/play) that points at the loopback `/query` endpoint.
+// introspection tables (ADR-0094 §SD3/§SD4). A keelson GUI host calls
+// [Start] once, and the tables become queryable three ways: by an external
+// clickhouse-local/-server over `url()`, by a co-resident SQL console
+// (apps/play) that points at the loopback `/query` endpoint, and by an app
+// holding a `keelson.query.<table>` grant over the bus (ADR-0253).
 //
 // The server MUST run in the host's own OS process: the providers read live
 // in-process state (the running window host, live env values, the app/demo
@@ -23,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	introspectproviders "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	introspectprovidersgui "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
@@ -207,6 +209,24 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		deps.Log.Warn().Err(e).Msg("introspecthost: catalog registration failed")
 	}
 
+	// ADR-0253 §SD1: the bus side of the tables. Stood up before the HTTP
+	// source and independent of it — a window reads its table through this
+	// wherever the chlocal pool runs, whether or not a socket is bound.
+	var querySvc *keelsonquery.Service
+	if deps.ChlocalAvailable && deps.Bus != nil {
+		svc, qerr := keelsonquery.NewService(deps.Bus, deps.Log, reg, queryPoolName)
+		if qerr != nil {
+			deps.Log.Warn().Err(qerr).Msg("introspecthost: keelson.query service start failed; keelson.query.* will be unbound")
+		} else {
+			querySvc = svc
+		}
+	}
+	closeQuery := func() {
+		if querySvc != nil {
+			querySvc.Close()
+		}
+	}
+
 	cfg := introspecthttp.Config{Registry: reg}
 	if deps.ChlocalAvailable && deps.Bus != nil {
 		// Back POST /query with the chlocal broker so a co-resident client
@@ -238,6 +258,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		if topoHolder != nil {
 			_ = topoHolder.Close()
 		}
+		closeQuery()
 		return noopStop, startErr
 	}
 	endpoint := srv.BaseURL() + "/query"
@@ -259,7 +280,8 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		Strs("tables", reg.Names()).
 		Str("queryEndpoint", endpoint).
 		Bool("queryBacked", cfg.Runner != nil).
-		Msg("introspecthost: table source listening (external join via url(); co-resident apps target queryEndpoint)")
+		Bool("busQuery", querySvc != nil).
+		Msg("introspecthost: table source listening (external join via url(); co-resident apps target queryEndpoint or keelson.query.<table>)")
 
 	stop = func(ctx context.Context) error {
 		introspect.SetLocalQueryEndpoint("")
@@ -268,6 +290,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 		if topoHolder != nil {
 			_ = topoHolder.Close()
 		}
+		closeQuery()
 		return srv.Stop(ctx)
 	}
 	return stop, nil

@@ -23,6 +23,10 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
+// TableAppState is the table's name, as keelson() resolves it and as a
+// manager's `keelson.query.<table>` grant names it (ADR-0253 §SD1).
+const TableAppState = "app_state"
+
 // RegisterAppState registers the app_state provider into r. persistExec is
 // the executor the state store was opened over, or nil: the provider opens
 // its own read-only store on it per query — the keelson('runtime_events')
@@ -50,7 +54,7 @@ type appStateProvider struct {
 	persistExec recordstore.ExecutorI
 }
 
-func (appStateProvider) Name() string                         { return "app_state" }
+func (appStateProvider) Name() string                         { return TableAppState }
 func (appStateProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (appStateProvider) Schema() *arrow.Schema                { return appStateTable(nil).Schema() }
 

@@ -12,6 +12,18 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
+// The table names, as keelson() resolves them and as a reader's
+// `keelson.query.<table>` grant names them (ADR-0253 §SD1).
+const (
+	// TableJobs is the job table, one row per job.
+	TableJobs = "watchbill"
+	// TableEvent is the trail, one row per transition.
+	TableEvent = "watchbill_event"
+	// TableWorker is the cell's workers: presence rows joined with
+	// liveness, this process's own with its live fields.
+	TableWorker = "watchbill_worker"
+)
+
 // ListerI is the read side the introspection tables need (ADR-0223
 // §SD7): every job row, and the newest event rows.
 type ListerI interface {
@@ -72,7 +84,7 @@ func RegisterIntrospect(r *introspect.Registry, deps IntrospectDeps) (err error)
 
 type workerProvider struct{ deps IntrospectDeps }
 
-func (workerProvider) Name() string                         { return "watchbill_worker" }
+func (workerProvider) Name() string                         { return TableWorker }
 func (workerProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (workerProvider) Schema() *arrow.Schema                { return workerTable(nil).Schema() }
 
@@ -161,7 +173,7 @@ func workerTable(rows []workerRow) *introspect.Table {
 
 type jobsProvider struct{ lister ListerI }
 
-func (jobsProvider) Name() string                         { return "watchbill" }
+func (jobsProvider) Name() string                         { return TableJobs }
 func (jobsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (jobsProvider) Schema() *arrow.Schema                { return jobsTable(nil).Schema() }
 
@@ -210,7 +222,7 @@ func jobsTable(rows []watchbillstore.Job) *introspect.Table {
 
 type eventsProvider struct{ lister ListerI }
 
-func (eventsProvider) Name() string                         { return "watchbill_event" }
+func (eventsProvider) Name() string                         { return TableEvent }
 func (eventsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (eventsProvider) Schema() *arrow.Schema                { return eventsTable(nil).Schema() }
 
