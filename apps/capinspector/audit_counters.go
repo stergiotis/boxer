@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 )
 
 // Counters is the audit-sink-shaped per-capability counter the
@@ -177,6 +178,8 @@ func classify(subject string) (capId CapId) {
 		capId = CapPersist
 	case strings.HasPrefix(subject, appstate.SubjectPrefix):
 		capId = CapAppState
+	case strings.HasPrefix(subject, keelsonquery.SubjectPrefix):
+		capId = CapKeelsonQuery
 	case strings.HasPrefix(subject, "task."):
 		capId = CapTask
 	case strings.HasPrefix(subject, "runtime.facts."):

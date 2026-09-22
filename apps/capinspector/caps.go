@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -32,6 +33,10 @@ const (
 	// the one capability that clears state other apps stored, so it is
 	// declared, prompted for on every Mount, and audited per request.
 	CapAppState CapId = "appstate"
+	// CapKeelsonQuery is a read over one introspection table (ADR-0253):
+	// the grant an app holds per keelson() table it reads, and the service
+	// the host runs over the in-process engine.
+	CapKeelsonQuery CapId = "keelsonquery"
 )
 
 // BackendImpl is one realisation of a capability's contract. A cap
@@ -343,12 +348,38 @@ var Registry = map[CapId]CapSpec{
 			{Id: "service", Display: "appstate.Service"},
 		},
 	},
+	CapKeelsonQuery: {
+		Id:            CapKeelsonQuery,
+		Display:       "keelson.query.* reads",
+		SubjectFamily: "keelson.query.{table} (request/reply)",
+		Description: "Reading one introspection table from an app (ADR-0253): " +
+			"the statement travels as a request on the table's own subject, " +
+			"the host's service holds it to that table — no second table, no " +
+			"table function, no mutation — and runs it on the in-process " +
+			"engine (ADR-0094 §SD4), which snapshots the provider and " +
+			"projects it to the referenced columns. The body comes back in " +
+			"the FORMAT the request named. An app holds the capability by " +
+			"declaring keelsonquery.ClientCaps(tables...), one sticky grant " +
+			"per table, so the broker prompt names exactly what is read; the " +
+			"read is a request, so every call lands an audit row with the app " +
+			"as sender. The loopback HTTP endpoint stays for SQL consoles and " +
+			"external url() joins.",
+		Backend: "introspect/keelsonquery over introspectengine (chlocal broker)",
+		AppFilter: func(f app.SubjectFilter) bool {
+			return strings.HasPrefix(f.Pattern, keelsonquery.SubjectPrefix)
+		},
+		// The id is not "service": CapAppState's backend already is, and
+		// the graph's node ids are one flat space per kind.
+		Backends: []BackendImpl{
+			{Id: "keelsonquery", Display: "keelsonquery.Service"},
+		},
+	},
 }
 
 // allCapIdsOrdered returns the canonical render order so the
 // inspector picker UI doesn't shuffle entries across frames (Go map
 // iteration is randomised).
 func allCapIdsOrdered() (ids []CapId) {
-	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState}
+	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery}
 	return
 }
