@@ -502,6 +502,14 @@ quite true — the read was off the capability system rather than free of
 it. The capslock finding for `apps/appstate` is gone, and the window says
 "no bus to read through" only where the host minted none.
 
+The same day's live check also settles the M3 note's other open item, the
+other way round: the Mount prompt did not appear because there is none —
+the window host mints the app's bus client from `Manifest.Caps` as
+declared, and the broker prompts only for a `runtime.cap.request` made
+later. SD3's "the broker asks on every Mount" describes ADR-0026 §SD7's
+intent, not a built behaviour; the non-sticky flag stays on the grant for
+the day that prompt exists.
+
 ## References
 
 - [ADR-0026: App runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD3 the subject taxonomy this family joins, §SD6 the facts table, §SD7 the broker that prompts.

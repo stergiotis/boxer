@@ -135,15 +135,27 @@ A sealed dataset (ADR-0145) is refused by the engine as before: it is served
 by handle on the loopback plane, and a bus read of one would hand back
 ciphertext.
 
-### SD5 — What stays on HTTP
+### SD5 — What stays on HTTP, and one engine under both
 
 The loopback `/query` endpoint, `LocalQueryEndpoint`, and the `url()` table
-source are unchanged. They serve the SQL-console class — play, sqlapplet,
-the vdd window host — whose contract is "a ClickHouse HTTP endpoint" and
-whose ADR-0141 dispatcher routes by URL; they serve joins across tables,
-ad-hoc datasets by handle, and external engines. That those consumers
-reach the plane without a declared cap is the same gap this ADR closes for
-the fixed-statement class, and is recorded rather than closed here.
+source stay. They serve the SQL-console class — play, sqlapplet, the vdd
+window host — whose contract is "a ClickHouse HTTP endpoint" and whose
+ADR-0141 dispatcher routes by URL; they serve joins across tables, ad-hoc
+datasets by handle, and external engines. That those consumers reach the
+plane without a declared cap is the same gap this ADR closes for the
+fixed-statement class, and is recorded rather than closed here.
+
+The endpoint now answers over the same engine as the bus service rather
+than the `url()` round trip: the handler hands a macro-resolving runner
+(`introspecthttp.MacroRunnerI`) the statement intact, and the engine's
+split rewrite (`keelsonsql.SplitPass`) sends an ordinary table to a
+projected in-process snapshot and a sealed dataset to `url()` against this
+server's `/table` route, the one place it is decrypted (ADR-0145 §SD2).
+The engine learns that route's address once the source is listening
+(`Engine.SetSealedBaseURL`); on the bus path the gate has already refused
+`url()` by kind, so a sealed name there still meets the engine's refusal.
+The historical broker runner remains as the fallback when the bus service
+fails to start.
 
 ### SD6 — The two windows
 
@@ -158,19 +170,22 @@ its audit classifier.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| vdd vocabulary registry | `kqReqTable`…`kqReplyBody` (218–223) | the assignments golden |
+| vdd vocabulary registry | `kqReqTable`…`kqReplyBody` (218–223), `kqReqParamName`/`kqReqParamValue` (224–225) | the assignments golden |
 | Codec kinds | `keelsonQueryRequest`, `keelsonQueryReply` | kindcheck; `scripts/dev/generate.sh`; the goldens |
 | `keelson.query.>` subject family | new, read-only (SD1) | ADR-0026 §SD3 taxonomy; capinspector's registry, classifier and help page |
 | `Manifest.Caps` of `apps/watchbill`, `apps/appstate` | +one sticky grant per table read | the broker prompt copy; the capslock app set (findings removed) |
-| `introspecthost.Start` | +the service, before the HTTP source | nothing — the host's wiring call is unchanged |
+| `introspecthost.Start` | +the service, before the HTTP source; `/query` served over its engine | nothing — the host's wiring call is unchanged |
+| `introspecthttp.Config.Runner` | may be a `MacroRunnerI`, handed the macros intact | a runner that is not one still gets the `url()` rewrite |
+| `introspectengine.Engine` | +`QueryParams`, +`SetSealedBaseURL` | `Query` is unchanged |
 | Provider table names | exported constants | any reader spelling a name by hand |
 
 ## Alternatives
 
-The QOC section carries the killed options. One more was weighed and left
-for later: giving `Engine.Query` the `param_*` channel (ADR-0133) so a
-request could bind placeholders instead of escaping inline. Neither window
-needs it, and the wire has room for it.
+The QOC section carries the killed options. One more was weighed and then
+built the same day: the `param_*` channel (ADR-0133) on the engine
+(`Engine.QueryParams`) and on the wire (`kqReqParamName` / `kqReqParamValue`,
+224–225), so a request binds `{name:Type}` placeholders instead of escaping
+inline. Neither window needs it yet; the two statements still escape.
 
 ## Consequences
 
@@ -181,6 +196,8 @@ needs it, and the wire has room for it.
 - The grant names one table, so the prompt says what is read.
 - The §SD4 engine has a production caller, and a window reads without a
   socket: the HTTP source can be off and the read still answers.
+- Both transports run one code path, and an HTTP read of an ordinary table
+  no longer fetches it back over loopback: it is projected in-process.
 
 ### Negative
 
@@ -188,8 +205,8 @@ needs it, and the wire has room for it.
   default request timeout (5 s) is the reader's ceiling; a mid-flight
   cancel does not reach the broker (the ExecOnPool contract).
 - The gate lives on the bus path only. The HTTP endpoint still runs any
-  statement a loopback client sends it; SD5 records that as the standing
-  gap it is.
+  statement a loopback client sends it — over the same engine now, but
+  ungated; SD5 records that as the standing gap it is.
 - A statement over two introspection tables has no bus route. That is by
   design (SD1), and the refusal says so.
 
@@ -217,16 +234,30 @@ fields.
   real chlocal broker (skipped without a clickhouse binary) a granted
   reader gets rows and an audit record with itself as sender, a refusal
   comes back as a reply with the reason, and a missing grant fails at the
-  transport. The two windows read through a stub service; the manifests
-  declare the grants.
+  transport; a bound placeholder reaches the engine and unequal parameter
+  columns are refused. The two windows read through a stub service; the
+  manifests declare the grants. `introspecthttp`: a macro runner receives
+  the macros intact and its unknown-table error is a 400; `keelsonsql`: the
+  split rewrite; `introspectengine`: params, and a sealed name refused
+  without a source and sent to `url()` with one.
 - **Lane: capslock gate.** `TestAnalyse_MatchesBaseline` no longer lists
   `apps/appstate` or `apps/watchbill`.
-- **Live.** Not yet done: the broker's Mount prompt for a sticky table
-  grant, and both windows reading on the desktop host.
+- **Live.** Done 2026-09-22 on the desktop host: the watchbill window
+  shows the cell's worker row and the app-state manager lists the stored
+  entries, both read through the bus (the broker log shows each read as
+  an `input_tables=1` exec, the in-process path). No prompt appeared, and
+  none exists to appear: the window host mints the app's bus client from
+  `Manifest.Caps` as declared (`windowhost.go`, the Mount path), and the
+  capability broker prompts only for a `runtime.cap.request` made later.
+  "Sticky" is therefore recorded on the grant for the day a Mount-time
+  prompt is built, not a behaviour a reader can see today; ADR-0185's
+  non-sticky delete seam is in the same position.
 
 ## Status
 
-Proposed 2026-09-22; built the same day, all six SDs.
+Proposed 2026-09-22; built the same day, all six SDs, then extended the
+same day with the params channel and the shared engine under `/query`
+(SD5), and checked live.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
