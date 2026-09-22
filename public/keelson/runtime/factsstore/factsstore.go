@@ -1,16 +1,16 @@
 // Package factsstore is the durable view of runtime facts per ADR-0026 §SD6.
 // Capability grants from the broker, audit records from the bus, the run and
-// app lifecycle trail, launches, workingsets and column-width overrides all
-// flow through FactsStoreI. Two backends implement it: InMemoryFactsStore
+// app lifecycle trail and launches all flow through FactsStoreI. Two backends implement it: InMemoryFactsStore
 // here, and the boxer.facts-backed Store in
 // [github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore],
 // which writes CH+leeway rows through the factsschema package.
 // chstore.NewWithFallback picks between them at runtime, degrading to the
 // in-memory store when ClickHouse is unreachable.
 //
-// App persist state does not flow through here any more: it lives on a
-// generated record store over its own table (persist.StoreBackend, ADR-0105
-// D3a), and the facts-bound state verbs were removed once that landed.
+// App state does not flow through here any more: persist state, workingsets
+// and column-width overrides live on a generated record store over their own
+// table (persist.StoreBackend, ADR-0105 D3a and its Update of 2026-08-15),
+// and the facts-bound state verbs were removed once each kind had moved.
 //
 // Row types are typed per-kind so the broker / audit / lifecycle code stays
 // readable; the leeway translation lives behind the FactsStoreI boundary, and
@@ -30,7 +30,6 @@ package factsstore
 import (
 	"context"
 	"errors"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -182,126 +181,6 @@ type LaunchRow struct {
 	ConfigKind  string // empty for a plain open
 	Config      []byte // raw facts-CBOR config bytes; nil for a plain open
 	Ts          time.Time
-}
-
-// WorkingsetRow records one saved app workingset (ADR-0148 §SD6): the
-// launch config that would reproduce the closing window's user-authored
-// state, written at the closing edge exactly as LaunchRow records the
-// opening edge. Maps to a boxer.facts row with KindWorkingset +
-// AppRefPrefix(appId) + RunRef(runId) + WorkingsetName + LaunchConfigKind
-// + LifecycleTileKey + LifecycleStopReason, with the config bytes on the
-// blob section under the LaunchConfig membership — the launch cohort's
-// vocabulary, reused because the record IS the app's LaunchKind DTO
-// (§SD2).
-//
-// Identity is (AppId, Name): the durable app id plus a caller-chosen
-// name (§SD3). v1 wires exactly one name, "default". Kind is the app's
-// Manifest.LaunchKind, stored as its own column because the facts wire
-// carries no kind marker — readers must not sniff the bytes.
-//
-// TileKey and Reason are provenance, not identity: which window wrote the
-// record and why it closed ("user-close" / "shutdown" / …). Rows are
-// append-only; the latest row for (AppId, Name) wins and a tombstone
-// (DeleteWorkingset) reads back as not-found — the persist-state semantics.
-type WorkingsetRow struct {
-	RunId   string
-	AppId   app.AppIdT
-	Name    string
-	Kind    string
-	Config  []byte
-	TileKey uint64
-	Reason  string
-	Ts      time.Time
-}
-
-// Column-width tier names (ADR-0151 §SD1), most specific first. They are
-// stored as their own low-cardinality column rather than being inferred
-// from whether Scope is empty, so a reader never has to reconstruct the
-// tier from the shape of another field.
-const (
-	// ColWidthTierInstance scopes an override to one table in one app;
-	// Scope carries the call site's stable table tag.
-	ColWidthTierInstance = "instance"
-	// ColWidthTierShape scopes an override to "the same logical table"
-	// wherever it appears; Scope carries the shape hash over the sorted
-	// column-key set. Read-only in v1 — nothing writes this tier yet
-	// (§SD1's deliberate small cut).
-	ColWidthTierShape = "shape"
-	// ColWidthTierColumn scopes an override to a column anywhere in the
-	// app; Scope is empty. This is the tier that lets a recurring column
-	// keep its width across differently-shaped ad-hoc query results.
-	ColWidthTierColumn = "column"
-)
-
-// ColumnWidthRow records one table column-width override (ADR-0151,
-// Update 2026-07-30). One row per entry rather than one document per app:
-// the trail is the history, and last-writer-wins lands at entry
-// granularity, which is what removes the cross-window race the ADR's
-// original document layout could only narrow.
-//
-// Identity is (AppId, Tier, Scope, ColumnKey). ColumnKey is the
-// blake3short of (column name, type discriminator), so a type change
-// invalidates the override by construction rather than by a rule someone
-// has to remember. Rows are append-only; the latest row for a key wins and
-// a tombstone (DeleteColumnWidth) reads back as absent — the persist-state
-// semantics, reused a third time after workingsets.
-//
-// Points and FontSize travel together because a width is only meaningful
-// against the font it was captured at: resolution rescales proportionally
-// when the current font size differs (§SD1). FontSize of 0 means "captured
-// without a font reference" and disables rescaling for that entry.
-//
-// One backend difference is worth knowing before writing a test: "latest"
-// means insertion order in InMemoryFactsStore and (Ts, id) in chstore, as
-// it already does for state and workingsets. The two agree for every
-// caller that lets Ts default to now, and diverge only for a caller that
-// back- or post-dates a write — so a test that stamps a future Ts will see
-// a tombstone lose on one backend and win on the other.
-// InstanceKey is the window that dragged the column (ADR-0191 §SD4), and is
-// provenance rather than identity — the identity stays (app, tier, scope,
-// column key), so a drag in a second window still overwrites the first's
-// entry rather than forking it. It is write-side only: ListColumnWidths
-// resolves the latest entry per key and does not project it back, because
-// resolution asks how wide, not who set it.
-type ColumnWidthRow struct {
-	AppId       app.AppIdT
-	InstanceKey uint64
-	Tier        string
-	Scope       string
-	ColumnKey   string
-	Points      float64
-	FontSize    float64
-	Ts          time.Time
-}
-
-// ColumnWidthKey is the identity tuple of an override, extracted so the
-// backends and the resolver agree on what "the same entry" means without
-// each re-deriving it.
-type ColumnWidthKey struct {
-	Tier      string
-	Scope     string
-	ColumnKey string
-}
-
-// Key returns the row's identity within its app.
-func (inst ColumnWidthRow) Key() (k ColumnWidthKey) {
-	k = ColumnWidthKey{Tier: inst.Tier, Scope: inst.Scope, ColumnKey: inst.ColumnKey}
-	return
-}
-
-// SortColumnWidths orders rows by (Tier, Scope, ColumnKey). Both backends
-// call it so they agree on ordering without either trusting ClickHouse's
-// collation — the same reason SortWorkingsets exists.
-func SortColumnWidths(rows []ColumnWidthRow) {
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Tier != rows[j].Tier {
-			return rows[i].Tier < rows[j].Tier
-		}
-		if rows[i].Scope != rows[j].Scope {
-			return rows[i].Scope < rows[j].Scope
-		}
-		return rows[i].ColumnKey < rows[j].ColumnKey
-	})
 }
 
 // LogFieldKindE discriminates the runtime type of a LogField's value. Drives
@@ -538,14 +417,16 @@ type AppLaunchHistoryReaderI interface {
 }
 
 // FactsStoreI is the contract implementations satisfy. Write methods
-// correspond to the recorded fact kinds; the workingset and column-width
-// verbs add latest-wins reads and tombstone deletes over their trails. All
-// methods return errors so the CH-backed implementation can surface
-// transport failures.
+// correspond to the recorded fact kinds. All methods return errors so the
+// CH-backed implementation can surface transport failures.
 //
-// App persist state is not here: it lives on the generated store behind
-// persist.StoreBackend (ADR-0105 D3a), and the facts-bound state verbs it
-// replaced were removed once it had no callers (ADR-0105, 2026-08-15).
+// App state is not here, in any of its kinds. Persist state, workingsets
+// and column-width overrides live on the generated state store behind
+// persist.StoreBackend (ADR-0105 D3a, and its Update of 2026-08-15 extending
+// D3a to every state-shaped kind); the rule the two tables split on is
+// *trail on `boxer.facts`, state on `boxer.persiststate`*. Workingset and
+// column-width rows written here before that move stay readable as trail
+// and are no longer read.
 type FactsStoreI interface {
 	WriteGrant(row GrantRow) (id uint64, err error)
 	WriteAudit(row AuditRow) (id uint64, err error)
@@ -559,50 +440,10 @@ type FactsStoreI interface {
 	WriteRuntimeHeartbeat(row HeartbeatRow) (id uint64, err error)
 	WriteAppLifecycle(row AppLifecycleRow) (id uint64, err error)
 	WriteLaunch(row LaunchRow) (id uint64, err error)
-	// WriteWorkingset appends one saved workingset record (ADR-0148 §SD6).
-	// Append-only: a second write for the same (AppId, Name) supersedes the
-	// first without erasing it, so the row trail is the history.
-	WriteWorkingset(row WorkingsetRow) (id uint64, err error)
-	// LatestWorkingset returns the most recent non-tombstoned record for
-	// (appId, name). kind is read back as its own column, never sniffed from
-	// the bytes — the facts wire has no kind marker (ADR-0135 Update). A
-	// missing record is found=false with no error.
-	LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error)
-	// ListWorkingsets returns the latest non-tombstoned record for every
-	// (AppId, Name) the store holds — the set a restore would find, not the
-	// write trail (ADR-0148 §SD7). A key whose newest row is a tombstone is
-	// absent, exactly as LatestWorkingset reports it. Ts is the winning
-	// row's write time; the trail itself stays a boxer.facts query, since
-	// history-as-rows is the ADR's stance rather than a method. Rows come
-	// back ordered by AppId then Name — see [SortWorkingsets]. No filter
-	// arguments: the result is bounded by (participating apps × names),
-	// which v1 caps at one name per app.
-	ListWorkingsets() (rows []WorkingsetRow, err error)
-	// DeleteWorkingset appends a tombstone for (appId, name); subsequent
-	// LatestWorkingset calls read back found=false until the next write.
-	DeleteWorkingset(appId app.AppIdT, name string) (err error)
-	// WriteColumnWidth appends one table column-width override
-	// (ADR-0151, Update 2026-07-30). Append-only: a later write for the
-	// same (AppId, Tier, Scope, ColumnKey) supersedes the earlier one
-	// without erasing it.
-	WriteColumnWidth(row ColumnWidthRow) (id uint64, err error)
-	// ListColumnWidths returns the latest non-tombstoned override for
-	// every key belonging to appId — the whole override set a resolver
-	// loads at once, since resolution walks three tiers per column and a
-	// per-key read would be one round-trip per column per frame. Rows come
-	// back ordered by [SortColumnWidths]. A cleared override is absent,
-	// not present-and-zero.
-	ListColumnWidths(appId app.AppIdT) (rows []ColumnWidthRow, err error)
-	// DeleteColumnWidth tombstones one override key. Clearing a key that
-	// was never written is not an error; the tombstone simply becomes the
-	// latest row for a key that had none.
-	DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error)
 }
 
 // InMemoryFactsStore is the M2.5 backend. Stores each kind in its own
-// slice, monotonically id'd. The workingset and column-width trails are
-// read latest-wins by a reverse scan; a delete appends a tombstone so the
-// read path naturally returns not-found until a subsequent write.
+// slice, monotonically id'd.
 type InMemoryFactsStore struct {
 	mu         sync.RWMutex
 	grants     []GrantRow
@@ -612,23 +453,7 @@ type InMemoryFactsStore struct {
 	heartbeats []HeartbeatRow
 	lifecycles []AppLifecycleRow
 	launches   []LaunchRow
-	// workingsets is the append-only workingset trail (ADR-0148 §SD6),
-	// read latest-wins by a reverse scan.
-	workingsets []workingsetEntry
-	// colWidths is the append-only column-width override trail
-	// (ADR-0151), collapsed latest-wins per key by ListColumnWidths.
-	colWidths []colWidthEntry
-	nextId    atomic.Uint64
-}
-
-type workingsetEntry struct {
-	row       WorkingsetRow
-	tombstone bool
-}
-
-type colWidthEntry struct {
-	row       ColumnWidthRow
-	tombstone bool
+	nextId     atomic.Uint64
 }
 
 var _ FactsStoreI = (*InMemoryFactsStore)(nil)
@@ -755,112 +580,6 @@ func (inst *InMemoryFactsStore) WriteLaunch(row LaunchRow) (id uint64, err error
 	return
 }
 
-// WriteWorkingset appends one saved workingset record (ADR-0148 §SD6).
-// Config bytes are defensively copied so the composing app can recycle
-// its buffer.
-func (inst *InMemoryFactsStore) WriteWorkingset(row WorkingsetRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
-	if row.Ts.IsZero() {
-		row.Ts = time.Now().UTC()
-	}
-	if row.Config != nil {
-		cp := make([]byte, len(row.Config))
-		copy(cp, row.Config)
-		row.Config = cp
-	}
-	inst.mu.Lock()
-	inst.workingsets = append(inst.workingsets, workingsetEntry{row: row})
-	inst.mu.Unlock()
-	return
-}
-
-// LatestWorkingset scans the trail in reverse so the most recent write for
-// (appId, name) wins; a tombstone reached first reads back as not-found.
-// The kind comes off the stored column, never from the bytes.
-func (inst *InMemoryFactsStore) LatestWorkingset(appId app.AppIdT, name string) (cfg []byte, kind string, found bool, err error) {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	for i := len(inst.workingsets) - 1; i >= 0; i-- {
-		e := inst.workingsets[i]
-		if e.row.AppId != appId || e.row.Name != name {
-			continue
-		}
-		if e.tombstone {
-			return
-		}
-		cfg = make([]byte, len(e.row.Config))
-		copy(cfg, e.row.Config)
-		kind = e.row.Kind
-		found = true
-		return
-	}
-	return
-}
-
-// ListWorkingsets walks the trail once in reverse, so the first entry seen
-// for a key is its newest, and reports the winners (ADR-0148 §SD7). A key
-// whose newest entry is a tombstone is skipped but still consumed, which is
-// what keeps a deleted record from being resurrected by the write that
-// preceded its tombstone.
-//
-// With ClickHouse down this is the store the runtime uses, so the answer is
-// then this process's own saves only — ADR-0148's documented degradation.
-func (inst *InMemoryFactsStore) ListWorkingsets() (rows []WorkingsetRow, err error) {
-	type wsKey struct {
-		appId app.AppIdT
-		name  string
-	}
-	inst.mu.RLock()
-	seen := make(map[wsKey]struct{}, len(inst.workingsets))
-	rows = make([]WorkingsetRow, 0, len(inst.workingsets))
-	for i := len(inst.workingsets) - 1; i >= 0; i-- {
-		e := inst.workingsets[i]
-		k := wsKey{appId: e.row.AppId, name: e.row.Name}
-		if _, dup := seen[k]; dup {
-			continue
-		}
-		seen[k] = struct{}{}
-		if e.tombstone {
-			continue
-		}
-		row := e.row
-		if e.row.Config != nil {
-			cp := make([]byte, len(e.row.Config))
-			copy(cp, e.row.Config)
-			row.Config = cp
-		}
-		rows = append(rows, row)
-	}
-	inst.mu.RUnlock()
-	SortWorkingsets(rows)
-	return
-}
-
-// SortWorkingsets orders rows by AppId then Name — the ListWorkingsets
-// ordering (ADR-0148 §SD7). Both backends call it rather than each trusting
-// its own collation, so a caller comparing an in-memory answer with a
-// ClickHouse one sees the same sequence.
-func SortWorkingsets(rows []WorkingsetRow) {
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].AppId != rows[j].AppId {
-			return rows[i].AppId < rows[j].AppId
-		}
-		return rows[i].Name < rows[j].Name
-	})
-}
-
-// DeleteWorkingset appends a tombstone for (appId, name), so history
-// stays in the trail.
-func (inst *InMemoryFactsStore) DeleteWorkingset(appId app.AppIdT, name string) (err error) {
-	inst.mu.Lock()
-	inst.workingsets = append(inst.workingsets, workingsetEntry{
-		row:       WorkingsetRow{AppId: appId, Name: name, Ts: time.Now().UTC()},
-		tombstone: true,
-	})
-	inst.mu.Unlock()
-	return
-}
-
 // Grants returns a snapshot of all written grants, ordered by insertion.
 func (inst *InMemoryFactsStore) Grants() (rows []GrantRow) {
 	inst.mu.RLock()
@@ -922,75 +641,5 @@ func (inst *InMemoryFactsStore) Launches() (rows []LaunchRow) {
 	defer inst.mu.RUnlock()
 	rows = make([]LaunchRow, len(inst.launches))
 	copy(rows, inst.launches)
-	return
-}
-
-// Workingsets returns a snapshot of recorded workingset rows in insertion
-// order, tombstones excluded (they carry no config to inspect).
-func (inst *InMemoryFactsStore) Workingsets() (rows []WorkingsetRow) {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	rows = make([]WorkingsetRow, 0, len(inst.workingsets))
-	for _, e := range inst.workingsets {
-		if e.tombstone {
-			continue
-		}
-		rows = append(rows, e.row)
-	}
-	return
-}
-
-// WriteColumnWidth appends one override to the trail (ADR-0151).
-func (inst *InMemoryFactsStore) WriteColumnWidth(row ColumnWidthRow) (id uint64, err error) {
-	id = inst.nextId.Add(1)
-	if row.Ts.IsZero() {
-		row.Ts = time.Now().UTC()
-	}
-	inst.mu.Lock()
-	inst.colWidths = append(inst.colWidths, colWidthEntry{row: row})
-	inst.mu.Unlock()
-	return
-}
-
-// ListColumnWidths collapses the trail to the latest entry per key for
-// appId. The scan runs in reverse and keeps the first sighting of each
-// key, so a tombstone reached first suppresses the key entirely rather
-// than letting an older surviving write show through — the same ordering
-// trap the CH backend has to spell out as HAVING argMax(is_tomb) = 0.
-func (inst *InMemoryFactsStore) ListColumnWidths(appId app.AppIdT) (rows []ColumnWidthRow, err error) {
-	rows = []ColumnWidthRow{}
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	seen := make(map[ColumnWidthKey]struct{}, len(inst.colWidths))
-	for i := len(inst.colWidths) - 1; i >= 0; i-- {
-		e := inst.colWidths[i]
-		if e.row.AppId != appId {
-			continue
-		}
-		k := e.row.Key()
-		if _, dup := seen[k]; dup {
-			continue
-		}
-		seen[k] = struct{}{}
-		if e.tombstone {
-			continue
-		}
-		rows = append(rows, e.row)
-	}
-	SortColumnWidths(rows)
-	return
-}
-
-// DeleteColumnWidth appends a tombstone for one override key.
-func (inst *InMemoryFactsStore) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {
-	inst.mu.Lock()
-	inst.colWidths = append(inst.colWidths, colWidthEntry{
-		row: ColumnWidthRow{
-			AppId: appId, Tier: tier, Scope: scope, ColumnKey: columnKey,
-			Ts: time.Now().UTC(),
-		},
-		tombstone: true,
-	})
-	inst.mu.Unlock()
 	return
 }

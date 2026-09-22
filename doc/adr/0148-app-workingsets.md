@@ -624,6 +624,26 @@ states this window's whole intent and wins, a restored record still raises its
 tab on an ordinary open, and an explicit knob beats a restored record. Pinned
 by a test that reads the precedence table rather than the symptom.
 
+## Update — 2026-09-22: the records move to the state table
+
+Workingset records no longer land on `boxer.facts`. ADR-0105's Update of
+2026-08-15 moved every state-shaped kind to `boxer.persiststate`, and this one
+is state: the newest save for `(app, name)` wins and a delete reads as
+absent, which the facts table could only answer through hand-written
+`argMax` SQL. A record is now a `Workingset` component on that store, beside
+the `Owner` component every state row carries, keyed
+`ws/<app>/<name>`; the window host saves and restores through
+`statestore.WorkingsetStoreI`, and `keelson('workingsets')` reads the same
+store. §SD6's vocabulary carries over unchanged — the component reuses the
+launch cohort's terms — except the kind tag and the tombstone term, which the
+state store does not need.
+
+What does not change: the host's gates (§SD4/§SD5), the table's columns
+(§SD7), and the data-centricity invariant, whose 2026-07-31 Update already
+names a substrate rather than a table. Records saved before the move stay on
+facts as trail and are not restored; ADR-0105 records why the maintainer
+accepted that once.
+
 ## Status
 
 Accepted (2026-07-29). Implemented 2026-07-29.

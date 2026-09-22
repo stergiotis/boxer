@@ -1,12 +1,12 @@
 // Package chstore is the ClickHouse-backed factsstore.FactsStoreI per
 // ADR-0026 M2.5c. Writes go through the generated leeway DML builders
 // (runtime/factsschema/dml.InEntityFacts) and ship as Arrow IPC via
-// chclient.InsertArrow. Reads (RecentLogs, the run-session views, the
-// workingset and column-width latest-wins lists) are hand-composed
-// leeway-shaped SELECTs against the array-encoded membership columns —
-// the code class ADR-0105 D5 replaces with generated stores kind by kind.
-// App persist state left this table for its own generated store
-// (ADR-0105 D3a); the state verbs went with it.
+// chclient.InsertArrow. Reads (RecentLogs, the run-session views, the run
+// events) are hand-composed leeway-shaped SELECTs against the array-encoded
+// membership columns — the code class ADR-0105 D5 replaces with generated
+// stores kind by kind. App state left this table for its own generated
+// store: persist state with ADR-0105 D3a, workingsets and column-width
+// overrides with its Update of 2026-08-15; each kind's verbs went with it.
 package chstore
 
 import (

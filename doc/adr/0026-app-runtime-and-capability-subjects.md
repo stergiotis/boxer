@@ -1048,6 +1048,18 @@ whose owning client is gone. Cap revocation does not stop a watch pump, so
 an app that keeps a read handle must close it explicitly on unmount — mdedit
 does — and a crashed app's watch lives until the broker closes.
 
+### 2026-09-22 — §SD6 is read as two tables: trail on facts, state on persiststate
+
+§SD6 argued for one table so that an app's facts sit together. ADR-0105 D3a
+moved persist state to its own table, and its Update of 2026-08-15 moved the
+other state-shaped kinds (workingsets, column-width overrides) after it, both
+built as of this date. The principle §SD6 is now read under is stated once,
+instead of as a per-kind exception: **trail on `boxer.facts`, state on
+`boxer.persiststate`.** A kind whose newest row wins and whose delete reads
+as absent is state; a kind that records what happened is trail. Both tables
+carry the app id, so "this app's state beside its facts" stays expressible —
+as a two-table query, the trade D3a took knowingly.
+
 ## References
 
 - [ADR-0057](0057-demo-registry-and-drivers.md) — Demo registry pattern that `app.Registry` generalises.

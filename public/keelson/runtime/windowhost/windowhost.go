@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -48,7 +49,7 @@ type window struct {
 	mountCtx *app.StaticMountContext
 	frameCtx *app.StaticFrameContext
 	// frameCtxApp is what Frame() actually receives: frameCtx itself, or a
-	// wrapper adding the column-width capability when this host has a facts
+	// wrapper adding the column-width capability when this host has a state
 	// store. frameCtx is kept alongside because the host calls its setters
 	// (focus, egui scope) every frame; the wrapper embeds it, so those
 	// still land.
@@ -152,6 +153,11 @@ type Inst struct {
 	// effort — write errors are logged but never block host activity.
 	runId string
 	facts factsstore.FactsStoreI
+	// state is where workingsets are saved and restored (ADR-0148) and the
+	// store the column-width capability hands apps (ADR-0151) — the state
+	// table since ADR-0105's Update of 2026-08-15 moved both kinds off
+	// `boxer.facts`. nil disables both: no restore, no save, no capability.
+	state statestore.StoreI
 
 	// busProvider mints per-app BusI clients over the host's chosen
 	// transport (ADR-0026 §SD3/§SD5/§SD4). When non-nil, Open mints a
@@ -270,6 +276,18 @@ func (inst *Inst) SetAudit(runId string, facts factsstore.FactsStoreI) {
 	defer inst.mu.Unlock()
 	inst.runId = runId
 	inst.facts = facts
+}
+
+// SetState attaches the state store workingsets and column-width overrides
+// live in (ADR-0105 Update 2026-08-15). Once set, a plain open of a
+// participating app restores its saved workingset, a close saves it, and
+// every window opened afterwards carries the column-width capability over
+// this store. Like SetAudit it is forward-only: windows already open keep
+// the frame context they were opened with.
+func (inst *Inst) SetState(state statestore.StoreI) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.state = state
 }
 
 // SetDialogColumnWidths persists the column widths of the dialogs the window
@@ -505,13 +523,13 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	frameCtx := app.NewStaticFrameContext(mountCtx, nil)
 	// Column-width capability (ADR-0151 M4) in the ADR-0155 §SD1 shape: an
 	// optional capability on the frame context, not a contract method. Only
-	// wrapped when a facts store exists, because absence of the capability
+	// wrapped when a state store exists, because absence of the capability
 	// is how an app learns there is nowhere durable to put widths — wrapping
 	// unconditionally and handing back nil would move that check to every
 	// call site instead.
 	var frameCtxApp app.FrameContextI = frameCtx
-	if inst.facts != nil {
-		frameCtxApp = &frameCtxColWidth{StaticFrameContext: frameCtx, store: inst.facts}
+	if inst.state != nil {
+		frameCtxApp = &frameCtxColWidth{StaticFrameContext: frameCtx, store: inst.state}
 	}
 	// Share Mount/Unmount state per AppI instance: a second window over a
 	// singleton-registered app reuses the existing instMount (refs++), so the
@@ -1336,7 +1354,7 @@ type frameCtxColWidth struct {
 
 var _ colwidth.HostI = (*frameCtxColWidth)(nil)
 
-// ColumnWidthStore hands back the host's facts store, whose column-width
+// ColumnWidthStore hands back the host's state store, whose column-width
 // verbs are exactly colwidth.StoreI. Scoping is the app's: the resolver
 // keys every read and write by the mount context's AppId, so one app's
 // overrides cannot reach another's through this.

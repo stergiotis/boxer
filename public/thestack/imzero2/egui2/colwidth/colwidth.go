@@ -23,14 +23,13 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 )
 
 // keyBytes is the length of a column key / shape hash before hex encoding.
 // Sixteen bytes is the same width the facts natural keys use: far past any
 // collision risk for the number of distinct columns one app renders, and
-// short enough that the key stays a readable low-cardinality symbol value
-// in the facts table.
+// short enough that the key stays readable in the state table's keys.
 const keyBytes = 16
 
 // Column is a column's semantic identity as the call site knows it.
@@ -84,26 +83,25 @@ func ShapeHash(cols []Column) (hash string) {
 	return
 }
 
-// StoreI is the resolver's view of durable storage. It is exactly the
-// column-width subset of [factsstore.FactsStoreI], so a facts store
-// satisfies it structurally and no adapter is needed; a test can supply a
-// map instead.
+// StoreI is the resolver's view of durable storage. It is exactly
+// [statestore.ColumnWidthStoreI], so the host's state store satisfies it
+// structurally and no adapter is needed; a test can supply a map instead.
 type StoreI interface {
-	ListColumnWidths(appId app.AppIdT) (rows []factsstore.ColumnWidthRow, err error)
-	WriteColumnWidth(row factsstore.ColumnWidthRow) (id uint64, err error)
+	ListColumnWidths(appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error)
+	WriteColumnWidth(row statestore.ColumnWidthRow) (err error)
 	DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error)
 }
 
-// HostI is the optional frame-context capability a host with a facts store
+// HostI is the optional frame-context capability a host with a state store
 // provides so an app can persist column widths. It takes the shape
 // [ADR-0155] §SD1 settled for reaching host-held collaborators: an optional
 // capability type-asserted off the context, exactly as [app.WindowFocusI]
 // is, so the four-method app contract stays frozen and hosts without a
-// facts store owe nothing.
+// state store owe nothing.
 //
 // It is declared here rather than in `app` because its store speaks in
-// facts rows, and `factsstore` imports `app` — declaring it there would
-// close that loop.
+// statestore rows, and `statestore` imports `app` — declaring it there
+// would close that loop.
 //
 // Absence means no durable widths, not an error. An app that cannot
 // acquire a store renders with its own defaults; every width affordance

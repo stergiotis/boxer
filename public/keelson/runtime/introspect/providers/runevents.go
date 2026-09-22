@@ -17,14 +17,15 @@
 //
 // Composed in Go the extraction is written once and compiled once, and the
 // applet's buffer becomes a projection over this table. It is the same trade
-// keelson('workingsets') records: "reading those otherwise means raw
-// boxer.facts SQL plus knowledge of the membership encoding".
+// keelson('workingsets') records: reading the rows otherwise means SQL plus
+// knowledge of how they are encoded.
 
 package providers
 
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
@@ -104,9 +105,17 @@ func (p runEventsProvider) collect() (rows []factsstore.RunEventRow) {
 	return
 }
 
-// persistRows reads the app-state half. Rows written since ADR-0191 §SD5
-// name their run; older ones name none and are placed by timestamp, the same
-// rule the facts half applies.
+// persistRows reads the app-state half: every write to the state table, of
+// every kind — a persist Set, a saved workingset, a captured column width.
+// It scans Owner rather than one kind's component because every write
+// carries Owner, so one scan covers the kinds without naming them; the
+// labels below are the ones the facts half gives the same kinds, so a
+// workingset reads alike whichever table its row sits on (rows written
+// before ADR-0105's Update of 2026-08-15 moved it are on facts). Deletions
+// carry no Owner and do not appear, as they did not before.
+//
+// Rows written since ADR-0191 §SD5 name their run; older ones name none and
+// are placed by timestamp, the same rule the facts half applies.
 func (p runEventsProvider) persistRows(runId string, sinceMs int64) (rows []factsstore.RunEventRow) {
 	if p.persistExec == nil {
 		return
@@ -114,38 +123,67 @@ func (p runEventsProvider) persistRows(runId string, sinceMs int64) (rows []fact
 	store := persiststore.NewPersistStore(p.persistExec, nil, persiststore.PersistStoreConfig{})
 	defer store.Close()
 	ctx := context.Background()
-	for ent, serr := range store.ScanState(ctx, recordstore.ScanOpts{}) {
+	for ent, serr := range store.ScanOwner(ctx, recordstore.ScanOpts{}) {
 		if serr != nil {
 			// Partial is better than nothing; the caller sees a short trail.
 			return
 		}
-		if !ent.State.Has {
-			continue
-		}
-		st := ent.State.Val
-		if st.RunId != "" {
-			if st.RunId != runId {
+		ow := ent.Owner.Val
+		if ow.RunId != "" {
+			if ow.RunId != runId {
 				continue
 			}
 		} else if ent.Ts.UnixMilli() < sinceMs {
 			continue
 		}
-		detail := st.Key
-		if ent.IsTombstone() {
-			detail += " (deleted)"
+		kind, detail, ok := stateEventOf(ent)
+		if !ok {
+			continue
 		}
 		rows = append(rows, factsstore.RunEventRow{
 			Ts:          ent.Ts,
-			Kind:        "persist",
-			AppId:       app.AppIdT(st.AppId),
-			InstanceKey: st.InstanceKey,
-			RunId:       st.RunId,
+			Kind:        kind,
+			AppId:       app.AppIdT(ow.AppId),
+			InstanceKey: ow.InstanceKey,
+			RunId:       ow.RunId,
 			Detail:      detail,
 			Source:      factsstore.RunEventSourcePersist,
 			FactId:      ent.ID,
 		})
 	}
 	return
+}
+
+// stateEventOf names a state-table write for the trail. A row carrying
+// Owner and none of the kinds is not a shape any writer produces, and is
+// skipped rather than shown as a kind the trail cannot name.
+func stateEventOf(ent *persiststore.PersistEntity) (kind string, detail string, ok bool) {
+	ok = true
+	switch {
+	case ent.State.Has:
+		kind, detail = "persist", ent.State.Val.Key
+	case ent.Workingset.Has:
+		w := ent.Workingset.Val
+		kind, detail = "workingset", joinDetail(w.Name, w.Kind, w.Reason)
+	case ent.ColumnWidth.Has:
+		c := ent.ColumnWidth.Val
+		kind, detail = "column width", joinDetail(c.Tier, c.Scope, c.ColumnKey)
+	default:
+		ok = false
+	}
+	return
+}
+
+// joinDetail joins the non-empty parts the way the facts half's detail
+// column does.
+func joinDetail(parts ...string) string {
+	kept := parts[:0:0]
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, " · ")
 }
 
 func runEventsTable(rows []factsstore.RunEventRow) *introspect.Table {

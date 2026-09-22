@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 )
 
@@ -52,26 +53,25 @@ func openAndFrameCtx(t *testing.T, h *Inst, id app.AppIdT) (ctx app.FrameContext
 	return h.windows[0].frameCtxApp
 }
 
-// With a facts store wired, the host offers the column-width capability
+// With a state store wired, the host offers the column-width capability
 // and hands back a usable store (ADR-0151 M4 over ADR-0155 §SD1).
-func TestColumnWidth_CapabilityPresentWithFacts(t *testing.T) {
+func TestColumnWidth_CapabilityPresentWithState(t *testing.T) {
 	a := mkColWidthApp()
 	reg := app.NewRegistry()
 	require.NoError(t, reg.Register(a))
 	h := NewInst(reg, zerolog.Nop())
-	facts := factsstore.NewInMemoryFactsStore()
-	h.SetAudit("run-xyz", facts)
+	h.SetState(statestore.NewMemory())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")
 	cap, ok := ctx.(colwidth.HostI)
-	require.True(t, ok, "a host with a facts store must expose colwidth.HostI")
+	require.True(t, ok, "a host with a state store must expose colwidth.HostI")
 	store := cap.ColumnWidthStore()
 	require.NotNil(t, store)
 
 	// Usable, not merely non-nil: a round-trip through the returned store
 	// is what the resolver will do.
-	_, err := store.WriteColumnWidth(factsstore.ColumnWidthRow{
-		AppId: "test.colwidth", Tier: factsstore.ColWidthTierColumn,
+	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+		AppId: "test.colwidth", Tier: statestore.ColWidthTierColumn,
 		ColumnKey: "k", Points: 42,
 	})
 	require.NoError(t, err)
@@ -81,18 +81,20 @@ func TestColumnWidth_CapabilityPresentWithFacts(t *testing.T) {
 	assert.Equal(t, 42.0, rows[0].Points)
 }
 
-// Without a facts store there is nowhere durable to put widths, and the
-// capability must be absent rather than present-and-nil — absence is how
-// an app is told to fall back to its own defaults.
-func TestColumnWidth_CapabilityAbsentWithoutFacts(t *testing.T) {
+// Without a state store there is nowhere to put widths, and the capability
+// must be absent rather than present-and-nil — absence is how an app is
+// told to fall back to its own defaults. An audit trail alone does not
+// supply one: widths are state, not trail.
+func TestColumnWidth_CapabilityAbsentWithoutState(t *testing.T) {
 	a := mkColWidthApp()
 	reg := app.NewRegistry()
 	require.NoError(t, reg.Register(a))
 	h := NewInst(reg, zerolog.Nop())
+	h.SetAudit("run-xyz", factsstore.NewInMemoryFactsStore())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")
 	_, ok := ctx.(colwidth.HostI)
-	assert.False(t, ok, "no facts store must mean no capability, not a nil store")
+	assert.False(t, ok, "no state store must mean no capability, not a nil store")
 }
 
 // The wrapper must not swallow the capabilities the host sets each frame.
@@ -101,7 +103,7 @@ func TestColumnWidth_WrapperPreservesWindowFocus(t *testing.T) {
 	reg := app.NewRegistry()
 	require.NoError(t, reg.Register(a))
 	h := NewInst(reg, zerolog.Nop())
-	h.SetAudit("run-xyz", factsstore.NewInMemoryFactsStore())
+	h.SetState(statestore.NewMemory())
 
 	ctx := openAndFrameCtx(t, h, "test.colwidth")
 	f, ok := ctx.(app.WindowFocusI)

@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 )
 
 // TestRunEventsTableRendersRow drives the table with fixed rows (no store),
@@ -88,4 +90,26 @@ func TestRunEventsRegistered(t *testing.T) {
 	require.NoError(t, RegisterRunEvents(reg, nil, nil))
 	_, ok := reg.Lookup("runtime_events")
 	assert.True(t, ok, "keelson('runtime_events') must resolve")
+}
+
+// TestStateEventOfLabelsEveryKind pins the persist half's labels to the ones
+// the facts half gives the same kinds, so a workingset or a column width
+// reads alike in the trail whichever table its row sits on — rows written
+// before ADR-0105's Update of 2026-08-15 moved them are on facts.
+func TestStateEventOfLabelsEveryKind(t *testing.T) {
+	for _, c := range []struct {
+		ent        persiststore.PersistEntity
+		kind, want string
+	}{
+		{persiststore.PersistEntity{State: option.Some(persiststore.State{Key: "tabs"})}, "persist", "tabs"},
+		{persiststore.PersistEntity{Workingset: option.Some(persiststore.Workingset{Name: "default", Kind: "playLaunch", Reason: "user-close"})}, "workingset", "default · playLaunch · user-close"},
+		{persiststore.PersistEntity{ColumnWidth: option.Some(persiststore.ColumnWidth{Tier: "column", ColumnKey: "ab12"})}, "column width", "column · ab12"},
+	} {
+		kind, detail, ok := stateEventOf(&c.ent)
+		require.True(t, ok)
+		assert.Equal(t, c.kind, kind)
+		assert.Equal(t, c.want, detail, "empty parts drop out, as in the facts half's detail")
+	}
+	_, _, ok := stateEventOf(&persiststore.PersistEntity{Owner: option.Some(persiststore.Owner{AppId: "a"})})
+	assert.False(t, ok, "an Owner with no kind is not a shape any writer produces, and is skipped")
 }

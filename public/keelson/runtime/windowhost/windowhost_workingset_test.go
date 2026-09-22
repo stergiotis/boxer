@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 )
 
 // wsApp is a workingset participant (ADR-0148 §SD4). It records when
@@ -89,15 +90,31 @@ func registerSharedInstance(t *testing.T, reg *app.Registry, a app.AppI) {
 	}))
 }
 
+// testStores is what a workingset test reads back: the audit trail, where
+// lifecycle and launch rows stay, and the state store the workingset
+// records themselves live in since ADR-0105's Update of 2026-08-15. The
+// two embed without clashing — neither declares a method the other does.
+type testStores struct {
+	*factsstore.InMemoryFactsStore
+	*statestore.Memory
+}
+
+// attachStores wires a fresh pair into h, as hostboot wires the runtime's.
+func attachStores(h *Inst) (s testStores) {
+	s = testStores{InMemoryFactsStore: factsstore.NewInMemoryFactsStore(), Memory: statestore.NewMemory()}
+	h.SetAudit("run-xyz", s.InMemoryFactsStore)
+	h.SetState(s.Memory)
+	return
+}
+
 // newWorkingsetHost registers one participant and returns the
 // host with the audit wiring attached.
-func newWorkingsetHost(t *testing.T, a *wsApp) (h *Inst, facts *factsstore.InMemoryFactsStore) {
+func newWorkingsetHost(t *testing.T, a *wsApp) (h *Inst, facts testStores) {
 	t.Helper()
 	reg := app.NewRegistry()
 	registerSharedInstance(t, reg, a)
 	h = NewInst(reg, zerolog.Nop())
-	facts = factsstore.NewInMemoryFactsStore()
-	h.SetAudit("run-xyz", facts)
+	facts = attachStores(h)
 	return
 }
 
@@ -264,8 +281,7 @@ func TestWorkingset_ParticipantWithoutComposerIsDiagnosed(t *testing.T) {
 	ca := &counterApp{manifest: mkWorkingsetManifest("test.ws")}
 	registerSharedInstance(t, reg, ca)
 	h := NewInst(reg, zerolog.Nop())
-	facts := factsstore.NewInMemoryFactsStore()
-	h.SetAudit("run-xyz", facts)
+	facts := attachStores(h)
 
 	k, err := h.Open("test.ws")
 	require.NoError(t, err)
@@ -347,9 +363,9 @@ func TestWorkingset_NoFactsStoreSkipsCompose(t *testing.T) {
 
 // seedWorkingset writes a usable record for id so the next plain open
 // restores it.
-func seedWorkingset(t *testing.T, facts *factsstore.InMemoryFactsStore, id app.AppIdT, cfg []byte) {
+func seedWorkingset(t *testing.T, facts testStores, id app.AppIdT, cfg []byte) {
 	t.Helper()
-	_, err := facts.WriteWorkingset(factsstore.WorkingsetRow{
+	err := facts.WriteWorkingset(statestore.WorkingsetRow{
 		RunId: "run-prev", AppId: id, Name: WorkingsetDefaultName,
 		Kind: testCfgKind, Config: cfg, TileKey: 1, Reason: "user-close",
 	})
@@ -417,7 +433,7 @@ func TestRestore_KindMismatchDegradesToPlain(t *testing.T) {
 	// The app's launch kind moved since the record was written.
 	a := &wsApp{manifest: mkWorkingsetManifest("test.ws")}
 	h, facts := newWorkingsetHost(t, a)
-	_, err := facts.WriteWorkingset(factsstore.WorkingsetRow{
+	err := facts.WriteWorkingset(statestore.WorkingsetRow{
 		AppId: "test.ws", Name: WorkingsetDefaultName,
 		Kind: "someOtherKind", Config: testCfgBytes,
 	})
@@ -515,8 +531,7 @@ func TestRestore_FactoryAppRestoresPerWindow(t *testing.T) {
 		return
 	}))
 	h := NewInst(reg, zerolog.Nop())
-	facts := factsstore.NewInMemoryFactsStore()
-	h.SetAudit("run-xyz", facts)
+	facts := attachStores(h)
 	seedWorkingset(t, facts, "test.factory", testCfgBytes)
 
 	_, err := h.Open("test.factory")
@@ -545,8 +560,7 @@ func TestRestore_CallerConfigOutranksStoredRecord(t *testing.T) {
 		return
 	}))
 	h := NewInst(reg, zerolog.Nop())
-	facts := factsstore.NewInMemoryFactsStore()
-	h.SetAudit("run-xyz", facts)
+	facts := attachStores(h)
 	seedWorkingset(t, facts, "test.factory", []byte("not a valid payload"))
 
 	_, err := h.OpenWithConfig("test.factory", testCfgKind, testCfgBytes)

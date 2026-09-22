@@ -9,17 +9,17 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 )
 
 // memWidthStore is the smallest colwidth.StoreI: rows in a slice, latest
 // wins per key, delete tombstones by removing.
 type memWidthStore struct {
-	rows []factsstore.ColumnWidthRow
+	rows []statestore.ColumnWidthRow
 }
 
-func (m *memWidthStore) ListColumnWidths(appId app.AppIdT) (rows []factsstore.ColumnWidthRow, err error) {
+func (m *memWidthStore) ListColumnWidths(appId app.AppIdT) (rows []statestore.ColumnWidthRow, err error) {
 	for _, r := range m.rows {
 		if r.AppId == appId {
 			rows = append(rows, r)
@@ -28,9 +28,9 @@ func (m *memWidthStore) ListColumnWidths(appId app.AppIdT) (rows []factsstore.Co
 	return
 }
 
-func (m *memWidthStore) WriteColumnWidth(row factsstore.ColumnWidthRow) (id uint64, err error) {
+func (m *memWidthStore) WriteColumnWidth(row statestore.ColumnWidthRow) (err error) {
 	m.rows = append(m.rows, row)
-	return uint64(len(m.rows)), nil
+	return nil
 }
 
 func (m *memWidthStore) DeleteColumnWidth(appId app.AppIdT, tier string, scope string, columnKey string) (err error) {

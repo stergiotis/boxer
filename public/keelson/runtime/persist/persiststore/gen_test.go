@@ -24,6 +24,11 @@ import (
 // numbering, under which a field reorder in State would silently renumber
 // every row on disk. persiststore_test.go pins the baked ids to the
 // registry.
+//
+// Several kinds share the typed sections (schema.go), which the generator's
+// cross-kind gate allows under registry ids because the ids themselves are
+// disjoint; it still refuses two kinds naming one membership, which is why
+// app, run and window live on Owner rather than on each kind.
 func TestGeneratePersistStore(t *testing.T) {
 	manip, err := GetPersistSchemaInManipulator()
 	require.NoError(t, err)
@@ -32,13 +37,16 @@ func TestGeneratePersistStore(t *testing.T) {
 	ids, err := storegen.MembershipIds(vocab.NkRegistry)
 	require.NoError(t, err)
 	require.NoError(t, gen.Input{
-		PackageName:    "persiststore",
-		StoreName:      "Persist",
-		TableName:      TableName,
-		Database:       DatabaseName,
-		Table:          td,
-		RowConfig:      TableRowConfig,
-		ComponentPaths: []string{"./state_dto.go"},
+		PackageName: "persiststore",
+		StoreName:   "Persist",
+		TableName:   TableName,
+		Database:    DatabaseName,
+		Table:       td,
+		RowConfig:   TableRowConfig,
+		// Owner first: every live row carries it, so it leads each entity's
+		// archetype. The kinds follow in the order ADR-0105's 2026-08-15
+		// entry names them.
+		ComponentPaths: []string{"./owner_dto.go", "./state_dto.go", "./workingset_dto.go", "./columnwidth_dto.go"},
 		OutDir:         ".",
 		ImportPath:     "github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore",
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: ids},

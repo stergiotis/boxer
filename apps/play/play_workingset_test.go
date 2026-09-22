@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -313,13 +313,13 @@ func TestWorkingset_ComposeRestoreRoundTrip(t *testing.T) {
 		"composed bytes must satisfy the host's boundary check")
 	require.LessOrEqual(t, len(cfg), 64<<10, "…and the host's size cap")
 
-	facts := factsstore.NewInMemoryFactsStore()
-	_, err = facts.WriteWorkingset(factsstore.WorkingsetRow{
+	state := statestore.NewMemory()
+	err = state.WriteWorkingset(statestore.WorkingsetRow{
 		RunId: "run-1", AppId: m.Id, Name: windowhost.WorkingsetDefaultName,
 		Kind: m.LaunchKind, Config: cfg, TileKey: 1, Reason: "user-close",
 	})
 	require.NoError(t, err)
-	stored, kind, found, err := facts.LatestWorkingset(m.Id, windowhost.WorkingsetDefaultName)
+	stored, kind, found, err := state.LatestWorkingset(m.Id, windowhost.WorkingsetDefaultName)
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, m.LaunchKind, kind)

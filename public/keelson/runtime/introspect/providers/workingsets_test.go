@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -19,7 +19,7 @@ import (
 // read (ADR-0148 §SD7).
 func TestWorkingsetsTableRendersRecord(t *testing.T) {
 	saved := time.Date(2026, 7, 30, 12, 34, 56, 0, time.UTC)
-	rows := []factsstore.WorkingsetRow{
+	rows := []statestore.WorkingsetRow{
 		{
 			RunId: "run-abc", AppId: "github.com/example/play", Name: "default",
 			Kind: "playLaunch", Config: []byte("0123456789"), TileKey: 42,
@@ -48,17 +48,17 @@ func TestWorkingsetsTableRendersRecord(t *testing.T) {
 // holds, in the store's (app, name) order, and that an AllColumns snapshot
 // carries every declared column.
 func TestWorkingsetsProviderReadsStore(t *testing.T) {
-	store := factsstore.NewInMemoryFactsStore()
-	_, err := store.WriteWorkingset(factsstore.WorkingsetRow{
+	store := statestore.NewMemory()
+	err := store.WriteWorkingset(statestore.WorkingsetRow{
 		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("sql"),
 	})
 	require.NoError(t, err)
-	_, err = store.WriteWorkingset(factsstore.WorkingsetRow{
+	err = store.WriteWorkingset(statestore.WorkingsetRow{
 		AppId: "imztop", Name: "default", Kind: "imztopLaunch",
 	})
 	require.NoError(t, err)
 
-	p := workingsetsProvider{facts: store}
+	p := workingsetsProvider{state: store}
 	rec, err := p.Snapshot(introspect.AllColumns())
 	require.NoError(t, err)
 	defer rec.Release()
@@ -68,7 +68,7 @@ func TestWorkingsetsProviderReadsStore(t *testing.T) {
 	assert.Equal(t, "imztop", firstString(t, rec, "app_id"), "ordered by app id")
 }
 
-// TestWorkingsetsProviderNilStore covers the headless / no-facts host: the
+// TestWorkingsetsProviderNilStore covers the headless / no-store host: the
 // table is empty rather than absent, the keelson('windows') precedent.
 func TestWorkingsetsProviderNilStore(t *testing.T) {
 	p := workingsetsProvider{}
@@ -85,7 +85,7 @@ func TestWorkingsetsProviderNilStore(t *testing.T) {
 // different claims about restorable state, and only one of them is safe to
 // silently report.
 func TestWorkingsetsProviderSurfacesStoreError(t *testing.T) {
-	p := workingsetsProvider{facts: failingWorkingsetStore{factsstore.NewInMemoryFactsStore()}}
+	p := workingsetsProvider{state: failingWorkingsetStore{statestore.NewMemory()}}
 	_, err := p.Snapshot(introspect.AllColumns())
 	require.Error(t, err)
 }
@@ -93,16 +93,16 @@ func TestWorkingsetsProviderSurfacesStoreError(t *testing.T) {
 // failingWorkingsetStore embeds the in-memory store so only the one method
 // under test needs an override.
 type failingWorkingsetStore struct {
-	*factsstore.InMemoryFactsStore
+	*statestore.Memory
 }
 
-func (failingWorkingsetStore) ListWorkingsets() (rows []factsstore.WorkingsetRow, err error) {
+func (failingWorkingsetStore) ListWorkingsets() (rows []statestore.WorkingsetRow, err error) {
 	err = eh.Errorf("workingsets: transport is down")
 	return
 }
 
 func TestRegisterWorkingsets(t *testing.T) {
 	r := introspect.NewRegistry()
-	require.NoError(t, RegisterWorkingsets(r, factsstore.NewInMemoryFactsStore()))
+	require.NoError(t, RegisterWorkingsets(r, statestore.NewMemory()))
 	assert.Equal(t, []string{"workingsets"}, r.Names())
 }

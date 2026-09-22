@@ -78,13 +78,17 @@ var (
 	MembAuditRequestSizeB   = NkRegistry.MustBegin("runtimeAuditRequestSizeB", 14).End()
 	MembAuditResponseSizeB  = NkRegistry.MustBegin("runtimeAuditResponseSizeB", 15).End()
 
-	// Persist fields. On the generated persist store (`boxer.persiststate`,
+	// Persist fields. On the generated state store (`boxer.persiststate`,
 	// ADR-0105 D3a) MembPersistKey tags the key string and MembPersistValue
 	// (below, ordinal 73) the value bytes; app identity there is
-	// MembRuntimeApp. On the legacy boxer.facts state rows PersistKey tagged
-	// both the symbol (key) and blob (value) attributes, and PersistTombstone
-	// on the bool section marked a key as deleted — the tombstone term is
-	// still what DeleteWorkingset and DeleteColumnWidth write.
+	// MembRuntimeApp on the Owner component every state row carries. On the
+	// legacy boxer.facts state rows PersistKey tagged both the symbol (key)
+	// and blob (value) attributes, and PersistTombstone on the bool section
+	// marked a key as deleted. Nothing writes the tombstone term any more:
+	// the workingset and column-width deletes that were its last writers
+	// moved to the state store with ADR-0105's Update of 2026-08-15, where a
+	// delete is the generated store's lifecycle tombstone. It stays
+	// registered because rows on disk carry it.
 	MembPersistKey       = NkRegistry.MustBegin("runtimePersistKey", 16).End()
 	MembPersistTombstone = NkRegistry.MustBegin("runtimePersistTombstone", 17).End()
 
@@ -215,6 +219,12 @@ var (
 	// kind tag, and the caller-chosen set name on the symbol section (v1
 	// wires exactly one name, "default" — §SD3).
 	//
+	// That describes the facts rows. Since ADR-0105's Update of 2026-08-15
+	// a workingset is a component on the state store instead: the same
+	// terms except the kind tag — a kind there is which component a row
+	// carries — and the tombstone, which is the store's lifecycle column.
+	// The facts rows written before the move stay readable as trail.
+	//
 	// The ordinals continue the block above rather than reusing any: each
 	// registration states its own, and persisted facts rows carry it (the
 	// ADR-0135 ordering constraint, now enforced by the registry itself —
@@ -244,6 +254,10 @@ var (
 	//
 	// Fresh ordinals for the same reason the workingset terms took theirs:
 	// persisted rows carry the id a name was given.
+	//
+	// As for workingsets, that describes the facts rows: since ADR-0105's
+	// Update of 2026-08-15 an override is a component on the state store,
+	// reusing every term here except the kind tag and the tombstone.
 	MembKindColumnWidth   = NkRegistry.MustBegin("runtimeKindColumnWidth", 67).End()
 	MembColWidthTier      = NkRegistry.MustBegin("runtimeColWidthTier", 68).End()
 	MembColWidthScope     = NkRegistry.MustBegin("runtimeColWidthScope", 69).End()

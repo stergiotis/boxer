@@ -34,6 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmscrape"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
@@ -204,6 +205,11 @@ type Runtime struct {
 	// PersistExec the executor behind a store backend, nil otherwise.
 	PersistBackend string
 	PersistExec    recordstore.ExecutorI
+	// State is where workingsets and column-width overrides live (ADR-0105
+	// Update 2026-08-15): the durable persist backend when ClickHouse is
+	// reachable, an in-memory twin otherwise. Never nil after Boot, and
+	// set whether or not the persist service runs.
+	State statestore.StoreI
 	// Watchbill is the running worker and WatchbillStore its store; both
 	// nil when the service is off or had no store to run over.
 	// WatchbillPresence is the worker's declaration on the facts store
@@ -377,11 +383,18 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.Fs = fsSvc
 		}
 	}
+	// App state (ADR-0105 D3a and its Update of 2026-08-15): persist
+	// values, workingsets and column-width overrides share one backend over
+	// the state table. It opens whether or not the persist service runs:
+	// workingsets and column widths rode the facts store, which every host
+	// has, before they moved to the state table, and a host that runs
+	// without runtime.persist keeps them.
+	persistCtx, persistCancel := context.WithTimeout(ctx, persistOpenTimeout)
+	backend, label, backendClose, exec := selectPersistBackend(persistCtx, factsCfg, rt.IsChStore, logger)
+	persistCancel()
+	rt.cleanups = append(rt.cleanups, backendClose)
+	rt.State = stateStoreFor(backend)
 	if svc.Persist {
-		persistCtx, persistCancel := context.WithTimeout(ctx, persistOpenTimeout)
-		backend, label, backendClose, exec := selectPersistBackend(persistCtx, factsCfg, rt.IsChStore, logger)
-		persistCancel()
-		rt.cleanups = append(rt.cleanups, backendClose)
 		persistSvc, pErr := persist.NewService(rt.Bus, logger, backend)
 		if pErr != nil {
 			logger.Warn().Err(pErr).Msg("persist: service start failed; runtime.persist.* will be unbound")
@@ -487,6 +500,9 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	if rt.RunInfo != nil {
 		host.SetAudit(rt.RunInfo.RunId, rt.Facts)
 	}
+	if rt.State != nil {
+		host.SetState(rt.State)
+	}
 	// App-launch requests (ADR-0135): apps holding the cap open other apps
 	// with typed launch configs.
 	if _, osErr := windowhost.NewOpenService(rt.Bus, host, logger); osErr != nil {
@@ -520,9 +536,9 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// column dragged in one is the width of the next, and it is flushed from
 	// the frame below whether or not a dialog is open.
 	var dialogWidths *colwidth.Resolver
-	if rt.Facts != nil {
+	if rt.State != nil {
 		var werr error
-		dialogWidths, werr = filepicker.NewColumnWidths(rt.Facts)
+		dialogWidths, werr = filepicker.NewColumnWidths(rt.State)
 		if werr != nil {
 			logger.Warn().Err(werr).Bool("usable", dialogWidths != nil).Msg("hostboot: file dialog column widths: stored widths unavailable")
 		}
@@ -620,6 +636,9 @@ func (rt *Runtime) bootIntrospect() {
 		Facts:            rt.Facts,
 		PersistExec:      rt.PersistExec,
 		Log:              logger,
+	}
+	if rt.State != nil {
+		deps.State = rt.State
 	}
 	if rt.Coverage != nil {
 		deps.Coverage = rt.Coverage
@@ -752,6 +771,17 @@ func (rt *Runtime) bootWatchbill(ctx context.Context) {
 		worker.Stop()
 		store.Close()
 	})
+}
+
+// stateStoreFor is the workingset and column-width store over the persist
+// backend's choice: the durable backend serves every kind of state, and the
+// in-memory fallback pairs with statestore's own in-memory twin — neither
+// survives the process, and both answer the same contract.
+func stateStoreFor(backend persist.StorageBackendI) (state statestore.StoreI) {
+	if sb, ok := backend.(*persist.StoreBackend); ok {
+		return sb
+	}
+	return statestore.NewMemory()
 }
 
 // selectPersistBackend follows the facts-store verdict: a live ClickHouse

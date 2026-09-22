@@ -11,19 +11,22 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
+	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 )
 
-// The resolver's own tests run against InMemoryFactsStore, which shares the
+// The resolver's own tests run against statestore.Memory, which shares the
 // interface but not the storage. These run the same state machine over live
-// ClickHouse, because the two backends differ in ways that only show up
-// there: the collapse to latest-per-key happens in SQL rather than a
-// reverse scan, widths and font sizes round-trip through the f64 section,
-// and "latest" is (ts, id) instead of insertion order.
+// ClickHouse through the backend the runtime wires, because the two differ
+// in ways that only show up there: the collapse to latest-per-key happens in
+// SQL rather than a reverse scan, widths and font sizes round-trip through
+// the f64 section, and "latest" is the row's timestamp instead of insertion
+// order.
 //
-// Scratch database, not boxer.facts — a developer running this is likely to
-// have a desktop pointed at the real table.
+// Scratch database, not boxer.persiststate — a developer running this is
+// likely to have a desktop pointed at the real table.
 const durabilityDb = "colwidth_durability_test"
 
 func newLiveStore(t *testing.T) (store colwidth.StoreI, cleanup func()) {
@@ -33,25 +36,24 @@ func newLiveStore(t *testing.T) (store colwidth.StoreI, cleanup func()) {
 	if err := cli.Ping(ctx); err != nil {
 		t.Skipf("ClickHouse not reachable at %s: %v", chclient.Defaults().URL, err)
 	}
-	cfg := chstore.Defaults()
-	cfg.Database = durabilityDb
-	s, err := chstore.New(cfg)
-	require.NoError(t, err)
-	require.NoError(t, s.DropTable(ctx))
-	require.NoError(t, s.SetupTable(ctx, "MergeTree() ORDER BY tuple()"))
-	cleanup = func() { _ = s.DropTable(context.Background()) }
-	return s, cleanup
+	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+durabilityDb))
+	store = reopen(t)
+	cleanup = func() { _ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+durabilityDb) }
+	return
 }
 
-// reopen builds a store client that shares nothing with the caller's but
-// the database — the closest a single process gets to "a later run".
+// reopen builds a backend that shares nothing with the caller's but the
+// table — its own HTTP client, executor, store and cache — the closest a
+// single process gets to "a later run". The first call provisions the
+// scratch table; later ones find it.
 func reopen(t *testing.T) colwidth.StoreI {
 	t.Helper()
-	cfg := chstore.Defaults()
-	cfg.Database = durabilityDb
-	s, err := chstore.New(cfg)
+	exec, err := storeexec.New(chclient.New(chclient.Defaults(), nil), nil)
 	require.NoError(t, err)
-	return s
+	b, err := persist.OpenStoreBackendAt(context.Background(), exec, nil, durabilityDb+"."+persiststore.TableName)
+	require.NoError(t, err)
+	t.Cleanup(b.Close)
+	return b
 }
 
 var (
@@ -63,7 +65,7 @@ var (
 // on the row: Flush stamps rows with the time it is handed. Dating them
 // forward to clear the debounce — the obvious way to write this — puts the
 // width row ahead of a tombstone written at real now, and Clear then loses
-// on the (ts, id) sort key. The rows must sit where a real session would
+// on the timestamp order. The rows must sit where a real session would
 // have left them.
 func testClock() (capturedAt, flushedAt time.Time) {
 	capturedAt = time.Now().Add(-time.Hour)

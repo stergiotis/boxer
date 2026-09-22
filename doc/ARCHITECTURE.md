@@ -554,8 +554,8 @@ and nearly all of it in one *shape*: the leeway facts table.
 
 | Table | Holds | Written by | Shape · engine | Record |
 | --- | --- | --- | --- | --- |
-| `boxer.facts` | the shared append-only fact trail: grants, audit, logs, runs and heartbeats, app lifecycle, launches, workingsets, column widths, query runs, the sysmetrics tee (13 kinds), the lading mount policy | hand-rolled [`public/keelson/runtime/factsstore/chstore`](../public/keelson/runtime/factsstore/chstore) (Arrow IPC), facts-bound generated stores, a refreshable MV | facts-shaped, 21 sections / 185 physical columns; `MergeTree ORDER BY ts`; no TTL unless the operator sets one | [ADR-0026 §SD6](./adr/0026-app-runtime-and-capability-subjects.md), [ADR-0184](./adr/0184-sysmetrics-persistence-tee.md), [ADR-0115](./adr/0115-query-observability-data-plane-strategy.md) |
-| `boxer.persiststate` | app durable state: one row per `Set`, entity `<app>/<key>`, newest wins, a tombstone is a delete | the generated store [`public/keelson/runtime/persist/persiststore`](../public/keelson/runtime/persist/persiststore) | own `TableDesc` with a `u8` lifecycle, which is what lets the generator emit a state view; `ORDER BY (id, ts)` | [ADR-0105 §D3a](./adr/0105-keelson-adopts-generated-record-stores.md) |
+| `boxer.facts` | the shared append-only fact trail: grants, audit, logs, runs and heartbeats, app lifecycle, launches, query runs, the sysmetrics tee, the lading mount policy | hand-rolled [`public/keelson/runtime/factsstore/chstore`](../public/keelson/runtime/factsstore/chstore) (Arrow IPC), facts-bound generated stores, a refreshable MV | facts-shaped, 21 sections / 185 physical columns; `MergeTree ORDER BY ts`; no TTL unless the operator sets one | [ADR-0026 §SD6](./adr/0026-app-runtime-and-capability-subjects.md), [ADR-0184](./adr/0184-sysmetrics-persistence-tee.md), [ADR-0115](./adr/0115-query-observability-data-plane-strategy.md) |
+| `boxer.persiststate` | app durable state of every kind — persist values, workingsets, column-width overrides: one row per write, entity keyed `<kind>/<app>/…`, newest wins, a tombstone is a delete | the generated store [`public/keelson/runtime/persist/persiststore`](../public/keelson/runtime/persist/persiststore), behind `persist.StoreBackend` | own `TableDesc` with a `u8` lifecycle, which is what lets the generator emit a state view; a small typed section set the kinds share as components; `ORDER BY (id, ts)` | [ADR-0105 §D3a and its Update of 2026-08-15](./adr/0105-keelson-adopts-generated-record-stores.md) |
 | `boxer.fsmeta` / `boxer.fsdata` / `boxer.fssnap` | the filesystem snapshot store (§3.6) | generated stores under [`public/fs/lading`](../public/fs/lading) | facts-shaped on store-owned tables; `ORDER BY (mount, snapshot, path)`; `PARTITION BY` expiry day; `TTL` | [ADR-0198](./adr/0198-fs-snapshot-store.md) |
 | `boxer.resultsets` + `boxer.pin_<fp>` | pinned query results: one metadata row, one content-addressed table per pin carrying the result's own Arrow schema | play | plain columns | [ADR-0115](./adr/0115-query-observability-data-plane-strategy.md) |
 | `boxer.mv_queryruns` | the refreshable materialized view that pulls `queryrunsd`'s `/pull` into `boxer.facts` every 5 s — ClickHouse owns the insert | [`public/keelson/runtime/queryrunsvc`](../public/keelson/runtime/queryrunsvc) reconciles it at boot | MV over `url(…, 'ArrowStream')` | ADR-0115 |
@@ -605,12 +605,14 @@ indexes to whoever writes most. The measured bill (2026-08-19,
 nothing on storage — the 184 columns beside the block data compress to 39 KiB
 against 7.7 MiB of blocks.
 
-Two deliberate asymmetries are worth knowing before reaching for either shape:
-workingsets and column widths still live on `boxer.facts` as hand-written
-`argMax` queries and are decided to move to `boxer.persiststate` (ADR-0105
-Update 2026-08-15, not yet shipped); and `runtime.persist.*` remains wired but
-is "no longer where new app state should be sent" — state that must survive
-gets a modelled fact kind ([ADR-0026 Update 2026-07-30](./adr/0026-app-runtime-and-capability-subjects.md),
+The two tables split on one rule: *trail on `boxer.facts`, state on
+`boxer.persiststate`* (ADR-0105 Update 2026-08-15). A kind whose newest row
+wins and whose delete reads as absent is state, and becomes a component on
+the state store — workingsets and column widths moved there from hand-written
+`argMax` queries over facts. One deliberate asymmetry is worth knowing before
+reaching for either shape: `runtime.persist.*` remains wired but is "no longer
+where new app state should be sent" — state that must survive gets a modelled
+kind rather than opaque bytes under a key ([ADR-0026 Update 2026-07-30](./adr/0026-app-runtime-and-capability-subjects.md),
 [ADR-0148](./adr/0148-app-workingsets.md)).
 
 ### 3.4 The query path

@@ -6,21 +6,23 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // DefaultDebounce is how long a captured width is held before it is
 // written. A drag emits a new width every frame it moves, so writing on
-// each observation would put a row per frame into the facts table; waiting
+// each observation would put a row per frame into the state table; waiting
 // for the motion to stop collapses one drag into one row.
 const DefaultDebounce = 700 * time.Millisecond
 
 // DefaultMaxEntries bounds the in-memory override set. It is not a
 // retention policy: rows already written stay written, and pruning the
-// durable trail is a retention question over the facts table (the ADR's
-// Update moved it there when the storage stopped being one document). The
+// durable trail is a retention question over the state table (ADR-0151's
+// Update made it a row per entry when the storage stopped being one
+// document; ADR-0105's Update of 2026-08-15 moved those rows off
+// `boxer.facts`). The
 // cap only stops a very long-lived process from growing its working set
 // without limit.
 const DefaultMaxEntries = 512
@@ -114,7 +116,7 @@ type colState struct {
 type Resolver struct {
 	store  StoreI
 	opts   Opts
-	byKey  map[factsstore.ColumnWidthKey]*entry
+	byKey  map[statestore.ColumnWidthKey]*entry
 	tables map[string]*tableState
 }
 
@@ -147,7 +149,7 @@ func New(store StoreI, opts Opts) (inst *Resolver, err error) {
 	inst = &Resolver{
 		store:  store,
 		opts:   opts,
-		byKey:  make(map[factsstore.ColumnWidthKey]*entry, 32),
+		byKey:  make(map[statestore.ColumnWidthKey]*entry, 32),
 		tables: make(map[string]*tableState, 8),
 	}
 	return
@@ -242,10 +244,10 @@ func (inst *Resolver) Resolve(tableTag string, cols []Column, fontSize float64, 
 
 // lookup walks the tiers most-specific-first.
 func (inst *Resolver) lookup(tableTag, shape, columnKey string, fontSize float64) (points float64, ok bool) {
-	for _, k := range []factsstore.ColumnWidthKey{
-		{Tier: factsstore.ColWidthTierInstance, Scope: tableTag, ColumnKey: columnKey},
-		{Tier: factsstore.ColWidthTierShape, Scope: shape, ColumnKey: columnKey},
-		{Tier: factsstore.ColWidthTierColumn, ColumnKey: columnKey},
+	for _, k := range []statestore.ColumnWidthKey{
+		{Tier: statestore.ColWidthTierInstance, Scope: tableTag, ColumnKey: columnKey},
+		{Tier: statestore.ColWidthTierShape, Scope: shape, ColumnKey: columnKey},
+		{Tier: statestore.ColWidthTierColumn, ColumnKey: columnKey},
 	} {
 		e, found := inst.byKey[k]
 		if !found {
@@ -364,9 +366,9 @@ func (inst *Resolver) Observe(tableTag string, cols []Column, fetched []float64,
 // tag can inherit widths, and writing it from a single table's drag would
 // claim more than the user expressed.
 func (inst *Resolver) capture(tableTag, columnKey string, points, fontSize float64, now time.Time) {
-	for _, k := range []factsstore.ColumnWidthKey{
-		{Tier: factsstore.ColWidthTierInstance, Scope: tableTag, ColumnKey: columnKey},
-		{Tier: factsstore.ColWidthTierColumn, ColumnKey: columnKey},
+	for _, k := range []statestore.ColumnWidthKey{
+		{Tier: statestore.ColWidthTierInstance, Scope: tableTag, ColumnKey: columnKey},
+		{Tier: statestore.ColWidthTierColumn, ColumnKey: columnKey},
 	} {
 		e, ok := inst.byKey[k]
 		if !ok {
@@ -393,7 +395,7 @@ func (inst *Resolver) Flush(now time.Time) (written int, err error) {
 		if !e.dirty || now.Sub(e.changedAt) < inst.opts.Debounce {
 			continue
 		}
-		_, werr := inst.store.WriteColumnWidth(factsstore.ColumnWidthRow{
+		werr := inst.store.WriteColumnWidth(statestore.ColumnWidthRow{
 			AppId:       inst.opts.AppId,
 			InstanceKey: inst.opts.InstanceKey,
 			Tier:        k.Tier,
@@ -425,9 +427,9 @@ func (inst *Resolver) Flush(now time.Time) (written int, err error) {
 // write it back a moment later.
 func (inst *Resolver) Clear(tableTag string, col Column) (err error) {
 	key := col.Key()
-	for _, k := range []factsstore.ColumnWidthKey{
-		{Tier: factsstore.ColWidthTierInstance, Scope: tableTag, ColumnKey: key},
-		{Tier: factsstore.ColWidthTierColumn, ColumnKey: key},
+	for _, k := range []statestore.ColumnWidthKey{
+		{Tier: statestore.ColWidthTierInstance, Scope: tableTag, ColumnKey: key},
+		{Tier: statestore.ColWidthTierColumn, ColumnKey: key},
 	} {
 		delete(inst.byKey, k)
 		if derr := inst.store.DeleteColumnWidth(inst.opts.AppId, k.Tier, k.Scope, k.ColumnKey); derr != nil {
@@ -540,6 +542,6 @@ func (inst *Resolver) evict() {
 }
 
 type evictCand struct {
-	key factsstore.ColumnWidthKey
+	key statestore.ColumnWidthKey
 	at  time.Time
 }

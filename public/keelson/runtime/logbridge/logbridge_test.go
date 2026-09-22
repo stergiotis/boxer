@@ -224,25 +224,6 @@ func (s *blockingStore) WriteLogs(rows []factsstore.LogRow) (ids []uint64, err e
 	}
 	return
 }
-func (s *blockingStore) WriteWorkingset(_ factsstore.WorkingsetRow) (uint64, error) {
-	return 0, nil
-}
-func (s *blockingStore) LatestWorkingset(_ app.AppIdT, _ string) (cfg []byte, kind string, found bool, err error) {
-	return
-}
-func (s *blockingStore) ListWorkingsets() (rows []factsstore.WorkingsetRow, err error) {
-	return
-}
-func (s *blockingStore) DeleteWorkingset(_ app.AppIdT, _ string) (err error) { return }
-func (s *blockingStore) WriteColumnWidth(_ factsstore.ColumnWidthRow) (uint64, error) {
-	return 0, nil
-}
-func (s *blockingStore) ListColumnWidths(_ app.AppIdT) (rows []factsstore.ColumnWidthRow, err error) {
-	return
-}
-func (s *blockingStore) DeleteColumnWidth(_ app.AppIdT, _ string, _ string, _ string) (err error) {
-	return
-}
 
 // TestSink_Close_DrainsPending guarantees the close path flushes any
 // buffered rows synchronously so a process exit does not lose log data

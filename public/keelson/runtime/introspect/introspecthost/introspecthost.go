@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
 	introspectproviders "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	introspectprovidersgui "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
@@ -72,11 +73,17 @@ type Deps struct {
 	// becomes queryable through this endpoint. nil builds a private
 	// registry (the historical behaviour).
 	Registry *introspect.Registry
-	// Facts is the runtime's facts store, backing keelson.workingsets
-	// (ADR-0148 §SD7). nil is allowed and leaves that table empty rather
-	// than absent, so the set of table names does not depend on whether a
-	// store was wired.
+	// Facts is the runtime's facts store, backing the facts half of
+	// keelson.runtime_events (ADR-0191 §SD7). nil is allowed and leaves that
+	// half empty.
 	Facts factsstore.FactsStoreI
+	// State is the runtime's state store, backing keelson.workingsets
+	// (ADR-0148 §SD7) — the workingset records moved there from Facts with
+	// ADR-0105's Update of 2026-08-15. nil is allowed and leaves that table
+	// empty rather than absent, so the set of table names does not depend on
+	// whether a store was wired. Same typed-nil trap as Coverage: assign
+	// only a non-nil store.
+	State statestore.WorkingsetStoreI
 	// Coverage is the live coverage sampler, backing the
 	// keelson.coverage_* tables (ADR-0169 §SD5). nil is allowed — an
 	// uninstrumented build leaves the tables empty rather than absent, so
@@ -143,7 +150,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// ADR-0148 §SD7: the stored workingset records, read through the facts
 	// store this process writes them with. Registered unconditionally — a nil
 	// store answers with an empty table, so the table name is always there.
-	if e := introspectproviders.RegisterWorkingsets(reg, deps.Facts); e != nil {
+	if e := introspectproviders.RegisterWorkingsets(reg, deps.State); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: workingsets provider registration failed")
 	}
 	// ADR-0191 §SD7: this run's own event trail, read through the facts

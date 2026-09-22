@@ -6,8 +6,8 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 )
 
 // TestStart_DisabledGate: KEELSON_INTROSPECT_ENABLE=false returns a no-op
@@ -62,22 +62,23 @@ func TestStart_NoRunnerDoesNotPublishEndpoint(t *testing.T) {
 	}
 }
 
-// TestStart_RegistersWorkingsetsFromFacts pins the ADR-0148 §SD7 wiring: the
-// facts store handed in as a dep is the one keelson('workingsets') reads, so a
-// record saved by the window host is queryable through this endpoint.
-func TestStart_RegistersWorkingsetsFromFacts(t *testing.T) {
+// TestStart_RegistersWorkingsetsFromState pins the ADR-0148 §SD7 wiring: the
+// state store handed in as a dep is the one keelson('workingsets') reads, so a
+// record saved by the window host is queryable through this endpoint. It was
+// the facts store until ADR-0105's Update of 2026-08-15 moved the records.
+func TestStart_RegistersWorkingsetsFromState(t *testing.T) {
 	Enabled.SetForTest(t, "true")
 	introspect.SetLocalQueryEndpoint("")
 
-	facts := factsstore.NewInMemoryFactsStore()
-	_, err := facts.WriteWorkingset(factsstore.WorkingsetRow{
+	state := statestore.NewMemory()
+	err := state.WriteWorkingset(statestore.WorkingsetRow{
 		AppId: "play", Name: "default", Kind: "playLaunch", Config: []byte("SELECT 1"),
 	})
 	if err != nil {
 		t.Fatalf("WriteWorkingset: %v", err)
 	}
 	reg := introspect.NewRegistry()
-	stop, err := Start(Deps{Registry: reg, Facts: facts, Log: zerolog.Nop()})
+	stop, err := Start(Deps{Registry: reg, State: state, Log: zerolog.Nop()})
 	if err != nil {
 		t.Fatalf("Start returned error: %v", err)
 	}
@@ -127,9 +128,9 @@ func TestStart_CoverageTablesPresentWithoutSampler(t *testing.T) {
 	}
 }
 
-// TestStart_WorkingsetsPresentWithoutFacts: no store wired means an empty
+// TestStart_WorkingsetsPresentWithoutState: no store wired means an empty
 // table, not a missing one — the table name must not depend on the wiring.
-func TestStart_WorkingsetsPresentWithoutFacts(t *testing.T) {
+func TestStart_WorkingsetsPresentWithoutState(t *testing.T) {
 	Enabled.SetForTest(t, "true")
 	introspect.SetLocalQueryEndpoint("")
 
@@ -142,7 +143,7 @@ func TestStart_WorkingsetsPresentWithoutFacts(t *testing.T) {
 
 	p, ok := reg.Lookup("workingsets")
 	if !ok {
-		t.Fatalf("workingsets must register even without a facts store; tables = %v", reg.Names())
+		t.Fatalf("workingsets must register even without a state store; tables = %v", reg.Names())
 	}
 	rec, err := p.Snapshot(introspect.AllColumns())
 	if err != nil {

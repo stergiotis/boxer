@@ -797,6 +797,24 @@ different tag, through the column tier. What remains unseen is the reset
 gesture: the header context menu did not open under the driver's secondary
 click, and whether that is the driver or the menu was not established.
 
+## Update — 2026-09-22: the overrides move to the state table
+
+Override rows no longer land on `boxer.facts`. ADR-0105's Update of
+2026-08-15 moved every state-shaped kind to `boxer.persiststate`: an override
+is a `ColumnWidth` component there, keyed
+`cw/<app>/<tier>/<scope>/<columnKey>`, and the per-app list the resolver
+loads is one key-range read over that app's prefix. The hand-written
+`HAVING argMax(is_tomb, sk) = 0` collapse this ADR's Updates guarded is gone
+with the facts verbs; the generated state view's `ScanLive` applies the same
+rule, newest row first and the tombstone test after.
+
+`colwidth.StoreI` keeps its shape, and now speaks `statestore` rows; its write
+verb returns only an error, since a state row has no facts id to report.
+Widths captured before the move stay on facts as trail and are not read, so
+a tuned column goes back to its estimator once — the cost ADR-0105's entry
+names. The live durability tests were rerun against the new backend on this
+date.
+
 ## Status
 
 Accepted 2026-07-30. The fact kind and M1–M6 are all implemented (Updates

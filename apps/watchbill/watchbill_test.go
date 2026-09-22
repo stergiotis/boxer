@@ -14,8 +14,8 @@ import (
 
 	"github.com/stergiotis/boxer/apps/watchbill/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
@@ -234,7 +234,7 @@ func TestSortJobs(t *testing.T) {
 // is flushed to the facts store and a fresh resolver over the same store
 // resolves it in place of the default (ADR-0151).
 func TestColumnWidthsPersist(t *testing.T) {
-	store := factsstore.NewInMemoryFactsStore()
+	store := statestore.NewMemory()
 	appId := app.AppIdT(manifest.Id)
 	res, err := colwidth.New(store, colwidth.Opts{AppId: appId, MinPoints: colMinWidth, MaxPoints: colMaxWidth, Debounce: time.Millisecond})
 	require.NoError(t, err)

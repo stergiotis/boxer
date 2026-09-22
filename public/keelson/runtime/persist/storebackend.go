@@ -6,17 +6,25 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
-// StoreBackend is the durable StorageBackendI over a generated record
-// store (ADR-0105 D3a). It replaced the facts-bound backend: same three
-// verbs, same StorageI surface for apps, but the rows land on the
-// store-owned `boxer.persiststate` table instead of `boxer.facts`.
+// StoreBackend is the durable backend over the one state table every kind
+// of app state shares (ADR-0105 D3a, and its Update of 2026-08-15 extending
+// D3a to every state-shaped kind). It serves two surfaces over the same
+// generated store: StorageBackendI for the runtime.persist service —
+// same three verbs and StorageI surface for apps as the facts-bound
+// backend it replaced — and statestore.StoreI for workingsets and
+// column-width overrides (storebackend_kinds.go), which left `boxer.facts`
+// with that Update. One store, one mutex and one flush discipline for all
+// three kinds; their keys are kept apart by kind prefix (persiststore's
+// keys.go).
 //
 // What that buys is the reason ADR-0105 exists. The state verbs want a
 // latest-wins read over a mutable key. On the append-only facts table
@@ -61,6 +69,7 @@ type StoreBackend struct {
 }
 
 var _ StorageBackendI = (*StoreBackend)(nil)
+var _ statestore.StoreI = (*StoreBackend)(nil)
 
 // OpenStoreBackend builds the backend over an executor and provisions the
 // table. Unlike a facts-bound store, this table is the store's own, so
@@ -114,11 +123,11 @@ func OpenStoreBackendAt(ctx context.Context, exec recordstore.ExecutorI, alloc m
 }
 
 // stateKey is the entity key: the app identity and the app's own key,
-// joined the way pushoutstore namespaces its keys. The app id rather
-// than the alias, so a key survives an alias change, matching what the
-// facts-backed predecessor stamped on its rows.
+// under the persist-state kind prefix (persiststore.StateKey). The app id
+// rather than the alias, so a key survives an alias change, matching what
+// the facts-backed predecessor stamped on its rows.
 func stateKey(ref StorageRef, key string) (id string) {
-	return string(ref.StateAppId()) + "/" + key
+	return persiststore.StateKey(string(ref.StateAppId()), key)
 }
 
 // Get resolves (app, key) to the latest value. A key that was never
@@ -161,18 +170,10 @@ func (inst *StoreBackend) Set(ref StorageRef, key string, value []byte) (err err
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	id := stateKey(ref, key)
-	err = inst.st.Begin(id, time.Now().UTC()).AddState(persiststore.State{
-		ID:    id,
-		AppId: string(ref.StateAppId()),
-		Key:   key,
-		Value: value,
-		// Provenance (ADR-0191 §SD5), not identity: the id above is still
-		// "<appId>/<key>", so a second window writing this key overwrites
-		// rather than forks. The tombstone Delete appends carries neither,
-		// because the generated Delete writes no component at all.
-		RunId:       inst.runId,
-		InstanceKey: ref.InstanceKey,
-	}).Commit()
+	err = inst.st.Begin(id, time.Now().UTC()).
+		AddOwner(inst.owner(id, ref.StateAppId(), "", ref.InstanceKey)).
+		AddState(persiststore.State{ID: id, Key: key, Value: value}).
+		Commit()
 	if err != nil {
 		inst.st.DiscardPending()
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store set failed: %w", err)
@@ -183,6 +184,19 @@ func (inst *StoreBackend) Set(ref StorageRef, key string, value []byte) (err err
 		err = eb.Build().Str("alias", ref.Alias).Str("key", key).Errorf("persist: store set failed: %w", err)
 	}
 	return
+}
+
+// owner is the Owner component every row this backend writes carries.
+// RunId and InstanceKey are provenance (ADR-0191 §SD5), not identity: the
+// key stays app-scoped, so a second window writing it overwrites rather
+// than forks. runId, when non-empty, is the writer's own claim; otherwise
+// the process's. The tombstone a Delete appends carries no Owner, because
+// the generated Delete writes no component at all.
+func (inst *StoreBackend) owner(id string, appId app.AppIdT, runId string, instanceKey uint64) persiststore.Owner {
+	if runId == "" {
+		runId = inst.runId
+	}
+	return persiststore.Owner{ID: id, AppId: string(appId), RunId: runId, InstanceKey: instanceKey}
 }
 
 // Delete appends a tombstone. Deleting a never-written key is not an

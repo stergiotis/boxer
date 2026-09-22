@@ -15,7 +15,9 @@ status: draft
 > another table, the font rescale survives the round-trip, a clear stays
 > cleared, and overrides do not cross apps. Two separate processes were also
 > run against the real `boxer.facts` — one captured a width, the other
-> resolved it.
+> resolved it. On 2026-09-22 the rows moved to `boxer.persiststate`
+> (ADR-0105 Update 2026-08-15) and the same Go-layer checks were rerun
+> against live ClickHouse through the runtime's state backend.
 >
 > The rendered behaviour was first seen on 2026-09-19, in the file dialog
 > under the headless driver: a column edge dragged in a running window, the
@@ -208,7 +210,7 @@ if h, ok := ctx.(colwidth.HostI); ok {
 }
 ```
 
-Absence is not an error — it means the host has no facts store, so widths
+Absence is not an error — it means the host has no state store, so widths
 come from your defaults and nothing persists. Every affordance still works.
 
 That silence cuts both ways, so if you *re-host* an app that already resolves
@@ -226,7 +228,7 @@ would fork the rows per embedder.
 Some tables belong to no app: the file dialog is raised by the window host
 and by the fs Powerbox bridge, for whichever app asked, and has no frame
 context to take a store from. Such a table resolves under a synthetic
-identity through a resolver its host builds directly over the facts store —
+identity through a resolver its host builds directly over the state store —
 `filepicker.NewColumnWidths(store)` for the dialog, which fixes the identity
 (`runtime.filepicker`) and the drag bounds — and the host flushes it on every
 frame, not only while the table is up: a width dragged just before a dialog

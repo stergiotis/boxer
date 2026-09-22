@@ -56,6 +56,13 @@ const persiststateArrowOutputSettings = " SETTINGS output_format_arrow_string_as
 // persiststateKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func persiststateKeyLiteral(k string) string { return marshalling.EscapeString(k) }
 
+// persiststateKeyPrefixPredicate renders ScanOpts.KeyPrefix: keys starting with
+// prefix. startsWith on the leading sort-key column is a primary-key
+// range read, not a scan of every row.
+func persiststateKeyPrefixPredicate(prefix string) string {
+	return "startsWith(" + PersistColKey + ", " + persiststateKeyLiteral(prefix) + ")"
+}
+
 // PersistMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -68,12 +75,27 @@ func persiststateKeyLiteral(k string) string { return marshalling.EscapeString(k
 // cannot see it. Compare this map against the writer's before pointing a
 // regenerated store at existing rows.
 var PersistMembershipIds = map[string]map[string]uint64{
-	"State": {
+	"Owner": {
 		"runtimeApp":              9223372049739677701,
-		"runtimePersistKey":       9223372049739677712,
 		"runtimeRun":              9223372049739677716,
 		"runtimeLifecycleTileKey": 9223372049739677728,
-		"runtimePersistValue":     9223372049739677769,
+	},
+	"State": {
+		"runtimePersistKey":   9223372049739677712,
+		"runtimePersistValue": 9223372049739677769,
+	},
+	"Workingset": {
+		"runtimeLifecycleStopReason": 9223372049739677727,
+		"runtimeLaunchConfigKind":    9223372049739677759,
+		"runtimeLaunchConfig":        9223372049739677760,
+		"runtimeWorkingsetName":      9223372049739677762,
+	},
+	"ColumnWidth": {
+		"runtimeColWidthTier":      9223372049739677764,
+		"runtimeColWidthScope":     9223372049739677765,
+		"runtimeColWidthColumnKey": 9223372049739677766,
+		"runtimeColWidthPoints":    9223372049739677767,
+		"runtimeColWidthFontSize":  9223372049739677768,
 	},
 }
 
@@ -82,16 +104,28 @@ var PersistMembershipIds = map[string]map[string]uint64{
 // Entities returned by cached reads are shared with the cache (and
 // every later reader): treat them as immutable.
 type PersistEntity struct {
-	ID        string
-	Ts        time.Time
-	Lifecycle uint8
-	State     option.Option[State]
+	ID          string
+	Ts          time.Time
+	Lifecycle   uint8
+	Owner       option.Option[Owner]
+	State       option.Option[State]
+	Workingset  option.Option[Workingset]
+	ColumnWidth option.Option[ColumnWidth]
 }
 
 // Archetype reports which components the entity carries, in schema order.
 func (inst *PersistEntity) Archetype() (a []string) {
+	if inst.Owner.Has {
+		a = append(a, "owner")
+	}
 	if inst.State.Has {
 		a = append(a, "state")
+	}
+	if inst.Workingset.Has {
+		a = append(a, "workingset")
+	}
+	if inst.ColumnWidth.Has {
+		a = append(a, "columnWidth")
 	}
 	return
 }
@@ -405,16 +439,16 @@ type PersistEntityBuilder struct {
 // section, after every component that contributed to it has written.
 func (inst *PersistEntityBuilder) endSection(section string) error {
 	switch section {
-	case "stateAppId":
-		inst.store.dml.GetSectionStateAppId().EndSection()
-	case "stateKey":
-		inst.store.dml.GetSectionStateKey().EndSection()
-	case "stateBlob":
-		inst.store.dml.GetSectionStateBlob().EndSection()
-	case "stateRunId":
-		inst.store.dml.GetSectionStateRunId().EndSection()
-	case "stateInstanceKey":
-		inst.store.dml.GetSectionStateInstanceKey().EndSection()
+	case "symbol":
+		inst.store.dml.GetSectionSymbol().EndSection()
+	case "u64":
+		inst.store.dml.GetSectionU64().EndSection()
+	case "string":
+		inst.store.dml.GetSectionString().EndSection()
+	case "blob":
+		inst.store.dml.GetSectionBlob().EndSection()
+	case "f64":
+		inst.store.dml.GetSectionF64().EndSection()
 	}
 	return nil
 }
@@ -429,6 +463,32 @@ func (inst *PersistStore) Begin(id string, ts time.Time) *PersistEntityBuilder {
 	b := &PersistEntityBuilder{store: inst, key: id, ent: PersistEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
 	b.pushed = inst.applyStampers()
 	return b
+}
+
+// AddOwner contributes the Owner component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *PersistEntityBuilder) AddOwner(row Owner) *PersistEntityBuilder {
+	if err := inst.buf.StartKind("Owner"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("symbol", "Owner", func() error {
+		return ownerEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("u64", "Owner", func() error {
+		return ownerEmitSectionU64(inst.store.dml.GetSectionU64(), row)
+	})
+	inst.ent.Owner = option.Some(row)
+	return inst
 }
 
 // AddState contributes the State component to the open entity.
@@ -447,22 +507,68 @@ func (inst *PersistEntityBuilder) AddState(row State) *PersistEntityBuilder {
 		inst.store.dml.AppendError(err)
 		return inst
 	}
-	inst.buf.Enqueue("stateAppId", "State", func() error {
-		return stateEmitSectionStateAppId(inst.store.dml.GetSectionStateAppId(), row)
+	inst.buf.Enqueue("string", "State", func() error {
+		return stateEmitSectionString(inst.store.dml.GetSectionString(), row)
 	})
-	inst.buf.Enqueue("stateKey", "State", func() error {
-		return stateEmitSectionStateKey(inst.store.dml.GetSectionStateKey(), row)
-	})
-	inst.buf.Enqueue("stateBlob", "State", func() error {
-		return stateEmitSectionStateBlob(inst.store.dml.GetSectionStateBlob(), row)
-	})
-	inst.buf.Enqueue("stateRunId", "State", func() error {
-		return stateEmitSectionStateRunId(inst.store.dml.GetSectionStateRunId(), row)
-	})
-	inst.buf.Enqueue("stateInstanceKey", "State", func() error {
-		return stateEmitSectionStateInstanceKey(inst.store.dml.GetSectionStateInstanceKey(), row)
+	inst.buf.Enqueue("blob", "State", func() error {
+		return stateEmitSectionBlob(inst.store.dml.GetSectionBlob(), row)
 	})
 	inst.ent.State = option.Some(row)
+	return inst
+}
+
+// AddWorkingset contributes the Workingset component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *PersistEntityBuilder) AddWorkingset(row Workingset) *PersistEntityBuilder {
+	if err := inst.buf.StartKind("Workingset"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("symbol", "Workingset", func() error {
+		return workingsetEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("blob", "Workingset", func() error {
+		return workingsetEmitSectionBlob(inst.store.dml.GetSectionBlob(), row)
+	})
+	inst.ent.Workingset = option.Some(row)
+	return inst
+}
+
+// AddColumnWidth contributes the ColumnWidth component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *PersistEntityBuilder) AddColumnWidth(row ColumnWidth) *PersistEntityBuilder {
+	if err := inst.buf.StartKind("ColumnWidth"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("symbol", "ColumnWidth", func() error {
+		return columnWidthEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("string", "ColumnWidth", func() error {
+		return columnWidthEmitSectionString(inst.store.dml.GetSectionString(), row)
+	})
+	inst.buf.Enqueue("f64", "ColumnWidth", func() error {
+		return columnWidthEmitSectionF64(inst.store.dml.GetSectionF64(), row)
+	})
+	inst.ent.ColumnWidth = option.Some(row)
 	return inst
 }
 
@@ -517,6 +623,30 @@ func (inst *PersistEntityBuilder) Rollback() (err error) {
 	return lowlevel.InEntityPersiststateTableRollbackEntity(inst.store.dml)
 }
 
+// IngestOwner buffers one whole entity per row carrying only the
+// Owner component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *PersistStore) IngestOwner(ts time.Time, rows []Owner) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest owner row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.Begin(rows[i].ID, ts).AddOwner(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest owner row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
 // IngestState buffers one whole entity per row carrying only the
 // State component, all stamped with ts — rows ship on the next Flush,
 // like every write. Keys must be distinct within one call (rows
@@ -535,6 +665,54 @@ func (inst *PersistStore) IngestState(ts time.Time, rows []State) (err error) {
 		err = inst.Begin(rows[i].ID, ts).AddState(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest state row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestWorkingset buffers one whole entity per row carrying only the
+// Workingset component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *PersistStore) IngestWorkingset(ts time.Time, rows []Workingset) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest workingset row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.Begin(rows[i].ID, ts).AddWorkingset(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest workingset row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestColumnWidth buffers one whole entity per row carrying only the
+// ColumnWidth component, all stamped with ts — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *PersistStore) IngestColumnWidth(ts time.Time, rows []ColumnWidth) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest columnWidth row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.Begin(rows[i].ID, ts).AddColumnWidth(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest columnWidth row %d: %w", i, err)
 			return
 		}
 	}
@@ -913,8 +1091,45 @@ func (inst *persiststateFetcher) FetchItemSinglePartition(ctx context.Context, p
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	persiststateScanStateFilter = "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) AND has(\"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716) AND has(\"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728) AND countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1 AND countEqual(\"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1"
+	persiststateScanOwnerFilter       = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677701, 9223372049739677716]) AND has(\"tv:u64:lr:lr:u64:1247:::0::data\", 9223372049739677728) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:u64:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1"
+	persiststateScanStateFilter       = "has(\"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677769) AND countEqual(\"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1"
+	persiststateScanWorkingsetFilter  = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677762, 9223372049739677759, 9223372049739677727]) AND has(\"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677760) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677762) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677759) = 1 AND countEqual(\"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677760) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677727) = 1"
+	persiststateScanColumnWidthFilter = "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677764) AND hasAll(\"tv:string:lr:lr:u64:1247:::0::data\", [9223372049739677765, 9223372049739677766]) AND hasAll(\"tv:f64:lr:lr:u64:1247:::0::data\", [9223372049739677767, 9223372049739677768]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677764) = 1 AND countEqual(\"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677765) = 1 AND countEqual(\"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677766) = 1 AND countEqual(\"tv:f64:lr:lr:u64:1247:::0::data\", 9223372049739677767) = 1 AND countEqual(\"tv:f64:lr:lr:u64:1247:::0::data\", 9223372049739677768) = 1"
 )
+
+// ScanOwner iterates the entities whose rows carry a conforming Owner
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *PersistStore) ScanOwner(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	where := persiststateScanOwnerFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.tableName() +
+		" WHERE " + where +
+		" ORDER BY " + PersistColOrder + " ASC, " + PersistColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += persiststateArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
 
 // ScanState iterates the entities whose rows carry a conforming State
 // component, ordered by (Order, Key) — so entities sharing an Order
@@ -922,6 +1137,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -932,6 +1149,77 @@ const (
 // rows.
 func (inst *PersistStore) ScanState(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
 	where := persiststateScanStateFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.tableName() +
+		" WHERE " + where +
+		" ORDER BY " + PersistColOrder + " ASC, " + PersistColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += persiststateArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanWorkingset iterates the entities whose rows carry a conforming Workingset
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *PersistStore) ScanWorkingset(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	where := persiststateScanWorkingsetFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.tableName() +
+		" WHERE " + where +
+		" ORDER BY " + PersistColOrder + " ASC, " + PersistColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += persiststateArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanColumnWidth iterates the entities whose rows carry a conforming ColumnWidth
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *PersistStore) ScanColumnWidth(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	where := persiststateScanColumnWidthFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
+	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1037,6 +1325,198 @@ func (inst *PersistStore) GetLive(ctx context.Context, key string) (ent *Persist
 	return
 }
 
+// ScanLiveOwner is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming Owner component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *PersistStore) ScanLiveOwner(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	inner := "SELECT * FROM " + inst.tableName()
+	if opts.KeyPrefix != "" {
+		inner += " WHERE " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	inner += " ORDER BY " + PersistColOrder + " DESC LIMIT 1 BY " + PersistColKey
+	where := "(" + persiststateScanOwnerFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PersistColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += persiststateArrowOutputSettings
+	return func(yield func(*PersistEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
+// ScanLiveState is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming State component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *PersistStore) ScanLiveState(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	inner := "SELECT * FROM " + inst.tableName()
+	if opts.KeyPrefix != "" {
+		inner += " WHERE " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	inner += " ORDER BY " + PersistColOrder + " DESC LIMIT 1 BY " + PersistColKey
+	where := "(" + persiststateScanStateFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PersistColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += persiststateArrowOutputSettings
+	return func(yield func(*PersistEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
+// ScanLiveWorkingset is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming Workingset component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *PersistStore) ScanLiveWorkingset(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	inner := "SELECT * FROM " + inst.tableName()
+	if opts.KeyPrefix != "" {
+		inner += " WHERE " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	inner += " ORDER BY " + PersistColOrder + " DESC LIMIT 1 BY " + PersistColKey
+	where := "(" + persiststateScanWorkingsetFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PersistColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += persiststateArrowOutputSettings
+	return func(yield func(*PersistEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
+// ScanLiveColumnWidth is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming ColumnWidth component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *PersistStore) ScanLiveColumnWidth(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	inner := "SELECT * FROM " + inst.tableName()
+	if opts.KeyPrefix != "" {
+		inner += " WHERE " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	inner += " ORDER BY " + PersistColOrder + " DESC LIMIT 1 BY " + PersistColKey
+	where := "(" + persiststateScanColumnWidthFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PersistColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += persiststateArrowOutputSettings
+	return func(yield func(*PersistEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
 // PersistComponentSQL publishes this store's ADR-0066 read-back artefacts —
 // the SQL its component definitions generate — for an authoring surface
 // to expand (ADR-0189). A host registers it into a componentsql.Registry;
@@ -1054,11 +1534,29 @@ var PersistComponentSQL = componentsql.Set{
 	Store: "Persist",
 	Table: PersistTableName,
 	Kinds: map[string]componentsql.Artefacts{
+		"Owner": {
+			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677701, 9223372049739677716]) AND has(\"tv:u64:lr:lr:u64:1247:::0::data\", 9223372049739677728)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:u64:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1",
+			Filter:     persiststateScanOwnerFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:24:::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:24:::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677716, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:u64:value:val:u64:4:::0::data\", \"tv:u64:lr:lr:u64:1247:::0::data\", 9223372049739677728, LW_RAGGED_PARENT_IDS(\"tv:u64:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, AppId String, RunId String, InstanceKey UInt64)')",
+		},
 		"State": {
-			Presence:   "has(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) AND has(\"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716) AND has(\"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728)",
-			Validator:  "countEqual(\"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1 AND countEqual(\"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716) = 1 AND countEqual(\"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728) = 1",
+			Presence:   "has(\"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677712) AND has(\"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677769)",
+			Validator:  "countEqual(\"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677712) = 1 AND countEqual(\"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677769) = 1",
 			Filter:     persiststateScanStateFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:stateAppId:value:val:s:24:::0::data\", \"tv:stateAppId:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:stateAppId:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateKey:value:val:s:4:::0::data\", \"tv:stateKey:lr:lr:u64:1247:::0::data\", 9223372049739677712, LW_RAGGED_PARENT_IDS(\"tv:stateKey:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateBlob:value:val:y:4:::0::data\", \"tv:stateBlob:lr:lr:u64:1247:::0::data\", 9223372049739677769, LW_RAGGED_PARENT_IDS(\"tv:stateBlob:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateRunId:value:val:s:24:::0::data\", \"tv:stateRunId:lr:lr:u64:1247:::0::data\", 9223372049739677716, LW_RAGGED_PARENT_IDS(\"tv:stateRunId:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:stateInstanceKey:value:val:u64:4:::0::data\", \"tv:stateInstanceKey:lr:lr:u64:1247:::0::data\", 9223372049739677728, LW_RAGGED_PARENT_IDS(\"tv:stateInstanceKey:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, AppId String, Key String, Value String, RunId String, InstanceKey UInt64)')",
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:string:value:val:s:4:::0::data\", \"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677712, LW_RAGGED_PARENT_IDS(\"tv:string:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:blob:value:val:y:4:::0::data\", \"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677769, LW_RAGGED_PARENT_IDS(\"tv:blob:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Key String, Value String)')",
+		},
+		"Workingset": {
+			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677762, 9223372049739677759, 9223372049739677727]) AND has(\"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677760)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677762) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677759) = 1 AND countEqual(\"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677760) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677727) = 1",
+			Filter:     persiststateScanWorkingsetFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:24:::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677762, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:24:::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677759, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:blob:value:val:y:4:::0::data\", \"tv:blob:lr:lr:u64:1247:::0::data\", 9223372049739677760, LW_RAGGED_PARENT_IDS(\"tv:blob:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:24:::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677727, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Name String, Kind String, Config String, Reason String)')",
+		},
+		"ColumnWidth": {
+			Presence:   "has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677764) AND hasAll(\"tv:string:lr:lr:u64:1247:::0::data\", [9223372049739677765, 9223372049739677766]) AND hasAll(\"tv:f64:lr:lr:u64:1247:::0::data\", [9223372049739677767, 9223372049739677768])",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677764) = 1 AND countEqual(\"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677765) = 1 AND countEqual(\"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677766) = 1 AND countEqual(\"tv:f64:lr:lr:u64:1247:::0::data\", 9223372049739677767) = 1 AND countEqual(\"tv:f64:lr:lr:u64:1247:::0::data\", 9223372049739677768) = 1",
+			Filter:     persiststateScanColumnWidthFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:24:::0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677764, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:string:value:val:s:4:::0::data\", \"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677765, LW_RAGGED_PARENT_IDS(\"tv:string:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:string:value:val:s:4:::0::data\", \"tv:string:lr:lr:u64:1247:::0::data\", 9223372049739677766, LW_RAGGED_PARENT_IDS(\"tv:string:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:f64:value:val:f64:4:::0::data\", \"tv:f64:lr:lr:u64:1247:::0::data\", 9223372049739677767, LW_RAGGED_PARENT_IDS(\"tv:f64:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:f64:value:val:f64:4:::0::data\", \"tv:f64:lr:lr:u64:1247:::0::data\", 9223372049739677768, LW_RAGGED_PARENT_IDS(\"tv:f64:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Tier String, Scope String, ColumnKey String, Points Float64, FontSize Float64)')",
 		},
 	},
 }
@@ -1117,12 +1615,12 @@ func decodePersistRecord(rec arrow.RecordBatch) (ents []*PersistEntity, err erro
 	idR := lowlevel.NewReadAccessPersiststateTablePlainEntityIdAttributes()
 	tsR := lowlevel.NewReadAccessPersiststateTablePlainEntityTimestampAttributes()
 	lcR := lowlevel.NewReadAccessPersiststateTablePlainEntityLifecycleAttributes()
-	stateAppIdR := lowlevel.NewReadAccessPersiststateTableTaggedStateAppId()
-	stateKeyR := lowlevel.NewReadAccessPersiststateTableTaggedStateKey()
-	stateBlobR := lowlevel.NewReadAccessPersiststateTableTaggedStateBlob()
-	stateRunIdR := lowlevel.NewReadAccessPersiststateTableTaggedStateRunId()
-	stateInstanceKeyR := lowlevel.NewReadAccessPersiststateTableTaggedStateInstanceKey()
-	readers := []persiststateSectionReaderI{idR, tsR, lcR, stateAppIdR, stateKeyR, stateBlobR, stateRunIdR, stateInstanceKeyR}
+	symbolR := lowlevel.NewReadAccessPersiststateTableTaggedSymbol()
+	u64R := lowlevel.NewReadAccessPersiststateTableTaggedU64()
+	stringR := lowlevel.NewReadAccessPersiststateTableTaggedString()
+	blobR := lowlevel.NewReadAccessPersiststateTableTaggedBlob()
+	f64R := lowlevel.NewReadAccessPersiststateTableTaggedF64()
+	readers := []persiststateSectionReaderI{idR, tsR, lcR, symbolR, u64R, stringR, blobR, f64R}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1150,7 +1648,18 @@ func decodePersistRecord(rec arrow.RecordBatch) (ents []*PersistEntity, err erro
 			Lifecycle: lcR.ValueLifecycle.Value(i),
 		}
 		{
-			row, ok, e := stateReadRow(i, stateAppIdR.GetAttributes(), stateAppIdR.GetMemberships(), stateKeyR.GetAttributes(), stateKeyR.GetMemberships(), stateBlobR.GetAttributes(), stateBlobR.GetMemberships(), stateRunIdR.GetAttributes(), stateRunIdR.GetMemberships(), stateInstanceKeyR.GetAttributes(), stateInstanceKeyR.GetMemberships())
+			row, ok, e := ownerReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), u64R.GetAttributes(), u64R.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read owner component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.Owner = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := stateReadRow(i, stringR.GetAttributes(), stringR.GetMemberships(), blobR.GetAttributes(), blobR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read state component: %w", e)
 				return
@@ -1158,6 +1667,28 @@ func decodePersistRecord(rec arrow.RecordBatch) (ents []*PersistEntity, err erro
 			if ok {
 				row.ID = ent.ID
 				ent.State = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := workingsetReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), blobR.GetAttributes(), blobR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read workingset component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.Workingset = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := columnWidthReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), stringR.GetAttributes(), stringR.GetMemberships(), f64R.GetAttributes(), f64R.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read columnWidth component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.ColumnWidth = option.Some(row)
 			}
 		}
 		ents = append(ents, ent)

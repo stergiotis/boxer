@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -16,9 +16,9 @@ import (
 // needs, so the tests run against the real storage semantics — latest-wins
 // per key, tombstones, app scoping — rather than a hand-rolled fake that
 // could agree with the resolver and disagree with production.
-func newResolver(t *testing.T) (r *Resolver, store *factsstore.InMemoryFactsStore) {
+func newResolver(t *testing.T) (r *Resolver, store *statestore.Memory) {
 	t.Helper()
-	store = factsstore.NewInMemoryFactsStore()
+	store = statestore.NewMemory()
 	r, err := New(store, Opts{AppId: "play"})
 	require.NoError(t, err)
 	return
@@ -51,7 +51,7 @@ func settled(t *testing.T, r *Resolver, tag string, cols []Column, defaults []fl
 }
 
 func TestNew_Validation(t *testing.T) {
-	store := factsstore.NewInMemoryFactsStore()
+	store := statestore.NewMemory()
 	_, err := New(nil, Opts{AppId: "play"})
 	require.Error(t, err)
 	_, err = New(store, Opts{})
@@ -102,37 +102,37 @@ func TestResolve_MissingDefaultsAreZero(t *testing.T) {
 func TestResolve_TierPrecedence(t *testing.T) {
 	tests := []struct {
 		name  string
-		write []factsstore.ColumnWidthRow
+		write []statestore.ColumnWidthRow
 		want  float64
 	}{
 		{
 			name: "column tier only",
-			write: []factsstore.ColumnWidthRow{
-				{AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30},
+			write: []statestore.ColumnWidthRow{
+				{AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30},
 			},
 			want: 30,
 		},
 		{
 			name: "shape beats column",
-			write: []factsstore.ColumnWidthRow{
-				{AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30},
-				{AppId: "play", Tier: factsstore.ColWidthTierShape, Scope: ShapeHash([]Column{colA}), ColumnKey: colA.Key(), Points: 60},
+			write: []statestore.ColumnWidthRow{
+				{AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30},
+				{AppId: "play", Tier: statestore.ColWidthTierShape, Scope: ShapeHash([]Column{colA}), ColumnKey: colA.Key(), Points: 60},
 			},
 			want: 60,
 		},
 		{
 			name: "instance beats both",
-			write: []factsstore.ColumnWidthRow{
-				{AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30},
-				{AppId: "play", Tier: factsstore.ColWidthTierShape, Scope: ShapeHash([]Column{colA}), ColumnKey: colA.Key(), Points: 60},
-				{AppId: "play", Tier: factsstore.ColWidthTierInstance, Scope: "tbl", ColumnKey: colA.Key(), Points: 90},
+			write: []statestore.ColumnWidthRow{
+				{AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30},
+				{AppId: "play", Tier: statestore.ColWidthTierShape, Scope: ShapeHash([]Column{colA}), ColumnKey: colA.Key(), Points: 60},
+				{AppId: "play", Tier: statestore.ColWidthTierInstance, Scope: "tbl", ColumnKey: colA.Key(), Points: 90},
 			},
 			want: 90,
 		},
 		{
 			name: "an instance override under another tag does not apply",
-			write: []factsstore.ColumnWidthRow{
-				{AppId: "play", Tier: factsstore.ColWidthTierInstance, Scope: "other", ColumnKey: colA.Key(), Points: 90},
+			write: []statestore.ColumnWidthRow{
+				{AppId: "play", Tier: statestore.ColWidthTierInstance, Scope: "other", ColumnKey: colA.Key(), Points: 90},
 			},
 			want: 11,
 		},
@@ -141,7 +141,7 @@ func TestResolve_TierPrecedence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r, store := newResolver(t)
 			for _, row := range tc.write {
-				_, err := store.WriteColumnWidth(row)
+				err := store.WriteColumnWidth(row)
 				require.NoError(t, err)
 			}
 			require.NoError(t, r.Load())
@@ -156,8 +156,8 @@ func TestResolve_TierPrecedence(t *testing.T) {
 func TestResolve_ShapeTierCrossesTableTags(t *testing.T) {
 	r, store := newResolver(t)
 	cols := []Column{colA, colB}
-	_, err := store.WriteColumnWidth(factsstore.ColumnWidthRow{
-		AppId: "play", Tier: factsstore.ColWidthTierShape,
+	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+		AppId: "play", Tier: statestore.ColWidthTierShape,
 		Scope: ShapeHash(cols), ColumnKey: colA.Key(), Points: 77,
 	})
 	require.NoError(t, err)
@@ -183,8 +183,8 @@ func TestResolve_RescalesOnFontSizeChange(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r, store := newResolver(t)
-			_, err := store.WriteColumnWidth(factsstore.ColumnWidthRow{
-				AppId: "play", Tier: factsstore.ColWidthTierColumn,
+			err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+				AppId: "play", Tier: statestore.ColWidthTierColumn,
 				ColumnKey: colA.Key(), Points: 100, FontSize: tc.capturedAt,
 			})
 			require.NoError(t, err)
@@ -196,11 +196,11 @@ func TestResolve_RescalesOnFontSizeChange(t *testing.T) {
 }
 
 func TestResolve_Clamps(t *testing.T) {
-	store := factsstore.NewInMemoryFactsStore()
+	store := statestore.NewMemory()
 	r, err := New(store, Opts{AppId: "play", MinPoints: 20, MaxPoints: 200})
 	require.NoError(t, err)
-	_, err = store.WriteColumnWidth(factsstore.ColumnWidthRow{
-		AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 100000,
+	err = store.WriteColumnWidth(statestore.ColumnWidthRow{
+		AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 100000,
 	})
 	require.NoError(t, err)
 	require.NoError(t, r.Load())
@@ -221,8 +221,8 @@ func TestEpoch_BumpsOnlyWhenResolvedWidthsChange(t *testing.T) {
 	r.Resolve("tbl", cols, 12, []float64{50})
 	assert.Equal(t, e1, r.Epoch("tbl"), "an unchanged resolve must not bump")
 
-	_, err := store.WriteColumnWidth(factsstore.ColumnWidthRow{
-		AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 123,
+	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+		AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 123,
 	})
 	require.NoError(t, err)
 	require.NoError(t, r.Load())
@@ -430,7 +430,7 @@ func TestFlush_DebouncesUntilMotionStops(t *testing.T) {
 // A failed write must leave the entry pending: losing a width the user set
 // because one insert failed is worse than writing a second row later.
 func TestFlush_FailureLeavesEntryPending(t *testing.T) {
-	store := &failingStore{InMemoryFactsStore: factsstore.NewInMemoryFactsStore(), fail: true}
+	store := &failingStore{Memory: statestore.NewMemory(), fail: true}
 	r, err := New(store, Opts{AppId: "play"})
 	require.NoError(t, err)
 	cols := []Column{colA}
@@ -488,8 +488,8 @@ func TestClear_DropsPendingCapture(t *testing.T) {
 // adjustment in favour of the older stored value.
 func TestLoad_KeepsPendingCaptures(t *testing.T) {
 	r, store := newResolver(t)
-	_, err := store.WriteColumnWidth(factsstore.ColumnWidthRow{
-		AppId: "play", Tier: factsstore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30,
+	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+		AppId: "play", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 30,
 	})
 	require.NoError(t, err)
 	require.NoError(t, r.Load())
@@ -505,8 +505,8 @@ func TestLoad_KeepsPendingCaptures(t *testing.T) {
 
 func TestLoad_IgnoresOtherApps(t *testing.T) {
 	r, store := newResolver(t)
-	_, err := store.WriteColumnWidth(factsstore.ColumnWidthRow{
-		AppId: "imztop", Tier: factsstore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 999,
+	err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+		AppId: "imztop", Tier: statestore.ColWidthTierColumn, ColumnKey: colA.Key(), Points: 999,
 	})
 	require.NoError(t, err)
 	require.NoError(t, r.Load())
@@ -514,14 +514,14 @@ func TestLoad_IgnoresOtherApps(t *testing.T) {
 }
 
 func TestEvict_BoundsMemoryAndSparesPendingCaptures(t *testing.T) {
-	store := factsstore.NewInMemoryFactsStore()
+	store := statestore.NewMemory()
 	r, err := New(store, Opts{AppId: "play", MaxEntries: 4})
 	require.NoError(t, err)
 
 	// Six stored overrides, oldest first.
 	for i := range 6 {
-		_, werr := store.WriteColumnWidth(factsstore.ColumnWidthRow{
-			AppId: "play", Tier: factsstore.ColWidthTierColumn,
+		werr := store.WriteColumnWidth(statestore.ColumnWidthRow{
+			AppId: "play", Tier: statestore.ColWidthTierColumn,
 			ColumnKey: Column{Name: string(rune('a' + i)), Type: "String"}.Key(),
 			Points:    float64(10 + i),
 			Ts:        t0.Add(time.Duration(i) * time.Minute),
@@ -541,22 +541,22 @@ func TestEvict_BoundsMemoryAndSparesPendingCaptures(t *testing.T) {
 
 // failingStore makes WriteColumnWidth fail on demand.
 type failingStore struct {
-	*factsstore.InMemoryFactsStore
+	*statestore.Memory
 	fail bool
 }
 
-func (inst *failingStore) WriteColumnWidth(row factsstore.ColumnWidthRow) (id uint64, err error) {
+func (inst *failingStore) WriteColumnWidth(row statestore.ColumnWidthRow) (err error) {
 	if inst.fail {
 		err = eh.Errorf("synthetic write failure")
 		return
 	}
-	id, err = inst.InMemoryFactsStore.WriteColumnWidth(row)
+	err = inst.Memory.WriteColumnWidth(row)
 	return
 }
 
 var _ StoreI = (*failingStore)(nil)
-var _ StoreI = (*factsstore.InMemoryFactsStore)(nil)
-var _ StoreI = (factsstore.FactsStoreI)(nil)
+var _ StoreI = (*statestore.Memory)(nil)
+var _ StoreI = (statestore.ColumnWidthStoreI)(nil)
 
 func TestClearAll_ResetsEveryColumn(t *testing.T) {
 	r, store := newResolver(t)
@@ -580,7 +580,7 @@ func TestClearAll_ResetsEveryColumn(t *testing.T) {
 // A partial clear is the worst outcome for this gesture, so a failure on
 // one column must not abandon the rest.
 func TestClearAll_ContinuesPastAFailure(t *testing.T) {
-	store := &failingDeleteStore{InMemoryFactsStore: factsstore.NewInMemoryFactsStore(), failFor: colA.Key()}
+	store := &failingDeleteStore{Memory: statestore.NewMemory(), failFor: colA.Key()}
 	r, err := New(store, Opts{AppId: "play"})
 	require.NoError(t, err)
 	cols := []Column{colA, colB}
@@ -607,7 +607,7 @@ func TestClearAll_EmptyColumnSetIsNoop(t *testing.T) {
 
 // failingDeleteStore fails DeleteColumnWidth for one column key.
 type failingDeleteStore struct {
-	*factsstore.InMemoryFactsStore
+	*statestore.Memory
 	failFor string
 }
 
@@ -616,7 +616,7 @@ func (inst *failingDeleteStore) DeleteColumnWidth(appId app.AppIdT, tier string,
 		err = eh.Errorf("synthetic delete failure")
 		return
 	}
-	return inst.InMemoryFactsStore.DeleteColumnWidth(appId, tier, scope, columnKey)
+	return inst.Memory.DeleteColumnWidth(appId, tier, scope, columnKey)
 }
 
 var _ StoreI = (*failingDeleteStore)(nil)

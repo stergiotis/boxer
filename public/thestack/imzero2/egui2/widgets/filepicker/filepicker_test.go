@@ -10,7 +10,7 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
 )
 
@@ -772,9 +772,9 @@ func TestWithShowHiddenFilesOption(t *testing.T) {
 
 func TestColumnWidths(t *testing.T) {
 	t.Run("resolver-is-keyed-to-the-dialog-and-loads", func(t *testing.T) {
-		store := factsstore.NewInMemoryFactsStore()
-		_, err := store.WriteColumnWidth(factsstore.ColumnWidthRow{
-			AppId: AppId, Tier: factsstore.ColWidthTierColumn,
+		store := statestore.NewMemory()
+		err := store.WriteColumnWidth(statestore.ColumnWidthRow{
+			AppId: AppId, Tier: statestore.ColWidthTierColumn,
 			ColumnKey: "k", Points: 123,
 		})
 		if err != nil {
@@ -789,7 +789,7 @@ func TestColumnWidths(t *testing.T) {
 		}
 	})
 	t.Run("option-and-setter", func(t *testing.T) {
-		res, err := NewColumnWidths(factsstore.NewInMemoryFactsStore())
+		res, err := NewColumnWidths(statestore.NewMemory())
 		if err != nil {
 			t.Fatalf("NewColumnWidths: %v", err)
 		}

@@ -165,7 +165,8 @@ func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 	require.True(t, rep.OK, "refused: %s", rep.Error)
 
 	// One row per persist Set: the document and the index. Both carry the
-	// store's durable id in the state component's AppId.
+	// store's durable id in the row's Owner component (every state row
+	// carries one since ADR-0105's Update of 2026-08-15).
 	exec, err := storeexec.New(cli, nil)
 	require.NoError(t, err)
 	reader := persiststore.NewPersistStore(exec, nil, persiststore.PersistStoreConfig{Table: table})
@@ -173,7 +174,7 @@ func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 	rows := 0
 	for ent, serr := range reader.ScanState(ctx, recordstore.ScanOpts{}) {
 		require.NoError(t, serr)
-		if ent.State.Has && ent.State.Val.AppId == "runtime.appletstore" {
+		if ent.State.Has && ent.Owner.Has && ent.Owner.Val.AppId == "runtime.appletstore" {
 			rows++
 		}
 	}
@@ -183,7 +184,7 @@ func TestStoreWritesStateRows_LiveCH(t *testing.T) {
 
 // TestStoreRowsCarryTheWritingWindow_LiveCH is ADR-0191 §SD5 through the
 // production path: a persist write records which window made it, all the way
-// from the bus envelope to a scanned-back State component.
+// from the bus envelope to a scanned-back Owner component.
 //
 // It goes through StoreBackend.Set with an explicit StorageRef rather than
 // through the appletstore service, because the service IS the writer in the
@@ -230,7 +231,8 @@ func TestStoreRowsCarryTheWritingWindow_LiveCH(t *testing.T) {
 	for ent, serr := range reader.ScanState(ctx, recordstore.ScanOpts{}) {
 		require.NoError(t, serr)
 		if ent.State.Has && ent.State.Val.Key == "editorFont" {
-			seen = append(seen, ent.State.Val.InstanceKey)
+			require.True(t, ent.Owner.Has, "a persist write carries its Owner")
+			seen = append(seen, ent.Owner.Val.InstanceKey)
 		}
 	}
 	assert.ElementsMatch(t, []uint64{4, 11}, seen,

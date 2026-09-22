@@ -1,15 +1,23 @@
-// Package persiststore is the generated record store behind the durable
-// persist backend (ADR-0105 D3a). App state lives on its own store-owned
-// table rather than on `boxer.facts`: the state verbs want a latest-wins
-// view over a mutable key, which is the shape the generated state view
-// gives directly and the append-only facts table only gives through
-// hand-written `argMax` SQL — the code class ADR-0105 exists to delete.
+// Package persiststore is the generated record store behind every kind of
+// durable app state (ADR-0105 D3a, and its Update of 2026-08-15 extending
+// D3a to every state-shaped kind). State lives on its own store-owned table
+// rather than on `boxer.facts`: the state verbs want a latest-wins view over
+// a mutable key, which the generated state view gives directly and the
+// append-only facts table only gives through hand-written `argMax` SQL — the
+// code class ADR-0105 exists to delete. The rule the two tables now split
+// on is *trail on `boxer.facts`, state on `boxer.persiststate`*.
 //
-// One row per Set, keyed "<appId>/<key>" (the pushoutstore namespacing
-// pattern). A Delete appends a tombstone; the newest row for a key wins,
-// and a tombstone reads as absent. The previous value stays queryable, so
-// the row trail is still the history of that key — the one property the
-// facts-backed predecessor had that was worth keeping.
+// Three kinds share the table, each a component over the same small set of
+// typed sections: persist state (State), workingsets (Workingset) and
+// table column-width overrides (ColumnWidth). A kind is which component a
+// row carries — no kind membership is written — and every live row also
+// carries Owner, the app it belongs to and the process and window that
+// wrote it. Adding a kind is a DTO plus vocabulary entries, never a schema
+// change.
+//
+// One row per write, keyed by kind (keys.go): the newest row for a key
+// wins, and a Delete appends a tombstone that reads as absent. The previous
+// value stays queryable, so the row trail is still the history of that key.
 //
 // The table is this store's own: EnsureTable provisions it. That is the
 // difference from a facts-bound store (ADR-0184 SD2), where `chstore` is
@@ -38,10 +46,10 @@ const (
 // TableRowConfig matches pushoutstore's: multiple attributes per row.
 const TableRowConfig = common.TableRowConfigMultiAttributesPerRow
 
-// GetPersistSchemaInManipulator builds the persist-state table. Envelope
-// roles: id (string Key — "<appId>/<key>"), ts (Order — the write time),
-// lifecycle (Lifecycle — the Delete tombstone, which is what makes the
-// state view emit at all).
+// GetPersistSchemaInManipulator builds the state table. Envelope roles: id
+// (string Key — see keys.go), ts (Order — the write time), lifecycle
+// (Lifecycle — the Delete tombstone, which is what makes the state view
+// emit at all).
 func GetPersistSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	manip, err = common.NewTableManipulator()
 	if err != nil {
@@ -49,7 +57,7 @@ func GetPersistSchemaInManipulator() (manip *common.TableManipulator, err error)
 		return
 	}
 	manip.SetTableName(TableName)
-	manip.SetTableComment("app persist state, keyed <appId>/<key> (ADR-0105 D3a)")
+	manip.SetTableComment("app state of every kind, keyed <kind>/<appId>/... (ADR-0105 D3a, Update 2026-08-15)")
 	loadPersistSchema(manip)
 	return
 }
@@ -76,25 +84,23 @@ func loadPersistSchema(manip common.TableManipulatorFluidI) {
 			AddColumnEncodingHints(hints...)
 	}
 
-	// The payload, opaque to this layer: persist stores bytes the app chose.
-	section("stateBlob", ctabb.Y, easp.AspectLightGeneralCompression)
-	// appId and key are carried denormalised beside the composite entity id
-	// so "every key this app owns" is a WHERE on a column rather than a
-	// prefix match on the id string. appId repeats across every row an app
-	// ever writes, which is what the inter-record hint is for.
-	section("stateAppId", ctabb.S,
-		easp.AspectInterRecordLowCardinality, easp.AspectLightGeneralCompression)
-	section("stateKey", ctabb.S, easp.AspectLightGeneralCompression)
-	// Provenance (ADR-0191 §SD5): the process and the window that wrote the
-	// row. Neither is part of the key — the state stays app-scoped and
-	// latest-wins — but without them a write can only be attributed to a run
-	// by its timestamp, which two overlapping processes make wrong.
+	// A small typed set rather than a section per field, so a new kind of
+	// state is a DTO plus vocabulary entries and never a schema change —
+	// ADR-0026 §SD6's "why one table" argument, applied to state. Kinds
+	// share these sections under distinct registry memberships; the ids
+	// keep their attributes apart on read (ADR-0105 D2's id-level gate).
 	//
-	// The run id repeats across every row a process writes, so it takes the
-	// same inter-record hint appId does. The window key is a small counter
-	// that repeats within a run and delta-encodes poorly, so it takes only
-	// the general compression.
-	section("stateRunId", ctabb.S,
+	// symbol: low-cardinality strings that repeat across rows — app ids,
+	// run ids, tier and kind labels — which is what the inter-record hint
+	// is for.
+	section("symbol", ctabb.S,
 		easp.AspectInterRecordLowCardinality, easp.AspectLightGeneralCompression)
-	section("stateInstanceKey", ctabb.U64, easp.AspectLightGeneralCompression)
+	// string: free text that does not repeat — persist keys, table scopes,
+	// column keys.
+	section("string", ctabb.S, easp.AspectLightGeneralCompression)
+	// blob: payloads opaque to this layer — a persist value, a workingset's
+	// facts-CBOR launch config.
+	section("blob", ctabb.Y, easp.AspectLightGeneralCompression)
+	section("u64", ctabb.U64, easp.AspectLightGeneralCompression)
+	section("f64", ctabb.F64, easp.AspectLightGeneralCompression)
 }

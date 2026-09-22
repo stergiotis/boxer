@@ -3,13 +3,15 @@ package windowhost
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 )
 
 // windowhost_workingset.go is the host half of ADR-0148: pulling a
-// closing window's workingset and writing it as a fact beside the launch
-// facts, and (M4) feeding a stored record back through the host's own
-// OpenWithConfig at a later plain open.
+// closing window's workingset and writing it to the state store, and (M4)
+// feeding a stored record back through the host's own OpenWithConfig at a
+// later plain open. The record lived on `boxer.facts` beside the launch
+// facts until ADR-0105's Update of 2026-08-15 moved it to the state table:
+// it is state — the newest save wins — not trail.
 
 // WorkingsetDefaultName is the single workingset name v1 wires (ADR-0148
 // §SD3). The store, the row, and the host paths carry a name from day one
@@ -40,12 +42,12 @@ func (inst *Inst) restoreWorkingset(m app.Manifest) (cfg []byte) {
 		return
 	}
 	inst.mu.Lock()
-	facts := inst.facts
+	state := inst.state
 	inst.mu.Unlock()
-	if facts == nil {
+	if state == nil {
 		return
 	}
-	stored, kind, found, err := facts.LatestWorkingset(m.Id, WorkingsetDefaultName)
+	stored, kind, found, err := state.LatestWorkingset(m.Id, WorkingsetDefaultName)
 	if err != nil {
 		inst.logger.Debug().Err(err).Str("id", string(m.Id)).
 			Msg("windowhost: workingset lookup failed; opening plainly")
@@ -77,8 +79,8 @@ func (inst *Inst) restoreWorkingset(m app.Manifest) (cfg []byte) {
 	return
 }
 
-// saveWorkingset pulls the closing window's workingset and writes it as a
-// boxer.facts row (ADR-0148 §SD4). Best-effort throughout: every failure
+// saveWorkingset pulls the closing window's workingset and writes it to
+// the state store (ADR-0148 §SD4). Best-effort throughout: every failure
 // path logs and returns, because persisting a record must never disturb a
 // close.
 //
@@ -97,11 +99,11 @@ func (inst *Inst) saveWorkingset(w *window, reason string) {
 	}
 	inst.mu.Lock()
 	runId := inst.runId
-	facts := inst.facts
+	state := inst.state
 	inst.mu.Unlock()
-	if facts == nil {
-		// No store attached: workingsets degrade with the audit trail
-		// (§SD5), and composing would be work with nowhere to land.
+	if state == nil {
+		// No store attached (§SD5): composing would be work with nowhere
+		// to land.
 		return
 	}
 	composer, ok := w.appInst.(app.WorkingsetComposerI)
@@ -141,7 +143,7 @@ func (inst *Inst) saveWorkingset(w *window, reason string) {
 			Msg("windowhost: composed workingset refused by kindcheck; skipping the save")
 		return
 	}
-	_, wErr := facts.WriteWorkingset(factsstore.WorkingsetRow{
+	wErr := state.WriteWorkingset(statestore.WorkingsetRow{
 		RunId:   runId,
 		AppId:   w.manifest.Id,
 		Name:    WorkingsetDefaultName,

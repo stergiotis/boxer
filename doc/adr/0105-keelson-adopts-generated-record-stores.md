@@ -704,6 +704,57 @@ blocked by genuine carrier channels, and `capmapfacts`
 ([ADR-0168](./0168-capmap-business-capability-corpus.md) §Deferrals) by both
 refusals, with `Relation` passing.
 
+### 2026-09-22 — the state table is built; three things the entry did not anticipate
+
+The 2026-08-15 entry's P1–P5 are built, in its milestone order, and the
+facts-side verbs and `chstore` files are gone. The maintainer re-confirmed on
+this date that stored rows were still expendable, so P4 ran as decided: the
+table is re-provisioned at its v2 shape and nothing is copied.
+
+Three corrections the entry could not have seen from its vantage:
+
+- **Every live row carries an `Owner` component.** P1 reads "a state kind is a
+  DTO plus vocabulary entries", but the generator refuses two kinds of one
+  store naming one membership (ADR-0100 SD6 as corrected 2026-08-28), and all
+  three kinds need `runtimeApp`, `runtimeRun` and `runtimeLifecycleTileKey`.
+  Those three ride a fourth component, `Owner`, so a row's archetype is
+  `Owner` plus exactly one kind. It also makes "everything one app owns" a
+  scan of one component, whichever kinds the rows are. A tombstone carries no
+  `Owner` — the generated `Delete` writes no component — and is attributed by
+  its key alone.
+- **Keys escape their segments.** App ids are Go import paths and they nest:
+  every applet's id sits under the sqlapplet app's. P2's spelling, unescaped,
+  cannot tell app `a/b` with key `c` from app `a` with key `b/c`, and a
+  per-app prefix read of the sqlapplet app would take in every applet. Every
+  segment but the last escapes `%` and `/`
+  (`persiststore.StateKey` and siblings), which keeps keys injective and a
+  per-app prefix exact. D3a's own `<app>/<key>` spelling had the same
+  ambiguity; the re-provision retires it.
+- **The state store opens whether or not the persist service runs.**
+  Workingsets and column widths rode the facts store, which every host has. A
+  host booted without `runtime.persist` would have lost both silently if the
+  store came with the service, so the host opens the state backend on its own
+  and the persist service reuses it when enabled.
+
+Two consequences worth stating:
+
+- `ScanLive<Kind>` applies `ScanOpts.ExtraPredicate` to the collapsed rows,
+  not before the collapse — a predicate that dropped a tombstone would uncover
+  the row it superseded, the resurrection P3 exists to prevent. Recorded in
+  ADR-0100's Update of this date with the rest of the generator surface.
+- `keelson('runtime_events')` kept its workingset and column-width rows: its
+  persist half scans `Owner`, so every state write appears under the label
+  the facts half gave the same kind. Rows written to facts before the move
+  still render there.
+
+Verification: one contract suite (`statestore/statestoretest`) runs against
+the in-memory twin and the durable backend — over `clickhouse-local` in the
+default lane and through the HTTP executor against a live server in the
+integration lane, per this entry's process rule — and the column-width
+durability tests moved to the same backend. The P3 ordering test was checked
+for teeth by moving the Filter inside the collapse: deleted and superseded
+keys came back, and the test failed.
+
 ## References
 
 - [ADR-0100: recordstore — generated leeway ClickHouse store](0100-recordstore-generated-leeway-clickhouse-store.md) — the producer-side decision and its deferrals.

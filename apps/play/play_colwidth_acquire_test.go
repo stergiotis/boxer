@@ -7,7 +7,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 )
 
@@ -33,7 +33,7 @@ func plainFrameCtx(id app.AppIdT) (ctx *app.StaticFrameContext) {
 func storeFrameCtx(id app.AppIdT) (ctx *frameCtxWithStore) {
 	ctx = &frameCtxWithStore{
 		StaticFrameContext: plainFrameCtx(id),
-		store:              factsstore.NewInMemoryFactsStore(),
+		store:              statestore.NewMemory(),
 	}
 	return
 }
