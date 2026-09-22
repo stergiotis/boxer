@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -118,9 +120,9 @@ const checkQuery = `SELECT
   countIf(LW_ID_HAS_TAG(id, 4294967295) != (expTagValue = 4294967295)) AS badHasTagMax
 FROM file('golden.csv', 'CSVWithNames', 'id UInt64, expValid UInt8, expWidth UInt16, expTagBits UInt64, expBody UInt64, expTagValue UInt32')`
 
-func chLocalIn(t *testing.T, dir string, script string) (out string) {
+func chLocalIn(t *testing.T, dir string, script string, extraArgs ...string) (out string) {
 	t.Helper()
-	cmd := exec.Command("clickhouse", "local", "-n", "--query", script)
+	cmd := exec.Command("clickhouse", append([]string{"local", "-n", "--query", script}, extraArgs...)...)
 	cmd.Dir = dir
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, "clickhouse local failed:\n%s\nscript:\n%s", string(b), script)
@@ -167,4 +169,86 @@ func TestServerTruth_Udfs(t *testing.T) {
 	script := strings.Join(UdfDdlStatements(), ";\n") + ";\n" + checkQuery
 	out := chLocalIn(t, dir, script)
 	requireAllZeroAfterCount(t, out, len(rows))
+}
+
+// The pruning lock for the UDF form of LW_ID_HAS_TAG: on a MergeTree keyed
+// by id, a literal tag value must reach the primary-key analysis as a
+// constant — `intDiv(id, <comma bit>) in [<code>, <code>]` — and read the
+// same granules the macro's BETWEEN reads; a column tag value must fall back
+// to a full scan without erroring; two calls in one query, and aliases in the
+// outer query that reuse the body's names, must not collide. Thirty tags of
+// fifty thousand ids each give every tag several granules at the default
+// granularity.
+
+var explainGranulesRe = regexp.MustCompile(`Granules: (\d+)/(\d+)`)
+
+func explainSelectedTotal(t *testing.T, explain string) (selected int, total int) {
+	t.Helper()
+	m := explainGranulesRe.FindStringSubmatch(explain)
+	require.NotNil(t, m, "no 'Granules: a/b' line in:\n%s", explain)
+	selected, _ = strconv.Atoi(m[1])
+	total, _ = strconv.Atoi(m[2])
+	return
+}
+
+func TestServerTruth_UdfHasTagPrunes(t *testing.T) {
+	requireClickhouse(t)
+	dir := t.TempDir()
+
+	tagValues := []uint64{1, 2, 3, 5, 7, 12, 13, 20, 21, 33, 34, 50, 54, 55, 88, 89, 100, 144, 233, 377,
+		610, 987, 1597, 2584, 4181, 6765, 10946, 65536, 1000000, math.MaxUint32}
+	firstIds := make([]string, 0, len(tagValues))
+	for _, tv := range tagValues {
+		firstIds = append(firstIds, fmt.Sprintf("%d", uint64(identifier.TagValue(tv).GetTag())))
+	}
+	const bodiesPerTag = 50000 // every uint32 tag keeps at least 2^17 - 1 bodies
+	macroBetween, err := ExpandPass.Run("SELECT count() FROM t WHERE LW_ID_HAS_TAG(id, 12)")
+	require.NoError(t, err)
+
+	const sep = "SELECT '=====';"
+	script := strings.Join(UdfDdlStatements(), ";\n") + ";\n" +
+		"CREATE TABLE t (id UInt64, v UInt8) ENGINE = MergeTree ORDER BY id SETTINGS index_granularity = 8192;\n" +
+		"INSERT INTO t SELECT lo + number AS id, 1 FROM (SELECT arrayJoin([" + strings.Join(firstIds, ",") + "]::Array(UInt64)) AS lo) AS tags " +
+		fmt.Sprintf("CROSS JOIN numbers(%d) AS bodies;\n", bodiesPerTag) +
+		"OPTIMIZE TABLE t FINAL;\n" +
+		"EXPLAIN indexes = 1 SELECT count() FROM t WHERE LW_ID_HAS_TAG(id, 12);\n" + sep +
+		"EXPLAIN indexes = 1 " + macroBetween + ";\n" + sep +
+		"EXPLAIN indexes = 1 SELECT count() FROM t WHERE LW_ID_HAS_TAG(id, 12) OR LW_ID_HAS_TAG(id, 4294967295);\n" + sep +
+		"EXPLAIN indexes = 1 SELECT count() FROM t WHERE LW_ID_HAS_TAG(id, v * 12);\n" + sep +
+		"SELECT count() FROM t WHERE LW_ID_HAS_TAG(id, 12);\n" +
+		"SELECT count() FROM t WHERE LW_ID_HAS_TAG(id, 12) OR LW_ID_HAS_TAG(id, 4294967295);\n" +
+		"SELECT count() FROM t WHERE LW_ID_HAS_TAG(id, v * 12);\n" +
+		"SELECT count() FROM (SELECT 5 AS _lw_div, 6 AS _lw_code, 7 AS _lw_r2, LW_ID_HAS_TAG(id, 12) AS h FROM t) WHERE h;\n" +
+		"SELECT count() FROM t WHERE LW_ID_HAS_TAG(id, 0) OR LW_ID_HAS_TAG(id, 4294967296);\n"
+	out := chLocalIn(t, dir, script, "--path", filepath.Join(dir, "ch"))
+	parts := strings.Split(out, "=====")
+	require.Len(t, parts, 5, "unexpected output shape:\n%s", out)
+
+	udfSel, udfTotal := explainSelectedTotal(t, parts[0])
+	macroSel, macroTotal := explainSelectedTotal(t, parts[1])
+	require.Equal(t, macroTotal, udfTotal)
+	require.Less(t, udfSel, udfTotal, "the UDF form did not prune:\n%s", parts[0])
+	require.Equal(t, macroSel, udfSel, "the UDF form reads other granules than the macro's BETWEEN:\n%s\n%s", parts[0], parts[1])
+	// Tag value 12 is the code 101011: 43 above a 58-bit body, so the comma
+	// bit is 2^58 — the folded constants the key analysis must have seen.
+	require.Contains(t, parts[0], "intDiv(id, 288230376151711744) in [43, 43]", parts[0])
+	// intDiv over an unsigned key with a positive constant reports itself
+	// always monotonic, which keeps the mark binary search available.
+	require.Contains(t, parts[0], "Search Algorithm: binary search", parts[0])
+
+	orSel, orTotal := explainSelectedTotal(t, parts[2])
+	require.Less(t, orSel, orTotal, "an OR of two tags did not prune:\n%s", parts[2])
+	require.Greater(t, orSel, udfSel)
+
+	colSel, colTotal := explainSelectedTotal(t, parts[3])
+	require.Equal(t, colTotal, colSel, "a column tag value must scan every granule:\n%s", parts[3])
+
+	counts := strings.Split(strings.TrimSpace(parts[4]), "\n")
+	require.Equal(t, []string{
+		fmt.Sprintf("%d", bodiesPerTag),
+		fmt.Sprintf("%d", 2*bodiesPerTag),
+		fmt.Sprintf("%d", bodiesPerTag),
+		fmt.Sprintf("%d", bodiesPerTag),
+		"0",
+	}, counts, "row counts:\n%s", parts[4])
 }

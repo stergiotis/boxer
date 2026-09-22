@@ -33,6 +33,7 @@ the linked document wins.
 | Configure behaviour via env vars | [doc/env-vars.md](./doc/env-vars.md) |
 | Run a task end to end | [doc/howto/](./doc/howto/) |
 | Persist a new kind of fact to `boxer.facts` | [doc/explanation/facts-bound-record-stores.md](./doc/explanation/facts-bound-record-stores.md) |
+| Know when a ClickHouse SQL UDF can prune the primary key — inlining, constant folding, `KeyCondition` | [doc/explanation/clickhouse-udf-primary-key-pruning.md](./doc/explanation/clickhouse-udf-primary-key-pruning.md) |
 | Give an app or a headless binary durable work to do | [doc/howto/watchbill-jobs.md](./doc/howto/watchbill-jobs.md) |
 | Hand a table an app computed to SQL without storing it — publish, read from an applet or a play window | [doc/howto/adhoc-datasets.md](./doc/howto/adhoc-datasets.md) |
 | See how watchbill's pieces fit, and what it serializes | [doc/explanation/watchbill-architecture.md](./doc/explanation/watchbill-architecture.md) |

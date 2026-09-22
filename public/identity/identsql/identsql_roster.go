@@ -16,9 +16,11 @@ import "github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 
 // Function is one entry of the LW_ID_* family: the name a query spells, the
 // parameters in order, and one line on what it does. Bodies are generated
-// (expandIsValid and friends) and differ between the macro expansion and the
-// UDF form only in that the macro may fold a constant argument, so they are
-// not carried here — UdfDdlStatements is the source for the SQL text.
+// (expandIsValid and friends) and agree between the macro expansion and the
+// UDF form on every input; only LW_ID_HAS_TAG spells its predicate
+// differently in the two (the macro folds a constant, the UDF lets the
+// server fold), so bodies are not carried here — UdfDdlStatements is the
+// source for the SQL text.
 type Function struct {
 	Name   string
 	Params []sqlvocab.Param

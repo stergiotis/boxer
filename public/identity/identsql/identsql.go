@@ -16,7 +16,8 @@
 // subexpressions once. LW_ID_HAS_TAG with a constant tag value folds at
 // expansion time into a sargable BETWEEN over the tag's contiguous id range,
 // which primary-index analysis can prune; no bit arithmetic survives into
-// the query.
+// the query. The UDF twin reaches the same pruning by deriving that range
+// from the tag value in scalar arithmetic the server folds itself.
 package identsql
 
 import (
@@ -143,20 +144,22 @@ func expandHasTag(x string, tagValueArg string) (r string, err error) {
 }
 
 // UdfDdlStatements returns one CREATE OR REPLACE FUNCTION statement per
-// LW_ID_* name, semantically identical to the macro expansions (LW_ID_HAS_TAG
-// necessarily in its generic, non-folded form). Apply them to a database once
-// and unexpanded LW_ID_* SQL runs as-is; ClickHouse SQL UDFs substitute their
-// body textually, exactly like the expansion pass.
+// LW_ID_* name, semantically identical to the macro expansions. Apply them to
+// a database once and unexpanded LW_ID_* SQL runs as-is; the server inlines a
+// SQL UDF's body at analysis time, much like the expansion pass. LW_ID_HAS_TAG
+// is emitted in the range form of expandHasTagUdfBody rather than the macro's
+// decode-and-compare fallback, so a literal tag value folds server-side and
+// the primary key prunes (see identsql_hastag_udf.go); the two forms agree on
+// every id and tag value, constant or not.
 func UdfDdlStatements() (stmts []string) {
 	x := "x"
-	hasTagGeneric, _ := expandHasTag("x", "tag_value") // non-constant arg: never errors
 	stmts = []string{
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameIsValid, expandIsValid(x)),
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameTagWidth, expandTagWidth(x)),
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameTagBits, expandTagBits(x)),
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameBody, expandBody(x)),
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameTagValue, expandTagValue(x)),
-		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x, tag_value) -> %s", NameHasTag, hasTagGeneric),
+		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x, tag_value) -> %s", NameHasTag, expandHasTagUdfBody(x, "tag_value")),
 	}
 	return
 }

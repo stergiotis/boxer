@@ -335,3 +335,28 @@ introspection `/query` endpoint — apply it best-effort before shipping.
 `identsql` itself stays registry-free. Preview surfaces keep the readable
 macro; only the shipped statement is expanded. The affordance-evaluator
 registration and an "install UDFs" action remain open follow-ups.
+
+## Update — 2026-09-22: the `LW_ID_HAS_TAG` UDF prunes the primary key
+
+The emitted `CREATE FUNCTION` for `LW_ID_HAS_TAG` no longer carries the
+macro's decode-and-compare fallback. Its body derives the tag's comma bit and
+code from the tag value with scalar arithmetic only — a greedy Zeckendorf
+over F(47)..F(2) in `intDiv` and `%`, remainders threaded by expression
+aliases — and compares `intDiv(x, comma bit)` with the code. The server folds
+that for a literal tag value, and `KeyCondition` prunes on `intDiv(id, c) = k`
+as it does on the macro's BETWEEN (2026-09-22, ClickHouse 26.8.1: the same
+8 of 184 granules as the literal control on a 1.5 M-row part; the previous
+body and any lambda-bearing derivation read all 184). The mechanisms and the
+costs are in
+[doc/explanation/clickhouse-udf-primary-key-pruning.md](../explanation/clickhouse-udf-primary-key-pruning.md).
+
+Consequences for the decision: SD5's "expands to the sargable range form" now
+holds for both routes rather than for the pass alone. The macro's
+non-constant fallback is unchanged, because a macro expands into the query's
+scope where the alias chain of two calls would collide; the two forms are
+locked to agree on every golden id by `TestServerTruth_Udfs`, and the pruning
+itself by `TestServerTruth_UdfHasTagPrunes`. The UDF body assumes the
+analyzer's per-call alias scope; it is not supported under `enable_analyzer =
+0` for more than one call per query. A literal tag value outside
+[1, 2^32 − 1] remains an error from the pass and becomes a false predicate
+from the UDF.

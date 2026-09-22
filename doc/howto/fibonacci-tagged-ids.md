@@ -179,9 +179,18 @@ time. `ExampleExpandPass` in
 (id) BETWEEN 12393906174523604992 AND 12682136550675316735
 ```
 
-With a non-constant tag value the macro (and the UDF, always) falls back to
-decode-and-compare — correct, but not index-prunable, and guarded so an
-invalid id never matches a zero tag value.
+With a non-constant tag value the macro falls back to decode-and-compare —
+correct, but not index-prunable, and guarded so an invalid id never matches
+a zero tag value.
+
+The UDF twin reaches the same pruning by another route: its body derives the
+tag's comma bit and code from the tag value in scalar arithmetic (a greedy
+Zeckendorf over F(47)..F(2), spelled with `intDiv` and `%`), which the server
+folds for a literal tag value, leaving `intDiv(id, <comma bit>) = <code>` for
+the primary-key analysis to prune on; a column tag value evaluates the same
+arithmetic per row. Why the arithmetic has to be lambda-free, and what each
+form costs, is in
+[clickhouse-udf-primary-key-pruning.md](../explanation/clickhouse-udf-primary-key-pruning.md).
 
 ## The LW_ID_* functions
 
@@ -218,6 +227,12 @@ templates — `identsql.UdfDdlStatements()` is the programmatic seam behind
   2026-07-05 update of ADR-0106): `UInt64 - 1` widens to Int64, and
   `bitShiftRight` silently no-ops on signed shift amounts. If you hand-write
   variants, keep masks shift-only and force shift amounts to `UInt8`.
+- The `LW_ID_HAS_TAG` UDF assumes the analyzer (the default since ClickHouse
+  24.3): its body names its intermediate remainders with aliases, which the
+  analyzer scopes to the call. Under `enable_analyzer = 0` two calls in one
+  query fail with `MULTIPLE_EXPRESSIONS_FOR_ALIAS`.
+- A literal tag value of 0 or beyond `uint32` is an expansion-time error
+  from the pass but a quietly false predicate from the UDF.
 
 ## Read them in play
 
