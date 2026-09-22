@@ -208,7 +208,10 @@ adjacent `11` pair; the highest marked bit is the comma, recovered exactly
 with `roundToExp2` + `bitCount` (ClickHouse has no leading-zeros builtin);
 width, masks and the fib-weighted tag-value sum all derive from it. The
 encoder's two biases cancel, so the Zeckendorf sum of the tag bits *is* the
-tag value. UDF bodies and macro expansions are generated from the same
+tag value. That sum is chunk lookups into constant weight tables — 8-bit
+chunks in the UDF, 4-bit in the macro — rather than a per-row array, which
+is what keeps `LW_ID_TAG_VALUE` within an order of magnitude of a fixed-width
+shift (figures in the explanation linked under step 5). UDF bodies and macro expansions are generated from the same
 templates — `identsql.UdfDdlStatements()` is the programmatic seam behind
 `leeway id udf`.
 

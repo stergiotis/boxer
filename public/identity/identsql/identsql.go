@@ -45,21 +45,6 @@ const (
 	NameHasTag   = "LW_ID_HAS_TAG"
 )
 
-// fibWeightsSql is the ClickHouse array literal of F(2)..F(64) — the full
-// uint64-safe Zeckendorf weight table, not just the uint32 tag-value span:
-// arrayElement returns 0 beyond the array, so a shorter table would decode
-// adversarial wide-width ids to a wrong non-zero value instead of tripping
-// the >uint32 invalid guard the way the Go decoder does.
-const fibWeightsSql = "[toUInt64(1),2,3,5,8,13,21,34,55,89,144,233,377,610,987,1597," +
-	"2584,4181,6765,10946,17711,28657,46368,75025,121393,196418," +
-	"317811,514229,832040,1346269,2178309,3524578,5702887,9227465," +
-	"14930352,24157817,39088169,63245986,102334155,165580141," +
-	"267914296,433494437,701408733,1134903170,1836311903,2971215073," +
-	"4807526976,7778742049,12586269025,20365011074,32951280099," +
-	"53316291173,86267571272,139583862445,225851433717,365435296162," +
-	"591286729879,956722026041,1548008755920,2504730781961," +
-	"4052739537881,6557470319842,10610209857723,17167680177565]"
-
 // pairsExpr marks the upper bit of every adjacent 11 pair of x; 0 means x
 // carries no fibonacci comma and is not a tagged id.
 func pairsExpr(x string) string {
@@ -87,15 +72,6 @@ func bodyMaskExpr(pairs string) string {
 	return fmt.Sprintf("bitShiftRight(bitNot(toUInt64(0)), toUInt8(%s))", widthRawExpr(pairs))
 }
 
-// zeckendorfSumExpr is the fib-weighted popcount of the tag bits of x. The
-// encoder's value bias and the code's Zeckendorf bias cancel, so the sum IS
-// the tag value (no ±1 anywhere). Meaningful only when pairs != 0.
-func zeckendorfSumExpr(x string, pairs string) string {
-	return fmt.Sprintf(
-		"arraySum(arrayMap(j -> toUInt64(bitTest(%s, 63 - toUInt8(j))) * %s[j + 1], range(toUInt64(%s) - 1)))",
-		x, fibWeightsSql, widthRawExpr(pairs))
-}
-
 func expandIsValid(x string) string {
 	return fmt.Sprintf("(%s != 0)", pairsExpr(x))
 }
@@ -115,10 +91,12 @@ func expandBody(x string) string {
 	return fmt.Sprintf("if(%s = 0, toUInt64(0), bitAnd(%s, %s))", p, x, bodyMaskExpr(p))
 }
 
+// expandTagValue is the macro form of the tag value: the encoder's value
+// bias and the code's Zeckendorf bias cancel, so the fib-weighted sum of the
+// digit bits IS the tag value (no ±1 anywhere). The sum is chunk lookups,
+// see identsql_tagvalue_tables.go.
 func expandTagValue(x string) string {
-	p := pairsExpr(x)
-	s := zeckendorfSumExpr(x, p)
-	return fmt.Sprintf("toUInt32(if(%s = 0, 0, if(%s > 4294967295, 0, %s)))", p, s, s)
+	return tagValueExpr(x, macroTagValueChunkBits, "", "")
 }
 
 // expandHasTag folds a constant tag value into the sargable BETWEEN over the
@@ -158,7 +136,7 @@ func UdfDdlStatements() (stmts []string) {
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameTagWidth, expandTagWidth(x)),
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameTagBits, expandTagBits(x)),
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameBody, expandBody(x)),
-		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameTagValue, expandTagValue(x)),
+		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x) -> %s", NameTagValue, tagValueExpr(x, udfTagValueChunkBits, "_lw_d", "_lw_s")),
 		fmt.Sprintf("CREATE OR REPLACE FUNCTION %s AS (x, tag_value) -> %s", NameHasTag, expandHasTagUdfBody(x, "tag_value")),
 	}
 	return

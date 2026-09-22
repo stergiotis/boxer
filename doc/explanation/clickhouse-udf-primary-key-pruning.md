@@ -164,7 +164,60 @@ body's `arrayMap` over the id's tag width — was not measured; the choice was
 made for pruning, and a claim about row throughput would need a trial under
 `doc/trials`.
 
-## 5. What this does not change
+## 5. The decoder's cost: why a per-row array loses to lookup tables
+
+The pruning story covers a *known* tag. Decoding an id's tag value — for
+display, or to group by tag — is the other direction, and it is where the
+scheme's SQL cost actually sits. The tag value is the Fibonacci-weighted
+popcount of the digit bits, Σ bit_j · F(j+2) over the positions above the
+comma. The first decoder wrote that as
+`arraySum(arrayMap(j -> bitTest(x, 63 - j) * W[j + 1], range(width - 1)))`.
+Per row that materialises an array of `width - 1` elements, replicates the
+captured `x` once per element, and runs `bitTest`, `arrayElement` and the
+multiply per element before the reduction: for a 20-bit tag, roughly twenty
+times the data volume of the input column.
+
+The lambda-free alternative splits the digit word into fixed-width chunks
+and looks each chunk up in a constant table whose entry `b` holds the sum of
+the weights of the bits set in `b` at that chunk's positions. Six 8-bit
+chunks need six `arrayElement` calls into 256-entry tables; twelve 4-bit
+chunks need twelve into 16-entry tables. Two guards make the tables
+sufficient: a comma below position 47 cannot belong to a `uint32` tag value
+(the greedy code's last digit is always set, so width 48 already means at
+least F(48) > 2^32 − 1), and a width-47 code can still exceed the maximum,
+so the value guard stays.
+
+Measured 2026-09-22 on ClickHouse 26.8.1, `clickhouse local`, one part of
+17.75 M ids across 269 tags of width 13–27, `max_threads = 1`, best of three
+on a shared machine (batches drifted up to 30 %; the ranking did not):
+
+| Expression over `id` | Wall time | Per row above the read floor |
+| --- | --- | --- |
+| `id` (read floor) | 0.31 s | — |
+| `LW_ID_TAG_WIDTH` (comma search) | 0.73 s | ~25 ns |
+| 8-bit chunks, six lookups (emitted UDF) | 1.8 – 2.9 s | ~85 – 145 ns |
+| 4-bit chunks, twelve lookups (macro expansion) | 3.1 – 6.1 s | ~155 – 330 ns |
+| unrolled 46-term `bitTest` sum | 7.9 s | ~430 ns |
+| `arraySum(arrayMap(range))` (previous decoder) | 12.1 – 13.2 s | ~670 – 730 ns |
+| `bitShiftRight(id, 48)` (fixed-width stand-in) | 0.29 s | < 5 ns |
+
+The macro takes the 4-bit form because an expansion is statement text and
+cannot alias its digit word or its sum — a macro lands in the query's own
+scope — so the sum is spliced twice (once into the guard) and the digit word
+once per chunk: ~8 KB per call at 4 bits, and it would be ~45 KB at 8 bits,
+against a 256 KB default `max_query_size`. The UDF aliases both and carries the 8-bit
+tables in ~12 KB of DDL. The DAG deduplicates the spliced copies by name, so
+the two forms differ at run time only in chunk count.
+
+One consequence for `LW_ID_HAS_TAG` with a *column* tag value: the UDF's
+range derivation (§ The predicate) costs ~46 `intDiv` and `%` per row on the
+tag value and measured 4.8 s on the same table, against ~1.8 s for decoding
+the id and comparing. The range form is kept because the literal case, which
+prunes, is the one that matters; a per-row filter by a column tag over a
+large table is better written as `LW_ID_TAG_VALUE(id) = tag`, and a decode
+that recurs belongs in a `MATERIALIZED` column or a projection, paid once.
+
+## 6. What this does not change
 
 - **The macro's non-literal fallback stays decode-and-compare.** A macro
   expands into the query's own scope, where the alias chain of two calls

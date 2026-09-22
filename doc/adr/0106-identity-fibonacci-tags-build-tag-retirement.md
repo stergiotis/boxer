@@ -360,3 +360,23 @@ analyzer's per-call alias scope; it is not supported under `enable_analyzer =
 0` for more than one call per query. A literal tag value outside
 [1, 2^32 − 1] remains an error from the pass and becomes a false predicate
 from the UDF.
+
+## Update — 2026-09-22: the tag-value decoder drops its lambda
+
+`LW_ID_TAG_VALUE` — in the UDF and the macro, and so in the macro's
+non-constant `LW_ID_HAS_TAG` fallback — no longer sums the Fibonacci
+weights with `arraySum(arrayMap(…, range(width - 1)))`. The digit word (the
+tag bits with the comma masked off) is split into fixed-width chunks, each a
+lookup into a constant table whose entry holds the weights of the bits set
+at that chunk's positions; the guards are unchanged, with a `width > 47`
+test standing in for the wide weight table the array form needed. The UDF
+takes 8-bit chunks, the macro 4-bit chunks to bound statement size. Measured
+2026-09-22 on ClickHouse 26.8.1, 17.75 M ids of width 13–27, one thread,
+best of three: the array form 12.1–13.2 s, 8-bit chunks 1.8–2.9 s, 4-bit
+chunks 3.1–6.1 s, the comma search alone 0.73 s, a fixed-width shift 0.29 s
+(reading the column: 0.31 s). The server-truth goldens lock both forms; the
+mechanism and the numbers are in
+[doc/explanation/clickhouse-udf-primary-key-pruning.md](../explanation/clickhouse-udf-primary-key-pruning.md).
+The SD2 "~12 integer ops" cost statement was about the Go split and stands;
+the SQL split was never that cheap and is now within an order of magnitude
+of it.
