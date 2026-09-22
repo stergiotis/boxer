@@ -55,6 +55,13 @@ const watchbilleventArrowOutputSettings = " SETTINGS output_format_arrow_string_
 // watchbilleventKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func watchbilleventKeyLiteral(k string) string { return marshalling.EscapeString(k) }
 
+// watchbilleventKeyPrefixPredicate renders ScanOpts.KeyPrefix: keys starting with
+// prefix. startsWith on the leading sort-key column is a primary-key
+// range read, not a scan of every row.
+func watchbilleventKeyPrefixPredicate(prefix string) string {
+	return "startsWith(" + EventColKey + ", " + watchbilleventKeyLiteral(prefix) + ")"
+}
+
 // EventMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -847,6 +854,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -857,6 +866,9 @@ const (
 // rows.
 func (inst *EventStore) ScanEvent(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*EventEntity, error] {
 	where := watchbilleventScanEventFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + watchbilleventKeyPrefixPredicate(opts.KeyPrefix)
+	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}

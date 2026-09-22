@@ -1002,6 +1002,13 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("// %sKeyLiteral renders a Key value as a ClickHouse SQL literal.", inst.TableName)
 	if inst.keyGoType == "string" {
 		p("func %sKeyLiteral(k string) string { return marshalling.EscapeString(k) }", inst.TableName)
+		p("")
+		p("// %sKeyPrefixPredicate renders ScanOpts.KeyPrefix: keys starting with", inst.TableName)
+		p("// prefix. startsWith on the leading sort-key column is a primary-key")
+		p("// range read, not a scan of every row.")
+		p("func %sKeyPrefixPredicate(prefix string) string {", inst.TableName)
+		p("\treturn \"startsWith(\" + %sColKey + \", \" + %sKeyLiteral(prefix) + \")\"", inst.StoreName, inst.TableName)
+		p("}")
 	} else {
 		p("func %sKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }", inst.TableName)
 	}
@@ -2051,6 +2058,7 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("// key written twice at the same Order) are not ordered against each")
 		p("// other by this clause; the table keeps newest-per-key, so which of")
 		p("// them survives is the engine's choice, not the scan's.")
+		inst.emitKeyPrefixDoc(p)
 		p("// opts.ExtraPredicate (trusted raw SQL over the physical columns —")
 		p("// never untrusted input) further restricts the scan; opts.Limit")
 		p("// caps the row count. The Filter artefact uses ClickHouse")
@@ -2060,7 +2068,13 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("// error ends it as a final (nil, err) pair. Scans see only flushed")
 		p("// rows.")
 		p("func (inst *%s) Scan%s(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*%s, error] {", inst.storeType(), c.Kind, inst.entityType())
+		inst.emitRefuseKeyPrefix(p)
 		p("\twhere := %sScan%sFilter", inst.TableName, c.Kind)
+		if inst.keyGoType == "string" {
+			p("\tif opts.KeyPrefix != \"\" {")
+			p("\t\twhere = \"(\" + where + \") AND \" + %sKeyPrefixPredicate(opts.KeyPrefix)", inst.TableName)
+			p("\t}")
+		}
 		p("\tif opts.ExtraPredicate != \"\" {")
 		p("\t\twhere = \"(\" + where + \") AND (\" + opts.ExtraPredicate + \")\"")
 		p("\t}")
@@ -2204,6 +2218,98 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("\t\tfound = false")
 	p("\t}")
 	p("\treturn")
+	p("}")
+	p("")
+	for _, c := range comps {
+		inst.emitScanLive(p, c)
+	}
+}
+
+// emitRefuseKeyPrefix opens a scan verb on a non-string-keyed store with
+// the ScanOpts.KeyPrefix refusal; a string-keyed store emits nothing here.
+func (inst emitter) emitRefuseKeyPrefix(p func(string, ...any)) {
+	if inst.keyGoType == "string" {
+		return
+	}
+	p("\tif opts.KeyPrefix != \"\" {")
+	p("\t\treturn recordstore.RefuseKeyPrefix[*%s]()", inst.entityType())
+	p("\t}")
+}
+
+// emitKeyPrefixDoc writes the ScanOpts.KeyPrefix paragraph of a scan
+// verb's doc comment, which depends only on the key type.
+func (inst emitter) emitKeyPrefixDoc(p func(string, ...any)) {
+	if inst.keyGoType == "string" {
+		p("// opts.KeyPrefix restricts the scan to keys starting with it — a")
+		p("// primary-key range read, since the table sorts by (key, order).")
+	} else {
+		p("// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):")
+		p("// this store's key is not a string.")
+	}
+}
+
+// emitScanLive writes ScanLive<Kind>, the state view's scan (ADR-0105
+// Update 2026-08-15, P3): the newest row per key, kept when it carries a
+// conforming component and is not a tombstone.
+//
+// The ordering of the two steps is the whole verb. The newest-row
+// collapse runs over every row of every key in range FIRST, in an inner
+// query; the component Filter and opts.ExtraPredicate apply to the
+// collapsed rows in the outer one. Testing the component first would skip
+// a newer tombstone — which carries no component — or a newer row
+// carrying a different component, and hand back the older row that one
+// superseded: a deleted key resurrected. ExtraPredicate sits outside for
+// the same reason; KeyPrefix sits inside because it selects whole keys,
+// every row of which the collapse then still sees.
+func (inst emitter) emitScanLive(p func(string, ...any), c storeComponent) {
+	p("// ScanLive%s is the state view's scan: the newest row of every key,", c.Kind)
+	p("// kept when that row carries a conforming %s component and is not a", c.Kind)
+	p("// tombstone — what GetLive would answer for each key, in one query.")
+	p("// The collapse to the newest row runs over all of a key's rows BEFORE")
+	p("// the component test: a key whose newest row is a tombstone, or carries")
+	p("// only other components, is absent, never represented by an older row")
+	p("// it superseded.")
+	inst.emitKeyPrefixDoc(p)
+	p("// opts.ExtraPredicate (trusted raw SQL over the physical columns)")
+	p("// applies to the collapsed rows, so it narrows the live set and cannot")
+	p("// uncover a superseded row. Entities come out ordered by key.")
+	p("// opts.Limit caps the rows the query returns before the Go-side")
+	p("// tombstone test, so under a configured tombstone pair whose marker")
+	p("// satisfies the Filter a limited scan can yield fewer than Limit.")
+	p("// Reads see only flushed rows; the sequence is single-use, and an")
+	p("// error ends it as a final (nil, err) pair.")
+	p("func (inst *%s) ScanLive%s(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*%s, error] {", inst.storeType(), c.Kind, inst.entityType())
+	inst.emitRefuseKeyPrefix(p)
+	p("\tinner := \"SELECT * FROM \" + inst.tableName()")
+	if inst.keyGoType == "string" {
+		p("\tif opts.KeyPrefix != \"\" {")
+		p("\t\tinner += \" WHERE \" + %sKeyPrefixPredicate(opts.KeyPrefix)", inst.TableName)
+		p("\t}")
+	}
+	p("\tinner += \" ORDER BY \" + %sColOrder + \" DESC LIMIT 1 BY \" + %sColKey", inst.StoreName, inst.StoreName)
+	p("\twhere := \"(\" + %sScan%sFilter + \")\"", inst.TableName, c.Kind)
+	p("\tif opts.ExtraPredicate != \"\" {")
+	p("\t\twhere += \" AND (\" + opts.ExtraPredicate + \")\"")
+	p("\t}")
+	p("\tsql := \"SELECT * FROM (\" + inner + \") WHERE \" + where + \" ORDER BY \" + %sColKey + \" ASC\"", inst.StoreName)
+	p("\tif opts.Limit > 0 {")
+	p("\t\tsql += \" LIMIT \" + strconv.Itoa(opts.Limit)")
+	p("\t}")
+	p("\tsql += %sArrowOutputSettings", inst.TableName)
+	p("\treturn func(yield func(*%s, error) bool) {", inst.entityType())
+	p("\t\tfor ent, err := range inst.iterateEntities(ctx, sql) {")
+	p("\t\t\tif err != nil {")
+	p("\t\t\t\tyield(nil, err)")
+	p("\t\t\t\treturn")
+	p("\t\t\t}")
+	p("\t\t\tif inst.isTombstone(ent) {")
+	p("\t\t\t\tcontinue")
+	p("\t\t\t}")
+	p("\t\t\tif !yield(ent, nil) {")
+	p("\t\t\t\treturn")
+	p("\t\t\t}")
+	p("\t\t}")
+	p("\t}")
 	p("}")
 	p("")
 }

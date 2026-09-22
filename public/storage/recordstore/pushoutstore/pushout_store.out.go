@@ -56,6 +56,13 @@ const pushoutArrowOutputSettings = " SETTINGS output_format_arrow_string_as_stri
 // pushoutKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func pushoutKeyLiteral(k string) string { return marshalling.EscapeString(k) }
 
+// pushoutKeyPrefixPredicate renders ScanOpts.KeyPrefix: keys starting with
+// prefix. startsWith on the leading sort-key column is a primary-key
+// range read, not a scan of every row.
+func pushoutKeyPrefixPredicate(prefix string) string {
+	return "startsWith(" + PushoutColKey + ", " + pushoutKeyLiteral(prefix) + ")"
+}
+
 // PushoutMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -1093,6 +1100,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1103,6 +1112,9 @@ const (
 // rows.
 func (inst *PushoutStore) ScanEnvelope(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
 	where := pushoutScanEnvelopeFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + pushoutKeyPrefixPredicate(opts.KeyPrefix)
+	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1122,6 +1134,8 @@ func (inst *PushoutStore) ScanEnvelope(ctx context.Context, opts recordstore.Sca
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1132,6 +1146,9 @@ func (inst *PushoutStore) ScanEnvelope(ctx context.Context, opts recordstore.Sca
 // rows.
 func (inst *PushoutStore) ScanLogEntry(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
 	where := pushoutScanLogEntryFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + pushoutKeyPrefixPredicate(opts.KeyPrefix)
+	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1151,6 +1168,8 @@ func (inst *PushoutStore) ScanLogEntry(ctx context.Context, opts recordstore.Sca
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1161,6 +1180,9 @@ func (inst *PushoutStore) ScanLogEntry(ctx context.Context, opts recordstore.Sca
 // rows.
 func (inst *PushoutStore) ScanSnapshot(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
 	where := pushoutScanSnapshotFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + pushoutKeyPrefixPredicate(opts.KeyPrefix)
+	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1180,6 +1202,8 @@ func (inst *PushoutStore) ScanSnapshot(ctx context.Context, opts recordstore.Sca
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1190,6 +1214,9 @@ func (inst *PushoutStore) ScanSnapshot(ctx context.Context, opts recordstore.Sca
 // rows.
 func (inst *PushoutStore) ScanRetention(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
 	where := pushoutScanRetentionFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + pushoutKeyPrefixPredicate(opts.KeyPrefix)
+	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1293,6 +1320,198 @@ func (inst *PushoutStore) GetLive(ctx context.Context, key string) (ent *Pushout
 		found = false
 	}
 	return
+}
+
+// ScanLiveEnvelope is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming Envelope component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *PushoutStore) ScanLiveEnvelope(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
+	inner := "SELECT * FROM " + inst.tableName()
+	if opts.KeyPrefix != "" {
+		inner += " WHERE " + pushoutKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	inner += " ORDER BY " + PushoutColOrder + " DESC LIMIT 1 BY " + PushoutColKey
+	where := "(" + pushoutScanEnvelopeFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PushoutColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += pushoutArrowOutputSettings
+	return func(yield func(*PushoutEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
+// ScanLiveLogEntry is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming LogEntry component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *PushoutStore) ScanLiveLogEntry(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
+	inner := "SELECT * FROM " + inst.tableName()
+	if opts.KeyPrefix != "" {
+		inner += " WHERE " + pushoutKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	inner += " ORDER BY " + PushoutColOrder + " DESC LIMIT 1 BY " + PushoutColKey
+	where := "(" + pushoutScanLogEntryFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PushoutColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += pushoutArrowOutputSettings
+	return func(yield func(*PushoutEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
+// ScanLiveSnapshot is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming Snapshot component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *PushoutStore) ScanLiveSnapshot(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
+	inner := "SELECT * FROM " + inst.tableName()
+	if opts.KeyPrefix != "" {
+		inner += " WHERE " + pushoutKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	inner += " ORDER BY " + PushoutColOrder + " DESC LIMIT 1 BY " + PushoutColKey
+	where := "(" + pushoutScanSnapshotFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PushoutColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += pushoutArrowOutputSettings
+	return func(yield func(*PushoutEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
+// ScanLiveRetention is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming Retention component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *PushoutStore) ScanLiveRetention(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PushoutEntity, error] {
+	inner := "SELECT * FROM " + inst.tableName()
+	if opts.KeyPrefix != "" {
+		inner += " WHERE " + pushoutKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	inner += " ORDER BY " + PushoutColOrder + " DESC LIMIT 1 BY " + PushoutColKey
+	where := "(" + pushoutScanRetentionFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PushoutColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += pushoutArrowOutputSettings
+	return func(yield func(*PushoutEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
 }
 
 // PushoutComponentSQL publishes this store's ADR-0066 read-back artefacts —

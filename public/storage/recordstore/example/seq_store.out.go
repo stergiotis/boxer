@@ -886,6 +886,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -895,6 +897,9 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SeqStore) ScanSeqReading(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SeqEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SeqEntity]()
+	}
 	where := seqScanSeqReadingFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -982,6 +987,54 @@ func (inst *SeqStore) GetLive(ctx context.Context, key uint64) (ent *SeqEntity, 
 		found = false
 	}
 	return
+}
+
+// ScanLiveSeqReading is the state view's scan: the newest row of every key,
+// kept when that row carries a conforming SeqReading component and is not a
+// tombstone — what GetLive would answer for each key, in one query.
+// The collapse to the newest row runs over all of a key's rows BEFORE
+// the component test: a key whose newest row is a tombstone, or carries
+// only other components, is absent, never represented by an older row
+// it superseded.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns)
+// applies to the collapsed rows, so it narrows the live set and cannot
+// uncover a superseded row. Entities come out ordered by key.
+// opts.Limit caps the rows the query returns before the Go-side
+// tombstone test, so under a configured tombstone pair whose marker
+// satisfies the Filter a limited scan can yield fewer than Limit.
+// Reads see only flushed rows; the sequence is single-use, and an
+// error ends it as a final (nil, err) pair.
+func (inst *SeqStore) ScanLiveSeqReading(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SeqEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SeqEntity]()
+	}
+	inner := "SELECT * FROM " + inst.tableName()
+	inner += " ORDER BY " + SeqColOrder + " DESC LIMIT 1 BY " + SeqColKey
+	where := "(" + seqScanSeqReadingFilter + ")"
+	if opts.ExtraPredicate != "" {
+		where += " AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + SeqColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += seqArrowOutputSettings
+	return func(yield func(*SeqEntity, error) bool) {
+		for ent, err := range inst.iterateEntities(ctx, sql) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if inst.isTombstone(ent) {
+				continue
+			}
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
 }
 
 // SeqComponentSQL publishes this store's ADR-0066 read-back artefacts —

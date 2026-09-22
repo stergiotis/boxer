@@ -1204,6 +1204,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1213,6 +1215,9 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *MddocStore) ScanMdDoc(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*MddocEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*MddocEntity]()
+	}
 	where := factsScanMdDocFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1233,6 +1238,8 @@ func (inst *MddocStore) ScanMdDoc(ctx context.Context, opts recordstore.ScanOpts
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1242,6 +1249,9 @@ func (inst *MddocStore) ScanMdDoc(ctx context.Context, opts recordstore.ScanOpts
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *MddocStore) ScanMdHeading(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*MddocEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*MddocEntity]()
+	}
 	where := factsScanMdHeadingFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1262,6 +1272,8 @@ func (inst *MddocStore) ScanMdHeading(ctx context.Context, opts recordstore.Scan
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1271,6 +1283,9 @@ func (inst *MddocStore) ScanMdHeading(ctx context.Context, opts recordstore.Scan
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *MddocStore) ScanMdCodeBlock(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*MddocEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*MddocEntity]()
+	}
 	where := factsScanMdCodeBlockFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1291,6 +1306,8 @@ func (inst *MddocStore) ScanMdCodeBlock(ctx context.Context, opts recordstore.Sc
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1300,6 +1317,9 @@ func (inst *MddocStore) ScanMdCodeBlock(ctx context.Context, opts recordstore.Sc
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *MddocStore) ScanMdLink(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*MddocEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*MddocEntity]()
+	}
 	where := factsScanMdLinkFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1320,6 +1340,8 @@ func (inst *MddocStore) ScanMdLink(ctx context.Context, opts recordstore.ScanOpt
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1329,6 +1351,9 @@ func (inst *MddocStore) ScanMdLink(ctx context.Context, opts recordstore.ScanOpt
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *MddocStore) ScanMdEmphasis(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*MddocEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*MddocEntity]()
+	}
 	where := factsScanMdEmphasisFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1349,6 +1374,8 @@ func (inst *MddocStore) ScanMdEmphasis(ctx context.Context, opts recordstore.Sca
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1358,6 +1385,9 @@ func (inst *MddocStore) ScanMdEmphasis(ctx context.Context, opts recordstore.Sca
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *MddocStore) ScanMdTag(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*MddocEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*MddocEntity]()
+	}
 	where := factsScanMdTagFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"

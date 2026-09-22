@@ -1758,6 +1758,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1767,6 +1769,9 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysCpu(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysCpuFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1787,6 +1792,8 @@ func (inst *SysmetricsStore) ScanSysCpu(ctx context.Context, opts recordstore.Sc
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1796,6 +1803,9 @@ func (inst *SysmetricsStore) ScanSysCpu(ctx context.Context, opts recordstore.Sc
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysCpuInfo(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysCpuInfoFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1816,6 +1826,8 @@ func (inst *SysmetricsStore) ScanSysCpuInfo(ctx context.Context, opts recordstor
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1825,6 +1837,9 @@ func (inst *SysmetricsStore) ScanSysCpuInfo(ctx context.Context, opts recordstor
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysMem(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysMemFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1845,6 +1860,8 @@ func (inst *SysmetricsStore) ScanSysMem(ctx context.Context, opts recordstore.Sc
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1854,6 +1871,9 @@ func (inst *SysmetricsStore) ScanSysMem(ctx context.Context, opts recordstore.Sc
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysPsi(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysPsiFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1874,6 +1894,8 @@ func (inst *SysmetricsStore) ScanSysPsi(ctx context.Context, opts recordstore.Sc
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1883,6 +1905,9 @@ func (inst *SysmetricsStore) ScanSysPsi(ctx context.Context, opts recordstore.Sc
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysNet(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysNetFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1903,6 +1928,8 @@ func (inst *SysmetricsStore) ScanSysNet(ctx context.Context, opts recordstore.Sc
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1912,6 +1939,9 @@ func (inst *SysmetricsStore) ScanSysNet(ctx context.Context, opts recordstore.Sc
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysDiskMount(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysDiskMountFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1932,6 +1962,8 @@ func (inst *SysmetricsStore) ScanSysDiskMount(ctx context.Context, opts recordst
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1941,6 +1973,9 @@ func (inst *SysmetricsStore) ScanSysDiskMount(ctx context.Context, opts recordst
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysDiskIo(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysDiskIoFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1961,6 +1996,8 @@ func (inst *SysmetricsStore) ScanSysDiskIo(ctx context.Context, opts recordstore
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1970,6 +2007,9 @@ func (inst *SysmetricsStore) ScanSysDiskIo(ctx context.Context, opts recordstore
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysBattery(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysBatteryFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -1990,6 +2030,8 @@ func (inst *SysmetricsStore) ScanSysBattery(ctx context.Context, opts recordstor
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1999,6 +2041,9 @@ func (inst *SysmetricsStore) ScanSysBattery(ctx context.Context, opts recordstor
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysGpu(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysGpuFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -2019,6 +2064,8 @@ func (inst *SysmetricsStore) ScanSysGpu(ctx context.Context, opts recordstore.Sc
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -2028,6 +2075,9 @@ func (inst *SysmetricsStore) ScanSysGpu(ctx context.Context, opts recordstore.Sc
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysProc(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysProcFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -2048,6 +2098,8 @@ func (inst *SysmetricsStore) ScanSysProc(ctx context.Context, opts recordstore.S
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -2057,6 +2109,9 @@ func (inst *SysmetricsStore) ScanSysProc(ctx context.Context, opts recordstore.S
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysProcCmd(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysProcCmdFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -2077,6 +2132,8 @@ func (inst *SysmetricsStore) ScanSysProcCmd(ctx context.Context, opts recordstor
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -2086,6 +2143,9 @@ func (inst *SysmetricsStore) ScanSysProcCmd(ctx context.Context, opts recordstor
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysSocket(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysSocketFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
@@ -2106,6 +2166,8 @@ func (inst *SysmetricsStore) ScanSysSocket(ctx context.Context, opts recordstore
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -2115,6 +2177,9 @@ func (inst *SysmetricsStore) ScanSysSocket(ctx context.Context, opts recordstore
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *SysmetricsStore) ScanSysTopology(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*SysmetricsEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
+	}
 	where := factsScanSysTopologyFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"

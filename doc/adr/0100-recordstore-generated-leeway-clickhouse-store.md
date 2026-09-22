@@ -1132,6 +1132,36 @@ responsibility, and the store is what holds the count.
   stores regenerated; no in-tree caller was moved onto the helpers in this
   pass.
 
+### 2026-09-22 — the state view gains a scan: `ScanLive<Kind>`, and `ScanOpts.KeyPrefix`
+
+Asked for by ADR-0105's Update of 2026-08-15 (its P3), which gave the state
+view a third consumer. `GetLive` answers one key; the live set of many keys
+was a Go fold over the ascending `Scan`, written once per consumer.
+
+- **`ScanLive<Kind>(ctx, opts)`**, emitted per component on every store with
+  a state view: the newest row of every key, kept when that row carries a
+  conforming component and is not a tombstone, ordered by key. It is one
+  statement: an inner `ORDER BY <order> DESC LIMIT 1 BY <key>` over the whole
+  key range, and the component's Filter in the outer `WHERE`. **The collapse
+  runs before the component test** — a tombstone carries no component, so
+  testing first would skip it and return the row it superseded. The same
+  holds for a newer row carrying only another component.
+- `opts.ExtraPredicate` applies to the collapsed rows, for the same reason.
+  `opts.Limit` caps the query's rows before the Go-side tombstone test, so
+  under a configured tombstone pair whose marker satisfies the Filter, a
+  limited scan can yield fewer than `Limit`.
+- **`ScanOpts.KeyPrefix`**, honoured by every `Scan<Kind>` and
+  `ScanLive<Kind>`: `startsWith(<key>, …)`, a primary-key range read because
+  generated tables sort by `(key, order)`. Inside `ScanLive` it narrows the
+  inner query, which is safe: it selects whole keys, all of whose rows the
+  collapse still sees. A store keyed by `uint64` refuses a non-empty prefix
+  with `recordstore.ErrKeyPrefixNumericKey` rather than ignoring it and
+  returning every key.
+- Verified over `clickhouse-local` and through the HTTP executor against a
+  live server. The ordering test was checked for teeth: with the Filter moved
+  inside the collapse, deleted and superseded keys came back and it failed.
+  All in-tree stores regenerated.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

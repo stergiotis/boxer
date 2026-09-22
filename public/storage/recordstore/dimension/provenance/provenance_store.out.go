@@ -833,6 +833,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -842,6 +844,9 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *ProvenanceStore) ScanProvenance(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*ProvenanceEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*ProvenanceEntity]()
+	}
 	where := provenanceScanProvenanceFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"

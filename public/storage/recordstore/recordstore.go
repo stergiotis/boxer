@@ -116,9 +116,17 @@ type ReplayOptsU64 struct {
 	Limit int
 }
 
-// ScanOpts parameterizes the generated Scan<Kind> verbs. The zero value
-// scans everything: no extra predicate, no limit.
+// ScanOpts parameterizes the generated Scan<Kind> and ScanLive<Kind> verbs.
+// The zero value scans everything: no key prefix, no extra predicate, no
+// limit.
 type ScanOpts struct {
+	// KeyPrefix restricts the scan to entities whose key starts with it
+	// (ADR-0105 Update 2026-08-15, P3). Generated tables sort by (key,
+	// order), so on a string-keyed store this is a primary-key range read
+	// rather than a predicate over every row. A uint64-keyed store has no
+	// prefix to match and refuses a non-empty KeyPrefix with
+	// [ErrKeyPrefixNumericKey] instead of ignoring it.
+	KeyPrefix string
 	// ExtraPredicate further restricts the scan: raw SQL over the physical
 	// (leeway-encoded) column names, ANDed with the store's baked Filter
 	// artefact. It is concatenated into the statement verbatim — trusted
@@ -126,6 +134,21 @@ type ScanOpts struct {
 	ExtraPredicate string
 	// Limit caps the number of returned rows; zero means no limit.
 	Limit int
+}
+
+// ErrKeyPrefixNumericKey is what a uint64-keyed store's scan verbs yield
+// for a non-empty [ScanOpts.KeyPrefix]. Ignoring the prefix would return
+// every key to a caller that asked for a range, so the scan refuses.
+var ErrKeyPrefixNumericKey = errors.New("ScanOpts.KeyPrefix set on a store whose key is not a string")
+
+// RefuseKeyPrefix is the one-element sequence a uint64-keyed store's scan
+// verbs return when [ScanOpts.KeyPrefix] is set: a final (zero,
+// [ErrKeyPrefixNumericKey]) pair, the scan iterators' error convention.
+func RefuseKeyPrefix[E any]() iter.Seq2[E, error] {
+	return func(yield func(E, error) bool) {
+		var zero E
+		yield(zero, ErrKeyPrefixNumericKey)
+	}
 }
 
 // SeqTs renders a synthetic per-key sequence number (1, 2, 3, …) as the
