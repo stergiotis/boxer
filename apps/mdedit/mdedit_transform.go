@@ -11,14 +11,15 @@ package mdedit
 // buffer has moved since, because a splice computed against one buffer must
 // not land on another. Discard and Copy are the other two verdicts.
 //
-// The whole surface is env-gated (transform.ConfigFromEnv): no endpoint or no
-// model means no picker, no pane, no probing — ADR-0120 §SD3's "no dead tab".
-// The endpoint HOST is shown beside the picker for the same section's reason:
+// The whole surface is gated on the host offering a model (llm.describe,
+// ADR-0254 §SD1): no model means no picker, no pane — ADR-0216 §SD3's "no
+// dead control" (the shape the withdrawn ADR-0120 first described). The
+// endpoint HOST is shown beside the picker for the same section's reason:
 // where the text goes should be readable where it is sent from.
 //
-// The run itself sits behind a bgjob.Runner: the compute goroutine builds the
-// client, runs one completion and never touches a c.* call; the render thread
-// polls, sustains repaint, and consumes the result once.
+// Both the describe and the run sit behind a bgjob.Runner: the compute
+// goroutine asks the host over the bus and never touches a c.* call; the
+// render thread polls, sustains repaint, and consumes the result once.
 
 import (
 	"context"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/stergiotis/boxer/apps/mdedit/transform"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
@@ -48,7 +50,7 @@ const (
 
 	tipTransformRun = "Run the picked transformation over the selection (when it takes one and one exists) or the whole document. The result lands in a pane below for review — nothing is rewritten until Apply."
 
-	tipTransformHost = "Where the text is sent: the transformation endpoint's host, from BOXER_MDEDIT_LLM_ENDPOINT."
+	tipTransformHost = "Where the text is sent: the host's model endpoint, from BOXER_LLM_ENDPOINT."
 
 	tipTransformApply = "Replace the text that was sent with the result. Refused if the buffer changed since the run started. A rebind from outside the editor — not an edit its undo describes."
 
@@ -56,7 +58,7 @@ const (
 
 	tipTransformCopy = "Copy the result to the clipboard, leaving the buffer and its dirty marker alone."
 
-	tipTransformTruncated = "The completion hit the token ceiling — this is everything the model produced, and it may stop mid-thought. Raise BOXER_MDEDIT_LLM_MAXTOKENS (or the prompt's max-tokens) for more room."
+	tipTransformTruncated = "The completion hit the token ceiling — this is everything the model produced, and it may stop mid-thought. Raise BOXER_LLM_MAXTOKENS (or the prompt's max-tokens) for more room."
 )
 
 var (
@@ -69,9 +71,12 @@ var (
 // transformState is everything the surface owns, one field on App (the
 // findState shape).
 type transformState struct {
-	// enabled, cfg and host are resolved once in Mount from the env registry.
+	// cli is the host's model over the bus; enabled, model and host land
+	// when the describe started at Mount comes back (avail).
+	cli     transform.CompleterI
+	avail   bgjob.Runner[llm.Description]
 	enabled bool
-	cfg     transform.Config
+	model   string
 	host    string
 
 	// defs is the parsed prompt corpus, loaded on the first gated frame;
@@ -166,17 +171,12 @@ func (inst *App) startTransform(def transform.PromptDef) {
 	x.res, x.errText = nil, ""
 	x.resDoc, x.resDocSrc = nil, ""
 
-	cfg := x.cfg
+	cli := x.cli
 	ok := x.runner.StartReporting(nil,
 		bgjob.Spec{Kind: "mdedit-transform", Title: def.Title},
 		func(ctx context.Context, _ bgjob.Reporter) (res *transform.Result, err error) {
-			client, err := transform.NewClient(cfg)
-			if err != nil {
-				return
-			}
-			defer func() { _ = client.Close() }()
 			var r transform.Result
-			r, err = transform.Run(ctx, client, cfg, def, input)
+			r, err = transform.Run(ctx, cli, def, input)
 			if err != nil {
 				return
 			}
@@ -188,12 +188,48 @@ func (inst *App) startTransform(def transform.PromptDef) {
 	}
 }
 
+// startTransformDescribe asks the host once, off the frame, whether it
+// offers a model (llm.describe). Nothing renders until the answer says so;
+// a host with no bus, or none configured, leaves the surface absent.
+func (inst *App) startTransformDescribe() {
+	x := &inst.xform
+	if inst.bus == nil {
+		return
+	}
+	cli := llm.NewClient(inst.bus)
+	x.cli = cli
+	x.avail.Start(nil, bgjob.Spec{Kind: "mdedit-llm-describe", Title: "model"},
+		func(ctx context.Context) (d *llm.Description, err error) {
+			got, err := cli.Describe(ctx)
+			if err != nil {
+				return
+			}
+			d = &got
+			return
+		})
+}
+
+// drainTransformDescribe lands the host's answer on the render thread.
+func (inst *App) drainTransformDescribe() {
+	x := &inst.xform
+	if d, _, ok := x.avail.TakeResult(); ok {
+		x.enabled = d.Configured
+		x.model, x.host = d.Model, d.EndpointHost
+		return
+	}
+	if snap := x.avail.Snapshot(); snap.State == bgjob.StateFailed {
+		x.avail.Invalidate()
+		inst.logger.Debug().Err(snap.Err).Msg("mdedit: llm.describe failed; transform surface stays absent")
+	}
+}
+
 // drainTransform moves a finished run onto the render thread, once per frame
 // (called from renderBody beside drainAsync). A cancel is not a failure: it
 // was the reader's own gesture, so it lands in the status line rather than
 // opening the pane to explain itself.
 func (inst *App) drainTransform() {
 	x := &inst.xform
+	inst.drainTransformDescribe()
 	if res, _, ok := x.runner.TakeResult(); ok {
 		x.res = res
 		x.errText = ""
@@ -387,7 +423,7 @@ func (inst *App) renderTransformPane() {
 func (inst *App) transformSummaryLine() (s string) {
 	x := &inst.xform
 	var b strings.Builder
-	b.WriteString(x.cfg.Model)
+	b.WriteString(x.model)
 	b.WriteString(" · ")
 	b.WriteString(x.host)
 	b.WriteString(" · ")

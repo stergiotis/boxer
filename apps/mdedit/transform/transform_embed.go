@@ -12,13 +12,14 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 )
 
 //go:embed prompts
 var promptsFS embed.FS
 
 func init() {
-	if err := RegisterPromptBook("mdedit", help.MustSub(promptsFS, "prompts")); err != nil {
+	if err := promptbook.Register(BookId, help.MustSub(promptsFS, "prompts")); err != nil {
 		log.Warn().Err(err).Msg("transform: failed to register the starter prompt book")
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
@@ -699,12 +700,13 @@ func TestManifestRegisters(t *testing.T) {
 // and the list is asserted exactly rather than by presence: a cap the app
 // never exercises is the §SD10 gate's other failure mode, so growth has to be
 // deliberate enough to edit a test for.
-func TestManifestDeclaresExactlyTheFourSubjects(t *testing.T) {
+func TestManifestDeclaresExactlyTheFiveSubjects(t *testing.T) {
 	want := []string{
 		clipboardbroker.SubjectWrite,
 		fsbroker.SubjectDialogRead,
 		fsbroker.SubjectDialogWrite,
 		windowhost.OpenSubject,
+		llm.SubjectAll,
 	}
 	got := make([]string, 0, len(manifest.Caps))
 	for _, c := range manifest.Caps {
@@ -713,6 +715,11 @@ func TestManifestDeclaresExactlyTheFourSubjects(t *testing.T) {
 		assert.NotEmpty(t, c.Reason, "a cap needs a reason: %q", c.Pattern)
 	}
 	assert.ElementsMatch(t, want, got)
+	for _, c := range manifest.Caps {
+		if c.Pattern == llm.SubjectAll {
+			assert.False(t, c.Sticky, "sending text to a model is a per-session consent (ADR-0254 §SD1)")
+		}
+	}
 }
 
 // TestManifestDoesNotDeclareAWildcardHandleCap is the one worth keeping

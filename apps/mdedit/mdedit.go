@@ -33,7 +33,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"github.com/stergiotis/boxer/apps/mdedit/transform"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
@@ -469,10 +468,10 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.store = ctx.Storage()
-	// The transform surface's env gate, resolved once: no endpoint or no
-	// model means the surface never renders (ADR-0120 §SD3's shape).
-	inst.xform.cfg, inst.xform.enabled = transform.ConfigFromEnv()
-	inst.xform.host = transform.EndpointHost(inst.xform.cfg.Endpoint)
+	// The transform surface's gate (ADR-0254 §SD1, ADR-0216 §SD3's
+	// shape): the host is asked once whether it offers a model, off the
+	// frame, and the surface renders only once it said yes.
+	inst.startTransformDescribe()
 	if inst.store != nil {
 		go inst.restore()
 	}
@@ -708,8 +707,8 @@ func (inst *App) renderBar() {
 			}
 		}
 
-		// The transform surface, only when its env gate is open — with it
-		// unset nothing here renders, probes or hints (mdedit_transform.go).
+		// The transform surface, only when the host offers a model — with
+		// none nothing here renders or hints (mdedit_transform.go).
 		if inst.xform.enabled {
 			c.AddSpace(styletokens.GapInline(styletokens.DensityStandard))
 			inst.renderTransformPicker()
