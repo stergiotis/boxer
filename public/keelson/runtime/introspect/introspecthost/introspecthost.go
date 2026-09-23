@@ -27,6 +27,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	introspectproviders "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	introspectprovidersgui "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
@@ -119,6 +121,10 @@ type Deps struct {
 	// either leaves the table with this process's worker alone.
 	WatchbillPresence watchbill.PresenceReaderI
 	WatchbillLiveness watchbill.LivenessI
+	// LLMCalls is the host's llm service as a read side, backing
+	// keelson.llm_calls (ADR-0254 §SD4). nil leaves it empty rather than
+	// absent. Same typed-nil trap: assign only a service that started.
+	LLMCalls llm.CallsI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -204,6 +210,17 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 				deps.Log.Warn().Err(e).Msg("introspecthost: topology provider registration failed")
 			}
 		}
+	}
+	// ADR-0254 §SD4: the completions this process answered. Registered
+	// unconditionally — a host with no llm service answers with an empty
+	// table.
+	if e := llm.RegisterIntrospect(reg, deps.LLMCalls); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: llm_calls provider registration failed")
+	}
+	// And what a model may be asked to do: every registered prompt
+	// document, joinable to llm_calls on purpose.
+	if e := promptbook.RegisterIntrospect(reg); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: llm_prompts provider registration failed")
 	}
 	if e := introspect.RegisterCatalog(reg); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: catalog registration failed")

@@ -32,6 +32,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
@@ -116,6 +117,10 @@ type Services struct {
 	// over the state store (ADR-0185 §SD3). Without a durable store it
 	// still answers, refusing with the reason.
 	AppState bool
+	// LLM is llm.*: model inference through the host's one provider
+	// (ADR-0254). Without BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL it still
+	// answers, saying no model is configured.
+	LLM bool
 }
 
 // AllServices is every service on — the carousel's configuration.
@@ -123,7 +128,7 @@ func AllServices() Services {
 	return Services{
 		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
-		AppState: true,
+		AppState: true, LLM: true,
 	}
 }
 
@@ -214,6 +219,9 @@ type Runtime struct {
 	// AppState is the app-state manager's delete seam (ADR-0185 §SD3); nil
 	// when the service is off or failed to start.
 	AppState *appstate.Service
+	// LLM is the model-inference service (ADR-0254); nil when off or
+	// failed to start.
+	LLM *llm.Service
 	// State is where workingsets and column-width overrides live (ADR-0105
 	// Update 2026-08-15): the durable persist backend when ClickHouse is
 	// reachable, an in-memory twin otherwise. Never nil after Boot, and
@@ -429,6 +437,18 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		} else {
 			rt.AppState = asSvc
 			rt.cleanups = append(rt.cleanups, asSvc.Close)
+		}
+	}
+	if svc.LLM {
+		llmSvc, lErr := llm.NewService(rt.Bus, logger, llm.ConfigFromEnv())
+		if lErr != nil {
+			logger.Warn().Err(lErr).Msg("llm: service start failed; llm.* will be unbound")
+		} else {
+			rt.LLM = llmSvc
+			rt.cleanups = append(rt.cleanups, llmSvc.Close)
+			d := llmSvc.Describe()
+			logger.Info().Bool("configured", d.Configured).Str("model", d.Model).Str("endpointHost", d.EndpointHost).
+				Bool("local", d.Local).Msg("llm: service listening on llm.*")
 		}
 	}
 	if svc.Watchbill {
@@ -683,6 +703,9 @@ func (rt *Runtime) bootIntrospect() {
 	}
 	if rt.WatchbillLiveness != nil {
 		deps.WatchbillLiveness = rt.WatchbillLiveness
+	}
+	if rt.LLM != nil {
+		deps.LLMCalls = rt.LLM
 	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {

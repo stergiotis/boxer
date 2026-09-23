@@ -462,3 +462,16 @@ sticky; the service holds the statement to that table before the engine
 sees it. §SD3's `url()` source, the `/query` endpoint and
 `LocalQueryEndpoint` are unchanged and remain the route for SQL consoles,
 joins, sealed datasets and external engines.
+
+## Update (2026-09-23) — `keelson.llm_calls` (ADR-0254)
+
+ADR-0254 (proposed) added a live provider over the host's llm service: one
+row per completion the process answered or refused — app, purpose,
+sensitivity, model, sizes, token counts, elapsed, how it ended; prompt and
+completion text only under `BOXER_LLM_KEEP_MESSAGES`. Registered from
+`introspecthost` over `Deps.LLMCalls`, empty rather than absent without the
+service. The rows are an in-process bounded record, not a facts-store
+kind; the durable write is ADR-0254's recorded deferral. Beside it,
+`keelson.llm_prompts`: every registered prompt document (the ADR-0216
+book mechanism, lifted to `llm/promptbook`), a failed one as a row with
+its error; `llm_calls.purpose` joins it on `book/slug`.
