@@ -110,6 +110,7 @@ for the parts that have no such term. New house names belong in this table.
 | `tally` | the count of cargo checked against the bill of lading | the browser over the lading store — `apps/tally` ([ADR-0200](doc/adr/0200-tally-lading-browser.md)) |
 | `portolan` | a chart ruled with rhumb lines | the Web-Mercator map widget — `public/thestack/imzero2/egui2/widgets/portolan` ([ADR-0204](doc/adr/0204-leaflet-map-core-port.md)) |
 | `watchbill` | the roster that assigns each hand a duty on each watch | durable work as job rows claimed by writing — `public/keelson/runtime/watchbill` ([ADR-0223](doc/adr/0223-watchbill-durable-work-on-facts.md)) |
+| `stevedore` | the hand who works the hatch, loading cargo and checking it against the manifest; what the cargo is, is the shipper's business | routing, failure and state handling around an ingestion processor a streaming framework drives — `public/streaming/stevedore` ([ADR-0252](doc/adr/0252-stevedore-routing-failure-and-state-handling-for-framework-driven-ingestion.md)) |
 
 ### Glossary
 <dl>
