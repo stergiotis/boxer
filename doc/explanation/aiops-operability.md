@@ -61,8 +61,8 @@ judgment — so the work below is mostly seam-completion, not an ML stack.
 | Configuration | env registry ([ADR-0009](../adr/0009-environment-variable-registry.md)) → [doc/env-vars.md](../env-vars.md) → `keelson.env` | built |
 | Live state as SQL | `keelson.*` providers, `url()` + `/query` ([ADR-0094](../adr/0094-keelson-introspection-tables.md)) | built |
 | History, audit, logs | `boxer.facts`: grants, audit, state, logs-as-facts ([ADR-0026 §SD6](../adr/0026-app-runtime-and-capability-subjects.md), `keelson/runtime/logbridge`) | built |
-| Host metrics | unidirectional pub/sub plane, metrics are leeway facts ([ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md)) | built, unpersisted |
-| Query telemetry | ELT capture pipelines as schema objects ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md)) | proposed |
+| Host metrics | unidirectional pub/sub plane, CBOR on the wire ([ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md)); an opt-in tee lands samples in `boxer.facts` ([ADR-0184](../adr/0184-sysmetrics-persistence-tee.md)) | built; persistence off by default |
+| Query telemetry | ELT capture pipelines as schema objects ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md)) | accepted; capture slices built |
 | Supply chain | license gate ([ADR-0004](../adr/0004-license-gate-cyclonedx.md)), airgapped bundle ([ADR-0095](../adr/0095-airgapped-build-bundle.md)), `keelson.extbin` digests ([ADR-0118](../adr/0118-extbin-external-process-chokepoint.md)), capslock drift gate ([ADR-0026 §SD10](../adr/0026-app-runtime-and-capability-subjects.md)) | built |
 | Actuation governance | capability-as-subject; audited request/reply (publish deliberately unaudited) | built |
 | Synthetic verification | `ws_probe`, screenshot tours ([ADR-0057](../adr/0057-demo-registry-and-drivers.md)), [egui-mcp](../howto/egui-mcp.md) | built |
@@ -96,7 +96,7 @@ history persist, and can it be queried?
 Three observations structure the gap:
 
 **Metrics split into four domains with one shared fix.** Host metrics are
-sourced, on-plane, unpersisted; process metrics (goruntime) are sourced but
+sourced, on-plane, persisted only where the [ADR-0184](../adr/0184-sysmetrics-persistence-tee.md) tee is switched on; process metrics (goruntime) are sourced but
 plane-less; frame metrics are pixels-only; app-defined instruments have no
 primitive at all. The `goruntime` collector already mirrors the sysmetrics
 Bundle shape, so publishing it as another plane domain is prepared, and a

@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-11
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-13
 ---
-
-> **Status: proposed — pre-human-review.** The panel ships with this record;
-> it has not been reviewed.
 
 # ADR-0227: a Graphview panel for `play` — the live reading of the Network contract
 

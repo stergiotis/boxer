@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-27
+reviewed-date: 2026-09-23
 ---
 
 # Engineering Practices
@@ -255,8 +255,13 @@ suites.
 
 ## 5. Custom in-tree governance (`boxer gov`)
 
-Two project-specific checks have no off-the-shelf equivalent and are
-implemented as subcommands of the project binary.
+The project-specific checks are subcommands of the project binary and run
+together as one composite gate, `boxer gov gate` — build-tag discipline,
+doclint, entry points, file naming and codelint, with the step list pinned in
+Go so a consuming repository runs the same artifact
+([ADR-0179](adr/0179-downstream-consumption-gate-and-skeleton.md)). The two
+with no off-the-shelf equivalent are described below; `gov codelint` is
+[ADR-0011](adr/0011-codelint.md) and §9.
 
 ### `boxer gov doclint`
 
@@ -422,7 +427,9 @@ conventions, including:
 - zero-value usability when feasible, otherwise an exported `New` constructor
   with unexported fields.
 
-These are human-enforced; no linter checks them.
+The subset with a `CS`-numbered rule is checked by `boxer gov codelint`
+([ADR-0011](adr/0011-codelint.md)), with per-line disables that carry a
+reason; the rest are human-enforced.
 
 Most Go projects defer to *Effective Go* and `gofmt`. Project-specific style
 guides at this depth are more common in C++ ecosystems (Google, LLVM) than

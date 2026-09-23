@@ -8,6 +8,12 @@ date: 2026-07-10
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
+The reference cut of the seam — `AllocatorI`, the `leased` generator and its
+in-memory allocator under [`public/identity/identgen`](../../public/identity/identgen)
+— is in the tree (noted 2026-09-23) with no consumer outside the package; the
+store-backed and network allocators are not. The record stays proposed until
+reviewed.
+
 # ADR-0111: identity — technology-neutral leased id generation via an allocator seam
 
 ## Context

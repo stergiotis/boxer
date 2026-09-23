@@ -228,8 +228,10 @@ not `go generate` alone.
 There is no CLI. The lane is a gen-test in the target package, the way
 [`recordstore/sharedsection`](../../public/storage/recordstore/sharedsection)
 and [`recordstore/example`](../../public/storage/recordstore/example) are
-driven. `keelson/runtime/sysmfacts` is the one facts-bound store in the tree
-and the worked example to copy: a DTO file per kind, a membership vocabulary
+driven. `keelson/runtime/sysmfacts` was the first facts-bound store and is
+the worked example to copy — the same lane drives `watchbill/watchbillpresence`,
+`llm/llmfacts`, `lading/ladingpolicy`, `markdown/mddocfacts` and
+`stevedore/stevedorefacts`: a DTO file per kind, a membership vocabulary
 beside it, a `gen_test.go` calling `storegen.Input{...}.Generate()`, and a test
 file asserting the ids landed.
 

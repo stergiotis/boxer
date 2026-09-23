@@ -381,7 +381,8 @@ header clear gesture (ADR-0151 M6 follow-through, small and independent), the
 
 ## Status
 
-Accepted 2026-09-22. Nothing implemented. The design dialogue settled three
+Accepted 2026-09-22 with nothing implemented; what has shipped since is
+recorded under `## Updates`. The design dialogue settled three
 questions — the delete seam, the UI's home, and the delete granularity — and
 this record is the result; the sequencing in Milestones is deliberate, so M0
 can proceed without M2 being settled in code.

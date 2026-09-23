@@ -5,8 +5,8 @@ date: 2026-06-27
 ---
 
 > **Status: proposed — pre-human-review.** Not yet reviewed by a code owner of the
-> nanopass package; the change is implemented on a spike branch and the design may
-> still change in review. Do not cite as settled.
+> nanopass package; the rewrite core is in the tree (noted 2026-09-23) and the
+> design may still change in review. Do not cite as settled.
 
 # ADR-0098: Nanopass Local-Rewrite Combinator Core
 

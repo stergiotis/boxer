@@ -461,7 +461,8 @@ Tracked as named follow-ons, not gates on this ADR:
 
 ## Status
 
-Proposed — awaiting review.
+Superseded (2026-06-07) by ADR-0070–ADR-0073, never accepted; retained for
+history, as the banner above states.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

@@ -3,7 +3,7 @@ type: explanation
 audience: prospective consumers and integrators evaluating adoption
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-18
+reviewed-date: 2026-09-23
 ---
 
 > Where this page and an ADR disagree, the ADR is the record. Regulatory
@@ -187,7 +187,7 @@ artifacts, and provenance is queryable from the history.
 - **Enacted by:** the resource monitor
   ([ADR-0020](../adr/0020-imzero2-imztop-resource-monitor.md)), the
   observability pipeline
-  ([ADR-0050](../adr/0050-clickhouse-observability-pipeline.md)), the runtime
+  ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md)), the runtime
   dashboard ([ADR-0061](../adr/0061-imzero2-imzrt-go-runtime-dashboard.md)),
   the metrics data plane
   ([ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md)).

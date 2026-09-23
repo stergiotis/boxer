@@ -3,7 +3,7 @@ type: explanation
 audience: prospective consumers and integrators evaluating adoption
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-23
+reviewed-date: 2026-09-23
 ---
 
 > Where this page and [why-boxer](./why-boxer.md) or an ADR disagree, those
@@ -85,7 +85,7 @@ exactly that.
 | is a | one Go host process, a Rust client that only renders, helpers on pipes, ClickHouse as the one place anything durable lives | [ARCHITECTURE §1](../ARCHITECTURE.md) (the four process kinds and their boundaries); FFFI2 over the client's pipes ([ADR-0024](../adr/0024-imzero2-remote-access-browser-viewer.md) §Context); the `clickhouse-local` pool ([ADR-0028](../adr/0028-chlocal-low-latency-sql-cap.md)); durable facts on the server ([ADR-0026 §SD6](../adr/0026-app-runtime-and-capability-subjects.md), [ADR-0105](../adr/0105-keelson-adopts-generated-record-stores.md)) |
 | that | a few people carry the whole stack | P6, and the P2→P6 chain in "The bet, named" |
 | that | problem-oriented languages generate tables, codecs, ingestion, readers, per-kind SQL functions | P2; the leeway generators ([ADR-0066](../adr/0066-leeway-dql-clickhouse-readback-generator.md), [ADR-0089](../adr/0089-rowdml-serialization-clickhouse-native-ingestion.md), [ADR-0100](../adr/0100-recordstore-generated-leeway-clickhouse-store.md), [ADR-0189](../adr/0189-component-sql-authoring-surface.md)) |
-| that | a query becomes a table, chart, map or board; a markdown file becomes an app | the play query graph and its panels ([ADR-0097](../adr/0097-play-reactive-query-graph.md), [ADR-0122](../adr/0122-play-kanban-panel.md), [ADR-0129](../adr/0129-play-layered-graph-panel.md)); SQL-defined applets ([ADR-0132](../adr/0132-sqlapplet-sql-defined-applets.md), build-time in v1) |
+| that | a query becomes a table, chart, map or board; a markdown file becomes an app | the play query graph and its panels ([ADR-0097](../adr/0097-play-reactive-query-graph.md), [ADR-0122](../adr/0122-play-kanban-panel.md), [ADR-0129](../adr/0129-play-layered-graph-panel.md)); SQL-defined applets ([ADR-0132](../adr/0132-sqlapplet-sql-defined-applets.md); a committed markdown document, or saved from a running play) |
 | that | that app runs unchanged on a desktop, in a browser, or from a roughly 110 MB appliance image | "placement is the host's call, not the app's" ([ADR-0026 §SD8](../adr/0026-app-runtime-and-capability-subjects.md)); the headless carrier and browser viewer ([ADR-0024](../adr/0024-imzero2-remote-access-browser-viewer.md)); the CPU-rasterized host and the gokrazy images ([ADR-0205](../adr/0205-imzero2-cpu-rasterized-pixel-host.md), [ADR-0206](../adr/0206-gokrazy-appliance-image.md)); [ARCHITECTURE §2](../ARCHITECTURE.md) |
 | that | every durable fact, even file trees, lands in one queryable table shape | the facts table and the generated record stores ([ADR-0026 §SD6](../adr/0026-app-runtime-and-capability-subjects.md), [ADR-0100](../adr/0100-recordstore-generated-leeway-clickhouse-store.md), [ADR-0105](../adr/0105-keelson-adopts-generated-record-stores.md)); metrics as facts ([ADR-0184](../adr/0184-sysmetrics-persistence-tee.md)); the fs snapshot store ([ADR-0198](../adr/0198-fs-snapshot-store.md)); [ARCHITECTURE §3.2–3.3](../ARCHITECTURE.md) |
 | that | a requirement costs a projection, not a data layer | P3 (what it buys) |
