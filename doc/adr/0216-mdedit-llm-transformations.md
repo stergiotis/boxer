@@ -146,7 +146,7 @@ review.
 
 ### 2026-09-23 — SD1 and SD3 are superseded by a capability (ADR-0254)
 
-[ADR-0254](./0254-model-inference-as-a-keelson-capability.md) (proposed)
+[ADR-0254](./0254-model-inference-as-a-keelson-capability.md)
 makes model inference a declared `llm.*` capability served by the host.
 What that changes here: the transform package calls `llm.complete` over
 the bus instead of holding an `openaichat` client, so SD1's reason —

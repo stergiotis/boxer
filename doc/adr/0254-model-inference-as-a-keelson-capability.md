@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-23
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-23
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do
-> not implement as if accepted.
 
 # ADR-0254: Model inference as a keelson capability — `llm.<verb>`, and what a model may touch
 
@@ -332,7 +331,9 @@ is revised in place; nothing built cites either.
 
 ## Status
 
-Proposed 2026-09-23. Consolidates the app-side half of ADR-0120 (withdrawn
+Accepted 2026-09-23, on the build and its tests; the live check against a
+model is still outstanding, since no endpoint ran where it was built.
+Consolidates the app-side half of ADR-0120 (withdrawn
 the same day; its evidence and generation constraints survive here and in
 ADR-0139) and takes over ADR-0139 §SD8's guarded executor as SD5.
 

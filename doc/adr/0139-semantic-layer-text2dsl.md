@@ -355,7 +355,7 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 
 - [ADR-0120](./0120-play-natural-language-ask-panel.md) (withdrawn) — the
   evidence section that motivates this ADR.
-- [ADR-0254](./0254-model-inference-as-a-keelson-capability.md) (proposed)
+- [ADR-0254](./0254-model-inference-as-a-keelson-capability.md)
   — the capability the client rides and the grants the tools run under.
 - [ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md) —
   the per-table read grant SD8's tools execute through.

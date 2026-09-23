@@ -465,7 +465,7 @@ joins, sealed datasets and external engines.
 
 ## Update (2026-09-23) — `keelson.llm_calls` (ADR-0254)
 
-ADR-0254 (proposed) added a live provider over the host's llm service: one
+ADR-0254 added a live provider over the host's llm service: one
 row per completion the process answered or refused — app, purpose,
 sensitivity, model, sizes, token counts, elapsed, how it ended; prompt and
 completion text only under `BOXER_LLM_KEEP_MESSAGES`. Registered from
