@@ -1,12 +1,17 @@
 ---
 type: adr
-status: proposed
+status: withdrawn
 date: 2026-07-21
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+withdrawn-date: 2026-09-23
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: withdrawn (2026-09-23).** Retracted before acceptance or
+> implementation in favour of
+> [ADR-0254](./0254-model-inference-as-a-keelson-capability.md), which makes
+> model inference a declared capability and gives play its model affordance
+> as a transformation book. The evidence review below stands and is cited
+> from there; the generation constraints (SD1, SD4, SD7) survive as
+> ADR-0254 §SD6 and ADR-0139. Kept as the record of the option.
 
 # ADR-0120: play Ask panel — natural-language query authoring
 
@@ -246,11 +251,28 @@ Deferred, recorded rather than gating (descope over gate):
 
 ## Status
 
-Proposed — the formerly open decisions (SD3 remote acknowledgement, SD4
-v0 scope, SD6 run gesture) were closed in the 2026-07-21 design dialogue;
-on 2026-07-22 an evidence review revised SD4 (grounding moved to the
-ADR-0139 semantic layer) and added SD7 (DSL target). Awaiting review for
-acceptance alongside ADR-0139.
+Withdrawn 2026-09-23, never accepted or built. Between the 2026-07-22
+revision and the withdrawal, [ADR-0216](./0216-mdedit-llm-transformations.md)
+shipped an app-side LLM surface in the shape SD2/SD3/SD5 described, and
+what it showed is that the shape gates an egress with an environment
+variable and hides it from the capability model. ADR-0254 replaces that
+half: the capability (`llm.*`), the host-side provider configuration, and
+the surface as a transformation book rather than a bespoke panel. The
+decisions about generation rather than about the panel are not withdrawn
+and moved rather than lapsed:
+
+- SD1 compile-only through the orchestrator and the editor-delivery ops,
+  SD4 grounding by the semantic layer, SD7 the canonical dialect as the
+  target — ADR-0254 §SD6.
+- SD6's "generated SQL never executes unseen" — the transformation book's
+  preview-then-apply posture, ADR-0216 §SD4.
+- The deferred list (execution-error repair, the golden corpus, multi-turn
+  refinement, compile-cache persistence) — carried by ADR-0139 and
+  ADR-0254 §SD7.
+
+Earlier history: the formerly open decisions (SD3 remote acknowledgement,
+SD4 v0 scope, SD6 run gesture) were closed in the 2026-07-21 design
+dialogue; on 2026-07-22 an evidence review revised SD4 and added SD7.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

@@ -20,7 +20,8 @@ The repository holds exactly one LLM client, `public/llm/openaichat`: one-shot
 chat completions against any OpenAI-compatible endpoint, no streaming, no
 timeout of its own. Its shipping consumers are CLI-side (commitdigest,
 text2sql2). For an *app-side* LLM surface, the recorded intent is
-[ADR-0120](./0120-play-natural-language-ask-panel.md) (still proposed): the LLM dependency
+[ADR-0120](./0120-play-natural-language-ask-panel.md) (withdrawn 2026-09-23 in favour of
+[ADR-0254](./0254-model-inference-as-a-keelson-capability.md)): the LLM dependency
 lives in a sibling package the app imports, the feature registers only when an
 endpoint env var says so, and the endpoint host is shown where the gesture is
 made. No app has shipped that shape yet — this is the first, so what it fixes
@@ -37,7 +38,7 @@ test holding the in-tree set to zero parse errors.
 ## Decision
 
 **SD1 — the LLM dependency lives in `apps/mdedit/transform`, a sibling
-package.** mdedit itself never imports `openaichat`. This is ADR-0120 §SD2's
+package.** mdedit itself never imports `openaichat`. This is the withdrawn ADR-0120 §SD2's
 shape, and it is also what keeps the capability gate quiet and honest: with
 the network call two packages away, capslock attributes the egress to the
 transform package rather than smearing it across everything mdedit touches.
@@ -123,8 +124,8 @@ apply, plus the badge saying it may stop mid-thought.
   Parameterized prompts, streaming, a per-prompt model override and a diff
   view of the result are deferred until asked for; the same goes for a
   quiescence-style re-anchoring of Apply onto a moved buffer.
-- ADR-0120, when picked up, should inherit SD2–SD5 rather than re-deciding
-  them.
+- play's model affordance (ADR-0254 §SD6, replacing the withdrawn
+  ADR-0120) inherits SD2, SD4 and SD5 rather than re-deciding them.
 
 ## Verification
 
@@ -140,6 +141,22 @@ live endpoint and stays manual, driven with LM Studio or Ollama via
 
 Proposed (2026-09-01). Implemented in the same session as the record; awaiting
 review.
+
+## Updates
+
+### 2026-09-23 — SD1 and SD3 are superseded by a capability (ADR-0254)
+
+[ADR-0254](./0254-model-inference-as-a-keelson-capability.md) (proposed)
+makes model inference a declared `llm.*` capability served by the host.
+What that changes here: the transform package calls `llm.complete` over
+the bus instead of holding an `openaichat` client, so SD1's reason —
+placing the network call where capslock attributes it to the transform
+package — no longer applies, the app holds a grant and no network
+capability; and SD3's five `BOXER_MDEDIT_LLM_*` variables move to the host
+as `BOXER_LLM_*`, with `llm.describe` supplying the visibility (the
+endpoint host beside the picker) and the gate (no model, no surface). SD2,
+SD4 and SD5 are unchanged and are the shape play adopts. Nothing here is
+built until ADR-0254 M1.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

@@ -310,7 +310,7 @@ them; M3+ pending acceptance.
 ## References
 
 - ADR-0094 (introspection tables), ADR-0122 §SD4 (`adrcontent`), ADR-0125
-  (codeview memoisation), ADR-0139 (text2dsl), ADR-0120 (Ask panel),
+  (codeview memoisation), ADR-0139 (text2dsl, proposed), ADR-0120 (Ask panel, withdrawn),
   ADR-0158 §SD6 (launcher search precedent).
 - `public/keelson/runtime/help` (BookI/RefT), `widgets/markdown`
   (EXPLANATION.md — id derivation order), `apps/play/play_docs_clickhouse.go`

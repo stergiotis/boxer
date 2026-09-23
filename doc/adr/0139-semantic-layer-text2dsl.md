@@ -12,9 +12,10 @@ date: 2026-07-22
 
 ## Context
 
-[ADR-0120](./0120-play-natural-language-ask-panel.md) wires the existing
-`text2sql2` engine into play. Its evidence section records why raw-schema
-grounding is not enough; the numbers that matter here:
+[ADR-0120](./0120-play-natural-language-ask-panel.md) (withdrawn; its
+consumer half is now [ADR-0254](./0254-model-inference-as-a-keelson-capability.md)
+§SD6) recorded why raw-schema grounding is not enough; the numbers that
+matter here:
 
 - On ClickHouse, frontier models are reported at 45.5–50.5% accuracy from
   schema text alone, and 67.7–68.7% (+17 to +23 points) once a ~4 KB
@@ -216,7 +217,16 @@ settled decisions:
   friendlier to small local models. Guardrails: read-only enforcement,
   row/size caps, every tool call emitted through the observer stream.
   SD8 defines the *surface*; the interaction protocol and the client
-  delta are SD9's.
+  delta are SD9's. *(Revised 2026-09-23:)* the "single guarded executor"
+  is not a component of this engine. Under ADR-0254 §SD5 every tool call
+  executes through the calling app's own bus client — an introspection
+  read through its `keelson.query.<table>` grants
+  ([ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md)),
+  which already enforce read-only, single-table statements — so the guard
+  is the manifest and the row cap is the tool façade's. The semantic-layer
+  entries themselves become one more introspection table
+  (`keelson('semlayer')`, a provider over the loaded scope), so the
+  measures tool is a canned query like the others.
 - **SD9 — Interactive tool calling, in-conversation** *(added
   2026-07-22)*. The SD8 tools are called *by the model, from within the
   generation conversation* — not pre-fetched by the engine on the
@@ -235,7 +245,13 @@ settled decisions:
   the equivalent. Interactive introspection is capability-gated per
   client: a model or adapter without tool support degrades to SD4
   seed-only single-shot generation — today's behavior — rather than
-  failing.
+  failing. *(Revised 2026-09-23:)* inside an app, `LLMClientI` is
+  implemented over the ADR-0254 `llm.complete` client: the model's tool
+  calls come back in the reply unexecuted, the orchestrator runs them
+  under the app's grants and continues; `llm.describe` answers the
+  tool-support question. The loop's home is unchanged — the orchestrator,
+  in the app's process — which is what keeps the service stateless per
+  turn.
 
 ## Alternatives
 
@@ -311,13 +327,16 @@ settled decisions:
 
 Proposed — all formerly open decisions were closed in the 2026-07-22
 design dialogue (SD1 home, SD2 line-oriented block grammar, SD3 lint
-beside the engine CLI, SD6-T2a handles in v0, SD8 bespoke façade over
-one executor) and are folded into the SD texts above. SD9 — the
-interactive in-conversation tool protocol — was added the same day after
-review feedback that SD8 left it implicit. Sequencing, also
-settled: the engine lands first and the `boxer text2sql` CLI proves it;
-the ADR-0120 panel consumes the proven engine after. Awaiting review for
-acceptance alongside ADR-0120.
+beside the engine CLI, SD6-T2a handles in v0, SD8 bespoke façade) and are
+folded into the SD texts above. SD9 — the interactive in-conversation
+tool protocol — was added the same day after review feedback that SD8
+left it implicit. Revised in place 2026-09-23 when ADR-0120 was withdrawn:
+SD8's executor and SD9's client are placed by ADR-0254 (the tools run
+under the calling app's grants; the client rides `llm.complete`), and the
+layer's entries are an introspection table. Sequencing, also settled: the
+engine lands first and the `boxer text2sql` CLI proves it; play's `ask`
+transformation (ADR-0254 §SD6) consumes the proven engine after. Awaiting
+review for acceptance alongside ADR-0254.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
@@ -332,8 +351,12 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 
 ## References
 
-- [ADR-0120](./0120-play-natural-language-ask-panel.md) — the consumer
-  whose evidence section motivates this ADR.
+- [ADR-0120](./0120-play-natural-language-ask-panel.md) (withdrawn) — the
+  evidence section that motivates this ADR.
+- [ADR-0254](./0254-model-inference-as-a-keelson-capability.md) (proposed)
+  — the capability the client rides and the grants the tools run under.
+- [ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md) —
+  the per-table read grant SD8's tools execute through.
 - [ADR-0116](./0116-play-leeway-column-handle-resolution.md),
   [ADR-0066](./0066-leeway-dql-clickhouse-readback-generator.md),
   [ADR-0060](./0060-leeway-data-contracts-odcs.md) — leeway sources for
