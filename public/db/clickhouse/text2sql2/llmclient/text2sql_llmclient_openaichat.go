@@ -2,6 +2,7 @@ package llmclient
 
 import (
 	"context"
+	"encoding/json/jsontext"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/orchestrator"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -74,13 +75,19 @@ func NewOpenAIChatClient(client openaichat.ClientI, opts ...OpenAIChatOption) (i
 }
 
 func (inst *OpenAIChatClient) Chat(ctx context.Context, model string, messages []orchestrator.Message) (response string, err error) {
+	response, _, err = inst.ChatTools(ctx, model, messages, nil)
+	return
+}
+
+var _ orchestrator.ToolClientI = (*OpenAIChatClient)(nil)
+
+// ChatTools is Chat with tools offered (ADR-0139 §SD9): the definitions
+// ride the request, the model's calls come back, and a replayed tool turn
+// keeps its call id.
+func (inst *OpenAIChatClient) ChatTools(ctx context.Context, model string, messages []orchestrator.Message, tools []orchestrator.Tool) (response string, calls []orchestrator.ToolCall, err error) {
 	wireMessages := make([]openaichat.Message, 0, len(messages))
 	for _, m := range messages {
-		role := translateRole(m.Role)
-		wireMessages = append(wireMessages, openaichat.Message{
-			Role:    role,
-			Content: m.Content,
-		})
+		wireMessages = append(wireMessages, WireMessage(m))
 	}
 	var resp openaichat.CompletionResponse
 	resp, err = inst.client.Complete(ctx, openaichat.CompletionRequest{
@@ -90,12 +97,40 @@ func (inst *OpenAIChatClient) Chat(ctx context.Context, model string, messages [
 		NumCtx:         inst.numCtx,
 		Seed:           inst.seed,
 		ResponseFormat: inst.responseFormat,
+		Tools:          WireTools(tools),
 	})
 	if err != nil {
 		err = eh.Errorf("openaichat complete: %w", err)
 		return
 	}
 	response = resp.Content
+	calls = CallsOf(resp.ToolCalls)
+	return
+}
+
+// WireMessage maps an orchestrator message onto the client's, tool turns
+// and tool calls included.
+func WireMessage(m orchestrator.Message) (out openaichat.Message) {
+	out = openaichat.Message{Role: translateRole(m.Role), Content: m.Content, ToolCallId: m.ToolCallId}
+	for _, c := range m.ToolCalls {
+		out.ToolCalls = append(out.ToolCalls, openaichat.ToolCall{Id: c.Id, Name: c.Name, Arguments: c.Arguments})
+	}
+	return
+}
+
+// WireTools maps tool definitions onto the client's.
+func WireTools(tools []orchestrator.Tool) (out []openaichat.Tool) {
+	for _, t := range tools {
+		out = append(out, openaichat.Tool{Name: t.Name, Description: t.Description, Parameters: jsontext.Value(t.Parameters)})
+	}
+	return
+}
+
+// CallsOf maps the model's calls back onto the orchestrator's.
+func CallsOf(calls []openaichat.ToolCall) (out []orchestrator.ToolCall) {
+	for _, c := range calls {
+		out = append(out, orchestrator.ToolCall{Id: c.Id, Name: c.Name, Arguments: c.Arguments})
+	}
 	return
 }
 
@@ -109,6 +144,8 @@ func translateRole(role string) (out openaichat.ChatRoleE) {
 		out = openaichat.ChatRoleSystem
 	case "assistant":
 		out = openaichat.ChatRoleAssistant
+	case "tool":
+		out = openaichat.ChatRoleTool
 	default:
 		out = openaichat.ChatRoleUser
 	}

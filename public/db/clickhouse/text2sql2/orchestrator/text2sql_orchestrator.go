@@ -36,8 +36,66 @@ type LLMClientI interface {
 
 // Message is a single message in an LLM conversation.
 type Message struct {
-	Role    string // "system", "user", "assistant"
+	Role    string // "system", "user", "assistant", "tool"
 	Content string
+	// ToolCallId names the call a role=tool message answers; ToolCalls are
+	// the calls a role=assistant message made (ADR-0139 §SD9). Both empty
+	// on the plain path.
+	ToolCallId string
+	ToolCalls  []ToolCall
+}
+
+// Tool is one function the model may call while composing a query
+// (ADR-0139 §SD8): a name, what it does, and its parameters as a JSON
+// Schema object, serialized.
+type Tool struct {
+	Name        string
+	Description string
+	Parameters  string
+}
+
+// ToolCall is one call the model made: the provider's id, the tool, and
+// the arguments as the JSON text the model wrote.
+type ToolCall struct {
+	Id        string
+	Name      string
+	Arguments string
+}
+
+// ToolClientI is an LLMClientI that can carry tool definitions and return
+// the model's tool calls (ADR-0139 §SD9). A client that is not one degrades
+// the loop to seed-only single-shot generation.
+type ToolClientI interface {
+	LLMClientI
+	// ChatTools is Chat with tools offered. A turn answers EITHER with
+	// content (no calls) or with calls to make; a provider that returns
+	// both is read as calls first.
+	ChatTools(ctx context.Context, model string, messages []Message, tools []Tool) (response string, calls []ToolCall, err error)
+}
+
+// ToolExecutorI is what runs the model's calls — in the caller's process,
+// under the caller's own grants (ADR-0254 §SD5): the orchestrator never
+// holds a capability of its own. Call returns the result as text the model
+// reads, or an error the model reads as text too (a failed call is
+// information, not a failure of the question).
+type ToolExecutorI interface {
+	Tools() []Tool
+	Call(ctx context.Context, call ToolCall) (result string, err error)
+}
+
+// ToolCallEvent is one executed call, for a ToolObserverI.
+type ToolCallEvent struct {
+	Attempt  int
+	Call     ToolCall
+	Result   string
+	Duration time.Duration
+	Err      error
+}
+
+// ToolObserverI is an ObserverI that also hears tool calls. Optional, so an
+// observer written before the loop existed keeps compiling.
+type ToolObserverI interface {
+	OnToolCall(ctx context.Context, event ToolCallEvent)
 }
 
 // CHClientI executes queries against ClickHouse.
@@ -256,7 +314,19 @@ type Config struct {
 	Schema        string       // pre-formatted schema text for LLM prompt
 	PolicyPasses  []PolicyPass // post-AST policy transformations
 	VerifyResults bool         // enable LLM result verification
+	// Tools, when set and the client is a ToolClientI, turns generation
+	// into the in-conversation tool loop of ADR-0139 §SD9: the model may
+	// answer a turn with calls, the executor runs them, and the results are
+	// appended as tool turns until the model emits SQL or the budget is
+	// spent. The tool history stays in the conversation across repair
+	// attempts, so what the model learned is not lost.
+	Tools ToolExecutorI
+	// MaxToolCalls bounds the calls per question; zero is DefaultMaxToolCalls.
+	MaxToolCalls int
 }
+
+// DefaultMaxToolCalls bounds the tool loop when Config.MaxToolCalls is zero.
+const DefaultMaxToolCalls = 8
 
 // Orchestrator coordinates the query pipeline.
 type Orchestrator struct {
@@ -275,6 +345,9 @@ func New(cfg Config, llm LLMClientI, ch CHClientI, cache CompiledQueryCacheI, ob
 	}
 	if cfg.DefaultModel == "" {
 		cfg.DefaultModel = "qwen3-coder-next"
+	}
+	if cfg.MaxToolCalls <= 0 {
+		cfg.MaxToolCalls = DefaultMaxToolCalls
 	}
 	return &Orchestrator{
 		cfg:          cfg,
@@ -342,14 +415,30 @@ func (inst *Orchestrator) Compile(ctx context.Context, input string) (result Res
 	var compiledAST ast.Query
 	var canonicalSQL string
 
+	// The tool loop (ADR-0139 §SD9) is on when the caller supplied an
+	// executor and the client can carry tools; the call budget is per
+	// question and survives repair attempts, as the tool history does.
+	toolClient, _ := inst.llm.(ToolClientI)
+	tools := []Tool(nil)
+	if inst.cfg.Tools != nil && toolClient != nil {
+		tools = inst.cfg.Tools.Tools()
+	}
+	callsLeft := inst.cfg.MaxToolCalls
+
 	for attempt := 1; attempt <= inst.cfg.MaxAttempts; attempt++ {
 		result.Attempts = attempt
 
-		// Stage 3: LLM generate
+		// Stage 3: LLM generate — through the tool loop when it is on.
 		inst.observer.OnLLMRequest(ctx, LLMRequestEvent{Model: model, Messages: messages, Attempt: attempt})
 
 		t0 = time.Now()
-		rawResponse, llmErr := inst.llm.Chat(ctx, model, messages)
+		var rawResponse string
+		var llmErr error
+		if len(tools) > 0 {
+			rawResponse, messages, callsLeft, llmErr = inst.toolTurns(ctx, toolClient, model, messages, tools, callsLeft, attempt)
+		} else {
+			rawResponse, llmErr = inst.llm.Chat(ctx, model, messages)
+		}
 		extractedSQL := extractSQL(rawResponse)
 		inst.observer.OnLLMResponse(ctx, LLMResponseEvent{
 			Model: model, RawResponse: rawResponse, ExtractedSQL: extractedSQL,
@@ -694,6 +783,66 @@ func templateCacheKey(tmpl Template) string {
 		_, _ = h.Write([]byte(q))
 	}
 	return fmt.Sprintf("%016x", h.Sum(nil))
+}
+
+// toolTurns runs one generation through the tool loop: the model answers
+// with calls, each is executed and appended as a tool turn, until it
+// answers with content or the budget is spent — then the loop asks once
+// more without tools so the question still gets an answer. The
+// conversation comes back extended, since the calls and their results are
+// what the model learned and the repair loop must not lose them.
+func (inst *Orchestrator) toolTurns(ctx context.Context, client ToolClientI, model string, messages []Message, tools []Tool, callsLeft int, attempt int) (response string, out []Message, left int, err error) {
+	out, left = messages, callsLeft
+	for {
+		offered := tools
+		if left <= 0 {
+			offered = nil
+		}
+		var calls []ToolCall
+		response, calls, err = client.ChatTools(ctx, model, out, offered)
+		if err != nil {
+			return
+		}
+		if len(calls) == 0 || len(offered) == 0 {
+			return
+		}
+		out = append(out, Message{Role: "assistant", Content: response, ToolCalls: calls})
+		for _, call := range calls {
+			t0 := time.Now()
+			var text string
+			var callErr error
+			if left <= 0 {
+				callErr = eb.Build().Str("tool", call.Name).Errorf("tool budget exhausted")
+			} else {
+				left--
+				text, callErr = inst.cfg.Tools.Call(ctx, call)
+			}
+			if callErr != nil {
+				text = "error: " + callErr.Error()
+			}
+			if obs, ok := inst.observer.(ToolObserverI); ok {
+				obs.OnToolCall(ctx, ToolCallEvent{Attempt: attempt, Call: call, Result: text, Duration: time.Since(t0), Err: callErr})
+			}
+			out = append(out, Message{Role: "tool", Content: text, ToolCallId: call.Id})
+		}
+	}
+}
+
+// Validate is the model's self-check and the caller's (ADR-0139 §SD8's
+// validate tool): grammar1 parse, canonicalize, grammar2 parse. It returns
+// the canonical statement or the first stage's error.
+func Validate(sql string) (canonical string, err error) {
+	if _, err = nanopass.Parse(sql); err != nil {
+		return "", eh.Errorf("SQL syntax error: %w", err)
+	}
+	canonical, err = passes.CanonicalizeFull(128).Run(sql)
+	if err != nil {
+		return "", eh.Errorf("normalization error: %w", err)
+	}
+	if _, err = nanopass.ParseCanonical(canonical); err != nil {
+		return "", eh.Errorf("canonical validation error: %w", err)
+	}
+	return
 }
 
 func appendRetry(messages []Message, rawResponse, extractedSQL string, validationErr error) []Message {
