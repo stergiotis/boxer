@@ -64,3 +64,31 @@ func TestChatMessage(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "unknown chat role"))
 }
+
+// The tools a model may call: the validate is pure and reads as the
+// orchestrator's stages would; a read outside the granted tables is
+// refused before any bus request; arguments that are not JSON are refused.
+func TestModelTools(t *testing.T) {
+	tools := modelTools{tables: modelToolTables}
+	names := make([]string, 0)
+	for _, tl := range tools.Tools() {
+		names = append(names, tl.Name)
+	}
+	assert.ElementsMatch(t, []string{"list_tables", "describe_table", "validate_sql"}, names, "no keelson_query without a reads client")
+
+	out, err := tools.Call(context.Background(), orchestrator.ToolCall{Name: "validate_sql", Arguments: `{"sql":"SELECT a FROM t"}`})
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(out, "valid"))
+	out, err = tools.Call(context.Background(), orchestrator.ToolCall{Name: "validate_sql", Arguments: `{"sql":"SELECT FROM WHERE"}`})
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(out, "invalid"))
+
+	_, err = tools.Call(context.Background(), orchestrator.ToolCall{Name: "validate_sql", Arguments: `not json`})
+	require.Error(t, err)
+	_, err = tools.Call(context.Background(), orchestrator.ToolCall{Name: "nope"})
+	require.Error(t, err)
+	_, err = tools.Call(context.Background(), orchestrator.ToolCall{Name: "list_tables"})
+	require.Error(t, err, "no endpoint client")
+
+	assert.Equal(t, "ab\n… (truncated)", capText("abc", 2))
+}

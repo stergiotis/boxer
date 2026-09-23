@@ -235,6 +235,8 @@ transformation but not free-form asking.
 | `Manifest.Caps` of mdedit and play | +`llm.ClientCaps()`, non-sticky | the capslock app set (mdedit's transform package loses its network capability) |
 | `llm/promptbook` | the ADR-0216 §SD2 book mechanism, lifted from `apps/mdedit/transform`, with three scopes added for play | mdedit's package becomes its book plus aliases; the corpus gate tests |
 | play's tab set | +`model` (dock id 34), an editor tool beside Snippets | the tab-count pins; the panes menu |
+| `text2sql2/orchestrator` | +`ToolClientI`, `ToolExecutorI`, `ToolObserverI`, `Config.Tools`, `Validate` | the openaichat adapter (now a ToolClientI); the ollama adapter stays single-shot |
+| `Manifest.Caps` of play | +`keelson.query.sql_passes`, sticky, for the model's reads | the cap-count pin |
 | `keelson()` table set | +`llm_calls`, +`llm_prompts` (SD4) | the introspection table docs |
 | the `llm` runtime package | new service and client | hostboot wiring |
 
@@ -320,8 +322,13 @@ is revised in place; nothing built cites either.
   of the pinned endpoint as grounding until the ADR-0139 layer exists,
   Insert / Replace over the delivery ops, and the buffer's dispatch label
   forwarded as the request's sensitivity.
-- **M4 — the tool loop.** ADR-0139 §SD9 in the orchestrator, tools
-  executed through the app's grants.
+- **M4 — the tool loop.** ✓ ADR-0139 §SD9 in the orchestrator, tools
+  executed through the app's grants. Built 2026-09-23: `ToolClientI` and
+  `ToolExecutorI` beside `LLMClientI`, a per-question call budget, the
+  tool history kept across repair attempts, an optional `ToolObserverI`;
+  play's executor offers `list_tables`, `describe_table`, `validate_sql`
+  (pure nanopass) and `keelson_query` over the introspection tables the
+  manifest grants (`sql_passes`), every call run in play's process.
 
 ## Status
 
@@ -334,9 +341,9 @@ M1, M2 and M3 built the same day: the family, the service under
 wiring, `keelson('llm_calls')` over the in-process record, mdedit migrated
 — its transform package completes through the bus client, its five
 variables are gone, and `llm.describe` gates the surface — and play's
-Model tab over the shared prompt book. Two deviations from the text as
-first proposed are recorded in SD2's wire row and SD4. M4 is not built,
-and neither consumer has been checked live against a model.
+Model tab over the shared prompt book; M4, the tool loop, the same day.
+Two deviations from the text as first proposed are recorded in SD2's wire
+row and SD4. Neither consumer has been checked live against a model.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

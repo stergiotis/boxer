@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -277,6 +278,10 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			// The Model tab's prompts (ADR-0254 §SD6): explain, fix this
 			// error, ask. Not sticky, with the purpose in the reason.
 			llm.ClientCaps("play: explain, fix or generate the editor's SQL through the host's model")[0],
+			// The introspection tables a model's tool calls may read while
+			// composing a query (ADR-0139 §SD8 under ADR-0254 §SD5): run here,
+			// under this grant, never by the service.
+			keelsonquery.ClientCaps(modelToolTables...)[0],
 		},
 		// PersistedKeys → host auto-injects the runtime.persist.play.>
 		// cap. Kept for the read-only bridge only (ADR-0148 §SD8, added

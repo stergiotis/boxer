@@ -251,7 +251,9 @@ settled decisions:
   under the app's grants and continues; `llm.describe` answers the
   tool-support question. The loop's home is unchanged — the orchestrator,
   in the app's process — which is what keeps the service stateless per
-  turn.
+  turn. *(Built 2026-09-23 under ADR-0254 M4:)* `ToolClientI` and
+  `ToolExecutorI` in the orchestrator, the budget, the history kept
+  across repair attempts; play's executor is the first.
 
 ## Alternatives
 

@@ -25,14 +25,18 @@ package play
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/llmclient"
 	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/observers"
 	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/orchestrator"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -94,6 +98,7 @@ type modelState struct {
 	// cli is the host's model over the bus; enabled, model and host land
 	// when the describe started on the first frame comes back (avail).
 	cli       *llm.Client
+	reads     *keelsonquery.Client
 	avail     bgjob.Runner[llm.Description]
 	asked     bool
 	enabled   bool
@@ -154,6 +159,7 @@ func (inst *PlayApp) startModelDescribe() {
 	m.asked = true
 	cli := llm.NewClient(inst.bus)
 	m.cli = cli
+	m.reads = keelsonquery.NewClient(inst.bus)
 	m.avail.Start(nil, bgjob.Spec{Kind: "play-model-describe", Title: "model"},
 		func(ctx context.Context) (d *llm.Description, err error) {
 			got, err := cli.Describe(ctx)
@@ -289,12 +295,12 @@ func (inst *PlayApp) startModelRun(def promptbook.PromptDef) {
 	m.reqTitle = def.Title
 	m.res, m.errText = nil, ""
 	m.resDoc, m.resDocSrc = nil, ""
-	cli, client := m.cli, inst.client
+	cli, reads, client := m.cli, m.reads, inst.client
 	ok := m.runner.StartReporting(nil,
 		bgjob.Spec{Kind: "play-model", Title: def.Title},
 		func(ctx context.Context, _ bgjob.Reporter) (res *modelResult, err error) {
 			var r modelResult
-			r, err = runModelPrompt(ctx, cli, client, def, buffer, question, lastErr)
+			r, err = runModelPrompt(ctx, cli, reads, client, def, buffer, question, lastErr)
 			if err != nil {
 				return
 			}
@@ -308,7 +314,7 @@ func (inst *PlayApp) startModelRun(def promptbook.PromptDef) {
 
 // runModelPrompt is the compute half, off the render thread: an explain is
 // one completion; a fix or an ask compiles through the orchestrator.
-func runModelPrompt(ctx context.Context, cli *llm.Client, client *Client, def promptbook.PromptDef, buffer, question, lastErr string) (res modelResult, err error) {
+func runModelPrompt(ctx context.Context, cli *llm.Client, reads *keelsonquery.Client, client *Client, def promptbook.PromptDef, buffer, question, lastErr string) (res modelResult, err error) {
 	started := time.Now()
 	sensitivity := queryengine.SensitivityOrdinary
 	if client != nil && strings.TrimSpace(buffer) != "" {
@@ -337,9 +343,13 @@ func runModelPrompt(ctx context.Context, cli *llm.Client, client *Client, def pr
 		if def.Scope == promptbook.ScopeBufferAndError {
 			input = fixInput(buffer, lastErr)
 		}
+		// The tool loop (ADR-0139 §SD9): the model may list and describe
+		// tables, validate a draft, and read the introspection tables this
+		// window holds grants for — each call run here, under play's grants.
 		orch := orchestrator.New(orchestrator.Config{
 			DefaultModel: "host", MaxAttempts: modelAttempts,
 			Schema: schema + "\n" + def.System,
+			Tools:  modelTools{client: client, reads: reads, tables: modelToolTables},
 		}, modelChat{cli: cli, purpose: def.Purpose(), sensitivity: sensitivity, temperature: def.Temperature, maxTokens: def.MaxTokens},
 			nil, modelNoCache{}, observers.NopObserver{})
 		out, cerr := orch.Compile(ctx, input)
@@ -587,4 +597,147 @@ func (inst *PlayApp) modelSummaryLine() (s string) {
 		b.WriteString(" tokens")
 	}
 	return b.String()
+}
+
+// ---------------------------------------------------------------------------
+// The tool loop (ADR-0139 §SD9 under ADR-0254 §SD5)
+// ---------------------------------------------------------------------------
+
+// ChatTools is the orchestrator's tool-carrying turn over the host's model:
+// definitions ride the request, the model's calls come back unexecuted,
+// and the orchestrator runs them here, in play's process, through
+// modelTools — never in the service.
+func (inst modelChat) ChatTools(ctx context.Context, _ string, messages []orchestrator.Message, tools []orchestrator.Tool) (response string, calls []orchestrator.ToolCall, err error) {
+	req := llm.Request{Purpose: inst.purpose, Sensitivity: inst.sensitivity, Temperature: inst.temperature, MaxTokens: inst.maxTokens}
+	for _, msg := range messages {
+		om, ok := chatMessage(msg)
+		if !ok {
+			return "", nil, eb.Build().Str("role", msg.Role).Errorf("model: unknown chat role")
+		}
+		req.Messages = append(req.Messages, om)
+	}
+	req.Tools = llmclient.WireTools(tools)
+	res, err := inst.cli.Complete(ctx, req)
+	if err != nil {
+		return
+	}
+	response = res.Content
+	calls = llmclient.CallsOf(res.ToolCalls)
+	return
+}
+
+var _ orchestrator.ToolClientI = modelChat{}
+
+const (
+	// modelToolRowCap and modelToolByteCap bound what one tool result hands
+	// the model: enough to answer "what is in this table", not a dump.
+	modelToolRowCap  = 50
+	modelToolByteCap = 8 << 10
+)
+
+// modelTools is what the model may touch while composing a query: the
+// pinned endpoint's catalog through play's own client, the introspection
+// tables play holds `keelson.query` grants for, and a validate that is pure
+// nanopass. Everything runs under play's grants (ADR-0254 §SD5).
+type modelTools struct {
+	client *Client
+	reads  *keelsonquery.Client
+	// tables are the introspection tables the manifest grants; the model
+	// is told exactly these.
+	tables []string
+}
+
+// modelToolTables are the introspection tables play's manifest grants a
+// model's reads on: the pass vocabulary a DSL author needs (ADR-0139 §SD8).
+var modelToolTables = []string{"sql_passes"}
+
+func (inst modelTools) Tools() (tools []orchestrator.Tool) {
+	tools = []orchestrator.Tool{
+		{Name: "list_tables", Description: "List the tables of the current database with their comments.",
+			Parameters: `{"type":"object","properties":{}}`},
+		{Name: "describe_table", Description: "List a table's columns with types and comments. Pass a bare name or database.name.",
+			Parameters: `{"type":"object","properties":{"table":{"type":"string"}},"required":["table"]}`},
+		{Name: "validate_sql", Description: "Check a draft statement against the ClickHouse grammar and return its canonical form, or the error.",
+			Parameters: `{"type":"object","properties":{"sql":{"type":"string"}},"required":["sql"]}`},
+	}
+	if inst.reads != nil && len(inst.tables) > 0 {
+		tools = append(tools, orchestrator.Tool{
+			Name:        "keelson_query",
+			Description: "Run a read-only SELECT over one keelson introspection table (" + strings.Join(inst.tables, ", ") + "); name the table in both fields. Returns JSON rows, capped.",
+			Parameters:  `{"type":"object","properties":{"table":{"type":"string"},"sql":{"type":"string"}},"required":["table","sql"]}`,
+		})
+	}
+	return
+}
+
+// toolArgs is the argument shape every tool reads; unused fields stay empty.
+type toolArgs struct {
+	Table string `json:"table"`
+	Sql   string `json:"sql"`
+}
+
+func (inst modelTools) Call(ctx context.Context, call orchestrator.ToolCall) (result string, err error) {
+	var args toolArgs
+	if strings.TrimSpace(call.Arguments) != "" {
+		if err = json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			return "", eb.Build().Str("tool", call.Name).Errorf("model: arguments are not a JSON object: %w", err)
+		}
+	}
+	switch call.Name {
+	case "list_tables":
+		if inst.client == nil {
+			return "", eh.Errorf("model: no endpoint client")
+		}
+		raw, qerr := inst.client.queryTabSeparated(ctx,
+			"SELECT name, comment FROM system.tables WHERE database = currentDatabase() ORDER BY name LIMIT "+itoa(modelToolRowCap)+" FORMAT TabSeparated", nil)
+		if qerr != nil {
+			return "", qerr
+		}
+		return capText(string(raw), modelToolByteCap), nil
+	case "describe_table":
+		if inst.client == nil {
+			return "", eh.Errorf("model: no endpoint client")
+		}
+		if args.Table == "" {
+			return "", eh.Errorf("model: describe_table needs a table")
+		}
+		db, name := splitQualified(args.Table)
+		raw, qerr := inst.client.queryTabSeparated(ctx,
+			"SELECT name, type, comment FROM system.columns WHERE table = {tbl:String} AND database = if({db:String} = '', currentDatabase(), {db:String}) ORDER BY position LIMIT "+itoa(modelSchemaRowCap)+" FORMAT TabSeparated",
+			map[string]string{"tbl": name, "db": db})
+		if qerr != nil {
+			return "", qerr
+		}
+		return capText(string(raw), modelToolByteCap), nil
+	case "validate_sql":
+		if strings.TrimSpace(args.Sql) == "" {
+			return "", eh.Errorf("model: validate_sql needs sql")
+		}
+		canonical, verr := orchestrator.Validate(args.Sql)
+		if verr != nil {
+			return "invalid: " + verr.Error(), nil
+		}
+		return "valid; canonical form:\n" + canonical, nil
+	case "keelson_query":
+		if inst.reads == nil {
+			return "", eh.Errorf("model: no introspection grant")
+		}
+		if !slices.Contains(inst.tables, args.Table) {
+			return "", eb.Build().Str("table", args.Table).Errorf("model: not a table this window may read")
+		}
+		res, qerr := inst.reads.Query(ctx, args.Table, args.Sql, keelsonquery.FormatJSONEachRow)
+		if qerr != nil {
+			return "", qerr
+		}
+		return capText(string(res.Body), modelToolByteCap), nil
+	}
+	return "", eb.Build().Str("tool", call.Name).Errorf("model: unknown tool")
+}
+
+// capText bounds a tool result, saying so.
+func capText(s string, byteCap int) (out string) {
+	if len(s) <= byteCap {
+		return s
+	}
+	return s[:byteCap] + "\n… (truncated)"
 }
