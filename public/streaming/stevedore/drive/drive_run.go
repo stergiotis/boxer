@@ -42,7 +42,8 @@ type Config struct {
 	// the start of the source are durable, so a run can be resumed with
 	// Skip. An error from it ends the run.
 	Checkpoint func(ctx context.Context, done uint64) error
-	// Logger receives one line per dead letter and per stop; nil is silent.
+	// Logger is what a handler finds through zerolog.Ctx; nil is silent. A
+	// dead letter is the store's to report.
 	Logger *zerolog.Logger
 }
 
@@ -311,7 +312,6 @@ func (inst *runner) deadLetter(ctx context.Context, req stevedore.Request, cause
 	row.Error = cause.Error()
 	row.Topic = inst.src.Name()
 	row.Message = req.Body
-	inst.cfg.logger().Warn().Str("origin", req.Origin).Str("class", row.Class).Err(cause).Msg("stevedore dead letter")
 	err = stevedore.Retry(ctx, inst.cfg.retry(), func(actx context.Context) error {
 		return inst.dead.Add(actx, row)
 	})

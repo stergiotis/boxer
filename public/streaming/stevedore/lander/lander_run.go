@@ -22,7 +22,8 @@ type Config struct {
 	// Retry is the in-place policy for a transient sink or store error; a
 	// zero Attempts takes the default policy.
 	Retry stevedore.RetryPolicy
-	// Logger receives one line per dead letter and per stop; nil is silent.
+	// Logger receives one line when the lander stops on a failure; nil is
+	// silent. A dead letter is the store's to report.
 	Logger *zerolog.Logger
 }
 
@@ -173,8 +174,6 @@ func (inst *Lander) deadLetter(ctx context.Context, rec *kgo.Record, item *steve
 	row.Partition = rec.Partition
 	row.Offset = rec.Offset
 	row.Message = rec.Value
-	inst.cfg.logger().Warn().Str("topic", rec.Topic).Int32("partition", rec.Partition).Int64("offset", rec.Offset).
-		Str("class", row.Class).Err(cause).Msg("stevedore dead letter")
 	return inst.addDeadLetter(ctx, row)
 }
 
