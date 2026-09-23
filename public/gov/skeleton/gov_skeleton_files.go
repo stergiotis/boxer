@@ -95,8 +95,6 @@ cache="${XDG_CACHE_HOME:-${HOME:-${TMPDIR:-/tmp}}/.cache}/boxer-launcher"
 cache="$cache/{{.Name}}-$(printf '%s' "$here" | cksum | cut -d' ' -f1)"
 mkdir -p "$cache"
 app="$cache/app"
-build=$(mktemp "$cache/build.XXXXXXXXXX")
-trap 'rm -f -- "$build"' EXIT
 # A build whose launcher was killed outright has no trap to remove it.
 find "$cache" -maxdepth 1 -name 'build.*' -mmin +60 -delete 2>/dev/null || true
 
@@ -106,9 +104,35 @@ tags="$(tr -d '\n' < tags)"
 tagflag=()
 [ -n "$tags" ] && tagflag=(-tags "$tags")
 
-go build "${EXTRA_BUILD_FLAGS[@]+"${EXTRA_BUILD_FLAGS[@]}"}" \
-    "${tagflag[@]+"${tagflag[@]}"}" -o "$build" {{.AppPackage}} 1>&2
-mv -f -- "$build" "$app"
+# The build is skipped when nothing it reads is newer than the binary. Go's
+# own cache makes an unchanged compile cheap, but the link of a binary this
+# size is seconds on every run, and a command that only prints help paid it
+# too. The inputs are every file of this checkout and of the other modules a
+# workspace uses — embedded documents and generated SQL count as much as Go
+# source — with go.mod and go.sum among them, so a pin bump rebuilds; the
+# module cache is immutable and needs no watching. BOXER_LAUNCHER_REBUILD=1
+# forces a build when the check is not trusted.
+stale=1
+if [ -x "$app" ] && [ -z "${BOXER_LAUNCHER_REBUILD:-}" ]; then
+    roots=("$here")
+    while IFS= read -r dir; do
+        [ -n "$dir" ] && [ "$dir" != "$here" ] && roots+=("$dir")
+    done < <(go list -m -f '{{"{{"}}.Dir{{"}}"}}' 2>/dev/null || true)
+    # The cache itself is pruned: it holds the binary and, under a checkout
+    # that keeps its cache inside the tree, the leftovers of earlier builds.
+    if [ -z "$(find "${roots[@]}" \( -path "$cache" -o -name .git -o -name node_modules -o -name target \) -prune -o \
+        -type f -newer "$app" -print -quit 2>/dev/null)" ]; then
+        stale=0
+    fi
+fi
+
+if [ "$stale" = 1 ]; then
+    build=$(mktemp "$cache/build.XXXXXXXXXX")
+    trap 'rm -f -- "$build"' EXIT
+    go build "${EXTRA_BUILD_FLAGS[@]+"${EXTRA_BUILD_FLAGS[@]}"}" \
+        "${tagflag[@]+"${tagflag[@]}"}" -o "$build" {{.AppPackage}} 1>&2
+    mv -f -- "$build" "$app"
+fi
 exec "$app" "$@"
 `
 

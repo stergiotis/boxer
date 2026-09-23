@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/gov/buildtags"
 	"github.com/stergiotis/boxer/public/gov/doclint"
@@ -473,4 +474,68 @@ func TestWriteRefusesToFollowASymlink(t *testing.T) {
 	body, readErr := os.ReadFile(real)
 	require.NoError(t, readErr)
 	assert.Equal(t, "#!/bin/bash\necho original\n", string(body), "the symlink target must be untouched")
+}
+
+// The launcher builds only when something it reads is newer than the binary.
+// The link of a large binary is seconds on every run, and a command that only
+// prints help paid it too; the observable is how many times `go build` ran
+// across runs with and without a touched source file, and with the override.
+func TestLauncherSkipsTheBuildWhenNothingChanged(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash unavailable")
+	}
+	dir := t.TempDir()
+	_, err := WriteE(dir, DefaultFiles(), testParams())
+	require.NoError(t, err)
+
+	// Stub `go`: `build` writes a runnable app and counts itself; `list`
+	// names no workspace module.
+	bin := filepath.Join(dir, "stubbin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	builds := filepath.Join(dir, "builds.txt")
+	stub := "#!/bin/bash\n" +
+		"[ \"$1\" = list ] && exit 0\n" +
+		"out=\nwhile [ $# -gt 0 ]; do [ \"$1\" = -o ] && out=$2; shift; done\n" +
+		"echo build >> \"" + builds + "\"\n" +
+		"printf '#!/bin/bash\\nexit 0\\n' > \"$out\"\nchmod +x \"$out\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte(stub), 0o755))
+
+	cache := filepath.Join(dir, "cache")
+	run := func(env ...string) {
+		t.Helper()
+		cmd := exec.Command("bash", filepath.Join(dir, "thing.sh"))
+		cmd.Env = append(append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "XDG_CACHE_HOME="+cache), env...)
+		require.NoError(t, cmd.Run())
+	}
+	count := func() int {
+		b, _ := os.ReadFile(builds)
+		return strings.Count(string(b), "build")
+	}
+
+	run()
+	require.Equal(t, 1, count(), "the first run builds")
+	run()
+	assert.Equal(t, 1, count(), "an unchanged tree is not rebuilt")
+
+	// A newer source is a rebuild. The binary is aged rather than the source
+	// dated into the future, so the rebuilt binary is newer than the source
+	// again and the run after it skips.
+	var app string
+	require.NoError(t, filepath.WalkDir(cache, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr == nil && !d.IsDir() && d.Name() == "app" {
+			app = path
+		}
+		return walkErr
+	}))
+	require.NotEmpty(t, app)
+	past := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(app, past, past))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "touched.go"), []byte("package x\n"), 0o644))
+	run()
+	assert.Equal(t, 2, count(), "a newer file rebuilds")
+	run()
+	assert.Equal(t, 2, count(), "and only once")
+
+	run("BOXER_LAUNCHER_REBUILD=1")
+	assert.Equal(t, 3, count(), "the override always builds")
 }
