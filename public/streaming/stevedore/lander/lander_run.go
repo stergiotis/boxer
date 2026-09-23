@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
+	"github.com/stergiotis/boxer/public/streaming/stevedore/deadletter"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/stevedorefacts"
 )
 
@@ -49,7 +50,7 @@ type Lander struct {
 	cfg      Config
 	consumer kafka.ConsumerI
 	sink     stevedore.SinkI
-	dead     DeadLettersI
+	dead     deadletter.StoreI
 	now      func() time.Time
 	landed   uint64
 	deadRows uint64
@@ -57,7 +58,7 @@ type Lander struct {
 
 // New wires a lander over a consumer the application built — its topics,
 // group and broker are the application's — a sink and a dead-letter store.
-func New(cfg Config, consumer kafka.ConsumerI, sink stevedore.SinkI, dead DeadLettersI) *Lander {
+func New(cfg Config, consumer kafka.ConsumerI, sink stevedore.SinkI, dead deadletter.StoreI) *Lander {
 	return &Lander{cfg: cfg, consumer: consumer, sink: sink, dead: dead, now: time.Now}
 }
 
@@ -159,8 +160,8 @@ func (inst *Lander) record(ctx context.Context, rec *kgo.Record) (err error) {
 // deadLetter records one message given up on, with its envelope's identity
 // where it decoded.
 func (inst *Lander) deadLetter(ctx context.Context, rec *kgo.Record, item *stevedore.Item, cause error) (err error) {
-	row := newDeadLetter(inst.now())
-	row.Id, row.NaturalKey = deadLetterIdentity(rec.Topic, rec.Partition, rec.Offset)
+	row := deadletter.New(inst.now())
+	row.Id, row.NaturalKey = deadletter.Identity(rec.Topic, rec.Partition, rec.Offset)
 	if item != nil {
 		row.Ref = item.Ref.Value()
 		row.Origin = item.Origin

@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
+	"github.com/stergiotis/boxer/public/streaming/stevedore/deadletter"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/lander"
 	"github.com/stergiotis/boxer/public/streaming/stevedore/stevedorefacts"
 )
@@ -26,13 +27,11 @@ func newLandCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "land",
 		Usage: "consume items from a topic, print each as a JSON line, dead-letter what does not decode",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringFlag{Name: "brokers", Required: true, Usage: "comma-separated seed brokers"},
 			&cli.StringFlag{Name: "topic", Required: true, Usage: "the items topic"},
 			&cli.StringFlag{Name: "group", Value: "stevedoredemo", Usage: "consumer group"},
-			&cli.StringFlag{Name: "dead-letters", Value: "log", Usage: "where dead letters go: log, or clickhouse (the facts table the CLICKHOUSE_* variables name)"},
-			&cli.StringFlag{Name: "database", Usage: "with --dead-letters=clickhouse: the database holding the facts table; empty takes the store's default"},
-		},
+		}, deadLetterFlags()...),
 		Action: runLand,
 	}
 }
@@ -59,15 +58,39 @@ func runLand(c *cli.Context) (err error) {
 		return eh.Errorf("reader: %w", err)
 	}
 
-	var dead lander.DeadLettersI
+	dead, closeDead, err := openDeadLetters(c)
+	if err != nil {
+		return
+	}
+	defer closeDead()
+
+	l := lander.New(lander.Config{Logger: &log.Logger}, reader, printSink{}, dead)
+	ctx, stop := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	err = l.Run(ctx)
+	log.Info().Uint64("landed", l.Landed()).Uint64("deadLettered", l.DeadLettered()).Msg("stevedoredemo land ends")
+	return
+}
+
+// deadLetterFlags are the flags land and run share.
+func deadLetterFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{Name: "dead-letters", Value: "log", Usage: "where dead letters go: log, or clickhouse (the facts table the CLICKHOUSE_* variables name)"},
+		&cli.StringFlag{Name: "database", Usage: "with --dead-letters=clickhouse: the database holding the facts table; empty takes the store's default"},
+	}
+}
+
+// openDeadLetters builds the dead-letter store the flags name.
+func openDeadLetters(c *cli.Context) (dead deadletter.StoreI, closeFn func(), err error) {
+	closeFn = func() {}
 	switch c.String("dead-letters") {
 	case "log":
-		dead = logDeadLetters{}
+		dead = deadletter.Log{Logger: &log.Logger}
 	case "clickhouse":
 		client := chclient.New(chclient.ConfigFromEnv(), nil)
 		exec, xerr := storeexec.New(client, nil)
 		if xerr != nil {
-			return eh.Errorf("executor: %w", xerr)
+			return nil, closeFn, eh.Errorf("executor: %w", xerr)
 		}
 		cfg := stevedorefacts.StevedoreStoreConfig{}
 		if db := c.String("database"); db != "" {
@@ -75,19 +98,13 @@ func runLand(c *cli.Context) (err error) {
 		}
 		store, oerr := stevedorefacts.OpenStevedoreStore(c.Context, exec, nil, cfg)
 		if oerr != nil {
-			return eh.Errorf("open dead-letter store: %w", oerr)
+			return nil, closeFn, eh.Errorf("open dead-letter store: %w", oerr)
 		}
-		defer store.Close()
-		dead = &lander.StoreDeadLetters{Store: store}
+		closeFn = store.Close
+		dead = &deadletter.Store{Store: store}
 	default:
-		return eh.Errorf("--dead-letters is log or clickhouse")
+		return nil, closeFn, eh.Errorf("--dead-letters is log or clickhouse")
 	}
-
-	l := lander.New(lander.Config{Logger: &log.Logger}, reader, printSink{}, dead)
-	ctx, stop := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	err = l.Run(ctx)
-	log.Info().Uint64("landed", l.Landed()).Uint64("deadLettered", l.DeadLettered()).Msg("stevedoredemo land ends")
 	return
 }
 
@@ -123,16 +140,3 @@ func (printSink) Land(_ context.Context, item stevedore.Item) error {
 }
 
 func (printSink) Flush(context.Context) error { return nil }
-
-// logDeadLetters is the example dead-letter store: one log line per row.
-type logDeadLetters struct{}
-
-var _ lander.DeadLettersI = logDeadLetters{}
-
-func (logDeadLetters) Add(_ context.Context, row stevedorefacts.DeadLetter) error {
-	log.Warn().Str("class", row.Class).Str("error", row.Error).Str("topic", row.Topic).
-		Int32("partition", row.Partition).Int64("offset", row.Offset).Msg("dead letter")
-	return nil
-}
-
-func (logDeadLetters) Flush(context.Context) error { return nil }

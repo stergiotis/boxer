@@ -3,7 +3,6 @@ package lander
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -231,16 +230,4 @@ func (inst *partSink) assembled(ref identifier.TaggedId) string {
 		}
 		out = append(out, p...)
 	}
-}
-
-func TestDeadLetterIdentityIsStable(t *testing.T) {
-	a, ka := deadLetterIdentity("t", 3, 99)
-	b, kb := deadLetterIdentity("t", 3, 99)
-	require.Equal(t, a, b)
-	require.Equal(t, ka, kb)
-	c, _ := deadLetterIdentity("t", 3, 100)
-	require.NotEqual(t, a, c)
-	ids := []uint64{a, c}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	require.Len(t, ids, 2)
 }
