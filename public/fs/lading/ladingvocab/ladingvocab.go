@@ -104,7 +104,12 @@ const NamingStyle = naming.LowerSpinalCase
 // ADR-0006 (proposed) names …339 through …341 for a download manager that
 // has written no rows; it takes fresh values when it is built.
 //
-// The next free value is 2178342.
+// **…342 is taken** by shadow-boxer's `swissgeofacts` vocabulary, claimed
+// 2026-09-23 as `shadowboxerSwissgeo` — the six kinds its Swiss address,
+// place-name and boundary registers write to `shadowboxer.facts` (its
+// ADR-0010, proposed).
+//
+// The next free value is 2178343.
 var TagValueClaim = tagmint.MustClaim("lading", 2178315, MaxExpectedMemberships)
 
 // MaxExpectedMemberships is what this vocabulary tells the mint it will need.
