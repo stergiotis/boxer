@@ -134,6 +134,7 @@ const (
 	dockTabChat        uint64 = 31
 	dockTabCards       uint64 = 32
 	dockTabVectorField uint64 = 33
+	dockTabModel       uint64 = 34
 )
 
 type PlayApp struct {
@@ -195,7 +196,9 @@ type PlayApp struct {
 	// SetDocsSource overrides it) — and docsPane its view state. A tool
 	// pane, not a result panel: its input is the editor's published caret
 	// entity, never the query result.
-	docs     *docsDriver
+	docs *docsDriver
+	// model is the Model tab's state (ADR-0254 §SD6, play_model_panel.go).
+	model    modelState
 	docsPane *docsPaneState
 
 	// snippets is the built-in Snippets tab's pane: its source and its filter

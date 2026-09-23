@@ -470,10 +470,34 @@ func (inst *Client) fetchColumnNames(ctx context.Context, db string, table strin
 	const q = "SELECT name FROM system.columns " +
 		"WHERE table = {tbl:String} AND database = if({db:String} = '', currentDatabase(), {db:String}) " +
 		"ORDER BY position FORMAT TabSeparated"
+	raw, err := inst.queryTabSeparated(ctx, q, map[string]string{"tbl": table, "db": db})
+	if err != nil {
+		return
+	}
+	// Single-column TabSeparated: one name per line. Physical leeway names
+	// contain only ':' and identifier characters, so no TSV unescaping is
+	// needed.
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		names = append(names, line)
+	}
+	return
+}
+
+// queryTabSeparated runs one statement (FORMAT clause included) on the pinned
+// endpoint with `{name:Type}` bindings and returns the raw body, capped at a
+// MiB. The one-off read the column-name probe and the model pane's schema
+// harvest share: no dispatch, no rewrites — the pinned endpoint's own
+// catalog is what both ask about.
+func (inst *Client) queryTabSeparated(ctx context.Context, q string, params map[string]string) (raw []byte, err error) {
 	reqURL := inst.URL()
 	qs := url.Values{}
-	qs.Set("param_tbl", table)
-	qs.Set("param_db", db)
+	for k, v := range params {
+		qs.Set("param_"+k, v)
+	}
 	sep := "?"
 	if strings.Contains(reqURL, "?") {
 		sep = "&"
@@ -483,7 +507,7 @@ func (inst *Client) fetchColumnNames(ctx context.Context, db string, table strin
 	var req *http.Request
 	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, strings.NewReader(q))
 	if err != nil {
-		err = eh.Errorf("unable to build system.columns request: %w", err)
+		err = eh.Errorf("unable to build catalog query request: %w", err)
 		return
 	}
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
@@ -496,29 +520,19 @@ func (inst *Client) fetchColumnNames(ctx context.Context, db string, table strin
 	var resp *http.Response
 	resp, err = inst.http.Do(req)
 	if err != nil {
-		err = eh.Errorf("system.columns request failed: %w", err)
+		err = eh.Errorf("catalog query request failed: %w", err)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(raw))).Errorf("system.columns http")
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(body))).Errorf("catalog query http")
 		return
 	}
-	raw, rerr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if rerr != nil {
-		err = eh.Errorf("unable to read system.columns response: %w", rerr)
+	raw, err = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		err = eh.Errorf("unable to read catalog query response: %w", err)
 		return
-	}
-	// Single-column TabSeparated: one name per line. Physical leeway names
-	// contain only ':' and identifier characters, so no TSV unescaping is
-	// needed.
-	for line := range strings.SplitSeq(string(raw), "\n") {
-		line = strings.TrimRight(line, "\r")
-		if line == "" {
-			continue
-		}
-		names = append(names, line)
 	}
 	return
 }

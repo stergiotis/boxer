@@ -164,7 +164,7 @@ func TestPlayApp_RestorePersistedSql_EmptyValue_KeepsDefault(t *testing.T) {
 
 func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
-	// Eight declared Caps: fs dialog + chlocalbroker pool for the time-range
+	// Nine declared Caps: fs dialog + chlocalbroker pool for the time-range
 	// evaluator + windowhost.open for the Save-as-applet launch (ADR-0135
 	// §SD7) + adhoc.publish for the timeseries fixture lab (ADR-0163 §SD7) +
 	// adhoc.resolve and adhoc.event.> for a launched window that follows
@@ -178,7 +178,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// The count is asserted on purpose: a capability is an authority this app
 	// is granted, so adding one has to be a deliberate edit here rather than
 	// something that rides along with a feature.
-	require.Len(t, m.Caps, 8)
+	require.Len(t, m.Caps, 9)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)

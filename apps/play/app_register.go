@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
@@ -273,6 +274,9 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Direction: app.CapDirectionPub,
 				Reason:    "Copy buttons: the Definition pane's SQL fences and gloss/taggedid's block face (ADR-0026 Update 2026-05-30)",
 			},
+			// The Model tab's prompts (ADR-0254 §SD6): explain, fix this
+			// error, ask. Not sticky, with the purpose in the reason.
+			llm.ClientCaps("play: explain, fix or generate the editor's SQL through the host's model")[0],
 		},
 		// PersistedKeys → host auto-injects the runtime.persist.play.>
 		// cap. Kept for the read-only bridge only (ADR-0148 §SD8, added
