@@ -34,6 +34,8 @@ type FrameReader struct {
 	codec    CodecE
 	maxFrame int
 	scratch  [4]byte
+	// line gathers a line frame's pieces across buffer refills.
+	line []byte
 }
 
 // NewFrameReader wraps r. maxFrame bounds a frame's payload; zero takes
@@ -61,22 +63,38 @@ func (inst *FrameReader) Read() (frame []byte, err error) {
 }
 
 func (inst *FrameReader) readLine() (frame []byte, err error) {
-	line, err := inst.r.ReadSlice('\n')
-	if err != nil {
-		if err == bufio.ErrBufferFull {
-			// Drain the rest of the line so the next Read starts on a frame.
-			for err == bufio.ErrBufferFull {
-				_, err = inst.r.ReadSlice('\n')
-			}
-			err = eb.Build().Int("max", inst.maxFrame).Errorf("line frame: %w", ErrFrameTooLarge)
-			return
+	// ReadSlice is bounded by the buffered reader's size, not by the frame
+	// bound, so a long line arrives in pieces; they are gathered up to the
+	// bound, and past it the rest of the line is drained so the next Read
+	// starts on a frame.
+	inst.line = inst.line[:0]
+	for {
+		var piece []byte
+		piece, err = inst.r.ReadSlice('\n')
+		if err == nil {
+			inst.line = append(inst.line, piece...)
+			break
 		}
-		if err == io.EOF && len(line) > 0 {
+		if err == bufio.ErrBufferFull {
+			if len(inst.line)+len(piece) > inst.maxFrame+1 {
+				for err == bufio.ErrBufferFull {
+					_, err = inst.r.ReadSlice('\n')
+				}
+				if err != nil && err != io.EOF {
+					return nil, eh.Errorf("drain oversize line: %w", err)
+				}
+				err = eb.Build().Int("max", inst.maxFrame).Errorf("line frame: %w", ErrFrameTooLarge)
+				return
+			}
+			inst.line = append(inst.line, piece...)
+			continue
+		}
+		if err == io.EOF && len(inst.line)+len(piece) > 0 {
 			err = eh.Errorf("pipe ended inside a line frame")
 		}
 		return nil, err
 	}
-	line = line[:len(line)-1]
+	line := inst.line[:len(inst.line)-1]
 	if len(line) > 0 && line[len(line)-1] == '\r' {
 		line = line[:len(line)-1]
 	}
@@ -203,6 +221,10 @@ func (inst *FrameWriter) Write(payload []byte) (err error) {
 				err = eh.Errorf("a payload holding a newline cannot travel under the lines codec")
 				return
 			}
+		}
+		if len(payload) > 0 && payload[len(payload)-1] == '\r' {
+			err = eh.Errorf("a payload ending in a carriage return cannot travel under the lines codec — the reader strips it")
+			return
 		}
 		_, err = inst.w.Write(payload)
 		if err == nil {

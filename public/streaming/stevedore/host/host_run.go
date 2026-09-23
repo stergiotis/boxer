@@ -41,6 +41,9 @@ func Run(ctx context.Context, cfg Config, handler stevedore.HandlerI, stdin io.R
 	if handler == nil {
 		return eh.Errorf("no handler")
 	}
+	if cfg.Codec == wire.CodecLines {
+		return eh.Errorf("the lines codec cannot carry a reply, which is a binary archive — frame with length_prefixed_uint32_be or netstring")
+	}
 	inst := &runner{
 		cfg:     cfg,
 		handler: handler,

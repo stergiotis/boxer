@@ -26,13 +26,18 @@ func DefaultRetryPolicy() RetryPolicy {
 	return RetryPolicy{Attempts: 3, Base: 200 * time.Millisecond, Max: 2 * time.Second, Jitter: 0.2}
 }
 
-// Delay is the wait before attempt n (from one) runs again.
+// Delay is the wait before attempt n (from one) runs again. A zero Base
+// takes the default policy's, so a policy that only sets Attempts still
+// backs off; a zero Max leaves the growth uncapped.
 func (inst RetryPolicy) Delay(n uint32) time.Duration {
 	d := inst.Base
-	for i := uint32(1); i < n && d < inst.Max; i++ {
+	if d <= 0 {
+		d = DefaultRetryPolicy().Base
+	}
+	for i := uint32(1); i < n && (inst.Max <= 0 || d < inst.Max); i++ {
 		d *= 2
 	}
-	if d > inst.Max {
+	if inst.Max > 0 && d > inst.Max {
 		d = inst.Max
 	}
 	if inst.Jitter > 0 && d > 0 {

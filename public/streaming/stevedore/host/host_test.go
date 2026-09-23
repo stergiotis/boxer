@@ -212,10 +212,17 @@ func TestBareBody(t *testing.T) {
 	require.Equal(t, stevedore.ReferenceOf(stevedore.Request{Body: []byte("p\nq")}), got[0].Ref)
 }
 
+func TestLinesCodecIsRefused(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), Config{Codec: wire.CodecLines}, &lineHandler{}, bytes.NewBufferString("x\n"), &stdout, &stderr)
+	require.Error(t, err)
+	require.Zero(t, stdout.Len())
+}
+
 func TestRunEndsWithTheContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var stdout, stderr bytes.Buffer
-	err := Run(ctx, Config{}, &lineHandler{}, bytes.NewBufferString("x\n"), &stdout, &stderr)
+	err := Run(ctx, Config{}, &lineHandler{}, bytes.NewBufferString("\x00\x00\x00\x01x"), &stdout, &stderr)
 	require.ErrorIs(t, err, context.Canceled)
 }

@@ -62,20 +62,6 @@ func deadLetterIdentity(topic string, partition int32, offset int64) (id uint64,
 	return binary.BigEndian.Uint64(key[:8]), key
 }
 
-// incompleteIdentity derives the row for a split body whose last part never
-// arrived: keyed by the reference alone, so one row per file however many
-// times the lander notices.
-func incompleteIdentity(ref uint64) (id uint64, key []byte) {
-	h := blake3.New(32, nil)
-	_, _ = h.Write([]byte("incomplete"))
-	_, _ = h.Write([]byte{0})
-	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], ref)
-	_, _ = h.Write(b[:])
-	key = h.Sum(nil)
-	return binary.BigEndian.Uint64(key[:8]), key
-}
-
 func newDeadLetter(ts time.Time) stevedorefacts.DeadLetter {
 	return stevedorefacts.DeadLetter{Ts: ts, Kind: KindDeadLetter}
 }

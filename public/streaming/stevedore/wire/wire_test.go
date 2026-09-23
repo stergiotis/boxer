@@ -86,6 +86,17 @@ func TestFrameRefusals(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "ok", string(got))
 	})
+	t.Run("a line longer than the buffered reader but under the bound is read whole", func(t *testing.T) {
+		long := bytes.Repeat([]byte{'y'}, 20_000)
+		in := append(append([]byte{}, long...), '\n', 'z', '\n')
+		r := NewFrameReader(bytes.NewBuffer(in), CodecLines, 1<<20)
+		got, err := r.Read()
+		require.NoError(t, err)
+		require.Equal(t, long, got)
+		got, err = r.Read()
+		require.NoError(t, err)
+		require.Equal(t, "z", string(got))
+	})
 	t.Run("truncated payload is an error, not EOF", func(t *testing.T) {
 		r := NewFrameReader(bytes.NewBufferString("5:hi"), CodecNetstring, 0)
 		_, err := r.Read()
@@ -102,10 +113,12 @@ func TestFrameRefusals(t *testing.T) {
 		_, err := r.Read()
 		require.Error(t, err)
 	})
-	t.Run("newline under lines codec is refused on write", func(t *testing.T) {
+	t.Run("newline or trailing carriage return under lines codec is refused on write", func(t *testing.T) {
 		var buf bytes.Buffer
 		require.Error(t, NewFrameWriter(&buf, CodecLines).Write([]byte("a\nb")))
-		require.Zero(t, buf.Len())
+		require.Error(t, NewFrameWriter(&buf, CodecLines).Write([]byte("ab\r")))
+		require.NoError(t, NewFrameWriter(&buf, CodecLines).Write([]byte("a\rb")))
+		require.Equal(t, "a\rb\n", buf.String())
 	})
 }
 

@@ -51,10 +51,12 @@ func ParseReplyMode(name string) (mode ReplyModeE, err error) {
 	return
 }
 
-// Config bounds one host. The zero value reads and writes lines, replies on
-// stdout, bounds frames at the wire default, retries with the default policy
-// and applies no deadline.
+// Config bounds one host. The zero value frames with a length prefix,
+// replies on stdout, bounds frames at the wire default, retries with the
+// default policy and applies no deadline.
 type Config struct {
+	// Codec frames requests and replies. The lines codec is refused: a reply
+	// is a binary archive, and a newline in it would end the frame early.
 	Codec wire.CodecE
 	Reply ReplyModeE
 	// BareBody says a request frame is the body alone, with no header and no

@@ -114,10 +114,11 @@ func DecodeItem(b []byte) (item Item, err error) {
 }
 
 // SinkI lands items as rows (ADR-0252 §SD5). Its rows must be keyed by the
-// item's Ref and Ordinal, so a redelivered item is a rewrite and not a
+// item's Ref, Part and Ordinal, so a redelivered item is a rewrite and not a
 // duplicate; a lander commits its offset only after Flush returns nil. An
 // error from either is classified: transient retries, permanent dead-letters
-// the item and moves on.
+// the item and moves on. A split item arrives as one part; a sink that wants
+// the body whole keeps the parts as rows and assembles them on read.
 type SinkI interface {
 	Land(ctx context.Context, item Item) error
 	Flush(ctx context.Context) error

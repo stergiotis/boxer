@@ -8,18 +8,21 @@ import (
 type CodecE uint8
 
 const (
-	// CodecLines delimits a frame with a trailing newline. A payload holding a
-	// newline cannot travel under it.
-	CodecLines CodecE = iota
 	// CodecLengthPrefixedUint32BE prefixes a frame with its length as a
-	// big-endian 32-bit integer.
-	CodecLengthPrefixedUint32BE
+	// big-endian 32-bit integer. It is the zero value, so an unset codec
+	// carries any bytes.
+	CodecLengthPrefixedUint32BE CodecE = iota
 	// CodecNetstring frames as `<decimal length>:<bytes>,`.
 	CodecNetstring
+	// CodecLines delimits a frame with a trailing newline, the way a
+	// framework strips it: a trailing carriage return goes with it. A payload
+	// holding a newline, or ending in a carriage return, cannot travel under
+	// it, and a binary reply never can.
+	CodecLines
 )
 
 // AllCodecs lists every codec, in declaration order.
-var AllCodecs = []CodecE{CodecLines, CodecLengthPrefixedUint32BE, CodecNetstring}
+var AllCodecs = []CodecE{CodecLengthPrefixedUint32BE, CodecNetstring, CodecLines}
 
 // String spells the codec the way a framework's configuration names it.
 func (inst CodecE) String() string {

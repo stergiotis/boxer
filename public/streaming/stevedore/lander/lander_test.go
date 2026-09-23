@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
 
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
@@ -190,40 +191,46 @@ func TestCrashThenRedeliveryCollapses(t *testing.T) {
 	require.Equal(t, clean.rows, crashed.rows, "read once")
 }
 
-func TestReassemblyLandsWholeBodiesAndExpiresIncompleteOnes(t *testing.T) {
+func TestSplitItemsLandAsParts(t *testing.T) {
 	ref := stevedore.ReferenceOf(stevedore.Request{Origin: "f"})
 	part := func(offset int64, idx uint32, last bool, total uint32, p string) *kgo.Record {
 		return rec(t, offset, stevedore.Item{Ref: ref, Origin: "f", Ordinal: 0, Split: true, Part: idx, Parts: total, Last: last, Payload: []byte(p)})
 	}
-	orphan := stevedore.ReferenceOf(stevedore.Request{Origin: "orphan"})
 	c := &memConsumer{batches: [][]*kgo.Record{
-		{part(0, 1, false, 0, "world"), part(1, 0, false, 0, "hello "),
-			rec(t, 2, stevedore.Item{Ref: orphan, Origin: "orphan", Split: true, Part: 0, Payload: []byte("never finished")})},
-		{part(3, 2, true, 3, "!"), part(4, 1, false, 0, "world")},
-		{rec(t, 5, itemOf("plain", 0, "unsplit"))},
+		{part(0, 1, false, 0, "world"), part(1, 0, false, 0, "hello ")},
+		{part(2, 2, true, 3, "!")},
 	}}
-	s := &memSink{}
-	d := &memDead{}
-	now := time.Unix(1000, 0)
-	l := New(Config{Retry: fastRetry(), Reassemble: true, ReassembleMaxAge: time.Minute}, c, s, d)
-	// Both clocks advance two minutes after the first batch, so the orphan
-	// expires at the second batch's sweep.
-	clock := func() time.Time {
-		if c.next > 1 {
-			return now.Add(2 * time.Minute)
-		}
-		return now
+	s := &partSink{}
+	require.NoError(t, runUntilIdle(t, New(Config{Retry: fastRetry()}, c, s, &memDead{})))
+	require.Equal(t, []int{0, 1}, c.acked)
+	require.Equal(t, "hello world!", s.assembled(ref))
+}
+
+// partSink keeps split items as rows keyed by reference, part and ordinal —
+// what a real sink does — and assembles on read.
+type partSink struct {
+	parts map[string][]byte
+}
+
+func (inst *partSink) Land(_ context.Context, item stevedore.Item) error {
+	if inst.parts == nil {
+		inst.parts = map[string][]byte{}
 	}
-	l.now = clock
-	l.re.SetClockForTest(clock)
-	require.NoError(t, runUntilIdle(t, l))
-	require.Equal(t, "hello world!", s.rows[fmt.Sprintf("%d/0", ref.Value())])
-	require.Equal(t, "unsplit", s.rows[fmt.Sprintf("%d/0", stevedore.ReferenceOf(stevedore.Request{Origin: "plain"}).Value())])
-	require.Equal(t, 2, s.landed, "a duplicate part changes nothing")
-	require.Len(t, d.rows, 1)
-	require.Equal(t, "incomplete", d.rows[0].Class)
-	require.Equal(t, orphan.Value(), d.rows[0].Ref)
-	require.Equal(t, []int{0, 1, 2}, c.acked)
+	inst.parts[fmt.Sprintf("%d/%d/%d", item.Ref.Value(), item.Part, item.Ordinal)] = item.Payload
+	return nil
+}
+
+func (inst *partSink) Flush(context.Context) error { return nil }
+
+func (inst *partSink) assembled(ref identifier.TaggedId) string {
+	var out []byte
+	for i := uint32(0); ; i++ {
+		p, ok := inst.parts[fmt.Sprintf("%d/%d/0", ref.Value(), i)]
+		if !ok {
+			return string(out)
+		}
+		out = append(out, p...)
+	}
 }
 
 func TestDeadLetterIdentityIsStable(t *testing.T) {

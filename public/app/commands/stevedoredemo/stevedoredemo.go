@@ -10,8 +10,6 @@
 package stevedoredemo
 
 import (
-	"time"
-
 	"github.com/urfave/cli/v2"
 )
 
@@ -26,6 +24,3 @@ func NewCliCommand() *cli.Command {
 		},
 	}
 }
-
-// closeTimeout bounds the consumer's shutdown after the run ends.
-const closeTimeout = 10 * time.Second

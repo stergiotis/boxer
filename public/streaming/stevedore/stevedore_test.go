@@ -139,6 +139,11 @@ func TestRetry(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, errors.Is(ctx.Err(), context.Canceled))
 	})
+	t.Run("an unset base and max still back off", func(t *testing.T) {
+		p := RetryPolicy{Attempts: 5}
+		require.Greater(t, p.Delay(1), time.Duration(0))
+		require.Greater(t, p.Delay(3), p.Delay(1))
+	})
 	t.Run("delay is bounded", func(t *testing.T) {
 		p := RetryPolicy{Base: time.Second, Max: 5 * time.Second, Jitter: 0.5}
 		for n := uint32(1); n < 10; n++ {

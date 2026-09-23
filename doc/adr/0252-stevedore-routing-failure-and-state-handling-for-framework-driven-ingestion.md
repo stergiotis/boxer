@@ -428,6 +428,36 @@ ids so a late duplicate does not re-open a set; and the fetch is the
 pipeline's or the handler's over whatever transport the file lives behind —
 HTTP, a path, SFTP, an object store — which the body's Context now says.
 
+### 2026-09-23 — the lander does not reassemble; a review's findings
+
+An adversarial review of the four commits found that §SD4 as written
+loses data. The lander acknowledged a batch after landing it, while the
+parts of a split body it held sat in memory until the last part arrived; a
+restart in between lost parts whose offsets were already committed, and
+the set could never complete. Deferring the acknowledgement is not
+available: the ordered reader holds the next read until the previous
+batch is acknowledged, and a file's parts share a partition, so a set
+spanning batches would deadlock. The at-least-once contract wins:
+
+- **The lander lands a split item as it is**, one part per item, and a
+  sink keys its rows by reference, part and ordinal. A sink that wants the
+  body whole keeps the parts as durable rows and assembles them on read —
+  the shape lading's block rows already have. The `Reassemble` options,
+  the age sweep and the `incomplete` dead-letter class are gone.
+- **The reassembler stays in the chunk package** as the protocol's
+  consumer side, for a process that holds the whole set itself, with the
+  review's corrections: a byte bound checked before a set is opened, held
+  indexes judged once the total is known, and a whole set kept until the
+  caller's `Done` so a failed handoff can retry.
+
+The other findings, fixed with it: the lines codec is refused by the host,
+since a reply is a binary archive; a length-prefixed frame is the zero
+codec; a line frame is bounded by the configured bound rather than the
+buffered reader's size; a payload ending in a carriage return is refused
+under the lines codec because the reader strips one; a retry policy with
+only its attempts set still backs off; and a proptable row that leaked in
+from another session's tree is removed.
+
 ## References
 
 - [ADR-0005](./0005-streaming-persisted-kafka-from-connect.md) — the Kafka

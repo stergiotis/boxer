@@ -17,13 +17,10 @@ const (
 	// ClassPermanent is an error no attempt will cure: a 4xx, a body the
 	// handler refuses, a request that does not parse.
 	ClassPermanent
-	// ClassIncomplete is a split body whose last part never arrived within
-	// the lander's age bound; only a lander raises it.
-	ClassIncomplete
 )
 
 // AllClasses lists every class, in declaration order.
-var AllClasses = []ClassE{ClassTransient, ClassPermanent, ClassIncomplete}
+var AllClasses = []ClassE{ClassTransient, ClassPermanent}
 
 // String is the class as a status prefix spells it.
 func (inst ClassE) String() string {
@@ -32,8 +29,6 @@ func (inst ClassE) String() string {
 		return "transient"
 	case ClassPermanent:
 		return "permanent"
-	case ClassIncomplete:
-		return "incomplete"
 	default:
 		return "unknown"
 	}

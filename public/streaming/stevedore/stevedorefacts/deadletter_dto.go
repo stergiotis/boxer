@@ -20,8 +20,7 @@ type DeadLetter struct {
 	Origin  string `lw:"stevedoreDeadOrigin,stringArray,unit"`
 	Ordinal uint64 `lw:"stevedoreDeadOrdinal,u64Array,unit"`
 
-	// Class is permanent, or incomplete for a split body whose last part
-	// never arrived.
+	// Class is the failure class the lander gave up under.
 	Class string `lw:"stevedoreDeadClass,symbol"`
 	Error string `lw:"stevedoreDeadError,stringArray,unit"`
 

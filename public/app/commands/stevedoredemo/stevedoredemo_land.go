@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json/v2"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
-	"time"
+	"syscall"
 
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -29,9 +30,6 @@ func newLandCommand() *cli.Command {
 			&cli.StringFlag{Name: "brokers", Required: true, Usage: "comma-separated seed brokers"},
 			&cli.StringFlag{Name: "topic", Required: true, Usage: "the items topic"},
 			&cli.StringFlag{Name: "group", Value: "stevedoredemo", Usage: "consumer group"},
-			&cli.BoolFlag{Name: "reassemble", Usage: "reassemble bodies the pipeline split"},
-			&cli.Int64Flag{Name: "reassemble-max-bytes", Value: 256 * 1024 * 1024, Usage: "bytes held across open sets"},
-			&cli.DurationFlag{Name: "reassemble-max-age", Value: 10 * time.Minute, Usage: "how long a set waits for its last part"},
 			&cli.StringFlag{Name: "dead-letters", Value: "log", Usage: "where dead letters go: log, or clickhouse (the facts table the CLICKHOUSE_* variables name)"},
 			&cli.StringFlag{Name: "database", Usage: "with --dead-letters=clickhouse: the database holding the facts table; empty takes the store's default"},
 		},
@@ -85,14 +83,9 @@ func runLand(c *cli.Context) (err error) {
 		return eh.Errorf("--dead-letters is log or clickhouse")
 	}
 
-	l := lander.New(lander.Config{
-		Reassemble:         c.Bool("reassemble"),
-		ReassembleMaxBytes: c.Int64("reassemble-max-bytes"),
-		ReassembleMaxAge:   c.Duration("reassemble-max-age"),
-		Logger:             &log.Logger,
-	}, reader, printSink{}, dead)
-	ctx, cancel := context.WithCancel(c.Context)
-	defer cancel()
+	l := lander.New(lander.Config{Logger: &log.Logger}, reader, printSink{}, dead)
+	ctx, stop := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 	err = l.Run(ctx)
 	log.Info().Uint64("landed", l.Landed()).Uint64("deadLettered", l.DeadLettered()).Msg("stevedoredemo land ends")
 	return
@@ -109,6 +102,8 @@ type printedItem struct {
 	Ref     string `json:"ref"`
 	Origin  string `json:"origin,omitzero"`
 	Ordinal uint64 `json:"ordinal"`
+	Part    uint32 `json:"part,omitzero"`
+	Last    bool   `json:"last,omitzero"`
 	Line    uint64 `json:"line,omitzero"`
 	Offset  uint64 `json:"offset,omitzero"`
 	Kind    string `json:"kind,omitzero"`
@@ -118,7 +113,7 @@ type printedItem struct {
 func (printSink) Land(_ context.Context, item stevedore.Item) error {
 	b, err := json.Marshal(printedItem{
 		Ref: "0x" + strconv.FormatUint(item.Ref.Value(), 16), Origin: item.Origin, Ordinal: item.Ordinal,
-		Line: item.Line, Offset: item.Offset, Kind: item.PayloadKind, Payload: string(item.Payload),
+		Part: item.Part, Last: item.Last, Line: item.Line, Offset: item.Offset, Kind: item.PayloadKind, Payload: string(item.Payload),
 	})
 	if err != nil {
 		return stevedore.Permanent(eh.Errorf("render item: %w", err))

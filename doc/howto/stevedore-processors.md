@@ -116,8 +116,8 @@ Without an origin the reference hashes the body.
 
 A pipeline that splits a body before the processor — a scanner into
 chunks, say — sets `split`, `part`, `parts` (once known) and `last` on the
-header of each piece; the host copies them onto every item and a lander
-reassembles by reference (§5).
+header of each piece; the host copies them onto every item, and the sink
+keeps each part as a row (§5).
 
 ## 4. Read the reply
 
@@ -142,7 +142,7 @@ is left unchanged and marked failed. Route on the prefix:
 ## 5. Land the items
 
 A sink writes items as rows. Its one contract: key the row by the item's
-reference and ordinal, so a redelivered item is a rewrite.
+reference, part and ordinal, so a redelivered item is a rewrite.
 
 ```go
 type mySink struct{ store *myfacts.MyStore }
@@ -162,8 +162,7 @@ application places by database; a transient one is retried, then stops the
 lander with nothing acknowledged, so the restart redelivers.
 
 ```go
-l := lander.New(lander.Config{Reassemble: true, ReassembleMaxAge: 10 * time.Minute},
-    reader, &mySink{store}, &lander.StoreDeadLetters{Store: deadStore})
+l := lander.New(lander.Config{}, reader, &mySink{store}, &lander.StoreDeadLetters{Store: deadStore})
 err := l.Run(ctx)
 ```
 
@@ -171,10 +170,12 @@ err := l.Run(ctx)
 and its acknowledgement, rows are written twice and read once when the
 reader collapses on the key; a count that does not collapse over-counts.
 
-With `Reassemble` on, split items are held per reference until the last
-part arrives, bounded by `ReassembleMaxBytes` across sets and
-`ReassembleMaxAge` per set; a set that outlives the age is dead-lettered
-as `incomplete` and released.
+**The lander does not reassemble split bodies**, and a sink must not hold
+parts in memory past its flush either: a batch is acknowledged after the
+flush, and a part held only in memory is lost on the next restart. Keep
+each part as a row and assemble on read — a query ordered by part, or
+lading's block rows. A body whose last part never arrives is then a
+query too: parts with no `last` row older than an age you choose.
 
 The example is `boxer stevedoredemo land`, which prints each item as a JSON
 line and logs dead letters, or writes them to ClickHouse with
@@ -187,9 +188,9 @@ line and logs dead letters, or writes them to ClickHouse with
   above `MaxBody` with a permanent status rather than build a reply the
   framework will kill. Split it in the pipeline, or wait for the fetcher
   service ADR-0252 defers.
-- **The `lines` codec with binary payloads.** A newline in a payload is a
-  frame boundary under it; the host refuses to write one. Use a
-  length-prefixed codec for anything that is not text.
+- **The `lines` codec.** A reply is a binary archive, and a newline in it
+  would end the frame early, so the host refuses to run under it. Frame
+  with `length_prefixed_uint32_be` or `netstring` on both sides.
 - **Logs on stderr under the stdout reply.** The framework reads every
   stderr line as the pending message's failure. The host sends logs to
   `LogOutput` instead; a handler that writes to stderr itself breaks the

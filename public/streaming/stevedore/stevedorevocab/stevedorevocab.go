@@ -93,8 +93,7 @@ var (
 	MembStevedoreDeadOrigin = NkRegistry.MustBegin("stevedoreDeadOrigin", 34).End()
 	// MembStevedoreDeadOrdinal is the envelope's ordinal, when one decoded.
 	MembStevedoreDeadOrdinal = NkRegistry.MustBegin("stevedoreDeadOrdinal", 35).End()
-	// MembStevedoreDeadClass is the failure class: permanent, or incomplete
-	// for a split body whose last part never arrived.
+	// MembStevedoreDeadClass is the failure class, permanent.
 	MembStevedoreDeadClass = NkRegistry.MustBegin("stevedoreDeadClass", 36).End()
 	// MembStevedoreDeadError is the error text.
 	MembStevedoreDeadError = NkRegistry.MustBegin("stevedoreDeadError", 37).End()
