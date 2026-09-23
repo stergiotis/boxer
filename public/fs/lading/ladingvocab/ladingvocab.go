@@ -109,7 +109,12 @@ const NamingStyle = naming.LowerSpinalCase
 // place-name and boundary registers write to `shadowboxer.facts` (its
 // ADR-0010, proposed).
 //
-// The next free value is 2178343.
+// **…343 and …344 are taken** by sailing, claimed 2026-09-23: …343 is its
+// `sailingWeather` vocabulary — the meteoBase, MeteoSwiss and webcam-frame
+// kinds it writes to `shadowboxer.facts` — and …344 `sailingWeatherMount`,
+// the tag its webcam lading mount is minted under (its ADR-0020, proposed).
+//
+// The next free value is 2178345.
 var TagValueClaim = tagmint.MustClaim("lading", 2178315, MaxExpectedMemberships)
 
 // MaxExpectedMemberships is what this vocabulary tells the mint it will need.
