@@ -59,6 +59,8 @@ res, err := inst.model.Complete(ctx, llm.Request{
 
 - `keelson('llm_calls')` — every completion this process answered or
   refused: app, purpose, sensitivity, model, sizes, tokens, elapsed, how it
-  ended. Prompt and completion text only under `BOXER_LLM_KEEP_MESSAGES`.
+  ended. Prompt and completion text only under `BOXER_LLM_KEEP_MESSAGES`,
+  and only here; the same row without the text lands on `boxer.facts` as
+  the `llmCall` kind wherever the host's persist backend reaches it.
 - `keelson('llm_prompts')` — every registered prompt document: what a
   model may be asked to do here. `purpose` is `book/slug` on both tables.

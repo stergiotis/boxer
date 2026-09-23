@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,9 +14,11 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/llmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // Config is the host's one provider (ADR-0254 §SD2).
@@ -38,6 +41,11 @@ type Config struct {
 	// Endpoint and ApiKey — a test's fake. Endpoint and Model still say
 	// whether a model is configured.
 	Client openaichat.ClientI
+	// Exec, when set, reaches the server that holds boxer.facts, and every
+	// call lands there as a row of the llmfacts store (ADR-0254 §SD4)
+	// beside the in-process record; nil keeps the record alone, the
+	// in-memory host's case. chstore has provisioned the table.
+	Exec recordstore.ExecutorI
 }
 
 // ConfigFromEnv resolves the config from the ADR-0009 registry.
@@ -71,6 +79,11 @@ type Service struct {
 	mu    sync.Mutex
 	calls []CallRecord
 	next  uint64
+	// facts is the durable half, nil without an executor; the mutex above
+	// confines it, since a generated store is single-goroutine.
+	facts *llmfacts.CallStore
+	// minted salts the call ids this process mints.
+	minted uint64
 }
 
 // NewService constructs and subscribes a Service. The caller MUST invoke
@@ -101,6 +114,9 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 			}
 		}
 	}
+	if cfg.Exec != nil {
+		s.facts = llmfacts.NewCallStore(cfg.Exec, nil, llmfacts.CallStoreConfig{})
+	}
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
 	s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handleRequest)
 	if err != nil {
@@ -126,6 +142,19 @@ func (inst *Service) Close() {
 		_ = inst.client.Close()
 		inst.client = nil
 	}
+	inst.mu.Lock()
+	if inst.facts != nil {
+		inst.facts.Close()
+		inst.facts = nil
+	}
+	inst.mu.Unlock()
+}
+
+// Durable says the calls land on boxer.facts as well as in the record.
+func (inst *Service) Durable() (yes bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.facts != nil
 }
 
 // Describe is the describe reply as a Go value, for the host's own use.
@@ -161,7 +190,7 @@ func (inst *Service) handleComplete(msg *app.Msg) {
 		return
 	}
 	rec := CallRecord{
-		At: time.Now().UTC(), Sender: msg.Sender, SenderInstance: msg.SenderInstance,
+		CallId: inst.mintCallId(), At: time.Now().UTC(), Sender: msg.Sender, SenderInstance: msg.SenderInstance,
 		Purpose: req.Purpose, Sensitivity: queryengine.SensitivityE(req.Sensitivity),
 		Model: inst.cfg.Model, EndpointHost: inst.host, Messages: len(req.Messages), Tools: len(req.Tools),
 	}
@@ -244,6 +273,9 @@ func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord) {
 	if rec.At.IsZero() {
 		rec.At, rec.Sender, rec.SenderInstance = time.Now().UTC(), msg.Sender, msg.SenderInstance
 	}
+	if rec.CallId == "" {
+		rec.CallId = inst.mintCallId()
+	}
 	inst.record(rec)
 	inst.log.Warn().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("reason", reason).Msg("llm: refused")
 	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason})
@@ -300,4 +332,15 @@ func joinMessages(ms []openaichat.Message) (s string) {
 		b.WriteString(m.Content)
 	}
 	return b.String()
+}
+
+// mintCallId is the call's identity: this process's run-scoped counter
+// behind the answer instant, unique on the box the way a run id is, and
+// the natural key of the facts row.
+func (inst *Service) mintCallId() (id string) {
+	inst.mu.Lock()
+	inst.minted++
+	n := inst.minted
+	inst.mu.Unlock()
+	return "llm-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 36) + "-" + strconv.FormatUint(n, 36)
 }

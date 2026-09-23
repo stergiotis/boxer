@@ -440,7 +440,12 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	if svc.LLM {
-		llmSvc, lErr := llm.NewService(rt.Bus, logger, llm.ConfigFromEnv())
+		// Durable where the persist backend is the server that holds
+		// boxer.facts (ADR-0254 §SD4); the in-memory fallback keeps the
+		// service's own record.
+		llmCfg := llm.ConfigFromEnv()
+		llmCfg.Exec = rt.PersistExec
+		llmSvc, lErr := llm.NewService(rt.Bus, logger, llmCfg)
 		if lErr != nil {
 			logger.Warn().Err(lErr).Msg("llm: service start failed; llm.* will be unbound")
 		} else {
@@ -448,7 +453,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.cleanups = append(rt.cleanups, llmSvc.Close)
 			d := llmSvc.Describe()
 			logger.Info().Bool("configured", d.Configured).Str("model", d.Model).Str("endpointHost", d.EndpointHost).
-				Bool("local", d.Local).Msg("llm: service listening on llm.*")
+				Bool("local", d.Local).Bool("durable", llmSvc.Durable()).Msg("llm: service listening on llm.*")
 		}
 	}
 	if svc.Watchbill {

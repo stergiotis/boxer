@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,9 +13,12 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
+	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )
 
 const appId app.AppIdT = "test.llm.app"
@@ -181,4 +185,77 @@ func TestConfigFromEnvGatesOnEndpointAndModel(t *testing.T) {
 	assert.Equal(t, int32(4096), cfg.MaxTokens)
 	assert.Equal(t, 120*time.Second, cfg.Timeout)
 	assert.False(t, cfg.KeepMessages)
+}
+
+// The durable row carries the counts and the verdict and never the text,
+// and reads back as the record it came from.
+func TestRowRoundTrip(t *testing.T) {
+	rec := CallRecord{
+		CallId: "llm-x-1", At: time.Unix(1700000000, 0).UTC(), Sender: appId, SenderInstance: 7,
+		Purpose: "play/ask", Sensitivity: queryengine.SensitivityConfined, Model: "m", EndpointHost: "127.0.0.1:1234",
+		Messages: 3, Tools: 2, PromptBytes: 400, CompletionBytes: 120, InputTokens: 100, OutputTokens: 30, ToolCalls: 1,
+		FinishReason: "stop", Elapsed: 1500 * time.Millisecond, Incomplete: true, Error: "boom",
+		Prompt: "secret prompt", Completion: "secret answer",
+	}
+	row := RowOf(rec)
+	assert.Equal(t, kindLabel, row.Kind)
+	assert.Equal(t, []byte("llm-x-1"), row.NaturalKey)
+	assert.Equal(t, "confined", row.Sensitivity)
+	assert.Equal(t, []string{"boom"}, row.Error)
+
+	back := RecordOf(row)
+	rec.Id, rec.Prompt, rec.Completion = 0, "", ""
+	assert.Equal(t, rec, back, "everything but the id and the bodies survives the row")
+	assert.Empty(t, RowOf(CallRecord{CallId: "c"}).Error, "no error, no element")
+}
+
+// A service without an executor is not durable and scans nothing; with
+// one it says so — the wiring hostboot relies on.
+func TestDurableOnlyWithAnExecutor(t *testing.T) {
+	_, svc, _ := serve(t, Config{})
+	assert.False(t, svc.Durable())
+	recs, err := svc.ScanCalls(context.Background(), time.Time{}, 10)
+	require.NoError(t, err)
+	assert.Nil(t, recs)
+}
+
+// Over clickhouse-local with the facts table provisioned the way chstore
+// provisions it: a completion lands as one llmCall row that scans back as
+// the record, and a refusal lands too.
+func TestCallsLandOnTheFactsTable(t *testing.T) {
+	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx := context.Background()
+	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for stmt := range strings.SplitSeq(setup, ";") {
+		if stmt = strings.TrimSpace(stmt); stmt != "" {
+			require.NoError(t, exec.Exec(ctx, stmt))
+		}
+	}
+
+	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "out", FinishReason: "stop", InputTokens: 10, OutputTokens: 20}}
+	cfg := localCfg(p)
+	cfg.Exec = exec
+	cli, svc, _ := serve(t, cfg)
+	require.True(t, svc.Durable())
+	_, err = cli.Complete(ctx, Request{Purpose: "test/ask", Messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}})
+	require.NoError(t, err)
+	_, err = cli.Complete(ctx, Request{Purpose: "test/ask"})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "%v", err)
+
+	rows, err := svc.ScanCalls(ctx, time.Now().Add(-time.Hour), 10)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	ring := svc.Calls()
+	assert.Equal(t, ring[0].CallId, rows[0].CallId, "the row is the record, by id")
+	assert.Equal(t, appId, rows[0].Sender)
+	assert.Equal(t, "test/ask", rows[0].Purpose)
+	assert.EqualValues(t, 20, rows[0].OutputTokens)
+	assert.Equal(t, "stop", rows[0].FinishReason)
+	assert.True(t, rows[1].Refused)
+	assert.Contains(t, rows[1].Error, "no messages")
 }

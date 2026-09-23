@@ -314,6 +314,33 @@ var (
 	MembWatchbillPresenceKinds      = NkRegistry.MustBegin("watchbillWorkerKinds", 99).End()
 	MembWatchbillPresenceQueues     = NkRegistry.MustBegin("watchbillWorkerQueues", 100).End()
 	MembWatchbillPresenceMaxWorkers = NkRegistry.MustBegin("watchbillWorkerMaxWorkers", 101).End()
+
+	// llm calls (ADR-0254 §SD4) — one boxer.facts row per completion the
+	// host's model service answered or refused: who asked, why, what it
+	// cost, how it ended. Append-only; bodies are not here (a second kind
+	// of its own, when kept). Kind label on the symbol section as the other
+	// kinds; the call id gets a membership of its own so a scan can filter
+	// on it; counts are u32/u64 units, flags bools.
+	MembKindLlmCall            = NkRegistry.MustBegin("runtimeKindLlmCall", 102).End()
+	MembLlmCallId              = NkRegistry.MustBegin("llmCallId", 103).End()
+	MembLlmCallApp             = NkRegistry.MustBegin("llmCallApp", 104).End()
+	MembLlmCallInstance        = NkRegistry.MustBegin("llmCallInstance", 105).End()
+	MembLlmCallPurpose         = NkRegistry.MustBegin("llmCallPurpose", 106).End()
+	MembLlmCallSensitivity     = NkRegistry.MustBegin("llmCallSensitivity", 107).End()
+	MembLlmCallModel           = NkRegistry.MustBegin("llmCallModel", 108).End()
+	MembLlmCallEndpointHost    = NkRegistry.MustBegin("llmCallEndpointHost", 109).End()
+	MembLlmCallMessages        = NkRegistry.MustBegin("llmCallMessages", 110).End()
+	MembLlmCallTools           = NkRegistry.MustBegin("llmCallTools", 111).End()
+	MembLlmCallPromptBytes     = NkRegistry.MustBegin("llmCallPromptBytes", 112).End()
+	MembLlmCallCompletionBytes = NkRegistry.MustBegin("llmCallCompletionBytes", 113).End()
+	MembLlmCallInputTokens     = NkRegistry.MustBegin("llmCallInputTokens", 114).End()
+	MembLlmCallOutputTokens    = NkRegistry.MustBegin("llmCallOutputTokens", 115).End()
+	MembLlmCallToolCalls       = NkRegistry.MustBegin("llmCallToolCalls", 116).End()
+	MembLlmCallFinishReason    = NkRegistry.MustBegin("llmCallFinishReason", 117).End()
+	MembLlmCallElapsedMs       = NkRegistry.MustBegin("llmCallElapsedMs", 118).End()
+	MembLlmCallIncomplete      = NkRegistry.MustBegin("llmCallIncomplete", 119).End()
+	MembLlmCallRefused         = NkRegistry.MustBegin("llmCallRefused", 120).End()
+	MembLlmCallError           = NkRegistry.MustBegin("llmCallError", 121).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -343,4 +370,8 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembPersistValue,
 	MembKindWatchbillWorker, MembWatchbillPresenceRun, MembWatchbillPresenceHost, MembWatchbillPresencePhase,
 	MembWatchbillPresenceKinds, MembWatchbillPresenceQueues, MembWatchbillPresenceMaxWorkers,
+	MembKindLlmCall, MembLlmCallId, MembLlmCallApp, MembLlmCallInstance, MembLlmCallPurpose, MembLlmCallSensitivity,
+	MembLlmCallModel, MembLlmCallEndpointHost, MembLlmCallMessages, MembLlmCallTools, MembLlmCallPromptBytes,
+	MembLlmCallCompletionBytes, MembLlmCallInputTokens, MembLlmCallOutputTokens, MembLlmCallToolCalls,
+	MembLlmCallFinishReason, MembLlmCallElapsedMs, MembLlmCallIncomplete, MembLlmCallRefused, MembLlmCallError,
 }

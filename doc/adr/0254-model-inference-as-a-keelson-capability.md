@@ -171,11 +171,21 @@ book, slug, scope, knobs and system text — a document that failed to parse
 as a row carrying the error, so a drifted book is visible rather than
 short. `llm_calls.purpose` is spelled `book/slug`, so the two join exactly.
 
-*Built as an in-process bounded record (the last thousand calls), not a
-facts-store kind.* A durable kind is a generated record store
-([ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md)), and
-the row above is the DTO it would carry; the write is deferred (SD7) so
-the capability did not wait on a store.
+*Built first as an in-process bounded record (the last thousand calls);
+the durable kind followed the same day.* `llmCall` is a facts-bound
+generated record store
+([ADR-0100](./0100-recordstore-generated-leeway-clickhouse-store.md),
+ADR-0184 §SD2's externally provisioned shape, the presence store of
+ADR-0237 as the template): a `runtimeKindLlmCall` cohort in the runtime
+vocabulary, one DTO carrying the counts and the verdict and never the
+text, written by the service after each call where the host's persist
+backend is the server that holds `boxer.facts`, and left to the ring on
+the in-memory fallback. Bodies stay off the table by design: with no
+tagged-sensitivity lane in the runtime vocabulary, text that a deployment
+keeps belongs on a kind of its own that can be purged or masked without
+touching the counts, and that kind is not built. No TTL, ADR-0184 §SD7's
+stance. `keelson('llm_calls')` still serves the ring; the durable rows are
+the table's own view, read through the service's scan.
 
 ### SD5 — A model's tool calls run under the caller's grants
 
@@ -216,7 +226,7 @@ under a different transport and is deferred to its own ADR (SD7).
 
 ### SD7 — Deferred, recorded
 
-A streaming verb; the durable `llm_calls` kind (SD4); long completions as
+A streaming verb; a bodies kind beside `llmCall` (SD4); long completions as
 a watchbill job kind
 ([ADR-0223](./0223-watchbill-durable-work-on-facts.md)) so a run survives
 the window; attribute masking at the SD3 point; the external tool surface
@@ -237,6 +247,8 @@ transformation but not free-form asking.
 | `text2sql2/orchestrator` | +`ToolClientI`, `ToolExecutorI`, `ToolObserverI`, `Config.Tools`, `Validate` | the openaichat adapter (now a ToolClientI); the ollama adapter stays single-shot |
 | `Manifest.Caps` of play | +`keelson.query.sql_passes`, sticky, for the model's reads | the cap-count pin |
 | `keelson()` table set | +`llm_calls`, +`llm_prompts` (SD4) | the introspection table docs |
+| Runtime vocabulary (`runtime/vocab`) | `runtimeKindLlmCall` and the `llmCall…` cohort, 102–121 | the assignments golden; the `llmfacts` store regenerates from them |
+| `boxer.facts` kinds | +`llmCall`, append-shaped, externally provisioned | nothing in chstore; `VerifySchema` is the guard |
 | the `llm` runtime package | new service and client | hostboot wiring |
 
 ## Alternatives
@@ -349,6 +361,15 @@ row and SD4. Neither consumer has been checked live against a model.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
+
+## Updates
+
+### 2026-09-23 — the durable `llmCall` kind
+
+SD4's deferral is closed: `llm/llmfacts` is a facts-bound generated store
+over the runtime vocabulary's new cohort, written by the service beside
+its ring wherever the host's persist backend reaches `boxer.facts`. The
+bodies kind stays deferred, and the reason is recorded in SD4.
 
 ## References
 

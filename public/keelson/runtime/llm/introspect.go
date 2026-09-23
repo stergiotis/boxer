@@ -1,24 +1,29 @@
 package llm
 
 import (
+	"context"
+	"strconv"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/zeebo/xxh3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/llmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // CallRecord is one completion the service answered or refused (ADR-0254
 // §SD4): who asked, why, what it cost, how it ended. Prompt and Completion
-// are kept only under Config.KeepMessages.
-//
-// deferred: the record is an in-process bounded ring, not a facts-store
-// row. A durable kind is a generated record store (ADR-0100), and the
-// shape here is what its DTO would carry.
+// are kept only under Config.KeepMessages, and only in the in-process
+// record; the durable row (llmfacts.LlmCall) carries the counts and never
+// the text.
 type CallRecord struct {
 	Id              uint64
+	CallId          string
 	At              time.Time
 	Sender          app.AppIdT
 	SenderInstance  uint64
@@ -42,7 +47,10 @@ type CallRecord struct {
 	Completion      string
 }
 
-// record appends rec to the bounded ring.
+// record appends rec to the bounded ring and, where the host holds
+// boxer.facts, lands it there as a row. A failed write is logged and the
+// record kept: the table is the audit, the ring is the window's view, and
+// a call already answered is not un-answered by a store that is down.
 func (inst *Service) record(rec CallRecord) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -52,13 +60,98 @@ func (inst *Service) record(rec CallRecord) {
 	if over := len(inst.calls) - inst.cfg.KeepCalls; over > 0 {
 		inst.calls = append([]CallRecord(nil), inst.calls[over:]...)
 	}
+	if inst.facts == nil {
+		return
+	}
+	row := RowOf(rec)
+	if err := inst.facts.Begin(row.Id, row.Ts, llmfacts.CallEnvelope{NaturalKey: row.NaturalKey}).AddLlmCall(row).Commit(); err != nil {
+		inst.log.Warn().Err(err).Str("callId", rec.CallId).Msg("llm: buffer call row")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), factsFlushTimeout)
+	defer cancel()
+	if _, err := inst.facts.Flush(ctx); err != nil {
+		inst.log.Warn().Err(err).Str("callId", rec.CallId).Msg("llm: flush call row")
+	}
 }
 
-// Calls returns the kept records, oldest first.
+// factsFlushTimeout bounds one row's write; a call is already answered by
+// then, so the bound is what keeps a slow server from stalling the next.
+const factsFlushTimeout = 5 * time.Second
+
+// Calls returns the kept records, oldest first: the in-process ring.
 func (inst *Service) Calls() (recs []CallRecord) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	recs = append([]CallRecord(nil), inst.calls...)
+	return
+}
+
+// ScanCalls reads the durable rows since a point in time, oldest first,
+// up to limit; nil, nil without a store. The table's own view, for a reader
+// that outlives this process's ring.
+func (inst *Service) ScanCalls(ctx context.Context, since time.Time, limit int) (recs []CallRecord, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.facts == nil {
+		return nil, nil
+	}
+	opts := recordstore.ScanOpts{
+		ExtraPredicate: llmfacts.CallColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(since.UTC().UnixNano(), 10) + ")",
+		Limit:          limit,
+	}
+	for ent, serr := range inst.facts.ScanLlmCall(ctx, opts) {
+		if serr != nil {
+			return nil, eh.Errorf("llm: scan calls: %w", serr)
+		}
+		if ent != nil && ent.LlmCall.Has {
+			recs = append(recs, RecordOf(ent.LlmCall.Val))
+		}
+	}
+	return
+}
+
+// kindLabel is the facts row's kind label.
+const kindLabel = "llmCall"
+
+// RowOf is the durable row of a record: the counts and the verdict, never
+// the text.
+func RowOf(rec CallRecord) (row llmfacts.LlmCall) {
+	row = llmfacts.LlmCall{
+		Id: xxh3.HashString(rec.CallId), NaturalKey: []byte(rec.CallId), Ts: rec.At.UTC(),
+		Kind: kindLabel, CallId: rec.CallId, App: string(rec.Sender), Instance: rec.SenderInstance,
+		Purpose: rec.Purpose, Sensitivity: sensitivityName(rec.Sensitivity),
+		Model: rec.Model, EndpointHost: rec.EndpointHost,
+		Messages: uint32(max(rec.Messages, 0)), Tools: uint32(max(rec.Tools, 0)),
+		PromptBytes: uint64(max(rec.PromptBytes, 0)), CompletionBytes: uint64(max(rec.CompletionBytes, 0)),
+		InputTokens: uint32(max(rec.InputTokens, 0)), OutputTokens: uint32(max(rec.OutputTokens, 0)),
+		ToolCalls: uint32(max(rec.ToolCalls, 0)), FinishReason: rec.FinishReason,
+		ElapsedMs:  uint64(max(rec.Elapsed.Milliseconds(), 0)),
+		Incomplete: rec.Incomplete, Refused: rec.Refused,
+	}
+	if rec.Error != "" {
+		row.Error = []string{rec.Error}
+	}
+	return
+}
+
+// RecordOf is RowOf's inverse, minus what the row never carried.
+func RecordOf(row llmfacts.LlmCall) (rec CallRecord) {
+	rec = CallRecord{
+		CallId: row.CallId, At: row.Ts, Sender: app.AppIdT(row.App), SenderInstance: row.Instance,
+		Purpose: row.Purpose, Model: row.Model, EndpointHost: row.EndpointHost,
+		Messages: int(row.Messages), Tools: int(row.Tools),
+		PromptBytes: int(row.PromptBytes), CompletionBytes: int(row.CompletionBytes),
+		InputTokens: int32(row.InputTokens), OutputTokens: int32(row.OutputTokens), ToolCalls: int(row.ToolCalls),
+		FinishReason: row.FinishReason, Elapsed: time.Duration(row.ElapsedMs) * time.Millisecond,
+		Incomplete: row.Incomplete, Refused: row.Refused,
+	}
+	if len(row.Error) > 0 {
+		rec.Error = row.Error[0]
+	}
+	if row.Sensitivity == "confined" {
+		rec.Sensitivity = queryengine.SensitivityConfined
+	}
 	return
 }
 
@@ -91,6 +184,7 @@ func (p callsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBat
 func callsTable(rows []CallRecord) *introspect.Table {
 	return introspect.NewTable().
 		Uint64("id", func(i int) uint64 { return rows[i].Id }).
+		String("call_id", func(i int) string { return rows[i].CallId }).
 		String("at", func(i int) string { return rows[i].At.UTC().Format(time.RFC3339Nano) }).
 		String("app_id", func(i int) string { return string(rows[i].Sender) }).
 		Uint64("instance_key", func(i int) uint64 { return rows[i].SenderInstance }).
