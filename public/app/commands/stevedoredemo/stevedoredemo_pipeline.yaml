@@ -1,0 +1,48 @@
+# The stevedore example under Redpanda Connect (ADR-0252 §SD6).
+#
+# Each line on stdin is one request body, sent bare: the subprocess processor
+# drives `boxer stevedoredemo process --bare-body`, and the reply — one binary
+# archive of item envelopes — is split into one message per item.
+#
+#   printf 'a b\nc d\nrefuse:me\n' | rpk connect run stevedoredemo_pipeline.yaml
+#
+# A failed request is marked errored by the framework; the `catch` block logs
+# it and drops it, where a real pipeline routes it to a dead-letter output.
+#
+# A pipeline that wants a header on the request — an origin the reference
+# hashes, a hint, attributes — composes the two-part binary archive the host
+# reads instead (the how-to shows the shape) and drops --bare-body.
+input:
+  stdin:
+    scanner:
+      lines: {}
+
+pipeline:
+  processors:
+    - subprocess:
+        name: boxer
+        args:
+          - stevedoredemo
+          - process
+          - --bare-body
+          - --codec=length_prefixed_uint32_be
+          - --reply=stdout
+          - --max-frame=16777216
+          - --deadline=20s
+        codec_send: length_prefixed_uint32_be
+        codec_recv: length_prefixed_uint32_be
+        max_buffer: 16777216
+    - catch:
+        - log:
+            level: ERROR
+            message: 'request failed: ${! error() }'
+        - mapping: root = deleted()
+    # The reply is one archive of n items; split it into n messages.
+    - unarchive:
+        format: binary
+
+output:
+  stdout: {}
+  # For a real pipeline: a kafka output on the items topic, keyed by the
+  # reference so a file's items share a partition, with
+  # `boxer stevedoredemo land --brokers … --topic items` on the other side.

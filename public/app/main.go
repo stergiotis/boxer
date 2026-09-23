@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/queryrunsd"
 	"github.com/stergiotis/boxer/public/app/commands/runtimecodegen"
 	"github.com/stergiotis/boxer/public/app/commands/sample"
+	"github.com/stergiotis/boxer/public/app/commands/stevedoredemo"
 	"github.com/stergiotis/boxer/public/app/commands/swisstopo"
 	"github.com/stergiotis/boxer/public/app/commands/sysmetricsd"
 	"github.com/stergiotis/boxer/public/app/commands/viewerfixture"
@@ -120,6 +121,7 @@ func mainC() (exitCode int) {
 			adr.NewCliCommand(),
 			capmap.NewCliCommand(),
 			capslock.NewCliCommand(),
+			stevedoredemo.NewCliCommand(),
 			codedriven.NewCliCommand(),
 			compression.NewCliCommand(),
 			datacatalog.NewCliCommand(),
