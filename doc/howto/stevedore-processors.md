@@ -181,7 +181,31 @@ The example is `boxer stevedoredemo land`, which prints each item as a JSON
 line and logs dead letters, or writes them to ClickHouse with
 `--dead-letters=clickhouse` against the `CLICKHOUSE_*` variables.
 
-## 6. What does not work, and why
+## 6. Run it without a framework
+
+For a tree of files, a list, lines on stdin, a test, or the appliance,
+the driver runs the same handler and sink in process:
+
+```go
+res, err := drive.Run(ctx, drive.Config{Workers: 4, FlushEvery: 64, Deadline: 20 * time.Second},
+    drive.Tree{FS: os.DirFS("/data/in"), Hint: "jsonl"},
+    stevedore.HandlerFunc(myHandler), &mySink{store}, &deadletter.Store{Store: deadStore})
+```
+
+Requests are handled with the configured workers and landed in source
+order; after each flush `Checkpoint`, when set, is told how many requests
+from the start are durable, and a resumed run hands that back as `Skip`.
+Because a request's origin is its path or line number, a rerun without a
+checkpoint rewrites the same rows rather than duplicating them. Failures
+are dead-letter rows keyed by the source and the origin, so a rerun writes
+the same row.
+
+The example is `boxer stevedoredemo run <dir>… | -`. The driver has no
+input beyond a tree, a reader and a list, no output beyond the sink, and
+no metrics or routing; a need past that is the framework's, and the
+handler and sink move there unchanged.
+
+## 7. What does not work, and why
 
 - **A body larger than a reply.** The contract holds one reply whole on
   both sides, within one frame and one timeout. The host refuses a body

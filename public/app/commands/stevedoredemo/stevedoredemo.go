@@ -3,7 +3,8 @@
 // end to end under a streaming framework with the pipeline configuration
 // beside this file. `process` splits a body into lines through the processor
 // host; `land` consumes the items and prints each one, dead-lettering what it
-// cannot decode through the facts-bound store or a log line.
+// cannot decode through the facts-bound store or a log line; `run` drives the
+// same handler and sink over a tree or stdin with no framework at all.
 //
 // It is an example, not a shipped surface: an application writes its own
 // handler and sink and links the hosts into a binary of its own.
@@ -21,6 +22,7 @@ func NewCliCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			newProcessCommand(),
 			newLandCommand(),
+			newRunCommand(),
 		},
 	}
 }

@@ -458,6 +458,31 @@ under the lines codec because the reader strips one; a retry policy with
 only its attempts set still backs off; and a proptable row that leaked in
 from another session's tree is removed.
 
+### 2026-09-23 — a driver for the cases a framework is too much for
+
+A third way to run a handler and a sink, beside the framework and the
+lander: `drive`, in process, no pipe and no topic. A source yields
+requests; each is handled under the host's deadline, panic recovery and
+retry; each item is landed in source order; the sink is flushed; only then
+is the checkpoint reported, as a count of requests from the start of the
+source that a resumed run passes back as `Skip`. Failures no retry cured
+are dead-letter rows through the same store, keyed by the source's name
+and the request's origin, so a rerun writes the same row. Three sources: a
+file tree, a line reader, a list.
+
+What it is for: a tree of files, a list of paths, lines on stdin, the
+developer's loop, a test of a handler and a sink together, and the
+appliance, which runs Go binaries only and has no framework. The property
+that earns it a place is that the same handler and sink run unchanged in
+process, under a framework, or in a test.
+
+Where it stops, recorded so the second draft is not rebuilt one input at
+a time: no input beyond a tree, a reader and a list; no output beyond the
+sink; no routing and no second stage; no metrics endpoint, configuration
+language or hot reload; no cross-process backpressure or lease. A need
+past that line is the framework's. The dead-letter store moved into its
+own package with this, shared by the lander and the driver.
+
 ## References
 
 - [ADR-0005](./0005-streaming-persisted-kafka-from-connect.md) — the Kafka
