@@ -165,8 +165,7 @@ SD1's two reads no longer go to the local query endpoint. The window
 declares one sticky grant per table, `keelson.query.watchbill_event` and
 `keelson.query.watchbill_worker`, and reads each as a request served by the
 host over the ADR-0094 §SD4 engine
-([ADR-0253](0253-introspection-table-reads-as-a-bus-capability.md),
-proposed). The rows and the statements are as they were; the bus audits
+([ADR-0253](0253-introspection-table-reads-as-a-bus-capability.md)). The rows and the statements are as they were; the bus audits
 the read with the window as sender, and the capslock finding for
 `apps/watchbill` is gone. The Verification plan's "stand-in HTTP server" is
 now a stub on the bus that answers `keelson.query.*`.

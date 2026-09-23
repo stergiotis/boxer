@@ -455,7 +455,7 @@ a window that has been reaped leaves no row in any of them.
 
 The §SD4 in-process engine gained its production caller. An app that has a
 fixed statement over one table now reads it as a request on
-`keelson.query.<table>` (ADR-0253, proposed), served by
+`keelson.query.<table>` (ADR-0253), served by
 `introspect/keelsonquery` over the engine and stood up by `introspecthost`
 beside the HTTP source, independent of it. The grant is per table and
 sticky; the service holds the statement to that table before the engine

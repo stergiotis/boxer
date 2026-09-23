@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-22
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-22
 ---
-
-> **Status: proposed — pre-human-review.** Built alongside the proposal; the
-> decision awaits a reader. Do not cite as authoritative.
 
 # ADR-0253: Introspection table reads as a bus capability — `keelson.query.<table>`
 
@@ -255,9 +254,9 @@ fields.
 
 ## Status
 
-Proposed 2026-09-22; built the same day, all six SDs, then extended the
-same day with the params channel and the shared engine under `/query`
-(SD5), and checked live.
+Accepted 2026-09-22. Proposed, built (all six SDs), extended with the
+params channel and the shared engine under `/query` (SD5), and checked
+live on the same day; accepted on the live check.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

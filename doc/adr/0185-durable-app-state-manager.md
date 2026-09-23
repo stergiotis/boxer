@@ -496,8 +496,7 @@ check the verification plan names remains to be done on the desktop host.
 The open item of the M3 note is closed the second way: the manager reads
 `keelson('app_state')` as a request on `keelson.query.app_state`, one sticky
 grant declared beside `ClientCaps()`, served by the host over the ADR-0094
-§SD4 engine ([ADR-0253](0253-introspection-table-reads-as-a-bus-capability.md),
-proposed). SD1's "costs no new capability" no longer holds and was never
+§SD4 engine ([ADR-0253](0253-introspection-table-reads-as-a-bus-capability.md)). SD1's "costs no new capability" no longer holds and was never
 quite true — the read was off the capability system rather than free of
 it. The capslock finding for `apps/appstate` is gone, and the window says
 "no bus to read through" only where the host minted none.
