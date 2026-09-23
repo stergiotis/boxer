@@ -103,6 +103,7 @@ func TestReassemblerOrderDuplicatesAndInterleaving(t *testing.T) {
 				_, twice := got[c.id]
 				require.False(rt, twice, "a set completes once")
 				got[c.id] = data
+				r.Done(c.id)
 			}
 		}
 		require.Equal(rt, len(want), len(got))
@@ -114,13 +115,37 @@ func TestReassemblerOrderDuplicatesAndInterleaving(t *testing.T) {
 }
 
 func TestReassemblerBounds(t *testing.T) {
-	t.Run("byte bound refuses the chunk that overflows", func(t *testing.T) {
+	t.Run("byte bound refuses the chunk that overflows, and opens no set for it", func(t *testing.T) {
 		r := &Reassembler{MaxBytes: 10}
 		_, _, err := r.Add(tagged(1), 0, false, 0, make([]byte, 6))
 		require.NoError(t, err)
 		_, _, err = r.Add(tagged(2), 0, false, 0, make([]byte, 6))
 		require.ErrorIs(t, err, ErrReassemblyFull)
 		require.Equal(t, int64(6), r.Held())
+		require.Equal(t, 1, r.Open())
+	})
+	t.Run("an index held before the total is judged when the total arrives", func(t *testing.T) {
+		r := &Reassembler{}
+		_, _, err := r.Add(tagged(1), 5, false, 0, []byte("z"))
+		require.NoError(t, err)
+		_, _, err = r.Add(tagged(1), 2, true, 3, []byte("c"))
+		require.ErrorIs(t, err, ErrChunkDisagrees)
+	})
+	t.Run("a whole set is yielded again until Done", func(t *testing.T) {
+		r := &Reassembler{}
+		data, done, err := r.Add(tagged(1), 0, true, 1, []byte("a"))
+		require.NoError(t, err)
+		require.True(t, done)
+		require.Equal(t, "a", string(data))
+		data, done, err = r.Add(tagged(1), 0, true, 1, []byte("a"))
+		require.NoError(t, err)
+		require.True(t, done, "the handoff can be retried")
+		require.Equal(t, "a", string(data))
+		r.Done(tagged(1))
+		_, done, err = r.Add(tagged(1), 0, true, 1, []byte("a"))
+		require.NoError(t, err)
+		require.False(t, done)
+		require.Zero(t, r.Open())
 	})
 	t.Run("age bound expires and releases", func(t *testing.T) {
 		now := time.Unix(1000, 0)
@@ -136,18 +161,21 @@ func TestReassemblerBounds(t *testing.T) {
 		require.Equal(t, 1, r.Open())
 		require.Equal(t, int64(1), r.Held())
 	})
-	t.Run("a late duplicate of a completed set is dropped", func(t *testing.T) {
+	t.Run("a late duplicate of a released set is dropped", func(t *testing.T) {
 		r := &Reassembler{MaxRecent: 2}
 		_, done, err := r.Add(tagged(1), 0, true, 1, []byte("a"))
 		require.NoError(t, err)
 		require.True(t, done)
+		r.Done(tagged(1))
 		_, done, err = r.Add(tagged(1), 0, true, 1, []byte("a"))
 		require.NoError(t, err)
 		require.False(t, done)
 		require.Zero(t, r.Open())
-		// The memory is a ring: two more completions evict the first id.
+		// The memory is a ring: two more releases evict the first id.
 		_, _, _ = r.Add(tagged(2), 0, true, 1, nil)
+		r.Done(tagged(2))
 		_, _, _ = r.Add(tagged(3), 0, true, 1, nil)
+		r.Done(tagged(3))
 		_, done, err = r.Add(tagged(1), 0, true, 1, []byte("a"))
 		require.NoError(t, err)
 		require.True(t, done, "forgotten, so it completes again")
@@ -167,5 +195,24 @@ func TestReassemblerBounds(t *testing.T) {
 		require.True(t, done)
 		_, _, err = r.Add(tagged(3), 0, true, 1, []byte("only"))
 		require.NoError(t, err)
+	})
+	t.Run("a failing handoff keeps the set for the retried write", func(t *testing.T) {
+		fail := true
+		var got []byte
+		col := &Collector{Reassembler: &Reassembler{}, OnComplete: func(_ identifier.TaggedId, d []byte) error {
+			if fail {
+				return context.DeadlineExceeded
+			}
+			got = d
+			return nil
+		}}
+		_, err := col.WriteFirstAndLastChunk(tagged(9), []byte("once"))
+		require.Error(t, err)
+		require.Equal(t, 1, col.Reassembler.Open())
+		fail = false
+		_, err = col.WriteFirstAndLastChunk(tagged(9), []byte("once"))
+		require.NoError(t, err)
+		require.Equal(t, "once", string(got))
+		require.Zero(t, col.Reassembler.Open())
 	})
 }

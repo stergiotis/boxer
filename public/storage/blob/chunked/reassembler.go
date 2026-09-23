@@ -63,8 +63,10 @@ func (inst *Reassembler) clock() time.Time {
 
 // Add records one chunk. index counts from zero; last marks the final chunk
 // and total is then the set's chunk count, which last-and-only chunks give
-// as one. When the chunk completes its set, done is true and data is the
-// set's bytes in index order, and the set is released.
+// as one. When the set is whole, done is true and data is its bytes in index
+// order. The set stays until [Reassembler.Done] releases it, so a caller
+// whose handoff of data failed can present the completing chunk again and
+// receive data again; a chunk of a set already released is dropped.
 func (inst *Reassembler) Add(id identifier.TaggedId, index uint32, last bool, total uint32, chunk []byte) (data []byte, done bool, err error) {
 	if last && total == 0 {
 		err = eb.Build().Uint64("id", id.Value()).Errorf("a last chunk must carry the set's total")
@@ -75,30 +77,37 @@ func (inst *Reassembler) Add(id identifier.TaggedId, index uint32, last bool, to
 		return
 	}
 	if _, completed := inst.recent[id]; completed {
-		return // a chunk of a set already yielded: a redelivery, dropped
-	}
-	if inst.open == nil {
-		inst.open = make(map[identifier.TaggedId]*openSet, 16)
+		return // a chunk of a set already released: a redelivery, dropped
 	}
 	set := inst.open[id]
-	if set == nil {
-		set = &openSet{chunks: make(map[uint32][]byte, 8), openedAt: inst.clock()}
-		inst.open[id] = set
-	}
-	if prev, dup := set.chunks[index]; dup {
-		if string(prev) != string(chunk) {
-			err = eb.Build().Uint64("id", id.Value()).Uint32("index", index).Errorf("repeated index with other bytes: %w", ErrChunkDisagrees)
+	if set != nil {
+		if prev, dup := set.chunks[index]; dup {
+			if string(prev) != string(chunk) {
+				err = eb.Build().Uint64("id", id.Value()).Uint32("index", index).Errorf("repeated index with other bytes: %w", ErrChunkDisagrees)
+				return
+			}
+			if set.whole() {
+				return set.assemble(), true, nil // the handoff is being retried
+			}
+			return // a faithful duplicate is a redelivery; nothing changes
 		}
-		return // a faithful duplicate is a redelivery; nothing changes
 	}
 	if last {
-		if set.total != 0 && set.total != total {
+		if set != nil && set.total != 0 && set.total != total {
 			err = eb.Build().Uint64("id", id.Value()).Uint32("total", total).Uint32("known", set.total).Errorf("total: %w", ErrChunkDisagrees)
 			return
 		}
-		set.total = total
+		if set != nil {
+			// Indexes held before the total was known are judged now.
+			for held := range set.chunks {
+				if held >= total {
+					err = eb.Build().Uint64("id", id.Value()).Uint32("index", held).Uint32("total", total).Errorf("a held index is past the total: %w", ErrChunkDisagrees)
+					return
+				}
+			}
+		}
 	}
-	if set.total != 0 && index >= set.total {
+	if set != nil && set.total != 0 && index >= set.total {
 		err = eb.Build().Uint64("id", id.Value()).Uint32("index", index).Uint32("total", set.total).Errorf("index past the total: %w", ErrChunkDisagrees)
 		return
 	}
@@ -106,22 +115,49 @@ func (inst *Reassembler) Add(id identifier.TaggedId, index uint32, last bool, to
 		err = eb.Build().Uint64("id", id.Value()).Int64("held", inst.held).Int64("max", inst.MaxBytes).Errorf("add chunk: %w", ErrReassemblyFull)
 		return
 	}
+	if set == nil {
+		if inst.open == nil {
+			inst.open = make(map[identifier.TaggedId]*openSet, 16)
+		}
+		set = &openSet{chunks: make(map[uint32][]byte, 8), openedAt: inst.clock()}
+		inst.open[id] = set
+	}
+	if last {
+		set.total = total
+	}
 	kept := make([]byte, len(chunk))
 	copy(kept, chunk)
 	set.chunks[index] = kept
 	set.bytes += int64(len(kept))
 	inst.held += int64(len(kept))
 
-	if set.total == 0 || uint32(len(set.chunks)) < set.total {
+	if !set.whole() {
 		return
 	}
-	data = make([]byte, 0, set.bytes)
-	for i := uint32(0); i < set.total; i++ {
-		data = append(data, set.chunks[i]...)
+	return set.assemble(), true, nil
+}
+
+// Done releases a set Add reported whole and remembers its id, so a later
+// chunk of it is dropped. Calling it for an unknown id does nothing.
+func (inst *Reassembler) Done(id identifier.TaggedId) {
+	set := inst.open[id]
+	if set == nil {
+		return
 	}
 	inst.release(id, set)
 	inst.remember(id)
-	return data, true, nil
+}
+
+func (inst *openSet) whole() bool {
+	return inst.total != 0 && uint32(len(inst.chunks)) == inst.total
+}
+
+func (inst *openSet) assemble() (data []byte) {
+	data = make([]byte, 0, inst.bytes)
+	for i := uint32(0); i < inst.total; i++ {
+		data = append(data, inst.chunks[i]...)
+	}
+	return
 }
 
 // remember records a completed id in a ring of MaxRecent, evicting the
@@ -194,11 +230,15 @@ func (inst *Collector) add(id identifier.TaggedId, index uint32, last bool, tota
 	if err != nil {
 		return 0, err
 	}
-	if done && inst.OnComplete != nil {
-		err = inst.OnComplete(id, data)
-		if err != nil {
-			return 0, err
+	if done {
+		if inst.OnComplete != nil {
+			err = inst.OnComplete(id, data)
+			if err != nil {
+				// The set stays; a retried last write yields the data again.
+				return 0, err
+			}
 		}
+		inst.Reassembler.Done(id)
 	}
 	return len(p), nil
 }
