@@ -79,6 +79,8 @@ var AllowedSpecialIds = map[string]bool{
 	// its family is NATS-aligned, so the id is a service name rather than
 	// the declaring package's import path. Missed when it landed.
 	"runtime.appstate": true,
+	// runtime.llm — the model-inference service (ADR-0254). Same class.
+	"runtime.llm": true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.

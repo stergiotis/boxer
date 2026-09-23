@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -37,6 +38,10 @@ const (
 	// the grant an app holds per keelson() table it reads, and the service
 	// the host runs over the in-process engine.
 	CapKeelsonQuery CapId = "keelsonquery"
+	// CapLLM is model inference (ADR-0254): the grant an app holds to
+	// send text to the host's one model, and the service that decides
+	// what may reach it.
+	CapLLM CapId = "llm"
 )
 
 // BackendImpl is one realisation of a capability's contract. A cap
@@ -374,12 +379,37 @@ var Registry = map[CapId]CapSpec{
 			{Id: "keelsonquery", Display: "keelsonquery.Service"},
 		},
 	},
+	CapLLM: {
+		Id:            CapLLM,
+		Display:       "llm.* model inference",
+		SubjectFamily: "llm.{describe|complete} (request/reply)",
+		Description: "Sending text to a model from an app (ADR-0254): describe " +
+			"says whether the host offers a model, which one and where it is; " +
+			"complete is one chat completion through the host's one client, " +
+			"configured once by BOXER_LLM_*. The service is the single point " +
+			"where content leaves: a request declares the sensitivity of what " +
+			"it was composed from, and confined content (sealed data, " +
+			"ADR-0145) is refused unless the endpoint is loopback. A model's " +
+			"tool calls come back unexecuted — the app runs them under its " +
+			"own grants, so the service never holds a capability the app " +
+			"lacks. An app holds the capability by declaring " +
+			"llm.ClientCaps(reason), not sticky; the read is a request, so " +
+			"every call lands an audit row, and keelson('llm_calls') keeps " +
+			"the record of what was asked, at what cost, and how it ended.",
+		Backend: "runtime/llm over public/llm/openaichat",
+		AppFilter: func(f app.SubjectFilter) bool {
+			return strings.HasPrefix(f.Pattern, llm.SubjectPrefix)
+		},
+		Backends: []BackendImpl{
+			{Id: "llm", Display: "llm.Service"},
+		},
+	},
 }
 
 // allCapIdsOrdered returns the canonical render order so the
 // inspector picker UI doesn't shuffle entries across frames (Go map
 // iteration is randomised).
 func allCapIdsOrdered() (ids []CapId) {
-	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery}
+	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapLLM}
 	return
 }

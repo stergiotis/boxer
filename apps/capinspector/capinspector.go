@@ -277,6 +277,8 @@ func diagramCapLabel(capId CapId) (s string) {
 		s = "App-state manager"
 	case CapKeelsonQuery:
 		s = "Table reads"
+	case CapLLM:
+		s = "Model inference"
 	}
 	return
 }
