@@ -339,6 +339,20 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## Updates
 
+### 2026-09-24 — a second, light palette chosen at launch (ADR-0258)
+
+The Context's "dark theme only for v1" stands for the IDS palette, and the
+v1 simplifications it bought stay: no theme event on the bus, no runtime
+switch, no parallel spine in *this* file. What [ADR-0258](./0258-imzero2-fresh-light-theme-chosen-at-launch.md)
+adds beside it is a second palette source, `palette-fresh.toml`, emitted by
+the §SD5 generator and graded against the same `pairs.toml`, and a theme
+read once at launch from `IMZERO2_THEME` on both sides of the FFFI
+boundary. §SD6's binding is unchanged for the dark palette; the light
+overlay binds the same `Visuals` fields from its own module. The
+2026-09-20 rail override below, and the two construction-time
+`ACCENT_DEFAULT` sites the M1 refinement introduced, now take their colour
+through a theme-aware accessor rather than naming this palette's module.
+
 ### 2026-09-20 — the slider's rail takes `border.default`, inside the slider only
 
 §SD6 maps `widgets.inactive.bg_fill` to `bg.surface`. egui paints a slider's

@@ -1266,7 +1266,14 @@ IMZERO2_SCREENSHOT_DIR=/tmp/screenshots bash hmi.sh
 
 Produces: `tables.png`, `plots.png`, `painter.png`, `treemap.png`, `sql.png`, `i18n.png`, `nerdfont.png`, `imzero2.png`, `debug_tools.png`, `colors_styling.png`.
 
-The tour uses a 4-phase state machine per window (setup → settle → capture → advance) to ensure layout is stable before each screenshot. The settle frame is necessary because collapse/uncollapse commands take effect on the next frame.
+The tour uses a 4-phase state machine per window (setup → settle → capture → advance) to ensure layout is stable before each screenshot.
+
+**Capturing under the light theme.** `IMZERO2_THEME=fresh` selects the
+light theme of ADR-0258 for the whole process — the Rust overlay and the
+Go token mirror both read it at launch, and there is no runtime switch —
+so the same tour command captures every demo under either theme. A widget
+that still looks dark under it has a hard-coded dark colour; move it onto
+a `styletokens` spine token, which leaves the dark palette unchanged. The settle frame is necessary because collapse/uncollapse commands take effect on the next frame.
 
 **A capture only proves what its font stack can show.** Whatever lane you verify in — this tour, an `imzero2 drive` scene, an `egui-mcp` session — the run is only as representative as the fonts that host loaded. A headless scene launched without `--fallbackFontTTF` renders a *different* glyph for any codepoint missing from the main font than a desktop launch does, at a different size and baseline; §12 "Oversized, Off-Centre Glyph" is that defect, invisible across four rounds of headless verification and obvious in the first desktop screenshot. Pass the same font flags your users' host passes, or treat glyph appearance as unverified.
 
