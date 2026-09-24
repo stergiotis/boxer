@@ -69,8 +69,8 @@ system, a road class or a country.
 
 ### Milestones
 
-- **M1 — Graph, heap, Dijkstra, snapping.**
-- **M2 — Order, hierarchy, customization, query, buckets.**
+- **M1 — Graph, heap, Dijkstra, snapping.** ✓
+- **M2 — Order, hierarchy, customization, query, buckets.** ✓
 
 ### Deferred
 
@@ -133,13 +133,31 @@ Proposed — awaiting review by @stergiotis.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-09-24 — M1 and M2 shipped, and the first country-size numbers
+
+Both milestones landed in one cut, with the lane the verification plan
+names: every hierarchy answer equal to Dijkstra's over random grids,
+metrics, parallel and forbidden arcs and snapped ends; unpacked paths as
+walks summing to the distance; buckets equal to pairwise queries; the
+order a permutation whose tree parents are upward neighbours; the grid
+index equal to a linear scan. Polyline coordinates are float32, and
+`Index.NearestWhere` takes an acceptance predicate so a consumer snaps
+under a profile.
+
+The consumer measured the package on the Swiss road layer (shadow-boxer
+ADR-0012, Updates 2026-09-24): 1 654 880 nodes and 4 154 136 arcs; the
+Inertial Flow order in 138 s single-threaded; contraction in 1 s to
+7 843 889 up-arcs (1.89× the arcs) and a tree of height 792;
+customization in 4.3 s single-threaded; a country-length query with
+unpacking in 5 ms, a six-by-six matrix by buckets in 21 ms. Two of the
+context's expectations are corrected by that: the fill-in is above the
+1.15–1.7× the literature reports, and a query is milliseconds, not tens of
+microseconds. Both are the order's quality — plain Inertial Flow with the
+separator taken as the source-side endpoints of an edge cut — and §SD3
+names the replacement. On a 300×300 grid the order costs 2.8 s and the
+fill is 7.7×, which is a lattice's nature rather than a defect.
 
 ## References
 
