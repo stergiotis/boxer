@@ -146,11 +146,12 @@ func New(ids *c.WidgetIdStack, scopeKey string) *Widget {
 		scopeKey: scopeKey,
 		atlas:    atlas,
 		loadErr:  err,
-		// Sea transparent (the pane background reads through), undata mid
-		// gray, borders near-black at ~55% — legible on light and dark fills.
-		// Presence fill is a viridis-family teal.
+		// Sea transparent (the pane background reads through), undata the
+		// faint-border neutral (mid grey on the dark spine, a light grey on a
+		// light one), borders near-black at ~55% — legible on light and dark
+		// fills. Presence fill is a viridis-family teal.
 		SeaRGBA:      0x00000000,
-		NoDataRGBA:   0x555555ff,
+		NoDataRGBA:   styletokens.NeutralBorderFaint.AsHex(),
 		StrokeRGBA:   0x0a0a0a8c,
 		PresenceRGBA: 0x2a788eff,
 		// Hover: a white wash light enough to keep the underlying fill

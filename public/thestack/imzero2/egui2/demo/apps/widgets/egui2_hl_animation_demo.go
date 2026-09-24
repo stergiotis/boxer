@@ -96,11 +96,11 @@ func demoAnimation(ids *c.WidgetIdStack, st *animationDemoState) {
 
 	drawRow := func(y float32, t float64, label string, col color.Color) {
 		// Track line
-		c.PaintLine(leftX+boxW/2, y+boxH/2, rightX+boxW/2, y+boxH/2, color.Hex(0x33333388), 1.0).Send()
+		c.PaintLine(leftX+boxW/2, y+boxH/2, rightX+boxW/2, y+boxH/2, color.Hex(styletokens.NeutralBorderFaint.AsHex()&^0xff|0x88), 1.0).Send()
 		// Box
 		x := leftX + (rightX-leftX)*float32(t)
 		c.PaintRectFilled(x, y, x+boxW, y+boxH, 5.0, col).Send()
-		c.PaintText(canvasW-4, y+boxH/2, 2, 1, label, 10.0, color.Hex(0xccccccff)).Send()
+		c.PaintText(canvasW-4, y+boxH/2, 2, 1, label, 10.0, color.Hex(styletokens.NeutralTextSecondary.AsHex())).Send()
 	}
 	// Migrated to IDS semantic palette — the three tracks map naturally
 	// to info / success / warning tones (blue / green / yellow). Was
@@ -109,7 +109,7 @@ func demoAnimation(ids *c.WidgetIdStack, st *animationDemoState) {
 	drawRow(8.0+rowH, st.t2, "Responsive", color.Hex(styletokens.SuccessDefault.AsHex()))
 	drawRow(8.0+2*rowH, st.t3, "Value", color.Hex(styletokens.WarningDefault.AsHex()))
 	c.PaintCanvas(ids.PrepareStr("anim-canvas"), canvasW, canvasH).
-		Background(color.Hex(0x1a1a22ff)).
+		Background(color.Hex(styletokens.NeutralBgExtreme.AsHex())).
 		Send()
 
 	// --- RequestRepaintAfter: schedule a one-shot repaint without polling.
