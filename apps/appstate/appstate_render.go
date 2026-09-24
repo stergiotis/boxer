@@ -16,7 +16,7 @@ const leftWidth = 340
 
 func (inst *App) render() {
 	snap := inst.snapshot()
-	apps := summarize(snap.rows)
+	apps := summarize(&snap.rows)
 	for range c.PanelTopInside(inst.ids.PrepareStr("top")).Resizable(false).KeepIter() {
 		inst.renderStatus(snap, apps)
 		inst.renderConfirm()
@@ -45,7 +45,7 @@ func (inst *App) renderStatus(snap snapshot, apps []appSummary) {
 			c.Label("Reading keelson('app_state')…").Send()
 		default:
 			c.Label(fmt.Sprintf("%d entries across %d apps, read %s ago",
-				len(snap.rows), len(apps), time.Since(snap.refreshed).Round(time.Second))).Send()
+				snap.rows.Len(), len(apps), time.Since(snap.refreshed).Round(time.Second))).Send()
 		}
 	}
 	for range c.HorizontalTop().KeepIter() {
@@ -118,7 +118,7 @@ func (inst *App) renderEntries(snap snapshot) {
 		c.Label("Select an app to see what it keeps.").Send()
 		return
 	}
-	rows := entriesOf(snap.rows, inst.selected)
+	rows := entriesOf(&snap.rows, inst.selected)
 	c.LabelAtoms(c.Atoms().BeginRichText(inst.selected).Monospace().Heading().End().Keep()).Send()
 	if len(rows) == 0 {
 		c.Label("It keeps nothing now.").Send()
@@ -130,7 +130,8 @@ func (inst *App) renderEntries(snap snapshot) {
 			strong(h)
 		}
 		c.EndRow()
-		for _, r := range rows {
+		for _, i := range rows {
+			r := snap.rows.Row(i)
 			for range c.IdScope(inst.ids.PrepareStr(r.EntityId)) {
 				badge.New(inst.ids.PrepareStr("kind"), r.Kind).Tone(kindTone(r.Kind)).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
 				mono(r.Key)

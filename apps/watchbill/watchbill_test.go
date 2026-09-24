@@ -1,6 +1,7 @@
 package watchbill
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/watchbill/launchcfg"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
@@ -60,7 +62,12 @@ func newFixture(t *testing.T) (f *fixture) {
 	f.consumer = wb.NewClient(bus.NewClient("apps/consumer", wb.ClientCaps()))
 	// The tables answer empty: the fixture is about the verbs, and a
 	// window that reads nothing must still refresh clean.
-	stubTables(t, bus, func(string, string) string { return "" })
+	stubTables(t, bus, func(table string, _ string) any {
+		if table == wb.TableEvent {
+			return eventCols{}
+		}
+		return workerCols{}
+	})
 
 	id := app.AppIdT(manifest.Id)
 	mc := app.NewStaticMountContext(id, zerolog.Nop(), nil, bus.NewClient(id, manifest.Caps), nil)
@@ -171,10 +178,10 @@ func TestClearFilters(t *testing.T) {
 }
 
 // stubTables stands in for the host's keelson.query service: it answers
-// every table read with the JSONEachRow body answer returns for the
+// every table read with the ArrowStream body of the columns answer returns for the
 // subject's table and the statement, so the reader is exercised without a
 // clickhouse-local.
-func stubTables(t *testing.T, bus *inprocbus.Inst, answer func(table string, sql string) string) (lastSQL func() string) {
+func stubTables(t *testing.T, bus *inprocbus.Inst, answer func(table string, sql string) any) (lastSQL func() string) {
 	t.Helper()
 	var last string
 	svc := bus.NewClient(keelsonquery.ServiceAppId, keelsonquery.ServiceCaps("introspect"))
@@ -184,8 +191,10 @@ func stubTables(t *testing.T, bus *inprocbus.Inst, answer func(table string, sql
 		last = req.Sql
 		table := strings.TrimPrefix(msg.Subject, keelsonquery.SubjectPrefix)
 		require.Equal(t, table, req.Table)
-		require.Equal(t, keelsonquery.FormatJSONEachRow, req.Format)
-		payload, eerr := buscodec.Encode(keelsonqueryreply.KeelsonQueryReply{Ok: true, Body: []byte(answer(table, req.Sql))})
+		require.Equal(t, keelsonquery.FormatArrowStream, req.Format)
+		var body bytes.Buffer
+		require.NoError(t, chrows.EncodeStream(&body, answer(table, req.Sql)))
+		payload, eerr := buscodec.Encode(keelsonqueryreply.KeelsonQueryReply{Ok: true, Body: body.Bytes()})
 		require.NoError(t, eerr)
 		require.NoError(t, svc.Publish(msg.Reply, payload))
 	})
@@ -195,17 +204,21 @@ func stubTables(t *testing.T, bus *inprocbus.Inst, answer func(table string, sql
 }
 
 // The two introspection reads travel as keelson.query requests on the
-// table's own subject, decode JSONEachRow from the reply, and the trail
+// table's own subject, decode ArrowStream from the reply, and the trail
 // query carries the escaped job id.
 func TestTableReads(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
-	lastSQL := stubTables(t, bus, func(table string, _ string) string {
+	lastSQL := stubTables(t, bus, func(table string, _ string) any {
 		switch table {
 		case wb.TableEvent:
-			return `{"job_id":"j1","at":"2026-09-15T10:00:00Z","state":"running","attempt":1,"worker_run":"r1","note":"","error":""}` + "\n" +
-				`{"job_id":"j1","at":"2026-09-15T10:00:03Z","state":"discarded","attempt":1,"worker_run":"r1","note":"attempts exhausted","error":"boom\nat x"}` + "\n"
+			return eventCols{JobId: []string{"j1", "j1"}, At: []string{"2026-09-15T10:00:00Z", "2026-09-15T10:00:03Z"},
+				State: []string{"running", "discarded"}, Attempt: []int64{1, 1}, WorkerRun: []string{"r1", "r1"},
+				Note: []string{"", "attempts exhausted"}, Error: []string{"", "boom\nat x"}}
 		default:
-			return `{"run_id":"r1","host":"box","kinds":["a","b"],"queues":[],"max_workers":2,"started_at":"2026-09-15T09:00:00Z","alive":true,"local":true,"running":["j1"],"last_tick":"2026-09-15T10:00:00Z","poll_ms":5000,"serving":true,"sweeping":false}` + "\n"
+			return workerCols{RunId: []string{"r1"}, Host: []string{"box"}, Kinds: [][]string{{"a", "b"}}, Queues: [][]string{{}},
+				MaxWorkers: []int64{2}, StartedAt: []string{"2026-09-15T09:00:00Z"}, Alive: []bool{true}, Local: []bool{true},
+				Running: [][]string{{"j1"}}, LastTick: []string{"2026-09-15T10:00:00Z"}, PollMs: []int64{5000},
+				Serving: []bool{true}, Sweeping: []bool{false}}
 		}
 	})
 	reader := newTableReader(bus.NewClient("apps/reader", keelsonquery.ClientCaps(wb.TableEvent, wb.TableWorker)))
@@ -214,14 +227,17 @@ func TestTableReads(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, lastSQL(), `'j\'1'`)
 	assert.NotContains(t, lastSQL(), "FORMAT", "the format is the request's, not the statement's")
-	require.Len(t, evs, 2)
-	assert.Equal(t, "discarded", evs[1].State)
-	assert.Equal(t, "boom", firstLine(evs[1].Error))
+	require.Equal(t, 2, evs.Len())
+	assert.Equal(t, "discarded", evs.State[1])
+	assert.Equal(t, "boom", firstLine(evs.Error[1]))
 	ws, err := reader.workers(context.Background())
 	require.NoError(t, err)
-	require.Len(t, ws, 1)
-	assert.Equal(t, []string{"a", "b"}, ws[0].Kinds)
-	assert.True(t, ws[0].Serving)
+	require.Equal(t, 1, ws.Len())
+	w := ws.Row(0)
+	assert.Equal(t, []string{"a", "b"}, w.Kinds)
+	assert.Empty(t, w.Queues)
+	assert.True(t, w.Serving)
+	assert.False(t, w.Sweeping)
 
 	// Without the grant the bus refuses the publish, and the window shows
 	// that rather than rows.

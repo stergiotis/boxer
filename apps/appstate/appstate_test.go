@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytes"
 	"context"
 	"iter"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	as "github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -41,14 +43,13 @@ func TestManifest(t *testing.T) {
 }
 
 func TestSummarizeAndEntriesOf(t *testing.T) {
-	rows := []entryRow{
-		{AppId: "x/play", Kind: "persist", Key: "a", PayloadBytes: 10},
-		{AppId: "x/tally", Kind: "workingset", Key: "default", PayloadBytes: 5},
-		{AppId: "x/play", Kind: "column_width", Key: "column//k"},
-	}
-	assert.Equal(t, []appSummary{{appId: "x/play", entries: 2, bytes: 10}, {appId: "x/tally", entries: 1, bytes: 5}}, summarize(rows))
-	assert.Len(t, entriesOf(rows, "x/play"), 2)
-	assert.Empty(t, entriesOf(rows, "x/none"))
+	var rows entryCols
+	rows.Add(entryRow{AppId: "x/play", Kind: "persist", Key: "a", PayloadBytes: 10})
+	rows.Add(entryRow{AppId: "x/tally", Kind: "workingset", Key: "default", PayloadBytes: 5})
+	rows.Add(entryRow{AppId: "x/play", Kind: "column_width", Key: "column//k"})
+	assert.Equal(t, []appSummary{{appId: "x/play", entries: 2, bytes: 10}, {appId: "x/tally", entries: 1, bytes: 5}}, summarize(&rows))
+	assert.Equal(t, []int{0, 2}, entriesOf(&rows, "x/play"))
+	assert.Empty(t, entriesOf(&rows, "x/none"))
 	assert.Equal(t, "play", shortApp("github.com/stergiotis/boxer/apps/play"))
 	assert.Equal(t, "flat", shortApp("flat"))
 }
@@ -61,8 +62,11 @@ func TestDescribe(t *testing.T) {
 }
 
 // The read travels as a keelson.query request on the table's subject and
-// decodes JSONEachRow from the reply.
+// decodes ArrowStream from the reply into columns.
 func TestTableReader(t *testing.T) {
+	var want entryCols
+	want.Add(entryRow{Kind: "persist", AppId: "x/play", Key: "tabs", EntityId: "state/x%2Fplay/tabs", PayloadBytes: 5,
+		WrittenAt: "2026-09-22T10:00:00Z", RunId: "r1", InstanceKey: 3})
 	bus := inprocbus.NewInst(zerolog.Nop())
 	var gotSQL, gotTable string
 	svc := bus.NewClient(keelsonquery.ServiceAppId, keelsonquery.ServiceCaps("introspect"))
@@ -70,8 +74,10 @@ func TestTableReader(t *testing.T) {
 		req, derr := buscodec.Decode[keelsonqueryrequest.KeelsonQueryRequest](msg.Payload)
 		require.NoError(t, derr)
 		gotSQL, gotTable = req.Sql, strings.TrimPrefix(msg.Subject, keelsonquery.SubjectPrefix)
-		payload, eerr := buscodec.Encode(keelsonqueryreply.KeelsonQueryReply{Ok: true,
-			Body: []byte(`{"kind":"persist","app_id":"x/play","key":"tabs","entity_id":"state/x%2Fplay/tabs","payload_bytes":5,"detail":"","written_at":"2026-09-22T10:00:00Z","run_id":"r1","instance_key":3}` + "\n")})
+		require.Equal(t, keelsonquery.FormatArrowStream, req.Format)
+		var body bytes.Buffer
+		require.NoError(t, chrows.EncodeStream(&body, &want))
+		payload, eerr := buscodec.Encode(keelsonqueryreply.KeelsonQueryReply{Ok: true, Body: body.Bytes()})
 		require.NoError(t, eerr)
 		require.NoError(t, svc.Publish(msg.Reply, payload))
 	})
@@ -84,9 +90,7 @@ func TestTableReader(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, providers.TableAppState, gotTable)
 	assert.Contains(t, gotSQL, "keelson('app_state')")
-	require.Len(t, rows, 1)
-	assert.Equal(t, entryRow{Kind: "persist", AppId: "x/play", Key: "tabs", EntityId: "state/x%2Fplay/tabs", PayloadBytes: 5,
-		WrittenAt: "2026-09-22T10:00:00Z", RunId: "r1", InstanceKey: 3}, rows[0])
+	assert.Equal(t, want, rows)
 	assert.Nil(t, newTableReader(nil), "no bus is nil, not a reader that fails")
 }
 
@@ -94,14 +98,14 @@ func TestTableReader(t *testing.T) {
 // for the endpoint the window reads in a host.
 type storeReader struct{ exec recordstore.ExecutorI }
 
-func (inst storeReader) entries(ctx context.Context) (rows []entryRow, err error) {
+func (inst storeReader) entries(ctx context.Context) (rows entryCols, err error) {
 	st := persiststore.NewPersistStore(inst.exec, nil, persiststore.PersistStoreConfig{})
 	defer st.Close()
 	for ent, serr := range st.ScanLiveOwner(ctx, recordstore.ScanOpts{}) {
 		if serr != nil {
-			return nil, serr
+			return entryCols{}, serr
 		}
-		rows = append(rows, entryRow{Kind: persiststore.KindOf(ent), AppId: ent.Owner.Val.AppId, Key: persiststore.EntryKeyOf(ent), EntityId: ent.ID})
+		rows.Add(entryRow{Kind: persiststore.KindOf(ent), AppId: ent.Owner.Val.AppId, Key: persiststore.EntryKeyOf(ent), EntityId: ent.ID})
 	}
 	return
 }
@@ -184,11 +188,11 @@ func (inst *App) eventuallyListed(t *testing.T, n int) (s snapshot) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		s = inst.snapshot()
-		if s.inflight == 0 && !s.refreshed.IsZero() && len(s.rows) == n {
+		if s.inflight == 0 && !s.refreshed.IsZero() && s.rows.Len() == n {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the window should list %d entries; it lists %d (err=%q note=%q inflight=%d)", n, len(s.rows), s.lastError, s.lastNote, s.inflight)
+			t.Fatalf("the window should list %d entries; it lists %d (err=%q note=%q inflight=%d)", n, s.rows.Len(), s.lastError, s.lastNote, s.inflight)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -200,7 +204,7 @@ func (inst *App) eventuallyListed(t *testing.T, n int) (s snapshot) {
 func TestForgetWaitsForItsConfirmation(t *testing.T) {
 	a, b := mounted(t)
 	s := a.eventuallyListed(t, 3)
-	apps := summarize(s.rows)
+	apps := summarize(&s.rows)
 	require.Len(t, apps, 2)
 	play := apps[0]
 	require.Equal(t, playId, play.appId)
@@ -218,7 +222,7 @@ func TestForgetWaitsForItsConfirmation(t *testing.T) {
 	a.confirmForget()
 	assert.Nil(t, a.armed, "a confirmed forget disarms")
 	s = a.eventuallyListed(t, 1)
-	assert.Equal(t, tallyId, s.rows[0].AppId, "forget reaches one app only")
+	assert.Equal(t, tallyId, s.rows.AppId[0], "forget reaches one app only")
 	assert.Contains(t, s.lastNote, "forgot play")
 	left, err := b.LiveEntries(playId)
 	require.NoError(t, err)
@@ -231,7 +235,7 @@ func TestDeleteOneEntry(t *testing.T) {
 	a, b := mounted(t)
 	s := a.eventuallyListed(t, 3)
 	var width entryRow
-	for _, r := range s.rows {
+	for _, r := range s.rows.All() {
 		if r.Kind == persiststore.KindColumnWidth {
 			width = r
 		}

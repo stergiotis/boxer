@@ -1,15 +1,11 @@
 package keelsonquery
 
 import (
-	"bytes"
 	"context"
-	"encoding/json/jsontext"
-	"encoding/json/v2"
-	"errors"
-	"io"
 	"sort"
 	"time"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
@@ -127,37 +123,34 @@ func (inst *Client) QueryWith(ctx context.Context, r Request) (res Result, err e
 	return
 }
 
-// FormatJSONEachRow is the FORMAT [Rows] asks for: one JSON object per
-// line, the text format a small reader decodes without an Arrow allocator.
+// FormatArrowStream is the FORMAT [Columns] asks for, and what a reader
+// that decodes the body into Go values asks for (ADR-0257).
+const FormatArrowStream = "ArrowStream"
+
+// FormatJSONEachRow is one JSON object per line, for a body that is read
+// as text rather than decoded — a model's tool result, say. Its integer
+// quoting is an engine setting, so a Go reader asks for [FormatArrowStream].
 const FormatJSONEachRow = "JSONEachRow"
 
-// Rows runs sql over table as JSONEachRow and decodes every row into a T
-// through its `json` tags. It is the whole of what a window with a fixed
-// statement needs.
-func Rows[T any](ctx context.Context, cli *Client, table string, sql string) (rows []T, err error) {
-	return RowsWith[T](ctx, cli, Request{Table: table, Sql: sql})
+// Columns runs sql over table as ArrowStream and appends the result to
+// dst, a pointer to a struct of column slices tagged `ch:"<column>"`
+// ([chrows.Decode]). It returns the rows appended, and is the whole of
+// what a window with a fixed statement needs.
+func Columns(ctx context.Context, cli *Client, table string, sql string, dst any) (n int, err error) {
+	return ColumnsWith(ctx, cli, Request{Table: table, Sql: sql}, dst)
 }
 
-// RowsWith is Rows over a Request, for a statement that binds
-// placeholders; the request's Format is replaced by JSONEachRow.
-func RowsWith[T any](ctx context.Context, cli *Client, r Request) (rows []T, err error) {
-	r.Format = FormatJSONEachRow
+// ColumnsWith is Columns over a Request, for a statement that binds
+// placeholders; the request's Format is replaced by ArrowStream.
+func ColumnsWith(ctx context.Context, cli *Client, r Request, dst any) (n int, err error) {
+	r.Format = FormatArrowStream
 	res, err := cli.QueryWith(ctx, r)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	table := r.Table
-	dec := jsontext.NewDecoder(bytes.NewReader(res.Body))
-	for {
-		var r T
-		if err = json.UnmarshalDecode(dec, &r); err != nil {
-			if errors.Is(err, io.EOF) {
-				err = nil
-				break
-			}
-			return nil, eb.Build().Str("table", table).Errorf("keelson.query row: %w", err)
-		}
-		rows = append(rows, r)
+	n, err = chrows.DecodeBytes(dst, res.Body)
+	if err != nil {
+		return n, eb.Build().Str("table", r.Table).Errorf("keelson.query result: %w", err)
 	}
 	return
 }

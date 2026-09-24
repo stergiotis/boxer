@@ -262,6 +262,18 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Updates
+
+### 2026-09-24 — the Go readers decode ArrowStream into columns (ADR-0257)
+
+§SD2 said that a small reader asks for JSONEachRow. The Go readers now ask
+for ArrowStream and decode it into a struct of column slices through
+`chrows`. `keelsonquery.Columns` / `ColumnsWith` replace the `Rows[T]` /
+`RowsWith[T]` that §SD6 names. The motive was integer fidelity: JSON's
+64-bit quoting is an engine setting the readers did not pin. The wire forms
+of §SD2 are unchanged and still carry any FORMAT; JSONEachRow remains for a
+body read as text, such as the model tool of ADR-0254.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the subject taxonomy this family joins, §SD7 the broker that prompts, §SD10 the capslock cross-check.

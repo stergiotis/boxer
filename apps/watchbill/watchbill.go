@@ -64,9 +64,9 @@ func (f filters) stateList() (states []string) {
 // snapshot is what one frame renders from.
 type snapshot struct {
 	jobs      []watchbillstore.Job
-	events    []eventRow
+	events    eventCols
 	eventsFor string
-	workers   []workerRow
+	workers   workerCols
 	lastError string
 	lastNote  string
 	refreshed time.Time
