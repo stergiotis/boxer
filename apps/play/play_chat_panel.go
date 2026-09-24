@@ -11,6 +11,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -622,7 +623,7 @@ func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, react
 		if k.convCol >= 0 && formatCell(rec, k.convCol, row) != conversation {
 			continue
 		}
-		entries = append(entries, chatEntry{row: row, ms: tsToEpochMS(int64(tsArr.Value(int(row))), k.tsUnit)})
+		entries = append(entries, chatEntry{row: row, ms: chrows.TimestampToEpochMillis(int64(tsArr.Value(int(row))), k.tsUnit)})
 	}
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].ms < entries[j].ms })
 	if cap > 0 && len(entries) > cap {
@@ -728,7 +729,7 @@ func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, react
 		}
 		if editedArr != nil && !editedArr.IsNull(int(row)) {
 			m.Flags[ord] |= chatview.FlagEdited
-			m.EditedMS[ord] = tsToEpochMS(int64(editedArr.Value(int(row))), k.editedUnit)
+			m.EditedMS[ord] = chrows.TimestampToEpochMillis(int64(editedArr.Value(int(row))), k.editedUnit)
 		}
 		if k.statusCol >= 0 {
 			m.Status[ord] = chatStatusOf(formatCell(rec, k.statusCol, row))

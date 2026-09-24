@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -369,46 +370,11 @@ func capMarks(in []temporalAttr) (out []temporalAttr, dropped int) {
 // integer cell is read as epoch *seconds*, the shape a width-32 DateTime('UTC')
 // leeway column takes on the Arrow wire. A non-temporal cell returns ok=false.
 func temporalCellMS(arr arrow.Array, row int, leewayTemporal bool) (ms int64, ok bool) {
-	switch a := arr.(type) {
-	case *array.Timestamp:
-		unit := arrow.Second
-		if tt, isTs := a.DataType().(*arrow.TimestampType); isTs {
-			unit = tt.Unit
-		}
-		return tsToEpochMS(int64(a.Value(row)), unit), true
-	case *array.Date32:
-		return int64(a.Value(row)) * msPerDay, true
-	case *array.Date64:
-		return int64(a.Value(row)), true
-	case *array.Dictionary:
-		vals := a.Dictionary()
-		idx := a.GetValueIndex(row)
-		if vals.IsNull(idx) {
-			return 0, false
-		}
-		return temporalCellMS(vals, idx, leewayTemporal)
+	if ms, ok = chrows.EpochMillis(arr, row); ok || !leewayTemporal {
+		return
 	}
-	if leewayTemporal {
-		if sec, isInt := readEpochSeconds(arr, row); isInt {
-			return sec * 1000, true
-		}
-	}
-	return 0, false
-}
-
-// readEpochSeconds reads an integer cell as a signed second count. Only the
-// widths a leeway DateTime('UTC') column can arrive as are handled (uint32 is
-// the canonical one).
-func readEpochSeconds(arr arrow.Array, row int) (sec int64, ok bool) {
-	switch a := arr.(type) {
-	case *array.Uint32:
-		return int64(a.Value(row)), true
-	case *array.Int32:
-		return int64(a.Value(row)), true
-	case *array.Uint64:
-		return int64(a.Value(row)), true
-	case *array.Int64:
-		return a.Value(row), true
+	if sec, isInt := chrows.Int64(arr, row); isInt {
+		return sec * 1000, true
 	}
 	return 0, false
 }

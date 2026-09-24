@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 )
 
@@ -95,7 +95,7 @@ func resolveGraphOpts(schema *arrow.Schema) (gc networkGraphOptsClaim) {
 		return
 	}
 	for ci, f := range schema.Fields() {
-		numeric := isNumericType(f.Type)
+		numeric := chrows.IsNumeric(f.Type)
 		switch f.Name {
 		case graphOptLayoutCol:
 			gc.layoutCol = ci
@@ -334,15 +334,5 @@ func isBooleanType(dt arrow.DataType) bool {
 // quantityCellValue call because that one falls back to parsing the formatted
 // text, and a boolean formats as "true" — which parses as no number at all.
 func booleanCellValue(rec arrow.RecordBatch, col int, row int64) (val, set bool) {
-	arr := rec.Column(col)
-	if row < 0 || int(row) >= arr.Len() || arr.IsNull(int(row)) {
-		return
-	}
-	if b, isBool := arr.(*array.Boolean); isBool {
-		return b.Value(int(row)), true
-	}
-	if v, isNum := numericCellValue(arr, row); isNum {
-		return v != 0, true
-	}
-	return
+	return chrows.Bool(rec.Column(col), int(row))
 }

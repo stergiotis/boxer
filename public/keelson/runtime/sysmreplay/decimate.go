@@ -6,10 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Decimation — replaying a range longer than the history window can hold
@@ -69,21 +68,23 @@ func (inst *Reader) CountBundles(ctx context.Context, w Window) (n int64, err er
 	}
 	sql := "SELECT toInt64(count()) AS c FROM " + sysmfacts.SysmetricsTableName +
 		" WHERE " + inst.windowPredicate(w, DomainCPU)
+	var cols struct {
+		Count []int64 `ch:"c"`
+	}
 	for rec, rerr := range inst.exec.QueryArrow(ctx, sql) {
 		if rerr != nil {
 			err = eh.Errorf("sysmreplay: counting bundles: %w", rerr)
 			return
 		}
-		counts, ok := rec.Column(0).(*array.Int64)
-		if !ok {
-			rec.Release()
-			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("sysmreplay: count column is not int64")
+		_, err = chrows.Decode(&cols, rec)
+		rec.Release()
+		if err != nil {
+			err = eh.Errorf("sysmreplay: count result: %w", err)
 			return
 		}
-		if rec.NumRows() > 0 {
-			n = counts.Value(0)
-		}
-		rec.Release()
+	}
+	if len(cols.Count) > 0 {
+		n = cols.Count[0]
 	}
 	return
 }
@@ -122,24 +123,22 @@ func (inst *Reader) PlanDecimation(ctx context.Context, w Window, slots int) (pl
 		" WHERE " + inst.windowPredicate(w, DomainCPU) +
 		" GROUP BY toStartOfInterval(" + col + ", INTERVAL " + strconv.FormatInt(secs, 10) + " SECOND)" +
 		" ORDER BY t"
+	var cols struct {
+		TimesMS []int64 `ch:"t"`
+	}
 	for rec, rerr := range inst.exec.QueryArrow(ctx, sql) {
 		if rerr != nil {
-			plan.TimesMS = nil
 			err = eh.Errorf("sysmreplay: planning decimation: %w", rerr)
 			return
 		}
-		ts, ok := rec.Column(0).(*array.Int64)
-		if !ok {
-			rec.Release()
-			plan.TimesMS = nil
-			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("sysmreplay: decimation stamp column is not int64")
+		_, err = chrows.Decode(&cols, rec)
+		rec.Release()
+		if err != nil {
+			err = eh.Errorf("sysmreplay: decimation result: %w", err)
 			return
 		}
-		for i := range int(rec.NumRows()) {
-			plan.TimesMS = append(plan.TimesMS, ts.Value(i))
-		}
-		rec.Release()
 	}
+	plan.TimesMS = cols.TimesMS
 	return
 }
 

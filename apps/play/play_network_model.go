@@ -3,6 +3,7 @@ package play
 import (
 	"cmp"
 	"fmt"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 	"math"
 	"slices"
@@ -347,7 +348,7 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 			// share the name than a magnitude the author meant, and silently
 			// widening every edge off a parsed string would be the worse
 			// failure. Left unclaimed, it stays an ordinary result column.
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				ec.weightCol = ci
 			}
 		case networkEdgeIDCol:
@@ -355,15 +356,15 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 			// UUID, an integer key and a name all tell parallel edges apart.
 			ec.idCol = ci
 		case networkOpacityCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				ec.opacityCol = ci
 			}
 		case networkLengthCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				ec.lengthCol = ci
 			}
 		case networkStrengthCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				ec.strengthCol = ci
 			}
 		case networkPickCol:
@@ -411,7 +412,7 @@ func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reas
 			vc.toneCol = ci
 		case networkWeightCol:
 			// Numeric-only, for the same reason the edge contract is.
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.weightCol = ci
 			}
 		case networkDonutCol:
@@ -421,59 +422,59 @@ func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reas
 				vc.donutCol = ci
 			}
 		case networkDonutTotalCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.donutTotalCol = ci
 			}
 		case networkOpacityCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.opacityCol = ci
 			}
 		case networkRadiusCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.radiusCol = ci
 			}
 		case networkPinXCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.pinXCol = ci
 			}
 		case networkPinYCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.pinYCol = ci
 			}
 		case networkLatCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.latCol = ci
 			}
 		case networkLonCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.lonCol = ci
 			}
 		case networkStartXCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.startXCol = ci
 			}
 		case networkStartYCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.startYCol = ci
 			}
 		case networkPullXCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.pullXCol = ci
 			}
 		case networkPullYCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.pullYCol = ci
 			}
 		case networkPullSCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.pullSCol = ci
 			}
 		case networkPullSXCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.pullSXCol = ci
 			}
 		case networkPullSYCol:
-			if isNumericType(f.Type) {
+			if chrows.IsNumeric(f.Type) {
 				vc.pullSYCol = ci
 			}
 		case networkPickCol:
@@ -886,9 +887,9 @@ func buildNetModelWith(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec
 			}
 			f := vertRec.Schema().Field(ci[0])
 			switch {
-			case isNumericType(f.Type):
+			case chrows.IsNumeric(f.Type):
 				extras = append(extras, extraRef{name: name, col: ci[0], kind: 1})
-			case isStringLikeType(f.Type):
+			case chrows.IsStringLike(f.Type):
 				extras = append(extras, extraRef{name: name, col: ci[0], kind: 2})
 			case netIsStringList(f.Type):
 				extras = append(extras, extraRef{name: name, col: ci[0], kind: 3})
@@ -1173,7 +1174,7 @@ func netIsNumericList(dt arrow.DataType) bool {
 	default:
 		return false
 	}
-	return isNumericType(elem)
+	return chrows.IsNumeric(elem)
 }
 
 // netDonutAt appends the non-null elements of the list cell at row to dst.
@@ -1305,7 +1306,7 @@ func netIsStringList(dt arrow.DataType) bool {
 	default:
 		return false
 	}
-	return isStringLikeType(elem)
+	return chrows.IsStringLike(elem)
 }
 
 // netFloatAt reads a numeric cell, NaN for an absent column, a NULL cell or an

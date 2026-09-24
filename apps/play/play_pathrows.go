@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 )
 
@@ -462,18 +462,5 @@ func cleanRowPath(s string) (p string, ok bool) {
 // boolean and a comparison like `NodeKind = 'dir'` as an unsigned byte, so both
 // spellings of the same question have to answer.
 func pathBoolCell(arr arrow.Array, row int64) (v bool, ok bool) {
-	if arr == nil || row < 0 || int(row) >= arr.Len() || arr.IsNull(int(row)) {
-		return false, false
-	}
-	if b, isBool := arr.(*array.Boolean); isBool {
-		return b.Value(int(row)), true
-	}
-	if d, isDict := arr.(*array.Dictionary); isDict {
-		return pathBoolCell(d.Dictionary(), int64(d.GetValueIndex(int(row))))
-	}
-	n, numeric := numericCellValue(arr, row)
-	if !numeric {
-		return false, false
-	}
-	return n != 0, true
+	return chrows.Bool(arr, int(row))
 }
