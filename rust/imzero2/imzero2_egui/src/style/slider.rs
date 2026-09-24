@@ -23,15 +23,17 @@ pub struct IdsSlider<'a>(pub Slider<'a>);
 impl Widget for IdsSlider<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let saved = ui.visuals().widgets.inactive.bg_fill;
-        ui.visuals_mut().widgets.inactive.bg_fill = RAIL;
+        ui.visuals_mut().widgets.inactive.bg_fill = super::slider_rail();
         let response = ui.add(self.0);
         ui.visuals_mut().widgets.inactive.bg_fill = saved;
         response
     }
 }
 
-/// The rail's colour. At rest the handle is filled with it too — egui reads
-/// the same field for both — and is told from the rail by its outline.
+/// The rail's colour under the IDS dark palette; the fresh theme has its
+/// own (`fresh::RAIL`) and `style::slider_rail` picks. At rest the handle is
+/// filled with it too — egui reads the same field for both — and is told
+/// from the rail by its outline.
 pub const RAIL: egui::Color32 = p::NEUTRAL_BORDER_DEFAULT;
 
 #[cfg(test)]

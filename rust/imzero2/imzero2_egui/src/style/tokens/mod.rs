@@ -10,10 +10,12 @@ pub mod branding;
 pub mod density;
 pub mod motion;
 pub mod oklab;
+pub mod palette_fresh_generated;
 pub mod palette_generated;
 pub mod rounding;
 pub mod spacing;
 pub mod stroke;
+pub mod theme;
 pub mod typography;
 pub mod visuals;
 
@@ -24,6 +26,7 @@ pub use visuals::{
 };
 
 pub use density::Density;
+pub use theme::Theme;
 
 use egui::style::{Spacing, Style, Visuals};
 use egui::{FontFamily, FontId, TextStyle};
