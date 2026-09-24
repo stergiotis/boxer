@@ -45,11 +45,15 @@
 // GFM's per-column alignment (`:---:`) is parsed but not applied. See
 // EXPLANATION.md for why.
 //
+// Footnotes ([obsidian.FeatureFootnote], ADR-0255) render as a
+// superscript `[n]` whose hover tooltip is the definition flattened to
+// plain text, and the definitions follow the document as a numbered list
+// for a reader without hover. A reference with no definition stays
+// literal and is counted by [Doc.Dropped].
+//
 // Math is still deferred: [obsidian.FeatureMath] is declared and
 // reserved but wired to nothing, and is deliberately not part of
-// [obsidian.FeatureAll]. GFM footnotes are absent for a different
-// reason — goldmark's footnote extension is bound to no feature flag at
-// all, so `[^1]` stays literal prose.
+// [obsidian.FeatureAll].
 //
 // # Concurrency
 //

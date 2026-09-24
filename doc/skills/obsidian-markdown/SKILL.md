@@ -77,11 +77,14 @@ md := goldmark.New(goldmark.WithExtensions(ext, myOtherExt))
 | `FeatureGFM` | `1 << 7` | Tables, strikethrough, task lists (goldmark built-in) |
 | `FeatureFrontmatter` | `1 << 8` | YAML `---` frontmatter parsing |
 | `FeatureHeadingAnchor` | `1 << 9` | `## Heading {#explicit-anchor}` → `<h2 id="explicit-anchor">` |
-| `FeatureAll` | `((1<<10)-1) &^ FeatureMath` | Every **wired** feature. `FeatureMath` is excluded on purpose: a flag inside "all" that does nothing reads as a capability the stack has. |
+| `FeatureFootnote` | `1 << 10` | `[^label]` references and `[^label]: text` definitions → goldmark's standard footnote HTML ([ADR-0255](../../adr/0255-gfm-footnotes-as-hover-glosses.md)) |
+| `FeatureAll` | `((1<<11)-1) &^ FeatureMath` | Every **wired** feature. `FeatureMath` is excluded on purpose: a flag inside "all" that does nothing reads as a capability the stack has. |
 
-Note that `FeatureGFM` does **not** buy footnotes. goldmark's footnote
-extension is wired to no flag here at all, so `[^1]` and `[^1]: text` stay
-literal prose on every path.
+Note that `FeatureGFM` does **not** buy footnotes — goldmark's GFM bundle has
+none, and GFM here means that bundle. `FeatureFootnote` does. Without it, the
+syntax is not reliably inert: CommonMark reads a one-token definition such as
+`[^1]: Gloss.` as a link reference definition, turning the reference into a
+hyperlink.
 
 ### Wikilinks
 
@@ -238,6 +241,34 @@ Produces:
 ```
 
 Handles nested maps (recursive `<dl>`), arrays (`<ul>`), arrays of maps, nil values, booleans, and numerics. Keys are sorted alphabetically. All values are HTML-escaped.
+
+### Footnotes
+
+**Syntax:**
+```markdown
+A term[^gloss] in prose.
+
+[^gloss]: What the term means.
+```
+
+**HTML output:**
+```html
+<p>A term<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> in prose.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>What the term means.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+```
+
+goldmark's extension, unconfigured. Definitions are numbered in order of first
+reference. A reference whose label has no definition stays literal text, and
+a definition nothing references is removed before any consumer sees the tree.
+The imzero2 markdown widget renders the same nodes as a superscript `[n]`
+with the definition as its hover tooltip, plus the numbered list at the end.
 
 ### Heading Anchors
 

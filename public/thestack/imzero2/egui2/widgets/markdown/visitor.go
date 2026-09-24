@@ -3,6 +3,8 @@ package markdown
 import (
 	"bytes"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -34,6 +36,14 @@ type lowerCtx struct {
 	src      []byte
 	resolver resolver.ResolverI
 	dropped  map[string]int
+
+	// footnotesOn mirrors [obsidian.FeatureFootnote]; it arms the
+	// unresolved-reference count. footnoteTips maps a footnote's index to
+	// its definition flattened to plain text — the tooltip every reference
+	// to it carries. Built before any block is lowered, because the
+	// definitions sit at the END of the tree and the references before them.
+	footnotesOn  bool
+	footnoteTips map[int]string
 }
 
 // countDropped records that one AST node of n's kind reached a skip
@@ -44,10 +54,20 @@ type lowerCtx struct {
 // The map is allocated lazily: the overwhelmingly common case is a
 // document that drops nothing, and that case should not pay for a map.
 func (inst *lowerCtx) countDropped(n ast.Node) {
+	inst.countDroppedKind(n.Kind().String(), 1)
+}
+
+// countDroppedKind is [lowerCtx.countDropped] for a construct that has no
+// node of its own — an unresolved footnote reference is plain text in the
+// tree, so its tally is keyed by the kind it failed to become.
+func (inst *lowerCtx) countDroppedKind(kind string, count int) {
+	if count <= 0 {
+		return
+	}
 	if inst.dropped == nil {
 		inst.dropped = make(map[string]int, 4)
 	}
-	inst.dropped[n.Kind().String()]++
+	inst.dropped[kind] += count
 }
 
 // parseAndLower runs goldmark with the configured Obsidian extensions,
@@ -72,6 +92,10 @@ func parseAndLower(src []byte, cfg *config) (segments []segment, frontmatter *co
 	}
 
 	ctx := &lowerCtx{src: src, resolver: cfg.resolver}
+	if cfg.features&obsidian.FeatureFootnote != 0 {
+		ctx.footnotesOn = true
+		ctx.footnoteTips = collectFootnoteTips(root, src)
+	}
 	segments = make([]segment, 0, 16)
 	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
 		if h, ok := child.(*ast.Heading); ok {
@@ -209,6 +233,8 @@ func lowerBlock(ctx *lowerCtx, n ast.Node) (seg segment, ok bool) {
 		ok = true
 	case *east.Table:
 		seg, ok = lowerTable(ctx, v)
+	case *east.FootnoteList:
+		seg, ok = lowerFootnotes(ctx, v)
 	}
 	if !ok {
 		// Both arms land here: a block kind with no case at all, and a
@@ -313,6 +339,168 @@ func lowerParagraphLike(ctx *lowerCtx, parent ast.Node, headingLevel uint8) (seg
 		emitInline(ctx, child, &b, styleNone)
 	}
 	seg.runs = b.finish()
+	if ctx.footnotesOn {
+		ctx.countDroppedKind(east.KindFootnoteLink.String(), countUnresolvedFootnoteRefs(parent, ctx.src))
+	}
+	return
+}
+
+// unresolvedFootnoteRef is the `[^label]` shape left behind in the text when
+// goldmark's footnote parser declined a reference — which it does exactly
+// when no definition carries the label. Labels with whitespace are not
+// matched: the shape is rare in prose, and a false positive here fails a
+// corpus gate for a document that did nothing wrong.
+var unresolvedFootnoteRef = regexp.MustCompile(`\[\^[^\]\[\s]+\]`)
+
+// countUnresolvedFootnoteRefs counts the `[^label]` references in a
+// paragraph that goldmark left as text (ADR-0255 §SD4). A resolved
+// reference is a [east.FootnoteLink] node, never text, so every match is
+// one that failed. Code spans are skipped — `[^1]` written as code is an
+// example of the syntax, not a use of it — and the text nodes are joined
+// first because the link parser splits an unresolved reference at its `[`.
+func countUnresolvedFootnoteRefs(parent ast.Node, src []byte) (n int) {
+	var sb strings.Builder
+	_ = ast.Walk(parent, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch v := node.(type) {
+		case *ast.CodeSpan, *comment.Node:
+			return ast.WalkSkipChildren, nil
+		case *ast.Text:
+			sb.Write(v.Segment.Value(src))
+			if v.SoftLineBreak() || v.HardLineBreak() {
+				sb.WriteByte('\n')
+			}
+		case *ast.String:
+			sb.Write(v.Value)
+		}
+		return ast.WalkContinue, nil
+	})
+	n = len(unresolvedFootnoteRef.FindAllStringIndex(sb.String(), -1))
+	return
+}
+
+// footnoteLabel is the marker a reference renders as, and the number the
+// definitions list gives the same footnote: Obsidian's reading-view `[n]`.
+func footnoteLabel(index int) (label string) {
+	label = "[" + strconv.Itoa(index) + "]"
+	return
+}
+
+// collectFootnoteTips flattens every footnote definition into the plain
+// text its references show on hover, keyed by the footnote's index. goldmark
+// appends the definitions to the document root as one [east.FootnoteList],
+// numbered in order of first reference, so that is the only place looked.
+func collectFootnoteTips(root ast.Node, src []byte) (tips map[int]string) {
+	for child := root.FirstChild(); child != nil; child = child.NextSibling() {
+		list, ok := child.(*east.FootnoteList)
+		if !ok {
+			continue
+		}
+		for fn := list.FirstChild(); fn != nil; fn = fn.NextSibling() {
+			def, isDef := fn.(*east.Footnote)
+			if !isDef {
+				continue
+			}
+			if tips == nil {
+				tips = make(map[int]string, list.ChildCount())
+			}
+			tips[def.Index] = footnotePlainText(def, src)
+		}
+	}
+	return
+}
+
+// footnotePlainText flattens one definition to the tooltip's plain text
+// (ADR-0255 §SD3): soft breaks become spaces, hard breaks and block
+// boundaries newlines, code spans and code blocks their text, links and
+// wikilinks their label. The backlinks goldmark appends are skipped — they
+// point back at the reference the reader is already hovering.
+func footnotePlainText(def *east.Footnote, src []byte) (out string) {
+	var sb strings.Builder
+	newline := func() {
+		if sb.Len() > 0 && !strings.HasSuffix(sb.String(), "\n") {
+			sb.WriteByte('\n')
+		}
+	}
+	_ = ast.Walk(def, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if n == ast.Node(def) || !entering {
+			return ast.WalkContinue, nil
+		}
+		if n.Type() == ast.TypeBlock {
+			newline()
+			switch n.(type) {
+			case *ast.FencedCodeBlock, *ast.CodeBlock:
+				lines := n.Lines()
+				for i := 0; i < lines.Len(); i++ {
+					line := lines.At(i)
+					sb.Write(line.Value(src))
+				}
+				return ast.WalkSkipChildren, nil
+			}
+			return ast.WalkContinue, nil
+		}
+		switch v := n.(type) {
+		case *ast.Text:
+			sb.Write(v.Segment.Value(src))
+			if v.HardLineBreak() {
+				sb.WriteByte('\n')
+			} else if v.SoftLineBreak() {
+				sb.WriteByte(' ')
+			}
+		case *ast.String:
+			sb.Write(v.Value)
+		case *east.FootnoteLink:
+			sb.WriteString(footnoteLabel(v.Index))
+		case *east.FootnoteBacklink, *comment.Node:
+			return ast.WalkSkipChildren, nil
+		default:
+			if s, ok := fieldCarriedText(n, src); ok {
+				sb.WriteString(s)
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	out = strings.TrimSpace(sb.String())
+	return
+}
+
+// lowerFootnotes turns goldmark's trailing definitions list into one
+// segKindFootnotes segment holding an ordered list, one item per
+// definition, so a reader without hover still gets every gloss and gets
+// its links live. The list reuses the ordinary list lowering's marker
+// machinery; it is numbered from the first definition's index, which is 1
+// whenever goldmark numbered anything (it numbers by first reference and
+// drops the definitions nothing references).
+func lowerFootnotes(ctx *lowerCtx, list *east.FootnoteList) (seg segment, ok bool) {
+	inner := segment{kind: segKindList, listOrdered: true, listStart: 1}
+	first := true
+	for fn := list.FirstChild(); fn != nil; fn = fn.NextSibling() {
+		def, isDef := fn.(*east.Footnote)
+		if !isDef {
+			continue
+		}
+		if first && def.Index > 0 {
+			inner.listStart = uint32(def.Index)
+		}
+		first = false
+		item := segment{kind: segKindListItem}
+		for child := def.FirstChild(); child != nil; child = child.NextSibling() {
+			block, blockOk := lowerBlock(ctx, child)
+			if blockOk {
+				item.children = append(item.children, block)
+			}
+		}
+		inner.children = append(inner.children, item)
+	}
+	if len(inner.children) == 0 {
+		return
+	}
+	inner.listMarkerDigits = markerDigits(inner.listStart, len(inner.children))
+	inner.listMarkers = buildListMarkers(&inner)
+	seg = segment{kind: segKindFootnotes, children: []segment{inner}}
+	ok = true
 	return
 }
 
@@ -594,6 +782,16 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 			glyph = icons.PhCheckSquare
 		}
 		b.emitText(glyph+" ", parentStyle)
+	case *east.FootnoteLink:
+		// A resolved reference (ADR-0255 §SD2). An index with no tip cannot
+		// happen while goldmark only forms a link for a defined label; the
+		// marker still renders, with an empty tooltip, rather than vanish.
+		b.emitFootnote(footnoteLabel(v.Index), ctx.footnoteTips[v.Index])
+	case *east.FootnoteBacklink:
+		// The return arrow goldmark appends to each definition. Dropped and
+		// deliberately not counted: it is navigation the HTML renderer
+		// invents, not authored text, and the reader reached the definition
+		// by hovering the reference, not by jumping to it.
 	case *comment.Node:
 		// Obsidian %%comment%% — explicitly drop, and deliberately NOT
 		// counted as a drop: the author asked for it to be invisible, so
@@ -626,6 +824,12 @@ func flattenInlineText(parent ast.Node, src []byte) (out string) {
 			buf.Write(v.Segment.Value(src))
 		case *ast.String:
 			buf.Write(v.Value)
+		case *east.FootnoteLink:
+			// Kept out of fieldCarriedText on purpose: a heading's slug and
+			// TOC text name the section, and a reference marker is not part
+			// of that name. A table cell or link label, flattened here, does
+			// show the marker — without its tooltip (ADR-0255 §SD5).
+			buf.WriteString(footnoteLabel(v.Index))
 		default:
 			if s, ok := fieldCarriedText(n, src); ok {
 				buf.WriteString(s)
@@ -697,6 +901,24 @@ func (inst *inlineBuilder) emitLink(label, url string) {
 		kind:  runKindLink,
 		label: label,
 		url:   url,
+	})
+}
+
+// emitFootnote appends a resolved footnote reference as its own run: the
+// superscript marker, pre-built here like every other retained holder, and
+// the tooltip text the renderer wraps it in. The link tone marks it as
+// something to point at; SmallRaised is egui's superscript.
+func (inst *inlineBuilder) emitFootnote(label, tip string) {
+	inst.flushAtoms()
+	a := c.Atoms()
+	for rt := range a.StyledTextColored(linkFg, linkBg, label) {
+		rt.SmallRaised()
+	}
+	inst.runs = append(inst.runs, paragraphRun{
+		kind:  runKindFootnote,
+		atoms: a.Keep(),
+		label: label,
+		tip:   tip,
 	})
 }
 

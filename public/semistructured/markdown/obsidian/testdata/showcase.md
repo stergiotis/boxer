@@ -113,3 +113,9 @@ func main() {
     fmt.Println("Hello, Obsidian!")
 }
 ```
+
+## Footnotes
+
+A term glossed once[^gloss], and a second reference to it[^gloss].
+
+[^gloss]: A footnote with `code` and a [[wikilink]].

@@ -38,6 +38,15 @@ const (
 	// `{#slug}.` keeps the whole thing as literal text, which is also what
 	// leaves prose that happens to contain braces alone.
 	FeatureHeadingAnchor FeatureE = 1 << 9
+	// FeatureFootnote enables GFM / PHP Markdown Extra footnotes: `[^label]`
+	// references and `[^label]: text` definitions, rendered as goldmark's
+	// standard footnote HTML (ADR-0255). [FeatureGFM] does NOT imply it —
+	// goldmark's GFM bundle has no footnotes, and GFM here means that bundle.
+	//
+	// A reference only parses when a definition with the same label exists;
+	// `[^x]` without one stays literal text. Definitions nothing references
+	// are removed by goldmark before any consumer sees the tree.
+	FeatureFootnote FeatureE = 1 << 10
 
 	// FeatureAll is every WIRED feature — the whole declared space MINUS
 	// the reserved-and-unwired bits. Only [FeatureMath] is subtracted
@@ -45,7 +54,7 @@ const (
 	// an OR of the wired flags so a newly declared bit is opted IN by
 	// default and has to be excluded on purpose, which is the direction
 	// that fails loudly.
-	FeatureAll FeatureE = ((1 << 10) - 1) &^ FeatureMath
+	FeatureAll FeatureE = ((1 << 11) - 1) &^ FeatureMath
 )
 
 // TagRenderE controls how tags are rendered in HTML.

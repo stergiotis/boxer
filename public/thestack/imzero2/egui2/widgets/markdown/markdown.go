@@ -58,8 +58,17 @@ type KindCount struct {
 // turns "we hope nothing is lost" into something a test can gate on, and
 // tells an author which construct to rewrite.
 //
+// One entry counts a construct that renders, but not as authored: a
+// footnote reference `[^x]` whose label has no definition shows as literal
+// text and is counted as "FootnoteLink" — the author wrote a reference and
+// the reader gets none (ADR-0255 §SD4). It is counted only when
+// [obsidian.FeatureFootnote] is on; with the flag off, literal brackets are
+// what the configuration asked for.
+//
 // Comments (`%%…%%`) are NOT counted: an author asking for text to be
-// invisible got what they asked for.
+// invisible got what they asked for. Neither are footnote backlinks — the
+// return arrows goldmark appends to each definition are navigation it
+// invents, not authored text.
 //
 // The result is sorted by Kind so callers can compare it directly. It is
 // freshly allocated per call and safe to keep.
@@ -475,7 +484,8 @@ func defaultConfig() (cfg config) {
 		obsidian.FeatureHighlight |
 		obsidian.FeatureComment |
 		obsidian.FeatureTag |
-		obsidian.FeatureHeadingAnchor
+		obsidian.FeatureHeadingAnchor |
+		obsidian.FeatureFootnote
 	cfg.resolver = resolver.NoopResolver{}
 	cfg.imageMaxW = imageMaxDefaultW
 	cfg.imageMaxH = imageMaxDefaultH
@@ -485,20 +495,15 @@ func defaultConfig() (cfg config) {
 // WithFeatures overrides the default obsidian feature set. The default
 // covers everything the renderer can lower: frontmatter, GFM (tables,
 // strikethrough, task lists), wikilinks, embeds, callouts, ==highlight==
-// and %%comment%% stripping, `#tag` spans, and `{#anchor}` heading
+// and %%comment%% stripping, `#tag` spans, `{#anchor}` heading
 // anchors ([obsidian.FeatureHeadingAnchor], which feeds
-// [HeadingInfo.Slug]).
+// [HeadingInfo.Slug]), and footnotes ([obsidian.FeatureFootnote]: a
+// superscript `[n]` whose hover tooltip is the definition, plus the
+// definitions as a numbered list at the end — ADR-0255).
 //
-// Two things the default set does NOT include, contrary to what this
-// comment used to claim:
-//
-//   - GFM footnotes. goldmark's footnote extension is wired to no
-//     feature flag at all, so `[^1]` and `[^1]: text` stay literal prose
-//     on every path. Nothing is lost, but nothing is rendered as a
-//     footnote either.
-//   - Math. [obsidian.FeatureMath] is declared and reserved but wired to
-//     nothing, and is deliberately not part of [obsidian.FeatureAll];
-//     setting it changes neither parse nor render.
+// The default set does NOT include math: [obsidian.FeatureMath] is
+// declared and reserved but wired to nothing, and is deliberately not part
+// of [obsidian.FeatureAll]; setting it changes neither parse nor render.
 //
 // Enabling a feature the lowering does not handle is worse than leaving it
 // off: an unrecognised inline node reaches the default branch of emitInline
@@ -593,6 +598,10 @@ const (
 	segKindHorizontalRule
 	segKindCallout
 	segKindTable
+	// segKindFootnotes is the definitions block goldmark appends to the end
+	// of a document that has footnotes: a separator above one ordered list,
+	// held as the segment's single child.
+	segKindFootnotes
 )
 
 // runKindE tags a run inside a paragraph or heading segment.
@@ -606,6 +615,11 @@ const (
 	// inline inside the paragraph's HorizontalWrapped flow via c.Image
 	// with FitAspectMaxE and the [Doc]'s configured cap.
 	runKindImage
+	// runKindFootnote is a resolved footnote reference: atoms holds the
+	// pre-built superscript `[n]` marker, label its plain text and tip the
+	// definition flattened to plain text, shown as the marker's hover
+	// tooltip (ADR-0255).
+	runKindFootnote
 )
 
 // paragraphRun is one slice of a paragraph or heading. A paragraph with
@@ -617,6 +631,7 @@ type paragraphRun struct {
 	atoms typed.RetainedFffiHolderTyped[c.AtomsS]
 	label string
 	url   string
+	tip   string
 
 	// runKindImage fields. imgPixels is row-major RGBA8 in
 	// (imgHeightPx × imgWidthPx) order. Alt-text / Title are not
@@ -668,6 +683,9 @@ type paragraphRun struct {
 //     the widest cell per column, in
 //     runes, and drives the initial
 //     column widths.
+//   - segKindFootnotes:                  children is one ordered segKindList
+//     whose items are the definitions,
+//     numbered from the first index.
 type segment struct {
 	kind               segKindE
 	runs               []paragraphRun

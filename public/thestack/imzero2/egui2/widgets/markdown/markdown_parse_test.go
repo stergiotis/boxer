@@ -351,11 +351,155 @@ func TestDropped_EmptyForAFullyRepresentedDocument(t *testing.T) {
 		"| a | b |", "|---|---|", "| 1 | 2 |", "",
 		"```go", "package main", "```", "",
 		"---", "",
-		"trailing prose.",
+		"trailing prose with a gloss[^g] and another[^h].", "",
+		"[^g]: The gloss, with `code` and a [link](https://example.com).",
+		"[^h]: The other.",
 	}, "\n")
 	doc := Parse([]byte(src))
 	if dropped := doc.Dropped(); len(dropped) != 0 {
 		t.Errorf("a document of supported constructs dropped: %+v", dropped)
+	}
+}
+
+// ---------------- footnotes (ADR-0255) -------------------------------------
+
+// footnoteRuns returns every runKindFootnote in the document's top-level
+// paragraphs, in order.
+func footnoteRuns(doc *Doc) (runs []paragraphRun) {
+	for _, seg := range doc.segments {
+		for _, r := range seg.runs {
+			if r.kind == runKindFootnote {
+				runs = append(runs, r)
+			}
+		}
+	}
+	return
+}
+
+func TestParse_Footnote_ReferenceRunAndTrailingDefinitions(t *testing.T) {
+	src := strings.Join([]string{
+		"A bus[^bus] and the facts[^facts], the bus[^bus] again.", "",
+		"[^bus]: The *in-process* message bus,",
+		"  over `x` and [a link](https://example.com).",
+		"[^facts]: One table.",
+	}, "\n")
+	doc := Parse([]byte(src))
+
+	runs := footnoteRuns(doc)
+	if len(runs) != 3 {
+		t.Fatalf("footnote runs: got %d want 3", len(runs))
+	}
+	wantLabels := []string{"[1]", "[2]", "[1]"}
+	for i, r := range runs {
+		if r.label != wantLabels[i] {
+			t.Errorf("run %d label: got %q want %q", i, r.label, wantLabels[i])
+		}
+	}
+	wantBus := "The in-process message bus, over x and a link."
+	if runs[0].tip != wantBus {
+		t.Errorf("bus tip: got %q want %q", runs[0].tip, wantBus)
+	}
+	if runs[2].tip != wantBus {
+		t.Errorf("second bus reference tip: got %q want %q", runs[2].tip, wantBus)
+	}
+	if runs[1].tip != "One table." {
+		t.Errorf("facts tip: got %q want %q", runs[1].tip, "One table.")
+	}
+
+	last := doc.segments[len(doc.segments)-1]
+	if last.kind != segKindFootnotes {
+		t.Fatalf("last segment kind: got %d want segKindFootnotes", last.kind)
+	}
+	if len(last.children) != 1 || last.children[0].kind != segKindList {
+		t.Fatalf("footnotes block should hold one list, got %+v", last.children)
+	}
+	list := last.children[0]
+	if !list.listOrdered || list.listStart != 1 {
+		t.Errorf("definitions list: ordered=%v start=%d, want ordered from 1", list.listOrdered, list.listStart)
+	}
+	if len(list.children) != 2 {
+		t.Fatalf("definitions: got %d want 2", len(list.children))
+	}
+	if len(list.listMarkers) != 2 {
+		t.Errorf("definition markers: got %d want 2 pre-built", len(list.listMarkers))
+	}
+	// The first definition keeps its link live, and its backlinks are gone.
+	bus := list.children[0]
+	if len(bus.children) != 1 || bus.children[0].kind != segKindParagraph {
+		t.Fatalf("bus definition: want one paragraph, got %+v", bus.children)
+	}
+	var sawLink bool
+	for _, r := range bus.children[0].runs {
+		if r.kind == runKindLink && r.url == "https://example.com" {
+			sawLink = true
+		}
+	}
+	if !sawLink {
+		t.Error("the definition list should render the footnote's link as a link")
+	}
+	if dropped := doc.Dropped(); len(dropped) != 0 {
+		t.Errorf("a fully footnoted document dropped: %+v", dropped)
+	}
+}
+
+func TestParse_Footnote_TipFlattensBlocksAndSkipsBacklinks(t *testing.T) {
+	src := strings.Join([]string{
+		"Term[^t].", "",
+		"[^t]: First paragraph with [[Page]] and #tag.", "",
+		"    Second paragraph.",
+	}, "\n")
+	runs := footnoteRuns(Parse([]byte(src)))
+	if len(runs) != 1 {
+		t.Fatalf("footnote runs: got %d want 1", len(runs))
+	}
+	want := "First paragraph with Page and #tag.\nSecond paragraph."
+	if runs[0].tip != want {
+		t.Errorf("tip: got %q want %q", runs[0].tip, want)
+	}
+}
+
+func TestParse_Footnote_UnresolvedStaysLiteralAndIsCounted(t *testing.T) {
+	src := "A dangling[^nowhere] ref, a `[^code]` example, and a real[^r] one.\n\n[^r]: Real.\n"
+	doc := Parse([]byte(src))
+	if got := len(footnoteRuns(doc)); got != 1 {
+		t.Errorf("footnote runs: got %d want 1 (only the resolved one)", got)
+	}
+	dropped := doc.Dropped()
+	want := []KindCount{{Kind: "FootnoteLink", Count: 1}}
+	if !reflect.DeepEqual(dropped, want) {
+		t.Errorf("dropped: got %+v want %+v", dropped, want)
+	}
+}
+
+func TestParse_Footnote_DisabledByFeatures(t *testing.T) {
+	src := "Term[^t] here.\n\n[^t]: Two words.\n"
+	doc := Parse([]byte(src), WithFeatures(obsidian.FeatureGFM))
+	if got := len(footnoteRuns(doc)); got != 0 {
+		t.Errorf("footnote runs with the flag off: got %d want 0", got)
+	}
+	for _, seg := range doc.segments {
+		if seg.kind == segKindFootnotes {
+			t.Error("a definitions block rendered with the flag off")
+		}
+	}
+	if dropped := doc.Dropped(); len(dropped) != 0 {
+		t.Errorf("literal brackets with the flag off must not count: %+v", dropped)
+	}
+}
+
+func TestFlattenInlineText_FootnoteReferenceShowsItsMarker(t *testing.T) {
+	doc := Parse([]byte("| a |\n|---|\n| x[^n] |\n\n[^n]: Note.\n"))
+	seg := tableSeg(t, doc)
+	if len(seg.tableCells) != 1 || seg.tableCells[0] != "x[1]" {
+		t.Errorf("cell: got %q want [\"x[1]\"]", seg.tableCells)
+	}
+}
+
+func TestParse_Footnote_HeadingSlugLeavesTheMarkerOut(t *testing.T) {
+	doc := Parse([]byte("## Title[^n]\n\n[^n]: Note.\n"))
+	hs := doc.Headings()
+	if len(hs) != 1 || hs[0].Text != "Title" || hs[0].Slug != "title" {
+		t.Errorf("heading: got %+v want Text=Title Slug=title", hs)
 	}
 }
 

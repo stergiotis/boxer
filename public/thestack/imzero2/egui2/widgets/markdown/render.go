@@ -120,6 +120,15 @@ func (inst *segment) render(rc *renderCtx) {
 		renderCallout(inst, rc)
 	case segKindTable:
 		renderTable(inst, rc)
+	case segKindFootnotes:
+		// The definitions after a rule, as goldmark's HTML sets them apart.
+		// Separator and the list's layout containers take no widget id, so
+		// the block disturbs the id-derivation order only through what its
+		// items render.
+		c.Separator().Send()
+		for i := range inst.children {
+			inst.children[i].render(rc)
+		}
 	}
 }
 
@@ -449,6 +458,8 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 				renderLinkRun(r, rc)
 			case runKindImage:
 				renderImageRun(r, rc)
+			case runKindFootnote:
+				renderFootnoteRun(r)
 			}
 		}
 	}
@@ -478,6 +489,22 @@ func renderLinkRun(r *paragraphRun, rc *renderCtx) {
 		Frame(false).
 		SendResp().HasPrimaryClicked() {
 		rc.linkClicked(r.label, r.url)
+	}
+}
+
+// renderFootnoteRun emits one footnote reference: the superscript marker
+// inside a [c.HoverText] block carrying the definition's plain text
+// (ADR-0255). The block opens its own `ui.scope` and senses hover on it, so
+// the marker needs no id of its own and consumes no id-sequence slot. A
+// reference whose tip is empty renders bare rather than with an empty
+// tooltip.
+func renderFootnoteRun(r *paragraphRun) {
+	if r.tip == "" {
+		c.LabelAtoms(r.atoms).Send()
+		return
+	}
+	for range c.HoverText(r.tip).KeepIter() {
+		c.LabelAtoms(r.atoms).Send()
 	}
 }
 

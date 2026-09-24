@@ -81,7 +81,7 @@ func allFeatures() Options {
 // expecting it to render (C3 in the rendering review).
 func TestFeatureAll_ExcludesTheUnwiredMathBit(t *testing.T) {
 	require.Zero(t, FeatureAll&FeatureMath, "FeatureAll must not carry the unwired math bit")
-	require.Equal(t, FeatureE(((1<<10)-1)&^FeatureMath), FeatureAll)
+	require.Equal(t, FeatureE(((1<<11)-1)&^FeatureMath), FeatureAll)
 }
 
 // Every OTHER declared bit is in FeatureAll — the exclusion list is one
@@ -100,6 +100,7 @@ func TestFeatureAll_CoversEveryWiredFlag(t *testing.T) {
 		{"GFM", FeatureGFM},
 		{"Frontmatter", FeatureFrontmatter},
 		{"HeadingAnchor", FeatureHeadingAnchor},
+		{"Footnote", FeatureFootnote},
 	}
 	var union FeatureE
 	for _, f := range wired {
@@ -548,6 +549,69 @@ func TestFeature_DisableHighlight(t *testing.T) {
 }
 
 // =============================================================================
+// Footnotes (ADR-0255)
+// =============================================================================
+
+// A reference + definition pair renders as goldmark's standard footnote HTML:
+// a superscript reference linking into an ordered list after the body, and a
+// backlink from the definition to the reference.
+func TestFootnote_ReferenceAndDefinition(t *testing.T) {
+	out := render(t, allFeatures(), "A bus[^bus] here.\n\n[^bus]: The *in-process* message bus.\n")
+	require.Equal(t, `<p>A bus<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> here.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>The <em>in-process</em> message bus.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>`, out)
+}
+
+// FeatureGFM does not buy footnotes. Without the flag the pair is NOT
+// guaranteed to stay prose, either: CommonMark reads `[^1]: Gloss.` as a
+// link reference definition whose destination is `Gloss.`, so a one-word
+// definition turns the reference into a hyperlink. Only the footnote markup
+// is asserted here.
+func TestFootnote_NotImpliedByGFM(t *testing.T) {
+	cases := []struct {
+		name     string
+		features FeatureE
+		wantSup  bool
+	}{
+		{"gfm only", FeatureGFM, false},
+		{"footnote only", FeatureFootnote, true},
+		{"all", FeatureAll, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := render(t, Options{Features: tc.features}, "Term[^1].\n\n[^1]: Gloss.\n")
+			if tc.wantSup {
+				require.Contains(t, out, `class="footnote-ref"`)
+				require.NotContains(t, out, "[^1]")
+			} else {
+				require.NotContains(t, out, "footnote")
+			}
+		})
+	}
+}
+
+// A reference with no definition stays literal text — the extension only
+// forms a reference when the label resolves.
+func TestFootnote_UnresolvedStaysLiteral(t *testing.T) {
+	out := render(t, allFeatures(), "Dangling[^nowhere] ref.")
+	require.Equal(t, "<p>Dangling[^nowhere] ref.</p>", out)
+}
+
+// Footnote and wikilink parsers both trigger on `[`; each must still win its
+// own syntax.
+func TestFootnote_CoexistsWithWikilink(t *testing.T) {
+	out := render(t, allFeatures(), "See [[Page]][^n].\n\n[^n]: Note.\n")
+	require.Contains(t, out, `<a href="/Page" class="wikilink">Page</a>`)
+	require.Contains(t, out, `class="footnote-ref"`)
+}
+
+// =============================================================================
 // Combined features
 // =============================================================================
 
@@ -968,6 +1032,8 @@ func TestShowcase(t *testing.T) {
 	require.Contains(t, html, `<h2 id="code-samples">Code</h2>`)
 	require.Contains(t, html, `class="frontmatter"`)
 	require.Contains(t, html, `<dt>title</dt><dd>Feature Showcase</dd>`)
+	require.Contains(t, html, `class="footnote-ref"`)
+	require.Contains(t, html, `class="footnotes"`)
 	require.NotContains(t, html, "but this is hidden")
 	require.NotContains(t, html, "a secret note")
 }

@@ -67,9 +67,11 @@ const richMaxImagePixels = imagedecode.DefaultMaxPixels
 // `---` is content here, not metadata.
 //
 // FeatureGFM is on and buys what it says: tables, strikethrough and task
-// lists all render in a declared cell. Footnotes are the one GFM construct
-// still missing, and they are missing everywhere: the footnote extension is
-// wired to no feature flag at all, so `[^1]` stays literal prose.
+// lists all render in a declared cell. Footnotes are not part of GFM here:
+// they sit behind obsidian.FeatureFootnote (ADR-0255), which this set does
+// not include, so `[^1]` stays literal prose in a cell — except that a
+// one-word definition (`[^1]: x`) is a CommonMark link reference definition
+// and turns the reference into a link.
 //
 // Math is absent: obsidian.FeatureMath is declared, reserved and consulted by
 // nothing, so setting it would change neither the parse nor the render.

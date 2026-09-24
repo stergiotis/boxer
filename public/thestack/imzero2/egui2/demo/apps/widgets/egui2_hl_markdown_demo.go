@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -103,6 +104,16 @@ type markdownDemoState struct {
 	loadInfo string
 }
 
+// markdownLoadEnv seeds the Load section: a demo window opens with this file
+// already loaded, the way a headless scene puts the gallery in a starting
+// state without typing into a text box the driver cannot focus. A relative
+// path resolves against the host's working directory.
+var markdownLoadEnv = env.NewPath(env.Spec{
+	Name:        "IMZERO2_MARKDOWN_DEMO_PATH",
+	Description: "markdown file the widget gallery's markdown demo loads when its window opens; empty starts with nothing loaded",
+	Category:    env.CategoryDev,
+})
+
 func init() {
 	registry.Register(registry.Demo{
 		Name:        "markdown",
@@ -113,7 +124,12 @@ func init() {
 		Kind:        registry.DemoKindUX,
 		Description: "Obsidian-flavored markdown renderer: headings, inline, lists, task lists, tables, blockquote, code, rule, frontmatter, highlight, wikilinks, embeds (Obsidian + CommonMark images), callouts, comments — plus an interactive Load section.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
-			state = &markdownDemoState{}
+			st := &markdownDemoState{}
+			if path := markdownLoadEnv.Get(); path != "" {
+				st.loadPath = path
+				st.loadMarkdownFromPath(path)
+			}
+			state = st
 			return
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
@@ -363,6 +379,15 @@ Unknown ref falls back to a 🖼-prefixed hyperlink:
 Comments are stripped silently — they do not appear in the rendered
 flow at all.`))
 
+	// mdFootnotes shows ADR-0255: each reference is a superscript marker whose
+	// hover tooltip is the definition, and the definitions follow as a list.
+	mdFootnotes = markdown.Parse([]byte(`Point at a marker: the bus[^bus] carries every request, and
+the facts table[^facts] records it. A reference with no definition stays
+literal.
+
+[^bus]: The in-process message bus, with *emphasis* and ` + "`code`" + ` flattened into the tooltip.
+[^facts]: One table shape every durable record lands in — see [ClickHouse](https://clickhouse.com), a live link in the list below.`))
+
 	// mdSelfHl shows the AST-driven markdown highlighter (codeview.PrepareMarkdown)
 	// applied to a fenced ```markdown block. The text rendered inside is a
 	// canonical form: gofmt-style normalization (single-* emphasis vs **strong**,
@@ -488,6 +513,12 @@ func demoMarkdownComment(ids *c.WidgetIdStack) {
 	}
 }
 
+func demoMarkdownFootnotes(ids *c.WidgetIdStack) {
+	for range c.IdScope(ids.PrepareStr("md-footnotes")) {
+		mdFootnotes.Render(ids)
+	}
+}
+
 func demoMarkdownSelfHl(ids *c.WidgetIdStack) {
 	for range c.IdScope(ids.PrepareStr("md-self-hl")) {
 		mdSelfHl.Render(ids)
@@ -603,5 +634,8 @@ func demoMarkdown(ids *c.WidgetIdStack, st *markdownDemoState) {
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("md-comment-h"), c.WidgetText().Text("comments (%%text%% — silently dropped)").Keep()).KeepIter() {
 		demoMarkdownComment(ids)
+	}
+	for range c.CollapsingHeader(ids.PrepareStr("md-footnotes-h"), c.WidgetText().Text("footnotes ([^label] — hover the marker)").Keep()).KeepIter() {
+		demoMarkdownFootnotes(ids)
 	}
 }

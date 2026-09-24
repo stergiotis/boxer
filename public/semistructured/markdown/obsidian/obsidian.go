@@ -114,6 +114,9 @@ func collectExtensions(opts Options) (exts []goldmark.Extender) {
 	if opts.Features&FeatureGFM != 0 {
 		exts = append(exts, extension.GFM)
 	}
+	if opts.Features&FeatureFootnote != 0 {
+		exts = append(exts, extension.Footnote)
+	}
 	if opts.Features&FeatureWikilink != 0 {
 		exts = append(exts, &wikilink.Extender{Resolver: r})
 	}
