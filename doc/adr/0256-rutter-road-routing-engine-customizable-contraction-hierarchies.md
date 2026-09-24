@@ -76,7 +76,6 @@ system, a road class or a country.
 
 - **Perfect customization and precomputed triangles.** Trigger: a query time measured above budget on a real graph.
 - **Turn costs by edge-based expansion.** Trigger: a car profile with turn restrictions to honour.
-- **Map matching.** Trigger: shadow-boxer ADR-0012 §M5.
 - **Time-dependent metrics by slices.** Trigger: predicted traffic.
 - **Alternatives.** Trigger: a consumer asks.
 
@@ -158,6 +157,17 @@ microseconds. Both are the order's quality — plain Inertial Flow with the
 separator taken as the source-side endpoints of an edge cut — and §SD3
 names the replacement. On a 300×300 grid the order costs 2.8 s and the
 fill is 7.7×, which is a lattice's nature rather than a defect.
+
+### 2026-09-24 — map matching, pulled out of Deferred
+
+Its trigger fired the same day: `Matcher` is Newson–Krumm over the
+index's candidates, with route distances from bounded one-to-many
+Dijkstra searches under a length metric that leaves and enters a
+polyline at the right ends, decoded by Viterbi and breaking the sequence
+where an observation has no candidate or no reachable predecessor.
+`Index.Candidates` keeps every admitted polyline within the radius,
+nearest first, for it. The consumer matched 146 synthetic fixes along a
+4 km route onto the Swiss graph in 204 ms.
 
 ## References
 
