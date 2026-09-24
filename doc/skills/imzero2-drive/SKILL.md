@@ -81,7 +81,7 @@ substring), `value`, `valueContains`, `role`, `nth`.
 | `set_value` | anchor, `text` | sets a slider or drag value |
 | `focus`, `scroll_into_view` | anchor | |
 | `key` | `text` (`Enter`, `Escape`, `ArrowDown`, `A`…), `modifiers` | key down and up to whatever is focused |
-| `hover` | `x`,`y` | moves the pointer |
+| `hover` | anchor, or `x`,`y` | moves the pointer — to the node's centre when anchored |
 | `drag` | `x`,`y`,`toX`,`toY`; anchored: `x`,`y` is the delta | press, moves, release |
 | `scroll` | `x`,`y` as the wheel delta | scrolls under the pointer — `hover` first |
 | `wait` | anchor | polls until the node is present and enabled |

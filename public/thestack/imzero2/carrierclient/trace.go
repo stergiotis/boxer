@@ -562,6 +562,14 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		// Without this verb no hover affordance in any imzero2 app was
 		// reachable from a trace at all, which is how a heatmap shipped with
 		// none: the tour could click a cell but never point at one.
+		//
+		// Anchored, it moves to the node's centre — a tooltip on a widget
+		// that has a node (a footnote reference, a toolbar button) is then
+		// reached by name rather than by a coordinate that goes stale.
+		if node != nil {
+			x, y := nodeCentre(node)
+			return c.MoveMouse(x, y)
+		}
 		x, y, e := opts.Vars.offset(st, st.X, st.Y)
 		if e != nil {
 			return e
