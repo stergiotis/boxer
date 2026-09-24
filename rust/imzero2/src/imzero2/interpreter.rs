@@ -4682,7 +4682,8 @@ self.apply_widget(w,u,f,Some(i));
                     // Striping + selection live in a locally-scoped decorator so the feature
                     // stays in this IDL rather than in interpreter.rs (which is regenerated).
                     // Stripes use the active visuals; the selection stripe is anchored to
-                    // ACCENT_DEFAULT (L=0.80) instead of visuals.selection.bg_fill because
+                    // the active theme's accent.default (style::accent_default, ADR-0258;
+                    // L=0.80 on the IDS palette) instead of visuals.selection.bg_fill because
                     // IDS pins that token at ACCENT_SUBTLE (L=0.20) for SelectableLabel
                     // contrast (ADR-0037) — 0.35× of L=0.20 is invisible against
                     // extreme_bg_color (L=0.06). Same fix pattern as ProgressBar's default
@@ -4769,9 +4770,7 @@ self.apply_widget(w,u,f,Some(i));
                             let visuals = ui.style().visuals.clone();
                             let rect = ui.max_rect();
                             if self.selected_row == Some(cell.row_nr) {
-                                let bg =
-                                    imzero2_egui::style::tokens::palette_generated::ACCENT_DEFAULT
-                                        .gamma_multiply(0.35);
+                                let bg = imzero2_egui::style::accent_default().gamma_multiply(0.35);
                                 ui.painter().rect_filled(rect, 0.0, bg);
                             } else if self.striped && cell.row_nr % 2 == 1 {
                                 ui.painter().rect_filled(rect, 0.0, visuals.faint_bg_color);
@@ -8615,8 +8614,8 @@ egui::Panel::top(i);
                 let mut progress = self.io.read_plain_f32()?;
                 // construct
 
-                let mut w = egui::ProgressBar::new(progress)
-                    .fill(imzero2_egui::style::tokens::palette_generated::ACCENT_DEFAULT);
+                let mut w =
+                    egui::ProgressBar::new(progress).fill(imzero2_egui::style::accent_default());
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(ProgressBarBuilderMethodId::from_repr)?;
