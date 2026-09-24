@@ -109,6 +109,7 @@ for the parts that have no such term. New house names belong in this table.
 | `lading` | a bill of lading is issued once per voyage, lists exactly what was loaded, and is never amended — only superseded by the next one | the filesystem snapshot store — `public/fs/lading` ([ADR-0198](doc/adr/0198-fs-snapshot-store.md)) |
 | `tally` | the count of cargo checked against the bill of lading | the browser over the lading store — `apps/tally` ([ADR-0200](doc/adr/0200-tally-lading-browser.md)) |
 | `portolan` | a chart ruled with rhumb lines | the Web-Mercator map widget — `public/thestack/imzero2/egui2/widgets/portolan` ([ADR-0204](doc/adr/0204-leaflet-map-core-port.md)) |
+| `rutter` | a pilot's book of sailing directions — the routes between ports | the road-network routing engine — `public/analytics/graph/rutter` ([ADR-0256](doc/adr/0256-rutter-road-routing-engine-customizable-contraction-hierarchies.md)) |
 | `watchbill` | the roster that assigns each hand a duty on each watch | durable work as job rows claimed by writing — `public/keelson/runtime/watchbill` ([ADR-0223](doc/adr/0223-watchbill-durable-work-on-facts.md)) |
 | `stevedore` | the hand who works the hatch, loading cargo and checking it against the manifest; what the cargo is, is the shipper's business | routing, failure and state handling around an ingestion processor a streaming framework drives — `public/streaming/stevedore` ([ADR-0252](doc/adr/0252-stevedore-routing-failure-and-state-handling-for-framework-driven-ingestion.md)) |
 
