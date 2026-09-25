@@ -428,7 +428,9 @@ type AppTrailFilter struct {
 // `started` and `stopped` lifecycle rows of one (run, app, instance) paired.
 // A zero StartedAt is a session that started before the filter's Since; a
 // zero StoppedAt is one still open, or one whose process ended without
-// writing its close.
+// writing its close. RunSeenAt is the last heartbeat or start record of the
+// session's process — for a session without a close, the latest moment it
+// is known to have been alive; zero when the process wrote neither.
 type AppRunRow struct {
 	RunId       string
 	AppId       app.AppIdT
@@ -436,6 +438,7 @@ type AppRunRow struct {
 	StartedAt   time.Time
 	StoppedAt   time.Time
 	StopReason  string
+	RunSeenAt   time.Time
 }
 
 // AppLogRow is one log row as the app center reads it (ADR-0260 §SD5): the

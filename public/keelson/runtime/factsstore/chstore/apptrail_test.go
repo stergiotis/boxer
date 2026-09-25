@@ -49,10 +49,23 @@ func TestStore_AppRuns_PairsAcrossRuns_LiveCH(t *testing.T) {
 	write("run-b", "play", 1, factsstore.AppLifecyclePhaseStarted, "", t0.Add(2*time.Minute))
 	write("run-b", "tally", 3, factsstore.AppLifecyclePhaseStopped, "shutdown", t0.Add(3*time.Minute))
 	write("run-b", "tally", 3, factsstore.AppLifecyclePhaseStarted, "", t0.Add(-48*time.Hour))
+	// Two sessions from before runs were recorded: without a run they cannot
+	// be told apart, and must not fold into one.
+	write("", "old", 1, factsstore.AppLifecyclePhaseStarted, "", t0)
+	write("", "old", 1, factsstore.AppLifecyclePhaseStopped, "user-close", t0.Add(4*time.Minute))
+
+	// run-b's process was last heard from after its open session started;
+	// run-a wrote no heartbeat at all.
+	for _, at := range []time.Time{t0.Add(3 * time.Minute), t0.Add(5 * time.Minute)} {
+		_, err := s.WriteRuntimeHeartbeat(factsstore.HeartbeatRow{RunId: "run-b", Ts: at})
+		require.NoError(t, err)
+	}
 
 	rows, err := s.AppRuns(context.Background(), factsstore.AppTrailFilter{Since: t0.Add(-time.Minute)})
 	require.NoError(t, err)
 	require.Len(t, rows, 3)
+	assert.Equal(t, t0.Add(5*time.Minute), rows[1].RunSeenAt, "the open session's process was last seen at its latest heartbeat")
+	assert.True(t, rows[2].RunSeenAt.IsZero(), "a process that wrote no heartbeat has no seen time")
 
 	assert.Equal(t, "github.com/example/tally", string(rows[0].AppId), "most recent first")
 	assert.True(t, rows[0].StartedAt.IsZero(), "the start fell before Since")

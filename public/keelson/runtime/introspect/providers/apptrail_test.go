@@ -48,7 +48,7 @@ type trailFacts struct {
 func TestAppTrailTablesRenderRows(t *testing.T) {
 	at := time.Date(2026, 9, 25, 10, 0, 0, 0, time.UTC)
 	fake := &fakeTrail{
-		runs:  []factsstore.AppRunRow{{RunId: "r1", AppId: "a", InstanceKey: 2, StartedAt: at, StopReason: ""}},
+		runs:  []factsstore.AppRunRow{{RunId: "r1", AppId: "a", InstanceKey: 2, StartedAt: at, StopReason: "", RunSeenAt: at.Add(time.Minute)}},
 		logs:  []factsstore.AppLogRow{{Ts: at, AppId: "a", InstanceKey: 2, RunId: "r1", Level: "warn", Message: "m", Error: "e"}},
 		audit: []factsstore.AppAuditRow{{AppId: "a", Subject: "s", Result: "ok", Requests: 3, FirstAt: at, LastAt: at, MeanLatencyMs: 1.5, MaxLatencyMs: 2}},
 	}
@@ -75,6 +75,8 @@ func TestAppTrailTablesRenderRows(t *testing.T) {
 	assert.Zero(t, stopped.Value(0), "an open session has no stop, not a 1970 one")
 	started := rec.Column(rec.Schema().FieldIndices("started_ms")[0]).(*array.Int64)
 	assert.Equal(t, at.UnixMilli(), started.Value(0))
+	seen := rec.Column(rec.Schema().FieldIndices("run_seen_ms")[0]).(*array.Int64)
+	assert.Equal(t, at.Add(time.Minute).UnixMilli(), seen.Value(0))
 	assert.Empty(t, appLogsTable(nil).Schema().FieldIndices("stack"), "the stack is never a column")
 }
 

@@ -104,37 +104,63 @@ func (inst *Store) AppRuns(ctx context.Context, filter factsstore.AppTrailFilter
 // composeAppRunsSql pairs each (run, app, instance)'s `started` and
 // `stopped` rows. A group missing either side keeps a zero there, which the
 // row type documents; a group with neither cannot occur, since every row in
-// it is one of the two.
+// it is one of the two. Each session also carries the last heartbeat or
+// start record of its process, so a session that never closed can be given
+// the latest end the trail supports.
+//
+// Rows that name no run are left out. They were written before ADR-0191
+// stamped the run on every row, and the instance key restarts in every
+// process, so (app, instance) alone would fold every such session of an app
+// into one that spans the whole look-back.
 func composeAppRunsSql(table string, filter factsstore.AppTrailFilter) string {
 	e := buildAppTrailExprs()
 	l := buildLifecycleColumnExprs()
+	seenWhere := []string{fmt.Sprintf("hasAny(%s, [%d, %d])", atSymLR,
+		vocab.MembKindRuntimeHeartbeat.GetId().Value(), vocab.MembKindRuntimeRun.GetId().Value())}
+	if !filter.Since.IsZero() {
+		seenWhere = append(seenWhere, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", atTsCol, filter.Since.Unix()))
+	}
 	return fmt.Sprintf(`
-SELECT
-  run_id,
-  app_id,
-  instance_key,
-  minIf(ts_sec, phase = 'started') AS started,
-  maxIf(ts_sec, phase = 'stopped') AS stopped,
-  anyIf(stop_reason, phase = 'stopped') AS stop_reason
+SELECT s.run_id, s.app_id, s.instance_key, s.started, s.stopped, s.stop_reason, ifNull(h.seen, 0) AS run_seen
 FROM (
-  SELECT %s AS run_id, %s AS app_id, %s AS instance_key, %s AS phase, %s AS stop_reason, %s AS ts_sec
+  SELECT
+    run_id,
+    app_id,
+    instance_key,
+    minIf(ts_sec, phase = 'started') AS started,
+    maxIf(ts_sec, phase = 'stopped') AS stopped,
+    anyIf(stop_reason, phase = 'stopped') AS stop_reason
+  FROM (
+    SELECT %s AS run_id, %s AS app_id, %s AS instance_key, %s AS phase, %s AS stop_reason, %s AS ts_sec
+    FROM %s
+    WHERE %s
+  )
+  WHERE app_id != '' AND run_id != ''
+  GROUP BY run_id, app_id, instance_key
+  ORDER BY greatest(started, stopped) DESC, app_id ASC, instance_key ASC
+  LIMIT %d
+) AS s
+LEFT JOIN (
+  SELECT %s AS run_id, max(%s) AS seen
   FROM %s
   WHERE %s
-)
-WHERE app_id != ''
-GROUP BY run_id, app_id, instance_key
-ORDER BY greatest(started, stopped) DESC, app_id ASC, instance_key ASC
-LIMIT %d
+  GROUP BY run_id
+) AS h ON h.run_id = s.run_id
+ORDER BY greatest(s.started, s.stopped) DESC, s.app_id ASC, s.instance_key ASC
+SETTINGS join_use_nulls = 1
 FORMAT TabSeparated`,
 		e.runId, e.appId, e.instanceKey, l.phase, l.stopReason, e.tsSec,
 		table,
 		appTrailWhere(vocab.MembKindAppLifecycle.GetId().Value(), filter.Since),
-		appTrailLimit(filter.Limit))
+		appTrailLimit(filter.Limit),
+		e.runId, e.tsSec,
+		table,
+		strings.Join(seenWhere, " AND "))
 }
 
 func parseAppRuns(raw []byte) (rows []factsstore.AppRunRow, err error) {
 	rows = []factsstore.AppRunRow{}
-	err = eachTsvLine(raw, 6, "app runs", func(p []string) (err error) {
+	err = eachTsvLine(raw, 7, "app runs", func(p []string) (err error) {
 		key, err := strconv.ParseUint(p[2], 10, 64)
 		if err != nil {
 			return
@@ -147,9 +173,13 @@ func parseAppRuns(raw []byte) (rows []factsstore.AppRunRow, err error) {
 		if err != nil {
 			return
 		}
+		seen, err := parseUnixOrZero(p[6])
+		if err != nil {
+			return
+		}
 		rows = append(rows, factsstore.AppRunRow{
 			RunId: unescapeTabSeparated(p[0]), AppId: app.AppIdT(unescapeTabSeparated(p[1])), InstanceKey: key,
-			StartedAt: started, StoppedAt: stopped, StopReason: unescapeTabSeparated(p[5]),
+			StartedAt: started, StoppedAt: stopped, StopReason: unescapeTabSeparated(p[5]), RunSeenAt: seen,
 		})
 		return
 	})

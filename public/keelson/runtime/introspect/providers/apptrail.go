@@ -111,7 +111,11 @@ func appRunsTable(rows []factsstore.AppRunRow) *introspect.Table {
 		Int64("started_ms", func(i int) int64 { return unixMsOrZero(rows[i].StartedAt) }).
 		// 0 when the session is open, or its process ended without a close.
 		Int64("stopped_ms", func(i int) int64 { return unixMsOrZero(rows[i].StoppedAt) }).
-		String("stop_reason", func(i int) string { return rows[i].StopReason })
+		String("stop_reason", func(i int) string { return rows[i].StopReason }).
+		// The process's last heartbeat or start record: for a session with no
+		// stop, the latest moment it is known to have been alive. 0 when the
+		// process wrote neither within the look-back.
+		Int64("run_seen_ms", func(i int) int64 { return unixMsOrZero(rows[i].RunSeenAt) })
 }
 
 type appLogsProvider struct {
