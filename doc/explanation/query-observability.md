@@ -256,7 +256,7 @@ natural delivery vehicle for the interactive case.
 | facts substrate | [ADR-0026](../adr/0026-app-runtime-and-capability-subjects.md) §SD6 | accepted |
 | pass registry / transform chain | [ADR-0108](../adr/0108-keelson-sql-pass-registry.md) | accepted |
 | lineage encoding (ref tuples) | [ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md) | accepted |
-| interning substrate (texts, chains, large values) | [ADR-0112](../adr/0112-dimensionstore-interned-facts-additive-memberships.md) | proposed, in flight |
+| interning substrate (texts, chains, large values) | [ADR-0112](../adr/0112-dimensionstore-interned-facts-additive-memberships.md) | accepted |
 | lanes, signals, per-lane query ids, glass | [ADR-0097](../adr/0097-play-reactive-query-graph.md) | accepted, slices ongoing |
 | identity bands / leased ids | [ADR-0106](../adr/0106-identity-fibonacci-tags-build-tag-retirement.md), [ADR-0111](../adr/0111-identity-technology-neutral-leased-id-generation.md) | accepted / proposed |
 | service anatomy precedent | [ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md) | accepted |
