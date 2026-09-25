@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"iter"
+	"sync/atomic"
 )
 
 type FuncProcId uint32
@@ -33,6 +34,12 @@ type Fffi2[U UnmarshallReaderI] struct {
 	// the pipe when the stack is empty. Supports nesting deferred-block
 	// scopes (e.g. an etable inside a dockArea tab body).
 	captureStack []captureFrame
+	// owner is the goroutine the channel is bound to, 0 when unbound; see
+	// BindToCurrentGoroutine (ADR-0261).
+	owner atomic.Uint64
+	// msgs counts the messages SendIntermediate took, captured or sent;
+	// see Messages.
+	msgs uint64
 }
 
 type MarshallWriterI interface {

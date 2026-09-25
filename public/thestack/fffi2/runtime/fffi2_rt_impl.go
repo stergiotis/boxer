@@ -25,6 +25,8 @@ func (inst *Fffi2[U]) SyncRetained(id uint64, buf []byte) (err error) {
 	return inst.SendIntermediate(buf)
 }
 func (inst *Fffi2[U]) SendIntermediate(buf []byte) (err error) {
+	inst.checkOwner()
+	inst.msgs++
 	if n := len(inst.captureStack); n > 0 {
 		// During deferred block capture: write framed message to the innermost
 		// capture buffer. Wire format matches what Rust's begin_consume_message
@@ -56,12 +58,14 @@ func (inst *Fffi2[U]) IsCapturing() (capturing bool) {
 // etable inside a dockArea tab body correctly nests its cell bodies
 // inside the tab body bytes.
 func (inst *Fffi2[U]) BeginCapture(buf *bytes.Buffer, endianness binary.ByteOrder) {
+	inst.checkOwner()
 	inst.captureStack = append(inst.captureStack, captureFrame{buf: buf, end: endianness})
 }
 
 // EndCapture pops the innermost capture scope. After the outermost pop the
 // stack is empty and SendIntermediate resumes sending to the pipe.
 func (inst *Fffi2[U]) EndCapture() {
+	inst.checkOwner()
 	n := len(inst.captureStack)
 	if n == 0 {
 		panic("EndCapture without matching BeginCapture")
@@ -75,6 +79,7 @@ func (inst *Fffi2[U]) EndCapture() {
 // DockArea iter wrapper uses it to flush buffered tab bodies into its
 // deferred block scope at Send time.
 func (inst *Fffi2[U]) AppendRawToCapture(raw []byte) {
+	inst.checkOwner()
 	n := len(inst.captureStack)
 	if n == 0 {
 		panic("AppendRawToCapture requires an active capture scope")
@@ -83,10 +88,12 @@ func (inst *Fffi2[U]) AppendRawToCapture(raw []byte) {
 	_, _ = top.buf.Write(raw)
 }
 func (inst *Fffi2[U]) ReceiveMsg() iter.Seq[U] {
+	inst.checkOwner()
 	return inst.channel.ReceiveMsg()
 }
 
 func (inst *Fffi2[U]) CallFunctionMayThrow() (err error) {
+	inst.checkOwner()
 	inst.channel.FlushMessages()
 	//err = inst.readError()
 	return
