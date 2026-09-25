@@ -29,6 +29,8 @@ const (
 	flagTimeout    = "timeout"
 	flagClient     = "clientBinary"
 	flagRoot       = "repoRoot"
+	flagFacts      = "facts"
+	flagRescore    = "rescore"
 )
 
 // NewCommand builds the `vizeval` subcommand.
@@ -42,6 +44,14 @@ func NewCommand() *cli.Command {
 				Usage:     "print the sinks each scenario admits, with their row caps and option spaces, as JSON lines",
 				ArgsUsage: "<scenario" + vizeval.ScenarioSuffix + " | dir>…",
 				Action:    runSpace,
+			},
+			{
+				Name:  "facts",
+				Usage: "print the scorecards filed in boxer.facts as JSON lines, oldest first",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "scenario", Usage: "only this scenario's scorecards"},
+				},
+				Action: runFacts,
 			},
 			{
 				Name:      "score",
@@ -62,6 +72,8 @@ func NewCommand() *cli.Command {
 					&cli.DurationFlag{Name: flagTimeout, Value: 60 * time.Second, Usage: "bound on the wait for the carrier and each driver request"},
 					&cli.PathFlag{Name: flagClient, Usage: "headless Rust client; default: the scene launcher's choice"},
 					&cli.PathFlag{Name: flagRoot, Usage: "checkout holding rust/imzero2; default: found from the working directory"},
+					&cli.BoolFlag{Name: flagFacts, Usage: "file scorecards in boxer.facts, and reuse a candidate already measured there at the same clean build and data"},
+					&cli.BoolFlag{Name: flagRescore, Usage: "with --" + flagFacts + ", render every candidate even when a measurement can be reused"},
 				},
 				Action: runScore,
 			},
@@ -130,6 +142,26 @@ func runSpace(ctx *cli.Context) (err error) {
 	return nil
 }
 
+func runFacts(ctx *cli.Context) (err error) {
+	store, err := harness.OpenFacts(ctx.Context)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	w := ctx.App.Writer
+	for card, e := range harness.ReadFacts(ctx.Context, store, ctx.String("scenario")) {
+		if e != nil {
+			return e
+		}
+		b, e := json.Marshal(card, json.Deterministic(true))
+		if e != nil {
+			return eh.Errorf("unable to encode a scorecard: %w", e)
+		}
+		_, _ = fmt.Fprintln(w, string(b))
+	}
+	return nil
+}
+
 func readCandidates(path string) (cands []vizeval.Candidate, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -181,6 +213,13 @@ func runScore(ctx *cli.Context) (err error) {
 		OutDir: out, RepoRoot: root, ClientBinary: ctx.Path(flagClient),
 		Timeout: ctx.Duration(flagTimeout), Logger: log.Logger,
 	}
+	if ctx.Bool(flagFacts) {
+		if opts.Facts, err = harness.OpenFacts(ctx.Context); err != nil {
+			return err
+		}
+		defer opts.Facts.Close()
+		opts.Rescore = ctx.Bool(flagRescore)
+	}
 	w := ctx.App.Writer
 	failed := 0
 	for _, sc := range scs {
@@ -200,6 +239,9 @@ func runScore(ctx *cli.Context) (err error) {
 			line := fmt.Sprintf("%-12s %-32s %s", c.Status, sc.Name, c.Candidate.Canonical())
 			if c.Reason != "" {
 				line += "  " + c.Reason
+			}
+			if c.ReusedFrom != "" {
+				line += "  (reused, measured " + c.ReusedFrom + ")"
 			}
 			_, _ = fmt.Fprintln(w, line)
 			if c.Status == harness.StatusFailed {

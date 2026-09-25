@@ -47,3 +47,32 @@ func TestScoreHostMetrics(t *testing.T) {
 	}
 	assert.Equal(t, StatusScored, cards[0].Status, "the card table passes both gates")
 }
+
+// TestFactsRoundTrip files a scorecard in boxer.facts and reads it back by
+// its measurement key, the lookup that lets a search skip a candidate it has
+// already scored (ADR-0257 §SD8).
+func TestFactsRoundTrip(t *testing.T) {
+	if unmet, err := scene.CheckRequire(scene.RequireClickHouse); err != nil || unmet != "" {
+		t.Skip("needs ClickHouse: ", unmet, err)
+	}
+	ctx := t.Context()
+	store, err := OpenFacts(ctx)
+	require.NoError(t, err)
+	defer store.Close()
+	cand, err := vizeval.NewCandidate(vizeval.SinkCard, nil)
+	require.NoError(t, err)
+	card := Scorecard{
+		Scenario: "facts_round_trip", Candidate: cand, CandidateID: cand.ID(),
+		Build: "test" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000"), ".", ""), BatchDigest: "d",
+		Rows: 3, Status: StatusScored, Metrics: map[string]float64{geometry.MetricTextRuns: 7},
+		Gates: map[string]bool{geometry.MetricTextClipped: true}, At: time.Now().UTC().Format(time.RFC3339),
+	}
+	_, found, err := lookupStored(ctx, store, card)
+	require.NoError(t, err)
+	require.False(t, found, "a fresh build has nothing stored")
+	require.NoError(t, writeFacts(ctx, store, []Scorecard{card}))
+	stored, found, err := lookupStored(ctx, store, card)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, card, stored)
+}

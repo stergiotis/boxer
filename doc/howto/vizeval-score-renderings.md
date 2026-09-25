@@ -15,7 +15,7 @@ and records geometry metrics for each — overlap, clipping, elision, contrast,
 colour distance, numeric alignment — as files you can read or compare. It
 covers the harness as built through
 [ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md) (proposed)
-M3: geometry only. Model-judged task accuracy and pairwise ranking are later
+M4: geometry metrics, filed as files and optionally in `boxer.facts`. Model-judged task accuracy and pairwise ranking are later
 milestones, and searching the candidate space is left to the caller.
 
 ## When to use this recipe
@@ -62,7 +62,19 @@ test.
    scripts/dev/vizeval.sh score --out tmp/vizeval --candidates c.jsonl apps/play/vizeval/20_long_labels.vizeval.md
    ```
 
-4. **Read the results.** `tmp/vizeval/<scenario>/index.md` is the contact
+4. **File them, optionally.** `--facts` also writes each scorecard to
+   `boxer.facts` (creating the table if needed) and answers a candidate
+   already measured there — same scenario, candidate, clean build and batch
+   digest — without rendering it again; `--rescore` renders anyway. A build
+   from a dirty tree is never reused. Read everything filed back as JSON
+   lines:
+
+   ```bash
+   scripts/dev/vizeval.sh score --facts apps/play/vizeval
+   scripts/dev/vizeval.sh facts --scenario 20_long_labels
+   ```
+
+5. **Read the results.** `tmp/vizeval/<scenario>/index.md` is the contact
    sheet: the computed answers, then each candidate's cropped artifact with
    its gates and metrics. `tmp/vizeval/scorecards.jsonl` has every scorecard
    ever written there, one per line, with the build it was scored at and a

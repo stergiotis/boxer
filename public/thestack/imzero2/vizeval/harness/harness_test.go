@@ -67,3 +67,36 @@ func TestFindNode(t *testing.T) {
 	_, err = findNode(p, "missing")
 	assert.Error(t, err)
 }
+
+func TestScorecardRowRoundTrip(t *testing.T) {
+	cand, err := vizeval.NewCandidate(vizeval.SinkUnicode, map[string]any{vizeval.OptionWidth: 96})
+	require.NoError(t, err)
+	card := Scorecard{
+		Scenario: "10_host_metrics", Candidate: cand, CandidateID: cand.ID(), Build: "0123456789ab",
+		BatchDigest: "d1", Rows: 8, Status: StatusGated, Reason: "", Dir: "10_host_metrics/" + cand.ID(),
+		Area:    [4]float64{1, 2, 3, 4},
+		Metrics: map[string]float64{geometry.MetricTextRuns: 25, geometry.MetricTextElided: 4},
+		Gates:   map[string]bool{geometry.MetricTextElided: false, geometry.MetricTextClipped: true},
+		At:      "2026-09-25T19:00:00Z",
+	}
+	row := RowOf(card)
+	id, nk := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest)
+	assert.Equal(t, id, row.Id)
+	assert.Equal(t, nk, string(row.NaturalKey))
+	assert.Equal(t, []string{geometry.MetricTextElided, geometry.MetricTextRuns}, row.MetricName, "names sorted")
+	assert.Equal(t, []float64{4, 25}, row.MetricValue, "values parallel to names")
+	back, err := CardOf(row)
+	require.NoError(t, err)
+	assert.Equal(t, card, back)
+
+	other, _ := ScoreKey(card.Scenario, card.CandidateID, card.Build, "d2")
+	assert.NotEqual(t, id, other, "different data is a different measurement")
+}
+
+func TestReusable(t *testing.T) {
+	assert.True(t, reusable(Scorecard{Build: "0123456789ab", Status: StatusScored}))
+	assert.True(t, reusable(Scorecard{Build: "0123456789ab", Status: StatusInadmissible}))
+	assert.False(t, reusable(Scorecard{Build: "0123456789ab+dirty", Status: StatusScored}), "a dirty build names no code")
+	assert.False(t, reusable(Scorecard{Build: "0123456789ab", Status: StatusFailed}), "a failure is not a measurement")
+	assert.False(t, reusable(Scorecard{Build: unknownBuild, Status: StatusScored}), "no revision names no code")
+}

@@ -341,6 +341,29 @@ var (
 	MembLlmCallIncomplete      = NkRegistry.MustBegin("llmCallIncomplete", 119).End()
 	MembLlmCallRefused         = NkRegistry.MustBegin("llmCallRefused", 120).End()
 	MembLlmCallError           = NkRegistry.MustBegin("llmCallError", 121).End()
+
+	// vizeval scorecards (ADR-0257 §SD8) — one boxer.facts row per candidate
+	// scored over a scenario at a build: which rendering, of which data, how
+	// far it got, and its metrics. Append-only. Metrics are two parallel
+	// arrays, names and values, so a new metric needs no new membership; the
+	// gates a scenario named are split into passed and failed. The candidate's
+	// canonical JSON and the free-text reason are strings, the rest symbols.
+	MembKindVizevalScore   = NkRegistry.MustBegin("runtimeKindVizevalScore", 122).End()
+	MembVizevalScenario    = NkRegistry.MustBegin("vizevalScenario", 123).End()
+	MembVizevalCandidateId = NkRegistry.MustBegin("vizevalCandidateId", 124).End()
+	MembVizevalSink        = NkRegistry.MustBegin("vizevalSink", 125).End()
+	MembVizevalCandidate   = NkRegistry.MustBegin("vizevalCandidate", 126).End()
+	MembVizevalBuild       = NkRegistry.MustBegin("vizevalBuild", 127).End()
+	MembVizevalBatchDigest = NkRegistry.MustBegin("vizevalBatchDigest", 128).End()
+	MembVizevalRows        = NkRegistry.MustBegin("vizevalRows", 129).End()
+	MembVizevalStatus      = NkRegistry.MustBegin("vizevalStatus", 130).End()
+	MembVizevalReason      = NkRegistry.MustBegin("vizevalReason", 131).End()
+	MembVizevalDir         = NkRegistry.MustBegin("vizevalDir", 132).End()
+	MembVizevalArea        = NkRegistry.MustBegin("vizevalArea", 133).End()
+	MembVizevalMetricName  = NkRegistry.MustBegin("vizevalMetricName", 134).End()
+	MembVizevalMetricValue = NkRegistry.MustBegin("vizevalMetricValue", 135).End()
+	MembVizevalGatePassed  = NkRegistry.MustBegin("vizevalGatePassed", 136).End()
+	MembVizevalGateFailed  = NkRegistry.MustBegin("vizevalGateFailed", 137).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -374,4 +397,8 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembLlmCallModel, MembLlmCallEndpointHost, MembLlmCallMessages, MembLlmCallTools, MembLlmCallPromptBytes,
 	MembLlmCallCompletionBytes, MembLlmCallInputTokens, MembLlmCallOutputTokens, MembLlmCallToolCalls,
 	MembLlmCallFinishReason, MembLlmCallElapsedMs, MembLlmCallIncomplete, MembLlmCallRefused, MembLlmCallError,
+	MembKindVizevalScore, MembVizevalScenario, MembVizevalCandidateId, MembVizevalSink, MembVizevalCandidate,
+	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
+	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,
+	MembVizevalGatePassed, MembVizevalGateFailed,
 }

@@ -228,12 +228,21 @@ parts in messages; that is the one change to the client.
 
 Results land in `boxer.facts` through a generated record store (the lane
 [facts-bound-record-stores](../explanation/facts-bound-record-stores.md)
-recommends), as kinds for a render (scenario, candidate hash, build commit,
-batch digest, capture paths), a metric value, a task answer, and a pairwise
-judgement. The PNG, SVG and tree stay on disk under the run directory;
-facts carry their paths and hashes. A search session reads what has been
-scored with SQL, and a candidate already scored at the same build and digest
-is not rendered again.
+recommends). A scorecard is one `vizevalScore` row: scenario, candidate and
+its canonical JSON, build, batch digest, status and reason, the capture
+directory, and the metrics as two parallel arrays, names and values, so a
+new metric needs no new membership. A row per metric was the alternative;
+it multiplies rows by the metric count and needs a join to reassemble what
+was one measurement. The task-answer and pairwise-judgement kinds arrive
+with the milestones that produce them (M5, M6). The PNG, SVG and tree stay
+on disk under the run directory; the row carries the directory.
+
+A row's key is a hash of scenario, candidate id, build and batch digest —
+what makes two scorings the same measurement. With the store attached, a
+candidate already measured under that key is read back instead of rendered;
+a build marked dirty, or with no revision stamp, is never reused, because
+its revision does not name the code that drew it. A search session reads
+what has been scored through the store's scan.
 
 The run directory also gets a contact-sheet gallery per scenario — the
 candidates side by side with their gates, accuracy and rank — written the
@@ -243,7 +252,8 @@ way the scene runner writes its index.
 
 `imzero2 vizeval` with verbs to list a scenario's admissible candidates
 (`space`: the option spaces of SD2), score a set of candidates given as
-JSONL (`score`), and rank a scenario's scored candidates (`rank`, with the
+JSONL (`score`, with `--facts` to file and reuse), read back what is filed
+(`facts`), and rank a scenario's scored candidates (`rank`, with the
 pairwise judgements of M6). It is a library first, as the scene runner is,
 so a search written later calls it in-process.
 
@@ -270,7 +280,7 @@ so a search written later calls it in-process.
   for the existing sinks, card table first.
 - **M3 — Scenario documents, the runner and geometry metrics** ✓ (SD4, SD6
   first layer, SD9), with table scenarios, results as files.
-- **M4 — The facts record store** (SD8).
+- **M4 — The facts record store** ✓ (SD8).
 - **M5 — Image content in `openaichat` and task-question accuracy** (SD6
   second layer, SD7).
 - **M6 — Pairwise judgements and ranking** (SD6 third layer).
@@ -288,7 +298,7 @@ so a search written later calls it in-process.
 | SVG export | each text shape becomes a `<g class="imz-text">` with `data-text`, `data-bbox`, `data-size`, `data-elided` | the geometry package's reader; viewers ignore the attributes |
 | egui2 IDL | adds the `accessibleRegion` block | regenerated Go bindings, Rust dispatch and the API reference; the opcode enums renumber, so both sides rebuild together |
 | `openaichat` messages | image content parts | `runtime.llm`'s request path and the ADR-0254 sensitivity point |
-| `boxer.facts` | new vizeval kinds | the generated record store and its regeneration lane |
+| `boxer.facts` | the `vizevalScore` kind; memberships 122–137 in the runtime vocabulary | the generated store (`vizevalfacts`), its gen-test lane, and the vocabulary's assignment golden |
 
 ## Alternatives
 

@@ -12,6 +12,7 @@ package harness
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json/v2"
 	"image"
@@ -27,7 +28,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
@@ -35,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/geometry"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/vizevalfacts"
 	"lukechampine.com/blake3"
 )
 
@@ -85,6 +87,10 @@ type Scorecard struct {
 	Metrics     map[string]float64 `json:"metrics,omitempty"`
 	Gates       map[string]bool    `json:"gates,omitempty"`
 	At          string             `json:"at"`
+	// ReusedFrom is set when the card was read back from boxer.facts rather
+	// than rendered: the same candidate over the same data at the same clean
+	// build was already measured then. Its Dir is that run's.
+	ReusedFrom string `json:"reusedFrom,omitempty"`
 }
 
 // Options configures a scoring run.
@@ -98,9 +104,16 @@ type Options struct {
 	ClientBinary string
 	Timeout      time.Duration
 	// ClickHouseURL is where the harness runs the dataset and the answers;
-	// empty means BOXER's configured endpoint. play reaches it the same way.
+	// empty means the configured endpoint (chclient.ConfigFromEnv), the one
+	// play and the facts store reach.
 	ClickHouseURL string
-	Logger        zerolog.Logger
+	// Facts, when set, files every fresh scorecard in boxer.facts and
+	// answers a candidate already measured there — same scenario, candidate,
+	// clean build and batch digest — without rendering it again, unless
+	// Rescore (ADR-0257 §SD8).
+	Facts   *vizevalfacts.ScoreStore
+	Rescore bool
+	Logger  zerolog.Logger
 }
 
 // Dataset is a scenario's batch as the harness sees it.
@@ -144,6 +157,19 @@ func Score(sc *vizeval.Scenario, cands []vizeval.Candidate, opts Options) (cards
 			Scenario: sc.Name, Candidate: cand, CandidateID: cand.ID(), Build: build,
 			BatchDigest: ds.Digest, Rows: ds.Rows,
 		}
+		if opts.Facts != nil && !opts.Rescore {
+			stored, found, e := lookupStored(context.Background(), opts.Facts, card)
+			if e != nil {
+				return nil, nil, e
+			}
+			if found {
+				stored.ReusedFrom = stored.At
+				cards = append(cards, stored)
+				opts.Logger.Info().Str("scenario", sc.Name).Str("candidate", string(cand.Canonical())).
+					Str("at", stored.At).Msg("candidate already measured; reused")
+				continue
+			}
+		}
 		scoreOne(sc, &card, ds, opts)
 		card.At = time.Now().UTC().Format(time.RFC3339)
 		opts.Logger.Info().Str("scenario", sc.Name).Str("candidate", string(cand.Canonical())).
@@ -153,7 +179,12 @@ func Score(sc *vizeval.Scenario, cands []vizeval.Candidate, opts Options) (cards
 	if err = writeScorecards(opts.OutDir, dir, cards); err != nil {
 		return cards, answers, err
 	}
-	if err = writeGallery(dir, sc, ds, answers, cards); err != nil {
+	if opts.Facts != nil {
+		if err = writeFacts(context.Background(), opts.Facts, cards); err != nil {
+			return cards, answers, err
+		}
+	}
+	if err = writeGallery(opts.OutDir, dir, sc, ds, answers, cards); err != nil {
 		return cards, answers, err
 	}
 	return cards, answers, nil
@@ -384,7 +415,7 @@ func query(opts Options, sql string, format string) (body []byte, err error) {
 	expanded = strings.TrimRight(strings.TrimSpace(expanded), ";")
 	url := opts.ClickHouseURL
 	if url == "" {
-		url = clickhouseenv.URL.Get()
+		url = chclient.ConfigFromEnv().URL
 	}
 	client := http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Post(url, "text/plain", strings.NewReader(expanded+"\nFORMAT "+format))
@@ -403,12 +434,15 @@ func query(opts Options, sql string, format string) (body []byte, err error) {
 	return body, nil
 }
 
+// unknownBuild is the build of a binary with no VCS stamp.
+const unknownBuild = "unknown"
+
 // buildID is the revision this binary was built from, marked when the tree was
 // dirty; scorecards from different builds are different measurements.
 func buildID() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return "unknown"
+		return unknownBuild
 	}
 	var rev, dirty string
 	for _, s := range info.Settings {
@@ -422,7 +456,7 @@ func buildID() string {
 		}
 	}
 	if rev == "" {
-		return "unknown"
+		return unknownBuild
 	}
 	return rev[:min(12, len(rev))] + dirty
 }
@@ -470,7 +504,7 @@ var metricOrder = []string{
 
 // writeGallery writes the scenario's contact sheet: the scenario, its data and
 // answers, and each candidate's artifact beside its gates and metrics.
-func writeGallery(dir string, sc *vizeval.Scenario, ds Dataset, answers []Answer, cards []Scorecard) (err error) {
+func writeGallery(outDir string, dir string, sc *vizeval.Scenario, ds Dataset, answers []Answer, cards []Scorecard) (err error) {
 	var b strings.Builder
 	b.WriteString("# " + sc.Name + "\n\nGenerated by `imzero2 vizeval score` (ADR-0257) — " +
 		time.Now().Format(time.RFC3339) + ".\n\n")
@@ -495,7 +529,12 @@ func writeGallery(dir string, sc *vizeval.Scenario, ds Dataset, answers []Answer
 		if c.Reason != "" {
 			b.WriteString("_" + c.Reason + "_\n\n")
 		}
-		if c.Dir != "" && c.Metrics != nil {
+		if c.ReusedFrom != "" {
+			b.WriteString("_Measured " + c.ReusedFrom + " at the same build and data; read back from boxer.facts._\n\n")
+		}
+		// A reused card's captures are in the run that made them, which
+		// may not be this output directory.
+		if c.Dir != "" && c.Metrics != nil && nonEmpty(filepath.Join(outDir, c.Dir, "artifact.png")) {
 			b.WriteString("![" + c.CandidateID + "](" + c.CandidateID + "/artifact.png)\n\n")
 		}
 		if len(c.Gates) > 0 {
@@ -528,4 +567,9 @@ func writeGallery(dir string, sc *vizeval.Scenario, ds Dataset, answers []Answer
 		return eh.Errorf("unable to write the gallery: %w", err)
 	}
 	return nil
+}
+
+func nonEmpty(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.Size() > 0
 }
