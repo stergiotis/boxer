@@ -1,11 +1,11 @@
 ---
 type: adr
-status: proposed
+status: deferred
 date: 2026-04-21
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do
-> not implement as if accepted. Dormant since 2026-04; its requirements
+> **Status: deferred (2026-09-25).** Not implemented; do not implement as
+> written. Dormant since 2026-04; its requirements
 > (result categorization, archival routing, lineage) are restated and tracked
 > in
 > [doc/explanation/query-observability.md](../explanation/query-observability.md),
@@ -972,8 +972,14 @@ include:
 
 ## Status
 
-Proposed — 2026-04-21. Awaiting review by `p@stergiotis`.
-Implementation to follow once accepted.
+Deferred (2026-09-25). Never implemented. The Decision builds on the
+transport of [ADR-0050](./0050-clickhouse-observability-pipeline.md),
+which was superseded without being built, and
+[query-observability](../explanation/query-observability.md) rescoped the
+requirements from a gate to an affordance.
+[ADR-0115](./0115-query-observability-data-plane-strategy.md) expects a
+successor at the weave slice. Trigger: that successor, which supersedes this
+ADR; the shape-lattice analysis stays as its theory record.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

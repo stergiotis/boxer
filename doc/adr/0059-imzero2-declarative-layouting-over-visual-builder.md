@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: deferred
 date: 2026-04-24
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: deferred (2026-09-25).** Not implemented; the sizing it waits on was never done. See `## Status`.
 
 # ADR-0059: ImZero2 — Invest in Declarative Layouting and Fast Turnover, Not a Visual GUI Builder
 
@@ -171,4 +171,4 @@ Rejection rationale for the top-level options is in the QOC matrix; notes below 
 
 ## Status
 
-Proposed. Awaiting review and concrete sizing of: the first-pass Go-side layout vocabulary and its mapping to `egui_taffy` (SD1); the target panel-LOC reduction baseline; the target turnover-latency number that turns SD3 from intention into a KPI.
+Deferred (2026-09-25). Nothing from the layout half was built: no `egui_taffy` dependency, no Go-side layout vocabulary. The stance against a visual builder is unchanged. Trigger: the sizing this ADR asked for — the first-pass Go-side layout vocabulary and its mapping to `egui_taffy` (SD1), the panel-LOC reduction baseline, and the turnover-latency number that turns SD3 into a KPI — at which point it returns to review. SD8's premise is dated: the accesskit tree now carries the headless driver ([ADR-0154](./0154-headless-carrier-tree-and-driver.md), `imzero2 drive`), so a revival re-examines it.
