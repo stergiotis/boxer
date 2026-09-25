@@ -169,6 +169,12 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if e := introspectproviders.RegisterRunEvents(reg, deps.Facts, deps.PersistExec); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: run-events provider registration failed")
 	}
+	// ADR-0260 §SD5: sessions, log tails and audit folds across runs, for
+	// the app center. Registered unconditionally, like runtime_events: a
+	// store that cannot read the trail answers with empty tables.
+	if e := introspectproviders.RegisterAppTrail(reg, deps.Facts); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: app trail provider registration failed")
+	}
 	if e := introspectproviders.RegisterAppState(reg, deps.PersistExec); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: app_state provider registration failed")
 	}
