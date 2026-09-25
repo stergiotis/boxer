@@ -206,10 +206,10 @@ id) keep the clickhouse-local path.
 
 ### Milestones
 
-- **M1 — Lane in the carrier behind ADR-0088 negotiation.** Tied to carrier
+- **M1 — Lane in the carrier behind ADR-0088 negotiation.** ✓ Tied to carrier
   lifecycle (no serve outliving FFFI2 shutdown); probe retired into it.
-- **M2 — Painter to product grade.** Gamma parity, DPR adoption, reconnect.
-- **M3 — Appliance host feature.** The `headless_wgpu`/`headless` split (SD6),
+- **M2 — Painter to product grade.** ✓ Gamma parity, DPR adoption, reconnect.
+- **M3 — Appliance host feature.** ✓ The `headless_wgpu`/`headless` split (SD6),
   then a musl-static target and a gokrazy QEMU boot probe. The appliance
   *image* is out of scope here — it relates the ADR-P-0001 deployment substrate
   and gets its own ADR once the probe confirms viability.
@@ -308,6 +308,15 @@ probe (`gok` instance; `main_go` as the Go package carrying the repo tags +
 The appliance *image* scope — and whether it becomes its own ADR or an
 ADR-P-0001 update — is deferred until the probe lands; it is not this ADR's
 decision.
+
+**M3 closed (noted 2026-09-25).** The musl-static client and the gokrazy boot
+probe were carried by [ADR-0206](./0206-gokrazy-appliance-image.md), which
+records itself as discharging this ADR's M3 deferral, beside the CPU-rasterized
+pixel host of [ADR-0205](./0205-imzero2-cpu-rasterized-pixel-host.md). M1–M3
+are built. **M4 — the runtime fallback policy — is the open item:** the
+callback sentinel is a warn-once in the headless host and the bandwidth guard
+has not landed. Acceptance can take M4 as a follow-up or split it out; that is
+the reviewer's call.
 
 ## References
 

@@ -151,6 +151,12 @@ Proposed (2026-07-10) — pre-human-review. Awaiting review by a code owner of
 [`public/identity/identgen`](../../public/identity/identgen). Decision under
 consideration; do not implement as if accepted.
 
+Built (noted 2026-09-25, `2a2106c2`): SD1's `AllocatorI` seam, SD2/SD3's
+leased generators and internalizer, SD4's `memalloc` reference backend, and
+SD5's context on the generation seam. Open: SD4's store-backed and
+network-authority allocators. No package outside `identgen` consumes the leased
+generators yet; ADR-0112 defers its durable-generator integration to them.
+
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 

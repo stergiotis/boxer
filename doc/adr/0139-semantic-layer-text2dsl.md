@@ -337,19 +337,27 @@ SD8's executor and SD9's client are placed by ADR-0254 (the tools run
 under the calling app's grants; the client rides `llm.complete`), and the
 layer's entries are an introspection table. Sequencing, also settled: the
 engine lands first and the `boxer text2sql` CLI proves it; play's `ask`
-transformation (ADR-0254 §SD6) consumes the proven engine after. Awaiting
-review for acceptance alongside ADR-0254.
+transformation (ADR-0254 §SD6) consumes the proven engine after. ADR-0254
+was accepted on its own (2026-09-23); this ADR awaits review for acceptance
+separately, with the layer (SD1–SD7) still unbuilt — see `## Updates`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-09-25 — what ADR-0254 built, and what stays open here
+
+The 2026-09-23 revision of `## Status` placed SD8 and SD9 under
+[ADR-0254](./0254-model-inference-as-a-keelson-capability.md) without a dated
+entry; this records it. Built under ADR-0254 (M4): the SD9 in-conversation
+tool loop in `public/db/clickhouse/text2sql2/orchestrator`, and the SD8 tools
+(`list_tables`, `describe_table`, `validate_sql`, `keelson_query`) executed
+under the calling app's grants. ADR-0254 §SD5 owns that executor; SD8's
+"guarded executor" is its manifest guard. Not built: the layer itself —
+SD1–SD7 (the home package, the block grammar, the lint, the renderer). Until
+it exists, play's `ask` grounds on a schema harvest of the pinned endpoint
+(ADR-0254 M3).
 
 ## References
 
