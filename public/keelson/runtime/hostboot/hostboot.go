@@ -17,8 +17,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
+	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/covscrape"
@@ -532,6 +535,19 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	lchr := launcher.Default
 	lchr.SetHost(host)
 	lchr.SetHelpApp(helphost.ManifestId)
+	// The detail pane's Inspect (ADR-0260 §SD1): the app center, opened on
+	// the app the pane shows. Wired only where the registry holds it, so a
+	// host built over a narrower registry shows no dead action.
+	if _, ok := reg.LookupManifest(appcenter.AppId); ok {
+		lchr.SetInspect(func(target app.AppIdT) (err error) {
+			cfg, err := buscodec.Encode(appcenterlaunch.AppCenterLaunch{At: time.Now().UTC(), AppId: string(target)})
+			if err != nil {
+				return
+			}
+			_, err = host.OpenWithConfig(appcenter.AppId, appcenterlaunch.Kind, cfg)
+			return
+		})
+	}
 	// Ranking, when the facts store can answer for it (ADR-0214 §SD7). A
 	// no-op against the in-memory fallback, which is the correct behaviour
 	// rather than a degraded one: a run with no server has no trail to rank

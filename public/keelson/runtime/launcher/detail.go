@@ -110,6 +110,12 @@ func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 				inst.open(inst.helpAppId)
 			}
 		}
+		if inst.inspect != nil {
+			if c.Button(ids.PrepareStr("detail-inspect"), c.Atoms().Text(icons.PhMagnifyingGlass+" Inspect").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.inspectApp(m.Id)
+			}
+		}
 	}
 	c.AddSpace(styletokens.GapItems(inst.density))
 }

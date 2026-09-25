@@ -116,6 +116,11 @@ type Inst struct {
 	// help. Empty hides the action.
 	helpAppId app.AppIdT
 
+	// inspect opens the app center on an app (ADR-0260 §SD1), injected for
+	// the reason helpAppId is: the launcher does not know which app
+	// inspects, nor how its launch config is encoded. nil hides the action.
+	inspect func(target app.AppIdT) (err error)
+
 	// rank supplies §SD8's frecency bonus. nil until a history source is
 	// wired, which is the state a run without ClickHouse stays in.
 	rank rankFn
@@ -165,6 +170,13 @@ func (inst *Inst) FocusQueryField() {
 // help reader.
 func (inst *Inst) SetHelpApp(id app.AppIdT) {
 	inst.helpAppId = id
+}
+
+// SetInspect installs the detail pane's "Inspect" action: fn opens a window
+// showing target (ADR-0260 §SD1). nil hides the action, which is the state of
+// a host that registers no app center.
+func (inst *Inst) SetInspect(fn func(target app.AppIdT) (err error)) {
+	inst.inspect = fn
 }
 
 // Render draws the whole launcher: the list pane beside the detail pane. The
@@ -471,6 +483,19 @@ func (inst *Inst) open(id app.AppIdT) {
 	inst.logger.Info().Str("id", string(id)).Msg("launcher: open-or-raise")
 	if err := inst.host.OpenOrRaiseApp(id); err != nil {
 		inst.logger.Warn().Err(err).Str("id", string(id)).Msg("launcher: open failed")
+	}
+}
+
+// inspectApp opens the app center on id (ADR-0260 §SD1). The open runs on
+// the frame goroutine, as open's does: the host call enqueues the window and
+// returns.
+func (inst *Inst) inspectApp(id app.AppIdT) {
+	if inst.inspect == nil {
+		return
+	}
+	inst.logger.Info().Str("id", string(id)).Msg("launcher: inspect")
+	if err := inst.inspect(id); err != nil {
+		inst.logger.Warn().Err(err).Str("id", string(id)).Msg("launcher: inspect failed")
 	}
 }
 
