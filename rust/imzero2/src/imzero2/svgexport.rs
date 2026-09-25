@@ -1618,7 +1618,7 @@ impl SvgBuilder {
         // The glyphs of one text shape are wrapped in one `<g class="imz-text">`
         // carrying what a program measuring the drawing needs and cannot
         // recover from glyphs alone (ADR-0257, proposed, §SD6): the string,
-        // the ink bounds of the glyphs actually drawn (advance widths are not
+        // the ink bounds of the glyphs actually drawn (their atlas quads — not
         // in the per-glyph elements), the largest font size, and whether
         // egui elided the text to fit. The opening tag is inserted once the
         // bounds are known; a shape that draws no glyph gets no group.
@@ -1719,10 +1719,15 @@ impl SvgBuilder {
                         ch = xml_escape_char(glyph.chr),
                     );
                     self.counts.glyphs_emitted += 1;
-                    let top = by - glyph.font_ascent;
-                    let glyph_box = Rect::from_min_max(
-                        egui::pos2(bx, top),
-                        egui::pos2(bx + advance, top + glyph.font_height),
+                    // The glyph's ink, where egui's own tessellation puts
+                    // its quad: position plus the atlas entry's offset, at
+                    // the entry's size. The line box (ascent to descent)
+                    // would count descender space a digit never inks as
+                    // text, and call a label clipped that is not.
+                    let uv = glyph.uv_rect;
+                    let glyph_box = Rect::from_min_size(
+                        egui::pos2(bx + uv.offset.x, by + uv.offset.y),
+                        uv.size,
                     );
                     ink = Some(ink.map_or(glyph_box, |r| r.union(glyph_box)));
                     max_size = max_size.max(em_size);

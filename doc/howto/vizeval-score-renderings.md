@@ -47,6 +47,12 @@ test.
    The format's reference is `vizeval.ScenarioSpec`
    ([scenario.go](../../public/thestack/imzero2/vizeval/scenario.go)).
 
+   The sinks a scenario can admit are the Experiments pane's: the card
+   table, the box-drawn tables, card-JSON, the topology treemap and sparks,
+   and `chart`, which draws the first tagged section with a numeric value
+   as bars, lines, points or a heatmap, one category per entity and one
+   series per membership.
+
 2. **List what can vary.** Each admitted sink's row cap and option space, one
    JSON line per sink — the input a search enumerates:
 

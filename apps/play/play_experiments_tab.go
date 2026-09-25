@@ -20,6 +20,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
@@ -86,6 +87,17 @@ var experimentsTopoPaneFill = paneFill{
 // size their own treemap.
 const experimentsTopoPaneProbeSalt uint64 = 0xe89e21a1e57090b0
 
+// experimentsChartPaneProbeSalt is the chart's probe slot, apart from the
+// treemap's so the two never read each other's box.
+const experimentsChartPaneProbeSalt uint64 = 0x3c7a1f0e5b2d9c41
+
+// experimentsChartPaneFill is the chart's box: the pane less a little slack,
+// floored where tick labels stop fitting.
+var experimentsChartPaneFill = paneFill{
+	slack: 12, minW: 360, maxW: 2400, minH: 200,
+	fallbackW: 900, fallbackH: 420,
+}
+
 // experimentsKey is the cache key for the built output: re-drive only when the
 // user changes what they asked for, or when the result underneath changes.
 // Schema identity is a pointer compare, the same idiom CardDriver.EnsureFor
@@ -131,9 +143,13 @@ type experimentsDriver struct {
 	notice   string
 	topoSink *leewaywidgets.TopologySink
 	topoView *treemap.Treemap
-	jsonView typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	jsonOK   bool
-	textOut  []string
+	// chartModel is the chart sink's projection of the batch; chartView draws
+	// it and keeps the heatmap's colour scale across frames.
+	chartModel *leewaywidgets.ChartModel
+	chartView  *leewaywidgets.ChartView
+	jsonView   typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	jsonOK     bool
+	textOut    []string
 
 	// card is the pane's card emitter, for both sources; cardPalette is the
 	// palette it was built with, since the emitter takes it at construction.
@@ -332,6 +348,10 @@ func sinkGuide(sink string) (headline, detail string) {
 		return "One braille cell per four attributes.",
 			"Within a cell the LEFT dot column marks attributes that carried a value and the " +
 				"RIGHT column those that carried tags; │ separates sections, ⟦ ⟧ wrap a co-section group."
+	case vizeval.SinkChart:
+		return "One category per entity, one series per membership.",
+			"The first tagged section with a numeric value is charted: each attribute's value, in the series its " +
+				"first membership names. seriesBy entity swaps the two; a heatmap puts series on rows."
 	case vizeval.SinkTreemapSpark:
 		return "Three lines per entity: a proportional box row.",
 			"Box width follows the section's column count. Inside, █ is value+tags, ▓ value only, " +
@@ -440,6 +460,7 @@ func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.
 	inst.notice = ""
 	inst.topoSink = nil
 	inst.topoView = nil
+	inst.chartModel = nil
 	inst.textOut = nil
 	inst.jsonOK = false
 
@@ -494,6 +515,9 @@ func (inst *experimentsDriver) makeSink(cand vizeval.Candidate) (sink streamread
 		return card.NewBrailleSpark(buf), func() { inst.textOut = splitTextOutput(buf.String()) }
 	case vizeval.SinkTreemapSpark:
 		return card.NewTreemapSpark(buf), func() { inst.textOut = splitTextOutput(buf.String()) }
+	case vizeval.SinkChart:
+		cs := leewaywidgets.NewChartSink()
+		return cs, func() { inst.chartModel = cs.Model() }
 	}
 	return nil, nil
 }
@@ -558,6 +582,8 @@ func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.S
 			if inst.jsonOK {
 				c.CodeView(inst.ids.PrepareStr("exp-json"), inst.jsonView).Wrap().Send()
 			}
+		case inst.sink == vizeval.SinkChart:
+			inst.renderChart(cand)
 		case inst.isTextSink():
 			inst.renderText()
 		}
@@ -682,6 +708,54 @@ func (inst *experimentsDriver) renderTopology() {
 	// far past the leaf.
 	inst.topoView.SetContainerSize(experimentsTopoPaneFill.box(inst.paneW, inst.paneH))
 	inst.topoView.Render()
+}
+
+// renderChart draws the chart sink's model under the candidate's options, in
+// the box the pane probe last reported.
+func (inst *experimentsDriver) renderChart(cand vizeval.Candidate) {
+	if inst.chartModel == nil {
+		return
+	}
+	if inst.chartView == nil {
+		inst.chartView = leewaywidgets.NewChartView(inst.ids)
+	}
+	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsChartPaneProbeSalt).Derive()); ok &&
+		availW > 0 && availH > 0 &&
+		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
+		inst.paneW, inst.paneH = availW, availH
+	}
+	w, h := experimentsChartPaneFill.box(inst.paneW, inst.paneH)
+	inst.chartView.Render(inst.chartModel, chartOptionsOf(cand), inst.chartModel.ValueName, w, h)
+}
+
+// experimentsColormaps maps the catalogue's colormap names onto palettes.
+var experimentsColormaps = map[string][]uint32{
+	"viridis": colormap.Viridis8, "inferno": colormap.Inferno8, "magma": colormap.Magma8,
+	"plasma": colormap.Plasma8, "cividis": colormap.Cividis8, "turbo": colormap.Turbo8,
+}
+
+// experimentsChartMarks maps the catalogue's mark names onto the view's.
+var experimentsChartMarks = map[string]leewaywidgets.ChartMarkE{
+	"bar": leewaywidgets.ChartMarkBar, "line": leewaywidgets.ChartMarkLine,
+	"scatter": leewaywidgets.ChartMarkScatter, "heatmap": leewaywidgets.ChartMarkHeatmap,
+}
+
+// experimentsChartSorts maps the catalogue's sort names onto the view's.
+var experimentsChartSorts = map[string]leewaywidgets.ChartSortE{
+	"none": leewaywidgets.ChartSortNone, "ascending": leewaywidgets.ChartSortAscending,
+	"descending": leewaywidgets.ChartSortDescending,
+}
+
+func chartOptionsOf(cand vizeval.Candidate) (o leewaywidgets.ChartOptions) {
+	mark, _ := cand.Options[vizeval.OptionMark].(string)
+	seriesBy, _ := cand.Options[vizeval.OptionSeriesBy].(string)
+	sort, _ := cand.Options[vizeval.OptionSort].(string)
+	cm, _ := cand.Options[vizeval.OptionColormap].(string)
+	legend, _ := cand.Options[vizeval.OptionLegend].(bool)
+	return leewaywidgets.ChartOptions{
+		Mark: experimentsChartMarks[mark], Transpose: seriesBy == "entity", Legend: legend,
+		Sort: experimentsChartSorts[sort], Colormap: experimentsColormaps[cm],
+	}
 }
 
 // topologyPointerLine reads the box under the pointer, or names the gesture

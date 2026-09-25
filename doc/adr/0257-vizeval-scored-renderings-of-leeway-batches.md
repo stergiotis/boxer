@@ -73,6 +73,15 @@ sink). What a sink claims from a batch — which section becomes an axis,
 which membership an edge — is part of the candidate, which makes the
 leeway-to-encoding mapping itself searchable, not only its styling.
 
+The chart sink's projection is fixed rather than searched: the first tagged
+section with a numeric scalar value is charted, one category per entity
+(labelled by its natural key) and one series per attribute's first
+membership. What varies is how that projection is drawn — mark (bar, line,
+scatter, heatmap), which side the series run along, category order, legend,
+heatmap ramp — which is where two readings of one table differ. A batch
+whose shape the projection does not fit is a scenario that does not admit
+the sink, not a projection to search over.
+
 The row cap becomes a per-sink property: shape-reading sinks keep a small
 one, sinks whose picture depends on every row (charts, graphs) declare a
 larger one. A batch over a sink's cap is never silently truncated: the pane
@@ -160,8 +169,10 @@ shape). The harness always requests them. This change is to the scene
 runner and the headless host; scenes that do not ask are unaffected.
 
 The exporter wraps each text shape's glyphs in one `<g class="imz-text">`
-carrying the string, the ink bounds of the glyphs drawn, the largest font
-size and whether egui elided it. The per-glyph elements alone carry neither
+carrying the string, the ink bounds of the glyphs drawn — each glyph's atlas
+quad, where egui's tessellation puts it, not its line box, which counted
+descender space a digit never inks and called fully drawn labels clipped —
+the largest font size and whether egui elided it. The per-glyph elements alone carry neither
 advance widths nor which glyphs form a label, and reconstructing words from
 glyph gaps would measure the reconstruction.
 
@@ -319,7 +330,7 @@ so a search written later calls it in-process.
 - **M5 — Image content in `openaichat` and task-question accuracy** ✓ (SD6
   second layer, SD7).
 - **M6 — Pairwise judgements and ranking** ✓ (SD6 third layer).
-- **M7 — Chart sinks.**
+- **M7 — Chart sinks** ✓: one `chart` sink whose mark is an option.
 - **M8 — A graphview sink.**
 - **M9 — Hierarchy sinks** (value-bearing treemap, icicle, sankey).
 

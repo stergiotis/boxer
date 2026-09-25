@@ -5,7 +5,7 @@ status: draft
 vizeval:
   size: 1600x1000
   intent: "Find the busiest of twenty-four hosts by cpu load."
-  sinks: [card, unicode, json]
+  sinks: [card, unicode, json, chart]
   questions:
     - id: busiest-cpu
       prompt: "Which host has the highest cpu load?"

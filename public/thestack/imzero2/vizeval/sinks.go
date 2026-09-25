@@ -10,6 +10,7 @@ const (
 	SinkTopoSpark    = "topo"
 	SinkBrailleSpark = "braille"
 	SinkTreemapSpark = "treemap"
+	SinkChart        = "chart"
 )
 
 // Option names shared by more than one caller.
@@ -17,6 +18,19 @@ const (
 	OptionPalette        = "palette"
 	OptionWidth          = "width"
 	OptionMaxColumnWidth = "maxColumnWidth"
+	OptionMark           = "mark"
+	OptionSeriesBy       = "seriesBy"
+	OptionSort           = "sort"
+	OptionLegend         = "legend"
+	OptionColormap       = "colormap"
+)
+
+// Chart option choices, in the order the pane offers them.
+var (
+	ChartMarks     = []string{"bar", "line", "scatter", "heatmap"}
+	ChartSeriesBy  = []string{"membership", "entity"}
+	ChartSorts     = []string{"none", "ascending", "descending"}
+	ChartColormaps = []string{"viridis", "inferno", "magma", "plasma", "cividis", "turbo"}
 )
 
 // SinkSpec declares one sink: what it is called, how many rows of a batch its
@@ -53,6 +67,21 @@ var sinks = []SinkSpec{
 	{ID: SinkTopoSpark, Title: "topology spark", RowCap: 64},
 	{ID: SinkBrailleSpark, Title: "braille spark", RowCap: 64},
 	{ID: SinkTreemapSpark, Title: "treemap spark", RowCap: 64},
+	// The chart projects the first tagged section with a numeric value: one
+	// category per entity, one series per membership (leewaywidgets.ChartModel).
+	// Every row is drawn, and 64 entities is past where category labels stay
+	// readable at any width the pane has.
+	{ID: SinkChart, Title: "chart", RowCap: 64, Space: Space{
+		{Name: OptionMark, Kind: OptionKindEnum, Choices: ChartMarks, Default: "bar",
+			Description: "how values are drawn"},
+		{Name: OptionSeriesBy, Kind: OptionKindEnum, Choices: ChartSeriesBy, Default: "membership",
+			Description: "what a series is: a membership, with entities along x, or an entity, with memberships along x"},
+		{Name: OptionSort, Kind: OptionKindEnum, Choices: ChartSorts, Default: "none",
+			Description: "category order: the batch's, or by the first series' value"},
+		{Name: OptionLegend, Kind: OptionKindBool, Default: true, Description: "show the series legend"},
+		{Name: OptionColormap, Kind: OptionKindEnum, Choices: ChartColormaps, Default: "viridis",
+			Description: "the heatmap's colour ramp"},
+	}},
 }
 
 // Sinks is the catalogue, in the order the pane offers the sinks. The slice is

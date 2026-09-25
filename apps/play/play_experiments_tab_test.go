@@ -42,6 +42,17 @@ func TestExperimentsImplementsTheCatalogue(t *testing.T) {
 		}
 		assert.Len(t, experimentsPalettes, len(o.Choices))
 	}
+	for _, ch := range vizeval.ChartMarks {
+		_, ok := experimentsChartMarks[ch]
+		assert.True(t, ok, "mark %s", ch)
+	}
+	for _, ch := range vizeval.ChartSorts {
+		_, ok := experimentsChartSorts[ch]
+		assert.True(t, ok, "sort %s", ch)
+	}
+	for _, ch := range vizeval.ChartColormaps {
+		assert.NotEmpty(t, experimentsColormaps[ch], "colormap %s", ch)
+	}
 }
 
 func TestExperimentsSeed(t *testing.T) {
