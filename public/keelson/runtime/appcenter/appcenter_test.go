@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspectengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
@@ -314,12 +315,70 @@ func TestRunSummary(t *testing.T) {
 		StartedMs:   []int64{1000, 5000, 0},
 		StoppedMs:   []int64{3000, 0, 9000},
 		StopReason:  []string{"user-close", "", "shutdown"},
+		RunSeenMs:   []int64{0, 0, 0},
 	}
 	assert.Equal(t, runSummary{sessions: 3, runs: 2, open: 1, lastMs: 9000}, summarizeRuns(&rc))
-	assert.Equal(t, "2s", sessionLength(1000, 3000))
-	assert.Empty(t, sessionLength(0, 3000), "a start before the look-back has no length")
-	assert.Empty(t, sessionLength(1000, 0), "an open session has no length")
+	assert.Equal(t, "2s", sessionLength(1000, 3000, 0))
+	assert.Equal(t, "≥ 4s", sessionLength(1000, 0, 5000), "no close: the process's last sign of life is a lower bound")
+	assert.Empty(t, sessionLength(0, 3000, 0), "a start before the look-back has no length")
+	assert.Empty(t, sessionLength(1000, 0, 0), "no close and no later sign of the process")
+	end, closed := sessionEnd(1000, 0, 500)
+	assert.Zero(t, end, "a heartbeat before the start says nothing about the end")
+	assert.False(t, closed)
 	assert.Equal(t, []kindCount{{"warn", 2}, {"info", 1}}, countValues([]string{"warn", "info", "warn"}))
 	assert.Equal(t, "—", timeOfMs(0))
 	assert.Equal(t, "abcdefgh", shortRun("abcdefghij"))
+}
+
+func TestPlayQueries(t *testing.T) {
+	const id = "github.com/stergiotis/boxer/apps/appstate"
+	for _, key := range playSections {
+		sql, ok := playQuery(key, id, "apps/appstate")
+		require.True(t, ok, key)
+		if key == secAdrs {
+			assert.Contains(t, sql, "'apps/appstate'", "the ADR statement filters by directory")
+		} else {
+			assert.Contains(t, sql, "'"+id+"'", key)
+		}
+	}
+	_, ok := playQuery(secAdrs, id, "")
+	assert.False(t, ok, "no directory, no ADR statement")
+	_, ok = playQuery("nope", id, "")
+	assert.False(t, ok)
+	sql, _ := playQuery(secLlm, id, "")
+	assert.NotContains(t, sql, "prompt", "the model-call statement leaves the text out")
+	assert.Equal(t, `'a\'b\\c'`, sqlString(`a'b\c`))
+}
+
+// Every statement runs on the engine the introspection endpoint serves
+// play's window through, over a registry built the way the host builds it.
+func TestPlayQueriesRunOnTheEngine(t *testing.T) {
+	if _, err := chlocalpool.LookupBinary(); err != nil {
+		t.Skipf("clickhouse not installed: %v", err)
+	}
+	logger := zerolog.New(zerolog.NewTestWriter(t))
+	bus := inprocbus.NewInst(logger)
+	bus.SetRequestTimeout(30 * time.Second)
+	broker, err := chlocalbroker.NewService(bus, chlocalpool.Config{
+		BaseTmpDir: t.TempDir(), MinIdle: 1, MaxConcurrent: 3, SpawnConcurrency: 1,
+	}, logger)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = broker.Stop(ctx)
+	})
+	e, err := introspectengine.New(introspectengine.Config{
+		Registry: hostRegistry(t),
+		Bus: bus.NewClient("test.appcenter.play", []app.SubjectFilter{
+			{Pattern: chlocalbroker.SubjectExecAll, Direction: app.CapDirectionBoth, Reason: "test"},
+		}),
+	}, logger)
+	require.NoError(t, err)
+	for _, key := range playSections {
+		sql, ok := playQuery(key, "github.com/stergiotis/boxer/apps/appstate", "apps/appstate")
+		require.True(t, ok)
+		_, _, err := e.Query(context.Background(), sql, "TabSeparated")
+		assert.NoError(t, err, "%s:\n%s", key, sql)
+	}
 }

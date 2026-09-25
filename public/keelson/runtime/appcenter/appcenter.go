@@ -24,7 +24,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -272,24 +271,9 @@ func readPage(ctx context.Context, r readerI, p page) page {
 	return p
 }
 
-// openApp asks the window host to open target, off the frame goroutine.
-// A refusal lands as the status line's note.
+// openApp asks the window host to open target, plainly.
 func (inst *App) openApp(target string) {
-	if inst.bus == nil || inst.appCtx == nil || inst.appCtx.Err() != nil {
-		return
-	}
-	inst.wg.Add(1)
-	go func() {
-		defer inst.wg.Done()
-		_, err := windowhost.RequestOpen(inst.bus, app.AppIdT(target), "", nil)
-		note := ""
-		if err != nil {
-			note = "open " + shortApp(target) + ": " + err.Error()
-		}
-		inst.mu.Lock()
-		inst.snap.openNote = note
-		inst.mu.Unlock()
-	}()
+	inst.request(target, "", nil)
 }
 
 func (inst *App) snapshot() (s snapshot) {

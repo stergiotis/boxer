@@ -34,7 +34,7 @@ var manifest = app.Manifest{
 	Caps: append(keelsonquery.ClientCaps(readTables...), app.SubjectFilter{
 		Pattern:   windowhost.OpenSubject,
 		Direction: app.CapDirectionPub,
-		Reason:    "app center: Open — open the app a page shows, or the app-state manager",
+		Reason:    "app center: Open — open the app a page shows, the app-state manager, or play on a section's table",
 	}),
 }
 

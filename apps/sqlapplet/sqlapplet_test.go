@@ -35,9 +35,14 @@ const sqlFence = "```sql\nSELECT * FROM keelson('env')\n```"
 func TestStarterBookCorpus(t *testing.T) {
 	defs, errs := ParseBook("sqlapplet", help.MustSub(bookFS, "book"))
 	require.Empty(t, errs)
-	require.Len(t, defs, 5)
+	require.Len(t, defs, 6)
 
-	docsSearch, recent, apps, env, timeline := defs[0], defs[1], defs[2], defs[3], defs[4]
+	sessions, docsSearch, recent, apps, env, timeline := defs[0], defs[1], defs[2], defs[3], defs[4], defs[5]
+	assert.Equal(t, "app-sessions", sessions.Slug)
+	assert.Equal(t, EndpointIntrospection, sessions.Endpoint)
+	assert.Equal(t, []TabSel{{ID: "timeline"}, {ID: "table"}, {ID: "detail"}}, sessions.Tabs)
+	assert.Equal(t, analysis.QuerySecurityRead, sessions.Class)
+	assert.False(t, sessions.HasUnboundSlots, "the apps slot is prelude-bound")
 	assert.Equal(t, "docs-search", docsSearch.Slug)
 	assert.Equal(t, EndpointIntrospection, docsSearch.Endpoint)
 	assert.Equal(t, []TabSel{{ID: "table"}, {ID: "detail"}}, docsSearch.Tabs)
@@ -89,7 +94,7 @@ func TestMintStarterBook(t *testing.T) {
 	reg := app.NewRegistry()
 	minted, errs := mintBooks(reg, zerolog.Nop(), []registeredBook{{id: "sqlapplet", fsys: help.MustSub(bookFS, "book"), topics: []app.TopicT{app.TopicRuntime}}})
 	require.Empty(t, errs)
-	assert.Equal(t, 5, minted)
+	assert.Equal(t, 6, minted)
 
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "runtime-apps"))
 	require.True(t, ok)

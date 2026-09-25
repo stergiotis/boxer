@@ -203,13 +203,32 @@ func summarizeRuns(cols *runCols) (s runSummary) {
 	return
 }
 
-// sessionLength is how long a session lasted, "" when either end is
-// unknown.
-func sessionLength(startedMs, stoppedMs int64) string {
-	if startedMs == 0 || stoppedMs == 0 || stoppedMs < startedMs {
+// sessionEnd is where a session's bar ends: its close, else the last time
+// its process was seen alive, else nowhere. closed says the end is a close
+// rather than a lower bound.
+func sessionEnd(startedMs, stoppedMs, seenMs int64) (endMs int64, closed bool) {
+	switch {
+	case stoppedMs > 0:
+		return stoppedMs, true
+	case seenMs > startedMs:
+		return seenMs, false
+	}
+	return 0, false
+}
+
+// sessionLength is how long a session lasted: exact when it closed, a lower
+// bound ("≥") when only its process's last sign of life is known, "" when
+// either end is unknown.
+func sessionLength(startedMs, stoppedMs, seenMs int64) string {
+	endMs, closed := sessionEnd(startedMs, stoppedMs, seenMs)
+	if startedMs == 0 || endMs == 0 || endMs < startedMs {
 		return ""
 	}
-	return (time.Duration(stoppedMs-startedMs) * time.Millisecond).Round(time.Second).String()
+	d := (time.Duration(endMs-startedMs) * time.Millisecond).Round(time.Second).String()
+	if !closed {
+		return "≥ " + d
+	}
+	return d
 }
 
 // llmTotal folds the app's model calls.

@@ -18,7 +18,8 @@ it. The scene selects the app-state manager, which declares a read grant and
 keeps no state of its own, and then the SQL playground. It asserts that the
 list was read over the bus and that the page's sections render, the three
 cross-run ones included. What each section lists depends on the trail the
-host's store holds.
+host's store holds. Last it opens the Runs section in play, which draws the app's sessions on
+its Timeline tab from the introspection endpoint.
 
 ```jsonl trace
 {"do":"wait","contains":"Refresh","role":"button","settleMs":500}
@@ -36,4 +37,9 @@ host's store holds.
 {"do":"capture","text":"appcenter-play"}
 {"do":"click","name":"Runs"}
 {"do":"capture","text":"appcenter-play-logs","settleMs":500}
+{"do":"click","name":"Runs"}
+{"do":"click","id":12875594712639319915,"comment":"the Runs section's Open in play; every section's button shares the name"}
+{"do":"read","valueContains":"rows ·","role":"label","pattern":"(?P<rows>\\d+) rows","comment":"play has run the statement"}
+{"do":"expect","of":"rows","min":1}
+{"do":"capture","text":"appcenter-open-in-play","settleMs":1000}
 ```

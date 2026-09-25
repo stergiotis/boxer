@@ -23,6 +23,6 @@ for the app center's page on that app.
 {"do":"wait","contains":"Inspect","role":"button","settleMs":500}
 {"do":"click","contains":"Inspect","role":"button"}
 {"do":"wait","name":"Capabilities","settleMs":3000}
-{"do":"read","valueContains":"apps/appstate","role":"label","nth":1,"pattern":"(?P<id>github.com/stergiotis/boxer/apps/appstate)"}
+{"do":"read","valueContains":"Cited under","role":"label","pattern":"Cited under (?P<dir>apps/appstate);","comment":"only the app center's page on App state says this"}
 {"do":"capture","text":"inspect-appstate"}
 ```

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	playlaunch "github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/observability/humanfmt"
@@ -111,18 +112,27 @@ func (inst *App) renderPage(snap snapshot) {
 		c.Label("Reading…").Send()
 		return
 	}
-	inst.section("runs", "Runs", func() { inst.renderRuns(p) })
-	inst.section("logs", "Logs", func() { inst.renderLogs(p) })
-	inst.section("audit", "Audited requests", func() { inst.renderAudit(p) })
-	inst.section("run", "This process", func() { inst.renderRun(p) })
-	inst.section("caps", "Capabilities", func() { inst.renderCaps(apps, i, p) })
-	inst.section("state", "Kept state", func() { inst.renderState(apps, p) })
-	inst.section("coverage", "Coverage", func() { inst.renderCoverage(&snap.global, p) })
-	inst.section("adrs", "ADRs its code cites", func() { inst.renderAdrs(&snap.global) })
-	inst.section("jobs", "Watchbill jobs", func() { inst.renderJobs(p) })
-	inst.section("datasets", "Published datasets", func() { inst.renderDatasets(p) })
-	inst.section("llm", "Model calls", func() { inst.renderLlm(p) })
-	inst.section("tasks", "Tasks", func() { inst.renderTasks(p) })
+	adrDir := packageDir(inst.selected, snap.global.coderefs.cols.Pkg)
+	play := appIndex(apps, playlaunch.AppId) >= 0
+	sec := func(key string, title string, body func()) {
+		sql := ""
+		if play {
+			sql, _ = playQuery(key, inst.selected, adrDir)
+		}
+		inst.section(key, title, sql, body)
+	}
+	sec(secRuns, "Runs", func() { inst.renderRuns(p) })
+	sec(secLogs, "Logs", func() { inst.renderLogs(p) })
+	sec(secAudit, "Audited requests", func() { inst.renderAudit(p) })
+	sec(secRun, "This process", func() { inst.renderRun(p) })
+	sec(secCaps, "Capabilities", func() { inst.renderCaps(apps, i, p) })
+	sec(secState, "Kept state", func() { inst.renderState(apps, p) })
+	sec(secCoverage, "Coverage", func() { inst.renderCoverage(&snap.global, p) })
+	sec(secAdrs, "ADRs its code cites", func() { inst.renderAdrs(&snap.global) })
+	sec(secJobs, "Watchbill jobs", func() { inst.renderJobs(p) })
+	sec(secDatasets, "Published datasets", func() { inst.renderDatasets(p) })
+	sec(secLlm, "Model calls", func() { inst.renderLlm(p) })
+	sec(secTasks, "Tasks", func() { inst.renderTasks(p) })
 }
 
 func (inst *App) renderHead(apps *appCols, i int) {
@@ -152,9 +162,18 @@ func (inst *App) renderHead(apps *appCols, i int) {
 	c.AddSpace(styletokens.PaddingInner(inst.density))
 }
 
-// section draws one lens under a header, open by default.
-func (inst *App) section(key string, title string, body func()) {
+// section draws one lens under a header, open by default. A non-empty
+// playSql puts an "Open in play" action above the lens: the same table,
+// whole and live, in a playground.
+func (inst *App) section(key string, title string, playSql string, body func()) {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-"+key), c.WidgetText().Text(title).Keep()).DefaultOpen(true).KeepIter() {
+		if playSql != "" {
+			for range c.HoverText(playSql).KeepIter() {
+				if c.Button(inst.ids.PrepareStr("play-"+key), c.Atoms().Text(icons.PhDatabase+" Open in play").Keep()).Small().SendResp().HasPrimaryClicked() {
+					inst.openInPlay(playSql, playTab(key))
+				}
+			}
+		}
 		body()
 	}
 }
@@ -246,8 +265,14 @@ func (inst *App) renderRuns(p *page) {
 	n := min(len(rc.RunId), runRowsShown)
 	inst.grid("runs-grid", []string{"started", "stopped", "lasted", "run", "window", "reason"}, n, func(j int) {
 		mono(timeOfMs(rc.StartedMs[j]))
-		mono(timeOfMs(rc.StoppedMs[j]))
-		mono(sessionLength(rc.StartedMs[j], rc.StoppedMs[j]))
+		if rc.StoppedMs[j] == 0 && rc.RunSeenMs[j] > rc.StartedMs[j] {
+			for range c.HoverText("No close was recorded; this is the last heartbeat of its process.").KeepIter() {
+				weak("seen " + timeOfMs(rc.RunSeenMs[j]))
+			}
+		} else {
+			mono(timeOfMs(rc.StoppedMs[j]))
+		}
+		mono(sessionLength(rc.StartedMs[j], rc.StoppedMs[j], rc.RunSeenMs[j]))
 		mono(shortRun(rc.RunId[j]))
 		mono(windowOf(rc.InstanceKey[j]))
 		c.Label(rc.StopReason[j]).Send()

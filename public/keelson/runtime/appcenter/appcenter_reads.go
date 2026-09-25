@@ -158,6 +158,7 @@ type runCols struct {
 	StartedMs   []int64  `ch:"started_ms"`
 	StoppedMs   []int64  `ch:"stopped_ms"`
 	StopReason  []string `ch:"stop_reason"`
+	RunSeenMs   []int64  `ch:"run_seen_ms"`
 }
 
 // logCols is keelson('app_logs') for one app: its newest log rows across
@@ -217,7 +218,7 @@ const (
 		"WHERE owner_app_id = {app:String} ORDER BY run_after DESC LIMIT 100"
 	datasetsSql = "SELECT alias, handle, rows, bytes, revision FROM keelson('adhoc') " +
 		"WHERE publisher = {app:String} ORDER BY alias"
-	runsSql = "SELECT run_id, instance_key, started_ms, stopped_ms, stop_reason FROM keelson('app_runs') " +
+	runsSql = "SELECT run_id, instance_key, started_ms, stopped_ms, stop_reason, run_seen_ms FROM keelson('app_runs') " +
 		"WHERE app_id = {app:String} ORDER BY greatest(started_ms, stopped_ms) DESC LIMIT " + runsReadStr
 	logsSql = "SELECT ts_ms, instance_key, run_id, level, caller, message, error FROM keelson('app_logs') " +
 		"WHERE app_id = {app:String} ORDER BY ts_ms DESC"

@@ -85,7 +85,7 @@ func TestMintGodepBook(t *testing.T) {
 		{id: "godep", fsys: help.MustSub(bookgodepFS, "bookgodep"), topics: []app.TopicT{app.TopicCode}},
 	})
 	require.Empty(t, errs)
-	assert.Equal(t, 17, minted)
+	assert.Equal(t, 18, minted)
 	m, ok := reg.LookupManifest(app.AppIdT(appletIdPrefix + "go-packages"))
 	require.True(t, ok)
 	assert.Equal(t, "Go packages", m.Display)
