@@ -13,16 +13,15 @@ date: 2026-09-23
 ## Context
 
 ADR-0229 §SD7 deferred weighted shortest paths "until a weighted `edges`
-contract has a consumer". The consumer is shadow-boxer's ADR-0012
-(proposed): foot and bike routing, reachability and travel-time matrices
+contract has a consumer". The consumer is a downstream project's
+routing proposal: foot and bike routing, reachability and travel-time matrices
 over the Swiss topographic road layer — about 1.65 M nodes and 4 M arcs
 once every two-way segment is two arcs — with a cost profile that changes
 per question (a hiking grade cap, a surface rule, a closure) and, should a
 car profile ever be taken up, weights that change per minute.
 
 The shape of the problem is settled in the literature and recorded in
-shadow-boxer's survey
-([road routing algorithms in Go](https://github.com/stergiotis/shadow-boxer/blob/main/doc/adr-background-work/road-routing-algorithms-in-go.md)):
+that consumer's survey of road routing algorithms in Go:
 a plain Contraction Hierarchy bakes the metric into its order, so each
 profile and each closure is a rebuild of minutes; a Customizable
 Contraction Hierarchy (Dibbelt, Strasser, Wagner 2016) computes a
@@ -83,7 +82,7 @@ system, a road class or a country.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| Exported Go API under `public/` | added: `public/analytics/graph/rutter` | shadow-boxer's pin, once tagged |
+| Exported Go API under `public/` | added: `public/analytics/graph/rutter` | the consumer's pin, once tagged |
 | House names | `rutter` joins the register in README | the README table |
 
 ## Alternatives
@@ -145,8 +144,8 @@ index equal to a linear scan. Polyline coordinates are float32, and
 `Index.NearestWhere` takes an acceptance predicate so a consumer snaps
 under a profile.
 
-The consumer measured the package on the Swiss road layer (shadow-boxer
-ADR-0012, Updates 2026-09-24): 1 654 880 nodes and 4 154 136 arcs; the
+The consumer measured the package on the Swiss road layer (its routing
+ADR, Updates 2026-09-24): 1 654 880 nodes and 4 154 136 arcs; the
 Inertial Flow order in 138 s single-threaded; contraction in 1 s to
 7 843 889 up-arcs (1.89× the arcs) and a tree of height 792;
 customization in 4.3 s single-threaded; a country-length query with
@@ -172,7 +171,7 @@ nearest first, for it. The consumer matched 146 synthetic fixes along a
 ## References
 
 - [ADR-0229](./0229-graph-analytics-engine.md) — the CSR container and the deferral this decision answers.
-- shadow-boxer ADR-0012 (proposed) — the consumer.
+- A downstream project's routing ADR (proposed) — the consumer.
 - Dibbelt, Strasser, Wagner, "Customizable Contraction Hierarchies", JEA 2016 — https://arxiv.org/abs/1402.0402
 - Bläsius et al., "Customizable Contraction Hierarchies – A Survey", 2025 — https://arxiv.org/abs/2502.10519
 - Schild, Sommer, "On Balanced Separators in Road Networks", SEA 2015 — https://aschild.github.io/papers/roadseparator.pdf
