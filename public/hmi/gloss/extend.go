@@ -24,7 +24,7 @@ import (
 //
 // Naming: a media type is the catalog key, so a consumer must pick one that
 // boxer will not later take. `gloss/<name>` is boxer's own space; a consumer
-// should use a prefix it owns — `sailing/tidestate`, `acme/x-widget` — and
+// should use a prefix it owns — `harbour/tidestate`, `acme/x-widget` — and
 // that is a convention here rather than a rule, because refusing an unknown
 // prefix would also refuse a gloss that later moves upstream unchanged.
 //

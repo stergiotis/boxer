@@ -16,7 +16,7 @@
 # monospaced, no two rows the same width, and every box frame ragged. A
 # launcher that quietly omits a flag therefore looks like a rendering bug in
 # the client, which is a long way from where the cause is. Consumers outside
-# this repository (shadow-boxer, sailing) resolve this file through their boxer
+# this repository resolve this file through their boxer
 # pin, so a fix here reaches them at their next bump.
 #
 # The four variables are inputs as well as outputs: MAIN_FONT, MONO_FONT,

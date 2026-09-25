@@ -172,7 +172,7 @@ if capture_keys_mask != 0 && ` + respExpr + `.has_focus() {
         // Necessary but not sufficient on its own: this delivers the key that
         // was pressed, while a consumer holding the keyboard still wants a
         // repaint cadence of its own so the NEXT press finds a live window
-        // (measured in shadow-boxer's lightbox: three arrows moved one cell
+        // (measured in a downstream image viewer: three arrows moved one cell
         // with this alone, three with a 50 ms poll beside it).
         ui.ctx().request_repaint();
     }
