@@ -921,7 +921,7 @@ reason alone.
 
 ### 2026-08-28 — the disjoint-sections gate is channel-aware; verbatim slots gain the name gate
 
-Trigger: the sailing repository's events store (sailing ADR-0006) binds
+Trigger: a downstream repository's events store binds
 every membership through `lowCardVerbatim`. Its four kinds share the
 type-named sections of the `boxer.facts` idiom, and under the default
 per-plan ids the SD6 gate refused the layout — although an all-verbatim
@@ -1161,6 +1161,13 @@ was a Go fold over the ascending `Scan`, written once per consumer.
   live server. The ordering test was checked for teeth: with the Filter moved
   inside the collapse, deleted and superseded keys came back and it failed.
   All in-tree stores regenerated.
+
+### 2026-09-25 — a downstream project no longer named
+
+Mentions of a downstream repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.
+
 
 ## References
 

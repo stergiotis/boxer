@@ -1185,8 +1185,8 @@ catalogue.
 §SD2 placed the three tables beside `boxer.facts`, and the database was a
 constant threaded through provisioning, `Verify`, the snapshot index and the
 adapter's index reads. A consuming repository whose own facts are forbidden
-from the `boxer` database (shadow-boxer's ADR-0002 keeps everything of its
-own in `shadowboxer`) could re-point the generated stores through
+from the `boxer` database (one keeps everything of its own in a database
+of its own) could re-point the generated stores through
 `MetaStoreConfig.Table` but not provision, verify or list snapshots there,
 so the first lading store outside boxer needed the constant to become a
 parameter.
@@ -1202,6 +1202,13 @@ instruction call them. The SQL surface already had its own spelling
 (`ladingsql.Config.Database`) and keeps it: it is configured where a pass
 registry is built, not where a store is opened. The ladingschema test pins
 that a layout moves every qualified name in the DDL and nothing else.
+
+### 2026-09-25 — a downstream project no longer named
+
+Mentions of a downstream repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.
+
 
 ## References
 

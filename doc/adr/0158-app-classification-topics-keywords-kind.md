@@ -517,7 +517,7 @@ leaf package, not to hand-roll a second matcher.
 
 ### 2026-08-28 — a `sensing` topic for instruments and radios
 
-The first adopter outside this repository — the sailing repository's
+The first adopter outside this repository — a downstream repository's
 Micronet receiver, a windowed app fed by a software-defined radio — had no
 honest place in the vocabulary: `data` names datasets and columnar
 modelling, `geo` names maps and terrain, and neither says "live
@@ -525,6 +525,13 @@ measurements from the physical world". §SD1's hand-ordered list gains
 `sensing` (instruments, radios, sensors), placed after `geo` in the
 launcher order. The §SD9 gate and `ParseTopic` cover it as they cover every
 member; no existing manifest moves.
+
+### 2026-09-25 — a downstream project no longer named
+
+Mentions of a downstream repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.
+
 
 ## References
 
