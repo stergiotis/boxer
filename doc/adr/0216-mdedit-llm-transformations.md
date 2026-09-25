@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-01
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** The change is implemented; this
-> record has not been reviewed.
 
 # ADR-0216: mdedit — pluggable LLM text transformations behind an env gate
 
@@ -139,8 +138,9 @@ live endpoint and stays manual, driven with LM Studio or Ollama via
 
 ## Status
 
-Proposed (2026-09-01). Implemented in the same session as the record; awaiting
-review.
+Accepted (2026-09-25). Implemented in the same session as the record
+(2026-09-01); SD1 and SD3 are superseded by ADR-0254 (Updates, 2026-09-23).
+Not yet exercised against a live model.
 
 ## Updates
 
@@ -157,6 +157,14 @@ as `BOXER_LLM_*`, with `llm.describe` supplying the visibility (the
 endpoint host beside the picker) and the gate (no model, no surface). SD2,
 SD4 and SD5 are unchanged and are the shape play adopts. Nothing here is
 built until ADR-0254 M1.
+
+### 2026-09-25 — the migration onto `llm.complete` has shipped
+
+The previous entry's closing line no longer holds. mdedit's transformations
+complete through the host's model over the bus (`a46eefba`, ADR-0254 §SD6),
+the `BOXER_MDEDIT_LLM_*` variables are gone in favour of the host's
+`BOXER_LLM_*`, and the SD2 prompt book lives in the host's
+`llm/promptbook`, where play reads it too.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

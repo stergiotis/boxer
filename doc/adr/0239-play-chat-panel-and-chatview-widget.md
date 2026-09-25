@@ -1,14 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-15
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Design dialogue in progress; this
-> file is the living snapshot of it (AGENTS.md § ADRs). Do not implement as if
-> accepted.
 
 # ADR-0239: a `play` chat pane — a transcript from a query result, its bubbles drawn through the gloss catalog
 
@@ -456,11 +452,11 @@ colour-token vocabulary are reused, not extended.
 
 ## Status
 
-Proposed — the design dialogue settled on 2026-09-15: the gloss body path
+Accepted (2026-09-25). The design dialogue settled on 2026-09-15: the gloss body path
 (QOC 1, O2), the tail window first (QOC 2, O2), the viewer from the picker
 alone (§SD2), reactions as a first-class contract member fed by a CTE (§SD1),
 a conversation picker with the sidebar deferred (§SD8), and storage and
-import out of scope. Awaiting review by the code owner.
+import out of scope.
 
 Built in the working tree the same day, against this text: `widgets/chatview`
 with its row-plan tests and two gallery demos (dialogue, group), the play
