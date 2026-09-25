@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/findAnchor"
 	"github.com/stergiotis/boxer/public/app/commands/http"
 	"github.com/stergiotis/boxer/public/app/commands/iconsgen"
+	"github.com/stergiotis/boxer/public/app/commands/jackstay"
 	"github.com/stergiotis/boxer/public/app/commands/keelsoncodec"
 	"github.com/stergiotis/boxer/public/app/commands/keelsonddl"
 	"github.com/stergiotis/boxer/public/app/commands/key"
@@ -134,6 +135,7 @@ func mainC() (exitCode int) {
 			watchbillcli.NewCliCommand(),
 			runtimecodegen.NewCliCommand(),
 			keelsonddl.NewCliCommand(),
+			jackstay.NewCliCommand(),
 			ladingfs.NewCliCommand(),
 			markdown.NewCliCommand(),
 			sample.NewCliCommand(),
