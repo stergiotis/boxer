@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-02
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0219: `play` shows a record's canonical identity — canonform and canonwire on demand, and a CBOR diagnostic-notation widget
 
@@ -421,7 +419,10 @@ pane is next touched.
   random entities of ADR-0210 M2, not random *tables* — the same limit that
   ADR recorded.
 
-## Forks — open at proposal
+## Forks — closed at acceptance
+
+Each fork was built as proposed and closed that way on acceptance
+(2026-09-25); the alternatives stay as the record of the option.
 
 1. **The canonwire fingerprint (SD4).** Keyed BLAKE3 in the runtime, as
    proposed; or an unkeyed hash; or none, showing only the bytes' length.
@@ -437,7 +438,8 @@ pane is next touched.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted (2026-09-25). M0–M3 built as proposed; the live-endpoint check
+named under Verification's gap is still owed.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
