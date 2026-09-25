@@ -64,6 +64,14 @@ func collectIdentifierTokenIndices(tree antlr.Tree) map[int]bool {
 			}
 			return false
 		}
+		// `columns` in table position is the COLUMNS token directly under
+		// tableIdentifier, not an identifier — but it is a name all the same,
+		// and a case-sensitive one: `system.COLUMNS` is no table.
+		if tid, ok := ctx.(*grammar1.TableIdentifierContext); ok {
+			if kw := tid.COLUMNS(); kw != nil {
+				indices[kw.GetSymbol().GetTokenIndex()] = true
+			}
+		}
 		return true
 	})
 	return indices

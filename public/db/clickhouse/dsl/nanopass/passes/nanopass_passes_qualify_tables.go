@@ -62,10 +62,14 @@ func qualifyTablesInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, de
 		// parameterised table (`FROM {t:Identifier}`) has no Identifier child
 		// and qualifies just as well — `db.{t:Identifier}` is what ClickHouse
 		// substitutes into.
+		// The COLUMNS token (`columns`, admitted in table position only) is
+		// spliced as written for the same reason.
 		name := tid.Identifier()
 		if name == nil {
 			if ps := tid.ParamSlot(); ps != nil {
 				nanopass.ReplaceNode(rw, tid, defaultDB+"."+ps.GetText())
+			} else if kw := tid.COLUMNS(); kw != nil {
+				nanopass.ReplaceNode(rw, tid, defaultDB+"."+kw.GetText())
 			}
 			continue
 		}

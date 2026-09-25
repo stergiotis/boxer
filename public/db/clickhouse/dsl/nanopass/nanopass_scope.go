@@ -536,9 +536,11 @@ func extractFromAliasExpr(aliasExpr *grammar1.TableExprAliasContext, parentScope
 // the grammar admits because ClickHouse substitutes there. A slot is not an
 // identifier, so it is neither decoded nor resolvable: no schema lookup will
 // match it, which is correct, because the real name is not known until the
-// server substitutes it.
+// server substitutes it. `columns` arrives as the COLUMNS token rather than an
+// identifier (the grammar admits it in table position only) and is returned
+// as written.
 //
-// Returns "" for a nil node or a shape carrying neither child.
+// Returns "" for a nil node or a shape carrying none of the three children.
 func TableIdentifierName(tid *grammar1.TableIdentifierContext) (name string) {
 	if tid == nil {
 		return
@@ -549,6 +551,10 @@ func TableIdentifierName(tid *grammar1.TableIdentifierContext) (name string) {
 	}
 	if ps := tid.ParamSlot(); ps != nil {
 		name = ps.GetText()
+		return
+	}
+	if kw := tid.COLUMNS(); kw != nil {
+		name = kw.GetText()
 	}
 	return
 }
