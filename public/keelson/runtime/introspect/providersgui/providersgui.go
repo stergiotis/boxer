@@ -1,5 +1,5 @@
 // Package providersgui implements the GUI-coupled v1 introspection
-// providers — demos and windows (ADR-0094 §SD8). They live apart from
+// providers — demos, windows (ADR-0094 §SD8) and frame times (ADR-0261). They live apart from
 // the GUI-free providers package because the demo registry and the
 // window host both pull in the egui2 bindings, so importing them from a
 // headless context is undesirable. The runtime wiring registers these
@@ -7,6 +7,8 @@
 package providersgui
 
 import (
+	"time"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -22,14 +24,24 @@ func RegisterWindows(r *introspect.Registry, host *windowhost.Inst) error {
 	return r.Register(windowsProvider{host: host})
 }
 
+// RegisterFrameTimes registers a frame-time provider bound to host into r.
+// A nil host answers with an empty table.
+func RegisterFrameTimes(r *introspect.Registry, host *windowhost.Inst) error {
+	return r.Register(frameTimesProvider{host: host})
+}
+
 // RegisterAll registers the GUI-coupled providers: demos (a process
-// global) and, when host is non-nil, windows (bound to that host).
+// global) and, when host is non-nil, windows and frame times (bound to
+// that host).
 func RegisterAll(r *introspect.Registry, host *windowhost.Inst) (err error) {
 	if err = RegisterDemos(r); err != nil {
 		return
 	}
 	if host != nil {
-		err = RegisterWindows(r, host)
+		if err = RegisterWindows(r, host); err != nil {
+			return
+		}
+		err = RegisterFrameTimes(r, host)
 	}
 	return
 }
@@ -122,4 +134,53 @@ func windowsTable(ws []windowhost.WindowInfo) *introspect.Table {
 		// (a singleton-registered app shown twice): such a window takes no
 		// config and saves no workingset.
 		Bool("shares_instance", func(i int) bool { return ws[i].SharesInstance })
+}
+
+// --- frame times (ADR-0261) --------------------------------------------------
+
+// TableFrameTimes is the table's name, keelson('frame_times').
+const TableFrameTimes = "frame_times"
+
+type frameTimesProvider struct{ host *windowhost.Inst }
+
+func (frameTimesProvider) Name() string                         { return TableFrameTimes }
+func (frameTimesProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (frameTimesProvider) Schema() *arrow.Schema                { return frameTimesTable(nil).Schema() }
+
+func (p frameTimesProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	var rows []windowhost.FrameTimeInfo
+	if p.host != nil {
+		rows = p.host.FrameTimes()
+	}
+	return frameTimesTable(rows).Build(proj, len(rows)), nil
+}
+
+// frameTimesTable is one row for the render loop and one per open window
+// that has drawn. Durations are microseconds: a frame's parts are well under
+// a millisecond, and a column a reader subtracts should not need parsing.
+func frameTimesTable(rows []windowhost.FrameTimeInfo) *introspect.Table {
+	us := func(d time.Duration) int64 { return d.Microseconds() }
+	return introspect.NewTable().
+		// "loop": the render loop's period, start of one frame to the next —
+		// the budget the window rows spend from. "window": one window's
+		// Frame call on the render goroutine.
+		String("scope", func(i int) string { return rows[i].Scope.String() }).
+		Uint64("instance_key", func(i int) uint64 { return uint64(rows[i].Key) }).
+		String("app_id", func(i int) string { return string(rows[i].AppId) }).
+		// frames counts every sample since the window opened; samples those
+		// the quantiles and means are over, the most recent ones.
+		Uint64("frames", func(i int) uint64 { return rows[i].Frames }).
+		Int64("samples", func(i int) int64 { return int64(rows[i].Samples) }).
+		Int64("total_us", func(i int) int64 { return us(rows[i].Total) }).
+		Int64("last_us", func(i int) int64 { return us(rows[i].Last) }).
+		Int64("mean_us", func(i int) int64 { return us(rows[i].Mean) }).
+		Int64("p50_us", func(i int) int64 { return us(rows[i].P50) }).
+		Int64("p95_us", func(i int) int64 { return us(rows[i].P95) }).
+		Int64("max_us", func(i int) int64 { return us(rows[i].Max) }).
+		// FFFI messages the sample produced, captured or sent.
+		Uint64("messages_last", func(i int) uint64 { return rows[i].MessagesLast }).
+		Float64("messages_mean", func(i int) float64 { return rows[i].MessagesMean }).
+		// Mount on the render goroutine; 0 for a window sharing an instance
+		// already mounted, and for the loop row.
+		Int64("mount_us", func(i int) int64 { return us(rows[i].Mount) })
 }

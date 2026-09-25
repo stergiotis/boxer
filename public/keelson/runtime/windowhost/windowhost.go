@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/config/env"
@@ -170,6 +171,10 @@ type Inst struct {
 	mu      sync.Mutex
 	nextKey uint64
 	windows []*window
+
+	// frameTimes times each window's Frame on the render goroutine
+	// (ADR-0261); read through FrameTimes.
+	frameTimes frameTimes
 
 	// pendingRaise queues one window to be raised to the top of egui's
 	// stacking on the next Frame — OpenOrRaise's "focus the existing
@@ -718,6 +723,7 @@ func (w *window) unload(logger zerolog.Logger) {
 // the last release, otherwise its own (unobserved) stop channel and client
 // close now.
 func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) {
+	inst.frameTimes.forget(w.key)
 	uc, shared, carried := inst.releaseMount(w)
 	if shared {
 		inst.warnWorkingsetSharedInstance(w)
@@ -975,6 +981,7 @@ func emitStopped(facts factsstore.FactsStoreI, logger zerolog.Logger, runId stri
 // "open" button per app and runs inside a c.PanelCentral so the user
 // can at least see something on the desktop after launch.
 func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
+	inst.frameTimes.beginLoop(time.Now())
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
 	// Snapshot the slice under lock; the iteration runs without the
@@ -1069,7 +1076,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 				inst.pendingExportKey = w.key
 				inst.fpSaveSvg.Show()
 			}
-			renderWindowBody(w, inst.logger)
+			renderWindowBody(w, inst.logger, &inst.frameTimes)
 		}
 	}
 	// Render the SVG-save picker once per Frame. It draws its own
@@ -1286,7 +1293,7 @@ func windowhostInstanceSalt(key WindowKeyT) uint64 {
 // on their outermost panel cannot collide on the wire id — each derives
 // its id under a different salt. The IdScope wrapper pops the salt on
 // return so the stack is empty between frames.
-func renderWindowBody(w *window, logger zerolog.Logger) {
+func renderWindowBody(w *window, logger zerolog.Logger, ft *frameTimes) {
 	if windowhostDebugRender {
 		logger.Info().
 			Uint64("windowKey", uint64(w.key)).
@@ -1302,7 +1309,9 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 	// Mount runs once per AppI instance (shared via w.mount), capturing the
 	// first window's mountCtx so the eventual Unmount uses the same context.
 	if !w.mount.mounted && w.mount.mountErr == nil {
+		mountStart := time.Now()
 		mErr := w.appInst.Mount(w.mountCtx)
+		ft.recordMount(w, time.Since(mountStart))
 		if mErr != nil {
 			w.mount.mountErr = mErr
 		} else {
@@ -1315,7 +1324,10 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 		return
 	}
 	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
+		msgs := frameMessages()
+		start := time.Now()
 		fErr := w.appInst.Frame(w.frameCtxApp)
+		ft.recordFrame(w, time.Since(start), frameMessages()-msgs)
 		if fErr != nil {
 			c.Label("windowhost: frame error: " + fErr.Error()).Send()
 		}

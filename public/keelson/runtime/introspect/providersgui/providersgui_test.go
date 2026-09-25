@@ -2,6 +2,7 @@ package providersgui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -75,4 +76,30 @@ func stringColumn(t *testing.T, rec arrow.RecordBatch, col string) (out []string
 		out[i] = c.Value(i)
 	}
 	return
+}
+
+func TestFrameTimesTable(t *testing.T) {
+	rows := []windowhost.FrameTimeInfo{
+		{Scope: windowhost.FrameScopeLoop, Frames: 10, Samples: 10, P95: 16 * time.Millisecond},
+		{Scope: windowhost.FrameScopeWindow, Key: 3, AppId: "test.a", P95: 1500 * time.Microsecond, MessagesMean: 42.5, Mount: 2 * time.Millisecond},
+	}
+	rec := frameTimesTable(rows).Build(introspect.AllColumns(), len(rows))
+	defer rec.Release()
+	require.EqualValues(t, 2, rec.NumRows())
+	assert.Equal(t, []string{"loop", "window"}, stringColumn(t, rec, "scope"))
+	assert.Equal(t, []string{"", "test.a"}, stringColumn(t, rec, "app_id"))
+	p95 := rec.Column(colIndex(t, rec, "p95_us")).(*array.Int64)
+	assert.EqualValues(t, 16000, p95.Value(0))
+	assert.EqualValues(t, 1500, p95.Value(1))
+	mount := rec.Column(colIndex(t, rec, "mount_us")).(*array.Int64)
+	assert.EqualValues(t, 2000, mount.Value(1))
+}
+
+func TestFrameTimesProviderNilHost(t *testing.T) {
+	p := frameTimesProvider{}
+	rec, err := p.Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer rec.Release()
+	assert.Zero(t, rec.NumRows())
+	assert.EqualValues(t, p.Schema().NumFields(), rec.NumCols())
 }
