@@ -117,3 +117,21 @@ func TestColorReferences(t *testing.T) {
 	assert.InDelta(t, 0.0, DeltaE2000(Lab{50, 0, 0}, Lab{50, 0, 0}), 1e-9)
 	assert.InDelta(t, 100.0, white.Lab().L, 1e-3)
 }
+
+func TestDigestIsTheDrawingInsideTheArea(t *testing.T) {
+	d, err := ReadSVG(strings.NewReader(plantedSVG))
+	require.NoError(t, err)
+	area := Rect{0, 0, 400, 200}
+	a := Digest(d, area)
+	assert.Equal(t, a, Digest(d, area), "deterministic")
+
+	outside := strings.Replace(plantedSVG, "</svg>", `<g class="imz-text" data-text="run:abc" data-bbox="10 250 40 16" data-size="13"><text fill="#ffffff">r</text></g></svg>`, 1)
+	d2, err := ReadSVG(strings.NewReader(outside))
+	require.NoError(t, err)
+	assert.Equal(t, a, Digest(d2, area), "what is drawn outside the area does not count")
+
+	moved := strings.Replace(plantedSVG, `data-text="alpha" data-bbox="10.00`, `data-text="alpha" data-bbox="11.00`, 1)
+	d3, err := ReadSVG(strings.NewReader(moved))
+	require.NoError(t, err)
+	assert.NotEqual(t, a, Digest(d3, area), "a moved label is a different drawing")
+}

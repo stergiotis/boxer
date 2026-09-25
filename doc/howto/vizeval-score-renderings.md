@@ -15,7 +15,8 @@ and records geometry metrics for each — overlap, clipping, elision, contrast,
 colour distance, numeric alignment — as files you can read or compare. It
 covers the harness as built through
 [ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md) (proposed)
-M4: geometry metrics, filed as files and optionally in `boxer.facts`. Model-judged task accuracy and pairwise ranking are later
+M5: geometry metrics and model-answered task questions, filed as files and
+optionally in `boxer.facts`. Model-judged task accuracy and pairwise ranking are later
 milestones, and searching the candidate space is left to the caller.
 
 ## When to use this recipe
@@ -74,7 +75,20 @@ test.
    scripts/dev/vizeval.sh facts --scenario 20_long_labels
    ```
 
-5. **Read the results.** `tmp/vizeval/<scenario>/index.md` is the contact
+5. **Ask a model, optionally.** `--judge` asks each scenario question of the
+   vision model `BOXER_LLM_ENDPOINT` / `BOXER_LLM_MODEL` name, about every
+   candidate that passed its geometry gates, and records `task.accuracy`;
+   the gallery shows each answer beside the expected one. Replies are cached
+   under `<out>/judge-cache` by what the picture shows, so a re-run of the
+   same drawing costs nothing; `--judgeCalls` bounds the calls a run makes.
+   Scenario data is synthetic, so nothing sealed leaves the machine.
+
+   ```bash
+   BOXER_LLM_ENDPOINT=http://localhost:1234/v1/ BOXER_LLM_MODEL=<vision model> \
+     scripts/dev/vizeval.sh score --judge --facts apps/play/vizeval
+   ```
+
+6. **Read the results.** `tmp/vizeval/<scenario>/index.md` is the contact
    sheet: the computed answers, then each candidate's cropped artifact with
    its gates and metrics. `tmp/vizeval/scorecards.jsonl` has every scorecard
    ever written there, one per line, with the build it was scored at and a

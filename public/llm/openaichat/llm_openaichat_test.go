@@ -334,3 +334,25 @@ func TestLoadGeminiApiKeyMissing(t *testing.T) {
 	_, err := LoadGeminiApiKey()
 	require.Error(t, err)
 }
+
+func TestEncodeRequestImagesUseContentParts(t *testing.T) {
+	inst, err := NewClient("http://localhost/", "")
+	require.NoError(t, err)
+	body, err := inst.encodeRequest(CompletionRequest{
+		ModelId: "m",
+		Messages: []Message{
+			{Role: ChatRoleSystem, Content: "read the picture"},
+			{Role: ChatRoleUser, Content: "which is largest?", Images: []Image{{MediaType: "image/png", Data: []byte{1, 2, 3}}}},
+		},
+	})
+	require.NoError(t, err)
+	s := string(body)
+	assert.Contains(t, s, `"content":"read the picture"`, "a message without images keeps plain string content")
+	assert.Contains(t, s, `{"type":"text","text":"which is largest?"}`)
+	assert.Contains(t, s, `{"type":"image_url","image_url":{"url":"data:image/png;base64,AQID"}}`)
+
+	_, err = inst.encodeRequest(CompletionRequest{ModelId: "m", Messages: []Message{
+		{Role: ChatRoleUser, Content: "x", Images: []Image{{MediaType: "text/plain", Data: []byte{1}}}},
+	}})
+	assert.Error(t, err, "only image media types are attached")
+}

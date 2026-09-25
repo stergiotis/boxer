@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/geometry"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/judge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/vizevalfacts"
 	"lukechampine.com/blake3"
 )
@@ -87,6 +88,12 @@ type Scorecard struct {
 	Metrics     map[string]float64 `json:"metrics,omitempty"`
 	Gates       map[string]bool    `json:"gates,omitempty"`
 	At          string             `json:"at"`
+	// DrawingDigest identifies what was drawn in the area (geometry.Digest):
+	// equal digests are equal drawings, whatever the candidates' options.
+	DrawingDigest string `json:"drawingDigest,omitempty"`
+	// Verdicts are the judge's answers to the scenario's questions, when a
+	// judge ran; the facts row keeps only the task metrics.
+	Verdicts []judge.Verdict `json:"verdicts,omitempty"`
 	// ReusedFrom is set when the card was read back from boxer.facts rather
 	// than rendered: the same candidate over the same data at the same clean
 	// build was already measured then. Its Dir is that run's.
@@ -113,7 +120,10 @@ type Options struct {
 	// Rescore (ADR-0257 §SD8).
 	Facts   *vizevalfacts.ScoreStore
 	Rescore bool
-	Logger  zerolog.Logger
+	// Judge, when set, asks the scenario's questions of a model about every
+	// candidate that passed its geometry gates (§SD6, second layer).
+	Judge  *judge.Judge
+	Logger zerolog.Logger
 }
 
 // Dataset is a scenario's batch as the harness sees it.
@@ -170,7 +180,7 @@ func Score(sc *vizeval.Scenario, cands []vizeval.Candidate, opts Options) (cards
 				continue
 			}
 		}
-		scoreOne(sc, &card, ds, opts)
+		scoreOne(sc, &card, ds, answers, opts)
 		card.At = time.Now().UTC().Format(time.RFC3339)
 		opts.Logger.Info().Str("scenario", sc.Name).Str("candidate", string(cand.Canonical())).
 			Str("status", string(card.Status)).Str("reason", card.Reason).Msg("candidate scored")
@@ -190,7 +200,7 @@ func Score(sc *vizeval.Scenario, cands []vizeval.Candidate, opts Options) (cards
 	return cards, answers, nil
 }
 
-func scoreOne(sc *vizeval.Scenario, card *Scorecard, ds Dataset, opts Options) {
+func scoreOne(sc *vizeval.Scenario, card *Scorecard, ds Dataset, answers []Answer, opts Options) {
 	spec, _ := vizeval.SinkByID(card.Candidate.Sink)
 	switch {
 	case !sc.Admits(card.Candidate.Sink):
@@ -216,23 +226,91 @@ func scoreOne(sc *vizeval.Scenario, card *Scorecard, ds Dataset, opts Options) {
 		}
 		return
 	}
-	area, metrics, err := measureCapture(cdir)
+	area, metrics, digest, err := measureCapture(cdir)
 	if err != nil {
 		card.Status, card.Reason = StatusFailed, err.Error()
 		return
 	}
+	card.DrawingDigest = digest
 	card.Area = [4]float64{area.X0, area.Y0, area.X1, area.Y1}
 	card.Metrics = metrics
 	card.Status = StatusScored
 	card.Gates = make(map[string]bool, len(sc.Spec.Gates))
+	applyGates(sc, card, false)
+	// Gates before rankings (§SD6): a candidate its geometry already rules out
+	// is not worth a model call.
+	if card.Status != StatusScored || opts.Judge == nil || len(answers) == 0 {
+		return
+	}
+	png, err := os.ReadFile(filepath.Join(cdir, "artifact.png"))
+	if err != nil {
+		card.Status, card.Reason = StatusFailed, "unable to read the artifact crop: "+err.Error()
+		return
+	}
+	card.Verdicts = opts.Judge.Ask(context.Background(), png, card.DrawingDigest, sc.Spec.Intent, questionsOf(answers))
+	var correct, unreadable, failed int
+	for _, v := range card.Verdicts {
+		switch {
+		case v.Error != "":
+			failed++
+		case v.Correct:
+			correct++
+		case v.Unreadable:
+			unreadable++
+		}
+	}
+	// Accuracy is only a measurement when every question got an answer; a
+	// spent budget or a failed call leaves the count, not a fraction of it.
+	metrics[MetricTaskErrors] = float64(failed)
+	if failed == 0 {
+		metrics[MetricTaskAccuracy] = float64(correct) / float64(len(card.Verdicts))
+		metrics[MetricTaskUnreadable] = float64(unreadable)
+	}
+	applyGates(sc, card, true)
+}
+
+// Metrics the judge adds (ADR-0257 §SD6, second layer).
+const (
+	// MetricTaskAccuracy is the share of the scenario's questions the model
+	// answered correctly from the artifact alone.
+	MetricTaskAccuracy = "task.accuracy"
+	// MetricTaskUnreadable counts questions the model said the rendering does
+	// not let it answer.
+	MetricTaskUnreadable = "task.unreadable"
+	// MetricTaskErrors counts questions that got no answer at all.
+	MetricTaskErrors = "task.errors"
+)
+
+// applyGates evaluates the scenario's gates, the geometry ones or, with task,
+// those over the judge's metrics. A task gate is not evaluated without a
+// judge: its metric is absent because nobody was asked, not because the
+// candidate failed.
+func applyGates(sc *vizeval.Scenario, card *Scorecard, task bool) {
 	for name, g := range sc.Spec.Gates {
-		v, present := metrics[name]
+		if strings.HasPrefix(name, "task.") != task {
+			continue
+		}
+		v, present := card.Metrics[name]
 		pass := g.Pass(v, present)
 		card.Gates[name] = pass
 		if !pass {
 			card.Status = StatusGated
 		}
 	}
+}
+
+func questionsOf(answers []Answer) (qs []judge.Question) {
+	qs = make([]judge.Question, 0, len(answers))
+	for _, a := range answers {
+		exp := make([]string, 0, len(a.Rows))
+		for _, r := range a.Rows {
+			if len(r) > 0 {
+				exp = append(exp, r[0])
+			}
+		}
+		qs = append(qs, judge.Question{ID: a.ID, Prompt: a.Prompt, Expected: exp, Compare: a.Compare, Tol: a.Tol})
+	}
+	return qs
 }
 
 // candidateScene is the scene that renders one candidate: play with every tab
@@ -276,33 +354,33 @@ func candidateScene(sc *vizeval.Scenario, cand vizeval.Candidate) *scene.Doc {
 
 // measureCapture finds the artifact in the tree, reads the SVG, measures, and
 // writes the artifact's crop of the PNG beside the capture.
-func measureCapture(dir string) (area geometry.Rect, m map[string]float64, err error) {
+func measureCapture(dir string) (area geometry.Rect, m map[string]float64, digest string, err error) {
 	node, err := findNode(filepath.Join(dir, carrierclient.SidecarFile(captureName, carrierclient.SidecarTree)), ArtifactNode)
 	if err != nil {
-		return area, nil, err
+		return area, nil, "", err
 	}
 	f, err := os.Open(filepath.Join(dir, carrierclient.SidecarFile(captureName, carrierclient.SidecarSVG)))
 	if err != nil {
-		return area, nil, eh.Errorf("unable to open the svg sidecar: %w", err)
+		return area, nil, "", eh.Errorf("unable to open the svg sidecar: %w", err)
 	}
 	d, err := geometry.ReadSVG(f)
 	_ = f.Close()
 	if err != nil {
-		return area, nil, err
+		return area, nil, "", err
 	}
 	area = geometry.VisibleArea(d, node)
 	if area.Empty() {
-		return area, nil, eh.Errorf("the artifact is not on screen")
+		return area, nil, "", eh.Errorf("the artifact is not on screen")
 	}
 	img, err := readPNG(filepath.Join(dir, carrierclient.SidecarFile(captureName, "")))
 	if err != nil {
-		return area, nil, err
+		return area, nil, "", err
 	}
 	m = geometry.Measure(d, area, img)
 	if err = writeCrop(img, d.Viewport, area, filepath.Join(dir, "artifact.png")); err != nil {
-		return area, nil, err
+		return area, nil, "", err
 	}
-	return area, m, nil
+	return area, m, geometry.Digest(d, area), nil
 }
 
 func findNode(path string, name string) (r geometry.Rect, err error) {
@@ -500,6 +578,7 @@ var metricOrder = []string{
 	geometry.MetricColorDistinct, geometry.MetricColorMinDeltaE,
 	geometry.MetricTableNumericColumns, geometry.MetricTableNumericRightAligned,
 	geometry.MetricTextRowPitchCV, geometry.MetricMarks,
+	MetricTaskAccuracy, MetricTaskUnreadable, MetricTaskErrors,
 }
 
 // writeGallery writes the scenario's contact sheet: the scenario, its data and
@@ -559,6 +638,22 @@ func writeGallery(outDir string, dir string, sc *vizeval.Scenario, ds Dataset, a
 				if v, ok := c.Metrics[n]; ok {
 					b.WriteString("| " + n + " | " + strconv.FormatFloat(v, 'g', 4, 64) + " |\n")
 				}
+			}
+			b.WriteString("\n")
+		}
+		if len(c.Verdicts) > 0 {
+			b.WriteString("| question | answered | expected | |\n| --- | --- | --- | --- |\n")
+			for _, v := range c.Verdicts {
+				mark := "wrong"
+				switch {
+				case v.Error != "":
+					mark = "no answer: " + v.Error
+				case v.Correct:
+					mark = "correct"
+				case v.Unreadable:
+					mark = "unreadable"
+				}
+				b.WriteString("| " + v.ID + " | " + strings.Join(v.Given, " · ") + " | " + strings.Join(v.Expected, " · ") + " | " + mark + " |\n")
 			}
 			b.WriteString("\n")
 		}

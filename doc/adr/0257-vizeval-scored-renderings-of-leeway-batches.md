@@ -199,7 +199,22 @@ gated-out candidate is scored no further.
 cropped PNG as the only evidence and compares its answer with the SQL
 answer. Accuracy over a scenario's questions is the measure of *clear and
 correct*: an encoding that a reader cannot answer the scenario's questions
-from has failed, however it looks.
+from has failed, however it looks. Only a candidate that passed its geometry
+gates is asked, and a gate over a `task.` metric is evaluated only when a
+judge ran. The model may answer that the rendering does not let it answer;
+that counts against accuracy and is reported apart from a wrong answer.
+Accuracy is recorded only when every question got a reply; a failed call or
+a spent budget leaves a count of errors instead.
+
+A reply is cached under what the picture shows, not under its bytes: the
+software rasterizer is not bit-identical between runs (2026-09-25: two
+renders of one candidate differed on 218 of 869,241 artifact pixels, by at
+most 2/255), so a byte key would miss on every re-render. The key is a
+digest of the drawing inside the artifact — its text runs and marks from the
+SVG, in paint order — which the two renders shared; the scorecard carries it,
+and equal digests across candidates mean they drew the same thing. The run
+is bounded by a number of model calls rather than a cost: the harness sees
+token counts, not the provider's prices.
 
 **Pairwise aesthetic judgements** show a model two candidates for the same
 scenario and digest, with the scenario's intent and the Tier 2 rubric
@@ -219,10 +234,14 @@ than beside it.
 
 The judges call the model through `runtime.llm`'s client, so they are
 configured by `BOXER_LLM_*`, recorded as `llmCall` rows, and pass the
-sensitivity point. Scenario data is synthetic by SD4; a scenario whose SQL
-reads a sealed dataset is refused by that point unless the provider is
-local, which is the intended outcome. `openaichat` gains image content
-parts in messages; that is the one change to the client.
+sensitivity point. The harness is not an app on a host, so it hosts the
+service itself, on a bus of its own, the way a host does for its apps; with
+the facts store attached the calls land in `boxer.facts` as a host's do.
+Scenario data is synthetic by SD4; a scenario whose SQL reads a sealed
+dataset is refused by that point unless the provider is local, which is the
+intended outcome. `openaichat` gains images on a message, sent in the
+multi-part content form as data URLs; the service counts their bytes in the
+call's prompt size.
 
 ### SD8 — Scorecards are facts
 
@@ -233,8 +252,9 @@ its canonical JSON, build, batch digest, status and reason, the capture
 directory, and the metrics as two parallel arrays, names and values, so a
 new metric needs no new membership. A row per metric was the alternative;
 it multiplies rows by the metric count and needs a join to reassemble what
-was one measurement. The task-answer and pairwise-judgement kinds arrive
-with the milestones that produce them (M5, M6). The PNG, SVG and tree stay
+was one measurement. The task layer adds metrics to the same row; the
+per-question verdicts — what the model answered against what was expected —
+stay in the scorecard file. The pairwise-judgement kind arrives with M6. The PNG, SVG and tree stay
 on disk under the run directory; the row carries the directory.
 
 A row's key is a hash of scenario, candidate id, build and batch digest —
@@ -281,7 +301,7 @@ so a search written later calls it in-process.
 - **M3 — Scenario documents, the runner and geometry metrics** ✓ (SD4, SD6
   first layer, SD9), with table scenarios, results as files.
 - **M4 — The facts record store** ✓ (SD8).
-- **M5 — Image content in `openaichat` and task-question accuracy** (SD6
+- **M5 — Image content in `openaichat` and task-question accuracy** ✓ (SD6
   second layer, SD7).
 - **M6 — Pairwise judgements and ranking** (SD6 third layer).
 - **M7 — Chart sinks.**

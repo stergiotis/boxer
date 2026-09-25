@@ -15,11 +15,17 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/harness"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/judge"
 	"github.com/urfave/cli/v2"
 )
 
@@ -31,7 +37,12 @@ const (
 	flagRoot       = "repoRoot"
 	flagFacts      = "facts"
 	flagRescore    = "rescore"
+	flagJudge      = "judge"
+	flagJudgeCalls = "judgeCalls"
 )
+
+// appId is how the harness appears on its bus and in the llm call table.
+const appId app.AppIdT = "imzero2.vizeval"
 
 // NewCommand builds the `vizeval` subcommand.
 func NewCommand() *cli.Command {
@@ -74,6 +85,8 @@ func NewCommand() *cli.Command {
 					&cli.PathFlag{Name: flagRoot, Usage: "checkout holding rust/imzero2; default: found from the working directory"},
 					&cli.BoolFlag{Name: flagFacts, Usage: "file scorecards in boxer.facts, and reuse a candidate already measured there at the same clean build and data"},
 					&cli.BoolFlag{Name: flagRescore, Usage: "with --" + flagFacts + ", render every candidate even when a measurement can be reused"},
+					&cli.BoolFlag{Name: flagJudge, Usage: "ask the scenario's questions of the configured vision model (BOXER_LLM_*) about every candidate that passed its gates"},
+					&cli.IntFlag{Name: flagJudgeCalls, Value: 200, Usage: "with --" + flagJudge + ", the most model calls the run makes; cached answers are free"},
 				},
 				Action: runScore,
 			},
@@ -162,6 +175,31 @@ func runFacts(ctx *cli.Context) (err error) {
 	return nil
 }
 
+// openJudge hosts the llm service on a bus of the harness's own, as a host
+// does for its apps (ADR-0254): the calls go through the service's
+// sensitivity point and call record, and land as llmCall rows when --facts
+// reaches boxer.facts. The judge's reply cache lives beside the output.
+func openJudge(ctx *cli.Context, out string) (j *judge.Judge, closeFn func(), err error) {
+	cfg := llm.ConfigFromEnv()
+	if !cfg.Configured() {
+		return nil, nil, eh.Errorf("--" + flagJudge + " needs a model: set BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL")
+	}
+	if ctx.Bool(flagFacts) {
+		if cfg.Exec, err = storeexec.New(chclient.New(chclient.ConfigFromEnv(), nil), nil); err != nil {
+			return nil, nil, err
+		}
+	}
+	bus := inprocbus.NewInst(log.Logger)
+	svc, err := llm.NewService(bus, log.Logger, cfg)
+	if err != nil {
+		return nil, nil, eh.Errorf("unable to start the llm service: %w", err)
+	}
+	client := llm.NewClient(bus.NewClient(appId, llm.ClientCaps("vizeval: answer scenario questions from renderings")))
+	client.Timeout = cfg.Timeout
+	j = &judge.Judge{Client: client, Model: cfg.Model, CacheDir: filepath.Join(out, "judge-cache")}
+	return j, svc.Close, nil
+}
+
 func readCandidates(path string) (cands []vizeval.Candidate, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -219,6 +257,14 @@ func runScore(ctx *cli.Context) (err error) {
 		}
 		defer opts.Facts.Close()
 		opts.Rescore = ctx.Bool(flagRescore)
+	}
+	if ctx.Bool(flagJudge) {
+		var closeJudge func()
+		if opts.Judge, closeJudge, err = openJudge(ctx, out); err != nil {
+			return err
+		}
+		defer closeJudge()
+		opts.Judge.MaxCalls = ctx.Int(flagJudgeCalls)
 	}
 	w := ctx.App.Writer
 	failed := 0

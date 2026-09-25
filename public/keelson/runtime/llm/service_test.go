@@ -259,3 +259,18 @@ func TestCallsLandOnTheFactsTable(t *testing.T) {
 	assert.True(t, rows[1].Refused)
 	assert.Contains(t, rows[1].Error, "no messages")
 }
+
+// An image attached to a message crosses the bus intact and counts toward
+// the call's prompt size (ADR-0257, proposed, §SD7).
+func TestImagesCrossTheBus(t *testing.T) {
+	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a", FinishReason: "stop"}}
+	cli, svc, _ := serve(t, localCfg(p))
+	img := openaichat.Image{MediaType: "image/png", Data: []byte{0x89, 'P', 'N', 'G', 0, 1, 2}}
+	_, err := cli.Complete(context.Background(), Request{Purpose: "test-look",
+		Messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "q", Images: []openaichat.Image{img}}}})
+	require.NoError(t, err)
+	require.Len(t, p.seen.Messages, 1)
+	assert.Equal(t, []openaichat.Image{img}, p.seen.Messages[0].Images)
+	require.Len(t, svc.Calls(), 1)
+	assert.Equal(t, 1+len(img.Data), svc.Calls()[0].PromptBytes)
+}

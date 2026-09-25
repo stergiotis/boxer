@@ -1,11 +1,15 @@
 package geometry
 
 import (
+	"encoding/hex"
 	"image"
 	"math"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+
+	"lukechampine.com/blake3"
 )
 
 // Metric names. Each is a number, not a verdict: a scenario's gates decide
@@ -382,4 +386,60 @@ func absInt(v int) int {
 		return -v
 	}
 	return v
+}
+
+// Digest identifies what was drawn inside area: the text runs and marks in
+// paint order, positions rounded to a hundredth of a point. Two renders of one
+// candidate differ in their PNG bytes — the rasterizer is not bit-identical
+// from run to run, by a level or two on a few hundred pixels — but not in
+// their drawing, so this is the key under which a judgement of the picture is
+// reused, and two candidates with one digest drew the same thing.
+func Digest(d Drawing, area Rect) string {
+	h := blake3.New(32, nil)
+	var buf []byte
+	r2 := func(v float64) int64 { return int64(math.Round(v * 100)) }
+	box := func(b Rect) {
+		for _, v := range []float64{b.X0, b.Y0, b.X1, b.Y1} {
+			buf = strconv.AppendInt(buf, r2(v), 10)
+			buf = append(buf, ',')
+		}
+	}
+	col := func(c RGBA) {
+		for _, v := range []float64{c.R, c.G, c.B, c.A} {
+			buf = strconv.AppendInt(buf, int64(math.Round(v*255)), 10)
+			buf = append(buf, ',')
+		}
+	}
+	runs, marks := 0, 0
+	for runs < len(d.Runs) || marks < len(d.Marks) {
+		buf = buf[:0]
+		if marks >= len(d.Marks) || (runs < len(d.Runs) && d.Runs[runs].Order < d.Marks[marks].Order) {
+			r := d.Runs[runs]
+			runs++
+			if r.Box.Intersect(r.Clip).Intersect(area).Empty() {
+				continue
+			}
+			buf = append(buf, 't')
+			buf = append(buf, r.Text...)
+			buf = append(buf, 0)
+			box(r.Box.Intersect(r.Clip).Intersect(area))
+			col(r.Fill)
+			buf = strconv.AppendInt(buf, r2(r.Size), 10)
+		} else {
+			m := d.Marks[marks]
+			marks++
+			vis := m.Box.Intersect(m.Clip).Intersect(area)
+			if vis.Empty() {
+				continue
+			}
+			buf = append(buf, 'm', byte('0'+m.Kind))
+			box(vis)
+			col(m.Fill)
+			col(m.Stroke)
+			buf = strconv.AppendInt(buf, r2(m.StrokeWidth), 10)
+		}
+		buf = append(buf, '\n')
+		_, _ = h.Write(buf)
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
 }

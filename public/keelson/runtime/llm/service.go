@@ -196,6 +196,10 @@ func (inst *Service) handleComplete(msg *app.Msg) {
 	}
 	for _, m := range req.Messages {
 		rec.PromptBytes += len(m.Content)
+		// Attached images are prompt too, and usually most of its bytes.
+		for _, img := range m.Images {
+			rec.PromptBytes += len(img.Data)
+		}
 	}
 	if inst.cfg.KeepMessages {
 		rec.Prompt = joinMessages(req.Messages)

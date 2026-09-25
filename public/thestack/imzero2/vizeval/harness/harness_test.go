@@ -45,13 +45,13 @@ func TestScoreOneRefusesWithoutRendering(t *testing.T) {
 	json, err := vizeval.NewCandidate(vizeval.SinkJSON, nil)
 	require.NoError(t, err)
 	card := Scorecard{Candidate: json}
-	scoreOne(sc, &card, Dataset{Rows: 1}, Options{})
+	scoreOne(sc, &card, Dataset{Rows: 1}, nil, Options{})
 	assert.Equal(t, StatusInadmissible, card.Status, "not admitted")
 
 	uni, err := vizeval.NewCandidate(vizeval.SinkUnicode, nil)
 	require.NoError(t, err)
 	card = Scorecard{Candidate: uni}
-	scoreOne(sc, &card, Dataset{Rows: 100}, Options{})
+	scoreOne(sc, &card, Dataset{Rows: 100}, nil, Options{})
 	assert.Equal(t, StatusInadmissible, card.Status, "over the row cap")
 	assert.Contains(t, card.Reason, "cap")
 }
