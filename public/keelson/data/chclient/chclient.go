@@ -248,6 +248,107 @@ func (inst *Client) InsertArrow(ctx context.Context, table string, records []arr
 	return
 }
 
+// StreamOptions shape a streamed query or insert.
+type StreamOptions struct {
+	// QueryId names the query on the server, so another connection can find
+	// it in system.processes while it runs.
+	QueryId string
+	// AcceptEncoding asks the server to compress the response ("zstd",
+	// "gzip"). The body is returned as sent, still compressed; the encoding
+	// the server actually applied is returned beside it.
+	AcceptEncoding string
+	// ContentEncoding declares the compression of an insert's body.
+	ContentEncoding string
+}
+
+func (inst *Client) streamURL(sql string, opts StreamOptions, compressResponse bool) (u string) {
+	vals := make(url.Values, 3)
+	if sql != "" {
+		vals.Set("query", sql)
+	}
+	if opts.QueryId != "" {
+		vals.Set("query_id", opts.QueryId)
+	}
+	if compressResponse {
+		vals.Set("enable_http_compression", "1")
+	}
+	sep := "?"
+	if strings.Contains(inst.cfg.URL, "?") {
+		sep = "&"
+	}
+	return inst.cfg.URL + sep + vals.Encode()
+}
+
+func (inst *Client) doStream(req *http.Request) (resp *http.Response, err error) {
+	inst.injectHeaders(req)
+	resp, err = inst.http.Do(req)
+	if err != nil {
+		err = eb.Build().Str("url", inst.cfg.URL).Errorf("chclient stream: do: %w", err)
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		err = eb.Build().Int("status", resp.StatusCode).Str("response", string(bodyBytes)).Errorf("chclient stream: non-200: %s", truncateForMessage(bodyBytes)) //boxer:lint disable=CS013 reason="the excerpt is deliberately truncated for the message; the response field keeps it whole"
+		resp = nil
+	}
+	return
+}
+
+// QueryStream runs sql and returns its response body undecoded, with the
+// Content-Encoding the server applied. A compressed body stays compressed, so
+// a copy between two servers can relay it byte for byte (ADR-0259 §SD5,
+// §SD6). A server error that begins after the body has started arrives inside
+// the body, as ClickHouse's HTTP interface sends it; a consumer that parses
+// the stream sees it as corrupt data. Caller MUST close the body.
+func (inst *Client) QueryStream(ctx context.Context, sql string, opts StreamOptions) (body io.ReadCloser, contentEncoding string, err error) {
+	var req *http.Request
+	// The statement is the request body: a long one (a repair's leaf list)
+	// would otherwise ride the URL.
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, inst.streamURL("", opts, opts.AcceptEncoding != ""), strings.NewReader(sql))
+	if err != nil {
+		err = eh.Errorf("chclient queryStream: build: %w", err)
+		return
+	}
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if opts.AcceptEncoding != "" {
+		// Set by hand, so the transport neither adds gzip nor decodes.
+		req.Header.Set("Accept-Encoding", opts.AcceptEncoding)
+	}
+	var resp *http.Response
+	resp, err = inst.doStream(req)
+	if err != nil {
+		return
+	}
+	return resp.Body, resp.Header.Get("Content-Encoding"), nil
+}
+
+// InsertStream POSTs body as the data of insertSQL, an `INSERT … FORMAT <fmt>`
+// statement, without buffering it: the statement rides the URL and the rows
+// stream from the reader. A copy between two servers pipes one server's
+// QueryStream body straight into another's InsertStream, and the bytes are
+// never decoded (ADR-0259 §SD5).
+func (inst *Client) InsertStream(ctx context.Context, insertSQL string, body io.Reader, opts StreamOptions) (err error) {
+	var req *http.Request
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, inst.streamURL(insertSQL, opts, false), body)
+	if err != nil {
+		err = eh.Errorf("chclient insertStream: build: %w", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if opts.ContentEncoding != "" {
+		req.Header.Set("Content-Encoding", opts.ContentEncoding)
+	}
+	var resp *http.Response
+	resp, err = inst.doStream(req)
+	if err != nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	return
+}
+
 func (inst *Client) queryURL(queryParam string) (u string) {
 	base := inst.cfg.URL
 	sep := "?"
