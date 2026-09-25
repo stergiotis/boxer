@@ -50,8 +50,8 @@ func serve(t *testing.T) (bus *inprocbus.Inst, sink *audit.InMemoryAuditSink) {
 	return
 }
 
-type envRow struct {
-	Name string `json:"name"`
+type envCols struct {
+	Name []string `ch:"name"`
 }
 
 // A reader holding the grant for one table reads it in both spellings,
@@ -62,10 +62,11 @@ func TestReadOverGrantedTable(t *testing.T) {
 	cli.Timeout = 15 * time.Second
 	ctx := context.Background()
 
-	rows, err := Rows[envRow](ctx, cli, "env", "SELECT name FROM keelson('env') WHERE name != '' ORDER BY name LIMIT 3")
+	var cols envCols
+	n, err := Columns(ctx, cli, "env", "SELECT name FROM keelson('env') WHERE name != '' ORDER BY name LIMIT 3", &cols)
 	require.NoError(t, err)
-	require.Len(t, rows, 3)
-	assert.NotEmpty(t, rows[0].Name)
+	require.Equal(t, 3, n)
+	assert.NotEmpty(t, cols.Name[0])
 
 	res, err := cli.Query(ctx, "env", "SELECT count() AS n FROM env", "TabSeparated")
 	require.NoError(t, err)
@@ -124,15 +125,16 @@ func TestParamsBindPlaceholders(t *testing.T) {
 	cli.Timeout = 15 * time.Second
 	ctx := context.Background()
 
-	all, err := Rows[envRow](ctx, cli, "env", "SELECT name FROM keelson('env') WHERE name != '' ORDER BY name LIMIT 2")
+	var all envCols
+	_, err := Columns(ctx, cli, "env", "SELECT name FROM keelson('env') WHERE name != '' ORDER BY name LIMIT 2", &all)
 	require.NoError(t, err)
-	require.Len(t, all, 2)
-	got, err := RowsWith[envRow](ctx, cli, Request{Table: "env",
+	require.Len(t, all.Name, 2)
+	var got envCols
+	_, err = ColumnsWith(ctx, cli, Request{Table: "env",
 		Sql:    "SELECT name FROM keelson('env') WHERE name = {n:String}",
-		Params: map[string]string{"n": all[1].Name}})
+		Params: map[string]string{"n": all.Name[1]}}, &got)
 	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, all[1].Name, got[0].Name)
+	assert.Equal(t, []string{all.Name[1]}, got.Name)
 
 	svc := bus.NewClient("test.keelsonquery.raw", ClientCaps("env"))
 	payload, err := buscodec.Encode(keelsonqueryrequest.KeelsonQueryRequest{Table: "env", Sql: "SELECT 1 FROM env",

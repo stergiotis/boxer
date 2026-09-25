@@ -37,6 +37,25 @@ func readRust(t *testing.T, name string) (s string) {
 	return
 }
 
+// TestThemeDiscriminantsMatch confirms the Go ThemeE values match the Rust
+// `Theme` enum discriminants (ADR-0258): both sides resolve IMZERO2_THEME on
+// their own, and a log line naming the theme has to mean the same thing.
+func TestThemeDiscriminantsMatch(t *testing.T) {
+	src := readRust(t, "theme.rs")
+	for _, tc := range []struct {
+		name    string
+		wantGo  styletokens.ThemeE
+		rustPat string
+	}{
+		{"Dark", styletokens.ThemeDark, `Dark\s*=\s*0`},
+		{"Fresh", styletokens.ThemeFresh, `Fresh\s*=\s*1`},
+	} {
+		if !regexp.MustCompile(tc.rustPat).MatchString(src) {
+			t.Errorf("theme %s: Rust source missing pattern %q", tc.name, tc.rustPat)
+		}
+	}
+}
+
 // TestDensityDiscriminantsMatch confirms the Go DensityE values match the
 // Rust enum discriminants. Both sides are indexed into PX_TABLE columns.
 func TestDensityDiscriminantsMatch(t *testing.T) {

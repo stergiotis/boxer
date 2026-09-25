@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-05-24
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0047: Keelson inline help system
 
@@ -228,9 +226,11 @@ position stable.
 - **Image resolver only handles vault-rooted refs.**
   `![](logo.png)` works; `![](../assets/logo.png)` (relative)
   does not. Per-doc base-path resolution is deferred.
-- **No full-text search.** The index is title + heading + path.
-  Adding `bleve` (or even `grep`-shaped) is a future build-tag
-  feature; it would need a freshness story for live-reload mode.
+- **No full-text index.** The library's index is title + heading
+  + path. Section-grained regex search over the same corpus came
+  later as `help/search`
+  ([ADR-0164](./0164-documentation-regex-search.md)), a scan rather
+  than an index.
 - **Section anchor scroll is one-shot, not bidirectional.**
   The nav highlights the selected section but doesn't track the
   user's manual scroll position — scrolling away leaves the
@@ -262,7 +262,7 @@ position stable.
 
 ## Status
 
-Proposed — awaiting review by code owner.
+Accepted (2026-09-25).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`. See boxer's `DOCUMENTATION_STANDARD.md` §1 ADR for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 

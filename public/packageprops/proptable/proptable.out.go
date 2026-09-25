@@ -90,6 +90,7 @@ var Table = packageprops.Table{
 	{ImportPath: "github.com/stergiotis/boxer/public/db/badger", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
 	{ImportPath: "github.com/stergiotis/boxer/public/db/badger/cli", Props: packageprops.Props{WASMWASI: packageprops.WASMBlocked, WASMJS: packageprops.WASMBlocked, WASMFreestanding: packageprops.WASMBlocked}},
 	{ImportPath: "github.com/stergiotis/boxer/public/db/clickhouse/chhttp", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
+	{ImportPath: "github.com/stergiotis/boxer/public/db/clickhouse/chrows", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/db/clickhouse/chtype", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/db/clickhouse/cli", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},

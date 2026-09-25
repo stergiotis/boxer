@@ -62,11 +62,11 @@ func TestLaunchWithAQueryOpensTheResultsTab(t *testing.T) {
 // what every config written before the field existed says.
 func TestLaunchDatabaseSelectsTheStore(t *testing.T) {
 	inst := newApp()
-	inst.applyLaunch(launchcfg.TallyLaunch{Database: " shadowboxer ", Target: "A"})
-	assert.Equal(t, "shadowboxer", inst.layout.Database)
-	assert.Equal(t, "shadowboxer.fsmeta", inst.layout.MetaTable())
-	assert.Equal(t, "shadowboxer", inst.composeLaunch().Database)
-	assert.Equal(t, "shadowboxer", sqlConfig(inst.layout).Database)
+	inst.applyLaunch(launchcfg.TallyLaunch{Database: " downstream ", Target: "A"})
+	assert.Equal(t, "downstream", inst.layout.Database)
+	assert.Equal(t, "downstream.fsmeta", inst.layout.MetaTable())
+	assert.Equal(t, "downstream", inst.composeLaunch().Database)
+	assert.Equal(t, "downstream", sqlConfig(inst.layout).Database)
 
 	inst = newApp()
 	inst.applyLaunch(launchcfg.TallyLaunch{Target: "A"})
@@ -79,11 +79,11 @@ func TestLaunchDatabaseSelectsTheStore(t *testing.T) {
 // against the layout's tables, so play — whose expansion is bound to the
 // default store — runs it as it stands.
 func TestOpenInPlayBufferNamesTheLayoutTables(t *testing.T) {
-	layout := ladingschema.Layout{Database: "shadowboxer"}
+	layout := ladingschema.Layout{Database: "downstream"}
 	loc := location{mount: identifier.TaggedId(0x3bfe363bcf148002), snap: time.Unix(0, 1_700_000_000_000_000_000).UTC()}
 	expanded, err := ladingsql.Expand(sqlConfig(layout), openInPlaySQL(loc, "music"))
 	require.NoError(t, err)
-	assert.Contains(t, expanded, "FROM shadowboxer.fsmeta")
+	assert.Contains(t, expanded, "FROM downstream.fsmeta")
 	assert.NotContains(t, expanded, "FROM "+ladingschema.DatabaseName+".fsmeta")
 	assert.NotContains(t, expanded, "fs(")
 	assert.True(t, strings.HasPrefix(expanded, "-- tally:"), "the header comment survives the expansion")

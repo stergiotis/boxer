@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
@@ -64,137 +65,25 @@ func (inst ArrowCell) Text() string {
 	return FormatArrowElem(inst.Arr, int64(inst.Row))
 }
 
-// Raw returns the bytes of a string or binary value without validation or
-// hex-encoding — the content a decoder needs. String.Value returns a
-// substring of the array's backing string and Binary.ValueString is
-// documented zero-copy, so this is a length read, not a copy.
+// Raw returns the bytes of a string or binary value — a FixedString
+// included — without validation or hex-encoding: the content a decoder
+// needs. Text and binary alias the array's buffer; a FixedString is copied.
 func (inst ArrowCell) Raw() (raw string, ok bool) {
-	if inst.IsNull() {
-		return "", false
+	if raw, ok = chrows.String(inst.Arr, inst.Row); ok {
+		return
 	}
-	switch a := inst.Arr.(type) {
-	case *array.String:
-		return a.Value(inst.Row), true
-	case *array.LargeString:
-		return a.Value(inst.Row), true
-	case *array.Binary:
-		return a.ValueString(inst.Row), true
-	case *array.LargeBinary:
-		return a.ValueString(inst.Row), true
-	case *array.FixedSizeBinary:
-		return string(a.Value(inst.Row)), true
-	case *array.Dictionary:
-		if dv, isStr := a.Dictionary().(*array.String); isStr {
-			return dv.Value(a.GetValueIndex(inst.Row)), true
-		}
-	}
-	return "", false
+	b, ok := chrows.Bytes(inst.Arr, inst.Row)
+	raw = string(b)
+	return
 }
 
-func (inst ArrowCell) Float64() (v float64, ok bool) {
-	if inst.IsNull() {
-		return 0, false
-	}
-	i := inst.Row
-	switch a := inst.Arr.(type) {
-	case *array.Float64:
-		return a.Value(i), true
-	case *array.Float32:
-		return float64(a.Value(i)), true
-	case *array.Float16:
-		return float64(a.Value(i).Float32()), true
-	case *array.Int8:
-		return float64(a.Value(i)), true
-	case *array.Int16:
-		return float64(a.Value(i)), true
-	case *array.Int32:
-		return float64(a.Value(i)), true
-	case *array.Int64:
-		return float64(a.Value(i)), true
-	case *array.Uint8:
-		return float64(a.Value(i)), true
-	case *array.Uint16:
-		return float64(a.Value(i)), true
-	case *array.Uint32:
-		return float64(a.Value(i)), true
-	case *array.Uint64:
-		return float64(a.Value(i)), true
-	case *array.Decimal128:
-		if dt, isDec := a.DataType().(*arrow.Decimal128Type); isDec {
-			return a.Value(i).ToFloat64(dt.Scale), true
-		}
-	case *array.Decimal256:
-		if dt, isDec := a.DataType().(*arrow.Decimal256Type); isDec {
-			return a.Value(i).ToFloat64(dt.Scale), true
-		}
-	}
-	return 0, false
-}
+func (inst ArrowCell) Float64() (v float64, ok bool) { return chrows.Float64(inst.Arr, inst.Row) }
 
-func (inst ArrowCell) Int64() (v int64, ok bool) {
-	if inst.IsNull() {
-		return 0, false
-	}
-	i := inst.Row
-	switch a := inst.Arr.(type) {
-	case *array.Int8:
-		return int64(a.Value(i)), true
-	case *array.Int16:
-		return int64(a.Value(i)), true
-	case *array.Int32:
-		return int64(a.Value(i)), true
-	case *array.Int64:
-		return a.Value(i), true
-	case *array.Uint8:
-		return int64(a.Value(i)), true
-	case *array.Uint16:
-		return int64(a.Value(i)), true
-	case *array.Uint32:
-		return int64(a.Value(i)), true
-	case *array.Uint64:
-		u := a.Value(i)
-		if u > uint64(1<<63-1) {
-			return 0, false
-		}
-		return int64(u), true
-	}
-	return 0, false
-}
+func (inst ArrowCell) Int64() (v int64, ok bool) { return chrows.Int64(inst.Arr, inst.Row) }
 
-func (inst ArrowCell) Uint64() (v uint64, ok bool) {
-	if inst.IsNull() {
-		return 0, false
-	}
-	i := inst.Row
-	switch a := inst.Arr.(type) {
-	case *array.Uint8:
-		return uint64(a.Value(i)), true
-	case *array.Uint16:
-		return uint64(a.Value(i)), true
-	case *array.Uint32:
-		return uint64(a.Value(i)), true
-	case *array.Uint64:
-		return a.Value(i), true
-	case *array.Int8:
-		return nonNegative(int64(a.Value(i)))
-	case *array.Int16:
-		return nonNegative(int64(a.Value(i)))
-	case *array.Int32:
-		return nonNegative(int64(a.Value(i)))
-	case *array.Int64:
-		return nonNegative(a.Value(i))
-	}
-	return 0, false
-}
-
-// nonNegative is the signed→unsigned read: a negative value is not a uint64
-// and is refused rather than wrapped to the top of the range.
-func nonNegative(v int64) (u uint64, ok bool) {
-	if v < 0 {
-		return 0, false
-	}
-	return uint64(v), true
-}
+// Uint64 refuses a negative signed value rather than wrapping it to the
+// top of the range.
+func (inst ArrowCell) Uint64() (v uint64, ok bool) { return chrows.Uint64(inst.Arr, inst.Row) }
 
 // TextCell wraps an already formatted value: the leeway card's cell text, or
 // a test's literal. Numeric access parses the text.

@@ -1,0 +1,80 @@
+# IDS "fresh" theme palette — the light theme an app chooses at launch with
+# IMZERO2_THEME=fresh (ADR-0258). Same schema and generator as palette.toml
+# (ADR-0033 §SD3 / ADR-0031 §SD2): OKLCh coordinates, gamut-clipped by chroma
+# reduction, graded against the same pairs.toml under the APCA gate, and
+# emitted as
+#   - rust/imzero2/imzero2_egui/src/style/tokens/palette_fresh_generated.rs
+#   - public/keelson/designsystem/styletokens/palette_fresh.out.go
+#   - doc/design-system/foundations/color-fresh.md
+# via `./boxer.sh designsystem colors gen`.
+#
+# The spine is one hue at ten lightnesses: a cool-tinted paper for panels,
+# a blue-black ink of the same hue for text. The role emphasis inverts
+# against the dark palette — subtle is a tint under dark text, default a
+# mid tone that carries light text, strong the darker foreground on a
+# tint. Per-token edits flow through PR review; structural changes are
+# Tier 3 ADRs, as for palette.toml.
+
+[meta]
+oklab_version = "ottosson-2020"
+gamut         = "srgb"
+emit          = ["rust"]
+theme         = "light"           # the fresh theme of ADR-0258
+
+# Cool lavender-white spine: the tint is what makes the panels read as
+# "paper", and the same hue at low L gives a blue-black ink for text.
+[neutral]
+hue    = 265.0
+chroma = 0.012
+
+[neutral.spine]
+bg_extreme     = 1.00   # text fields, plot backgrounds — whiter than the panel (egui light convention)
+bg_surface     = 0.99   # windows, cards — near-white on the tinted panel
+bg_panel       = 0.965  # default panel fill — tinted paper
+bg_faint       = 0.945  # alternating rows, weak fills
+border_faint   = 0.72   # subtle dividers
+border_default = 0.62   # control borders
+text_disabled  = 0.68
+text_secondary = 0.50
+text_primary   = 0.27   # ink
+text_extreme   = 0.20
+
+# Semantic roles, light theme: subtle is a tint (a fill under dark text),
+# default a mid tone (a stroke or a fill under white text), strong darker.
+[semantic.info]
+hue     = 240.0
+subtle  = { L = 0.93, C = 0.04 }
+default = { L = 0.56, C = 0.14 }
+strong  = { L = 0.46, C = 0.15 }
+
+[semantic.success]
+hue     = 150.0
+subtle  = { L = 0.93, C = 0.05 }
+default = { L = 0.56, C = 0.13 }
+strong  = { L = 0.46, C = 0.13 }
+
+[semantic.warning]
+hue     = 75.0
+subtle  = { L = 0.95, C = 0.05 }
+default = { L = 0.58, C = 0.14 }
+strong  = { L = 0.50, C = 0.13 }
+
+[semantic.error]
+hue     = 25.0
+subtle  = { L = 0.93, C = 0.04 }
+default = { L = 0.58, C = 0.17 }
+strong  = { L = 0.48, C = 0.17 }
+
+[semantic.neutral]
+hue     = 265.0
+subtle  = { L = 0.92, C = 0.01 }
+default = { L = 0.50, C = 0.01 }
+strong  = { L = 0.35, C = 0.01 }
+
+# Orchid accent: 65° from info and 55° from error, so a hover ring or a
+# selection never reads as a status.
+[semantic.accent]
+hue     = 315.0
+subtle  = { L = 0.95, C = 0.045 }
+default = { L = 0.60, C = 0.16 }
+strong  = { L = 0.50, C = 0.18 }

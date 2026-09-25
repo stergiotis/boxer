@@ -39,7 +39,7 @@ Substrate facts that shape the design:
   as an inline face (one line, no cache behind it) or a block face (markdown,
   code, image, …). play's `glossBlock` already serves block faces to a pane
   that is not Detail, from an artifact cache that holds many rows — the Chat
-  pane's arrangement (ADR-0239 (proposed) §SD6).
+  pane's arrangement (ADR-0239 §SD6).
 - **A gloss binds once per column.** ADR-0186 §SD1 binds parameters per
   column, not per cell, and every route to a binding — alias, directive, rule
   set, affinity — is keyed on the column. Nothing lets row 1 say `image/png`
@@ -83,7 +83,7 @@ when the kinds vary by row?
 - **O1 — Alias only, coalesce by label.** Several columns may share a gloss
   label — `` `card_hero@image/png` ``, `` `card_hero@audio/wav` `` — and the
   slot takes the first non-null. The Chat pane's "one column per attachment
-  kind" (ADR-0239 (proposed) §SD1).
+  kind" (ADR-0239 §SD1).
 - **O2 — A row-value companion, cards only.** `card_hero_gloss` holds the
   row's media type; only the Cards pane reads it.
 - **O3 — A row-value companion, general.** For any column labelled `L`, a
@@ -569,7 +569,7 @@ An adversarial review of the built pane found the following, each fixed.
 
 - [ADR-0123](./0123-play-content-typed-detail-cells.md) — `label@mime`, the slash gate, image caps.
 - [ADR-0186](./0186-play-gloss-catalog.md) — the gloss catalog, faces, binding precedence.
-- [ADR-0239](./0239-play-chat-panel-and-chatview-widget.md) (proposed) — label-matched contract, host-drawn blocks, the many-row artifact cache.
+- [ADR-0239](./0239-play-chat-panel-and-chatview-widget.md) — label-matched contract, host-drawn blocks, the many-row artifact cache.
 - [ADR-0122](./0122-play-kanban-panel.md) — named columns over detection, tone tokens, two-way selection.
 - [ADR-0208](./0208-audio-waveform-player-widget.md) — `science/audio`, peaks, sinks, the player this does not embed.
 - [ADR-0163](./0163-play-timeseries-workbench.md) — the fixture-lab pattern.

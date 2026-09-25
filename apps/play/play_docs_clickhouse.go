@@ -19,8 +19,9 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 )
 
 var _ DocsSourceI = (*ClickHouseDocsSource)(nil)
@@ -333,37 +334,8 @@ func decodeDocRows(rec arrow.RecordBatch) (out []DocsEntry) {
 // panicking: a server whose schema drifted should degrade to a blank field,
 // not take the pane down.
 func stringAccessor(a arrow.Array) func(int) string {
-	switch v := a.(type) {
-	case *array.String:
-		return func(i int) string {
-			if v.IsNull(i) {
-				return ""
-			}
-			return v.Value(i)
-		}
-	case *array.LargeString:
-		return func(i int) string {
-			if v.IsNull(i) {
-				return ""
-			}
-			return v.Value(i)
-		}
-	case *array.Binary:
-		return func(i int) string {
-			if v.IsNull(i) {
-				return ""
-			}
-			return string(v.Value(i))
-		}
-	case *array.Dictionary:
-		inner := stringAccessor(v.Dictionary())
-		return func(i int) string {
-			if v.IsNull(i) {
-				return ""
-			}
-			return inner(v.GetValueIndex(i))
-		}
-	default:
-		return func(int) string { return "" }
+	return func(i int) string {
+		s, _ := chrows.String(a, i)
+		return strings.Clone(s)
 	}
 }

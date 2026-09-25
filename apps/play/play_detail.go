@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/hmi/gloss"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -37,16 +37,14 @@ func extractTaggedId(rec arrow.RecordBatch, row int64) (identifier.TaggedId, boo
 		if row < 0 || int(row) >= col.Len() || col.IsNull(int(row)) {
 			return 0, false
 		}
-		switch a := col.(type) {
-		case *array.Uint64:
-			return identifier.TaggedId(a.Value(int(row))), true
-		default:
-			s := formatCell(rec, i, row)
-			var u uint64
-			_, err := fmt.Sscanf(s, "%d", &u)
-			if err == nil {
-				return identifier.TaggedId(u), true
-			}
+		if u, ok := chrows.Uint64(col, int(row)); ok {
+			return identifier.TaggedId(u), true
+		}
+		s := formatCell(rec, i, row)
+		var u uint64
+		_, err := fmt.Sscanf(s, "%d", &u)
+		if err == nil {
+			return identifier.TaggedId(u), true
 		}
 	}
 	return 0, false

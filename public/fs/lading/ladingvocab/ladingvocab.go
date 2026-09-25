@@ -78,41 +78,16 @@ const NamingStyle = naming.LowerSpinalCase
 // 2026-08-20 and could not keep its previous values: they were short-prefix
 // tags this contract reserves for the runtime generators.
 //
-// **…335 is taken** by shadow-boxer's `photofacts` vocabulary, claimed
-// 2026-08-30 as `shadowboxerPhoto`. It crossed for the same reason and at the
-// same cost: its hand-picked base 32 encodes to a width-8 tag, so every
-// membership id moved and the facts already written under the old base had to
-// be re-crawled. Two repositories have now paid that, which is the argument
-// for a consumer claiming here before it writes rows rather than after.
-//
-// **…336 through …338 are taken** by shadow-boxer: …336 is reserved for its
-// `starfacts` vocabulary (its ADR-0004, proposed), …337 is its `shantyfacts`
-// vocabulary and …338 the tag its shanty music library's lading mount is
-// minted under (its ADR-0005, proposed) — a mount id is a tagged id the
-// application supplies (ADR-0198 §SD3), and a claim of its own is what keeps
-// a mount's body from colliding with a membership ordinal under one tag.
-//
-// **…339 is taken** by shadow-boxer's `claudefacts` vocabulary, claimed
-// 2026-09-17 as `shadowboxerClaudelog` — the four kinds its Claude Code
-// session model writes to `shadowboxer.facts` (its ADR-0009, proposed).
-//
-// **…340 and …341 are taken** by shadow-boxer's `petrelstore`, claimed
-// 2026-09-19: …340 is its `shadowboxerPetrel` vocabulary — the `vp` kind of
-// its bird-profile table `shadowboxer.petrelprofile` — and …341 is
-// `shadowboxerPetrelRadar`, the tag its radar ids are minted under, separate
-// for the reason a mount's is (its ADR-0008, proposed). That repository's
-// ADR-0006 (proposed) names …339 through …341 for a download manager that
-// has written no rows; it takes fresh values when it is built.
-//
-// **…342 is taken** by shadow-boxer's `swissgeofacts` vocabulary, claimed
-// 2026-09-23 as `shadowboxerSwissgeo` — the six kinds its Swiss address,
-// place-name and boundary registers write to `shadowboxer.facts` (its
-// ADR-0010, proposed).
-//
-// **…343 and …344 are taken** by sailing, claimed 2026-09-23: …343 is its
-// `sailingWeather` vocabulary — the meteoBase, MeteoSwiss and webcam-frame
-// kinds it writes to `shadowboxer.facts` — and …344 `sailingWeatherMount`,
-// the tag its webcam lading mount is minted under (its ADR-0020, proposed).
+// **…335 through …344 are taken** by consuming repositories, claimed between
+// 2026-08-30 and 2026-09-23: vocabularies, and the tags their lading mounts
+// and radar ids are minted under. The first of them crossed at the same cost
+// as the nineteen above: a hand-picked base encoded to a width-8 tag, so every
+// membership id moved and the facts written under the old base had to be
+// re-crawled. Two repositories have now paid that, which is the argument for
+// a consumer claiming here before it writes rows rather than after. A mount id
+// is a tagged id the application supplies (ADR-0198 §SD3), and a claim of its
+// own is what keeps a mount's body from colliding with a membership ordinal
+// under one tag.
 //
 // The next free value is 2178345.
 var TagValueClaim = tagmint.MustClaim("lading", 2178315, MaxExpectedMemberships)

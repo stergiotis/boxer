@@ -1,6 +1,7 @@
 ---
 type: adr
 status: superseded
+superseded-by: ADR-0115
 date: 2026-04-20
 superseded-date: 2026-07-11
 ---

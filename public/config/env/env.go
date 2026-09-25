@@ -18,7 +18,7 @@
 // # Seeding another component's variables in-process
 //
 // A wrapper command that hosts another component in the same process
-// (sailing's `gui` around boxer's carousel is the first) seeds that
+// (a downstream `gui` around boxer's carousel is the first) seeds that
 // component's variables by calling Override on each *Var before the
 // component reads them, typically from its own flag values. Nothing is
 // written to the process environment — Lookup, `env list`'s CURRENT column

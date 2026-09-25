@@ -257,8 +257,8 @@ Each item names the mechanism, so the claim is checkable.
    without lading changing. The read is a join on the backbone: `fs(m)`
    against the kind's projection via `LW_COMPONENT('Kind')` (ADR-0189), or
    presence via `LW_COMPONENT_FILTER`; the archetype — the set of kinds a
-   row carries — is `ArchetypePresence` in Go and the ADR-0193 (proposed)
-   survey in SQL. What a GUI does with it: optional columns discoverable
+   row carries — is `ArchetypePresence` in Go and a planned component
+   survey in SQL (no ADR written yet). What a GUI does with it: optional columns discoverable
    from the registry (`keelson('memberships')`, ADR-0174's rosters), an
    "also known about this file" section in Info, an archetype summary per
    mount, filter by presence. Reading existing kinds costs nothing new;
@@ -555,7 +555,7 @@ and capabilities, so it goes late; M7 is durability through shipped seams.
   proposed), ADR-0170 (data catalog), ADR-0174 (vocabulary panel), ADR-0176
   (tree widget), ADR-0177 (focus-scoped keys), ADR-0178 (mdedit's sizing
   contracts), ADR-0185 (app-state manager, proposed), ADR-0186 (glosses),
-  ADR-0189 (`LW_COMPONENT`), ADR-0193 (component survey, proposed); the
+  ADR-0189 (`LW_COMPONENT`); the
   [app composition survey](./app-composition-survey.md) for the substrate
   inventory this page leans on; the `leeway-components` skill.
 - WinSCP documentation (tier b): [Synchronize](https://winscp.net/eng/docs/ui_synchronize),

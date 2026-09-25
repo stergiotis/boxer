@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0220: pushout storage capabilities, a purge ledger, and an explicit retention mode
 
@@ -344,13 +342,15 @@ consumers, nothing else.
   counterfactual.
 - **Gap.** Fleet-wide erasure across re-cloning (ADR-0079 OQ-7) is
   untouched: a fresh clone has no ledger of any kind. A re-encoding
-  store (`ExactEnvelopeBytes = false`) has no in-tree instance, so its
-  engine-level gate is unexercised until one lands.
+  store (`ExactEnvelopeBytes = false`) exists in the tree only as a test
+  double (`repo/reencoding_test.go`, `f9bbb01d`): it runs the storage
+  conformance suite through `storagetest.RunWith` and the engine over
+  re-encoded envelopes. No production store of that shape exists.
 
 ## Status
 
-Proposed — implementation landed with this record for review together;
-awaiting review by the pushout code owner.
+Accepted (2026-09-25). The implementation landed with this record;
+ADR-0221 reshaped the verbs (Updates, 2026-09-05).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

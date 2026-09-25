@@ -59,12 +59,12 @@ func withExtras(t *testing.T, gs []GlossI, fn func()) {
 // every host calls. Before it existed a consumer could build a catalog with
 // NewCatalog and nothing would ever look in it.
 func TestRegisterDefaultReachesEveryHost(t *testing.T) {
-	withExtras(t, []GlossI{tideGloss{mt: "sailing/tidestate"}}, func() {
-		g, ok := Default().Lookup("sailing/tidestate")
+	withExtras(t, []GlossI{tideGloss{mt: "harbour/tidestate"}}, func() {
+		g, ok := Default().Lookup("harbour/tidestate")
 		require.True(t, ok, "a registered gloss resolves through Default")
-		assert.Equal(t, "sailing/tidestate", g.MediaType())
+		assert.Equal(t, "harbour/tidestate", g.MediaType())
 
-		d, declared := Default().ParseColumn("t@sailing/tidestate")
+		d, declared := Default().ParseColumn("t@harbour/tidestate")
 		require.True(t, declared)
 		require.Empty(t, d.Reason)
 		assert.Equal(t, Inline{Text: "tide flood"}, d.Instance.Inline(txt("flood")))
@@ -72,7 +72,7 @@ func TestRegisterDefaultReachesEveryHost(t *testing.T) {
 		assert.Len(t, RegisteredDefaults(), 1)
 	})
 	// The registration is undone, so nothing leaks between tests.
-	_, ok := Default().Lookup("sailing/tidestate")
+	_, ok := Default().Lookup("harbour/tidestate")
 	assert.False(t, ok)
 }
 
@@ -80,13 +80,13 @@ func TestRegisterDefaultReachesEveryHost(t *testing.T) {
 // order is affinity order, so an extension must not be able to take a column a
 // built-in would have claimed.
 func TestRegisterDefaultAppendsAfterBuiltins(t *testing.T) {
-	withExtras(t, []GlossI{tideGloss{mt: "sailing/tidestate"}}, func() {
+	withExtras(t, []GlossI{tideGloss{mt: "harbour/tidestate"}}, func() {
 		var order []string
 		for g := range Default().All() {
 			order = append(order, g.MediaType())
 		}
 		require.NotEmpty(t, order)
-		assert.Equal(t, "sailing/tidestate", order[len(order)-1], "extras come last")
+		assert.Equal(t, "harbour/tidestate", order[len(order)-1], "extras come last")
 		assert.Equal(t, MediaTypeRaw, order[len(order)-2], "the built-in tail is undisturbed")
 	})
 }
@@ -101,20 +101,20 @@ func TestRegisterDefaultRefusesADuplicate(t *testing.T) {
 			func() { RegisterDefault(tideGloss{mt: MediaTypeVelocity}) },
 			"a built-in cannot be shadowed")
 
-		RegisterDefault(tideGloss{mt: "sailing/tidestate"})
+		RegisterDefault(tideGloss{mt: "harbour/tidestate"})
 		assert.PanicsWithValue(t,
-			"gloss: RegisterDefault(sailing/tidestate): already registered by another package",
-			func() { RegisterDefault(tideGloss{mt: "sailing/tidestate"}) })
+			"gloss: RegisterDefault(harbour/tidestate): already registered by another package",
+			func() { RegisterDefault(tideGloss{mt: "harbour/tidestate"}) })
 	})
 }
 
 // TestRegisteredDefaultsIsACopy pins that a caller cannot mutate the registry
 // through the listing it is handed.
 func TestRegisteredDefaultsIsACopy(t *testing.T) {
-	withExtras(t, []GlossI{tideGloss{mt: "sailing/tidestate"}}, func() {
+	withExtras(t, []GlossI{tideGloss{mt: "harbour/tidestate"}}, func() {
 		got := RegisteredDefaults()
 		require.Len(t, got, 1)
 		got[0] = tideGloss{mt: "other/thing"}
-		assert.Equal(t, "sailing/tidestate", RegisteredDefaults()[0].MediaType())
+		assert.Equal(t, "harbour/tidestate", RegisteredDefaults()[0].MediaType())
 	})
 }

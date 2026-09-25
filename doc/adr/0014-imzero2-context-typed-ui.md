@@ -1,12 +1,18 @@
 ---
 type: adr
-status: proposed
+status: withdrawn
 date: 2026-04-26
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+withdrawn-date: 2026-09-25
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: withdrawn (2026-09-25).** Retracted before acceptance or
+> implementation. The API this ADR types — one `*c.WidgetIdStack`-shaped
+> receiver carrying every widget method, with containers taking `func(*Ui)`
+> callbacks — is no longer the shape of imzero2: widgets are package-level
+> factories in `egui2/bindings` and containers are iterator-scoped
+> (`c.Horizontal().KeepIter()`). O2's context types would have to be
+> re-derived against that surface; a successor starts there. The nesting
+> hazards in Context stand. Kept as the record of the option.
 
 # ADR-0014: ImZero2 — Context-Typed Ui for Container-Nesting Safety
 
@@ -165,7 +171,8 @@ A drift-guard test analogous to `TestStatefulWidgetsAreGated` ([ADR-0013](0013-i
 
 ## Status
 
-Proposed — awaiting review by @stergiotis.
+Withdrawn (2026-09-25) — see the banner. Never implemented; no symbol from
+the Decision (`RootUi`, `FlowUi`, `FreeUi`, `BoundedUi`, `PaintUi`) exists.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

@@ -7,6 +7,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
@@ -356,21 +357,21 @@ func resolveContract(schema *arrow.Schema) (ct timelineContract) {
 			ct.ColTimeEnd = int32(i)
 			ct.UnitTimeEnd = tt.Unit
 		case timelineSlotLabel:
-			if !isStringLikeType(f.Type) {
+			if !chrows.IsStringLike(f.Type) {
 				ct.Reject = fmt.Sprintf("%q must be a String / Binary column (got %s).",
 					timelineSlotLabel, f.Type)
 				return
 			}
 			ct.ColLabel = int32(i)
 		case timelineSlotLane:
-			if !isStringLikeType(f.Type) {
+			if !chrows.IsStringLike(f.Type) {
 				ct.Reject = fmt.Sprintf("%q must be a String / Binary column (got %s).",
 					timelineSlotLane, f.Type)
 				return
 			}
 			ct.ColLane = int32(i)
 		case timelineSlotIntensity:
-			if !isNumericType(f.Type) {
+			if !chrows.IsNumeric(f.Type) {
 				ct.Reject = fmt.Sprintf("%q must be a numeric column (got %s).",
 					timelineSlotIntensity, f.Type)
 				return
@@ -462,7 +463,7 @@ func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.Inte
 				continue
 			}
 			ev := &layout.PointEvent{
-				TMS:       tsToEpochMS(int64(timeArr.Value(int(i))), ct.UnitTime),
+				TMS:       chrows.TimestampToEpochMillis(int64(timeArr.Value(int(i))), ct.UnitTime),
 				KindID:    int32(i),
 				Intensity: readIntensityCell(intensityArr, int(i)),
 			}
@@ -479,8 +480,8 @@ func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.Inte
 				continue
 			}
 			ev := &layout.IntervalEvent{
-				FromMS:    tsToEpochMS(int64(timeArr.Value(int(i))), ct.UnitTime),
-				ToMS:      tsToEpochMS(int64(endArr.Value(int(i))), ct.UnitTimeEnd),
+				FromMS:    chrows.TimestampToEpochMillis(int64(timeArr.Value(int(i))), ct.UnitTime),
+				ToMS:      chrows.TimestampToEpochMillis(int64(endArr.Value(int(i))), ct.UnitTimeEnd),
 				KindID:    int32(i),
 				Intensity: readIntensityCell(intensityArr, int(i)),
 				LaneHint:  readStringCell(laneArr, int(i)),
@@ -502,7 +503,7 @@ func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.Inte
 				continue
 			}
 			ev := &layout.Annotation{
-				TMS:        tsToEpochMS(int64(timeArr.Value(int(i))), ct.UnitTime),
+				TMS:        chrows.TimestampToEpochMillis(int64(timeArr.Value(int(i))), ct.UnitTime),
 				Number:     int32(i),
 				PaletteIdx: int32(i % 10),
 				Label:      readStringCell(labelArr, int(i)),
@@ -513,43 +514,13 @@ func buildEvents(rec arrow.RecordBatch, ct timelineContract) (ivs []*layout.Inte
 	return
 }
 
-// tsToEpochMS converts an Arrow timestamp value to epoch milliseconds
-// (UTC). Unknown units fall through unchanged — the widget will misplace
-// the event on the axis but won't crash, and the offending column shows
-// up obviously in the rendered timeline.
-func tsToEpochMS(v int64, unit arrow.TimeUnit) (ms int64) {
-	switch unit {
-	case arrow.Second:
-		ms = v * 1000
-	case arrow.Millisecond:
-		ms = v
-	case arrow.Microsecond:
-		ms = v / 1000
-	case arrow.Nanosecond:
-		ms = v / 1_000_000
-	default:
-		ms = v
-	}
-	return
-}
-
 // readStringCell extracts a string from String / LargeString / Binary /
 // LargeBinary columns, hex-fallback-safe via utfsafe.EnsureUTF8 so non-UTF-8
 // payloads (CH FORMAT ArrowStream emits String as LargeBinary by default)
 // can't desync the FFFI wire downstream of c.Label.
 func readStringCell(arr arrow.Array, row int) (s string) {
-	if arr == nil || arr.IsNull(row) {
-		return
-	}
-	switch a := arr.(type) {
-	case *array.String:
-		s = utfsafe.EnsureUTF8(a.Value(row))
-	case *array.LargeString:
-		s = utfsafe.EnsureUTF8(a.Value(row))
-	case *array.Binary:
-		s = utfsafe.EnsureUTF8(string(a.Value(row)))
-	case *array.LargeBinary:
-		s = utfsafe.EnsureUTF8(string(a.Value(row)))
+	if v, ok := chrows.String(arr, row); ok {
+		s = utfsafe.EnsureUTF8(v)
 	}
 	return
 }
@@ -558,48 +529,8 @@ func readStringCell(arr arrow.Array, row int) (s string) {
 // widget's [0,1] colormap input. Out-of-range values are clamped by the
 // widget; the contract documents that the caller should normalise upstream.
 func readIntensityCell(arr arrow.Array, row int) (v float32) {
-	if arr == nil || arr.IsNull(row) {
-		return
-	}
-	switch a := arr.(type) {
-	case *array.Int8:
-		v = float32(a.Value(row))
-	case *array.Int16:
-		v = float32(a.Value(row))
-	case *array.Int32:
-		v = float32(a.Value(row))
-	case *array.Int64:
-		v = float32(a.Value(row))
-	case *array.Uint8:
-		v = float32(a.Value(row))
-	case *array.Uint16:
-		v = float32(a.Value(row))
-	case *array.Uint32:
-		v = float32(a.Value(row))
-	case *array.Uint64:
-		v = float32(a.Value(row))
-	case *array.Float32:
-		v = a.Value(row)
-	case *array.Float64:
-		v = float32(a.Value(row))
-	}
-	return
-}
-
-func isNumericType(dt arrow.DataType) (ok bool) {
-	switch dt.ID() {
-	case arrow.INT8, arrow.INT16, arrow.INT32, arrow.INT64,
-		arrow.UINT8, arrow.UINT16, arrow.UINT32, arrow.UINT64,
-		arrow.FLOAT16, arrow.FLOAT32, arrow.FLOAT64:
-		ok = true
-	}
-	return
-}
-
-func isStringLikeType(dt arrow.DataType) (ok bool) {
-	switch dt.ID() {
-	case arrow.STRING, arrow.LARGE_STRING, arrow.BINARY, arrow.LARGE_BINARY:
-		ok = true
+	if f, ok := chrows.Float64(arr, row); ok {
+		v = float32(f)
 	}
 	return
 }

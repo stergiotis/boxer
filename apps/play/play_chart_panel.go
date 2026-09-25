@@ -11,6 +11,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -342,7 +343,7 @@ func resolveChartColumns(schema *arrow.Schema) (k chartClaim, reason string) {
 	// cell keys and `z` is the value. It is claimed by name, so a `z` that
 	// cannot BE a cell value is a mistake worth naming rather than ignoring.
 	if k.zCol >= 0 {
-		if !isNumericType(schema.Field(k.zCol).Type) {
+		if !chrows.IsNumeric(schema.Field(k.zCol).Type) {
 			reason = fmt.Sprintf("Column `z` is a heatmap's cell value and must be numeric; it is %s. "+
 				"Cast it, or rename it if this result is not a grid.", schema.Field(k.zCol).Type)
 			return
@@ -376,7 +377,7 @@ func resolveChartColumns(schema *arrow.Schema) (k chartClaim, reason string) {
 		if ci == k.xCol || ci == k.seriesCol {
 			continue // claimed by name — never a lane, whatever its type
 		}
-		if isNumericType(f.Type) {
+		if chrows.IsNumeric(f.Type) {
 			k.laneCols = append(k.laneCols, ci)
 		}
 	}
@@ -431,7 +432,7 @@ func chartAxisFor(dt arrow.DataType) (axis chartAxisE) {
 	switch {
 	case isSeriesTemporalType(dt):
 		axis = chartAxisTemporal
-	case isNumericType(dt):
+	case chrows.IsNumeric(dt):
 		axis = chartAxisNumeric
 	default:
 		axis = chartAxisCategorical

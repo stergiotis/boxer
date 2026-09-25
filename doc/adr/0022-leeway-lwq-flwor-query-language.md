@@ -1,12 +1,17 @@
 ---
 type: adr
-status: proposed
+status: withdrawn
 date: 2026-05-08
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+withdrawn-date: 2026-09-25
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: withdrawn (2026-09-25).** Retracted before acceptance or
+> implementation. [ADR-0181](./0181-leeway-dql-authoring-surface.md)
+> (accepted) weighed reviving lwq as its option O5 and kept it parked: a
+> language is heavier than a vocabulary and still needs ADR-0181's machinery
+> underneath. [ADR-0066](./0066-leeway-dql-clickhouse-readback-generator.md)
+> (accepted) took the mechanical read-back path. No `lwq` package was built.
+> Kept as the record of the option.
 
 # ADR-0022: leeway lwq — FLWOR-style query language for Leeway-stored data
 
@@ -170,7 +175,7 @@ The point of enumerating these is to record what specifically would be lost unde
 
 ## Status
 
-Proposed — awaiting review by Leeway and CH DSL maintainers and a downstream architecture review.
+Withdrawn (2026-09-25) — see the banner.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

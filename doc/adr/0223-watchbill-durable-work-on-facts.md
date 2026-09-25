@@ -80,7 +80,7 @@ on the one substrate the house keeps?
   `running` row, a lease against the runtime heartbeat, a worker library,
   the bus as a doorbell. (chosen)
 - **O5 — Each consumer its own state machine** on its own kind — the
-  shape shadow-boxer's first draft took.
+  shape a downstream consumer's first draft took.
 
 **Criteria.**
 
@@ -140,8 +140,8 @@ README § House names with this ADR.
   `boxer.facts`: `watchbillstore` is a generated record store on the
   ADR-0105 D3a pattern: its own table, `<db>.watchbill`, with a `Layout`
   carrying the database as `ladingschema.Layout` does, so a consuming
-  repository places it beside its own facts (shadow-boxer:
-  `shadowboxer.watchbill`). A writer on the shared facts table cannot
+  repository places it beside its own facts (for example
+  `<consumer>.watchbill`). A writer on the shared facts table cannot
   control its indexes, its retention or its table settings (ADR-0184,
   Consequences), and this table needs all three: an immutable key so its
   rows can be updated in place, `enable_block_number_column` and
@@ -291,7 +291,7 @@ README § House names with this ADR.
   twenty workers racing one job.
 - **M3 — Host.** `hostboot.Services.Watchbill`, the subjects, the task
   bridge, the CLI verb.
-- **M4 — First consumer.** shadow-boxer's tender (its ADR-0006) runs its
+- **M4 — First consumer.** A downstream consumer's download tender runs its
   downloads as watchbill jobs of kind `tender.download`; its `Download` row
   is the subject.
 - **M5 — Surface.** `keelson('watchbill')` and the applet book.
@@ -400,7 +400,7 @@ README § House names with this ADR.
 
 Nothing to migrate: the withdrawn River path was never built, the task
 protocol is unchanged, and the new table is provisioned on first use.
-shadow-boxer's tender adopts at its own M4 and removes its private state
+The downstream tender adopts at its own M4 and removes its private state
 kind in the same commit.
 
 ## Verification plan — Tier 1
@@ -470,6 +470,12 @@ The conditions the claim holds under moved into
 `recordstore/rowcas`, which the store's statements now compose through, so
 a second primitive inherits them rather than copying SQL.
 
+### 2026-09-25 — a consumer's repository no longer named
+
+Mentions of the first consumer's repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.
+
 ## References
 
 - [ADR-0038](./0038-keelson-background-task-primitive.md) — the task primitive; the Update of 2026-06-22 this ADR withdraws.
@@ -483,4 +489,4 @@ a second primitive inherits them rather than copying SQL.
 - [ADR-0206](./0206-gokrazy-appliance-image.md) — the appliance's constraints.
 - [ClickHouse primitives for watchbill](../adr-background-work/watchbill-clickhouse-primitives.md) — the measurements behind §SD3 and the rejected claims (2026-09-09, 26.8).
 - River — <https://github.com/riverqueue/river> — the contract this ADR keeps (at-least-once, idempotent handlers, policy on the row) on another substrate.
-- shadow-boxer ADR-0006 (proposed) — the first consumer.
+- A downstream consumer's ADR (proposed) — the first consumer.

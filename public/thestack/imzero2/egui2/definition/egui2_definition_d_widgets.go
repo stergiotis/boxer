@@ -496,11 +496,12 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("cornerRadius").Arg("radius", ctabb.U8).CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.corner_radius(radius);\n")).EndMethod().
 				BeginMethod("fill").EvaluatedArg("col", structColor32()).AsColor().CodeClientRust(rustClientCode("{{Instance}} = {{Instance}}.fill(col);\n")).EndMethod().
 				Build()...).
-			// Default fill to ACCENT_DEFAULT (L=0.80). egui's ProgressBar otherwise reads
+			// Default fill to the active theme's accent.default (style::accent_default,
+			// ADR-0258; L=0.80 on the IDS palette). egui's ProgressBar otherwise reads
 			// visuals.selection.bg_fill — which IDS pins at ACCENT_SUBTLE (L=0.20) for
 			// SelectableLabel text contrast (ADR-0037), giving a near-invisible bar over
 			// extreme_bg_color (L=0.06). Explicit `.fill(col)` from Go still overrides.
-			WithConstructionCodeClientRust(rustClientCode("egui::ProgressBar::new(progress).fill(imzero2_egui::style::tokens::palette_generated::ACCENT_DEFAULT);\n")).
+			WithConstructionCodeClientRust(rustClientCode("egui::ProgressBar::new(progress).fill(imzero2_egui::style::accent_default());\n")).
 			WithSettingImmediate(true).
 			WithSettingRetained(true).
 			WithReturnType(structProgressBar()).

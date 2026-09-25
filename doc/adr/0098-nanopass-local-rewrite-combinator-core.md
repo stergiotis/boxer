@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-27
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Not yet reviewed by a code owner of the
-> nanopass package; the rewrite core is in the tree (noted 2026-09-23) and the
-> design may still change in review. Do not cite as settled.
 
 # ADR-0098: Nanopass Local-Rewrite Combinator Core
 
@@ -213,8 +211,8 @@ The QOC matrix carries the rankings; the notes below record nuance.
 
 ## Status
 
-Proposed — 2026-06-27. Promote to `accepted` after review by a code owner of
-[`public/db/clickhouse/dsl/nanopass`](../../public/db/clickhouse/dsl/nanopass).
+Accepted (2026-09-25). The rewrite core is in the tree and the `Canonicalize*`
+passes use it; [ADR-0181](./0181-leeway-dql-authoring-surface.md) builds on it.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.

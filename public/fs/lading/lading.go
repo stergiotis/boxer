@@ -33,8 +33,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
@@ -241,14 +240,15 @@ func scalarStrings(ctx context.Context, exec recordstore.ExecutorI, sql string) 
 			err = eh.Errorf("query returned no columns")
 			return
 		}
-		col, ok := rec.Column(0).(*array.String)
-		if !ok {
-			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("column is not a string")
+		col := rec.Column(0)
+		if !chrows.IsStringLike(chrows.ValueType(col.DataType())) {
+			err = eb.Build().Stringer("dataType", col.DataType()).Errorf("column is not a string")
 			rec.Release()
 			return
 		}
 		for i := range int(rec.NumRows()) {
-			out = append(out, col.Value(i))
+			v, _ := chrows.String(col, i)
+			out = append(out, strings.Clone(v))
 		}
 		rec.Release()
 	}

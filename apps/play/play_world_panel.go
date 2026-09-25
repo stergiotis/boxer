@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
@@ -482,33 +482,9 @@ func numericColumns(schema *arrow.Schema) (out []int) {
 // numericCellValue reads one numeric cell as float64 (ok=false on NULL or a
 // non-numeric array — the row then contributes membership but no value).
 func numericCellValue(arr arrow.Array, row int64) (v float64, ok bool) {
-	if row < 0 || int(row) >= arr.Len() || arr.IsNull(int(row)) {
+	v, ok = chrows.Float64(arr, int(row))
+	if !ok || math.IsNaN(v) {
 		return 0, false
 	}
-	i := int(row)
-	switch a := arr.(type) {
-	case *array.Int8:
-		return float64(a.Value(i)), true
-	case *array.Int16:
-		return float64(a.Value(i)), true
-	case *array.Int32:
-		return float64(a.Value(i)), true
-	case *array.Int64:
-		return float64(a.Value(i)), true
-	case *array.Uint8:
-		return float64(a.Value(i)), true
-	case *array.Uint16:
-		return float64(a.Value(i)), true
-	case *array.Uint32:
-		return float64(a.Value(i)), true
-	case *array.Uint64:
-		return float64(a.Value(i)), true
-	case *array.Float32:
-		f := float64(a.Value(i))
-		return f, !math.IsNaN(f)
-	case *array.Float64:
-		f := a.Value(i)
-		return f, !math.IsNaN(f)
-	}
-	return 0, false
+	return
 }

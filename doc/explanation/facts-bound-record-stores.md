@@ -129,7 +129,7 @@ something else:
   in `mrhp`. Nothing is lost by carrying it in one lane only — so here you have
   a genuine choice, and it is a modelling one.
 
-The markdown frontmatter row (ADR-0218, proposed) is the first case taken
+The markdown frontmatter row (ADR-0218) is the first case taken
 deliberately in a package that also has a generated store: the leaves ride the
 mixed channel on a row of their own, written through the entity builder's
 `Raw()`, beside the document row the store writes — because `Raw()` and

@@ -18,8 +18,8 @@ repetition. They say how big and how skewed a record is. They do not say
 which sections or attributes it has.
 
 The explanation step ([ADR-0235](./0235-explaining-a-clustering-threshold-tree-and-rank-contrasts.md))
-made the consequence visible on a real table. Over six thousand sailing
-events, HDBSCAN found seventy clusters, and the rules read
+made the consequence visible on a real table. Over six thousand events
+of a downstream table, HDBSCAN found seventy clusters, and the rules read
 `total_value_bytes <= 121` for one and `total_value_bytes > 121 AND
 total_value_bytes <= 122` for the next, each at full precision and recall:
 track points with identical structure, sliced by the printed length of
@@ -109,7 +109,7 @@ lane's parameters, in the client-call spelling ADR-0235 names.
 
 ### Positive
 
-- Kinds become separable by what they contain; on the sailing table the
+- Kinds become separable by what they contain; on that table the
   clusters are expected to track the nineteen signatures, which is a
   ground truth the lane can be scored against.
 - The two questions get two distances instead of one compromise, and the
@@ -137,7 +137,7 @@ Nothing to migrate: the default is the set the lane always had.
 - **Lane.** Default `go test`: the structure matrix gives equal rows to
   entities with equal sections and tags and different values, unequal
   rows for one more tag, and is deterministic. A trial under
-  `doc/trials/` over the sailing table, where the nineteen signatures are
+  `doc/trials/` over that table, where the nineteen signatures are
   known: the clusters under the structure set against the signatures, by
   the attribute rules' precision and recall.
 - **What would fail.** A value leaking into the vector breaks the
@@ -154,7 +154,7 @@ Accepted 2026-09-15.
 
 ### 2026-09-15 — first live run, before the trial
 
-Six thousand rows of the sailing table, the neighbour count and the
+Six thousand rows of that table, the neighbour count and the
 minimum cluster size at their defaults. The sample holds ten structural
 signatures, eight of them with at least the minimum cluster size of rows.
 Under the shape set the lane reports seventy clusters; under the
@@ -210,6 +210,13 @@ it, under cosine. It is the archetype of ADR-0146 D5 as a vector, and it
 is only defined for a facts-shaped result; under any other result the set
 refuses the run and says why, while the items simply do not appear. The
 structure set stays the answer for a result no registered component reads.
+
+### 2026-09-25 — a downstream project no longer named
+
+Mentions of a downstream repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.
+
 
 ## References
 

@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-28
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0099: `terrainscope` — a keelson app for terrain line-of-sight and polar viewshed sweeps
 
@@ -100,10 +100,21 @@ first cut; the principled bus-service split is Phase 4.
 
 ## Status
 
-Proposed — awaiting review by @spx. A first cut (the `terrainscope` keelson app,
-its capability / env-var registration, and per-control hover-help) is already
-committed to `main`; the decision is treated as provisional until that review
-lands.
+Accepted (2026-09-25). Phases 1, 2, 3 and 5 are built; Phase 4 stays deferred.
+The 2026-09-25 update records what has moved since.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-09-25 — plots on implot, the map on portolan; what stays open
+
+The sweep and distribution plots moved to implot
+([ADR-0149](./0149-implot-core-port-painter-lane.md) §SD7, `f8d4e905`) and the
+map to the portolan widget ([ADR-0204](./0204-leaflet-map-core-port.md),
+`d42d689e`). The decision above is unchanged; only the widgets it names are.
+
+Still open: the Phase 3 "later" items — the angle × distance heatmap and CSV
+export through the `fs.dialog.save` broker — and Phase 4, the headless
+elevation service, which stays deferred.

@@ -169,7 +169,7 @@ func TestAttrExplodeSink_poolNoStale(t *testing.T) {
 	})
 }
 
-// benchShape mirrors a sailing.facts-style page: a backbone id plus a tagged
+// benchShape mirrors a downstream facts-style page: a backbone id plus a tagged
 // "tv" section with several scalar attributes and two 3-item collection
 // attributes (which explode to their own rows), across many entities.
 func benchShape(entities int) []tEntity {

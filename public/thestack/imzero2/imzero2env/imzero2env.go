@@ -104,6 +104,17 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// Theme is the IDS colour theme (dark | fresh), read once at launch
+	// on both sides of the FFFI boundary (ADR-0258). Case-insensitive;
+	// anything other than "fresh" is the IDS dark palette. There is no
+	// runtime switch: widgets are free to resolve palette tokens at init,
+	// so a process is one theme from its first frame to its last.
+	Theme = env.NewString(env.Spec{
+		Name:        "IMZERO2_THEME",
+		Description: "IDS colour theme at launch: dark (the IDS palette, default) | fresh (the light theme of ADR-0258); chosen once per process, not switchable at runtime",
+		Category:    env.CategoryDev,
+	})
+
 	// ScreenshotSize is the canonical capture size override for tours.
 	// Parsed as "WxH" (e.g. "1600x900"). When set, the widgets
 	// TestDriver uses these dimensions as the stage rect for every

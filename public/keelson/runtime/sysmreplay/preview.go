@@ -6,10 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // The load preview (ADR-0197 §SD10, second query).
@@ -62,30 +61,27 @@ func (inst *Reader) Preview(ctx context.Context, w Window, bucket time.Duration)
 	}
 	bucket = previewBucket(w, bucket)
 
+	var cols struct {
+		Start []int64   `ch:"b"`
+		Value []float64 `ch:"v"`
+	}
 	for rec, rerr := range inst.exec.QueryArrow(ctx, inst.previewSQL(w, bucket)) {
 		if rerr != nil {
-			points = nil
 			err = eh.Errorf("sysmreplay: preview query: %w", rerr)
 			return
 		}
-		starts, ok := rec.Column(0).(*array.Int64)
-		if !ok {
-			rec.Release()
-			points = nil
-			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("sysmreplay: preview bucket column is not int64")
-			return
-		}
-		vals, ok := rec.Column(1).(*array.Float64)
-		if !ok {
-			rec.Release()
-			points = nil
-			err = eb.Build().Stringer("dataType", rec.Column(1).DataType()).Errorf("sysmreplay: preview value column is not float64")
-			return
-		}
-		for i := range int(rec.NumRows()) {
-			points = append(points, PreviewPoint{StartMS: starts.Value(i), Value: vals.Value(i)})
-		}
+		_, err = chrows.Decode(&cols, rec)
 		rec.Release()
+		if err != nil {
+			err = eh.Errorf("sysmreplay: preview result: %w", err)
+			return
+		}
+	}
+	if len(cols.Start) > 0 {
+		points = make([]PreviewPoint, 0, len(cols.Start))
+	}
+	for i, start := range cols.Start {
+		points = append(points, PreviewPoint{StartMS: start, Value: cols.Value[i]})
 	}
 	return
 }

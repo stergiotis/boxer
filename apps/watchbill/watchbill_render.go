@@ -170,7 +170,7 @@ func (inst *App) renderTrail(snap snapshot, job watchbillstore.Job) {
 		case snap.eventsFor != job.ID:
 			c.Label("Reading the trail…").Send()
 			return
-		case len(snap.events) == 0:
+		case snap.events.Len() == 0:
 			c.Label("No transitions recorded yet.").Send()
 			return
 		}
@@ -179,7 +179,7 @@ func (inst *App) renderTrail(snap snapshot, job watchbillstore.Job) {
 				c.LabelAtoms(c.Atoms().BeginRichText(h).Strong().End().Keep()).Send()
 			}
 			c.EndRow()
-			for i, e := range snap.events {
+			for i, e := range snap.events.All() {
 				for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 					c.Label(e.At).Send()
 					badge.New(inst.ids.PrepareStr("st"), e.State).Tone(toneOf(e.State)).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
@@ -205,8 +205,8 @@ func (inst *App) renderTrail(snap snapshot, job watchbillstore.Job) {
 				c.EndRow()
 			}
 		}
-		if inst.shownEvent >= 0 && inst.shownEvent < len(snap.events) {
-			c.LabelAtoms(c.Atoms().BeginRichText(snap.events[inst.shownEvent].Error).Monospace().Small().End().Keep()).Send()
+		if inst.shownEvent >= 0 && inst.shownEvent < snap.events.Len() {
+			c.LabelAtoms(c.Atoms().BeginRichText(snap.events.Error[inst.shownEvent]).Monospace().Small().End().Keep()).Send()
 		}
 	}
 }
@@ -218,12 +218,12 @@ func (inst *App) renderWorkers(snap snapshot) {
 	case !snap.reads:
 		c.Label("Workers: unknown, this window has no bus to read keelson('watchbill_worker') through").Send()
 		return
-	case len(snap.workers) == 0:
+	case snap.workers.Len() == 0:
 		c.Label("Workers: none alive on the cell (a worker needs a live ClickHouse)").Send()
 		return
 	}
-	c.LabelAtoms(c.Atoms().BeginRichText(fmt.Sprintf("Workers alive on the cell: %d", len(snap.workers))).Strong().End().Keep()).Send()
-	for i, w := range snap.workers {
+	c.LabelAtoms(c.Atoms().BeginRichText(fmt.Sprintf("Workers alive on the cell: %d", snap.workers.Len())).Strong().End().Keep()).Send()
+	for i, w := range snap.workers.All() {
 		for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 			for range c.HorizontalTop().KeepIter() {
 				queues := "every queue"

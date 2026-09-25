@@ -297,10 +297,16 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ## Updates
 
+### 2026-09-25 — a downstream project no longer named
+
+Mentions of a downstream repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.
+
 ### 2026-08-28 — second capture site: `scrollingTexture`
 
 The primitive was declared on `paintCanvas` only. A waterfall built on the
-`scrollingTexture` widget (heatmapscroll; sailing's Binnacle) had to read the
+`scrollingTexture` widget (heatmapscroll; a downstream receiver's display) had to read the
 unscoped `GetScrollDelta()` to zoom on the wheel, with the hover gate rebuilt
 by hand — the one shape SD3 kept the globals for was a whole-viewport read,
 not this. `scrollingTexture` now carries the same two opt-ins,

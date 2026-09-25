@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/oklab"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -48,9 +50,31 @@ type highlighterSpec struct {
 //
 // Unexported: each per-language palette interns its own colours at init().
 func internRgb(r, g, b uint8) color.Color {
+	if styletokens.ActiveTheme() == styletokens.ThemeFresh {
+		r, g, b = forLightSurface(r, g, b)
+	}
 	holder := c.Color().FromRgb(r, g, b).Keep()
 	return color.FromRetainedHolder(holder.Untype(), uint32(r)<<24|uint32(g)<<16|uint32(b)<<8|0xff)
 }
+
+// forLightSurface re-tunes a colour the per-language palettes chose for a
+// dark surface so it reads on a light one (the fresh theme, ADR-0258):
+// the hue and chroma stay, the OKLab lightness is capped at lightCodeMaxL,
+// so the palette's relationships survive the flip. The dark palettes sit
+// around L 0.7–0.9; the cap puts them where ink is.
+func forLightSurface(r, g, b uint8) (uint8, uint8, uint8) {
+	lin := func(v uint8) float64 { return oklab.SrgbToLinear(float64(v) / 255.0) }
+	l, a, bb := oklab.LinearSrgbToOklab(lin(r), lin(g), lin(b))
+	lch, ch, h := oklab.OklabToOklch(l, a, bb)
+	if lch <= lightCodeMaxL {
+		return r, g, b
+	}
+	nr, ng, nb, _ := oklab.OklchToSrgbU8(lightCodeMaxL, ch, h)
+	return nr, ng, nb
+}
+
+// lightCodeMaxL is the OKLab lightness ceiling forLightSurface applies.
+const lightCodeMaxL = 0.48
 
 // build runs the highlighter once on `src` and emits a retained
 // CodeViewJob with one Section per resolved span.

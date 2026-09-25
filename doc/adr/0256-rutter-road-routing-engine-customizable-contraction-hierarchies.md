@@ -1,28 +1,25 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-23
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0256: rutter — a road-network routing engine on customizable contraction hierarchies
 
 ## Context
 
 ADR-0229 §SD7 deferred weighted shortest paths "until a weighted `edges`
-contract has a consumer". The consumer is shadow-boxer's ADR-0012
-(proposed): foot and bike routing, reachability and travel-time matrices
+contract has a consumer". The consumer is a downstream project's
+routing proposal: foot and bike routing, reachability and travel-time matrices
 over the Swiss topographic road layer — about 1.65 M nodes and 4 M arcs
 once every two-way segment is two arcs — with a cost profile that changes
 per question (a hiking grade cap, a surface rule, a closure) and, should a
 car profile ever be taken up, weights that change per minute.
 
 The shape of the problem is settled in the literature and recorded in
-shadow-boxer's survey
-([road routing algorithms in Go](https://github.com/stergiotis/shadow-boxer/blob/main/doc/adr-background-work/road-routing-algorithms-in-go.md)):
+that consumer's survey of road routing algorithms in Go:
 a plain Contraction Hierarchy bakes the metric into its order, so each
 profile and each closure is a rebuild of minutes; a Customizable
 Contraction Hierarchy (Dibbelt, Strasser, Wagner 2016) computes a
@@ -69,14 +66,13 @@ system, a road class or a country.
 
 ### Milestones
 
-- **M1 — Graph, heap, Dijkstra, snapping.**
-- **M2 — Order, hierarchy, customization, query, buckets.**
+- **M1 — Graph, heap, Dijkstra, snapping.** ✓
+- **M2 — Order, hierarchy, customization, query, buckets.** ✓
 
 ### Deferred
 
 - **Perfect customization and precomputed triangles.** Trigger: a query time measured above budget on a real graph.
 - **Turn costs by edge-based expansion.** Trigger: a car profile with turn restrictions to honour.
-- **Map matching.** Trigger: shadow-boxer ADR-0012 §M5.
 - **Time-dependent metrics by slices.** Trigger: predicted traffic.
 - **Alternatives.** Trigger: a consumer asks.
 
@@ -84,7 +80,7 @@ system, a road class or a country.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| Exported Go API under `public/` | added: `public/analytics/graph/rutter` | shadow-boxer's pin, once tagged |
+| Exported Go API under `public/` | added: `public/analytics/graph/rutter` | the consumer's pin, once tagged |
 | House names | `rutter` joins the register in README | the README table |
 
 ## Alternatives
@@ -128,23 +124,53 @@ system, a road class or a country.
 
 ## Status
 
-Proposed — awaiting review by @stergiotis.
+Accepted (2026-09-25). M1 and M2 shipped (Updates, 2026-09-24); the
+Deferred items stand as follow-ups, each with its trigger.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-09-24 — M1 and M2 shipped, and the first country-size numbers
+
+Both milestones landed in one cut, with the lane the verification plan
+names: every hierarchy answer equal to Dijkstra's over random grids,
+metrics, parallel and forbidden arcs and snapped ends; unpacked paths as
+walks summing to the distance; buckets equal to pairwise queries; the
+order a permutation whose tree parents are upward neighbours; the grid
+index equal to a linear scan. Polyline coordinates are float32, and
+`Index.NearestWhere` takes an acceptance predicate so a consumer snaps
+under a profile.
+
+The consumer measured the package on the Swiss road layer (its routing
+ADR, Updates 2026-09-24): 1 654 880 nodes and 4 154 136 arcs; the
+Inertial Flow order in 138 s single-threaded; contraction in 1 s to
+7 843 889 up-arcs (1.89× the arcs) and a tree of height 792;
+customization in 4.3 s single-threaded; a country-length query with
+unpacking in 5 ms, a six-by-six matrix by buckets in 21 ms. Two of the
+context's expectations are corrected by that: the fill-in is above the
+1.15–1.7× the literature reports, and a query is milliseconds, not tens of
+microseconds. Both are the order's quality — plain Inertial Flow with the
+separator taken as the source-side endpoints of an edge cut — and §SD3
+names the replacement. On a 300×300 grid the order costs 2.8 s and the
+fill is 7.7×, which is a lattice's nature rather than a defect.
+
+### 2026-09-24 — map matching, pulled out of Deferred
+
+Its trigger fired the same day: `Matcher` is Newson–Krumm over the
+index's candidates, with route distances from bounded one-to-many
+Dijkstra searches under a length metric that leaves and enters a
+polyline at the right ends, decoded by Viterbi and breaking the sequence
+where an observation has no candidate or no reachable predecessor.
+`Index.Candidates` keeps every admitted polyline within the radius,
+nearest first, for it. The consumer matched 146 synthetic fixes along a
+4 km route onto the Swiss graph in 204 ms.
 
 ## References
 
 - [ADR-0229](./0229-graph-analytics-engine.md) — the CSR container and the deferral this decision answers.
-- shadow-boxer ADR-0012 (proposed) — the consumer.
+- A downstream project's routing ADR (proposed) — the consumer.
 - Dibbelt, Strasser, Wagner, "Customizable Contraction Hierarchies", JEA 2016 — https://arxiv.org/abs/1402.0402
 - Bläsius et al., "Customizable Contraction Hierarchies – A Survey", 2025 — https://arxiv.org/abs/2502.10519
 - Schild, Sommer, "On Balanced Separators in Road Networks", SEA 2015 — https://aschild.github.io/papers/roadseparator.pdf

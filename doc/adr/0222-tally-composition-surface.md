@@ -201,7 +201,7 @@ it in tally.
 ### 2026-09-09 — the launch names the store: `tallyLaunchDatabase`
 
 The first caller outside boxer keeps its lading store in a database of its
-own (shadow-boxer's shanty library, under the `ladingschema.Layout` of
+own (a music library, under the `ladingschema.Layout` of
 ADR-0198's 2026-09-04 update), and a launch config could not say so: the
 window opened its connection over the default store, so a mount id, a
 snapshot and a path-set query that were all correct named rows the window
@@ -234,3 +234,8 @@ Not carried: the SFTP path and the rclone command still spell the default
 head, which serves the default store only. Trigger for the rest: an SFTP
 head that takes a layout.
 
+### 2026-09-25 — a downstream project no longer named
+
+Mentions of a downstream repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.

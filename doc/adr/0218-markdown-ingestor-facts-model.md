@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-02
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0218: markdown ingestor — a document as an item-per-row fact family, its frontmatter as an mlvhp row
 
@@ -212,7 +212,8 @@ DDL and the leeway SQL surface, asserting the answers over the fixture vault.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted (2026-09-25). Built as described, with the how-to at
+[markdown-facts-obsidian-queries](../howto/markdown-facts-obsidian-queries.md).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.

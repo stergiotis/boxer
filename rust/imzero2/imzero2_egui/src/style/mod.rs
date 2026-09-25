@@ -2,13 +2,15 @@
 //!
 //! `apply(ctx, density)` is the startup call apps make. It writes IDS
 //! spacing, rounding, stroke, font, and color tokens into the active
-//! `egui::Context`. Per ADR-0029 §SD13 no design-system code runs in the
+//! `egui::Context`. Which colour, rounding and stroke tokens is the theme's
+//! decision (`tokens::theme`, ADR-0258): the IDS dark palette, or `fresh`. Per ADR-0029 §SD13 no design-system code runs in the
 //! render path: the apply is event-driven, once at startup and again only
 //! when something asks for a different density — the `setIdsDensity` opcode
 //! behind the host chrome's Layout ▸ Density menu (ADR-0032 §SD1, Update
 //! 2026-08-23).
 
 pub mod data_encoding;
+pub mod fresh;
 pub mod slider;
 pub mod tokens;
 
@@ -36,17 +38,41 @@ pub fn apply(ctx: &Context, density: Density) {
 pub fn apply_style_only(ctx: &Context, density: Density) {
     ctx.global_style_mut(|style| {
         tokens::apply_spacing(&mut style.spacing, density);
-        // Apply visuals first — it overwrites widget-table corner_radius,
-        // which apply_rounding then sets to IDS values.
-        tokens::apply_visuals(&mut style.visuals);
-        tokens::apply_rounding(&mut style.visuals);
-        tokens::apply_stroke(&mut style.visuals);
+        if tokens::theme::active() == tokens::Theme::Fresh {
+            // ADR-0258: the light theme replaces the colour / rounding /
+            // stroke trio below; spacing and typography stay shared.
+            fresh::apply(style, density);
+        } else {
+            // Apply visuals first — it overwrites widget-table corner_radius,
+            // which apply_rounding then sets to IDS values.
+            tokens::apply_visuals(&mut style.visuals);
+            tokens::apply_rounding(&mut style.visuals);
+            tokens::apply_stroke(&mut style.visuals);
+        }
         // ADR-0030 §SD3 type-scale binding: rewrite style.text_styles so
         // egui's Body/Heading/Small/Monospace/Button slots resolve to
         // IDS pt sizes. Display + Micro land in Name slots (no built-in
         // egui tier matches them).
         tokens::apply_typography(style, density);
     });
+}
+
+/// The accent at the emphasis the IDS binds construction-time fills to —
+/// `ProgressBar::fill` and the etable selection stripe, which egui does
+/// not read from `Visuals` — for the active theme.
+pub fn accent_default() -> egui::Color32 {
+    match tokens::theme::active() {
+        tokens::Theme::Fresh => tokens::palette_fresh_generated::ACCENT_DEFAULT,
+        tokens::Theme::Dark => tokens::palette_generated::ACCENT_DEFAULT,
+    }
+}
+
+/// The slider rail's colour for the active theme; see [`slider`].
+pub fn slider_rail() -> egui::Color32 {
+    match tokens::theme::active() {
+        tokens::Theme::Fresh => fresh::RAIL,
+        tokens::Theme::Dark => slider::RAIL,
+    }
 }
 
 /// Tour-mode neutralization: make hover and active look like inactive.

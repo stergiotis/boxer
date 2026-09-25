@@ -209,8 +209,8 @@ Accepted 2026-08-10.
 
 The data disposition for old-era tables was decided as **truncate**
 (owner-directed). Eight old-era leeway tables across six databases on the
-live server were dropped — the runtime facts table, the anchor/drone/
-sailing demo sets, a facts11 instance, and the spinnaker set including its
+live server were dropped — the runtime facts table, the anchor/drone and
+other demo sets, a facts11 instance, and the spinnaker set including its
 merged view. `boxer.facts` was re-created through the production
 self-provisioning path (`SetupTable`, 185 columns; v2
 `DiscoverTableFromColumnNames` round-trip verified; empty). Pack v4 was
@@ -218,6 +218,13 @@ installed and probed on the server (`LW_PACK_VERSION()` = 4;
 `LW_ASPECT_HAS_SEM` answering over `system.columns`), and a re-inventory
 reports zero remaining old-era tables. The demo/experiment databases
 re-provision through their producers on next use.
+
+## Update 2026-09-25 — a downstream project no longer named
+
+Mentions of a downstream repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.
+
 
 ## References
 

@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -338,7 +339,7 @@ func resolveSeriesColumns(schema *arrow.Schema) (k seriesClaim, reason string) {
 		switch {
 		case k.tCol < 0 && isSeriesTemporalType(f.Type):
 			k.tCol = ci
-		case isNumericType(f.Type):
+		case chrows.IsNumeric(f.Type):
 			k.vCols = append(k.vCols, ci)
 		}
 	}
@@ -380,7 +381,7 @@ func acceptSeriesScores(schema *arrow.Schema) (claim ChannelClaim, reason string
 			k.tCol = ci
 			continue
 		}
-		if f.Name == "score" && isNumericType(f.Type) {
+		if f.Name == "score" && chrows.IsNumeric(f.Type) {
 			k.vCols = append(k.vCols, ci)
 		}
 	}

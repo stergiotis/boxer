@@ -209,8 +209,8 @@ func TestIndexAgainstLinearScan(t *testing.T) {
 		k := 2 + rng.IntN(4)
 		x, y := rng.Float64()*1000, rng.Float64()*1000
 		for range k {
-			lines.X = append(lines.X, x)
-			lines.Y = append(lines.Y, y)
+			lines.X = append(lines.X, float32(x))
+			lines.Y = append(lines.Y, float32(y))
 			x += rng.Float64()*40 - 20
 			y += rng.Float64()*40 - 20
 		}
@@ -242,7 +242,7 @@ func TestIndexAgainstLinearScan(t *testing.T) {
 	}
 	// The closest point on a two-vertex line is the projection, and the
 	// fraction is where along it.
-	one := Polylines{First: []int32{0, 2}, X: []float64{0, 10}, Y: []float64{0, 0}}
+	one := Polylines{First: []int32{0, 2}, X: []float32{0, 10}, Y: []float32{0, 0}}
 	idx, err = NewIndexE(one, 5)
 	require.NoError(t, err)
 	s, ok := idx.Nearest(2.5, 3, 10)
@@ -252,6 +252,14 @@ func TestIndexAgainstLinearScan(t *testing.T) {
 	require.InDelta(t, 3, s.Dist, 1e-12)
 	require.InDelta(t, 0.25, s.Fraction, 1e-12)
 	require.InDelta(t, 10, one.Length(0), 1e-12)
+	// A filter skips the nearest when it is not admitted.
+	two := Polylines{First: []int32{0, 2, 4}, X: []float32{0, 10, 0, 10}, Y: []float32{0, 0, 5, 5}}
+	idx, err = NewIndexE(two, 5)
+	require.NoError(t, err)
+	s, ok = idx.NearestWhere(5, 1, 10, func(i int32) bool { return i == 1 })
+	require.True(t, ok)
+	require.EqualValues(t, 1, s.Polyline)
+	require.InDelta(t, 4, s.Dist, 1e-6)
 	_, err = NewIndexE(Polylines{First: []int32{0, 0}}, 5)
 	require.Error(t, err)
 }

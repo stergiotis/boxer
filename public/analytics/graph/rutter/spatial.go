@@ -8,10 +8,13 @@ import (
 
 // Polylines is a set of planar polylines in one flat vertex array:
 // polyline i is the vertices [First[i], First[i+1]). Coordinates are
-// whatever planar unit the caller uses; distances come back in it.
+// float32 in whatever planar unit the caller uses — a country's extent in
+// metres keeps a quarter-metre of precision, and a set of tens of millions
+// of vertices is what the width is for; distances come back as float64 in
+// the same unit.
 type Polylines struct {
 	First []int32
-	X, Y  []float64
+	X, Y  []float32
 }
 
 // NumPolylines is the polyline count.
@@ -69,10 +72,10 @@ func NewIndexE(lines Polylines, cell float64) (inst *Index, err error) {
 	inst.minX, inst.minY = math.Inf(1), math.Inf(1)
 	maxX, maxY := math.Inf(-1), math.Inf(-1)
 	for i := range lines.X {
-		inst.minX = min(inst.minX, lines.X[i])
-		inst.minY = min(inst.minY, lines.Y[i])
-		maxX = max(maxX, lines.X[i])
-		maxY = max(maxY, lines.Y[i])
+		inst.minX = min(inst.minX, float64(lines.X[i]))
+		inst.minY = min(inst.minY, float64(lines.Y[i]))
+		maxX = max(maxX, float64(lines.X[i]))
+		maxY = max(maxY, float64(lines.Y[i]))
 	}
 	inst.cols = int32(math.Floor((maxX-inst.minX)/cell)) + 1
 	inst.rows = int32(math.Floor((maxY-inst.minY)/cell)) + 1
@@ -90,8 +93,8 @@ func NewIndexE(lines Polylines, cell float64) (inst *Index, err error) {
 			bx0, by0 = min(bx0, lines.X[p]), min(by0, lines.Y[p])
 			bx1, by1 = max(bx1, lines.X[p]), max(by1, lines.Y[p])
 		}
-		c0, r0 := inst.cellOf(bx0, by0)
-		c1, r1 := inst.cellOf(bx1, by1)
+		c0, r0 := inst.cellOf(float64(bx0), float64(by0))
+		c1, r1 := inst.cellOf(float64(bx1), float64(by1))
 		boxes[i] = [4]int32{c0, r0, c1, r1}
 		for r := r0; r <= r1; r++ {
 			for c := c0; c <= c1; c++ {
@@ -133,6 +136,14 @@ func (inst *Index) cellIndex(c, r int32) int64 { return int64(r)*int64(inst.cols
 // the answer is exact for the radius; a polyline is measured once per
 // query however many cells list it.
 func (inst *Index) Nearest(x, y, radius float64) (s Snap, ok bool) {
+	return inst.NearestWhere(x, y, radius, nil)
+}
+
+// NearestWhere is [Index.Nearest] over the polylines accept admits; a nil
+// accept admits all. A caller snapping under a profile passes the
+// profile's passability, so a point beside a motorway snaps to the path
+// beyond it.
+func (inst *Index) NearestWhere(x, y, radius float64, accept func(polyline int32) bool) (s Snap, ok bool) {
 	if len(inst.lines.X) == 0 {
 		return s, false
 	}
@@ -153,6 +164,9 @@ func (inst *Index) Nearest(x, y, radius float64) (s Snap, ok bool) {
 					continue
 				}
 				inst.stamp[i] = inst.gen
+				if accept != nil && !accept(i) {
+					continue
+				}
 				cand := inst.measure(i, x, y)
 				if cand.Dist <= best && (!ok || cand.Dist < s.Dist) {
 					s, ok, best = cand, true, cand.Dist
@@ -171,15 +185,16 @@ func (inst *Index) measure(i int32, x, y float64) (s Snap) {
 	X, Y := inst.lines.X, inst.lines.Y
 	total := 0.0
 	for p := lo; p+1 < hi; p++ {
-		total += math.Hypot(X[p+1]-X[p], Y[p+1]-Y[p])
+		total += math.Hypot(float64(X[p+1]-X[p]), float64(Y[p+1]-Y[p]))
 	}
 	if hi-lo == 1 || total == 0 {
-		s.X, s.Y, s.Dist = X[lo], Y[lo], math.Hypot(x-X[lo], y-Y[lo])
+		s.X, s.Y = float64(X[lo]), float64(Y[lo])
+		s.Dist = math.Hypot(x-s.X, y-s.Y)
 		return
 	}
 	walked := 0.0
 	for p := lo; p+1 < hi; p++ {
-		ax, ay, bx, by := X[p], Y[p], X[p+1], Y[p+1]
+		ax, ay, bx, by := float64(X[p]), float64(Y[p]), float64(X[p+1]), float64(Y[p+1])
 		dx, dy := bx-ax, by-ay
 		seg := math.Hypot(dx, dy)
 		t := 0.0
@@ -191,7 +206,9 @@ func (inst *Index) measure(i int32, x, y float64) (s Snap) {
 		d := math.Hypot(x-px, y-py)
 		if d < s.Dist {
 			s.X, s.Y, s.Dist = px, py, d
-			s.Fraction = (walked + t*seg) / total
+			// Clamped: the two sums are the same numbers added in another
+			// order, and rounding can put the last vertex a hair past 1.
+			s.Fraction = min(max((walked+t*seg)/total, 0), 1)
 		}
 		walked += seg
 	}
@@ -202,7 +219,7 @@ func (inst *Index) measure(i int32, x, y float64) (s Snap) {
 func (inst Polylines) Length(i int32) (l float64) {
 	lo, hi := inst.First[i], inst.First[i+1]
 	for p := lo; p+1 < hi; p++ {
-		l += math.Hypot(inst.X[p+1]-inst.X[p], inst.Y[p+1]-inst.Y[p])
+		l += math.Hypot(float64(inst.X[p+1]-inst.X[p]), float64(inst.Y[p+1]-inst.Y[p]))
 	}
 	return
 }

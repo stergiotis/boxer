@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/dustin/go-humanize"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -132,7 +133,7 @@ func mapBandsRecord(rec arrow.RecordBatch) (bands []layout.BackgroundBand, skipp
 			Errorf("\"" + timelineSlotBandTo + "\" must be a Timestamp column")
 		return
 	}
-	if !isStringLikeType(rec.Column(colColor[0]).DataType()) {
+	if !chrows.IsStringLike(rec.Column(colColor[0]).DataType()) {
 		err = eb.Build().Stringer("dataType", rec.Column(colColor[0]).DataType()).
 			Errorf("\"" + timelineSlotBandColor + "\" must be a String / Binary column")
 		return
@@ -140,7 +141,7 @@ func mapBandsRecord(rec arrow.RecordBatch) (bands []layout.BackgroundBand, skipp
 	colorArr := rec.Column(colColor[0])
 	var labelArr arrow.Array
 	if len(colLabel) > 0 {
-		if !isStringLikeType(rec.Column(colLabel[0]).DataType()) {
+		if !chrows.IsStringLike(rec.Column(colLabel[0]).DataType()) {
 			err = eb.Build().Stringer("dataType", rec.Column(colLabel[0]).DataType()).
 				Errorf("\"" + timelineSlotBandLabel + "\" must be a String / Binary column")
 			return
@@ -163,8 +164,8 @@ func mapBandsRecord(rec arrow.RecordBatch) (bands []layout.BackgroundBand, skipp
 			skipped++
 			continue
 		}
-		from := tsToEpochMS(int64(fromArr.Value(int(i))), unitFrom)
-		to := tsToEpochMS(int64(toArr.Value(int(i))), unitTo)
+		from := chrows.TimestampToEpochMillis(int64(fromArr.Value(int(i))), unitFrom)
+		to := chrows.TimestampToEpochMillis(int64(toArr.Value(int(i))), unitTo)
 		if to < from {
 			skipped++
 			continue

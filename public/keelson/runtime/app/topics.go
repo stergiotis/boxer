@@ -41,7 +41,7 @@ const (
 	TopicGeo TopicT = "geo"
 	// TopicSensing: instruments, radios and sensors — live measurements from
 	// the physical world (ADR-0158 Update 2026-08-28; the first member is
-	// the sailing repository's Micronet receiver).
+	// a downstream repository's Micronet receiver).
 	TopicSensing TopicT = "sensing"
 	// TopicAbout: the project itself — provenance, licence, splash.
 	TopicAbout TopicT = "about"

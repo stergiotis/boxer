@@ -305,7 +305,10 @@ case.
 ## Status
 
 Proposed. M0–M2b implemented alongside this draft for review, M1b with
-them; M3+ pending acceptance.
+them; M3+ pending acceptance. Open (noted 2026-09-25): M3, the text2regex
+generator, waits on the ADR-0139 semantic layer, which is unbuilt; M4, the
+golden query set, gates the embeddings deferral. Neither blocks accepting
+what M0–M2b shipped.
 
 ## References
 

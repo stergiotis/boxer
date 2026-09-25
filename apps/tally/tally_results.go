@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -184,26 +185,8 @@ func (inst *pathSetAccumulator) add(rec arrow.RecordBatch) (err error) {
 // truthyAt reads a boolean cell. The lading surface projects `is_dir` as a
 // ClickHouse UInt8, which Arrow carries as an integer rather than a boolean.
 func truthyAt(col arrow.Array, row int) (yes bool) {
-	if col.IsNull(row) {
-		return false
-	}
-	switch a := col.(type) {
-	case *array.Boolean:
-		return a.Value(row)
-	case *array.Uint8:
-		return a.Value(row) != 0
-	case *array.Int8:
-		return a.Value(row) != 0
-	case *array.Uint32:
-		return a.Value(row) != 0
-	case *array.Int32:
-		return a.Value(row) != 0
-	case *array.Uint64:
-		return a.Value(row) != 0
-	case *array.Int64:
-		return a.Value(row) != 0
-	}
-	return false
+	yes, _ = chrows.Bool(col, row)
+	return
 }
 
 // normalizeLocation rewrites the instant to a wall-clock-only UTC time. A
@@ -298,64 +281,32 @@ func fieldIndex(schema *arrow.Schema, name string) (idx int) {
 
 // stringAt reads a text cell. The lading surface hands `path` back as the
 // natural key, which arrives as binary or as a string depending on how the
-// caller projected it; both are the same bytes.
+// caller projected it; both are the same bytes. The result is kept past the
+// batch, so it is copied.
 func stringAt(col arrow.Array, row int) (s string, ok bool) {
-	if col.IsNull(row) {
-		return
-	}
-	switch a := col.(type) {
-	case *array.String:
-		return a.Value(row), true
-	case *array.LargeString:
-		return a.Value(row), true
-	case *array.Binary:
-		return string(a.Value(row)), true
-	case *array.LargeBinary:
-		return string(a.Value(row)), true
-	case *array.Dictionary:
-		return stringAt(a.Dictionary(), a.GetValueIndex(row))
-	}
+	s, ok = chrows.String(col, row)
+	s = strings.Clone(s)
 	return
 }
 
 func uint64At(col arrow.Array, row int) (v uint64, ok bool) {
-	if col.IsNull(row) {
-		return
-	}
-	switch a := col.(type) {
-	case *array.Uint64:
-		return a.Value(row), true
-	case *array.Int64:
-		return uint64(a.Value(row)), true
-	case *array.Uint32:
-		return uint64(a.Value(row)), true
-	case *array.Dictionary:
-		return uint64At(a.Dictionary(), a.GetValueIndex(row))
-	}
-	return
+	return chrows.Uint64(col, row)
 }
 
 // timeAt reads a snapshot instant. `snap` is the entry row's timestamp, which
 // the surface projects as a ClickHouse DateTime64 and Arrow carries as a
-// timestamp; an integer column is read as Unix nanoseconds, which is the
-// spelling the query templates use.
+// timestamp; a 64-bit integer column is read as Unix nanoseconds, which is
+// the spelling the query templates use.
 func timeAt(col arrow.Array, row int) (t time.Time, ok bool) {
-	if col.IsNull(row) {
+	if t, ok = chrows.Time(col, row); ok {
 		return
 	}
-	switch a := col.(type) {
-	case *array.Timestamp:
-		dt, valid := a.DataType().(*arrow.TimestampType)
-		if !valid {
-			return
+	switch col.DataType().ID() {
+	case arrow.INT64, arrow.UINT64:
+		var ns int64
+		if ns, ok = chrows.Int64(col, row); ok {
+			t = time.Unix(0, ns).UTC()
 		}
-		return a.Value(row).ToTime(dt.Unit).UTC(), true
-	case *array.Int64:
-		return time.Unix(0, a.Value(row)).UTC(), true
-	case *array.Uint64:
-		return time.Unix(0, int64(a.Value(row))).UTC(), true
-	case *array.Date64:
-		return a.Value(row).ToTime().UTC(), true
 	}
 	return
 }

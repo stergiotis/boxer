@@ -199,14 +199,17 @@ pub fn init_common<'a, R: std::io::BufRead, W: std::io::Write>(
     // overlay — used for ADR-0030 §SD10 Aile hinting evaluation.
     // Default keeps the carousel's env-configured fonts.
     let density = imzero2_egui::style::tokens::density::from_env();
+    // The colour theme (ADR-0258) is read the same way, once; the Go side
+    // resolves the same variable at package init.
+    let theme = imzero2_egui::style::tokens::theme::active();
     let use_ids_fonts =
         std::env::var("IMZERO2_IDS_FONTS").map(|v| v.eq_ignore_ascii_case("on")).unwrap_or(false);
     if use_ids_fonts {
         imzero2_egui::style::apply(ctx, density);
-        tracing::info!(?density, "applied IDS style overlay + IDS fonts");
+        tracing::info!(?density, ?theme, "applied IDS style overlay + IDS fonts");
     } else {
         imzero2_egui::style::apply_style_only(ctx, density);
-        tracing::info!(?density, "applied IDS style overlay (host fonts)");
+        tracing::info!(?density, ?theme, "applied IDS style overlay (host fonts)");
     }
     // When the tour is active (IMZERO2_SCREENSHOT_DIR set) collapse
     // hover/active widget strokes onto the inactive stroke so that

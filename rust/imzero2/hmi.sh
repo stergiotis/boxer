@@ -6,8 +6,8 @@ cd "$here"
 clientDir="$here/target/release/"
 VSYNC="${VSYNC:-on}"
 # Font selection lives in font-resolve.sh, sourced rather than repeated: the
-# launchers here and the ones in consuming repositories (shadow-boxer, sailing,
-# which reach this file through their boxer pin) then cannot drift apart. Set
+# launchers here and the ones in consuming repositories (which reach this
+# file through their boxer pin) then cannot drift apart. Set
 # MAIN_FONT / MONO_FONT / PHOSPHOR_FONT / FALLBACK_FONT beforehand to pin a
 # face; hmi-fonts-pragmatapro.sh is exactly that, scoped to a licensed install.
 . "$here/font-resolve.sh"

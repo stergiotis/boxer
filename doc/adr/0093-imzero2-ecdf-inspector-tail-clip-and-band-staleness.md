@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-21
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0093: ECDF inspector — adaptive tail cutoff and confidence-band staleness
 
@@ -138,9 +138,7 @@ Band staleness — rejected for "settle":
 
 ## Status
 
-Proposed — awaiting review by @spx. A first cut is already committed to `main`
-(see Implementation, below); the decision is treated as provisional until that
-review lands.
+Accepted (2026-09-25). Implemented as described under Implementation, below.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

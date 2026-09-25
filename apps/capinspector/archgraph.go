@@ -299,13 +299,19 @@ const (
 // graph nodes and the picker row above. Bars reuse Tally's rolling histogram
 // (audit_sparkline.go); the normalisation matches the old paintCapSparkline.
 func (inst *App) renderActivityStrip(canvasW float32, selected CapId) {
+	// Colours resolve from the palette so the strip follows the theme:
+	// a step below the panel for the canvas, secondary text for labels,
+	// the success tone for the selected cap, translucent neutrals for the
+	// baseline and the idle bars.
+	var (
+		bgFill      = styletokens.NeutralBgExtreme.AsHex()
+		labelCol    = styletokens.NeutralTextSecondary.AsHex()
+		labelSelCol = styletokens.SuccessDefault.AsHex()
+		baselineCol = styletokens.NeutralBorderFaint.AsHex()&^0xff | 0x80
+		barCol      = styletokens.NeutralTextSecondary.AsHex()&^0xff | 0xd0
+		barSelCol   = styletokens.SuccessDefault.AsHex()&^0xff | 0xe0
+	)
 	const (
-		bgFill       uint32  = 0x161616ff
-		labelCol     uint32  = 0x9aa0a6ff
-		labelSelCol  uint32  = 0x44cc88ff
-		baselineCol  uint32  = 0x40404080
-		barCol       uint32  = 0x8090a0d0
-		barSelCol    uint32  = 0x44cc88e0
 		minScaleMax  uint64  = 4   // floor so 1-2 audits don't render saturated
 		minBarHeight float32 = 1.5 // keep 1-count buckets visible
 		labelY       float32 = 11.0

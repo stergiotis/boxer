@@ -6,10 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Coverage — where stored history actually is (ADR-0197 §SD10).
@@ -64,31 +63,28 @@ func (inst *Reader) Coverage(ctx context.Context, w Window, bucket time.Duration
 	}
 	bucket = coverageBucket(w, bucket)
 
+	var cols struct {
+		Start []int64 `ch:"b"`
+		Rows  []int64 `ch:"c"`
+	}
 	sql := inst.coverageSQL(w, bucket)
 	for rec, rerr := range inst.exec.QueryArrow(ctx, sql) {
 		if rerr != nil {
-			buckets = nil
 			err = eh.Errorf("sysmreplay: coverage query: %w", rerr)
 			return
 		}
-		starts, ok := rec.Column(0).(*array.Int64)
-		if !ok {
-			rec.Release()
-			buckets = nil
-			err = eb.Build().Stringer("dataType", rec.Column(0).DataType()).Errorf("sysmreplay: coverage bucket column is not int64")
-			return
-		}
-		counts, ok := rec.Column(1).(*array.Uint64)
-		if !ok {
-			rec.Release()
-			buckets = nil
-			err = eb.Build().Stringer("dataType", rec.Column(1).DataType()).Errorf("sysmreplay: coverage count column is not uint64")
-			return
-		}
-		for i := range int(rec.NumRows()) {
-			buckets = append(buckets, CoverageBucket{StartMS: starts.Value(i), Rows: int64(counts.Value(i))})
-		}
+		_, err = chrows.Decode(&cols, rec)
 		rec.Release()
+		if err != nil {
+			err = eh.Errorf("sysmreplay: coverage result: %w", err)
+			return
+		}
+	}
+	if len(cols.Start) > 0 {
+		buckets = make([]CoverageBucket, 0, len(cols.Start))
+	}
+	for i, start := range cols.Start {
+		buckets = append(buckets, CoverageBucket{StartMS: start, Rows: cols.Rows[i]})
 	}
 	return
 }

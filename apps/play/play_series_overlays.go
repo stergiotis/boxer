@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/stergiotis/boxer/public/analytics/timeseries/adscore"
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -125,9 +125,7 @@ func foldSeriesScores(rec arrow.RecordBatch) (out seriesScores, ok bool) {
 		out.score = append(out.score, v)
 		warm := false
 		if warmCol >= 0 {
-			if b, isBool := rec.Column(warmCol).(*array.Boolean); isBool && !b.IsNull(row) {
-				warm = b.Value(row)
-			}
+			warm, _ = chrows.Bool(rec.Column(warmCol), row)
 		}
 		out.warm = append(out.warm, warm)
 	}

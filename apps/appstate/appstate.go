@@ -38,28 +38,28 @@ type appSummary struct {
 	bytes   int64
 }
 
-// summarize groups rows by app, in app order.
-func summarize(rows []entryRow) (apps []appSummary) {
+// summarize groups entries by app, in app order.
+func summarize(cols *entryCols) (apps []appSummary) {
 	idx := make(map[string]int, 8)
-	for _, r := range rows {
-		i, ok := idx[r.AppId]
+	for j, appId := range cols.AppId {
+		i, ok := idx[appId]
 		if !ok {
 			i = len(apps)
-			idx[r.AppId] = i
-			apps = append(apps, appSummary{appId: r.AppId})
+			idx[appId] = i
+			apps = append(apps, appSummary{appId: appId})
 		}
 		apps[i].entries++
-		apps[i].bytes += r.PayloadBytes
+		apps[i].bytes += cols.PayloadBytes[j]
 	}
 	sort.Slice(apps, func(i, j int) bool { return apps[i].appId < apps[j].appId })
 	return
 }
 
-// entriesOf is the rows of one app.
-func entriesOf(rows []entryRow, appId string) (out []entryRow) {
-	for _, r := range rows {
-		if r.AppId == appId {
-			out = append(out, r)
+// entriesOf is the indices of one app's entries.
+func entriesOf(cols *entryCols, appId string) (idx []int) {
+	for i, a := range cols.AppId {
+		if a == appId {
+			idx = append(idx, i)
 		}
 	}
 	return
@@ -85,7 +85,7 @@ type armedForget struct {
 
 // snapshot is what one frame renders from.
 type snapshot struct {
-	rows      []entryRow
+	rows      entryCols
 	lastError string
 	lastNote  string
 	refreshed time.Time
@@ -189,7 +189,7 @@ func (inst *App) poll() {
 // refresh reads the table and lands it as one snapshot. A failed read keeps
 // the rows the window had; the error says why.
 func (inst *App) refresh() {
-	var rows []entryRow
+	var rows entryCols
 	var readErr string
 	if inst.reader == nil {
 		readErr = "this window has no bus to read keelson('app_state') through, so there is nothing to list"

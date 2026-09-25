@@ -2,13 +2,17 @@
 //
 // Reads palette.toml + pairs.toml; performs OKLCh → sRGB gamut clipping;
 // runs APCA + WCAG 2.1 contrast verification; runs CVD ΔE > 15 verification;
-// runs IP-boundary verbatim search; emits five artefacts:
+// runs IP-boundary verbatim search; emits, for the IDS palette:
 //
 //   - rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs
 //   - public/keelson/designsystem/styletokens/palette.out.go
 //   - public/keelson/designsystem/web/ids-palette.css   (ADR-0076)
 //   - doc/design-system/foundations/color.md
 //   - doc/design-system/foundations/ip-boundary-check.md
+//
+// and, for every alternative theme in `themes` (ADR-0258), a Rust module,
+// a Go apply-function and a colour page of its own, graded against the same
+// pairs.
 //
 // Pure-Go; deterministic; CI re-runs with Verify=true to byte-compare
 // against committed artefacts.
@@ -80,6 +84,71 @@ type pairsFile struct {
 	} `toml:"pair"`
 }
 
+// theme is one palette source and the artefacts emitted from it. The first
+// entry is the IDS palette (ADR-0031, dark); the others are the themes an
+// app can choose at launch with IMZERO2_THEME (ADR-0258). Every theme is
+// graded against the same pairs.toml, so the APCA gate holds for each, and
+// every emitted file is byte-compared under Verify.
+type theme struct {
+	name   string // IMZERO2_THEME value; "" for the IDS palette
+	title  string // heading of the theme's colour page
+	source string // palette file, relative to the repo root
+	rust   string // Rust module of Color32 consts
+	goFile string // Go consts (IDS) or apply-function (theme)
+	css    string // CSS custom properties; IDS only
+	md     string // the colour page
+}
+
+var themes = []theme{
+	{
+		name:   "",
+		title:  "IDS color tokens",
+		source: emit.DefaultSource,
+		rust:   "rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs",
+		goFile: "public/keelson/designsystem/styletokens/palette.out.go",
+		css:    "public/keelson/designsystem/web/ids-palette.css",
+		md:     "doc/design-system/foundations/color.md",
+	},
+	{
+		name:   "fresh",
+		title:  "IDS color tokens — the fresh theme",
+		source: "rust/imzero2/assets/colors/palette-fresh.toml",
+		rust:   "rust/imzero2/imzero2_egui/src/style/tokens/palette_fresh_generated.rs",
+		goFile: "public/keelson/designsystem/styletokens/palette_fresh.out.go",
+		md:     "doc/design-system/foundations/color-fresh.md",
+	},
+}
+
+// prefixed labels a theme's findings so a gate failure names the palette
+// it came from; the IDS palette's findings stay bare.
+func (inst theme) prefixed(findings []string) (out []string) {
+	if inst.name == "" {
+		return findings
+	}
+	out = make([]string, 0, len(findings))
+	for _, f := range findings {
+		out = append(out, inst.name+": "+f)
+	}
+	return
+}
+
+// qualified is the token name as the IP-boundary log reports it.
+func (inst theme) qualified(token string) (s string) {
+	if inst.name == "" {
+		return token
+	}
+	s = inst.name + "/" + token
+	return
+}
+
+// artefact is one file the generator emits; verify says whether the CI
+// drift check byte-compares it (pages that embed a date are not).
+type artefact struct {
+	path    string
+	content string
+	verify  bool
+}
+
 // Run executes the generator with the supplied configuration. APCA gate
 // failures are reported via Result.APCAFailures (non-nil-empty slice does
 // NOT cause err to be non-nil — the caller decides exit semantics).
@@ -96,29 +165,10 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		}
 	}
 
-	paletteTomlPath := filepath.Join(repoRoot, "rust/imzero2/assets/colors/palette.toml")
 	pairsTomlPath := filepath.Join(repoRoot, "rust/imzero2/assets/colors/pairs.toml")
 	ipRefsDir := filepath.Join(repoRoot, "public/keelson/designsystem/colors/ip-refs")
 
-	var pf palette.File
-	_, err = toml.DecodeFile(paletteTomlPath, &pf)
-	if err != nil {
-		err = eh.Errorf("decode palette.toml: %w", err)
-		return
-	}
-
-	tokens, err := palette.Resolve(&pf)
-	if err != nil {
-		err = eh.Errorf("resolve tokens: %w", err)
-		return
-	}
-
-	tokenLookup := make(map[string]palette.Token, len(tokens))
-	for _, t := range tokens {
-		tokenLookup[t.Name] = t
-	}
-
-	// ---- Contrast verification ----
+	// ---- Contrast pairs: one file, graded against every theme ----
 	var pf2 pairsFile
 	_, err = toml.DecodeFile(pairsTomlPath, &pf2)
 	if err != nil {
@@ -126,75 +176,87 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		return
 	}
 
-	apcaResults, apcaFailures, contrastResults, contrastWarnings := runContrast(pf2, tokenLookup)
-
-	// ---- CVD verification ----
-	cvdFailures := runCVD(tokens)
-
-	// ---- IP boundary search ----
+	// ---- IP boundary sources ----
 	sources, err := ipboundary.LoadAll(ipRefsDir)
 	if err != nil {
 		err = eh.Errorf("load IP-refs: %w", err)
 		return
 	}
-	idsHexes := make(map[string]string, len(tokens))
-	for _, t := range tokens {
-		idsHexes[t.Name] = t.Hex()
+
+	var (
+		apcaFailures     []string
+		contrastWarnings []string
+		cvdFailures      []string
+		collisions       []ipboundary.Collision
+		writes           []artefact
+	)
+	for _, th := range themes {
+		var pf palette.File
+		_, err = toml.DecodeFile(filepath.Join(repoRoot, th.source), &pf)
+		if err != nil {
+			err = eb.Build().Str("source", th.source).Errorf("decode palette: %w", err)
+			return
+		}
+		var tokens []palette.Token
+		tokens, err = palette.Resolve(&pf)
+		if err != nil {
+			err = eb.Build().Str("source", th.source).Errorf("resolve tokens: %w", err)
+			return
+		}
+		tokenLookup := make(map[string]palette.Token, len(tokens))
+		for _, t := range tokens {
+			tokenLookup[t.Name] = t
+		}
+
+		apcaResults, failures, contrastResults, warnings := runContrast(pf2, tokenLookup)
+		apcaFailures = append(apcaFailures, th.prefixed(failures)...)
+		contrastWarnings = append(contrastWarnings, th.prefixed(warnings)...)
+		cvdFailures = append(cvdFailures, th.prefixed(runCVD(tokens))...)
+
+		idsHexes := make(map[string]string, len(tokens))
+		for _, t := range tokens {
+			idsHexes[th.qualified(t.Name)] = t.Hex()
+		}
+		collisions = append(collisions, ipboundary.Search(idsHexes, sources)...)
+
+		res.TokenCount += len(tokens)
+		res.PairCount += len(apcaResults)
+
+		writes = append(writes, artefact{th.rust, emit.RustFileFor(th.source, tokens), true})
+		if th.name == "" {
+			writes = append(writes,
+				artefact{th.goFile, emit.GoFile(tokens), true},
+				artefact{th.css, emit.CssFile(tokens), true})
+		} else {
+			writes = append(writes, artefact{th.goFile, emit.GoThemeFile(th.source, th.name, tokens), true})
+		}
+		// The colour pages include time.Now(); never byte-compared.
+		writes = append(writes, artefact{th.md, emit.ColorMdFor(th.source, th.title, tokens, apcaResults, contrastResults), false})
 	}
-	collisions := ipboundary.Search(idsHexes, sources)
+	writes = append(writes, artefact{"doc/design-system/foundations/ip-boundary-check.md", emit.IPBoundaryMd(collisions, sources), false})
 
 	// ---- Emit ----
-	rustOut := emit.RustFile(tokens)
-	goOut := emit.GoFile(tokens)
-	cssOut := emit.CssFile(tokens)
-	colorMd := emit.ColorMd(tokens, apcaResults, contrastResults)
-	ipMd := emit.IPBoundaryMd(collisions, sources)
-
-	rustPath := filepath.Join(repoRoot, "rust/imzero2/imzero2_egui/src/style/tokens/palette_generated.rs")
-	goPath := filepath.Join(repoRoot, "public/keelson/designsystem/styletokens/palette.out.go")
-	cssPath := filepath.Join(repoRoot, "public/keelson/designsystem/web/ids-palette.css")
-	colorMdPath := filepath.Join(repoRoot, "doc/design-system/foundations/color.md")
-	ipMdPath := filepath.Join(repoRoot, "doc/design-system/foundations/ip-boundary-check.md")
-
-	if cfg.Verify {
-		err = verifyFile(rustPath, rustOut)
-		if err != nil {
-			return
-		}
-		err = verifyFile(goPath, goOut)
-		if err != nil {
-			return
-		}
-		err = verifyFile(cssPath, cssOut)
-		if err != nil {
-			return
-		}
-		// color.md and ip-boundary-check.md include time.Now(); skip byte-compare.
-	} else {
-		err = os.MkdirAll(filepath.Dir(colorMdPath), 0o755)
-		if err != nil {
-			return
-		}
-		err = os.MkdirAll(filepath.Dir(cssPath), 0o755)
-		if err != nil {
-			return
-		}
-		for _, w := range []struct {
-			path, content string
-		}{
-			{rustPath, rustOut},
-			{goPath, goOut},
-			{cssPath, cssOut},
-			{colorMdPath, colorMd},
-			{ipMdPath, ipMd},
-		} {
-			err = os.WriteFile(w.path, []byte(w.content), 0o644)
-			if err != nil {
-				err = eb.Build().Str("path", w.path).Errorf("write: %w", err)
-				return
+	for _, w := range writes {
+		path := filepath.Join(repoRoot, w.path)
+		if cfg.Verify {
+			if w.verify {
+				err = verifyFile(path, w.content)
+				if err != nil {
+					return
+				}
 			}
-			res.Wrote = append(res.Wrote, w.path)
+			continue
 		}
+		err = os.MkdirAll(filepath.Dir(path), 0o755)
+		if err != nil {
+			return
+		}
+		err = os.WriteFile(path, []byte(w.content), 0o644)
+		if err != nil {
+			err = eb.Build().Str("path", path).Errorf("write: %w", err)
+			return
+		}
+		res.Wrote = append(res.Wrote, path)
 	}
 
 	// Advisory diagnostics — go to stderr but do not fail.
@@ -214,8 +276,6 @@ func Run(ctx context.Context, cfg Config) (res Result, err error) {
 		}
 	}
 
-	res.TokenCount = len(tokens)
-	res.PairCount = len(apcaResults)
 	res.APCAFailures = apcaFailures
 	res.WCAGWarnings = contrastWarnings
 	res.CVDWarnings = cvdFailures

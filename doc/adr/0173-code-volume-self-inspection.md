@@ -858,7 +858,11 @@ label is ambiguous. It took a second tree to find that three of them were.
 
 ## Status
 
-Proposed — awaiting review by the boxer maintainer.
+Proposed — awaiting review by the boxer maintainer. Built (noted 2026-09-25):
+M0–M3 — `go_modules`, `go_symbols`, the `go_packages` volume columns and the
+`generators` column, with the `bookcodevol` applet. Open: M4–M9 — the Rust
+tables, the widened book, `go_reach`, the `owner` column and the statement /
+branch counts; SD12 and SD13 were added after M3 (see `## Updates`).
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 

@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0233: leeway params-codec declaration — the encoding of a section's membership params blobs as a writable schema statement
 
@@ -23,7 +21,7 @@ DML takes a raw `[]byte`, so nothing in the wire format states the encoding.
 tree — fixed-width lowercase hex, four digits per index, `.`-separated — and
 its commit records why it exists: three writers had grown three incompatible
 encodings and no reader at all. On 2026-09-14 the first writer outside this
-tree, the ontology binding in `hackathon_2026`, was found spelling the index
+tree, a downstream ontology binding, was found spelling the index
 with `%04d`: identical to the codec for the first ten occurrences, `0010`
 against `000a` past that. The codec is universal by convention only, and a
 convention without a declaration is what produced four encodings in six
@@ -101,8 +99,7 @@ answers `ParamsCodecUndeclared` when the section states none.
   bytes, read access still hands back the binary lane, `lwextract` and the
   read-back generator still assume. Making them codec-aware is the
   pluggability step this decision deliberately does not take: it waits for a
-  second codec with a named consumer, and its shape is recorded in
-  `hackathon_2026/doc/ontology/leeway-binding-notes-for-boxer.md` §5 — a
+  second codec with a named consumer. The shape sketched for it is a
   `ParamsCodecI` with an SQL half, typed overloads beside the raw DML methods,
   the codec always taken from the schema.
 
@@ -145,8 +142,8 @@ and it is paid only when someone needs one.
 
 ## Status
 
-Proposed — 2026-09-14. Pre-acceptance: the front-matter `reviewed-by` and
-`reviewed-date` are filled when it flips to accepted.
+Accepted (2026-09-25). The declaration is built (`6a0a9eda`);
+codec-aware generators wait for a second codec, as §Decision records.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

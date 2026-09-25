@@ -16,7 +16,7 @@ a professional spectrum-analyzer *display* — a scrolling waterfall with a labe
 **frequency axis**, a **power/dB axis**, a **colorbar legend**, an optional spectrum
 **line trace**, **annotations** (markers, named frequency regions, a tuned-channel
 line), and a **cursor readout** in physical units. The motivating consumer is a
-Micronet SDR receiver in the sibling `sailing` project, but the widget is generic:
+Micronet SDR receiver in a downstream project, but the widget is generic:
 RF waterfalls, audio spectrograms, thermal/rolling-metric heatmaps. A clean-room
 survey of established SDR displays (sdrangel, SDR++) fixed the user-facing
 requirement set; nothing of their GPL-3 implementation is reproduced.
@@ -231,10 +231,17 @@ SD1–SD5 decisions stand, so `status` / `reviewed-date` are not re-stamped.
 The demo gained a collapsed **Features** bullet list enumerating the widget's
 capabilities.
 
+### 2026-09-25 — a downstream project no longer named
+
+Mentions of a downstream repository were replaced with a generic
+description. That repository is private, and this one is public. The
+decision is unchanged.
+
+
 ## References
 
 - [ADR-0058 — ImZero2 scrolling-texture widget](./0058-imzero2-scrolling-texture-widget.md) — the `heatmapscroll` backing opcode.
 - [ADR-0068 — ImZero2 gauge widget](./0068-imzero2-gauge-widget.md) — the painter-widget precedent (`AllocateUiAtRect`→`Paint*`→`PaintCanvas`).
 - [ADR-0057 — Demo registry and drivers](./0057-demo-registry-and-drivers.md) — screenshot-demo registration.
 - [`colorscale`](../../public/thestack/imzero2/egui2/widgets/colorscale/), [`heatmapscroll`](../../public/thestack/imzero2/egui2/widgets/heatmapscroll/), [`finddivisions`](../../public/math/numerical/finddivisions/), [`colormap`](../../public/thestack/imzero2/egui2/widgets/colormap/) — composed packages.
-- `sailing` ADR-0004 — the comprehensive-spectrum-analyzer consumer that motivates this widget.
+- A downstream project's ADR — the comprehensive-spectrum-analyzer consumer that motivates this widget.

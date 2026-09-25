@@ -285,23 +285,3 @@ func TestResolveContractPreservesUnit(t *testing.T) {
 		})
 	}
 }
-
-func TestTsToEpochMS(t *testing.T) {
-	tests := []struct {
-		name string
-		v    int64
-		unit arrow.TimeUnit
-		want int64
-	}{
-		{"second", 1700000000, arrow.Second, 1700000000000},
-		{"millisecond", 1700000000000, arrow.Millisecond, 1700000000000},
-		{"microsecond", 1700000000000000, arrow.Microsecond, 1700000000000},
-		{"nanosecond", 1700000000000000000, arrow.Nanosecond, 1700000000000},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tsToEpochMS(tt.v, tt.unit)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}

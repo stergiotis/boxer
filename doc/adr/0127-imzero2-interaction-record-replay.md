@@ -5,7 +5,8 @@ date: 2026-07-17
 ---
 
 > **Status: proposed — pre-human-review.** Not verified; do not cite as
-> authoritative.
+> authoritative. Rescoped 2026-09-25 to the recorder: replay shipped
+> elsewhere (see SD6 and `## Status`).
 
 # ADR-0127: imzero2 interaction record/replay — semantic capture over the inspection seam
 
@@ -101,9 +102,13 @@ reasons for O1/O3/O4 standalone in [§Alternatives](#alternatives).
 
 ## Decision
 
-An imzero2-side recorder `egui::Plugin` plus an offline script emitter;
-replay through the existing inspection seam. No egui fork, no protocol
-change, no new network listener.
+An imzero2-side recorder `egui::Plugin` plus an offline script emitter
+whose traces replay on the existing driver. No egui fork, no protocol
+change, no new network listener. Replay itself is not this ADR's to build:
+[ADR-0154](./0154-headless-carrier-tree-and-driver.md)'s `imzero2 drive`
+and [ADR-0248](./0248-imzero2-scenes-one-runner-and-assertions-in-the-trace.md)'s
+scene runner execute this vocabulary. This ADR keeps the vocabulary (SD2)
+and the recorder (SD1, SD3, the emitter).
 
 ### SD1 — Recording seam: a second plugin beside the inspection plugin
 
@@ -169,6 +174,13 @@ deferred.
 
 ### SD6 — Replay executors, in adoption order
 
+*Rescoped 2026-09-25.* Executor 2 below was overtaken before it was built:
+`imzero2 drive` over the headless carrier (ADR-0154) replays traces
+deterministically without a compositor, and ADR-0248's scenes carry
+`read`/`expect` assertions in the trace. Kill-reason for keeping executor 2:
+a second Go client on the `egui_inspection` wire, under weston, duplicates a
+driver that needs neither. The recorder's traces target that driver.
+
 1. **Via egui-mcp** (day one, no new code): traces use the mcp vocabulary,
    so an agent replays them directly. This is also the teach-in surface:
    traces as in-context examples, distilled into parameterized committed
@@ -201,9 +213,9 @@ deferred.
   start-of-recording tree snapshot, annotation marker; ring-buffer mode with
   export-on-panic.
 - **M2 — Script emitter.** Coalescing, dual anchors, auto-waits; a recorded
-  demonstration replays via egui-mcp.
-- **M3 — `app imzero2 replay`.** Go protocol client, anchor ladder,
-  navigate / verify modes; CI wiring under weston.
+  demonstration replays via `imzero2 drive` and as a scene.
+- ~~**M3 — `app imzero2 replay`.**~~ Dropped 2026-09-25: delivered as
+  `imzero2 drive` (ADR-0154) and `imzero2 scene` (ADR-0248); see SD6.
 - **M4 — Heal-on-green + the teach-in how-to.** Demonstrate → distill →
   replay → verify, skill file conventions.
 
@@ -258,8 +270,14 @@ deferred.
 
 ## Status
 
-Proposed. Decision dialogue captured 2026-07-17; next step is review of the
-SD carve and, if accepted, M1.
+Proposed. Decision dialogue captured 2026-07-17. Rescoped in place
+2026-09-25 to the recorder (M1, M2, M4): the replay executor and the anchor
+ladder shipped through ADR-0154 and ADR-0248, which cite this ADR for the
+step vocabulary. Nothing of M1 is built — no `RecorderPlugin`, no
+`IMZERO2_RECORD`. Open: the env-var name, the trace container, and whether
+the recorder taps the desktop build (as SD1 assumes) or the headless
+carrier the driver already reads. Next step is review of the SD carve and,
+if accepted, M1.
 
 ## References
 

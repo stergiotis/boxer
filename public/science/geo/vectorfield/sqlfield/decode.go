@@ -6,6 +6,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 )
@@ -47,14 +48,7 @@ func ShapeOf(schema *arrow.Schema) (shape Shape, reason string) {
 }
 
 func isNumeric(dt arrow.DataType) bool {
-	switch dt.ID() {
-	case arrow.FLOAT16, arrow.FLOAT32, arrow.FLOAT64,
-		arrow.INT8, arrow.INT16, arrow.INT32, arrow.INT64,
-		arrow.UINT8, arrow.UINT16, arrow.UINT32, arrow.UINT64,
-		arrow.DECIMAL128, arrow.DECIMAL256:
-		return true
-	}
-	return false
+	return chrows.IsNumeric(dt) || chrows.IsDecimal(dt)
 }
 
 func columnE(rec arrow.RecordBatch, name string) (col arrow.Array, err error) {
@@ -99,40 +93,25 @@ func intAt(rec arrow.RecordBatch, name string, row int) (v int64, err error) {
 		err = eb.Build().Str("column", name).Errorf("the reply's column holds a NULL")
 		return
 	}
-	switch a := col.(type) {
-	case *array.Int64:
-		v = a.Value(row)
-	case *array.Uint64:
-		v = int64(a.Value(row))
-	case *array.Int32:
-		v = int64(a.Value(row))
-	case *array.Uint32:
-		v = int64(a.Value(row))
-	default:
-		err = eb.Build().Str("column", name).Stringer("type", col.DataType()).Errorf("the reply's column is not an integer")
+	v, ok := chrows.Int64(col, row)
+	if !ok {
+		err = eb.Build().Str("column", name).Stringer("type", col.DataType()).Errorf("the reply's column is not an integer, or its value exceeds int64")
 	}
 	return
 }
 
-// stringAt reads a text cell. ClickHouse writes a String as Arrow binary
-// unless told otherwise, so both spellings are read.
+// stringAt reads a text cell, in either of the spellings ClickHouse writes
+// a String as.
 func stringAt(rec arrow.RecordBatch, name string, row int) (v string, err error) {
 	col, err := columnE(rec, name)
 	if err != nil {
 		return
 	}
-	switch a := col.(type) {
-	case *array.String:
-		v = a.Value(row)
-	case *array.LargeString:
-		v = a.Value(row)
-	case *array.Binary:
-		v = string(a.Value(row))
-	case *array.LargeBinary:
-		v = string(a.Value(row))
-	default:
+	if !chrows.IsStringLike(chrows.ValueType(col.DataType())) {
 		err = eb.Build().Str("column", name).Stringer("type", col.DataType()).Errorf("the reply's column is not text")
+		return
 	}
+	v, _ = chrows.String(col, row)
 	return
 }
 
