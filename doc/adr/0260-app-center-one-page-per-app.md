@@ -105,6 +105,33 @@ Each lens states what it measures:
 - **State** is read-only here. The page links to the app-state manager for
   deletes, rather than carrying a second delete seam.
 
+### SD4a — Every section opens in play
+
+Each section carries **Open in play**. It opens the SQL playground on the
+introspection endpoint with a statement over the section's table, filtered
+to the app, and runs it (ADR-0135 launch config, play's `Endpoint`). Play
+reads the table live and whole, including the columns the page leaves out.
+Where the page composed in Go, the statement joins instead: the ADR section
+joins `coderef` to `adr` over the app's directory. The endpoint allows the
+join; the app center's own gated reads do not. The model-call statement
+leaves out the prompt and completion, as the page does.
+
+Publishing each section as an ad-hoc dataset (ADR-0240) was weighed and
+rejected. Every section is already a table play can name, so a copy would
+go stale, count against the dataset quotas, and add a publish grant to buy
+nothing.
+
+The Runs section opens on play's Timeline tab, one bar per session. The
+starter book's *App sessions* applet draws every app's sessions the same
+way, with a lane per app. A bar without a close ends at its process's last
+heartbeat. A session whose start lies outside the look-back is a mark at its
+close, not a bar from the look-back's edge. Which apps were open together is
+not inferred from this: no run records whether it was a person or a scene,
+and overlap is not use.
+
+The app center imports play's launch-config package. That package is a
+leaf with no registration, kept apart from play for callers like this one.
+
 ### SD5 — Three bounded cross-run tables over the fact trail
 
 Run history, logs and audit exist across processes only in `boxer.facts`,
@@ -113,7 +140,11 @@ bounded by construction:
 
 - `app_runs` holds one row per window session, pairing the `started` and
   `stopped` rows on (run id, instance key), over a fixed look-back window.
-  An open or crashed session has no stop time.
+  An open or crashed session has no stop time. Each row carries the last
+  heartbeat of its process, the latest end the trail supports for a session
+  without a close. Rows that name no run are left out: they predate
+  ADR-0191, and since the instance key restarts in every process they
+  cannot be paired.
 - `app_logs` holds the newest N log rows per app (`LIMIT n BY app_id`).
   Columns are level, message, caller, error, time, app, instance and run. It
   has no fields and no stack.
@@ -198,7 +229,11 @@ Whether a reader should see only its own trail unless separately granted is
     a failed read.
   - The SD5 reads themselves run against a local server, skipped without
     one, as the package's other live tests are.
-- **Scenes.** `appcenter` opens the window and walks two pages. `inspect`
+  - Every SD4a statement runs on the introspection engine over the host's
+    registry, and the applet's buffer runs over fixed sessions covering each
+    ending.
+- **Scenes.** `appcenter` opens the window, walks two pages, and opens the
+  Runs section on play's Timeline. `app-sessions` runs the applet. `inspect`
   opens the launcher, presses Inspect on an app, and waits for its page in
   the app center.
 
