@@ -50,6 +50,10 @@ func TestExperimentsImplementsTheCatalogue(t *testing.T) {
 		_, ok := experimentsChartSorts[ch]
 		assert.True(t, ok, "sort %s", ch)
 	}
+	for _, ch := range vizeval.GraphLayouts {
+		_, ok := experimentsGraphLayouts[ch]
+		assert.True(t, ok, "layout %s", ch)
+	}
 	for _, ch := range vizeval.ChartColormaps {
 		assert.NotEmpty(t, experimentsColormaps[ch], "colormap %s", ch)
 	}

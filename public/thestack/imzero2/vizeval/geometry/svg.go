@@ -12,6 +12,7 @@ package geometry
 import (
 	"encoding/xml"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 
@@ -74,9 +75,12 @@ type Mark struct {
 	Fill        RGBA
 	Stroke      RGBA
 	StrokeWidth float64
-	// Poly is the filled outline of a polygon or path, for hit tests; nil for
-	// the kinds whose box is their shape.
-	Poly  []Point
+	// Poly is the filled outline of a polygon or path, for hit tests, and a
+	// line's two ends; nil for the kinds whose box is their shape.
+	Poly []Point
+	// Cubic marks a path drawn as one cubic Bézier: Poly holds its start,
+	// two control points and end.
+	Cubic bool
 	Clip  Rect
 	Order int
 }
@@ -111,6 +115,7 @@ func ReadSVG(r io.Reader) (d Drawing, err error) {
 		var tok xml.Token
 		tok, err = dec.Token()
 		if err == io.EOF {
+			d.Runs = collapseHalos(d.Runs)
 			return d, nil
 		}
 		if err != nil {
@@ -186,6 +191,29 @@ func ReadSVG(r io.Reader) (d Drawing, err error) {
 	}
 }
 
+// haloOffset is how far a halo copy of a label sits from the label.
+const haloOffset = 2.5
+
+// collapseHalos keeps one run per haloed label. A label drawn with a halo —
+// graphview's labels are — is the same text painted several times in a row,
+// each copy a point or two off the last, the final one on top in the text
+// colour. Measured as they are, the copies overlap each other and a single
+// label counts five times; the reader sees one label, the topmost.
+func collapseHalos(runs []TextRun) (out []TextRun) {
+	out = runs[:0:0]
+	for i := 0; i < len(runs); {
+		j := i + 1
+		for j < len(runs) && runs[j].Text == runs[i].Text &&
+			math.Abs(runs[j].Box.X0-runs[i].Box.X0) <= haloOffset &&
+			math.Abs(runs[j].Box.Y0-runs[i].Box.Y0) <= haloOffset {
+			j++
+		}
+		out = append(out, runs[j-1])
+		i = j
+	}
+	return out
+}
+
 func attrs(as []xml.Attr) map[string]string {
 	m := make(map[string]string, len(as))
 	for _, a := range as {
@@ -237,12 +265,13 @@ func markOf(name string, a map[string]string) (m Mark, ok bool) {
 	case "path":
 		m.Kind, m.Poly = MarkKindPath, pathPoints(a["d"])
 		m.Box = boundsOf(m.Poly)
+		m.Cubic = len(m.Poly) == 4 && strings.Contains(a["d"], "C")
 	case "line", "polyline":
 		pts := []Point{{num(a["x1"]), num(a["y1"])}, {num(a["x2"]), num(a["y2"])}}
 		if name == "polyline" {
 			pts = pointsOf(a["points"])
 		}
-		m.Kind, m.Box = MarkKindLine, boundsOf(pts)
+		m.Kind, m.Box, m.Poly = MarkKindLine, boundsOf(pts), pts
 		m.Fill = RGBA{}
 	case "circle", "ellipse":
 		cx, cy := num(a["cx"]), num(a["cy"])

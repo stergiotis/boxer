@@ -3,6 +3,7 @@ package geometry
 import (
 	"image"
 	"image/color"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -134,4 +135,62 @@ func TestDigestIsTheDrawingInsideTheArea(t *testing.T) {
 	d3, err := ReadSVG(strings.NewReader(moved))
 	require.NoError(t, err)
 	assert.NotEqual(t, a, Digest(d3, area), "a moved label is a different drawing")
+}
+
+// Four nodes on a square: its two diagonals cross; its sides meet only at
+// nodes; a curve along the bottom shares its ends with both diagonals, so
+// meets them at nodes; a short edge just off the centre passes clear of the
+// diagonals and crosses the curve.
+const graphSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle cx="20" cy="20" r="5" fill="#1f77b4"/>
+  <circle cx="180" cy="20" r="5" fill="#1f77b4"/>
+  <circle cx="20" cy="180" r="5" fill="#1f77b4"/>
+  <circle cx="180" cy="180" r="5" fill="#1f77b4"/>
+  <line x1="20" y1="20" x2="180" y2="20" stroke="#888888" stroke-width="1"/>
+  <line x1="180" y1="20" x2="180" y2="180" stroke="#888888" stroke-width="1"/>
+  <line x1="20" y1="20" x2="180" y2="180" stroke="#888888" stroke-width="1"/>
+  <line x1="180" y1="20" x2="20" y2="180" stroke="#888888" stroke-width="1"/>
+  <path d="M20,180 C60,100 140,100 180,180" fill="none" stroke="#888888" stroke-width="1"/>
+  <line x1="97" y1="105" x2="97" y2="170" stroke="#888888" stroke-width="1"/>
+  <g class="imz-text" data-text="a" data-bbox="24 8 30 10" data-size="12"><text fill="#ffffff">a</text></g>
+  <g class="imz-text" data-text="long label" data-bbox="140 16 50 10" data-size="12"><text fill="#ffffff">l</text></g>
+</svg>`
+
+func TestMeasureGraph(t *testing.T) {
+	d, err := ReadSVG(strings.NewReader(graphSVG))
+	require.NoError(t, err)
+	m := map[string]float64{}
+	MeasureGraph(d, Rect{0, 0, 200, 200}, m)
+	assert.Equal(t, 4.0, m[MetricGraphNodes])
+	assert.Equal(t, 6.0, m[MetricGraphEdges])
+	assert.Equal(t, 2.0, m[MetricGraphEdgeCrossings], "the diagonals, and the short edge with the curve")
+	assert.Equal(t, 0.0, m[MetricGraphLabelNodeOverlaps], "each label nearest its own node")
+
+	over := strings.Replace(graphSVG, `data-bbox="24 8 30 10"`, `data-bbox="160 14 30 10"`, 1)
+	d2, err := ReadSVG(strings.NewReader(over))
+	require.NoError(t, err)
+	m2 := map[string]float64{}
+	MeasureGraph(d2, Rect{0, 0, 200, 200}, m2)
+	assert.Equal(t, 0.0, m2[MetricGraphLabelNodeOverlaps], "a label on its nearest node is its own")
+}
+
+func TestHaloCopiesAreOneLabel(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">`)
+	for _, off := range [][2]float64{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {0, 0}} {
+		fill := "#000000"
+		if off == [2]float64{0, 0} {
+			fill = "#ffffff"
+		}
+		b.WriteString(`<g class="imz-text" data-text="node" data-bbox="` +
+			strconv.FormatFloat(10+off[0], 'f', 2, 64) + " " + strconv.FormatFloat(10+off[1], 'f', 2, 64) +
+			` 30 10" data-size="12"><text fill="` + fill + `">n</text></g>`)
+	}
+	b.WriteString(`<g class="imz-text" data-text="node" data-bbox="60 60 30 10" data-size="12"><text fill="#ffffff">n</text></g></svg>`)
+	d, err := ReadSVG(strings.NewReader(b.String()))
+	require.NoError(t, err)
+	require.Len(t, d.Runs, 2, "five halo copies are one label; a second label of the same text elsewhere is another")
+	assert.InDelta(t, 1.0, d.Runs[0].Fill.R, 1e-9, "the kept copy is the one on top")
+	m := Measure(d, Rect{0, 0, 100, 100}, nil)
+	assert.Equal(t, 0.0, m[MetricTextOverlapPairs])
 }

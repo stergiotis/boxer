@@ -226,7 +226,7 @@ func scoreOne(sc *vizeval.Scenario, card *Scorecard, ds Dataset, answers []Answe
 		}
 		return
 	}
-	area, metrics, digest, err := measureCapture(cdir)
+	area, metrics, digest, err := measureCapture(cdir, card.Candidate.Sink == vizeval.SinkGraph)
 	if err != nil {
 		card.Status, card.Reason = StatusFailed, err.Error()
 		return
@@ -354,7 +354,7 @@ func candidateScene(sc *vizeval.Scenario, cand vizeval.Candidate) *scene.Doc {
 
 // measureCapture finds the artifact in the tree, reads the SVG, measures, and
 // writes the artifact's crop of the PNG beside the capture.
-func measureCapture(dir string) (area geometry.Rect, m map[string]float64, digest string, err error) {
+func measureCapture(dir string, graph bool) (area geometry.Rect, m map[string]float64, digest string, err error) {
 	node, err := findNode(filepath.Join(dir, carrierclient.SidecarFile(captureName, carrierclient.SidecarTree)), ArtifactNode)
 	if err != nil {
 		return area, nil, "", err
@@ -377,6 +377,9 @@ func measureCapture(dir string) (area geometry.Rect, m map[string]float64, diges
 		return area, nil, "", err
 	}
 	m = geometry.Measure(d, area, img)
+	if graph {
+		geometry.MeasureGraph(d, area, m)
+	}
 	if err = writeCrop(img, d.Viewport, area, filepath.Join(dir, "artifact.png")); err != nil {
 		return area, nil, "", err
 	}

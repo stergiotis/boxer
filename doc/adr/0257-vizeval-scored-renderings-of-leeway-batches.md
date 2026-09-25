@@ -82,6 +82,18 @@ heatmap ramp — which is where two readings of one table differ. A batch
 whose shape the projection does not fit is a scenario that does not admit
 the sink, not a projection to search over.
 
+The graph sink's projection is one node per entity and one edge per value of
+the linking section that names another entity of the batch, by natural key
+or id; an edge's label is its first membership, a node's tone its first
+membership in another section. The linking section is found by resolution —
+the section whose values most often name an entity — rather than by the
+linking use aspect, which the SQL constructors cannot mint per column. What
+varies is the layout (force, force with gravity, hierarchical, radial), its
+orientation and spacing, and whether labels, arrow heads and group tones are
+drawn. A force layout steps once per frame, so the sink runs a fixed budget
+of steps on its first frame and then holds: two captures of one graph are
+one picture.
+
 The row cap becomes a per-sink property: shape-reading sinks keep a small
 one, sinks whose picture depends on every row (charts, graphs) declare a
 larger one. A batch over a sink's cap is never silently truncated: the pane
@@ -196,8 +208,14 @@ within `experiments.artifact`'s visible rect, with no model involved:
   them;
 - for tables, whether columns of numbers align on the right, and the
   regularity of the row pitch;
-- for graphs, edge crossings and node–label overlap, with the graph sink
-  (M8).
+- for graphs, pairs of edges that cross (edges meeting at a node do not),
+  and labels drawn over a node other than their nearest. They are measured
+  for the graph sink only, where every stroked line or curve is an edge and
+  every filled circle a node; in a chart the grid would count.
+
+A label drawn with a halo — the same text painted several times a point or
+two apart, the last copy on top — is one label to every metric: counted as
+drawn, a haloed graph measured each label overlapping itself four times.
 
 The names and definitions are the `Metric*` constants of the geometry
 package; a metric is added there, not here.
@@ -331,7 +349,7 @@ so a search written later calls it in-process.
   second layer, SD7).
 - **M6 — Pairwise judgements and ranking** ✓ (SD6 third layer).
 - **M7 — Chart sinks** ✓: one `chart` sink whose mark is an option.
-- **M8 — A graphview sink.**
+- **M8 — A graphview sink** ✓.
 - **M9 — Hierarchy sinks** (value-bearing treemap, icicle, sankey).
 
 ## Surfaces — Tier 1

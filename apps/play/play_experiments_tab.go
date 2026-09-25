@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
@@ -91,6 +92,9 @@ const experimentsTopoPaneProbeSalt uint64 = 0xe89e21a1e57090b0
 // treemap's so the two never read each other's box.
 const experimentsChartPaneProbeSalt uint64 = 0x3c7a1f0e5b2d9c41
 
+// experimentsGraphPaneProbeSalt is the graph's probe slot.
+const experimentsGraphPaneProbeSalt uint64 = 0x9b1e44d2c07a6f13
+
 // experimentsChartPaneFill is the chart's box: the pane less a little slack,
 // floored where tick labels stop fitting.
 var experimentsChartPaneFill = paneFill{
@@ -147,6 +151,10 @@ type experimentsDriver struct {
 	// it and keeps the heatmap's colour scale across frames.
 	chartModel *leewaywidgets.ChartModel
 	chartView  *leewaywidgets.ChartView
+	// graphModel and graphView are the graph sink's projection and its
+	// retained view.
+	graphModel *leewaywidgets.GraphModel
+	graphView  *leewaywidgets.GraphView
 	jsonView   typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	jsonOK     bool
 	textOut    []string
@@ -352,6 +360,10 @@ func sinkGuide(sink string) (headline, detail string) {
 		return "One category per entity, one series per membership.",
 			"The first tagged section with a numeric value is charted: each attribute's value, in the series its " +
 				"first membership names. seriesBy entity swaps the two; a heatmap puts series on rows."
+	case vizeval.SinkGraph:
+		return "One node per entity, one edge per reference to another entity.",
+			"The edges come from the tagged section whose values most often name an entity of the batch, by natural key " +
+				"or id; an edge's label is its first membership, a node's tone its first membership elsewhere."
 	case vizeval.SinkTreemapSpark:
 		return "Three lines per entity: a proportional box row.",
 			"Box width follows the section's column count. Inside, █ is value+tags, ▓ value only, " +
@@ -461,6 +473,7 @@ func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.
 	inst.topoSink = nil
 	inst.topoView = nil
 	inst.chartModel = nil
+	inst.graphModel = nil
 	inst.textOut = nil
 	inst.jsonOK = false
 
@@ -518,6 +531,14 @@ func (inst *experimentsDriver) makeSink(cand vizeval.Candidate) (sink streamread
 	case vizeval.SinkChart:
 		cs := leewaywidgets.NewChartSink()
 		return cs, func() { inst.chartModel = cs.Model() }
+	case vizeval.SinkGraph:
+		gs := leewaywidgets.NewGraphSink()
+		return gs, func() {
+			// A fresh model per drive; the view restarts its layout on a
+			// new model, so it is compared by identity.
+			m := *gs.Model()
+			inst.graphModel = &m
+		}
 	}
 	return nil, nil
 }
@@ -584,6 +605,8 @@ func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.S
 			}
 		case inst.sink == vizeval.SinkChart:
 			inst.renderChart(cand)
+		case inst.sink == vizeval.SinkGraph:
+			inst.renderGraph(cand)
 		case inst.isTextSink():
 			inst.renderText()
 		}
@@ -726,6 +749,48 @@ func (inst *experimentsDriver) renderChart(cand vizeval.Candidate) {
 	}
 	w, h := experimentsChartPaneFill.box(inst.paneW, inst.paneH)
 	inst.chartView.Render(inst.chartModel, chartOptionsOf(cand), inst.chartModel.ValueName, w, h)
+}
+
+// renderGraph draws the graph sink's model under the candidate's options.
+// The canvas is the body's last widget, as graphview wants: anything below it
+// would let a scrollbar narrow the pane and resize the canvas.
+func (inst *experimentsDriver) renderGraph(cand vizeval.Candidate) {
+	if inst.graphModel == nil {
+		return
+	}
+	if inst.graphView == nil {
+		inst.graphView = leewaywidgets.NewGraphView(inst.ids)
+	}
+	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsGraphPaneProbeSalt).Derive()); ok &&
+		availW > 0 && availH > 0 &&
+		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
+		inst.paneW, inst.paneH = availW, availH
+	}
+	w, h := experimentsChartPaneFill.box(inst.paneW, inst.paneH)
+	inst.graphView.Render(inst.graphModel, graphOptionsOf(cand), w, h)
+}
+
+// experimentsGraphLayouts maps the catalogue's layout names onto graphview's.
+var experimentsGraphLayouts = map[string]graphview.LayoutE{
+	"force": graphview.LayoutForceDirected, "force_gravity": graphview.LayoutForceDirectedCG,
+	"hierarchical": graphview.LayoutHierarchical, "radial": graphview.LayoutRadial,
+}
+
+func graphOptionsOf(cand vizeval.Candidate) (o leewaywidgets.GraphOptions) {
+	layout, _ := cand.Options[vizeval.OptionLayout].(string)
+	orient, _ := cand.Options[vizeval.OptionOrientation].(string)
+	spacing, _ := cand.Options[vizeval.OptionSpacing].(float64)
+	labels, _ := cand.Options[vizeval.OptionLabelsAlways].(bool)
+	directed, _ := cand.Options[vizeval.OptionDirected].(bool)
+	groups, _ := cand.Options[vizeval.OptionColorGroups].(bool)
+	o = leewaywidgets.GraphOptions{
+		Layout: experimentsGraphLayouts[layout], Spacing: float32(spacing),
+		LabelsAlways: labels, Directed: directed, ColorGroups: groups,
+	}
+	if orient == "left_right" {
+		o.Orientation = graphview.OrientationLeftRight
+	}
+	return o
 }
 
 // experimentsColormaps maps the catalogue's colormap names onto palettes.

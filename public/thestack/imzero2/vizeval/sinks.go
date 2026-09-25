@@ -11,6 +11,7 @@ const (
 	SinkBrailleSpark = "braille"
 	SinkTreemapSpark = "treemap"
 	SinkChart        = "chart"
+	SinkGraph        = "graph"
 )
 
 // Option names shared by more than one caller.
@@ -23,6 +24,12 @@ const (
 	OptionSort           = "sort"
 	OptionLegend         = "legend"
 	OptionColormap       = "colormap"
+	OptionLayout         = "layout"
+	OptionOrientation    = "orientation"
+	OptionSpacing        = "spacing"
+	OptionLabelsAlways   = "labelsAlways"
+	OptionDirected       = "directed"
+	OptionColorGroups    = "colorGroups"
 )
 
 // Chart option choices, in the order the pane offers them.
@@ -31,6 +38,12 @@ var (
 	ChartSeriesBy  = []string{"membership", "entity"}
 	ChartSorts     = []string{"none", "ascending", "descending"}
 	ChartColormaps = []string{"viridis", "inferno", "magma", "plasma", "cividis", "turbo"}
+)
+
+// Graph option choices, in the order the pane offers them.
+var (
+	GraphLayouts      = []string{"force", "force_gravity", "hierarchical", "radial"}
+	GraphOrientations = []string{"top_down", "left_right"}
 )
 
 // SinkSpec declares one sink: what it is called, how many rows of a batch its
@@ -81,6 +94,20 @@ var sinks = []SinkSpec{
 		{Name: OptionLegend, Kind: OptionKindBool, Default: true, Description: "show the series legend"},
 		{Name: OptionColormap, Kind: OptionKindEnum, Choices: ChartColormaps, Default: "viridis",
 			Description: "the heatmap's colour ramp"},
+	}},
+	// The graph projects entities onto nodes and the section whose values
+	// name other entities onto edges (leewaywidgets.GraphModel). 96 nodes is
+	// where labels on every node stop fitting a pane.
+	{ID: SinkGraph, Title: "graph", RowCap: 96, Space: Space{
+		{Name: OptionLayout, Kind: OptionKindEnum, Choices: GraphLayouts, Default: "force_gravity",
+			Description: "node placement"},
+		{Name: OptionOrientation, Kind: OptionKindEnum, Choices: GraphOrientations, Default: "top_down",
+			Description: "the hierarchical layout's growth direction"},
+		{Name: OptionSpacing, Kind: OptionKindFloat, Min: 0.5, Max: 3, Default: 1.0,
+			Description: "scale on every layout's distances"},
+		{Name: OptionLabelsAlways, Kind: OptionKindBool, Default: true, Description: "label every node, not only the hovered one"},
+		{Name: OptionDirected, Kind: OptionKindBool, Default: true, Description: "draw arrow heads"},
+		{Name: OptionColorGroups, Kind: OptionKindBool, Default: true, Description: "tone nodes by group"},
 	}},
 }
 

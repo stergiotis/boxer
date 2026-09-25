@@ -51,7 +51,11 @@ test.
    table, the box-drawn tables, card-JSON, the topology treemap and sparks,
    and `chart`, which draws the first tagged section with a numeric value
    as bars, lines, points or a heatmap, one category per entity and one
-   series per membership.
+   series per membership, and `graph`, which draws entities as nodes and
+   the section whose values name other entities as edges
+   ([40_service_graph](../../apps/play/vizeval/40_service_graph.vizeval.md)
+   is the worked example). A graph candidate also gets `graph.*` metrics:
+   edge crossings and labels drawn over another node.
 
 2. **List what can vary.** Each admitted sink's row cap and option space, one
    JSON line per sink — the input a search enumerates:
