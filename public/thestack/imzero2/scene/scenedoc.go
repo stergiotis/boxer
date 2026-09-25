@@ -87,16 +87,19 @@ func (inst Spec) Dimensions() (w, h int, err error) {
 	return w, h, nil
 }
 
-type fence struct {
-	lang string
-	role string
-	text string
+// Fence is one fenced block of a document: its info string's first two words
+// (language and role) and its text.
+type Fence struct {
+	Lang string
+	Role string
+	Text string
 }
 
-// splitDoc separates frontmatter, fences and prose. Fences open with three
+// SplitDoc separates frontmatter, fences and prose. Fences open with three
 // backticks at the start of a line and close with a bare three-backtick line,
-// which is the applet book's rule too.
-func splitDoc(src []byte) (front []byte, fences []fence, prose string) {
+// which is the applet book's rule too. It is exported for documents that
+// share the scene document's shape (vizeval scenarios, ADR-0257).
+func SplitDoc(src []byte) (front []byte, fences []Fence, prose string) {
 	lines := strings.Split(string(src), "\n")
 	i := 0
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
@@ -108,23 +111,23 @@ func splitDoc(src []byte) (front []byte, fences []fence, prose string) {
 			}
 		}
 	}
-	var cur *fence
+	var cur *Fence
 	var body, text []string
 	for ; i < len(lines); i++ {
 		line := lines[i]
 		switch {
 		case cur == nil && strings.HasPrefix(line, "```"):
 			info := strings.Fields(strings.TrimPrefix(line, "```"))
-			cur = &fence{}
+			cur = &Fence{}
 			if len(info) > 0 {
-				cur.lang = info[0]
+				cur.Lang = info[0]
 			}
 			if len(info) > 1 {
-				cur.role = info[1]
+				cur.Role = info[1]
 			}
 			body = body[:0]
 		case cur != nil && strings.TrimSpace(line) == "```":
-			cur.text = strings.Join(body, "\n")
+			cur.Text = strings.Join(body, "\n")
 			fences = append(fences, *cur)
 			cur = nil
 		case cur != nil:
@@ -146,7 +149,7 @@ func ParseDoc(path string, src []byte) (doc *Doc, err error) {
 		return nil, eb.Build().Str("path", path).Errorf("a scene document is named *" + DocSuffix)
 	}
 	doc = &Doc{Name: strings.TrimSuffix(base, DocSuffix), Path: path}
-	front, fences, prose := splitDoc(src)
+	front, fences, prose := SplitDoc(src)
 	doc.Prose = prose
 	if front == nil {
 		return nil, eb.Build().Str("path", path).Errorf("scene document has no frontmatter")
@@ -183,13 +186,13 @@ func ParseDoc(path string, src []byte) (doc *Doc, err error) {
 	}
 	for _, f := range fences {
 		switch {
-		case f.lang == "sql" && f.role == "" && doc.SQL == "":
-			doc.SQL = strings.TrimSpace(f.text)
-		case f.lang == "jsonl" && f.role == "trace":
+		case f.Lang == "sql" && f.Role == "" && doc.SQL == "":
+			doc.SQL = strings.TrimSpace(f.Text)
+		case f.Lang == "jsonl" && f.Role == "trace":
 			if doc.Trace != "" {
 				return nil, eb.Build().Str("path", path).Errorf("more than one `jsonl trace` fence")
 			}
-			doc.Trace = strings.TrimSpace(f.text)
+			doc.Trace = strings.TrimSpace(f.Text)
 		}
 	}
 	if doc.Trace == "" {

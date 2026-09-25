@@ -481,7 +481,11 @@ func (inst *experimentsDriver) makeSink(cand vizeval.Candidate) (sink streamread
 		}
 	case vizeval.SinkUnicode:
 		width, _ := cand.Options[vizeval.OptionWidth].(int64)
-		return card.NewUnicodeCardEmitter(buf, int(width)), func() {
+		cfg := card.DefaultUnicodeEmitterConfig()
+		if maxCol, ok := cand.Options[vizeval.OptionMaxColumnWidth].(int64); ok {
+			cfg.MaxColumnWidth = int(maxCol)
+		}
+		return card.NewUnicodeCardEmitterWithConfig(buf, int(width), cfg), func() {
 			inst.textOut = splitTextOutput(buf.String())
 		}
 	case vizeval.SinkTopoSpark:

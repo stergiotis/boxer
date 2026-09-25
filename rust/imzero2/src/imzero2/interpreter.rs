@@ -2559,6 +2559,15 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                     scope_resp.widget_info(|| {
                         egui::WidgetInfo::labeled(egui::WidgetType::Other, true, name.as_str())
                     });
+                    let visible = scope_resp.rect.intersect(ui.clip_rect());
+                    ui.ctx().accesskit_node_builder(scope_resp.id, |b| {
+                        b.set_bounds(egui::accesskit::Rect {
+                            x0: visible.min.x.into(),
+                            y0: visible.min.y.into(),
+                            x1: visible.max.x.into(),
+                            y1: visible.max.y.into(),
+                        });
+                    });
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }

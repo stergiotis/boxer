@@ -412,6 +412,12 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""
 	inner.previewAsSent = PreviewAsSent.Get() != ""
+	if zones := TabZonesOverride.Get(); zones != "" {
+		if err = inner.Tabs().ApplyTabZones(zones); err != nil {
+			err = eh.Errorf("BOXER_PLAY_TAB_ZONES does not describe a layout: %w", err)
+			return
+		}
+	}
 	if seed := ExperimentsSeed.Get(); seed != "" {
 		// Refused rather than defaulted: a scripted capture of the wrong
 		// candidate would be scored under the right one's name.

@@ -87,8 +87,10 @@ The pane wraps a sink's output in one named accessibility node
 to the artifact, not play's chrome. The node comes from an IDL block,
 `accessibleRegion`, that labels the rect its body drew in; the body's own
 nodes are not reparented under it, so it names an area, not a subtree. The
-rect is the body's full extent, which inside a scroll area can exceed what
-is visible: the harness intersects it with the viewport.
+node's bounds are the body's rect clipped to the enclosing ui's clip, so
+inside a scroll area they are the visible share, not the whole content;
+measuring against the unclipped rect, or guessing the visible part from the
+clips of what was drawn, measured cells instead of the artifact.
 
 ### SD2 — A sink declares its option space
 
@@ -108,7 +110,11 @@ that pair in canonical form, which is the cache key everywhere below.
 One registered variable (ADR-0009), `BOXER_PLAY_EXPERIMENTS`, carries a
 candidate as JSON — `{"source": "result", "sink": …, "options": {…}}` — and
 puts the pane in that state at launch; with `BOXER_PLAY_FOCUS_EXPERIMENTS`,
-`BOXER_PLAY_SQL` and `BOXER_PLAY_AUTORUN` a capture needs no clicks. A seed
+`BOXER_PLAY_SQL` and `BOXER_PLAY_AUTORUN` a capture needs no clicks. The pane
+lives in the tools split, a fraction of the window; `BOXER_PLAY_TAB_ZONES`
+re-zones tabs at launch, and `*=body` puts every tab in one leaf that fills
+the central panel, which is how the harness gives the artifact the window. A
+seed
 that does not parse against SD2 is refused at launch, not rendered with
 defaults, because a harness scoring the wrong candidate is worse than one
 that stops.
@@ -118,14 +124,20 @@ that stops.
 `*.vizeval.md`, following the scene document (ADR-0248 §SD3): frontmatter,
 prose, role-marked fences.
 
-- **Frontmatter:** `size`, an `intent` sentence, the sinks the scenario
-  admits (a scenario about hubs in a network does not admit a box-drawn
-  table), and `questions` — each a prompt plus an `answer` SQL over the same
-  data and a comparison (`eq`, `set`, `approx`+`tol`).
-- **The first `sql` fence** is the dataset. It must be self-contained:
-  data generated from `numbers()` with explicit seeds (`cityHash64`, not
-  `rand()`), no reads of ingested tables. A scenario over live data cannot
-  be compared across runs.
+- **Frontmatter**, under a `vizeval:` key parsed strictly: `size`, an
+  `intent` sentence, the sinks the scenario admits (a scenario about hubs in
+  a network does not admit a box-drawn table), `questions` — each a prompt
+  plus an `answer` SQL over the same data and a comparison (`eq`, `set`,
+  `approx`+`tol`) — and `gates`.
+- **A `sql base` fence** holds the data with plain names. It must be
+  self-contained: generated from `numbers()` with explicit seeds
+  (`cityHash64`, not `rand()`), no reads of ingested tables. A scenario over
+  live data cannot be compared across runs.
+- **The first plain `sql` fence** projects `base` into a leeway table with
+  the `LW_*` constructors (ADR-0181). The harness runs it, and every answer,
+  under `WITH base AS (…)`, so the generator is written once and the answers
+  read the same rows the picture does. It expands the constructors with the
+  pass play applies, so its digest is of what play drew.
 - **The prose** states the scenario for a human reviewer and is also the
   context handed to the judges.
 
@@ -147,23 +159,37 @@ export of the same frame and the tree as JSONL (the `--treeFormat jsonl`
 shape). The harness always requests them. This change is to the scene
 runner and the headless host; scenes that do not ask are unaffected.
 
+The exporter wraps each text shape's glyphs in one `<g class="imz-text">`
+carrying the string, the ink bounds of the glyphs drawn, the largest font
+size and whether egui elided it. The per-glyph elements alone carry neither
+advance widths nor which glyphs form a label, and reconstructing words from
+glyph gaps would measure the reconstruction.
+
 A candidate is rendered by a scene generated in memory from the scenario
 and the candidate, run through the scene library (ADR-0248 §SD5), never
 written to disk as a document.
 
 ### SD6 — The scorecard: three layers, gates before rankings
 
-**Geometry metrics** are computed from the SVG and tree, cropped to
-`experiments.artifact`, with no model involved:
+**Geometry metrics** are computed from the SVG, the tree and the PNG,
+within `experiments.artifact`'s visible rect, with no model involved:
 
-- text/text and text/mark overlap; labels clipped at the artifact bounds;
-  text ellipsised by its widget;
-- smallest rendered glyph height; text contrast against the fill beneath it
-  (WCAG ratio);
-- ink ratio and whitespace; mark count against row count;
-- pairwise distance (CIEDE2000) of categorical colours in use;
-- for graphs, edge crossings and node–label overlap;
-- for tables, numeric-column alignment, truncated cells, and row rhythm.
+- text runs that overlap; text cut by its own cell's clip, told apart from
+  text running past the artifact's edge (expected in a scrolling pane);
+  text shortened to fit, whether egui elided it or the sink wrote the
+  ellipsis;
+- smallest font size; text contrast against what is painted under it,
+  composited in paint order (WCAG ratio);
+- ink ratio; mark count;
+- distinct chromatic colours and the smallest CIEDE2000 distance between
+  them;
+- for tables, whether columns of numbers align on the right, and the
+  regularity of the row pitch;
+- for graphs, edge crossings and node–label overlap, with the graph sink
+  (M8).
+
+The names and definitions are the `Metric*` constants of the geometry
+package; a metric is added there, not here.
 
 Each metric is a number, not a verdict. A scenario may name thresholds that
 **gate** a candidate — "no overlapping labels", "no clipped text" — and a
@@ -216,9 +242,10 @@ way the scene runner writes its index.
 ### SD9 — Entry point
 
 `imzero2 vizeval` with verbs to list a scenario's admissible candidates
-(the option spaces of SD2), score a set of candidates given as JSONL, and
-rank a scenario's scored candidates. It is a library first, as the scene
-runner is, so a search written later calls it in-process.
+(`space`: the option spaces of SD2), score a set of candidates given as
+JSONL (`score`), and rank a scenario's scored candidates (`rank`, with the
+pairwise judgements of M6). It is a library first, as the scene runner is,
+so a search written later calls it in-process.
 
 ### SD10 — Deferred
 
@@ -241,7 +268,7 @@ runner is, so a search written later calls it in-process.
 - **M2 — Option spaces and the seed variable** ✓ (SD1–SD3): declared option
   spaces, per-sink row caps, `BOXER_PLAY_EXPERIMENTS` and the artifact node,
   for the existing sinks, card table first.
-- **M3 — Scenario documents, the runner and geometry metrics** (SD4, SD6
+- **M3 — Scenario documents, the runner and geometry metrics** ✓ (SD4, SD6
   first layer, SD9), with table scenarios, results as files.
 - **M4 — The facts record store** (SD8).
 - **M5 — Image content in `openaichat` and task-question accuracy** (SD6
@@ -257,7 +284,8 @@ runner is, so a search written later calls it in-process.
 | --- | --- | --- |
 | scene `capture` step | adds SVG and tree sidecar outputs | the imzero2-drive skill page; the headless host's capture handling |
 | Experiments sinks | declare an option space and a row cap | the pane's controls, which are generated from the declaration |
-| `BOXER_PLAY_EXPERIMENTS` | added (ADR-0009 registry) | `doc/env-vars.md` |
+| `BOXER_PLAY_EXPERIMENTS`, `BOXER_PLAY_TAB_ZONES` | added (ADR-0009 registry) | `doc/env-vars.md` |
+| SVG export | each text shape becomes a `<g class="imz-text">` with `data-text`, `data-bbox`, `data-size`, `data-elided` | the geometry package's reader; viewers ignore the attributes |
 | egui2 IDL | adds the `accessibleRegion` block | regenerated Go bindings, Rust dispatch and the API reference; the opcode enums renumber, so both sides rebuild together |
 | `openaichat` messages | image content parts | `runtime.llm`'s request path and the ADR-0254 sensitivity point |
 | `boxer.facts` | new vizeval kinds | the generated record store and its regeneration lane |

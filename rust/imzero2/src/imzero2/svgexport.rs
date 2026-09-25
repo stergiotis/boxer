@@ -1615,6 +1615,17 @@ impl SvgBuilder {
         let link_url = self.link_for_bbox(text_bbox).map(|s| s.to_owned());
         self.set_link(link_url.as_deref());
 
+        // The glyphs of one text shape are wrapped in one `<g class="imz-text">`
+        // carrying what a program measuring the drawing needs and cannot
+        // recover from glyphs alone (ADR-0257, proposed, §SD6): the string,
+        // the ink bounds of the glyphs actually drawn (advance widths are not
+        // in the per-glyph elements), the largest font size, and whether
+        // egui elided the text to fit. The opening tag is inserted once the
+        // bounds are known; a shape that draws no glyph gets no group.
+        let group_at = self.body.len();
+        let mut ink: Option<Rect> = None;
+        let mut max_size: f32 = 0.0;
+
         // Syntax-highlighted text (CodeView, json, markdown, ...) uses one
         // `LayoutSection` per token, each carrying its own colour and font.
         // `Glyph::section_index` is `pub(crate)` so we can't read it
@@ -1708,6 +1719,13 @@ impl SvgBuilder {
                         ch = xml_escape_char(glyph.chr),
                     );
                     self.counts.glyphs_emitted += 1;
+                    let top = by - glyph.font_ascent;
+                    let glyph_box = Rect::from_min_max(
+                        egui::pos2(bx, top),
+                        egui::pos2(bx + advance, top + glyph.font_height),
+                    );
+                    ink = Some(ink.map_or(glyph_box, |r| r.union(glyph_box)));
+                    max_size = max_size.max(em_size);
                 } else {
                     self.counts.glyphs_skipped += 1;
                 }
@@ -1760,6 +1778,23 @@ impl SvgBuilder {
             if placed_row.ends_with_newline {
                 byte_cursor += 1; // `\n` is one UTF-8 byte
             }
+        }
+        if let Some(r) = ink {
+            let open = format!(
+                "  <g class=\"imz-text\" data-text=\"{t}\" data-bbox=\"{x:.2} {y:.2} {w:.2} {h:.2}\" data-size=\"{max_size:.2}\"{elided}>\n",
+                t = xml_escape_attr(&job.text),
+                x = r.min.x,
+                y = r.min.y,
+                w = r.width(),
+                h = r.height(),
+                elided = if galley.elided {
+                    " data-elided=\"1\""
+                } else {
+                    ""
+                },
+            );
+            self.body.insert_str(group_at, &open);
+            self.body.push_str("  </g>\n");
         }
     }
 

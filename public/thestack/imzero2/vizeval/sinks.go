@@ -14,8 +14,9 @@ const (
 
 // Option names shared by more than one caller.
 const (
-	OptionPalette = "palette"
-	OptionWidth   = "width"
+	OptionPalette        = "palette"
+	OptionWidth          = "width"
+	OptionMaxColumnWidth = "maxColumnWidth"
 )
 
 // SinkSpec declares one sink: what it is called, how many rows of a batch its
@@ -45,7 +46,9 @@ var sinks = []SinkSpec{
 	{ID: SinkJSON, Title: "card-JSON", RowCap: 16},
 	{ID: SinkUnicode, Title: "box-drawn tables", RowCap: 16, Space: Space{
 		{Name: OptionWidth, Kind: OptionKindInt, Min: 40, Max: 240, Default: int64(160),
-			Description: "column budget, in characters"},
+			Description: "table budget, in characters: columns shrink when a table is wider"},
+		{Name: OptionMaxColumnWidth, Kind: OptionKindInt, Min: 8, Max: 240, Default: int64(60),
+			Description: "cap on one column, in characters; a longer cell is cut with an ellipsis"},
 	}},
 	{ID: SinkTopoSpark, Title: "topology spark", RowCap: 64},
 	{ID: SinkBrailleSpark, Title: "braille spark", RowCap: 64},

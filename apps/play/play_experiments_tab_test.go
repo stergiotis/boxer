@@ -81,3 +81,25 @@ func TestExperimentsCapRowsSaysWhenItCuts(t *testing.T) {
 	assert.Equal(t, spec.RowCap, n)
 	assert.Contains(t, notice, "row cap")
 }
+
+func TestApplyTabZones(t *testing.T) {
+	reg := defaultTabs(&PlayApp{})
+	require.NoError(t, reg.ApplyTabZones("*=body, editor=bottom"))
+	for _, spec := range reg.all() {
+		want := TabZoneBody
+		if spec.ID == "editor" {
+			want = TabZoneBottom
+		}
+		assert.Equal(t, want, spec.Zone, "later pairs win over the wildcard: %s", spec.ID)
+	}
+	assert.Empty(t, reg.byZone(TabZoneTools))
+
+	for name, spec := range map[string]string{
+		"unknown zone": "experiments=left",
+		"unknown tab":  "nope=body",
+		"not a pair":   "experiments",
+		"empty id":     "=body",
+	} {
+		assert.Error(t, defaultTabs(&PlayApp{}).ApplyTabZones(spec), name)
+	}
+}
