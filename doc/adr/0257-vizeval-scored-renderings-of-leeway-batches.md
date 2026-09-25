@@ -94,6 +94,16 @@ drawn. A force layout steps once per frame, so the sink runs a fixed budget
 of steps on its first frame and then holds: two captures of one graph are
 one picture.
 
+The hierarchy sink's projection splits each entity's label into a path on a
+separator — natural keys like `research/vision/datasets` are paths already —
+and weighs each leaf by the sum of its values in the chart's section, or by
+one. It is drawn as a treemap, an icicle or a sankey; the sankey starts from
+a root carrying the total, so a top-level leaf has a flow to be drawn with,
+and orders each column depth-first, so a parent's children stay together
+instead of interleaving with their cousins and crossing every ribbon. What
+varies is the form, the size measure, the separator, the depth drawn and
+whether colour follows the top-level branch or the depth.
+
 The row cap becomes a per-sink property: shape-reading sinks keep a small
 one, sinks whose picture depends on every row (charts, graphs) declare a
 larger one. A batch over a sink's cap is never silently truncated: the pane
@@ -350,7 +360,8 @@ so a search written later calls it in-process.
 - **M6 — Pairwise judgements and ranking** ✓ (SD6 third layer).
 - **M7 — Chart sinks** ✓: one `chart` sink whose mark is an option.
 - **M8 — A graphview sink** ✓.
-- **M9 — Hierarchy sinks** (value-bearing treemap, icicle, sankey).
+- **M9 — Hierarchy sinks** ✓: one `hierarchy` sink whose form (treemap,
+  icicle, sankey) is an option.
 
 ## Surfaces — Tier 1
 

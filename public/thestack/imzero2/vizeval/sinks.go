@@ -12,6 +12,7 @@ const (
 	SinkTreemapSpark = "treemap"
 	SinkChart        = "chart"
 	SinkGraph        = "graph"
+	SinkHierarchy    = "hierarchy"
 )
 
 // Option names shared by more than one caller.
@@ -30,6 +31,11 @@ const (
 	OptionLabelsAlways   = "labelsAlways"
 	OptionDirected       = "directed"
 	OptionColorGroups    = "colorGroups"
+	OptionForm           = "form"
+	OptionSizeBy         = "sizeBy"
+	OptionSeparator      = "separator"
+	OptionMaxDepth       = "maxDepth"
+	OptionColorBy        = "colorBy"
 )
 
 // Chart option choices, in the order the pane offers them.
@@ -44,6 +50,14 @@ var (
 var (
 	GraphLayouts      = []string{"force", "force_gravity", "hierarchical", "radial"}
 	GraphOrientations = []string{"top_down", "left_right"}
+)
+
+// Hierarchy option choices, in the order the pane offers them.
+var (
+	HierarchyForms      = []string{"treemap", "icicle", "sankey"}
+	HierarchySizeBy     = []string{"value", "count"}
+	HierarchySeparators = []string{"/", ".", ":", "-"}
+	HierarchyColorBy    = []string{"branch", "depth"}
 )
 
 // SinkSpec declares one sink: what it is called, how many rows of a batch its
@@ -108,6 +122,21 @@ var sinks = []SinkSpec{
 		{Name: OptionLabelsAlways, Kind: OptionKindBool, Default: true, Description: "label every node, not only the hovered one"},
 		{Name: OptionDirected, Kind: OptionKindBool, Default: true, Description: "draw arrow heads"},
 		{Name: OptionColorGroups, Kind: OptionKindBool, Default: true, Description: "tone nodes by group"},
+	}},
+	// The hierarchy splits each entity's label into a path and weighs it by
+	// its values (leewaywidgets.Hierarchy). 96 entities is where a sankey's
+	// leaf column stops having room for its labels.
+	{ID: SinkHierarchy, Title: "hierarchy", RowCap: 96, Space: Space{
+		{Name: OptionForm, Kind: OptionKindEnum, Choices: HierarchyForms, Default: "treemap",
+			Description: "how the tree is drawn"},
+		{Name: OptionSizeBy, Kind: OptionKindEnum, Choices: HierarchySizeBy, Default: "value",
+			Description: "a leaf's size: its values' sum, or one per entity"},
+		{Name: OptionSeparator, Kind: OptionKindEnum, Choices: HierarchySeparators, Default: "/",
+			Description: "what splits a label into its path"},
+		{Name: OptionMaxDepth, Kind: OptionKindInt, Min: 0, Max: 8, Default: int64(0),
+			Description: "levels drawn, deeper ones folded into their ancestor; 0 draws all"},
+		{Name: OptionColorBy, Kind: OptionKindEnum, Choices: HierarchyColorBy, Default: "branch",
+			Description: "colour: a hue per top-level branch, or a ramp by depth"},
 	}},
 }
 

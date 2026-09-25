@@ -55,7 +55,10 @@ test.
    the section whose values name other entities as edges
    ([40_service_graph](../../apps/play/vizeval/40_service_graph.vizeval.md)
    is the worked example). A graph candidate also gets `graph.*` metrics:
-   edge crossings and labels drawn over another node.
+   edge crossings and labels drawn over another node. `hierarchy` splits
+   each entity's label into a path and draws the weighted tree as a
+   treemap, an icicle or a sankey
+   ([50_storage_hierarchy](../../apps/play/vizeval/50_storage_hierarchy.vizeval.md)).
 
 2. **List what can vary.** Each admitted sink's row cap and option space, one
    JSON line per sink — the input a search enumerates:

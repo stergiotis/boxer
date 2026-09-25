@@ -92,6 +92,9 @@ const experimentsTopoPaneProbeSalt uint64 = 0xe89e21a1e57090b0
 // treemap's so the two never read each other's box.
 const experimentsChartPaneProbeSalt uint64 = 0x3c7a1f0e5b2d9c41
 
+// experimentsHierarchyPaneProbeSalt is the hierarchy's probe slot.
+const experimentsHierarchyPaneProbeSalt uint64 = 0x5d2f8e61a9c3b047
+
 // experimentsGraphPaneProbeSalt is the graph's probe slot.
 const experimentsGraphPaneProbeSalt uint64 = 0x9b1e44d2c07a6f13
 
@@ -155,9 +158,13 @@ type experimentsDriver struct {
 	// retained view.
 	graphModel *leewaywidgets.GraphModel
 	graphView  *leewaywidgets.GraphView
-	jsonView   typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	jsonOK     bool
-	textOut    []string
+	// hierModel is the hierarchy sink's projection — the chart's, split into
+	// paths by the view — and hierView its retained view.
+	hierModel *leewaywidgets.ChartModel
+	hierView  *leewaywidgets.HierarchyView
+	jsonView  typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	jsonOK    bool
+	textOut   []string
 
 	// card is the pane's card emitter, for both sources; cardPalette is the
 	// palette it was built with, since the emitter takes it at construction.
@@ -364,6 +371,10 @@ func sinkGuide(sink string) (headline, detail string) {
 		return "One node per entity, one edge per reference to another entity.",
 			"The edges come from the tagged section whose values most often name an entity of the batch, by natural key " +
 				"or id; an edge's label is its first membership, a node's tone its first membership elsewhere."
+	case vizeval.SinkHierarchy:
+		return "One leaf per entity, placed by its label split into a path.",
+			"A leaf's size is the sum of its values in the first numeric tagged section, or one per entity; " +
+				"a parent's size is its leaves'. A sankey shows the total splitting level by level."
 	case vizeval.SinkTreemapSpark:
 		return "Three lines per entity: a proportional box row.",
 			"Box width follows the section's column count. Inside, █ is value+tags, ▓ value only, " +
@@ -474,6 +485,7 @@ func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.
 	inst.topoView = nil
 	inst.chartModel = nil
 	inst.graphModel = nil
+	inst.hierModel = nil
 	inst.textOut = nil
 	inst.jsonOK = false
 
@@ -531,6 +543,12 @@ func (inst *experimentsDriver) makeSink(cand vizeval.Candidate) (sink streamread
 	case vizeval.SinkChart:
 		cs := leewaywidgets.NewChartSink()
 		return cs, func() { inst.chartModel = cs.Model() }
+	case vizeval.SinkHierarchy:
+		hs := leewaywidgets.NewChartSink()
+		return hs, func() {
+			m := *hs.Model()
+			inst.hierModel = &m
+		}
 	case vizeval.SinkGraph:
 		gs := leewaywidgets.NewGraphSink()
 		return gs, func() {
@@ -607,6 +625,8 @@ func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.S
 			inst.renderChart(cand)
 		case inst.sink == vizeval.SinkGraph:
 			inst.renderGraph(cand)
+		case inst.sink == vizeval.SinkHierarchy:
+			inst.renderHierarchy(cand)
 		case inst.isTextSink():
 			inst.renderText()
 		}
@@ -768,6 +788,42 @@ func (inst *experimentsDriver) renderGraph(cand vizeval.Candidate) {
 	}
 	w, h := experimentsChartPaneFill.box(inst.paneW, inst.paneH)
 	inst.graphView.Render(inst.graphModel, graphOptionsOf(cand), w, h)
+}
+
+// renderHierarchy draws the hierarchy sink's model under the candidate's
+// options.
+func (inst *experimentsDriver) renderHierarchy(cand vizeval.Candidate) {
+	if inst.hierModel == nil {
+		return
+	}
+	if inst.hierView == nil {
+		inst.hierView = leewaywidgets.NewHierarchyView(inst.ids)
+	}
+	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsHierarchyPaneProbeSalt).Derive()); ok &&
+		availW > 0 && availH > 0 &&
+		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
+		inst.paneW, inst.paneH = availW, availH
+	}
+	w, h := experimentsChartPaneFill.box(inst.paneW, inst.paneH)
+	inst.hierView.Render(inst.hierModel, hierarchyOptionsOf(cand), w, h)
+}
+
+// experimentsHierarchyForms maps the catalogue's form names onto the view's.
+var experimentsHierarchyForms = map[string]leewaywidgets.HierarchyFormE{
+	"treemap": leewaywidgets.HierarchyFormTreemap, "icicle": leewaywidgets.HierarchyFormIcicle,
+	"sankey": leewaywidgets.HierarchyFormSankey,
+}
+
+func hierarchyOptionsOf(cand vizeval.Candidate) (o leewaywidgets.HierarchyOptions) {
+	form, _ := cand.Options[vizeval.OptionForm].(string)
+	sizeBy, _ := cand.Options[vizeval.OptionSizeBy].(string)
+	sep, _ := cand.Options[vizeval.OptionSeparator].(string)
+	depth, _ := cand.Options[vizeval.OptionMaxDepth].(int64)
+	colorBy, _ := cand.Options[vizeval.OptionColorBy].(string)
+	return leewaywidgets.HierarchyOptions{
+		Form: experimentsHierarchyForms[form], Separator: sep, SizeByValue: sizeBy == "value",
+		MaxDepth: int(depth), ColorByBranch: colorBy == "branch",
+	}
 }
 
 // experimentsGraphLayouts maps the catalogue's layout names onto graphview's.
