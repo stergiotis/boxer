@@ -1,6 +1,8 @@
 ---
 type: adr
 status: superseded
+superseded-by: ADR-0073
+superseded-date: 2026-06-07
 date: 2026-05-01
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-05-01
