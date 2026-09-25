@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-05
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0221: pushout storage seam — batch verbs, a delta retention ledger, a batch acceptor, and history behind a contract
 
@@ -197,15 +195,16 @@ makes the fetch path one round trip.
   a transport that drops the pending list; a recovery that reads
   envelopes one at a time.
 - **Gap.** No store yet offers a bounded history; SD4's contract is
-  exercised only by the eager implementation. No re-encoding store is
-  in-tree (ADR-0220's gap stands). The Quint crash-recovery model
+  exercised only by the eager implementation. A re-encoding store
+  exists only as a test double (`repo/reencoding_test.go`, `f9bbb01d`),
+  which the conformance suite and the engine both run over. The Quint crash-recovery model
   abstracts the ledger as a set and is unchanged: a delta applied
   atomically is the same step.
 
 ## Status
 
-Proposed — implementation landed with this record for review together;
-awaiting review by the pushout code owner.
+Accepted (2026-09-25). The implementation landed with this record. A
+store offering bounded history is the open follow-up.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
