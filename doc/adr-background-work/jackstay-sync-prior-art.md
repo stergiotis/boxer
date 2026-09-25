@@ -8,7 +8,7 @@ status: draft
 
 > **Status: draft — pre-human-review.** Compiled 2026-09-25 to feed
 > [ADR-0259](../adr/0259-jackstay-guided-clickhouse-to-clickhouse-sync.md)
-> (proposed); nothing here is a decision. The survey is clean-room: it rests
+> (accepted 2026-09-25); nothing here is a decision. The survey is clean-room: it rests
 > on published papers, manual pages and product documentation, and no
 > third-party source code was read. Each claim about another system is tagged
 > either `[verified: URL]` (the page was fetched on the compile date and says

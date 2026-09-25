@@ -1,4 +1,4 @@
-// Package jackstay is the wizard of ADR-0259 §SD7 (proposed): the guided
+// Package jackstay is the wizard of ADR-0259 §SD7: the guided
 // ClickHouse-to-ClickHouse sync, one step per page — Connect, Databases,
 // Structure, Differences, Sync, Monitor — over the same plan document and the
 // same workflow functions the `boxer jackstay` CLI uses.

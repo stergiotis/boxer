@@ -1,6 +1,6 @@
 // Package jackstay is the CLI of the guided ClickHouse-to-ClickHouse sync of
-// ADR-0259 (proposed): one subcommand per step, each reading or writing the
-// plan file (§SD7). This milestone (§M1) has three steps:
+// ADR-0259: one subcommand per step, each reading or writing the plan file
+// (§SD7), all through the engine's workflow functions:
 //
 //	boxer jackstay discover  --source host:8123 --target other:8123
 //	boxer jackstay structure --source … --target … --plan plan.json [--database db] [--map db=newdb]
@@ -9,12 +9,11 @@
 //	boxer jackstay sync      --plan plan.json --mode full|repair|sample [--sample 1/100] [--existing refuse|append|replace] [--dry-run]
 //	boxer jackstay status    --plan plan.json [--disk]
 //
-// §M2 adds diff: the content comparison by primary key, which moves no rows.
-// §M3 adds sync: chunks relayed from source to target, each verified by digest
-// before it enters the journal beside the plan, so an interrupted run resumes.
-// §M4 adds the monitor: a pre-flight of the target's free space, a live bar of
-// rows landed with rate and ETA, a free-space floor the sync waits at between
-// chunks, a compressed relay, and status.
+// diff compares content by primary key and moves no rows. sync relays chunks
+// from source to target, verifies each by digest before it enters the journal
+// beside the plan, and resumes from that journal when run again; it shows a
+// pre-flight of the target's free space, a live bar of rows landed, and waits
+// at a free-space floor between chunks.
 //
 // Passwords come from the environment only (CLICKHOUSE_PASSWORD for the
 // source, BOXER_JACKSTAY_TARGET_PASSWORD for the target) and are never written

@@ -1,5 +1,5 @@
 // Package jackstay is the engine of the guided ClickHouse-to-ClickHouse sync
-// of ADR-0259 (proposed). Every step of the process reads both servers and
+// of ADR-0259. Every step of the process reads both servers and
 // writes its findings into one [Plan] document. The CLI and the imzero2 wizard
 // are two editors of that document (§SD1).
 //
