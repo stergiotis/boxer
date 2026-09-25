@@ -32,6 +32,19 @@ import (
 //     than a silently live one. Releasing an effect early stays a no-op at
 //     close.
 //
+// Goroutine: Mount, Frame and Unmount run on the host's render goroutine,
+// the one running the imzero2 render loop, and every open app shares it —
+// each window's Frame runs after the previous one returns (ADR-0261). The
+// one exception is a shutdown whose render loop is wedged: Unmount then runs
+// from the signal handler while the loop is blocked rather than drawing. Every
+// imzero2 call must be made on that goroutine; a call from another one
+// interleaves into the frame being written. Work that blocks or takes long
+// (queries, file walks, the bus) runs on a goroutine of the app's own or a
+// task, and hands its result to a later Frame. The time a Frame takes is
+// time every other window waits: the host measures it per window, in
+// keelson('frame_times') and the app center. IMZERO2_RENDER_GOROUTINE_CHECK
+// turns an off-goroutine call into a panic that names the caller.
+//
 // All three methods may return an error; the host logs and propagates per
 // host policy (DockHost surfaces the error in the tile chrome; CliHost
 // returns it from main).

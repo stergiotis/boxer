@@ -915,10 +915,44 @@ func (rt *Runtime) Close() {
 	})
 }
 
-// Run creates the imzero2 application from cfg, installs the signal handler
-// (SIGINT / SIGTERM reap the windows, shut the application down and force
-// exit after the grace period), runs the render loop until the window
-// closes, and Closes the runtime. It returns the application's error.
+// shutdownOnSignal waits for one signal, asks the loop to stop, and leaves
+// the reaping to Close on the render goroutine (ADR-0261). If the loop has
+// not returned within grace it is wedged — no frame boundary will come — and
+// the windows are reaped here instead. Either way, exit runs a grace period
+// later if the process is still up: a Close that hangs must not keep it
+// alive.
+func shutdownOnSignal(sigCh <-chan os.Signal, loopDone <-chan struct{}, grace time.Duration, logger zerolog.Logger,
+	stopLoop func(), reap func(), exit func()) {
+	sig, ok := <-sigCh
+	if !ok {
+		return
+	}
+	logger.Info().Str("signal", sig.String()).Msg("hostboot: caught signal, shutting down")
+	stopLoop()
+	select {
+	case <-loopDone:
+		// Close reaps on the render goroutine once Run's loop returns.
+	case <-time.After(grace):
+		logger.Warn().Dur("grace", grace).Msg("hostboot: render loop did not stop within the grace period; reaping off the render goroutine")
+		reap()
+	}
+	time.AfterFunc(grace, func() {
+		logger.Warn().Dur("grace", grace).Msg("hostboot: shutdown did not complete within the grace period, forcing exit")
+		exit()
+	})
+}
+
+// Run creates the imzero2 application from cfg, installs the signal handler,
+// runs the render loop until the window closes, and Closes the runtime. It
+// returns the application's error.
+//
+// SIGINT / SIGTERM stop the loop at its next frame boundary; Run then returns
+// through Close, which reaps the windows on this goroutine — the render
+// goroutine — so no app's Unmount overlaps its Frame (ADR-0261). A loop that
+// does not stop within the grace period is wedged, most likely blocked on a
+// client that no longer answers: the handler then reaps from its own
+// goroutine, the one case where Unmount runs off the render goroutine, so
+// that state is still saved before the forced exit a grace period later.
 func (rt *Runtime) Run(cfg *application.Config) (err error) {
 	defer rt.Close()
 	logger := rt.opts.Log
@@ -935,19 +969,11 @@ func (rt *Runtime) Run(cfg *application.Config) (err error) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
-	go func() {
-		sig, ok := <-sigCh
-		if !ok {
-			return
-		}
-		logger.Info().Str("signal", sig.String()).Msg("hostboot: caught signal, shutting down")
-		rt.Reap()
-		application_.Shutdown()
-		time.AfterFunc(grace, func() {
-			logger.Warn().Dur("grace", grace).Msg("hostboot: shutdown did not complete within the grace period, forcing exit")
-			os.Exit(1)
-		})
-	}()
+	// Closed when Run returns, before the deferred Close reaps: on every
+	// path, so a signal after a failed Launch does not wait out the grace.
+	loopDone := make(chan struct{})
+	defer close(loopDone)
+	go shutdownOnSignal(sigCh, loopDone, grace, logger, application_.Shutdown, rt.Reap, func() { os.Exit(1) })
 
 	application_.FffiEstablishedHandler = func(fffi *runtime.Fffi2[*runtime.Unmarshaller]) error {
 		typed.SetCurrentFffiVar(fffi)
