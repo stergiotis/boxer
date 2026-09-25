@@ -23,7 +23,7 @@ DML takes a raw `[]byte`, so nothing in the wire format states the encoding.
 tree — fixed-width lowercase hex, four digits per index, `.`-separated — and
 its commit records why it exists: three writers had grown three incompatible
 encodings and no reader at all. On 2026-09-14 the first writer outside this
-tree, the ontology binding in `hackathon_2026`, was found spelling the index
+tree, a downstream ontology binding, was found spelling the index
 with `%04d`: identical to the codec for the first ten occurrences, `0010`
 against `000a` past that. The codec is universal by convention only, and a
 convention without a declaration is what produced four encodings in six
@@ -101,8 +101,7 @@ answers `ParamsCodecUndeclared` when the section states none.
   bytes, read access still hands back the binary lane, `lwextract` and the
   read-back generator still assume. Making them codec-aware is the
   pluggability step this decision deliberately does not take: it waits for a
-  second codec with a named consumer, and its shape is recorded in
-  `hackathon_2026/doc/ontology/leeway-binding-notes-for-boxer.md` §5 — a
+  second codec with a named consumer. The shape sketched for it is a
   `ParamsCodecI` with an SQL half, typed overloads beside the raw DML methods,
   the codec always taken from the schema.
 
