@@ -1,12 +1,20 @@
 ---
 type: adr
-status: proposed
+status: withdrawn
 date: 2026-05-08
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+withdrawn-date: 2026-09-25
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: withdrawn (2026-09-25).** Retracted before acceptance or
+> implementation. [ADR-0181](./0181-leeway-dql-authoring-surface.md)
+> (accepted) weighed reviving lwq as its option O5 and kept it parked: a
+> language is heavier than a vocabulary and still needs ADR-0181's machinery
+> underneath. [ADR-0066](./0066-leeway-dql-clickhouse-readback-generator.md)
+> (accepted) took the mechanical read-back path. No `lwq` package was built.
+> Kept as the record of the option.
+> The path `public/db/leeway/lwq/` below was never created; leeway lives
+> under `public/semistructured/leeway/`. The in-process target's Arrow data
+> left the tree with [ADR-0202](./0202-retire-arrow-parquet.md).
 
 # ADR-0023: leeway lwq — Go API as the v1 implementation surface
 
@@ -686,7 +694,7 @@ Indicative scope: v0 + v1 together is on the order of a few thousand lines of ne
 
 ## Status
 
-Proposed — awaiting review by Leeway and CH DSL maintainers and a downstream architecture review.
+Withdrawn (2026-09-25) — see the banner. Shares ADR-0022's fate.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
