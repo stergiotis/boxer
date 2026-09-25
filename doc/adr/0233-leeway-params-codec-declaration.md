@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-14
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0233: leeway params-codec declaration — the encoding of a section's membership params blobs as a writable schema statement
 
@@ -144,8 +142,8 @@ and it is paid only when someone needs one.
 
 ## Status
 
-Proposed — 2026-09-14. Pre-acceptance: the front-matter `reviewed-by` and
-`reviewed-date` are filled when it flips to accepted.
+Accepted (2026-09-25). The declaration is built (`6a0a9eda`);
+codec-aware generators wait for a second codec, as §Decision records.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

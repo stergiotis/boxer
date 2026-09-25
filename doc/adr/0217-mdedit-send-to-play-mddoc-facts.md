@@ -1,11 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-02
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** The change is implemented; this
-> record has not been reviewed.
 
 # ADR-0217: send-to-play — markdown documents as a boxer.facts kind
 
@@ -145,8 +144,8 @@ set `CLICKHOUSE_ENDPOINT`, open mdedit in the imzero2 host, Send to play.
 
 ## Status
 
-Proposed (2026-09-02). Implemented in the same session as the record; awaiting
-review.
+Accepted (2026-09-25). Implemented in the same session as the record
+(2026-09-02); ADR-0218 extends it.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
