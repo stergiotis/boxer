@@ -252,7 +252,7 @@ natural delivery vehicle for the interactive case.
 
 | concern | decided by | state at last edit |
 |---|---|---|
-| data-plane architecture & technology (ELT/ETL rule, URL services, NATS forwarding leg, in-DB escalation) | [ADR-0115](../adr/0115-query-observability-data-plane-strategy.md) | proposed |
+| data-plane architecture & technology (ELT/ETL rule, URL services, NATS forwarding leg, in-DB escalation) | [ADR-0115](../adr/0115-query-observability-data-plane-strategy.md) | accepted |
 | facts substrate | [ADR-0026](../adr/0026-app-runtime-and-capability-subjects.md) §SD6 | accepted |
 | pass registry / transform chain | [ADR-0108](../adr/0108-keelson-sql-pass-registry.md) | accepted |
 | lineage encoding (ref tuples) | [ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md) | accepted |
