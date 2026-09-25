@@ -8,9 +8,12 @@ import (
 	"strings"
 
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -20,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval"
 )
 
 // The Experiments tab is a leeway sink playground: it drives one batch through
@@ -34,6 +38,13 @@ import (
 // it is always available, so the pane is useful before a query has ever run.
 // The current result is whatever the active query returned, usable only when
 // its schema is leeway-shaped (CardDriver.EnsureFor decides).
+//
+// The sinks, their row caps and their settings are vizeval's catalogue
+// (ADR-0257, proposed, §SD1–SD2): the sink bar and the option controls are
+// drawn from it, and TestExperimentsImplementsTheCatalogue holds the pane to
+// it. What the pane shows can be seeded at launch as one candidate
+// (BOXER_PLAY_EXPERIMENTS, §SD3), and its output is wrapped in one named
+// accessibility node (experimentsArtifactName) so a headless run can find it.
 
 type experimentsSourceE uint8
 
@@ -42,29 +53,10 @@ const (
 	experimentsSourceResult
 )
 
-type experimentsSinkE uint8
-
 const (
-	experimentsSinkCard experimentsSinkE = iota
-	experimentsSinkTopology
-	experimentsSinkJSON
-	experimentsSinkUnicode
-	experimentsSinkTopoSpark
-	experimentsSinkBrailleSpark
-	experimentsSinkTreemapSpark
-)
-
-const (
-	// experimentsMaxRows caps how much of a result the pane drives. The sinks
-	// are all whole-batch accumulators, so an unbounded result would build an
-	// unbounded model on the render thread; the pane is for reading shape, and
-	// shape repeats.
-	experimentsMaxRows = 16
-
-	// experimentsUnicodeWidth is the column budget handed to the unicode
-	// emitter — wide enough for its box-drawn tables without wrapping in a
-	// typical dock leaf.
-	experimentsUnicodeWidth = 160
+	// experimentsArtifactName names the accessibility node around the sink's
+	// output — the rect a capture is cropped to and metrics are scoped to.
+	experimentsArtifactName = "experiments.artifact"
 
 	// experimentsTopoWidgetChromePx is the room the treemap widget takes for
 	// itself around the container it is handed: the breadcrumb bar above it,
@@ -99,10 +91,18 @@ const experimentsTopoPaneProbeSalt uint64 = 0xe89e21a1e57090b0
 // Schema identity is a pointer compare, the same idiom CardDriver.EnsureFor
 // uses.
 type experimentsKey struct {
-	source experimentsSourceE
-	sink   experimentsSinkE
-	schema *arrow.Schema
-	nRows  int64
+	source    experimentsSourceE
+	candidate string
+	schema    *arrow.Schema
+	nRows     int64
+}
+
+// experimentsKnob is one option control's state. Numeric controls bind a
+// float64 whatever the option's kind; the candidate rounds an int option.
+type experimentsKnob struct {
+	text string
+	num  float64
+	flag bool
 }
 
 // experimentsDriver owns the pane's selection and its built output. It holds no
@@ -112,7 +112,11 @@ type experimentsDriver struct {
 	ids *c.WidgetIdStack
 
 	source experimentsSourceE
-	sink   experimentsSinkE
+	// sink is a vizeval sink id.
+	sink string
+	// knobs holds every catalogued sink's option state, by sink id then option
+	// name, so switching sinks and back keeps what was set.
+	knobs map[string]map[string]*experimentsKnob
 
 	// paneW / paneH are the last box the pane probe reported. Held across
 	// frames rather than read fresh: the probe answers nothing on the first
@@ -131,12 +135,14 @@ type experimentsDriver struct {
 	jsonOK   bool
 	textOut  []string
 
-	// fixtureCard is the card emitter for the fixture source.
-	fixtureCard *leewaywidgets.Table2CardEmitter
+	// card is the pane's card emitter, for both sources; cardPalette is the
+	// palette it was built with, since the emitter takes it at construction.
+	card        *leewaywidgets.Table2CardEmitter
+	cardPalette string
 
-	// cards is this pane's OWN CardDriver for the result source. The app's is
-	// already driven and rendered by the Detail tab each frame, and one emitter
-	// cannot render twice in a frame without re-emitting its ids.
+	// cards is this pane's OWN CardDriver for the result source: it decides
+	// whether a result is leeway-shaped and holds the driver for it. The app's
+	// is already driven and rendered by the Detail tab each frame.
 	cards *CardDriver
 
 	// cardIds is the stack both card emitters derive from, held so renderCard
@@ -146,19 +152,132 @@ type experimentsDriver struct {
 }
 
 func newExperimentsDriver(ids *c.WidgetIdStack, cardIds *c.WidgetIdStack) (inst *experimentsDriver) {
-	inst = &experimentsDriver{ids: ids, cardIds: cardIds, cards: NewCardDriver(cardIds, nil)}
+	inst = &experimentsDriver{
+		ids: ids, cardIds: cardIds, cards: NewCardDriver(cardIds, nil),
+		sink:  vizeval.SinkCard,
+		knobs: make(map[string]map[string]*experimentsKnob, len(vizeval.Sinks())),
+	}
+	for _, spec := range vizeval.Sinks() {
+		inst.knobs[spec.ID] = make(map[string]*experimentsKnob, len(spec.Space))
+		inst.setKnobs(spec, spec.Space.Defaults())
+	}
 	return
+}
+
+// setKnobs puts resolved values into a sink's controls.
+func (inst *experimentsDriver) setKnobs(spec vizeval.SinkSpec, vals vizeval.Values) {
+	for _, o := range spec.Space {
+		k := &experimentsKnob{}
+		switch v := vals[o.Name].(type) {
+		case string:
+			k.text = v
+		case int64:
+			k.num = float64(v)
+		case float64:
+			k.num = v
+		case bool:
+			k.flag = v
+		}
+		inst.knobs[spec.ID][o.Name] = k
+	}
+}
+
+// spec is the selected sink's catalogue entry.
+func (inst *experimentsDriver) spec() vizeval.SinkSpec {
+	spec, ok := vizeval.SinkByID(inst.sink)
+	if !ok {
+		// Unreachable: sink is only ever set from the catalogue.
+		panic("experiments: sink not in the vizeval catalogue: " + inst.sink)
+	}
+	return spec
+}
+
+// candidate is what the controls currently say: the sink and its options,
+// resolved. The controls are bounded by the same declaration, so resolving
+// fails only on a declaration bug; the error is carried all the same.
+func (inst *experimentsDriver) candidate() (cand vizeval.Candidate, err error) {
+	spec := inst.spec()
+	raw := make(map[string]any, len(spec.Space))
+	for _, o := range spec.Space {
+		k := inst.knobs[spec.ID][o.Name]
+		switch o.Kind {
+		case vizeval.OptionKindEnum:
+			raw[o.Name] = k.text
+		case vizeval.OptionKindInt:
+			raw[o.Name] = math.Round(k.num)
+		case vizeval.OptionKindFloat:
+			raw[o.Name] = k.num
+		case vizeval.OptionKindBool:
+			raw[o.Name] = k.flag
+		}
+	}
+	return vizeval.NewCandidate(spec.ID, raw)
+}
+
+// experimentsSeed is BOXER_PLAY_EXPERIMENTS: a candidate plus the source it is
+// drawn from.
+type experimentsSeed struct {
+	Source  string         `json:"source"`
+	Sink    string         `json:"sink"`
+	Options map[string]any `json:"options"`
+}
+
+// applySeed puts the pane in the state a seed names. Anything that does not
+// resolve against the catalogue is refused — the caller fails the mount —
+// rather than drawn with defaults, because a scripted run that captures the
+// wrong candidate is worse than one that stops (ADR-0257 §SD3).
+func (inst *experimentsDriver) applySeed(raw string) (err error) {
+	var seed experimentsSeed
+	if err = json.Unmarshal([]byte(raw), &seed, json.RejectUnknownMembers(true)); err != nil {
+		return eh.Errorf("unable to decode the experiments seed: %w", err)
+	}
+	cand, err := vizeval.NewCandidate(seed.Sink, seed.Options)
+	if err != nil {
+		return eh.Errorf("unable to resolve the experiments seed: %w", err)
+	}
+	switch seed.Source {
+	case "", "fixture":
+		inst.source = experimentsSourceFixture
+	case "result":
+		inst.source = experimentsSourceResult
+	default:
+		return eb.Build().Str("source", seed.Source).Errorf("unknown experiments source (want fixture or result)")
+	}
+	inst.sink = cand.Sink
+	inst.setKnobs(inst.spec(), cand.Options)
+	inst.built = false
+	return nil
 }
 
 // isTextSink reports whether the sink writes lines of monospace text rather
 // than driving widgets or a codeview.
 func (inst *experimentsDriver) isTextSink() bool {
 	switch inst.sink {
-	case experimentsSinkUnicode, experimentsSinkTopoSpark,
-		experimentsSinkBrailleSpark, experimentsSinkTreemapSpark:
+	case vizeval.SinkUnicode, vizeval.SinkTopoSpark,
+		vizeval.SinkBrailleSpark, vizeval.SinkTreemapSpark:
 		return true
 	}
 	return false
+}
+
+// capRows is how many of n rows the selected sink draws, and the notice to
+// show when that is fewer than n: the cut is said, never silent (ADR-0257
+// §SD1).
+func (inst *experimentsDriver) capRows(n int64) (drawn int64, notice string) {
+	spec := inst.spec()
+	if n <= spec.RowCap {
+		return n, ""
+	}
+	return spec.RowCap, "Showing the first " + strconv.FormatInt(spec.RowCap, 10) +
+		" of " + strconv.FormatInt(n, 10) + " rows — the " + spec.Title + "'s row cap."
+}
+
+// experimentsPalettes maps the catalogue's palette names onto the emitter's.
+var experimentsPalettes = map[string]leewaywidgets.ColorPaletteE{
+	"inferno": leewaywidgets.ColorPaletteInferno,
+	"viridis": leewaywidgets.ColorPaletteViridis,
+	"magma":   leewaywidgets.ColorPaletteMagma,
+	"plasma":  leewaywidgets.ColorPalettePlasma,
 }
 
 // renderExperimentsTab draws the control row, a reading guide for the selected
@@ -173,42 +292,47 @@ func (inst *PlayApp) renderExperimentsTab(rec arrow.RecordBatch, schema *arrow.S
 	c.AddSpace(gap)
 	c.Separator().Horizontal().Send()
 	c.AddSpace(gap)
-	d.ensureBuilt(rec, schema)
-	d.renderBody(rec, schema)
+	cand, err := d.candidate()
+	if err != nil {
+		c.Label("The controls do not resolve to a candidate: " + err.Error()).Send()
+		return
+	}
+	d.ensureBuilt(rec, schema, cand)
+	d.renderBody(rec, schema, cand)
 }
 
 // sinkGuide is how to READ each sink's output. Every one of these renders the
 // same Begin*/End* callback sequence, so what changes between them is the
 // encoding, not the data — and the encoding is the thing a reader has to be
 // told. Kept to two lines: this is a legend, not documentation.
-func sinkGuide(sink experimentsSinkE) (headline, detail string) {
+func sinkGuide(sink string) (headline, detail string) {
 	switch sink {
-	case experimentsSinkCard:
+	case vizeval.SinkCard:
 		return "One row per attribute, grouped by section.",
 			"Columns are section · primary memberships · secondary memberships · values. " +
 				"A section header row carries its own size and share of the entity."
-	case experimentsSinkTopology:
+	case vizeval.SinkTopology:
 		return "Shape only — every value is discarded.",
 			"Nesting is entity › co-section group › section › attribute; a cell's AREA is the " +
 				"attribute count beneath it, and an attribute's COLOUR is what it carried (key below). " +
 				"Click a box to drill in."
-	case experimentsSinkJSON:
+	case vizeval.SinkJSON:
 		return "The canonical lossless card-JSON (ADR-0018).",
 			"byStructure holds the schema once per entity; byAttribute is rooted at primary " +
 				"memberships. Scalars keep their JSON type — numbers are not stringified."
-	case experimentsSinkUnicode:
+	case vizeval.SinkUnicode:
 		return "One box-drawn table per section.",
 			"Column headers are the section's value names, one row per attribute. The widest " +
 				"cell sets the column, so ragged sections show as ragged tables."
-	case experimentsSinkTopoSpark:
+	case vizeval.SinkTopoSpark:
 		return "One line per entity — arity and types, no values.",
 			"◆ plain section · ◇N× tagged section with N attributes · ⟨…⟩ its column canonical " +
 				"types · ∥n array of n · {n} set of n · #n membership count · ˡ ʰ ᵐ low/high/mixed cardinality."
-	case experimentsSinkBrailleSpark:
+	case vizeval.SinkBrailleSpark:
 		return "One braille cell per four attributes.",
 			"Within a cell the LEFT dot column marks attributes that carried a value and the " +
 				"RIGHT column those that carried tags; │ separates sections, ⟦ ⟧ wrap a co-section group."
-	case experimentsSinkTreemapSpark:
+	case vizeval.SinkTreemapSpark:
 		return "Three lines per entity: a proportional box row.",
 			"Box width follows the section's column count. Inside, █ is value+tags, ▓ value only, " +
 				"░ tags only, · an empty slot; ═ double rules mark a co-section group."
@@ -249,30 +373,65 @@ func (inst *experimentsDriver) renderControls() {
 			SendResp()
 		c.AddSpace(gap)
 		c.Label("sink").Send() // designlint:ignore=L1 (field caption; lowercase matches its control's own options)
-		selector.Segmented(inst.ids, "exp-sink", &inst.sink).
+		bar := selector.Segmented(inst.ids, "exp-sink", &inst.sink).
 			Inline().
 			Frameless().
-			Style(selector.StyleSelectable).
-			Option(experimentsSinkCard, "card").
-			Option(experimentsSinkTopology, "topology").
-			Option(experimentsSinkJSON, "json").
-			Option(experimentsSinkUnicode, "unicode").
-			Option(experimentsSinkTopoSpark, "topo").
-			Option(experimentsSinkBrailleSpark, "braille").
-			Option(experimentsSinkTreemapSpark, "treemap").
-			SendResp()
+			Style(selector.StyleSelectable)
+		for _, spec := range vizeval.Sinks() {
+			bar = bar.Option(spec.ID, spec.ID)
+		}
+		bar.SendResp()
+	}
+	inst.renderOptionControls()
+}
+
+// renderOptionControls draws the selected sink's settings from its declared
+// space: a segmented bar for an enum, a slider for a number, a checkbox for a
+// flag. A sink with no settings draws nothing.
+func (inst *experimentsDriver) renderOptionControls() {
+	spec := inst.spec()
+	if len(spec.Space) == 0 {
+		return
+	}
+	gap := styletokens.GapSections(styletokens.ActiveDensity())
+	for range c.HorizontalTop().KeepIter() {
+		for i, o := range spec.Space {
+			if i > 0 {
+				c.AddSpace(gap)
+			}
+			k := inst.knobs[spec.ID][o.Name]
+			key := "exp-opt-" + spec.ID + "-" + o.Name
+			switch o.Kind {
+			case vizeval.OptionKindEnum:
+				c.Label(o.Name).Send() // designlint:ignore=L1 (field caption; the option's own name, as a seed spells it)
+				bar := selector.Segmented(inst.ids, key, &k.text).
+					Inline().
+					Frameless().
+					Style(selector.StyleSelectable)
+				for _, ch := range o.Choices {
+					bar = bar.Option(ch, ch)
+				}
+				bar.SendResp()
+			case vizeval.OptionKindInt:
+				c.SliderF64(inst.ids.PrepareStr(key), k.num, o.Min, o.Max).Integer().Text(o.Name).SendRespVal(&k.num)
+			case vizeval.OptionKindFloat:
+				c.SliderF64(inst.ids.PrepareStr(key), k.num, o.Min, o.Max).Text(o.Name).SendRespVal(&k.num)
+			case vizeval.OptionKindBool:
+				c.Checkbox(inst.ids.PrepareStr(key), k.flag, o.Name).SendRespVal(&k.flag)
+			}
+		}
 	}
 }
 
 // ensureBuilt (re)drives the selected sink when the selection or the underlying
 // result changed. The card sink is excluded: its emitter must be re-driven every
 // frame to keep widget ids stable, so renderBody handles it directly.
-func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.Schema) {
+func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.Schema, cand vizeval.Candidate) {
 	var nRows int64
 	if rec != nil {
 		nRows = rec.NumRows()
 	}
-	key := experimentsKey{source: inst.source, sink: inst.sink, schema: schema, nRows: nRows}
+	key := experimentsKey{source: inst.source, candidate: cand.ID(), schema: schema, nRows: nRows}
 	if inst.built && inst.key == key {
 		return
 	}
@@ -284,11 +443,11 @@ func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.
 	inst.textOut = nil
 	inst.jsonOK = false
 
-	if inst.sink == experimentsSinkCard {
+	if inst.sink == vizeval.SinkCard {
 		return
 	}
 
-	sink, finish := inst.makeSink()
+	sink, finish := inst.makeSink(cand)
 	if sink == nil {
 		return
 	}
@@ -301,10 +460,10 @@ func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.
 // makeSink builds the sink for the current selection and returns the closure
 // that turns its accumulated state into something renderable. Both are nil for
 // a selection that needs no driving.
-func (inst *experimentsDriver) makeSink() (sink streamreadaccess.SinkI, finish func()) {
+func (inst *experimentsDriver) makeSink(cand vizeval.Candidate) (sink streamreadaccess.SinkI, finish func()) {
 	buf := bytes.NewBuffer(make([]byte, 0, 4096))
-	switch inst.sink {
-	case experimentsSinkTopology:
+	switch cand.Sink {
+	case vizeval.SinkTopology:
 		topo := leewaywidgets.NewTopologySink()
 		inst.topoSink = topo
 		return topo, func() {
@@ -314,21 +473,22 @@ func (inst *experimentsDriver) makeSink() (sink streamreadaccess.SinkI, finish f
 			inst.topoView = leewaywidgets.NewTopologyTreemap(inst.ids, "play-exp-topo", topo,
 				treemap.WithStatusLine(false))
 		}
-	case experimentsSinkJSON:
+	case vizeval.SinkJSON:
 		enc := jsontext.NewEncoder(buf, jsontext.Multiline(true), jsontext.WithIndent("  "))
 		return card.NewJsonCardEmitter(enc, nil), func() {
 			inst.jsonView = codeview.PrepareJson(buf.String())
 			inst.jsonOK = true
 		}
-	case experimentsSinkUnicode:
-		return card.NewUnicodeCardEmitter(buf, experimentsUnicodeWidth), func() {
+	case vizeval.SinkUnicode:
+		width, _ := cand.Options[vizeval.OptionWidth].(int64)
+		return card.NewUnicodeCardEmitter(buf, int(width)), func() {
 			inst.textOut = splitTextOutput(buf.String())
 		}
-	case experimentsSinkTopoSpark:
+	case vizeval.SinkTopoSpark:
 		return card.NewTopologySpark(buf), func() { inst.textOut = splitTextOutput(buf.String()) }
-	case experimentsSinkBrailleSpark:
+	case vizeval.SinkBrailleSpark:
 		return card.NewBrailleSpark(buf), func() { inst.textOut = splitTextOutput(buf.String()) }
-	case experimentsSinkTreemapSpark:
+	case vizeval.SinkTreemapSpark:
 		return card.NewTreemapSpark(buf), func() { inst.textOut = splitTextOutput(buf.String()) }
 	}
 	return nil, nil
@@ -354,12 +514,8 @@ func (inst *experimentsDriver) drive(sink streamreadaccess.SinkI, rec arrow.Reco
 		inst.notice = "No leeway driver for the current result."
 		return false
 	}
-	n := rec.NumRows()
-	if n > experimentsMaxRows {
-		n = experimentsMaxRows
-		inst.notice = "Showing the first " + strconv.FormatInt(experimentsMaxRows, 10) +
-			" of " + strconv.FormatInt(rec.NumRows(), 10) + " rows."
-	}
+	n, notice := inst.capRows(rec.NumRows())
+	inst.notice = notice
 	// One slice, not one per row: every sink brackets its work in
 	// BeginBatch/EndBatch, and driving row-by-row would reset the accumulator
 	// each time and leave only the last row's model standing.
@@ -372,30 +528,41 @@ func (inst *experimentsDriver) drive(sink streamreadaccess.SinkI, rec arrow.Reco
 	return true
 }
 
-func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.Schema) {
+// renderBody draws the notice, if any, and then the artifact inside its named
+// accessibility region. The notice stays outside the region: it is the pane
+// talking about the picture, not part of it.
+func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.Schema, cand vizeval.Candidate) {
+	var cardReady bool
+	if cand.Sink == vizeval.SinkCard {
+		cardReady = inst.prepareCard(rec, schema, cand)
+	}
 	if inst.notice != "" {
 		c.Label(inst.notice).Send()
-		if inst.sink != experimentsSinkTopology || inst.topoView == nil {
+		if inst.sink != vizeval.SinkTopology || inst.topoView == nil {
 			c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 		}
 	}
-	switch {
-	case inst.sink == experimentsSinkCard:
-		inst.renderCard(rec, schema)
-	case inst.sink == experimentsSinkTopology:
-		inst.renderTopology()
-	case inst.sink == experimentsSinkJSON:
-		if inst.jsonOK {
-			c.CodeView(inst.ids.PrepareStr("exp-json"), inst.jsonView).Wrap().Send()
+	for range c.AccessibleRegion(experimentsArtifactName).KeepIter() {
+		switch {
+		case inst.sink == vizeval.SinkCard:
+			if cardReady {
+				inst.renderCard()
+			}
+		case inst.sink == vizeval.SinkTopology:
+			inst.renderTopology()
+		case inst.sink == vizeval.SinkJSON:
+			if inst.jsonOK {
+				c.CodeView(inst.ids.PrepareStr("exp-json"), inst.jsonView).Wrap().Send()
+			}
+		case inst.isTextSink():
+			inst.renderText()
 		}
-	case inst.isTextSink():
-		inst.renderText()
 	}
 }
 
-// Id-scope seeds for the two card emitters this pane can draw. Both must be
-// non-zero and distinct: Table2CardEmitter derives every cell id from a
-// per-section counter via PrepareSeq, and PrepareSeq maps its argument through
+// Id-scope seeds for the card emitter, one per source. Both must be non-zero
+// and distinct: Table2CardEmitter derives every cell id from a per-section
+// counter via PrepareSeq, and PrepareSeq maps its argument through
 // makeHighEntropy alone — the *WidgetIdStack instance contributes nothing. Two
 // stacks built by the app's mk() therefore share a base salt and, with nothing
 // pushed, produce byte-identical ids. Detail renders the same emitter in the
@@ -405,50 +572,74 @@ const (
 	experimentsCardScopeFixture uint64 = 0xE7C1
 	experimentsCardScopeResult  uint64 = 0xE7C2
 
-	// experimentsCardSaltMix is XORed into the base salt of the stack those two
-	// emitters derive from, so the pane's ids are disjoint from the app's card
+	// experimentsCardSaltMix is XORed into the base salt of the stack the
+	// emitter derives from, so the pane's ids are disjoint from the app's card
 	// stack rather than merely scoped apart. See the construction site in
 	// play_renderer.go.
 	experimentsCardSaltMix uint64 = 0x5EED_E7C0_0000_0001
 )
 
-// renderCard drives and draws the Table2 card emitter. Unlike the other sinks
-// this happens every frame: the emitter re-bases its widget-id counter at each
-// drive, so a cached drive would leave the deferred render pointing at stale
-// ids.
-//
-// Each arm renders inside an IdScope on the SAME stack the emitter derives
-// from — scoping a different stack would not move these ids, since the scope is
-// pushed onto the instance it is taken from.
-func (inst *experimentsDriver) renderCard(rec arrow.RecordBatch, schema *arrow.Schema) {
+// cardEmitter returns the pane's card emitter, rebuilt when the palette
+// changed: the emitter takes its palette at construction.
+func (inst *experimentsDriver) cardEmitter(palette string) *leewaywidgets.Table2CardEmitter {
+	if inst.card == nil || inst.cardPalette != palette {
+		inst.card = leewaywidgets.NewTable2CardEmitter(inst.cardIds, experimentsPalettes[palette], nil)
+		// Without this the emitter flushes at EndBatch — inside the drive —
+		// and renderCard draws the same widgets a second time. CardDriver sets
+		// it for the same reason.
+		inst.card.DeferRender = true
+		inst.cardPalette = palette
+	}
+	return inst.card
+}
+
+// prepareCard drives the card emitter for this frame, setting inst.notice when
+// there is nothing to draw or when the row cap cut the batch. Unlike the other
+// sinks this happens every frame: the emitter re-bases its widget-id counter at
+// each drive, so a cached drive would leave the deferred render pointing at
+// stale ids.
+func (inst *experimentsDriver) prepareCard(rec arrow.RecordBatch, schema *arrow.Schema, cand vizeval.Candidate) (ok bool) {
+	palette, _ := cand.Options[vizeval.OptionPalette].(string)
+	em := inst.cardEmitter(palette)
+	inst.notice = ""
 	if inst.source == experimentsSourceFixture {
-		if inst.fixtureCard == nil {
-			inst.fixtureCard = leewaywidgets.NewTable2CardEmitter(inst.cardIds, leewaywidgets.ColorPaletteViridis, nil)
-			// Without this the emitter flushes at EndBatch — i.e. inside
-			// RunFixture — and the Render() below draws the same widgets a
-			// second time. CardDriver sets it for the same reason.
-			inst.fixtureCard.DeferRender = true
-		}
-		leewaywidgets.RunFixture(inst.fixtureCard)
-		for range c.IdScope(inst.cardIds.PrepareSeq(experimentsCardScopeFixture)) {
-			inst.fixtureCard.Render()
-		}
-		return
+		leewaywidgets.RunFixture(em)
+		return true
 	}
 	if rec == nil || schema == nil || rec.NumRows() == 0 {
-		c.Label("No result yet — run a query, or switch the source to the fixture.").Send()
-		return
+		inst.notice = "No result yet — run a query, or switch the source to the fixture."
+		return false
 	}
 	if !inst.cards.EnsureFor(schema) {
-		c.Label("The current result is not leeway-shaped. Switch the source to the fixture.").Send()
-		return
+		inst.notice = "The current result is not leeway-shaped. Switch the source to the fixture."
+		return false
 	}
-	if err := inst.cards.Prepare(rec, 0); err != nil {
-		c.Label("Driving the result failed: " + err.Error()).Send()
-		return
+	drv := inst.cards.Driver()
+	if drv == nil {
+		inst.notice = "No leeway driver for the current result."
+		return false
 	}
-	for range c.IdScope(inst.cardIds.PrepareSeq(experimentsCardScopeResult)) {
-		inst.cards.Render()
+	n, notice := inst.capRows(rec.NumRows())
+	slice := rec.NewSlice(0, n)
+	defer slice.Release()
+	if err := drv.DriveRecordBatch(em, slice); err != nil {
+		inst.notice = "Driving the result failed: " + err.Error()
+		return false
+	}
+	inst.notice = notice
+	return true
+}
+
+// renderCard draws what prepareCard drove, inside an IdScope on the SAME stack
+// the emitter derives from — scoping a different stack would not move these
+// ids, since the scope is pushed onto the instance it is taken from.
+func (inst *experimentsDriver) renderCard() {
+	scope := experimentsCardScopeResult
+	if inst.source == experimentsSourceFixture {
+		scope = experimentsCardScopeFixture
+	}
+	for range c.IdScope(inst.cardIds.PrepareSeq(scope)) {
+		inst.card.Render()
 	}
 }
 

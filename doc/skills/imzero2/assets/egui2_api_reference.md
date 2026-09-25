@@ -15,6 +15,7 @@ status: draft
 
 | Name | Type | Identity | Plain Args | Eval Args | Methods | Features |
 |------|------|----------|------------|-----------|---------|----------|
+| AccessibleRegion | BuilderFactory | No | 1 | 0 | 0 | Immediate, BlockIterator |
 | AddSpace | Procedural | No | 1 | 0 | - | - |
 | AllocateUiAtRect | BuilderFactory | No | 4 | 0 | 0 | Immediate, BlockIterator |
 | AnimateBoolResponsive | Procedural | No | 2 | 0 | - | - |
@@ -198,6 +199,24 @@ status: draft
 
 
 ## BuilderFactory Nodes
+
+### AccessibleRegion
+
+- **Type:** BuilderFactory
+- **Identity:** No
+- **Features:** Immediate, BlockIterator
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| name | plain | s |
+
+#### Return Type
+
+Block
+
+---
 
 ### AllocateUiAtRect
 

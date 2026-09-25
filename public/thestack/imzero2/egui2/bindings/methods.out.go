@@ -11,6 +11,25 @@ import (
 	"iter"
 )
 
+func (inst AccessibleRegionFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst AccessibleRegionFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
 func (inst AllocateUiAtRectFluid) Send() {
 	r := inst.r
 

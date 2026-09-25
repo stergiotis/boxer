@@ -75,12 +75,20 @@ leeway-to-encoding mapping itself searchable, not only its styling.
 
 The row cap becomes a per-sink property: shape-reading sinks keep a small
 one, sinks whose picture depends on every row (charts, graphs) declare a
-larger one, and a batch over a sink's cap is refused with its reason, as
-panels refuse schemas, never silently truncated.
+larger one. A batch over a sink's cap is never silently truncated: the pane
+draws the first rows and says so, and the harness does not score a
+candidate whose scenario batch exceeds the cap — a picture of part of the
+data would be scored as a picture of all of it. The card sink draws every
+row up to its cap, where it previously drew the first row of a result
+alone.
 
 The pane wraps a sink's output in one named accessibility node
 (`experiments.artifact`) so the harness can crop captures and scope metrics
-to the artifact, not play's chrome.
+to the artifact, not play's chrome. The node comes from an IDL block,
+`accessibleRegion`, that labels the rect its body drew in; the body's own
+nodes are not reparented under it, so it names an area, not a subtree. The
+rect is the body's full extent, which inside a scroll area can exceed what
+is visible: the harness intersects it with the viewport.
 
 ### SD2 — A sink declares its option space
 
@@ -230,7 +238,7 @@ runner is, so a search written later calls it in-process.
 ### Milestones
 
 - **M1 — Capture sidecars** ✓ (SD5) in the headless host and scene runner.
-- **M2 — Option spaces and the seed variable** (SD1–SD3): declared option
+- **M2 — Option spaces and the seed variable** ✓ (SD1–SD3): declared option
   spaces, per-sink row caps, `BOXER_PLAY_EXPERIMENTS` and the artifact node,
   for the existing sinks, card table first.
 - **M3 — Scenario documents, the runner and geometry metrics** (SD4, SD6
@@ -250,6 +258,7 @@ runner is, so a search written later calls it in-process.
 | scene `capture` step | adds SVG and tree sidecar outputs | the imzero2-drive skill page; the headless host's capture handling |
 | Experiments sinks | declare an option space and a row cap | the pane's controls, which are generated from the declaration |
 | `BOXER_PLAY_EXPERIMENTS` | added (ADR-0009 registry) | `doc/env-vars.md` |
+| egui2 IDL | adds the `accessibleRegion` block | regenerated Go bindings, Rust dispatch and the API reference; the opcode enums renumber, so both sides rebuild together |
 | `openaichat` messages | image content parts | `runtime.llm`'s request path and the ADR-0254 sensitivity point |
 | `boxer.facts` | new vizeval kinds | the generated record store and its regeneration lane |
 

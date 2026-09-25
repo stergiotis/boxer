@@ -83,6 +83,12 @@ var (
 		Category:    env.CategoryE("boxer-play"),
 	})
 
+	ExperimentsSeed = env.NewString(env.Spec{
+		Name:        "BOXER_PLAY_EXPERIMENTS",
+		Description: "seed the Experiments pane with one vizeval candidate as JSON, {\"source\":\"fixture|result\",\"sink\":…,\"options\":{…}} (ADR-0257); a seed that does not resolve against the sink catalogue fails the mount",
+		Category:    env.CategoryE("boxer-play"),
+	})
+
 	// The BOXER_PLAY_FOCUS_* knobs are registered per built-in body tab in
 	// play_tabs.go (registerFocusVars, slice 6a) — derived from the tab
 	// definitions instead of hand-written here.
@@ -406,6 +412,14 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	inner.ScreenshotPath = ScreenshotPath.Get()
 	inner.ExitOnShot = ExitOnShot.Get() != ""
 	inner.previewAsSent = PreviewAsSent.Get() != ""
+	if seed := ExperimentsSeed.Get(); seed != "" {
+		// Refused rather than defaulted: a scripted capture of the wrong
+		// candidate would be scored under the right one's name.
+		if err = inner.experiments.applySeed(seed); err != nil {
+			err = eh.Errorf("BOXER_PLAY_EXPERIMENTS does not name a candidate: %w", err)
+			return
+		}
+	}
 	inner.SetCapabilities(ctx.Bus(), ctx.Storage(), ctx.Log())
 	if launch == nil {
 		// Legacy read bridge (ADR-0148 §SD8), one release: only a window
