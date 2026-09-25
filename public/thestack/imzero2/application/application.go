@@ -231,6 +231,11 @@ func (inst *Application[U]) Launch() (err error) {
 
 var ErrNeedsToBeLaunchedBeforeRun = eh.Errorf("application needs to be launched before run")
 
+// Channel is the FFFI2 transport Launch established, or nil before Launch.
+func (inst *Application[U]) Channel() *runtime.InlineIoChannel[U] {
+	return inst.channel
+}
+
 func defaultRenderLoopHandler() error {
 	return nil
 }
@@ -252,6 +257,12 @@ func (inst *Application[U]) Run() (err error) {
 		}
 	}()
 
+	// Run's goroutine is the render goroutine: the handlers above and below
+	// and every frame run on it (ADR-0261).
+	if imzero2env.RenderGoroutineCheck.Get() {
+		inst.fffi.BindToCurrentGoroutine()
+		log.Info().Msg("imzero2: FFFI channel bound to the render goroutine; a call from any other goroutine panics")
+	}
 	if inst.BeforeFirstFrameInitHandler != nil {
 		err = inst.BeforeFirstFrameInitHandler()
 		if err != nil {
