@@ -29,7 +29,7 @@
 // [SinkI] is the authority seam as well. `track` is handed a sink and never
 // opens a device itself, so an audio-output capability brokered by the
 // keelson runtime — the shape of ADR-0026 §SD7's file-dialog powerbox, and
-// what an ADR-0207 compartment boundary would enforce — can be introduced
+// what a compartment boundary would enforce (no ADR yet) — can be introduced
 // by handing out a different sink, without touching the player. The
 // pulse-protocol sink that actually makes sound is ADR-0208 M3; this package
 // carries no device dependency until then.
