@@ -229,7 +229,7 @@ runner is, so a search written later calls it in-process.
 
 ### Milestones
 
-- **M1 — Capture sidecars** (SD5) in the headless host and scene runner.
+- **M1 — Capture sidecars** ✓ (SD5) in the headless host and scene runner.
 - **M2 — Option spaces and the seed variable** (SD1–SD3): declared option
   spaces, per-sink row caps, `BOXER_PLAY_EXPERIMENTS` and the artifact node,
   for the existing sinks, card table first.

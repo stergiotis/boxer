@@ -213,6 +213,29 @@ func (inst *Doc) Captures() (names []string) {
 	return names
 }
 
+// CaptureFiles lists every file the scene's trace writes, relative to the
+// output directory: each capture's PNG and then the sidecars its step asks
+// for (ADR-0257 (proposed) §SD5), in trace order.
+func (inst *Doc) CaptureFiles() (files []CaptureFile) {
+	for _, st := range inst.Steps {
+		if st.Do != "capture" || st.Text == "" {
+			continue
+		}
+		f := CaptureFile{PNG: carrierclient.SidecarFile(st.Text, "")}
+		for _, sc := range st.Sidecars {
+			f.Sidecars = append(f.Sidecars, carrierclient.SidecarFile(st.Text, sc))
+		}
+		files = append(files, f)
+	}
+	return files
+}
+
+// CaptureFile is one capture's PNG and the sidecar files written beside it.
+type CaptureFile struct {
+	PNG      string
+	Sidecars []string
+}
+
 // Title is the document's first heading, or its name when it has none.
 func (inst *Doc) Title() string {
 	for _, line := range strings.Split(inst.Prose, "\n") {

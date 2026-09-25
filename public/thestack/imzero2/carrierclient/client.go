@@ -259,15 +259,18 @@ func (inst *Client) Tree(timeout time.Duration) (snap *TreeSnapshot, err error) 
 }
 
 // Capture asks the host to write the current frame as a PNG under its dump
-// directory and returns the acknowledgement (ADR-0154 SD4).
+// directory and returns the acknowledgement (ADR-0154 SD4). With svg set the
+// host also writes the frame's shapes as an SVG of the same basename, from the
+// same pass (ADR-0257 (proposed) §SD5); the acknowledgement's SvgPath is empty
+// when that export did not land, and the caller decides whether that fails.
 //
 // The host reduces name to a basename and owns the directory, so the path it
 // reports back may differ from what was asked for; use the returned path.
 // A host with no IMZERO2_HEADLESS_DUMP_DIR ignores the request, which surfaces
 // here as a timeout.
-func (inst *Client) Capture(name string, timeout time.Duration) (done *CaptureDone, err error) {
+func (inst *Client) Capture(name string, svg bool, timeout time.Duration) (done *CaptureDone, err error) {
 	err = inst.sendControl(&SessionControl{
-		Control: &SessionControl_CaptureRequest{CaptureRequest: &CaptureRequest{Name: name}},
+		Control: &SessionControl_CaptureRequest{CaptureRequest: &CaptureRequest{Name: name, Svg: svg}},
 	})
 	if err != nil {
 		return nil, err

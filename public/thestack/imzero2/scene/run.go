@@ -32,6 +32,8 @@ type Result struct {
 	Duration time.Duration
 	// Captures are the PNGs the run wrote, relative to the output directory.
 	Captures []string
+	// Sidecars are the files its captures wrote beside them, the same way.
+	Sidecars []string
 }
 
 // CollectDocs expands paths into scene documents: a file is itself, a
@@ -96,8 +98,11 @@ func RunDoc(doc *Doc, opts Options) (res Result) {
 	}
 	opts.SQL = doc.SQL
 	// Stale captures of the same name would let a run that wrote nothing pass.
-	for _, name := range doc.Captures() {
-		_ = os.Remove(filepath.Join(opts.OutDir, name+".png"))
+	for _, f := range doc.CaptureFiles() {
+		_ = os.Remove(filepath.Join(opts.OutDir, f.PNG))
+		for _, sc := range f.Sidecars {
+			_ = os.Remove(filepath.Join(opts.OutDir, sc))
+		}
 	}
 
 	s, err := Launch(spec, opts)
@@ -111,18 +116,28 @@ func RunDoc(doc *Doc, opts Options) (res Result) {
 		return res
 	}
 	if !opts.DryRun {
-		for _, name := range doc.Captures() {
-			png := name + ".png"
-			st, e := os.Stat(filepath.Join(opts.OutDir, png))
-			if e != nil || st.Size() == 0 {
-				res.Err = eb.Build().Str("capture", png).Errorf("the trace ran but its capture was not written")
+		for _, f := range doc.CaptureFiles() {
+			if !nonEmptyFile(filepath.Join(opts.OutDir, f.PNG)) {
+				res.Err = eb.Build().Str("capture", f.PNG).Errorf("the trace ran but its capture was not written")
 				return res
 			}
-			res.Captures = append(res.Captures, png)
+			res.Captures = append(res.Captures, f.PNG)
+			for _, sc := range f.Sidecars {
+				if !nonEmptyFile(filepath.Join(opts.OutDir, sc)) {
+					res.Err = eb.Build().Str("sidecar", sc).Errorf("the trace ran but a capture sidecar was not written")
+					return res
+				}
+				res.Sidecars = append(res.Sidecars, sc)
+			}
 		}
 	}
 	res.Status = StatusPass
 	return res
+}
+
+func nonEmptyFile(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.Size() > 0
 }
 
 // WriteIndex writes the gallery: each scene's prose, captures, query and
@@ -144,6 +159,13 @@ func WriteIndex(outDir string, results []Result) (err error) {
 		}
 		for _, png := range r.Captures {
 			b.WriteString("![" + png + "](" + png + ")\n\n")
+		}
+		if len(r.Sidecars) > 0 {
+			links := make([]string, 0, len(r.Sidecars))
+			for _, sc := range r.Sidecars {
+				links = append(links, "["+sc+"]("+sc+")")
+			}
+			b.WriteString("Sidecars: " + strings.Join(links, " · ") + "\n\n")
 		}
 		if len(r.Doc.Spec.Env) > 0 {
 			keys := make([]string, 0, len(r.Doc.Spec.Env))

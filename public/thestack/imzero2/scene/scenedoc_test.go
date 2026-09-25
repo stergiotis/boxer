@@ -71,3 +71,16 @@ func TestParseDocRejects(t *testing.T) {
 	_, err := ParseDoc("a.md", []byte("---\nscene:\n  launch: play\n---\n"))
 	require.Error(t, err, "wrong suffix")
 }
+
+func TestCaptureFilesListsSidecars(t *testing.T) {
+	doc, err := ParseDoc("x/20_chart.scene.md", []byte("---\nscene:\n  launch: play\n---\n\n# Chart\n\n"+
+		"```jsonl trace\n"+
+		"{\"do\":\"capture\",\"text\":\"plain\"}\n"+
+		"{\"do\":\"capture\",\"text\":\"measured\",\"sidecars\":[\"svg\",\"tree\"]}\n"+
+		"```\n"))
+	require.NoError(t, err)
+	assert.Equal(t, []CaptureFile{
+		{PNG: "plain.png"},
+		{PNG: "measured.png", Sidecars: []string{"measured.svg", "measured.tree.jsonl"}},
+	}, doc.CaptureFiles())
+}

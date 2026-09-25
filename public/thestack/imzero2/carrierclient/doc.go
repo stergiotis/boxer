@@ -23,7 +23,7 @@
 //	tree, err := c.Tree(5 * time.Second)
 //	node := carrierclient.FindByName(tree, "Panes")
 //	err = c.ClickNode(node.GetId())
-//	done, err := c.Capture("panes-open", 5 * time.Second)
+//	done, err := c.Capture("panes-open", false, 5 * time.Second)
 //
 // Only the ACTIVE connection's input, tree requests and captures are honoured
 // (ADR-0086); the first connection to a host is admitted active, so a driver

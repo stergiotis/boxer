@@ -674,6 +674,12 @@ fn rgba_to_png(width: u32, height: u32, rgba: &[u8]) -> Option<Vec<u8>> {
 pub struct ExportState {
     pub pending: Option<ExportRequest>,
     pub last_result: Option<Result<usize, String>>,
+    /// The path `last_result` is about. One request is served per pass and a
+    /// later `request_export` replaces an earlier one, so a requester that
+    /// shares the slot (the headless host's capture sidecar beside the app's
+    /// own `ExportSvg`) checks this to learn whether it was its export that
+    /// ran.
+    pub last_path: Option<PathBuf>,
 }
 
 /// How much of a window to include in the SVG export.
@@ -787,7 +793,9 @@ impl egui::plugin::Plugin for SvgExportPlugin {
         } else if let Ok(bytes) = result {
             tracing::info!(path = %req.path.display(), embed = req.embed_fonts, bytes, "svg export ok");
         }
-        self.state.lock().expect("svg_export state poisoned").last_result = Some(result);
+        let mut s = self.state.lock().expect("svg_export state poisoned");
+        s.last_result = Some(result);
+        s.last_path = Some(req.path);
     }
 }
 

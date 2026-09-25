@@ -266,7 +266,7 @@ async fn main() {
                             eprintln!("[{now:.1}s] requesting capture {name:?}");
                             tx.send(tokio_tungstenite::tungstenite::Message::Binary(
                                 control(pb::session_control::Control::CaptureRequest(
-                                    pb::CaptureRequest { name },
+                                    pb::CaptureRequest { name, svg: false },
                                 )).into(),
                             )).await.expect("send capture request");
                         }

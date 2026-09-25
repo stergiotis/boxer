@@ -410,10 +410,10 @@ struct Inner {
     /// queue: two requests before one pass are one answer, and the answer is
     /// always "the tree as of the next completed pass".
     tree_wanted: std::sync::atomic::AtomicBool,
-    /// ADR-0154 SD4: capture name the active connection asked for, drained by
-    /// the render thread. Latest-wins for the same reason `resize` is: a second
+    /// ADR-0154 SD4: capture the active connection asked for, drained by the
+    /// render thread. Latest-wins for the same reason `resize` is: a second
     /// request before the first is served asks about a newer frame.
-    capture_request: std::sync::Mutex<Option<String>>,
+    capture_request: std::sync::Mutex<Option<pb::CaptureRequest>>,
 }
 
 pub struct WsCarrier {
@@ -701,9 +701,10 @@ impl WsCarrier {
         }
     }
 
-    /// Take the pending capture name, if the active connection asked for one
-    /// (ADR-0154 SD4). Draining rather than peeking: one request, one capture.
-    pub fn take_capture_request(&self) -> Option<String> {
+    /// Take the pending capture request, if the active connection asked for
+    /// one (ADR-0154 SD4). Draining rather than peeking: one request, one
+    /// capture.
+    pub fn take_capture_request(&self) -> Option<pb::CaptureRequest> {
         self.inner.capture_request.lock().ok()?.take()
     }
 
@@ -1754,7 +1755,7 @@ fn handle_client_message(data: &[u8], inner: &Inner, id: u64) {
                     // directory; nothing from the wire reaches a path join.
                     if active {
                         if let Ok(mut pending) = inner.capture_request.lock() {
-                            *pending = Some(c.name);
+                            *pending = Some(c);
                         }
                         let _ = inner.waker.send(());
                     }
