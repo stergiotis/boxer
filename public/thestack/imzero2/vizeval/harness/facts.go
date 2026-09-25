@@ -128,7 +128,7 @@ func CardOf(row vizevalfacts.VizevalScore) (card Scorecard, err error) {
 // endpoint, creating the table when it does not exist. chstore is the table's
 // only DDL author (ADR-0184 §SD2), so the table is set up through it and the
 // generated store runs none.
-func OpenFacts(ctx context.Context) (store *vizevalfacts.ScoreStore, err error) {
+func OpenFacts(ctx context.Context) (store *vizevalfacts.VizevalStore, err error) {
 	cs, err := chstore.New(chstore.ConfigFromEnv())
 	if err != nil {
 		return nil, eh.Errorf("unable to configure boxer.facts: %w", err)
@@ -140,7 +140,7 @@ func OpenFacts(ctx context.Context) (store *vizevalfacts.ScoreStore, err error) 
 	if err != nil {
 		return nil, err
 	}
-	store = vizevalfacts.NewScoreStore(exec, nil, vizevalfacts.ScoreStoreConfig{})
+	store = vizevalfacts.NewVizevalStore(exec, nil, vizevalfacts.VizevalStoreConfig{})
 	if err = store.VerifySchema(ctx); err != nil {
 		return nil, eh.Errorf("boxer.facts does not have the shape the scorecard store decodes: %w", err)
 	}
@@ -149,7 +149,7 @@ func OpenFacts(ctx context.Context) (store *vizevalfacts.ScoreStore, err error) 
 
 // lookupStored returns the newest stored scorecard for the measurement, if
 // one may be reused.
-func lookupStored(ctx context.Context, store *vizevalfacts.ScoreStore, card Scorecard) (stored Scorecard, found bool, err error) {
+func lookupStored(ctx context.Context, store *vizevalfacts.VizevalStore, card Scorecard) (stored Scorecard, found bool, err error) {
 	id, _ := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest)
 	ent, found, err := store.Latest(ctx, id)
 	if err != nil || !found || ent == nil || !ent.VizevalScore.Has {
@@ -165,7 +165,7 @@ func lookupStored(ctx context.Context, store *vizevalfacts.ScoreStore, card Scor
 // scenario, only that scenario's. The scenario filter is applied after
 // decoding: the kind's scan is already narrow, and a membership-value
 // predicate would bind this reader to the table's physical column names.
-func ReadFacts(ctx context.Context, store *vizevalfacts.ScoreStore, scenario string) iter.Seq2[Scorecard, error] {
+func ReadFacts(ctx context.Context, store *vizevalfacts.VizevalStore, scenario string) iter.Seq2[Scorecard, error] {
 	return func(yield func(Scorecard, error) bool) {
 		for ent, err := range store.ScanVizevalScore(ctx, recordstore.ScanOpts{}) {
 			if err != nil {
@@ -187,13 +187,13 @@ func ReadFacts(ctx context.Context, store *vizevalfacts.ScoreStore, scenario str
 }
 
 // writeFacts files freshly scored cards and flushes them.
-func writeFacts(ctx context.Context, store *vizevalfacts.ScoreStore, cards []Scorecard) (err error) {
+func writeFacts(ctx context.Context, store *vizevalfacts.VizevalStore, cards []Scorecard) (err error) {
 	for _, c := range cards {
 		if c.ReusedFrom != "" {
 			continue
 		}
 		row := RowOf(c)
-		err = store.Begin(row.Id, row.Ts, vizevalfacts.ScoreEnvelope{NaturalKey: row.NaturalKey}).AddVizevalScore(row).Commit()
+		err = store.Begin(row.Id, row.Ts, vizevalfacts.VizevalEnvelope{NaturalKey: row.NaturalKey}).AddVizevalScore(row).Commit()
 		if err != nil {
 			return eh.Errorf("unable to stage a scorecard row: %w", err)
 		}

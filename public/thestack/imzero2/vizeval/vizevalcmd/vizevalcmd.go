@@ -65,6 +65,21 @@ func NewCommand() *cli.Command {
 				Action: runFacts,
 			},
 			{
+				Name:      "rank",
+				Usage:     "compare a score run's scored candidates pairwise with the vision model and rank them",
+				ArgsUsage: "<scenario" + vizeval.ScenarioSuffix + " | dir>…",
+				Description: "Reads --" + flagOut + "/scorecards.jsonl, keeps each candidate's latest scored card\n" +
+					"from the scenario's most recent batch, asks the model (BOXER_LLM_*) to compare\n" +
+					"every pair in both orders on five criteria, and fits Bradley–Terry strengths.\n" +
+					"Writes <out>/<scenario>/ranking.md and ranking.json.",
+				Flags: []cli.Flag{
+					&cli.PathFlag{Name: flagOut, Value: "tmp/vizeval", Usage: "the score run's output directory"},
+					&cli.BoolFlag{Name: flagFacts, Usage: "file every comparison in boxer.facts, and the model calls with them"},
+					&cli.IntFlag{Name: flagJudgeCalls, Value: 200, Usage: "the most model calls the run makes; cached comparisons are free"},
+				},
+				Action: runRank,
+			},
+			{
 				Name:      "score",
 				Usage:     "render and measure candidates over each scenario",
 				ArgsUsage: "<scenario" + vizeval.ScenarioSuffix + " | dir>…",
@@ -151,6 +166,52 @@ func runSpace(ctx *cli.Context) (err error) {
 			}
 			_, _ = fmt.Fprintln(w, string(b))
 		}
+	}
+	return nil
+}
+
+func runRank(ctx *cli.Context) (err error) {
+	scs, err := collect(ctx.Args().Slice())
+	if err != nil {
+		return err
+	}
+	out, err := filepath.Abs(ctx.Path(flagOut))
+	if err != nil {
+		return eh.Errorf("unable to resolve --"+flagOut+": %w", err)
+	}
+	j, closeJudge, err := openJudge(ctx, out)
+	if err != nil {
+		return err
+	}
+	defer closeJudge()
+	j.MaxCalls = ctx.Int(flagJudgeCalls)
+	opts := harness.RankOptions{OutDir: out, Judge: j, Logger: log.Logger}
+	if ctx.Bool(flagFacts) {
+		if opts.Facts, err = harness.OpenFacts(ctx.Context); err != nil {
+			return err
+		}
+		defer opts.Facts.Close()
+	}
+	w := ctx.App.Writer
+	failed := 0
+	for _, sc := range scs {
+		r, e := harness.Rank(ctx.Context, sc, opts)
+		if e != nil {
+			_, _ = fmt.Fprintf(w, "%-32s error: %s\n", sc.Name, scene.PlainError(e))
+			failed++
+			continue
+		}
+		for i, c := range r.Candidates {
+			_, _ = fmt.Fprintf(w, "%2d %+7.3f  %-32s %s\n", i+1, c.Strength, sc.Name, c.Candidate.Canonical())
+		}
+		for _, s := range r.Skipped {
+			_, _ = fmt.Fprintln(w, "   not ranked: "+s)
+		}
+		_, _ = fmt.Fprintln(w, "  → "+filepath.Join(out, sc.Name, "ranking.md"))
+	}
+	_, _ = fmt.Fprintf(w, "model calls: %d\n", j.Calls())
+	if failed > 0 {
+		return eb.Build().Int("failed", failed).Errorf("some scenarios could not be ranked")
 	}
 	return nil
 }

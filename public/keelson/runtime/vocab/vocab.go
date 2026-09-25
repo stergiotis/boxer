@@ -364,6 +364,23 @@ var (
 	MembVizevalMetricValue = NkRegistry.MustBegin("vizevalMetricValue", 135).End()
 	MembVizevalGatePassed  = NkRegistry.MustBegin("vizevalGatePassed", 136).End()
 	MembVizevalGateFailed  = NkRegistry.MustBegin("vizevalGateFailed", 137).End()
+
+	// vizeval pairwise judgements (ADR-0257 §SD6, §SD8) — one boxer.facts
+	// row per pair of candidates a model compared, both orders merged: which
+	// two drawings, by which model and prompt, and per criterion which side
+	// it preferred (a, b, tie, or split when the orders disagreed).
+	MembKindVizevalJudgement     = NkRegistry.MustBegin("runtimeKindVizevalJudgement", 138).End()
+	MembVizevalJudgementScenario = NkRegistry.MustBegin("vizevalJudgementScenario", 139).End()
+	MembVizevalJudgementDigest   = NkRegistry.MustBegin("vizevalJudgementDigest", 140).End()
+	MembVizevalJudgeModel        = NkRegistry.MustBegin("vizevalJudgeModel", 141).End()
+	MembVizevalJudgePrompt       = NkRegistry.MustBegin("vizevalJudgePrompt", 142).End()
+	MembVizevalPairA             = NkRegistry.MustBegin("vizevalPairA", 143).End()
+	MembVizevalPairB             = NkRegistry.MustBegin("vizevalPairB", 144).End()
+	MembVizevalDrawingA          = NkRegistry.MustBegin("vizevalDrawingA", 145).End()
+	MembVizevalDrawingB          = NkRegistry.MustBegin("vizevalDrawingB", 146).End()
+	MembVizevalCriterion         = NkRegistry.MustBegin("vizevalCriterion", 147).End()
+	MembVizevalPreference        = NkRegistry.MustBegin("vizevalPreference", 148).End()
+	MembVizevalWhy               = NkRegistry.MustBegin("vizevalWhy", 149).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -401,4 +418,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
 	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,
 	MembVizevalGatePassed, MembVizevalGateFailed,
+	MembKindVizevalJudgement, MembVizevalJudgementScenario, MembVizevalJudgementDigest, MembVizevalJudgeModel,
+	MembVizevalJudgePrompt, MembVizevalPairA, MembVizevalPairB, MembVizevalDrawingA, MembVizevalDrawingB,
+	MembVizevalCriterion, MembVizevalPreference, MembVizevalWhy,
 }

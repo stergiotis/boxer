@@ -15,8 +15,8 @@ and records geometry metrics for each — overlap, clipping, elision, contrast,
 colour distance, numeric alignment — as files you can read or compare. It
 covers the harness as built through
 [ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md) (proposed)
-M5: geometry metrics and model-answered task questions, filed as files and
-optionally in `boxer.facts`. Model-judged task accuracy and pairwise ranking are later
+M6: geometry metrics, model-answered task questions and a pairwise ranking,
+filed as files and optionally in `boxer.facts`. Model-judged task accuracy and pairwise ranking are later
 milestones, and searching the candidate space is left to the caller.
 
 ## When to use this recipe
@@ -88,7 +88,18 @@ test.
      scripts/dev/vizeval.sh score --judge --facts apps/play/vizeval
    ```
 
-6. **Read the results.** `tmp/vizeval/<scenario>/index.md` is the contact
+6. **Rank.** `rank` reads a score run's output, keeps the candidates that
+   passed their gates, and asks the model to compare every pair in both
+   orders on five criteria; it writes `<out>/<scenario>/ranking.md` with
+   Bradley–Terry strengths overall and per criterion beside task accuracy.
+   Candidates that drew the same thing are tied without a call; comparisons
+   are cached like answers. `n` candidates cost `n(n-1)` calls the first time.
+
+   ```bash
+   scripts/dev/vizeval.sh rank --facts --out tmp/vizeval apps/play/vizeval/10_host_metrics.vizeval.md
+   ```
+
+7. **Read the results.** `tmp/vizeval/<scenario>/index.md` is the contact
    sheet: the computed answers, then each candidate's cropped artifact with
    its gates and metrics. `tmp/vizeval/scorecards.jsonl` has every scorecard
    ever written there, one per line, with the build it was scored at and a

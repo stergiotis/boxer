@@ -220,10 +220,20 @@ token counts, not the provider's prices.
 scenario and digest, with the scenario's intent and the Tier 2 rubric
 criteria (V1 clutter, V2 colour encoding, V4 density, V5 legends, V7
 typographic rhythm), and record which it prefers per criterion, with a
-rationale. Rankings are fitted from the pairs (Bradley–Terry); each pair is
-asked in both orders to cancel position bias. Pairwise, not absolute scores,
-because a model's 1–10 grades drift between calls and a comparison does
-not need a scale.
+rationale. The five are restated for two renderings of one dataset —
+which makes what matters easiest to find, uses colour more purposefully,
+fits the data's amount better, labels more completely, keeps a steadier
+type rhythm — and the prompt forbids grading anything else. Each pair is
+asked in both orders and a preference stands only when both agree; a
+disagreement is a *split*, so a model that prefers whatever it saw first
+wins nothing. Rankings are fitted from the pairs (Bradley–Terry, by the MM
+algorithm), overall and per criterion, with ties and splits as half a win
+to each side and one win and one loss against a fixed virtual opponent per
+candidate, without which an undefeated candidate has no finite strength.
+Only candidates that passed their gates are ranked, all from the scenario's
+most recent batch; two candidates with one drawing digest are recorded as
+tied without a call. Pairwise, not absolute scores, because a model's 1–10
+grades drift between calls and a comparison does not need a scale.
 
 Judgement calls reuse the Tier 2 cache discipline — a key over the input
 hashes, the rubric version and the model id — and a per-run cost cap. The
@@ -254,7 +264,12 @@ new metric needs no new membership. A row per metric was the alternative;
 it multiplies rows by the metric count and needs a join to reassemble what
 was one measurement. The task layer adds metrics to the same row; the
 per-question verdicts — what the model answered against what was expected —
-stay in the scorecard file. The pairwise-judgement kind arrives with M6. The PNG, SVG and tree stay
+stay in the scorecard file. A pairwise comparison is a `vizevalJudgement`
+row: the two candidates and their drawing digests, the model and prompt
+version, and per criterion the preference and the reason, keyed by what
+makes two comparisons the same (scenario, prompt, model, both drawings).
+The fitted ranking is not a row: it is derived, and refitting it from the
+rows is how another fit would be compared. The PNG, SVG and tree stay
 on disk under the run directory; the row carries the directory.
 
 A row's key is a hash of scenario, candidate id, build and batch digest —
@@ -273,8 +288,8 @@ way the scene runner writes its index.
 `imzero2 vizeval` with verbs to list a scenario's admissible candidates
 (`space`: the option spaces of SD2), score a set of candidates given as
 JSONL (`score`, with `--facts` to file and reuse), read back what is filed
-(`facts`), and rank a scenario's scored candidates (`rank`, with the
-pairwise judgements of M6). It is a library first, as the scene runner is,
+(`facts`), and rank a score run's scored candidates by pairwise
+comparison (`rank`). It is a library first, as the scene runner is,
 so a search written later calls it in-process.
 
 ### SD10 — Deferred
@@ -303,7 +318,7 @@ so a search written later calls it in-process.
 - **M4 — The facts record store** ✓ (SD8).
 - **M5 — Image content in `openaichat` and task-question accuracy** ✓ (SD6
   second layer, SD7).
-- **M6 — Pairwise judgements and ranking** (SD6 third layer).
+- **M6 — Pairwise judgements and ranking** ✓ (SD6 third layer).
 - **M7 — Chart sinks.**
 - **M8 — A graphview sink.**
 - **M9 — Hierarchy sinks** (value-bearing treemap, icicle, sankey).
@@ -318,7 +333,7 @@ so a search written later calls it in-process.
 | SVG export | each text shape becomes a `<g class="imz-text">` with `data-text`, `data-bbox`, `data-size`, `data-elided` | the geometry package's reader; viewers ignore the attributes |
 | egui2 IDL | adds the `accessibleRegion` block | regenerated Go bindings, Rust dispatch and the API reference; the opcode enums renumber, so both sides rebuild together |
 | `openaichat` messages | image content parts | `runtime.llm`'s request path and the ADR-0254 sensitivity point |
-| `boxer.facts` | the `vizevalScore` kind; memberships 122–137 in the runtime vocabulary | the generated store (`vizevalfacts`), its gen-test lane, and the vocabulary's assignment golden |
+| `boxer.facts` | the `vizevalScore` and `vizevalJudgement` kinds; memberships 122–149 in the runtime vocabulary | the generated store (`vizevalfacts`), its gen-test lane, and the vocabulary's assignment golden |
 
 ## Alternatives
 

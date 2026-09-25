@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene/scenetest"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/geometry"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/judge"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -75,4 +77,33 @@ func TestFactsRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, card, stored)
+}
+
+// TestJudgementFactsLand files a ranking's comparisons and finds them by scan.
+func TestJudgementFactsLand(t *testing.T) {
+	if unmet, err := scene.CheckRequire(scene.RequireClickHouse); err != nil || unmet != "" {
+		t.Skip("needs ClickHouse: ", unmet, err)
+	}
+	ctx := t.Context()
+	store, err := OpenFacts(ctx)
+	require.NoError(t, err)
+	defer store.Close()
+	scenario := "judgement_round_trip_" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000"), ".", "")
+	prefer := map[string]string{}
+	for _, c := range judge.Criteria {
+		prefer[c.Name] = judge.PreferA
+	}
+	r := Ranking{Scenario: scenario, BatchDigest: "d", Model: "m", Prompt: judge.PairPromptVersion,
+		Verdicts: []judge.PairVerdict{{A: "ca", B: "cb", Prefer: prefer}}}
+	require.NoError(t, writeJudgements(ctx, store, r, []judge.Picture{{ID: "ca", Drawing: "da"}, {ID: "cb", Drawing: "db"}}))
+	var found bool
+	for ent, e := range store.ScanVizevalJudgement(ctx, recordstore.ScanOpts{}) {
+		require.NoError(t, e)
+		if ent.VizevalJudgement.Has && ent.VizevalJudgement.Val.Scenario == scenario {
+			found = true
+			assert.Equal(t, "da", ent.VizevalJudgement.Val.DrawingA)
+			assert.Len(t, ent.VizevalJudgement.Val.Preference, len(judge.Criteria))
+		}
+	}
+	assert.True(t, found)
 }

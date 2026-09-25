@@ -118,7 +118,7 @@ type Options struct {
 	// answers a candidate already measured there — same scenario, candidate,
 	// clean build and batch digest — without rendering it again, unless
 	// Rescore (ADR-0257 §SD8).
-	Facts   *vizevalfacts.ScoreStore
+	Facts   *vizevalfacts.VizevalStore
 	Rescore bool
 	// Judge, when set, asks the scenario's questions of a model about every
 	// candidate that passed its geometry gates (§SD6, second layer).
