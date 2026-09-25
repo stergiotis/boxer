@@ -14,7 +14,7 @@ status: draft
 # How to ingest a markdown vault and query it like Obsidian
 
 Read a directory of Obsidian-flavoured markdown into `boxer.facts` with the
-markdown ingestor (ADR-0218, proposed), then ask it for the link graph,
+markdown ingestor (ADR-0218), then ask it for the link graph,
 backlinks, tags, sections and frontmatter properties in SQL. It covers the
 `semistructured/markdown` flavour only, and it does not cover rendering or
 editing — mdedit does that.
