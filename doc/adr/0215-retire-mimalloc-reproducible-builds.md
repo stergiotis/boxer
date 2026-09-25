@@ -1,13 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-01
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** The change is implemented; this
-> record has not been reviewed.
 
 # ADR-0215: Retire mimalloc, and make the builds byte-reproducible
 
@@ -195,8 +192,9 @@ less.
 
 ## Status
 
-Proposed (2026-09-01). The change is implemented and the parity gate is in
-`lint.sh`; awaiting review.
+Accepted (2026-09-25). The change is implemented and the parity gate is in
+`lint.sh`. Cross-machine parity and the committed `h3.wasm` against the new pin
+are unchecked until the first CI run under SD7.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

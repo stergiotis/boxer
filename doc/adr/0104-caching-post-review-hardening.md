@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-04
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0104: caching — post-review hardening
 
@@ -149,9 +149,7 @@ Four layers, replacing confirmatory-only coverage:
 
 ## Status
 
-Proposed (2026-07-04) — pre-human-review, as the banner above states. The
-decision is under consideration and not yet accepted; treat this ADR as a
-living snapshot until it is.
+Accepted (2026-09-25). D1–D6 are implemented in `public/caching`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

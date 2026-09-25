@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-10
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0112: DimensionStore — interned dimension facts stamped as additive memberships
 
@@ -480,7 +478,7 @@ who, _, _ := rec.Resolve(ctx, provID)                                           
 
 ## Status
 
-Proposed. **S1 and S2 are implemented and tested** (round-trips green against
+Accepted (2026-09-25). **S1 and S2 are implemented and tested** (round-trips green against
 clickhouse-local): the `DimensionStore` runtime and the provenance instance
 (S1); the M1 ambient-membership primitive, the `ReferenceStamper` seam, and
 ordered flush (S2). An adversarial review pass (2026-07-11) hardened the
@@ -490,8 +488,8 @@ in place rather than as dated updates. The earlier open forks are settled — M1
 built, SD4 granularity is fixed at attribute-level (the entity-level synthetic
 section dropped), and SD5 is ordered-flush-by-default with a best-effort toggle.
 Depends on ADR-0111 for the id-generation seam (its `GetId(ctx)` has landed).
-The ADR stays proposed pending human review — ready to flip to accepted with a
-reviewer. S3 (a readback artefact, host-only / sampled capture tiers) and S4 (a
+ADR-0111 itself stays proposed; the durable-generator integration waits on
+it. S3 (a readback artefact, host-only / sampled capture tiers) and S4 (a
 second dimension) remain optional follow-ups.
 
 ## References

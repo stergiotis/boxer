@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-31
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0214: The launcher as an app — summary, detail, and ranked recall
 
@@ -421,9 +419,10 @@ column count changes.
 
 ## Status
 
-Proposed (2026-08-31). Selected shape agreed in design dialogue; implemented
+Accepted (2026-09-25). Selected shape agreed in design dialogue; implemented
 along §Migration's order in the same session, which is why several decisions
-above carry a note about what the implementation changed. Awaiting review.
+above carry a note about what the implementation changed. The headless key
+trace named in the verification plan is a follow-up.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.

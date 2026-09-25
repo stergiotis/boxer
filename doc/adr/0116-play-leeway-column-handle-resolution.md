@@ -1,18 +1,16 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-13
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-25
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0116: play resolves friendly leeway column handles to physical names
 
 ## Status
 
-Proposed. Implemented: the generic `ResolveColumnNames` pass and
+Accepted (2026-09-25). Implemented: the generic `ResolveColumnNames` pass and
 `ColumnResolverI` in `public/db/clickhouse/dsl/nanopass/passes`, the leeway
 resolver and label builder in `public/semistructured/leeway/lwsql`, and the play
 wiring (`system.columns` probe, per-client factory binding, display-time labels)
