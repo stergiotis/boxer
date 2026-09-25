@@ -125,6 +125,7 @@ func (inst *App) renderPage(snap snapshot) {
 	sec(secLogs, "Logs", func() { inst.renderLogs(p) })
 	sec(secAudit, "Audited requests", func() { inst.renderAudit(p) })
 	sec(secRun, "This process", func() { inst.renderRun(p) })
+	sec(secFrames, "Frame time", func() { inst.renderFrames(p) })
 	sec(secCaps, "Capabilities", func() { inst.renderCaps(apps, i, p) })
 	sec(secState, "Kept state", func() { inst.renderState(apps, p) })
 	sec(secCoverage, "Coverage", func() { inst.renderCoverage(&snap.global, p) })

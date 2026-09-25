@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspectengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
@@ -42,6 +43,7 @@ var statements = []struct{ table, sql string }{
 	{providers.TableAppRuns, runsSql},
 	{providers.TableAppLogs, logsSql},
 	{providers.TableAppAudit, auditSql},
+	{tableFrameTimes, framesSql},
 }
 
 // adhocStub stands in for keelson('adhoc'), which only a running dataset
@@ -79,6 +81,7 @@ func hostRegistry(t *testing.T) *introspect.Registry {
 	require.NoError(t, llm.RegisterIntrospect(r, nil))
 	require.NoError(t, providers.RegisterAppTrail(r, nil))
 	require.NoError(t, r.Register(adhocStub{}))
+	require.NoError(t, providersgui.RegisterFrameTimes(r, nil))
 	return r
 }
 
@@ -154,6 +157,7 @@ func TestEveryLensReadsOverTheBus(t *testing.T) {
 		"state": {p.state.state, p.state.note}, "llm": {p.llm.state, p.llm.note},
 		"jobs": {p.jobs.state, p.jobs.note}, "datasets": {p.datasets.state, p.datasets.note},
 		"runs": {p.runs.state, p.runs.note}, "logs": {p.logs.state, p.logs.note}, "audit": {p.audit.state, p.audit.note},
+		"frames": {p.frames.state, p.frames.note},
 	} {
 		assert.Equal(t, lensStateOk, st.s, "%s: %s", name, st.note)
 	}
@@ -381,4 +385,29 @@ func TestPlayQueriesRunOnTheEngine(t *testing.T) {
 		_, _, err := e.Query(context.Background(), sql, "TabSeparated")
 		assert.NoError(t, err, "%s:\n%s", key, sql)
 	}
+}
+
+func TestSummarizeFrames(t *testing.T) {
+	fc := frameCols{
+		Scope:        []string{"loop", "window", "window", "window"},
+		InstanceKey:  []uint64{0, 3, 5, 9},
+		Samples:      []int64{100, 50, 20, 0},
+		P50Us:        []int64{16000, 900, 3000, 0},
+		P95Us:        []int64{17000, 1200, 9000, 0},
+		MeanUs:       []int64{16500, 1000, 3000, 0},
+		MountUs:      []int64{0, 4000, 0, 0},
+		MessagesMean: []float64{0, 100, 300, 0},
+	}
+	s := summarizeFrames(&fc)
+	assert.Equal(t, 2, s.windows, "a window with no samples yet is not counted")
+	assert.EqualValues(t, 16000, s.loopP50Us)
+	assert.EqualValues(t, 9000, s.worstP95Us)
+	assert.EqualValues(t, 3900, s.p50Us, "medians add up across its windows")
+	assert.EqualValues(t, 4000, s.mountUs)
+	assert.InDelta(t, 400, s.messages, 1e-9, "and so do messages")
+
+	assert.Equal(t, "—", fmtUs(0))
+	assert.Equal(t, "420 µs", fmtUs(420))
+	assert.Equal(t, "1.50 ms", fmtUs(1500))
+	assert.Equal(t, "2.00 s", fmtUs(2_000_000))
 }

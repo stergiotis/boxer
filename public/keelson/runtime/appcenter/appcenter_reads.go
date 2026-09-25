@@ -30,6 +30,9 @@ const (
 	tableTasks          = "tasks"
 	tableRunEvents      = "runtime_events"
 	tableAppState       = providers.TableAppState
+	// tableFrameTimes is served by providersgui beside keelson('windows'),
+	// which pulls in the demo registry.
+	tableFrameTimes = "frame_times"
 )
 
 // readTables is every table the window reads, in the order the manifest
@@ -39,6 +42,7 @@ var readTables = []string{
 	tableClientCaps, tableTasks, tableRunEvents, tableAppState,
 	llm.TableCalls, watchbill.TableJobs, adhocdata.CatalogTableName,
 	providers.TableAppRuns, providers.TableAppLogs, providers.TableAppAudit,
+	tableFrameTimes,
 }
 
 // appCols is keelson('apps'): the list and each page's head.
@@ -185,6 +189,22 @@ type auditCols struct {
 	MaxLatencyMs  []uint64  `ch:"max_latency_ms"`
 }
 
+// frameCols is keelson('frame_times') for one app's windows, and the
+// render loop's own row the page measures them against (ADR-0261).
+type frameCols struct {
+	Scope        []string  `ch:"scope"`
+	InstanceKey  []uint64  `ch:"instance_key"`
+	Frames       []uint64  `ch:"frames"`
+	Samples      []int64   `ch:"samples"`
+	LastUs       []int64   `ch:"last_us"`
+	MeanUs       []int64   `ch:"mean_us"`
+	P50Us        []int64   `ch:"p50_us"`
+	P95Us        []int64   `ch:"p95_us"`
+	MaxUs        []int64   `ch:"max_us"`
+	MessagesMean []float64 `ch:"messages_mean"`
+	MountUs      []int64   `ch:"mount_us"`
+}
+
 // runsRead is how many sessions a page reads; the summary says when it hit
 // it, since a count of a capped list is not the app's history.
 const (
@@ -222,6 +242,8 @@ const (
 		"WHERE app_id = {app:String} ORDER BY greatest(started_ms, stopped_ms) DESC LIMIT " + runsReadStr
 	logsSql = "SELECT ts_ms, instance_key, run_id, level, caller, message, error FROM keelson('app_logs') " +
 		"WHERE app_id = {app:String} ORDER BY ts_ms DESC"
+	framesSql = "SELECT scope, instance_key, frames, samples, last_us, mean_us, p50_us, p95_us, max_us, messages_mean, mount_us FROM keelson('frame_times') " +
+		"WHERE app_id = {app:String} OR scope = 'loop' ORDER BY scope, instance_key"
 	auditSql = "SELECT subject, result, requests, first_ms, last_ms, mean_latency_ms, max_latency_ms FROM keelson('app_audit') " +
 		"WHERE app_id = {app:String} ORDER BY requests DESC, subject, result"
 )

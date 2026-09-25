@@ -59,6 +59,7 @@ type page struct {
 	runs     lens[runCols]
 	logs     lens[logCols]
 	audit    lens[auditCols]
+	frames   lens[frameCols]
 	read     time.Time
 }
 
@@ -267,6 +268,7 @@ func readPage(ctx context.Context, r readerI, p page) page {
 	readInto(ctx, r, providers.TableAppRuns, runsSql, id, &p.runs)
 	readInto(ctx, r, providers.TableAppLogs, logsSql, id, &p.logs)
 	readInto(ctx, r, providers.TableAppAudit, auditSql, id, &p.audit)
+	readInto(ctx, r, tableFrameTimes, framesSql, id, &p.frames)
 	p.read = time.Now()
 	return p
 }
