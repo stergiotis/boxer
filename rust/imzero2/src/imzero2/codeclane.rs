@@ -318,6 +318,14 @@ impl CodecLane {
             encoder_args.push("constrained_baseline".to_owned());
         }
         encoder_args.extend(["-bf", "0", "-g", PERIODIC_IDR_GOP].iter().map(|s| (*s).to_owned()));
+        // One frame in flight. At the VAAPI encoders' default depth of 2 a
+        // frame is emitted only when the next one is submitted, and this host
+        // submits only frames whose pixels changed (ADR-0242 SD3): the frame
+        // before the screen settles would wait for the next change, and every
+        // frame would arrive one frame late. On an integrated AMD encode block
+        // depth 1 cost no throughput (measured 2026-09-25, see the
+        // multi-tenant display design space in doc/adr-background-work).
+        encoder_args.extend(["-async_depth", "1"].iter().map(|s| (*s).to_owned()));
         Self {
             codec,
             encoder_args,
