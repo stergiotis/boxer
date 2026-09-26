@@ -31,14 +31,15 @@ type footer struct {
 
 func (inst *App) render() {
 	for range c.PanelTopInside(inst.ids.PrepareStr("top")).Resizable(false).KeepIter() {
-		inst.renderStepBar()
+		inst.renderBreadcrumb()
 		inst.renderPlanRow()
 		inst.renderStatus()
 	}
 	for range c.PanelBottomInside(inst.ids.PrepareStr("bottom")).Resizable(false).KeepIter() {
-		// The bottom bar is laid out before the page, which decides what it
-		// holds, so the page's footer is the one it declared last frame.
 		inst.renderFooter(inst.footerFor(inst.step))
+	}
+	for range c.PanelLeftInside(inst.ids.PrepareStr("brief")).Resizable(false).ExactSize(250).KeepIter() {
+		inst.renderBrief()
 	}
 	for range c.PanelCentralInside().KeepIter() {
 		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
@@ -73,38 +74,76 @@ func (inst *App) goTo(st stepE) {
 	inst.step = st
 }
 
-// --- the step bar: where we are, what each step produced -----------------------
+// --- the breadcrumb: the steps in order, where we are -----------------------------
 
-func (inst *App) renderStepBar() {
+// renderBreadcrumb draws the six steps as a trail. A done step is ticked, the
+// current one is emphasised, a locked one is dimmed with its reason on hover.
+// Each is a frameless button, so a done step can be revisited by clicking it.
+func (inst *App) renderBreadcrumb() {
 	for range c.HorizontalTop().KeepIter() {
-		for _, st := range allSteps {
-			for range c.IdScope(inst.ids.PrepareStr("chip-" + st.String())) {
-				for range c.Vertical().KeepIter() {
-					locked := inst.stepLocked(st)
-					for range c.HorizontalTop().KeepIter() {
-						if locked != "" {
-							c.UiDisable()
-						}
-						clicked := false
-						if locked != "" {
-							for range c.HoverText(locked).KeepIter() {
-								clicked = c.Button(inst.ids.PrepareStr("step"), c.Atoms().Text(st.String()).Keep()).
-									Selected(inst.step == st).SendResp().HasPrimaryClicked()
-							}
-						} else {
-							clicked = c.Button(inst.ids.PrepareStr("step"), c.Atoms().Text(st.String()).Keep()).
-								Selected(inst.step == st).SendResp().HasPrimaryClicked()
-						}
-						if clicked && locked == "" {
-							inst.step = st
-						}
+		for i, st := range allSteps {
+			if i > 0 {
+				weak(icons.PhCaretRight)
+			}
+			for range c.IdScope(inst.ids.PrepareStr("crumb-" + st.String())) {
+				locked := inst.stepLocked(st)
+				if inst.step == st {
+					locked = ""
+				}
+				done, _ := inst.stepDone(st)
+				text := c.Atoms().Text(st.String()).Keep()
+				switch {
+				case inst.step == st:
+					text = c.Atoms().BeginRichText(st.String()).Strong().End().Keep()
+				case done:
+					text = c.Atoms().Text(icons.PhCheck + " " + st.String()).Keep()
+				case locked != "":
+					text = c.Atoms().BeginRichText(st.String()).Weak().End().Keep()
+				}
+				for range c.HorizontalTop().KeepIter() {
+					if locked != "" {
+						c.UiDisable()
 					}
-					if done, summary := inst.stepDone(st); done {
-						small(icons.PhCheck + " " + summary)
+					clicked := false
+					if locked != "" {
+						for range c.HoverText(locked).KeepIter() {
+							clicked = c.Button(inst.ids.PrepareStr("step"), text).Frame(false).SendResp().HasPrimaryClicked()
+						}
 					} else {
-						small(" ")
+						clicked = c.Button(inst.ids.PrepareStr("step"), text).Frame(false).SendResp().HasPrimaryClicked()
+					}
+					if clicked && locked == "" {
+						inst.step = st
 					}
 				}
+			}
+		}
+	}
+}
+
+// renderBrief is the column beside the page: the step's icon, its name,
+// what it does, and what the earlier steps produced.
+func (inst *App) renderBrief() {
+	st := inst.step
+	for range c.Frame(inst.ids.PrepareStr("brief-pad")).InnerMarginSides(12, 12, 16, 8).KeepIter() {
+		c.LabelAtoms(c.Atoms().BeginRichText(st.icon()).Size(64).End().Keep()).Send()
+		c.LabelAtoms(c.Atoms().BeginRichText(st.short()).Heading().End().Keep()).Send()
+		small("step " + strconv.Itoa(int(st)+1) + " of " + strconv.Itoa(len(allSteps)))
+		space()
+		note(st.describe())
+		space()
+		any := false
+		for _, s := range allSteps {
+			done, summary := inst.stepDone(s)
+			if !done {
+				continue
+			}
+			if !any {
+				heading("So far")
+				any = true
+			}
+			for range c.IdScope(inst.ids.PrepareStr("sofar-" + s.String())) {
+				note(icons.PhCheck + " " + s.short() + ": " + summary)
 			}
 		}
 	}
@@ -195,17 +234,11 @@ func (inst *App) footerFor(st stepE) (ft footer) {
 	return
 }
 
+// renderFooter is the classic wizard bar: Back, the page's action and Next
+// at the right edge. The row is laid out right to left, so Next is drawn
+// first.
 func (inst *App) renderFooter(ft footer) {
-	for range c.HorizontalTop().KeepIter() {
-		if inst.step > stepConnect {
-			prev := inst.step - 1
-			if c.Button(inst.ids.PrepareStr("back"), c.Atoms().Text(icons.PhArrowLeft+" "+prev.short()).Keep()).SendResp().HasPrimaryClicked() {
-				inst.goTo(prev)
-			}
-		}
-		if ft.primary != nil {
-			ft.primary()
-		}
+	for range c.UiWithLayout().MainDirRightToLeft().KeepIter() {
 		if ft.hasNext {
 			locked := inst.stepLocked(ft.next)
 			for range c.HorizontalTop().KeepIter() {
@@ -224,6 +257,17 @@ func (inst *App) renderFooter(ft footer) {
 				if clicked && locked == "" {
 					inst.step = ft.next
 				}
+			}
+		}
+		if ft.primary != nil {
+			for range c.UiWithLayout().MainDirRightToLeft().KeepIter() {
+				ft.primary()
+			}
+		}
+		if inst.step > stepConnect {
+			prev := inst.step - 1
+			if c.Button(inst.ids.PrepareStr("back"), c.Atoms().Text(icons.PhArrowLeft+" "+prev.short()).Keep()).SendResp().HasPrimaryClicked() {
+				inst.goTo(prev)
 			}
 		}
 	}
@@ -271,12 +315,10 @@ func mono(s string) {
 	c.LabelAtoms(c.Atoms().BeginRichText(s).Monospace().End().Keep()).Send()
 }
 
-// pageHeader opens a page: a question the page answers, and one line on how.
-func pageHeader(title string, blurb string) {
+// pageHeader opens a page with the question it answers; the brief beside
+// the page says how.
+func pageHeader(title string) {
 	c.LabelAtoms(c.Atoms().BeginRichText(title).Heading().End().Keep()).Send()
-	if blurb != "" {
-		note(blurb)
-	}
 	space()
 }
 
@@ -425,8 +467,7 @@ func passwordLine(name string, set bool) (s string) {
 }
 
 func (inst *App) renderConnect() {
-	pageHeader("Which two servers?",
-		"The source is only read. The target is written only by the steps you confirm: the DDL on Structure, and the copy on Sync.")
+	pageHeader("Which two servers?")
 	if len(inst.recent) > 0 {
 		inst.renderRecent()
 	}
@@ -525,12 +566,11 @@ func (inst *App) dbStats() (stats map[string]dbStat) {
 
 func (inst *App) renderDatabases() {
 	if inst.disc == nil {
-		pageHeader("Which databases?", "")
+		pageHeader("Which databases?")
 		note("Discover the servers first.")
 		return
 	}
-	pageHeader("Which databases, and where do they land?",
-		"Tick the source databases to sync. A target name other than the source's renames the database on the target. Nothing is written yet.")
+	pageHeader("Which databases, and where do they land?")
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(inst.ids.PrepareStr("all"), c.Atoms().Text("Select all").Keep()).Small().SendResp().HasPrimaryClicked() {
 			for _, p := range inst.dbPick {
@@ -619,13 +659,12 @@ func (inst *App) renderStructure() {
 	inst.jobRow(&inst.structureJob, "structure", "cancel-structure", "")
 	inst.failedNote("structure-failed", &inst.structureJob)
 	if inst.plan == nil {
-		pageHeader("What is on each side?", "")
+		pageHeader("What is on each side?")
 		note("Choose databases and plan the structure, or open a plan.")
 		return
 	}
 	p := inst.plan
-	pageHeader("What is on each side?",
-		"Every table gets a verdict: what the target holds, and what would bring it in line. Hover a verdict for its reasons; select a table for its DDL.")
+	pageHeader("What is on each side?")
 	counts := p.CountVerdicts()
 	for range c.HorizontalTop().KeepIter() {
 		c.Label(plural(len(p.Tables), "table") + ":").Send()

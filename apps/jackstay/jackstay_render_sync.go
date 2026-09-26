@@ -18,12 +18,11 @@ import (
 
 func (inst *App) renderDifferences() {
 	if inst.plan == nil {
-		pageHeader("How do the tables' contents differ?", "")
+		pageHeader("How do the tables' contents differ?")
 		note("Plan the structure first.")
 		return
 	}
-	pageHeader("How do the tables' contents differ?",
-		"Each side scans every table once for leaf digests; small differing leaves are then compared row by row. No row moves, and nothing is written.")
+	pageHeader("How do the tables' contents differ?")
 	for range c.HoverText("ReplacingMergeTree and its relatives hold rows a merge will drop. FINAL reads each side as if merged, at a cost; without it a difference can be spurious.").KeepIter() {
 		c.Checkbox(inst.ids.PrepareStr("final"), inst.final, "read merge engines (Replacing, Collapsing, …) with FINAL").SendRespVal(&inst.final)
 	}
@@ -196,13 +195,12 @@ func existingGloss(p jk.ExistingPolicyE) (s string) {
 
 func (inst *App) renderSync() {
 	if inst.plan == nil {
-		pageHeader("Copy what, and how?", "")
+		pageHeader("Copy what, and how?")
 		note("Plan the structure first.")
 		return
 	}
 	p := inst.plan
-	pageHeader("Copy what, and how?",
-		"Rows are relayed through this machine, source to target, chunk by chunk, and every copied chunk is verified by digest. A stopped sync resumes from its journal.")
+	pageHeader("Copy what, and how?")
 	recMode, why := inst.recommendMode()
 	for range c.HorizontalTop().KeepIter() {
 		c.Label("mode").Send()
@@ -364,11 +362,11 @@ func (inst *App) renderStartControls() {
 
 func (inst *App) renderRun() {
 	if inst.plan == nil {
-		pageHeader("How is the sync going?", "")
+		pageHeader("How is the sync going?")
 		note("Nothing to monitor yet.")
 		return
 	}
-	pageHeader("How is the sync going?", "")
+	pageHeader("How is the sync going?")
 	inst.renderRunHeadline()
 	inst.renderReports()
 	space()

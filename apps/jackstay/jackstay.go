@@ -35,6 +35,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
 )
@@ -75,6 +76,44 @@ func (inst stepE) String() (s string) {
 func (inst stepE) short() (s string) {
 	_, s, _ = strings.Cut(inst.String(), " ")
 	return
+}
+
+// icon is the glyph that stands for the step in the brief beside its page.
+func (inst stepE) icon() (glyph string) {
+	switch inst {
+	case stepConnect:
+		return icons.PhPlugsConnected
+	case stepDatabases:
+		return icons.PhDatabase
+	case stepStructure:
+		return icons.PhTreeStructure
+	case stepDifferences:
+		return icons.PhGitDiff
+	case stepSync:
+		return icons.PhArrowsLeftRight
+	case stepRun:
+		return icons.PhGauge
+	}
+	return ""
+}
+
+// describe is the step's brief: what it does, and what it touches.
+func (inst stepE) describe() (s string) {
+	switch inst {
+	case stepConnect:
+		return "Name the two servers. The source is only read; the target is written only by the steps you confirm later: the DDL on Structure, the copy on Sync. Discovery reads the system tables of both."
+	case stepDatabases:
+		return "Tick the source databases to sync and say where each lands on the target. Planning the structure judges every table of those databases and writes the plan file. Nothing is written to a server."
+	case stepStructure:
+		return "Every table gets a verdict: what the target holds, and the DDL that would bring it in line. Applying that DDL is the first write to the target, behind a confirmation that names it."
+	case stepDifferences:
+		return "Each side scans every table once for leaf digests; small differing leaves are compared row by row. No row moves. The result decides what the sync proposes."
+	case stepSync:
+		return "Rows are relayed through this machine, chunk by chunk, and every copied chunk is verified by digest. The pre-flight shows what would move and whether the target's disks have room."
+	case stepRun:
+		return "The sync in flight, or the last run's outcome, with the target's disks and every table's report. A stopped sync resumes from its journal when started again."
+	}
+	return ""
 }
 
 // PlanEnv names a plan file the window opens at start and saves to — the
@@ -650,8 +689,8 @@ func (inst *App) stepLocked(st stepE) (reason string) {
 			return "discover the servers first"
 		}
 	case stepStructure:
-		if inst.plan == nil && inst.disc == nil {
-			return "discover the servers, or open a plan"
+		if inst.plan == nil {
+			return "plan the structure on the Databases step first, or open a plan"
 		}
 	case stepDifferences, stepSync, stepRun:
 		if inst.plan == nil {

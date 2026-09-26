@@ -512,11 +512,15 @@ copy of the plan, `widgets/filepicker` for plan files — and changed what each
 page tells the operator, on the premise that nothing may need remembering
 between uses:
 
-- **The step bar carries state.** Each step's chip shows what the step
-  produced (the servers, the databases, the verdict count, the comparison,
-  the run), and a step whose prerequisite is missing is disabled, with the
-  reason on hover. Every page ends in the same bar: Back, the page's own
-  action, Next, the latter enabled once the step it leads to is unlocked.
+- **The frame is a classic wizard's.** A breadcrumb trail names the steps,
+  ticks the done ones and dims a step whose prerequisite is missing, with
+  the reason on hover; a column beside each page carries the step's icon,
+  what the step does, and what the earlier steps produced (the servers, the
+  databases, the verdict count, the comparison, the run); and every page
+  ends in the same right-aligned bar: Back, the page's own action, Next,
+  the latter enabled once the step it leads to is unlocked. Structure is
+  such a step: it unlocks when the plan exists, so Next on Databases does
+  not lead to an empty page.
 - **The plan file is proposed, not demanded.** A plan with no file gets one
   under `BOXER_JACKSTAY_PLAN_DIR` (by default the user's config directory)
   when the structure is first planned, named by date and servers, so the
