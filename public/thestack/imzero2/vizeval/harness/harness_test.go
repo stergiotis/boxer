@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -125,6 +126,17 @@ func TestArtifactBox(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, plain.Frame(), "no box, no frame: the key stays what it was")
 	assert.Empty(t, checkBox(plain, geometry.Rect{X1: 5, Y1: 5}))
+}
+
+func TestBuildIDCountsTrackedChangesOnly(t *testing.T) {
+	st := func(modified string) []debug.BuildSetting {
+		return []debug.BuildSetting{{Key: "vcs.revision", Value: "0123456789abcdef"}, {Key: "vcs.modified", Value: modified}}
+	}
+	assert.Equal(t, "0123456789ab", buildIDOf(st("false"), ""))
+	assert.Equal(t, "0123456789ab+dirty", buildIDOf(st("true"), ""), "unstamped: vcs.modified as it is")
+	assert.Equal(t, "0123456789ab", buildIDOf(st("true"), "0"), "only untracked files differed")
+	assert.Equal(t, "0123456789ab+dirty", buildIDOf(st("true"), "1"))
+	assert.Equal(t, unknownBuild, buildIDOf(nil, "0"))
 }
 
 func TestReusable(t *testing.T) {

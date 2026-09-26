@@ -621,6 +621,13 @@ func query(opts Options, sql string, format string) (body []byte, err error) {
 // unknownBuild is the build of a binary with no VCS stamp.
 const unknownBuild = "unknown"
 
+// trackedChanges is stamped by scripts/dev/vizeval.sh at link time: "0" when
+// no tracked file differed from HEAD, "1" when one did. Go's own vcs.modified
+// also counts untracked files, so a stray scratch directory in the checkout
+// marked every build dirty and no measurement was ever reused. Unstamped (any
+// other build of the binary), vcs.modified is taken as it is.
+var trackedChanges string
+
 // buildID is the revision this binary was built from, marked when the tree was
 // dirty; scorecards from different builds are different measurements.
 func buildID() string {
@@ -628,13 +635,17 @@ func buildID() string {
 	if !ok {
 		return unknownBuild
 	}
+	return buildIDOf(info.Settings, trackedChanges)
+}
+
+func buildIDOf(settings []debug.BuildSetting, tracked string) string {
 	var rev, dirty string
-	for _, s := range info.Settings {
+	for _, s := range settings {
 		switch s.Key {
 		case "vcs.revision":
 			rev = s.Value
 		case "vcs.modified":
-			if s.Value == "true" {
+			if s.Value == "true" && tracked != "0" {
 				dirty = "+dirty"
 			}
 		}

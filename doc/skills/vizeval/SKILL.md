@@ -221,7 +221,9 @@ All are measured inside the `experiments.artifact` node's visible rect only.
 - **Same `batchDigest`** — else different data. **Same `build`** — else
   different code. A build ending `+dirty` is never reused from `boxer.facts`,
   nor is `unknown` (a binary with no VCS stamp); commit before a long search
-  if you want reuse.
+  if you want reuse. Built by `scripts/dev/vizeval.sh`, only tracked changes
+  make a build dirty; built any other way, Go's own flag applies, which also
+  counts untracked files.
 - **`drawingDigest`** identifies what was drawn. Two candidates with one
   digest drew the same thing — an option the sink ignored for this data — so
   keep one of them and stop varying that option.
