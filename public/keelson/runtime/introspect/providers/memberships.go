@@ -2,6 +2,7 @@ package providers
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/keelson/vdd"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/contract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
@@ -229,4 +231,28 @@ func (MembershipLookup) LookupMembership(name string) (id uint64, err error) {
 	}
 	err = eb.Build().Str("name", name).Errorf("providers: no registered vocabulary carries this membership; keelson('memberships') lists them")
 	return
+}
+
+// MembershipRefFormatter renders a membership ref id by the name the
+// process's registries give it, and in the default hex form when none does —
+// the registry-backed injector membership.Renderer's formatter seam was kept
+// for. The id→name map is built on first use; the registries are static.
+type MembershipRefFormatter struct{}
+
+var _ membership.RefFormatterI = MembershipRefFormatter{}
+
+var membershipNames = sync.OnceValue(func() map[uint64]string {
+	rows := membershipRows()
+	names := make(map[uint64]string, len(rows))
+	for _, r := range rows {
+		names[r.id] = r.name
+	}
+	return names
+})
+
+func (MembershipRefFormatter) FormatRef(ref uint64) (humanReadable string) {
+	if name, ok := membershipNames()[ref]; ok {
+		return name
+	}
+	return membership.DefaultRefFormatter{}.FormatRef(ref)
 }
