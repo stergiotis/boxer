@@ -28,8 +28,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
-	"flag"
+	"encoding/json/v2"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -43,13 +42,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/observability/logging"
+	"github.com/stergiotis/boxer/public/observability/vcs"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
+	"github.com/urfave/cli/v2"
 
 	// The registry demos that compile for wasm and emit the same frame on
 	// every target; each registers in init. sccmap compiles too but reads
@@ -172,12 +175,12 @@ func dumpFetchTable(bindingsDir string, w io.Writer) (err error) {
 				case fetchKinds[m] != "":
 					kinds = append(kinds, fetchKinds[m])
 				default:
-					return fmt.Errorf("fetcher %s: unknown read helper %s", fd.Name.Name, m)
+					return eb.Build().Str("fetcher", fd.Name.Name).Str("helper", m).Errorf("fetcher: unknown read helper")
 				}
 			}
 		}
 		if op < 0 {
-			return fmt.Errorf("fetcher %s: no invoke found", fd.Name.Name)
+			return eb.Build().Str("fetcher", fd.Name.Name).Errorf("fetcher: no invoke found")
 		}
 		names = append(names, fd.Name.Name)
 		lines[fd.Name.Name] = fmt.Sprintf("fetch %d %s %s\n", op, fd.Name.Name, strings.Join(kinds, " "))
@@ -264,7 +267,7 @@ func parseFetchTable(text string) (table map[uint32]fetchSpec, err error) {
 			n, err = strconv.ParseUint(f[1], 10, 32)
 			table[uint32(n)] = fetchSpec{name: f[2], kinds: f[3:]}
 		default:
-			err = fmt.Errorf("fetch table: unknown line %q", line)
+			err = eb.Build().Str("line", line).Errorf("fetch table: unknown line")
 		}
 		if err != nil {
 			return
@@ -275,7 +278,7 @@ func parseFetchTable(text string) (table map[uint32]fetchSpec, err error) {
 
 // ---- scenes ----------------------------------------------------------------
 
-type scene interface {
+type sceneI interface {
 	setup(ids *c.WidgetIdStack)
 	render(ids *c.WidgetIdStack, stageW, stageH float32)
 }
@@ -405,82 +408,91 @@ func main() {
 // never runs main and sees no argv, so its setup export hands the same
 // arguments to this function (reactor_wasip1.go).
 func run(args []string) {
-	var (
-		dumpTable = flag.String("dumpFetchTable", "", "derive the stub's fetch table from this bindings directory and exit")
-		dumpOps   = flag.String("dumpOpcodes", "", "print every opcode's number and name from this bindings directory and exit")
-		tableText = flag.String("fetchTable", "", "the fetch table text (from -dumpFetchTable); required for -consumer inproc")
-		arm       = flag.String("arm", "", "label for the report")
-		target    = flag.String("target", "", "label for the report (native, js, wasip1)")
-		consumer  = flag.String("consumer", "pipe", "pipe | inproc")
-		lazyFlush = flag.Bool("lazyFlush", true, "pipe: defer flushes to the next blocking read (the channel default); -lazyFlush=false flushes after every message")
-		sceneName = flag.String("scene", "gallery", "gallery | labels")
-		only      = flag.String("demo", "", "gallery: render only this registry demo")
-		rows      = flag.Int("rows", 200, "labels: rows in the grid")
-		frames    = flag.Int("frames", 300, "measured frames")
-		warmup    = flag.Int("warmup", 30, "frames discarded before measuring")
-		stage     = flag.String("stage", "1024x600", "stage size in points")
-		list      = flag.Bool("list", false, "list the registry demos linked in and exit")
-		logLevel  = flag.String("logLevel", "error", "zerolog global level during the run; a warning per widget would dominate the wasm arms")
-		reactor   = flag.Bool("reactor", false, "wasip1 only: set up and return from main; the host calls the exported frame function per tick")
-		cpuProf   = flag.String("cpuprofile", "", "write a CPU profile of the measured frames to this file (native)")
-	)
-	if err := flag.CommandLine.Parse(args); err != nil {
-		os.Exit(2)
+	app := &cli.App{
+		Name:    "wasmspike",
+		Usage:   "the Go frame producer of the keelson-wasm-frame-cost trial",
+		Version: vcs.BuildVersionInfo(),
+		Flags: append([]cli.Flag{
+			&cli.StringFlag{Name: "dumpFetchTable", Usage: "derive the stub's fetch table from this bindings directory and exit"},
+			&cli.StringFlag{Name: "dumpOpcodes", Usage: "print every opcode's number and name from this bindings directory and exit"},
+			&cli.StringFlag{Name: "fetchTable", Usage: "the fetch table text (from -dumpFetchTable); required for -consumer inproc"},
+			&cli.StringFlag{Name: "arm", Usage: "label for the report"},
+			&cli.StringFlag{Name: "target", Usage: "label for the report (native, js, wasip1)"},
+			&cli.StringFlag{Name: "consumer", Value: "pipe", Usage: "pipe | inproc"},
+			&cli.BoolFlag{Name: "lazyFlush", Value: true, Usage: "pipe: defer flushes to the next blocking read (the channel default); -lazyFlush=false flushes after every message"},
+			&cli.StringFlag{Name: "scene", Value: "gallery", Usage: "gallery | labels"},
+			&cli.StringFlag{Name: "demo", Usage: "gallery: render only this registry demo"},
+			&cli.IntFlag{Name: "rows", Value: 200, Usage: "labels: rows in the grid"},
+			&cli.IntFlag{Name: "frames", Value: 300, Usage: "measured frames"},
+			&cli.IntFlag{Name: "warmup", Value: 30, Usage: "frames discarded before measuring"},
+			&cli.StringFlag{Name: "stage", Value: "1024x600", Usage: "stage size in points"},
+			&cli.BoolFlag{Name: "list", Usage: "list the registry demos linked in and exit"},
+			&cli.BoolFlag{Name: "reactor", Usage: "wasip1 only: set up and return; the host calls the exported frame function per tick"},
+			&cli.StringFlag{Name: "cpuprofile", Usage: "write a CPU profile of the measured frames to this file (native)"},
+		}, logging.LoggingFlags...),
+		// The level defaults to error here, not info: a warning per widget
+		// per frame (a duplicate id, say) would dominate the wasm arms.
+		Before: func(ctx *cli.Context) error {
+			if !ctx.IsSet("logLevel") {
+				if err := ctx.Set("logLevel", "error"); err != nil {
+					return err
+				}
+			}
+			return logging.Apply(ctx)
+		},
+		Action: spike,
 	}
-	if lvl, err := zerolog.ParseLevel(*logLevel); err == nil {
-		zerolog.SetGlobalLevel(lvl)
+	if err := app.Run(append([]string{"wasmspike"}, args...)); err != nil {
+		fmt.Fprintln(os.Stderr, "wasmspike:", err)
+		os.Exit(1)
 	}
-	if *dumpOps != "" {
-		if err := dumpOpcodes(*dumpOps, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "wasmspike:", err)
-			os.Exit(1)
-		}
-		return
+}
+
+func spike(ctx *cli.Context) (err error) {
+	if d := ctx.String("dumpOpcodes"); d != "" {
+		return dumpOpcodes(d, os.Stdout)
 	}
-	if *dumpTable != "" {
-		if err := dumpFetchTable(*dumpTable, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "wasmspike:", err)
-			os.Exit(1)
-		}
-		return
+	if d := ctx.String("dumpFetchTable"); d != "" {
+		return dumpFetchTable(d, os.Stdout)
 	}
-	if *list {
+	if ctx.Bool("list") {
 		for _, d := range registry.All() {
 			fmt.Fprintf(os.Stderr, "%s\t%s\t%gx%g\n", d.Name, d.Category, d.Stage[0], d.Stage[1])
 		}
 		return
 	}
 	var stageW, stageH float32
-	if _, err := fmt.Sscanf(*stage, "%gx%g", &stageW, &stageH); err != nil {
-		fmt.Fprintln(os.Stderr, "wasmspike: bad -stage:", err)
-		os.Exit(1)
+	if _, err = fmt.Sscanf(ctx.String("stage"), "%gx%g", &stageW, &stageH); err != nil {
+		return eh.Errorf("bad -stage: %w", err)
 	}
 
-	var sc scene
-	switch *sceneName {
+	sceneName := ctx.String("scene")
+	var sc sceneI
+	switch sceneName {
 	case "gallery":
-		sc = &galleryScene{only: *only}
+		sc = &galleryScene{only: ctx.String("demo")}
 	case "labels":
-		sc = &labelsScene{rows: *rows}
+		sc = &labelsScene{rows: ctx.Int("rows")}
 	default:
-		fmt.Fprintln(os.Stderr, "wasmspike: unknown scene", *sceneName)
-		os.Exit(1)
+		return eb.Build().Str("scene", sceneName).Errorf("unknown scene")
 	}
 
-	if *cpuProf != "" {
-		f, err := os.Create(*cpuProf)
+	if p := ctx.String("cpuprofile"); p != "" {
+		var f *os.File
+		f, err = os.Create(p)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "wasmspike:", err)
-			os.Exit(1)
+			return
 		}
-		if err := pprof.StartCPUProfile(f); err != nil {
-			fmt.Fprintln(os.Stderr, "wasmspike:", err)
-			os.Exit(1)
+		if err = pprof.StartCPUProfile(f); err != nil {
+			return
 		}
 		defer pprof.StopCPUProfile()
 	}
-	rep := report{Arm: *arm, Target: *target, Consumer: *consumer, LazyFlush: *lazyFlush, Scene: *sceneName, Frames: *frames, Warmup: *warmup}
-	samples := make([]sample, 0, *frames)
+	consumer := ctx.String("consumer")
+	lazyFlush := ctx.Bool("lazyFlush")
+	nFrames, warmup := ctx.Int("frames"), ctx.Int("warmup")
+	rep := report{Arm: ctx.String("arm"), Target: ctx.String("target"), Consumer: consumer, LazyFlush: lazyFlush, Scene: sceneName, Frames: nFrames, Warmup: warmup}
+	samples := make([]sample, 0, nFrames)
 	var bytesSum, msgsSum int64
 	ids := c.NewWidgetIdStack()
 	frame := 0
@@ -500,15 +512,15 @@ func run(args []string) {
 		}
 		st.FinishServersideFrame()
 		m := metrics.Current
-		if frame >= *warmup {
+		if frame >= warmup {
 			samples = append(samples, sample{renderNs: m.LastRenderNs, syncNs: m.LastSyncNs, totalNs: m.LastTotalNs})
 		}
 		frame++
-		if frame == *warmup {
+		if frame == warmup {
 			b, n := bytesOf()
 			bytesSum, msgsSum = -b, -n
 		}
-		if frame >= *warmup+*frames {
+		if frame >= warmup+nFrames {
 			b, n := bytesOf()
 			bytesSum += b
 			msgsSum += n
@@ -519,12 +531,14 @@ func run(args []string) {
 
 	setupReport(&rep, &samples, &bytesSum, &msgsSum)
 
-	switch *consumer {
+	switch consumer {
 	case "inproc":
-		table, err := parseFetchTable(*tableText)
-		if err != nil || len(table) == 0 {
-			fmt.Fprintln(os.Stderr, "wasmspike: -consumer inproc needs -fetchTable:", err)
-			os.Exit(1)
+		table, terr := parseFetchTable(ctx.String("fetchTable"))
+		if terr != nil {
+			return eh.Errorf("-consumer inproc: bad -fetchTable: %w", terr)
+		}
+		if len(table) == 0 {
+			return eh.Errorf("-consumer inproc needs -fetchTable (from -dumpFetchTable)")
 		}
 		replies := &bytes.Buffer{}
 		u := runtime.NewUnmarshaller(replies, binary.NativeEndian, nil, nil)
@@ -534,19 +548,18 @@ func run(args []string) {
 		running := true
 		stop = func() { running = false }
 		for running {
-			if err := loop(); err != nil {
-				fmt.Fprintln(os.Stderr, "wasmspike: frame error:", err)
-				os.Exit(1)
+			if err = loop(); err != nil {
+				return eh.Errorf("frame error: %w", err)
 			}
 		}
 	case "pipe":
 		cfg := &application.Config{}
 		cfg.Validate(true)
 		u := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
-		app, err := application.NewApplication(cfg, u)
+		var app *application.Application[*runtime.Unmarshaller]
+		app, err = application.NewApplication(cfg, u)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "wasmspike:", err)
-			os.Exit(1)
+			return
 		}
 		app.FffiEstablishedHandler = func(fffi *runtime.Fffi2[*runtime.Unmarshaller]) error {
 			typed.SetCurrentFffiVar(fffi)
@@ -565,17 +578,15 @@ func run(args []string) {
 		bytesOf = func() (int64, int64) { return written, 0 }
 		stop = app.Shutdown
 		if err = app.Launch(); err != nil {
-			fmt.Fprintln(os.Stderr, "wasmspike:", err)
-			os.Exit(1)
+			return
 		}
-		app.Channel().SetDeferFlush(*lazyFlush)
-		if *reactor {
-			// The host owns the cadence: main returns after Begin and the
-			// exported frame function (reactor_wasip1.go) runs one Step per
-			// call, printing the report once the loop has stopped.
+		app.Channel().SetDeferFlush(lazyFlush)
+		if ctx.Bool("reactor") {
+			// The host owns the cadence: the action returns after Begin and
+			// the exported frame function (reactor_wasip1.go) runs one Step
+			// per call, printing the report once the loop has stopped.
 			if err = app.Begin(); err != nil {
-				fmt.Fprintln(os.Stderr, "wasmspike:", err)
-				os.Exit(1)
+				return
 			}
 			reported := false
 			stepFn = func() int32 {
@@ -596,15 +607,14 @@ func run(args []string) {
 			return
 		}
 		if err = app.Run(); err != nil {
-			fmt.Fprintln(os.Stderr, "wasmspike:", err)
-			os.Exit(1)
+			return
 		}
 	default:
-		fmt.Fprintln(os.Stderr, "wasmspike: unknown consumer", *consumer)
-		os.Exit(1)
+		return eb.Build().Str("consumer", consumer).Errorf("unknown consumer")
 	}
 
 	printReport()
+	return
 }
 
 // stepFn is the reactor's per-tick step, set by main when -reactor is on.
