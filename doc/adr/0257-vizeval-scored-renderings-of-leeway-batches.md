@@ -360,34 +360,36 @@ so a search written later calls it in-process.
 
 ### SD10 — An agent as the task judge
 
-*Proposed; not built.* The task layer needs a vision model behind
-`BOXER_LLM_*`; a search run by a coding agent that can read images has a
-reader already, and without one the questions go unasked. The agent, or a
-person, can stand where the model stands, and be scored by the same rule.
+The task layer needs a vision model behind `BOXER_LLM_*`; a search run by a
+coding agent that can read images has a reader already, and without one the
+questions go unasked. The agent, or a person, can stand where the model
+stands, and be scored by the same rule.
 
-- **`score --judgeSheet`** writes, for each candidate that passed its gates,
-  `<out>/<scenario>/judge/<sheetId>.md`: the artifact's path, the scenario's
-  intent, the questions, and the reply format the model is given — per
-  question `{"answer": […], "unreadable": bool}`. It holds nothing else: no
-  expected answer, no answer SQL, no prose, no candidate id or options. The
-  sheet id is opaque and the order of sheets shuffled; which candidate and
-  drawing a sheet stands for is kept in `judge/key.json`, beside the sheets
-  but not referred to by them.
-- **The reader** writes `<out>/<scenario>/judge/answers.jsonl`, one line per
-  sheet and question — `{"sheet", "question", "answer", "unreadable",
-  "reader"}` — where `reader` names who answered (`agent:<label>`,
-  `human:<label>`).
-- **`score --answers <file>`** resolves each sheet through the key to its
-  candidate and drawing digest, and scores the replies with `judge.Matches`,
-  the comparison the model's replies go through, so an answer is right or
-  wrong by one rule whoever gave it. A reply whose drawing digest no longer
-  matches what the candidate draws is refused as stale; a candidate reused
-  under SD8 keeps its digest, so answers outlive a re-render. The metrics
-  are the `task.*` of SD6, and the scorecard gains the judge's identity — the
-  model id, or the reader — as a field and a membership of `vizevalScore`,
-  because accuracies from two judges are two measurements. Replies are
-  cached under drawing, question and reader as the model's are under drawing,
-  question and model.
+- **`score --judgeSheet`** writes under `<out>/<scenario>/judge/` a sheet
+  (`<sheetId>.md`) and its picture (`<sheetId>.png`, a copy of the artifact)
+  per drawing of a candidate that passed its gates: the scenario's intent,
+  the questions and the reply format, as the model is given them. It holds
+  nothing else — no expected answer, no answer SQL, no prose, no candidate
+  id or options. The sheet id is a hash of scenario and drawing digest:
+  opaque to a reader, the same on every run for the same drawing, and shared
+  by candidates that drew one picture. Which candidates and drawing a sheet
+  stands for is kept in `judge/key.json`, which the sheets do not refer to.
+- **The reader** writes one line per sheet and question — `{"sheet",
+  "question", "answer", "unreadable", "reader"}` — where `reader` names who
+  answered (`agent:<label>`, `human:<label>`).
+- **`score --answers <file>`** resolves each sheet through the key to the
+  candidates whose current drawing it shows, and scores the replies with
+  `judge.VerdictOf`, the rule the model's replies go through, so an answer is
+  right or wrong by one rule whoever gave it. Replies to sheets of another
+  scenario are left alone; a sheet answered by two readers, a question
+  answered twice or one the scenario does not ask is refused. A candidate
+  whose answered sheet shows a drawing it no longer draws gets a `stale`
+  verdict and no accuracy. The metrics are the `task.*` of SD6, and the
+  scorecard carries the judge — `model:<id>` or `reader:<label>` — as a field
+  and the `vizevalTaskJudge` membership, because accuracies from two judges
+  are two measurements. The answers file is the record; nothing is cached
+  beside it. `--judge` and `--answers` are not taken together: a card
+  records one judge.
 
 **The bias to design against is a reader who knows the answers.** The model
 sees the picture and the intent and nothing else; an agent running the
@@ -399,26 +401,28 @@ reader knows, so the design makes informed answers detectable and keeps them
 apart rather than trying to prevent them:
 
 - **One fresh reader per sheet.** The intended protocol is a sub-agent
-  started with the sheet and the image only, in a context that has not seen
-  the scenario or the output directory, and never given two sheets of one
-  scenario — a reader who answers two candidates carries the easier
-  picture's answers into the harder one. A reader label that appears on
-  sheets of two candidates of one scenario is recorded as `informed`.
-- **A control sheet.** Among the sheets the harness puts, under an opaque id
-  like the others, a rendering that cannot answer the questions — the
-  scenario's batch through a sink that discards values, or a blank
-  artifact. A reader who answers the control correctly beyond what a guess
-  gets is answering from knowledge; every reply of that reader is recorded
-  as `informed`.
+  started with the sheet and its picture only, copied somewhere the output
+  directory is not beside them, in a context that has not seen the scenario,
+  and never given two sheets of one scenario — a reader who answers two
+  candidates carries the easier picture's answers into the harder one. A
+  reader label that appears on two sheets of one scenario is `informed`.
+- **A control sheet.** Among the sheets, under an opaque id like the others,
+  is one scored artifact blurred until no label survives: the layout of a
+  real rendering, nothing to read. A sink that discards values was the
+  alternative, rejected because structural questions ("how many kinds")
+  stay answerable from it. A reader who answers any control question
+  correctly is `informed`; a small count guessed right is enough, which errs
+  towards setting a reader's replies aside.
 - **Informed replies are kept, not mixed.** They land under
   `task.informed.*`, never under `task.accuracy`, and gates and rankings do
   not read them. The reader's own declaration is not trusted to mark a reply
-  blind; only the protocol checks above are.
+  blind; only the checks above are.
 
-What this does not remove: a blind agent and a vision model are two readers
-with two error profiles, so accuracies from them compare within a judge and
-not across; and a sub-agent that shares its parent's model shares its priors
-about which renderings are readable, though not what the data holds.
+What this does not remove: a reader who knows the data and says
+"unreadable" to the control passes it; a blind agent and a vision model are
+two readers with two error profiles, so accuracies compare within a judge
+and not across; and a sub-agent that shares its parent's model shares its
+priors about which renderings are readable, though not what the data holds.
 
 ### SD11 — Deferred
 
@@ -454,8 +458,8 @@ about which renderings are readable, though not what the data holds.
 - **M10 — Reading a round** ✓: the contact sheet (SD8), `table` (SD9), the
   elided share and labelled-keys metrics (SD6), and the artifact box (SD3,
   SD4).
-- **M11 — The agent judge** (SD10): judge sheets, the answers file, control
-  sheets, and the judge's identity on the scorecard.
+- **M11 — The agent judge** ✓ (SD10): judge sheets, the answers file, the
+  control sheet, and the judge's identity on the scorecard.
 
 ## Surfaces — Tier 1
 
@@ -467,8 +471,8 @@ about which renderings are readable, though not what the data holds.
 | SVG export | each text shape becomes a `<g class="imz-text">` with `data-text`, `data-bbox`, `data-size`, `data-elided` | the geometry package's reader; viewers ignore the attributes |
 | egui2 IDL | adds the `accessibleRegion` block | regenerated Go bindings, Rust dispatch and the API reference; the opcode enums renumber, so both sides rebuild together |
 | `openaichat` messages | image content parts | `runtime.llm`'s request path and the ADR-0254 sensitivity point |
-| `boxer.facts` | the `vizevalScore` and `vizevalJudgement` kinds; memberships 122–149 in the runtime vocabulary | the generated store (`vizevalfacts`), its gen-test lane, and the vocabulary's assignment golden |
-| `vizevalScore` (M11, not built) | gains the task judge's identity (SD10) | the generated store and the vocabulary's assignment golden |
+| `boxer.facts` | the `vizevalScore` and `vizevalJudgement` kinds; memberships 122–150 in the runtime vocabulary | the generated store (`vizevalfacts`), its gen-test lane, and the vocabulary's assignment golden |
+| `vizevalScore` | gains the task judge's identity, membership 150 (SD10) | the generated store and the vocabulary's assignment golden |
 
 ## Alternatives
 

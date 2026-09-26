@@ -109,6 +109,21 @@ test.
      scripts/dev/vizeval.sh score --judge --facts apps/play/vizeval
    ```
 
+   Without a model, readers can answer instead — an agent or a person per
+   sheet. `--judgeSheet` writes one sheet per drawing (picture, intent,
+   questions) and a blurred control under `<out>/<scenario>/judge/`; each
+   sheet goes to its own fresh reader, who writes one JSON line per question;
+   `--answers <file>` scores the lines onto the candidates. A reader who
+   answered more than one sheet of the scenario, or a control question
+   correctly, is recorded under `task.informed.*` rather than
+   `task.accuracy`. The protocol for handing sheets to agent readers is in
+   the [vizeval skill](../skills/vizeval/SKILL.md).
+
+   ```bash
+   scripts/dev/vizeval.sh score --judgeSheet --out tmp/vizeval apps/play/vizeval/10_host_metrics.vizeval.md
+   scripts/dev/vizeval.sh score --answers answers.jsonl --out tmp/vizeval apps/play/vizeval/10_host_metrics.vizeval.md
+   ```
+
 6. **Rank.** `rank` reads a score run's output, keeps the candidates that
    passed their gates, and asks the model to compare every pair in both
    orders on five criteria; it writes `<out>/<scenario>/ranking.md` with

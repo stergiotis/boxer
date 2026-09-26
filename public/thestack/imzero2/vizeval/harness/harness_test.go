@@ -78,7 +78,7 @@ func TestScorecardRowRoundTrip(t *testing.T) {
 		Area:    [4]float64{1, 2, 3, 4},
 		Metrics: map[string]float64{geometry.MetricTextRuns: 25, geometry.MetricTextElided: 4},
 		Gates:   map[string]bool{geometry.MetricTextElided: false, geometry.MetricTextClipped: true},
-		At:      "2026-09-25T19:00:00Z",
+		At:      "2026-09-25T19:00:00Z", TaskJudge: "reader:agent:a",
 	}
 	row := RowOf(card)
 	id, nk := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest, "")

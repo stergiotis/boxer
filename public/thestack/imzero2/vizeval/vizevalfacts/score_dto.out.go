@@ -29,6 +29,7 @@ const (
 	kindVizevalMetricValue      uint64 = 9223372049739677831
 	kindVizevalGatePassed       uint64 = 9223372049739677832
 	kindVizevalGateFailed       uint64 = 9223372049739677833
+	kindVizevalTaskJudge        uint64 = 9223372049739677846
 )
 
 // vizevalScoreSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -280,6 +281,14 @@ func vizevalScoreEmitSectionSymbolArray[
 		}
 		symbolArraySecAttr_GateFailed.AddMembershipLowCardRefP(kindVizevalGateFailed)
 		symbolArraySecAttr_GateFailed.EndAttributeP()
+	}
+	if len(row.TaskJudge) > 0 {
+		symbolArraySecAttr_TaskJudge := symbolArraySec.BeginAttribute()
+		for _, v := range row.TaskJudge {
+			symbolArraySecAttr_TaskJudge.AddToContainerP(v)
+		}
+		symbolArraySecAttr_TaskJudge.AddMembershipLowCardRefP(kindVizevalTaskJudge)
+		symbolArraySecAttr_TaskJudge.EndAttributeP()
 	}
 	return
 }
@@ -718,6 +727,9 @@ func vizevalScoreReadRow[
 	var symbolArrayGateFailedSlice []string
 	var symbolArrayGateFailedCount int
 	var symbolArrayGateFailedLastAttr int64
+	var symbolArrayTaskJudgeSlice []string
+	var symbolArrayTaskJudgeCount int
+	var symbolArrayTaskJudgeLastAttr int64
 	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -746,6 +758,14 @@ func vizevalScoreReadRow[
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayGateFailedSlice = append(symbolArrayGateFailedSlice, v)
 				}
+			case kindVizevalTaskJudge:
+				if symbolArrayTaskJudgeLastAttr != attrJ+1 {
+					symbolArrayTaskJudgeLastAttr = attrJ + 1
+					symbolArrayTaskJudgeCount++
+				}
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayTaskJudgeSlice = append(symbolArrayTaskJudgeSlice, v)
+				}
 			}
 		}
 	}
@@ -771,6 +791,14 @@ func vizevalScoreReadRow[
 	}
 	if symbolArrayGateFailedSlice != nil {
 		row.GateFailed = symbolArrayGateFailedSlice
+		present = true
+	}
+	if symbolArrayTaskJudgeCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "vizevalTaskJudge").Int("got", symbolArrayTaskJudgeCount).Errorf("slot symbolArray@vizevalTaskJudge (field TaskJudge) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayTaskJudgeCount)
+		return
+	}
+	if symbolArrayTaskJudgeSlice != nil {
+		row.TaskJudge = symbolArrayTaskJudgeSlice
 		present = true
 	}
 	return

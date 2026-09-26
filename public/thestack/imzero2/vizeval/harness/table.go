@@ -73,8 +73,8 @@ func ReadScorecards(outDir string) (cards []Scorecard, err error) {
 // which scorecards compare (ADR-0257 §SD4).
 type tableGroup struct {
 	scenario, digest, frame string
-	rows             int64
-	cards            []Scorecard
+	rows                    int64
+	cards                   []Scorecard
 }
 
 // WriteTable prints one aligned line per card, grouped by scenario, batch

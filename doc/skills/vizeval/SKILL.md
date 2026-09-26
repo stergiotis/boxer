@@ -34,6 +34,8 @@ The harness scores; it does not search. Choosing the next candidates is yours.
   after any change under `rust/imzero2`, or the capture runs old code.
 - **A model** only for `--judge` and `rank`: `BOXER_LLM_ENDPOINT` and
   `BOXER_LLM_MODEL` (an OpenAI-compatible endpoint serving a vision model).
+  Without one, task questions can be answered by readers from judge sheets
+  (below).
 - Run from the checkout: `scripts/dev/vizeval.sh` builds the `imzero2` binary
   once per checkout and runs `imzero2 vizeval`.
 
@@ -76,6 +78,41 @@ $V facts --scenario 10_host_metrics                         # everything filed, 
   `n(n-1)` calls for `n` candidates. `--judgeCalls` bounds a run; replies are
   cached under `<out>/judge-cache` by what the picture shows, so re-running is
   free.
+
+## Judging without a model: reader sheets
+
+`score --judgeSheet` writes `<out>/<scenario>/judge/<sheetId>.md` and
+`.png` per drawing of a candidate that passed its gates — the picture, the
+intent, the questions, nothing else — plus one **control**: a scored artifact
+blurred until nothing is legible. `key.json` beside them maps sheets to
+candidates; never hand it to a reader.
+
+**You are not a blind reader.** You wrote or read the scenario, and
+`index.md` prints every expected answer. Do not answer sheets yourself.
+Instead, per sheet:
+
+1. Copy `<id>.md` and `<id>.png` to a directory of their own, away from the
+   output directory.
+2. Start one **fresh** sub-agent for that sheet alone, told to read only
+   those two files, with a reader label (`agent:r1`, …) and an answers file
+   of its own. Never give one reader two sheets of a scenario.
+3. Concatenate the answers files and score them:
+
+```bash
+$V score --judgeSheet --out tmp/vz apps/play/vizeval/10_host_metrics.vizeval.md
+# … one fresh reader per sheet, as above …
+cat readers/*/answers.jsonl > answers.jsonl
+$V score --answers answers.jsonl --out tmp/vz apps/play/vizeval/10_host_metrics.vizeval.md
+```
+
+The replies go through the rule the model's do. A reader who answered two
+sheets of the scenario, or any control question correctly, is **informed**:
+its replies land in `task.informed.*`, which no gate or ranking reads. A
+sheet answered by two readers is refused. Sheet ids follow the drawing, so
+answers survive a re-render; a candidate that now draws something else gets a
+`stale` verdict. `--answers` and `--judge` do not combine. The scorecard's
+`taskJudge` says who answered (`model:<id>` or `reader:<label>`): compare
+accuracies within one judge only.
 
 ## Statuses
 
@@ -170,7 +207,9 @@ All are measured inside the `experiments.artifact` node's visible rect only.
 - `graph.*` — only for the graph sink: `edge_crossings` (edges meeting at a
   node do not count) and `label_node_overlaps` (a label over a node that is
   not its nearest).
-- `task.accuracy` — share of questions the model answered correctly from the
+- `task.informed.accuracy` (and `.unreadable`, `.errors`) — the same from
+  a reader shown to know the answers; not a measurement of the picture.
+- `task.accuracy` — share of questions the judge answered correctly from the
   artifact alone; absent when any question got no answer (`task.errors`).
   `task.unreadable` counts "the picture does not show this".
 - `rank` strengths are Bradley–Terry log-strengths: a difference of 1 is odds

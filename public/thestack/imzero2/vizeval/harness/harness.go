@@ -98,6 +98,9 @@ type Scorecard struct {
 	// Verdicts are the judge's answers to the scenario's questions, when a
 	// judge ran; the facts row keeps only the task metrics.
 	Verdicts []judge.Verdict `json:"verdicts,omitempty"`
+	// TaskJudge names who answered them: `model:<id>` or `reader:<label>`
+	// (ADR-0257 §SD10). Accuracies of two judges are two measurements.
+	TaskJudge string `json:"taskJudge,omitempty"`
 	// ReusedFrom is set when the card was read back from boxer.facts rather
 	// than rendered: the same candidate over the same data at the same clean
 	// build was already measured then. Its Dir is that run's.
@@ -126,8 +129,14 @@ type Options struct {
 	Rescore bool
 	// Judge, when set, asks the scenario's questions of a model about every
 	// candidate that passed its geometry gates (§SD6, second layer).
-	Judge  *judge.Judge
-	Logger zerolog.Logger
+	Judge *judge.Judge
+	// JudgeSheets writes a judge sheet per drawing of a candidate that passed
+	// its gates, and a control, for a reader to answer (§SD10).
+	JudgeSheets bool
+	// Replies are a reader's answers to judge sheets, scored onto the
+	// candidates whose drawings the sheets show (§SD10).
+	Replies []judge.ReaderReply
+	Logger  zerolog.Logger
 }
 
 // Dataset is a scenario's batch as the harness sees it.
@@ -192,6 +201,16 @@ func Score(sc *vizeval.Scenario, cands []vizeval.Candidate, opts Options) (cards
 		opts.Logger.Info().Str("scenario", sc.Name).Str("candidate", string(cand.Canonical())).
 			Str("status", string(card.Status)).Str("reason", card.Reason).Msg("candidate scored")
 		cards = append(cards, card)
+	}
+	if len(opts.Replies) > 0 {
+		if err = applyReaderReplies(sc, dir, answers, opts.Replies, cards); err != nil {
+			return cards, answers, err
+		}
+	}
+	if opts.JudgeSheets {
+		if _, err = writeJudgeSheets(opts.OutDir, dir, sc, answers, cards); err != nil {
+			return cards, answers, err
+		}
 	}
 	if err = writeScorecards(opts.OutDir, dir, cards); err != nil {
 		return cards, answers, err
@@ -263,24 +282,10 @@ func scoreOne(sc *vizeval.Scenario, card *Scorecard, ds Dataset, answers []Answe
 		return
 	}
 	card.Verdicts = opts.Judge.Ask(context.Background(), png, card.DrawingDigest, sc.Spec.Intent, questionsOf(answers))
-	var correct, unreadable, failed int
-	for _, v := range card.Verdicts {
-		switch {
-		case v.Error != "":
-			failed++
-		case v.Correct:
-			correct++
-		case v.Unreadable:
-			unreadable++
-		}
-	}
+	card.TaskJudge = "model:" + opts.Judge.Model
 	// Accuracy is only a measurement when every question got an answer; a
 	// spent budget or a failed call leaves the count, not a fraction of it.
-	metrics[MetricTaskErrors] = float64(failed)
-	if failed == 0 {
-		metrics[MetricTaskAccuracy] = float64(correct) / float64(len(card.Verdicts))
-		metrics[MetricTaskUnreadable] = float64(unreadable)
-	}
+	taskMetrics(card, MetricTaskAccuracy, MetricTaskUnreadable, MetricTaskErrors)
 	applyGates(sc, card, true)
 }
 
@@ -680,6 +685,7 @@ var metricOrder = []string{
 	geometry.MetricTableNumericColumns, geometry.MetricTableNumericRightAligned,
 	geometry.MetricTextRowPitchCV, geometry.MetricMarks,
 	MetricTaskAccuracy, MetricTaskUnreadable, MetricTaskErrors,
+	MetricTaskInformedAccuracy, MetricTaskInformedUnreadable, MetricTaskInformedErrors,
 }
 
 // writeGallery writes the scenario's contact sheet: the scenario, its data and
@@ -749,6 +755,9 @@ func writeGallery(outDir string, dir string, sc *vizeval.Scenario, ds Dataset, a
 			b.WriteString("\n")
 		}
 		if len(c.Verdicts) > 0 {
+			if c.TaskJudge != "" {
+				b.WriteString("Answered by `" + c.TaskJudge + "`.\n\n")
+			}
 			b.WriteString("| question | answered | expected | |\n| --- | --- | --- | --- |\n")
 			for _, v := range c.Verdicts {
 				mark := "wrong"

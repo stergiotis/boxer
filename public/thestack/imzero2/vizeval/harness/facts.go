@@ -69,6 +69,9 @@ func RowOf(card Scorecard) (row vizevalfacts.VizevalScore) {
 	if card.Reason != "" {
 		row.Reason = []string{card.Reason}
 	}
+	if card.TaskJudge != "" {
+		row.TaskJudge = []string{card.TaskJudge}
+	}
 	if card.Dir != "" {
 		row.Dir = []string{card.Dir}
 	}
@@ -111,6 +114,9 @@ func CardOf(row vizevalfacts.VizevalScore) (card Scorecard, err error) {
 	}
 	if len(row.Reason) > 0 {
 		card.Reason = row.Reason[0]
+	}
+	if len(row.TaskJudge) > 0 {
+		card.TaskJudge = row.TaskJudge[0]
 	}
 	if len(row.Dir) > 0 {
 		card.Dir = row.Dir[0]

@@ -43,6 +43,8 @@ const (
 	flagMetrics    = "metrics"
 	flagSort       = "sort"
 	flagAll        = "all"
+	flagJudgeSheet = "judgeSheet"
+	flagAnswers    = "answers"
 )
 
 // appId is how the harness appears on its bus and in the llm call table.
@@ -123,6 +125,8 @@ func NewCommand() *cli.Command {
 					&cli.BoolFlag{Name: flagRescore, Usage: "with --" + flagFacts + ", render every candidate even when a measurement can be reused"},
 					&cli.BoolFlag{Name: flagJudge, Usage: "ask the scenario's questions of the configured vision model (BOXER_LLM_*) about every candidate that passed its gates"},
 					&cli.IntFlag{Name: flagJudgeCalls, Value: 200, Usage: "with --" + flagJudge + ", the most model calls the run makes; cached answers are free"},
+					&cli.BoolFlag{Name: flagJudgeSheet, Usage: "write a judge sheet per drawing of a candidate that passed its gates, and a control, under <out>/<scenario>/" + harness.JudgeDirName + "/, for a reader to answer (ADR-0257 §SD10)"},
+					&cli.PathFlag{Name: flagAnswers, Usage: "score a reader's replies to judge sheets (JSONL) onto the candidates whose drawings the sheets show"},
 				},
 				Action: runScore,
 			},
@@ -368,6 +372,15 @@ func runScore(ctx *cli.Context) (err error) {
 		defer opts.Facts.Close()
 		opts.Rescore = ctx.Bool(flagRescore)
 	}
+	opts.JudgeSheets = ctx.Bool(flagJudgeSheet)
+	if p := ctx.Path(flagAnswers); p != "" {
+		if ctx.Bool(flagJudge) {
+			return eh.Errorf("--" + flagJudge + " and --" + flagAnswers + " both judge the task questions; a card records one judge, so pass one")
+		}
+		if opts.Replies, err = judge.ReadReplies(p); err != nil {
+			return err
+		}
+	}
 	if ctx.Bool(flagJudge) {
 		var closeJudge func()
 		if opts.Judge, closeJudge, err = openJudge(ctx, out); err != nil {
@@ -405,6 +418,9 @@ func runScore(ctx *cli.Context) (err error) {
 			}
 		}
 		_, _ = fmt.Fprintln(w, "  → "+filepath.Join(out, sc.Name, "index.md"))
+		if opts.JudgeSheets {
+			_, _ = fmt.Fprintln(w, "  → judge sheets: "+filepath.Join(out, sc.Name, harness.JudgeDirName)+" (one reader per sheet; see the vizeval skill)")
+		}
 	}
 	if failed > 0 {
 		return eb.Build().Int("failed", failed).Errorf("some candidates or scenarios failed")
