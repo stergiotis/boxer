@@ -1,7 +1,7 @@
 use crate::fffi::io::ImZeroFffiIo;
 
 pub struct DebugTools {
-    last_update: Option<std::time::Instant>,
+    last_update: Option<crate::imzero2::clock::Instant>,
 }
 
 impl Default for DebugTools {
@@ -26,7 +26,7 @@ impl DebugTools {
         ui.heading("performance measures");
         let fps_string;
         {
-            let tnow = std::time::Instant::now();
+            let tnow = crate::imzero2::clock::Instant::now();
             fps_string = if let Some(tprev) = self.last_update {
                 let dt = (tnow - tprev).as_secs_f64();
                 let fps = 1.0 / dt;

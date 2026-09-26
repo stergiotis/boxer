@@ -10,7 +10,7 @@
 //! Pure Rust, no system `protoc`: protox parses the .proto into a
 //! `FileDescriptorSet` and prost-build emits the Rust from it.
 //!
-//! Gated on the `headless` feature — only that build compiles the wire
+//! Gated on the `headless` and `browser` features — only those builds compile the wire
 //! types (`inputproto.rs` is itself `#[cfg(feature = "headless")]`), so a
 //! desktop build does no codegen.
 
@@ -21,7 +21,9 @@ fn main() {
     const PROTO_FILE: &str = "boxer/imzero2/v1/input.proto";
     println!("cargo:rerun-if-changed={PROTO_ROOT}/{PROTO_FILE}");
 
-    if std::env::var_os("CARGO_FEATURE_HEADLESS").is_none() {
+    if std::env::var_os("CARGO_FEATURE_HEADLESS").is_none()
+        && std::env::var_os("CARGO_FEATURE_BROWSER").is_none()
+    {
         return;
     }
 

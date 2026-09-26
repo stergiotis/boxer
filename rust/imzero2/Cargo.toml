@@ -30,6 +30,12 @@ rust-version = "1.94"
 all-features = true
 targets = ["x86_64-unknown-linux-gnu"]
 
+# The browser host (ADR-0077 Phase 1) is a wasm32 cdylib driven from JS; the
+# native binaries keep using the rlib. cargo cannot choose the crate type per
+# target, so both are declared and the native build also links an unused .so.
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [[bin]]
 name = "imzero2_ws_probe"
 path = "src/bin/ws_probe.rs"
@@ -127,6 +133,14 @@ inspection = ["desktop", "eframe?/inspection"]
 # 94 543 bytes. No allocator is worth an unreproducible binary, and dropping it
 # also finishes what ADR-0205 M6 started — `libmimalloc-sys` was the last crate
 # blocking `--target x86_64-unknown-linux-musl`.
+# ADR-0077 Phase 1 / keelson-wasm-frame-cost M2 — the browser host: the shared
+# interpreter plus egui, tessellating into the ADR-0128 mesh wire, exported as
+# C-ABI functions for a JS worker that owns the FFFI2 bytes (browser.rs). No
+# GPU, no sockets, no threads, no files: fonts come as bytes and the clock is a
+# host import. `cargo build --lib --no-default-features --features browser
+# --target wasm32-unknown-unknown` is the artifact; the feature also builds
+# natively so its tests run in the ordinary lane.
+browser = ["dep:prost"]
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
 wayland = ["eframe?/wayland"]
@@ -203,8 +217,6 @@ puffin_http = {version = "0.17.0", optional = true }
 puffin = {version = "0.20.0", optional = true }
 profiling = "1.0.17"
 dhat = { version = "0.3.3", optional = true }
-memmap2 = "0.9.9"
-rand = "0.10.2"
 blake3 = "1.8.2"
 egui_extras = { version = "0.35.0", features = ["default", "datepicker", "serde"] }
 jiff = { version = "0.2", default-features = false, features = ["std"] }
@@ -259,6 +271,23 @@ rayon = { version = "1", optional = true }
 # memcpy per frame — more than the rasterization itself. Same crate epaint
 # uses, so it is one crate in the graph and no new supply-chain surface.
 bytemuck = { version = "1.25", optional = true, default-features = false }
+
+# Used by the IPC test harness only, which is not built for the browser:
+# memmap2 has no wasm32 backend and rand would pull getrandom, which refuses
+# wasm32-unknown-unknown without a JS backend (ADR-0077 SD4).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+memmap2 = "0.9.9"
+rand = "0.10.2"
+
+# egui_graphs pulls rand 0.8 and 0.9, hence getrandom 0.2 and 0.3, which
+# refuse wasm32-unknown-unknown unless told where randomness comes from. The
+# browser host has no wasm-bindgen glue, so both get the crate's own
+# generator (browser.rs): 0.2 through its `custom` feature, 0.3 through the
+# `--cfg getrandom_backend="custom"` rustflag build_rust_browser.sh sets. The
+# only consumer is graph layout seeding.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom02 = { package = "getrandom", version = "0.2", features = ["custom"] }
+getrandom = "0.3"
 
 [profile.release]
 opt-level = 2

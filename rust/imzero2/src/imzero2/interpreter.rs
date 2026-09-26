@@ -1388,7 +1388,7 @@ impl<R: std::io::BufRead, W: std::io::Write> egui_table::TableDelegate
 }
 
 pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
-    io: ImZeroFffiIo<R, W>,
+    pub(crate) io: ImZeroFffiIo<R, W>,
 
     r0_atoms: egui::Atoms<'a>,
     r1_widget_text: egui::WidgetText,
@@ -2020,7 +2020,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.graph_metrics_fr_last_disp.clear();
     }
     pub fn interpret_commands_outer(&mut self, ctx: &egui::Context) -> InterpretResult<()> {
-        let t0 = std::time::Instant::now();
+        let t0 = crate::imzero2::clock::Instant::now();
         self.read_blocked_ns = 0;
         Self::handle_screenshot_event(ctx);
         // Advance per-frame state for widgets that need it. Must run exactly
@@ -2164,7 +2164,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         let header = if self.io.is_replaying() {
             self.io.read_plain_u32()
         } else {
-            let t_wait = std::time::Instant::now();
+            let t_wait = crate::imzero2::clock::Instant::now();
             let r = self.io.read_plain_u32();
             self.read_blocked_ns =
                 self.read_blocked_ns.saturating_add(t_wait.elapsed().as_nanos() as u64);
@@ -2242,6 +2242,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 // Peer closed the pipe — graceful shutdown signal, not a panic.
                 Err(InterpretError::PeerClosed)
             }
+            // A reader that holds whole messages and has none left (the
+            // browser host's inbox) says so at a message boundary; that is
+            // the end of what can be interpreted now, not of the peer.
+            Err(FffiError::Io(ref e)) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
             Err(e) => Err(InterpretError::Fffi(e)),
         }
     }

@@ -3,15 +3,17 @@
 #[cfg(all(
     not(feature = "desktop"),
     not(feature = "headless"),
-    not(feature = "headless_svg")
+    not(feature = "headless_svg"),
+    not(feature = "browser")
 ))]
 compile_error!(
-    "imzero2 needs at least one host: enable the `desktop` (default), `headless`, or `headless_svg` feature"
+    "imzero2 needs at least one host: enable the `desktop` (default), `headless`, `headless_svg` or `browser` feature"
 );
 
 pub mod cli;
 mod fffi;
 pub mod imzero2;
+#[cfg(not(target_arch = "wasm32"))]
 mod ipc;
 pub mod runinfo;
 
@@ -23,5 +25,7 @@ pub use imzero2::headless::run_main_loop as run_imzero2_headless_loop;
 pub use imzero2::headless_svg::run_main_loop as run_imzero2_svg_loop;
 //pub use ipc::ipc06::run_main_loop as run_ipc06_main_loop;
 pub use imzero2::appconfig;
+#[cfg(not(target_arch = "wasm32"))]
 pub use ipc::ipc06testharness::run_consumer as run_ipc06_testharness_consumer;
+#[cfg(not(target_arch = "wasm32"))]
 pub use ipc::ipc06testharness::run_producer as run_ipc06_testharness_producer;
