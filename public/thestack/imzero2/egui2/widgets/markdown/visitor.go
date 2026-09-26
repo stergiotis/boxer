@@ -529,19 +529,36 @@ func lowerCodeBlock(lines *text.Segments, src []byte, lang string) (seg segment)
 	// wrote (codeText) and the language (codeLang) to the caller.
 	seg.codeText = source
 	seg.codeLang = normLang
-	switch normLang {
-	case "go", "golang":
-		seg.code = codeview.PrepareGo(source)
-	case "sql":
-		seg.code = codeview.PrepareSql(source)
-	case "json":
-		seg.code = codeview.PrepareJson(source)
-	case "markdown", "md":
-		seg.code = codeview.PrepareMarkdown(source)
-	default:
-		seg.code = c.CodeViewJob(source).Keep()
-	}
+	// The highlighted job is built on first render ([segment.codeJob]), not
+	// here: a parse serves indexes and catalogues that never render the
+	// block, and highlighting is a full SQL parse per block. Measured on
+	// play's start-up, where the help book and the applet library parse
+	// every document: about a second of CPU on a handheld, four times that
+	// under wasm, most of it highlighting code nobody had opened.
 	return
+}
+
+// codeJob returns the block's retained code-view job, highlighted per the
+// fence language, building it on the first call. Render-thread only, like
+// every retained holder.
+func (inst *segment) codeJob() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
+	if inst.codeBuilt {
+		return inst.code
+	}
+	switch inst.codeLang {
+	case "go", "golang":
+		inst.code = codeview.PrepareGo(inst.codeText)
+	case "sql":
+		inst.code = codeview.PrepareSql(inst.codeText)
+	case "json":
+		inst.code = codeview.PrepareJson(inst.codeText)
+	case "markdown", "md":
+		inst.code = codeview.PrepareMarkdown(inst.codeText)
+	default:
+		inst.code = c.CodeViewJob(inst.codeText).Keep()
+	}
+	inst.codeBuilt = true
+	return inst.code
 }
 
 // lowerList walks an ast.List into a list segment with one

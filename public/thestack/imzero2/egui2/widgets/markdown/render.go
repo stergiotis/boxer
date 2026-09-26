@@ -97,7 +97,7 @@ func (inst *segment) render(rc *renderCtx) {
 		rc.codeBlockIdx++
 		seq := rc.idSeq
 		rc.idSeq++
-		c.CodeView(rc.ids.PrepareSeq(seq), inst.code).Send()
+		c.CodeView(rc.ids.PrepareSeq(seq), inst.codeJob()).Send()
 	case segKindList:
 		renderList(inst, rc)
 	case segKindListItem:

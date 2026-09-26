@@ -690,6 +690,7 @@ type segment struct {
 	kind               segKindE
 	runs               []paragraphRun
 	code               typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	codeBuilt          bool // code holds the job built from codeText/codeLang
 	codeText           string
 	codeLang           string
 	children           []segment
