@@ -503,6 +503,51 @@ Deferred:
 - The server-side `remote()` mode, database renaming beyond a flat map,
   and syncing views and UDFs.
 
+## Updates
+
+### 2026-09-26 — The wizard revised for the operator who uses it rarely
+
+§SD7's GUI kept its structure — one page per step, one `bgjob` per step on a
+copy of the plan, `widgets/filepicker` for plan files — and changed what each
+page tells the operator, on the premise that nothing may need remembering
+between uses:
+
+- **The step bar carries state.** Each step's chip shows what the step
+  produced (the servers, the databases, the verdict count, the comparison,
+  the run), and a step whose prerequisite is missing is disabled, with the
+  reason on hover. Every page ends in the same bar: Back, the page's own
+  action, Next, the latter enabled once the step it leads to is unlocked.
+- **The plan file is proposed, not demanded.** A plan with no file gets one
+  under `BOXER_JACKSTAY_PLAN_DIR` (by default the user's config directory)
+  when the structure is first planned, named by date and servers, so the
+  sync's refuse-unsaved guard still holds and is never met by accident.
+  `Save as` remains. The plans the window used are kept under its persisted
+  key `recent-plans` and listed on the first page; opening one lands on the
+  furthest step that has a result.
+- **Every write shows its consequence first.** The Structure page states
+  what the pending DDL creates, grouped by database and table, before the
+  two-step confirmation. The Sync page runs the pre-flight itself whenever
+  the choices change and shows the rows, the bytes and the disks' fit
+  before Start, which takes the same two-step confirmation as the DDL and
+  names the target.
+- **Defaults follow the plan.** The mode is proposed from the plan's state
+  — repair after a comparison that found differences, full otherwise, with
+  the reason stated — until the operator picks one. Compression and the
+  restart choice sit under an Advanced header; restart appears only when
+  the plan has a previous run.
+- **The target side is shown.** The Databases page says whether each
+  proposed target database exists and how many tables it holds, from the
+  inventory discovery already took.
+- **Monitor became Run.** One card leads: the sync in flight, or the last
+  run's outcome, rows, bytes and duration, with the per-table report as a
+  grid and the disks and chunk log beneath. Each page also shows the CLI
+  invocation of its step, for the run someone automates afterwards.
+
+The committed scene captures the first five pages; the sync itself was
+verified with a scratch scene against one server, source and target, on a
+1.5M-row database, followed by a comparison that found every table
+identical.
+
 ## References
 
 - [ADR-0170](./0170-data-catalog-competence.md) — the data catalog: classification, restoration, shape relation.
