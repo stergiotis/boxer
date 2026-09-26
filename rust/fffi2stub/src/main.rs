@@ -9,8 +9,10 @@
 //! stdin to it and its stdout back, and counts what Go sends per frame and per
 //! opcode. Nothing is answered or altered. The per-frame table goes to
 //! `--report` (TSV), the per-opcode summary to stderr at exit. Frames end at
-//! `--frame-op` (default 38, `FetchFrameMetrics` in the egui2 bindings; the
-//! `wasmspike -dumpOpcodes` table gives the current value and the names).
+//! `--frame-op`: `FetchFrameMetrics` in the egui2 bindings, resolved by name
+//! from the `--opcodes` table (the `wasmspike -dumpOpcodes` output) when one
+//! is given, since the number moves whenever the IDL gains an opcode; 38
+//! without a table.
 
 use std::io::{Read, Write};
 
@@ -60,7 +62,7 @@ fn main() {
 
 fn tee(args: &[String]) {
     let mut opcodes: Option<String> = None;
-    let mut frame_op: u32 = 38;
+    let mut frame_op: Option<u32> = None;
     let mut report: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
@@ -70,7 +72,7 @@ fn tee(args: &[String]) {
                 i += 2;
             }
             "--frame-op" => {
-                frame_op = args[i + 1].parse().expect("--frame-op N");
+                frame_op = Some(args[i + 1].parse().expect("--frame-op N"));
                 i += 2;
             }
             "--report" => {
@@ -137,6 +139,13 @@ fn tee(args: &[String]) {
         f
     });
     let mut reported = 0usize;
+    let frame_op = frame_op.unwrap_or_else(|| {
+        names
+            .iter()
+            .position(|n| n == "FetchFrameMetrics")
+            .map(|i| i as u32)
+            .unwrap_or(38)
+    });
     let mut counter = fffi2stub::Counter::new(frame_op);
     let mut stdin = std::io::stdin().lock();
     let mut buf = vec![0u8; 1 << 16];
