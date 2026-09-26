@@ -16,7 +16,7 @@ const q = new URL(self.location.href).searchParams;
 const stage = (q.get('stage') || '1024x600').split('x').map(Number);
 const fps = Number(q.get('fps') || '30');
 const log = (line) => self.postMessage({ kind: 'log', line });
-const PREFIX_INPUT = 0x02;
+const PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
 
 try {
   const fontBytes = (slot) => fetch(q.get(`${slot}Font`) || `./fonts/${slot}.ttf`)
@@ -30,13 +30,22 @@ try {
   log('worker — fonts: ' + (FONT_SLOTS.filter((s) => fonts[s]).join(', ') || 'egui defaults'));
   const stub = await loadHost(hostBytes, stage[0], stage[1], 1.0,
     (m) => self.postMessage({ kind: 'mesh', bytes: m.buffer }, [m.buffer]), undefined, fonts);
+  // The hello the carrier would send: the canvas backing size in pixels and
+  // the scale. Sent at start and again whenever the page's resize changed
+  // the host's geometry.
+  const sendHello = () => {
+    const g = stub.geometry();
+    self.postMessage({ kind: 'hello', hello: { width: Math.round(g.width * g.ppp), height: Math.round(g.height * g.ppp), ppp: g.ppp, codec: 'mesh', cadence: 0 } });
+  };
   self.onmessage = (e) => {
     const m = e.data;
     if (m.kind !== 'input') return;
     const b = new Uint8Array(m.bytes);
-    if (b.length > 1 && b[0] === PREFIX_INPUT) stub.input(b.subarray(1));
+    if (b.length < 2) return;
+    if (b[0] === PREFIX_INPUT) stub.input(b.subarray(1));
+    else if (b[0] === PREFIX_SESSION && stub.session(b.subarray(1)) === 1) sendHello();
   };
-  self.postMessage({ kind: 'hello', hello: { width: stage[0], height: stage[1], ppp: 1, codec: 'mesh', cadence: 0 } });
+  sendHello();
   const argv = ['-consumer', 'pipe', '-scene', q.get('scene') || 'gallery', '-rows', q.get('rows') || '200',
     '-frames', q.get('frames') || '1000000', '-warmup', '0', '-stage', `${stage[0]}x${stage[1]}`, '-target', 'wasip1', '-arm', 'viewer-worker'];
   if (q.get('demo')) argv.push('-demo', q.get('demo'));

@@ -117,6 +117,16 @@ export async function loadHost(hostBytes, width, height, ppp, onMesh, paceMs, fo
       mem().set(bytes, p);
       return ex.host_input(bytes.length) === 1;
     },
+    // One SessionControl as the page encodes it, without the prefix: 1 when
+    // the geometry changed (send a fresh hello), 2 when a paste was queued.
+    session(bytes) {
+      const p = ex.host_alloc(bytes.length);
+      mem().set(bytes, p);
+      return ex.host_session(bytes.length);
+    },
+    geometry() { return { width: ex.host_width(), height: ex.host_height(), ppp: ex.host_ppp() }; },
+    // Milliseconds after the last pass at which egui asked to run again.
+    repaintDelayMs() { return ex.host_repaint_delay_ms(); },
     lastError() { const n = ex.host_last_error(); return new TextDecoder().decode(mem().slice(ex.host_alloc(0), ex.host_alloc(0) + n)); },
     stats() {
       const s = (i) => Number(ex.host_stat(i));

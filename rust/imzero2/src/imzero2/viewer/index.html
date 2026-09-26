@@ -988,8 +988,15 @@ function connectWorker() {
       renderRoster();
       onHello(m.hello);
     } else if (m.kind === "mesh") {
+      // one wire message, dispatched by prefix as a socket's would be
       const data = new Uint8Array(m.bytes);
-      if (data.length > 0 && data[0] === PREFIX_MESH) onMesh(data.subarray(1));
+      if (data.length < 1) return;
+      if (data[0] === PREFIX_MESH) onMesh(data.subarray(1));
+      else if (data[0] === PREFIX_SESSION) {
+        const ctl = parseSessionControl(data.subarray(1));
+        if (ctl && ctl.kind === "clipboard") onClipboard(ctl.text);
+        else if (ctl && ctl.kind === "cursor") applyCursor(ctl.shape);
+      }
     } else if (m.kind === "log") {
       statusEl.textContent = m.line;
     }

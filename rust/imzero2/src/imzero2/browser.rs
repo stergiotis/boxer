@@ -141,9 +141,17 @@ pub struct Host {
     height: f32,
     ppp: f32,
     start: Instant,
+    /// the cursor shape code last posted to the page, so a shape crosses
+    /// only when it changes (the carrier keeps the same memo)
+    last_cursor: u32,
+    /// how soon egui asked to be run again after the last pass, for a
+    /// worker that ticks on demand rather than at a fixed rate
+    repaint_delay_ms: f64,
     last_error: String,
     pub stats: Stats,
 }
+
+const CURSOR_UNSENT: u32 = u32::MAX;
 
 impl Host {
     /// `fonts` holds the bytes for the slots of [`FONT_SLOTS`] the page
@@ -198,9 +206,77 @@ impl Host {
             height,
             ppp,
             start: Instant::now(),
+            last_cursor: CURSOR_UNSENT,
+            repaint_delay_ms: 0.0,
             last_error: String::new(),
             stats: Stats::default(),
         }
+    }
+
+    /// Takes one `SessionControl` as the viewer page encodes it (the wire's
+    /// `0x03` prefix already stripped): a viewport resize changes the host's
+    /// geometry, a clipboard message is the page's paste. Returns 1 when the
+    /// geometry changed (the page needs a fresh hello), 2 when a paste was
+    /// queued, 0 otherwise. Everything else on the session channel — cadence,
+    /// decode capabilities, roster, tree and capture requests — is the
+    /// carrier's business and has no meaning for a host on the page's own
+    /// thread, so it is ignored.
+    pub fn session(&mut self, payload: &[u8]) -> u32 {
+        let msg = match pb::SessionControl::decode(payload) {
+            Ok(m) => m,
+            Err(e) => {
+                self.stats.errors += 1;
+                self.last_error = format!("session: {e}");
+                return 0;
+            }
+        };
+        match msg.control {
+            Some(pb::session_control::Control::ViewportResize(r)) => {
+                if !(r.logical_width.is_finite()
+                    && r.logical_height.is_finite()
+                    && r.pixel_scale.is_finite())
+                {
+                    return 0;
+                }
+                // The headless host's clamp: a sane pixel scale, at least
+                // a few points, and no side past the texture limit.
+                let ppp = r.pixel_scale.clamp(0.25, 4.0);
+                let max_side = MAX_TEXTURE_SIDE as f32 / ppp;
+                let w = r.logical_width.clamp(16.0, max_side).round();
+                let h = r.logical_height.clamp(16.0, max_side).round();
+                if w == self.width && h == self.height && (ppp - self.ppp).abs() < 0.001 {
+                    return 0;
+                }
+                self.width = w;
+                self.height = h;
+                self.ppp = ppp;
+                1
+            }
+            // Consumed at its arrival position like the carrier's paste: a
+            // focus loss that preceded it drops it here.
+            Some(pb::session_control::Control::Clipboard(c)) if self.translator.focused() => {
+                self.pending_events.push(egui::Event::Paste(c.text));
+                2
+            }
+            _ => 0,
+        }
+    }
+
+    /// The viewport in points and the pixel scale the host renders for.
+    pub fn geometry(&self) -> (f32, f32, f32) {
+        (self.width, self.height, self.ppp)
+    }
+
+    /// One session-control message framed as the carrier frames it, so the
+    /// page dispatches it by prefix like a socket's.
+    fn session_frame(control: pb::session_control::Control) -> Vec<u8> {
+        let msg = pb::SessionControl {
+            control: Some(control),
+        };
+        let mut framed = Vec::with_capacity(1 + msg.encoded_len());
+        framed.push(pb::PREFIX_SESSION);
+        let _ = msg.encode(&mut framed);
+        framed
     }
 
     pub fn write(&mut self, bytes: &[u8]) {
@@ -289,7 +365,7 @@ impl Host {
 
     fn run_frame(&mut self, frame: &[u8]) {
         self.fffi.io.r.push(frame);
-        let raw_input = egui::RawInput {
+        let mut raw_input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
                 egui::vec2(self.width, self.height),
@@ -302,6 +378,8 @@ impl Host {
             events: std::mem::take(&mut self.pending_events),
             ..Default::default()
         };
+        raw_input.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point =
+            Some(self.ppp);
         let t0 = Instant::now();
         let fffi = &mut self.fffi;
         let mut err = None;
@@ -322,6 +400,34 @@ impl Host {
             self.fffi.io.r = Inbox::default();
         }
         self.stats.last_interpret_us = t0.elapsed().as_micros() as u64;
+
+        // What egui resolved per pass that the page cannot see in the mesh
+        // (ADR-0024 Update 2026-07-28, ADR-0082 SD6): the pointer shape,
+        // sent on change, and text the app copied. They ride the same drain
+        // as the mesh, each framed as the carrier would frame it.
+        let cursor = crate::imzero2::inputmap::cursor_shape_code(out.platform_output.cursor_icon);
+        if cursor != self.last_cursor {
+            self.last_cursor = cursor;
+            self.mesh_out.push(Self::session_frame(
+                pb::session_control::Control::CursorShape(pb::CursorShape { shape: cursor }),
+            ));
+        }
+        for cmd in &out.platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = cmd
+                && !text.is_empty()
+            {
+                self.mesh_out.push(Self::session_frame(
+                    pb::session_control::Control::Clipboard(pb::ClipboardData {
+                        text: text.clone(),
+                    }),
+                ));
+            }
+        }
+        self.repaint_delay_ms = out
+            .viewport_output
+            .get(&egui::ViewportId::ROOT)
+            .map(|v| v.repaint_delay.as_secs_f64() * 1000.0)
+            .unwrap_or(0.0);
 
         let t1 = Instant::now();
         for m in self.textures.ingest(&out.textures_delta) {
@@ -421,6 +527,43 @@ pub extern "C" fn host_input(n: usize) -> u32 {
         let s = s.borrow();
         HOST.with(|h| h.borrow_mut().as_mut().map(|h| u32::from(h.input(&s[..n]))).unwrap_or(0))
     })
+}
+
+/// Takes one session-control message from `n` bytes of the scratch buffer;
+/// see [`Host::session`] for the return codes.
+#[unsafe(no_mangle)]
+pub extern "C" fn host_session(n: usize) -> u32 {
+    SCRATCH.with(|s| {
+        let s = s.borrow();
+        HOST.with(|h| h.borrow_mut().as_mut().map(|h| h.session(&s[..n])).unwrap_or(0))
+    })
+}
+
+/// The viewport width in points the host renders for.
+#[unsafe(no_mangle)]
+pub extern "C" fn host_width() -> f32 {
+    HOST.with(|h| h.borrow().as_ref().map(|h| h.geometry().0).unwrap_or(0.0))
+}
+
+/// The viewport height in points the host renders for.
+#[unsafe(no_mangle)]
+pub extern "C" fn host_height() -> f32 {
+    HOST.with(|h| h.borrow().as_ref().map(|h| h.geometry().1).unwrap_or(0.0))
+}
+
+/// The pixel scale the host renders for.
+#[unsafe(no_mangle)]
+pub extern "C" fn host_ppp() -> f32 {
+    HOST.with(|h| h.borrow().as_ref().map(|h| h.geometry().2).unwrap_or(1.0))
+}
+
+/// Milliseconds after the last pass at which egui asked to run again: 0
+/// means right away (an animation, a repaint request), a large value means
+/// nothing is pending. A worker that ticks on demand reads this after each
+/// frame.
+#[unsafe(no_mangle)]
+pub extern "C" fn host_repaint_delay_ms() -> f64 {
+    HOST.with(|h| h.borrow().as_ref().map(|h| h.repaint_delay_ms).unwrap_or(0.0))
 }
 
 /// Interprets what has arrived; 1 when a frame was rendered, else 0.
