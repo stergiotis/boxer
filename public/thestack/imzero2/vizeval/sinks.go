@@ -13,6 +13,7 @@ const (
 	SinkChart        = "chart"
 	SinkGraph        = "graph"
 	SinkHierarchy    = "hierarchy"
+	SinkLens         = "lens"
 )
 
 // Option names shared by more than one caller.
@@ -36,6 +37,9 @@ const (
 	OptionSeparator      = "separator"
 	OptionMaxDepth       = "maxDepth"
 	OptionColorBy        = "colorBy"
+	OptionValues         = "values"
+	OptionStable         = "stable"
+	OptionRow            = "row"
 )
 
 // Chart option choices, in the order the pane offers them.
@@ -51,6 +55,9 @@ var (
 	GraphLayouts      = []string{"force", "force_gravity", "hierarchical", "radial"}
 	GraphOrientations = []string{"top_down", "left_right"}
 )
+
+// Lens option choices, in the order the pane offers them.
+var LensForms = []string{"rows", "archetypes", "focus"}
 
 // Hierarchy option choices, in the order the pane offers them.
 var (
@@ -137,6 +144,19 @@ var sinks = []SinkSpec{
 			Description: "levels drawn, deeper ones folded into their ancestor; 0 draws all"},
 		{Name: OptionColorBy, Kind: OptionKindEnum, Choices: HierarchyColorBy, Default: "branch",
 			Description: "colour: a hue per top-level branch, or a ramp by depth"},
+	}},
+	// The lens reads rows as slots — (section, primary membership) — and
+	// draws them by two reader intents (lwlens.Intent). Every row is drawn;
+	// past 128 even the presence-only rows stop fitting a pane.
+	{ID: SinkLens, Title: "lens", RowCap: 128, Space: Space{
+		{Name: OptionValues, Kind: OptionKindFloat, Min: 0, Max: 1, Default: 0.5,
+			Description: "structure (0: which slots a row has) to values (1: what they hold)"},
+		{Name: OptionStable, Kind: OptionKindFloat, Min: 0, Max: 1, Default: 0.5,
+			Description: "local (0: each row on its own terms) to stable (1: one frame for every row)"},
+		{Name: OptionForm, Kind: OptionKindEnum, Choices: LensForms, Default: "rows",
+			Description: "every row in its cluster, each cluster as its template and its exceptions, or one row among its peers"},
+		{Name: OptionRow, Kind: OptionKindInt, Min: 0, Max: 127, Default: int64(0),
+			Description: "the row the focus form draws"},
 	}},
 }
 

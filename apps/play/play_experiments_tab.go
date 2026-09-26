@@ -2,6 +2,7 @@ package play
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -12,9 +13,12 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwlens"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -95,6 +99,9 @@ const experimentsChartPaneProbeSalt uint64 = 0x3c7a1f0e5b2d9c41
 // experimentsHierarchyPaneProbeSalt is the hierarchy's probe slot.
 const experimentsHierarchyPaneProbeSalt uint64 = 0x5d2f8e61a9c3b047
 
+// experimentsLensPaneProbeSalt is the lens's probe slot.
+const experimentsLensPaneProbeSalt uint64 = 0x6a0c3e9d51f7b284
+
 // experimentsGraphPaneProbeSalt is the graph's probe slot.
 const experimentsGraphPaneProbeSalt uint64 = 0x9b1e44d2c07a6f13
 
@@ -162,9 +169,13 @@ type experimentsDriver struct {
 	// paths by the view — and hierView its retained view.
 	hierModel *leewaywidgets.ChartModel
 	hierView  *leewaywidgets.HierarchyView
-	jsonView  typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-	jsonOK    bool
-	textOut   []string
+	// lensAnalysis is the lens sink's batch read as slots, with its clusters
+	// and rules; lensView paints a plan of it.
+	lensAnalysis *lwlens.Analysis
+	lensView     *leewaywidgets.LensView
+	jsonView     typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	jsonOK       bool
+	textOut      []string
 
 	// card is the pane's card emitter, for both sources; cardPalette is the
 	// palette it was built with, since the emitter takes it at construction.
@@ -371,6 +382,10 @@ func sinkGuide(sink string) (headline, detail string) {
 		return "One node per entity, one edge per reference to another entity.",
 			"The edges come from the tagged section whose values most often name an entity of the batch, by natural key " +
 				"or id; an edge's label is its first membership, a node's tone its first membership elsewhere."
+	case vizeval.SinkLens:
+		return "One line per entity, grouped by clusters of slot presence.",
+			"A slot is a section and a membership. values slides from which slots a row has to what they hold; " +
+				"stable slides from each row on its own terms, through one frame per cluster, to one frame for all rows."
 	case vizeval.SinkHierarchy:
 		return "One leaf per entity, placed by its label split into a path.",
 			"A leaf's size is the sum of its values in the first numeric tagged section, or one per entity; " +
@@ -486,6 +501,7 @@ func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.
 	inst.chartModel = nil
 	inst.graphModel = nil
 	inst.hierModel = nil
+	inst.lensAnalysis = nil
 	inst.textOut = nil
 	inst.jsonOK = false
 
@@ -548,6 +564,15 @@ func (inst *experimentsDriver) makeSink(cand vizeval.Candidate) (sink streamread
 		return hs, func() {
 			m := *hs.Model()
 			inst.hierModel = &m
+		}
+	case vizeval.SinkLens:
+		ls := lwlens.NewSink(membership.NewRenderer(providers.MembershipRefFormatter{}, nil, nil))
+		return ls, func() {
+			a, err := lwlens.Analyze(context.Background(), ls.Model(), lwlens.AnalyzeOptions{})
+			if err != nil {
+				inst.notice = "Analysing the batch failed: " + err.Error()
+			}
+			inst.lensAnalysis = &a
 		}
 	case vizeval.SinkGraph:
 		gs := leewaywidgets.NewGraphSink()
@@ -627,6 +652,8 @@ func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.S
 			inst.renderGraph(cand)
 		case inst.sink == vizeval.SinkHierarchy:
 			inst.renderHierarchy(cand)
+		case inst.sink == vizeval.SinkLens:
+			inst.renderLens(cand)
 		case inst.isTextSink():
 			inst.renderText()
 		}
@@ -806,6 +833,34 @@ func (inst *experimentsDriver) renderHierarchy(cand vizeval.Candidate) {
 	}
 	w, h := experimentsChartPaneFill.box(inst.paneW, inst.paneH)
 	inst.hierView.Render(inst.hierModel, hierarchyOptionsOf(cand), w, h)
+}
+
+// renderLens plans the lens under the candidate's intents and draws it.
+func (inst *experimentsDriver) renderLens(cand vizeval.Candidate) {
+	if inst.lensAnalysis == nil {
+		return
+	}
+	if inst.lensView == nil {
+		inst.lensView = leewaywidgets.NewLensView(inst.ids)
+	}
+	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsLensPaneProbeSalt).Derive()); ok &&
+		availW > 0 && availH > 0 &&
+		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
+		inst.paneW, inst.paneH = availW, availH
+	}
+	w, h := experimentsChartPaneFill.box(inst.paneW, inst.paneH)
+	values, _ := cand.Options[vizeval.OptionValues].(float64)
+	stable, _ := cand.Options[vizeval.OptionStable].(float64)
+	form, _ := cand.Options[vizeval.OptionForm].(string)
+	row, _ := cand.Options[vizeval.OptionRow].(int64)
+	plan := lwlens.PlanRows(inst.lensAnalysis, lwlens.Intent{Values: values, Stable: stable})
+	inst.lensView.Render(inst.lensAnalysis, &plan, experimentsLensForms[form], int32(row), w, h)
+}
+
+// experimentsLensForms maps the catalogue's lens forms onto the view's.
+var experimentsLensForms = map[string]leewaywidgets.LensFormE{
+	"rows": leewaywidgets.LensFormRows, "archetypes": leewaywidgets.LensFormArchetypes,
+	"focus": leewaywidgets.LensFormFocus,
 }
 
 // experimentsHierarchyForms maps the catalogue's form names onto the view's.
