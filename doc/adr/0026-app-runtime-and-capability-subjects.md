@@ -359,6 +359,16 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-09-26 — `net.http.fetch.<destination>` joins the taxonomy (ADR-0262)
+
+§SD10's `net.` prefix gains its first family: HTTP egress to a destination
+the host registers, one request/reply subject per destination
+([ADR-0262](./0262-http-egress-as-a-keelson-capability.md)). The two
+families added before it without an entry here are `llm.{describe|complete}`
+([ADR-0254](./0254-model-inference-as-a-keelson-capability.md)) and
+`keelson.query.{table}`
+([ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md)).
+
 ### 2026-08-27 — `boxer.facts` holds a corpus that is not process state (ADR-0168 §SD1)
 
 §SD6 describes `boxer.facts` as holding runtime state, capability grants and
