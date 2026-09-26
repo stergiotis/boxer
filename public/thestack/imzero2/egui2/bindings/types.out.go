@@ -6,6 +6,11 @@ import "github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 
 import "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 
+type AccessibleRegionFluid struct {
+	r *typed.RetainedFffiBuilder
+}
+type AccessibleRegionMethodIdE uint32
+
 type AllocateUiAtRectFluid struct {
 	r *typed.RetainedFffiBuilder
 }

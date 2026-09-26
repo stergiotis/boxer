@@ -481,6 +481,59 @@ var builtinTabDefs = []builtinTabDef{
 	{id: "detail", dockID: dockTabDetail, title: "Detail", zone: TabZoneSide},
 }
 
+// TabZoneNames spells each zone the way a layout knob or a document names it.
+var TabZoneNames = map[string]TabZoneE{
+	"body":   TabZoneBody,
+	"editor": TabZoneEditor,
+	"tools":  TabZoneTools,
+	"side":   TabZoneSide,
+	"bottom": TabZoneBottom,
+}
+
+// TabZonesOverride is the launch-time re-zoning knob. Its use is a scripted
+// capture that needs one pane large: "*=body" puts every tab in one leaf, the
+// whole central panel, and a BOXER_PLAY_FOCUS_* knob raises the pane to draw
+// (ADR-0257, proposed — the vizeval harness captures the Experiments pane
+// this way).
+var TabZonesOverride = env.NewString(env.Spec{
+	Name:        "BOXER_PLAY_TAB_ZONES",
+	Description: "re-zone tabs at launch, as comma-separated id=zone pairs (zones: body, editor, tools, side, bottom; id * names every tab; later pairs win), e.g. \"*=body\" for one full-panel leaf; a pair naming an unknown tab or zone fails the mount",
+	Category:    env.CategoryE("boxer-play"),
+})
+
+// ApplyTabZones re-zones registered tabs from a BOXER_PLAY_TAB_ZONES value.
+// Pairs apply in order, so a wildcard first and exceptions after reads as it
+// is written. Valid only before the first Render, like SetZone.
+func (inst *TabRegistry) ApplyTabZones(spec string) (err error) {
+	for pair := range strings.SplitSeq(spec, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		id, zoneName, ok := strings.Cut(pair, "=")
+		id, zoneName = strings.TrimSpace(id), strings.TrimSpace(zoneName)
+		if !ok || id == "" {
+			return eb.Build().Str("pair", pair).Errorf("tab zone pair is not id=zone")
+		}
+		zone, known := TabZoneNames[zoneName]
+		if !known {
+			return eb.Build().Str("pair", pair).Str("zone", zoneName).Errorf("unknown tab zone")
+		}
+		if id != "*" {
+			if err = inst.SetZone(id, zone); err != nil {
+				return err
+			}
+			continue
+		}
+		for _, spec := range inst.all() {
+			if err = inst.SetZone(spec.ID, zone); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // focusVars are the BOXER_PLAY_FOCUS_<ID> scripted-screenshot knobs, one per
 // built-in tab, derived from the tab definitions (slice 6a — this replaces six
 // hand-registered specs and their hand-permuted reorder blocks).

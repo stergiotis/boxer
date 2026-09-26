@@ -2,9 +2,13 @@ package carrierclient
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"io"
+	"math"
 	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -142,6 +146,64 @@ type Step struct {
 
 	// Comment is free prose kept beside the step; the runner logs it.
 	Comment string `json:"comment,omitempty"`
+
+	// Sidecars names what a `capture` writes beside its PNG, for a program to
+	// measure rather than a reader to look at (ADR-0257 (proposed) §SD5):
+	// [SidecarSVG] and [SidecarTree]. A requested sidecar that is not written
+	// fails the step.
+	Sidecars []string `json:"sidecars,omitempty"`
+}
+
+const (
+	// SidecarSVG is the frame's shapes as an SVG, written by the host from the
+	// same pass as the PNG: text as glyph-positioned `<text>`, shapes as
+	// primitives. Named <capture>.svg.
+	SidecarSVG = "svg"
+	// SidecarTree is the accessibility tree as JSONL ([WriteTreeJSONL]), every
+	// node, requested right after the capture — so it is the next pass's tree,
+	// not the captured pass's, which a settled frame does not tell apart.
+	// Named <capture>.tree.jsonl.
+	SidecarTree = "tree"
+)
+
+// SidecarFile is the file name a capture named name writes for sidecar, or
+// the PNG itself for an empty sidecar. It mirrors the host's rule: a trailing
+// ".png" on the name is dropped first.
+func SidecarFile(name string, sidecar string) string {
+	stem := name
+	if ext := filepath.Ext(stem); strings.EqualFold(ext, ".png") {
+		stem = stem[:len(stem)-len(ext)]
+	}
+	switch sidecar {
+	case "":
+		return stem + ".png"
+	case SidecarTree:
+		return stem + ".tree.jsonl"
+	default:
+		return stem + "." + sidecar
+	}
+}
+
+// wants reports whether the step asks for sidecar.
+func (inst Step) wants(sidecar string) bool {
+	return slices.Contains(inst.Sidecars, sidecar)
+}
+
+// check refuses what the decoder cannot: a step with no verb, and sidecars on
+// anything but a capture, or ones nobody writes.
+func (inst Step) check() (err error) {
+	if inst.Do == "" {
+		return eh.Errorf("step has no \"do\" verb")
+	}
+	if len(inst.Sidecars) > 0 && inst.Do != "capture" {
+		return eb.Build().Str("do", inst.Do).Errorf("only a capture step takes \"sidecars\"")
+	}
+	for _, sc := range inst.Sidecars {
+		if sc != SidecarSVG && sc != SidecarTree {
+			return eb.Build().Str("sidecar", sc).Errorf("unknown capture sidecar (want %q or %q)", SidecarSVG, SidecarTree)
+		}
+	}
+	return nil
 }
 
 // hasAnchor reports whether the step names a widget at all.
@@ -221,8 +283,8 @@ func ParseTrace(r io.Reader) (steps []Step, err error) {
 		if err = json.Unmarshal([]byte(text), &st); err != nil {
 			return nil, eb.Build().Int("line", line).Errorf("unable to parse trace step at line %d: %w", line, err) //boxer:lint disable=CS013 reason="line is already a field; %d keeps it in the human-read diagnostic"
 		}
-		if st.Do == "" {
-			return nil, eb.Build().Int("line", line).Errorf("trace step at line %d has no \"do\" verb", line) //boxer:lint disable=CS013 reason="line is already a field; %d keeps it in the human-read diagnostic"
+		if err = st.check(); err != nil {
+			return nil, eb.Build().Int("line", line).Errorf("invalid trace step at line %d: %w", line, err) //boxer:lint disable=CS013 reason="line is already a field; %d keeps it in the human-read diagnostic"
 		}
 		steps = append(steps, st)
 	}
@@ -240,8 +302,8 @@ func ParseSteps(array []byte) (steps []Step, err error) {
 		return nil, eh.Errorf("unable to parse steps: %w", err)
 	}
 	for i, st := range steps {
-		if st.Do == "" {
-			return nil, eb.Build().Int("index", i).Errorf("step has no \"do\" verb")
+		if err = st.check(); err != nil {
+			return nil, eb.Build().Int("index", i).Errorf("invalid step: %w", err)
 		}
 	}
 	return steps, nil
@@ -400,6 +462,29 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 		}
 		log.Info().Msg(st.describe())
 	}
+	return nil
+}
+
+// writeTreeSidecar writes every node of a fresh tree beside the capture it
+// follows. The path is derived from the one the host reported, so this assumes
+// the host's dump directory is on this machine — which a scene run, the one
+// caller that asks, guarantees by launching the host itself.
+func writeTreeSidecar(c *Client, done *CaptureDone, opts RunOptions) (err error) {
+	snap, err := c.Tree(opts.Timeout)
+	if err != nil {
+		return err
+	}
+	var b bytes.Buffer
+	if err = WriteTreeJSONL(&b, SelectNodes(snap, TreeFilter{Limit: math.MaxInt})); err != nil {
+		return err
+	}
+	path := filepath.Join(filepath.Dir(done.GetPath()), SidecarFile(filepath.Base(done.GetPath()), SidecarTree))
+	if err = os.WriteFile(path, b.Bytes(), 0o644); err != nil {
+		return eb.Build().Str("path", path).Errorf("unable to write the tree sidecar: %w", err)
+	}
+	opts.Logger.Info().Str("path", path).Uint64("pass", snap.GetPass()).
+		Uint64("captureFrame", done.GetFrameIndex()).Int("nodes", len(snap.GetNodes())).
+		Msg("tree sidecar written")
 	return nil
 }
 
@@ -633,13 +718,22 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		if name == "" {
 			return eh.Errorf("capture step needs a name in \"text\"")
 		}
-		done, e := c.Capture(name, opts.Timeout)
+		svg := st.wants(SidecarSVG)
+		done, e := c.Capture(name, svg, opts.Timeout)
 		if e != nil {
 			return e
 		}
 		opts.Logger.Info().Str("path", done.GetPath()).
 			Uint32("width", done.GetWidth()).Uint32("height", done.GetHeight()).
+			Str("svg", done.GetSvgPath()).Uint64("frame", done.GetFrameIndex()).
 			Msg("captured")
+		if svg && done.GetSvgPath() == "" {
+			return eb.Build().Str("path", done.GetPath()).
+				Errorf("the host wrote the capture but not its svg sidecar (see the host log)")
+		}
+		if st.wants(SidecarTree) {
+			return writeTreeSidecar(c, done, opts)
+		}
 		return nil
 	case "expect":
 		return opts.Vars.expect(st)

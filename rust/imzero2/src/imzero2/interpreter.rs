@@ -2537,6 +2537,41 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             clippy::useless_let_if_seq
         )]
         match f {
+            FuncProcId::AccessibleRegion => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::AccessibleRegion");
+                // arguments
+                let mut name = self.io.read_plain_s()?;
+                // construct
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                if u.is_some() {
+                    let ui = u.as_mut().unwrap();
+                    let scope_resp = ui
+                        .scope(|ui| {
+                            let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                        })
+                        .response;
+                    scope_resp.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::Other, true, name.as_str())
+                    });
+                    let visible = scope_resp.rect.intersect(ui.clip_rect());
+                    ui.ctx().accesskit_node_builder(scope_resp.id, |b| {
+                        b.set_bounds(egui::accesskit::Rect {
+                            x0: visible.min.x.into(),
+                            y0: visible.min.y.into(),
+                            x1: visible.max.x.into(),
+                            y1: visible.max.y.into(),
+                        });
+                    });
+                } else {
+                    self.interpret_outer(c, &mut None)?;
+                }
+            }
             FuncProcId::AddSpace => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::AddSpace");

@@ -880,6 +880,43 @@ let mut layout = egui::Layout::default();`)).
 						self.interpret_outer({{EguiContext}}, &mut None)?;
 					}
 `)).Build())
+	// accessibleRegion names the rect its body draws in, as one node of the
+	// accessibility tree: role "unknown" (egui's WidgetType::Other), the name
+	// given, and the bounds of the part of the body that is visible — its rect
+	// clipped to the enclosing ui's clip, so inside a scroll area it is the
+	// viewport's share, not the whole content. It exists so a headless driver
+	// can find where a painter-drawn artifact sits — to crop a capture to it or
+	// scope a measurement to it (ADR-0257, proposed, §SD1). Nothing is drawn
+	// and no interaction is added. The body's own nodes stay parented where
+	// they were: the region node is created after them, so it names an area,
+	// not a subtree.
+	blocks = append(blocks, idl.NewBuilderFactoryNode("accessibleRegion").
+		AddArguments(idl.NewArgumentsBuilder().PlainArg("name", ctabb.S).Build()).
+		WithSettingImmediate(true).
+		WithSettingBlockIterator(true).
+		WithConstructionCodeClientRust(ir.EmptyCode).
+		WithApplyCodeClientRust(rustClientCode(`
+					if {{EguiUiOptionalOuter}}.is_some() {
+						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
+						let scope_resp = ui.scope(|ui| {
+							let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						}).response;
+						scope_resp.widget_info(|| {
+							egui::WidgetInfo::labeled(egui::WidgetType::Other, true, name.as_str())
+						});
+						let visible = scope_resp.rect.intersect(ui.clip_rect());
+						ui.ctx().accesskit_node_builder(scope_resp.id, |b| {
+							b.set_bounds(egui::accesskit::Rect {
+								x0: visible.min.x.into(),
+								y0: visible.min.y.into(),
+								x1: visible.max.x.into(),
+								y1: visible.max.y.into(),
+							});
+						});
+					} else {
+						self.interpret_outer({{EguiContext}}, &mut None)?;
+					}
+`)).Build())
 	// hoverUi captures BOTH a tooltip body and a target body as deferred
 	// blocks. At render time the target body runs inside a `ui.scope(...)` and
 	// an overlay interact-widget on top of the scope's rect is decorated with

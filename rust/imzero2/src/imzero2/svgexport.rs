@@ -674,6 +674,12 @@ fn rgba_to_png(width: u32, height: u32, rgba: &[u8]) -> Option<Vec<u8>> {
 pub struct ExportState {
     pub pending: Option<ExportRequest>,
     pub last_result: Option<Result<usize, String>>,
+    /// The path `last_result` is about. One request is served per pass and a
+    /// later `request_export` replaces an earlier one, so a requester that
+    /// shares the slot (the headless host's capture sidecar beside the app's
+    /// own `ExportSvg`) checks this to learn whether it was its export that
+    /// ran.
+    pub last_path: Option<PathBuf>,
 }
 
 /// How much of a window to include in the SVG export.
@@ -787,7 +793,9 @@ impl egui::plugin::Plugin for SvgExportPlugin {
         } else if let Ok(bytes) = result {
             tracing::info!(path = %req.path.display(), embed = req.embed_fonts, bytes, "svg export ok");
         }
-        self.state.lock().expect("svg_export state poisoned").last_result = Some(result);
+        let mut s = self.state.lock().expect("svg_export state poisoned");
+        s.last_result = Some(result);
+        s.last_path = Some(req.path);
     }
 }
 
@@ -1607,6 +1615,17 @@ impl SvgBuilder {
         let link_url = self.link_for_bbox(text_bbox).map(|s| s.to_owned());
         self.set_link(link_url.as_deref());
 
+        // The glyphs of one text shape are wrapped in one `<g class="imz-text">`
+        // carrying what a program measuring the drawing needs and cannot
+        // recover from glyphs alone (ADR-0257, proposed, §SD6): the string,
+        // the ink bounds of the glyphs actually drawn (their atlas quads — not
+        // in the per-glyph elements), the largest font size, and whether
+        // egui elided the text to fit. The opening tag is inserted once the
+        // bounds are known; a shape that draws no glyph gets no group.
+        let group_at = self.body.len();
+        let mut ink: Option<Rect> = None;
+        let mut max_size: f32 = 0.0;
+
         // Syntax-highlighted text (CodeView, json, markdown, ...) uses one
         // `LayoutSection` per token, each carrying its own colour and font.
         // `Glyph::section_index` is `pub(crate)` so we can't read it
@@ -1700,6 +1719,18 @@ impl SvgBuilder {
                         ch = xml_escape_char(glyph.chr),
                     );
                     self.counts.glyphs_emitted += 1;
+                    // The glyph's ink, where egui's own tessellation puts
+                    // its quad: position plus the atlas entry's offset, at
+                    // the entry's size. The line box (ascent to descent)
+                    // would count descender space a digit never inks as
+                    // text, and call a label clipped that is not.
+                    let uv = glyph.uv_rect;
+                    let glyph_box = Rect::from_min_size(
+                        egui::pos2(bx + uv.offset.x, by + uv.offset.y),
+                        uv.size,
+                    );
+                    ink = Some(ink.map_or(glyph_box, |r| r.union(glyph_box)));
+                    max_size = max_size.max(em_size);
                 } else {
                     self.counts.glyphs_skipped += 1;
                 }
@@ -1752,6 +1783,23 @@ impl SvgBuilder {
             if placed_row.ends_with_newline {
                 byte_cursor += 1; // `\n` is one UTF-8 byte
             }
+        }
+        if let Some(r) = ink {
+            let open = format!(
+                "  <g class=\"imz-text\" data-text=\"{t}\" data-bbox=\"{x:.2} {y:.2} {w:.2} {h:.2}\" data-size=\"{max_size:.2}\"{elided}>\n",
+                t = xml_escape_attr(&job.text),
+                x = r.min.x,
+                y = r.min.y,
+                w = r.width(),
+                h = r.height(),
+                elided = if galley.elided {
+                    " data-elided=\"1\""
+                } else {
+                    ""
+                },
+            );
+            self.body.insert_str(group_at, &open);
+            self.body.push_str("  </g>\n");
         }
     }
 

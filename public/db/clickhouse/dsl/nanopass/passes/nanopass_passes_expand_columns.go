@@ -284,8 +284,18 @@ func expandAsterisk(ctx *grammar1.ColumnsExprAsteriskContext, scope *nanopass.Se
 	}
 
 	if tableIdCtx != nil {
-		// table.* — expand for a specific table
-		tableName := tableIdCtx.Identifier().GetText()
+		// table.* — expand for a specific table. The qualifier is not always an
+		// identifier: a parameter slot or the COLUMNS token has no Identifier
+		// child, so take the name from whichever child is present.
+		var tableName string
+		switch {
+		case tableIdCtx.Identifier() != nil:
+			tableName = tableIdCtx.Identifier().GetText()
+		case tableIdCtx.ParamSlot() != nil:
+			tableName = tableIdCtx.ParamSlot().GetText()
+		case tableIdCtx.COLUMNS() != nil:
+			tableName = tableIdCtx.COLUMNS().GetText()
+		}
 		expanded = expandForTable(tableName, scope, schema)
 	} else {
 		// bare * — expand for all tables in scope

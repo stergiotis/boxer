@@ -58,6 +58,37 @@ impl FrameSink for PngDumpSink {
     }
 }
 
+/// The file a capture named `name` is written to under `dir`, with extension
+/// `ext` — the sanitising half of [`capture_named`], shared with the sidecars a
+/// capture may carry (ADR-0257 (proposed) §SD5) so a PNG and its SVG always
+/// share a basename. A trailing `.png` on the name is dropped first, so
+/// `"a.png"` and `"a"` name the same capture.
+pub fn capture_path(
+    dir: &std::path::Path,
+    name: &str,
+    ext: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    let unusable = || {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("capture name has no usable file component: {name:?}"),
+        )
+    };
+    let base = std::path::Path::new(name)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty() && *s != "." && *s != "..")
+        .ok_or_else(unusable)?;
+    let stem = match std::path::Path::new(base).extension() {
+        Some(e) if e.eq_ignore_ascii_case("png") => &base[..base.len() - e.len() - 1],
+        _ => base,
+    };
+    if stem.is_empty() {
+        return Err(unusable());
+    }
+    Ok(dir.join(format!("{stem}.{ext}")))
+}
+
 /// Write one BGRA frame as a PNG named by a *remote* request (ADR-0154 SD4).
 ///
 /// The name crosses the wire, so it is reduced to its final component before it
@@ -73,24 +104,8 @@ pub fn capture_named(
     width: u32,
     height: u32,
 ) -> std::io::Result<std::path::PathBuf> {
-    let base = std::path::Path::new(name)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .filter(|s| !s.is_empty() && *s != "." && *s != "..")
-        .ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("capture name has no usable file component: {name:?}"),
-            )
-        })?;
-    let file =
-        if std::path::Path::new(base).extension().is_some_and(|e| e.eq_ignore_ascii_case("png")) {
-            base.to_owned()
-        } else {
-            format!("{base}.png")
-        };
+    let path = capture_path(dir, name, "png")?;
     std::fs::create_dir_all(dir)?;
-    let path = dir.join(file);
     let mut rgba = Vec::with_capacity(bgra.len());
     for px in bgra.chunks_exact(4) {
         if let &[b, g, r, a] = px {
@@ -115,4 +130,43 @@ pub fn write_png(
     let mut writer = encoder.write_header().map_err(std::io::Error::other)?;
     writer.write_image_data(rgba).map_err(std::io::Error::other)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::capture_path;
+    use std::path::Path;
+
+    #[test]
+    fn capture_path_shares_a_basename_across_extensions() {
+        let dir = Path::new("/dump");
+        assert_eq!(capture_path(dir, "a", "png").unwrap(), dir.join("a.png"));
+        assert_eq!(
+            capture_path(dir, "a.png", "png").unwrap(),
+            dir.join("a.png")
+        );
+        assert_eq!(
+            capture_path(dir, "a.PNG", "svg").unwrap(),
+            dir.join("a.svg")
+        );
+        assert_eq!(
+            capture_path(dir, "a.b", "svg").unwrap(),
+            dir.join("a.b.svg")
+        );
+    }
+
+    #[test]
+    fn capture_path_reduces_to_a_basename_under_dir() {
+        let dir = Path::new("/dump");
+        assert_eq!(
+            capture_path(dir, "../../etc/x", "svg").unwrap(),
+            dir.join("x.svg")
+        );
+        assert_eq!(
+            capture_path(dir, "/abs/y.png", "png").unwrap(),
+            dir.join("y.png")
+        );
+        assert!(capture_path(dir, "..", "png").is_err());
+        assert!(capture_path(dir, "", "png").is_err());
+    }
 }

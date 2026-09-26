@@ -1371,8 +1371,13 @@ func (x *TreeNode) GetChildren() []uint64 {
 // is ignored. The carrier already grants the active connection full input
 // control, which is no reason to also grant it arbitrary filesystem writes.
 type CaptureRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// ADR-0257 (proposed) §SD5: also write the frame's shapes as an SVG
+	// beside the PNG — same basename, `.svg` — from the same pass. The SVG
+	// carries what the pixels do not: text as glyph-positioned `<text>`, and
+	// shapes as primitives, for geometry to be measured rather than seen.
+	Svg           bool `protobuf:"varint,2,opt,name=svg,proto3" json:"svg,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1414,14 +1419,25 @@ func (x *CaptureRequest) GetName() string {
 	return ""
 }
 
+func (x *CaptureRequest) GetSvg() bool {
+	if x != nil {
+		return x.Svg
+	}
+	return false
+}
+
 // Server→client: the capture landed. `path` is the file the host actually
 // wrote, after sanitising.
 type CaptureDone struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Width         uint32                 `protobuf:"varint,2,opt,name=width,proto3" json:"width,omitempty"`
-	Height        uint32                 `protobuf:"varint,3,opt,name=height,proto3" json:"height,omitempty"`
-	FrameIndex    uint64                 `protobuf:"varint,4,opt,name=frame_index,json=frameIndex,proto3" json:"frame_index,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Path       string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Width      uint32                 `protobuf:"varint,2,opt,name=width,proto3" json:"width,omitempty"`
+	Height     uint32                 `protobuf:"varint,3,opt,name=height,proto3" json:"height,omitempty"`
+	FrameIndex uint64                 `protobuf:"varint,4,opt,name=frame_index,json=frameIndex,proto3" json:"frame_index,omitempty"`
+	// The SVG written for a request with `svg` set; empty when none was asked
+	// for or the export did not land (the PNG is acknowledged regardless, and
+	// the client decides whether a missing SVG fails its step).
+	SvgPath       string `protobuf:"bytes,5,opt,name=svg_path,json=svgPath,proto3" json:"svg_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1482,6 +1498,13 @@ func (x *CaptureDone) GetFrameIndex() uint64 {
 		return x.FrameIndex
 	}
 	return 0
+}
+
+func (x *CaptureDone) GetSvgPath() string {
+	if x != nil {
+		return x.SvgPath
+	}
+	return ""
 }
 
 // Server→client (ADR-0024 Update 2026-07-28): the mouse cursor shape egui
@@ -2403,15 +2426,17 @@ const file_boxer_imzero2_v1_input_proto_rawDesc = "" +
 	"\x05flags\x18\t \x01(\rR\x05flags\x12\x16\n" +
 	"\x06parent\x18\n" +
 	" \x01(\x04R\x06parent\x12\x1a\n" +
-	"\bchildren\x18\v \x03(\x04R\bchildren\"$\n" +
+	"\bchildren\x18\v \x03(\x04R\bchildren\"6\n" +
 	"\x0eCaptureRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"p\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
+	"\x03svg\x18\x02 \x01(\bR\x03svg\"\x8b\x01\n" +
 	"\vCaptureDone\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +
 	"\x05width\x18\x02 \x01(\rR\x05width\x12\x16\n" +
 	"\x06height\x18\x03 \x01(\rR\x06height\x12\x1f\n" +
 	"\vframe_index\x18\x04 \x01(\x04R\n" +
-	"frameIndex\"#\n" +
+	"frameIndex\x12\x19\n" +
+	"\bsvg_path\x18\x05 \x01(\tR\asvgPath\"#\n" +
 	"\vCursorShape\x12\x14\n" +
 	"\x05shape\x18\x01 \x01(\rR\x05shape\"A\n" +
 	"\vClientHello\x12\x1c\n" +

@@ -737,6 +737,75 @@ fn close_requested(out: &egui::FullOutput) -> bool {
 /// Round up to the next even number — H.264 4:2:0 (the Phase 2 encoder)
 /// requires even frame dimensions; bake that in from the start so the
 /// dumped frames and the future encoded stream agree.
+/// Queue the SVG sidecar of a capture (ADR-0257 (proposed) §SD5) on the
+/// export plugin, which writes it from this pass's shapes in `on_end_pass` —
+/// the pass whose pixels the PNG is read back from. Returns the path it asked
+/// for, which [`capture_svg_written`] checks after the pass. The backdrop is
+/// the opaque black the raster is cleared to, so an uncovered region reads the
+/// same in both files.
+#[cfg(feature = "headless_raster")]
+fn queue_capture_svg(
+    export: &crate::imzero2::svgexport::ExportStateHandle,
+    dump_dir: Option<&std::path::Path>,
+    name: &str,
+) -> Option<std::path::PathBuf> {
+    // No dump directory: the capture itself is refused below, with a warning.
+    let dir = dump_dir?;
+    let path = match framesink::capture_path(dir, name, "svg") {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error=%e, name, "capture svg sidecar refused");
+            return None;
+        }
+    };
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        tracing::warn!(error=%e, dir=%dir.display(), "capture svg sidecar: no dump directory");
+        return None;
+    }
+    if let Ok(mut st) = export.lock() {
+        st.last_path = None;
+        st.last_result = None;
+    }
+    crate::imzero2::svgexport::request_export(
+        export,
+        path.clone(),
+        true,
+        crate::imzero2::svgexport::ExportScope::Viewport,
+        Some(egui::Color32::BLACK),
+    );
+    Some(path)
+}
+
+/// Whether the export plugin wrote `path` during the pass just run. It is not
+/// when the app queued its own `ExportSvg` in the same pass — the slot holds
+/// one request and the later one wins — or when the export failed; either way
+/// the capture is acknowledged without an SVG and the client decides.
+#[cfg(feature = "headless_raster")]
+fn capture_svg_written(
+    export: &crate::imzero2::svgexport::ExportStateHandle,
+    path: &std::path::Path,
+) -> Option<String> {
+    let st = export.lock().ok()?;
+    match (&st.last_path, &st.last_result) {
+        (Some(p), Some(Ok(_))) if p == path => Some(path.to_string_lossy().into_owned()),
+        (Some(p), _) if p != path => {
+            tracing::warn!(
+                asked=%path.display(), written=%p.display(),
+                "capture svg sidecar displaced by the app's own export this pass"
+            );
+            None
+        }
+        (_, Some(Err(e))) => {
+            tracing::warn!(error=%e, path=%path.display(), "capture svg sidecar failed");
+            None
+        }
+        _ => {
+            tracing::warn!(path=%path.display(), "capture svg sidecar was not written");
+            None
+        }
+    }
+}
+
 fn even_up(v: u32) -> u32 {
     v + (v & 1)
 }
@@ -1169,6 +1238,16 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 fffi.set_video_capabilities(&[]);
             }
         }
+        // ADR-0154 SD4: a capture request is taken before the pass, so that an
+        // SVG sidecar (ADR-0257 (proposed) §SD5) can be queued for the export
+        // plugin to write from the same pass the PNG below rasterizes.
+        #[cfg(feature = "headless_raster")]
+        let capture = carrier.as_ref().and_then(|c| c.take_capture_request());
+        #[cfg(feature = "headless_raster")]
+        let capture_svg = capture
+            .as_ref()
+            .filter(|r| r.svg)
+            .and_then(|r| queue_capture_svg(&fffi.export_state, opts.dump_dir.as_deref(), &r.name));
         // Mirrors eframe 0.34's epi_integration: `run_ui(raw_input, |ui| {
         // app.logic(ui.ctx(), ..) })` — the interpreter dispatches against
         // the live pass exactly as it does under the desktop host.
@@ -1288,7 +1367,6 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             // ADR-0154 SD4: a capture request forces the pixel path for this
             // frame even when nothing else consumes pixels — an idle host with
             // no viewer is exactly the case a scripted capture runs in.
-            let capture = carrier.as_ref().and_then(|c| c.take_capture_request());
             let need_pixels = !sinks.is_empty()
                 || capture.is_some()
                 || carrier.as_ref().map(|c| c.connected() && c.wants_pixels()).unwrap_or(false);
@@ -1302,17 +1380,23 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
                 for sink in &mut sinks {
                     sink.on_frame(&bgra_frame, width_px, height_px, frame_idx);
                 }
-                if let (Some(name), Some(c)) = (capture, carrier.as_ref()) {
+                if let (Some(req), Some(c)) = (capture, carrier.as_ref()) {
+                    let name = req.name;
                     if let Some(dir) = opts.dump_dir.as_deref() {
                         match framesink::capture_named(dir, &name, &bgra_frame, width_px, height_px)
                         {
                             Ok(path) => {
-                                tracing::info!(path=%path.display(), frame_idx, "capture written");
+                                let svg_path = capture_svg
+                                    .as_deref()
+                                    .and_then(|p| capture_svg_written(&fffi.export_state, p))
+                                    .unwrap_or_default();
+                                tracing::info!(path=%path.display(), svg_path, frame_idx, "capture written");
                                 c.send_capture_done(crate::imzero2::inputproto::CaptureDone {
                                     path: path.to_string_lossy().into_owned(),
                                     width: width_px,
                                     height: height_px,
                                     frame_index: frame_idx,
+                                    svg_path,
                                 });
                             }
                             // No ack on failure: the client is waiting for

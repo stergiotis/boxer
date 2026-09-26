@@ -11,6 +11,18 @@ import "github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 import "encoding/binary"
 import "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 
+func AccessibleRegion(name string) (inst AccessibleRegionFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdAccessibleRegion))
+	r.WriteString(name)
+
+	inst = AccessibleRegionFluid{
+		r: r,
+	}
+
+	return
+}
+
 func AddSpace(amount float32) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdAddSpace))

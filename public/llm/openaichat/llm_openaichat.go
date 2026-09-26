@@ -24,6 +24,10 @@
 // shape — Ollama's native top-level "format" field is out of scope. Extra
 // merges provider-specific members (llama.cpp sampler knobs and the like)
 // verbatim into the top-level request object for backends that accept them.
+// Message.Images attaches images to a turn; such a message is sent in the
+// multi-part content form (a text part, then one image_url part per image as
+// a base64 data URL), which vision models on these endpoints read and text-only
+// models refuse — the refusal is the provider's to make.
 //
 // Transport: by default Complete and ListModels perform a single round-trip.
 // WithRetry enables bounded exponential backoff with jitter (honoring
@@ -38,6 +42,7 @@ package openaichat
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -98,6 +103,16 @@ type Message struct {
 	Content    string
 	ToolCallId string     // role=tool: the call this message answers
 	ToolCalls  []ToolCall // role=assistant: tool calls to echo back
+	// Images are sent with the turn, after its text (role=user). Empty keeps
+	// the plain string content every endpoint accepts.
+	Images []Image
+}
+
+// Image is one picture attached to a message: its media type ("image/png",
+// "image/jpeg") and its encoded bytes, which travel as a base64 data URL.
+type Image struct {
+	MediaType string
+	Data      []byte
 }
 
 // Tool declares a function the model may call. Parameters is the function's
@@ -334,6 +349,30 @@ type wireMessage struct {
 	ToolCallId       string         `json:"tool_call_id,omitempty"`
 }
 
+// wireOutMessage is a message as a request carries it: the same members as
+// wireMessage, but Content is either the plain string or, when the message
+// has images, the array of content parts.
+type wireOutMessage struct {
+	Role       string         `json:"role"`
+	Content    any            `json:"content"`
+	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
+	ToolCallId string         `json:"tool_call_id,omitempty"`
+}
+
+type wireTextPart struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type wireImagePart struct {
+	Type     string       `json:"type"`
+	ImageUrl wireImageUrl `json:"image_url"`
+}
+
+type wireImageUrl struct {
+	Url string `json:"url"`
+}
+
 type wireToolCall struct {
 	Id       string               `json:"id"`
 	Type     string               `json:"type"`
@@ -380,7 +419,7 @@ type wireOptions struct {
 // instead swallow an intentional temperature=0.
 type wireRequest struct {
 	Model              string              `json:"model"`
-	Messages           []wireMessage       `json:"messages"`
+	Messages           []wireOutMessage    `json:"messages"`
 	Temperature        *float32            `json:"temperature,omitempty"`
 	MaxTokens          int32               `json:"max_tokens,omitzero"`
 	Seed               *int64              `json:"seed,omitempty"`
@@ -792,7 +831,7 @@ func isIncompleteFinishReason(reason string) (incomplete bool) {
 func (inst *Client) encodeRequest(req CompletionRequest) (body []byte, err error) {
 	wreq := wireRequest{
 		Model:       req.ModelId,
-		Messages:    make([]wireMessage, 0, len(req.Messages)),
+		Messages:    make([]wireOutMessage, 0, len(req.Messages)),
 		Temperature: req.Temperature,
 		MaxTokens:   req.MaxTokens,
 		Seed:        req.Seed,
@@ -829,7 +868,11 @@ func (inst *Client) encodeRequest(req CompletionRequest) (body []byte, err error
 		wreq.ToolChoice = toWireToolChoice(req.ToolChoice)
 	}
 	for _, m := range req.Messages {
-		wreq.Messages = append(wreq.Messages, toWireMessage(m))
+		var wm wireOutMessage
+		if wm, err = toWireMessage(m); err != nil {
+			return
+		}
+		wreq.Messages = append(wreq.Messages, wm)
 	}
 	body, err = json.Marshal(wreq)
 	if err != nil {
@@ -852,11 +895,28 @@ func validateResponseFormat(rf *ResponseFormat) (err error) {
 	return
 }
 
-func toWireMessage(m Message) (wm wireMessage) {
-	wm = wireMessage{
+func toWireMessage(m Message) (wm wireOutMessage, err error) {
+	wm = wireOutMessage{
 		Role:       m.Role.String(),
 		Content:    m.Content,
 		ToolCallId: m.ToolCallId,
+	}
+	if len(m.Images) > 0 {
+		parts := make([]any, 0, 1+len(m.Images))
+		if m.Content != "" {
+			parts = append(parts, wireTextPart{Type: "text", Text: m.Content})
+		}
+		for i, img := range m.Images {
+			if !strings.HasPrefix(img.MediaType, "image/") || len(img.Data) == 0 {
+				err = eb.Build().Int("image", i).Str("mediaType", img.MediaType).
+					Errorf("openaichat: an image needs an image/* media type and data")
+				return
+			}
+			parts = append(parts, wireImagePart{Type: "image_url", ImageUrl: wireImageUrl{
+				Url: "data:" + img.MediaType + ";base64," + base64.StdEncoding.EncodeToString(img.Data),
+			}})
+		}
+		wm.Content = parts
 	}
 	if len(m.ToolCalls) > 0 {
 		wm.ToolCalls = make([]wireToolCall, 0, len(m.ToolCalls))

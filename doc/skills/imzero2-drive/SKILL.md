@@ -88,7 +88,7 @@ substring), `value`, `valueContains`, `role`, `nth`.
 | `read` | anchor, `pattern`, `on` | polls until the node's value (or name, with `"on":"name"`) matches the regular expression, then binds every named group `(?P<zoom>[\d.]+)` for the rest of the run |
 | `expect` | `of`, `minus`; `eq`, `approx`+`tol`, `min`, `max`, `is`, `matches` | compares a bound name — less another, with `minus` — with a constant; fails with what was read and what was expected |
 | `tree` | `text`, `role`, `id` (as *under*) | prints matching nodes mid-run |
-| `capture` | `text` as the file name | PNG into the host's `IMZERO2_HEADLESS_DUMP_DIR` |
+| `capture` | `text` as the file name; `sidecars` | PNG into the host's `IMZERO2_HEADLESS_DUMP_DIR`; with `"sidecars":["svg","tree"]` also `<name>.svg` (the same pass's shapes, text as glyph-positioned `<text>`) and `<name>.tree.jsonl` (every node, taken right after) |
 | `resize`, `cadence`, `sleep`, `note` | see `carrierclient.Step` | |
 
 Coordinate steps (`click`, `hover`, `drag`) also take `xFrom` / `yFrom`: the

@@ -224,6 +224,11 @@ message TreeNode {
 // control, which is no reason to also grant it arbitrary filesystem writes.
 message CaptureRequest {
   string name = 1;
+  // ADR-0257 (proposed) §SD5: also write the frame's shapes as an SVG
+  // beside the PNG — same basename, `.svg` — from the same pass. The SVG
+  // carries what the pixels do not: text as glyph-positioned `<text>`, and
+  // shapes as primitives, for geometry to be measured rather than seen.
+  bool svg = 2;
 }
 
 // Server→client: the capture landed. `path` is the file the host actually
@@ -233,6 +238,10 @@ message CaptureDone {
   uint32 width = 2;
   uint32 height = 3;
   uint64 frame_index = 4;
+  // The SVG written for a request with `svg` set; empty when none was asked
+  // for or the export did not land (the PNG is acknowledged regardless, and
+  // the client decides whether a missing SVG fails its step).
+  string svg_path = 5;
 }
 
 // Server→client (ADR-0024 Update 2026-07-28): the mouse cursor shape egui

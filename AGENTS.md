@@ -43,6 +43,7 @@ the linked document wins.
 | Draw a graph over a slippy map | [doc/howto/graph-on-a-map.md](./doc/howto/graph-on-a-map.md) |
 | Draw a gridded vector field (wind, currents) on a map | [doc/howto/vector-field-on-a-map.md](./doc/howto/vector-field-on-a-map.md) |
 | Drive a running app, or write a headless scene that asserts and captures | [doc/skills/imzero2-drive/SKILL.md](./doc/skills/imzero2-drive/SKILL.md) |
+| Score renderings of a leeway batch — geometry metrics per candidate sink | [doc/howto/vizeval-score-renderings.md](./doc/howto/vizeval-score-renderings.md) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
 | Report a vulnerability | [SECURITY.md](./SECURITY.md) |
 

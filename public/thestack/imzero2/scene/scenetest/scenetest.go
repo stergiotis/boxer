@@ -123,6 +123,21 @@ func buildHost(host Host) (b *builtHost, err error) {
 	return b, nil
 }
 
+// BuildHost builds the host once per test process and returns its path, for a
+// test that runs scenes through a library of its own (vizeval's harness,
+// ADR-0257) rather than through Launch.
+func BuildHost(t testing.TB, host Host) (path string, root string) {
+	t.Helper()
+	b, err := buildHost(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.err != nil {
+		t.Fatalf("unable to build the imzero2 host: %v\n%s", b.err, b.out)
+	}
+	return b.path, b.host.ClientRoot
+}
+
 // Launch starts a scene on boxer's own host for a test and tears it down with
 // the test. It skips the test when the machine has no headless client to run
 // against — that says something about the machine, not about the widget.

@@ -295,7 +295,12 @@ tableFunctionExpr: identifier LPAREN tableArgList? RPAREN;
 // Without it a query parameterised on its database or table cannot be parsed at
 // all, so an applet carrying one never mounts. Consumers must treat
 // `Identifier()` as optional here and fall back to `GetText()`.
-tableIdentifier: (databaseIdentifier DOT)? (identifier | paramSlot);
+//
+// COLUMNS is admitted in the same position, and only there: `system.columns`
+// is a real table, but COLUMNS cannot join the `keyword` rule, because
+// `COLUMNS('re')` would then match both ColumnExprFunction and
+// ColumnExprDynamic. After a DOT or before one, the token is unambiguous.
+tableIdentifier: (databaseIdentifier DOT)? (identifier | COLUMNS | paramSlot);
 tableArgList: tableArgExpr (COMMA tableArgExpr)*;
 // The columnExpr alternative admits expression arguments — row tuples
 // `values('a UInt8, b UInt8', (1, 2))`, arrays, arithmetic, function calls —

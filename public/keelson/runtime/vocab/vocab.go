@@ -341,6 +341,46 @@ var (
 	MembLlmCallIncomplete      = NkRegistry.MustBegin("llmCallIncomplete", 119).End()
 	MembLlmCallRefused         = NkRegistry.MustBegin("llmCallRefused", 120).End()
 	MembLlmCallError           = NkRegistry.MustBegin("llmCallError", 121).End()
+
+	// vizeval scorecards (ADR-0257 §SD8) — one boxer.facts row per candidate
+	// scored over a scenario at a build: which rendering, of which data, how
+	// far it got, and its metrics. Append-only. Metrics are two parallel
+	// arrays, names and values, so a new metric needs no new membership; the
+	// gates a scenario named are split into passed and failed. The candidate's
+	// canonical JSON and the free-text reason are strings, the rest symbols.
+	MembKindVizevalScore   = NkRegistry.MustBegin("runtimeKindVizevalScore", 122).End()
+	MembVizevalScenario    = NkRegistry.MustBegin("vizevalScenario", 123).End()
+	MembVizevalCandidateId = NkRegistry.MustBegin("vizevalCandidateId", 124).End()
+	MembVizevalSink        = NkRegistry.MustBegin("vizevalSink", 125).End()
+	MembVizevalCandidate   = NkRegistry.MustBegin("vizevalCandidate", 126).End()
+	MembVizevalBuild       = NkRegistry.MustBegin("vizevalBuild", 127).End()
+	MembVizevalBatchDigest = NkRegistry.MustBegin("vizevalBatchDigest", 128).End()
+	MembVizevalRows        = NkRegistry.MustBegin("vizevalRows", 129).End()
+	MembVizevalStatus      = NkRegistry.MustBegin("vizevalStatus", 130).End()
+	MembVizevalReason      = NkRegistry.MustBegin("vizevalReason", 131).End()
+	MembVizevalDir         = NkRegistry.MustBegin("vizevalDir", 132).End()
+	MembVizevalArea        = NkRegistry.MustBegin("vizevalArea", 133).End()
+	MembVizevalMetricName  = NkRegistry.MustBegin("vizevalMetricName", 134).End()
+	MembVizevalMetricValue = NkRegistry.MustBegin("vizevalMetricValue", 135).End()
+	MembVizevalGatePassed  = NkRegistry.MustBegin("vizevalGatePassed", 136).End()
+	MembVizevalGateFailed  = NkRegistry.MustBegin("vizevalGateFailed", 137).End()
+
+	// vizeval pairwise judgements (ADR-0257 §SD6, §SD8) — one boxer.facts
+	// row per pair of candidates a model compared, both orders merged: which
+	// two drawings, by which model and prompt, and per criterion which side
+	// it preferred (a, b, tie, or split when the orders disagreed).
+	MembKindVizevalJudgement     = NkRegistry.MustBegin("runtimeKindVizevalJudgement", 138).End()
+	MembVizevalJudgementScenario = NkRegistry.MustBegin("vizevalJudgementScenario", 139).End()
+	MembVizevalJudgementDigest   = NkRegistry.MustBegin("vizevalJudgementDigest", 140).End()
+	MembVizevalJudgeModel        = NkRegistry.MustBegin("vizevalJudgeModel", 141).End()
+	MembVizevalJudgePrompt       = NkRegistry.MustBegin("vizevalJudgePrompt", 142).End()
+	MembVizevalPairA             = NkRegistry.MustBegin("vizevalPairA", 143).End()
+	MembVizevalPairB             = NkRegistry.MustBegin("vizevalPairB", 144).End()
+	MembVizevalDrawingA          = NkRegistry.MustBegin("vizevalDrawingA", 145).End()
+	MembVizevalDrawingB          = NkRegistry.MustBegin("vizevalDrawingB", 146).End()
+	MembVizevalCriterion         = NkRegistry.MustBegin("vizevalCriterion", 147).End()
+	MembVizevalPreference        = NkRegistry.MustBegin("vizevalPreference", 148).End()
+	MembVizevalWhy               = NkRegistry.MustBegin("vizevalWhy", 149).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -374,4 +414,11 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembLlmCallModel, MembLlmCallEndpointHost, MembLlmCallMessages, MembLlmCallTools, MembLlmCallPromptBytes,
 	MembLlmCallCompletionBytes, MembLlmCallInputTokens, MembLlmCallOutputTokens, MembLlmCallToolCalls,
 	MembLlmCallFinishReason, MembLlmCallElapsedMs, MembLlmCallIncomplete, MembLlmCallRefused, MembLlmCallError,
+	MembKindVizevalScore, MembVizevalScenario, MembVizevalCandidateId, MembVizevalSink, MembVizevalCandidate,
+	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
+	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,
+	MembVizevalGatePassed, MembVizevalGateFailed,
+	MembKindVizevalJudgement, MembVizevalJudgementScenario, MembVizevalJudgementDigest, MembVizevalJudgeModel,
+	MembVizevalJudgePrompt, MembVizevalPairA, MembVizevalPairB, MembVizevalDrawingA, MembVizevalDrawingB,
+	MembVizevalCriterion, MembVizevalPreference, MembVizevalWhy,
 }

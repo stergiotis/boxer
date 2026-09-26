@@ -19,6 +19,7 @@ import (
 	demo2 "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/carousel"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/driver"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene/scenecmd"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/vizevalcmd"
 	"github.com/stergiotis/boxer/showcase/deploy"
 	"github.com/urfave/cli/v2"
 )
@@ -63,6 +64,7 @@ func mainC() (exitCode int) {
 					deploy.NewCommand(),
 					drivecmd.NewCommand(),
 					scenecmd.NewCommand(),
+					vizevalcmd.NewCommand(),
 				},
 			},
 			observability.NewCliCommand(),

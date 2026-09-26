@@ -152,3 +152,27 @@ func TestParseTraceReadAndExpect(t *testing.T) {
 	assert.Equal(t, "ox", steps[2].XFrom)
 	assert.True(t, requiresAnchor("read"))
 }
+
+func TestParseTraceCaptureSidecars(t *testing.T) {
+	steps, err := ParseTrace(strings.NewReader(
+		`{"do":"capture","text":"chart","sidecars":["svg","tree"]}`))
+	require.NoError(t, err)
+	require.Len(t, steps, 1)
+	assert.True(t, steps[0].wants(SidecarSVG))
+	assert.True(t, steps[0].wants(SidecarTree))
+
+	_, err = ParseTrace(strings.NewReader(`{"do":"capture","text":"c","sidecars":["pdf"]}`))
+	require.Error(t, err, "a sidecar nobody writes is refused at parse time, not after the run")
+	_, err = ParseTrace(strings.NewReader(`{"do":"click","name":"Run","sidecars":["svg"]}`))
+	require.Error(t, err, "only a capture writes sidecars")
+	_, err = ParseSteps([]byte(`[{"do":"tree","sidecars":["tree"]}]`))
+	require.Error(t, err, "ParseSteps applies the same checks")
+}
+
+func TestSidecarFileMirrorsTheHostNaming(t *testing.T) {
+	assert.Equal(t, "a.png", SidecarFile("a", ""))
+	assert.Equal(t, "a.png", SidecarFile("a.png", ""))
+	assert.Equal(t, "a.svg", SidecarFile("a.PNG", SidecarSVG))
+	assert.Equal(t, "a.tree.jsonl", SidecarFile("a", SidecarTree))
+	assert.Equal(t, "a.b.svg", SidecarFile("a.b", SidecarSVG))
+}

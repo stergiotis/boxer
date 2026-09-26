@@ -133,6 +133,15 @@ var bookwatchbillFS embed.FS
 //go:embed bookappstate
 var bookappstateFS embed.FS
 
+// bookchsys is the ClickHouse-introspection book: the server's own system
+// tables through play's panels — its sampling profiler as a flamegraph, one
+// query's processor pipeline and the table dependency graph as graphs,
+// column storage as a treemap, part events on a timeline and query reads as
+// a sankey. It reads the default endpoint, not the in-process one.
+//
+//go:embed bookchsys
+var bookchsysFS embed.FS
+
 func init() {
 	if err := RegisterBook("sqlapplet", help.MustSub(bookFS, "book"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register starter book")
@@ -151,6 +160,12 @@ func init() {
 	}
 	if err := RegisterBook("appstate", help.MustSub(bookappstateFS, "bookappstate"), []app.TopicT{app.TopicRuntime}); err != nil {
 		log.Warn().Err(err).Msg("sqlapplet: failed to register app-state book")
+	}
+	// TopicObservability: what the ClickHouse server did — its profiler, its
+	// pipelines, its merges, its reads. The two documents about what it holds
+	// (dependencies, storage) carry TopicData in their own frontmatter.
+	if err := RegisterBook("chsys", help.MustSub(bookchsysFS, "bookchsys"), []app.TopicT{app.TopicObservability}); err != nil {
+		log.Warn().Err(err).Msg("sqlapplet: failed to register clickhouse-introspection book")
 	}
 	// TopicCode: the corpus describes what the toolbelt can do, which is the
 	// shape of the repository at a coarser grain than packages. It is not
