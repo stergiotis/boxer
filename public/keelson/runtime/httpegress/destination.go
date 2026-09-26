@@ -2,7 +2,6 @@ package httpegress
 
 import (
 	"net"
-	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
@@ -18,8 +17,9 @@ import (
 // URLs it covers and the transport policy that reaches them.
 type Destination struct {
 	// Prefixes are the URLs a request may start with: scheme, host and a
-	// path prefix, no userinfo, query or fragment. [TilePrefixes] derives
-	// them from a tile template.
+	// path prefix, no userinfo, query or fragment. Scheme and host compare
+	// exactly; the path is a plain string prefix, so end it with "/" to
+	// mean a directory. [TilePrefixes] derives them from a tile template.
 	Prefixes []string
 	// CAFile is a PEM bundle to trust instead of the system roots.
 	// Verification stays on.
@@ -33,9 +33,6 @@ type Destination struct {
 	Timeout time.Duration
 	// MaxBodyBytes caps a reply body; zero is DefaultMaxBodyBytes.
 	MaxBodyBytes int64
-	// Transport, when set, is used as is (tests); CAFile and InsecureTLS
-	// are then ignored.
-	Transport http.RoundTripper
 }
 
 // DestinationSpec registers a destination: a name and how to resolve it.
@@ -182,7 +179,7 @@ func localPrefixes(prefixes []prefix) (yes bool) {
 
 // TilePrefixes derives a destination's prefixes from an XYZ tile template:
 // each {s} subdomain expanded, the rest cut at the first remaining
-// placeholder. "https://{s}.tile.example/{z}/{x}/{y}.png" with a, b, c is
+// placeholder or at the query, whichever comes first. "https://{s}.tile.example/{z}/{x}/{y}.png" with a, b, c is
 // three prefixes, "https://a.tile.example/" and its siblings.
 func TilePrefixes(template string, subdomains []string) (prefixes []string, err error) {
 	template = strings.TrimSpace(template)
@@ -195,7 +192,7 @@ func TilePrefixes(template string, subdomains []string) (prefixes []string, err 
 	}
 	for _, s := range subs {
 		t := strings.ReplaceAll(template, "{s}", s)
-		if i := strings.IndexByte(t, '{'); i >= 0 {
+		if i := strings.IndexAny(t, "{?"); i >= 0 {
 			t = t[:i]
 		}
 		if !slices.Contains(prefixes, t) {

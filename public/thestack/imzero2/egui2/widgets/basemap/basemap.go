@@ -1,6 +1,7 @@
 // Package basemap resolves the shared slippy-map basemap tile server from the
-// BOXER_MAP_TILE_* environment variables and hands it to the portolan map
-// widget as a TileSource and LoaderOptions. Every app that shows a basemap
+// BOXER_MAP_TILE_* environment variables: as a TileSource for the portolan
+// map widget, and as the "basemap" destination of the host's HTTP egress
+// service (ADR-0262), which the widget's tiles are fetched through. Every app that shows a basemap
 // (play's Map panel, terrainscope, the widget gallery) routes its tile
 // configuration through here, so a deployment points every basemap at a
 // self-hosted GIS with a single BOXER_MAP_TILE_URL — no per-app knob, and no
@@ -90,7 +91,7 @@ var (
 	// The two TLS knobs below date from the retired renderer-side tile
 	// client, which trusted the webpki root bundle and nothing else — no
 	// system trust store to add a private CA to, SSL_CERT_FILE ignored. The
-	// Go tile loader honours the system store, so a private CA installed
+	// host's egress service honours the system store, so a private CA installed
 	// there works without them; they remain for a CA that is not, and for
 	// the insecure escape hatch. Prefer the CA file — it keeps certificate
 	// verification on.

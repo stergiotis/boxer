@@ -26,7 +26,7 @@ type TileFetcherI interface {
 }
 
 // errNoFetcher is every fetch's outcome for a loader built without one.
-var errNoFetcher = errors.New("portolan: no tile fetcher — the map is not hosted, or its app declares no tile destination")
+var errNoFetcher = errors.New("portolan: no tile fetcher")
 
 // LoaderOptions configures a TileLoader. The zero value is usable but
 // fetches nothing: without a Fetcher every tile fails with errNoFetcher.

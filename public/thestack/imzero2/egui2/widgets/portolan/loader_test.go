@@ -106,5 +106,5 @@ func TestTileLoader_NoFetcherFailsWithTheReason(t *testing.T) {
 	a := drainOne(t, l)
 	require.True(t, a.Failed)
 	assert.ErrorIs(t, a.Err, errNoFetcher)
-	assert.Contains(t, l.Health().LastError, "not hosted")
+	assert.Contains(t, l.Health().LastError, "no tile fetcher")
 }

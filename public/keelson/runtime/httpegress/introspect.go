@@ -20,7 +20,7 @@ type CallRecord struct {
 	Purpose        string
 	Sensitivity    queryengine.SensitivityE
 	Method         string
-	// URL is the request URL, redacted of any password.
+	// URL is scheme, host and path; the query is never kept (recordedURL).
 	URL     string
 	Status  int
 	Bytes   int
@@ -31,36 +31,42 @@ type CallRecord struct {
 
 // DestinationRecord is one registered destination as the host resolved it.
 type DestinationRecord struct {
-	Name        string
-	Description string
-	Prefixes    []string
-	Local       bool
-	CAFile      string
-	InsecureTLS bool
-	UserAgent   string
-	Timeout     time.Duration
-	MaxBody     int64
+	Name         string
+	Description  string
+	Prefixes     []string
+	Local        bool
+	CAFile       string
+	InsecureTLS  bool
+	UserAgent    string
+	Timeout      time.Duration
+	MaxBodyBytes int64
 	// Error is why the destination cannot be served; empty when it can.
 	Error string
 }
 
-// record appends rec to the bounded ring.
+// record puts rec into the bounded ring, overwriting the oldest once it is
+// full: a screenful of tiles is dozens of calls, so the ring must not copy
+// itself per call.
 func (inst *Service) record(rec CallRecord) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.next++
 	rec.Id = inst.next
-	inst.calls = append(inst.calls, rec)
-	if over := len(inst.calls) - inst.cfg.KeepCalls; over > 0 {
-		inst.calls = append([]CallRecord(nil), inst.calls[over:]...)
+	if len(inst.calls) < inst.cfg.KeepCalls {
+		inst.calls = append(inst.calls, rec)
+		return
 	}
+	inst.calls[inst.head] = rec
+	inst.head = (inst.head + 1) % len(inst.calls)
 }
 
 // Calls returns the kept records, oldest first.
 func (inst *Service) Calls() (recs []CallRecord) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	recs = append([]CallRecord(nil), inst.calls...)
+	recs = make([]CallRecord, 0, len(inst.calls))
+	recs = append(recs, inst.calls[inst.head:]...)
+	recs = append(recs, inst.calls[:inst.head]...)
 	return
 }
 
@@ -72,7 +78,7 @@ func (inst *Service) Destinations() (recs []DestinationRecord) {
 		rec := DestinationRecord{
 			Name: name, Description: r.spec.Description, Prefixes: r.dest.Prefixes, Local: r.local,
 			CAFile: r.dest.CAFile, InsecureTLS: r.dest.InsecureTLS, UserAgent: r.dest.UserAgent,
-			Timeout: r.dest.Timeout, MaxBody: r.dest.MaxBodyBytes,
+			Timeout: r.dest.Timeout, MaxBodyBytes: r.dest.MaxBodyBytes,
 		}
 		if r.err != nil {
 			rec.Error = r.err.Error()
@@ -157,7 +163,7 @@ func destinationsTable(rows []DestinationRecord) *introspect.Table {
 		Bool("insecure_tls", func(i int) bool { return rows[i].InsecureTLS }).
 		String("user_agent", func(i int) string { return rows[i].UserAgent }).
 		Int64("timeout_ms", func(i int) int64 { return rows[i].Timeout.Milliseconds() }).
-		Int64("max_body_bytes", func(i int) int64 { return rows[i].MaxBody }).
+		Int64("max_body_bytes", func(i int) int64 { return rows[i].MaxBodyBytes }).
 		String("error", func(i int) string { return rows[i].Error })
 }
 

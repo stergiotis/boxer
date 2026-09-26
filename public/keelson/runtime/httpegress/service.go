@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,10 +55,14 @@ type Service struct {
 	order     []string
 	busClient *inprocbus.Client
 	unsub     func()
+	closeOnce sync.Once
 	log       zerolog.Logger
 
-	mu    sync.Mutex
+	mu sync.Mutex
+	// calls is a ring of cfg.KeepCalls records; head is the oldest once
+	// it is full.
 	calls []CallRecord
+	head  int
 	next  uint64
 }
 
@@ -138,7 +143,7 @@ func (inst *Service) resolve(spec DestinationSpec) (r *resolved) {
 				return eh.Errorf("too many redirects")
 			}
 			if _, merr := matchURL(r.prefixes, req.URL.String()); merr != nil {
-				return eb.Build().Str("url", req.URL.Redacted()).Errorf("redirect: %w", merr)
+				return eb.Build().Str("url", recordedURL(req.URL)).Errorf("redirect: %w", merr)
 			}
 			return nil
 		},
@@ -147,21 +152,19 @@ func (inst *Service) resolve(spec DestinationSpec) (r *resolved) {
 }
 
 // Close releases the subscription and the bus client. Safe to call more
-// than once.
+// than once. A fetch already in flight — the handler runs on the
+// requester's goroutine — finishes, and its reply meets the closed client
+// rather than a nil one.
 func (inst *Service) Close() {
-	if inst.unsub != nil {
+	inst.closeOnce.Do(func() {
 		inst.unsub()
-		inst.unsub = nil
-	}
-	if inst.busClient != nil {
-		inst.busClient.Close()
-		inst.busClient = nil
-	}
-	for _, r := range inst.dests {
-		if r.client != nil {
-			r.client.CloseIdleConnections()
+		_ = inst.busClient.Close()
+		for _, r := range inst.dests {
+			if r.client != nil {
+				r.client.CloseIdleConnections()
+			}
 		}
-	}
+	})
 }
 
 func (inst *Service) handleRequest(msg *app.Msg) {
@@ -176,7 +179,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.refuse(msg, "malformed request: "+err.Error(), rec)
 		return
 	}
-	rec.Purpose, rec.Sensitivity, rec.URL = req.Purpose, queryengine.SensitivityE(req.Sensitivity), req.URL
+	rec.Purpose, rec.Sensitivity = req.Purpose, queryengine.SensitivityE(req.Sensitivity)
 	rec.Method = req.Method
 	if rec.Method == "" {
 		rec.Method = http.MethodGet
@@ -199,7 +202,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.refuse(msg, err.Error(), rec)
 		return
 	}
-	rec.URL = u.Redacted()
+	rec.URL = recordedURL(u)
 	// The sensitivity wall (ADR-0262 §SD4, the ADR-0145 rule): a request
 	// composed from sealed data goes to a loopback destination and
 	// nowhere else.
@@ -268,6 +271,18 @@ func (inst *Service) exchange(ctx context.Context, r *resolved, method string, t
 		ct = mt
 	}
 	rep = wireReply{Ok: true, Status: int32(resp.StatusCode), ContentType: ct, Body: body}
+	return
+}
+
+// recordedURL is a URL as the record and the log keep it: scheme, host
+// and path. The query is dropped, not redacted — a tile server's API key
+// rides there, and keelson('http_calls') is readable by any app granted
+// it.
+func recordedURL(u *url.URL) (s string) {
+	s = u.Scheme + "://" + u.Host + u.EscapedPath()
+	if u.RawQuery != "" {
+		s += "?…"
+	}
 	return
 }
 

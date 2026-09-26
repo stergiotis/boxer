@@ -9,13 +9,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// newTransport is the destination's transport: its own when a test set
-// one, else a clone of the default transport under the destination's trust
-// policy.
+// newTransport is the destination's transport: a clone of the default
+// transport under the destination's trust policy.
 func (d Destination) newTransport(log zerolog.Logger) http.RoundTripper {
-	if d.Transport != nil {
-		return d.Transport
-	}
 	t, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
 		return http.DefaultTransport

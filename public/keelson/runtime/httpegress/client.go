@@ -3,6 +3,7 @@ package httpegress
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -145,7 +146,7 @@ func (inst Getter) Get(ctx context.Context, url string) (data []byte, err error)
 	if err != nil {
 		return
 	}
-	if res.Status != 200 {
+	if res.Status != http.StatusOK {
 		return nil, eb.Build().Int("status", res.Status).Str("url", url).Errorf("httpegress: the server answered an error status")
 	}
 	data = res.Body

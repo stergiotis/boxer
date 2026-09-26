@@ -186,6 +186,13 @@ func TestTilePrefixes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"http://gis:8080/tiles/"}, ps)
 
+	ps, err = TilePrefixes("https://tiles.example/v1/{z}/{x}/{y}.png?key=abc", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"https://tiles.example/v1/"}, ps)
+	ps, err = TilePrefixes("https://tiles.example/wmts?layer=a&z={z}", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"https://tiles.example/wmts"}, ps, "cut at the query")
+
 	_, err = TilePrefixes("https://{s}.x.example/{z}", nil)
 	require.Error(t, err)
 }
@@ -209,4 +216,58 @@ func TestRegisterRejectsBadNames(t *testing.T) {
 		Register(DestinationSpec{Name: "has.dot", Resolve: func() (Destination, error) { return Destination{}, nil }})
 	})
 	assert.Panics(t, func() { Register(DestinationSpec{Name: "noresolve"}) })
+}
+
+// The record keeps scheme, host and path, never the query: a tile
+// server's key rides there, and the table is readable by other apps.
+func TestRecordDropsTheQuery(t *testing.T) {
+	srv, _ := origin(t)
+	cli, svc, _ := serve(t, []DestinationSpec{spec("tiles", Destination{Prefixes: []string{srv.URL + "/tiles/"}})}, "tiles")
+	_, err := cli.Fetch(context.Background(), "tiles", Request{URL: srv.URL + "/tiles/1.png?apikey=secret"})
+	require.NoError(t, err)
+	calls := svc.Calls()
+	require.Len(t, calls, 1)
+	assert.NotContains(t, calls[0].URL, "secret")
+	assert.Equal(t, srv.URL+"/tiles/1.png?…", calls[0].URL)
+}
+
+// The ring keeps the newest KeepCalls records, oldest first.
+func TestCallRingWraps(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	svc, err := NewService(bus, zerolog.Nop(), Config{Destinations: []DestinationSpec{}, KeepCalls: 3})
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+	for i := range 5 {
+		svc.record(CallRecord{Purpose: string(rune('a' + i))})
+	}
+	var got []string
+	for _, r := range svc.Calls() {
+		got = append(got, r.Purpose)
+	}
+	assert.Equal(t, []string{"c", "d", "e"}, got)
+}
+
+// A fetch still in flight when the service closes finishes without a
+// panic: the handler runs on the requester's goroutine, and its reply
+// meets the closed bus client.
+func TestCloseDuringAFetch(t *testing.T) {
+	release := make(chan struct{})
+	entered := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(entered)
+		<-release
+		_, _ = w.Write([]byte("late"))
+	}))
+	t.Cleanup(srv.Close)
+	cli, svc, _ := serve(t, []DestinationSpec{spec("slow", Destination{Prefixes: []string{srv.URL + "/"}})}, "slow")
+	cli.Timeout = 2 * time.Second
+	done := make(chan error, 1)
+	go func() {
+		_, ferr := cli.Fetch(context.Background(), "slow", Request{URL: srv.URL + "/x"})
+		done <- ferr
+	}()
+	<-entered
+	svc.Close()
+	close(release)
+	require.Error(t, <-done, "the reply cannot reach a closed service's inbox")
 }

@@ -146,8 +146,9 @@ the run's label.
 ### SD5 — Every call is a record
 
 The service keeps a bounded in-process record of calls — app, instance,
-destination, purpose, method, URL, status, bytes, latency, sensitivity,
-the refusal or error — served as `keelson('http_calls')`. The bus audits
+destination, purpose, method, URL without its query (a tile server's
+key rides there), status, bytes, latency, sensitivity, the refusal or
+error — served as `keelson('http_calls')`. The bus audits
 the request as well. A durable kind on `boxer.facts` is deferred: a
 screenful of tiles is dozens of rows, and whether the durable shape is a
 row per call or a per-destination rollup is a decision for the first
@@ -157,8 +158,9 @@ reader who needs it.
 
 The tile loader's HTTP client is replaced by a fetcher it is handed; the
 TLS, agent and timeout options leave `LoaderOptions` for the destination.
-`basemap.PortolanLoader` takes the app's bus and returns options whose
-fetcher is an `httpegress` client bound to the `basemap` destination.
+A hosted app builds a `basemap.Tiles` over its bus — a GET against the
+`basemap` destination — and `basemap.PortolanLoader` hands it to the
+loader as its fetcher.
 The loader keeps its worker pool, byte cache, negative cache and health —
 those are about tiles, not transport. Sharing the byte cache across maps
 and apps in the service (ADR-0165 Q1) is deferred.
@@ -180,7 +182,7 @@ own decision.
 | `httpegress` runtime package | new registry, service, client, wire (CBOR through `buscodec`) | hostboot `Services.HTTP`; the L12 id allowlist (`runtime.http`) |
 | `keelson()` table set | +`http_calls`, +`http_destinations` | introspecthost deps |
 | portolan `LoaderOptions` | −`Transport`, −`CAFile`, −`InsecureTLS`, −`UserAgent`; +`Fetcher` | every `portolan.New` caller; the loader tests |
-| `basemap.PortolanLoader` | takes the app's bus; registers the `basemap` destination | play, terrainscope, the gallery demos |
+| `basemap` | registers the `basemap` destination; `Tiles` (the app's fetcher) and `ClientCaps`; `PortolanLoader` takes a `Tiles` | play, terrainscope, the gallery demos |
 | `Manifest.Caps` of play, terrainscope, the gallery | +`httpegress.ClientCaps("basemap", …)`; the gallery also its own destination | the cap-count pins |
 
 ## Alternatives
