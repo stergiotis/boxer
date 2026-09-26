@@ -10,7 +10,7 @@ status: draft
 > with the vizeval harness ([ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md),
 > proposed). Every quality judgement below is one reader's reading of
 > captures plus vizeval's geometry gates, except §Judged rounds, which
-> report three task-accuracy rounds by blind agent readers.
+> report four task-accuracy rounds by blind agent readers.
 
 # A lens over leeway rows: structure↔values, local↔stable
 
@@ -239,6 +239,26 @@ slots, while the top host cpu, 98.2, is not the top of a cpu slot that
 services share, so the lows rank above it. Ordering by surprise answers
 "what is strangest", not "which row holds the maximum".
 
+### Round 4
+
+The archetype form gains one line per band under its template, `extremes`:
+for each numeric slot the band mostly has, the rows holding the band's
+lowest and highest value (`cpu ↓host-15 6.3 ↑host-06 98.2`), at the gist
+detail and above. The three archetype candidates drew differently and got
+fresh readers; the others kept round 2's drawings and replies.
+
+| candidate | round 2 | round 3 | round 4 |
+| --- | --- | --- | --- |
+| archetypes, stable 0 | 1.0 | 1.0 | 1.0 |
+| archetypes, stable 0.5 | 0.8 | 0.8 | 1.0 |
+| archetypes, stable 1 | 0.8 | 0.8 | 1.0 |
+
+Every archetype candidate now answers every question, at any stable
+position. All three readers named the same residual doubt unprompted: the
+form shows the failed job as an exception but never says it is the only
+one, so "which jobs are failed" is answered by trusting that no "more rows"
+line means nothing was cut.
+
 ## Considered, not built
 
 - A navigator over the threshold tree itself (an icicle of rules with row
@@ -260,11 +280,13 @@ services share, so the lows rank above it. Ordering by surprise answers
 - **Vertical budget.** The pane is not scrolled; rows past its height are
   counted, not drawn. The archetype form is the answer for many rows; a
   scroll area is the answer for reading them all.
-- **Name each slot's extremes in the band.** A reader asking for a band's
-  maximum needs its row named whether or not it is the batch's strangest
-  value (§Judged rounds, round 3): the template could carry, per numeric
-  slot, the rows holding the band's top and bottom, or those rows could be
-  kept past the cap.
+- **Say when a list is complete.** A reader of the archetype form trusts the
+  absence of a "more rows" line to conclude a rare value's rows are all
+  shown (§Judged rounds, round 4); the form could say so, e.g. by counting a
+  rare label's rows beside it.
+- **The rows form and rare values.** It still cuts the failed job at the end
+  of its band; whether the rows form should hoist rare-value rows, or leave
+  that to the archetype form, is undecided.
 - **Task accuracy with more readers.** One reader per candidate per round;
   several per candidate, or a vision model as judge, would say how much of
   a 0.2 step is the reader.
