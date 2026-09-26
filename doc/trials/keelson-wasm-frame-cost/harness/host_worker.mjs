@@ -6,8 +6,11 @@
 // rendered frame's mesh messages are posted to the page, which paints them
 // with the painter it already has. Query parameters of this module's URL
 // select the scene (`scene`, `rows`, `demo`), the stage (`stage`) and the
-// tick rate (`fps`).
-import { loadHost, startReactor } from './bridge.js';
+// tick rate (`fps`). Fonts cross as bytes: each slot (`main`, `mono`,
+// `phosphor`, `fallback`) is fetched from `<slot>Font=<url>` when given,
+// else from `./fonts/<slot>.ttf`, and a slot whose fetch fails is left to
+// egui's default faces.
+import { FONT_SLOTS, loadHost, startReactor } from './bridge.js';
 
 const q = new URL(self.location.href).searchParams;
 const stage = (q.get('stage') || '1024x600').split('x').map(Number);
@@ -16,12 +19,17 @@ const log = (line) => self.postMessage({ kind: 'log', line });
 const PREFIX_INPUT = 0x02;
 
 try {
-  const [hostBytes, goBytes] = await Promise.all([
+  const fontBytes = (slot) => fetch(q.get(`${slot}Font`) || `./fonts/${slot}.ttf`)
+    .then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  const [hostBytes, goBytes, ...fontList] = await Promise.all([
     fetch('./imzero2.wasm').then((r) => r.arrayBuffer()),
     fetch('./wasmspike_wasip1_reactor.wasm').then((r) => r.arrayBuffer()),
+    ...FONT_SLOTS.map(fontBytes),
   ]);
+  const fonts = Object.fromEntries(FONT_SLOTS.map((slot, i) => [slot, fontList[i]]));
+  log('worker — fonts: ' + (FONT_SLOTS.filter((s) => fonts[s]).join(', ') || 'egui defaults'));
   const stub = await loadHost(hostBytes, stage[0], stage[1], 1.0,
-    (m) => self.postMessage({ kind: 'mesh', bytes: m.buffer }, [m.buffer]));
+    (m) => self.postMessage({ kind: 'mesh', bytes: m.buffer }, [m.buffer]), undefined, fonts);
   self.onmessage = (e) => {
     const m = e.data;
     if (m.kind !== 'input') return;

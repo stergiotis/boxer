@@ -43,7 +43,13 @@ export async function loadStub(stubBytes, tableText, stageW, stageH) {
 // only genuine import is the clock; the JavaScript-binding imports that a few
 // dependencies declare are stubbed to throw, since nothing in the measured
 // scenes reaches them (graph layouts, the time-range picker's wall clock).
-export async function loadHost(hostBytes, width, height, ppp, onMesh, paceMs) {
+// Slots of the host's host_font export, in its numbering; the same four the
+// native hosts take as paths.
+export const FONT_SLOTS = ['main', 'mono', 'phosphor', 'fallback'];
+
+// fonts: {main, mono, phosphor, fallback} → bytes (ArrayBuffer or Uint8Array),
+// each optional; a tab has no font files, so they cross as bytes before init.
+export async function loadHost(hostBytes, width, height, ppp, onMesh, paceMs, fonts) {
   const module = await WebAssembly.compile(hostBytes);
   const imports = { env: { now_ms: () => performance.now() } };
   for (const i of WebAssembly.Module.imports(module)) {
@@ -54,6 +60,13 @@ export async function loadHost(hostBytes, width, height, ppp, onMesh, paceMs) {
   const instance = await WebAssembly.instantiate(module, imports);
   const ex = instance.exports;
   const mem = () => new Uint8Array(ex.memory.buffer);
+  for (const [i, slot] of FONT_SLOTS.entries()) {
+    if (!fonts || !fonts[slot]) continue;
+    const b = new Uint8Array(fonts[slot]);
+    const p = ex.host_alloc(b.length);
+    mem().set(b, p);
+    ex.host_font(i, b.length);
+  }
   ex.host_init(width, height, ppp);
   let stepNs = 0n, steps = 0, frames = 0, meshBytes = 0, lastFrameAt = 0;
   const now = () => (typeof process !== 'undefined' && process.hrtime) ? process.hrtime.bigint() : BigInt(Math.round(performance.now() * 1e6));

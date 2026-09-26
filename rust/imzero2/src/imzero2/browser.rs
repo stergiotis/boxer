@@ -41,6 +41,13 @@ use prost::Message as _;
 const MAX_TEXTURE_SIDE: usize = 8192;
 const NOMINAL_DT: f32 = 1.0 / 60.0;
 
+/// The font slots the page may fill before init, in the order `host_font`
+/// numbers them; the same four the native hosts take as paths (ADR-0030,
+/// ADR-0044).
+pub const FONT_SLOTS: [&str; 4] = ["main", "mono", "phosphor", "fallback"];
+/// One optional TTF/OTF per slot of [`FONT_SLOTS`].
+pub type FontBytes = [Option<Vec<u8>>; 4];
+
 /// The interpreter's reader: whole messages the host admitted, read to a
 /// boundary. Empty, it reports `WouldBlock`, which the interpreter maps to
 /// "nothing more to interpret now".
@@ -139,15 +146,36 @@ pub struct Host {
 }
 
 impl Host {
-    pub fn new(width: f32, height: f32, ppp: f32) -> Self {
+    /// `fonts` holds the bytes for the slots of [`FONT_SLOTS`] the page
+    /// supplied; an empty slot leaves that family to egui's defaults, as an
+    /// empty path does natively.
+    pub fn new(width: f32, height: f32, ppp: f32, fonts: FontBytes) -> Self {
         let ctx = egui::Context::default();
+        let slot =
+            |i: usize| fonts[i].as_ref().map(|_| FONT_SLOTS[i].to_owned()).unwrap_or_default();
         let config = AppConfig {
             initial_main_window_width: width,
             initial_main_window_height: height,
+            main_font_ttf: slot(0),
+            mono_font_ttf: slot(1),
+            phosphor_font_ttf: slot(2),
+            fallback_font_ttf: slot(3),
             ..AppConfig::default()
         };
-        let (fffi, _reactive) =
-            apphost::init_common(&ctx, &config, Inbox::default(), Outbox::default());
+        let mut read = |name: &str| -> std::io::Result<Vec<u8>> {
+            FONT_SLOTS
+                .iter()
+                .position(|s| *s == name)
+                .and_then(|i| fonts[i].clone())
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, name.to_owned()))
+        };
+        let (fffi, _reactive) = apphost::init_common_with_fonts(
+            &ctx,
+            &config,
+            Inbox::default(),
+            Outbox::default(),
+            &mut read,
+        );
         let mut fetch_ops = HashSet::new();
         for raw in 0..1024u32 {
             if let Some(id) = FuncProcId::from_repr(raw)
@@ -334,6 +362,7 @@ thread_local! {
     static HOST: RefCell<Option<Host>> = const { RefCell::new(None) };
     static SCRATCH: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     static REPLY: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static FONTS: RefCell<FontBytes> = const { RefCell::new([None, None, None, None]) };
 }
 
 /// A scratch buffer of at least `n` bytes for the host to fill; valid until
@@ -349,10 +378,26 @@ pub extern "C" fn host_alloc(n: usize) -> *mut u8 {
     })
 }
 
-/// Creates the host for a viewport of `width` × `height` points at `ppp`.
+/// Stores `n` bytes of the scratch buffer as the font for slot `kind` (an
+/// index into [`FONT_SLOTS`]) for the next `host_init`, which takes them.
+/// Fonts cross as bytes because a tab has no paths (ADR-0077 SD5); 1 when
+/// the slot exists.
+#[unsafe(no_mangle)]
+pub extern "C" fn host_font(kind: u32, n: usize) -> u32 {
+    let i = kind as usize;
+    if i >= FONT_SLOTS.len() {
+        return 0;
+    }
+    SCRATCH.with(|s| FONTS.with(|f| f.borrow_mut()[i] = Some(s.borrow()[..n].to_vec())));
+    1
+}
+
+/// Creates the host for a viewport of `width` × `height` points at `ppp`,
+/// with whatever fonts `host_font` stored since the last init.
 #[unsafe(no_mangle)]
 pub extern "C" fn host_init(width: f32, height: f32, ppp: f32) {
-    HOST.with(|h| *h.borrow_mut() = Some(Host::new(width, height, ppp)));
+    let fonts = FONTS.with(|f| std::mem::take(&mut *f.borrow_mut()));
+    HOST.with(|h| *h.borrow_mut() = Some(Host::new(width, height, ppp, fonts)));
 }
 
 /// Admits `n` bytes of the producer's stream from the scratch buffer.

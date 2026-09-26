@@ -98,10 +98,10 @@ const WS_URL = new URLSearchParams(location.search).get("ws") || defaultWsUrl();
 // ?worker=<module url>: the mesh comes from a Web Worker on this page instead
 // of a socket — the worker runs the Go application and the Rust host as wasm
 // modules (ADR-0077; the keelson-wasm-frame-cost trial's M2 demonstrator)
-// and posts each wire message as the carrier would send it. The painter,
-// the hello and the input path are the same; the roster is this one viewer.
-// Input reaches the worker only when it yields, which the current worker
-// never does, so this mode shows frames and takes no input.
+// and posts each wire message as the carrier would send it (ADR-0263). The
+// painter, the hello and the input path are the same; the roster is this
+// one viewer. Input reaches the worker between its ticks, so it must yield
+// (the reactor build does; a module that loops in main never does).
 const WORKER_URL = new URLSearchParams(location.search).get("worker");
 
 const statusBar = document.getElementById("status");
