@@ -10,7 +10,7 @@ status: draft
 > with the vizeval harness ([ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md),
 > proposed). Every quality judgement below is one reader's reading of
 > captures plus vizeval's geometry gates, except §Judged rounds, which
-> report two task-accuracy rounds by blind agent readers.
+> report three task-accuracy rounds by blind agent readers.
 
 # A lens over leeway rows: structure↔values, local↔stable
 
@@ -223,6 +223,22 @@ focus and topo are round 1's drawings, re-read.
   room for, but the failed job is still among the jobs cut at the band's
   end; the rows form's answer to a rare value is the archetype form.
 
+### Round 3
+
+One further change: within a class, exception lines are ordered by their
+most extreme value surprise, so the cap cuts the mildest outliers first.
+Only the stable-0 archetype candidate drew differently; the others kept
+round 2's drawings, and with them their round-2 replies (judge sheets are
+keyed by drawing). Its fresh reader scored 1.0 again; every other figure is
+round 2's.
+
+The busiest host stayed cut at stable 0.5 and 1. Value surprise is
+two-sided and measured against the slot across the whole batch: a host's
+disk at 9.2, cpu at 6.3 and tx at 224 sit at the very bottom of their
+slots, while the top host cpu, 98.2, is not the top of a cpu slot that
+services share, so the lows rank above it. Ordering by surprise answers
+"what is strangest", not "which row holds the maximum".
+
 ## Considered, not built
 
 - A navigator over the threshold tree itself (an icicle of rules with row
@@ -244,10 +260,11 @@ focus and topo are round 1's drawings, re-read.
 - **Vertical budget.** The pane is not scrolled; rows past its height are
   counted, not drawn. The archetype form is the answer for many rows; a
   scroll area is the answer for reading them all.
-- **Outliers by surprise.** Within the numeric class the archetype form
-  still keeps the plan's row order, so the most extreme value can be cut
-  (§Judged rounds, round 2); ordering them by value surprise is the next
-  change.
+- **Name each slot's extremes in the band.** A reader asking for a band's
+  maximum needs its row named whether or not it is the batch's strangest
+  value (§Judged rounds, round 3): the template could carry, per numeric
+  slot, the rows holding the band's top and bottom, or those rows could be
+  kept past the cap.
 - **Task accuracy with more readers.** One reader per candidate per round;
   several per candidate, or a vision model as judge, would say how much of
   a 0.2 step is the reader.
