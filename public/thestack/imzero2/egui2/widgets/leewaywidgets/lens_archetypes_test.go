@@ -87,3 +87,20 @@ func jobExceptions(a lwlens.Analysis, exc []exception) (out []exception) {
 	}
 	return out
 }
+
+func TestArchetypeExtremesNameTheBandsMaximum(t *testing.T) {
+	a, err := lwlens.Analyze(context.Background(), jobsModel(), lwlens.AnalyzeOptions{})
+	require.NoError(t, err)
+	p := lwlens.PlanRows(&a, lwlens.Intent{Values: 0.5, Stable: 0.5})
+	lp := &lensPainter{a: &a, p: &p, labelPrefix: make([]int, len(a.Bands))}
+	var parts []string
+	for _, pb := range p.Bands {
+		b := &a.Bands[pb.Band]
+		if strings.HasPrefix(a.Model.Rows[b.Rows[0]].Label, "job-") {
+			parts = lp.extremes([]int32{0, 1, 2}, b)
+		}
+	}
+	require.Len(t, parts, 1, "runtime varies; attempt is constant and state is a label: %v", parts)
+	assert.Contains(t, parts[0], "↑job-00 9000")
+	assert.Contains(t, parts[0], "↓job-01 101")
+}

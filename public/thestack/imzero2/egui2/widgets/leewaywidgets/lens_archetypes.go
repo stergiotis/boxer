@@ -404,6 +404,9 @@ func (inst *lensPainter) paintArchetypes() {
 			inst.paintTemplateCell(xs[i], cy, s, b)
 		}
 		inst.y += rh + 2
+		if inst.p.Detail >= lwlens.DetailGist && inst.y+rh <= inst.h-lensPad-inst.reserve {
+			inst.paintExtremes(inst.extremes(frame, b), rh)
+		}
 		exc := inst.exceptions(pb, b)
 		for i, e := range exc {
 			if i == lensExceptionLines || inst.y+rh > inst.h-lensPad-inst.reserve {
@@ -419,6 +422,66 @@ func (inst *lensPainter) paintArchetypes() {
 		}
 
 	}
+}
+
+// lensExtremesMin is the fewest values a band needs in a slot for its
+// extremes to be named: with two, the lowest and highest are the band.
+const lensExtremesMin = 3
+
+// extremes names, per numeric slot of the frame the band mostly has, the rows
+// holding the band's lowest and highest value — what a reader asking for a
+// band's maximum needs named, whether or not it is the batch's strangest
+// value, which is what the exception lines rank by (the lens exploration's
+// third judged round found the two differ).
+func (inst *lensPainter) extremes(frame []int32, b *lwlens.Band) (parts []string) {
+	m := inst.a.Model
+	for _, s := range frame {
+		if m.Slots[s].Kind != lwlens.ValueKindNumeric || b.Support[s] < lensTemplateAt {
+			continue
+		}
+		lo, hi := int32(-1), int32(-1)
+		var vlo, vhi float64
+		n := 0
+		for _, r := range b.Rows {
+			cell, ok := m.Rows[r].Cell(s)
+			if !ok || !cell.HasNum {
+				continue
+			}
+			n++
+			if lo < 0 || cell.Num < vlo {
+				lo, vlo = r, cell.Num
+			}
+			if hi < 0 || cell.Num > vhi {
+				hi, vhi = r, cell.Num
+			}
+		}
+		if n < lensExtremesMin || vlo == vhi {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s ↓%s %s ↑%s %s", inst.memberName(s),
+			inst.rowLabel(lo), inst.numText(s, vlo), inst.rowLabel(hi), inst.numText(s, vhi)))
+	}
+	return parts
+}
+
+// paintExtremes draws the band's extremes as one line under its template.
+func (inst *lensPainter) paintExtremes(parts []string, rh float32) {
+	if len(parts) == 0 {
+		return
+	}
+	cy := inst.y + rh/2
+	sec := lensTok(styletokens.NeutralTextSecondary)
+	inst.text(lensPad, cy, "extremes", lensFont, sec)
+	x := lensPad + inst.labelW
+	for _, part := range parts {
+		if x+lensTextW(part, lensSmallFont) > inst.w-lensPad {
+			inst.text(x, cy, "…", lensSmallFont, sec)
+			break
+		}
+		inst.text(x, cy, part, lensSmallFont, lensTok(styletokens.NeutralTextPrimary))
+		x += lensTextW(part, lensSmallFont) + 14
+	}
+	inst.y += rh
 }
 
 // paintException draws one exception line: its rows, then its departures.
