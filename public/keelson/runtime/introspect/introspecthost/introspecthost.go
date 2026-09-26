@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
@@ -125,6 +126,10 @@ type Deps struct {
 	// keelson.llm_calls (ADR-0254 §SD4). nil leaves it empty rather than
 	// absent. Same typed-nil trap: assign only a service that started.
 	LLMCalls llm.CallsI
+	// HTTPCalls is the host's egress service as a read side, backing
+	// keelson.http_calls and keelson.http_destinations (ADR-0262 §SD5).
+	// Same typed-nil trap: assign only a service that started.
+	HTTPCalls httpegress.CallsI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -222,6 +227,11 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// table.
 	if e := llm.RegisterIntrospect(reg, deps.LLMCalls); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: llm_calls provider registration failed")
+	}
+	// ADR-0262 §SD2, §SD5: the fetches this process answered, and every
+	// destination any app could name. Registered unconditionally.
+	if e := httpegress.RegisterIntrospect(reg, deps.HTTPCalls); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: http_calls provider registration failed")
 	}
 	// And what a model may be asked to do: every registered prompt
 	// document, joinable to llm_calls on purpose.

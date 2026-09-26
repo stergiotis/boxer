@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 )
@@ -183,6 +184,8 @@ func classify(subject string) (capId CapId) {
 		capId = CapKeelsonQuery
 	case strings.HasPrefix(subject, llm.SubjectPrefix):
 		capId = CapLLM
+	case strings.HasPrefix(subject, httpegress.SubjectPrefix):
+		capId = CapHTTP
 	case strings.HasPrefix(subject, "task."):
 		capId = CapTask
 	case strings.HasPrefix(subject, "runtime.facts."):

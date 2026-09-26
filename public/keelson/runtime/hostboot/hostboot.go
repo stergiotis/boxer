@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker/pickerbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
@@ -124,6 +125,10 @@ type Services struct {
 	// (ADR-0254). Without BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL it still
 	// answers, saying no model is configured.
 	LLM bool
+	// HTTP is net.http.fetch.*: HTTP egress to the registered destinations
+	// (ADR-0262). A destination that failed to resolve is refused with the
+	// reason.
+	HTTP bool
 }
 
 // AllServices is every service on — the carousel's configuration.
@@ -131,7 +136,7 @@ func AllServices() Services {
 	return Services{
 		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
-		AppState: true, LLM: true,
+		AppState: true, LLM: true, HTTP: true,
 	}
 }
 
@@ -225,6 +230,9 @@ type Runtime struct {
 	// LLM is the model-inference service (ADR-0254); nil when off or
 	// failed to start.
 	LLM *llm.Service
+	// HTTP is the egress service (ADR-0262); nil when off or failed to
+	// start.
+	HTTP *httpegress.Service
 	// State is where workingsets and column-width overrides live (ADR-0105
 	// Update 2026-08-15): the durable persist backend when ClickHouse is
 	// reachable, an in-memory twin otherwise. Never nil after Boot, and
@@ -457,6 +465,22 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			d := llmSvc.Describe()
 			logger.Info().Bool("configured", d.Configured).Str("model", d.Model).Str("endpointHost", d.EndpointHost).
 				Bool("local", d.Local).Bool("durable", llmSvc.Durable()).Msg("llm: service listening on llm.*")
+		}
+	}
+	if svc.HTTP {
+		httpSvc, hErr := httpegress.NewService(rt.Bus, logger, httpegress.Config{})
+		if hErr != nil {
+			logger.Warn().Err(hErr).Msg("httpegress: service start failed; net.http.fetch.* will be unbound")
+		} else {
+			rt.HTTP = httpSvc
+			rt.cleanups = append(rt.cleanups, httpSvc.Close)
+			for _, d := range httpSvc.Destinations() {
+				ev := logger.Info()
+				if d.Error != "" {
+					ev = logger.Warn()
+				}
+				ev.Str("destination", d.Name).Strs("prefixes", d.Prefixes).Bool("local", d.Local).Str("error", d.Error).Msg("httpegress: destination")
+			}
 		}
 	}
 	if svc.Watchbill {
@@ -727,6 +751,9 @@ func (rt *Runtime) bootIntrospect() {
 	}
 	if rt.LLM != nil {
 		deps.LLMCalls = rt.LLM
+	}
+	if rt.HTTP != nil {
+		deps.HTTPCalls = rt.HTTP
 	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {

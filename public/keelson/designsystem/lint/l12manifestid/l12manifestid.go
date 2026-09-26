@@ -81,6 +81,8 @@ var AllowedSpecialIds = map[string]bool{
 	"runtime.appstate": true,
 	// runtime.llm — the model-inference service (ADR-0254). Same class.
 	"runtime.llm": true,
+	// runtime.http — the HTTP egress service (ADR-0262). Same class.
+	"runtime.http": true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.

@@ -279,6 +279,8 @@ func diagramCapLabel(capId CapId) (s string) {
 		s = "Table reads"
 	case CapLLM:
 		s = "Model inference"
+	case CapHTTP:
+		s = "HTTP egress"
 	}
 	return
 }
