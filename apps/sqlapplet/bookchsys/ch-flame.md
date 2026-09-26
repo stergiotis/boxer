@@ -7,7 +7,7 @@ summary: "Draw the server's sampled stacks as a flamegraph"
 icon: "🔥"
 endpoint: default
 tabs: [icicle, treemap, table]
-keywords: [trace_log, profiler, cpu, memory, stack, symbol]
+keywords: [clickhouse, system tables, introspection, server, system.trace_log, flamegraph, icicle, profiler, cpu, memory, stack, symbol]
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.

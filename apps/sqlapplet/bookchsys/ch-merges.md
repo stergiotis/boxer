@@ -7,7 +7,7 @@ summary: "Lay merges, inserts and mutations out on a per-table timeline"
 icon: "⏱"
 endpoint: default
 tabs: [timeline, table]
-keywords: [part_log, merge, mutation, insert, parts, background]
+keywords: [clickhouse, system tables, introspection, server, system.part_log, timeline, merge, mutation, insert, parts, background]
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.

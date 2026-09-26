@@ -7,7 +7,7 @@ summary: "Draw one query's processor pipeline with its timings"
 icon: "🧵"
 endpoint: default
 tabs: [network, graphview, table]
-keywords: [processors_profile_log, pipeline, processors, explain, query plan]
+keywords: [clickhouse, system tables, introspection, server, system.processors_profile_log, graph, pipeline, processors, explain, query plan, performance]
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.

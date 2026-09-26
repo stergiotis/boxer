@@ -36,6 +36,12 @@ func TestChsysBookCorpus(t *testing.T) {
 		assert.Equal(t, analysis.QuerySecurityRead, d.Class, "%s: a system-table read auto-runs", slug)
 		assert.False(t, d.HasUnboundSlots, "%s: every knob is prelude-bound", slug)
 		assert.NotEmpty(t, d.Icon, slug)
+		// The shared retrieval terms: the launcher matches display, topics and
+		// keywords only, and most titles do not say ClickHouse, so these are
+		// what make "clickhouse" or "system tables" find the whole book.
+		for _, kw := range []string{"clickhouse", "system tables", "introspection"} {
+			assert.Contains(t, d.Keywords, kw, slug)
+		}
 	}
 
 	// Folded hierarchy contract (ADR-0160, ADR-0166): a list-typed `stack`

@@ -7,7 +7,7 @@ summary: "Trace read bytes from users through query kinds into tables"
 icon: "🌊"
 endpoint: default
 tabs: [sankey, table]
-keywords: [query_log, read_bytes, users, tables, workload]
+keywords: [clickhouse, system tables, introspection, server, system.query_log, sankey, read_bytes, users, tables, workload]
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.

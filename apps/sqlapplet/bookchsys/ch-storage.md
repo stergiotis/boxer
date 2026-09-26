@@ -8,7 +8,7 @@ icon: "🧱"
 endpoint: default
 tabs: [treemap, icicle, table]
 topics: [data]
-keywords: [system.columns, disk, compression, bytes, size]
+keywords: [clickhouse, system tables, introspection, server, system.columns, treemap, disk, compression, codec, bytes, size]
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.

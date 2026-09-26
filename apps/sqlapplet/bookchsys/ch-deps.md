@@ -8,7 +8,7 @@ icon: "⛓"
 endpoint: default
 tabs: [network, graphview, table]
 topics: [data]
-keywords: [materialized view, view, dictionary, lineage, dependencies, system.tables]
+keywords: [clickhouse, system tables, introspection, server, system.tables, graph, materialized view, view, dictionary, lineage, dependencies]
 ---
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
