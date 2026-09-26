@@ -19,10 +19,17 @@ type InlineIoChannel[U UnmarshallReaderI] struct {
 	bin            binary.ByteOrder
 	allocateBuffer func(l uint32) []byte
 	errHandler     func(err error)
+	// deferFlush holds every flush until the next ReceiveMsg, the first
+	// point at which the peer's bytes are needed; the default, see
+	// SetDeferFlush.
+	deferFlush bool
 }
 
 func (inst *InlineIoChannel[U]) ReceiveMsg() iter.Seq[U] {
 	return func(yield func(U) bool) {
+		if inst.deferFlush {
+			inst.flush()
+		}
 		//inst.readOffset += int64(inst.sz.Size)
 		//inst.sz.Reset()
 		yield(inst.unmarshall)
@@ -62,6 +69,7 @@ func NewInlineIoChannel[U UnmarshallReaderI](unmarshaller U, in *bufio.Reader, o
 		bin:            bin,
 		allocateBuffer: allocateBuffer,
 		errHandler:     errHandler,
+		deferFlush:     true,
 	}
 	inst.SetInOut(in, out)
 	return
@@ -81,7 +89,28 @@ func (inst *InlineIoChannel[U]) SetInOut(in *bufio.Reader, out *bufio.Writer) {
 	//inst.unmarshall.SetInput(io.TeeReader(in, inst.sz))
 }
 
+// SetDeferFlush selects when buffered messages reach the peer. With defer
+// on, the default, bytes leave only when the writer's buffer fills or when
+// this side is about to block on a reply — the lock-step protocol needs
+// nothing earlier, the peer still receives the frame in buffer-sized pieces
+// while it is produced, and every flush that is not needed is a syscall (or,
+// under wasm, a host call) saved. With defer off every message is flushed as
+// it is sent, the behaviour before the keelson-wasm-frame-cost trial measured
+// the difference: on a handheld the per-message flush was about 1.3 µs a
+// message, a millisecond of a real play frame and eleven of a message-heavy
+// one.
+func (inst *InlineIoChannel[U]) SetDeferFlush(defer_ bool) {
+	inst.deferFlush = defer_
+}
+
 func (inst *InlineIoChannel[U]) FlushMessages() {
+	if inst.deferFlush {
+		return
+	}
+	inst.flush()
+}
+
+func (inst *InlineIoChannel[U]) flush() {
 	err := inst.out.Flush()
 	if err != nil {
 		inst.errHandler(err)
