@@ -10,7 +10,7 @@ status: draft
 > with the vizeval harness ([ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md),
 > proposed). Every quality judgement below is one reader's reading of
 > captures plus vizeval's geometry gates, except §Judged rounds, which
-> report four task-accuracy rounds by blind agent readers.
+> report five task-accuracy rounds by blind agent readers.
 
 # A lens over leeway rows: structure↔values, local↔stable
 
@@ -259,6 +259,19 @@ form shows the failed job as an exception but never says it is the only
 one, so "which jobs are failed" is answered by trusting that no "more rows"
 line means nothing was cut.
 
+### Round 5
+
+A rare label now carries its count in the band — `state failed (1 of 12
+rows)`. The three archetype candidates drew differently and got fresh
+readers, and so did the control, whose picture is blurred from a drawing
+that changed; the others kept round 2's replies.
+
+Accuracy stayed at 1.0 for all three, so the figures cannot show the
+change; the readers' own accounts do. Where all three round-4 readers
+inferred the failed job's list was complete from a missing "more rows"
+line, two of the three round-5 readers cited the count for it, and none
+raised the doubt. The control was again answered unreadable throughout.
+
 ## Considered, not built
 
 - A navigator over the threshold tree itself (an icicle of rules with row
@@ -280,11 +293,6 @@ line means nothing was cut.
 - **Vertical budget.** The pane is not scrolled; rows past its height are
   counted, not drawn. The archetype form is the answer for many rows; a
   scroll area is the answer for reading them all.
-- **Whether the rare-value count settles the doubt.** A reader of the
-  archetype form trusted the absence of a "more rows" line to conclude a
-  rare value's rows were all shown (§Judged rounds, round 4). A rare label
-  now carries its count in the band — `state failed (1 of 12 rows)` — so
-  the list's completeness can be read; no judged round has read it yet.
 - **The rows form and rare values.** It still cuts the failed job at the end
   of its band; whether the rows form should hoist rare-value rows, or leave
   that to the archetype form, is undecided.
