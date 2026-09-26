@@ -104,10 +104,14 @@ etable prefetch (`FetchR9EtPrefetch`), frame metrics
       tuple (for slice fetchers, alias `[]Xyz`).
    b. Add a field on `StateManager` (`xyz XyzValue`).
    c. In the `// Per-frame inline-fetcher snapshot.` block at the end
-      of `Sync()`, call the new fetcher and store the result into the
-      field. For slice fetchers, reuse the existing slice via
-      `out := inst.xyz[:0]; ...; inst.xyz = out` to keep the hot
-      path allocation-free.
+      of `Sync()`, call the new fetcher's `CollectFetchXyz` and store
+      the result into the field, and add `IssueFetchXyz()` to the issue
+      list at the top of `Sync()` **at the same position** — every fetch
+      of a frame is issued before the first reply is read and the
+      replies are collected in issue order (ADR-0077 SD3), so a collect
+      out of order reads the wrong reply. For slice fetchers, reuse the
+      existing slice via `out := inst.xyz[:0]; ...; inst.xyz = out` to
+      keep the hot path allocation-free.
    d. Add a `GetXyz() XyzValue` method.
 4. Document the cache in the table above when you flip this skill's
    front-matter to `stable`.

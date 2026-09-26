@@ -359,3 +359,55 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
   no server behind it. The measure script gained a `reactor-host` arm.
 - **Results:** no run directory; the paired numbers above were read from
   Node's `ARM` lines in this session.
+
+## 2026-09-26 — SD3, the fetch batch — every fetch of a Sync issued before the first reply; one host step a frame instead of 24
+
+- **Build under test:** the tree at the M2b entry plus fonts as bytes, the
+  session channel and the on-demand cadence in the demonstrator, and the
+  change under test: the Go fetcher generator emits `Issue*` / `Collect*`
+  halves beside each `Fetch*`, `StateManager.Sync` issues its 24 fetches
+  and then collects the replies in the same order, and the browser host's
+  step takes the whole trailing run of fetch messages, not the last one.
+  The comparison module is the same tree without the `Sync` change, so
+  both modules carry the same opcode table.
+- **Environment:** the handheld, `powersave` governor, other sessions
+  active (a Rust and a Go build ran alongside parts of it), Node 24 and
+  Chromium 144 headless; 200 measured frames after 20 of warm-up, the two
+  arms interleaved twice.
+- **Attempted:** (1) the gallery and the fibscope explore scene in Node,
+  Go module against the real host; (2) the gallery in Chromium through the
+  harness page's `host` arm; (3) play scenes natively through the headless
+  client (a check, not a measurement).
+- **Findings:**
+  - **[positive boxer-toolbelt → proposed:keelson-browser-wasm / performance-efficiency.resource-utilisation / —]**
+    the host is stepped once a frame instead of 24 times, with no errors
+    and identical frame counts, in Node and in Chromium. The protocol
+    allowed it all along: the requests take no arguments and the peer
+    answers in read order, so the change is on the Go side and in the
+    host's split, not on the wire.
+  - **[neutral boxer-toolbelt → proposed:keelson-browser-wasm / performance-efficiency.time-behaviour / —]**
+    what the 23 saved steps are worth is small on this machine: in Node,
+    the gallery frame's host time 5.8 to 6.0 → 5.7 ms and Go's Sync 4.9 →
+    4.8 ms; fibscope's Sync 1.43 to 1.47 → 1.27 ms and host 1.28 → 1.21 to
+    1.30 ms. In Chromium, gallery wall time per frame 45.5 to 45.6 → 43.2
+    to 44.2 ms, host 16.0 to 16.9 → 15.3 to 16.3 ms, Go 25.8 to 26.1 →
+    24.4 to 25.3 ms (all far above M2's levels: the machine was loaded and
+    the gallery has grown). So about 0.2 ms a frame in Node and 1 to 2 ms
+    in Chromium — a JS→wasm step costs more in the browser — against the
+    0.7 ms the M2 entry attributed to the fetch steps by subtraction.
+    Natively the batch saves 23 pipe flushes and wake-ups a frame; not
+    measured here.
+  - **[pain boxer-toolbelt → proposed:keelson-wasm-trial / maintainability.modifiability / S3]**
+    a stale artifact cost an hour: a merge on `main` had added an opcode,
+    so every module built from the tree disagreed with the Go module in
+    the prebuilt pack by one, which showed as the host failing every frame
+    after the third with "operation would block" and Go reading empty
+    replies. The pack must be rebuilt as a unit, Go and Rust from one
+    tree; the tee now resolves its frame opcode by name from the opcode
+    table instead of defaulting to a number.
+- **Outcome:** ADR-0077 SD3 lands as pipelining rather than a combined
+  message: no IDL change, no new opcode, and the native hosts read the
+  same stream as before. The remaining per-frame host cost in the tab is
+  the pass itself.
+- **Results:** no run directory; the paired numbers above were read from
+  the `ARM` lines of this session's runs.

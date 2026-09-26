@@ -143,12 +143,14 @@ across threads.
   events as it does for the appliance; the worker forwards them to the Rust
   module, which translates them with the headless host's translator. No
   second input vocabulary.
-- **SD5 — ADR-0077's prerequisites stand.** Fetch coalescing (its SD3),
-  fonts as bytes (SD5), the reactive cadence (SD6), the Go build-tag sweep
-  (SD8) and the data plane (SD9) are unchanged in substance; this ADR
-  changes where the bridge runs, not what it needs. The trial's M2 gives
-  fetch coalescing its first time-based argument, about 0.7 ms of a 3 ms
-  Rust frame in the tab.
+- **SD5 — ADR-0077's prerequisites stand.** Fonts as bytes (its SD5), the
+  reactive cadence (SD6), the Go build-tag sweep (SD8) and the data plane
+  (SD9) are unchanged in substance; this ADR changes where the bridge
+  runs, not what it needs. Its SD3, fetch coalescing, landed as
+  pipelining: `Sync` issues every fetch of a frame before it reads the
+  first reply, so the worker steps the host once a frame instead of once
+  a fetch, with no change to the wire; the trial's logbook records what
+  that is worth (small on a loaded handheld).
 
 ## Surfaces — Tier 1
 

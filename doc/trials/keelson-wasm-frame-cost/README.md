@@ -103,6 +103,13 @@ next frames. fibscope's explore frame costs about 1.5 ms whole in the tab
 on the handheld. The reactor costs nothing over command mode (paired: Go
 5.7 against 5.6 ms, host 5.4 against 5.5 ms on a loaded machine).
 
+**The fetch batch** (2026-09-26, handheld, loaded): with `Sync` issuing its
+24 fetches before reading the first reply, the host is stepped once a frame
+instead of 24 times; paired against the same tree without the change, that
+is worth about 0.2 ms a frame in Node and 1 to 2 ms of a 45 ms gallery
+frame in headless Chromium, less than the 0.7 ms M2 attributed to the
+steps by subtraction. The logbook entry has the pairs.
+
 **What this trial does not say.**
 
 - **Not "the browser tier costs 4× the desktop."** The stub interprets

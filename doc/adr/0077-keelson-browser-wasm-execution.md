@@ -173,9 +173,16 @@ bridge between them, and the worker posts each frame's tessellated mesh to
 the existing viewer page in the ADR-0128 wire, so the egui pass no longer
 wraps the Go frame on the main thread. O3's aim — the Go frame off the
 main thread — is met without the `SharedArrayBuffer` that killed it. SD2
-through SD12 are unchanged; the phasing after Phase 0 continues with SD3
-fetch coalescing, for which the trial's M2 gives the first time-based
-argument.
+through SD12 are unchanged in substance.
+
+SD3 landed the same day as pipelining rather than a combined message:
+`StateManager.Sync` issues every fetch of a frame before it reads the
+first reply and collects the replies in the same order, which the
+protocol allowed all along (the requests take no arguments, the peer
+answers in read order). No IDL change, no new opcode; the native hosts
+read the same stream. In the tab the host is stepped once a frame instead
+of 24 times; what that is worth on a loaded handheld the trial's logbook
+records as small (about 0.2 ms in Node, 1 to 2 ms in Chromium).
 
 ### 2026-09-21 — `wasm2go` surveyed as an O5 mechanism: an AOT translator, not a sandbox
 
