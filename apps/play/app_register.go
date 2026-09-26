@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
@@ -282,6 +283,9 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			// composing a query (ADR-0139 §SD8 under ADR-0254 §SD5): run here,
 			// under this grant, never by the service.
 			keelsonquery.ClientCaps(modelToolTables...)[0],
+			// The Map, Graph and Vector field panes' basemap tiles, fetched
+			// through the host's egress service (ADR-0262 §SD6).
+			basemap.ClientCaps("play: basemap tiles under the Map, Graph and Vector field panes")[0],
 		},
 		// PersistedKeys → host auto-injects the runtime.persist.play.>
 		// cap. Kept for the read-only bridge only (ADR-0148 §SD8, added

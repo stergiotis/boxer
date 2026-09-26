@@ -383,6 +383,7 @@ type GraphviewDriver struct {
 	// and picks inside it (ADR-0228). The offline atlas draws country
 	// outlines where no tile server is configured.
 	pm             *portolan.Map
+	tiles          *basemap.Tiles
 	land           *landoverlay.Layer
 	atlas          *worldmap.Atlas
 	hostViewHash   uint64
@@ -1770,7 +1771,7 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 		lat0, lon0 := netUnprojectWebMercator(m.GeoOriginX, m.GeoOriginY)
 		inst.pm = portolan.New(inst.ids, portolan.Options{
 			Source:  basemap.PortolanSource(),
-			Loader:  basemap.PortolanLoader(),
+			Loader:  basemap.PortolanLoader(inst.tiles),
 			Center:  portolan.LL(lat0, lon0),
 			Zoom:    netWebMercatorZoom,
 			NoTiles: !basemap.Configured(),

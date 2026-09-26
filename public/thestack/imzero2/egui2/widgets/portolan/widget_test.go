@@ -2,12 +2,11 @@ package portolan
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,17 +18,17 @@ import (
 // and the pyramid. Drawing and input are exercised by the headless scene
 // (TestScenePortolanCamera, in the integration lane).
 
-// errorTileTransport 404s every tile and serves one 2×2 PNG at the error URL.
-type errorTileTransport struct {
+// errorTileFetcher fails every tile and serves one 2×2 PNG at the error URL.
+type errorTileFetcher struct {
 	errURL string
 	png    []byte
 }
 
-func (tr *errorTileTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	if r.URL.String() == tr.errURL {
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(tr.png))}, nil
+func (f *errorTileFetcher) Get(_ context.Context, url string) ([]byte, error) {
+	if url == f.errURL {
+		return f.png, nil
 	}
-	return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader(""))}, nil
+	return nil, errors.New("404")
 }
 
 func TestMap_ErrorTileURL(t *testing.T) {
@@ -47,11 +46,11 @@ func TestMap_ErrorTileURL(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, png.Encode(&buf, img))
 	const errURL = "http://tiles.example/error.png"
-	tr := &errorTileTransport{errURL: errURL, png: buf.Bytes()}
+	tr := &errorTileFetcher{errURL: errURL, png: buf.Bytes()}
 
 	src := NewTileSource("http://tiles.example/{z}/{x}/{y}.png")
 	src.ErrorTileURL = errURL
-	m := New(nil, Options{Source: src, Loader: LoaderOptions{Workers: 2, Transport: tr}, Center: LL(0, 0), Zoom: 1})
+	m := New(nil, Options{Source: src, Loader: LoaderOptions{Workers: 2, Fetcher: tr}, Center: LL(0, 0), Zoom: 1})
 	defer m.Close()
 	m.view.SetSize(Pt(300, 300))
 	m.view.SetView(m.opts.Center, m.opts.Zoom)

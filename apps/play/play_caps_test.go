@@ -17,9 +17,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appletstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
@@ -178,7 +180,7 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// The count is asserted on purpose: a capability is an authority this app
 	// is granted, so adding one has to be a deliberate edit here rather than
 	// something that rides along with a feature.
-	require.Len(t, m.Caps, 10)
+	require.Len(t, m.Caps, 11)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
@@ -211,6 +213,9 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// inspector window is denied.
 	assert.Contains(t, patterns, regexsummary.ChLocalCapPattern)
 	assert.NotContains(t, patterns, appletstore.SubjectSave)
+	// The basemap's tile destination (ADR-0262): the map panes fetch
+	// through the host, never over a socket of their own.
+	assert.Contains(t, patterns, httpegress.Subject(basemap.Destination))
 	// PersistedKeys → host-injected runtime.persist.play.> cap. Both keys
 	// are read-only now (ADR-0148 §SD8): the buffers are saved as a
 	// workingset record, and the cap is what the one-release read bridge

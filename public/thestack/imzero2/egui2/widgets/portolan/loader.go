@@ -3,27 +3,38 @@ package portolan
 import (
 	"bytes"
 	"container/list"
-	"crypto/tls"
-	"crypto/x509"
+	"context"
+	"errors"
 	"image"
 	"image/draw"
 	_ "image/jpeg" // raster tile servers serve PNG; aerial layers JPEG
 	_ "image/png"
-	"io"
-	"net/http"
-	"os"
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// LoaderOptions configures a TileLoader. The zero value is usable: six
-// workers, a 512-tile byte cache, a 30 s negative cache, a 30 s timeout, the
-// system trust store.
+// TileFetcherI fetches one tile's bytes. The loader does no HTTP of its
+// own (ADR-0262 §SD6): a hosted app hands it a fetcher over the
+// `net.http.fetch.<destination>` family, whose destination holds the
+// transport policy — trust, user agent, timeout. A status other than 200
+// is the fetcher's error.
+type TileFetcherI interface {
+	Get(ctx context.Context, url string) (data []byte, err error)
+}
+
+// errNoFetcher is every fetch's outcome for a loader built without one.
+var errNoFetcher = errors.New("portolan: no tile fetcher — the map is not hosted, or its app declares no tile destination")
+
+// LoaderOptions configures a TileLoader. The zero value is usable but
+// fetches nothing: without a Fetcher every tile fails with errNoFetcher.
+// Otherwise six workers, a 512-tile byte cache, a 30 s negative cache and a
+// 30 s timeout.
 type LoaderOptions struct {
+	// Fetcher fetches a tile's bytes; nil fails every tile.
+	Fetcher TileFetcherI
 	// Workers is the number of concurrent fetches — Leaflet's and the old binding's
 	// per-host budget of six.
 	Workers int
@@ -35,25 +46,9 @@ type LoaderOptions struct {
 	NegativeTTL time.Duration
 	// Timeout bounds one fetch.
 	Timeout time.Duration
-	// UserAgent identifies this client to the tile server; the public OSM
-	// servers refuse an empty one.
-	UserAgent string
-	// CAFile is a PEM bundle to trust instead of the system roots — the
-	// BOXER_MAP_TILE_CA_FILE knob (ADR-0204 §SD4). Verification stays on.
-	CAFile string
-	// InsecureTLS disables certificate verification —
-	// BOXER_MAP_TILE_INSECURE_TLS. It also drops the protocol floor to TLS
-	// 1.0 and admits the legacy cipher suites, so that a server old enough
-	// to need the knob can actually be reached; see tlsClientConfig.
-	InsecureTLS bool
-	// Transport, when set, is used as is (tests); CAFile/InsecureTLS are then
-	// ignored.
-	Transport http.RoundTripper
 	// MaxTileBytes caps one tile's body.
 	MaxTileBytes int64
 }
-
-const defaultUserAgent = "boxer-portolan/0.1 (+https://github.com/stergiotis/boxer)"
 
 func (o LoaderOptions) withDefaults() LoaderOptions {
 	if o.Workers <= 0 {
@@ -67,9 +62,6 @@ func (o LoaderOptions) withDefaults() LoaderOptions {
 	}
 	if o.Timeout <= 0 {
 		o.Timeout = 30 * time.Second
-	}
-	if o.UserAgent == "" {
-		o.UserAgent = defaultUserAgent
 	}
 	if o.MaxTileBytes <= 0 {
 		o.MaxTileBytes = 4 << 20
@@ -117,8 +109,7 @@ type tileWaiter struct {
 // requests from the viewport's centre outward — and a request for the same
 // URL as one in flight attaches to it rather than fetching twice.
 type TileLoader struct {
-	opts   LoaderOptions
-	client *http.Client
+	opts LoaderOptions
 
 	mu        sync.Mutex
 	cond      *sync.Cond
@@ -145,87 +136,10 @@ func NewTileLoader(opts LoaderOptions) *TileLoader {
 		negative:  make(map[string]time.Time, 16),
 	}
 	l.cond = sync.NewCond(&l.mu)
-	transport := opts.Transport
-	if transport == nil {
-		transport = l.newTransport()
-	}
-	l.client = &http.Client{Transport: transport, Timeout: opts.Timeout}
 	for i := 0; i < opts.Workers; i++ {
 		go l.worker()
 	}
 	return l
-}
-
-func (l *TileLoader) newTransport() http.RoundTripper {
-	t, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		return http.DefaultTransport
-	}
-	t = t.Clone()
-	if cfg := l.opts.tlsClientConfig(); cfg != nil {
-		t.TLSClientConfig = cfg
-	}
-	return t
-}
-
-// tlsClientConfig is the tile client's TLS configuration, or nil to leave the
-// transport's own default in place — the system trust store and Go's TLS 1.2
-// floor, which is what an unconfigured deployment fetching from
-// tile.openstreetmap.org wants.
-//
-// The two knobs are deliberately not symmetric. CAFile says "verification
-// stays on, the chain just ends somewhere else", so it changes the roots and
-// nothing else. InsecureTLS says "do not authenticate this peer at all", which
-// is a strictly larger statement, and once it is made the protocol floor and
-// the cipher list stop protecting anything: an attacker who can present an
-// arbitrary certificate is already the peer, so declining their TLS 1.0 or
-// their CBC suite buys nothing. Both are therefore lowered along with it —
-// without that, the handshake against the legacy appliance this knob exists
-// for fails on version or cipher negotiation rather than on the certificate,
-// and the operator sees a knob that does not work.
-func (o LoaderOptions) tlsClientConfig() *tls.Config {
-	if o.CAFile == "" && !o.InsecureTLS {
-		return nil
-	}
-	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
-	if o.CAFile != "" {
-		pem, err := os.ReadFile(o.CAFile)
-		if err != nil {
-			log.Error().Err(err).Str("path", o.CAFile).Msg("portolan: tile CA file unreadable; keeping the system roots")
-		} else if pool := x509.NewCertPool(); !pool.AppendCertsFromPEM(pem) {
-			log.Error().Str("path", o.CAFile).Msg("portolan: tile CA file holds no certificate; keeping the system roots")
-		} else {
-			cfg.RootCAs = pool
-		}
-	}
-	if o.InsecureTLS {
-		cfg.InsecureSkipVerify = true //nolint:gosec // the operator's explicit knob, logged
-		cfg.MinVersion = tls.VersionTLS10
-		cfg.CipherSuites = legacyCipherSuites()
-		log.Warn().Msg("portolan: tile TLS verification disabled by configuration; the protocol floor is TLS 1.0 and the legacy cipher suites are admitted")
-	}
-	return cfg
-}
-
-// legacyCipherSuites is every TLS 1.0–1.2 suite crypto/tls can speak,
-// including the ones it keeps out of its default list: the static-RSA key
-// exchanges an old server typically offers, and 3DES and RC4. Only reachable
-// under InsecureTLS.
-//
-// Config.CipherSuites is intersected against what the library supports and
-// re-ordered by Go's own preference, so listing a suite only permits it; the
-// TLS 1.3 ids in the slice are ignored, since TLS 1.3 suites are not
-// configurable and stay enabled.
-func legacyCipherSuites() []uint16 {
-	secure, insecure := tls.CipherSuites(), tls.InsecureCipherSuites()
-	ids := make([]uint16, 0, len(secure)+len(insecure))
-	for _, cs := range secure {
-		ids = append(ids, cs.ID)
-	}
-	for _, cs := range insecure {
-		ids = append(ids, cs.ID)
-	}
-	return ids
 }
 
 // Request asks for a tile. It is idempotent per coords while the request is
@@ -402,22 +316,14 @@ func (l *TileLoader) deliver(req *tileRequest, px []uint32, w, h int, err error)
 }
 
 func (l *TileLoader) fetch(url string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, eb.Build().Str("url", url).Errorf("portolan: bad tile url: %w", err)
+	if l.opts.Fetcher == nil {
+		return nil, errNoFetcher
 	}
-	req.Header.Set("User-Agent", l.opts.UserAgent)
-	resp, err := l.client.Do(req)
+	ctx, cancel := context.WithTimeout(context.Background(), l.opts.Timeout)
+	defer cancel()
+	data, err := l.opts.Fetcher.Get(ctx, url)
 	if err != nil {
 		return nil, eh.Errorf("portolan: tile fetch failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, eb.Build().Int("statusCode", resp.StatusCode).Str("url", url).Errorf("portolan: tile server answered an error status")
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, l.opts.MaxTileBytes+1))
-	if err != nil {
-		return nil, eh.Errorf("portolan: tile body unreadable: %w", err)
 	}
 	if int64(len(data)) > l.opts.MaxTileBytes {
 		return nil, eb.Build().Int64("maxTileBytes", l.opts.MaxTileBytes).Errorf("portolan: tile body exceeds the size limit")

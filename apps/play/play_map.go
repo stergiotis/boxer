@@ -36,6 +36,7 @@ import (
 type MapDriver struct {
 	ids    *c.WidgetIdStack
 	pm     *portolan.Map // the map widget, created on first Render
+	tiles  *basemap.Tiles
 	client *Client
 
 	// Controls + display. The map fills the tab body by default (FillAvailable
@@ -302,7 +303,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	if inst.pm == nil {
 		inst.pm = portolan.New(inst.ids, portolan.Options{
 			Source:  basemap.PortolanSource(),
-			Loader:  basemap.PortolanLoader(),
+			Loader:  basemap.PortolanLoader(inst.tiles),
 			Center:  portolan.LL(inst.initLat, inst.initLon),
 			Zoom:    inst.initZoom,
 			NoTiles: inst.noTiles,

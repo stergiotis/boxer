@@ -31,6 +31,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
@@ -829,6 +830,9 @@ type PlayApp struct {
 	bus     app.BusI
 	storage app.StorageI
 	logger  zerolog.Logger
+	// tiles is the map panes' basemap fetcher (ADR-0262 §SD6), built
+	// unbound with the panes and bound to bus by SetCapabilities.
+	tiles *basemap.Tiles
 
 	// pickMu guards the goroutine-side load state. The Load button
 	// fires loadFromPicker in a goroutine; the Render loop reads
@@ -872,6 +876,7 @@ func (inst *PlayApp) SetCapabilities(bus app.BusI, storage app.StorageI, logger 
 	inst.bus = bus
 	inst.storage = storage
 	inst.logger = logger
+	inst.tiles.Bind(bus)
 
 	// Wire the time-range evaluator + fan it out to widgets that
 	// opt into evaluatorAwareI. Nil-bus or constructor failure
@@ -1133,7 +1138,9 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	// gesture exists for.
 	inst.captureParamDefaults(initialSQL)
 	inst.timeline = NewTimelineDriver(timelineIds, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
+	inst.tiles = basemap.NewTiles(nil, "play: map panes")
 	inst.mapDriver = NewMapDriver(mk(), client)
+	inst.mapDriver.tiles = inst.tiles
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
 	inst.chatDriver = NewChatDriver(mk(), client)
@@ -1147,8 +1154,10 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.netSource = newNetworkSource(client)
 	inst.networkDriver = NewNetworkDriver(mk(), inst.netSource)
 	inst.graphviewDriver = NewGraphviewDriver(mk(), inst.netSource)
+	inst.graphviewDriver.tiles = inst.tiles
 	inst.sankeyDriver = NewSankeyDriver(mk(), client)
 	inst.vectorFieldDriver = NewVectorFieldDriver(mk(), client, inst.openVectorFieldQuery)
+	inst.vectorFieldDriver.tiles = inst.tiles
 	inst.distDriver = NewDistDriver(mk())
 	inst.icicleDriver = NewIcicleDriver(mk())
 	inst.treemapDriver = newTreemapDriver(mk())

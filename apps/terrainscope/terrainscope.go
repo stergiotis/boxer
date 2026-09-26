@@ -208,6 +208,7 @@ type App struct {
 	applyZoom      bool
 	applyCenter    bool
 	pm             *portolan.Map // the map widget, created on first renderMap
+	tiles          *basemap.Tiles
 
 	// plotEpoch is folded into the plot widget id; bumping it on reset gives
 	// egui_plot fresh widget state so its cached axis transform doesn't
@@ -248,6 +249,7 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
+	inst.tiles = basemap.NewTiles(ctx.Bus(), "terrainscope: basemap")
 	return
 }
 
@@ -434,7 +436,7 @@ func (inst *App) renderMap() {
 	if inst.pm == nil {
 		inst.pm = portolan.New(inst.ids, portolan.Options{
 			Source: basemap.PortolanSource(),
-			Loader: basemap.PortolanLoader(),
+			Loader: basemap.PortolanLoader(inst.tiles),
 			Center: portolan.LL(swissCenterLat, swissCenterLon),
 			Zoom:   8,
 		})

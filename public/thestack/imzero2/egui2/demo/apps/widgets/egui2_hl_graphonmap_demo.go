@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -116,11 +117,11 @@ type graphOnMapState struct {
 	landNoFill bool
 }
 
-func newGraphOnMapState(ids *c.WidgetIdStack) *graphOnMapState {
+func newGraphOnMapState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *graphOnMapState {
 	st := &graphOnMapState{
 		m: portolan.New(ids, portolan.Options{
 			Source: basemap.PortolanSource(),
-			Loader: basemap.PortolanLoader(),
+			Loader: basemap.PortolanLoader(basemap.NewTiles(bus, "gallery: graph on a map")),
 			Center: graphOnMapCentre,
 			Zoom:   graphOnMapRefZoom,
 		}),

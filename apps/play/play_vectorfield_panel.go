@@ -293,6 +293,7 @@ type VectorFieldDriver struct {
 	probeErr     error
 
 	pm    *portolan.Map
+	tiles *basemap.Tiles
 	land  *landoverlay.Layer
 	atlas *worldmap.Atlas
 
@@ -419,7 +420,7 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 	if inst.pm == nil {
 		inst.pm = portolan.New(inst.ids, portolan.Options{
 			Source:     basemap.PortolanSource(),
-			Loader:     basemap.PortolanLoader(),
+			Loader:     basemap.PortolanLoader(inst.tiles),
 			Center:     portolan.LL(30, 0),
 			Zoom:       2,
 			NoTiles:    inst.noTiles,

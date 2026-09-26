@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
@@ -71,11 +72,11 @@ type flowOnMapState struct {
 	density   float64
 }
 
-func newFlowOnMapState(ids *c.WidgetIdStack) *flowOnMapState {
+func newFlowOnMapState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *flowOnMapState {
 	st := &flowOnMapState{
 		m: portolan.New(ids, portolan.Options{
 			Source:  basemap.PortolanSource(),
-			Loader:  basemap.PortolanLoader(),
+			Loader:  basemap.PortolanLoader(basemap.NewTiles(bus, "gallery: flow on a map")),
 			Center:  portolan.LL(35, 5),
 			Zoom:    2.6,
 			NoTiles: true,
