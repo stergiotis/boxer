@@ -738,7 +738,38 @@ func (inst *StateManager) Sync() {
 	seenIds.Clear()
 	fetcher := inst.fetcher
 
-	ids, resps := fetcher.FetchR7()
+	// Every fetch of a Sync is issued before the first reply is read, and
+	// the replies are collected below in the same order (ADR-0077 SD3):
+	// the requests take no arguments and the peer answers messages in the
+	// order it reads them, so one flush and one wait serve the whole batch
+	// instead of one round trip per fetch. The two lists must stay in
+	// step — a collect out of order reads the wrong reply.
+	fetcher.IssueFetchR7()
+	fetcher.IssueFetchR9F64()
+	fetcher.IssueFetchR9U64()
+	fetcher.IssueFetchR9S()
+	fetcher.IssueFetchR10()
+	fetcher.IssueFetchR9EtPrefetch()
+	fetcher.IssueFetchR25EtColWidths()
+	fetcher.IssueFetchR16ScrollDelta()
+	fetcher.IssueFetchR17Modifiers()
+	fetcher.IssueFetchR18AvailableSize()
+	fetcher.IssueFetchR19ZoomDelta()
+	fetcher.IssueFetchR20Pointer()
+	fetcher.IssueFetchF1KeyPressed()
+	fetcher.IssueFetchF2KeyPressed()
+	fetcher.IssueFetchCommandEnterPressed()
+	fetcher.IssueFetchR21UiRects()
+	fetcher.IssueFetchR23CanvasWheel()
+	fetcher.IssueFetchR24CanvasPointers()
+	fetcher.IssueFetchR26KeyCaptures()
+	fetcher.IssueFetchR22StarvedTextures()
+	fetcher.IssueFetchGraphEvents()
+	fetcher.IssueFetchGraphSelection()
+	fetcher.IssueFetchGraphMetrics()
+	fetcher.IssueFetchFrameMetrics()
+
+	ids, resps := fetcher.CollectFetchR7()
 	d := inst.responseFlags
 	for id, resp := range ragged.Zip2R(ids, resps) {
 		d.UpsertBatch(id, ResponseFlagsE(resp))
@@ -748,21 +779,21 @@ func (inst *StateManager) Sync() {
 	blacklist := inst.overriddenBindingIds
 
 	applyDataBindings(blacklist, inst.r9F64Databinds, func() ([]uint64, iter.Seq[float64]) {
-		return fetcher.FetchR9F64()
+		return fetcher.CollectFetchR9F64()
 	})
 	applyDataBindings(blacklist, inst.r9U64Databinds, func() ([]uint64, iter.Seq[uint64]) {
-		return fetcher.FetchR9U64()
+		return fetcher.CollectFetchR9U64()
 	})
 	applyDataBindings(blacklist, inst.r9SDatabinds, func() ([]uint64, iter.Seq[string]) {
-		return fetcher.FetchR9S()
+		return fetcher.CollectFetchR9S()
 	})
-	applyDataBindingsConst2(blacklist, inst.r10Databinds, fetcher.FetchR10, true, false)
+	applyDataBindingsConst2(blacklist, inst.r10Databinds, fetcher.CollectFetchR10, true, false)
 
 	// ETable prefetch — packed 5×u64 per id (rowBegin, rowEnd, colBegin,
 	// colEnd, numStickyCols). Must consume the iterator fully even if
 	// unused so the FFI channel stays in sync.
 	{
-		etIds, etVals := fetcher.FetchR9EtPrefetch()
+		etIds, etVals := fetcher.CollectFetchR9EtPrefetch()
 		next, stop := iter.Pull(etVals)
 		for _, id := range etIds {
 			rb, _ := next()
@@ -791,7 +822,7 @@ func (inst *StateManager) Sync() {
 	// ApplyWidths push here, so this is usually empty. As above, the
 	// iterator must be consumed fully even when unused or the FFI channel
 	// desynchronizes.
-	inst.applyEtColWidths(fetcher.FetchR25EtColWidths())
+	inst.applyEtColWidths(fetcher.CollectFetchR25EtColWidths())
 
 	inst.r9F64Databinds.Reset()
 	inst.r9U64Databinds.Reset()
@@ -799,26 +830,26 @@ func (inst *StateManager) Sync() {
 	inst.r10Databinds.Reset()
 	blacklist.Clear()
 	{
-		x, y := fetcher.FetchR16ScrollDelta()
+		x, y := fetcher.CollectFetchR16ScrollDelta()
 		inst.r16ScrollDelta = ScrollDeltaValue{X: x, Y: y}
 	}
 	{
-		alt, ctrl, shift, macCmd, command := fetcher.FetchR17Modifiers()
+		alt, ctrl, shift, macCmd, command := fetcher.CollectFetchR17Modifiers()
 		inst.r17Modifiers = ModifiersValue{
 			Alt: alt, Ctrl: ctrl, Shift: shift,
 			MacCmd: macCmd, Command: command,
 		}
 	}
 	{
-		w, h := fetcher.FetchR18AvailableSize()
+		w, h := fetcher.CollectFetchR18AvailableSize()
 		inst.r18AvailableSize = AvailableSizeValue{W: w, H: h}
 	}
 	{
-		z := fetcher.FetchR19ZoomDelta()
+		z := fetcher.CollectFetchR19ZoomDelta()
 		inst.r19ZoomDelta = ZoomDeltaValue{Zoom: z}
 	}
 	{
-		x, y, valid := fetcher.FetchR20Pointer()
+		x, y, valid := fetcher.CollectFetchR20Pointer()
 		inst.r20Pointer = PointerValue{X: x, Y: y, Valid: valid}
 	}
 	{
@@ -827,8 +858,8 @@ func (inst *StateManager) Sync() {
 		// same frame don't also react: the runtime owns these two shortcuts
 		// exclusively, and each has its own fetcher so that ownership is
 		// explicit per binding rather than pooled behind one "any key" drain.
-		inst.f1KeyPressed = fetcher.FetchF1KeyPressed()
-		inst.f2KeyPressed = fetcher.FetchF2KeyPressed()
+		inst.f1KeyPressed = fetcher.CollectFetchF1KeyPressed()
+		inst.f2KeyPressed = fetcher.CollectFetchF2KeyPressed()
 	}
 	{
 		// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter. Draining these at
@@ -836,10 +867,10 @@ func (inst *StateManager) Sync() {
 		// TextEdit reacts to Enter only through its return_key, which
 		// carries no modifiers, so the widgets have already declined
 		// these two by the time Sync runs.
-		inst.commandEnter, inst.commandEnterShift = fetcher.FetchCommandEnterPressed()
+		inst.commandEnter, inst.commandEnterShift = fetcher.CollectFetchCommandEnterPressed()
 	}
 	{
-		seqs, minX, minY, maxX, maxYSeq := fetcher.FetchR21UiRects()
+		seqs, minX, minY, maxX, maxYSeq := fetcher.CollectFetchR21UiRects()
 		for k := range inst.r21UiRects {
 			delete(inst.r21UiRects, k)
 		}
@@ -858,7 +889,7 @@ func (inst *StateManager) Sync() {
 		}
 	}
 	{
-		ids, scrollXs, scrollYs, zooms, hoverXs, hoverYSeq := fetcher.FetchR23CanvasWheel()
+		ids, scrollXs, scrollYs, zooms, hoverXs, hoverYSeq := fetcher.CollectFetchR23CanvasWheel()
 		for k := range inst.r23CanvasWheel {
 			delete(inst.r23CanvasWheel, k)
 		}
@@ -878,7 +909,7 @@ func (inst *StateManager) Sync() {
 		}
 	}
 	{
-		ids, originXs, originYs, posXs, posYs, modsSeq := fetcher.FetchR24CanvasPointers()
+		ids, originXs, originYs, posXs, posYs, modsSeq := fetcher.CollectFetchR24CanvasPointers()
 		for k := range inst.r24CanvasPointers {
 			delete(inst.r24CanvasPointers, k)
 		}
@@ -907,7 +938,7 @@ func (inst *StateManager) Sync() {
 		// widget per frame is garbage for no benefit. The map keeps its
 		// entries for the same reason — a widget that captured once will
 		// likely capture again.
-		ids, codes, modsSeq := fetcher.FetchR26KeyCaptures()
+		ids, codes, modsSeq := fetcher.CollectFetchR26KeyCaptures()
 		for k, v := range inst.r26KeyCaptures {
 			inst.r26KeyCaptures[k] = v[:0]
 		}
@@ -925,14 +956,14 @@ func (inst *StateManager) Sync() {
 		}
 	}
 	{
-		ids := fetcher.FetchR22StarvedTextures()
+		ids := fetcher.CollectFetchR22StarvedTextures()
 		clear(inst.r22StarvedTextures)
 		for id := range ids {
 			inst.r22StarvedTextures[id] = struct{}{}
 		}
 	}
 	{
-		graphIds, kinds, keyA, keyBSeq := fetcher.FetchGraphEvents()
+		graphIds, kinds, keyA, keyBSeq := fetcher.CollectFetchGraphEvents()
 		out := inst.graphEvents[:0]
 		i := 0
 		for kb := range keyBSeq {
@@ -950,7 +981,7 @@ func (inst *StateManager) Sync() {
 		inst.graphEvents = out
 	}
 	{
-		graphIds, kinds, keyA, keyBSeq := fetcher.FetchGraphSelection()
+		graphIds, kinds, keyA, keyBSeq := fetcher.CollectFetchGraphSelection()
 		out := inst.graphSelection[:0]
 		i := 0
 		for kb := range keyBSeq {
@@ -968,7 +999,7 @@ func (inst *StateManager) Sync() {
 		inst.graphSelection = out
 	}
 	{
-		graphIds, nodeCount, edgeCount, frSteps, frLastSeq := fetcher.FetchGraphMetrics()
+		graphIds, nodeCount, edgeCount, frSteps, frLastSeq := fetcher.CollectFetchGraphMetrics()
 		out := inst.graphMetrics[:0]
 		i := 0
 		for last := range frLastSeq {
@@ -991,7 +1022,7 @@ func (inst *StateManager) Sync() {
 	// Cost is one opcode + a 16-byte response; reported with one-frame lag
 	// because this fetcher fires inside the very interpret_commands_outer
 	// call whose elapsed it would otherwise need to peek at.
-	interpretUs, passNr := inst.fetcher.FetchFrameMetrics()
+	interpretUs, passNr := inst.fetcher.CollectFetchFrameMetrics()
 	metrics.Current.RecordRust(interpretUs, passNr)
 }
 

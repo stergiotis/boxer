@@ -336,14 +336,19 @@ impl Host {
             // Go is not blocked on a fetch: nothing to answer yet.
             return false;
         }
-        // split off the trailing fetch message
+        // Split off the trailing run of fetch messages: Go issues every
+        // fetch of a Sync before it blocks on the first reply, so what
+        // follows the frame is the whole batch, answered here in order.
         let fetch_start = {
             let b = &self.pending;
             let mut off = 0usize;
             let mut start = 0usize;
             while off < complete {
-                start = off;
                 let len = u32::from_ne_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]]) as usize;
+                let op = u32::from_ne_bytes([b[off + 4], b[off + 5], b[off + 6], b[off + 7]]);
+                if !self.fetch_ops.contains(&op) {
+                    start = off + 4 + len;
+                }
                 off += 4 + len;
             }
             start

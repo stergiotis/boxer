@@ -558,27 +558,58 @@ func generateProceduralCode(w io.Writer, procedure *ir.ProceduralNode, tracker *
 `)
 	tracker.MergeError(err)
 }
+
+// generateFetcherCode emits three functions per fetcher: `Fetch<Name>`, the
+// round trip (write the opcode, read the reply), and its two halves
+// `Issue<Name>` (the opcode only) and `Collect<Name>` (the reply only). A
+// caller that needs several fetches issues them all and then collects in
+// the same order, so a batch costs one flush and one wait instead of one per
+// fetch (ADR-0077 SD3); the replies arrive in issue order because the peer
+// answers messages in the order it reads them.
 func generateFetcherCode(w io.Writer, fetcher *ir.FetcherNode, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
 	tracker.ErrorMessagePrefix = fmt.Sprintf("fetcher %s ", fetcher.Name)
-	_, err := fmt.Fprintf(w, `func (inst *Fetcher) %s() (`, fetcher.Name.Convert(naming.UpperCamelCase))
-	tracker.MergeError(err)
-	{
+	name := fetcher.Name.Convert(naming.UpperCamelCase)
+	var err error
+	writeReturnDecl := func() {
+		_, err = fmt.Fprint(w, `() (`)
+		tracker.MergeError(err)
 		generateArgumentsDeclPlainLastIterator(w, fetcher.ReturnTypes.Iterate(), tracker)
-	}
-	_, err = fmt.Fprint(w, `) {
+		_, err = fmt.Fprint(w, `) {
 `)
-	tracker.MergeError(err)
-
-	_, err = fmt.Fprintf(w, `	inst.invoke(FuncProcId%s)
-`, fetcher.Name.Convert(naming.UpperCamelCase))
-	tracker.MergeError(err)
-
-	generateFetcherReturnHandlingPlain(w, fetcher.ReturnTypes.Iterate(), tracker)
-
-	_, err = fmt.Fprint(w, `	return
+		tracker.MergeError(err)
+	}
+	writeInvoke := func() {
+		_, err = fmt.Fprintf(w, `	inst.invoke(FuncProcId%s)
+`, name)
+		tracker.MergeError(err)
+	}
+	writeReturn := func() {
+		_, err = fmt.Fprint(w, `	return
 }
 `)
+		tracker.MergeError(err)
+	}
+
+	_, err = fmt.Fprintf(w, `func (inst *Fetcher) %s`, name)
 	tracker.MergeError(err)
+	writeReturnDecl()
+	writeInvoke()
+	generateFetcherReturnHandlingPlain(w, fetcher.ReturnTypes.Iterate(), tracker)
+	writeReturn()
+
+	_, err = fmt.Fprintf(w, `func (inst *Fetcher) Issue%s() {
+`, name)
+	tracker.MergeError(err)
+	writeInvoke()
+	_, err = fmt.Fprint(w, `}
+`)
+	tracker.MergeError(err)
+
+	_, err = fmt.Fprintf(w, `func (inst *Fetcher) Collect%s`, name)
+	tracker.MergeError(err)
+	writeReturnDecl()
+	generateFetcherReturnHandlingPlain(w, fetcher.ReturnTypes.Iterate(), tracker)
+	writeReturn()
 }
 func generateFactoryCode(w io.Writer, factory *ir.BuilderFactoryNode, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
 	generateRootFunc(w, factory.Name, factory.IdentityArguments, factory.Arguments, tracker)
