@@ -9,7 +9,8 @@ status: draft
 > **Status: draft — pre-human-review.** An exploration dated 2026-09-26, done
 > with the vizeval harness ([ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md),
 > proposed). Every quality judgement below is one reader's reading of
-> captures plus vizeval's geometry gates; no task-accuracy judge was run.
+> captures plus vizeval's geometry gates, except §Judged round, which
+> reports one task-accuracy round by blind agent readers.
 
 # A lens over leeway rows: structure↔values, local↔stable
 
@@ -148,6 +149,47 @@ Tried and dropped:
 - **Section names in their hue.** Some hues fail contrast on the dark
   surface; names are neutral over a hue rule.
 
+## Judged round
+
+One round, 2026-09-26, at build `4ebcd397`: scenario `60_mixed_kinds` in a
+1500×900 artifact box, its five questions answered per candidate by one
+agent reader given only that candidate's judge sheet (ADR-0257 §SD10). A
+blurred control sheet was answered "unreadable" throughout, so no reader was
+recorded as informed. One reader per candidate means each figure is one
+reading, not a mean.
+
+| candidate | task.accuracy | rows.labelled_share |
+| --- | --- | --- |
+| rows, values 0.5 | 0.8 | 0.79 |
+| rows, values 0.9 | 0.8 | 0.79 |
+| rows, values 0.1 | 0.6 | 0.46 |
+| archetypes, stable 0 | 0.8 | 0.31 |
+| archetypes, stable 0.5 | 0.4 | 0.31 |
+| archetypes, stable 1 | 0.4 | 0.31 |
+| focus (row 0) | 0 | 0.10 |
+| topo (reference sink) | 0 | 0 |
+
+Every miss but one was "unreadable", not a wrong answer; the topology spark
+counted three kinds for four, by row shape. What the misses point at:
+
+- **No candidate showed the failed job.** The rows form ran out of height
+  inside the jobs band ("… 2 more rows") and never drew the fourth cluster;
+  the archetype form lists numeric exceptions only, so a rare label value —
+  one job in state `failed` among twelve — is not an exception there,
+  although it is what the form is for.
+- **In the archetype form, `stable` decided whether the missing slot was
+  visible.** At stable 0 the host lacking `disk` and the busiest host were
+  among the rows shown; at 0.5 and 1 both fell into "2 more rows with
+  exceptions". Exceptions are cut by a row budget, and a missing slot does
+  not outrank a numeric outlier in it.
+- **`values` barely moved the rows form** between 0.5 and 0.9; at 0.1, the
+  shape end, the values that two questions need are gone.
+- **Labelled share did not separate the archetype candidates**; accuracy
+  did (0.8 against 0.4 at one share). Which rows are named mattered more
+  than how many.
+- **focus** answers questions about one row, which none of the scenario's
+  are; its zero says the scenario does not test that form.
+
 ## Considered, not built
 
 - A navigator over the threshold tree itself (an icicle of rules with row
@@ -169,6 +211,13 @@ Tried and dropped:
 - **Vertical budget.** The pane is not scrolled; rows past its height are
   counted, not drawn. The archetype form is the answer for many rows; a
   scroll area is the answer for reading them all.
-- **Task accuracy.** The scenario carries five questions with SQL answers;
-  a judge run would say which slider positions answer which questions.
+- **Exceptions the archetype form ranks first.** A missing slot and a rare
+  label value should outrank a numeric outlier when the row budget cuts
+  (§Judged round); stable 0 as the form's default is the other candidate
+  fix.
+- **A cluster dropped whole.** Out of height, the rows form should summarise
+  a cluster it cannot draw rather than omit it.
+- **Task accuracy beyond one round.** One reader per candidate; a second
+  round after the fixes above, and one with a vision model as judge, would
+  say whether the differences hold.
 - **The light theme** was not captured.
