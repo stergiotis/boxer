@@ -1,6 +1,7 @@
 package leewaywidgets
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -216,6 +217,9 @@ type exception struct {
 	rows  []int32
 	parts []string
 	class exceptionClassE
+	// surprise is the most extreme value surprise among its outliers,
+	// which orders lines within a class: the budget cuts the mildest.
+	surprise float64
 }
 
 // rareLabels finds, per label slot the band mostly has, the values rare
@@ -254,8 +258,9 @@ func (inst *lensPainter) rareLabels(b *lwlens.Band) (rare map[int32]map[string]b
 
 // exceptions lists a band's rows that break its pattern — missing and unusual
 // slots, and above the shape detail rare labels and extreme values — most
-// telling first (exceptionClassE), so the row budget cuts outliers before
-// structure. Rows with the same departures share a line.
+// telling first (exceptionClassE), and within a class most extreme first, so
+// the row budget cuts outliers before structure and mild outliers before
+// extreme ones. Rows with the same departures share a line.
 func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []exception) {
 	idx := map[string]int{}
 	m := inst.a.Model
@@ -265,6 +270,7 @@ func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []
 	}
 	for _, pr := range pb.Rows {
 		var parts []string
+		var surprise float64
 		class := exceptionOutlier
 		if len(pr.Missing)+len(pr.Unexpected) > 0 {
 			class = exceptionStructural
@@ -288,9 +294,11 @@ func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []
 				if m.Slots[s].Kind != lwlens.ValueKindNumeric || !cell.HasNum || b.Support[s] < lensTemplateAt {
 					continue
 				}
-				if lwlens.ValueSurprise(inst.a, s, &cell) < lensOutlierAt {
+				vs := lwlens.ValueSurprise(inst.a, s, &cell)
+				if vs < lensOutlierAt {
 					continue
 				}
+				surprise = max(surprise, vs)
 				dir := "↑"
 				if inst.a.Stats[s].Percentile(cell.Num) < 0.5 {
 					dir = "↓"
@@ -308,9 +316,14 @@ func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []
 			continue
 		}
 		idx[key] = len(out)
-		out = append(out, exception{rows: rows, parts: parts, class: class})
+		out = append(out, exception{rows: rows, parts: parts, class: class, surprise: surprise})
 	}
-	slices.SortStableFunc(out, func(x, y exception) int { return int(x.class) - int(y.class) })
+	slices.SortStableFunc(out, func(x, y exception) int {
+		if x.class != y.class {
+			return int(x.class) - int(y.class)
+		}
+		return cmp.Compare(y.surprise, x.surprise)
+	})
 	return
 }
 

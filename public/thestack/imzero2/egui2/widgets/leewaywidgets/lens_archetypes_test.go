@@ -67,6 +67,9 @@ func TestArchetypeExceptionsRankStructureThenRareLabels(t *testing.T) {
 	}
 	for i := 1; i < len(exc); i++ {
 		assert.LessOrEqual(t, exc[i-1].class, exc[i].class, "most telling first: %v", lines)
+		if exc[i-1].class == exc[i].class {
+			assert.GreaterOrEqual(t, exc[i-1].surprise, exc[i].surprise, "within a class, most extreme first: %v", lines)
+		}
 	}
 	assert.True(t, strings.HasPrefix(lines[0], "job-10: −num·runtime"), "the missing slot leads: %v", lines)
 	assert.Contains(t, lines, "job-11: state failed", "a rare label is an exception")
