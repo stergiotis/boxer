@@ -9,8 +9,8 @@ status: draft
 > **Status: draft — pre-human-review.** An exploration dated 2026-09-26, done
 > with the vizeval harness ([ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md),
 > proposed). Every quality judgement below is one reader's reading of
-> captures plus vizeval's geometry gates, except §Judged round, which
-> reports one task-accuracy round by blind agent readers.
+> captures plus vizeval's geometry gates, except §Judged rounds, which
+> report two task-accuracy rounds by blind agent readers.
 
 # A lens over leeway rows: structure↔values, local↔stable
 
@@ -149,9 +149,11 @@ Tried and dropped:
 - **Section names in their hue.** Some hues fail contrast on the dark
   surface; names are neutral over a hue rule.
 
-## Judged round
+## Judged rounds
 
-One round, 2026-09-26, at build `4ebcd397`: scenario `60_mixed_kinds` in a
+### Round 1
+
+2026-09-26, at build `4ebcd397`: scenario `60_mixed_kinds` in a
 1500×900 artifact box, its five questions answered per candidate by one
 agent reader given only that candidate's judge sheet (ADR-0257 §SD10). A
 blurred control sheet was answered "unreadable" throughout, so no reader was
@@ -190,6 +192,37 @@ counted three kinds for four, by row shape. What the misses point at:
 - **focus** answers questions about one row, which none of the scenario's
   are; its zero says the scenario does not test that form.
 
+### Round 2
+
+Same scenario, box, candidates and protocol, fresh readers, 2026-09-26,
+after two changes to the lens (build `f93ab1f3` plus them): the archetype
+form ranks its exception lines — a missing or unexpected slot first, then a
+rare label value (at most a tenth of its band, against a slot whose band has
+a typical value), then numeric outliers — before its per-band cap cuts them,
+and lists rare label values at all; and both forms draw a cluster they have
+no room for as one line (name, row count, rule, "not drawn") instead of
+omitting it. Only the lens's rows and archetype candidates drew differently;
+focus and topo are round 1's drawings, re-read.
+
+| candidate | round 1 | round 2 |
+| --- | --- | --- |
+| rows, values 0.5 | 0.8 | 0.8 |
+| rows, values 0.9 | 0.8 | 0.8 |
+| rows, values 0.1 | 0.6 | 0.6 |
+| archetypes, stable 0 | 0.8 | 1.0 |
+| archetypes, stable 0.5 | 0.4 | 0.8 |
+| archetypes, stable 1 | 0.4 | 0.8 |
+
+- **The archetype form no longer depends on `stable` for structure.** The
+  missing slot and the failed job were read at every stable position.
+- **Its remaining miss is the busiest host** at stable 0.5 and 1: numeric
+  outliers are still cut in row order, and the host with the top cpu fell
+  into "2 more rows with exceptions". At stable 0 the plan's row order put it
+  above the cut.
+- **The rows form did not move.** It now names the alert cluster it has no
+  room for, but the failed job is still among the jobs cut at the band's
+  end; the rows form's answer to a rare value is the archetype form.
+
 ## Considered, not built
 
 - A navigator over the threshold tree itself (an icicle of rules with row
@@ -211,13 +244,11 @@ counted three kinds for four, by row shape. What the misses point at:
 - **Vertical budget.** The pane is not scrolled; rows past its height are
   counted, not drawn. The archetype form is the answer for many rows; a
   scroll area is the answer for reading them all.
-- **Exceptions the archetype form ranks first.** A missing slot and a rare
-  label value should outrank a numeric outlier when the row budget cuts
-  (§Judged round); stable 0 as the form's default is the other candidate
-  fix.
-- **A cluster dropped whole.** Out of height, the rows form should summarise
-  a cluster it cannot draw rather than omit it.
-- **Task accuracy beyond one round.** One reader per candidate; a second
-  round after the fixes above, and one with a vision model as judge, would
-  say whether the differences hold.
+- **Outliers by surprise.** Within the numeric class the archetype form
+  still keeps the plan's row order, so the most extreme value can be cut
+  (§Judged rounds, round 2); ordering them by value surprise is the next
+  change.
+- **Task accuracy with more readers.** One reader per candidate per round;
+  several per candidate, or a vision model as judge, would say how much of
+  a 0.2 step is the reader.
 - **The light theme** was not captured.
