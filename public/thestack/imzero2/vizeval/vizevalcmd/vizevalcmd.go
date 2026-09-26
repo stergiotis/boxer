@@ -39,6 +39,10 @@ const (
 	flagRescore    = "rescore"
 	flagJudge      = "judge"
 	flagJudgeCalls = "judgeCalls"
+	flagScenario   = "scenario"
+	flagMetrics    = "metrics"
+	flagSort       = "sort"
+	flagAll        = "all"
 )
 
 // appId is how the harness appears on its bus and in the llm call table.
@@ -60,9 +64,26 @@ func NewCommand() *cli.Command {
 				Name:  "facts",
 				Usage: "print the scorecards filed in boxer.facts as JSON lines, oldest first",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "scenario", Usage: "only this scenario's scorecards"},
+					&cli.StringFlag{Name: flagScenario, Usage: "only this scenario's scorecards"},
 				},
 				Action: runFacts,
+			},
+			{
+				Name:  "table",
+				Usage: "print one aligned line per scorecard — id, sink, options, status, chosen metrics — grouped by scenario and batch",
+				Description: "Reads --" + flagOut + "/scorecards.jsonl, or boxer.facts with --" + flagFacts + ". A candidate scored\n" +
+					"more than once over one batch shows its latest card unless --" + flagAll + ". A metric a card\n" +
+					"does not have prints as '-'.\n\n" +
+					"   imzero2 vizeval table --out tmp/vz --metrics text.elided_share,rows.labelled_share --sort -rows.labelled_share",
+				Flags: []cli.Flag{
+					&cli.PathFlag{Name: flagOut, Value: "tmp/vizeval", Usage: "the score run's output directory"},
+					&cli.BoolFlag{Name: flagFacts, Usage: "read the scorecards filed in boxer.facts instead of --" + flagOut},
+					&cli.StringFlag{Name: flagScenario, Usage: "only this scenario's scorecards"},
+					&cli.StringFlag{Name: flagMetrics, Value: strings.Join(harness.DefaultTableMetrics, ","), Usage: "comma-separated metric columns"},
+					&cli.StringFlag{Name: flagSort, Usage: "order each group by this metric, ascending; prefix '-' to descend"},
+					&cli.BoolFlag{Name: flagAll, Usage: "print every card, not only each candidate's latest"},
+				},
+				Action: runTable,
 			},
 			{
 				Name:      "rank",
@@ -90,8 +111,8 @@ func NewCommand() *cli.Command {
 					"   imzero2 vizeval score --candidates c.jsonl apps/play/vizeval/10_hosts.vizeval.md\n\n" +
 					"A candidates file holds one {\"sink\":…,\"options\":{…}} per line; a scenario\n" +
 					"that does not admit a candidate's sink records it as inadmissible.\n" +
-					"Output: <out>/<scenario>/index.md per scenario, a directory per candidate,\n" +
-					"and every scorecard appended to <out>/scorecards.jsonl.",
+					"Output: <out>/<scenario>/index.md and contact.png per scenario, a directory\n" +
+					"per candidate, and every scorecard appended to <out>/scorecards.jsonl.",
 				Flags: []cli.Flag{
 					&cli.PathFlag{Name: flagOut, Value: "tmp/vizeval", Usage: "output directory"},
 					&cli.PathFlag{Name: flagCandidates, Usage: "JSONL file of candidates; default: each admitted sink at its defaults"},
@@ -216,6 +237,34 @@ func runRank(ctx *cli.Context) (err error) {
 	return nil
 }
 
+func runTable(ctx *cli.Context) (err error) {
+	var cards []harness.Scorecard
+	if ctx.Bool(flagFacts) {
+		store, e := harness.OpenFacts(ctx.Context)
+		if e != nil {
+			return e
+		}
+		defer store.Close()
+		for card, e := range harness.ReadFacts(ctx.Context, store, ctx.String(flagScenario)) {
+			if e != nil {
+				return e
+			}
+			cards = append(cards, card)
+		}
+	} else if cards, err = harness.ReadScorecards(ctx.Path(flagOut)); err != nil {
+		return err
+	}
+	var metrics []string
+	for m := range strings.SplitSeq(ctx.String(flagMetrics), ",") {
+		if m = strings.TrimSpace(m); m != "" {
+			metrics = append(metrics, m)
+		}
+	}
+	return harness.WriteTable(ctx.App.Writer, cards, harness.TableOptions{
+		Metrics: metrics, Scenario: ctx.String(flagScenario), All: ctx.Bool(flagAll), Sort: ctx.String(flagSort),
+	})
+}
+
 func runFacts(ctx *cli.Context) (err error) {
 	store, err := harness.OpenFacts(ctx.Context)
 	if err != nil {
@@ -223,7 +272,7 @@ func runFacts(ctx *cli.Context) (err error) {
 	}
 	defer store.Close()
 	w := ctx.App.Writer
-	for card, e := range harness.ReadFacts(ctx.Context, store, ctx.String("scenario")) {
+	for card, e := range harness.ReadFacts(ctx.Context, store, ctx.String(flagScenario)) {
 		if e != nil {
 			return e
 		}

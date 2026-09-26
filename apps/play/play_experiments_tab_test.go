@@ -77,8 +77,17 @@ func TestExperimentsSeed(t *testing.T) {
 	cand, err = d.candidate()
 	require.NoError(t, err)
 	assert.Equal(t, "magma", cand.Options[vizeval.OptionPalette])
+	assert.Zero(t, d.boxW, "no box, the pane's room")
+
+	require.NoError(t, d.applySeed(`{"sink":"lens","box":[1400,800]}`))
+	assert.Equal(t, [2]float32{1400, 800}, [2]float32{d.boxW, d.boxH})
+	assert.False(t, d.flows(), "the lens sizes to the pane probe")
+	require.NoError(t, d.applySeed(`{"sink":"unicode"}`))
+	assert.True(t, d.flows(), "the box-drawn tables scroll inside the box")
 
 	for name, seed := range map[string]string{
+		"box of one":     `{"sink":"card","box":[100]}`,
+		"empty box":      `{"sink":"card","box":[0,100]}`,
 		"not json":       `{`,
 		"unknown member": `{"sink":"card","extra":true}`,
 		"unknown sink":   `{"sink":"pie"}`,

@@ -81,6 +81,7 @@ func TestMeasurePlanted(t *testing.T) {
 	assert.Equal(t, 1.0, m[MetricTextClipped], "the cell's text")
 	assert.Equal(t, 1.0, m[MetricTextCutAtEdge], "the run past the bottom")
 	assert.Equal(t, 2.0, m[MetricTextElided], "one elided by egui, one cut by its sink")
+	assert.InDelta(t, 0.2, m[MetricTextElidedShare], 1e-9, "two of ten runs")
 	assert.Equal(t, 9.0, m[MetricTextMinSize])
 	assert.Equal(t, 1.0, m[MetricTextLowContrast], "grey on grey")
 	assert.Less(t, m[MetricTextMinContrast], 2.0)
@@ -90,6 +91,30 @@ func TestMeasurePlanted(t *testing.T) {
 	assert.Greater(t, m[MetricColorMinDeltaE], 20.0)
 	_, has := m[MetricInkRatio]
 	assert.False(t, has, "no capture, no ink ratio")
+}
+
+func TestKeysLabelled(t *testing.T) {
+	area := Rect{0, 0, 100, 100}
+	run := func(text string, y float64) TextRun {
+		return TextRun{Text: text, Box: Rect{0, y, 40, y + 10}, Clip: unbounded}
+	}
+	d := Drawing{Runs: []TextRun{
+		run("host-1", 0), run("host-1", 0), // a halo: one key
+		run("host-2 +1", 20),        // a key with a count after it
+		run("host-10", 40),          // not host-1
+		run("│ host-5 │ 3.2 │", 50), // a cell of a box-drawn line
+		run("host-3", 200),          // outside the area
+		{Text: "host-4", Box: Rect{0, 60, 40, 70}, Clip: unbounded, Elided: true},
+	}}
+	keys := []string{"host-1", "host-2", "host-3", "host-4", "host-5"}
+	assert.Equal(t, 3, KeysLabelled(d, area, keys))
+	assert.Equal(t, 0, KeysLabelled(d, area, []string{"host"}), "a key inside a longer token is not found")
+
+	// A code view: one run of four lines, 10pt each, scrolled so the clip
+	// shows the middle two.
+	view := Drawing{Runs: []TextRun{{Text: "\"a-1\"\n\"a-2\"\n\"a-3\"\n\"a-4\"",
+		Box: Rect{0, 0, 40, 40}, Clip: Rect{0, 10, 100, 30}}}}
+	assert.Equal(t, 2, KeysLabelled(view, area, []string{"a-1", "a-2", "a-3", "a-4"}), "only the lines in the clip")
 }
 
 func TestInkRatio(t *testing.T) {

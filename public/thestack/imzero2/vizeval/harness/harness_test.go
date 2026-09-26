@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient"
@@ -80,7 +81,7 @@ func TestScorecardRowRoundTrip(t *testing.T) {
 		At:      "2026-09-25T19:00:00Z",
 	}
 	row := RowOf(card)
-	id, nk := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest)
+	id, nk := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest, "")
 	assert.Equal(t, id, row.Id)
 	assert.Equal(t, nk, string(row.NaturalKey))
 	assert.Equal(t, []string{geometry.MetricTextElided, geometry.MetricTextRuns}, row.MetricName, "names sorted")
@@ -89,8 +90,41 @@ func TestScorecardRowRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, card, back)
 
-	other, _ := ScoreKey(card.Scenario, card.CandidateID, card.Build, "d2")
+	other, _ := ScoreKey(card.Scenario, card.CandidateID, card.Build, "d2", "")
 	assert.NotEqual(t, id, other, "different data is a different measurement")
+
+	card.Frame = "1400x800@1528x1320"
+	row = RowOf(card)
+	assert.NotEqual(t, id, row.Id, "another box is another measurement")
+	back, err = CardOf(row)
+	require.NoError(t, err)
+	assert.Equal(t, card.Frame, back.Frame, "the frame comes back from the key")
+}
+
+func TestArtifactBox(t *testing.T) {
+	src := strings.Replace(scenarioSrc, "size: 1600x1000", "artifact: 1400x800", 1)
+	sc, err := vizeval.ParseScenario("x/s"+vizeval.ScenarioSuffix, []byte(src))
+	require.NoError(t, err)
+	assert.Equal(t, "1400x800@1528x1320", sc.Frame(), "the viewport is the box plus the chrome allowance")
+	cands, err := DefaultCandidates(sc)
+	require.NoError(t, err)
+	doc := candidateScene(sc, cands[0])
+	assert.Equal(t, "1528x1320", doc.Spec.Size)
+	var seed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(doc.Spec.Env["BOXER_PLAY_EXPERIMENTS"]), &seed))
+	assert.Equal(t, []any{1400.0, 800.0}, seed["box"])
+
+	assert.Empty(t, checkBox(sc, geometry.Rect{X0: 10, Y0: 20, X1: 1410.4, Y1: 820}))
+	assert.Contains(t, checkBox(sc, geometry.Rect{X0: 10, Y0: 20, X1: 1410, Y1: 600}), "raise size")
+
+	small := strings.Replace(scenarioSrc, "size: 1600x1000", "size: 800x600\n  artifact: 1400x800", 1)
+	_, err = vizeval.ParseScenario("x/s"+vizeval.ScenarioSuffix, []byte(small))
+	assert.Error(t, err, "a viewport smaller than the box")
+
+	plain, err := vizeval.ParseScenario("x/s"+vizeval.ScenarioSuffix, []byte(scenarioSrc))
+	require.NoError(t, err)
+	assert.Empty(t, plain.Frame(), "no box, no frame: the key stays what it was")
+	assert.Empty(t, checkBox(plain, geometry.Rect{X1: 5, Y1: 5}))
 }
 
 func TestReusable(t *testing.T) {

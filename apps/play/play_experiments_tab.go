@@ -151,6 +151,12 @@ type experimentsDriver struct {
 	// on those frames would flash.
 	paneW, paneH float32
 
+	// boxW / boxH, when non-zero, are the artifact box a seed declared: the
+	// region the sink draws in is exactly that size, whatever the pane has
+	// room for, so a capture's artifact does not move with play's chrome
+	// (ADR-0257 §SD3).
+	boxW, boxH float32
+
 	// Built output, invalidated by key.
 	key      experimentsKey
 	built    bool
@@ -257,11 +263,12 @@ func (inst *experimentsDriver) candidate() (cand vizeval.Candidate, err error) {
 }
 
 // experimentsSeed is BOXER_PLAY_EXPERIMENTS: a candidate plus the source it is
-// drawn from.
+// drawn from, and optionally the artifact box, [w, h] in points.
 type experimentsSeed struct {
 	Source  string         `json:"source"`
 	Sink    string         `json:"sink"`
 	Options map[string]any `json:"options"`
+	Box     []float32      `json:"box"`
 }
 
 // applySeed puts the pane in the state a seed names. Anything that does not
@@ -284,6 +291,14 @@ func (inst *experimentsDriver) applySeed(raw string) (err error) {
 		inst.source = experimentsSourceResult
 	default:
 		return eb.Build().Str("source", seed.Source).Errorf("unknown experiments source (want fixture or result)")
+	}
+	switch {
+	case seed.Box == nil:
+	case len(seed.Box) != 2 || !(seed.Box[0] > 0) || !(seed.Box[1] > 0) ||
+		math.IsInf(float64(seed.Box[0]), 0) || math.IsInf(float64(seed.Box[1]), 0):
+		return eh.Errorf("the experiments seed's box must be [width, height], both positive")
+	default:
+		inst.boxW, inst.boxH = seed.Box[0], seed.Box[1]
 	}
 	inst.sink = cand.Sink
 	inst.setKnobs(inst.spec(), cand.Options)
@@ -635,28 +650,62 @@ func (inst *experimentsDriver) renderBody(rec arrow.RecordBatch, schema *arrow.S
 		}
 	}
 	for range c.AccessibleRegion(experimentsArtifactName).KeepIter() {
-		switch {
-		case inst.sink == vizeval.SinkCard:
-			if cardReady {
-				inst.renderCard()
-			}
-		case inst.sink == vizeval.SinkTopology:
-			inst.renderTopology()
-		case inst.sink == vizeval.SinkJSON:
-			if inst.jsonOK {
-				c.CodeView(inst.ids.PrepareStr("exp-json"), inst.jsonView).Wrap().Send()
-			}
-		case inst.sink == vizeval.SinkChart:
-			inst.renderChart(cand)
-		case inst.sink == vizeval.SinkGraph:
-			inst.renderGraph(cand)
-		case inst.sink == vizeval.SinkHierarchy:
-			inst.renderHierarchy(cand)
-		case inst.sink == vizeval.SinkLens:
-			inst.renderLens(cand)
-		case inst.isTextSink():
-			inst.renderText()
+		if inst.boxW > 0 {
+			inst.renderBoxed(cardReady, cand)
+			continue
 		}
+		inst.renderSink(cardReady, cand)
+	}
+}
+
+// renderBoxed draws the sink in the declared box. The constraints go on the
+// region's own ui, so the region's rect is the box; a sink that sizes itself
+// to the pane probe then measures the box, one frame behind as ever, and one
+// that flows (the card table, the text and JSON sinks) scrolls inside it
+// rather than growing the region.
+func (inst *experimentsDriver) renderBoxed(cardReady bool, cand vizeval.Candidate) {
+	c.UiSetMinWidth(inst.boxW)
+	c.UiSetMaxWidth(inst.boxW)
+	c.UiSetMinHeight(inst.boxH)
+	c.UiSetMaxHeight(inst.boxH)
+	if !inst.flows() {
+		inst.renderSink(cardReady, cand)
+		return
+	}
+	for range c.ScrollArea().Hscroll(true).Vscroll(true).AutoShrink(false, false).KeepIter() {
+		inst.renderSink(cardReady, cand)
+	}
+}
+
+// flows reports whether the selected sink lays out its own content height
+// rather than sizing a picture to the pane.
+func (inst *experimentsDriver) flows() bool {
+	return inst.sink == vizeval.SinkCard || inst.sink == vizeval.SinkJSON || inst.isTextSink()
+}
+
+// renderSink draws the selected sink's output where the caller put it.
+func (inst *experimentsDriver) renderSink(cardReady bool, cand vizeval.Candidate) {
+	switch {
+	case inst.sink == vizeval.SinkCard:
+		if cardReady {
+			inst.renderCard()
+		}
+	case inst.sink == vizeval.SinkTopology:
+		inst.renderTopology()
+	case inst.sink == vizeval.SinkJSON:
+		if inst.jsonOK {
+			c.CodeView(inst.ids.PrepareStr("exp-json"), inst.jsonView).Wrap().Send()
+		}
+	case inst.sink == vizeval.SinkChart:
+		inst.renderChart(cand)
+	case inst.sink == vizeval.SinkGraph:
+		inst.renderGraph(cand)
+	case inst.sink == vizeval.SinkHierarchy:
+		inst.renderHierarchy(cand)
+	case inst.sink == vizeval.SinkLens:
+		inst.renderLens(cand)
+	case inst.isTextSink():
+		inst.renderText()
 	}
 }
 

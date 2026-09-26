@@ -38,7 +38,7 @@ test.
 
 1. **Write a scenario** as `<name>.vizeval.md` — the maintained ones are in
    [apps/play/vizeval](../../apps/play/vizeval). The frontmatter's `vizeval:`
-   key holds `size`, a one-sentence `intent`, the `sinks` the scenario admits,
+   key holds `size` or `artifact` (below), a one-sentence `intent`, the `sinks` the scenario admits,
    `questions` with answer SQL, and `gates`. A `sql base` fence holds the data
    with plain column names, generated from `numbers()` with seeded hashes; the
    first plain `sql` fence projects it into a leeway table with the `LW_*`
@@ -46,6 +46,14 @@ test.
    Answers read `base` too, so they come from the same rows as the picture.
    The format's reference is `vizeval.ScenarioSpec`
    ([scenario.go](../../public/thestack/imzero2/vizeval/scenario.go)).
+
+   `size` is the capture's viewport, of which play's own chrome takes about
+   95 by 440 points; the sink gets what is left, and that changes when play's
+   chrome does. `artifact: WxH` gives the sink exactly that box instead, with
+   the viewport grown to fit (or set it with `size` too). A candidate whose
+   artifact is not the box is `failed` with a reason saying which way it
+   missed. Prefer `artifact` for a sink whose picture depends on its height,
+   such as one that summarises rows it has no room for.
 
    The sinks a scenario can admit are the Experiments pane's: the card
    table, the box-drawn tables, card-JSON, the topology treemap and sparks,
@@ -112,12 +120,33 @@ test.
    scripts/dev/vizeval.sh rank --facts --out tmp/vizeval apps/play/vizeval/10_host_metrics.vizeval.md
    ```
 
-7. **Read the results.** `tmp/vizeval/<scenario>/index.md` is the contact
-   sheet: the computed answers, then each candidate's cropped artifact with
-   its gates and metrics. `tmp/vizeval/scorecards.jsonl` has every scorecard
-   ever written there, one per line, with the build it was scored at and a
-   digest of the batch; each candidate's directory holds the full capture,
-   its SVG and tree sidecars, and `artifact.png`.
+7. **Read the results.** `tmp/vizeval/<scenario>/contact.png` is every
+   candidate of the run in one image, numbered in scoring order and labelled
+   with its status, sink, id prefix and options, and — for a candidate that
+   was not scored — the failed gates or the reason. It is 1600 pixels wide,
+   two candidates to a row and six to a sheet; further candidates go to
+   `contact-2.png` and on. All sheets of a run share one scale, so sizes
+   compare across them. The thumbnails show layout and density; small text in
+   them is not legible, so read a candidate's own `artifact.png` for that.
+
+   `tmp/vizeval/<scenario>/index.md` has the computed answers, the sheets,
+   and each candidate's cropped artifact with its gates and metrics under the
+   same number. `tmp/vizeval/scorecards.jsonl` has every scorecard ever
+   written there, one per line, with the build it was scored at and a digest
+   of the batch; each candidate's directory holds the full capture, its SVG
+   and tree sidecars, and `artifact.png`.
+
+8. **Compare a round as a table.** `table` prints one aligned line per
+   scorecard — id prefix, sink, options, status and the metrics you name —
+   grouped by scenario and batch digest, with a build column when a group
+   spans builds. A candidate scored more than once over one batch shows its
+   latest card unless `--all`; `--sort` orders each group by a metric
+   (`-` descends); `--facts` reads `boxer.facts` instead of `--out`.
+
+   ```bash
+   scripts/dev/vizeval.sh table --out tmp/vizeval --scenario 60_mixed_kinds \
+     --metrics text.elided_share,rows.labelled_share,text.min_contrast --sort -rows.labelled_share
+   ```
 
 ## Verification
 
@@ -139,6 +168,14 @@ go test -tags="$(cat ./tags),integration" ./public/thestack/imzero2/vizeval/harn
   different digest is different data.
 - `text.cut_at_edge` counts text running past the visible artifact, which in
   a scrolling pane is expected; `text.clipped` counts text cut by its own cell.
+- `text.elided_share` is `text.elided` over `text.runs`: the share of what is
+  written that was shortened. It says nothing of what was not written at all.
+- `rows.labelled_share` is the share of the batch's distinct natural keys
+  written somewhere in the visible artifact. It is a floor on how many rows a
+  reader can name, not a count of rows drawn: a bar with no tick label, a
+  hierarchy cell labelled by the last part of its path, or a row the sink
+  summarised ("… 6 more rows") counts as missing. Compare it between
+  candidates of one sink family rather than across families.
 - A sink whose output is one text shape (the JSON code view) is one text run:
   its overlap and clipping counts say little.
 

@@ -139,12 +139,19 @@ that pair in canonical form, which is the cache key everywhere below.
 ### SD3 — Seeding the pane
 
 One registered variable (ADR-0009), `BOXER_PLAY_EXPERIMENTS`, carries a
-candidate as JSON — `{"source": "result", "sink": …, "options": {…}}` — and
-puts the pane in that state at launch; with `BOXER_PLAY_FOCUS_EXPERIMENTS`,
+candidate as JSON — `{"source": "result", "sink": …, "options": {…}}`, and
+optionally `"box": [w, h]` — and puts the pane in that state at launch; with `BOXER_PLAY_FOCUS_EXPERIMENTS`,
 `BOXER_PLAY_SQL` and `BOXER_PLAY_AUTORUN` a capture needs no clicks. The pane
 lives in the tools split, a fraction of the window; `BOXER_PLAY_TAB_ZONES`
 re-zones tabs at launch, and `*=body` puts every tab in one leaf that fills
-the central panel, which is how the harness gives the artifact the window. A
+the central panel, which is how the harness gives the artifact the window.
+Play's chrome still takes its share of that window — host bars, toolbars,
+the tab strip, the pane's controls and guide; about 95 by 440 points of a
+1600 by 1000 viewport — and the share moves whenever the chrome does. A
+`box` fixes the artifact's size instead: the constraints go on the
+artifact region's own ui, so a sink that sizes itself to the pane measures
+the box, and one whose content flows (the card table, the text and JSON
+sinks) scrolls inside it. A
 seed
 that does not parse against SD2 is refused at launch, not rendered with
 defaults, because a harness scoring the wrong candidate is worse than one
@@ -155,8 +162,9 @@ that stops.
 `*.vizeval.md`, following the scene document (ADR-0248 §SD3): frontmatter,
 prose, role-marked fences.
 
-- **Frontmatter**, under a `vizeval:` key parsed strictly: `size`, an
-  `intent` sentence, the sinks the scenario admits (a scenario about hubs in
+- **Frontmatter**, under a `vizeval:` key parsed strictly: `size` (the
+  viewport) or `artifact` (the box of SD3, the viewport then being the box
+  plus an allowance for play's chrome) or both, an `intent` sentence, the sinks the scenario admits (a scenario about hubs in
   a network does not admit a box-drawn table), `questions` — each a prompt
   plus an `answer` SQL over the same data and a comparison (`eq`, `set`,
   `approx`+`tol`) — and `gates`.
@@ -210,7 +218,7 @@ within `experiments.artifact`'s visible rect, with no model involved:
 - text runs that overlap; text cut by its own cell's clip, told apart from
   text running past the artifact's edge (expected in a scrolling pane);
   text shortened to fit, whether egui elided it or the sink wrote the
-  ellipsis;
+  ellipsis, as a count and as a share of all runs;
 - smallest font size; text contrast against what is painted under it,
   composited in paint order (WCAG ratio);
 - ink ratio; mark count;
@@ -223,6 +231,13 @@ within `experiments.artifact`'s visible rect, with no model involved:
   for the graph sink only, where every stroked line or curve is an edge and
   every filled circle a node; in a chart the grid would count.
 
+One metric reads the batch as well as the drawing: the share of the batch's
+distinct natural keys written, as a delimited token, in a visible and
+unelided run. It is a floor on the rows a reader can name — a mark without a
+label, a label that is part of its key, or a row a sink summarised away all
+count as missing — and not a count of rows drawn, which would need the sink
+to say what it drew (the mark ledger of SD11).
+
 A label drawn with a halo — the same text painted several times a point or
 two apart, the last copy on top — is one label to every metric: counted as
 drawn, a haloed graph measured each label overlapping itself four times.
@@ -234,9 +249,9 @@ Each metric is a number, not a verdict. A scenario may name thresholds that
 **gate** a candidate — "no overlapping labels", "no clipped text" — and a
 gated-out candidate is scored no further.
 
-**Task-question accuracy** asks a vision model each question with the
-cropped PNG as the only evidence and compares its answer with the SQL
-answer. Accuracy over a scenario's questions is the measure of *clear and
+**Task-question accuracy** asks a vision model (or, by SD10, a reader) each
+question with the cropped PNG as the only evidence and compares its answer
+with the SQL answer. Accuracy over a scenario's questions is the measure of *clear and
 correct*: an encoding that a reader cannot answer the scenario's questions
 from has failed, however it looks. Only a candidate that passed its geometry
 gates is asked, and a gate over a `task.` metric is evaluated only when a
@@ -312,26 +327,100 @@ rows is how another fit would be compared. The PNG, SVG and tree stay
 on disk under the run directory; the row carries the directory.
 
 A row's key is a hash of scenario, candidate id, build and batch digest —
-what makes two scorings the same measurement. With the store attached, a
+what makes two scorings the same measurement — and, for a scenario that
+declares an artifact box, the box and viewport, so a card measured in another
+box is not reused. A card whose artifact is not the declared box — a
+viewport too short for the chrome, a sink drawing past its box — is `failed`
+rather than measured. With the store attached, a
 candidate already measured under that key is read back instead of rendered;
 a build marked dirty, or with no revision stamp, is never reused, because
 its revision does not name the code that drew it. A search session reads
 what has been scored through the store's scan.
 
-The run directory also gets a contact-sheet gallery per scenario — the
-candidates side by side with their gates, accuracy and rank — written the
-way the scene runner writes its index.
+The run directory also gets, per scenario, a gallery (`index.md`, written the
+way the scene runner writes its index: answers, then each candidate's
+artifact, gates, metrics and verdicts) and a contact sheet (`contact.png`):
+every candidate's artifact in one image, numbered as in the gallery and
+labelled with its status, sink and options. The sheet is for looking at a
+round whole, which is how design flaws were found in practice; it is sized to
+be viewed as one image, so it splits into further sheets rather than shrink
+every thumbnail, and it scales every thumbnail of a run by one factor, so
+sizes compare. Text inside a thumbnail is not meant to be read there.
 
 ### SD9 — Entry point
 
 `imzero2 vizeval` with verbs to list a scenario's admissible candidates
 (`space`: the option spaces of SD2), score a set of candidates given as
 JSONL (`score`, with `--facts` to file and reuse), read back what is filed
-(`facts`), and rank a score run's scored candidates by pairwise
-comparison (`rank`). It is a library first, as the scene runner is,
+(`facts`), print scorecards as one aligned line each — id, sink, options,
+status, chosen metrics — grouped by scenario and batch digest, since only
+cards of one group compare (`table`), and rank a score run's scored
+candidates by pairwise comparison (`rank`). It is a library first, as the scene runner is,
 so a search written later calls it in-process.
 
-### SD10 — Deferred
+### SD10 — An agent as the task judge
+
+*Proposed; not built.* The task layer needs a vision model behind
+`BOXER_LLM_*`; a search run by a coding agent that can read images has a
+reader already, and without one the questions go unasked. The agent, or a
+person, can stand where the model stands, and be scored by the same rule.
+
+- **`score --judgeSheet`** writes, for each candidate that passed its gates,
+  `<out>/<scenario>/judge/<sheetId>.md`: the artifact's path, the scenario's
+  intent, the questions, and the reply format the model is given — per
+  question `{"answer": […], "unreadable": bool}`. It holds nothing else: no
+  expected answer, no answer SQL, no prose, no candidate id or options. The
+  sheet id is opaque and the order of sheets shuffled; which candidate and
+  drawing a sheet stands for is kept in `judge/key.json`, beside the sheets
+  but not referred to by them.
+- **The reader** writes `<out>/<scenario>/judge/answers.jsonl`, one line per
+  sheet and question — `{"sheet", "question", "answer", "unreadable",
+  "reader"}` — where `reader` names who answered (`agent:<label>`,
+  `human:<label>`).
+- **`score --answers <file>`** resolves each sheet through the key to its
+  candidate and drawing digest, and scores the replies with `judge.Matches`,
+  the comparison the model's replies go through, so an answer is right or
+  wrong by one rule whoever gave it. A reply whose drawing digest no longer
+  matches what the candidate draws is refused as stale; a candidate reused
+  under SD8 keeps its digest, so answers outlive a re-render. The metrics
+  are the `task.*` of SD6, and the scorecard gains the judge's identity — the
+  model id, or the reader — as a field and a membership of `vizevalScore`,
+  because accuracies from two judges are two measurements. Replies are
+  cached under drawing, question and reader as the model's are under drawing,
+  question and model.
+
+**The bias to design against is a reader who knows the answers.** The model
+sees the picture and the intent and nothing else; an agent running the
+search has usually written the scenario, read its data, opened `index.md` —
+which prints every expected answer — and looked at the other candidates. Such
+a reader answers from memory, every candidate scores alike, and the metric
+loses the differences it exists to measure. The harness cannot see what a
+reader knows, so the design makes informed answers detectable and keeps them
+apart rather than trying to prevent them:
+
+- **One fresh reader per sheet.** The intended protocol is a sub-agent
+  started with the sheet and the image only, in a context that has not seen
+  the scenario or the output directory, and never given two sheets of one
+  scenario — a reader who answers two candidates carries the easier
+  picture's answers into the harder one. A reader label that appears on
+  sheets of two candidates of one scenario is recorded as `informed`.
+- **A control sheet.** Among the sheets the harness puts, under an opaque id
+  like the others, a rendering that cannot answer the questions — the
+  scenario's batch through a sink that discards values, or a blank
+  artifact. A reader who answers the control correctly beyond what a guess
+  gets is answering from knowledge; every reply of that reader is recorded
+  as `informed`.
+- **Informed replies are kept, not mixed.** They land under
+  `task.informed.*`, never under `task.accuracy`, and gates and rankings do
+  not read them. The reader's own declaration is not trusted to mark a reply
+  blind; only the protocol checks above are.
+
+What this does not remove: a blind agent and a vision model are two readers
+with two error profiles, so accuracies from them compare within a judge and
+not across; and a sub-agent that shares its parent's model shares its priors
+about which renderings are readable, though not what the data holds.
+
+### SD11 — Deferred
 
 - **The search strategy.** Grid, random, Bayesian or LLM-proposed
   candidates are the next session's decision; nothing here assumes one.
@@ -362,6 +451,11 @@ so a search written later calls it in-process.
 - **M8 — A graphview sink** ✓.
 - **M9 — Hierarchy sinks** ✓: one `hierarchy` sink whose form (treemap,
   icicle, sankey) is an option.
+- **M10 — Reading a round** ✓: the contact sheet (SD8), `table` (SD9), the
+  elided share and labelled-keys metrics (SD6), and the artifact box (SD3,
+  SD4).
+- **M11 — The agent judge** (SD10): judge sheets, the answers file, control
+  sheets, and the judge's identity on the scorecard.
 
 ## Surfaces — Tier 1
 
@@ -374,6 +468,7 @@ so a search written later calls it in-process.
 | egui2 IDL | adds the `accessibleRegion` block | regenerated Go bindings, Rust dispatch and the API reference; the opcode enums renumber, so both sides rebuild together |
 | `openaichat` messages | image content parts | `runtime.llm`'s request path and the ADR-0254 sensitivity point |
 | `boxer.facts` | the `vizevalScore` and `vizevalJudgement` kinds; memberships 122–149 in the runtime vocabulary | the generated store (`vizevalfacts`), its gen-test lane, and the vocabulary's assignment golden |
+| `vizevalScore` (M11, not built) | gains the task judge's identity (SD10) | the generated store and the vocabulary's assignment golden |
 
 ## Alternatives
 
@@ -427,7 +522,7 @@ so a search written later calls it in-process.
 - Scenario datasets are ClickHouse queries, so scoring needs a server, as
   scenes that run SQL already do.
 - Correctness is measured through a reader (task accuracy), not by
-  inspecting the drawing, until a mark ledger exists (SD10).
+  inspecting the drawing, until a mark ledger exists (SD11).
 
 ## Migration — Tier 1
 

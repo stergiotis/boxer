@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-09-25T20:54:06Z
+generated-at: 2026-09-26T19:10:41Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -43,7 +43,7 @@ generated-at: 2026-09-25T20:54:06Z
 | `BOXER_PLAY_ALLOW_WRITES` | string | — | — |  | non-empty lets Run execute an INSERT … SELECT wrapper (ADR-0181 §SD8); unset, Run refuses the write with a copy-out hint. Governs every play-engined host, sqlapplet included |
 | `BOXER_PLAY_AUTORUN` | string | — | — |  | non-empty enables auto-run of the initial SQL on mount |
 | `BOXER_PLAY_EXIT_ON_SHOT` | string | — | — |  | non-empty exits the play HMI after writing BOXER_PLAY_SCREENSHOT |
-| `BOXER_PLAY_EXPERIMENTS` | string | — | — |  | seed the Experiments pane with one vizeval candidate as JSON, {"source":"fixture\|result","sink":…,"options":{…}} (ADR-0257); a seed that does not resolve against the sink catalogue fails the mount |
+| `BOXER_PLAY_EXPERIMENTS` | string | — | — |  | seed the Experiments pane with one vizeval candidate as JSON, {"source":"fixture\|result","sink":…,"options":{…},"box":[w,h]} (ADR-0257); box, optional, fixes the artifact's size in points whatever room the pane has; a seed that does not resolve against the sink catalogue fails the mount |
 | `BOXER_PLAY_FOCUS_CARDS` | string | — | — |  | non-empty makes Cards the default-active tab in its dock leaf (scripted screenshots) |
 | `BOXER_PLAY_FOCUS_CHART` | string | — | — |  | non-empty makes Chart the default-active tab in its dock leaf (scripted screenshots) |
 | `BOXER_PLAY_FOCUS_CHAT` | string | — | — |  | non-empty makes Chat the default-active tab in its dock leaf (scripted screenshots) |

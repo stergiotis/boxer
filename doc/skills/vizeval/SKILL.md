@@ -45,6 +45,7 @@ $V space apps/play/vizeval/10_host_metrics.vizeval.md      # what may vary: sink
 $V score --facts --out tmp/vz --candidates c.jsonl apps/play/vizeval/10_host_metrics.vizeval.md
 $V score --facts --judge --out tmp/vz --candidates c.jsonl …   # + task accuracy for gate-passing candidates
 $V rank  --facts --out tmp/vz apps/play/vizeval/10_host_metrics.vizeval.md
+$V table --out tmp/vz --metrics text.elided_share,rows.labelled_share --sort -rows.labelled_share
 $V facts --scenario 10_host_metrics                         # everything filed, as JSON lines
 ```
 
@@ -54,12 +55,22 @@ $V facts --scenario 10_host_metrics                         # everything filed, 
   `--candidates`, each admitted sink is scored at its defaults.
 - **Identity.** A candidate's id is a hash of its canonical form, so an option
   left out and one set to its default are the same candidate.
-- **Output.** `<out>/<scenario>/index.md` is the contact sheet (answers,
-  then each candidate's cropped artifact, gates and metrics);
+- **Output.** `<out>/<scenario>/contact.png` is the round in one image:
+  every candidate's artifact, numbered and labelled with status, sink and
+  options, six to a sheet (`contact-2.png` and on past that), one scale for
+  all sheets. Look at it first; open a candidate's `artifact.png` for text,
+  which is not legible at the sheet's scale. `<out>/<scenario>/index.md` has
+  the answers, then each candidate under the same number with its cropped
+  artifact, gates and metrics;
   `<out>/<scenario>/<candidateId>/` holds the capture, `capture.svg`,
   `capture.tree.jsonl`, `artifact.png` and the scorecard;
   `<out>/scorecards.jsonl` accumulates every scorecard written to that
   directory. `rank` writes `ranking.md` / `ranking.json` beside the index.
+- **Comparing a round.** `table` prints one aligned line per scorecard — id
+  prefix, sink, options, status, the `--metrics` you name (`-` when a card
+  lacks one) — grouped by scenario and batch digest, each candidate's latest
+  card unless `--all`. It reads `--out`'s `scorecards.jsonl`, or `boxer.facts`
+  with `--facts`. There is no need to script over `scorecards.jsonl` for this.
 - **Cost.** One candidate is one launch of play: seconds, not milliseconds.
   `--judge` asks one model call per question per candidate; `rank` asks
   `n(n-1)` calls for `n` candidates. `--judgeCalls` bounds a run; replies are
@@ -96,6 +107,13 @@ shortest complete example.
   rows; `compare` is `eq` (ordered), `set` or `approx` with `tol`. Ask what the
   intent promises a reader can see; a question no rendering could answer
   measures nothing.
+- **`artifact: WxH`** — the box the sink is given, whatever play's chrome
+  takes (about 95 by 440 points of the viewport). Without it, `size` is the
+  viewport and the sink gets the remainder: a 1600x1000 scenario gives it
+  roughly 1500x560, and row-heavy sinks run out of height. With it, `size`
+  may be left out; a viewport too small for box and chrome fails the
+  candidate. Cards of two boxes are grouped apart by `table` and never
+  reused for each other.
 - **`gates`** — bounds on metric names (`text.clipped: {max: 0}`). A metric a
   candidate does not have fails a gate that names it — except `task.*` gates,
   which are only evaluated when a judge ran.
@@ -127,11 +145,22 @@ Names and definitions are the `Metric*` constants in
 All are measured inside the `experiments.artifact` node's visible rect only.
 
 - `text.overlap_pairs`, `text.clipped`, `text.elided` — the gate-worthy
-  faults. `clipped` is text cut by its own cell or widget; `text.cut_at_edge`
+  faults. In practice overlap and clipping rarely fire on the table-like
+  sinks; `text.min_contrast` and `text.elided` are the ones that have caught
+  faults there. `clipped` is text cut by its own cell or widget; `text.cut_at_edge`
   is text running past the artifact's edge, which a scrolling table does by
   design — do not gate it without meaning to.
 - `text.elided` counts egui's ellipses and ellipses a sink wrote into the
   text itself (the box-drawn tables cut wide cells that way).
+- `text.elided_share` — `text.elided` over `text.runs`. Only what was
+  written and shortened; what a sink left out entirely is not in it.
+- `rows.labelled`, `rows.labelled_share` — the batch's distinct natural keys
+  written, as a delimited token, in a visible unelided run of the artifact
+  (count, and share of all keys). A floor on the rows a reader can name, not
+  a count of rows drawn: an unlabelled mark, a label that is only part of the
+  key (the hierarchy's path segments), or a row summarised away ("… 6 more
+  rows") counts as missing. Compare within one sink family; across families
+  it mostly measures whether the sink labels by key at all.
 - `text.min_contrast`, `text.low_contrast` — WCAG ratio of each label against
   what is painted under its centre, composited in paint order.
 - `color.distinct`, `color.min_delta_e` — chromatic colours in use and how far
@@ -169,6 +198,8 @@ All are measured inside the `experiments.artifact` node's visible rect only.
   passes the geometry gates, then judge and rank only those.
 - **Vary one option at a time from a good candidate**, and use
   `drawingDigest` to drop options that change nothing.
+- **Look at the contact sheet after every round**, then at the artifacts
+  of the candidates it makes you doubt.
 - **Look at the pictures of the extremes.** A metric that says a candidate is
   best is a claim about the metric until the artifact agrees: every flaw
   found in building this harness showed first as a number that the picture

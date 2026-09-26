@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -38,8 +39,14 @@ type Scenario struct {
 
 // ScenarioSpec is the frontmatter's `vizeval:` key.
 type ScenarioSpec struct {
-	// Size is the capture's viewport, WxH logical points.
+	// Size is the capture's viewport, WxH logical points. With Artifact set it
+	// may be left out: the viewport is then the artifact box plus
+	// ChromeAllowance.
 	Size string `yaml:"size"`
+	// Artifact, WxH logical points, is the box the sink is given, whatever
+	// room play's chrome leaves in the viewport. Without it the sink gets
+	// what the pane has left, which moves whenever play's chrome does.
+	Artifact string `yaml:"artifact"`
 	// Intent says what a reader wants from the data, in one sentence.
 	Intent string `yaml:"intent"`
 	// Sinks lists the sinks the scenario admits. A scenario about ranking
@@ -73,6 +80,17 @@ type Gate struct {
 	Min *float64 `yaml:"min"`
 	Max *float64 `yaml:"max"`
 }
+
+// ChromeAllowance is what play takes around the Experiments pane's artifact
+// in a viewport, logical points: the host's bars, the window frame, play's
+// toolbars and tab strip, the pane's controls and reading guide, the result
+// line. Measured off a 1600x1000 capture (about 95 by 440) and rounded up
+// for a guide that wraps or a notice line; a viewport short of it fails the
+// candidate rather than shrinking the box.
+const (
+	ChromeAllowanceW = 128
+	ChromeAllowanceH = 520
+)
 
 // DefaultSettleMs covers mount, query and first layout on the headless host.
 const DefaultSettleMs = 2500
@@ -141,7 +159,19 @@ func (inst *Scenario) check() (err error) {
 	if inst.SQL == "" {
 		return eh.Errorf("no dataset: the scenario needs a `sql` fence")
 	}
-	if _, _, err = (scene.Spec{Size: inst.Spec.Size}).Dimensions(); err != nil {
+	if inst.Spec.Artifact != "" {
+		var aw, ah, vw, vh int
+		if aw, ah, err = (scene.Spec{Size: inst.Spec.Artifact}).Dimensions(); err != nil {
+			return eh.Errorf("artifact: %w", err)
+		}
+		if vw, vh, err = inst.Viewport(); err != nil {
+			return err
+		}
+		if vw < aw || vh < ah {
+			return eb.Build().Str("size", inst.Spec.Size).Str("artifact", inst.Spec.Artifact).
+				Errorf("the viewport is smaller than the artifact box")
+		}
+	} else if _, _, err = inst.Viewport(); err != nil {
 		return err
 	}
 	if len(inst.Spec.Sinks) == 0 {
@@ -171,6 +201,40 @@ func (inst *Scenario) check() (err error) {
 		}
 	}
 	return nil
+}
+
+// Viewport is the capture's size: Size, or with only Artifact set, the box
+// plus ChromeAllowance.
+func (inst *Scenario) Viewport() (w, h int, err error) {
+	if inst.Spec.Size == "" && inst.Spec.Artifact != "" {
+		if w, h, err = (scene.Spec{Size: inst.Spec.Artifact}).Dimensions(); err != nil {
+			return 0, 0, err
+		}
+		return w + ChromeAllowanceW, h + ChromeAllowanceH, nil
+	}
+	return (scene.Spec{Size: inst.Spec.Size}).Dimensions()
+}
+
+// ArtifactBox is the declared artifact box; ok is false without one.
+func (inst *Scenario) ArtifactBox() (w, h int, ok bool) {
+	if inst.Spec.Artifact == "" {
+		return 0, 0, false
+	}
+	w, h, err := (scene.Spec{Size: inst.Spec.Artifact}).Dimensions()
+	return w, h, err == nil
+}
+
+// Frame names the render geometry a scorecard was measured in when the
+// scenario declares an artifact box — `<box>@<viewport>` — and is empty
+// otherwise. Two boxes are two measurements, so it is part of a scorecard's
+// key (ADR-0257 §SD8).
+func (inst *Scenario) Frame() string {
+	aw, ah, ok := inst.ArtifactBox()
+	if !ok {
+		return ""
+	}
+	vw, vh, _ := inst.Viewport()
+	return strconv.Itoa(aw) + "x" + strconv.Itoa(ah) + "@" + strconv.Itoa(vw) + "x" + strconv.Itoa(vh)
 }
 
 // DatasetSQL is the dataset as play runs it: the projection, under the base
