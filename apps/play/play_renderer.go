@@ -391,6 +391,9 @@ type PlayApp struct {
 	// tableSort is the Table pane's header-click sort: a permutation over the
 	// record already in hand, never a re-issued query (play_table_sort.go).
 	tableSort tableSortState
+	// masterCells replays the master table's cells while nothing they depend
+	// on changes; see play_table_cells_cache.go.
+	masterCells masterCellsCache
 
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
 	// a leeway TableDesc inferred from the active result's Arrow schema (plain
@@ -3563,6 +3566,28 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			rowHi = uint64(displayRows)
 		}
 	}
+	// Nothing on a page changes between most frames, so the cells are captured
+	// once and replayed until one of their inputs moves or a cell has a
+	// response the live path would read (a click selects a row). The host
+	// sees the same bytes either way.
+	key := masterCellsKey{
+		result: inst.tableResult, schema: schema,
+		pageStart: pageStart, pageEnd: pageEnd, rowLo: rowLo, rowHi: rowHi,
+		selectedRow: selectedRow, refit: refit, cellPadX: cellPadX,
+		sortActive: inst.tableSort.active, sortCol: inst.tableSort.col, sortDesc: inst.tableSort.desc,
+		identityDone: idJob == nil || idJob.isDone(),
+		opts:         inst.tableOpts,
+		columns: foldColumns(visCols, synth, func(pos uint32) bool {
+			vis, _ := et.ColVisible(pos)
+			return vis
+		}),
+	}
+	if raw := inst.masterCells.retained(key, c.CurrentApplicationState.StateManager); raw != nil {
+		et.SendWithRawCells(raw)
+		inst.captureMasterWidths(et, cols)
+		return
+	}
+	inst.masterCells.beginCapture(key)
 	for local := rowLo; local < rowHi; local++ {
 		// The display position walks the page; the record row it draws comes
 		// from the sort permutation (identity when unsorted).
@@ -3618,6 +3643,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			}
 		}
 	}
+	inst.masterCells.endCapture(et.CellsBytes())
 	et.Send()
 	inst.captureMasterWidths(et, cols)
 }

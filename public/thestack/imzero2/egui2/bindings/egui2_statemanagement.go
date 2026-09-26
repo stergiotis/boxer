@@ -994,6 +994,21 @@ func (inst *StateManager) Sync() {
 	interpretUs, passNr := inst.fetcher.FetchFrameMetrics()
 	metrics.Current.RecordRust(interpretUs, passNr)
 }
+
+// ResponseFlagsAny reports whether any widget the host answered for in the
+// last Sync carries one of the flags in mask and satisfies in. It is the
+// gate a retained widget tree needs: a caller that would replay captured
+// bytes instead of re-emitting widgets must not do so on a frame where one
+// of those widgets has a response its live path would read.
+func (inst *StateManager) ResponseFlagsAny(mask ResponseFlagsE, in func(id uint64) bool) bool {
+	for id, flags := range inst.responseFlags.IteratePairs() {
+		if flags&mask != 0 && in(id) {
+			return true
+		}
+	}
+	return false
+}
+
 func (inst *StateManager) Reset() {
 	inst.responseFlags.Reset()
 }

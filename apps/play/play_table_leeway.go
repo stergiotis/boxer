@@ -410,7 +410,12 @@ func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, we
 		if weak {
 			rt = rt.Weak()
 		}
-		btn := c.Button(inst.ids.PrepareSeq(id), rt.End().Keep()).
+		// Derive once and hand the button the absolute id: the cells cache
+		// keys its response gate on the wire id, and Derive consumes the
+		// prepared seq.
+		wire := inst.ids.PrepareSeq(id).Derive()
+		inst.masterCells.note(wire)
+		btn := c.Button(c.AbsoluteWidgetId(wire), rt.End().Keep()).
 			Frame(false).
 			Selected(selected)
 		if truncate {

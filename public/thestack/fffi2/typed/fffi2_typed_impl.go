@@ -257,6 +257,14 @@ func (inst *RetainedFffiBuilder) SpliceDeferredBlockMap(scope *runtime.DeferredB
 	}
 }
 
+// SpliceRaw appends bytes already in wire form — a deferred-block map a
+// DeferredBlockScope.WriteToFixedKey produced earlier — where the generated
+// code would splice this frame's scope. The caller vouches that nothing the
+// bytes describe has changed since they were written.
+func (inst *RetainedFffiBuilder) SpliceRaw(raw []byte) {
+	inst.builder.buf.Write(raw)
+}
+
 func (inst *RetainedFffiBuilder) SendIntermediate() {
 	defer inst.putInPool()
 	currentFffiErrorHandler(currentFffiVar.SendIntermediate(inst.builder.buf.Bytes()))
