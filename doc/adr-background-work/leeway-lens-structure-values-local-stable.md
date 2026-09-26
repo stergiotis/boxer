@@ -280,10 +280,11 @@ line means nothing was cut.
 - **Vertical budget.** The pane is not scrolled; rows past its height are
   counted, not drawn. The archetype form is the answer for many rows; a
   scroll area is the answer for reading them all.
-- **Say when a list is complete.** A reader of the archetype form trusts the
-  absence of a "more rows" line to conclude a rare value's rows are all
-  shown (§Judged rounds, round 4); the form could say so, e.g. by counting a
-  rare label's rows beside it.
+- **Whether the rare-value count settles the doubt.** A reader of the
+  archetype form trusted the absence of a "more rows" line to conclude a
+  rare value's rows were all shown (§Judged rounds, round 4). A rare label
+  now carries its count in the band — `state failed (1 of 12 rows)` — so
+  the list's completeness can be read; no judged round has read it yet.
 - **The rows form and rare values.** It still cuts the failed job at the end
   of its band; whether the rows form should hoist rare-value rows, or leave
   that to the archetype form, is undecided.

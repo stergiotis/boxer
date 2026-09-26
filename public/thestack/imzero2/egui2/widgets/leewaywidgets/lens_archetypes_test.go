@@ -72,7 +72,7 @@ func TestArchetypeExceptionsRankStructureThenRareLabels(t *testing.T) {
 		}
 	}
 	assert.True(t, strings.HasPrefix(lines[0], "job-10: −num·runtime"), "the missing slot leads: %v", lines)
-	assert.Contains(t, lines, "job-11: state failed", "a rare label is an exception")
+	assert.Contains(t, lines, "job-11: state failed (1 of 12 rows)", "a rare label is an exception, counted so its list can be seen complete")
 	for _, l := range lines {
 		assert.NotContains(t, l, "state running", "the typical label is not")
 	}

@@ -223,11 +223,12 @@ type exception struct {
 }
 
 // rareLabels finds, per label slot the band mostly has, the values rare
-// enough to be exceptions: the slot must have a typical value in the band
-// (one held by half its rows or more), and the value is held by at most
-// lensRareShare of them, one row at least.
-func (inst *lensPainter) rareLabels(b *lwlens.Band) (rare map[int32]map[string]bool) {
-	rare = map[int32]map[string]bool{}
+// enough to be exceptions, with how many of the band's rows hold each: the
+// slot must have a typical value in the band (one held by half its rows or
+// more), and the value is held by at most lensRareShare of them, one row at
+// least.
+func (inst *lensPainter) rareLabels(b *lwlens.Band) (rare map[int32]map[string]int) {
+	rare = map[int32]map[string]int{}
 	m := inst.a.Model
 	for s := range m.Slots {
 		sl := int32(s)
@@ -247,9 +248,9 @@ func (inst *lensPainter) rareLabels(b *lwlens.Band) (rare map[int32]map[string]b
 		for t, n := range counts {
 			if t != typical && n <= limit {
 				if rare[sl] == nil {
-					rare[sl] = map[string]bool{}
+					rare[sl] = map[string]int{}
 				}
-				rare[sl][t] = true
+				rare[sl][t] = n
 			}
 		}
 	}
@@ -264,7 +265,7 @@ func (inst *lensPainter) rareLabels(b *lwlens.Band) (rare map[int32]map[string]b
 func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []exception) {
 	idx := map[string]int{}
 	m := inst.a.Model
-	var rare map[int32]map[string]bool
+	var rare map[int32]map[string]int
 	if inst.p.Detail >= lwlens.DetailGist {
 		rare = inst.rareLabels(b)
 	}
@@ -284,8 +285,13 @@ func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []
 		if inst.p.Detail >= lwlens.DetailGist {
 			row := &m.Rows[pr.Row]
 			for _, cell := range row.Cells {
-				if rare[cell.Slot][cell.Text] {
-					parts = append(parts, inst.memberName(cell.Slot)+" "+lensFit(cell.Text, 24))
+				if n := rare[cell.Slot][cell.Text]; n > 0 {
+					// The count says whether the list is complete: a reader
+					// who sees every one of the n rows needs no "more rows"
+					// line to conclude none was cut (the fourth judged round's
+					// readers could only infer it).
+					parts = append(parts, fmt.Sprintf("%s %s (%d of %d rows)", inst.memberName(cell.Slot),
+						lensFit(cell.Text, 24), n, len(b.Rows)))
 					class = min(class, exceptionRareLabel)
 				}
 			}
