@@ -240,7 +240,12 @@ func defaultRenderLoopHandler() error {
 	return nil
 }
 
-func (inst *Application[U]) Run() (err error) {
+// Begin does everything Run does before its first frame: the established
+// and first-frame handlers, the render-goroutine binding, the default loop
+// handler. Run is Begin, Step until the loop should stop, and the closers;
+// a host that owns the frame cadence — a browser worker calling a frame
+// export per tick (ADR-0077 O2) — calls the three itself.
+func (inst *Application[U]) Begin() (err error) {
 	if inst.channel == nil {
 		return ErrNeedsToBeLaunchedBeforeRun
 	}
@@ -251,14 +256,6 @@ func (inst *Application[U]) Run() (err error) {
 			return
 		}
 	}
-	defer func() {
-		for _, c := range inst.closers {
-			_ = c.Close()
-		}
-	}()
-
-	// Run's goroutine is the render goroutine: the handlers above and below
-	// and every frame run on it (ADR-0261).
 	if imzero2env.RenderGoroutineCheck.Get() {
 		inst.fffi.BindToCurrentGoroutine()
 		log.Info().Msg("imzero2: FFFI channel bound to the render goroutine; a call from any other goroutine panics")
@@ -270,38 +267,62 @@ func (inst *Application[U]) Run() (err error) {
 			return
 		}
 	}
-	marshaller := inst.channel.Marshaller()
-
 	if inst.RenderLoopHandler == nil {
 		inst.RenderLoopHandler = defaultRenderLoopHandler
+	}
+	return
+}
+
+// Step runs one frame: the render loop handler and the byte accounting.
+// more is false once the loop should stop (Shutdown, or an error the channel
+// recorded); err carries that error.
+func (inst *Application[U]) Step() (more bool, err error) {
+	if typed.HasErrors() || !inst.shouldProceed() {
+		if typed.HasErrors() {
+			err = typed.GetError()
+		}
+		return false, err
 	}
 	type byteCountReader interface {
 		GetReadBytes() int
 		ResetReadBytes()
 	}
+	marshaller := inst.channel.Marshaller()
 	unmarshallerCounter, _ := any(inst.unmarshaller).(byteCountReader)
-	for !typed.HasErrors() && inst.shouldProceed() {
-		marshaller.ResetWrittenBytes()
-		if unmarshallerCounter != nil {
-			unmarshallerCounter.ResetReadBytes()
-		}
-		err = inst.RenderLoopHandler()
-		if err != nil {
-			inst.handleNonNilError(err)
-			err = nil
-		}
-		written := marshaller.GetWrittenBytes()
-		read := 0
-		if unmarshallerCounter != nil {
-			read = unmarshallerCounter.GetReadBytes()
-		}
-		metrics.Current.RecordBytes(written, read)
+	marshaller.ResetWrittenBytes()
+	if unmarshallerCounter != nil {
+		unmarshallerCounter.ResetReadBytes()
 	}
-	if typed.HasErrors() {
-		err = typed.GetError()
+	if e := inst.RenderLoopHandler(); e != nil {
+		inst.handleNonNilError(e)
+	}
+	read := 0
+	if unmarshallerCounter != nil {
+		read = unmarshallerCounter.GetReadBytes()
+	}
+	metrics.Current.RecordBytes(marshaller.GetWrittenBytes(), read)
+	return true, nil
+}
+
+// CloseAll runs the closers Launch registered; Run does it on return.
+func (inst *Application[U]) CloseAll() {
+	for _, c := range inst.closers {
+		_ = c.Close()
+	}
+}
+
+func (inst *Application[U]) Run() (err error) {
+	if err = inst.Begin(); err != nil {
 		return
 	}
-	return
+	defer inst.CloseAll()
+	for {
+		more, e := inst.Step()
+		if !more {
+			err = e
+			return
+		}
+	}
 }
 
 // Shutdown asks the render loop to stop at the next frame boundary, so that
