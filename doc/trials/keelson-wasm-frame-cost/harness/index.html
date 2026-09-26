@@ -1,0 +1,35 @@
+<!doctype html>
+<!--
+  Browser host for the wasm arms of the keelson-wasm-frame-cost trial. The
+  page only starts a worker (worker.mjs) and copies its report lines into the
+  DOM, so a headless browser's DOM dump carries the result. Arms are given as
+  query parameters: ?target=js|wasip1&consumer=pipe|inproc&scene=...&frames=N
+  &warmup=N&rows=N&stage=WxH&arm=label — the same flags wasmspike takes.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>keelson wasm frame cost</title>
+  <style>body { font: 13px monospace; white-space: pre-wrap; }</style>
+</head>
+<body>
+<div id="log"></div>
+<div id="report"></div>
+<script type="module">
+  const q = new URLSearchParams(location.search);
+  const params = {};
+  for (const [k, v] of q) params[k] = v;
+  const log = document.getElementById('log');
+  const report = document.getElementById('report');
+  const w = new Worker('./worker.mjs', { type: 'module' });
+  w.onmessage = (e) => {
+    const m = e.data;
+    if (m.kind === 'log') log.append(m.line + '\n');
+    else if (m.kind === 'arm') { report.append('ARM ' + JSON.stringify(m.arm) + '\n'); report.dataset.done = '1'; }
+    else if (m.kind === 'error') { report.append('ERROR ' + m.message + '\n'); report.dataset.done = '1'; }
+  };
+  w.onerror = (e) => { report.append('ERROR ' + e.message + '\n'); report.dataset.done = '1'; };
+  w.postMessage(params);
+</script>
+</body>
+</html>

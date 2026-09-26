@@ -1,0 +1,7 @@
+
+(process:2): Gtk-WARNING **: 08:08:25.742: Locale not supported by C library.
+	Using the fallback 'C' locale.
+Gtk-Message: 08:08:25.743: Failed to load module "canberra-gtk-module"
+[2:23:0926/081326.388619:ERROR:storage/browser/quota/quota_settings.cc:126] Unable to compute QuotaSettings.
+[2:2:0926/081550.661225:ERROR:content/common/zygote/zygote_communication_linux.cc:293] Failed to send GetTerminationStatus message to zygote
+[2:2:0926/081550.739497:ERROR:content/common/zygote/zygote_communication_linux.cc:293] Failed to send GetTerminationStatus message to zygote

@@ -1,0 +1,94 @@
+File: app
+Build ID: 87d085a7463cb6287167434aa78dee4b670e2224
+Type: cpu
+Time: 2026-09-25 22:58:55 CEST
+Duration: 24.99s, Total samples = 7.01s (28.06%)
+Showing nodes accounting for 4.50s, 64.19% of 7.01s total
+Dropped 608 nodes (cum <= 0.04s)
+Showing top 45 nodes out of 367
+      flat  flat%   sum%        cum   cum%
+     0.76s 10.84% 10.84%      0.76s 10.84%  internal/runtime/syscall/linux.Syscall6
+     0.41s  5.85% 16.69%      0.81s 11.55%  runtime.tryDeferToSpanScan
+     0.38s  5.42% 22.11%      0.91s 12.98%  runtime.scanObjectsSmall
+     0.34s  4.85% 26.96%      0.34s  4.85%  runtime.spanClass.sizeclass (inline)
+     0.23s  3.28% 30.24%      0.25s  3.57%  runtime.typePointers.next
+     0.15s  2.14% 32.38%      0.82s 11.70%  runtime.scanObject
+     0.14s  2.00% 34.38%      0.14s  2.00%  runtime.memmove
+     0.12s  1.71% 36.09%      0.16s  2.28%  runtime.mallocgcTinySC2
+     0.11s  1.57% 37.66%      0.22s  3.14%  bytes.(*Buffer).Write
+     0.11s  1.57% 39.23%      1.14s 16.26%  runtime.scanSpan
+     0.10s  1.43% 40.66%      0.74s 10.56%  runtime.mallocgc
+     0.10s  1.43% 42.08%      0.16s  2.28%  runtime.mallocgcSmallScanNoHeaderSC2
+     0.09s  1.28% 43.37%      1.21s 17.26%  github.com/antlr4-go/antlr/v4.(*ParserATNSimulator).closureCheckingStopState
+     0.09s  1.28% 44.65%      1.21s 17.26%  github.com/antlr4-go/antlr/v4.(*ParserATNSimulator).closureWork
+     0.09s  1.28% 45.93%      0.09s  1.28%  runtime.extractHeapBitsSmall
+     0.09s  1.28% 47.22%      0.09s  1.28%  runtime.memclrNoHeapPointers
+     0.09s  1.28% 48.50%      0.20s  2.85%  unique.(*canonMap[go.shape.string]).Load
+     0.08s  1.14% 49.64%      0.08s  1.14%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
+     0.06s  0.86% 50.50%      0.10s  1.43%  runtime.mallocgcSmallScanNoHeaderSC5
+     0.06s  0.86% 51.36%      0.10s  1.43%  runtime.scanObjectSmall
+     0.05s  0.71% 52.07%      0.07s     1%  github.com/antlr4-go/antlr/v4.(*ATNConfig).InitATNConfig (inline)
+     0.05s  0.71% 52.78%      0.35s  4.99%  github.com/antlr4-go/antlr/v4.(*ParserATNSimulator).getEpsilonTarget
+     0.05s  0.71% 53.50%      0.15s  2.14%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Marshaller).writeBuf
+     0.05s  0.71% 54.21%      0.05s  0.71%  internal/runtime/maps.memHash64AES
+     0.05s  0.71% 54.92%      0.07s     1%  runtime.(*mspan).writeHeapBitsSmall
+     0.05s  0.71% 55.63%      0.05s  0.71%  runtime.getMCache (inline)
+     0.04s  0.57% 56.21%      0.09s  1.28%  github.com/antlr4-go/antlr/v4.(*JMap[go.shape.*uint8,go.shape.*uint8,go.shape.*uint8]).Get
+     0.04s  0.57% 56.78%      0.04s  0.57%  runtime.(*mspan).moveInlineMarks
+     0.04s  0.57% 57.35%      0.06s  0.86%  runtime.(*spanSet).push
+     0.04s  0.57% 57.92%      0.05s  0.71%  runtime.findObject
+     0.04s  0.57% 58.49%      0.12s  1.71%  runtime.mapaccess2_fast64
+     0.04s  0.57% 59.06%      0.04s  0.57%  runtime.step
+     0.04s  0.57% 59.63%      0.04s  0.57%  runtime.typePointers.nextFast (inline)
+     0.03s  0.43% 60.06%      0.17s  2.43%  encoding/binary.Write
+     0.03s  0.43% 60.49%      0.24s  3.42%  github.com/antlr4-go/antlr/v4.(*JStore[go.shape.*uint8,go.shape.interface { Equals2(*github.com/antlr4-go/antlr/v4.ATNConfig, *github.com/antlr4-go/antlr/v4.ATNConfig) bool; Hash1(*github.com/antlr4-go/antlr/v4.ATNConfig) int }]).Put
+     0.03s  0.43% 60.91%      0.07s     1%  github.com/antlr4-go/antlr/v4.(*LexerATNSimulator).execATN
+     0.03s  0.43% 61.34%      0.33s  4.71%  github.com/stergiotis/boxer/public/thestack/fffi2/typed.(*RetainedFffiBuilder).BuildRetained
+     0.03s  0.43% 61.77%      0.25s  3.57%  runtime.mallocgcSmallScanNoHeader
+     0.03s  0.43% 62.20%      0.07s     1%  runtime.pcvalue
+     0.03s  0.43% 62.62%      0.04s  0.57%  sync.(*Pool).pin
+     0.03s  0.43% 63.05%      0.05s  0.71%  weak.runtime_makeStrongFromWeak
+     0.02s  0.29% 63.34%      0.04s  0.57%  github.com/antlr4-go/antlr/v4.(*ParserATNSimulator).canDropLoopEntryEdgeInLeftRecursiveRule
+     0.02s  0.29% 63.62%      1.54s 21.97%  github.com/antlr4-go/antlr/v4.(*ParserATNSimulator).execATN
+     0.02s  0.29% 63.91%      0.65s  9.27%  github.com/stergiotis/boxer/apps/play.(*PlayApp).selectableCell.func2
+     0.02s  0.29% 64.19%      0.25s  3.57%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Fffi2[go.shape.*uint8]).SendIntermediate
+         0     0%  0.29%      1.95s 27.82%  github.com/stergiotis/boxer/apps/play.(*PlayApp).Frame
+         0     0%  0.29%      1.95s 27.82%  github.com/stergiotis/boxer/apps/play.(*PlayApp).render
+         0     0%  0.29%      1.95s 27.82%  github.com/stergiotis/boxer/apps/play.(*PlayLauncher).Frame
+         0     0%  0.29%      1.92s 27.39%  github.com/stergiotis/boxer/apps/play.(*PlayApp).render-range3
+     0.01s  0.14%  0.43%      1.91s 27.25%  github.com/stergiotis/boxer/apps/play.(*PlayApp).render-range3-range1
+         0     0%  0.43%      1.81s 25.82%  github.com/stergiotis/boxer/apps/play.(*PlayApp).renderTabBody
+         0     0%  0.43%      1.79s 25.53%  github.com/stergiotis/boxer/apps/play.(*PlayApp).render-range3-range1-range2
+         0     0%  0.43%      1.69s 24.11%  github.com/stergiotis/boxer/apps/play.dispatchPanel
+         0     0%  0.71%      1.50s 21.40%  github.com/stergiotis/boxer/apps/play.(*PlayApp).renderTableTab
+         0     0%  0.71%      1.50s 21.40%  github.com/stergiotis/boxer/apps/play.defaultTabs.func4
+         0     0%  0.71%      1.49s 21.26%  github.com/stergiotis/boxer/apps/play.(*PlayApp).renderMasterTable
+         0     0%  0.71%      1.49s 21.26%  github.com/stergiotis/boxer/apps/play.(*PlayApp).renderTableBody
+         0     0%  0.71%      1.49s 21.26%  github.com/stergiotis/boxer/apps/play.tablePanel.Render
+         0     0%  0.71%      1.42s 20.26%  github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass.parseGrammar1
+         0     0%  0.71%      1.39s 19.83%  github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass.Parse
+         0     0%  0.71%      1.39s 19.83%  github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass.Parse.func1 (inline)
+         0     0%  0.71%      1.39s 19.83%  github.com/stergiotis/boxer/public/parsing/antlr4utils.TwoStage[go.shape.struct { github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass.pr *github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass.ParseResult; github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass.listener *github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass.errorListener }] (inline)
+     0.01s  0.14%  3.57%      1.17s 16.69%  github.com/stergiotis/boxer/apps/play.(*PlayApp).selectableCell
+         0     0%  3.57%      1.14s 16.26%  github.com/stergiotis/boxer/apps/play.(*PlayApp).cellInset
+         0     0%  5.14%      1.12s 15.98%  github.com/stergiotis/boxer/apps/play.(*PlayApp).renderMasterTable-range5
+         0     0% 10.70%      0.86s 12.27%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview.sqlHighlight
+         0     0% 10.84%      0.84s 11.98%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview.build
+         0     0% 10.84%      0.82s 11.70%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview.(*memoT).prepare
+         0     0% 10.84%      0.82s 11.70%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview.PrepareSql.func1
+         0     0% 18.83%      0.78s 11.13%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview.PrepareSql
+     0.01s  0.14% 31.24%      0.71s 10.13%  github.com/stergiotis/boxer/apps/play.(*PlayApp).cellInset-range1
+         0     0% 31.24%      0.67s  9.56%  github.com/stergiotis/boxer/public/observability/sysmetrics.(*Bundle).Sample.func8
+         0     0% 31.24%      0.67s  9.56%  github.com/stergiotis/boxer/public/observability/sysmetrics/proc.(*Collector).Sample (inline)
+         0     0% 31.24%      0.67s  9.56%  github.com/stergiotis/boxer/public/observability/sysmetrics/proc.(*Collector).collectAll
+     0.02s  0.29% 31.53%      0.65s  9.27%  github.com/stergiotis/boxer/apps/play.(*PlayApp).selectableCell.func2
+         0     0% 31.53%      0.62s  8.84%  github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs.(*Reader).ReadFileInto
+         0     0% 31.67%      0.42s  5.99%  github.com/stergiotis/boxer/public/observability/sysmetrics/proc.(*Collector).readBasicPID
+     0.01s  0.14% 31.81%      0.41s  5.85%  github.com/stergiotis/boxer/apps/play.(*PlayApp).selectableCell.func1
+         0     0% 31.81%      0.41s  5.85%  github.com/stergiotis/boxer/apps/play.(*PlayApp).selectableCell.func2-range2
+         0     0% 42.65%      0.24s  3.42%  github.com/stergiotis/boxer/public/observability/sysmetrics/proc.(*Collector).enrichDetailPID
+         0     0% 44.51%      0.20s  2.85%  github.com/stergiotis/boxer/apps/play.(*PlayApp).renderDetailPane
+         0     0% 44.51%      0.20s  2.85%  github.com/stergiotis/boxer/apps/play.(*PlayApp).renderDetailTab
+         0     0% 44.51%      0.20s  2.85%  github.com/stergiotis/boxer/apps/play.defaultTabs.func34
+         0     0% 44.51%      0.20s  2.85%  github.com/stergiotis/boxer/apps/play.detailPanel.Render
+         0     0% 45.93%      0.19s  2.71%  github.com/stergiotis/boxer/apps/play.(*PlayApp).renderDetailPane-range1

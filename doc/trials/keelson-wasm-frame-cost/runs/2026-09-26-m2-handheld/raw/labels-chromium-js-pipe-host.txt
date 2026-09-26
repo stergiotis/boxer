@@ -1,0 +1,12 @@
+PORT 37577
+GET /index.html?target=js&consumer=pipe&flush=host&host=1&scene=labels&rows=1700&frames=300&warmup=30&stage=1024x600&arm=chromium-js-pipe-host
+GET /worker.mjs
+GET /favicon.ico
+GET /bridge.js
+GET /fetchtable.txt
+GET /fffi2stub.wasm
+GET /wasmspike_js.wasm
+GET /imzero2.wasm
+GET /wasm_exec.js
+POST /report
+ARM {"result":{"arm":"chromium-js-pipe-host","target":"js","consumer":"pipe","lazy_flush":true,"scene":"labels","frames":300,"warmup":30,"bytes_per_frame":301799,"messages_per_frame":0,"render_us":{"p50":15500.032,"p90":16300.032,"max":23000.064},"sync_us":{"p50":39599.872,"p90":40999.936,"max":47699.968},"total_us":{"p50":55199.744,"p90":58699.776,"max":63899.904}},"host":{"frames":330,"bytesIn":99593670,"lastInterpretUs":39500,"lastTessellateUs":200,"lastSerializeUs":500,"lastBodies":1,"lastBodiesSent":0,"errors":0,"stepMs":12677,"steps":7920,"meshBytes":1271092,"jsFrames":330,"meshFrames":661,"lastError":""},"bridge":{"chunks":32010,"bridgeMs":56.9},"wallMs":19129.39999999106,"ua":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/144.0.0.0 Safari/537.36"}

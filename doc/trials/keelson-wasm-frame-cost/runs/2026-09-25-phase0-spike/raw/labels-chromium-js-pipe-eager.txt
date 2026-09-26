@@ -1,0 +1,11 @@
+PORT 33601
+GET /index.html?target=js&consumer=pipe&flush=eager&scene=labels&rows=1700&frames=300&warmup=30&stage=1024x600&arm=chromium-js-pipe-eager
+GET /worker.mjs
+GET /favicon.ico
+GET /bridge.js
+GET /fetchtable.txt
+GET /fffi2stub.wasm
+GET /wasmspike_js.wasm
+GET /wasm_exec.js
+POST /report
+ARM {"result":{"arm":"chromium-js-pipe-eager","target":"js","consumer":"pipe","lazy_flush":false,"scene":"labels","frames":300,"warmup":30,"bytes_per_frame":301799,"messages_per_frame":0,"render_us":{"p50":286800.128,"p90":302799.872,"max":327800.064},"sync_us":{"p50":1799.936,"p90":2100.224,"max":14599.936},"total_us":{"p50":288600.064,"p90":306699.776,"max":329600}},"stub":{"messages":2815890,"bytes":99593670,"frames":330,"fetches":7920,"maxMessage":51},"bridge":{"chunks":2815890,"bridgeMs":2124.2},"wallMs":96444.39999999851,"ua":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/144.0.0.0 Safari/537.36"}
