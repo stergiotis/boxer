@@ -146,4 +146,6 @@ figures only from that page's §0.
 3. Add the frame envelope and push consumption to the interpreter.
 4. Record §3 as a new ADR referencing ADR-0077, since it amends SD1 and
    partly reverses the O3 kill reason; an accepted ADR only takes dated
-   updates.
+   updates. Done as
+   [ADR-0263](../adr/0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md),
+   proposed 2026-09-26.
