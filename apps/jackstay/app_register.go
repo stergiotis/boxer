@@ -12,7 +12,7 @@ const AppId app.AppIdT = "github.com/stergiotis/boxer/apps/jackstay"
 
 // manifest declares the wizard of ADR-0259 §SD7. It talks to the two
 // ClickHouse servers over HTTP directly, as the CLI does, and publishes on no
-// bus subject.
+// bus subject; its only runtime state is the recent-plans list.
 var manifest = app.Manifest{
 	Id:       AppId,
 	Version:  "0.1.0",
@@ -27,6 +27,8 @@ var manifest = app.Manifest{
 		PreferredWidth:  1280,
 		PreferredHeight: 820,
 	},
+	// The plans this window used, for the first page's resume list.
+	PersistedKeys: []string{recentKey},
 }
 
 func init() {

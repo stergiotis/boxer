@@ -1,17 +1,27 @@
 // Package jackstay is the wizard of ADR-0259 §SD7: the guided
 // ClickHouse-to-ClickHouse sync, one step per page — Connect, Databases,
-// Structure, Differences, Sync, Monitor — over the same plan document and the
+// Structure, Differences, Sync, Run — over the same plan document and the
 // same workflow functions the `boxer jackstay` CLI uses.
+//
+// The wizard is built for someone who uses it rarely: every page says where
+// it sits in the sequence, what the earlier steps produced and what the next
+// click will do to which server, so nothing has to be remembered between
+// uses. The plan file is proposed by the app, so the sync never refuses for
+// want of one, and the plans used before are listed on the first page.
 //
 // Nothing waits on a server from the frame goroutine. Every step runs as a
 // bgjob on a copy of the plan and lands a new plan value, which the frame
-// takes, shows and, when the plan has a file, saves. The worker goroutines
-// never call imzero2.
+// takes, shows and saves. The worker goroutines never call imzero2.
 package jackstay
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,11 +47,12 @@ const (
 	stepStructure
 	stepDifferences
 	stepSync
-	stepMonitor
+	stepRun
 )
 
-var allSteps = []stepE{stepConnect, stepDatabases, stepStructure, stepDifferences, stepSync, stepMonitor}
+var allSteps = []stepE{stepConnect, stepDatabases, stepStructure, stepDifferences, stepSync, stepRun}
 
+// String is the step chip's text, and so the name a headless scene clicks.
 func (inst stepE) String() (s string) {
 	switch inst {
 	case stepConnect:
@@ -54,10 +65,16 @@ func (inst stepE) String() (s string) {
 		return "4 Differences"
 	case stepSync:
 		return "5 Sync"
-	case stepMonitor:
-		return "6 Monitor"
+	case stepRun:
+		return "6 Run"
 	}
 	return "invalid"
+}
+
+// short is the step's name without its number, for "Next: Databases".
+func (inst stepE) short() (s string) {
+	_, s, _ = strings.Cut(inst.String(), " ")
+	return
 }
 
 // PlanEnv names a plan file the window opens at start and saves to — the
@@ -69,13 +86,57 @@ var PlanEnv = env.NewString(env.Spec{
 	Category:    env.CategoryDatabase,
 })
 
-// chunkLogCap bounds the chunk results the Sync and Monitor pages list.
+// PlanDirEnv is where the window puts a plan it proposes a path for. Empty
+// resolves through [resolvePlanDir].
+var PlanDirEnv = env.NewPath(env.Spec{
+	Name:        "BOXER_JACKSTAY_PLAN_DIR",
+	Description: "jackstay window: directory for plans the window names itself; empty uses <user config dir>/boxer/jackstay",
+	Category:    env.CategoryDatabase,
+})
+
+// resolvePlanDir is [PlanDirEnv] when set, else <user config dir>/boxer/jackstay,
+// else a directory under the temp dir for a host with no config directory.
+// A plan's journal lives beside it, so the directory should survive a
+// reboot, which rules the cache directory out.
+func resolvePlanDir() (dir string) {
+	if dir = PlanDirEnv.Get(); dir != "" {
+		return dir
+	}
+	if cfg, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(cfg, "boxer", "jackstay")
+	}
+	return filepath.Join(os.TempDir(), "boxer-jackstay")
+}
+
+// recentKey is the persisted key under which the window keeps the plans it
+// used, newest first.
+const recentKey = "recent-plans"
+
+// recentCap bounds the recent-plans list.
+const recentCap = 8
+
+// chunkLogCap bounds the chunk results the Run page lists.
 const chunkLogCap = 200
+
+// recentPlan is one row of the first page's "Resume a plan" list.
+type recentPlan struct {
+	Path   string    `json:"path"`
+	Source string    `json:"source"`
+	Target string    `json:"target"`
+	Step   string    `json:"step"`
+	At     time.Time `json:"at"`
+}
 
 // discovered is the Connect step's result.
 type discovered struct {
 	srcEp, dstEp jk.Endpoint
 	src, dst     jk.Inventory
+}
+
+// same reports whether both endpoints are one server, in which case the
+// target databases must be renamed copies.
+func (inst *discovered) same() (same bool) {
+	return jk.IsSameServer(inst.srcEp, inst.dstEp, inst.src.Server, inst.dst.Server)
 }
 
 // stepResult is what a plan-producing step hands back to the frame.
@@ -87,10 +148,21 @@ type stepResult struct {
 	note    string
 }
 
+// preflightResult is what the Sync page shows before the operator starts:
+// the disks' fit and the size of what would move.
+type preflightResult struct {
+	disks   []jk.PreflightDisk
+	tables  int
+	rows    int64
+	bytes   uint64
+	skipped []string
+}
+
 // App is the per-window instance.
 type App struct {
 	ids    *c.WidgetIdStack
 	logger zerolog.Logger
+	store  app.StorageI
 
 	appCtx    context.Context
 	cancelApp context.CancelFunc
@@ -102,15 +174,19 @@ type App struct {
 	dstURL, dstUser string
 	discoverJob     bgjob.Runner[discovered]
 	disc            *discovered
+	recent          []recentPlan
 
 	// Databases.
 	dbPick     map[string]*bool
 	dbTarget   map[string]*string
 	leewayOnly bool
 
-	// The plan and its file.
+	// The plan and its file. planRev counts plan replacements, so a page
+	// can tell a new plan from the one it last read.
 	plan     *jk.Plan
+	planRev  uint64
 	planPath string
+	savedAt  time.Time
 	openDlg  *filepicker.Inst
 	saveDlg  *filepicker.Inst
 
@@ -123,21 +199,29 @@ type App struct {
 	diffJob bgjob.Runner[stepResult]
 	final   bool
 
-	// Sync.
-	syncJob     bgjob.Runner[stepResult]
-	previewJob  bgjob.Runner[[]jk.PreflightDisk]
-	preflight   []jk.PreflightDisk
-	syncMode    jk.SyncModeE
-	existing    jk.ExistingPolicyE
-	sampleText  string
-	compression string
-	restart     bool
-	rows, bytes atomic.Int64
+	// Sync. syncModeChosen is set once the operator picks a mode; until
+	// then the page follows the recommendation.
+	syncJob        bgjob.Runner[stepResult]
+	previewJob     bgjob.Runner[preflightResult]
+	preflight      *preflightResult
+	preflightKey   string
+	syncMode       jk.SyncModeE
+	syncModeChosen bool
+	existing       jk.ExistingPolicyE
+	sampleText     string
+	compression    string
+	restart        bool
+	syncArmed      bool
+	rows, bytes    atomic.Int64
+
+	// Run: the last run's timing, kept on the frame goroutine.
+	syncStarted, syncFinished time.Time
+	syncWasRunning            bool
 
 	logMu    sync.Mutex
 	chunkLog []jk.ChunkResult
 
-	// Monitor: lastDisks is the latest read, kept while the next is taken.
+	// Run: lastDisks is the latest read, kept while the next is taken.
 	disks     bgjob.Keyed[jk.DiskReport]
 	lastDisks *jk.DiskReport
 
@@ -179,17 +263,18 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
+	inst.store = ctx.Storage()
 	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
 	inst.openDlg = filepicker.New("jackstay-open", filepicker.ModeOpen,
 		filepicker.WithTitle("Open a jackstay plan"), filepicker.WithExtensionFilter(".json"), filepicker.WithStartAtOsHome())
 	inst.saveDlg = filepicker.New("jackstay-save", filepicker.ModeSave,
-		filepicker.WithTitle("Save the jackstay plan"), filepicker.WithExtensionFilter(".json"), filepicker.WithDefaultFilename("plan.json"), filepicker.WithStartAtOsHome())
+		filepicker.WithTitle("Save the jackstay plan as"), filepicker.WithExtensionFilter(".json"), filepicker.WithDefaultFilename("plan.json"), filepicker.WithStartAtOsHome())
+	inst.loadRecent()
 	if path := PlanEnv.Get(); path != "" {
 		inst.planPath = path
 		if p, lerr := jk.LoadPlan(path); lerr == nil {
-			inst.plan = &p
-			inst.srcURL, inst.srcUser = p.Source.URL, p.Source.User
-			inst.dstURL, inst.dstUser = p.Target.URL, p.Target.User
+			inst.adoptPlan(&p, path)
+			inst.step = inst.resumeStep()
 		}
 	}
 	return
@@ -244,6 +329,169 @@ func clients(src jk.Endpoint, dst jk.Endpoint, scan bool) (s *chclient.Client, d
 	return
 }
 
+// hostLabel is the short name of a server for chips, captions and file
+// names: the URL's host and port, or the string itself when it is not a URL.
+func hostLabel(s string) (label string) {
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return strings.TrimSuffix(s, "/")
+	}
+	return u.Host
+}
+
+// fileToken makes a host label safe for a file name.
+func fileToken(s string) (t string) {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.', r == '_':
+			return r
+		}
+		return '-'
+	}, s)
+}
+
+// --- the plan file and the recent list ----------------------------------------
+
+// adoptPlan makes p the window's plan: the endpoints follow it, the pages
+// re-read it, and the file it came from is remembered.
+func (inst *App) adoptPlan(p *jk.Plan, path string) {
+	inst.plan = p
+	inst.planRev++
+	inst.planPath = path
+	inst.srcURL, inst.srcUser = p.Source.URL, p.Source.User
+	inst.dstURL, inst.dstUser = p.Target.URL, p.Target.User
+	inst.syncModeChosen = false
+	inst.applyArmed, inst.syncArmed = false, false
+	inst.preflight, inst.preflightKey = nil, ""
+	if path != "" {
+		if st, err := os.Stat(path); err == nil {
+			inst.savedAt = st.ModTime()
+		}
+		inst.noteRecent()
+	}
+}
+
+// resumeStep is the page an opened plan lands on: the furthest step that
+// has a result, which is where the operator left off.
+func (inst *App) resumeStep() (st stepE) {
+	st = stepStructure
+	for _, s := range []stepE{stepDifferences, stepSync, stepRun} {
+		if done, _ := inst.stepDone(s); done {
+			st = s
+		}
+	}
+	return
+}
+
+// proposePlanPath names a plan file for a plan that has none, under the plan
+// directory, by date and servers, so the sync never waits on a save.
+func (inst *App) proposePlanPath(src jk.Endpoint, dst jk.Endpoint) (path string) {
+	dir := resolvePlanDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		inst.lastError = "unable to create the plan directory: " + err.Error()
+		return ""
+	}
+	base := time.Now().Format("2006-01-02") + "-" + fileToken(hostLabel(src.URL)) + "-to-" + fileToken(hostLabel(dst.URL))
+	path = filepath.Join(dir, base+".json")
+	for i := 2; ; i++ {
+		if _, err := os.Stat(path); err != nil {
+			return path
+		}
+		path = filepath.Join(dir, base+"-"+strconv.Itoa(i)+".json")
+	}
+}
+
+func (inst *App) autosave() {
+	if inst.plan == nil || inst.planPath == "" {
+		return
+	}
+	if err := inst.plan.Save(inst.planPath); err != nil {
+		inst.lastError = "unable to save the plan: " + err.Error()
+		return
+	}
+	inst.savedAt = time.Now()
+	inst.noteRecent()
+}
+
+// loadRecent reads the recent-plans list; a host without the persist
+// capability leaves it empty, which the first page shows as no list.
+func (inst *App) loadRecent() {
+	if inst.store == nil {
+		return
+	}
+	data, found, err := inst.store.Get(recentKey)
+	if err != nil || !found {
+		return
+	}
+	var list []recentPlan
+	if json.Unmarshal(data, &list) == nil {
+		inst.recent = list
+	}
+}
+
+// noteRecent moves the current plan to the front of the recent list.
+func (inst *App) noteRecent() {
+	if inst.plan == nil || inst.planPath == "" {
+		return
+	}
+	step := stepStructure
+	for _, s := range []stepE{stepDifferences, stepSync, stepRun} {
+		if done, _ := inst.stepDone(s); done {
+			step = s
+		}
+	}
+	entry := recentPlan{Path: inst.planPath, Source: hostLabel(inst.plan.Source.URL), Target: hostLabel(inst.plan.Target.URL),
+		Step: step.short(), At: time.Now()}
+	list := make([]recentPlan, 0, recentCap)
+	list = append(list, entry)
+	for _, r := range inst.recent {
+		if r.Path != entry.Path && len(list) < recentCap {
+			list = append(list, r)
+		}
+	}
+	inst.recent = list
+	if inst.store == nil {
+		return
+	}
+	if data, err := json.Marshal(list); err == nil {
+		if serr := inst.store.Set(recentKey, data); serr != nil {
+			inst.logger.Debug().Err(serr).Msg("jackstay: recent plans not persisted")
+		}
+	}
+}
+
+// forgetRecent drops a row whose file has gone.
+func (inst *App) forgetRecent(path string) {
+	kept := inst.recent[:0]
+	for _, r := range inst.recent {
+		if r.Path != path {
+			kept = append(kept, r)
+		}
+	}
+	inst.recent = kept
+	if inst.store != nil {
+		if data, err := json.Marshal(inst.recent); err == nil {
+			_ = inst.store.Set(recentKey, data)
+		}
+	}
+}
+
+// openPlan loads a plan file and lands on the step it was left at.
+func (inst *App) openPlan(path string) {
+	p, err := jk.LoadPlan(path)
+	if err != nil {
+		inst.lastError = "unable to open the plan: " + err.Error()
+		if os.IsNotExist(err) {
+			inst.forgetRecent(path)
+		}
+		return
+	}
+	inst.adoptPlan(&p, path)
+	inst.disc = nil
+	inst.note, inst.lastError = "plan opened", ""
+	inst.step = inst.resumeStep()
+}
+
 // --- results, on the frame goroutine ----------------------------------------
 
 func (inst *App) takeResults() {
@@ -264,23 +512,31 @@ func (inst *App) takeResults() {
 		}
 		p := r.plan
 		inst.plan = &p
+		inst.planRev++
 		inst.note, inst.lastError = r.note, ""
 		inst.autosave()
+		if !inst.syncModeChosen {
+			inst.syncMode, _ = inst.recommendMode()
+		}
 		// The footprint a step leaves behind is worth reading now, not at
 		// the next tick.
 		inst.disks.Invalidate()
 	}
 	if r, _, ok := inst.previewJob.TakeResult(); ok {
-		inst.preflight = *r
+		inst.preflight = r
 	}
+	running := inst.syncJob.Running()
+	if inst.syncWasRunning && !running {
+		inst.syncFinished = time.Now()
+	}
+	inst.syncWasRunning = running
 }
 
 // seedDatabases gives every source database a checkbox and a target name. When
 // both endpoints are one server, the target name defaults to a suffixed copy,
 // since a table cannot be synced onto itself.
 func (inst *App) seedDatabases() {
-	same := inst.disc.srcEp.URL == inst.disc.dstEp.URL ||
-		(inst.disc.src.Server.UUID != "" && inst.disc.src.Server.UUID == inst.disc.dst.Server.UUID)
+	same := inst.disc.same()
 	for _, db := range inst.disc.src.UserDatabases() {
 		if _, has := inst.dbPick[db]; !has {
 			v := false
@@ -293,15 +549,6 @@ func (inst *App) seedDatabases() {
 			}
 			inst.dbTarget[db] = &t
 		}
-	}
-}
-
-func (inst *App) autosave() {
-	if inst.plan == nil || inst.planPath == "" {
-		return
-	}
-	if err := inst.plan.Save(inst.planPath); err != nil {
-		inst.lastError = "unable to save the plan: " + err.Error()
 	}
 }
 
@@ -318,6 +565,145 @@ func (inst *App) clonePlan() (p jk.Plan, ok bool) {
 		return
 	}
 	return p, true
+}
+
+// --- what the steps have produced ----------------------------------------------
+
+// stepDone reports whether a step has a result, and a few words of it for
+// the step bar.
+func (inst *App) stepDone(st stepE) (done bool, summary string) {
+	p := inst.plan
+	switch st {
+	case stepConnect:
+		if inst.disc != nil {
+			s := hostLabel(inst.disc.srcEp.URL) + " → " + hostLabel(inst.disc.dstEp.URL)
+			if inst.disc.same() {
+				s = hostLabel(inst.disc.srcEp.URL) + ", one server"
+			}
+			return true, s
+		}
+		if p != nil {
+			return true, hostLabel(p.Source.URL) + " → " + hostLabel(p.Target.URL)
+		}
+	case stepDatabases:
+		if p != nil {
+			n := len(p.Selection.Databases)
+			s := plural(n, "database")
+			if len(p.Selection.DatabaseMap) > 0 {
+				s += ", renamed"
+			}
+			return true, s
+		}
+	case stepStructure:
+		if p != nil {
+			s := plural(len(p.Tables), "table")
+			if p.HasPendingDDL() {
+				s += ", DDL pending"
+			}
+			return true, s
+		}
+	case stepDifferences:
+		if p != nil {
+			same, differ := inst.diffCounts()
+			if same+differ > 0 {
+				s := strconv.Itoa(same) + " identical"
+				if differ > 0 {
+					s = plural(differ, "table") + " differ"
+					if differ == 1 {
+						s = "1 table differs"
+					}
+				}
+				return true, s
+			}
+		}
+	case stepSync:
+		if p != nil && p.SyncRun != nil {
+			mode := ""
+			for _, t := range p.Tables {
+				if t.Sync != nil {
+					mode = t.Sync.Mode.String()
+					break
+				}
+			}
+			return true, mode + ", " + p.SyncRun.StartedAt.Local().Format("Jan 2 15:04")
+		}
+	case stepRun:
+		if p != nil {
+			for _, t := range p.Tables {
+				if t.SyncReport != nil {
+					return true, "last run " + t.SyncReport.FinishedAt.Local().Format("Jan 2 15:04")
+				}
+			}
+		}
+	}
+	return false, ""
+}
+
+// stepLocked reports why a step cannot be visited yet; empty means it can.
+func (inst *App) stepLocked(st stepE) (reason string) {
+	switch st {
+	case stepDatabases:
+		if inst.disc == nil && inst.plan != nil {
+			return "discover the servers again to change the databases of an opened plan"
+		}
+		if inst.disc == nil {
+			return "discover the servers first"
+		}
+	case stepStructure:
+		if inst.plan == nil && inst.disc == nil {
+			return "discover the servers, or open a plan"
+		}
+	case stepDifferences, stepSync, stepRun:
+		if inst.plan == nil {
+			return "plan the structure first"
+		}
+	}
+	return ""
+}
+
+// diffCounts tallies the compared tables.
+func (inst *App) diffCounts() (same int, differ int) {
+	if inst.plan == nil {
+		return
+	}
+	for _, t := range inst.plan.Tables {
+		if t.Diff == nil {
+			continue
+		}
+		if t.Diff.IsIdentical() {
+			same++
+		} else {
+			differ++
+		}
+	}
+	return
+}
+
+// recommendMode is the sync mode the plan's state calls for, and why: repair
+// after a comparison that found differences, full otherwise.
+func (inst *App) recommendMode() (mode jk.SyncModeE, why string) {
+	same, differ := inst.diffCounts()
+	switch {
+	case differ > 0:
+		return jk.SyncModeRepair, "the last comparison found differences in " + plural(differ, "table") + "; repair makes only those leaves equal"
+	case same > 0:
+		return jk.SyncModeFull, "every compared table is identical, so there is nothing to repair; a full copy fills empty target tables only"
+	}
+	return jk.SyncModeFull, "no comparison has been run; full copies every chunk, and refuses a target table that already holds rows"
+}
+
+// existingTargets counts the plan's syncable tables that already exist on
+// the target, which is where the existing-rows policy matters.
+func (inst *App) existingTargets() (n int) {
+	if inst.plan == nil {
+		return
+	}
+	for _, t := range inst.plan.Tables {
+		if t.Verdict.IsSyncable() && t.Verdict != jk.VerdictCreate {
+			n++
+		}
+	}
+	return
 }
 
 // --- the steps' jobs; each worker touches only its own copy -----------------
@@ -356,6 +742,15 @@ func (inst *App) selection() (sel jk.Selection) {
 	return
 }
 
+func (inst *App) pickedCount() (n int) {
+	for _, p := range inst.dbPick {
+		if p != nil && *p {
+			n++
+		}
+	}
+	return
+}
+
 func (inst *App) startStructure() {
 	if inst.disc == nil {
 		return
@@ -369,6 +764,9 @@ func (inst *App) startStructure() {
 	var old *jk.Plan
 	if p, ok := inst.clonePlan(); ok {
 		old = &p
+	}
+	if inst.planPath == "" {
+		inst.planPath = inst.proposePlanPath(srcEp, dstEp)
 	}
 	src, dst := clients(srcEp, dstEp, false)
 	inst.applyArmed = false
@@ -442,6 +840,12 @@ func (inst *App) tableSync() (ts jk.TableSync, err error) {
 	return
 }
 
+// settingsKey names the Sync page's choices, so a change re-runs the
+// pre-flight once and a repeat does not.
+func (inst *App) settingsKey() (key string) {
+	return inst.syncMode.String() + "|" + inst.existing.String() + "|" + inst.sampleText + "|" + strconv.FormatUint(inst.planRev, 10)
+}
+
 func (inst *App) startPreview() {
 	p, ok := inst.clonePlan()
 	if !ok {
@@ -452,19 +856,27 @@ func (inst *App) startPreview() {
 		inst.lastError = err.Error()
 		return
 	}
+	inst.lastError = ""
 	src, dst := clients(p.Source, p.Target, false)
 	inst.previewJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.preflight", Title: "pre-flight"},
-		func(ctx context.Context, report bgjob.Reporter) (*[]jk.PreflightDisk, error) {
+		func(ctx context.Context, report bgjob.Reporter) (*preflightResult, error) {
 			report(0, 0, "reading the target's disks")
-			chosen, _, err := jk.PrepareSync(ctx, src, &p, ts, nil, jk.DefaultChunkingOptions())
+			chosen, skipped, err := jk.PrepareSync(ctx, src, &p, ts, nil, jk.DefaultChunkingOptions())
 			if err != nil {
 				return nil, err
+			}
+			out := preflightResult{tables: len(chosen), rows: jk.ExpectedRows(chosen), skipped: skipped}
+			if len(chosen) == 0 {
+				return &out, nil
 			}
 			rep, err := jk.ReadDisks(ctx, dst, targetsOf(chosen))
 			if err != nil {
 				return nil, err
 			}
-			out := jk.Preflight(chosen, &rep, 1.5)
+			out.disks = jk.Preflight(chosen, &rep, 1.5)
+			for _, g := range out.disks {
+				out.bytes += g.Need
+			}
 			return &out, nil
 		})
 }
@@ -491,6 +903,8 @@ func (inst *App) startSync() {
 	inst.logMu.Lock()
 	inst.chunkLog = inst.chunkLog[:0]
 	inst.logMu.Unlock()
+	inst.syncArmed = false
+	inst.syncStarted, inst.syncFinished = time.Now(), time.Time{}
 	inst.syncJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.sync", Title: "sync"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
@@ -566,13 +980,13 @@ func (inst *App) startSync() {
 				_ = fresh.Save(planPath)
 				return nil, err
 			}
-			note := "sync done; run the diff to compare"
+			note := "sync done; compare the content again to confirm"
 			if failed > 0 {
 				note = plural(failed, "chunk") + " not synced; see the tables' problems"
 			}
 			return &stepResult{plan: fresh, skipped: skipped, note: note}, nil
 		})
-	inst.step = stepMonitor
+	inst.step = stepRun
 }
 
 // logChunk is called from the sync worker.
@@ -593,7 +1007,7 @@ func (inst *App) chunkLogSnapshot() (out []jk.ChunkResult) {
 }
 
 // demandDisks reads the target's disks and the footprint of the plan's
-// tables, again every five seconds while the Monitor page is shown, and keeps
+// tables, again every five seconds while the Run page is shown, and keeps
 // the last good read in lastDisks.
 func (inst *App) demandDisks() (err error) {
 	if inst.plan == nil {
