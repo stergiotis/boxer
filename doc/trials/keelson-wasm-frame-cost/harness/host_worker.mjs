@@ -5,8 +5,15 @@
 // and yields in between, which is when the page's input arrives; each
 // rendered frame's mesh messages are posted to the page, which paints them
 // with the painter it already has. Query parameters of this module's URL
-// select the scene (`scene`, `rows`, `demo`), the stage (`stage`) and the
-// tick rate (`fps`). Fonts cross as bytes: each slot (`main`, `mono`,
+// select the scene (`scene`, `rows`, `demo`) and the stage (`stage`).
+//
+// The cadence is reactive (ADR-0077 SD6): after each frame the worker asks
+// the host how soon egui wants to run again — now for an animation or a
+// repaint request, which is also how the Go side asks for one — and sleeps
+// until then, at most `idle` ms (default 1000, the heartbeat) and at least
+// 1000/`fps` (default 60, the ceiling); input and session messages wake it
+// at once. `cadence=continuous` ticks at `fps` regardless, the measurement
+// shape. Fonts cross as bytes: each slot (`main`, `mono`,
 // `phosphor`, `fallback`) is fetched from `<slot>Font=<url>` when given,
 // else from `./fonts/<slot>.ttf`, and a slot whose fetch fails is left to
 // egui's default faces.
@@ -14,7 +21,9 @@ import { FONT_SLOTS, loadHost, startReactor } from './bridge.js';
 
 const q = new URL(self.location.href).searchParams;
 const stage = (q.get('stage') || '1024x600').split('x').map(Number);
-const fps = Number(q.get('fps') || '30');
+const fps = Number(q.get('fps') || '60');
+const idleMs = Number(q.get('idle') || '1000');
+const continuous = q.get('cadence') === 'continuous';
 const log = (line) => self.postMessage({ kind: 'log', line });
 const PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
 
@@ -35,8 +44,10 @@ try {
   // the host's geometry.
   const sendHello = () => {
     const g = stub.geometry();
-    self.postMessage({ kind: 'hello', hello: { width: Math.round(g.width * g.ppp), height: Math.round(g.height * g.ppp), ppp: g.ppp, codec: 'mesh', cadence: 0 } });
+    self.postMessage({ kind: 'hello', hello: { width: Math.round(g.width * g.ppp), height: Math.round(g.height * g.ppp), ppp: g.ppp, codec: 'mesh', cadence: continuous ? 0 : 1 } });
   };
+  // wake is set once the reactor runs: anything from the page earns a frame
+  let wake = () => {};
   self.onmessage = (e) => {
     const m = e.data;
     if (m.kind !== 'input') return;
@@ -44,20 +55,29 @@ try {
     if (b.length < 2) return;
     if (b[0] === PREFIX_INPUT) stub.input(b.subarray(1));
     else if (b[0] === PREFIX_SESSION && stub.session(b.subarray(1)) === 1) sendHello();
+    wake();
   };
   sendHello();
   const argv = ['-consumer', 'pipe', '-scene', q.get('scene') || 'gallery', '-rows', q.get('rows') || '200',
     '-frames', q.get('frames') || '1000000', '-warmup', '0', '-stage', `${stage[0]}x${stage[1]}`, '-target', 'wasip1', '-arm', 'viewer-worker'];
   if (q.get('demo')) argv.push('-demo', q.get('demo'));
+  if (!continuous) argv.push('-continuous=false');
   const r = await startReactor({ goBytes, stub, argv, log: (l) => { if (!l.startsWith('{')) log(l); } });
   log('worker — running the application');
-  let frames = 0;
+  let frames = 0, timer = null, lastTick = -Infinity, exited = false;
+  const minMs = 1000 / fps;
+  const schedule = (ms) => { clearTimeout(timer); timer = setTimeout(tick, Math.max(0, ms)); };
   const tick = () => {
-    const done = r.frame();
+    timer = null;
+    const early = lastTick + minMs - performance.now();
+    if (early > 0) { schedule(early); return; }
+    lastTick = performance.now();
+    const rc = r.frame();
     frames++;
-    if (done !== 0) { log(`worker — the application exited after ${frames} frames`); return; }
-    setTimeout(tick, 1000 / fps);
+    if (rc !== 0) { exited = true; log(`worker — the application exited after ${frames} frames`); return; }
+    schedule(continuous ? minMs : Math.min(Math.max(stub.repaintDelayMs(), minMs), idleMs));
   };
+  wake = () => { if (!exited) schedule(0); };
   tick();
 } catch (err) {
   log('worker error: ' + (err && err.stack || err));

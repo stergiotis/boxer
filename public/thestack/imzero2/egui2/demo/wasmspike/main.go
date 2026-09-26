@@ -428,6 +428,7 @@ func run(args []string) {
 			&cli.StringFlag{Name: "stage", Value: "1024x600", Usage: "stage size in points"},
 			&cli.BoolFlag{Name: "list", Usage: "list the registry demos linked in and exit"},
 			&cli.BoolFlag{Name: "reactor", Usage: "wasip1 only: set up and return; the host calls the exported frame function per tick"},
+			&cli.BoolFlag{Name: "continuous", Value: true, Usage: "request a repaint every frame, so a host with a reactive cadence keeps ticking (the measurement shape); -continuous=false lets it idle"},
 			&cli.StringFlag{Name: "cpuprofile", Usage: "write a CPU profile of the measured frames to this file (native)"},
 		}, logging.LoggingFlags...),
 		// The level defaults to error here, not info: a warning per widget
@@ -490,6 +491,7 @@ func spike(ctx *cli.Context) (err error) {
 	}
 	consumer := ctx.String("consumer")
 	lazyFlush := ctx.Bool("lazyFlush")
+	continuous := ctx.Bool("continuous")
 	nFrames, warmup := ctx.Int("frames"), ctx.Int("warmup")
 	rep := report{Arm: ctx.String("arm"), Target: ctx.String("target"), Consumer: consumer, LazyFlush: lazyFlush, Scene: sceneName, Frames: nFrames, Warmup: warmup}
 	samples := make([]sample, 0, nFrames)
@@ -505,7 +507,9 @@ func spike(ctx *cli.Context) (err error) {
 		}
 		st := c.CurrentApplicationState
 		st.StartServersideFrame()
-		c.RequestRepaint()
+		if continuous {
+			c.RequestRepaint()
+		}
 		ids.Reset()
 		for range c.IdScope(ids.PrepareStr("wasmspike")) {
 			sc.render(ids, stageW, stageH)
