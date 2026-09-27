@@ -130,7 +130,7 @@ export async function loadHost(hostBytes, width, height, ppp, onMesh, paceMs, fo
     lastError() { const n = ex.host_last_error(); return new TextDecoder().decode(mem().slice(ex.host_alloc(0), ex.host_alloc(0) + n)); },
     stats() {
       const s = (i) => Number(ex.host_stat(i));
-      return { frames: s(0), bytesIn: s(1), lastInterpretUs: s(3), lastTessellateUs: s(4), lastSerializeUs: s(5), lastBodies: s(6), lastBodiesSent: s(7), errors: s(8), stepMs: Number(stepNs) / 1e6, steps, meshBytes, jsFrames: frames };
+      return { frames: s(0), bytesIn: s(1), lastInterpretUs: s(3), lastTessellateUs: s(4), lastSerializeUs: s(5), lastBodies: s(6), lastBodiesSent: s(7), errors: s(8), framesUnchanged: s(9), lastSentBbox: [10, 11, 12, 13].map((i) => { const b = new DataView(new ArrayBuffer(4)); b.setUint32(0, Number(ex.host_stat(i))); return Number(b.getFloat32(0).toFixed(1)); }), stepMs: Number(stepNs) / 1e6, steps, meshBytes, jsFrames: frames };
     },
   };
 }

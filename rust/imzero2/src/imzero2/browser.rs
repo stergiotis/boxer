@@ -118,6 +118,11 @@ pub struct Stats {
     pub last_bodies: u64,
     pub last_bodies_sent: u64,
     pub errors: u64,
+    /// passes whose mesh equalled the last one posted, so nothing was posted
+    pub frames_unchanged: u64,
+    /// bounding box (min x, min y, max x, max y, points) of the bodies the
+    /// last posted frame carried, for finding what keeps a scene moving
+    pub last_sent_bbox: [f32; 4],
 }
 
 pub struct Host {
@@ -144,6 +149,12 @@ pub struct Host {
     /// the cursor shape code last posted to the page, so a shape crosses
     /// only when it changes (the carrier keeps the same memo)
     last_cursor: u32,
+    /// the last frame's body hashes and live texture keys: a pass whose
+    /// mesh is the same as the last one posts nothing, as the carrier skips
+    /// a frame whose signature it has already sent (the page keeps painting
+    /// what it holds)
+    last_hashes: Vec<u64>,
+    last_live_keys: Vec<u32>,
     /// how soon egui asked to be run again after the last pass, for a
     /// worker that ticks on demand rather than at a fixed rate
     repaint_delay_ms: f64,
@@ -207,6 +218,8 @@ impl Host {
             ppp,
             start: Instant::now(),
             last_cursor: CURSOR_UNSENT,
+            last_hashes: Vec::new(),
+            last_live_keys: Vec::new(),
             repaint_delay_ms: 0.0,
             last_error: String::new(),
             stats: Stats::default(),
@@ -435,8 +448,10 @@ impl Host {
             .unwrap_or(0.0);
 
         let t1 = Instant::now();
+        let mut texture_msgs = 0usize;
         for m in self.textures.ingest(&out.textures_delta) {
             self.mesh_out.push(m);
+            texture_msgs += 1;
         }
         let clipped = self.ctx.tessellate(out.shapes, out.pixels_per_point);
         self.stats.last_tessellate_us = t1.elapsed().as_micros() as u64;
@@ -446,15 +461,44 @@ impl Host {
         let missing: Vec<usize> = (0..frame.hashes.len())
             .filter(|&i| !self.painter_has.contains(&frame.hashes[i]))
             .collect();
-        let w_px = self.width * self.ppp;
-        let h_px = self.height * self.ppp;
-        let msg = meshlane::frame_message(out.pixels_per_point, w_px, h_px, &frame, &missing);
-        self.mesh_out.push(msg);
+        if !missing.is_empty() {
+            let mut bb = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+            for &i in &missing {
+                if let Some(egui::ClippedPrimitive {
+                    primitive: egui::epaint::Primitive::Mesh(m),
+                    ..
+                }) = clipped.get(i)
+                {
+                    for v in &m.vertices {
+                        bb[0] = bb[0].min(v.pos.x);
+                        bb[1] = bb[1].min(v.pos.y);
+                        bb[2] = bb[2].max(v.pos.x);
+                        bb[3] = bb[3].max(v.pos.y);
+                    }
+                }
+            }
+            self.stats.last_sent_bbox = bb;
+        }
         self.textures.finish_frame();
-        self.mesh_out.push(meshlane::retirement_message(&self.textures.live_keys()));
-        // after the retirement the painter keeps exactly this frame's bodies
-        self.painter_has.clear();
-        self.painter_has.extend(frame.hashes.iter().copied());
+        let live_keys = self.textures.live_keys();
+        let unchanged = texture_msgs == 0
+            && missing.is_empty()
+            && frame.hashes == self.last_hashes
+            && live_keys == self.last_live_keys;
+        if unchanged {
+            self.stats.frames_unchanged += 1;
+        } else {
+            let w_px = self.width * self.ppp;
+            let h_px = self.height * self.ppp;
+            let msg = meshlane::frame_message(out.pixels_per_point, w_px, h_px, &frame, &missing);
+            self.mesh_out.push(msg);
+            self.mesh_out.push(meshlane::retirement_message(&live_keys));
+            // after the retirement the painter keeps exactly this frame's bodies
+            self.painter_has.clear();
+            self.painter_has.extend(frame.hashes.iter().copied());
+            self.last_hashes = frame.hashes.clone();
+            self.last_live_keys = live_keys;
+        }
         self.stats.last_serialize_us = t2.elapsed().as_micros() as u64;
         self.stats.last_bodies = frame.hashes.len() as u64;
         self.stats.last_bodies_sent = missing.len() as u64;
@@ -644,6 +688,8 @@ pub extern "C" fn host_stat(i: u32) -> u64 {
             6 => s.last_bodies,
             7 => s.last_bodies_sent,
             8 => s.errors,
+            9 => s.frames_unchanged,
+            10..=13 => u64::from(s.last_sent_bbox[(i - 10) as usize].to_bits()),
             _ => 0,
         }
     })

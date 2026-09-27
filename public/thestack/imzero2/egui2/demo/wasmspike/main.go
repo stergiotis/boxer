@@ -435,6 +435,7 @@ func run(args []string) {
 			&cli.BoolFlag{Name: "reactor", Usage: "wasip1 only: set up and return; the host calls the exported frame function per tick"},
 			&cli.BoolFlag{Name: "continuous", Value: true, Usage: "request a repaint every frame, so a host with a reactive cadence keeps ticking (the measurement shape); -continuous=false lets it idle"},
 			&cli.StringFlag{Name: "cpuprofile", Usage: "write a CPU profile of the measured frames to this file (native)"},
+			&cli.StringFlag{Name: "clientBinary", Usage: "pipe: launch this imzero2 client as the peer (a headless build with IMZERO2_HEADLESS_LISTEN serves the mesh wire to a viewer); empty speaks the protocol on stdin/stdout"},
 		}, logging.LoggingFlags...),
 		// The level defaults to error here, not info: a warning per widget
 		// per frame (a duplicate id, say) would dominate the wasm arms.
@@ -564,7 +565,7 @@ func spike(ctx *cli.Context) (err error) {
 			}
 		}
 	case "pipe":
-		cfg := &application.Config{}
+		cfg := &application.Config{ClientBinary: ctx.String("clientBinary")}
 		cfg.Validate(true)
 		u := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 		var app *application.Application[*runtime.Unmarshaller]

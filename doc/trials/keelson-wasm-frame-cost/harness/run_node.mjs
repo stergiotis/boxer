@@ -21,8 +21,19 @@ const table = readFileSync(opt.table, 'utf8');
 // --host <imzero2.wasm> drives the real Rust host instead of the stub; the
 // fetch table is then unused by the peer (the host answers from its state).
 let meshFrames = 0, meshBytes = 0, meshLast = 0;
+// per message kind, by the wire's first byte (1 frame, 2 texture, 3
+// retirement, other = session control), for the parity check against the
+// native appliance (mesh_count.mjs)
+const meshKinds = { frame: { n: 0, bytes: 0 }, texture: { n: 0, bytes: 0 }, retirement: { n: 0, bytes: 0 }, other: { n: 0, bytes: 0 } };
+let firstFrameBytes = 0, firstFrameClosed = false; // frame + textures up to the first retirement
+const PREFIX_MESH = 0x04;
 const stub = opt.host
-  ? await loadHost(readFileSync(opt.host), stage[0], stage[1], 1.0, (m) => { meshFrames++; meshBytes += m.length; meshLast = m.length; })
+  ? await loadHost(readFileSync(opt.host), stage[0], stage[1], 1.0, (m) => {
+    meshFrames++; meshBytes += m.length; meshLast = m.length;
+    const k = m[0] !== PREFIX_MESH ? 'other' : m[1] === 1 ? 'frame' : m[1] === 2 ? 'texture' : m[1] === 3 ? 'retirement' : 'other';
+    meshKinds[k].n++; meshKinds[k].bytes += m.length - (k === 'other' ? 0 : 1);
+    if (!firstFrameClosed && k !== 'other') { if (k === 'retirement') firstFrameClosed = true; else firstFrameBytes += m.length - 1; }
+  })
   : await loadStub(readFileSync(opt.stub), table, stage[0], stage[1]);
 const goBytes = readFileSync(opt.go);
 let GoCtor = null;
@@ -48,5 +59,5 @@ if (opt.reactor) {
 } else {
   out = await runArm({ target: opt.target, goBytes, stub, argv, GoCtor, log: (l) => { if (!l.startsWith('RESULT ')) process.stderr.write(l + '\n'); } });
 }
-const host = opt.host ? { ...out.stub, meshFrames, meshBytes, meshLast, lastError: stub.lastError() } : undefined;
+const host = opt.host ? { ...out.stub, meshFrames, meshBytes, meshLast, meshKinds, firstFrameBytes, lastError: stub.lastError() } : undefined;
 process.stdout.write('ARM ' + JSON.stringify({ result: out.result, stub: opt.host ? undefined : out.stub, host, bridge: out.bridge, wallMs: out.wallMs }) + '\n');
