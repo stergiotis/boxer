@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-26
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-27
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0263: imzero2 in a browser tab — both wasm modules in one worker, the mesh to the existing painter
 
@@ -243,18 +241,44 @@ across threads.
 
 ## Status
 
-Proposed — awaiting review by the imzero2 code owner.
+Accepted 2026-09-27.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-09-27 — accepted; the demonstrator becomes a package, a binary and a bundle
+
+Accepted the day the trial's step 8 closed. What shipped on acceptance,
+so that the shape is a citizen of the tree rather than a trial harness:
+
+- `rust/imzero2/browser` — the browser host's C ABI as its own cdylib crate
+  over `imzero2`'s `browser` feature. The main crate is an rlib again; the
+  native hosts no longer link a shared library they never load. The
+  getrandom backend cfg stays in `build_rust_browser.sh`, because the repro
+  environment's `RUSTFLAGS` would replace any cargo config that set it.
+- `public/thestack/imzero2/browserhost` — the Go side: `Mount` (a
+  registered app over an in-process bus, the window host's shape minus the
+  window and the services), the wasip1 reactor exports behind `SetMain`,
+  `StepLoop`, and `InstallHostTransport`, the process-wide HTTP swap taken
+  deliberately by the binary rather than by an `init`. Its `web/` holds
+  the worker, the WASI shim and the dev server the page loads.
+- `public/thestack/cmd/imzero2tab` — the tab binary: the apps a tab may
+  open, one mounted by `-app`, the pipe natively, the reactor under wasm.
+- `scripts/dev/build_tab_bundle.sh` — a servable directory from all of the
+  above plus the viewer page and the fonts; the how-to is
+  [imzero2-in-the-browser](../howto/imzero2-in-the-browser.md).
+- The trial's spike is measurement again: scenes, consumers, the stub's
+  tables, and the reactor arm through `browserhost`.
+
+Two things the implementation taught, both now in the design: the render
+loop must yield to the scheduler around a frame on wasm (SD1 above says
+the worker owns the cadence; it also owns every other goroutine's chance
+to run, since the shim answers reads synchronously and nothing parks), and
+the host skips a pass whose mesh equals the last one posted, as the
+carrier does. What the tab still lacks is unchanged: the runtime services
+on the bus, live query progress, sealed files.
 
 ## References
 

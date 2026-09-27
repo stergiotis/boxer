@@ -224,7 +224,10 @@ The bridge is the same for both targets: fd 1 writes go synchronously into
 the stub module, its replies are queued and served to fd 0 reads. For
 `GOOS=js` that path is `syscall/js` and `wasm_exec.js`'s `fs` object; for
 `GOOS=wasip1` it is a hand-written `wasi_snapshot_preview1` import object
-(`harness/bridge.js`). Both arms run entirely inside one worker: no
+(`bridge.js` under
+[public/thestack/imzero2/browserhost/web](../../../public/thestack/imzero2/browserhost/web),
+where the tab's own worker lives since ADR-0263's acceptance; the harness
+copies it beside its page). Both arms run entirely inside one worker: no
 `SharedArrayBuffer`, no COOP/COEP headers.
 
 Standing hypotheses: **H1** the wasip1 fd path is byte-identical to the
@@ -253,21 +256,18 @@ browser engines differ materially from each other for this workload.
   and `Run` unchanged. The in-process arms bypass the transport by
   construction; they are reference points, not the product path.
 - **Browser arms** load a page (`harness/index.html`) whose module worker
-  runs the arm and POSTs its report to the serving host (`harness/serve.mjs`),
-  which prints it and exits; no DOM dumping, no virtual time. A sandboxed
-  browser must be able to see the throwaway profile directory
-  (`PROFILE_DIR`); one that cannot never loads the page.
-- **The demonstrator.** `harness/host_worker.mjs` runs both modules in a
-  worker — the Go module as a wasip1 reactor whose `frame` export the worker
-  calls per tick, yielding in between so the page's input arrives — and
-  posts each mesh message; the viewer page in `?worker=` mode paints them
-  and forwards its input. Serve a directory holding the page, the harness
-  files, `imzero2.wasm` and `wasmspike_wasip1_reactor.wasm` with
-  `serve.mjs`, open
-  `index.html?worker=host_worker.mjs%3Fscene%3Dgallery%26demo%3Dfibscope-explore`,
-  or screenshot it headless after real seconds with `cdp_shot.mjs`, which
-  can click first (Chromium needs `--enable-unsafe-swiftshader` for WebGL2
-  there).
+  runs the arm and POSTs its report to the serving host (the browserhost
+  package's `serve.mjs`), which prints it and exits; no DOM dumping, no
+  virtual time. A sandboxed browser must be able to see the throwaway
+  profile directory (`PROFILE_DIR`); one that cannot never loads the page.
+- **The demonstrator** is no longer the trial's: the shape it demonstrated
+  is built by `scripts/dev/build_tab_bundle.sh` and described in
+  [doc/howto/imzero2-in-the-browser.md](../../howto/imzero2-in-the-browser.md).
+  The reactor measurement arm still runs the spike as a wasip1 reactor
+  through the same `browserhost` exports. `cdp_shot.mjs` screenshots any
+  such page headless after real seconds and can click first (Chromium needs
+  `--enable-unsafe-swiftshader` for WebGL2 there); `mesh_count.mjs` counts
+  a native mesh appliance's wire from a viewer's seat.
 - **Reporting.** Each run appends a [logbook](./logbook.md) entry.
 
 ## 5 Findings ledger

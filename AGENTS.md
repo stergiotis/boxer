@@ -42,6 +42,7 @@ the linked document wins.
 | Ingest a markdown vault and query its graph, tags and properties | [doc/howto/markdown-facts-obsidian-queries.md](./doc/howto/markdown-facts-obsidian-queries.md) |
 | Draw a graph over a slippy map | [doc/howto/graph-on-a-map.md](./doc/howto/graph-on-a-map.md) |
 | Draw a gridded vector field (wind, currents) on a map | [doc/howto/vector-field-on-a-map.md](./doc/howto/vector-field-on-a-map.md) |
+| Run an app in a browser tab — build the bundle, serve it, what the tab lacks | [doc/howto/imzero2-in-the-browser.md](./doc/howto/imzero2-in-the-browser.md) |
 | Drive a running app, or write a headless scene that asserts and captures | [doc/skills/imzero2-drive/SKILL.md](./doc/skills/imzero2-drive/SKILL.md) |
 | Score renderings of a leeway batch — geometry metrics per candidate sink | [doc/howto/vizeval-score-renderings.md](./doc/howto/vizeval-score-renderings.md) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
