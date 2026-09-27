@@ -2,60 +2,12 @@
 
 package main
 
-import (
-	"strings"
-	"unsafe"
-)
+import "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost"
 
-// The reactor entry points (ADR-0077 O2). A host that built this command with
-// -buildmode=c-shared calls _initialize (package inits only: Go runs neither
-// main nor sees argv in that mode), writes the arguments NUL-separated into
-// the buffer argbuf names, calls setup with their length — which runs main's
-// body, and with -reactor returns once the application is set up — and then
-// frame per tick.
-
-// argBuf is a fixed, non-moving home for the arguments the host writes; Go's
-// collector does not move globals, so its address is stable.
-var argBuf [1 << 16]byte
-
-// argbuf returns the address and capacity of the argument buffer.
-//
-//go:wasmexport argbuf
-func argbuf() int32 {
-	return int32(uintptr(unsafe.Pointer(&argBuf[0])))
-}
-
-//go:wasmexport argcap
-func argcap() int32 {
-	return int32(len(argBuf))
-}
-
-// setup runs main's body on the n bytes of NUL-separated arguments in the
-// buffer. Returns 0 when the reactor loop is ready (frame may be called), 1
-// when the arguments ran a one-shot command instead.
-//
-//go:wasmexport setup
-func setup(n int32) int32 {
-	var args []string
-	if n > 0 {
-		args = strings.Split(string(argBuf[:n]), "\x00")
-	}
-	run(args)
-	if stepFn == nil {
-		return 1
-	}
-	return 0
-}
-
-// frame is the reactor's tick: one Step of the application. Returns 0 while
-// the loop continues and 1 once it has stopped and reported; -1 before setup.
-// Goroutines other than the render goroutine get their turn inside Step,
-// which yields to the scheduler around the frame on wasm targets.
-//
-//go:wasmexport frame
-func frame() int32 {
-	if stepFn == nil {
-		return -1
-	}
-	return stepFn()
+// The reactor arm (ADR-0263 SD1): a host that built this command with
+// -buildmode=c-shared writes the arguments into the buffer browserhost
+// exports and calls setup, which runs main's body on them; with -reactor
+// the body returns the per-tick step instead of running the loop itself.
+func init() {
+	browserhost.SetMain(run)
 }

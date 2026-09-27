@@ -42,7 +42,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -50,6 +49,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/browserhost"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
@@ -65,9 +65,6 @@ import (
 	// A real app that is a pure front end (no bus, no store) and registers
 	// its own tour demos: the browser demonstrator's first application.
 	_ "github.com/stergiotis/boxer/apps/fibscope"
-	_ "github.com/stergiotis/boxer/apps/mdedit"
-	_ "github.com/stergiotis/boxer/apps/play"
-	_ "github.com/stergiotis/boxer/apps/taskdemo"
 )
 
 // ---- fetch table -----------------------------------------------------------
@@ -431,10 +428,14 @@ func main() {
 	run(os.Args[1:])
 }
 
+// reactorStep is what the pipe consumer leaves behind under -reactor: the
+// per-tick step the host calls (browserhost.StepLoop).
+var reactorStep func() int32
+
 // run is main's body with the arguments passed in: a wasip1 reactor build
-// never runs main and sees no argv, so its setup export hands the same
-// arguments to this function (reactor_wasip1.go).
-func run(args []string) {
+// never runs main and sees no argv, so browserhost's setup export hands the
+// host's arguments to this function and calls what it returns per tick.
+func run(args []string) (step func() int32) {
 	app := &cli.App{
 		Name:    "wasmspike",
 		Usage:   "the Go frame producer of the keelson-wasm-frame-cost trial",
@@ -447,8 +448,7 @@ func run(args []string) {
 			&cli.StringFlag{Name: "target", Usage: "label for the report (native, js, wasip1)"},
 			&cli.StringFlag{Name: "consumer", Value: "pipe", Usage: "pipe | inproc"},
 			&cli.BoolFlag{Name: "lazyFlush", Value: true, Usage: "pipe: defer flushes to the next blocking read (the channel default); -lazyFlush=false flushes after every message"},
-			&cli.StringFlag{Name: "scene", Value: "gallery", Usage: "gallery | labels | app"},
-			&cli.StringFlag{Name: "app", Value: "github.com/stergiotis/boxer/apps/taskdemo", Usage: "app: the registered app id to mount (its package must be linked in)"},
+			&cli.StringFlag{Name: "scene", Value: "gallery", Usage: "gallery | labels"},
 			&cli.StringFlag{Name: "demo", Usage: "gallery: render only these registry demos (comma-separated, registry order); default the three tour packages' demos, `all` every demo linked in"},
 			&cli.Float64Flag{Name: "stackPad", Usage: "gallery: empty points above the first demo, to place a demo far down the stage"},
 			&cli.IntFlag{Name: "rows", Value: 200, Usage: "labels: rows in the grid"},
@@ -477,6 +477,7 @@ func run(args []string) {
 		fmt.Fprintln(os.Stderr, "wasmspike:", err)
 		os.Exit(1)
 	}
+	return reactorStep
 }
 
 func spike(ctx *cli.Context) (err error) {
@@ -504,8 +505,6 @@ func spike(ctx *cli.Context) (err error) {
 		sc = &galleryScene{only: ctx.String("demo"), pad: float32(ctx.Float64("stackPad"))}
 	case "labels":
 		sc = &labelsScene{rows: ctx.Int("rows")}
-	case "app":
-		sc = &appScene{id: app.AppIdT(ctx.String("app"))}
 	default:
 		return eb.Build().Str("scene", sceneName).Errorf("unknown scene")
 	}
@@ -619,27 +618,14 @@ func spike(ctx *cli.Context) (err error) {
 		app.Channel().SetDeferFlush(lazyFlush)
 		if ctx.Bool("reactor") {
 			// The host owns the cadence: the action returns after Begin and
-			// the exported frame function (reactor_wasip1.go) runs one Step
-			// per call, printing the report once the loop has stopped.
-			if err = app.Begin(); err != nil {
-				return
-			}
-			reported := false
-			stepFn = func() int32 {
-				more, e := app.Step()
-				if more {
-					return 0
+			// the host calls the step per tick, which prints the report once
+			// the loop has stopped.
+			reactorStep, err = browserhost.StepLoop(app, func(e error) {
+				if e != nil {
+					fmt.Fprintln(os.Stderr, "wasmspike:", e)
 				}
-				if !reported {
-					reported = true
-					if e != nil {
-						fmt.Fprintln(os.Stderr, "wasmspike:", e)
-					}
-					app.CloseAll()
-					printReport()
-				}
-				return 1
-			}
+				printReport()
+			})
 			return
 		}
 		if err = app.Run(); err != nil {
@@ -652,9 +638,6 @@ func spike(ctx *cli.Context) (err error) {
 	printReport()
 	return
 }
-
-// stepFn is the reactor's per-tick step, set by main when -reactor is on.
-var stepFn func() int32
 
 // printReport writes the RESULT line; set up by main once the samples,
 // counters and report are in place.

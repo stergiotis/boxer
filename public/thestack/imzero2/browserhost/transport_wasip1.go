@@ -1,6 +1,6 @@
 //go:build wasip1
 
-package main
+package browserhost
 
 import (
 	"bytes"
@@ -19,9 +19,7 @@ import (
 // crosses to the host as bytes and comes back as bytes (ADR-0077 SD9's
 // "custom http host import"). The host — the browser worker — performs it
 // synchronously against the page's origin, which is where a same-origin
-// proxy to ClickHouse lives; a Node host answers "no HTTP here". Installed
-// as http.DefaultTransport at init, so chclient, play's client and the
-// egress service, none of which set a Transport, all go this way.
+// proxy to ClickHouse lives; a Node host answers "no HTTP here".
 //
 // Wire (little-endian u32 lengths): request = method, url, headers as
 // "Name: value\n" lines, body. Response = status (0 = the host failed to
@@ -37,7 +35,13 @@ type hostTransport struct{}
 
 var _ http.RoundTripper = hostTransport{}
 
-func init() {
+// InstallHostTransport makes the host import the process's default HTTP
+// transport. It is a process-wide swap, taken deliberately and once by the
+// tab binary at start: chclient, play's client and the egress service set
+// no Transport of their own, so the default is the one seam through which
+// every request of theirs leaves the module. A client that did set a
+// Transport would dial and fail, since the module has no sockets.
+func InstallHostTransport() {
 	http.DefaultTransport = hostTransport{}
 }
 

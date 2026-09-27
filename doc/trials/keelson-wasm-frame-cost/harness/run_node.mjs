@@ -7,7 +7,7 @@
 // the bridge's own time and the wall time.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { loadHost, loadStub, runArm, startReactor } from './bridge.js';
+import { loadHost, loadStub, runArm, startReactor } from '../../../../public/thestack/imzero2/browserhost/web/bridge.js';
 
 const args = process.argv.slice(2);
 const opt = {};
@@ -49,6 +49,7 @@ if (!argv.includes('-stage')) argv.push('-stage', `${stage[0]}x${stage[1]}`);
 if (!argv.includes('-fetchTable')) argv.push('-fetchTable', table);
 let out;
 if (opt.reactor) {
+  argv.push('-reactor'); // the spike's setup returns after Begin under this flag
   // --reactor 1 with a c-shared wasip1 module: frames are driven from here
   const t0 = performance.now();
   const r = await startReactor({ goBytes, stub, argv, log: (l) => { if (!l.startsWith('RESULT ')) process.stderr.write(l + '\n'); } });

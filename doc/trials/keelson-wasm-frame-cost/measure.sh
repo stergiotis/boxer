@@ -87,12 +87,13 @@ else
 	cp "$root/rust/fffi2stub/target/wasm32-unknown-unknown/release/fffi2stub.wasm" "$work/fffi2stub.wasm"
 	# the real Rust host (M2), if its toolchain target is here
 	if (cd "$root/rust/imzero2" && ./build_rust_browser.sh >/dev/null 2>&1); then
-		cp "$root/rust/imzero2/target/browser/wasm32-unknown-unknown/release/imzero2.wasm" "$work/imzero2.wasm"
+		cp "$root/rust/imzero2/target/browser/wasm32-unknown-unknown/release/imzero2_browser.wasm" "$work/imzero2.wasm"
 	else
 		echo "measure.sh: the browser host did not build; host arms skipped" >&2
 	fi
 	cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$work/wasm_exec.js"
-	cp "$here/harness/"{index.html,worker.mjs,bridge.js,host_worker.mjs,package.json} "$work/"
+	cp "$here/harness/"{index.html,worker.mjs} "$work/"
+	cp "$root/public/thestack/imzero2/browserhost/web/"{bridge.js,package.json} "$work/"
 	"$work/wasmspike_native" -dumpFetchTable "$root/public/thestack/imzero2/egui2/bindings" > "$work/fetchtable.txt"
 	build_info="boxer $(cd "$root" && git rev-parse --short HEAD) (dirty: $(cd "$root" && git status --porcelain | grep -c .) paths), go $(go version | cut -d' ' -f3), rustc $(cd "$root/rust/fffi2stub" && rustc --version | cut -d' ' -f2), native $(uname -sm)"
 	echo "$build_info" > "$work/build-info.txt"
@@ -219,7 +220,7 @@ for scene in $SCENES; do
 			[[ $flush == host && ! -f "$work/imzero2.wasm" ]] && continue
 			arm=$browser-$target-pipe-$flush
 			out="$run/raw/$scene-$arm.txt"
-			node "$here/harness/serve.mjs" "$work" 0 > "$out" 2>&1 &
+			node "$root/public/thestack/imzero2/browserhost/web/serve.mjs" "$work" 0 > "$out" 2>&1 &
 			srv=$!
 			for _ in $(seq 1 50); do grep -q '^PORT ' "$out" 2>/dev/null && break; sleep 0.1; done
 			port=$(sed -n 's/^PORT //p' "$out")

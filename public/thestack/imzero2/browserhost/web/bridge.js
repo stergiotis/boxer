@@ -407,14 +407,16 @@ export async function startReactor({ goBytes, stub, argv, log, env }) {
   };
   const queue = makeQueue(stub, log || (() => {}));
   // Go runs neither main nor reads argv in a c-shared module: the arguments
-  // go NUL-separated into the buffer the module exports, and setup runs
-  // main's body on them.
+  // go NUL-separated into the buffer the module exports, and setup runs the
+  // entry the module registered on them (browserhost.SetMain). A module
+  // that needs a flag to know it is a reactor (the trial's spike) gets it
+  // from the caller's argv.
   const wasi = makeWasi(queue, stderr, ['wasmspike'], env || []);
   const module = await WebAssembly.compile(goBytes);
   const instance = await WebAssembly.instantiate(module, wasiImportsFor(module, wasi));
   wasi.setMemory(instance.exports.memory);
   instance.exports._initialize();
-  const args = new TextEncoder().encode([...argv, '-reactor'].join('\0'));
+  const args = new TextEncoder().encode(argv.join('\0'));
   if (args.length > instance.exports.argcap()) throw new Error('reactor: arguments exceed the module\'s buffer');
   new Uint8Array(instance.exports.memory.buffer).set(args, instance.exports.argbuf());
   const ready = instance.exports.setup(args.length);

@@ -1,25 +1,31 @@
-// The worker behind the viewer page's ?worker= mode: the Go application
-// (wasmspike, GOOS=wasip1 as a reactor) and the Rust browser host as two wasm
-// modules on this one thread, joined by the fd 0/1 shim in bridge.js. The
-// worker owns the cadence: it calls the Go module's frame export per tick
-// and yields in between, which is when the page's input arrives; each
-// rendered frame's mesh messages are posted to the page, which paints them
-// with the painter it already has. Query parameters of this module's URL
-// select the scene (`scene`, `rows`, `demo`; `app` names the registered app
-// the `app` scene mounts), the stage (`stage`) and the module's environment
-// (`env=NAME=value`, repeatable); `log=1` forwards the module's stderr to the
-// server.
+// The worker behind the viewer page's ?worker= mode (ADR-0263): the Go tab
+// host (imzero2tab, GOOS=wasip1 as a reactor) and the Rust browser host as
+// two wasm modules on this one thread, joined by the fd 0/1 shim in
+// bridge.js. The worker owns the cadence: it calls the Go module's frame
+// export per tick and yields in between, which is when the page's input
+// arrives; each rendered frame's wire messages are posted to the page, which
+// paints them with the painter it already has.
+//
+// Query parameters of this module's URL:
+//   app=<id>            the registered app to mount (the module's default otherwise)
+//   module=<file>       the Go module (default imzero2tab.wasm); host=<file> the
+//                       Rust host (default imzero2_browser.wasm)
+//   arg=<flag>          extra module arguments, repeatable
+//   env=NAME=value      the module's environment, repeatable; CLICKHOUSE_URL
+//                       defaults to <origin>/ch/, which serve.mjs proxies
+//   stage=WxH           the initial viewport in points (the page's resize
+//                       takes over)
+//   fps=, idle=, cadence=continuous   the cadence, see below
+//   <slot>Font=<url>    a font slot (main, mono, phosphor, fallback); default
+//                       ./fonts/<slot>.ttf, a failed fetch leaves egui's face
+//   log=1               forward the module's stderr to the server (POST ./log)
 //
 // The cadence is reactive (ADR-0077 SD6): after each frame the worker asks
 // the host how soon egui wants to run again — now for an animation or a
 // repaint request, which is also how the Go side asks for one — and sleeps
 // until then, at most `idle` ms (default 1000, the heartbeat) and at least
 // 1000/`fps` (default 60, the ceiling); input and session messages wake it
-// at once. `cadence=continuous` ticks at `fps` regardless, the measurement
-// shape. Fonts cross as bytes: each slot (`main`, `mono`,
-// `phosphor`, `fallback`) is fetched from `<slot>Font=<url>` when given,
-// else from `./fonts/<slot>.ttf`, and a slot whose fetch fails is left to
-// egui's default faces.
+// at once. `cadence=continuous` ticks at `fps` regardless.
 import { FONT_SLOTS, loadHost, startReactor } from './bridge.js';
 
 const q = new URL(self.location.href).searchParams;
@@ -38,8 +44,8 @@ try {
   const fontBytes = (slot) => fetch(q.get(`${slot}Font`) || `./fonts/${slot}.ttf`)
     .then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
   const [hostBytes, goBytes, ...fontList] = await Promise.all([
-    fetch('./imzero2.wasm').then((r) => r.arrayBuffer()),
-    fetch('./wasmspike_wasip1_reactor.wasm').then((r) => r.arrayBuffer()),
+    fetch(q.get('host') || './imzero2_browser.wasm').then((r) => r.arrayBuffer()),
+    fetch(q.get('module') || './imzero2tab.wasm').then((r) => r.arrayBuffer()),
     ...FONT_SLOTS.map(fontBytes),
   ]);
   const fonts = Object.fromEntries(FONT_SLOTS.map((slot, i) => [slot, fontList[i]]));
@@ -65,11 +71,8 @@ try {
     wake();
   };
   sendHello();
-  const argv = ['-consumer', 'pipe', '-scene', q.get('scene') || 'gallery', '-rows', q.get('rows') || '200',
-    '-frames', q.get('frames') || '1000000', '-warmup', '0', '-stage', `${stage[0]}x${stage[1]}`, '-target', 'wasip1', '-arm', 'viewer-worker'];
-  if (q.get('demo')) argv.push('-demo', q.get('demo'));
+  const argv = [...q.getAll('arg')];
   if (q.get('app')) argv.push('-app', q.get('app'));
-  if (!continuous) argv.push('-continuous=false');
   // The module's environment: every `env=NAME=value` parameter, plus the
   // page's origin as the ClickHouse endpoint unless one is given — the
   // server behind the page proxies /ch/ to ClickHouse (serve.mjs), which is
