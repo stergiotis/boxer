@@ -224,7 +224,7 @@ The bridge is the same for both targets: fd 1 writes go synchronously into
 the stub module, its replies are queued and served to fd 0 reads. For
 `GOOS=js` that path is `syscall/js` and `wasm_exec.js`'s `fs` object; for
 `GOOS=wasip1` it is a hand-written `wasi_snapshot_preview1` import object
-(`bridge.js` under
+(`bridge.mjs` under
 [public/thestack/imzero2/browserhost/web](../../../public/thestack/imzero2/browserhost/web),
 where the tab's own worker lives since ADR-0263's acceptance; the harness
 copies it beside its page). Both arms run entirely inside one worker: no

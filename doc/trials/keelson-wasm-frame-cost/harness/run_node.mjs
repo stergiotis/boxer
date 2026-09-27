@@ -7,7 +7,7 @@
 // the bridge's own time and the wall time.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { loadHost, loadStub, runArm, startReactor } from '../../../../public/thestack/imzero2/browserhost/web/bridge.js';
+import { loadHost, loadStub, runArm, startReactor } from '../../../../public/thestack/imzero2/browserhost/web/bridge.mjs';
 
 const args = process.argv.slice(2);
 const opt = {};

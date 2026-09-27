@@ -31,7 +31,7 @@ echo "bundle: the Go tab host (wasip1 reactor)" >&2
 echo "bundle: the Rust browser host (wasm32 cdylib)" >&2
 (cd "$root/rust/imzero2" && ./build_rust_browser.sh >/dev/null)
 cp "$root/rust/imzero2/target/browser/wasm32-unknown-unknown/release/imzero2_browser.wasm" "$out/"
-cp "$root/public/thestack/imzero2/browserhost/web/"{bridge.js,worker.mjs,package.json} "$out/"
+cp "$root/public/thestack/imzero2/browserhost/web/"{bridge.mjs,worker.mjs} "$out/"
 cp "$root/rust/imzero2/src/imzero2/viewer/index.html" "$out/index.html"
 
 # shellcheck source=/dev/null

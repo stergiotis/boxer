@@ -1,9 +1,9 @@
 // Worker of the browser host: loads the stub and the Go module, runs one arm
-// through bridge.js entirely off the main thread, and posts the report. The
+// through bridge.mjs entirely off the main thread, and posts the report. The
 // run blocks this worker for its whole duration; the page stays responsive.
-// bridge.js is copied beside this file into the served directory by
+// bridge.mjs is copied beside this file into the served directory by
 // measure.sh from public/thestack/imzero2/browserhost/web/.
-import { loadHost, loadStub, runArm } from './bridge.js';
+import { loadHost, loadStub, runArm } from './bridge.mjs';
 
 // The report also goes to the serving host (serve.mjs), which is how a
 // headless run collects it without reading the DOM.

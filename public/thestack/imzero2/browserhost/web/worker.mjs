@@ -1,7 +1,7 @@
 // The worker behind the viewer page's ?worker= mode (ADR-0263): the Go tab
 // host (imzero2tab, GOOS=wasip1 as a reactor) and the Rust browser host as
 // two wasm modules on this one thread, joined by the fd 0/1 shim in
-// bridge.js. The worker owns the cadence: it calls the Go module's frame
+// bridge.mjs. The worker owns the cadence: it calls the Go module's frame
 // export per tick and yields in between, which is when the page's input
 // arrives; each rendered frame's wire messages are posted to the page, which
 // paints them with the painter it already has.
@@ -26,7 +26,7 @@
 // until then, at most `idle` ms (default 1000, the heartbeat) and at least
 // 1000/`fps` (default 60, the ceiling); input and session messages wake it
 // at once. `cadence=continuous` ticks at `fps` regardless.
-import { FONT_SLOTS, loadHost, startReactor } from './bridge.js';
+import { FONT_SLOTS, loadHost, startReactor } from './bridge.mjs';
 
 const q = new URL(self.location.href).searchParams;
 const stage = (q.get('stage') || '1024x600').split('x').map(Number);

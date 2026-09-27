@@ -94,7 +94,7 @@ else
 	fi
 	cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$work/wasm_exec.js"
 	cp "$here/harness/"{index.html,worker.mjs} "$work/"
-	cp "$root/public/thestack/imzero2/browserhost/web/"{bridge.js,package.json} "$work/"
+	cp "$root/public/thestack/imzero2/browserhost/web/"bridge.mjs "$work/"
 	# the page's server for the browser arms (imzero2tab serve)
 	"$work/wasmspike_native" -dumpFetchTable "$root/public/thestack/imzero2/egui2/bindings" > "$work/fetchtable.txt"
 	build_info="boxer $(cd "$root" && git rev-parse --short HEAD) (dirty: $(cd "$root" && git status --porcelain | grep -c .) paths), go $(go version | cut -d' ' -f3), rustc $(cd "$root/rust/fffi2stub" && rustc --version | cut -d' ' -f2), native $(uname -sm)"
