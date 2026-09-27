@@ -8,6 +8,14 @@
 // scripts/dev/build_tab_bundle.sh. Natively it runs the same app against a
 // client binary over the pipe, which is how the tab's Go side is exercised
 // without a browser, and its `serve` subcommand serves a bundle.
+//
+// It is its own `package main`, against the standard's preference for a
+// subcommand of ./boxer.sh, for the same reason the desktop host is: the
+// binary is the shipped artifact. A wasm module is what this command
+// compiles to, and boxer's tree does not compile for wasm and should not
+// be asked to. It keeps the standard's other half — a urfave/cli app with
+// the shared logging and version wiring — so the entry-point audit passes
+// it on its merits, not by baseline.
 package main
 
 import (

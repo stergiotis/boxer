@@ -36,6 +36,9 @@ type ServeConfig struct {
 	// posting their result — end the server after printing the body;
 	// off, the body is printed and serving continues.
 	ExitOnReport bool
+	// OnListen, when set, is told the bound address before the first
+	// request is served (tests; a caller that asked for port 0).
+	OnListen func(addr net.Addr)
 }
 
 // Serve serves a tab bundle: the directory's files with no caching, `/ch/`
@@ -116,6 +119,9 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	fmt.Fprintf(os.Stdout, "PORT %d\n", ln.Addr().(*net.TCPAddr).Port)
+	if cfg.OnListen != nil {
+		cfg.OnListen(ln.Addr())
+	}
 	logger.Info().Str("addr", ln.Addr().String()).Str("dir", cfg.Dir).Str("clickhouse", cfg.ChURL).Msg("tab: serving")
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
