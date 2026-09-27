@@ -1,3 +1,7 @@
+// Package llmclient adapts openaichat to the orchestrator's LLMClientI and
+// ToolClientI, and maps the orchestrator's messages and tools onto the
+// client's for callers that reach a model some other way (play, through
+// the host's llm service).
 package llmclient
 
 import (
@@ -7,12 +11,12 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/orchestrator"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // OpenAIChatClient adapts openaichat.Client to orchestrator.LLMClientI.
 // Use it to drive text2sql2 against any OpenAI-compatible endpoint — LM
-// Studio, Gemini's OpenAI shim, or a litellm bridge — while keeping the
-// existing OllamaClient for /api/chat servers.
+// Studio, Ollama's /v1, Gemini's OpenAI shim, or a litellm bridge.
 //
 // Zero-value usage is invalid; construct via NewOpenAIChatClient.
 type OpenAIChatClient struct {
@@ -85,9 +89,10 @@ var _ orchestrator.ToolClientI = (*OpenAIChatClient)(nil)
 // ride the request, the model's calls come back, and a replayed tool turn
 // keeps its call id.
 func (inst *OpenAIChatClient) ChatTools(ctx context.Context, model string, messages []orchestrator.Message, tools []orchestrator.Tool) (response string, calls []orchestrator.ToolCall, err error) {
-	wireMessages := make([]openaichat.Message, 0, len(messages))
-	for _, m := range messages {
-		wireMessages = append(wireMessages, WireMessage(m))
+	var wireMessages []openaichat.Message
+	wireMessages, err = WireMessages(messages)
+	if err != nil {
+		return
 	}
 	var resp openaichat.CompletionResponse
 	resp, err = inst.client.Complete(ctx, openaichat.CompletionRequest{
@@ -108,12 +113,22 @@ func (inst *OpenAIChatClient) ChatTools(ctx context.Context, model string, messa
 	return
 }
 
-// WireMessage maps an orchestrator message onto the client's, tool turns
-// and tool calls included.
-func WireMessage(m orchestrator.Message) (out openaichat.Message) {
-	out = openaichat.Message{Role: translateRole(m.Role), Content: m.Content, ToolCallId: m.ToolCallId}
-	for _, c := range m.ToolCalls {
-		out.ToolCalls = append(out.ToolCalls, openaichat.ToolCall{Id: c.Id, Name: c.Name, Arguments: c.Arguments})
+// WireMessages maps orchestrator messages onto the client's, tool turns
+// and tool calls included. An unknown role is refused rather than
+// defaulted: a message sent under the wrong role is a prompt injection the
+// reader never sees.
+func WireMessages(messages []orchestrator.Message) (out []openaichat.Message, err error) {
+	out = make([]openaichat.Message, 0, len(messages))
+	for i, m := range messages {
+		role, ok := translateRole(m.Role)
+		if !ok {
+			return nil, eb.Build().Int("index", i).Str("role", m.Role).Errorf("llmclient: unknown chat role")
+		}
+		wm := openaichat.Message{Role: role, Content: m.Content, ToolCallId: m.ToolCallId}
+		for _, c := range m.ToolCalls {
+			wm.ToolCalls = append(wm.ToolCalls, openaichat.ToolCall{Id: c.Id, Name: c.Name, Arguments: c.Arguments})
+		}
+		out = append(out, wm)
 	}
 	return
 }
@@ -135,19 +150,20 @@ func CallsOf(calls []openaichat.ToolCall) (out []orchestrator.ToolCall) {
 }
 
 // translateRole maps text2sql2's stringly-typed orchestrator.Message.Role
-// onto openaichat.ChatRoleE. Unknown strings fall through to "user" — the
-// safer default when the orchestrator emits a role we have not yet
-// catalogued (it would otherwise be silently dropped).
-func translateRole(role string) (out openaichat.ChatRoleE) {
+// onto openaichat.ChatRoleE.
+func translateRole(role string) (out openaichat.ChatRoleE, ok bool) {
+	ok = true
 	switch role {
 	case "system":
 		out = openaichat.ChatRoleSystem
+	case "user":
+		out = openaichat.ChatRoleUser
 	case "assistant":
 		out = openaichat.ChatRoleAssistant
 	case "tool":
 		out = openaichat.ChatRoleTool
 	default:
-		out = openaichat.ChatRoleUser
+		ok = false
 	}
 	return
 }

@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/llmclient"
 	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/orchestrator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
+	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
 // The corpus gate (the sqlapplet §SD6 pattern): play's prompt book is held
@@ -51,16 +53,23 @@ func TestFixInput(t *testing.T) {
 	assert.NotContains(t, fixInput("SELECT 1", " "), "The error:")
 }
 
-// The orchestrator's roles map onto the client's, and an unknown role is
-// refused rather than sent as the user.
-func TestChatMessage(t *testing.T) {
-	for _, role := range []string{"system", "user", "assistant"} {
-		_, ok := chatMessage(orchestrator.Message{Role: role, Content: "x"})
-		assert.True(t, ok, role)
-	}
-	_, ok := chatMessage(orchestrator.Message{Role: "tool", Content: "x"})
-	assert.False(t, ok)
-	_, err := modelChat{}.Chat(context.Background(), "m", []orchestrator.Message{{Role: "weird"}})
+// The orchestrator's roles map onto the client's — tool turns and the
+// calls they answer included, since the tool loop replays both — and an
+// unknown role is refused rather than sent as the user.
+func TestChatMessages(t *testing.T) {
+	msgs, err := llmclient.WireMessages([]orchestrator.Message{
+		{Role: "system", Content: "s"},
+		{Role: "user", Content: "u"},
+		{Role: "assistant", ToolCalls: []orchestrator.ToolCall{{Id: "c1", Name: "list_tables", Arguments: "{}"}}},
+		{Role: "tool", Content: "t", ToolCallId: "c1"},
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 4)
+	assert.Equal(t, openaichat.ChatRoleTool, msgs[3].Role)
+	assert.Equal(t, "c1", msgs[3].ToolCallId)
+	require.Len(t, msgs[2].ToolCalls, 1)
+	assert.Equal(t, "list_tables", msgs[2].ToolCalls[0].Name)
+	_, err = modelChat{}.Chat(context.Background(), "m", []orchestrator.Message{{Role: "weird"}})
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "unknown chat role"))
 }

@@ -40,7 +40,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
-	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -403,34 +402,7 @@ type modelChat struct {
 }
 
 func (inst modelChat) Chat(ctx context.Context, _ string, messages []orchestrator.Message) (response string, err error) {
-	req := llm.Request{Purpose: inst.purpose, Sensitivity: inst.sensitivity, Temperature: inst.temperature, MaxTokens: inst.maxTokens}
-	for _, msg := range messages {
-		om, ok := chatMessage(msg)
-		if !ok {
-			return "", eb.Build().Str("role", msg.Role).Errorf("model: unknown chat role")
-		}
-		req.Messages = append(req.Messages, om)
-	}
-	res, err := inst.cli.Complete(ctx, req)
-	if err != nil {
-		return
-	}
-	response = res.Content
-	return
-}
-
-// chatMessage maps the orchestrator's stringly-typed role onto the client's.
-// An unknown role is refused rather than defaulted: a message sent under the
-// wrong role is a prompt injection the reader never sees.
-func chatMessage(msg orchestrator.Message) (out openaichat.Message, ok bool) {
-	switch msg.Role {
-	case "system":
-		return openaichat.Message{Role: openaichat.ChatRoleSystem, Content: msg.Content}, true
-	case "user":
-		return openaichat.Message{Role: openaichat.ChatRoleUser, Content: msg.Content}, true
-	case "assistant":
-		return openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: msg.Content}, true
-	}
+	response, _, err = inst.ChatTools(ctx, "", messages, nil)
 	return
 }
 
@@ -609,12 +581,9 @@ func (inst *PlayApp) modelSummaryLine() (s string) {
 // modelTools — never in the service.
 func (inst modelChat) ChatTools(ctx context.Context, _ string, messages []orchestrator.Message, tools []orchestrator.Tool) (response string, calls []orchestrator.ToolCall, err error) {
 	req := llm.Request{Purpose: inst.purpose, Sensitivity: inst.sensitivity, Temperature: inst.temperature, MaxTokens: inst.maxTokens}
-	for _, msg := range messages {
-		om, ok := chatMessage(msg)
-		if !ok {
-			return "", nil, eb.Build().Str("role", msg.Role).Errorf("model: unknown chat role")
-		}
-		req.Messages = append(req.Messages, om)
+	req.Messages, err = llmclient.WireMessages(messages)
+	if err != nil {
+		return
 	}
 	req.Tools = llmclient.WireTools(tools)
 	res, err := inst.cli.Complete(ctx, req)
