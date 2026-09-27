@@ -184,6 +184,16 @@ read the same stream. In the tab the host is stepped once a frame instead
 of 24 times; what that is worth on a loaded handheld the trial's logbook
 records as small (about 0.2 ms in Node, 1 to 2 ms in Chromium).
 
+SD8 and SD9 have a first cut as of 2026-09-27: the four Linux-only corners
+the sweep found (fsbroker's inotify, sealed's O_TMPFILE, the disk
+collector's statfs, the Graphviz engine) sit behind build tags with
+fallbacks, so play and mdedit compile for wasip1; and the data plane is a
+same-origin proxy in front of ClickHouse plus one host import that
+`http.DefaultTransport` is swapped to under wasip1 — the "custom http host
+import" SD2 named. play ran a query in a tab that way. What the tab still
+lacks — live progress, the runtime services, sealed files — is listed in
+the trial's logbook.
+
 ### 2026-09-21 — `wasm2go` surveyed as an O5 mechanism: an AOT translator, not a sandbox
 
 Firefox's library sandboxing uses `wasm2c`, so the Go-native analogue — [`goccy/wasm2go`](https://github.com/goccy/wasm2go) (AOT wasm→Go, MIT) — was examined as an O5 mechanism that would need no cgo. It does not carry the property the option is named for, and the reason is a stated design choice rather than an immaturity: its codegen drops the runtime bounds check. The rationale is written into `internal/codegen/emit_memops.go` under its "Bounds check" heading — the input wasm is taken as already validated and the source language as having enforced its own bounds, so an out-of-range address counts as a bug in the input rather than a trap path. Scalar accesses compile to `unsafe.Add` on the linear-memory base pointer, which is an ordinary Go slice with no guard-page reservation (its SIMD check-coalescing pass states outright that an AOT translation cannot use guard pages). An out-of-range guest address is therefore a Go-heap access. SIMD and bulk-memory ops do keep an explicit compare against the memory size; the scalar path — the overwhelming majority of accesses in the module measured below — does not.

@@ -110,6 +110,13 @@ is worth about 0.2 ms a frame in Node and 1 to 2 ms of a 45 ms gallery
 frame in headless Chromium, less than the 0.7 ms M2 attributed to the
 steps by subtraction. The logbook entry has the pairs.
 
+**Real apps in the tab** (2026-09-27, handheld, functional, no numbers):
+with the four Linux-only corners behind build tags and one host import for
+HTTP, taskdemo, mdedit and play mount in the browser worker on an
+in-process bus, and play's Run returned 50 rows in 74 ms from ClickHouse
+through a same-origin proxy. The logbook entry lists what the tab still
+lacks.
+
 **What this trial does not say.**
 
 - **Not "the browser tier costs 4× the desktop."** The stub interprets

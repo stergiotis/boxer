@@ -411,3 +411,56 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
   the pass itself.
 - **Results:** no run directory; the paired numbers above were read from
   the `ARM` lines of this session's runs.
+
+## 2026-09-27 — M3, keelson apps in the tab — taskdemo, mdedit and play mount on an in-process bus; play queries ClickHouse through the page's origin
+
+- **Build under test:** the tree at the SD3 entry plus: the spike's `app`
+  scene (a registered AppI mounted the way the window host does, over an
+  inprocbus client with the app's own caps); the four Linux-only corners
+  behind build tags (fsbroker's inotify, sealed's O_TMPFILE, the disk
+  collector's statfs, the Graphviz engine) and hostboot's rlimit, so play
+  and mdedit compile for wasip1; the reactor's tick yielding to the
+  scheduler; a wasip1-only `http.DefaultTransport` that crosses to the
+  host as bytes, answered by a synchronous XMLHttpRequest in the worker;
+  chserver's raw-socket progress transport falling back to the stock
+  client under wasm; the static server proxying `/ch/` to ClickHouse and
+  the worker handing the module `CLICKHOUSE_URL=<origin>/ch/` and any
+  `env=` it is given.
+- **Environment:** the handheld, `powersave`, other sessions active,
+  Chromium 144 headless with software WebGL, a local ClickHouse server.
+- **Attempted:** (1) taskdemo mounted, a task started by a DevTools click;
+  (2) mdedit mounted; (3) play mounted with a seed query, the Docs pane's
+  lookups, then Run by a click.
+- **Findings:**
+  - **[pain boxer-toolbelt → proposed:go-wasm-toolchain / time-behaviour / S2]**
+    under the reactor a goroutine other than the render goroutine never
+    ran: the render goroutine never parks (the shim answers its reads
+    synchronously), and between exports the runtime is suspended, so a
+    task producer's `time.Sleep` never returned. Yielding to the scheduler
+    a few rounds before and after each frame is enough: expired timers fire
+    and bus handlers run inside the tick. With it taskdemo's task advanced
+    (22 %, 200 items/s, 3 s left) and the monitor followed at the reactive
+    cadence.
+  - **[positive boxer-toolbelt → proposed:keelson-browser-wasm / portability / —]**
+    play mounts in the tab as it is: the dock, the editor with the seeded
+    SQL, the panes, the Docs lookups against `system.tables` through the
+    proxy, and a Run that returned 50 rows in 74 ms into the Table and
+    Detail panes. Nothing in play changed; the transport swap is one
+    RoundTripper and the progress fallback.
+  - **[pain boxer-toolbelt → proposed:keelson-browser-wasm / functional-completeness / S3]**
+    what the tab does not have: live progress (the raw-socket transport
+    has no wasm form), the runtime services (persist, appstate, fsbroker,
+    adhocdata, clipboard — a bus request to any of them times out), sealed
+    files, layered graph layouts, and every app that needs one of those at
+    Mount. Auto-run of the seed SQL was not exercised (the capture's URL
+    lacked the flag); the Run click was.
+  - **[neutral boxer-toolbelt → proposed:keelson-wasm-trial / — / —]**
+    the demonstrator's worker now forwards the module's stderr to the
+    server on `log=1`, since a worker's console is out of a headless
+    capture's reach.
+- **Outcome:** ADR-0077's Phase 3 shape exists as a demonstrator: the
+  build-tag sweep (SD8) compiles play for wasm, the data plane (SD9) is a
+  same-origin proxy plus one host import, and three real apps run in the
+  tab from the existing viewer page. No numbers were taken; the arms
+  above are functional checks.
+- **Results:** no run directory; the captures are not kept.

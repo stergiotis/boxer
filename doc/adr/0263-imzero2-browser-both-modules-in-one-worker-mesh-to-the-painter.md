@@ -191,7 +191,9 @@ across threads.
   dependency, which is also the smallest surface to keep compiling for
   wasm32.
 - The trial's demonstrator exists in this shape, so the gate figures in
-  its §0 describe the decided topology and not a proxy for it.
+  its §0 describe the decided topology and not a proxy for it; three real
+  apps — taskdemo, mdedit and play, the last querying ClickHouse through
+  the page's origin — run in it from the existing viewer page.
 
 ### Negative
 
