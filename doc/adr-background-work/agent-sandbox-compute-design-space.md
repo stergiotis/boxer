@@ -1,13 +1,13 @@
 ---
 type: explanation
 audience: package maintainer
-status: draft
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+status: stable
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-27
 ---
 
-> **Status: draft — pre-human-review.** Compiled 2026-09-27. Nothing here is a
-> decision, and no boxer work is proposed. This is a clean-room survey. It
+> **Provenance.** Compiled 2026-09-27. Nothing here is a decision, and no
+> boxer work is proposed. This is a clean-room survey. It
 > rests on papers, product documentation, engineering blogs, security
 > advisories and project design documents read on that date, partly through
 > delegated passes that opened no implementation source of any surveyed
