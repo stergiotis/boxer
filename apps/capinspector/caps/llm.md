@@ -39,6 +39,10 @@ res, err := inst.model.Complete(ctx, llm.Request{
   owns the model and the endpoint; a request carries neither.
   `llm.cancel` is a publish that stops the sender's own completion in
   flight; the typed client sends it when the caller's context is cancelled.
+  `llm.retain.complete` is `complete` whose conversation the host keeps
+  ([ADR-0264](../../../doc/adr/0264-retained-model-conversations-on-facts.md));
+  it has two tokens, so no `llm.*` grant covers it and an app declares
+  `llm.RetainCaps(reason)` beside `ClientCaps`.
 - **Backends.** One service, under the id `runtime.llm`, over the
   repository's one chat-completion client, configured once by
   `BOXER_LLM_ENDPOINT`, `BOXER_LLM_MODEL`, `BOXER_LLM_APIKEY`,
@@ -61,8 +65,15 @@ res, err := inst.model.Complete(ctx, llm.Request{
 
 - `keelson('llm_calls')` — every completion this process answered or
   refused: app, purpose, sensitivity, model, sizes, tokens, elapsed, how it
-  ended. Prompt and completion text only under `BOXER_LLM_KEEP_MESSAGES`,
-  and only here; the same row without the text lands on `boxer.facts` as
-  the `llmCall` kind wherever the host's persist backend reaches it.
+  ended. Prompt and completion text only at `BOXER_LLM_RETAIN=ring` or
+  above, and only here; the same row without the text lands on
+  `boxer.facts` as the `llmCall` kind wherever the host's persist backend
+  reaches it.
+- `boxer.facts`, kind `llmMessage` — the messages of retained requests, one
+  row per message, only what is new since the call's parent, at
+  `BOXER_LLM_RETAIN=durable`. Read with SQL; no verb reads it back. The
+  text is kept until removed by hand: `llmfacts.DitchMessagesSQL` removes
+  all of it, or one app's, and leaves the `llmCall` rows — the way to check
+  an app does not rely on it.
 - `keelson('llm_prompts')` — every registered prompt document: what a
   model may be asked to do here. `purpose` is `book/slug` on both tables.

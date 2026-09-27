@@ -381,6 +381,34 @@ var (
 	MembVizevalCriterion         = NkRegistry.MustBegin("vizevalCriterion", 147).End()
 	MembVizevalPreference        = NkRegistry.MustBegin("vizevalPreference", 148).End()
 	MembVizevalWhy               = NkRegistry.MustBegin("vizevalWhy", 149).End()
+
+	// retained model conversations (ADR-0264) — the llmCall row gains the
+	// conversation it belongs to, the call it continues, where its kept
+	// messages start and the hash over its history; the text is a kind of
+	// its own, one boxer.facts row per message, apart from the counts so it
+	// can be ditched without touching them (§SD6). Content and reasoning
+	// are text; the reply's tool calls and the image digests string arrays.
+	MembLlmCallConversation    = NkRegistry.MustBegin("llmCallConversation", 150).End()
+	MembLlmCallParent          = NkRegistry.MustBegin("llmCallParent", 151).End()
+	MembLlmCallRetainedFrom    = NkRegistry.MustBegin("llmCallRetainedFrom", 152).End()
+	MembLlmCallHistoryHash     = NkRegistry.MustBegin("llmCallHistoryHash", 153).End()
+	MembKindLlmMessage         = NkRegistry.MustBegin("runtimeKindLlmMessage", 154).End()
+	MembLlmMessageCallId       = NkRegistry.MustBegin("llmMessageCallId", 155).End()
+	MembLlmMessageConversation = NkRegistry.MustBegin("llmMessageConversation", 156).End()
+	MembLlmMessageApp          = NkRegistry.MustBegin("llmMessageApp", 157).End()
+	MembLlmMessageSensitivity  = NkRegistry.MustBegin("llmMessageSensitivity", 158).End()
+	MembLlmMessageOrdinal      = NkRegistry.MustBegin("llmMessageOrdinal", 159).End()
+	MembLlmMessageRole         = NkRegistry.MustBegin("llmMessageRole", 160).End()
+	MembLlmMessageContent      = NkRegistry.MustBegin("llmMessageContent", 161).End()
+	MembLlmMessageReasoning    = NkRegistry.MustBegin("llmMessageReasoning", 162).End()
+	MembLlmMessageToolCallId   = NkRegistry.MustBegin("llmMessageToolCallId", 163).End()
+	MembLlmMessageToolCalls    = NkRegistry.MustBegin("llmMessageToolCalls", 164).End()
+	MembLlmMessageImages       = NkRegistry.MustBegin("llmMessageImages", 165).End()
+	// A retained call's declared omission (ADR-0264 §SD3): the range of the
+	// logical conversation the request left out, so the model saw a window
+	// and the kept rows still continue the conversation.
+	MembLlmCallOmitFrom = NkRegistry.MustBegin("llmCallOmitFrom", 166).End()
+	MembLlmCallOmitTo   = NkRegistry.MustBegin("llmCallOmitTo", 167).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -414,6 +442,11 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembLlmCallModel, MembLlmCallEndpointHost, MembLlmCallMessages, MembLlmCallTools, MembLlmCallPromptBytes,
 	MembLlmCallCompletionBytes, MembLlmCallInputTokens, MembLlmCallOutputTokens, MembLlmCallToolCalls,
 	MembLlmCallFinishReason, MembLlmCallElapsedMs, MembLlmCallIncomplete, MembLlmCallRefused, MembLlmCallError,
+	MembLlmCallConversation, MembLlmCallParent, MembLlmCallRetainedFrom, MembLlmCallHistoryHash,
+	MembKindLlmMessage, MembLlmMessageCallId, MembLlmMessageConversation, MembLlmMessageApp, MembLlmMessageSensitivity,
+	MembLlmMessageOrdinal, MembLlmMessageRole, MembLlmMessageContent, MembLlmMessageReasoning,
+	MembLlmMessageToolCallId, MembLlmMessageToolCalls, MembLlmMessageImages,
+	MembLlmCallOmitFrom, MembLlmCallOmitTo,
 	MembKindVizevalScore, MembVizevalScenario, MembVizevalCandidateId, MembVizevalSink, MembVizevalCandidate,
 	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
 	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,

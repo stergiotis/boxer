@@ -184,7 +184,7 @@ func TestConfigFromEnvGatesOnEndpointAndModel(t *testing.T) {
 	assert.True(t, cfg.Configured())
 	assert.Equal(t, int32(4096), cfg.MaxTokens)
 	assert.Equal(t, 120*time.Second, cfg.Timeout)
-	assert.False(t, cfg.KeepMessages)
+	assert.Equal(t, RetainOff, cfg.Retain, "text is not kept unless the deployment says so")
 }
 
 // The durable row carries the counts and the verdict and never the text,

@@ -1,6 +1,10 @@
 package llmfacts
 
-import "time"
+import (
+	"time"
+
+	"github.com/stergiotis/boxer/public/functional/option"
+)
 
 // LlmCall is one completion as a `boxer.facts` row (ADR-0254 §SD4). Id is
 // the xxh3 of the call id and NaturalKey the call id, so the row is
@@ -45,4 +49,19 @@ type LlmCall struct {
 	// when there is one, none otherwise — the string section is array-valued,
 	// the log kind's shape.
 	Error []string `lw:"llmCallError,stringArray"`
+
+	// The retained-conversation fields (ADR-0264 §SD2/§SD3), absent on a
+	// call that was not retained and on rows written before them.
+	// Conversation is the app's id for it; Parent the call this turn
+	// continues; RetainedFrom the ordinal its kept llmMessage rows start
+	// at (0 when the whole history was kept); HistoryHash the hash over the
+	// logical conversation after this call, one element when kept.
+	// OmitFrom and OmitTo are the range of the logical conversation the
+	// request declared it left out, when it did: the model saw the rest.
+	Conversation option.Option[string] `lw:"llmCallConversation,symbol"`
+	Parent       option.Option[string] `lw:"llmCallParent,symbol"`
+	RetainedFrom option.Option[uint32] `lw:"llmCallRetainedFrom,u32Array,unit"`
+	HistoryHash  []string              `lw:"llmCallHistoryHash,stringArray"`
+	OmitFrom     option.Option[uint32] `lw:"llmCallOmitFrom,u32Array,unit"`
+	OmitTo       option.Option[uint32] `lw:"llmCallOmitTo,u32Array,unit"`
 }

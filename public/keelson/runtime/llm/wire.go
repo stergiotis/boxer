@@ -14,7 +14,7 @@ import (
 // reader's benefit. The record that IS a flat row is the call fact
 // (introspect.go), and that one is a table.
 
-const wireVersion uint8 = 1
+const wireVersion uint8 = 2
 
 // wireRequest is the envelope on llm.complete: the caller's purpose and
 // sensitivity declaration, and the completion request minus what the
@@ -36,6 +36,14 @@ type wireRequest struct {
 	// DeadlineUnixNanos carries the caller's ctx deadline, since the
 	// handler has no ctx of its own. 0 means none.
 	DeadlineUnixNanos int64 `json:"deadline_ns,omitempty"`
+	// Conversation and ParentCallId tie a retained turn into its
+	// conversation (ADR-0264 §SD2); ignored on llm.complete.
+	Conversation string `json:"conversation,omitempty"`
+	ParentCallId string `json:"parent_call_id,omitempty"`
+	// OmitFrom and OmitTo declare the range of the logical conversation
+	// the request left out (ADR-0264 §SD3); OmitTo 0 is none.
+	OmitFrom uint32 `json:"omit_from,omitempty"`
+	OmitTo   uint32 `json:"omit_to,omitempty"`
 	// CancelKey is the requester's handle for llm.cancel; empty is a
 	// request that cannot be stopped early.
 	CancelKey string `json:"cancel_key,omitempty"`
@@ -76,6 +84,13 @@ type wireReply struct {
 	OutputTokens int32                 `json:"output_tokens,omitempty"`
 	Incomplete   bool                  `json:"incomplete,omitempty"`
 	ElapsedNs    int64                 `json:"elapsed_ns,omitempty"`
+	// CallId is the call's identity, what a retained turn's successor
+	// names as its parent.
+	CallId string `json:"call_id,omitempty"`
+	// Retention and RetentionReason are the verdict on a retained request
+	// (ADR-0264 §SD4).
+	Retention       uint8  `json:"retention,omitempty"`
+	RetentionReason string `json:"retention_reason,omitempty"`
 }
 
 // The failure kinds a reply can name, mapped back onto openaichat's

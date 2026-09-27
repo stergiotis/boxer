@@ -69,6 +69,24 @@ type Request struct {
 	Tools          []openaichat.Tool
 	ToolChoice     string
 	ResponseFormat *openaichat.ResponseFormat
+
+	// Retain sends the request on llm.retain.complete (ADR-0264): the host
+	// keeps the conversation where its BOXER_LLM_RETAIN ceiling is durable.
+	// Needs [RetainCaps] beside [ClientCaps]; the bus refuses it otherwise.
+	Retain bool
+	// Conversation is the app's id for the conversation, required with
+	// Retain. ParentCallId is the CallId of the reply this turn continues,
+	// empty on the first turn; the host then keeps only what is new.
+	Conversation string
+	ParentCallId string
+	// OmitFrom and OmitTo declare that the request leaves out messages
+	// [OmitFrom, OmitTo) of the conversation — positions in the whole
+	// conversation, not in Messages — to fit the model's context. Messages
+	// is then the conversation with that range removed, followed by what is
+	// new, and the host still keeps only what is new; an omission that does
+	// not match keeps the whole request. OmitTo 0 declares none.
+	OmitFrom int
+	OmitTo   int
 }
 
 // Response is one completion's answer. Tool calls come back unexecuted
@@ -86,7 +104,27 @@ type Response struct {
 	// there is, and err is nil.
 	Incomplete bool
 	Elapsed    time.Duration
+	// CallId is the call's identity: the next turn's ParentCallId.
+	CallId string
+	// Retention says whether a retained request's messages were kept, and
+	// RetentionReason why not (ADR-0264 §SD4).
+	Retention       RetentionE
+	RetentionReason string
 }
+
+// RetentionE is the verdict on a request's text.
+type RetentionE uint8
+
+const (
+	// RetentionNotAsked is a request sent on llm.complete.
+	RetentionNotAsked RetentionE = 0
+	// RetentionKept means the messages were flushed to boxer.facts before
+	// the reply was sent.
+	RetentionKept RetentionE = 1
+	// RetentionNotKept carries the reason: the ceiling, no durable backend,
+	// or a failed write.
+	RetentionNotKept RetentionE = 2
+)
 
 // RefusedError is a reply the service declined: no model, a confined
 // request against a remote endpoint, a malformed request. Provider
@@ -131,10 +169,16 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		return res, eh.Errorf("llm: before request: %w", err)
 	}
 	req := wireRequest{
-		Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity),
+		V: wireVersion, Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity),
 		Messages: r.Messages, Temperature: r.Temperature, MaxTokens: r.MaxTokens, Seed: r.Seed, Stop: r.Stop,
 		EnableThinking: r.EnableThinking, Tools: r.Tools, ToolChoice: r.ToolChoice, ResponseFormat: r.ResponseFormat,
 		CancelKey: strconv.FormatUint(rand.Uint64(), 36),
+	}
+	subject := SubjectComplete
+	if r.Retain {
+		subject = SubjectRetainComplete
+		req.Conversation, req.ParentCallId = r.Conversation, r.ParentCallId
+		req.OmitFrom, req.OmitTo = uint32(max(r.OmitFrom, 0)), uint32(max(r.OmitTo, 0))
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		req.DeadlineUnixNanos = deadline.UnixNano()
@@ -143,7 +187,7 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 	if err != nil {
 		return
 	}
-	raw, err := inst.request(ctx, SubjectComplete, payload, req.CancelKey)
+	raw, err := inst.request(ctx, subject, payload, req.CancelKey)
 	if err != nil {
 		return res, eb.Build().Str("purpose", r.Purpose).Errorf("llm.complete request: %w", err)
 	}
@@ -157,7 +201,8 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 	res = Response{
 		Content: w.Content, Reasoning: w.Reasoning, FinishReason: w.FinishReason, ToolCalls: w.ToolCalls,
 		InputTokens: w.InputTokens, OutputTokens: w.OutputTokens, Incomplete: w.Incomplete,
-		Elapsed: time.Duration(w.ElapsedNs),
+		Elapsed: time.Duration(w.ElapsedNs), CallId: w.CallId,
+		Retention: RetentionE(w.Retention), RetentionReason: w.RetentionReason,
 	}
 	return
 }

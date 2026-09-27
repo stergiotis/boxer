@@ -13,12 +13,14 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/llmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -33,8 +35,10 @@ type Config struct {
 	MaxTokens int32
 	// Timeout bounds one completion on the service side.
 	Timeout time.Duration
-	// KeepMessages keeps prompt and completion text on the call records.
-	KeepMessages bool
+	// Retain is the ceiling on keeping text (ADR-0264 §SD1): ring keeps
+	// prompt and completion on the in-process records, durable also keeps
+	// the messages of retained requests on boxer.facts. Empty is off.
+	Retain RetainE
 	// KeepCalls bounds the in-process call record; zero is
 	// DefaultKeepCalls.
 	KeepCalls int
@@ -53,7 +57,7 @@ type Config struct {
 func ConfigFromEnv() (cfg Config) {
 	cfg = Config{
 		Endpoint: Endpoint.Get(), Model: Model.Get(), ApiKey: ApiKey.Get(),
-		MaxTokens: int32(MaxTokens.Get()), Timeout: Timeout.Get(), KeepMessages: KeepMessages.Get(),
+		MaxTokens: int32(MaxTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
 	}
 	return
 }
@@ -74,7 +78,7 @@ type Service struct {
 	host      string
 	local     bool
 	busClient *inprocbus.Client
-	unsub     func()
+	unsubs    []func()
 	log       zerolog.Logger
 	// base parents every completion's context; Close cancels it, then
 	// waits on inflight before it releases the clients the calls use.
@@ -96,6 +100,12 @@ type Service struct {
 	// running holds the cancel of each completion in flight, by its
 	// sender's cancel key (llm.cancel).
 	running map[cancelKey]context.CancelFunc
+	// kept remembers the calls whose messages landed, by call id, so a
+	// continuing turn keeps only what is new (ADR-0264 §SD3); keptOrder
+	// bounds it to KeepCalls. In-process: after a restart the first turn
+	// of a conversation keeps its whole history again.
+	kept      map[string]kept
+	keptOrder []string
 }
 
 // NewService constructs and subscribes a Service. The caller MUST invoke
@@ -111,7 +121,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = DefaultTimeout
 	}
-	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), running: map[cancelKey]context.CancelFunc{}}
+	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), kept: map[string]kept{}, running: map[cancelKey]context.CancelFunc{}}
 	s.base, s.cancelBase = context.WithCancel(context.Background())
 	if cfg.Configured() {
 		s.host = EndpointHost(cfg.Endpoint)
@@ -131,11 +141,15 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		s.facts = llmfacts.NewCallStore(cfg.Exec, nil, llmfacts.CallStoreConfig{})
 	}
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
-	s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handleRequest)
-	if err != nil {
-		s.busClient.Close()
-		err = eh.Errorf("llm: subscribe: %w", err)
-		return nil, err
+	for _, pattern := range []string{SubjectAll, SubjectRetainAll} {
+		var unsub func()
+		unsub, err = s.busClient.Subscribe(pattern, s.handleRequest)
+		if err != nil {
+			s.Close()
+			err = eb.Build().Str("pattern", pattern).Errorf("llm: subscribe: %w", err)
+			return nil, err
+		}
+		s.unsubs = append(s.unsubs, unsub)
 	}
 	return
 }
@@ -144,10 +158,10 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 // waits for them, then releases the bus client and the provider client.
 // Safe to call more than once.
 func (inst *Service) Close() {
-	if inst.unsub != nil {
-		inst.unsub()
-		inst.unsub = nil
+	for _, unsub := range inst.unsubs {
+		unsub()
 	}
+	inst.unsubs = nil
 	inst.mu.Lock()
 	inst.closed = true
 	inst.mu.Unlock()
@@ -199,8 +213,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	case SubjectDescribe:
 		d := inst.Describe()
 		inst.reply(msg.Reply, wireDescribe{Configured: d.Configured, Model: d.Model, EndpointHost: d.EndpointHost, Local: d.Local, MaxTokens: d.MaxTokens, Reason: d.Reason})
-	case SubjectComplete:
-		inst.startComplete(msg)
+	case SubjectComplete, SubjectRetainComplete:
+		inst.startComplete(msg, msg.Subject == SubjectRetainComplete)
 	default:
 		inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: "unknown verb " + strings.TrimPrefix(msg.Subject, SubjectPrefix)})
 	}
@@ -211,7 +225,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 // inline would hold the requester for the whole provider call, and the
 // requester's own wait (Client.Timeout, its context) would never take
 // effect. msg is the bus's and is not retained, so it is copied first.
-func (inst *Service) startComplete(msg *app.Msg) {
+func (inst *Service) startComplete(msg *app.Msg, retained bool) {
 	m := *msg
 	m.Payload = bytes.Clone(msg.Payload)
 	inst.mu.Lock()
@@ -223,7 +237,7 @@ func (inst *Service) startComplete(msg *app.Msg) {
 	inst.mu.Unlock()
 	go func() {
 		defer inst.inflight.Done()
-		inst.handleComplete(&m)
+		inst.handleComplete(&m, retained)
 	}()
 }
 
@@ -250,16 +264,29 @@ func (inst *Service) handleCancel(msg *app.Msg) {
 	}
 }
 
-func (inst *Service) handleComplete(msg *app.Msg) {
+func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	req, err := decode[wireRequest](msg.Payload)
 	if err != nil {
-		inst.refuse(msg, "malformed request: "+err.Error(), CallRecord{})
+		inst.refuse(msg, "malformed request: "+err.Error(), CallRecord{}, nil)
 		return
 	}
 	rec := CallRecord{
 		CallId: inst.mintCallId(), At: time.Now().UTC(), Sender: msg.Sender, SenderInstance: msg.SenderInstance,
 		Purpose: req.Purpose, Sensitivity: queryengine.SensitivityE(req.Sensitivity),
 		Model: inst.cfg.Model, EndpointHost: inst.host, Messages: len(req.Messages), Tools: len(req.Tools),
+	}
+	// A retained turn (ADR-0264): its messages are kept even when the call
+	// is refused or fails (§SD4), so the chat shows the turn that did.
+	var t *turn
+	if retained {
+		rec.Conversation, rec.ParentCallId = req.Conversation, req.ParentCallId
+		rec.OmitFrom, rec.OmitTo = int(req.OmitFrom), int(req.OmitTo)
+		t = &turn{conversation: req.Conversation, parent: req.ParentCallId, messages: req.Messages,
+			omitFrom: int(req.OmitFrom), omitTo: int(req.OmitTo)}
+		if req.Conversation == "" {
+			inst.refuse(msg, "a retained request names its conversation", rec, nil)
+			return
+		}
 	}
 	for _, m := range req.Messages {
 		rec.PromptBytes += len(m.Content)
@@ -268,21 +295,21 @@ func (inst *Service) handleComplete(msg *app.Msg) {
 			rec.PromptBytes += len(img.Data)
 		}
 	}
-	if inst.cfg.KeepMessages {
+	if inst.cfg.Retain.atLeast(RetainRing) {
 		rec.Prompt = joinMessages(req.Messages)
 	}
 	if !inst.cfg.Configured() {
-		inst.refuse(msg, inst.Describe().Reason, rec)
+		inst.refuse(msg, inst.Describe().Reason, rec, t)
 		return
 	}
 	if len(req.Messages) == 0 {
-		inst.refuse(msg, "the request carries no messages", rec)
+		inst.refuse(msg, "the request carries no messages", rec, t)
 		return
 	}
 	// The sensitivity wall (ADR-0254 §SD3, the ADR-0145 rule): confined
 	// content leaves for a loopback provider and nowhere else.
 	if rec.Sensitivity == queryengine.SensitivityConfined && !inst.local {
-		inst.refuse(msg, "the content derives from sealed data that must not leave this box, and "+inst.host+" is not loopback", rec)
+		inst.refuse(msg, "the content derives from sealed data that must not leave this box, and "+inst.host+" is not loopback", rec, t)
 		return
 	}
 	maxTokens := req.MaxTokens
@@ -320,12 +347,12 @@ func (inst *Service) handleComplete(msg *app.Msg) {
 	rec.CompletionBytes = len(resp.Content)
 	rec.ToolCalls = len(resp.ToolCalls)
 	rec.FinishReason = resp.FinishReason
-	if inst.cfg.KeepMessages {
+	if inst.cfg.Retain.atLeast(RetainRing) {
 		rec.Completion = resp.Content
 	}
 	rep := wireReply{
 		Ok: true, Content: resp.Content, Reasoning: resp.Reasoning, FinishReason: resp.FinishReason, ToolCalls: resp.ToolCalls,
-		InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, ElapsedNs: int64(rec.Elapsed),
+		InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, ElapsedNs: int64(rec.Elapsed), CallId: rec.CallId,
 	}
 	if cerr != nil {
 		if errors.Is(cerr, openaichat.ErrIncompleteCompletion) && resp.Content != "" {
@@ -338,7 +365,13 @@ func (inst *Service) handleComplete(msg *app.Msg) {
 			rec.Error = cerr.Error()
 		}
 	}
-	inst.record(rec)
+	if t != nil && rep.Ok {
+		// The reply as the app will echo it back: what the next turn's
+		// prefix is hashed against.
+		t.reply = option.Some(openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: resp.Content, ToolCalls: resp.ToolCalls})
+		t.reasoning = resp.Reasoning
+	}
+	rep.Retention, rep.RetentionReason = inst.record(rec, t)
 	lg := inst.log.Debug()
 	if !rep.Ok {
 		lg = inst.log.Warn()
@@ -349,8 +382,9 @@ func (inst *Service) handleComplete(msg *app.Msg) {
 }
 
 // refuse answers with the reason and records the refusal: a refused call
-// is a call the table should show.
-func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord) {
+// is a call the table should show, and a retained turn's messages are kept
+// with it (ADR-0264 §SD4).
+func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord, t *turn) {
 	rec.Refused, rec.Error = true, reason
 	if rec.At.IsZero() {
 		rec.At, rec.Sender, rec.SenderInstance = time.Now().UTC(), msg.Sender, msg.SenderInstance
@@ -358,7 +392,7 @@ func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord) {
 	if rec.CallId == "" {
 		rec.CallId = inst.mintCallId()
 	}
-	inst.record(rec)
+	inst.record(rec, t)
 	inst.log.Warn().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("reason", reason).Msg("llm: refused")
 	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason})
 }

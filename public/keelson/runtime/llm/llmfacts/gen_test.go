@@ -22,7 +22,7 @@ func TestGenerateLlmCallStore(t *testing.T) {
 	require.NoError(t, storegen.Input{
 		PackageName:    "llmfacts",
 		StoreName:      "Call",
-		ComponentPaths: []string{"./llmcall_dto.go"},
+		ComponentPaths: []string{"./llmcall_dto.go", "./llmmessage_dto.go"},
 		OutDir:         ".",
 		ImportPath:     "github.com/stergiotis/boxer/public/keelson/runtime/llm/llmfacts",
 		Ids:            ids,

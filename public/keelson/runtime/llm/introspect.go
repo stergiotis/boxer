@@ -8,6 +8,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/zeebo/xxh3"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/llmfacts"
@@ -18,9 +19,10 @@ import (
 
 // CallRecord is one completion the service answered or refused (ADR-0254
 // §SD4): who asked, why, what it cost, how it ended. Prompt and Completion
-// are kept only under Config.KeepMessages, and only in the in-process
-// record; the durable row (llmfacts.LlmCall) carries the counts and never
-// the text.
+// are kept only at a Config.Retain of ring or above, and only in the
+// in-process record; the durable row (llmfacts.LlmCall) carries the counts
+// and never the text, which a retained request keeps on llmMessage rows of
+// its own (ADR-0264).
 type CallRecord struct {
 	Id              uint64
 	CallId          string
@@ -45,33 +47,113 @@ type CallRecord struct {
 	Error           string
 	Prompt          string
 	Completion      string
+	// Conversation and ParentCallId are a retained request's (ADR-0264
+	// §SD2). Kept says its messages landed on boxer.facts, from ordinal
+	// RetainedFrom on, with HistoryHash over the conversation after it.
+	Conversation string
+	ParentCallId string
+	Kept         bool
+	RetainedFrom int
+	HistoryHash  string
+	// OmitFrom and OmitTo are the declared omission; OmitTo 0 is none.
+	OmitFrom int
+	OmitTo   int
 }
 
 // record appends rec to the bounded ring and, where the host holds
 // boxer.facts, lands it there as a row. A failed write is logged and the
 // record kept: the table is the audit, the ring is the window's view, and
 // a call already answered is not un-answered by a store that is down.
-func (inst *Service) record(rec CallRecord) {
+//
+// A retained turn t (ADR-0264) also lands its new messages as llmMessage
+// rows in the same flush, when the ceiling is durable; the verdict says
+// whether they did, and is what the reply carries (§SD4). Nil t is a call
+// on llm.complete, and its verdict is RetentionNotAsked.
+func (inst *Service) record(rec CallRecord, t *turn) (retention uint8, reason string) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	var msgs []llmfacts.LlmMessage
+	var logical []string
+	if t != nil {
+		retention = uint8(RetentionNotKept)
+		switch {
+		case inst.cfg.Retain != RetainDurable:
+			level := inst.cfg.Retain
+			if level == "" {
+				level = RetainOff
+			}
+			reason = "this host's BOXER_LLM_RETAIN is " + string(level) + ", not durable"
+		case inst.facts == nil:
+			reason = "this host has no durable backend for boxer.facts"
+		default:
+			var parent option.Option[kept]
+			if k, ok := inst.kept[t.parent]; ok && t.parent != "" {
+				parent = option.Some(k)
+			}
+			msgs, rec.RetainedFrom, logical = keep(rec, *t, parent)
+			rec.HistoryHash = historyHash(logical)
+			rec.Kept = true
+		}
+	}
 	inst.next++
 	rec.Id = inst.next
-	inst.calls = append(inst.calls, rec)
-	if over := len(inst.calls) - inst.cfg.KeepCalls; over > 0 {
-		inst.calls = append([]CallRecord(nil), inst.calls[over:]...)
-	}
 	if inst.facts == nil {
+		inst.appendRing(rec)
 		return
 	}
 	row := RowOf(rec)
 	if err := inst.facts.Begin(row.Id, row.Ts, llmfacts.CallEnvelope{NaturalKey: row.NaturalKey}).AddLlmCall(row).Commit(); err != nil {
 		inst.log.Warn().Err(err).Str("callId", rec.CallId).Msg("llm: buffer call row")
+		rec.Kept = false
+		inst.appendRing(rec)
+		if t != nil && reason == "" {
+			reason = "buffering the call row failed: " + err.Error()
+		}
 		return
+	}
+	for _, m := range msgs {
+		if err := inst.facts.Begin(m.Id, m.Ts, llmfacts.CallEnvelope{NaturalKey: m.NaturalKey}).AddLlmMessage(m).Commit(); err != nil {
+			inst.log.Warn().Err(err).Str("callId", rec.CallId).Msg("llm: buffer message row")
+			rec.Kept = false
+			reason = "buffering a message row failed: " + err.Error()
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), factsFlushTimeout)
 	defer cancel()
 	if _, err := inst.facts.Flush(ctx); err != nil {
 		inst.log.Warn().Err(err).Str("callId", rec.CallId).Msg("llm: flush call row")
+		if rec.Kept {
+			rec.Kept = false
+			reason = "the write failed (the rows stay buffered and may land with a later one): " + err.Error()
+		}
+	}
+	if rec.Kept {
+		retention, reason = uint8(RetentionKept), ""
+		inst.remember(rec.CallId, kept{conversation: t.conversation, hashes: logical})
+	}
+	inst.appendRing(rec)
+	return
+}
+
+// appendRing adds rec to the bounded in-process record. The caller holds
+// the mutex.
+func (inst *Service) appendRing(rec CallRecord) {
+	inst.calls = append(inst.calls, rec)
+	if over := len(inst.calls) - inst.cfg.KeepCalls; over > 0 {
+		inst.calls = append([]CallRecord(nil), inst.calls[over:]...)
+	}
+}
+
+// remember notes a kept call for its successor, bounded to KeepCalls. The
+// caller holds the mutex.
+func (inst *Service) remember(callId string, k kept) {
+	inst.kept[callId] = k
+	inst.keptOrder = append(inst.keptOrder, callId)
+	if over := len(inst.keptOrder) - inst.cfg.KeepCalls; over > 0 {
+		for _, id := range inst.keptOrder[:over] {
+			delete(inst.kept, id)
+		}
+		inst.keptOrder = append([]string(nil), inst.keptOrder[over:]...)
 	}
 }
 
@@ -132,6 +214,19 @@ func RowOf(rec CallRecord) (row llmfacts.LlmCall) {
 	if rec.Error != "" {
 		row.Error = []string{rec.Error}
 	}
+	if rec.Conversation != "" {
+		row.Conversation = option.Some(rec.Conversation)
+	}
+	if rec.ParentCallId != "" {
+		row.Parent = option.Some(rec.ParentCallId)
+	}
+	if rec.Kept {
+		row.RetainedFrom = option.Some(uint32(max(rec.RetainedFrom, 0)))
+		row.HistoryHash = []string{rec.HistoryHash}
+	}
+	if rec.OmitTo > 0 {
+		row.OmitFrom, row.OmitTo = option.Some(uint32(max(rec.OmitFrom, 0))), option.Some(uint32(rec.OmitTo))
+	}
 	return
 }
 
@@ -151,6 +246,16 @@ func RecordOf(row llmfacts.LlmCall) (rec CallRecord) {
 	}
 	if row.Sensitivity == "confined" {
 		rec.Sensitivity = queryengine.SensitivityConfined
+	}
+	rec.Conversation, rec.ParentCallId = row.Conversation.Val, row.Parent.Val
+	if row.RetainedFrom.Has {
+		rec.Kept, rec.RetainedFrom = true, int(row.RetainedFrom.Val)
+	}
+	if len(row.HistoryHash) > 0 {
+		rec.HistoryHash = row.HistoryHash[0]
+	}
+	if row.OmitTo.Has {
+		rec.OmitFrom, rec.OmitTo = int(row.OmitFrom.Val), int(row.OmitTo.Val)
 	}
 	return
 }
@@ -205,7 +310,13 @@ func callsTable(rows []CallRecord) *introspect.Table {
 		Bool("refused", func(i int) bool { return rows[i].Refused }).
 		String("error", func(i int) string { return rows[i].Error }).
 		String("prompt", func(i int) string { return rows[i].Prompt }).
-		String("completion", func(i int) string { return rows[i].Completion })
+		String("completion", func(i int) string { return rows[i].Completion }).
+		String("conversation", func(i int) string { return rows[i].Conversation }).
+		String("parent_call_id", func(i int) string { return rows[i].ParentCallId }).
+		Bool("kept", func(i int) bool { return rows[i].Kept }).
+		Int64("retained_from", func(i int) int64 { return int64(rows[i].RetainedFrom) }).
+		Int64("omit_from", func(i int) int64 { return int64(rows[i].OmitFrom) }).
+		Int64("omit_to", func(i int) int64 { return int64(rows[i].OmitTo) })
 }
 
 func sensitivityName(s queryengine.SensitivityE) (name string) {

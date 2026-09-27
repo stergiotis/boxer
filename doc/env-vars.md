@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-09-26T20:14:32Z
+generated-at: 2026-09-27T18:41:14Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -176,9 +176,9 @@ generated-at: 2026-09-26T20:14:32Z
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_LLM_APIKEY` | string | — | — | yes | API key the host's llm service sends to the endpoint; empty for local endpoints that take none |
 | `BOXER_LLM_ENDPOINT` | string | — | — |  | OpenAI-compatible chat-completions base URL the host's llm service talks to (e.g. http://localhost:1234/v1); unset means no model is offered to apps |
-| `BOXER_LLM_KEEP_MESSAGES` | bool | `false` | — |  | keep prompt and completion text on keelson('llm_calls') rows; off keeps sizes and token counts only |
 | `BOXER_LLM_MAXTOKENS` | int64 | `4096` | — |  | completion token ceiling per llm.complete when the request names none |
 | `BOXER_LLM_MODEL` | string | — | — |  | model id the host's llm service completes with; unset means no model is offered even with the endpoint set |
+| `BOXER_LLM_RETAIN` | categorial-string | `off` | — |  | ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of llm.retain.* requests on boxer.facts, kept until removed by hand)<br>**Allowed:** `off` \| `ring` \| `durable` |
 | `BOXER_LLM_TIMEOUT` | duration | `120s` | — |  | wall-clock bound on one llm.complete on the service side |
 | `GEMINI_API_KEY` | string | — | — | yes | Google AI Studio / Gemini API key |
 
@@ -281,9 +281,9 @@ generated-at: 2026-09-26T20:14:32Z
 | `BOXER_LAUNCHER_FRECENCY_HALFLIFE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/launcher` |
 | `BOXER_LLM_APIKEY` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/llm` |
 | `BOXER_LLM_ENDPOINT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/llm` |
-| `BOXER_LLM_KEEP_MESSAGES` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/llm` |
 | `BOXER_LLM_MAXTOKENS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/llm` |
 | `BOXER_LLM_MODEL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/llm` |
+| `BOXER_LLM_RETAIN` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/llm` |
 | `BOXER_LLM_TIMEOUT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/llm` |
 | `BOXER_LOG_CALLER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/logging` |
 | `BOXER_LOG_COLOR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/logging` |

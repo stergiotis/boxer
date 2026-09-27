@@ -33,6 +33,12 @@ const (
 	kindLlmCallIncomplete      uint64 = 9223372049739677815
 	kindLlmCallRefused         uint64 = 9223372049739677816
 	kindLlmCallError           uint64 = 9223372049739677817
+	kindLlmCallConversation    uint64 = 9223372049739677846
+	kindLlmCallParent          uint64 = 9223372049739677847
+	kindLlmCallRetainedFrom    uint64 = 9223372049739677848
+	kindLlmCallHistoryHash     uint64 = 9223372049739677849
+	kindLlmCallOmitFrom        uint64 = 9223372049739677862
+	kindLlmCallOmitTo          uint64 = 9223372049739677863
 )
 
 // llmCallSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -171,6 +177,16 @@ func llmCallEmitSectionSymbol[
 	symbolSecAttr_FinishReason := symbolSec.BeginAttribute(row.FinishReason)
 	symbolSecAttr_FinishReason.AddMembershipLowCardRefP(kindLlmCallFinishReason)
 	symbolSecAttr_FinishReason.EndAttributeP()
+	if row.Conversation.Has {
+		symbolSecAttr_Conversation := symbolSec.BeginAttribute(row.Conversation.Val)
+		symbolSecAttr_Conversation.AddMembershipLowCardRefP(kindLlmCallConversation)
+		symbolSecAttr_Conversation.EndAttributeP()
+	}
+	if row.Parent.Has {
+		symbolSecAttr_Parent := symbolSec.BeginAttribute(row.Parent.Val)
+		symbolSecAttr_Parent.AddMembershipLowCardRefP(kindLlmCallParent)
+		symbolSecAttr_Parent.EndAttributeP()
+	}
 	return
 }
 
@@ -222,6 +238,21 @@ func llmCallEmitSectionU32Array[
 	u32ArraySecAttr_ToolCalls := u32ArraySec.BeginAttributeSingle(row.ToolCalls)
 	u32ArraySecAttr_ToolCalls.AddMembershipLowCardRefP(kindLlmCallToolCalls)
 	u32ArraySecAttr_ToolCalls.EndAttributeP()
+	if row.RetainedFrom.Has {
+		u32ArraySecAttr_RetainedFrom := u32ArraySec.BeginAttributeSingle(row.RetainedFrom.Val)
+		u32ArraySecAttr_RetainedFrom.AddMembershipLowCardRefP(kindLlmCallRetainedFrom)
+		u32ArraySecAttr_RetainedFrom.EndAttributeP()
+	}
+	if row.OmitFrom.Has {
+		u32ArraySecAttr_OmitFrom := u32ArraySec.BeginAttributeSingle(row.OmitFrom.Val)
+		u32ArraySecAttr_OmitFrom.AddMembershipLowCardRefP(kindLlmCallOmitFrom)
+		u32ArraySecAttr_OmitFrom.EndAttributeP()
+	}
+	if row.OmitTo.Has {
+		u32ArraySecAttr_OmitTo := u32ArraySec.BeginAttributeSingle(row.OmitTo.Val)
+		u32ArraySecAttr_OmitTo.AddMembershipLowCardRefP(kindLlmCallOmitTo)
+		u32ArraySecAttr_OmitTo.EndAttributeP()
+	}
 	return
 }
 
@@ -259,6 +290,14 @@ func llmCallEmitSectionStringArray[
 		}
 		stringArraySecAttr_Error.AddMembershipLowCardRefP(kindLlmCallError)
 		stringArraySecAttr_Error.EndAttributeP()
+	}
+	if len(row.HistoryHash) > 0 {
+		stringArraySecAttr_HistoryHash := stringArraySec.BeginAttribute()
+		for _, v := range row.HistoryHash {
+			stringArraySecAttr_HistoryHash.AddToContainerP(v)
+		}
+		stringArraySecAttr_HistoryHash.AddMembershipLowCardRefP(kindLlmCallHistoryHash)
+		stringArraySecAttr_HistoryHash.EndAttributeP()
 	}
 	return
 }
@@ -437,6 +476,12 @@ func llmCallReadRow[
 	var symbolFinishReasonVal string
 	var symbolFinishReasonCount int
 	var symbolFinishReasonLastAttr int64
+	var symbolConversationVal string
+	var symbolConversationCount int
+	var symbolConversationLastAttr int64
+	var symbolParentVal string
+	var symbolParentCount int
+	var symbolParentLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -497,6 +542,20 @@ func llmCallReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolFinishReasonVal = val
+			case kindLlmCallConversation:
+				if symbolConversationLastAttr != attrJ+1 {
+					symbolConversationLastAttr = attrJ + 1
+					symbolConversationCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolConversationVal = val
+			case kindLlmCallParent:
+				if symbolParentLastAttr != attrJ+1 {
+					symbolParentLastAttr = attrJ + 1
+					symbolParentCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolParentVal = val
 			}
 		}
 	}
@@ -562,6 +621,24 @@ func llmCallReadRow[
 	}
 	if symbolFinishReasonCount == 1 {
 		row.FinishReason = symbolFinishReasonVal
+		present = true
+	}
+	if symbolConversationCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "llmCallConversation").Int("got", symbolConversationCount).Errorf("slot symbol@llmCallConversation (field Conversation) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolConversationCount)
+		return
+	}
+	if symbolConversationCount == 1 {
+		row.Conversation.Val = symbolConversationVal
+		row.Conversation.Has = true
+		present = true
+	}
+	if symbolParentCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "llmCallParent").Int("got", symbolParentCount).Errorf("slot symbol@llmCallParent (field Parent) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolParentCount)
+		return
+	}
+	if symbolParentCount == 1 {
+		row.Parent.Val = symbolParentVal
+		row.Parent.Has = true
 		present = true
 	}
 	// --- u64Array. ---
@@ -676,6 +753,15 @@ func llmCallReadRow[
 	var u32ArrayToolCallsVal uint32
 	var u32ArrayToolCallsCount int
 	var u32ArrayToolCallsLastAttr int64
+	var u32ArrayRetainedFromVal uint32
+	var u32ArrayRetainedFromCount int
+	var u32ArrayRetainedFromLastAttr int64
+	var u32ArrayOmitFromVal uint32
+	var u32ArrayOmitFromCount int
+	var u32ArrayOmitFromLastAttr int64
+	var u32ArrayOmitToVal uint32
+	var u32ArrayOmitToCount int
+	var u32ArrayOmitToLastAttr int64
 	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -735,6 +821,39 @@ func llmCallReadRow[
 					return
 				}
 				u32ArrayToolCallsVal = val
+			case kindLlmCallRetainedFrom:
+				if u32ArrayRetainedFromLastAttr != attrJ+1 {
+					u32ArrayRetainedFromLastAttr = attrJ + 1
+					u32ArrayRetainedFromCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallRetainedFrom").Str("field", "RetainedFrom").Errorf("slot u32Array@llmCallRetainedFrom (field RetainedFrom) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayRetainedFromVal = val
+			case kindLlmCallOmitFrom:
+				if u32ArrayOmitFromLastAttr != attrJ+1 {
+					u32ArrayOmitFromLastAttr = attrJ + 1
+					u32ArrayOmitFromCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallOmitFrom").Str("field", "OmitFrom").Errorf("slot u32Array@llmCallOmitFrom (field OmitFrom) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayOmitFromVal = val
+			case kindLlmCallOmitTo:
+				if u32ArrayOmitToLastAttr != attrJ+1 {
+					u32ArrayOmitToLastAttr = attrJ + 1
+					u32ArrayOmitToCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallOmitTo").Str("field", "OmitTo").Errorf("slot u32Array@llmCallOmitTo (field OmitTo) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayOmitToVal = val
 			}
 		}
 	}
@@ -776,6 +895,33 @@ func llmCallReadRow[
 	}
 	if u32ArrayToolCallsCount == 1 {
 		row.ToolCalls = u32ArrayToolCallsVal
+		present = true
+	}
+	if u32ArrayRetainedFromCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallRetainedFrom").Int("got", u32ArrayRetainedFromCount).Errorf("slot u32Array@llmCallRetainedFrom (field RetainedFrom) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayRetainedFromCount)
+		return
+	}
+	if u32ArrayRetainedFromCount == 1 {
+		row.RetainedFrom.Val = u32ArrayRetainedFromVal
+		row.RetainedFrom.Has = true
+		present = true
+	}
+	if u32ArrayOmitFromCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallOmitFrom").Int("got", u32ArrayOmitFromCount).Errorf("slot u32Array@llmCallOmitFrom (field OmitFrom) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayOmitFromCount)
+		return
+	}
+	if u32ArrayOmitFromCount == 1 {
+		row.OmitFrom.Val = u32ArrayOmitFromVal
+		row.OmitFrom.Has = true
+		present = true
+	}
+	if u32ArrayOmitToCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallOmitTo").Int("got", u32ArrayOmitToCount).Errorf("slot u32Array@llmCallOmitTo (field OmitTo) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayOmitToCount)
+		return
+	}
+	if u32ArrayOmitToCount == 1 {
+		row.OmitTo.Val = u32ArrayOmitToVal
+		row.OmitTo.Has = true
 		present = true
 	}
 	// --- bool. ---
@@ -826,6 +972,9 @@ func llmCallReadRow[
 	var stringArrayErrorSlice []string
 	var stringArrayErrorCount int
 	var stringArrayErrorLastAttr int64
+	var stringArrayHistoryHashSlice []string
+	var stringArrayHistoryHashCount int
+	var stringArrayHistoryHashLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -838,6 +987,14 @@ func llmCallReadRow[
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayErrorSlice = append(stringArrayErrorSlice, v)
 				}
+			case kindLlmCallHistoryHash:
+				if stringArrayHistoryHashLastAttr != attrJ+1 {
+					stringArrayHistoryHashLastAttr = attrJ + 1
+					stringArrayHistoryHashCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayHistoryHashSlice = append(stringArrayHistoryHashSlice, v)
+				}
 			}
 		}
 	}
@@ -847,6 +1004,14 @@ func llmCallReadRow[
 	}
 	if stringArrayErrorSlice != nil {
 		row.Error = stringArrayErrorSlice
+		present = true
+	}
+	if stringArrayHistoryHashCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallHistoryHash").Int("got", stringArrayHistoryHashCount).Errorf("slot stringArray@llmCallHistoryHash (field HistoryHash) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayHistoryHashCount)
+		return
+	}
+	if stringArrayHistoryHashSlice != nil {
+		row.HistoryHash = stringArrayHistoryHashSlice
 		present = true
 	}
 	return

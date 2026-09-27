@@ -386,7 +386,7 @@ var Registry = map[CapId]CapSpec{
 	CapLLM: {
 		Id:            CapLLM,
 		Display:       "llm.* model inference",
-		SubjectFamily: "llm.{describe|complete} (request/reply)",
+		SubjectFamily: "llm.{describe|complete}, llm.retain.complete (request/reply)",
 		Description: "Sending text to a model from an app (ADR-0254): describe " +
 			"says whether the host offers a model, which one and where it is; " +
 			"complete is one chat completion through the host's one client, " +
@@ -399,7 +399,11 @@ var Registry = map[CapId]CapSpec{
 			"lacks. An app holds the capability by declaring " +
 			"llm.ClientCaps(reason), not sticky; the read is a request, so " +
 			"every call lands an audit row, and keelson('llm_calls') keeps " +
-			"the record of what was asked, at what cost, and how it ended.",
+			"the record of what was asked, at what cost, and how it ended. " +
+			"An app that asks the host to keep its conversations also " +
+			"declares llm.RetainCaps(reason) (ADR-0264); the text lands on " +
+			"boxer.facts as llmMessage rows only where BOXER_LLM_RETAIN is " +
+			"durable.",
 		Backend: "runtime/llm over public/llm/openaichat",
 		AppFilter: func(f app.SubjectFilter) bool {
 			return strings.HasPrefix(f.Pattern, llm.SubjectPrefix)
