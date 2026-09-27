@@ -25,9 +25,19 @@ out=$(cd "$out" && pwd)
 source "$here/go-build-env.sh"
 tags=$(cat "$root/tags")
 echo "bundle: the Go tab host (wasip1 reactor)" >&2
+# -s -w: the symbol and DWARF sections are of no use in a browser and cost
+# about five percent. The size that remains is the linked graph's code —
+# play alone is a third of it — so the lever for a smaller tab is which
+# apps a build links, not flags; wasm-opt -Oz, when binaryen is installed,
+# takes a further slice off (the h3 lane documents installing it).
 # shellcheck disable=SC2086 # deliberate word splitting of the flag list
-(cd "$root" && GOOS=wasip1 GOARCH=wasm go build $BOXER_GO_FLAGS -buildmode=c-shared -tags "$tags" \
+(cd "$root" && GOOS=wasip1 GOARCH=wasm go build $BOXER_GO_FLAGS -buildmode=c-shared -ldflags="-s -w" -tags "$tags" \
 	-o "$out/imzero2tab.wasm" ./public/thestack/cmd/imzero2tab)
+if command -v wasm-opt >/dev/null 2>&1; then
+	wasm-opt -Oz --enable-bulk-memory --enable-sign-ext --enable-mutable-globals --enable-nontrapping-float-to-int \
+		"$out/imzero2tab.wasm" -o "$out/imzero2tab.opt.wasm" && mv "$out/imzero2tab.opt.wasm" "$out/imzero2tab.wasm" \
+		|| echo "bundle: wasm-opt failed; the unoptimised module stands" >&2
+fi
 echo "bundle: the Rust browser host (wasm32 cdylib)" >&2
 (cd "$root/rust/imzero2" && ./build_rust_browser.sh >/dev/null)
 cp "$root/rust/imzero2/target/browser/wasm32-unknown-unknown/release/imzero2_browser.wasm" "$out/"

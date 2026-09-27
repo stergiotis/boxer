@@ -90,6 +90,25 @@ node doc/trials/keelson-wasm-frame-cost/harness/cdp_shot.mjs \
   chromium --enable-unsafe-swiftshader -- "<url>" out.png 10000 1140x780
 ```
 
+## Size
+
+The Go module is the size of the graph it links, and Go's wasm code is
+bulky. Measured on 2026-09-27 with symbols stripped (which is worth about
+five percent):
+
+| apps linked | module | brotli |
+| --- | --- | --- |
+| fibscope | 46 MB | 6.7 MB |
+| + taskdemo | 47 MB | 6.8 MB |
+| + mdedit | 63 MB | 8.4 MB |
+| + play | 98 MB | 14 MB |
+
+The Rust host is 8.5 MB (2.3 MB brotli). V8 compiles the 98 MB module in
+about 0.35 s on a handheld (its baseline tier; optimisation follows in the
+background) and caches the result; ADR-0077 accepts bundle size for the
+LAN-served tier it targets. The lever for a smaller
+tab is which apps a build links; a tab for one app should link that app.
+
 ## What the tab does not have
 
 - **The runtime services.** Only the app's own bus client exists; a request
