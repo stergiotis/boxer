@@ -371,6 +371,19 @@ over the runtime vocabulary's new cohort, written by the service beside
 its ring wherever the host's persist backend reaches `boxer.facts`. The
 bodies kind stays deferred, and the reason is recorded in SD4.
 
+### 2026-09-27 — `llm.cancel`, and the requester's wait holds
+
+The in-process bus runs a handler on the publisher's goroutine, so a
+completion answered inline held the requester for the whole provider call:
+neither `Client.Timeout` nor the caller's context could end the wait, and
+only the caller's deadline reached the service. The service now answers
+`llm.complete` off the requester's goroutine, and a request carries a
+cancel key the client mints. Cancelling the caller's context returns at
+once and publishes `llm.cancel` with the key, which stops the provider
+call; the key is scoped to the sender, so one app cannot stop another's
+call. The verb falls under the existing `llm.*` grant. `Service.Close`
+cancels the calls in flight and waits for them.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

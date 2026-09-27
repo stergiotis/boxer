@@ -36,6 +36,16 @@ type wireRequest struct {
 	// DeadlineUnixNanos carries the caller's ctx deadline, since the
 	// handler has no ctx of its own. 0 means none.
 	DeadlineUnixNanos int64 `json:"deadline_ns,omitempty"`
+	// CancelKey is the requester's handle for llm.cancel; empty is a
+	// request that cannot be stopped early.
+	CancelKey string `json:"cancel_key,omitempty"`
+}
+
+// wireCancel is the message on llm.cancel: stop the sender's completion
+// that carried Key. No reply.
+type wireCancel struct {
+	V   uint8  `json:"v"`
+	Key string `json:"key"`
 }
 
 // wireDescribe is the reply on llm.describe.
@@ -78,6 +88,7 @@ const (
 	errKindBadRequest    = "bad_request"
 	errKindServer        = "server"
 	errKindTimeout       = "timeout"
+	errKindCancelled     = "cancelled"
 	errKindOther         = "other"
 )
 

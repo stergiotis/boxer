@@ -3,6 +3,8 @@ package llm
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
+	"strconv"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -119,7 +121,8 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 
 // Complete runs one completion. A refusal is a *RefusedError; a provider
 // failure wraps the openaichat sentinel it maps to; a transport failure is
-// neither.
+// neither. Cancelling ctx returns at once with its error and asks the
+// service to stop the provider call (llm.cancel).
 func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err error) {
 	if inst == nil || inst.bus == nil {
 		return res, eh.Errorf("llm: client without a bus")
@@ -131,6 +134,7 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity),
 		Messages: r.Messages, Temperature: r.Temperature, MaxTokens: r.MaxTokens, Seed: r.Seed, Stop: r.Stop,
 		EnableThinking: r.EnableThinking, Tools: r.Tools, ToolChoice: r.ToolChoice, ResponseFormat: r.ResponseFormat,
+		CancelKey: strconv.FormatUint(rand.Uint64(), 36),
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		req.DeadlineUnixNanos = deadline.UnixNano()
@@ -139,7 +143,7 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 	if err != nil {
 		return
 	}
-	raw, err := inst.bus.RequestWithTimeout(SubjectComplete, payload, inst.wait(ctx, DefaultTimeout))
+	raw, err := inst.request(ctx, SubjectComplete, payload, req.CancelKey)
 	if err != nil {
 		return res, eb.Build().Str("purpose", r.Purpose).Errorf("llm.complete request: %w", err)
 	}
@@ -156,6 +160,32 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		Elapsed: time.Duration(w.ElapsedNs),
 	}
 	return
+}
+
+// request sends payload and waits for the reply or for ctx, whichever
+// comes first. On cancellation it publishes llm.cancel with key so the
+// service stops the provider call rather than finishing it for no one;
+// the abandoned request's goroutine ends when the reply or its wait does.
+func (inst *Client) request(ctx context.Context, subject string, payload []byte, key string) (raw []byte, err error) {
+	type result struct {
+		raw []byte
+		err error
+	}
+	done := make(chan result, 1)
+	wait := inst.wait(ctx, DefaultTimeout)
+	go func() {
+		r, e := inst.bus.RequestWithTimeout(subject, payload, wait)
+		done <- result{raw: r, err: e}
+	}()
+	select {
+	case r := <-done:
+		return r.raw, r.err
+	case <-ctx.Done():
+		if cancelPayload, cerr := encode(wireCancel{V: wireVersion, Key: key}); cerr == nil {
+			_ = inst.bus.Publish(SubjectCancel, cancelPayload)
+		}
+		return nil, eh.Errorf("llm: waiting for the reply: %w", ctx.Err())
+	}
 }
 
 // wait is the request wait: Timeout, else fallback, shortened to the
@@ -191,6 +221,8 @@ func failureOf(w wireReply) (err error) {
 		sentinel = openaichat.ErrServer
 	case errKindTimeout:
 		sentinel = context.DeadlineExceeded
+	case errKindCancelled:
+		sentinel = context.Canceled
 	default:
 		return errors.New("llm: " + w.Reason)
 	}
@@ -212,6 +244,8 @@ func kindOf(err error) (kind string) {
 		return errKindServer
 	case errors.Is(err, context.DeadlineExceeded):
 		return errKindTimeout
+	case errors.Is(err, context.Canceled):
+		return errKindCancelled
 	default:
 		return errKindOther
 	}

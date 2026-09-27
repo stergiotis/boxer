@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -75,6 +76,11 @@ type Service struct {
 	busClient *inprocbus.Client
 	unsub     func()
 	log       zerolog.Logger
+	// base parents every completion's context; Close cancels it, then
+	// waits on inflight before it releases the clients the calls use.
+	base       context.Context
+	cancelBase context.CancelFunc
+	inflight   sync.WaitGroup
 
 	mu    sync.Mutex
 	calls []CallRecord
@@ -84,6 +90,12 @@ type Service struct {
 	facts *llmfacts.CallStore
 	// minted salts the call ids this process mints.
 	minted uint64
+	// closed refuses completions that arrive once Close has begun, so
+	// inflight is never added to while Close waits on it.
+	closed bool
+	// running holds the cancel of each completion in flight, by its
+	// sender's cancel key (llm.cancel).
+	running map[cancelKey]context.CancelFunc
 }
 
 // NewService constructs and subscribes a Service. The caller MUST invoke
@@ -99,7 +111,8 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = DefaultTimeout
 	}
-	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger()}
+	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), running: map[cancelKey]context.CancelFunc{}}
+	s.base, s.cancelBase = context.WithCancel(context.Background())
 	if cfg.Configured() {
 		s.host = EndpointHost(cfg.Endpoint)
 		s.local = isLocalEndpoint(cfg.Endpoint)
@@ -127,13 +140,19 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	return
 }
 
-// Close releases the subscription, the bus client and the provider
-// client. Safe to call more than once.
+// Close releases the subscription, cancels the completions in flight and
+// waits for them, then releases the bus client and the provider client.
+// Safe to call more than once.
 func (inst *Service) Close() {
 	if inst.unsub != nil {
 		inst.unsub()
 		inst.unsub = nil
 	}
+	inst.mu.Lock()
+	inst.closed = true
+	inst.mu.Unlock()
+	inst.cancelBase()
+	inst.inflight.Wait()
 	if inst.busClient != nil {
 		inst.busClient.Close()
 		inst.busClient = nil
@@ -168,6 +187,10 @@ func (inst *Service) Describe() (d Description) {
 }
 
 func (inst *Service) handleRequest(msg *app.Msg) {
+	if msg.Subject == SubjectCancel {
+		inst.handleCancel(msg)
+		return
+	}
 	if msg.Reply == "" {
 		inst.log.Warn().Str("subject", msg.Subject).Msg("llm: request without reply, dropping")
 		return
@@ -177,9 +200,53 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		d := inst.Describe()
 		inst.reply(msg.Reply, wireDescribe{Configured: d.Configured, Model: d.Model, EndpointHost: d.EndpointHost, Local: d.Local, MaxTokens: d.MaxTokens, Reason: d.Reason})
 	case SubjectComplete:
-		inst.handleComplete(msg)
+		inst.startComplete(msg)
 	default:
 		inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: "unknown verb " + strings.TrimPrefix(msg.Subject, SubjectPrefix)})
+	}
+}
+
+// startComplete answers off the requester's goroutine. The in-process bus
+// runs a handler on the publisher's goroutine, so a completion answered
+// inline would hold the requester for the whole provider call, and the
+// requester's own wait (Client.Timeout, its context) would never take
+// effect. msg is the bus's and is not retained, so it is copied first.
+func (inst *Service) startComplete(msg *app.Msg) {
+	m := *msg
+	m.Payload = bytes.Clone(msg.Payload)
+	inst.mu.Lock()
+	if inst.closed {
+		inst.mu.Unlock()
+		return
+	}
+	inst.inflight.Add(1)
+	inst.mu.Unlock()
+	go func() {
+		defer inst.inflight.Done()
+		inst.handleComplete(&m)
+	}()
+}
+
+// cancelKey is a completion's cancel handle: the key the requester minted,
+// scoped to the requester, so one app cannot stop another's call.
+type cancelKey struct {
+	sender   app.AppIdT
+	instance uint64
+	key      string
+}
+
+// handleCancel stops the completion the sender's key names. Unknown keys
+// are ignored: the call may already have been answered.
+func (inst *Service) handleCancel(msg *app.Msg) {
+	c, err := decode[wireCancel](msg.Payload)
+	if err != nil || c.Key == "" {
+		return
+	}
+	inst.mu.Lock()
+	cancel := inst.running[cancelKey{sender: msg.Sender, instance: msg.SenderInstance, key: c.Key}]
+	inst.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
@@ -222,8 +289,19 @@ func (inst *Service) handleComplete(msg *app.Msg) {
 	if maxTokens <= 0 {
 		maxTokens = inst.cfg.MaxTokens
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), inst.cfg.Timeout)
+	ctx, cancel := context.WithTimeout(inst.base, inst.cfg.Timeout)
 	defer cancel()
+	if req.CancelKey != "" {
+		k := cancelKey{sender: msg.Sender, instance: msg.SenderInstance, key: req.CancelKey}
+		inst.mu.Lock()
+		inst.running[k] = cancel
+		inst.mu.Unlock()
+		defer func() {
+			inst.mu.Lock()
+			delete(inst.running, k)
+			inst.mu.Unlock()
+		}()
+	}
 	if req.DeadlineUnixNanos > 0 {
 		if d := time.Unix(0, req.DeadlineUnixNanos); d.Before(time.Now().Add(inst.cfg.Timeout)) {
 			var c2 context.CancelFunc

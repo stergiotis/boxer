@@ -35,6 +35,10 @@ const (
 	SubjectDescribe = "llm.describe"
 	// SubjectComplete is one chat completion.
 	SubjectComplete = "llm.complete"
+	// SubjectCancel stops a completion in flight: a publish, no reply,
+	// naming the cancel key the request carried. Only the sender that
+	// made the request can stop it.
+	SubjectCancel = "llm.cancel"
 	// SubjectAll is the service's subscription pattern.
 	SubjectAll = "llm.*"
 )

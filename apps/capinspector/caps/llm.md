@@ -37,6 +37,8 @@ res, err := inst.model.Complete(ctx, llm.Request{
 
 - **Subjects.** `llm.describe` and `llm.complete`, request/reply. The host
   owns the model and the endpoint; a request carries neither.
+  `llm.cancel` is a publish that stops the sender's own completion in
+  flight; the typed client sends it when the caller's context is cancelled.
 - **Backends.** One service, under the id `runtime.llm`, over the
   repository's one chat-completion client, configured once by
   `BOXER_LLM_ENDPOINT`, `BOXER_LLM_MODEL`, `BOXER_LLM_APIKEY`,

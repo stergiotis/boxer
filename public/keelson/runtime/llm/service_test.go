@@ -274,3 +274,100 @@ func TestImagesCrossTheBus(t *testing.T) {
 	require.Len(t, svc.Calls(), 1)
 	assert.Equal(t, 1+len(img.Data), svc.Calls()[0].PromptBytes)
 }
+
+// blockingProvider holds a completion until its context ends, and says
+// how it ended.
+type blockingProvider struct {
+	started chan struct{}
+	ended   chan error
+}
+
+func newBlockingProvider() *blockingProvider {
+	return &blockingProvider{started: make(chan struct{}, 1), ended: make(chan error, 1)}
+}
+
+func (f *blockingProvider) Complete(ctx context.Context, _ openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
+	f.started <- struct{}{}
+	<-ctx.Done()
+	f.ended <- ctx.Err()
+	return openaichat.CompletionResponse{}, ctx.Err()
+}
+func (f *blockingProvider) Close() (err error) { return }
+
+func userMessage() []openaichat.Message {
+	return []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+}
+
+// Cancelling the requester's context returns at once and stops the
+// provider call on the service side; the call table records it.
+func TestCancelStopsTheProviderCall(t *testing.T) {
+	p := newBlockingProvider()
+	cli, svc, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() {
+		_, err := cli.Complete(ctx, Request{Purpose: "cancel", Messages: userMessage()})
+		errc <- err
+	}()
+	<-p.started
+	cancel()
+	select {
+	case err := <-errc:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Complete did not return on cancellation")
+	}
+	select {
+	case err := <-p.ended:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the provider call was not cancelled")
+	}
+	require.Eventually(t, func() bool {
+		calls := svc.Calls()
+		return len(calls) == 1 && calls[0].Error != ""
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
+// Client.Timeout bounds the wait in-process too: the service answers off
+// the requester's goroutine, so a slow provider no longer holds it.
+func TestClientTimeoutHoldsInProcess(t *testing.T) {
+	p := newBlockingProvider()
+	cli, _, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	cli.Timeout = 50 * time.Millisecond
+	t0 := time.Now()
+	_, err := cli.Complete(context.Background(), Request{Messages: userMessage()})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, inprocbus.ErrTimeout)
+	assert.Less(t, time.Since(t0), 5*time.Second)
+}
+
+// Another app cannot stop a call by guessing its key: cancel keys are
+// scoped to the sender.
+func TestCancelIsScopedToTheSender(t *testing.T) {
+	p := newBlockingProvider()
+	bus := inprocbus.NewInst(zerolog.Nop())
+	svc, err := NewService(bus, zerolog.Nop(), Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+	owner := bus.NewClient(appId, ClientCaps("test: ask"))
+	other := bus.NewClient("test.llm.other", ClientCaps("test: other"))
+	payload, err := encode(wireRequest{V: wireVersion, Messages: userMessage(), CancelKey: "k"})
+	require.NoError(t, err)
+	go func() { _, _ = owner.RequestWithTimeout(SubjectComplete, payload, 5*time.Second) }()
+	<-p.started
+	stop, err := encode(wireCancel{V: wireVersion, Key: "k"})
+	require.NoError(t, err)
+	require.NoError(t, other.Publish(SubjectCancel, stop))
+	select {
+	case <-p.ended:
+		t.Fatal("another sender stopped the call")
+	case <-time.After(100 * time.Millisecond):
+	}
+	require.NoError(t, owner.Publish(SubjectCancel, stop))
+	select {
+	case <-p.ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the owner could not stop its call")
+	}
+}
