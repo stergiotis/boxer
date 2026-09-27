@@ -1,3 +1,5 @@
+//go:build !(js || wasip1)
+
 package chserver
 
 import (
@@ -41,10 +43,6 @@ import (
 // so degradation loses nothing durable.
 
 const (
-	// progressIntervalMs is the server-side tick spacing requested for
-	// progress headers. 250 ms reads as live without header spam on
-	// minute-long queries (~240 lines/min).
-	progressIntervalMs = 250
 	// progressDialTimeout bounds the TCP connect; established connections
 	// are governed by the caller's ctx.
 	progressDialTimeout = 5 * time.Second
