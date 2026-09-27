@@ -742,12 +742,14 @@ fn close_requested(out: &egui::FullOutput) -> bool {
 /// the pass whose pixels the PNG is read back from. Returns the path it asked
 /// for, which [`capture_svg_written`] checks after the pass. The backdrop is
 /// the opaque black the raster is cleared to, so an uncovered region reads the
-/// same in both files.
+/// same in both files. Fonts are embedded only when the request asks: a
+/// reader of the text does not need them, and they are most of the bytes.
 #[cfg(feature = "headless_raster")]
 fn queue_capture_svg(
     export: &crate::imzero2::svgexport::ExportStateHandle,
     dump_dir: Option<&std::path::Path>,
     name: &str,
+    embed_fonts: bool,
 ) -> Option<std::path::PathBuf> {
     // No dump directory: the capture itself is refused below, with a warning.
     let dir = dump_dir?;
@@ -769,7 +771,7 @@ fn queue_capture_svg(
     crate::imzero2::svgexport::request_export(
         export,
         path.clone(),
-        true,
+        embed_fonts,
         crate::imzero2::svgexport::ExportScope::Viewport,
         Some(egui::Color32::BLACK),
     );
@@ -1244,10 +1246,14 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         #[cfg(feature = "headless_raster")]
         let capture = carrier.as_ref().and_then(|c| c.take_capture_request());
         #[cfg(feature = "headless_raster")]
-        let capture_svg = capture
-            .as_ref()
-            .filter(|r| r.svg)
-            .and_then(|r| queue_capture_svg(&fffi.export_state, opts.dump_dir.as_deref(), &r.name));
+        let capture_svg = capture.as_ref().filter(|r| r.svg).and_then(|r| {
+            queue_capture_svg(
+                &fffi.export_state,
+                opts.dump_dir.as_deref(),
+                &r.name,
+                r.svg_fonts,
+            )
+        });
         // Mirrors eframe 0.34's epi_integration: `run_ui(raw_input, |ui| {
         // app.logic(ui.ctx(), ..) })` — the interpreter dispatches against
         // the live pass exactly as it does under the desktop host.

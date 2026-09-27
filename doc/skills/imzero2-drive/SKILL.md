@@ -88,7 +88,7 @@ substring), `value`, `valueContains`, `role`, `nth`.
 | `read` | anchor, `pattern`, `on` | polls until the node's value (or name, with `"on":"name"`) matches the regular expression, then binds every named group `(?P<zoom>[\d.]+)` for the rest of the run |
 | `expect` | `of`, `minus`; `eq`, `approx`+`tol`, `min`, `max`, `is`, `matches` | compares a bound name — less another, with `minus` — with a constant; fails with what was read and what was expected |
 | `tree` | `text`, `role`, `id` (as *under*) | prints matching nodes mid-run |
-| `capture` | `text` as the file name; `sidecars` | PNG into the host's `IMZERO2_HEADLESS_DUMP_DIR`; with `"sidecars":["svg","tree"]` also `<name>.svg` (the same pass's shapes, text as glyph-positioned `<text>`) and `<name>.tree.jsonl` (every node, taken right after) |
+| `capture` | `text` as the file name; `sidecars` | PNG into the host's `IMZERO2_HEADLESS_DUMP_DIR`; with `"sidecars":["svg","tree"]` also `<name>.svg` (the same pass's shapes; text as one `<text>` per run with an `x` per character, so `data-text` and the element's string agree) and `<name>.tree.jsonl` (every node, taken right after). `"svg+fonts"` in place of `"svg"` embeds the used fonts in the SVG, for looking at it on a machine without them; it is several times the size |
 | `resize`, `cadence`, `sleep`, `note` | see `carrierclient.Step` | |
 
 Coordinate steps (`click`, `hover`, `drag`) also take `xFrom` / `yFrom`: the

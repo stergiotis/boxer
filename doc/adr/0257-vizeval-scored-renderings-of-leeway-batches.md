@@ -194,9 +194,15 @@ The exporter wraps each text shape's glyphs in one `<g class="imz-text">`
 carrying the string, the ink bounds of the glyphs drawn — each glyph's atlas
 quad, where egui's tessellation puts it, not its line box, which counted
 descender space a digit never inks and called fully drawn labels clipped —
-the largest font size and whether egui elided it. The per-glyph elements alone carry neither
-advance widths nor which glyphs form a label, and reconstructing words from
-glyph gaps would measure the reconstruction.
+the largest font size and whether egui elided it. Inside the group the glyphs
+are written as one `<text>` per run of same-styled glyphs with an `x`
+coordinate per character, egui's positions, so a viewer's own shaping never
+moves a glyph and the string is readable as text; the earlier one-element-per-
+glyph form carried neither advance widths nor which glyphs form a label, and
+cost about three times the bytes. The sidecar names the fonts rather than
+embedding them — the harness measures the file, it does not look at it, and
+the embedded font blocks were most of its bytes; a scene that wants a
+self-contained file asks for the `svg+fonts` sidecar instead.
 
 A candidate is rendered by a scene generated in memory from the scenario
 and the candidate, run through the scene library (ADR-0248 §SD5), never
