@@ -18,6 +18,7 @@ import (
 	_ "github.com/stergiotis/boxer/apps/appstate"
 	_ "github.com/stergiotis/boxer/apps/capdemo"
 	_ "github.com/stergiotis/boxer/apps/capinspector"
+	_ "github.com/stergiotis/boxer/apps/chat"
 	_ "github.com/stergiotis/boxer/apps/fibscope"
 	_ "github.com/stergiotis/boxer/apps/imzrt"
 	_ "github.com/stergiotis/boxer/apps/imztop"
