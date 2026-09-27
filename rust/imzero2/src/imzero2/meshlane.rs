@@ -26,13 +26,7 @@
 //! viewer pixels (`points × pixels_per_point`); u16 at 1/8 px caps the frame
 //! at 8191 px per axis, comfortably past the 4K-at-DPR-2 envelope.
 
-#[cfg(feature = "headless")]
 use crate::imzero2::inputproto::PREFIX_MESH;
-/// The carrier's wire prefix for a mesh message; the browser host writes the
-/// same bytes to a port instead of a socket, without the carrier's input
-/// module behind it. The headless build asserts the two agree.
-#[cfg(not(feature = "headless"))]
-const PREFIX_MESH: u8 = 0x04;
 use std::collections::HashMap;
 use std::hash::Hasher as _;
 
