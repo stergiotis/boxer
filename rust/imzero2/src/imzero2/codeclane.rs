@@ -281,9 +281,29 @@ impl CodecLane {
         }
     }
 
-    /// Hardware (VAAPI) lane for a codec. Probe it with [`probe_lane`] before
+    /// Hardware (VAAPI) lane for a codec, converting the BGRA readback to the
+    /// encoder's surface format on the CPU. Probe it with [`probe_lane`] before
     /// use — VAAPI opens then ENOSYS-fails on stock Fedora mesa.
     pub fn hardware(codec: VideoCodec) -> Self {
+        Self::vaapi(codec, false)
+    }
+
+    /// The hardware lane with the BGRA → NV12 conversion on the GPU instead:
+    /// the frame is uploaded as BGRA and `scale_vaapi` converts it, which takes
+    /// most of the hardware lane's CPU cost off the host (the conversion costs
+    /// about as much as rasterizing the frame). `None` for lanes that do not
+    /// encode NV12. [`CodecLane::best`] uses it only where
+    /// [`gpu_conversion_is_bt709`] holds, because the VA driver, not the
+    /// filter's options, picks the conversion matrix, and the lane's stream
+    /// says BT.709.
+    pub fn hardware_gpu_conversion(codec: VideoCodec) -> Option<Self> {
+        match codec {
+            VideoCodec::H264 | VideoCodec::Vp9 | VideoCodec::Av1 => Some(Self::vaapi(codec, true)),
+            VideoCodec::Av1Hi444 | VideoCodec::Mesh => None,
+        }
+    }
+
+    fn vaapi(codec: VideoCodec, gpu_conversion: bool) -> Self {
         // `cv` is the VAAPI encoder; `upload` is the sw pixel format hwupload
         // maps onto the VA surface — `nv12` (4:2:0) for the standard lanes, the
         // packed 8-bit 4:4:4 surface `vuyx` for the High-4:4:4 lane. An
@@ -301,7 +321,11 @@ impl CodecLane {
             "-vaapi_device".to_owned(),
             "/dev/dri/renderD128".to_owned(),
             "-vf".to_owned(),
-            format!("format={upload},hwupload"),
+            if gpu_conversion {
+                GPU_BT709_CONVERSION.to_owned()
+            } else {
+                format!("format={upload},hwupload")
+            },
             "-c:v".to_owned(),
             cv.to_owned(),
         ];
@@ -326,6 +350,13 @@ impl CodecLane {
         // depth 1 cost no throughput (measured 2026-09-25, see the
         // multi-tenant display design space in doc/adr-background-work).
         encoder_args.extend(["-async_depth", "1"].iter().map(|s| (*s).to_owned()));
+        // Say in the stream which colours the samples are, so a decoder need
+        // not guess. The CPU conversion (swscale) writes limited-range BT.601;
+        // the GPU conversion carries its BT.709 properties on the frames. The
+        // 4:4:4 lane is left as it was.
+        if !gpu_conversion && upload == "nv12" {
+            encoder_args.extend(BT601_LABEL.iter().map(|s| (*s).to_owned()));
+        }
         Self {
             codec,
             encoder_args,
@@ -346,7 +377,9 @@ impl CodecLane {
     }
 
     /// The best working lane for a codec on this host: hardware (VAAPI) if it
-    /// actually encodes here, else the portable software lane (SD5), else the
+    /// actually encodes here — converting on the GPU where this host's driver
+    /// was checked to convert to BT.709, else on the CPU — else the portable
+    /// software lane (SD5), else the
     /// encoderless mesh draw-stream lane (ADR-0128). The same rule drives the
     /// startup default and the runtime switch, so the encode backend reported
     /// to the Go control matches what is used. The mesh lane has no encoder to
@@ -368,6 +401,12 @@ impl CodecLane {
     pub fn best(codec: VideoCodec) -> Self {
         if codec == VideoCodec::Mesh {
             return Self::mesh();
+        }
+        if let Some(gpu) = Self::hardware_gpu_conversion(codec)
+            && gpu_conversion_is_bt709()
+            && probe_lane(&gpu).is_ok()
+        {
+            return gpu;
         }
         let hw = Self::hardware(codec);
         if probe_lane(&hw).is_ok() {
@@ -598,6 +637,80 @@ pub fn probe_host_encode() -> Vec<(VideoCodec, LaneProbe, LaneProbe)> {
     .collect()
 }
 
+/// The GPU conversion: upload BGRA, convert to limited-range NV12 on the GPU,
+/// and mark the frames BT.709 — which the encoder then writes into the stream.
+/// Without `out_range=tv` the conversion is full range and the stream says
+/// the samples are RGB; without the colour properties it says nothing.
+const GPU_BT709_CONVERSION: &str = "hwupload,scale_vaapi=format=nv12:out_range=tv:\
+out_color_matrix=bt709:out_color_primaries=bt709:out_color_transfer=bt709";
+
+/// What the CPU conversion writes: limited-range BT.601.
+const BT601_LABEL: [&str; 8] = [
+    "-colorspace",
+    "bt470bg",
+    "-color_primaries",
+    "bt470bg",
+    "-color_trc",
+    "smpte170m",
+    "-color_range",
+    "tv",
+];
+
+/// Whether this host's VA driver converts BGRA to BT.709, so that the GPU
+/// conversion's stream says what its samples are. The driver, not
+/// `scale_vaapi`'s options, picks the matrix — Mesa's radeonsi converts to
+/// BT.709 whatever is asked — so it is checked once per process: pure red is
+/// converted on the GPU and its luma read back. `false` when the check cannot
+/// run, which leaves the conversion on the CPU.
+pub fn gpu_conversion_is_bt709() -> bool {
+    static CHECKED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *CHECKED.get_or_init(|| {
+        let luma = gpu_converted_red_luma();
+        let bt709 = luma.is_some_and(is_bt709_red_luma);
+        tracing::info!(?luma, bt709, "VAAPI colour conversion check");
+        bt709
+    })
+}
+
+/// Luma of a pure-red frame after the GPU conversion, or `None` if it could
+/// not be converted here.
+fn gpu_converted_red_luma() -> Option<u8> {
+    let (w, h) = (256usize, 256usize);
+    let out = std::process::Command::new(ffmpeg_bin())
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=256x256:r=30,format=bgra",
+            "-frames:v",
+            "1",
+            "-vaapi_device",
+            "/dev/dri/renderD128",
+            "-vf",
+            &format!("{GPU_BT709_CONVERSION},hwdownload,format=nv12"),
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    out.stdout.get(w * (h / 2) + w / 2).copied()
+}
+
+/// Limited-range luma of pure red is 16 + 219 × 0.2126 ≈ 63 under BT.709 and
+/// 16 + 219 × 0.299 ≈ 81 under BT.601.
+fn is_bt709_red_luma(y: u8) -> bool {
+    (60..=66).contains(&y)
+}
+
 /// Probe whether a specific lane actually encodes on this host (SD5): a 2-frame
 /// probe-encode to `-f null`. Returns [`LaneProbe::Ok`] on success, else the
 /// classified failure cause (e.g. `h264_vaapi` → [`LaneProbe::EncodeRejected`]
@@ -618,7 +731,9 @@ pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
         "-f",
         "lavfi",
         "-i",
-        "color=c=black:s=256x256:r=30",
+        // BGRA, as the host feeds its encoder: a lane whose upload or
+        // conversion cannot take BGRA must fail here, not on the first frame.
+        "color=c=black:s=256x256:r=30,format=bgra",
         "-frames:v",
         "2",
     ])
@@ -920,7 +1035,12 @@ mod tests {
             VideoCodec::Av1,
             VideoCodec::Av1Hi444,
         ] {
-            for lane in [CodecLane::software(codec), CodecLane::hardware(codec)] {
+            let lanes = [
+                Some(CodecLane::software(codec)),
+                Some(CodecLane::hardware(codec)),
+                CodecLane::hardware_gpu_conversion(codec),
+            ];
+            for lane in lanes.into_iter().flatten() {
                 let a = lane.with_gop(true).encoder_args;
                 let gops: Vec<usize> =
                     (0..a.len()).filter(|&i| a[i] == "-g" || a[i].starts_with("-g:")).collect();
@@ -960,5 +1080,64 @@ mod tests {
         // Up to the clamp_resize ceiling (8192²).
         assert_eq!(vp9.webcodecs_codec_string(7680, 4320), "vp09.00.60.08");
         assert_eq!(av1.webcodecs_codec_string(7680, 4320), "av01.0.16M.08");
+    }
+
+    #[test]
+    fn the_cpu_conversion_says_bt601_and_the_gpu_conversion_bt709() {
+        // A stream that does not say which colours its samples are is decoded
+        // by guesswork, and one that says the wrong thing is decoded wrongly.
+        for codec in [VideoCodec::H264, VideoCodec::Vp9, VideoCodec::Av1] {
+            let cpu = CodecLane::hardware(codec).encoder_args.join(" ");
+            assert!(cpu.contains("format=nv12,hwupload"), "{codec:?}: {cpu}");
+            assert!(cpu.contains("-colorspace bt470bg"), "{codec:?}: {cpu}");
+            assert!(cpu.contains("-color_range tv"), "{codec:?}: {cpu}");
+            let gpu = CodecLane::hardware_gpu_conversion(codec)
+                .expect("an NV12 lane has a GPU conversion")
+                .encoder_args
+                .join(" ");
+            assert!(
+                gpu.contains("scale_vaapi=format=nv12:out_range=tv"),
+                "{codec:?}: {gpu}"
+            );
+            assert!(gpu.contains("out_color_matrix=bt709"), "{codec:?}: {gpu}");
+            assert!(
+                !gpu.contains("bt470bg"),
+                "{codec:?}: one label, not two: {gpu}"
+            );
+            assert!(gpu.contains("-async_depth 1"), "{codec:?}: {gpu}");
+        }
+        assert!(CodecLane::hardware_gpu_conversion(VideoCodec::Av1Hi444).is_none());
+        assert!(CodecLane::hardware_gpu_conversion(VideoCodec::Mesh).is_none());
+        assert!(
+            !CodecLane::hardware(VideoCodec::Av1Hi444)
+                .encoder_args
+                .iter()
+                .any(|a| a == "-colorspace"),
+            "the 4:4:4 lane is left as it was"
+        );
+    }
+
+    #[test]
+    fn red_luma_tells_bt709_from_bt601() {
+        assert!(is_bt709_red_luma(63), "BT.709 limited range");
+        assert!(!is_bt709_red_luma(81), "BT.601 limited range");
+        assert!(!is_bt709_red_luma(54), "BT.709 full range");
+        assert!(!is_bt709_red_luma(0));
+    }
+
+    #[test]
+    fn best_converts_on_the_gpu_only_where_the_driver_was_checked() {
+        let lane = CodecLane::best(VideoCodec::H264);
+        if !lane.is_hardware() {
+            eprintln!("no VAAPI H.264 lane here; skipping");
+            return;
+        }
+        let on_gpu = lane.encoder_args.iter().any(|a| a.contains("scale_vaapi"));
+        assert_eq!(
+            on_gpu,
+            gpu_conversion_is_bt709(),
+            "GPU conversion exactly when the driver converts to BT.709: {:?}",
+            lane.encoder_args
+        );
     }
 }

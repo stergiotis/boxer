@@ -1416,13 +1416,25 @@ mod tests {
         // last one for a long time. An encoder that keeps a frame in flight
         // until its successor arrives (h264_vaapi's default async_depth of 2)
         // would show that screen one frame stale until the next change.
-        let lane = crate::imzero2::codeclane::CodecLane::hardware(
-            crate::imzero2::codeclane::VideoCodec::H264,
-        );
-        if !crate::imzero2::codeclane::probe_lane(&lane).is_ok() {
-            eprintln!("no working VAAPI H.264 encoder here; skipping");
-            return;
+        use crate::imzero2::codeclane::{CodecLane, VideoCodec, probe_lane};
+        let lanes = [
+            Some(CodecLane::hardware(VideoCodec::H264)),
+            CodecLane::hardware_gpu_conversion(VideoCodec::H264),
+        ];
+        let mut tried = 0;
+        for lane in lanes.into_iter().flatten() {
+            if !probe_lane(&lane).is_ok() {
+                continue;
+            }
+            tried += 1;
+            every_frame_comes_out_without_a_successor(lane);
         }
+        if tried == 0 {
+            eprintln!("no working VAAPI H.264 encoder here; skipping");
+        }
+    }
+
+    fn every_frame_comes_out_without_a_successor(lane: crate::imzero2::codeclane::CodecLane) {
         let (w, h) = (256u32, 256u32);
         let (tx, mut rx) = tokio::sync::mpsc::channel::<EncodedFrame>(64);
         let mut sink = EncoderSink::new(
