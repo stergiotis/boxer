@@ -293,9 +293,11 @@ func (inst *Application[U]) Step() (more bool, err error) {
 	if unmarshallerCounter != nil {
 		unmarshallerCounter.ResetReadBytes()
 	}
+	yieldToOtherGoroutines()
 	if e := inst.RenderLoopHandler(); e != nil {
 		inst.handleNonNilError(e)
 	}
+	yieldToOtherGoroutines()
 	read := 0
 	if unmarshallerCounter != nil {
 		read = unmarshallerCounter.GetReadBytes()

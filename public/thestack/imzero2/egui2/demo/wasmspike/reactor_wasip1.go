@@ -3,7 +3,6 @@
 package main
 
 import (
-	"runtime"
 	"strings"
 	"unsafe"
 )
@@ -50,30 +49,13 @@ func setup(n int32) int32 {
 
 // frame is the reactor's tick: one Step of the application. Returns 0 while
 // the loop continues and 1 once it has stopped and reported; -1 before setup.
-//
-// Goroutines other than the render goroutine run only while an export is
-// executing, and the render goroutine never parks: its reads are answered
-// synchronously by the host's shim. So the tick yields to the scheduler
-// before and after the frame — that is when an expired timer fires and a
-// background goroutine (a task producer, a bus handler) gets its turn.
-// A few rounds let a wake-up chain (timer → publish → observer) complete
-// within one tick.
+// Goroutines other than the render goroutine get their turn inside Step,
+// which yields to the scheduler around the frame on wasm targets.
 //
 //go:wasmexport frame
 func frame() int32 {
 	if stepFn == nil {
 		return -1
 	}
-	yieldToOthers()
-	rc := stepFn()
-	yieldToOthers()
-	return rc
-}
-
-const yieldRounds = 4
-
-func yieldToOthers() {
-	for range yieldRounds {
-		runtime.Gosched()
-	}
+	return stepFn()
 }

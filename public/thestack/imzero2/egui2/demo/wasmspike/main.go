@@ -287,19 +287,42 @@ type sceneI interface {
 	render(ids *c.WidgetIdStack, stageW, stageH float32)
 }
 
-// galleryScene renders every registered demo each frame, each on its own
-// stage below the previous one, with the same Init/RenderStateful handling
-// as the screenshot tour.
+// galleryScene renders registered demos each frame, each on its own stage
+// below the previous one, with the same Init/RenderStateful handling as the
+// screenshot tour. The default set is the three tour packages' demos — the
+// trial's `gallery` workload, pinned so that linking an app into the spike
+// for the app scene (which brings that app's registry demos along) does not
+// change what the measurement arms render; `-demo all` takes everything.
+// galleryPackages are the name prefixes of the tour packages the gallery
+// workload is made of.
+var galleryPackages = []string{"fibscope-", "idsshowcase-", "leewaywidgets-"}
+
+func galleryIncludes(only string, name string) bool {
+	switch only {
+	case "":
+		for _, p := range galleryPackages {
+			if strings.HasPrefix(name, p) {
+				return true
+			}
+		}
+		return false
+	case "all":
+		return true
+	}
+	return slices.Contains(strings.Split(only, ","), name)
+}
+
 type galleryScene struct {
 	demos []registry.Demo
 	state map[string]any
 	only  string
+	pad   float32
 }
 
 func (inst *galleryScene) setup(ids *c.WidgetIdStack) {
 	inst.state = map[string]any{}
 	for _, d := range registry.All() {
-		if inst.only != "" && d.Name != inst.only {
+		if !galleryIncludes(inst.only, d.Name) {
 			continue
 		}
 		switch {
@@ -313,7 +336,7 @@ func (inst *galleryScene) setup(ids *c.WidgetIdStack) {
 }
 
 func (inst *galleryScene) render(ids *c.WidgetIdStack, stageW, stageH float32) {
-	var y float32
+	y := inst.pad
 	for _, d := range inst.demos {
 		w, h := d.Stage[0], d.Stage[1]
 		if w == 0 || w > stageW {
@@ -426,7 +449,8 @@ func run(args []string) {
 			&cli.BoolFlag{Name: "lazyFlush", Value: true, Usage: "pipe: defer flushes to the next blocking read (the channel default); -lazyFlush=false flushes after every message"},
 			&cli.StringFlag{Name: "scene", Value: "gallery", Usage: "gallery | labels | app"},
 			&cli.StringFlag{Name: "app", Value: "github.com/stergiotis/boxer/apps/taskdemo", Usage: "app: the registered app id to mount (its package must be linked in)"},
-			&cli.StringFlag{Name: "demo", Usage: "gallery: render only this registry demo"},
+			&cli.StringFlag{Name: "demo", Usage: "gallery: render only these registry demos (comma-separated, registry order); default the three tour packages' demos, `all` every demo linked in"},
+			&cli.Float64Flag{Name: "stackPad", Usage: "gallery: empty points above the first demo, to place a demo far down the stage"},
 			&cli.IntFlag{Name: "rows", Value: 200, Usage: "labels: rows in the grid"},
 			&cli.IntFlag{Name: "frames", Value: 300, Usage: "measured frames"},
 			&cli.IntFlag{Name: "warmup", Value: 30, Usage: "frames discarded before measuring"},
@@ -477,7 +501,7 @@ func spike(ctx *cli.Context) (err error) {
 	var sc sceneI
 	switch sceneName {
 	case "gallery":
-		sc = &galleryScene{only: ctx.String("demo")}
+		sc = &galleryScene{only: ctx.String("demo"), pad: float32(ctx.Float64("stackPad"))}
 	case "labels":
 		sc = &labelsScene{rows: ctx.Int("rows")}
 	case "app":
