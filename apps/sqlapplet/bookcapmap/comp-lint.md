@@ -5,6 +5,7 @@ status: draft
 title: Competence links
 summary: "List declared competence links and how each resolved"
 icon: "🔗"
+keywords: [competence, competences, capmap, capability map, business capability, vault, catalog, links, wikilink, unresolved, lint]
 endpoint: introspection
 tabs: [table, detail]
 ---

@@ -46,6 +46,14 @@ func TestCapmapBookCorpus(t *testing.T) {
 		assert.Equal(t, EndpointIntrospection, d.Endpoint, slug)
 		assert.Equal(t, analysis.QuerySecurityRead, d.Class, "%s: keelson('…') classifies as a local read", slug)
 		assert.NotEmpty(t, d.Icon, slug)
+		// Retrievability: the launcher matches Display, Topics and Keywords
+		// (ADR-0214), never Summary, so "competence" must reach every
+		// document through its title and its keyword list, and "capmap"
+		// through the keywords alone — the subsystem's name is not in any
+		// title.
+		assert.Contains(t, strings.ToLower(d.Title), "competence", slug)
+		assert.Contains(t, d.Keywords, "competence", slug)
+		assert.Contains(t, d.Keywords, "capmap", slug)
 	}
 
 	assert.Equal(t, []TabSel{{ID: "table"}}, bySlug["comp-overview"].Tabs)

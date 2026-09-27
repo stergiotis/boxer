@@ -5,6 +5,7 @@ status: draft
 title: Competence browser
 summary: "Read the competence hierarchy with each note in full"
 icon: "🔍"
+keywords: [competence, competences, capmap, capability map, business capability, vault, catalog, hierarchy, treemap, browser]
 endpoint: introspection
 tabs: ["treemap:nodes", "detail@side", "table@bottom", "network@bottom"]
 ---

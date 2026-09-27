@@ -5,6 +5,7 @@ status: draft
 title: Competence overview
 summary: "Count what the competence vault holds and how much is judged"
 icon: "🗂"
+keywords: [competence, competences, capmap, capability map, business capability, vault, catalog, maturity, pain, coverage]
 endpoint: introspection
 tabs: [table]
 ---
