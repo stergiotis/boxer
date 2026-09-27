@@ -117,6 +117,16 @@ in-process bus, and play's Run returned 50 rows in 74 ms from ClickHouse
 through a same-origin proxy. The logbook entry lists what the tab still
 lacks.
 
+**Both machines on one pack** (2026-09-27, `powersave`, gallery of eleven
+demos): Go in-process 1.31 ms native / 6.2 ms wasm on the handheld and
+0.41 / 2.25 ms on the desktop; a whole frame through the real host 13 ms in
+Node and 15 ms in Firefox on the handheld, 5 and 6 ms on the desktop. The
+`performance` governor rerun is still open. Mesh parity against the native
+appliance: the first full frame is 1.40 MB native against 1.36 MB in the
+browser host; a settled scene posts nothing on either, but the stacked
+gallery never settles in the browser host (one body a pass, an open
+defect the logbook entry describes).
+
 **What this trial does not say.**
 
 - **Not "the browser tier costs 4× the desktop."** The stub interprets

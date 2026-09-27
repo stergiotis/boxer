@@ -464,3 +464,67 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
   tab from the existing viewer page. No numbers were taken; the arms
   above are functional checks.
 - **Results:** no run directory; the captures are not kept.
+
+## 2026-09-27 — step 8, the open measurement questions — both machines re-measured on one pack; Firefox on the handheld; mesh parity against the native appliance
+
+- **Build under test:** one pack built by `measure.sh --pack` from the tree
+  at the M3 entry (pipelined Sync, the app scene, play linked in — the
+  gallery is now eleven demos and 164 kB a frame), run on both machines;
+  the browser host with a new unchanged-frame skip; `mesh_count.mjs`, a
+  viewer-side client that speaks the carrier's handshake and counts the
+  mesh wire by message kind; the spike's `-clientBinary` so the native
+  mesh appliance can sit behind it.
+- **Environment:** handheld (`powersave`, other sessions active, load 1–2)
+  and desktop (`powersave`, idle, load 0.3), gallery, 300 frames after 30,
+  Node arms plus Firefox headless on each; `runs/2026-09-27-handheld-powersave`
+  and `runs/2026-09-27-desktop-powersave`.
+- **Attempted:** (1) the Node and Firefox arms on both machines from the
+  same pack; (2) the `performance` governor rerun — not run: switching
+  needs the owner's sudo on each machine and neither had been switched
+  by the end of the session (the rerun script is ready); (3) Chromium on
+  the desktop — not run: no Chromium is installed there (Firefox only);
+  (4) mesh parity: the native `headless_mesh` appliance behind the same
+  spike, counted from a viewer client, against the browser host's
+  per-kind tally on the same gallery at 1024×600.
+- **Findings:**
+  - **[neutral boxer-toolbelt → proposed:keelson-wasm-trial / — / —]**
+    the two-machine picture of M0 holds on the grown gallery and the new
+    pack: Go in-process 1.31 ms native / 6.2 ms wasm (4.7×) on the handheld,
+    0.41 / 2.25 ms (5.5×) on the desktop; the whole frame through the real
+    host 13.0 ms (Node) / 15 ms (Firefox) on the handheld against 5.1 /
+    6 ms on the desktop; the reactor arm equal to command mode on both.
+    Firefox on the handheld, missing from M2, is within 15 % of Chromium's
+    earlier figures on the same class of frame; desktop Firefox is
+    consistent with its 2026-09-25 run.
+  - **[pain boxer-toolbelt → proposed:imzero2-browser-host / performance-efficiency.resource-utilisation / S2]**
+    the browser host posted a frame message on every pass, where the
+    carrier skips a frame whose mesh signature it has already sent. It now
+    skips a pass whose body hashes, texture updates and live keys equal
+    the last one posted (`frames_unchanged` in its stats). Every single
+    demo settles under it — 69 of 70 passes post nothing after the first,
+    the two fibscope tables after some 40 to 60 passes.
+  - **[pain boxer-toolbelt → proposed:imzero2-browser-host / functional-correctness / S2 — open]**
+    the stacked gallery never settles in the browser host: one body of
+    about 13 kB is re-sent on every one of 1 010 passes, and the bounding
+    box of the re-sent bodies puts it at y ≈ 7 720–8 040 points, the
+    leeway table demo far below the 600-point viewport. The same stack
+    behind the native appliance is static (two frames in 15 s, the second
+    on the viewer's resize), and the same table alone settles in the
+    browser host. Not root-caused; the suspects are how the two hosts
+    open the pass (`run_ui` against the interpreter's root Ui) and a
+    width feedback that converges natively by equality and not under
+    wasm. It costs a body a frame in the tab, and it is what kept play's
+    frame count high in the M3 captures.
+  - **[positive boxer-toolbelt → proposed:keelson-browser-wasm / portability / —]**
+    the first full frame is the same order on both paths — 1.40 MB native
+    (347 kB mesh + 1.05 MB font atlas) against 1.36 MB in the browser host
+    — and the steady state of a settled scene is nothing on both. The
+    wire is the same serializer; what differs is which passes each host
+    decides to send.
+- **Outcome:** the powersave rerun on both machines is in the tree; the
+  governor rerun and desktop Chromium remain open on the owner's side; the
+  parity question has a tool, a number for the first frame, and one open
+  defect. The host's frame skip lands.
+- **Results:** `runs/2026-09-27-handheld-powersave/results.tsv`,
+  `runs/2026-09-27-desktop-powersave/results.tsv`; the parity numbers are
+  from this session's `ARM` lines and `mesh_count` output, not kept.

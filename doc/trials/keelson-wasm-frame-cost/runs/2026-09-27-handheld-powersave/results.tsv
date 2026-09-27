@@ -1,0 +1,12 @@
+scene	arm	host	target	consumer	flush	frames	bytes_frame	msgs_frame	render_p50_us	render_p90_us	render_max_us	sync_p50_us	sync_p90_us	total_p50_us	total_p90_us	bridge_us_frame	wall_ms	rust_us_frame	rust_interpret_us	mesh_bytes_frame
+gallery	native-inproc	native	native	inproc	n/a	300	164366	2690	1306	1734	3075	62	78	1369	1807	0	0	n/a	n/a	n/a
+gallery	native-pipe-eager	native	native	pipe	eager	300	164366	0	5575	6236	12724	105	138	5695	6350	0	0	n/a	n/a	n/a
+gallery	native-pipe-lazy	native	native	pipe	lazy	300	164366	0	1301	1555	3674	63	93	1364	1640	0	0	n/a	n/a	n/a
+gallery	node-wasip1-inproc	node	wasip1	inproc	n/a	300	164193	2691	6215	8854	11274	191	481	6425	9269	0	3284	n/a	n/a	n/a
+gallery	node-wasip1-pipe-eager	node	wasip1	pipe	eager	300	164193	2691	9936	12556	16173	295	644	10249	13165	949	4638	n/a	n/a	n/a
+gallery	node-wasip1-pipe-lazy	node	wasip1	pipe	lazy	300	164193	2691	6519	9244	10449	240	589	6756	9957	191	3406	n/a	n/a	n/a
+gallery	node-wasip1-host	node	wasip1	pipe	host	300	163952	0	6583	9085	11112	6392	6939	13019	15767	56	5765	6747	4485	18241
+gallery	node-wasip1-reactor-host	node	wasip1	pipe	host	300	164125	0	6322	8007	13716	6332	7051	12670	15168	56	5647	6981	4545	5787
+gallery	firefox-wasip1-pipe-eager	firefox	wasip1	pipe	eager	300	164193	2691	13000	16000	19000	0	1000	13000	16000	1745	5923	n/a	n/a	n/a
+gallery	firefox-wasip1-pipe-lazy	firefox	wasip1	pipe	lazy	300	164193	2691	8000	10000	12000	0	1000	8000	10000	139	4116	n/a	n/a	n/a
+gallery	firefox-wasip1-pipe-host	firefox	wasip1	pipe	host	300	163952	0	8000	11000	15000	7000	9000	15000	18000	70	6746	7345	6000	18839
