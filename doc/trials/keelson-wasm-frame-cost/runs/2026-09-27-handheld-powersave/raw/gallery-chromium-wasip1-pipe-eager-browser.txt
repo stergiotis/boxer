@@ -1,0 +1,4 @@
+
+(process:2): Gtk-WARNING **: 18:10:57.325: Locale not supported by C library.
+	Using the fallback 'C' locale.
+Gtk-Message: 18:10:57.336: Failed to load module "canberra-gtk-module"

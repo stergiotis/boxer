@@ -1,1 +1,1 @@
-fffi2stub: messages=887701 bytes=54240437 frames=330 fetches=7920 max_message=27777
+fffi2stub: messages=600930 bytes=42467394 frames=330 fetches=7920 max_message=27777

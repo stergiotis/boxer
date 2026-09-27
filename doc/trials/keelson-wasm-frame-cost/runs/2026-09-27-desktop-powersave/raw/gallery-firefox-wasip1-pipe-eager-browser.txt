@@ -4,8 +4,6 @@ update.go:193: cannot change mount namespace according to change mount (/var/lib
 update.go:193: cannot change mount namespace according to change mount (/var/lib/snapd/hostfs/usr/share/libreoffice/help /usr/share/libreoffice/help none bind,ro 0 0): cannot write to "/var/lib/snapd/hostfs/usr/share/libreoffice/help" because it would affect the host in "/var/lib/snapd"
 update.go:193: cannot change mount namespace according to change mount (/var/lib/snapd/hostfs/usr/share/sphinx_rtd_theme /usr/share/sphinx_rtd_theme none bind,ro 0 0): cannot write to "/var/lib/snapd/hostfs/usr/share/sphinx_rtd_theme" because it would affect the host in "/var/lib/snapd"
 update.go:193: cannot change mount namespace according to change mount (/var/lib/snapd/hostfs/usr/share/xubuntu-docs /usr/share/xubuntu-docs none bind,ro 0 0): cannot write to "/var/lib/snapd/hostfs/usr/share/xubuntu-docs" because it would affect the host in "/var/lib/snapd"
-libpxbackend-1.0.so: cannot open shared object file: No such file or directory
-Failed to load module: ~/snap/firefox/common/.cache/gio-modules/libgiolibproxy.so
 *** You are running in headless mode.
 [GFX1-]: RenderCompositorSWGL failed mapping default framebuffer, no dt
 Exiting due to channel error.

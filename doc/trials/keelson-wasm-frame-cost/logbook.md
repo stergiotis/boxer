@@ -468,17 +468,22 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
 ## 2026-09-27 — step 8, the open measurement questions — both machines re-measured on one pack; Firefox on the handheld; mesh parity against the native appliance
 
 - **Build under test:** one pack built by `measure.sh --pack` from the tree
-  at the M3 entry (pipelined Sync, the app scene, play linked in — the
-  gallery is now eleven demos and 164 kB a frame), run on both machines;
-  the browser host with a new unchanged-frame skip; `mesh_count.mjs`, a
-  viewer-side client that speaks the carrier's handshake and counts the
-  mesh wire by message kind; the spike's `-clientBinary` so the native
-  mesh appliance can sit behind it.
+  at the M3 entry plus the day's fixes (pipelined Sync, the app scene, the
+  gallery pinned to the three tour packages' eleven demos, the render
+  loop's yield on wasm), run on both machines; the browser host with a new
+  unchanged-frame skip; `mesh_count.mjs`, a viewer-side client that speaks
+  the carrier's handshake and counts the mesh wire by message kind; the
+  spike's `-clientBinary` so the native mesh appliance can sit behind it.
+  The gallery is 129 kB and 1 821 messages a frame (M2's was 99 kB: the
+  fibscope demos have joined since).
 - **Environment:** handheld (`powersave`, other sessions active, load 1–2)
-  and desktop (`powersave`, idle, load 0.3), gallery, 300 frames after 30,
-  Node arms plus Firefox headless on each; `runs/2026-09-27-handheld-powersave`
-  and `runs/2026-09-27-desktop-powersave`.
-- **Attempted:** (1) the Node and Firefox arms on both machines from the
+  and desktop (`powersave`, idle, load 0.3), gallery, 300 frames after 30;
+  Node arms plus Chromium and Firefox headless on the handheld, Node plus
+  Firefox on the desktop; `runs/2026-09-27-handheld-powersave` and
+  `runs/2026-09-27-desktop-powersave`. An earlier pass of the same runs on
+  a fifteen-demo gallery was replaced by these once the gallery was
+  pinned; its figures are not kept.
+- **Attempted:** (1) the Node and browser arms on both machines from the
   same pack; (2) the `performance` governor rerun — not run: switching
   needs the owner's sudo on each machine and neither had been switched
   by the end of the session (the rerun script is ready); (3) Chromium on
@@ -488,14 +493,16 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
   per-kind tally on the same gallery at 1024×600.
 - **Findings:**
   - **[neutral boxer-toolbelt → proposed:keelson-wasm-trial / — / —]**
-    the two-machine picture of M0 holds on the grown gallery and the new
-    pack: Go in-process 1.31 ms native / 6.2 ms wasm (4.7×) on the handheld,
-    0.41 / 2.25 ms (5.5×) on the desktop; the whole frame through the real
-    host 13.0 ms (Node) / 15 ms (Firefox) on the handheld against 5.1 /
-    6 ms on the desktop; the reactor arm equal to command mode on both.
-    Firefox on the handheld, missing from M2, is within 15 % of Chromium's
-    earlier figures on the same class of frame; desktop Firefox is
-    consistent with its 2026-09-25 run.
+    the two-machine picture of M0 holds on the new pack: Go in-process
+    0.85 ms native / 4.2 ms wasm (4.9×) on the handheld, 0.41 / 1.54 ms
+    (3.8×) on the desktop; the whole frame through the real host 8.2 ms in
+    Node, 10.1 in Chromium and 10.0 in Firefox on the handheld (Rust 4.3 /
+    5.7 / 4.5 of it) against 3.2 ms in Node and 4 in Firefox on the
+    desktop; the reactor arm equal to command mode on both (8.17 against
+    8.19 ms). Both browsers on the handheld for the first time on one
+    pack: within a millisecond of each other on every arm, Chromium's
+    Rust side the dearer. The flush lever is unchanged: eager against
+    deferred is 8.5 against 5.1 ms in Chromium and 9 against 5 in Firefox.
   - **[pain boxer-toolbelt → proposed:imzero2-browser-host / performance-efficiency.resource-utilisation / S2]**
     the browser host posted a frame message on every pass, where the
     carrier skips a frame whose mesh signature it has already sent. It now
@@ -503,18 +510,26 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
     the last one posted (`frames_unchanged` in its stats). Every single
     demo settles under it — 69 of 70 passes post nothing after the first,
     the two fibscope tables after some 40 to 60 passes.
-  - **[pain boxer-toolbelt → proposed:imzero2-browser-host / functional-correctness / S2 — open]**
-    the stacked gallery never settles in the browser host: one body of
-    about 13 kB is re-sent on every one of 1 010 passes, and the bounding
-    box of the re-sent bodies puts it at y ≈ 7 720–8 040 points, the
-    leeway table demo far below the 600-point viewport. The same stack
-    behind the native appliance is static (two frames in 15 s, the second
-    on the viewer's resize), and the same table alone settles in the
-    browser host. Not root-caused; the suspects are how the two hosts
-    open the pass (`run_ui` against the interpreter's root Ui) and a
-    width feedback that converges natively by equality and not under
-    wasm. It costs a body a frame in the tab, and it is what kept play's
-    frame count high in the M3 captures.
+  - **[pain boxer-toolbelt → proposed:go-wasm-toolchain / time-behaviour / S2 — resolved the same day]**
+    the stacked gallery never settled in the browser host: one body of
+    about 13 kB was re-sent on every one of 1 010 passes, its bounding
+    box at y ≈ 7 720–8 040 points. Two wrong turns first: the position
+    is not a table below the fold but the regex explorer's highlighting
+    scene, which linking play into the spike had brought into the
+    gallery (fifteen demos, not eleven — the reason the gallery grew to
+    164 kB, and why every eleven-name subset "fixed" it); and the moving
+    bodies are a 14-point spinner drawn while one of its query lanes is
+    "running". The lane's goroutine never ran: in command mode nothing in
+    the frame ever yields, because the shim answers every read
+    synchronously, so the job that would have failed fast on the missing
+    bus stayed in flight forever. The reactor, whose tick already
+    yielded, settles the same fifteen-demo stack (293 of 300 passes post
+    nothing); command mode posts a body on every pass. The yield now
+    lives in `Application.Step` for wasm targets, natively a no-op, and
+    the gallery workload is pinned to the three tour packages so an app
+    linked in for the app scene no longer changes what the measurement
+    arms render. The runs in this entry were taken on the fifteen-demo
+    gallery, one spinner included.
   - **[positive boxer-toolbelt → proposed:keelson-browser-wasm / portability / —]**
     the first full frame is the same order on both paths — 1.40 MB native
     (347 kB mesh + 1.05 MB font atlas) against 1.36 MB in the browser host
@@ -523,8 +538,9 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
     decides to send.
 - **Outcome:** the powersave rerun on both machines is in the tree; the
   governor rerun and desktop Chromium remain open on the owner's side; the
-  parity question has a tool, a number for the first frame, and one open
-  defect. The host's frame skip lands.
+  parity question has a tool and a number for the first frame, and the one
+  discrepancy it found was goroutine starvation in the command-mode arms,
+  fixed in the render loop. The host's frame skip lands.
 - **Results:** `runs/2026-09-27-handheld-powersave/results.tsv`,
   `runs/2026-09-27-desktop-powersave/results.tsv`; the parity numbers are
   from this session's `ARM` lines and `mesh_count` output, not kept.

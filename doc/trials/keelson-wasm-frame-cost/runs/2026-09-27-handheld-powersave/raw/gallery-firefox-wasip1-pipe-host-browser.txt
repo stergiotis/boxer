@@ -3,6 +3,6 @@
 [2, Main Thread] WARNING: Locale not supported by C library.
 	Using the fallback 'C' locale.: 'glib warning', file /builds/worker/checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:201
 
-(firefox:2): Gtk-WARNING **: 17:13:16.843: Locale not supported by C library.
+(firefox:2): Gtk-WARNING **: 18:11:43.566: Locale not supported by C library.
 	Using the fallback 'C' locale.
-Gtk-Message: 17:13:16.844: Failed to load module "canberra-gtk-module"
+Gtk-Message: 18:11:43.566: Failed to load module "canberra-gtk-module"

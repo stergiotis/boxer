@@ -1,4 +1,4 @@
-PORT 37991
+PORT 42533
 GET /index.html?target=wasip1&consumer=pipe&flush=host&host=1&scene=gallery&rows=1700&frames=300&warmup=30&stage=1024x600&arm=firefox-wasip1-pipe-host
 GET /worker.mjs
 GET /favicon.ico
@@ -8,4 +8,4 @@ GET /fffi2stub.wasm
 GET /wasmspike_wasip1.wasm
 GET /imzero2.wasm
 POST /report
-ARM {"result":{"arm":"firefox-wasip1-pipe-host","target":"wasip1","consumer":"pipe","lazy_flush":true,"scene":"gallery","frames":300,"warmup":30,"bytes_per_frame":163952,"messages_per_frame":0,"render_us":{"p50":3000,"p90":4000,"max":5000},"sync_us":{"p50":3000,"p90":4000,"max":5000},"total_us":{"p50":6000,"p90":7000,"max":8000}},"host":{"frames":330,"bytesIn":54104432,"lastInterpretUs":2000,"lastTessellateUs":0,"lastSerializeUs":0,"lastBodies":57,"lastBodiesSent":1,"errors":0,"stepMs":953,"steps":330,"meshBytes":7734596,"jsFrames":330,"meshFrames":663,"lastError":""},"bridge":{"chunks":9570,"bridgeMs":4},"wallMs":2409,"ua":"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0"}
+ARM {"result":{"arm":"firefox-wasip1-pipe-host","target":"wasip1","consumer":"pipe","lazy_flush":true,"scene":"gallery","frames":300,"warmup":30,"bytes_per_frame":128689,"messages_per_frame":0,"render_us":{"p50":2000,"p90":2000,"max":4000},"sync_us":{"p50":2000,"p90":2000,"max":3000},"total_us":{"p50":4000,"p90":4000,"max":6000}},"host":{"frames":330,"bytesIn":42467394,"lastInterpretUs":2000,"lastTessellateUs":0,"lastSerializeUs":0,"lastBodies":19,"lastBodiesSent":0,"errors":0,"framesUnchanged":265,"lastSentBbox":[-4.5,66.5,1004.5,391],"stepMs":591,"steps":330,"meshBytes":4558946,"jsFrames":330,"meshFrames":133,"lastError":""},"bridge":{"chunks":6930,"bridgeMs":4},"wallMs":1660,"ua":"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0"}
