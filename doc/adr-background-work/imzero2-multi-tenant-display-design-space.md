@@ -578,7 +578,10 @@ for the worker §5 describes; they bound the design, they do not size it.
   the depth is now 1, at no measured cost in throughput. The same list converts
   BGRA to NV12 on the CPU, which costs about as much as rasterizing the frame
   and is most of what hardware encoding costs the host; converting on the GPU
-  removes most of it, and is not yet done.
+  removes most of it. The host now converts on the GPU where a check at
+  start-up finds the driver converting to BT.709, and says so in the stream;
+  the GPU conversion as first measured wrote full range and declared the
+  samples RGB, and the driver, not the filter's options, picks the matrix.
 - **A software encoder is affordable per session** — a fraction of a core at
   this size, a few milliseconds of latency — and runs out with the CPU.
 - **Guests are small** (§9), and **the stock gokrazy kernel has no vsock** (§5).
@@ -626,7 +629,8 @@ host, mesh to viewers by default and video past a measured trigger. Capacity
 is planned in sessions per CPU core by what the sessions draw, not in streams
 per encoder; admission control and the broker are components of the design,
 not later additions; guest-side encoding is a supported path; and GPU colour
-conversion and the uplink's transport are the cheap fixes to make first.
+conversion (done where the driver's matrix is verified) and the uplink's
+transport are the cheap fixes to make first.
 
 ## 11 Open questions
 
