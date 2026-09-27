@@ -2056,6 +2056,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "imzero2_browser"
+version = "0.1.0"
+dependencies = [
+ "imzero2",
+]
+
+[[package]]
 name = "imzero2_egui"
 version = "0.1.0"
 dependencies = [

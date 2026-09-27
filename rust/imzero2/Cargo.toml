@@ -1,5 +1,8 @@
 [workspace]
-members = [".", "imzero2_egui"]
+members = [".", "imzero2_egui", "browser"]
+# The browser module is a wasm32 cdylib built by build_rust_browser.sh; a
+# plain `cargo build` here does not link it natively.
+default-members = [".", "imzero2_egui"]
 # Vendored third-party source (vendor/egui_software_backend, see its
 # VENDORING.md) is a path dependency but NOT a member: `check.sh` runs
 # `cargo fmt --all` and `cargo clippy --workspace -- -D warnings`, and neither
@@ -29,12 +32,6 @@ rust-version = "1.94"
 [package.metadata.docs.rs]
 all-features = true
 targets = ["x86_64-unknown-linux-gnu"]
-
-# The browser host (ADR-0077 Phase 1) is a wasm32 cdylib driven from JS; the
-# native binaries keep using the rlib. cargo cannot choose the crate type per
-# target, so both are declared and the native build also links an unused .so.
-[lib]
-crate-type = ["rlib", "cdylib"]
 
 [[bin]]
 name = "imzero2_ws_probe"
@@ -138,8 +135,9 @@ inspection = ["desktop", "eframe?/inspection"]
 # C-ABI functions for a JS worker that owns the FFFI2 bytes (browser.rs). No
 # GPU, no sockets, no threads, no files: fonts come as bytes and the clock is a
 # host import. `cargo build --lib --no-default-features --features browser
-# --target wasm32-unknown-unknown` is the artifact; the feature also builds
-# natively so its tests run in the ordinary lane.
+# --target wasm32-unknown-unknown` of the `browser/` cdylib crate is the
+# artifact (build_rust_browser.sh); the feature also builds natively so its
+# tests run in the ordinary lane.
 browser = ["dep:prost"]
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
@@ -283,8 +281,9 @@ rand = "0.10.2"
 # refuse wasm32-unknown-unknown unless told where randomness comes from. The
 # browser host has no wasm-bindgen glue, so both get the crate's own
 # generator (browser.rs): 0.2 through its `custom` feature, 0.3 through the
-# `--cfg getrandom_backend="custom"` rustflag build_rust_browser.sh sets. The
-# only consumer is graph layout seeding.
+# `--cfg getrandom_backend="custom"` rustflag build_rust_browser.sh sets (a
+# cargo config cannot: the repro environment's RUSTFLAGS would replace it).
+# The only consumer is graph layout seeding.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom02 = { package = "getrandom", version = "0.2", features = ["custom"] }
 getrandom = "0.3"
