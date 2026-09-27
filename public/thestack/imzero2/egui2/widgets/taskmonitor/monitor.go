@@ -272,6 +272,11 @@ func (inst *Inst) terminal(id task.TaskIdT, final string, atMs int64, reason str
 // Render draws the widget body. Single-threaded — the host's frame
 // goroutine. Snapshots state under the lock then renders without it
 // so ObserverI callbacks aren't blocked behind the egui scope.
+// inflightRepaintSecs is how soon the monitor asks to be drawn again while
+// a task is in flight: a few progress reports (the producers tick at tens
+// of milliseconds), and well under any idle heartbeat.
+const inflightRepaintSecs = 0.1
+
 func (inst *Inst) Render() {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
@@ -286,6 +291,12 @@ func (inst *Inst) Render() {
 	history := append([]historyRow(nil), inst.history...)
 	inst.mu.Unlock()
 
+	// Progress arrives on the bus between frames; a host with a reactive
+	// cadence (ADR-0062) repaints only when asked, so ask while anything
+	// is in flight. Continuous hosts ignore the request.
+	if len(inflight) > 0 {
+		c.RequestRepaintAfter(inflightRepaintSecs)
+	}
 	inst.renderInflight(inflight)
 	c.AddSpace(styletokens.PaddingOuter(inst.density))
 	inst.renderHistory(history)
