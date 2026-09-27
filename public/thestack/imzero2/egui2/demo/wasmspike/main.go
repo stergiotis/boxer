@@ -42,6 +42,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -64,6 +65,8 @@ import (
 	// A real app that is a pure front end (no bus, no store) and registers
 	// its own tour demos: the browser demonstrator's first application.
 	_ "github.com/stergiotis/boxer/apps/fibscope"
+	_ "github.com/stergiotis/boxer/apps/mdedit"
+	_ "github.com/stergiotis/boxer/apps/taskdemo"
 )
 
 // ---- fetch table -----------------------------------------------------------
@@ -420,7 +423,8 @@ func run(args []string) {
 			&cli.StringFlag{Name: "target", Usage: "label for the report (native, js, wasip1)"},
 			&cli.StringFlag{Name: "consumer", Value: "pipe", Usage: "pipe | inproc"},
 			&cli.BoolFlag{Name: "lazyFlush", Value: true, Usage: "pipe: defer flushes to the next blocking read (the channel default); -lazyFlush=false flushes after every message"},
-			&cli.StringFlag{Name: "scene", Value: "gallery", Usage: "gallery | labels"},
+			&cli.StringFlag{Name: "scene", Value: "gallery", Usage: "gallery | labels | app"},
+			&cli.StringFlag{Name: "app", Value: "github.com/stergiotis/boxer/apps/taskdemo", Usage: "app: the registered app id to mount (its package must be linked in)"},
 			&cli.StringFlag{Name: "demo", Usage: "gallery: render only this registry demo"},
 			&cli.IntFlag{Name: "rows", Value: 200, Usage: "labels: rows in the grid"},
 			&cli.IntFlag{Name: "frames", Value: 300, Usage: "measured frames"},
@@ -474,6 +478,8 @@ func spike(ctx *cli.Context) (err error) {
 		sc = &galleryScene{only: ctx.String("demo")}
 	case "labels":
 		sc = &labelsScene{rows: ctx.Int("rows")}
+	case "app":
+		sc = &appScene{id: app.AppIdT(ctx.String("app"))}
 	default:
 		return eb.Build().Str("scene", sceneName).Errorf("unknown scene")
 	}

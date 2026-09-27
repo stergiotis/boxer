@@ -5,7 +5,8 @@
 // and yields in between, which is when the page's input arrives; each
 // rendered frame's mesh messages are posted to the page, which paints them
 // with the painter it already has. Query parameters of this module's URL
-// select the scene (`scene`, `rows`, `demo`) and the stage (`stage`).
+// select the scene (`scene`, `rows`, `demo`; `app` names the registered app
+// the `app` scene mounts) and the stage (`stage`).
 //
 // The cadence is reactive (ADR-0077 SD6): after each frame the worker asks
 // the host how soon egui wants to run again — now for an animation or a
@@ -61,6 +62,7 @@ try {
   const argv = ['-consumer', 'pipe', '-scene', q.get('scene') || 'gallery', '-rows', q.get('rows') || '200',
     '-frames', q.get('frames') || '1000000', '-warmup', '0', '-stage', `${stage[0]}x${stage[1]}`, '-target', 'wasip1', '-arm', 'viewer-worker'];
   if (q.get('demo')) argv.push('-demo', q.get('demo'));
+  if (q.get('app')) argv.push('-app', q.get('app'));
   if (!continuous) argv.push('-continuous=false');
   const r = await startReactor({ goBytes, stub, argv, log: (l) => { if (!l.startsWith('{')) log(l); } });
   log('worker — running the application');
