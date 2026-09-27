@@ -258,11 +258,10 @@ func renderCard(in Input, lay Layout, i int, reveal bool, res *Result) {
 		renderHero(in, lay, i, x, y, res)
 	}
 	if m.Tone != nil && m.Tone[i].Kind() != color.ColorKindNone {
-		top := y + lay.Hero.H + styletokens.RoundingLg
-		if lay.Hero.H == 0 {
-			top = y + styletokens.RoundingLg
-		}
-		fillRect(ids.PrepareStr("tone"), x+1, top, x+1+toneW, y+lay.CardH-styletokens.RoundingLg, m.Tone[i], styletokens.RoundingSm)
+		// Inside the stroke, so the selection outline stays whole; below the
+		// hero, whose bottom edge is square.
+		toneEdge(ids.PrepareStr("tone"), x+strokeW, y+max(lay.Hero.H, strokeW), x+lay.CardW-strokeW, y+lay.CardH-strokeW,
+			lay.Hero.H == 0, m.Tone[i], styletokens.RoundingLg-strokeW)
 	}
 
 	tx0, tx1 := x+cardPad, x+lay.CardW-cardPad
@@ -543,16 +542,27 @@ func hover(on bool, full string, body func()) {
 	}
 }
 
-// fillRect draws a filled, rounded rect at a computed position.
-func fillRect(id c.WidgetIdCreatorI, x0, y0, x1, y1 float32, fill color.Color, rounding float32) {
-	if x1 <= x0 || y1 <= y0 {
+// toneEdge paints the accent edge along the left side of the rect x0..x1,
+// y0..y1: a rounded rect of that shape, clipped to a toneW-wide column, so
+// the edge follows the corners and tapers along them instead of stopping
+// where they begin. roundTop is false when the rect's top edge is square.
+func toneEdge(id c.WidgetIdCreatorI, x0, y0, x1, y1 float32, roundTop bool, fill color.Color, rounding float32) {
+	if x1-x0 <= toneW || y1 <= y0 {
 		return
 	}
-	for range c.AllocateUiAtRect(x0, y0, x1, y1).KeepIter() {
+	r := uint8(max(rounding, 0))
+	nw, ne := r, r
+	if !roundTop {
+		nw, ne = 0, 0
+	}
+	for range c.AllocateUiAtRect(x0, y0, x0+toneW, y1).KeepIter() {
 		c.UiClipToMaxRect()
-		for range c.Frame(id).Fill(fill).CornerRadius(rounding).InnerMargin(0).KeepIter() {
-			c.UiSetMinWidth(x1 - x0)
-			c.UiSetMinHeight(y1 - y0)
+		// Relative to the column; the child keeps the column's clip.
+		for range c.AllocateUiAtRect(0, 0, x1-x0, y1-y0).KeepIter() {
+			for range c.Frame(id).Fill(fill).CornerRadiusSides(nw, ne, r, r).InnerMargin(0).KeepIter() {
+				c.UiSetMinWidth(x1 - x0)
+				c.UiSetMinHeight(y1 - y0)
+			}
 		}
 	}
 }
