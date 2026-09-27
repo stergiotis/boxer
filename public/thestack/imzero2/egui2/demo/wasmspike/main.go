@@ -66,6 +66,7 @@ import (
 	// its own tour demos: the browser demonstrator's first application.
 	_ "github.com/stergiotis/boxer/apps/fibscope"
 	_ "github.com/stergiotis/boxer/apps/mdedit"
+	_ "github.com/stergiotis/boxer/apps/play"
 	_ "github.com/stergiotis/boxer/apps/taskdemo"
 )
 

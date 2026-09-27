@@ -191,19 +191,22 @@ export function makeJsFs(queue, stderr) {
 
 // GOOS=wasip1: the wasi_snapshot_preview1 imports Go's runtime needs, with
 // fd 0/1 on the queue and fd 2 on the log. Everything else is absent.
-export function makeWasi(queue, stderr, argv) {
+// env: "NAME=value" strings the module sees as its environment (Go's
+// os.Getenv; the ADR-0009 registry reads its variables from there).
+export function makeWasi(queue, stderr, argv, env = []) {
   let mem;
   const u8 = () => new Uint8Array(mem.buffer);
   const dv = () => new DataView(mem.buffer);
   const ESUCCESS = 0, EAGAIN = 6, EBADF = 8, ENOSYS = 52;
   const enc = new TextEncoder();
   const args = argv.map((a) => enc.encode(a + '\0'));
+  const envs = env.map((e) => enc.encode(e + '\0'));
   const nowNs = () => (typeof process !== 'undefined' && process.hrtime) ? process.hrtime.bigint() : BigInt(Math.round(performance.now() * 1e6));
   const imports = {
     args_sizes_get(pc, pb) { dv().setUint32(pc, args.length, true); dv().setUint32(pb, args.reduce((s, a) => s + a.length, 0), true); return ESUCCESS; },
     args_get(argvp, buf) { let off = buf; for (let i = 0; i < args.length; i++) { dv().setUint32(argvp + 4 * i, off, true); u8().set(args[i], off); off += args[i].length; } return ESUCCESS; },
-    environ_sizes_get(pc, pb) { dv().setUint32(pc, 0, true); dv().setUint32(pb, 0, true); return ESUCCESS; },
-    environ_get() { return ESUCCESS; },
+    environ_sizes_get(pc, pb) { dv().setUint32(pc, envs.length, true); dv().setUint32(pb, envs.reduce((s, a) => s + a.length, 0), true); return ESUCCESS; },
+    environ_get(envp, buf) { let off = buf; for (let i = 0; i < envs.length; i++) { dv().setUint32(envp + 4 * i, off, true); u8().set(envs[i], off); off += envs[i].length; } return ESUCCESS; },
     clock_time_get(id, prec, out) { const t = id === 0 ? BigInt(Date.now()) * 1000000n : nowNs(); dv().setBigUint64(out, t, true); return ESUCCESS; },
     random_get(p, n) { crypto.getRandomValues(u8().subarray(p, p + n)); return ESUCCESS; },
     proc_exit(code) { throw { wasiExit: code }; },
@@ -286,15 +289,69 @@ export function makeWasi(queue, stderr, argv) {
       return () => { if (!seen.has(name)) { seen.add(name); queue.log('wasi: ' + String(name) + ' called; answered ENOSYS'); } return ENOSYS; };
     },
   });
-  return { imports: stubbed, setMemory(m) { mem = m; }, names: (mod) => WebAssembly.Module.imports(mod).map((i) => i.name) };
+  // The module's own host imports (Go `//go:wasmimport env …`): HTTP, which
+  // a wasip1 module cannot do itself. The Go side frames a request as
+  // method, url, "Name: value" lines and body, each behind a u32 length;
+  // the reply is status (0 when the host could not perform it, the message
+  // in the header slot), headers and body the same way. Performed with a
+  // synchronous XMLHttpRequest, which a worker may issue; a host without
+  // one (Node) answers status 0.
+  let httpReply = null;
+  const u32 = (b, o) => new DataView(b.buffer, b.byteOffset).getUint32(o, true);
+  const field = (b, o) => { const n = u32(b, o); return [b.subarray(o + 4, o + 4 + n), o + 4 + n]; };
+  const frame = (status, headers, body) => {
+    const h = enc.encode(headers);
+    const out = new Uint8Array(12 + h.length + body.length);
+    const d = new DataView(out.buffer);
+    d.setUint32(0, status, true); d.setUint32(4, h.length, true); out.set(h, 8);
+    d.setUint32(8 + h.length, body.length, true); out.set(body, 12 + h.length);
+    return out;
+  };
+  const env_imports = {
+    http_fetch(reqPtr, n) {
+      const req = u8().slice(reqPtr, reqPtr + n);
+      let o = 0, method, url, headers, body;
+      [method, o] = field(req, o); [url, o] = field(req, o); [headers, o] = field(req, o); [body, o] = field(req, o);
+      const dec = new TextDecoder();
+      if (typeof XMLHttpRequest === 'undefined') { httpReply = frame(0, 'no synchronous HTTP in this host', new Uint8Array()); return httpReply.length; }
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open(dec.decode(method), dec.decode(url), false);
+        xhr.responseType = 'arraybuffer';
+        for (const line of dec.decode(headers).split('\n')) {
+          const i = line.indexOf(':'); if (i < 0) continue;
+          const k = line.slice(0, i).trim();
+          if (/^(host|content-length|connection|accept-encoding|user-agent)$/i.test(k)) continue; // the browser owns these
+          try { xhr.setRequestHeader(k, line.slice(i + 1).trim()); } catch (_) { /* forbidden header name */ }
+        }
+        xhr.send(body.length ? body : null);
+        const respBody = xhr.response ? new Uint8Array(xhr.response) : new Uint8Array();
+        httpReply = frame(xhr.status || 0, xhr.status ? xhr.getAllResponseHeaders().replace(/\r/g, '') : 'network error', respBody);
+      } catch (e) {
+        httpReply = frame(0, String(e && e.message || e), new Uint8Array());
+      }
+      return httpReply.length;
+    },
+    http_take(dst, cap) {
+      if (!httpReply) return 0;
+      const n = Math.min(cap, httpReply.length);
+      u8().set(httpReply.subarray(0, n), dst);
+      httpReply = null;
+      return n;
+    },
+  };
+  return { imports: stubbed, env: env_imports, setMemory(m) { mem = m; }, names: (mod) => WebAssembly.Module.imports(mod).map((i) => i.name) };
 }
 
 // Builds a complete import object for a module from the shim, one entry per
 // import the module declares (a Proxy cannot back WebAssembly.instantiate).
 export function wasiImportsFor(module, shim) {
-  const o = {};
-  for (const i of WebAssembly.Module.imports(module)) if (i.module === 'wasi_snapshot_preview1') o[i.name] = shim.imports[i.name];
-  return { wasi_snapshot_preview1: o };
+  const o = {}, env = {};
+  for (const i of WebAssembly.Module.imports(module)) {
+    if (i.module === 'wasi_snapshot_preview1') o[i.name] = shim.imports[i.name];
+    else if (i.module === 'env') env[i.name] = (shim.env && shim.env[i.name]) || (() => { throw new Error('unwired host import env.' + i.name); });
+  }
+  return { wasi_snapshot_preview1: o, env };
 }
 
 // Runs one arm. `goBytes` is the Go module, `target` "js" or "wasip1",
@@ -341,7 +398,7 @@ export async function runArm({ target, goBytes, stub, argv, log, GoCtor }) {
 // returns; `frame()` then runs one frame per call, so the caller owns the
 // cadence and yields between frames — the worker receives input then. The
 // result's `frame` returns 0 while the loop runs and 1 once it stopped.
-export async function startReactor({ goBytes, stub, argv, log }) {
+export async function startReactor({ goBytes, stub, argv, log, env }) {
   const lines = []; let partial = '';
   const stderr = (b) => {
     partial += new TextDecoder().decode(b);
@@ -352,7 +409,7 @@ export async function startReactor({ goBytes, stub, argv, log }) {
   // Go runs neither main nor reads argv in a c-shared module: the arguments
   // go NUL-separated into the buffer the module exports, and setup runs
   // main's body on them.
-  const wasi = makeWasi(queue, stderr, ['wasmspike']);
+  const wasi = makeWasi(queue, stderr, ['wasmspike'], env || []);
   const module = await WebAssembly.compile(goBytes);
   const instance = await WebAssembly.instantiate(module, wasiImportsFor(module, wasi));
   wasi.setMemory(instance.exports.memory);

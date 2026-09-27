@@ -6,7 +6,9 @@
 // rendered frame's mesh messages are posted to the page, which paints them
 // with the painter it already has. Query parameters of this module's URL
 // select the scene (`scene`, `rows`, `demo`; `app` names the registered app
-// the `app` scene mounts) and the stage (`stage`).
+// the `app` scene mounts), the stage (`stage`) and the module's environment
+// (`env=NAME=value`, repeatable); `log=1` forwards the module's stderr to the
+// server.
 //
 // The cadence is reactive (ADR-0077 SD6): after each frame the worker asks
 // the host how soon egui wants to run again — now for an animation or a
@@ -26,6 +28,10 @@ const fps = Number(q.get('fps') || '60');
 const idleMs = Number(q.get('idle') || '1000');
 const continuous = q.get('cadence') === 'continuous';
 const log = (line) => self.postMessage({ kind: 'log', line });
+// `log=1` also posts every line the module writes to fd 2 — the app's
+// structured log included — to the page's server (serve.mjs prints them),
+// since a worker's console is out of reach for a headless capture.
+const tee = q.get('log') ? (line) => { fetch('./log', { method: 'POST', body: line }).catch(() => {}); } : () => {};
 const PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
 
 try {
@@ -64,7 +70,13 @@ try {
   if (q.get('demo')) argv.push('-demo', q.get('demo'));
   if (q.get('app')) argv.push('-app', q.get('app'));
   if (!continuous) argv.push('-continuous=false');
-  const r = await startReactor({ goBytes, stub, argv, log: (l) => { if (!l.startsWith('{')) log(l); } });
+  // The module's environment: every `env=NAME=value` parameter, plus the
+  // page's origin as the ClickHouse endpoint unless one is given — the
+  // server behind the page proxies /ch/ to ClickHouse (serve.mjs), which is
+  // how the data plane stays same-origin (ADR-0077 SD9).
+  const env = q.getAll('env');
+  if (!env.some((e) => e.startsWith('CLICKHOUSE_URL='))) env.push(`CLICKHOUSE_URL=${self.location.origin}/ch/`);
+  const r = await startReactor({ goBytes, stub, argv, env, log: (l) => { tee(l); if (!l.startsWith('{')) log(l); } });
   log('worker — running the application');
   let frames = 0, timer = null, lastTick = -Infinity, exited = false;
   const minMs = 1000 / fps;
