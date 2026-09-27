@@ -1,3 +1,5 @@
+//go:build !(js || wasip1)
+
 package goccyengine_test
 
 import (

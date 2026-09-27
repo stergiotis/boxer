@@ -1,3 +1,5 @@
+//go:build !(js || wasip1)
+
 // Package goccyengine implements layeredgraph.Engine with Graphviz `dot`, run
 // in-process as WebAssembly via goccy/go-graphviz (wazero, cgo-free). It is
 // the only package that imports the Graphviz dependency: the ADR-0069 seam
