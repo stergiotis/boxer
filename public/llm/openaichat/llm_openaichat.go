@@ -218,7 +218,14 @@ var (
 	ErrBadRequest = errors.New("openaichat: bad request")
 	// ErrServer: HTTP 5xx.
 	ErrServer = errors.New("openaichat: server error")
+	// ErrResponseTooLarge: the body exceeded WithMaxResponseBytes. Not
+	// retried — the same request draws the same answer.
+	ErrResponseTooLarge = errors.New("openaichat: response exceeds the byte limit")
 )
+
+// errRequestBuild marks a request that could not be constructed (a
+// malformed URL); retrying cannot change the outcome.
+var errRequestBuild = errors.New("openaichat: request could not be built")
 
 // RetryPolicy bounds the retry loop. MaxAttempts counts the first try, so <=1
 // disables retries. Delays grow exponentially from BaseDelay (full jitter),
@@ -259,6 +266,7 @@ type Client struct {
 	baseUrl          string
 	apiKey           string
 	httpClient       *http.Client
+	ownsHTTPClient   bool
 	retry            RetryPolicy
 	maxResponseBytes int64
 	observer         func(RequestStat)
@@ -273,11 +281,13 @@ type Option func(*Client)
 
 // WithHTTPClient injects a custom *http.Client — for a proxy, TLS settings, or
 // a test transport. A nil client is ignored. The default client has no timeout;
-// request lifetime is bounded by the caller's context.
+// request lifetime is bounded by the caller's context. The caller keeps the
+// injected client: Close leaves its connections alone.
 func WithHTTPClient(hc *http.Client) Option {
 	return func(inst *Client) {
 		if hc != nil {
 			inst.httpClient = hc
+			inst.ownsHTTPClient = false
 		}
 	}
 }
@@ -313,6 +323,7 @@ func NewClient(baseUrl string, apiKey string, opts ...Option) (inst *Client, err
 		baseUrl:          baseUrl,
 		apiKey:           apiKey,
 		httpClient:       defaultHTTPClient(),
+		ownsHTTPClient:   true,
 		retry:            RetryPolicy{MaxAttempts: 1}, // retries opt-in via WithRetry
 		maxResponseBytes: defaultMaxResponseBytes,
 	}
@@ -341,10 +352,14 @@ func defaultHTTPClient() (c *http.Client) {
 // Wire types stay internal so callers depend on Message / CompletionRequest
 // / CompletionResponse instead.
 
+// ReasoningContent and Reasoning are the two spellings providers use for
+// the reasoning trace: reasoning_content (LM Studio, DeepSeek, older vLLM)
+// and reasoning (Ollama's /v1, OpenRouter, newer vLLM).
 type wireMessage struct {
 	Role             string         `json:"role"`
 	Content          string         `json:"content"`
 	ReasoningContent string         `json:"reasoning_content,omitempty"`
+	Reasoning        string         `json:"reasoning,omitempty"`
 	ToolCalls        []wireToolCall `json:"tool_calls,omitempty"`
 	ToolCallId       string         `json:"tool_call_id,omitempty"`
 }
@@ -546,7 +561,7 @@ func (inst *Client) Complete(ctx context.Context, req CompletionRequest) (resp C
 	cleanContent, inlineThought := extractInlineThought(choice.Message.Content)
 	resp = CompletionResponse{
 		Content:      cleanContent,
-		Reasoning:    joinReasoning(choice.Message.ReasoningContent, inlineThought),
+		Reasoning:    joinReasoning(joinReasoning(choice.Message.ReasoningContent, choice.Message.Reasoning), inlineThought),
 		FinishReason: choice.FinishReason,
 		ToolCalls:    fromWireToolCalls(choice.Message.ToolCalls),
 		InputTokens:  wresp.Usage.PromptTokens,
@@ -643,7 +658,7 @@ func (inst *Client) send(ctx context.Context, method, url string, body []byte) (
 	var httpReq *http.Request
 	httpReq, err = http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
-		err = eh.Errorf("new request: %w", err)
+		err = eh.Errorf("new request: %w: %w", errRequestBuild, err)
 		return
 	}
 	if body != nil {
@@ -680,17 +695,19 @@ func (inst *Client) send(ctx context.Context, method, url string, body []byte) (
 		return
 	}
 	if inst.maxResponseBytes > 0 && int64(len(raw)) > inst.maxResponseBytes {
-		err = eb.Build().Str("url", url).Int("status", status).Int64("maxResponseBytes", inst.maxResponseBytes).Errorf("openaichat: response exceeds the byte limit")
+		err = eb.Build().Str("url", url).Int("status", status).Int64("maxResponseBytes", inst.maxResponseBytes).Errorf("read body: %w", ErrResponseTooLarge)
 		return
 	}
 	return
 }
 
 // retryable reports whether a failed attempt should be retried: a transport /
-// read error (except caller-context cancellation), or a transient HTTP status.
+// read error (except caller-context cancellation and the deterministic
+// failures a retry would repeat), or a transient HTTP status.
 func retryable(status int, err error) (ok bool) {
 	if err != nil {
-		ok = !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+		ok = !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) &&
+			!errors.Is(err, ErrResponseTooLarge) && !errors.Is(err, errRequestBuild)
 		return
 	}
 	switch status {
@@ -772,9 +789,18 @@ var inlineThoughtTags = [...]struct{ open, close string }{
 // the OpenAI reasoning_content extension and these inline tags need to feed
 // CompletionResponse.Reasoning. An opening tag with no matching close is left
 // in place — better to keep it visible than drop trailing content.
+//
+// A closing tag with no opening tag before it is the other half of the same
+// convention: chat templates that open the block in the prompt (DeepSeek-R1
+// distills, some Qwen 3 templates) leave the output starting inside it, so
+// everything before that close is reasoning.
 func extractInlineThought(content string) (clean, thought string) {
 	clean = content
 	for _, tag := range inlineThoughtTags {
+		if head, tail, found := strings.Cut(clean, tag.close); found && !strings.Contains(head, tag.open) {
+			thought = joinReasoning(thought, head)
+			clean = tail
+		}
 		var blocks string
 		clean, blocks = stripTaggedBlocks(clean, tag.open, tag.close)
 		thought = joinReasoning(thought, blocks)
@@ -997,14 +1023,16 @@ func (inst *Client) classifyHttpError(ctx context.Context, url string, status in
 	sentinel := sentinelForStatus(status)
 	var env wireErrorEnvelope
 	// Best-effort: error responses are usually JSON, but truncated /
-	// non-JSON bodies should not mask the HTTP status. On 404 / 400 we
-	// additionally probe /models so callers see what is actually exposed
-	// — typical cause is a typo'd ModelId.
+	// non-JSON bodies should not mask the HTTP status. On a 404, or a 400
+	// that names the model, we additionally probe /models so callers see
+	// what is actually exposed — typical cause is a typo'd ModelId. Other
+	// 400s (context too long, a malformed tool schema) are about the
+	// request, and a probe would only add a round-trip to them.
 	unmarshalErr := json.Unmarshal(rawBody, &env)
 	bld := eb.Build().
 		Str("url", url).
 		Int("status", status)
-	if status == http.StatusNotFound || status == http.StatusBadRequest {
+	if status == http.StatusNotFound || (status == http.StatusBadRequest && namesUnknownModel(string(rawBody))) {
 		models, listErr := inst.ListModels(ctx)
 		if listErr == nil && len(models) > 0 {
 			bld = bld.Strs("availableModels", models)
@@ -1023,8 +1051,29 @@ func (inst *Client) classifyHttpError(ctx context.Context, url string, status in
 	return
 }
 
+// namesUnknownModel says an error body reads as a model that is not
+// there — "model 'x' not found", "unknown model", "does not exist" — rather
+// than as a problem with the request that merely mentions the model
+// ("This model's maximum context length is …").
+func namesUnknownModel(body string) (yes bool) {
+	b := strings.ToLower(body)
+	if !strings.Contains(b, "model") {
+		return false
+	}
+	for _, phrase := range [...]string{"not found", "does not exist", "unknown model", "invalid model", "no such model", "not available"} {
+		if strings.Contains(b, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+// Close releases the idle connections of the client's own transport; an
+// injected one (WithHTTPClient) is the caller's to close.
 func (inst *Client) Close() (err error) {
-	inst.httpClient.CloseIdleConnections()
+	if inst.ownsHTTPClient {
+		inst.httpClient.CloseIdleConnections()
+	}
 	return
 }
 

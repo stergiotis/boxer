@@ -250,6 +250,8 @@ func TestRetryable(t *testing.T) {
 	assert.True(t, retryable(0, errors.New("dial tcp: connection refused")))
 	assert.False(t, retryable(0, context.Canceled))
 	assert.False(t, retryable(0, context.DeadlineExceeded))
+	assert.False(t, retryable(0, ErrResponseTooLarge))
+	assert.False(t, retryable(0, errRequestBuild))
 }
 
 func TestParseRetryAfter(t *testing.T) {
@@ -279,12 +281,15 @@ func TestObserverReceivesStats(t *testing.T) {
 
 func TestMaxResponseBytesCap(t *testing.T) {
 	big := strings.Repeat("x", 1000)
+	var calls atomic.Int32
 	c := newServerClientOpts(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
 		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"`+big+`"},"finish_reason":"stop"}]}`)
-	}, WithMaxResponseBytes(100))
+	}, WithMaxResponseBytes(100), WithRetry(RetryPolicy{MaxAttempts: 3, BaseDelay: time.Millisecond}))
 	_, err := c.Complete(context.Background(), userReq("m"))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exceeds")
+	assert.ErrorIs(t, err, ErrResponseTooLarge)
+	assert.Equal(t, int32(1), calls.Load(), "an oversized body must not be retried")
 }
 
 func TestMaxResponseBytesUnlimited(t *testing.T) {
