@@ -5,6 +5,7 @@ package jackstay
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -101,7 +102,10 @@ func TestDiff_LiveServer(t *testing.T) {
 
 	t.Run("partitioned", func(t *testing.T) {
 		dd := diff("part", false)
-		assert.Equal(t, ChunkingPartition, tables["part"].Chunking.Kind)
+		pt := tables["part"]
+		assert.Equal(t, ChunkingPartition, pt.Chunking.Kind)
+		assert.Equal(t, leavesFor(pt.Rows/2, chunkOpts), pt.Chunking.Leaves, "leaves are sized per partition, of which there are two")
+		assert.Less(t, pt.Chunking.Leaves, leavesFor(pt.Rows, chunkOpts), "fewer than a single-chunk table of the same rows would get")
 		assert.Equal(t, uint64(9995), dd.SrcRows)
 		assert.Equal(t, uint64(8995-10+5), dd.DstRows)
 		assert.Equal(t, uint64(0), dd.UnresolvedLeaves)
@@ -132,6 +136,22 @@ func TestDiff_LiveServer(t *testing.T) {
 		bounds := append([]string(nil), c.Bounds...)
 		diff("rng", false)
 		assert.Equal(t, bounds, tables["rng"].Chunking.Bounds, "a second diff reuses the layout")
+
+		// The chunk predicates partition the table: their counts sum to its rows.
+		type nRow struct {
+			N uint64 `json:"n"`
+		}
+		var total uint64
+		for i := 0; i <= len(c.Bounds); i++ {
+			rows, qerr := queryRows[nRow](ctx, client, "SELECT count() AS n FROM "+s+"rng WHERE "+c.ChunkPredicate(strconv.Itoa(i), "")+jsonSettings)
+			require.NoError(t, qerr)
+			require.Len(t, rows, 1)
+			total += rows[0].N
+		}
+		assert.Equal(t, uint64(5000), total)
+		rows, qerr := queryRows[nRow](ctx, client, "SELECT count() AS n FROM "+s+"rng WHERE "+c.ChunkPredicate(strconv.Itoa(len(c.Bounds)+1), "")+jsonSettings)
+		require.NoError(t, qerr)
+		assert.Zero(t, rows[0].N, "past the last chunk selects nothing")
 	})
 	t.Run("no sorting key", func(t *testing.T) {
 		dd := diff("logt", false)

@@ -111,7 +111,8 @@ func scanIdent(s string) (n int, err error) {
 }
 
 // ColumnDefinition renders a column as it would appear in CREATE or ADD COLUMN:
-// name, type, default clause and codec, the parts system.columns reports.
+// name, type, default clause, comment and codec, the parts system.columns
+// reports. A column TTL is not among them; only the table's CREATE carries it.
 func ColumnDefinition(c ColumnInfo) (def string) {
 	var b strings.Builder
 	b.WriteString(QuoteIdent(c.Name))
@@ -124,6 +125,10 @@ func ColumnDefinition(c ColumnInfo) (def string) {
 			b.WriteByte(' ')
 			b.WriteString(c.DefaultExpression)
 		}
+	}
+	if c.Comment != "" {
+		b.WriteString(" COMMENT ")
+		b.WriteString(QuoteString(c.Comment))
 	}
 	if c.CompressionCodec != "" {
 		b.WriteByte(' ')

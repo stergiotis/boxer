@@ -17,6 +17,8 @@ package jackstay
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -190,6 +192,7 @@ type stepResult struct {
 // preflightResult is what the Sync page shows before the operator starts:
 // the disks' fit and the size of what would move.
 type preflightResult struct {
+	stale   []string
 	disks   []jk.PreflightDisk
 	tables  int
 	rows    int64
@@ -202,9 +205,6 @@ type App struct {
 	ids    *c.WidgetIdStack
 	logger zerolog.Logger
 	store  app.StorageI
-
-	appCtx    context.Context
-	cancelApp context.CancelFunc
 
 	step stepE
 
@@ -264,9 +264,10 @@ type App struct {
 	disks     bgjob.Keyed[jk.DiskReport]
 	lastDisks *jk.DiskReport
 
-	// The status line: the last outcome, or the last error.
+	// The status line: the last outcome, or the last error; skipped lists
+	// the tables the last diff or sync left out, with the reason.
 	note, lastError string
-	stale           []string
+	stale, skipped  []string
 }
 
 var _ app.AppI = (*App)(nil)
@@ -303,7 +304,6 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.store = ctx.Storage()
-	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
 	inst.openDlg = filepicker.New("jackstay-open", filepicker.ModeOpen,
 		filepicker.WithTitle("Open a jackstay plan"), filepicker.WithExtensionFilter(".json"), filepicker.WithStartAtOsHome())
 	inst.saveDlg = filepicker.New("jackstay-save", filepicker.ModeSave,
@@ -311,9 +311,13 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.loadRecent()
 	if path := PlanEnv.Get(); path != "" {
 		inst.planPath = path
-		if p, lerr := jk.LoadPlan(path); lerr == nil {
+		p, lerr := jk.LoadPlan(path)
+		switch {
+		case lerr == nil:
 			inst.adoptPlan(&p, path)
-			inst.step = inst.resumeStep()
+			inst.step = inst.furthestStep()
+		case !errors.Is(lerr, fs.ErrNotExist):
+			inst.lastError = "unable to open the plan: " + lerr.Error()
 		}
 	}
 	return
@@ -322,9 +326,6 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 // Unmount cancels whatever runs. A sync stopped this way resumes from its
 // journal the next time the plan is synced.
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	if inst.cancelApp != nil {
-		inst.cancelApp()
-	}
 	inst.discoverJob.Cancel()
 	inst.structureJob.Cancel()
 	inst.diffJob.Cancel()
@@ -410,9 +411,9 @@ func (inst *App) adoptPlan(p *jk.Plan, path string) {
 	}
 }
 
-// resumeStep is the page an opened plan lands on: the furthest step that
-// has a result, which is where the operator left off.
-func (inst *App) resumeStep() (st stepE) {
+// furthestStep is where the operator left off: the furthest step that has
+// a result, Structure at the least, which is where an opened plan lands.
+func (inst *App) furthestStep() (st stepE) {
 	st = stepStructure
 	for _, s := range []stepE{stepDifferences, stepSync, stepRun} {
 		if done, _ := inst.stepDone(s); done {
@@ -473,14 +474,8 @@ func (inst *App) noteRecent() {
 	if inst.plan == nil || inst.planPath == "" {
 		return
 	}
-	step := stepStructure
-	for _, s := range []stepE{stepDifferences, stepSync, stepRun} {
-		if done, _ := inst.stepDone(s); done {
-			step = s
-		}
-	}
 	entry := recentPlan{Path: inst.planPath, Source: hostLabel(inst.plan.Source.URL), Target: hostLabel(inst.plan.Target.URL),
-		Step: step.short(), At: time.Now()}
+		Step: inst.furthestStep().short(), At: time.Now()}
 	list := make([]recentPlan, 0, recentCap)
 	list = append(list, entry)
 	for _, r := range inst.recent {
@@ -528,7 +523,7 @@ func (inst *App) openPlan(path string) {
 	inst.adoptPlan(&p, path)
 	inst.disc = nil
 	inst.note, inst.lastError = "plan opened", ""
-	inst.step = inst.resumeStep()
+	inst.step = inst.furthestStep()
 }
 
 // --- results, on the frame goroutine ----------------------------------------
@@ -553,6 +548,7 @@ func (inst *App) takeResults() {
 		inst.plan = &p
 		inst.planRev++
 		inst.note, inst.lastError = r.note, ""
+		inst.skipped = r.skipped
 		inst.autosave()
 		if !inst.syncModeChosen {
 			inst.syncMode, _ = inst.recommendMode()
@@ -827,11 +823,16 @@ func (inst *App) startApply() {
 		return
 	}
 	src, dst := clients(p.Source, p.Target, false)
-	ddl := chclient.New(jk.DDLClientConfig(jk.TargetClientConfig(p.Target)), nil)
+	dstCfg := jk.TargetClientConfig(p.Target)
 	inst.applyArmed = false
 	inst.structureJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.apply", Title: "apply the DDL"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking, then running the DDL on the target")
+			guards, err := jk.DDLGuardSettings(ctx, dst)
+			if err != nil {
+				return nil, err
+			}
+			ddl := chclient.New(jk.DDLClientConfig(dstCfg, guards), nil)
 			applied, after, stale, err := jk.ApplyDDLStep(ctx, src, dst, ddl, &p, time.Now())
 			if err != nil {
 				return nil, err
@@ -845,16 +846,11 @@ func (inst *App) startDiff() {
 	if !ok {
 		return
 	}
-	metaS, metaD := clients(p.Source, p.Target, false)
 	scanS, scanD := clients(p.Source, p.Target, true)
 	final := inst.final
 	inst.diffJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.diff", Title: "compare content"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
-			fresh, stale, err := jk.Recheck(ctx, metaS, metaD, &p, time.Now())
-			if err != nil || len(stale) > 0 {
-				return &stepResult{stale: stale}, err
-			}
 			opts := jk.DiffOptionsAll{Final: final, Chunking: jk.DefaultChunkingOptions(), Diff: jk.DefaultDiffOptions(),
 				Progress: func(i int, n int, pt *jk.PlanTable) {
 					note := "done"
@@ -863,18 +859,20 @@ func (inst *App) startDiff() {
 					}
 					report(uint64(i), uint64(n), note)
 				}}
-			skipped, err := jk.DiffStep(ctx, scanS, scanD, &fresh, opts, time.Now)
-			if err != nil {
-				return nil, err
+			fresh, skipped, stale, err := jk.DiffStep(ctx, scanS, scanD, &p, opts, time.Now)
+			if err != nil || len(stale) > 0 {
+				return &stepResult{stale: stale}, err
 			}
 			return &stepResult{plan: fresh, skipped: skipped, note: "content compared"}, nil
 		})
 }
 
-func (inst *App) tableSync() (ts jk.TableSync, err error) {
-	ts = jk.TableSync{Mode: inst.syncMode, Existing: inst.existing}
-	if ts.Mode == jk.SyncModeSample {
-		ts.SampleNum, ts.SampleDen, err = parseFraction(inst.sampleText)
+// syncRequest is the Sync page's choices as the engine takes them.
+func (inst *App) syncRequest() (req jk.SyncRequest, err error) {
+	req = jk.SyncRequest{TableSync: jk.TableSync{Mode: inst.syncMode, Existing: inst.existing},
+		Restart: inst.restart, Chunking: jk.DefaultChunkingOptions(), Headroom: 1.5}
+	if req.Mode == jk.SyncModeSample {
+		req.SampleNum, req.SampleDen, err = parseFraction(inst.sampleText)
 	}
 	return
 }
@@ -890,7 +888,7 @@ func (inst *App) startPreview() {
 	if !ok {
 		return
 	}
-	ts, err := inst.tableSync()
+	req, err := inst.syncRequest()
 	if err != nil {
 		inst.lastError = err.Error()
 		return
@@ -899,21 +897,13 @@ func (inst *App) startPreview() {
 	src, dst := clients(p.Source, p.Target, false)
 	inst.previewJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.preflight", Title: "pre-flight"},
 		func(ctx context.Context, report bgjob.Reporter) (*preflightResult, error) {
-			report(0, 0, "reading the target's disks")
-			chosen, skipped, err := jk.PrepareSync(ctx, src, &p, ts, nil, jk.DefaultChunkingOptions())
+			report(0, 0, "rechecking the plan, reading the target's disks")
+			prep, err := jk.PrepareSyncStep(ctx, src, dst, &p, req)
 			if err != nil {
 				return nil, err
 			}
-			out := preflightResult{tables: len(chosen), rows: jk.ExpectedRows(chosen), skipped: skipped}
-			if len(chosen) == 0 {
-				return &out, nil
-			}
-			rep, err := jk.ReadDisks(ctx, dst, targetsOf(chosen))
-			if err != nil {
-				return nil, err
-			}
-			out.disks = jk.Preflight(chosen, &rep, 1.5)
-			for _, g := range out.disks {
+			out := preflightResult{stale: prep.Stale, tables: len(prep.Chosen), rows: prep.ExpectedRows, skipped: prep.Skipped, disks: prep.Disks}
+			for _, g := range prep.Disks {
 				out.bytes += g.Need
 			}
 			return &out, nil
@@ -929,13 +919,12 @@ func (inst *App) startSync() {
 	if !ok {
 		return
 	}
-	ts, err := inst.tableSync()
+	req, err := inst.syncRequest()
 	if err != nil {
 		inst.lastError = err.Error()
 		return
 	}
-	planPath, restart, compression := inst.planPath, inst.restart, inst.compression
-	metaS, metaD := clients(p.Source, p.Target, false)
+	planPath, compression := inst.planPath, inst.compression
 	scanS, scanD := clients(p.Source, p.Target, true)
 	inst.rows.Store(0)
 	inst.bytes.Store(0)
@@ -947,31 +936,15 @@ func (inst *App) startSync() {
 	inst.syncJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.sync", Title: "sync"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
-			fresh, stale, err := jk.Recheck(ctx, metaS, metaD, &p, time.Now())
-			if err != nil || len(stale) > 0 {
-				return &stepResult{stale: stale}, err
+			prep, err := jk.PrepareSyncStep(ctx, scanS, scanD, &p, req)
+			if err != nil || len(prep.Stale) > 0 {
+				return &stepResult{stale: prep.Stale}, err
 			}
-			chosen, skipped, err := jk.PrepareSync(ctx, scanS, &fresh, ts, nil, jk.DefaultChunkingOptions())
-			if err != nil {
-				return nil, err
+			if len(prep.Chosen) == 0 {
+				return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: "nothing to sync"}, nil
 			}
-			if len(chosen) == 0 {
-				return &stepResult{plan: fresh, skipped: skipped, note: "nothing to sync"}, nil
-			}
-			run, _, err := jk.BeginRun(&fresh, restart, time.Now())
-			if err != nil {
-				return nil, err
-			}
-			if err = fresh.Save(planPath); err != nil {
-				return nil, err
-			}
-			j, err := jk.OpenJournal(jk.JournalPath(planPath), run.RunId)
-			if err != nil {
-				return nil, err
-			}
-			defer func() { _ = j.Close() }()
 
-			expected := uint64(jk.ExpectedRows(chosen))
+			expected := uint64(prep.ExpectedRows)
 			var current atomic.Pointer[string]
 			stopFeed := make(chan struct{})
 			go func() {
@@ -1008,22 +981,24 @@ func (inst *App) startSync() {
 					current.Store(&s)
 				})
 			}
-			failed, err := jk.SyncStep(ctx, scanS, scanD, chosen, j, opts, time.Now, jk.SyncHooks{
-				BeforeTable: func(pt *jk.PlanTable) {
-					s := pt.Source.String()
-					current.Store(&s)
-				},
-				AfterTable: func(pt *jk.PlanTable) { _ = fresh.Save(planPath) },
-			})
+			opts.BeforeTable = func(pt *jk.PlanTable) {
+				s := pt.Source.String()
+				current.Store(&s)
+			}
+			out, err := jk.RunSync(ctx, scanS, scanD, &prep, planPath, req.Restart, opts, time.Now)
 			if err != nil {
-				_ = fresh.Save(planPath)
+				// The plan on disk is what the run left; the frame reads it
+				// back so the reports of the tables that finished show.
+				if saved, lerr := jk.LoadPlan(planPath); lerr == nil {
+					return &stepResult{plan: saved, skipped: prep.Skipped, note: "the sync stopped"}, err
+				}
 				return nil, err
 			}
 			note := "sync done; compare the content again to confirm"
-			if failed > 0 {
-				note = plural(failed, "chunk") + " not synced; see the tables' problems"
+			if out.Failed > 0 {
+				note = plural(out.Failed, "chunk") + " not synced; see the tables' problems"
 			}
-			return &stepResult{plan: fresh, skipped: skipped, note: note}, nil
+			return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: note}, nil
 		})
 	inst.step = stepRun
 }
@@ -1060,19 +1035,14 @@ func (inst *App) demandDisks() (err error) {
 		}
 	}
 	key := target.URL + "|" + time.Now().Truncate(5*time.Second).Format(time.RFC3339)
-	rep, done, err, _ := inst.disks.Demand(key, func(ctx context.Context) (jk.DiskReport, error) {
+	rep, done, err, busy := inst.disks.Demand(key, func(ctx context.Context) (jk.DiskReport, error) {
 		return jk.ReadDisks(ctx, chclient.New(jk.TargetClientConfig(target), nil), refs)
 	})
 	if done && err == nil {
 		inst.lastDisks = &rep
 	}
-	return
-}
-
-func targetsOf(tables []*jk.PlanTable) (refs []datacatalog.TableRef) {
-	refs = make([]datacatalog.TableRef, 0, len(tables))
-	for _, pt := range tables {
-		refs = append(refs, pt.Target)
+	if busy {
+		c.RequestRepaint()
 	}
 	return
 }

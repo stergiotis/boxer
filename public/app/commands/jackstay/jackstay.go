@@ -22,12 +22,15 @@ package jackstay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"text/tabwriter"
 	"time"
@@ -172,6 +175,10 @@ func newStructureCommand() *cli.Command {
 			var old *jk.Plan
 			if o, loadErr := jk.LoadPlan(path); loadErr == nil {
 				old = &o
+			} else if !errors.Is(loadErr, fs.ErrNotExist) {
+				// A plan that exists and cannot be read is not overwritten
+				// unread.
+				return loadErr
 			}
 			var plan jk.Plan
 			plan, err = jk.PlanStructure(ctx, metaClient(jk.SourceClientConfig(srcEp)), metaClient(jk.TargetClientConfig(dstEp)), srcEp, dstEp, sel, old, time.Now())
@@ -353,9 +360,14 @@ func newApplyDDLCommand() *cli.Command {
 				}
 				return
 			}
+			var guards []string
+			guards, err = jk.DDLGuardSettings(ctx, dstQ)
+			if err != nil {
+				return
+			}
 			var applied, stale []string
 			var after jk.Plan
-			applied, after, stale, err = jk.ApplyDDLStep(ctx, srcQ, dstQ, chclient.New(jk.DDLClientConfig(dstCfg), nil), &plan, time.Now())
+			applied, after, stale, err = jk.ApplyDDLStep(ctx, srcQ, dstQ, chclient.New(jk.DDLClientConfig(dstCfg, guards), nil), &plan, time.Now())
 			for _, sql := range applied {
 				_, _ = fmt.Fprintf(w, "ran: %s\n", sql)
 			}
@@ -405,15 +417,6 @@ func newDiffCommand() *cli.Command {
 			}
 			srcCfg := jk.SourceClientConfig(plan.Source)
 			dstCfg := jk.TargetClientConfig(plan.Target)
-			var fresh jk.Plan
-			var stale []string
-			fresh, stale, err = jk.Recheck(ctx, metaClient(srcCfg), metaClient(dstCfg), &plan, time.Now())
-			if err != nil {
-				return
-			}
-			if len(stale) > 0 {
-				return refuseStale(w, path, stale)
-			}
 			var prev *jk.PlanTable
 			var started time.Time
 			opts := jk.DiffOptionsAll{
@@ -430,13 +433,17 @@ func newDiffCommand() *cli.Command {
 			}
 			// Digest scans read whole tables; the default client timeout is
 			// for metadata. Cancellation comes from the context.
-			var skipped []string
-			skipped, err = jk.DiffStep(ctx, scanClient(srcCfg), scanClient(dstCfg), &fresh, opts, time.Now)
+			var fresh jk.Plan
+			var skipped, stale []string
+			fresh, skipped, stale, err = jk.DiffStep(ctx, scanClient(srcCfg), scanClient(dstCfg), &plan, opts, time.Now)
 			for _, s := range skipped {
 				_, _ = fmt.Fprintf(w, "skip %s\n", s)
 			}
 			if err != nil {
 				return
+			}
+			if len(stale) > 0 {
+				return refuseStale(w, path, stale)
 			}
 			err = fresh.Save(path)
 			if err != nil {
@@ -534,254 +541,257 @@ func newSyncCommand() *cli.Command {
 			ctx := c.Context
 			var w io.Writer = os.Stdout
 			path := c.Path("plan")
-			var ts jk.TableSync
-			err = ts.Mode.UnmarshalText([]byte(c.String("mode")))
+			var req jk.SyncRequest
+			var compression string
+			req, compression, err = parseSyncRequest(c)
 			if err != nil {
 				return
-			}
-			err = ts.Existing.UnmarshalText([]byte(c.String("existing")))
-			if err != nil {
-				return
-			}
-			if ts.Mode == jk.SyncModeSample {
-				ts.SampleNum, ts.SampleDen, err = parseFraction(c.String("sample"))
-				if err != nil {
-					return
-				}
-			}
-			compression := c.String("compression")
-			switch compression {
-			case "zstd", "gzip":
-			case "none":
-				compression = ""
-			default:
-				return eb.Build().Str("compression", compression).Errorf("expected zstd, gzip or none")
 			}
 			var plan jk.Plan
 			plan, err = jk.LoadPlan(path)
 			if err != nil {
 				return
 			}
-			srcCfg := jk.SourceClientConfig(plan.Source)
-			dstCfg := jk.TargetClientConfig(plan.Target)
-			var fresh jk.Plan
-			var stale []string
-			fresh, stale, err = jk.Recheck(ctx, metaClient(srcCfg), metaClient(dstCfg), &plan, time.Now())
+			// Digest scans and the relay read whole tables; the default
+			// client timeout is for metadata. Cancellation comes from the
+			// context.
+			srcC := scanClient(jk.SourceClientConfig(plan.Source))
+			dstC := scanClient(jk.TargetClientConfig(plan.Target))
+			var prep jk.SyncPrepared
+			prep, err = jk.PrepareSyncStep(ctx, srcC, dstC, &plan, req)
 			if err != nil {
 				return
 			}
-			if len(stale) > 0 {
-				return refuseStale(w, path, stale)
+			if len(prep.Stale) > 0 {
+				return refuseStale(w, path, prep.Stale)
 			}
-			srcC := scanClient(srcCfg)
-			dstC := scanClient(dstCfg)
-			var chosen []*jk.PlanTable
-			var skipped []string
-			chosen, skipped, err = jk.PrepareSync(ctx, srcC, &fresh, ts, parseRefs(c.StringSlice("table")), jk.DefaultChunkingOptions())
-			for _, s := range skipped {
+			for _, s := range prep.Skipped {
 				_, _ = fmt.Fprintf(w, "skip %s\n", s)
 			}
-			if err != nil {
-				return
-			}
-			if len(chosen) == 0 {
+			if len(prep.Chosen) == 0 {
 				_, _ = fmt.Fprintln(w, "nothing to sync")
 				return
 			}
 			if c.Bool("dry-run") {
-				printSyncPreview(w, chosen)
+				printSyncPreview(w, prep.Chosen)
 			}
-			targets := make([]datacatalog.TableRef, 0, len(chosen))
-			for _, pt := range chosen {
-				targets = append(targets, pt.Target)
-			}
-			var disks jk.DiskReport
-			disks, err = jk.ReadDisks(ctx, dstC, targets)
-			if err != nil {
-				return
-			}
-			printPreflight(w, jk.Preflight(chosen, &disks, c.Float64("headroom")))
+			printPreflight(w, prep.Disks)
 			if c.Bool("dry-run") {
 				return
 			}
 
-			var run jk.SyncRun
-			var resumed bool
-			run, resumed, err = jk.BeginRun(&fresh, c.Bool("restart"), time.Now())
-			if err != nil {
-				return
-			}
-			if resumed {
-				_, _ = fmt.Fprintf(w, "run %s resumes\n", run.RunId)
-			} else {
-				_, _ = fmt.Fprintf(w, "run %s begins\n", run.RunId)
-			}
-			err = fresh.Save(path)
-			if err != nil {
-				return
-			}
-			var j *jk.Journal
-			j, err = jk.OpenJournal(jk.JournalPath(path), run.RunId)
-			if err != nil {
-				return
-			}
-			defer func() { _ = j.Close() }()
-
 			opts := jk.DefaultSyncOptions()
 			opts.Compression = compression
-			var rows, bytes atomic.Int64
-			opts.Rows, opts.Bytes = &rows, &bytes
-			var expected int64
-			for _, pt := range chosen {
-				expected += int64(float64(pt.Rows) * jk.ExpectedCopyFraction(pt))
-			}
-			bar := progressbar.New(expected, "rows")
-			var current atomic.Pointer[string]
-			var freeBytes atomic.Uint64
-			started := time.Now()
-			bar.SetDetail(func(processed int64, total int64) string {
-				detail := ""
-				if t := current.Load(); t != nil {
-					detail = *t
-				}
-				if el := time.Since(started).Seconds(); el > 0 {
-					if rate := progressest.FormatRate(float64(bytes.Load())/el, "bytes"); rate != "" {
-						detail += "  " + rate + " on the wire"
-					}
-				}
-				if f := freeBytes.Load(); f > 0 {
-					detail += "  target free " + progressest.FormatBytes(int64(f))
-				}
-				return detail
-			})
-			w = bar.LogWriter()
+			mon := newSyncMonitor(ctx, dstC, prep.ExpectedRows)
+			mon.attach(&opts)
+			w = mon.bar.LogWriter()
 			floor := jk.FreeFloor{MinFreeBytes: c.Uint64("min-free-bytes"), MinFreeFraction: c.Float64("min-free-fraction"), Poll: jk.DefaultFreeFloor().Poll}
 			opts.BeforeChunk = func(ctx context.Context, pt *jk.PlanTable) error {
 				return floor.WaitForFree(ctx, dstC, pt.Target, func(low []jk.DiskInfo) {
 					for _, d := range low {
-						bar.Printf("  waiting: target disk %s has %s free, below the floor; free space or Ctrl-C (the run resumes later)\n",
+						mon.bar.Printf("  waiting: target disk %s has %s free, below the floor; free space or Ctrl-C (the run resumes later)\n",
 							d.Name, progressest.FormatBytes(int64(d.FreeSpace)))
 					}
 				})
 			}
-			stopFeed := make(chan struct{})
-			feedDone := make(chan struct{})
-			go func() {
-				defer close(feedDone)
-				var last int64
-				t := time.NewTicker(200 * time.Millisecond)
-				defer t.Stop()
-				for {
-					select {
-					case <-stopFeed:
-						bar.Add(rows.Load() - last)
-						return
-					case <-t.C:
-						n := rows.Load()
-						bar.Add(n - last)
-						last = n
-					}
-				}
-			}()
-			bar.Start(ctx)
-			defer func() {
-				close(stopFeed)
-				<-feedDone
-				bar.Stop()
-			}()
-			opts.Progress = func(r jk.ChunkResult) {
-				if r.Status == jk.ChunkStatusDone {
-					rows.Add(int64(r.Rows))
-				}
-				label := r.Display
-				if label == "" {
-					label = r.Chunk
-				}
-				line := fmt.Sprintf("  %-9s %s  %d rows, %s", r.Status, label, r.Rows, progressest.FormatBytes(int64(r.Bytes)))
-				if r.Cleared > 0 {
-					line += fmt.Sprintf(", cleared %d", r.Cleared)
-				}
-				if r.Attempts > 1 {
-					line += fmt.Sprintf(", %d attempts", r.Attempts)
-				}
-				if r.Note != "" {
-					line += " — " + r.Note
-				}
-				_, _ = fmt.Fprintln(w, line)
-				if rep, rerr := jk.ReadDisks(ctx, dstC, nil); rerr == nil {
-					var free uint64
-					for _, d := range rep.Disks {
-						free += d.FreeSpace
-					}
-					freeBytes.Store(free)
-				}
+			opts.BeforeTable = func(pt *jk.PlanTable) {
+				mon.beginTable(pt)
+				_, _ = fmt.Fprintf(w, "%s → %s (%s)\n", pt.Source, pt.Target, pt.Sync.Mode)
 			}
-			var tableStart time.Time
-			var failed int
-			failed, err = jk.SyncStep(ctx, srcC, dstC, chosen, j, opts, time.Now, jk.SyncHooks{
-				BeforeTable: func(pt *jk.PlanTable) {
-					label := pt.Source.String()
-					current.Store(&label)
-					tableStart = time.Now()
-					_, _ = fmt.Fprintf(w, "%s → %s (%s)\n", pt.Source, pt.Target, pt.Sync.Mode)
-				},
-				AfterTable: func(pt *jk.PlanTable) {
-					rep := pt.SyncReport
-					_, _ = fmt.Fprintf(w, "  %d copied, %d already done, %d identical, %d stale, %d failed; %d rows, %s in %s\n",
-						rep.Copied, rep.Done, rep.Identical, rep.Stale, rep.Failed, rep.Rows, progressest.FormatBytes(int64(rep.Bytes)),
-						progressest.FormatDuration(time.Since(tableStart)))
-					if serr := fresh.Save(path); serr != nil {
-						_, _ = fmt.Fprintf(w, "  unable to save the plan: %v\n", serr)
-					}
-				},
-			})
+			opts.AfterTable = func(pt *jk.PlanTable) {
+				rep := pt.SyncReport
+				_, _ = fmt.Fprintf(w, "  %d copied, %d already done, %d identical, %d stale, %d failed; %d rows, %s in %s\n",
+					rep.Copied, rep.Done, rep.Identical, rep.Stale, rep.Failed, rep.Rows, progressest.FormatBytes(int64(rep.Bytes)),
+					progressest.FormatDuration(mon.tableTook()))
+			}
+			opts.Progress = func(r jk.ChunkResult) {
+				mon.chunk(r)
+				_, _ = fmt.Fprintln(w, chunkLine(r))
+			}
+			var out jk.SyncOutcome
+			out, err = jk.RunSync(ctx, srcC, dstC, &prep, path, req.Restart, opts, time.Now)
+			mon.stop()
+			if out.Run.RunId != "" {
+				verb := "began"
+				if out.Resumed {
+					verb = "resumed"
+				}
+				_, _ = fmt.Fprintf(os.Stdout, "run %s %s\n", out.Run.RunId, verb)
+			}
 			if err != nil {
-				_ = fresh.Save(path)
 				return
 			}
-			if after, derr := jk.ReadDisks(ctx, dstC, targets); derr == nil {
-				printFootprints(w, chosen, &after)
+			targets := make([]datacatalog.TableRef, 0, len(prep.Chosen))
+			for _, pt := range prep.Chosen {
+				targets = append(targets, pt.Target)
 			}
-			_, _ = fmt.Fprintf(w, "\nplan updated in %s; run diff to compare the result\n", path)
-			if failed > 0 {
-				return eb.Build().Int("chunks", failed).Errorf("some chunks were not synced")
+			if after, derr := jk.ReadDisks(ctx, dstC, targets); derr == nil {
+				printFootprints(os.Stdout, prep.Chosen, &after)
+			}
+			_, _ = fmt.Fprintf(os.Stdout, "\nplan updated in %s; run diff to compare the result\n", path)
+			if out.Failed > 0 {
+				return eb.Build().Int("chunks", out.Failed).Errorf("some chunks were not synced")
 			}
 			return
 		},
 	}
 }
 
-func printSyncPreview(w io.Writer, tables []*jk.PlanTable) {
-	for _, pt := range tables {
-		if pt.Sync.Mode == jk.SyncModeRepair {
-			_, _ = fmt.Fprintf(w, "%s → %s: repair, %s chunking\n", pt.Source, pt.Target, pt.Chunking.Kind)
-		} else {
-			_, _ = fmt.Fprintf(w, "%s → %s: %s, existing rows: %s, %s chunking\n", pt.Source, pt.Target, pt.Sync.Mode, pt.Sync.Existing, pt.Chunking.Kind)
+// parseSyncRequest reads the sync command's flags.
+func parseSyncRequest(c *cli.Context) (req jk.SyncRequest, compression string, err error) {
+	err = req.Mode.UnmarshalText([]byte(c.String("mode")))
+	if err != nil {
+		return
+	}
+	err = req.Existing.UnmarshalText([]byte(c.String("existing")))
+	if err != nil {
+		return
+	}
+	if req.Mode == jk.SyncModeSample {
+		req.SampleNum, req.SampleDen, err = parseFraction(c.String("sample"))
+		if err != nil {
+			return
 		}
-		if pt.Sync.Mode != jk.SyncModeRepair {
-			rows := pt.Rows
-			if pt.Sync.Mode == jk.SyncModeSample {
-				rows = rows * uint64(pt.Sync.SampleNum) / uint64(pt.Sync.SampleDen)
+	}
+	req.Only = parseRefs(c.StringSlice("table"))
+	req.Restart = c.Bool("restart")
+	req.Chunking = jk.DefaultChunkingOptions()
+	req.Headroom = c.Float64("headroom")
+	compression = c.String("compression")
+	switch compression {
+	case "zstd", "gzip":
+	case "none":
+		compression = ""
+	default:
+		err = eb.Build().Str("compression", compression).Errorf("expected zstd, gzip or none")
+	}
+	return
+}
+
+// chunkLine is one chunk's outcome as the sync prints it.
+func chunkLine(r jk.ChunkResult) (line string) {
+	label := r.Display
+	if label == "" {
+		label = r.Chunk
+	}
+	line = fmt.Sprintf("  %-9s %s  %d rows, %s", r.Status, label, r.Rows, progressest.FormatBytes(int64(r.Bytes)))
+	if r.Cleared > 0 {
+		line += fmt.Sprintf(", cleared %d", r.Cleared)
+	}
+	if r.Attempts > 1 {
+		line += fmt.Sprintf(", %d attempts", r.Attempts)
+	}
+	if r.Note != "" {
+		line += " — " + r.Note
+	}
+	return
+}
+
+// syncMonitor owns the sync's progress bar: the rows and bytes counters the
+// engine advances, the feed that moves the bar, and the target's free space,
+// read every few seconds off the relay's path.
+type syncMonitor struct {
+	bar        *progressbar.Bar
+	rows       atomic.Int64
+	bytes      atomic.Int64
+	current    atomic.Pointer[string]
+	freeBytes  atomic.Uint64
+	started    time.Time
+	tableStart time.Time
+	stop       func()
+}
+
+func newSyncMonitor(ctx context.Context, dst jk.QueryI, expectedRows int64) (m *syncMonitor) {
+	m = &syncMonitor{bar: progressbar.New(expectedRows, "rows"), started: time.Now()}
+	m.bar.SetDetail(func(processed int64, total int64) string {
+		detail := ""
+		if t := m.current.Load(); t != nil {
+			detail = *t
+		}
+		if el := time.Since(m.started).Seconds(); el > 0 {
+			if rate := progressest.FormatRate(float64(m.bytes.Load())/el, "bytes"); rate != "" {
+				detail += "  " + rate + " on the wire"
 			}
-			_, _ = fmt.Fprintf(w, "  copies about %d of %d rows\n", rows, pt.Rows)
-			continue
 		}
-		var clear, copyRows uint64
-		for _, cd := range pt.Diff.Differing {
-			switch {
-			case cd.AbsentOnTarget:
-				copyRows += cd.SrcRows
-			case cd.AbsentOnSource:
-				clear += cd.DstRows
-			default:
-				for _, ld := range cd.Leaves {
-					clear += ld.DstRows
-					copyRows += ld.SrcRows
+		if f := m.freeBytes.Load(); f > 0 {
+			detail += "  target free " + progressest.FormatBytes(int64(f))
+		}
+		return detail
+	})
+	stopFeed := make(chan struct{})
+	feedDone := make(chan struct{})
+	go func() {
+		defer close(feedDone)
+		var last int64
+		t := time.NewTicker(200 * time.Millisecond)
+		defer t.Stop()
+		disks := time.NewTicker(5 * time.Second)
+		defer disks.Stop()
+		for {
+			select {
+			case <-stopFeed:
+				m.bar.Add(m.rows.Load() - last)
+				return
+			case <-t.C:
+				n := m.rows.Load()
+				m.bar.Add(n - last)
+				last = n
+			case <-disks.C:
+				if rep, rerr := jk.ReadDisks(ctx, dst, nil); rerr == nil {
+					var free uint64
+					for _, d := range rep.Disks {
+						free += d.FreeSpace
+					}
+					m.freeBytes.Store(free)
 				}
 			}
 		}
+	}()
+	m.bar.Start(ctx)
+	var once sync.Once
+	m.stop = func() {
+		once.Do(func() {
+			close(stopFeed)
+			<-feedDone
+			m.bar.Stop()
+		})
+	}
+	return
+}
+
+// attach gives the engine the counters the bar reads.
+func (inst *syncMonitor) attach(opts *jk.SyncOptions) {
+	opts.Rows, opts.Bytes = &inst.rows, &inst.bytes
+}
+
+func (inst *syncMonitor) beginTable(pt *jk.PlanTable) {
+	label := pt.Source.String()
+	inst.current.Store(&label)
+	inst.tableStart = time.Now()
+}
+
+func (inst *syncMonitor) tableTook() (d time.Duration) {
+	return time.Since(inst.tableStart)
+}
+
+// chunk credits a chunk an earlier call of the run verified, which the relay
+// never counted.
+func (inst *syncMonitor) chunk(r jk.ChunkResult) {
+	if r.Status == jk.ChunkStatusDone {
+		inst.rows.Add(int64(r.Rows))
+	}
+}
+
+func printSyncPreview(w io.Writer, tables []*jk.PlanTable) {
+	for _, pt := range tables {
+		if pt.Sync.Mode != jk.SyncModeRepair {
+			_, _ = fmt.Fprintf(w, "%s → %s: %s, existing rows: %s, %s chunking\n", pt.Source, pt.Target, pt.Sync.Mode, pt.Sync.Existing, pt.Chunking.Kind)
+			_, _ = fmt.Fprintf(w, "  copies about %d of %d rows\n", uint64(float64(pt.Rows)*jk.ExpectedCopyFraction(pt)), pt.Rows)
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "%s → %s: repair, %s chunking\n", pt.Source, pt.Target, pt.Chunking.Kind)
 		_, _ = fmt.Fprintf(w, "  %d differing chunks: clears %d target rows, copies %d source rows (as of the diff at %s)\n",
-			len(pt.Diff.Differing), clear, copyRows, pt.Diff.ComputedAt.Format(time.RFC3339))
+			len(pt.Diff.Differing), jk.RepairClearRows(pt.Diff), jk.RepairCopyRows(pt.Diff), pt.Diff.ComputedAt.Format(time.RFC3339))
 	}
 }
 
@@ -846,7 +856,7 @@ func newStatusCommand() *cli.Command {
 			var j *jk.Journal
 			if plan.SyncRun != nil {
 				_, _ = fmt.Fprintf(w, "sync run %s, begun %s\n", plan.SyncRun.RunId, plan.SyncRun.StartedAt.Format(time.RFC3339))
-				j, err = jk.ReadJournal(path+".journal", plan.SyncRun.RunId)
+				j, err = jk.ReadJournal(jk.JournalPath(path), plan.SyncRun.RunId)
 				if err != nil {
 					return
 				}

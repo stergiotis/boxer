@@ -7,14 +7,18 @@ import (
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
 )
 
-// digestSettings pin the RowBinary encoding the row digest hashes, so a server
-// profile cannot change the bytes (ADR-0259 §SD4). JSON is hashed as its
-// string form: with paths in canonical order, logically equal documents give
-// equal bytes, which the native RowBinary form does not.
-const digestSettings = " SETTINGS output_format_json_quote_64bit_integers = 0" +
-	", output_format_binary_encode_types_in_binary_format = 0" +
-	", output_format_binary_write_json_as_string = 1" +
-	" FORMAT JSONEachRow"
+// rowBinarySettings pin the RowBinary encoding of formatRowNoNewline, which
+// the row digest and the partition chunk id both hash, so a server profile
+// cannot change the bytes (ADR-0259 §SD4). JSON is written as its string
+// form: with paths in canonical order, logically equal documents give equal
+// bytes, which the native RowBinary form does not.
+const rowBinarySettings = ", output_format_binary_encode_types_in_binary_format = 0" +
+	", output_format_binary_write_json_as_string = 1"
+
+// digestSettings close every query that evaluates [Chunking.ChunkExpr] or a
+// row hash, [DigestSpec.ChunkListQuery] included, so chunk ids and digests
+// from any two such queries are comparable by construction.
+const digestSettings = " SETTINGS output_format_json_quote_64bit_integers = 0" + rowBinarySettings + " FORMAT JSONEachRow"
 
 // DigestSpec is what one side's digest queries read: the table, its key, the
 // columns the row digest covers and the chunk layout. Source and target specs
@@ -35,11 +39,7 @@ type DigestSpec struct {
 // RowHashExpr hashes the copied columns' RowBinary bytes. The list is
 // explicit and in plan order, never `*`.
 func (inst *DigestSpec) RowHashExpr() (sql string) {
-	cols := make([]string, 0, len(inst.CopyColumns))
-	for _, c := range inst.CopyColumns {
-		cols = append(cols, QuoteIdent(c))
-	}
-	return "cityHash64(formatRowNoNewline('RowBinary', " + strings.Join(cols, ", ") + "))"
+	return "cityHash64(formatRowNoNewline('RowBinary', " + inst.columnList() + "))"
 }
 
 // KeyHashExpr hashes the sorting key. A table with no sorting key (Log,
@@ -54,11 +54,7 @@ func (inst *DigestSpec) KeyHashExpr() (sql string) {
 
 func (inst *DigestSpec) keyTextExpr() (sql string) {
 	if len(inst.KeyExprs) == 0 {
-		cols := make([]string, 0, len(inst.CopyColumns))
-		for _, c := range inst.CopyColumns {
-			cols = append(cols, QuoteIdent(c))
-		}
-		return "substring(toString(tuple(" + strings.Join(cols, ", ") + ")), 1, 200)"
+		return "substring(toString(tuple(" + inst.columnList() + ")), 1, 200)"
 	}
 	return "substring(toString(tuple(" + strings.Join(inst.KeyExprs, ", ") + ")), 1, 200)"
 }
@@ -130,12 +126,12 @@ func (inst *DigestSpec) SamplePredicate(num uint32, den uint32) (sql string) {
 	return "cityHash64('jackstay-sample', " + keys + ") % " + strconv.FormatUint(uint64(max(den, 1)), 10) + " < " + strconv.FormatUint(uint64(num), 10)
 }
 
-// ChunkListQuery lists the chunks with their row counts and partition ids.
+// ChunkListQuery lists the chunks with their partition ids and display text.
 // It hashes nothing, so it is cheaper than a digest.
 func (inst *DigestSpec) ChunkListQuery() (sql string) {
-	return "SELECT chunk, any(pid) AS pid, any(display) AS display, count() AS n FROM (SELECT " +
+	return "SELECT chunk, any(pid) AS pid, any(display) AS display FROM (SELECT " +
 		inst.Chunking.ChunkExpr() + " AS chunk, " + inst.pidExpr() + " AS pid, " + inst.Chunking.DisplayExpr() + " AS display" +
-		inst.from() + ") GROUP BY chunk ORDER BY chunk" + jsonSettings
+		inst.from() + ") GROUP BY chunk ORDER BY chunk" + digestSettings
 }
 
 // SelectNative streams the copy columns of the spec's rows as Native.

@@ -552,6 +552,41 @@ verified with a scratch scene against one server, source and target, on a
 1.5M-row database, followed by a comparison that found every table
 identical.
 
+### 2026-09-26 — Review fixes: retry, resume, replace, and one seam for diff and sync
+
+A source-level review of the engine, the CLI and the wizard found the core of
+§SD4 and §SD5 sound and its edges not. What changed:
+
+- **Retry re-reads the source.** A copy is verified against the source digest
+  it read from; a source that moved between the digest and the copy used to
+  fail every attempt. Cleared rows are counted on the first attempt only.
+- **Resume is checked against the journal's start entry**, which now records
+  the mode and existing-rows policy the table was begun under; a run resumed
+  under other settings is refused and told to restart.
+- **Replace clears target-only chunks**, so the target ends up equal to the
+  source; each is journaled at an empty source digest.
+- **Repair reports the relay's error** rather than the digest mismatch that
+  follows it, and counts rows only once they are verified.
+- **A diff is not carried across a copy-column change**, since its digests
+  hashed the earlier columns; `CarryOver` is one function with a `withDiffs`
+  switch. §SD5's "a later structure or diff step begins a new run" is now
+  only the structure step: a diff keeps the run, which is safe because a
+  journaled chunk is skipped only while the source digest still matches.
+- **One seam for every step.** `DiffStep` and `PrepareSyncStep` recheck the
+  plan themselves, and `RunSync` owns the run id, the journal and the plan
+  saves; the CLI and the wizard render and choose the file, as §SD7 meant.
+- Partition chunks are sized per partition; Float keys keep NaN rows in
+  chunk 0's predicate; a leaf whose pair stage returns nothing stays
+  unresolved; `TableDiff.Final` records the request; the pre-flight charges
+  each group's headroom to every disk it touches; the free-floor wait polls
+  through a read error; the DDL client carries only the guard settings the
+  target knows; the endpoint normaliser keeps a query string; `LoadPlan`
+  validates what it read; extend DDL carries column comments; a retargeted
+  CREATE whose body still names the source database is noted; nested
+  `LowCardinality` compares as a note.
+- A scripted fake client drives the retry, resume and replace branches in
+  the default lane.
+
 ## References
 
 - [ADR-0170](./0170-data-catalog-competence.md) — the data catalog: classification, restoration, shape relation.

@@ -91,16 +91,19 @@ func (inst *App) renderBreadcrumb() {
 					locked = ""
 				}
 				done, _ := inst.stepDone(st)
+				// The button's text is the step's name alone, so a driver
+				// finds a step by the same name whether it is done or not.
 				text := c.Atoms().Text(st.String()).Keep()
 				switch {
 				case inst.step == st:
 					text = c.Atoms().BeginRichText(st.String()).Strong().End().Keep()
-				case done:
-					text = c.Atoms().Text(icons.PhCheck + " " + st.String()).Keep()
 				case locked != "":
 					text = c.Atoms().BeginRichText(st.String()).Weak().End().Keep()
 				}
 				for range c.HorizontalTop().KeepIter() {
+					if done && inst.step != st {
+						weak(icons.PhCheck)
+					}
 					if locked != "" {
 						c.UiDisable()
 					}
@@ -132,15 +135,15 @@ func (inst *App) renderBrief() {
 		space()
 		note(st.describe())
 		space()
-		any := false
+		shown := false
 		for _, s := range allSteps {
 			done, summary := inst.stepDone(s)
 			if !done {
 				continue
 			}
-			if !any {
+			if !shown {
 				heading("So far")
-				any = true
+				shown = true
 			}
 			for range c.IdScope(inst.ids.PrepareStr("sofar-" + s.String())) {
 				note(icons.PhCheck + " " + s.short() + ": " + summary)
@@ -186,6 +189,11 @@ func (inst *App) renderStatus() {
 	for i, s := range inst.stale {
 		for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 			c.Label("  moved: " + s).Send()
+		}
+	}
+	for i, s := range inst.skipped {
+		for range c.IdScope(inst.ids.PrepareSeq(uint64(1000 + i))) {
+			small("skipped " + s)
 		}
 	}
 }
@@ -619,7 +627,23 @@ func (inst *App) renderDatabases() {
 		c.Checkbox(inst.ids.PrepareStr("leeway-only"), inst.leewayOnly, "only tables that classify as leeway").SendRespVal(&inst.leewayOnly)
 	}
 	note("Planning the structure judges every table of the chosen databases against the target and writes the plan file. It changes nothing on either server.")
-	inst.cliHint("structure --plan {plan} --database <db> [--map src=target] [--leeway-only]")
+	inst.cliHint(inst.structureCommand())
+}
+
+// structureCommand is the CLI spelling of the Databases page's choices.
+func (inst *App) structureCommand() (cmd string) {
+	cmd = "structure --plan {plan}"
+	sel := inst.selection()
+	for _, db := range sel.Databases {
+		cmd += " --database " + db
+		if t, has := sel.DatabaseMap[db]; has {
+			cmd += " --map " + db + "=" + t
+		}
+	}
+	if sel.LeewayOnly {
+		cmd += " --leeway-only"
+	}
+	return
 }
 
 // --- 3 Structure -----------------------------------------------------------------

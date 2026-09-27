@@ -26,6 +26,8 @@
 package jackstay
 
 import (
+	"context"
+	"net/url"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/config/env"
@@ -83,10 +85,19 @@ func NormalizeEndpointURL(s string) (u string) {
 	if !strings.Contains(u, "://") {
 		u = "http://" + u
 	}
-	if !strings.HasSuffix(u, "/") {
-		u += "/"
+	// The slash ends the path, not the whole string: a query string such as
+	// ?database=x must stay as it is.
+	parsed, perr := url.Parse(u)
+	if perr != nil {
+		if !strings.HasSuffix(u, "/") {
+			u += "/"
+		}
+		return
 	}
-	return
+	if !strings.HasSuffix(parsed.Path, "/") {
+		parsed.Path += "/"
+	}
+	return parsed.String()
 }
 
 // SourceEndpoint is the source as the environment (or a CLI flag bound to the
@@ -130,10 +141,35 @@ var ddlGuardSettings = []string{
 	"allow_suspicious_ttl_expressions",
 }
 
+// DDLGuardSettings returns the guard settings of [DDLClientConfig] that the
+// server behind q knows. A setting a release does not know fails every
+// request that names it, so an older target gets only the ones it has.
+func DDLGuardSettings(ctx context.Context, q QueryI) (settings []string, err error) {
+	quoted := make([]string, 0, len(ddlGuardSettings))
+	for _, s := range ddlGuardSettings {
+		quoted = append(quoted, "'"+s+"'")
+	}
+	type nameRow struct {
+		Name string `json:"name"`
+	}
+	var rows []nameRow
+	rows, err = queryRows[nameRow](ctx, q, "SELECT name FROM system.settings WHERE name IN ("+strings.Join(quoted, ", ")+") ORDER BY name"+jsonSettings)
+	if err != nil {
+		err = eh.Errorf("unable to read the target's settings: %w", err)
+		return
+	}
+	settings = make([]string, 0, len(rows))
+	for _, r := range rows {
+		settings = append(settings, r.Name)
+	}
+	return
+}
+
 // DDLClientConfig derives from cfg the configuration for a client that applies a
-// plan's DDL. It carries [ddlGuardSettings] as HTTP query parameters, which
-// ClickHouse applies to every statement sent through it. Use it for DDL only.
-func DDLClientConfig(cfg chclient.Config) (out chclient.Config) {
+// plan's DDL. It carries settings, normally the answer of [DDLGuardSettings],
+// as HTTP query parameters, which ClickHouse applies to every statement sent
+// through it. Use it for DDL only.
+func DDLClientConfig(cfg chclient.Config, settings []string) (out chclient.Config) {
 	out = cfg
 	var b strings.Builder
 	b.WriteString(cfg.URL)
@@ -141,7 +177,7 @@ func DDLClientConfig(cfg chclient.Config) (out chclient.Config) {
 	if strings.Contains(cfg.URL, "?") {
 		sep = '&'
 	}
-	for _, s := range ddlGuardSettings {
+	for _, s := range settings {
 		b.WriteByte(sep)
 		b.WriteString(s)
 		b.WriteString("=1")

@@ -178,7 +178,7 @@ func TestSync_LiveServer(t *testing.T) {
 	t.Run("log engine, leftover rows cleared", func(t *testing.T) {
 		pt := prepare("logt", TableSync{Mode: SyncModeFull})
 		j := openJournal("run-log")
-		require.NoError(t, j.RecordStart(pt.Source.String(), true, time.Now()))
+		require.NoError(t, j.RecordStart(pt.Source.String(), true, *pt.Sync, time.Now()))
 		exec("INSERT INTO " + d + "logt VALUES (1), (2)") // a half-finished earlier attempt
 		rep, err := SyncTable(ctx, client, client, pt, j, DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)

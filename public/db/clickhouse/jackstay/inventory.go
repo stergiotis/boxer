@@ -45,6 +45,7 @@ type ColumnInfo struct {
 	DefaultKind       string `json:"default_kind"`
 	DefaultExpression string `json:"default_expression"`
 	CompressionCodec  string `json:"compression_codec"`
+	Comment           string `json:"comment"`
 }
 
 // IsInsertable reports whether an INSERT may carry a value for the column.
@@ -60,9 +61,7 @@ type TableInfo struct {
 	Ref          datacatalog.TableRef
 	Engine       string
 	SortingKey   string
-	PrimaryKey   string
 	PartitionKey string
-	SamplingKey  string
 	TotalRows    uint64
 	TotalBytes   uint64
 	CreateQuery  string
@@ -144,14 +143,14 @@ func DatabasesQuery() (sql string) {
 // TablesQuery excludes temporary tables: they belong to a session and cannot
 // be reached by a sync.
 func TablesQuery() (sql string) {
-	return "SELECT database, name, engine, sorting_key, primary_key, partition_key, sampling_key, " +
+	return "SELECT database, name, engine, sorting_key, partition_key, " +
 		"ifNull(total_rows, 0) AS total_rows, ifNull(total_bytes, 0) AS total_bytes, create_table_query " +
 		"FROM system.tables WHERE " + systemExclusion("database") + " AND NOT is_temporary " +
 		"ORDER BY database, name" + jsonSettings
 }
 
 func ColumnsQuery() (sql string) {
-	return "SELECT database, table, name, type, position, default_kind, default_expression, compression_codec " +
+	return "SELECT database, table, name, type, position, default_kind, default_expression, compression_codec, comment " +
 		"FROM system.columns WHERE " + systemExclusion("database") + " ORDER BY database, table, position" + jsonSettings
 }
 
@@ -167,9 +166,7 @@ type tableRow struct {
 	Name         string `json:"name"`
 	Engine       string `json:"engine"`
 	SortingKey   string `json:"sorting_key"`
-	PrimaryKey   string `json:"primary_key"`
 	PartitionKey string `json:"partition_key"`
-	SamplingKey  string `json:"sampling_key"`
 	TotalRows    uint64 `json:"total_rows"`
 	TotalBytes   uint64 `json:"total_bytes"`
 	CreateQuery  string `json:"create_table_query"`
@@ -225,9 +222,7 @@ func Discover(ctx context.Context, q QueryI) (inv Inventory, err error) {
 			Ref:          ref,
 			Engine:       t.Engine,
 			SortingKey:   t.SortingKey,
-			PrimaryKey:   t.PrimaryKey,
 			PartitionKey: t.PartitionKey,
-			SamplingKey:  t.SamplingKey,
 			TotalRows:    t.TotalRows,
 			TotalBytes:   t.TotalBytes,
 			CreateQuery:  t.CreateQuery,

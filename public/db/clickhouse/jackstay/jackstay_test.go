@@ -30,7 +30,6 @@ func mergeTree(r datacatalog.TableRef, sortingKey string, cols ...ColumnInfo) Ta
 		Ref:         r,
 		Engine:      "MergeTree",
 		SortingKey:  sortingKey,
-		PrimaryKey:  sortingKey,
 		CreateQuery: "CREATE TABLE " + r.Database + "." + r.Name + " (`k` UInt64) ENGINE = MergeTree ORDER BY " + sortingKey,
 		Columns:     cols,
 	}
@@ -369,15 +368,24 @@ func TestVerdict_Text(t *testing.T) {
 }
 
 func TestDDLClientConfig(t *testing.T) {
-	cfg := DDLClientConfig(chclient.Config{URL: "http://h:8123/", User: "u"})
+	cfg := DDLClientConfig(chclient.Config{URL: "http://h:8123/", User: "u"}, ddlGuardSettings)
 	assert.True(t, strings.HasPrefix(cfg.URL, "http://h:8123/?allow_suspicious_low_cardinality_types=1&"))
 	assert.Equal(t, "u", cfg.User)
-	cfg = DDLClientConfig(chclient.Config{URL: "http://h:8123/?database=x"})
+	cfg = DDLClientConfig(chclient.Config{URL: "http://h:8123/?database=x"}, ddlGuardSettings)
 	assert.True(t, strings.HasPrefix(cfg.URL, "http://h:8123/?database=x&allow_suspicious_low_cardinality_types=1&"))
+	// Only the settings the target knows travel; an unknown one fails every request.
+	cfg = DDLClientConfig(chclient.Config{URL: "http://h:8123/"}, []string{"allow_suspicious_codecs"})
+	assert.Equal(t, "http://h:8123/?allow_suspicious_codecs=1", cfg.URL)
+	cfg = DDLClientConfig(chclient.Config{URL: "http://h:8123/"}, nil)
+	assert.Equal(t, "http://h:8123/", cfg.URL)
 }
 
 func TestNormalizeEndpointURL(t *testing.T) {
 	assert.Equal(t, "http://host:8123/", NormalizeEndpointURL("host:8123"))
 	assert.Equal(t, "https://host:8443/", NormalizeEndpointURL(" https://host:8443 "))
 	assert.Equal(t, "", NormalizeEndpointURL(""))
+	// The slash ends the path; a query string stays where it is.
+	assert.Equal(t, "http://h:8123/?database=x", NormalizeEndpointURL("http://h:8123?database=x"))
+	assert.Equal(t, "http://h:8123/?database=x", NormalizeEndpointURL("h:8123/?database=x"))
+	assert.Equal(t, "http://h:8123/base/", NormalizeEndpointURL("http://h:8123/base"))
 }

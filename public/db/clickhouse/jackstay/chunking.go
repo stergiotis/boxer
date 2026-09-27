@@ -2,11 +2,13 @@ package jackstay
 
 import (
 	"context"
+	"math"
 	"math/bits"
 	"strconv"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -118,6 +120,34 @@ func leavesFor(chunkRows uint64, opts ChunkingOptions) (leaves uint32) {
 	return
 }
 
+// leavesPerChunk sizes the leaves of a table of rows rows cut into chunks
+// chunks, as if the rows were spread evenly; a chunk count of zero (no active
+// parts yet) is treated as one.
+func leavesPerChunk(rows uint64, chunks uint64, opts ChunkingOptions) (leaves uint32) {
+	return leavesFor(rows/max(chunks, 1), opts)
+}
+
+// rangeIndex parses a range chunk id: the decimal index of the chunk, with no
+// sign, no leading zeros and no overflow. ok is false for anything else, such
+// as a partition chunk id.
+func rangeIndex(id string) (i int, ok bool) {
+	if id == "" || (len(id) > 1 && id[0] == '0') {
+		return 0, false
+	}
+	for j := 0; j < len(id); j++ {
+		ch := id[j]
+		if ch < '0' || ch > '9' {
+			return 0, false
+		}
+		d := int(ch - '0')
+		if i > (math.MaxInt-d)/10 {
+			return 0, false
+		}
+		i = i*10 + d
+	}
+	return i, true
+}
+
 // orderableType reports whether a range of values of a column of this type
 // can be written as `lo <= x AND x < hi` with literal bounds.
 func orderableType(typ string) (ok bool) {
@@ -140,6 +170,10 @@ func stripLowCardinality(typ string) (t string) {
 
 func isDateTimeType(t string) (ok bool) {
 	return strings.HasPrefix(t, "DateTime")
+}
+
+func isFloatType(t string) (ok bool) {
+	return strings.HasPrefix(stripLowCardinality(t), "Float")
 }
 
 // boundType is the type a bound is cast to: the column's own type, without
@@ -175,6 +209,64 @@ func QuoteString(s string) (quoted string) {
 	return b.String()
 }
 
+// validate checks a layout read back from a plan file: the kind is known, a
+// partition or range layout names its expressions, a range layout has a bound
+// type and distinct bounds, and Leaves is a power of two. Bounds are text of
+// a typed sort, so their order is not checked.
+func (inst *Chunking) validate() (err error) {
+	switch inst.Kind {
+	case ChunkingSingle:
+	case ChunkingPartition:
+		if len(inst.Exprs) == 0 {
+			return eh.Errorf("partition chunking names no partition key expression")
+		}
+	case ChunkingRange:
+		if len(inst.Exprs) != 1 {
+			return eb.Build().Int("exprs", len(inst.Exprs)).Errorf("range chunking needs exactly one key expression")
+		}
+		if inst.BoundType == "" {
+			return eh.Errorf("range chunking names no bound type")
+		}
+		if len(inst.Bounds) == 0 {
+			return eh.Errorf("range chunking has no bounds")
+		}
+		seen := make(map[string]struct{}, len(inst.Bounds))
+		for _, b := range inst.Bounds {
+			if _, dup := seen[b]; dup {
+				return eb.Build().Str("bound", b).Errorf("range chunking repeats a bound")
+			}
+			seen[b] = struct{}{}
+		}
+		// Bounds out of order make chunk predicates overlap or leave gaps.
+		// Numeric bounds compare as numbers; the other types' text sorts
+		// as the values do.
+		numeric := false
+		for _, p := range []string{"Int", "UInt", "Float", "Decimal"} {
+			numeric = numeric || strings.HasPrefix(inst.BoundType, p)
+		}
+		for i := 1; i < len(inst.Bounds); i++ {
+			a, b := inst.Bounds[i-1], inst.Bounds[i]
+			ascending := a < b
+			if numeric {
+				fa, ea := strconv.ParseFloat(a, 64)
+				fb, eb2 := strconv.ParseFloat(b, 64)
+				if ea == nil && eb2 == nil {
+					ascending = fa < fb
+				}
+			}
+			if !ascending {
+				return eb.Build().Str("bound", a).Str("next", b).Errorf("range bounds are not ascending")
+			}
+		}
+	default:
+		return eb.Build().Uint8("kind", uint8(inst.Kind)).Errorf("invalid chunking kind")
+	}
+	if inst.Leaves == 0 || inst.Leaves&(inst.Leaves-1) != 0 {
+		return eb.Build().Uint32("leaves", inst.Leaves).Errorf("leaves is not a power of two")
+	}
+	return
+}
+
 func (inst *Chunking) boundLiterals() (lits []string) {
 	lits = make([]string, 0, len(inst.Bounds))
 	for _, b := range inst.Bounds {
@@ -201,7 +293,10 @@ func (inst *Chunking) ChunkExpr() (sql string) {
 // ChunkPredicate selects the rows of chunk id. pid, when known, is the chunk's
 // partition id on the table being read; it prunes where the expression form
 // cannot. Range chunks become bounds on the first sorting-key expression,
-// which the primary index prunes.
+// which the primary index prunes. A NaN of a Float key compares false against
+// every bound, so [Chunking.ChunkExpr] names its chunk "0"; chunk 0's predicate
+// selects NaN rows too, so the two agree and no row is left to no chunk. An
+// id that is not a chunk of the layout selects nothing.
 func (inst *Chunking) ChunkPredicate(id string, pid string) (sql string) {
 	switch inst.Kind {
 	case ChunkingPartition:
@@ -210,17 +305,22 @@ func (inst *Chunking) ChunkPredicate(id string, pid string) (sql string) {
 		}
 		return inst.ChunkExpr() + " = " + QuoteString(id)
 	case ChunkingRange:
-		i, err := strconv.Atoi(id)
-		if err != nil || i < 0 || i > len(inst.Bounds) {
+		i, ok := rangeIndex(id)
+		if !ok || i > len(inst.Bounds) {
 			return "0"
 		}
 		lits := inst.boundLiterals()
+		x := "(" + inst.Exprs[0] + ")"
 		parts := make([]string, 0, 2)
 		if i > 0 {
-			parts = append(parts, "("+inst.Exprs[0]+") >= "+lits[i-1])
+			parts = append(parts, x+" >= "+lits[i-1])
 		}
 		if i < len(inst.Bounds) {
-			parts = append(parts, "("+inst.Exprs[0]+") < "+lits[i])
+			below := x + " < " + lits[i]
+			if i == 0 && isFloatType(inst.BoundType) {
+				below = "(" + below + " OR isNaN(" + inst.Exprs[0] + "))"
+			}
+			parts = append(parts, below)
 		}
 		if len(parts) == 0 {
 			return "1"
@@ -244,12 +344,9 @@ func (inst *Chunking) RangeDisplay(id string) (s string) {
 	if inst.Kind != ChunkingRange {
 		return ""
 	}
-	i := 0
-	for _, ch := range id {
-		if ch < '0' || ch > '9' {
-			return ""
-		}
-		i = i*10 + int(ch-'0')
+	i, ok := rangeIndex(id)
+	if !ok {
+		return ""
 	}
 	lo, hi := "-∞", "+∞"
 	if i > 0 && i-1 < len(inst.Bounds) {
@@ -269,14 +366,31 @@ type sampleRow struct {
 	Sample []string `json:"sample"`
 }
 
+type partitionsRow struct {
+	Partitions uint64 `json:"partitions"`
+}
+
 // DeriveChunking chooses the chunk layout of a source table (ADR-0259 §SD4):
 // partitions when the table has a partition key, else ranges of the first
 // sorting-key expression when its type is orderable and the table is large
-// enough to need more than one chunk, else a single chunk. Range bounds come
-// from a sorted reservoir sample of the source, one scan of that expression.
+// enough to need more than one chunk, else a single chunk. Leaves are sized
+// for the rows of one chunk: a partitioned table's active partitions are
+// counted from system.parts first. Range bounds come from a sorted reservoir
+// sample of the source, one scan of that expression.
 func DeriveChunking(ctx context.Context, q QueryI, ref datacatalog.TableRef, sortingKey string, partitionKey string, rows uint64, opts ChunkingOptions) (c Chunking, err error) {
 	if pk := SplitKeyExprs(partitionKey); len(pk) > 0 {
-		c = Chunking{Kind: ChunkingPartition, Exprs: pk, Leaves: leavesFor(rows, opts)}
+		var parts []partitionsRow
+		parts, err = queryRows[partitionsRow](ctx, q, "SELECT uniqExact(partition_id) AS partitions FROM system.parts WHERE active AND database = "+
+			QuoteString(ref.Database)+" AND table = "+QuoteString(ref.Name)+jsonSettings)
+		if err != nil {
+			err = eb.Build().Str("table", ref.String()).Errorf("unable to count the source's partitions: %w", err)
+			return
+		}
+		var partitions uint64
+		if len(parts) == 1 {
+			partitions = parts[0].Partitions
+		}
+		c = Chunking{Kind: ChunkingPartition, Exprs: pk, Leaves: leavesPerChunk(rows, partitions, opts)}
 		return
 	}
 	c = Chunking{Kind: ChunkingSingle, Leaves: leavesFor(rows, opts)}
@@ -318,7 +432,7 @@ func DeriveChunking(ctx context.Context, q QueryI, ref datacatalog.TableRef, sor
 		Exprs:     []string{x},
 		BoundType: bt,
 		Bounds:    bounds,
-		Leaves:    leavesFor(rows/uint64(len(bounds)+1), opts),
+		Leaves:    leavesPerChunk(rows, uint64(len(bounds)+1), opts),
 	}
 	return
 }

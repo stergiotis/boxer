@@ -201,12 +201,18 @@ type PreflightDisk struct {
 	// write a new part before they drop the old ones.
 	Headroom uint64
 	Tables   []datacatalog.TableRef
-	OK       bool
+	// OK is false when Headroom exceeds Free, or when a disk of the set is
+	// shared with other groups and their headrooms together exceed what that
+	// disk has free.
+	OK bool
 }
 
 // Preflight estimates what the chosen tables will need on the target and
 // compares it with free space (ADR-0259 §SD6). It only warns: the estimate
-// ignores codec differences between the servers and what merges reclaim.
+// ignores codec differences between the servers and what merges reclaim. A
+// policy does not say how it spreads parts over its disks, so a group's whole
+// headroom is charged to each of its disks when disks are shared between
+// groups.
 func Preflight(tables []*PlanTable, dst *DiskReport, headroomFactor float64) (out []PreflightDisk) {
 	byGroup := make(map[string]*PreflightDisk, 4)
 	order := make([]string, 0, 4)
@@ -221,9 +227,7 @@ func Preflight(tables []*PlanTable, dst *DiskReport, headroomFactor float64) (ou
 		if g == nil {
 			g = &PreflightDisk{Disks: disks}
 			for _, name := range disks {
-				if d, ok := dst.Disk(name); ok && d.FreeSpace > d.KeepFreeSpace {
-					g.Free += d.FreeSpace - d.KeepFreeSpace
-				}
+				g.Free += usableFree(dst, name)
 			}
 			byGroup[key] = g
 			order = append(order, key)
@@ -232,13 +236,34 @@ func Preflight(tables []*PlanTable, dst *DiskReport, headroomFactor float64) (ou
 		g.Held += heldBytes(pt, fp)
 		g.Tables = append(g.Tables, pt.Target)
 	}
+	demand := make(map[string]uint64, len(dst.Disks))
 	for _, key := range order {
 		g := byGroup[key]
 		g.Headroom = uint64(float64(g.Need+g.Held) * max(headroomFactor, 1))
+		for _, name := range g.Disks {
+			demand[name] += g.Headroom
+		}
+	}
+	for _, key := range order {
+		g := byGroup[key]
 		g.OK = g.Headroom <= g.Free
+		for _, name := range g.Disks {
+			if _, known := dst.Disk(name); known && demand[name] > usableFree(dst, name) {
+				g.OK = false
+			}
+		}
 		out = append(out, *g)
 	}
 	return
+}
+
+// usableFree is a disk's free space less what ClickHouse keeps free; zero for
+// a disk the report does not list.
+func usableFree(rep *DiskReport, name string) (free uint64) {
+	if d, ok := rep.Disk(name); ok && d.FreeSpace > d.KeepFreeSpace {
+		return d.FreeSpace - d.KeepFreeSpace
+	}
+	return 0
 }
 
 // heldBytes estimates the target bytes a sync of pt clears that stay on disk
@@ -287,25 +312,27 @@ func (inst FreeFloor) Low(rep *DiskReport, names []string) (low []DiskInfo) {
 
 // WaitForFree returns once none of the table's target disks is below the
 // floor, polling every Poll. notify is called each time it finds them low,
-// so an operator sees why the sync stands still; cancelling ctx stops the
-// wait, and the run resumes from its journal later.
+// so an operator sees why the sync stands still. A failed disk readout does
+// not end the wait: the disks are then unknown, notify is called with no
+// disks, and the next poll reads again. Only cancelling ctx stops the wait,
+// and the run resumes from its journal later.
 func (inst FreeFloor) WaitForFree(ctx context.Context, q QueryI, target datacatalog.TableRef, notify func(low []DiskInfo)) (err error) {
 	for {
-		var rep DiskReport
-		rep, err = ReadDisks(ctx, q, []datacatalog.TableRef{target})
-		if err != nil {
-			return
-		}
-		disks := []string{"default"}
-		if fp, has := rep.Table(target); has {
-			disks = fp.Disks
-		}
-		low := inst.Low(&rep, disks)
-		if len(low) == 0 {
-			return
-		}
-		if notify != nil {
-			notify(low)
+		rep, rerr := ReadDisks(ctx, q, []datacatalog.TableRef{target})
+		if rerr == nil {
+			disks := []string{"default"}
+			if fp, has := rep.Table(target); has {
+				disks = fp.Disks
+			}
+			low := inst.Low(&rep, disks)
+			if len(low) == 0 {
+				return
+			}
+			if notify != nil {
+				notify(low)
+			}
+		} else if notify != nil {
+			notify(nil)
 		}
 		select {
 		case <-ctx.Done():

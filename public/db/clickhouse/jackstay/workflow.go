@@ -15,12 +15,13 @@ import (
 
 // The workflow: one function per step of ADR-0259 §SD7, shared by the CLI and
 // the wizard, so the two front ends are two editors of one plan and never two
-// implementations of it. Each takes the servers' clients, reads both, and
-// returns a new plan value; the caller decides where it is saved.
+// implementations of it. Each step that acts on a saved plan rechecks it
+// against the servers first and refuses a stale one; the caller only renders
+// and decides where the plan is saved.
 
 // DiscoverBoth reads both inventories at once.
 func DiscoverBoth(ctx context.Context, src QueryI, dst QueryI) (s Inventory, d Inventory, err error) {
-	s, d, err = both(func(side int) (Inventory, error) {
+	s, d, err = both(ctx, func(ctx context.Context, side int) (Inventory, error) {
 		if side == 0 {
 			inv, e := Discover(ctx, src)
 			if e != nil {
@@ -64,7 +65,7 @@ func PlanStructure(ctx context.Context, src QueryI, dst QueryI, srcEp Endpoint, 
 		return
 	}
 	if old != nil && old.Source == plan.Source && old.Target == plan.Target {
-		plan.CarryOver(old)
+		plan.CarryOver(old, false)
 	}
 	return
 }
@@ -88,8 +89,7 @@ func Recheck(ctx context.Context, src QueryI, dst QueryI, plan *Plan, now time.T
 	if err != nil {
 		return
 	}
-	fresh.CarryOver(plan)
-	fresh.CarryDiffs(plan)
+	fresh.CarryOver(plan, true)
 	return
 }
 
@@ -128,18 +128,35 @@ type DiffOptionsAll struct {
 	Progress func(i int, n int, pt *PlanTable)
 }
 
-// DiffStep is the Differences step over a plan that [Recheck] found current:
-// every diffable table in scope is diffed in place (§SD4).
-func DiffStep(ctx context.Context, src QueryI, dst QueryI, plan *Plan, opts DiffOptionsAll, now func() time.Time) (skipped []string, err error) {
-	todo := make([]*PlanTable, 0, len(plan.Tables))
-	for i := range plan.Tables {
-		pt := &plan.Tables[i]
+// notDiffable says why a table in scope is not compared or synced.
+func notDiffable(pt *PlanTable) (reason string) {
+	if pt.Verdict.IsSyncable() {
+		return pt.Source.String() + ": verdict " + pt.Verdict.String() + " (apply the DDL first)"
+	}
+	s := pt.Source.String() + ": verdict " + pt.Verdict.String()
+	if len(pt.Reasons) > 0 {
+		s += " (" + pt.Reasons[0] + ")"
+	}
+	return s
+}
+
+// DiffStep is the Differences step: recheck the plan, then diff every
+// diffable table in scope in place (§SD4). fresh is the plan to save; a
+// stale plan is not diffed.
+func DiffStep(ctx context.Context, src QueryI, dst QueryI, plan *Plan, opts DiffOptionsAll, now func() time.Time) (fresh Plan, skipped []string, stale []string, err error) {
+	fresh, stale, err = Recheck(ctx, src, dst, plan, now())
+	if err != nil || len(stale) > 0 {
+		return
+	}
+	todo := make([]*PlanTable, 0, len(fresh.Tables))
+	for i := range fresh.Tables {
+		pt := &fresh.Tables[i]
 		if len(opts.Only) > 0 && !slices.Contains(opts.Only, pt.Source) {
 			continue
 		}
 		if !pt.IsDiffable() {
-			if pt.Verdict.IsSyncable() {
-				skipped = append(skipped, pt.Source.String()+": verdict "+pt.Verdict.String()+" (apply the DDL first)")
+			if len(opts.Only) > 0 || pt.Verdict.IsSyncable() {
+				skipped = append(skipped, notDiffable(pt))
 			}
 			continue
 		}
@@ -160,10 +177,68 @@ func DiffStep(ctx context.Context, src QueryI, dst QueryI, plan *Plan, opts Diff
 	return
 }
 
-// PrepareSync is the Sync step's choice: the tables in scope that can take ts,
-// with a chunk layout and ts set on each. A table that cannot is listed in
-// skipped with the reason; a repair has nothing to do on a table whose diff
-// is identical.
+// SyncRequest is what the operator asked of the Sync step.
+type SyncRequest struct {
+	TableSync
+	// Only restricts the step to these source tables; empty syncs every
+	// table ready for it.
+	Only []datacatalog.TableRef
+	// Restart begins a new run instead of resuming the plan's.
+	Restart  bool
+	Chunking ChunkingOptions
+	// Headroom is the pre-flight factor over the estimated bytes the target
+	// must have free; zero takes 1.5.
+	Headroom float64
+}
+
+// SyncPrepared is the Sync step before anything moves: the rechecked plan,
+// the tables chosen with their chunk layout and settings, the tables left
+// out with the reason, and the target's disks against what would land.
+type SyncPrepared struct {
+	Plan  Plan
+	Stale []string
+	// Chosen points into Plan.Tables.
+	Chosen  []*PlanTable
+	Skipped []string
+	// Disks is empty when nothing was chosen or the plan is stale.
+	Disks []PreflightDisk
+	// ExpectedRows is what a progress bar counts towards.
+	ExpectedRows int64
+}
+
+// PrepareSyncStep rechecks the plan, chooses the tables req can take, derives
+// the chunk layout of any that lacks one, and reads the target's disks for
+// the pre-flight (§SD5, §SD6). Nothing is written to either server.
+func PrepareSyncStep(ctx context.Context, src QueryI, dst QueryI, plan *Plan, req SyncRequest) (prep SyncPrepared, err error) {
+	prep.Plan, prep.Stale, err = Recheck(ctx, src, dst, plan, time.Now())
+	if err != nil || len(prep.Stale) > 0 {
+		return
+	}
+	prep.Chosen, prep.Skipped, err = PrepareSync(ctx, src, &prep.Plan, req.TableSync, req.Only, req.Chunking)
+	if err != nil || len(prep.Chosen) == 0 {
+		return
+	}
+	prep.ExpectedRows = ExpectedRows(prep.Chosen)
+	refs := make([]datacatalog.TableRef, 0, len(prep.Chosen))
+	for _, pt := range prep.Chosen {
+		refs = append(refs, pt.Target)
+	}
+	var rep DiskReport
+	rep, err = ReadDisks(ctx, dst, refs)
+	if err != nil {
+		return
+	}
+	headroom := req.Headroom
+	if headroom <= 0 {
+		headroom = 1.5
+	}
+	prep.Disks = Preflight(prep.Chosen, &rep, headroom)
+	return
+}
+
+// PrepareSync chooses the tables in scope that can take ts, with a chunk
+// layout and ts set on each. A table that cannot is listed in skipped with the
+// reason; a repair has nothing to do on a table whose diff is identical.
 func PrepareSync(ctx context.Context, src QueryI, plan *Plan, ts TableSync, only []datacatalog.TableRef, chunkOpts ChunkingOptions) (chosen []*PlanTable, skipped []string, err error) {
 	chosen = make([]*PlanTable, 0, len(plan.Tables))
 	for i := range plan.Tables {
@@ -174,7 +249,7 @@ func PrepareSync(ctx context.Context, src QueryI, plan *Plan, ts TableSync, only
 		switch {
 		case !pt.IsDiffable():
 			if len(only) > 0 || pt.Verdict.IsSyncable() {
-				skipped = append(skipped, pt.Source.String()+": verdict "+pt.Verdict.String()+" (apply the DDL first)")
+				skipped = append(skipped, notDiffable(pt))
 			}
 			continue
 		case ts.Mode == SyncModeRepair && pt.Diff == nil:
@@ -224,33 +299,71 @@ func ExpectedRows(chosen []*PlanTable) (rows int64) {
 	return
 }
 
-// SyncHooks let a front end follow [SyncStep] table by table.
-type SyncHooks struct {
-	BeforeTable func(pt *PlanTable)
-	// AfterTable runs once a table's report is stored — the moment to save
-	// the plan.
-	AfterTable func(pt *PlanTable)
+// SyncOutcome is what a run left behind.
+type SyncOutcome struct {
+	Run     SyncRun
+	Resumed bool
+	// Failed counts the chunks not synced: failed and stale ones.
+	Failed int
 }
 
-// SyncStep syncs the chosen tables in order, storing each table's report in
-// it and dropping its diff, which described the target before the run. It
-// stops at the first table-level error; chunk failures are in the reports.
-func SyncStep(ctx context.Context, src ClientI, dst ClientI, chosen []*PlanTable, j *Journal, opts SyncOptions, now func() time.Time, hooks SyncHooks) (failed int, err error) {
-	for _, pt := range chosen {
-		if hooks.BeforeTable != nil {
-			hooks.BeforeTable(pt)
+// RunSync runs the sync a [PrepareSyncStep] prepared: it names the run, saves
+// the plan at planPath (the journal lives beside it), copies each chosen
+// table, and saves the plan again after each table and at the end, so a run
+// stopped part-way resumes from what it recorded. Chunk failures are in the
+// tables' reports; err is a table-level failure, after which the plan is
+// still saved.
+func RunSync(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, planPath string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
+	if len(prep.Stale) > 0 {
+		err = eb.Build().Int("stale", len(prep.Stale)).Errorf("plan is stale: %w", ErrStale)
+		return
+	}
+	if len(prep.Chosen) == 0 {
+		return
+	}
+	plan := &prep.Plan
+	out.Run, out.Resumed, err = BeginRun(plan, restart, now())
+	if err != nil {
+		return
+	}
+	var j *Journal
+	j, err = OpenJournal(JournalPath(planPath), out.Run.RunId)
+	if err != nil {
+		return
+	}
+	defer func() { _ = j.Close() }()
+	// A resumed run keeps the settings it began under. Refused before the
+	// plan is saved, so a refused request leaves no trace in it.
+	for _, pt := range prep.Chosen {
+		if e, started := j.Started(pt.Source.String()); started && (e.Mode != pt.Sync.Mode.String() || e.Existing != pt.Sync.Existing.String()) {
+			err = eb.Build().Str("table", pt.Source.String()).Str("begun", e.Mode+"/"+e.Existing).Str("now", pt.Sync.Mode.String()+"/"+pt.Sync.Existing.String()).
+				Errorf("the run began this table under other settings; keep them, or restart the run")
+			return
+		}
+	}
+	if err = plan.Save(planPath); err != nil {
+		return
+	}
+	for _, pt := range prep.Chosen {
+		if opts.BeforeTable != nil {
+			opts.BeforeTable(pt)
 		}
 		var rep TableSyncReport
 		rep, err = SyncTable(ctx, src, dst, pt, j, opts, now)
 		if err != nil {
 			err = eb.Build().Str("table", pt.Source.String()).Errorf("unable to sync table: %w", err)
+			_ = plan.Save(planPath)
 			return
 		}
 		pt.SyncReport = &rep
+		// The diff described the target before the run.
 		pt.Diff = nil
-		failed += rep.Failed + rep.Stale
-		if hooks.AfterTable != nil {
-			hooks.AfterTable(pt)
+		out.Failed += rep.Failed + rep.Stale
+		if err = plan.Save(planPath); err != nil {
+			return
+		}
+		if opts.AfterTable != nil {
+			opts.AfterTable(pt)
 		}
 	}
 	return

@@ -295,6 +295,14 @@ func (inst *App) renderPreflight() {
 		return
 	}
 	inst.card("preflight")(func() bool {
+		if len(pf.stale) > 0 {
+			heading("The plan no longer matches the servers")
+			for _, s := range pf.stale {
+				note("moved: " + s)
+			}
+			note("Plan the structure again before syncing.")
+			return true
+		}
 		if pf.tables == 0 {
 			heading("Nothing to copy with these choices")
 			for _, s := range pf.skipped {

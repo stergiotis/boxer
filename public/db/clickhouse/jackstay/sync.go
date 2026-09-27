@@ -143,6 +143,25 @@ const (
 
 var AllChunkStatuses = []ChunkStatusE{ChunkStatusCopied, ChunkStatusDone, ChunkStatusIdentical, ChunkStatusStale, ChunkStatusFailed}
 
+func (inst ChunkStatusE) MarshalText() (text []byte, err error) {
+	s := inst.String()
+	if s == "invalid" {
+		err = eb.Build().Uint8("status", uint8(inst)).Errorf("invalid chunk status")
+		return
+	}
+	return []byte(s), nil
+}
+
+func (inst *ChunkStatusE) UnmarshalText(text []byte) (err error) {
+	for _, st := range AllChunkStatuses {
+		if st.String() == string(text) {
+			*inst = st
+			return
+		}
+	}
+	return eb.Build().Str("status", string(text)).Errorf("unknown chunk status")
+}
+
 func (inst ChunkStatusE) String() (s string) {
 	switch inst {
 	case ChunkStatusCopied:
@@ -164,7 +183,7 @@ type ChunkResult struct {
 	Table    string       `json:"table"`
 	Chunk    string       `json:"chunk"`
 	Display  string       `json:"display,omitempty"`
-	Status   ChunkStatusE `json:"-"`
+	Status   ChunkStatusE `json:"status"`
 	Rows     uint64       `json:"rows"`
 	Bytes    uint64       `json:"bytes"`
 	Cleared  uint64       `json:"cleared,omitempty"`
@@ -246,6 +265,10 @@ type SyncOptions struct {
 	// BeforeChunk, when set, runs before each chunk; the disk floor wait
 	// lives here. An error stops the table's sync.
 	BeforeChunk func(ctx context.Context, pt *PlanTable) (err error)
+	// BeforeTable and AfterTable, when set, bracket each table of a run;
+	// AfterTable runs once the table's report is stored in the plan.
+	BeforeTable func(pt *PlanTable)
+	AfterTable  func(pt *PlanTable)
 }
 
 func DefaultSyncOptions() (opts SyncOptions) {
@@ -452,56 +475,66 @@ func SyncTable(ctx context.Context, src ClientI, dst ClientI, pt *PlanTable, j *
 	table := pt.Source.String()
 	rep.RunId = j.run
 
-	owned, started := j.Started(table)
-	if !started {
-		owned, err = ts.claim(ctx)
+	if e, started := j.Started(table); started {
+		if e.Mode != pt.Sync.Mode.String() || e.Existing != pt.Sync.Existing.String() {
+			err = eb.Build().Str("table", table).Str("begun", e.Mode+"/"+e.Existing).Str("now", pt.Sync.Mode.String()+"/"+pt.Sync.Existing.String()).
+				Errorf("the run began this table under other settings; keep them, or restart the run")
+			return
+		}
+		ts.owned = e.Owned
+	} else {
+		ts.owned, err = ts.claim(ctx)
 		if err != nil {
 			return
 		}
-		err = j.RecordStart(table, owned, now())
+		err = j.RecordStart(table, ts.owned, *pt.Sync, now())
 		if err != nil {
 			return
 		}
 	}
-	ts.owned = owned
 
+	var chunks []func() ChunkResult
 	if pt.Sync.Mode == SyncModeRepair {
 		for i := range pt.Diff.Differing {
-			if err = ctx.Err(); err != nil {
-				return
-			}
-			if opts.BeforeChunk != nil {
-				if err = opts.BeforeChunk(ctx, pt); err != nil {
-					return
-				}
-			}
-			r := ts.repairChunk(ctx, &pt.Diff.Differing[i])
-			rep.add(r)
-			if opts.Progress != nil {
-				opts.Progress(r)
-			}
+			cd := &pt.Diff.Differing[i]
+			chunks = append(chunks, func() ChunkResult { return ts.repairChunk(ctx, cd) })
 		}
 	} else {
-		var chunks []chunkListRow
-		chunks, err = queryRows[chunkListRow](ctx, src, ts.srcSpec.ChunkListQuery())
+		var srcChunks []chunkListRow
+		srcChunks, err = queryRows[chunkListRow](ctx, src, ts.srcSpec.ChunkListQuery())
 		if err != nil {
 			err = eb.Build().Str("table", table).Errorf("unable to list source chunks: %w", err)
 			return
 		}
-		for _, c := range chunks {
-			if err = ctx.Err(); err != nil {
+		for _, c := range srcChunks {
+			chunks = append(chunks, func() ChunkResult { return ts.copyChunk(ctx, c) })
+		}
+		if pt.Sync.Existing == ExistingPolicyReplace {
+			// Replace makes the target equal to the source, so chunks the
+			// target holds and the source does not are cleared too.
+			var extra []chunkListRow
+			extra, err = ts.targetOnlyChunks(ctx, srcChunks)
+			if err != nil {
 				return
 			}
-			if opts.BeforeChunk != nil {
-				if err = opts.BeforeChunk(ctx, pt); err != nil {
-					return
-				}
+			for _, c := range extra {
+				chunks = append(chunks, func() ChunkResult { return ts.clearChunk(ctx, c) })
 			}
-			r := ts.copyChunk(ctx, c)
-			rep.add(r)
-			if opts.Progress != nil {
-				opts.Progress(r)
+		}
+	}
+	for _, chunk := range chunks {
+		if err = ctx.Err(); err != nil {
+			return
+		}
+		if opts.BeforeChunk != nil {
+			if err = opts.BeforeChunk(ctx, pt); err != nil {
+				return
 			}
+		}
+		r := chunk()
+		rep.add(r)
+		if opts.Progress != nil {
+			opts.Progress(r)
 		}
 	}
 	rep.FinishedAt = now().UTC()
@@ -516,14 +549,17 @@ type chunkListRow struct {
 	Chunk   string `json:"chunk"`
 	Pid     string `json:"pid"`
 	Display string `json:"display"`
-	N       uint64 `json:"n"`
 }
 
 // claim decides, when a run first reaches a table, whether it owns the
 // target's rows: it does when the target is empty or the policy is replace. A
 // full or sample sync into a non-empty target is refused unless the policy
-// says otherwise; repair owns only the leaves it was shown.
+// says otherwise. Repair owns only the leaves it was shown, which is decided
+// per chunk against the diff, so it claims nothing here.
 func (inst *tableSyncer) claim(ctx context.Context) (owned bool, err error) {
+	if inst.pt.Sync.Mode == SyncModeRepair {
+		return false, nil
+	}
 	var rows []countRow
 	rows, err = queryRows[countRow](ctx, inst.dst, "SELECT count() AS n FROM "+QuoteRef(inst.pt.Target)+jsonSettings)
 	if err != nil {
@@ -531,9 +567,6 @@ func (inst *tableSyncer) claim(ctx context.Context) (owned bool, err error) {
 		return
 	}
 	empty := len(rows) == 1 && rows[0].N == 0
-	if inst.pt.Sync.Mode == SyncModeRepair {
-		return empty, nil
-	}
 	switch inst.pt.Sync.Existing {
 	case ExistingPolicyReplace:
 		return true, nil
@@ -552,6 +585,60 @@ func (inst *tableSyncer) targetPid(srcPid string) (pid string) {
 		return srcPid
 	}
 	return ""
+}
+
+// targetOnlyChunks lists the target's chunks that the source's list lacks.
+func (inst *tableSyncer) targetOnlyChunks(ctx context.Context, srcChunks []chunkListRow) (extra []chunkListRow, err error) {
+	var dstChunks []chunkListRow
+	dstChunks, err = queryRows[chunkListRow](ctx, inst.dst, inst.dstSpec.ChunkListQuery())
+	if err != nil {
+		err = eb.Build().Str("table", inst.pt.Target.String()).Errorf("unable to list target chunks: %w", err)
+		return
+	}
+	have := make(map[string]bool, len(srcChunks))
+	for _, c := range srcChunks {
+		have[c.Chunk] = true
+	}
+	for _, c := range dstChunks {
+		if !have[c.Chunk] {
+			extra = append(extra, c)
+		}
+	}
+	return
+}
+
+// clearChunk removes a target-only chunk under replace. It is journaled as a
+// chunk copied at an empty source digest, so a resumed run skips it while the
+// source still lacks it.
+func (inst *tableSyncer) clearChunk(ctx context.Context, c chunkListRow) (r ChunkResult) {
+	table := inst.pt.Source.String()
+	r = ChunkResult{Table: table, Chunk: c.Chunk, Display: c.Display, Note: "target-only chunk cleared", Attempts: 1}
+	if r.Display == "" {
+		r.Display = inst.pt.Chunking.RangeDisplay(c.Chunk)
+	}
+	if e, done := inst.journal.Done(table, c.Chunk); done && e.N == 0 {
+		r.Status, r.Note = ChunkStatusDone, "target-only chunk cleared earlier"
+		return
+	}
+	dstSpec := inst.dstSpec.With(inst.pt.Chunking.ChunkPredicate(c.Chunk, inst.targetPid(c.Pid)))
+	before, err := readLeafSet(ctx, inst.dst, &dstSpec)
+	if err != nil {
+		r.Status, r.Note = ChunkStatusFailed, err.Error()
+		return
+	}
+	if n := before.total().n; n > 0 {
+		if err = inst.clear(ctx, c.Chunk, inst.targetPid(c.Pid), nil); err != nil {
+			r.Status, r.Note = ChunkStatusFailed, "unable to clear the target chunk: "+err.Error()
+			return
+		}
+		r.Cleared = n
+	}
+	if err = inst.journal.RecordChunk(table, c.Chunk, inst.pt.Sync.Mode, leafDigest{}, inst.now()); err != nil {
+		r.Status, r.Note = ChunkStatusFailed, err.Error()
+		return
+	}
+	r.Status = ChunkStatusCopied
+	return
 }
 
 // clear removes rows of a target chunk: all of it (leaves nil) or the given
@@ -600,7 +687,7 @@ func (inst *tableSyncer) verify(ctx context.Context, srcSpec *DigestSpec, dstSpe
 	sf.Final = IsMergeEngine(inst.pt.Engine)
 	df.Final = IsMergeEngine(inst.pt.TargetEngine)
 	var s, d leafSet
-	s, d, err = both(func(side int) (leafSet, error) {
+	s, d, err = both(ctx, func(ctx context.Context, side int) (leafSet, error) {
 		if side == 0 {
 			return readLeafSet(ctx, inst.src, &sf)
 		}
@@ -646,6 +733,17 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 	}
 	for attempt := 1; attempt <= inst.opts.MaxAttempts; attempt++ {
 		r.Attempts = attempt
+		if attempt > 1 {
+			// The source may have moved since the digest the last attempt
+			// verified against; a copy is verified against the source it
+			// read from.
+			srcSet, err = readLeafSet(ctx, inst.src, &srcSpec)
+			if err != nil {
+				r.Status, r.Note = ChunkStatusFailed, err.Error()
+				return
+			}
+			srcTotal = srcSet.total()
+		}
 		var counted int64
 		before, err := readLeafSet(ctx, inst.dst, &dstSpec)
 		if err != nil {
@@ -658,7 +756,11 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 				r.Status, r.Note = ChunkStatusFailed, "unable to clear the target chunk: "+err.Error()
 				return
 			}
-			r.Cleared += before.total().n
+			if attempt == 1 {
+				// Later attempts clear the run's own failed copy, not
+				// rows the operator had.
+				r.Cleared += before.total().n
+			}
 			before = leafSet{}
 		}
 		if srcTotal.n > 0 {
@@ -727,7 +829,7 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 	}
 	dstSpec := inst.dstSpec.With(inst.pt.Chunking.ChunkPredicate(cd.Id, dstPid))
 
-	s, d, err := both(func(side int) (leafSet, error) {
+	s, d, err := both(ctx, func(ctx context.Context, side int) (leafSet, error) {
 		if side == 0 {
 			return readLeafSet(ctx, inst.src, &srcSpec)
 		}
@@ -782,18 +884,27 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 			}
 			r.Cleared += dstRows
 		}
-		if s.restrict(leaves).total().n > 0 {
+		copied := s.restrict(leaves).total().n
+		if copied > 0 {
 			leafSpec := srcSpec
 			if !coversAll(leaves, s, d) {
 				leafSpec = srcSpec.With(inst.srcSpec.LeafPredicate(leaves))
 			}
 			var bytes uint64
-			bytes, counted, err = relay(ctx, inst.src, inst.dst, &leafSpec, &inst.dstSpec, &inst.opts, s.restrict(leaves).total().n)
+			bytes, counted, err = relay(ctx, inst.src, inst.dst, &leafSpec, &inst.dstSpec, &inst.opts, copied)
 			r.Bytes += bytes
 			if err != nil {
+				// The relay's error is what the operator needs to see; the
+				// verification that would follow could only say the target
+				// does not match.
 				r.Note = err.Error()
+				d, err = readLeafSet(ctx, inst.dst, &dstSpec)
+				if err != nil {
+					r.Status, r.Note = ChunkStatusFailed, err.Error()
+					return
+				}
+				continue
 			}
-			r.Rows += s.restrict(leaves).total().n
 		}
 		var ok bool
 		ok, r.Note, err = inst.verify(ctx, &srcSpec, &dstSpec, s, true)
@@ -811,7 +922,7 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 				r.Status, r.Note = ChunkStatusFailed, err.Error()
 				return
 			}
-			r.Status = ChunkStatusCopied
+			r.Status, r.Rows = ChunkStatusCopied, copied
 			return
 		}
 		d, err = readLeafSet(ctx, inst.dst, &dstSpec)

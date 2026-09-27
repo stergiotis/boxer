@@ -13,8 +13,9 @@ import (
 )
 
 // JournalEntry is one line of the sync journal. A "start" entry records, once
-// per table and run, whether the run owns the target table's rows; a "chunk"
-// entry records a chunk whose copy was verified, with the source digest it was
+// per table and run, the mode and existing-rows policy the table was begun
+// under and whether the run owns the target table's rows; a "chunk" entry
+// records a chunk whose copy was verified, with the source digest it was
 // copied at; an "attempt" entry records a copy begun into rows the run does
 // not own, which a resumed run must not repeat.
 type JournalEntry struct {
@@ -24,10 +25,14 @@ type JournalEntry struct {
 	At    time.Time `json:"at"`
 	// Owned (start): the target held nothing of the run's when it began, or
 	// the run was told to replace; either way the run may clear what it
-	// copies.
+	// copies. Repair owns only the leaves its diff showed, so it records
+	// false.
 	Owned bool   `json:"owned,omitempty"`
 	Chunk string `json:"chunk,omitempty"`
-	Mode  string `json:"mode,omitempty"`
+	// Mode (start, chunk) and Existing (start): the settings the table was
+	// begun under. A resumed run must be given the same ones, or restart.
+	Mode     string `json:"mode,omitempty"`
+	Existing string `json:"existing,omitempty"`
 	// N, Kd, Rd (chunk): the source chunk's digest totals when copied.
 	N  uint64 `json:"n,omitempty"`
 	Kd uint64 `json:"kd,omitempty"`
@@ -159,15 +164,16 @@ func (inst *Journal) write(e JournalEntry) (err error) {
 	return
 }
 
-// Started reports whether the run has begun table, and if so whether it owns
-// the target's rows.
-func (inst *Journal) Started(table string) (owned bool, started bool) {
-	e, started := inst.start[table]
-	return e.Owned, started
+// Started returns the run's start entry for table, if the run has begun it.
+func (inst *Journal) Started(table string) (e JournalEntry, started bool) {
+	e, started = inst.start[table]
+	return
 }
 
-func (inst *Journal) RecordStart(table string, owned bool, now time.Time) (err error) {
-	e := JournalEntry{Table: table, Event: "start", Owned: owned, At: now.UTC()}
+// RecordStart records that the run begins table under ts, owning the target's
+// rows or not.
+func (inst *Journal) RecordStart(table string, owned bool, ts TableSync, now time.Time) (err error) {
+	e := JournalEntry{Table: table, Event: "start", Owned: owned, Mode: ts.Mode.String(), Existing: ts.Existing.String(), At: now.UTC()}
 	err = inst.write(e)
 	if err == nil {
 		inst.start[table] = e

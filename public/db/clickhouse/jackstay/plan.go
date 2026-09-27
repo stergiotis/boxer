@@ -149,13 +149,6 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 			err = eb.Build().Str("table", st.Ref.String()).Errorf("source and target are the same table; map the database to another name")
 			return
 		}
-		if other, taken := targets[target]; taken {
-			err = eb.Build().Str("table", st.Ref.String()).Str("other", other.String()).Str("target", target.String()).
-				Errorf("two source tables map onto one target table")
-			return
-		}
-		targets[target] = st.Ref
-
 		dt, _ := dst.Table(target)
 		targetEngine, targetPartitionKey := "", ""
 		if dt != nil {
@@ -170,6 +163,12 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 		if sel.LeewayOnly && !v.Leeway {
 			continue
 		}
+		if other, taken := targets[target]; taken {
+			err = eb.Build().Str("table", st.Ref.String()).Str("other", other.String()).Str("target", target.String()).
+				Errorf("two source tables map onto one target table")
+			return
+		}
+		targets[target] = st.Ref
 		if v.Verdict == VerdictCreate && !dst.HasDatabase(target.Database) && !slices.Contains(needDatabase, target.Database) {
 			needDatabase = append(needDatabase, target.Database)
 		}
@@ -202,35 +201,14 @@ func IsSameServer(srcEp Endpoint, dstEp Endpoint, src ServerInfo, dst ServerInfo
 	return src.UUID != "" && src.UUID != nilUUID && src.UUID == dst.UUID
 }
 
-// CarryDiffs copies each table's diff, sync settings and sync report from old
-// where [Plan.CarryOver] kept the chunk layout they were computed under. The sync step uses it: repair acts only
-// on what a diff showed, and a fresh structure check must not lose it.
-func (inst *Plan) CarryDiffs(old *Plan) {
-	if old == nil {
-		return
-	}
-	prev := make(map[datacatalog.TableRef]*PlanTable, len(old.Tables))
-	for i := range old.Tables {
-		prev[old.Tables[i].Source] = &old.Tables[i]
-	}
-	for i := range inst.Tables {
-		t := &inst.Tables[i]
-		o := prev[t.Source]
-		if o == nil || t.Chunking == nil || o.Chunking == nil || !slices.Equal(o.Chunking.Bounds, t.Chunking.Bounds) || o.Chunking.Leaves != t.Chunking.Leaves {
-			continue
-		}
-		t.Diff = o.Diff
-		t.Sync = o.Sync
-		t.SyncReport = o.SyncReport
-	}
-	inst.SyncRun = old.SyncRun
-}
-
 // CarryOver copies each table's chunk layout from old, a previous plan, when
-// the table's source keys are unchanged. Keeping the layout is what lets a
+// the table's source keys are unchanged: keeping the layout is what lets a
 // later diff compare chunk for chunk with an earlier one (ADR-0259 §SD4).
-// Diffs are not carried: a new structure step makes them stale.
-func (inst *Plan) CarryOver(old *Plan) {
+// With diffs, it also carries the diff, sync settings and sync report of each
+// table whose layout it kept and whose copied columns are unchanged, since
+// the digests a diff holds were taken over those columns; the sync run comes
+// with them. A structure step passes false: it makes every diff stale.
+func (inst *Plan) CarryOver(old *Plan, withDiffs bool) {
 	if old == nil {
 		return
 	}
@@ -245,7 +223,28 @@ func (inst *Plan) CarryOver(old *Plan) {
 			continue
 		}
 		c := *o.Chunking
+		c.Bounds = slices.Clone(o.Chunking.Bounds)
+		c.Exprs = slices.Clone(o.Chunking.Exprs)
 		t.Chunking = &c
+		if !withDiffs || !slices.Equal(o.CopyColumns, t.CopyColumns) {
+			continue
+		}
+		if o.Diff != nil {
+			d := *o.Diff
+			t.Diff = &d
+		}
+		if o.Sync != nil {
+			sy := *o.Sync
+			t.Sync = &sy
+		}
+		if o.SyncReport != nil {
+			r := *o.SyncReport
+			t.SyncReport = &r
+		}
+	}
+	if withDiffs && old.SyncRun != nil {
+		run := *old.SyncRun
+		inst.SyncRun = &run
 	}
 }
 
@@ -353,9 +352,37 @@ func LoadPlan(path string) (plan Plan, err error) {
 		err = eb.Build().Str("path", path).Errorf("unable to decode plan: %w", err)
 		return
 	}
-	if plan.FormatVersion != PlanFormatVersion {
-		err = eb.Build().Str("path", path).Uint64("formatVersion", uint64(plan.FormatVersion)).
-			Uint64("supported", uint64(PlanFormatVersion)).Errorf("unsupported plan format version")
+	err = plan.Validate()
+	if err != nil {
+		err = eb.Build().Str("path", path).Errorf("invalid plan: %w", err)
+	}
+	return
+}
+
+// Validate checks what a hand-edited or foreign plan could get wrong and the
+// steps would otherwise act on silently: the format version, the endpoints,
+// every table's references, and each chunk layout's bounds and leaf count.
+func (inst *Plan) Validate() (err error) {
+	if inst.FormatVersion != PlanFormatVersion {
+		return eb.Build().Uint64("formatVersion", uint64(inst.FormatVersion)).Uint64("supported", uint64(PlanFormatVersion)).
+			Errorf("unsupported plan format version")
+	}
+	if inst.Source.URL == "" || inst.Target.URL == "" {
+		return eh.Errorf("plan names no source or no target server")
+	}
+	for i := range inst.Tables {
+		t := &inst.Tables[i]
+		if t.Source.Database == "" || t.Source.Name == "" || t.Target.Database == "" || t.Target.Name == "" {
+			return eb.Build().Int("table", i).Errorf("table entry names no source or no target table")
+		}
+		if c := t.Chunking; c != nil {
+			if e := c.validate(); e != nil {
+				return eb.Build().Str("table", t.Source.String()).Errorf("invalid chunk layout: %w", e)
+			}
+		}
+		if t.Sync != nil && t.Sync.Mode == SyncModeSample && (t.Sync.SampleDen == 0 || t.Sync.SampleNum == 0 || t.Sync.SampleNum > t.Sync.SampleDen) {
+			return eb.Build().Str("table", t.Source.String()).Errorf("invalid sample fraction")
+		}
 	}
 	return
 }

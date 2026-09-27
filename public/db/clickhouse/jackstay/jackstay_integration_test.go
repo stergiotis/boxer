@@ -44,7 +44,9 @@ func TestStructure_LiveServer(t *testing.T) {
 	drop()
 	t.Cleanup(drop)
 
-	ddl := chclient.New(DDLClientConfig(chclient.ConfigFromEnv()), nil)
+	guards, err := DDLGuardSettings(ctx, client)
+	require.NoError(t, err)
+	ddl := chclient.New(DDLClientConfig(chclient.ConfigFromEnv(), guards), nil)
 	for _, sql := range []string{
 		"CREATE DATABASE " + itSource,
 		"CREATE TABLE " + itSource + ".plain (k UInt64, s String, n UInt32 CODEC(ZSTD(1))) ENGINE = MergeTree PARTITION BY k % 4 ORDER BY k",

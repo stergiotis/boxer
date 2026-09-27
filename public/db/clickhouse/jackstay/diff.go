@@ -53,7 +53,11 @@ type RowExample struct {
 // leaves differ, and, where they could be compared row by row, how.
 type TableDiff struct {
 	ComputedAt time.Time `json:"computedAt"`
-	Final      bool      `json:"final"`
+	// Final records that the diff was asked for with FINAL. [PlanTable.DigestSpecs]
+	// applies FINAL only to a side whose engine collapses rows, so the request
+	// may have reached one side, both or neither; MaybeSpurious says whether a
+	// merge engine was read without it.
+	Final bool `json:"final"`
 	// MaybeSpurious is set when a merge-semantics engine was read without
 	// FINAL: differences may vanish once both sides are merged.
 	MaybeSpurious   bool   `json:"maybeSpurious,omitempty"`
@@ -124,18 +128,28 @@ func readDigests(ctx context.Context, q QueryI, spec *DigestSpec) (chunks map[st
 }
 
 // both runs f for the source and the target at once; the scans are independent
-// and each is bound by its own server.
-func both[T any](f func(side int) (T, error)) (src T, dst T, err error) {
+// and each is bound by its own server. The first error cancels the other
+// side, so a failure on one server is not reported only after the other's
+// scan has run to its end.
+func both[T any](ctx context.Context, f func(ctx context.Context, side int) (T, error)) (src T, dst T, err error) {
 	type result struct {
 		v   T
 		err error
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ch := make(chan result, 1)
 	go func() {
-		v, e := f(1)
+		v, e := f(ctx, 1)
+		if e != nil {
+			cancel()
+		}
 		ch <- result{v, e}
 	}()
-	src, err = f(0)
+	src, err = f(ctx, 0)
+	if err != nil {
+		cancel()
+	}
 	r := <-ch
 	dst = r.v
 	if err == nil {
@@ -146,11 +160,13 @@ func both[T any](f func(side int) (T, error)) (src T, dst T, err error) {
 
 // DiffTable compares one table's content on both servers without moving rows
 // (ADR-0259 §SD4): one leaf-digest scan per side, then one row-pair scan per
-// side for the differing leaves small enough to compare row by row.
+// side for the differing leaves small enough to compare row by row. Final is
+// set when either spec reads with FINAL; [DiffPlanTable] overwrites it with
+// the operator's request.
 func DiffTable(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestSpec, dstSpec *DigestSpec, opts DiffOptions, now time.Time) (d TableDiff, err error) {
-	d = TableDiff{ComputedAt: now.UTC(), Final: srcSpec.Final && dstSpec.Final}
+	d = TableDiff{ComputedAt: now.UTC(), Final: srcSpec.Final || dstSpec.Final}
 	var sc, dc map[string]*chunkDigests
-	sc, dc, err = both(func(side int) (map[string]*chunkDigests, error) {
+	sc, dc, err = both(ctx, func(ctx context.Context, side int) (map[string]*chunkDigests, error) {
 		if side == 0 {
 			return readDigests(ctx, src, srcSpec)
 		}
@@ -247,22 +263,12 @@ func DiffTable(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestSpec,
 // compareChunkIds orders range chunk ids (decimal indexes) numerically and
 // everything else as strings.
 func compareChunkIds(a string, b string) (r int) {
-	if len(a) != len(b) && isDecimal(a) && isDecimal(b) {
-		return cmp.Compare(len(a), len(b))
+	ia, oka := rangeIndex(a)
+	ib, okb := rangeIndex(b)
+	if oka && okb {
+		return cmp.Compare(ia, ib)
 	}
 	return cmp.Compare(a, b)
-}
-
-func isDecimal(s string) (ok bool) {
-	if s == "" {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 func diffLeaves(s *chunkDigests, t *chunkDigests) (out []LeafDiff) {
@@ -319,10 +325,12 @@ func readPairs(ctx context.Context, q QueryI, spec *DigestSpec, leaves []ChunkLe
 // resolveLeaves compares the given leaves row by row. Per key, rows present on
 // both sides with equal row hashes match; unmatched rows under a key both sides
 // hold are changed, pairing one source row with one target row, and the rest
-// are missing or extra. Duplicate rows are counted, not collapsed.
+// are missing or extra. Duplicate rows are counted, not collapsed. A leaf for
+// which neither side returned a row (the table moved between the scans) is
+// left unresolved rather than reported as zero differences.
 func resolveLeaves(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestSpec, dstSpec *DigestSpec, leaves []ChunkLeaf, opts DiffOptions, d *TableDiff) (err error) {
 	var sp, dp map[pairKey]*pairSide
-	sp, dp, err = both(func(side int) (map[pairKey]*pairSide, error) {
+	sp, dp, err = both(ctx, func(ctx context.Context, side int) (map[pairKey]*pairSide, error) {
 		if side == 0 {
 			return readPairs(ctx, src, srcSpec, leaves)
 		}
@@ -331,7 +339,11 @@ func resolveLeaves(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestS
 	if err != nil {
 		return
 	}
-	type counts struct{ missing, extra, changed uint64 }
+	type counts struct {
+		missing, extra, changed uint64
+		// seen is set once a side returned a row of the leaf.
+		seen bool
+	}
 	per := make(map[ChunkLeaf]*counts, len(leaves))
 	for _, cl := range leaves {
 		per[cl] = &counts{}
@@ -364,6 +376,7 @@ func resolveLeaves(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestS
 		if c == nil {
 			continue
 		}
+		c.seen = true
 		s, t := sp[k], dp[k]
 		switch {
 		case t == nil:
@@ -394,7 +407,7 @@ func resolveLeaves(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestS
 		cd := &d.Differing[i]
 		for j := range cd.Leaves {
 			ld := &cd.Leaves[j]
-			if c := per[ChunkLeaf{Chunk: cd.Id, Leaf: ld.Leaf}]; c != nil {
+			if c := per[ChunkLeaf{Chunk: cd.Id, Leaf: ld.Leaf}]; c != nil && c.seen {
 				ld.Resolved = true
 				ld.Missing, ld.Extra, ld.Changed = c.missing, c.extra, c.changed
 			}
@@ -465,6 +478,7 @@ func DiffPlanTable(ctx context.Context, src QueryI, dst QueryI, pt *PlanTable, f
 		err = eb.Build().Str("table", pt.Source.String()).Errorf("unable to diff table: %w", err)
 		return
 	}
+	d.Final = final
 	d.MaybeSpurious = maybeSpurious && !d.IsIdentical()
 	pt.Diff = &d
 	return

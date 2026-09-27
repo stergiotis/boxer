@@ -202,6 +202,10 @@ func judgeCreate(src *TableInfo, target datacatalog.TableRef, v *TableVerdict) {
 	}
 	v.Verdict = VerdictCreate
 	v.DDL = []string{ddl}
+	if target.Database != src.Ref.Database && bodyNamesDatabase(ddl, src.Ref.Database) {
+		v.Notes = append(v.Notes, "the DDL body still names the source database "+src.Ref.Database+
+			" (a default expression, a TTL, a Keeper path); only the table's own name was retargeted")
+	}
 	for _, c := range src.Columns {
 		if c.IsInsertable() {
 			v.CopyColumns = append(v.CopyColumns, c.Name)
@@ -242,9 +246,16 @@ func judgeExisting(src *TableInfo, dst *TableInfo, target datacatalog.TableRef, 
 	}
 	var extras []string
 	for _, dc := range dst.Columns {
-		if _, has := src.Column(dc.Name); !has && dc.IsInsertable() {
-			extras = append(extras, dc.Name)
+		if _, has := src.Column(dc.Name); !has {
+			label := dc.Name
+			if !dc.IsInsertable() {
+				label += " (" + dc.DefaultKind + ")"
+			}
+			extras = append(extras, label)
 		}
+	}
+	if len(ddl) > 0 && strings.Contains(src.CreateQuery, " TTL ") {
+		v.Notes = append(v.Notes, "the source declares TTL; ADD COLUMN carries no column TTL")
 	}
 
 	switch {
@@ -260,7 +271,7 @@ func judgeExisting(src *TableInfo, dst *TableInfo, target datacatalog.TableRef, 
 		v.Verdict = VerdictIdentical
 	}
 	if len(extras) > 0 && v.Verdict != VerdictIncompatible {
-		v.Notes = append(v.Notes, "target-only columns take their defaults: "+strings.Join(extras, ", "))
+		v.Notes = append(v.Notes, "target-only columns take their defaults or are computed: "+strings.Join(extras, ", "))
 	}
 }
 
@@ -287,7 +298,7 @@ func judgeSharedColumn(sc ColumnInfo, dc ColumnInfo, v *TableVerdict) {
 		return
 	}
 	if sc.Type != dc.Type {
-		if datacatalog.NormalizeType(sc.Type) == datacatalog.NormalizeType(dc.Type) {
+		if stripLowCardinalityDeep(sc.Type) == stripLowCardinalityDeep(dc.Type) {
 			v.Notes = append(v.Notes, "column "+sc.Name+" differs only in LowCardinality: "+sc.Type+" → "+dc.Type)
 		} else {
 			v.Reasons = append(v.Reasons, "column "+sc.Name+" type differs: source "+sc.Type+", target "+dc.Type)
@@ -295,6 +306,50 @@ func judgeSharedColumn(sc ColumnInfo, dc ColumnInfo, v *TableVerdict) {
 		}
 	}
 	v.CopyColumns = append(v.CopyColumns, sc.Name)
+}
+
+// stripLowCardinalityDeep removes every LowCardinality(...) wrapper of a type
+// at any nesting, so Array(LowCardinality(String)) reads as Array(String):
+// the wrapper changes the storage, not the values (ADR-0259 §SD3).
+func stripLowCardinalityDeep(typ string) (t string) {
+	const w = "LowCardinality("
+	t = typ
+	for {
+		i := strings.Index(t, w)
+		if i < 0 {
+			return
+		}
+		depth, end := 0, -1
+		for j := i + len(w) - 1; j < len(t); j++ {
+			switch t[j] {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					end = j
+				}
+			}
+			if end >= 0 {
+				break
+			}
+		}
+		if end < 0 {
+			return
+		}
+		t = t[:i] + t[i+len(w):end] + t[end+1:]
+	}
+}
+
+// bodyNamesDatabase reports whether a retargeted CREATE still refers to db
+// after the table's own name, bare or quoted, as `db.` would in an
+// expression, a dictGet, a TTL destination or a Keeper path.
+func bodyNamesDatabase(ddl string, db string) (names bool) {
+	body := ddl
+	if i := strings.Index(body, "("); i >= 0 {
+		body = body[i:]
+	}
+	return strings.Contains(body, db+".") || strings.Contains(body, QuoteIdent(db)+".") || strings.Contains(body, "/"+db+"/")
 }
 
 func sameNameSet(a *TableInfo, b *TableInfo) (same bool) {
