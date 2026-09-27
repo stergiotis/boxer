@@ -12,7 +12,7 @@
 //                       Rust host (default imzero2_browser.wasm)
 //   arg=<flag>          extra module arguments, repeatable
 //   env=NAME=value      the module's environment, repeatable; CLICKHOUSE_URL
-//                       defaults to <origin>/ch/, which serve.mjs proxies
+//                       defaults to <origin>/ch/, which `imzero2tab serve` proxies
 //   stage=WxH           the initial viewport in points (the page's resize
 //                       takes over)
 //   fps=, idle=, cadence=continuous   the cadence, see below
@@ -35,7 +35,7 @@ const idleMs = Number(q.get('idle') || '1000');
 const continuous = q.get('cadence') === 'continuous';
 const log = (line) => self.postMessage({ kind: 'log', line });
 // `log=1` also posts every line the module writes to fd 2 — the app's
-// structured log included — to the page's server (serve.mjs prints them),
+// structured log included — to the page's server (`imzero2tab serve` logs them),
 // since a worker's console is out of reach for a headless capture.
 const tee = q.get('log') ? (line) => { fetch('./log', { method: 'POST', body: line }).catch(() => {}); } : () => {};
 const PREFIX_INPUT = 0x02, PREFIX_SESSION = 0x03;
@@ -75,7 +75,7 @@ try {
   if (q.get('app')) argv.push('-app', q.get('app'));
   // The module's environment: every `env=NAME=value` parameter, plus the
   // page's origin as the ClickHouse endpoint unless one is given — the
-  // server behind the page proxies /ch/ to ClickHouse (serve.mjs), which is
+  // server behind the page proxies /ch/ to ClickHouse (`imzero2tab serve`), which is
   // how the data plane stays same-origin (ADR-0077 SD9).
   const env = q.getAll('env');
   if (!env.some((e) => e.startsWith('CLICKHOUSE_URL='))) env.push(`CLICKHOUSE_URL=${self.location.origin}/ch/`);

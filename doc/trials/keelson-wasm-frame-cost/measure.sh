@@ -79,7 +79,8 @@ else
 	tags=$(cat "$root/tags")
 	spike=./public/thestack/imzero2/egui2/demo/wasmspike
 	(cd "$root/rust/fffi2stub" && cargo build --release --locked -q && cargo build --release --locked -q --lib --target wasm32-unknown-unknown)
-	(cd "$root" && go build -tags="$tags" -o "$work/wasmspike_native" $spike \
+	(cd "$root" && go build -tags="$tags" -o "$work/imzero2tab" ./public/thestack/cmd/imzero2tab \
+		&& go build -tags="$tags" -o "$work/wasmspike_native" $spike \
 		&& GOOS=js GOARCH=wasm go build -tags="$tags" -o "$work/wasmspike_js.wasm" $spike \
 		&& GOOS=wasip1 GOARCH=wasm go build -tags="$tags" -o "$work/wasmspike_wasip1.wasm" $spike \
 		&& GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -tags="$tags" -o "$work/wasmspike_wasip1_reactor.wasm" $spike)
@@ -94,6 +95,7 @@ else
 	cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$work/wasm_exec.js"
 	cp "$here/harness/"{index.html,worker.mjs} "$work/"
 	cp "$root/public/thestack/imzero2/browserhost/web/"{bridge.js,package.json} "$work/"
+	# the page's server for the browser arms (imzero2tab serve)
 	"$work/wasmspike_native" -dumpFetchTable "$root/public/thestack/imzero2/egui2/bindings" > "$work/fetchtable.txt"
 	build_info="boxer $(cd "$root" && git rev-parse --short HEAD) (dirty: $(cd "$root" && git status --porcelain | grep -c .) paths), go $(go version | cut -d' ' -f3), rustc $(cd "$root/rust/fffi2stub" && rustc --version | cut -d' ' -f2), native $(uname -sm)"
 	echo "$build_info" > "$work/build-info.txt"
@@ -220,7 +222,7 @@ for scene in $SCENES; do
 			[[ $flush == host && ! -f "$work/imzero2.wasm" ]] && continue
 			arm=$browser-$target-pipe-$flush
 			out="$run/raw/$scene-$arm.txt"
-			node "$root/public/thestack/imzero2/browserhost/web/serve.mjs" "$work" 0 > "$out" 2>&1 &
+			"$work/imzero2tab" serve --dir "$work" --listen 127.0.0.1:0 --exitOnReport > "$out" 2>&1 &
 			srv=$!
 			for _ in $(seq 1 50); do grep -q '^PORT ' "$out" 2>/dev/null && break; sleep 0.1; done
 			port=$(sed -n 's/^PORT //p' "$out")

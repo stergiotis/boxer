@@ -262,10 +262,13 @@ so that the shape is a citizen of the tree rather than a trial harness:
   registered app over an in-process bus, the window host's shape minus the
   window and the services), the wasip1 reactor exports behind `SetMain`,
   `StepLoop`, and `InstallHostTransport`, the process-wide HTTP swap taken
-  deliberately by the binary rather than by an `init`. Its `web/` holds
-  the worker, the WASI shim and the dev server the page loads.
+  deliberately by the binary rather than by an `init`; `Serve`, the
+  development server for a bundle (files, the `/ch/` proxy, the worker's
+  sinks), so no second runtime is needed to open a tab. Its `web/` holds
+  the worker and the WASI shim the page loads.
 - `public/thestack/cmd/imzero2tab` — the tab binary: the apps a tab may
-  open, one mounted by `-app`, the pipe natively, the reactor under wasm.
+  open, one mounted by `-app`, the pipe natively, the reactor under wasm,
+  and `serve` for the bundle.
 - `scripts/dev/build_tab_bundle.sh` — a servable directory from all of the
   above plus the viewer page and the fonts; the how-to is
   [imzero2-in-the-browser](../howto/imzero2-in-the-browser.md).

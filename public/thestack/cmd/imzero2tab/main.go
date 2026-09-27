@@ -7,12 +7,13 @@
 // Built with `GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared` by
 // scripts/dev/build_tab_bundle.sh. Natively it runs the same app against a
 // client binary over the pipe, which is how the tab's Go side is exercised
-// without a browser.
+// without a browser, and its `serve` subcommand serves a bundle.
 package main
 
 import (
 	"encoding/binary"
 	"os"
+	"os/signal"
 	"runtime"
 
 	"github.com/rs/zerolog/log"
@@ -61,6 +62,19 @@ func run(args []string) (step func() int32) {
 		}, logging.LoggingFlags...),
 		Before: logging.Apply,
 		Action: tab,
+		Commands: []*cli.Command{
+			{
+				Name:  "serve",
+				Usage: "serve a bundle build_tab_bundle.sh wrote: its files, /ch/ proxied to ClickHouse, the worker's log and report sinks",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "dir", Required: true, Usage: "the bundle directory"},
+					&cli.StringFlag{Name: "listen", Value: "127.0.0.1:8765", Usage: "bind address; port 0 picks one, printed as `PORT <n>`"},
+					&cli.StringFlag{Name: "chURL", Value: "http://127.0.0.1:8123/", Usage: "the ClickHouse HTTP endpoint /ch/ proxies to"},
+					&cli.BoolFlag{Name: "exitOnReport", Usage: "end after the first POST /report (the trial's browser arms)"},
+				},
+				Action: serve,
+			},
+		},
 	}
 	if err := cliApp.Run(append([]string{"imzero2tab"}, args...)); err != nil {
 		log.Error().Err(err).Msg("imzero2tab")
@@ -125,4 +139,15 @@ func tab(ctx *cli.Context) (err error) {
 		_ = mounted.Unmount()
 	}
 	return
+}
+
+func serve(ctx *cli.Context) (err error) {
+	sigCtx, stop := signal.NotifyContext(ctx.Context, os.Interrupt)
+	defer stop()
+	return browserhost.Serve(sigCtx, browserhost.ServeConfig{
+		Dir:          ctx.String("dir"),
+		Listen:       ctx.String("listen"),
+		ChURL:        ctx.String("chURL"),
+		ExitOnReport: ctx.Bool("exitOnReport"),
+	}, log.Logger)
 }

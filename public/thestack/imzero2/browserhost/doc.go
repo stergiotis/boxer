@@ -16,7 +16,10 @@
 //     wasip1, where there are no sockets; the worker answers it with a
 //     synchronous request against the page's origin.
 //
-// The web/ directory holds the worker and the WASI shim the page loads, and
-// scripts/dev/build_tab_bundle.sh assembles a servable directory from all
-// of it. public/thestack/cmd/imzero2tab is the binary that links apps in.
+// [Serve] serves such a directory during development: its files, `/ch/`
+// proxied to ClickHouse so the data plane stays same-origin, and the sinks
+// the worker posts to. The web/ directory holds the worker and the WASI
+// shim the page loads, and scripts/dev/build_tab_bundle.sh assembles a
+// servable directory from all of it. public/thestack/cmd/imzero2tab is the
+// binary that links apps in and carries `serve`.
 package browserhost

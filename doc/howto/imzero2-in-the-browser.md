@@ -32,8 +32,6 @@ trial, not this page.
 - The Go toolchain go.mod names, and a Rust toolchain at least the
   `rust-version` in [rust/imzero2/Cargo.toml](../../rust/imzero2/Cargo.toml)
   with the `wasm32-unknown-unknown` target installed.
-- Node for the dev server (any recent version; it serves files and proxies
-  one path).
 - A ClickHouse HTTP endpoint reachable from the machine that serves the
   page (default `http://127.0.0.1:8123/`), if the app queries.
 - A browser with WebGL 2. Headless captures with Chromium need
@@ -44,7 +42,7 @@ trial, not this page.
 1. **Build the bundle.** The script builds the Go tab host as a wasip1
    reactor (`public/thestack/cmd/imzero2tab`), the Rust browser host as a
    wasm32 cdylib (`rust/imzero2/browser`), and copies the worker, the WASI
-   shim, the dev server, the viewer page and the fonts beside them. Fonts
+   shim, the viewer page and the fonts beside them. Fonts
    follow `rust/imzero2/font-resolve.sh`; set `MAIN_FONT` and friends to
    pin faces. A slot with no file is left to egui's default face.
 
@@ -52,12 +50,13 @@ trial, not this page.
    scripts/dev/build_tab_bundle.sh /tmp/tab
    ```
 
-2. **Serve it.** The dev server serves the directory and proxies `/ch/` to
-   ClickHouse, so the data plane stays same-origin; `CH_URL` points it
-   elsewhere.
+2. **Serve it.** The same binary, built natively, serves the directory and
+   proxies `/ch/` to ClickHouse, so the data plane stays same-origin;
+   `--chURL` points it elsewhere and `--listen` moves it. It is a
+   development server: no auth, no TLS.
 
    ```bash
-   node /tmp/tab/serve.mjs /tmp/tab 8765
+   go run ./public/thestack/cmd/imzero2tab serve --dir /tmp/tab --listen 127.0.0.1:8765
    ```
 
 3. **Open an app.** The page's `?worker=` parameter names the worker module
@@ -83,8 +82,8 @@ trial, not this page.
 The page's status line reads `connected — WxH @ppp 1 — N frames painted
 (mesh lane)` and `cadence: reactive`; the frame count grows while
 something animates and stops when nothing does. With play open, a query
-returns rows into the Table pane and the server's log shows `POST /ch/`
-lines. A headless capture follows the same URL:
+returns rows into the Table pane; with `log=1` in the worker's query the
+module's own log lines appear in the server's output. A headless capture follows the same URL:
 
 ```bash
 node doc/trials/keelson-wasm-frame-cost/harness/cdp_shot.mjs \

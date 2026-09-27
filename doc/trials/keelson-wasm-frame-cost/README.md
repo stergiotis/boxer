@@ -256,9 +256,9 @@ browser engines differ materially from each other for this workload.
   and `Run` unchanged. The in-process arms bypass the transport by
   construction; they are reference points, not the product path.
 - **Browser arms** load a page (`harness/index.html`) whose module worker
-  runs the arm and POSTs its report to the serving host (the browserhost
-  package's `serve.mjs`), which prints it and exits; no DOM dumping, no
-  virtual time. A sandboxed browser must be able to see the throwaway
+  runs the arm and POSTs its report to the serving host (`imzero2tab serve
+  --exitOnReport`, built into the pack), which prints it and exits; no DOM
+  dumping, no virtual time. A sandboxed browser must be able to see the throwaway
   profile directory (`PROFILE_DIR`); one that cannot never loads the page.
 - **The demonstrator** is no longer the trial's: the shape it demonstrated
   is built by `scripts/dev/build_tab_bundle.sh` and described in
