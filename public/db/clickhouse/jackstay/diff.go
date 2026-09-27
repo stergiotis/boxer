@@ -3,7 +3,9 @@ package jackstay
 import (
 	"cmp"
 	"context"
+	"errors"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -130,33 +132,54 @@ func readDigests(ctx context.Context, q QueryI, spec *DigestSpec) (chunks map[st
 // both runs f for the source and the target at once; the scans are independent
 // and each is bound by its own server. The first error cancels the other
 // side, so a failure on one server is not reported only after the other's
-// scan has run to its end.
+// scan has run to its end. The error returned is the first side's: the other
+// side's error is dropped when it is only the cancellation that failure caused
+// (it would name a server that did nothing wrong), and joined to it otherwise.
 func both[T any](ctx context.Context, f func(ctx context.Context, side int) (T, error)) (src T, dst T, err error) {
 	type result struct {
 		v   T
 		err error
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	var first atomic.Int32 // 0: no side has failed; otherwise side+1
+	fail := func(side int) {
+		if first.CompareAndSwap(0, int32(side)+1) {
+			cancel(errOtherSideFailed)
+		}
+	}
 	ch := make(chan result, 1)
 	go func() {
 		v, e := f(ctx, 1)
 		if e != nil {
-			cancel()
+			fail(1)
 		}
 		ch <- result{v, e}
 	}()
-	src, err = f(ctx, 0)
-	if err != nil {
-		cancel()
+	var srcErr error
+	src, srcErr = f(ctx, 0)
+	if srcErr != nil {
+		fail(0)
 	}
 	r := <-ch
 	dst = r.v
-	if err == nil {
-		err = r.err
+	firstErr, laterErr := srcErr, r.err
+	if first.Load() == 2 {
+		firstErr, laterErr = r.err, srcErr
+	}
+	switch {
+	case laterErr == nil:
+		err = firstErr
+	case errors.Is(laterErr, context.Canceled) && context.Cause(ctx) == errOtherSideFailed:
+		err = firstErr
+	default:
+		err = errors.Join(firstErr, laterErr)
 	}
 	return
 }
+
+// errOtherSideFailed is the cause [both] cancels the second side with.
+var errOtherSideFailed = errors.New("the other server failed")
 
 // DiffTable compares one table's content on both servers without moving rows
 // (ADR-0259 §SD4): one leaf-digest scan per side, then one row-pair scan per

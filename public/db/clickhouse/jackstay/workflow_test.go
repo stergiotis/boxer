@@ -2,6 +2,8 @@ package jackstay
 
 import (
 	"context"
+	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -63,4 +65,42 @@ func TestPlan_Clone(t *testing.T) {
 	require.NoError(t, err)
 	q.Tables[0].DDL[0] = "y"
 	assert.Equal(t, "x", p.Tables[0].DDL[0], "a clone shares nothing")
+}
+
+// blockingQuery answers nothing until its context ends, as a live but slow
+// server would.
+type blockingQuery struct{}
+
+func (blockingQuery) Query(ctx context.Context, _ string) (io.ReadCloser, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+type failingQuery struct{ err error }
+
+func (inst failingQuery) Query(context.Context, string) (io.ReadCloser, error) {
+	return nil, inst.err
+}
+
+// The side that fails is the side the error names: the other side's
+// cancellation is not reported as its own failure.
+func TestDiscoverBoth_NamesTheFailingServer(t *testing.T) {
+	unreachable := errors.New("connection refused")
+	ctx := context.Background()
+
+	_, _, err := DiscoverBoth(ctx, blockingQuery{}, failingQuery{unreachable})
+	require.ErrorIs(t, err, unreachable)
+	assert.Contains(t, err.Error(), "the target")
+	assert.NotContains(t, err.Error(), "the source")
+	assert.NotErrorIs(t, err, context.Canceled)
+
+	_, _, err = DiscoverBoth(ctx, failingQuery{unreachable}, blockingQuery{})
+	require.ErrorIs(t, err, unreachable)
+	assert.Contains(t, err.Error(), "the source")
+	assert.NotContains(t, err.Error(), "the target")
+
+	other := errors.New("authentication failed")
+	_, _, err = DiscoverBoth(ctx, failingQuery{unreachable}, failingQuery{other})
+	require.ErrorIs(t, err, unreachable, "two independent failures are both reported")
+	require.ErrorIs(t, err, other)
 }
