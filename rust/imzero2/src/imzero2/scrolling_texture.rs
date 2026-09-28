@@ -159,8 +159,16 @@ impl ScrollingTextureCache {
     pub fn tick(&mut self) {
         self.frame = self.frame.wrapping_add(1);
         let frame = self.frame;
-        self.entries
-            .retain(|_, e| frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES);
+        let cache = self.texture_cache.as_ref();
+        self.entries.retain(|_, e| {
+            let keep = frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES;
+            if !keep && let Some(cache) = cache {
+                // The evicted texture's id is never drawn again; its pixel
+                // mirror would otherwise stay in the export cache for good.
+                cache.lock().expect("texture cache poisoned").remove(e.tex.id());
+            }
+            keep
+        });
     }
 
     /// Drop the cache entry (and its GPU texture) for `id`. Invoked from the
@@ -208,7 +216,8 @@ impl ScrollingTextureCache {
                     nearest,
                 );
             }
-            self.entries.insert(
+            let new_tex_id = tex.id();
+            let replaced = self.entries.insert(
                 id,
                 Entry {
                     tex,
@@ -218,6 +227,14 @@ impl ScrollingTextureCache {
                     rgba,
                 },
             );
+            // A reshape allocates a fresh TextureId; the old one's mirror
+            // would otherwise stay in the export cache for good.
+            if let Some(old) = replaced
+                && old.tex.id() != new_tex_id
+                && let Some(cache) = &self.texture_cache
+            {
+                cache.lock().expect("texture cache poisoned").remove(old.tex.id());
+            }
         }
         needs_new
     }
@@ -614,5 +631,49 @@ impl ScrollingTextureCache {
             hover_x,
             hover_y,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::imzero2::svgexport::{TexturePixelCache, TexturePixelCacheHandle};
+    use std::sync::{Arc, Mutex};
+
+    fn cache_with_mirror() -> (ScrollingTextureCache, TexturePixelCacheHandle) {
+        let mirror: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
+        let mut c = ScrollingTextureCache::new();
+        c.attach_texture_cache(mirror.clone());
+        (c, mirror)
+    }
+
+    fn tex_id(c: &ScrollingTextureCache, id: u64) -> TextureId {
+        c.entries[&id].tex.id()
+    }
+
+    #[test]
+    fn reshape_drops_the_replaced_mirror_entry() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        assert!(c.ensure_entry(&ctx, 5, 4, 2, TextureOptions::NEAREST));
+        let first = tex_id(&c, 5);
+        assert!(c.ensure_entry(&ctx, 5, 8, 2, TextureOptions::NEAREST));
+        let second = tex_id(&c, 5);
+        let m = mirror.lock().unwrap();
+        assert!(m.get(first).is_none(), "the replaced texture's pixels must leave the mirror");
+        assert!(m.get(second).is_some());
+    }
+
+    #[test]
+    fn idle_eviction_drops_the_mirror_entry() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        c.ensure_entry(&ctx, 9, 4, 2, TextureOptions::NEAREST);
+        let tex = tex_id(&c, 9);
+        for _ in 0..ScrollingTextureCache::MAX_AGE_FRAMES {
+            c.tick();
+        }
+        assert!(c.entries.is_empty());
+        assert!(mirror.lock().unwrap().get(tex).is_none());
     }
 }

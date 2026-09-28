@@ -74,8 +74,16 @@ impl ImageCache {
     pub fn tick(&mut self) {
         self.frame = self.frame.wrapping_add(1);
         let frame = self.frame;
-        self.entries
-            .retain(|_, e| frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES);
+        let cache = self.texture_cache.as_ref();
+        self.entries.retain(|_, e| {
+            let keep = frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES;
+            if !keep && let Some(cache) = cache {
+                // The evicted texture's id is never drawn again; its pixel
+                // mirror would otherwise stay in the export cache for good.
+                cache.lock().expect("texture cache poisoned").remove(e.tex.id());
+            }
+            keep
+        });
     }
 
     /// Drop the cache entry (and its GPU texture) for `id`. Invoked from the
@@ -128,7 +136,8 @@ impl ImageCache {
             cache.lock().expect("texture cache poisoned").insert(tex.id(), w, h, rgba, nearest);
         }
 
-        self.entries.insert(
+        let new_tex_id = tex.id();
+        let replaced = self.entries.insert(
             id,
             Entry {
                 tex,
@@ -138,6 +147,15 @@ impl ImageCache {
                 last_touched_frame: self.frame,
             },
         );
+        // Every `load_texture` hands out a fresh TextureId, so the replaced
+        // entry's mirror is keyed by an id nothing will draw again. Drop it,
+        // or each re-upload leaks one full RGBA copy into the export cache.
+        if let Some(old) = replaced
+            && old.tex.id() != new_tex_id
+            && let Some(cache) = &self.texture_cache
+        {
+            cache.lock().expect("texture cache poisoned").remove(old.tex.id());
+        }
     }
 
     /// Upload-if-needed and return the cached texture id **without drawing**.
@@ -362,5 +380,45 @@ impl ImageCache {
         };
 
         (resp, hover_rc, false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::imzero2::svgexport::{TexturePixelCache, TexturePixelCacheHandle};
+    use std::sync::{Arc, Mutex};
+
+    fn cache_with_mirror() -> (ImageCache, TexturePixelCacheHandle) {
+        let mirror: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
+        let mut c = ImageCache::new();
+        c.attach_texture_cache(mirror.clone());
+        (c, mirror)
+    }
+
+    #[test]
+    fn reupload_drops_the_replaced_mirror_entry() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        let px = [0xff00_00ffu32; 4];
+        let first = c.ensure(&ctx, 7, 2, 2, 1, TextureOptions::NEAREST, &px).unwrap();
+        let second = c.ensure(&ctx, 7, 2, 2, 2, TextureOptions::NEAREST, &px).unwrap();
+        assert_ne!(first, second, "load_texture hands out a fresh id per upload");
+        let m = mirror.lock().unwrap();
+        assert!(m.get(first).is_none(), "the replaced texture's pixels must leave the mirror");
+        assert!(m.get(second).is_some());
+    }
+
+    #[test]
+    fn idle_eviction_drops_the_mirror_entry() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        let px = [0u32; 1];
+        let tex = c.ensure(&ctx, 3, 1, 1, 1, TextureOptions::NEAREST, &px).unwrap();
+        for _ in 0..ImageCache::MAX_AGE_FRAMES {
+            c.tick();
+        }
+        assert!(c.entries.is_empty());
+        assert!(mirror.lock().unwrap().get(tex).is_none());
     }
 }
