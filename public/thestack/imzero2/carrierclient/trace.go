@@ -209,7 +209,7 @@ func (inst Step) check() (err error) {
 	}
 	for _, sc := range inst.Sidecars {
 		if sc != SidecarSVG && sc != SidecarSVGFonts && sc != SidecarTree {
-			return eb.Build().Str("sidecar", sc).Errorf("unknown capture sidecar (want %q, %q or %q)", SidecarSVG, SidecarSVGFonts, SidecarTree)
+			return eb.Build().Str("sidecar", sc).Strs("want", []string{SidecarSVG, SidecarSVGFonts, SidecarTree}).Errorf("unknown capture sidecar")
 		}
 	}
 	return nil
