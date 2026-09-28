@@ -199,11 +199,11 @@ func WriteQueryID(w http.ResponseWriter, queryID string) {
 // absent format is application/octet-stream.
 func ContentTypeForStatement(sql string) (ct string) {
 	ct = "application/octet-stream"
-	i := strings.LastIndex(strings.ToUpper(sql), "FORMAT ")
+	i := lastFormatKeyword(sql)
 	if i < 0 {
 		return
 	}
-	name := strings.TrimSpace(sql[i+len("FORMAT "):])
+	name := strings.TrimSpace(sql[i+len("FORMAT"):])
 	if j := strings.IndexAny(name, " \t\r\n;"); j >= 0 {
 		name = name[:j]
 	}
@@ -220,6 +220,25 @@ func ContentTypeForStatement(sql string) (ct string) {
 		ct = "text/tab-separated-values"
 	}
 	return
+}
+
+// lastFormatKeyword returns the byte offset in sql of the last FORMAT
+// keyword followed by whitespace, or -1. The fold compares bytes in place
+// so the offset indexes sql itself: strings.ToUpper can change the byte
+// length of non-ASCII runes (ı, ſ) and misalign an offset taken from it.
+func lastFormatKeyword(sql string) (i int) {
+	const kw = "FORMAT"
+	for i = len(sql) - len(kw) - 1; i >= 0; i-- {
+		switch sql[i+len(kw)] {
+		case ' ', '\t', '\r', '\n':
+		default:
+			continue
+		}
+		if strings.EqualFold(sql[i:i+len(kw)], kw) {
+			return
+		}
+	}
+	return -1
 }
 
 // exceptionCodeRe finds the first ClickHouse error code in a message —
