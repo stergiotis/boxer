@@ -212,7 +212,7 @@ func CreateSchemaWatchbillTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityWatchbillTable struct {
 	errs               []error
@@ -328,7 +328,7 @@ var InEntityWatchbillTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityWatchbillTable) setId(id0 string) *InEntityWatchbillTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -343,7 +343,7 @@ func (inst *InEntityWatchbillTable) setId(id0 string) *InEntityWatchbillTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityWatchbillTable) setTimestamp(ts1 time.Time) *InEntityWatchbillTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -1140,6 +1140,7 @@ func (inst *InEntityWatchbillTableSectionJobArgsInAttr) EndSection() *InEntityWa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1465,6 +1466,7 @@ func (inst *InEntityWatchbillTableSectionJobArgsKindInAttr) EndSection() *InEnti
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1790,6 +1792,7 @@ func (inst *InEntityWatchbillTableSectionJobAttemptInAttr) EndSection() *InEntit
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2115,6 +2118,7 @@ func (inst *InEntityWatchbillTableSectionJobBackoffInAttr) EndSection() *InEntit
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2440,6 +2444,7 @@ func (inst *InEntityWatchbillTableSectionJobBackoffBaseMsInAttr) EndSection() *I
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2765,6 +2770,7 @@ func (inst *InEntityWatchbillTableSectionJobFinishedAtInAttr) EndSection() *InEn
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3090,6 +3096,7 @@ func (inst *InEntityWatchbillTableSectionJobKindInAttr) EndSection() *InEntityWa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3415,6 +3422,7 @@ func (inst *InEntityWatchbillTableSectionJobLastErrorInAttr) EndSection() *InEnt
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3740,6 +3748,7 @@ func (inst *InEntityWatchbillTableSectionJobMaxAttemptsInAttr) EndSection() *InE
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4065,6 +4074,7 @@ func (inst *InEntityWatchbillTableSectionJobOwnerAppInAttr) EndSection() *InEnti
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4390,6 +4400,7 @@ func (inst *InEntityWatchbillTableSectionJobPriorityInAttr) EndSection() *InEnti
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4715,6 +4726,7 @@ func (inst *InEntityWatchbillTableSectionJobQueueInAttr) EndSection() *InEntityW
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5040,6 +5052,7 @@ func (inst *InEntityWatchbillTableSectionJobRequesterRunInAttr) EndSection() *In
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5365,6 +5378,7 @@ func (inst *InEntityWatchbillTableSectionJobRunAfterInAttr) EndSection() *InEnti
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5690,6 +5704,7 @@ func (inst *InEntityWatchbillTableSectionJobStateInAttr) EndSection() *InEntityW
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6015,6 +6030,7 @@ func (inst *InEntityWatchbillTableSectionJobSubjectInAttr) EndSection() *InEntit
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6340,6 +6356,7 @@ func (inst *InEntityWatchbillTableSectionJobTimeoutMsInAttr) EndSection() *InEnt
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6665,6 +6682,7 @@ func (inst *InEntityWatchbillTableSectionJobWorkerRunInAttr) EndSection() *InEnt
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

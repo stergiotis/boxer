@@ -271,7 +271,7 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityTestTable struct {
 	errs               []error
@@ -404,7 +404,7 @@ var InEntityTestTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityTestTable) SetId(id0 uint64, naturalKey1 []byte) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -1281,6 +1281,7 @@ func (inst *InEntityTestTableSectionBlobArrayInAttr) EndSection() *InEntityTestT
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1634,6 +1635,7 @@ func (inst *InEntityTestTableSectionF32ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1987,6 +1989,7 @@ func (inst *InEntityTestTableSectionF64ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2192,6 +2195,7 @@ func (inst *InEntityTestTableSectionForeignKeyInAttr) EndSection() *InEntityTest
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2587,6 +2591,7 @@ func (inst *InEntityTestTableSectionGeoAreaInAttr) EndSection() *InEntityTestTab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2934,6 +2939,7 @@ func (inst *InEntityTestTableSectionGeoPointInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3287,6 +3293,7 @@ func (inst *InEntityTestTableSectionI16ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3640,6 +3647,7 @@ func (inst *InEntityTestTableSectionI32ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3993,6 +4001,7 @@ func (inst *InEntityTestTableSectionI64ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4346,6 +4355,7 @@ func (inst *InEntityTestTableSectionI8ArrayInAttr) EndSection() *InEntityTestTab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4699,6 +4709,7 @@ func (inst *InEntityTestTableSectionStringArrayInAttr) EndSection() *InEntityTes
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5024,6 +5035,7 @@ func (inst *InEntityTestTableSectionSymbolInAttr) EndSection() *InEntityTestTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5377,6 +5389,7 @@ func (inst *InEntityTestTableSectionSymbolArrayInAttr) EndSection() *InEntityTes
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5760,6 +5773,7 @@ func (inst *InEntityTestTableSectionTextInAttr) EndSection() *InEntityTestTable 
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6113,6 +6127,7 @@ func (inst *InEntityTestTableSectionTimeArrayInAttr) EndSection() *InEntityTestT
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6449,6 +6464,7 @@ func (inst *InEntityTestTableSectionTimeRangeInAttr) EndSection() *InEntityTestT
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6802,6 +6818,7 @@ func (inst *InEntityTestTableSectionU16ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7155,6 +7172,7 @@ func (inst *InEntityTestTableSectionU32ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7508,6 +7526,7 @@ func (inst *InEntityTestTableSectionU32SetInAttr) EndSection() *InEntityTestTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7861,6 +7880,7 @@ func (inst *InEntityTestTableSectionU64ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -8214,6 +8234,7 @@ func (inst *InEntityTestTableSectionU64SetInAttr) EndSection() *InEntityTestTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -8567,6 +8588,7 @@ func (inst *InEntityTestTableSectionU8ArrayInAttr) EndSection() *InEntityTestTab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

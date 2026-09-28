@@ -86,7 +86,7 @@ func CreateSchemaDroneTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityDroneTable struct {
 	errs                  []error
@@ -163,7 +163,7 @@ var InEntityDroneTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityDroneTable) SetId(id0 uint64) *InEntityDroneTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -723,6 +723,7 @@ func (inst *InEntityDroneTableSectionGeoPointInAttr) EndSection() *InEntityDrone
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1048,6 +1049,7 @@ func (inst *InEntityDroneTableSectionSymbolInAttr) EndSection() *InEntityDroneTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1401,6 +1403,7 @@ func (inst *InEntityDroneTableSectionSymbolArrayInAttr) EndSection() *InEntityDr
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1737,6 +1740,7 @@ func (inst *InEntityDroneTableSectionTimeRangeInAttr) EndSection() *InEntityDron
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2090,6 +2094,7 @@ func (inst *InEntityDroneTableSectionU64ArrayInAttr) EndSection() *InEntityDrone
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

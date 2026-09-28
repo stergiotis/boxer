@@ -39,7 +39,7 @@ func CreateSchemaProvenanceTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityProvenanceTable struct {
 	errs               []error
@@ -107,7 +107,7 @@ var InEntityProvenanceTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityProvenanceTable) setId(id0 uint64) *InEntityProvenanceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -122,7 +122,7 @@ func (inst *InEntityProvenanceTable) setId(id0 uint64) *InEntityProvenanceTable 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityProvenanceTable) setTimestamp(ts1 time.Time) *InEntityProvenanceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -513,6 +513,7 @@ func (inst *InEntityProvenanceTableSectionSymbolInAttr) EndSection() *InEntityPr
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -746,6 +747,7 @@ func (inst *InEntityProvenanceTableSectionSymbolArrayInAttr) EndSection() *InEnt
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

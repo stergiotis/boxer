@@ -59,7 +59,7 @@ func CreateSchemaTesttable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityTesttable struct {
 	plainTs1              time.Time
@@ -141,7 +141,7 @@ var InEntityTesttableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -156,7 +156,7 @@ func (inst *InEntityTesttable) SetId(id0 uint64) *InEntityTesttable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityTesttable) SetTimestamp(ts1 time.Time) *InEntityTesttable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -591,6 +591,7 @@ func (inst *InEntityTesttableSectionBoolInAttr) EndSection() *InEntityTesttable 
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -809,6 +810,7 @@ func (inst *InEntityTesttableSectionFloat64InAttr) EndSection() *InEntityTesttab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1093,6 +1095,7 @@ func (inst *InEntityTesttableSectionMultiInAttr) EndSection() *InEntityTesttable
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1369,6 +1372,7 @@ func (inst *InEntityTesttableSectionSpecialInAttr) EndSection() *InEntityTesttab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1587,6 +1591,7 @@ func (inst *InEntityTesttableSectionStringInAttr) EndSection() *InEntityTesttabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

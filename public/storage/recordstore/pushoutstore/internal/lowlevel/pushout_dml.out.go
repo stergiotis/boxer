@@ -118,7 +118,7 @@ func CreateSchemaPushoutTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityPushoutTable struct {
 	errs               []error
@@ -209,7 +209,7 @@ var InEntityPushoutTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -224,7 +224,7 @@ func (inst *InEntityPushoutTable) setId(id0 string) *InEntityPushoutTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -239,7 +239,7 @@ func (inst *InEntityPushoutTable) setTimestamp(ts1 time.Time) *InEntityPushoutTa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityPushoutTable) setLifecycle(lifecycle2 uint8) *InEntityPushoutTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -863,6 +863,7 @@ func (inst *InEntityPushoutTableSectionEnvBlobInAttr) EndSection() *InEntityPush
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1188,6 +1189,7 @@ func (inst *InEntityPushoutTableSectionLogHashInAttr) EndSection() *InEntityPush
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1541,6 +1543,7 @@ func (inst *InEntityPushoutTableSectionRetHashInAttr) EndSection() *InEntityPush
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1894,6 +1897,7 @@ func (inst *InEntityPushoutTableSectionRetIndexInAttr) EndSection() *InEntityPus
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2247,6 +2251,7 @@ func (inst *InEntityPushoutTableSectionRetOpInAttr) EndSection() *InEntityPushou
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2600,6 +2605,7 @@ func (inst *InEntityPushoutTableSectionRetTimeInAttr) EndSection() *InEntityPush
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2953,6 +2959,7 @@ func (inst *InEntityPushoutTableSectionSnapAppliedInAttr) EndSection() *InEntity
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3278,6 +3285,7 @@ func (inst *InEntityPushoutTableSectionSnapPushoutGraphInAttr) EndSection() *InE
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

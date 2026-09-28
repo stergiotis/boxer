@@ -48,7 +48,7 @@ func CreateSchemaTestTableNarrow() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityTestTableNarrow struct {
 	plainTs1              time.Time
@@ -126,7 +126,7 @@ var InEntityTestTableNarrowSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityTestTableNarrow) SetId(id0 uint64) *InEntityTestTableNarrow {
 	if inst.state != runtime.EntityStateInEntity {
@@ -141,7 +141,7 @@ func (inst *InEntityTestTableNarrow) SetId(id0 uint64) *InEntityTestTableNarrow 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityTestTableNarrow) SetTimestamp(ts1 time.Time, proc2 []time.Time) *InEntityTestTableNarrow {
 	if inst.state != runtime.EntityStateInEntity {
@@ -597,6 +597,7 @@ func (inst *InEntityTestTableNarrowSectionGeoInAttr) EndSection() *InEntityTestT
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -861,6 +862,7 @@ func (inst *InEntityTestTableNarrowSectionTextInAttr) EndSection() *InEntityTest
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

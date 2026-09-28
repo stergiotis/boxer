@@ -43,7 +43,7 @@ func CreateSchemaPlace() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityPlace struct {
 	allocator             memory.Allocator
@@ -114,7 +114,7 @@ var InEntityPlaceSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityPlace) SetId(id0 uint64) *InEntityPlace {
 	if inst.state != runtime.EntityStateInEntity {
@@ -514,6 +514,7 @@ func (inst *InEntityPlaceSectionGeoInAttr) EndSection() *InEntityPlace {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -720,6 +721,7 @@ func (inst *InEntityPlaceSectionH3InAttr) EndSection() *InEntityPlace {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -981,6 +983,7 @@ func (inst *InEntityPlaceSectionTagsInAttr) EndSection() *InEntityPlace {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

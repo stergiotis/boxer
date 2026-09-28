@@ -40,7 +40,7 @@ func CreateSchemaFixedTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityFixedTable struct {
 	allocator             memory.Allocator
@@ -111,7 +111,7 @@ var InEntityFixedTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityFixedTable) SetId(id0 uint64) *InEntityFixedTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -496,6 +496,7 @@ func (inst *InEntityFixedTableSectionCodeInAttr) EndSection() *InEntityFixedTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -732,6 +733,7 @@ func (inst *InEntityFixedTableSectionCodesInAttr) EndSection() *InEntityFixedTab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -938,6 +940,7 @@ func (inst *InEntityFixedTableSectionHashInAttr) EndSection() *InEntityFixedTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

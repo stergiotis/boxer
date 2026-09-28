@@ -46,7 +46,7 @@ func CreateSchemaChannelTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityChannelTable struct {
 	allocator             memory.Allocator
@@ -123,7 +123,7 @@ var InEntityChannelTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityChannelTable) SetId(id0 uint64) *InEntityChannelTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -542,6 +542,7 @@ func (inst *InEntityChannelTableSectionHparamInAttr) EndSection() *InEntityChann
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -754,6 +755,7 @@ func (inst *InEntityChannelTableSectionHrefInAttr) EndSection() *InEntityChannel
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -960,6 +962,7 @@ func (inst *InEntityChannelTableSectionHverbInAttr) EndSection() *InEntityChanne
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1166,6 +1169,7 @@ func (inst *InEntityChannelTableSectionLparamInAttr) EndSection() *InEntityChann
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1384,6 +1388,7 @@ func (inst *InEntityChannelTableSectionMrefInAttr) EndSection() *InEntityChannel
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

@@ -116,7 +116,7 @@ func CreateSchemaLedgerTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityLedgerTable struct {
 	errs               []error
@@ -202,7 +202,7 @@ var InEntityLedgerTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -217,7 +217,7 @@ func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityLedgerTable) setTimestamp(ts1 time.Time) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -834,6 +834,7 @@ func (inst *InEntityLedgerTableSectionAcctClosedInAttr) EndSection() *InEntityLe
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1187,6 +1188,7 @@ func (inst *InEntityLedgerTableSectionAcctDepositInAttr) EndSection() *InEntityL
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1512,6 +1514,7 @@ func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) EndSection() *InEntityLed
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1865,6 +1868,7 @@ func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) EndSection() *InEntity
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2218,6 +2222,7 @@ func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) EndSection() *InEntityLedg
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2571,6 +2576,7 @@ func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) EndSection() *InEntityL
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2896,6 +2902,7 @@ func (inst *InEntityLedgerTableSectionSnapClosedInAttr) EndSection() *InEntityLe
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3221,6 +3228,7 @@ func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) EndSection() *InEntityLed
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

@@ -57,7 +57,7 @@ func CreateSchemaFixture() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityFixture struct {
 	errs               []error
@@ -138,7 +138,7 @@ var InEntityFixtureSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityFixture) SetId(id0 uint64, internalKey1 string, naturalKey2 string) *InEntityFixture {
 	if inst.state != runtime.EntityStateInEntity {
@@ -541,6 +541,7 @@ func (inst *InEntityFixtureSectionGeoAreaInAttr) EndSection() *InEntityFixture {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -757,6 +758,7 @@ func (inst *InEntityFixtureSectionGeoPointInAttr) EndSection() *InEntityFixture 
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1199,6 +1201,7 @@ func (inst *InEntityFixtureSectionMetricInAttr) EndSection() *InEntityFixture {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

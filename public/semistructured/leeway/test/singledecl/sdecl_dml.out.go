@@ -37,7 +37,7 @@ func CreateSchemaSdecl() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntitySdecl struct {
 	errs                  []error
@@ -105,7 +105,7 @@ var InEntitySdeclSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntitySdecl) SetId(id0 uint64) *InEntitySdecl {
 	if inst.state != runtime.EntityStateInEntity {
@@ -478,6 +478,7 @@ func (inst *InEntitySdeclSectionAddrInAttr) EndSection() *InEntitySdecl {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -720,6 +721,7 @@ func (inst *InEntitySdeclSectionTagsInAttr) EndSection() *InEntitySdecl {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

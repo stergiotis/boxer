@@ -59,7 +59,7 @@ func createRecordBuilder() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntity struct {
 	errs                  []error
@@ -142,7 +142,7 @@ var InEntitySectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntity) SetId(key0 uint64) *InEntity {
 	if inst.state != runtime.EntityStateInEntity {
@@ -608,6 +608,7 @@ func (inst *InEntityBoolInAttr) EndSection() *InEntity {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -825,6 +826,7 @@ func (inst *InEntityDate32InAttr) EndSection() *InEntity {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1042,6 +1044,7 @@ func (inst *InEntityInt64InAttr) EndSection() *InEntity {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1259,6 +1262,7 @@ func (inst *InEntityStringInAttr) EndSection() *InEntity {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1476,6 +1480,7 @@ func (inst *InEntitySymbolInAttr) EndSection() *InEntity {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1693,6 +1698,7 @@ func (inst *InEntityTextInAttr) EndSection() *InEntity {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1910,6 +1916,7 @@ func (inst *InEntityUint64InAttr) EndSection() *InEntity {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

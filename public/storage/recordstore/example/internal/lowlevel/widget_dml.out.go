@@ -80,7 +80,7 @@ func CreateSchemaWidgetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityWidgetTable struct {
 	errs               []error
@@ -174,7 +174,7 @@ var InEntityWidgetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -190,7 +190,7 @@ func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetT
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -205,7 +205,7 @@ func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -221,7 +221,7 @@ func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InE
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityWidgetTable) setLifecycle(lifecycle5 uint8) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -813,6 +813,7 @@ func (inst *InEntityWidgetTableSectionGeoPointInAttr) EndSection() *InEntityWidg
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1138,6 +1139,7 @@ func (inst *InEntityWidgetTableSectionSymbolInAttr) EndSection() *InEntityWidget
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1491,6 +1493,7 @@ func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) EndSection() *InEntityW
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1844,6 +1847,7 @@ func (inst *InEntityWidgetTableSectionU64ArrayInAttr) EndSection() *InEntityWidg
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

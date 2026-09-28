@@ -64,7 +64,7 @@ func CreateSchemaSystemTableColumns() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntitySystemTableColumns struct {
 	allocator             memory.Allocator
@@ -149,7 +149,7 @@ var InEntitySystemTableColumnsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 uint64) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -165,7 +165,7 @@ func (inst *InEntitySystemTableColumns) SetId(tableHash0 uint64, columnIndex1 ui
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntitySystemTableColumns) SetRouting(tableName2 string) *InEntitySystemTableColumns {
 	if inst.state != runtime.EntityStateInEntity {
@@ -660,6 +660,7 @@ func (inst *InEntitySystemTableColumnsSectionStringInAttr) EndSection() *InEntit
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -952,6 +953,7 @@ func (inst *InEntitySystemTableColumnsSectionSymbolInAttr) EndSection() *InEntit
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1244,6 +1246,7 @@ func (inst *InEntitySystemTableColumnsSectionTextInAttr) EndSection() *InEntityS
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1536,6 +1539,7 @@ func (inst *InEntitySystemTableColumnsSectionU64InAttr) EndSection() *InEntitySy
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

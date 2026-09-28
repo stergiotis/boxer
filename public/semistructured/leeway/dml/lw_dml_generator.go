@@ -1123,6 +1123,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		}
 		_, err = b.WriteString(`
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

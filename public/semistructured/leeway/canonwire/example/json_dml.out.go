@@ -62,7 +62,7 @@ func CreateSchemaJson() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityJson struct {
 	allocator             memory.Allocator
@@ -151,7 +151,7 @@ var InEntityJsonSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityJson) SetId(blake3hash0 []byte) *InEntityJson {
 	if inst.state != runtime.EntityStateInEntity {
@@ -654,6 +654,7 @@ func (inst *InEntityJsonSectionBoolInAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -861,6 +862,7 @@ func (inst *InEntityJsonSectionEmptyArrayInAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1068,6 +1070,7 @@ func (inst *InEntityJsonSectionEmptyObjectInAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1286,6 +1289,7 @@ func (inst *InEntityJsonSectionFloat64InAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1504,6 +1508,7 @@ func (inst *InEntityJsonSectionInt64InAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1711,6 +1716,7 @@ func (inst *InEntityJsonSectionNullInAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1929,6 +1935,7 @@ func (inst *InEntityJsonSectionStringInAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2147,6 +2154,7 @@ func (inst *InEntityJsonSectionSymbolInAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2354,6 +2362,7 @@ func (inst *InEntityJsonSectionUndefinedInAttr) EndSection() *InEntityJson {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

@@ -83,7 +83,7 @@ func CreateSchemaPersiststateTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityPersiststateTable struct {
 	errs               []error
@@ -165,7 +165,7 @@ var InEntityPersiststateTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityPersiststateTable) setId(id0 string) *InEntityPersiststateTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -180,7 +180,7 @@ func (inst *InEntityPersiststateTable) setId(id0 string) *InEntityPersiststateTa
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityPersiststateTable) setTimestamp(ts1 time.Time) *InEntityPersiststateTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -195,7 +195,7 @@ func (inst *InEntityPersiststateTable) setTimestamp(ts1 time.Time) *InEntityPers
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityPersiststateTable) setLifecycle(lifecycle2 uint8) *InEntityPersiststateTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -769,6 +769,7 @@ func (inst *InEntityPersiststateTableSectionBlobInAttr) EndSection() *InEntityPe
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1094,6 +1095,7 @@ func (inst *InEntityPersiststateTableSectionF64InAttr) EndSection() *InEntityPer
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1419,6 +1421,7 @@ func (inst *InEntityPersiststateTableSectionStringInAttr) EndSection() *InEntity
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1744,6 +1747,7 @@ func (inst *InEntityPersiststateTableSectionSymbolInAttr) EndSection() *InEntity
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2069,6 +2073,7 @@ func (inst *InEntityPersiststateTableSectionU64InAttr) EndSection() *InEntityPer
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

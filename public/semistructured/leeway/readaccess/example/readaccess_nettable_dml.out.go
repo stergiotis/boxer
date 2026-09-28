@@ -41,7 +41,7 @@ func CreateSchemaNetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityNetTable struct {
 	plainTs1              time.Time
@@ -111,7 +111,7 @@ var InEntityNetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityNetTable) SetId(id0 uint64) *InEntityNetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -126,7 +126,7 @@ func (inst *InEntityNetTable) SetId(id0 uint64) *InEntityNetTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityNetTable) SetTimestamp(ts1 time.Time) *InEntityNetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -556,6 +556,7 @@ func (inst *InEntityNetTableSectionNetInAttr) EndSection() *InEntityNetTable {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

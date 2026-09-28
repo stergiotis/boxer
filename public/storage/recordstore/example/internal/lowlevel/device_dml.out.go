@@ -77,7 +77,7 @@ func CreateSchemaDeviceTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
 
 type InEntityDeviceTable struct {
 	errs               []error
@@ -156,7 +156,7 @@ var InEntityDeviceTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityDeviceTable) setId(id0 uint64) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -171,7 +171,7 @@ func (inst *InEntityDeviceTable) setId(id0 uint64) *InEntityDeviceTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityDeviceTable) setTimestamp(ts1 time.Time) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -186,7 +186,7 @@ func (inst *InEntityDeviceTable) setTimestamp(ts1 time.Time) *InEntityDeviceTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
 
 func (inst *InEntityDeviceTable) setLifecycle(lifecycle2 uint8) *InEntityDeviceTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -760,6 +760,7 @@ func (inst *InEntityDeviceTableSectionGeoPointInAttr) EndSection() *InEntityDevi
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1085,6 +1086,7 @@ func (inst *InEntityDeviceTableSectionSymbolInAttr) EndSection() *InEntityDevice
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1438,6 +1440,7 @@ func (inst *InEntityDeviceTableSectionSymbolArrayInAttr) EndSection() *InEntityD
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1791,6 +1794,7 @@ func (inst *InEntityDeviceTableSectionU64ArrayInAttr) EndSection() *InEntityDevi
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
