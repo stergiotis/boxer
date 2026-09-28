@@ -510,6 +510,18 @@ D1–D6 and the subsidiary decisions are unaffected: the zip rule, the S = 0
 splice, and the one-attribute-per-row shape all stand, and the round-trip tests
 that covered them now drive a single `AddSections` call per row.
 
+### 2026-09-28 — reflect codec keys the `[N]byte` conversion on the DML parameter
+
+The D4 note that fixed-byte `[N]byte` elements "re-slice through
+`reslicedIfFixedByte`" held only for `y` (blob) sections. A section whose
+column is fixed-width (`yxN`, or a network type `v` / `w` / `vc` / `wc`)
+has a DML method that takes `[N]byte`, and the unconditional re-slice made
+`Marshal` / `RowComposer` panic inside `reflect.Call`. `marshallreflect`
+now passes the array unchanged and converts it to `[]byte` only where the
+target method's parameter is a byte slice (`adaptFixedByteArgs`, applied
+in `mustCall`). The marshallgen front-end's choice between `[N]byte` and
+`[]byte` is not changed by this entry.
+
 ## References
 
 - [ADR-0008](0008-leeway-marshall-extensions.md) — marshall extensions (D2 ordering, SD8 presence-signal precedent, Cut-2 carrier length-agreement precedent); superseded by ADR-0070–0073 but decisions stand.

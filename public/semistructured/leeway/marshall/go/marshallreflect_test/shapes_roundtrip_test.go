@@ -267,7 +267,8 @@ func TestRoundTrip_OptionScalar(t *testing.T) {
 // --- Fixed [N]byte round-trip (carried as a resliced blob). ---
 
 // fixedDrone routes a [16]byte into blobArray with `,unit`: the write side
-// reslices the array to []byte (reslicedIfFixedByte), the read side copies
+// reslices the array to []byte (adaptFixedByteArgs, since the blob method
+// takes []byte), the read side copies
 // the blob back into the fixed array (consumeValue's fixed-byte branch).
 type fixedDrone struct {
 	_        struct{} `kind:"fixedDrone"`
