@@ -173,10 +173,11 @@ const (
 )
 
 // SidecarFile is the file name a capture named name writes for sidecar, or
-// the PNG itself for an empty sidecar. It mirrors the host's rule: a trailing
-// ".png" on the name is dropped first.
+// the PNG itself for an empty sidecar. It mirrors the host's rule: the name is
+// reduced to its last path element, since the host owns the directory, and a
+// trailing ".png" on it is dropped.
 func SidecarFile(name string, sidecar string) string {
-	stem := name
+	stem := filepath.Base(name)
 	if ext := filepath.Ext(stem); strings.EqualFold(ext, ".png") {
 		stem = stem[:len(stem)-len(ext)]
 	}
