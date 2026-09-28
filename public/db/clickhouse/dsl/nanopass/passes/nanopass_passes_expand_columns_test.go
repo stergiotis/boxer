@@ -119,3 +119,28 @@ func TestExpandColumns_DynamicOperandLeftAlone(t *testing.T) {
 		t.Errorf("projection item: got %s, want %s", got, want)
 	}
 }
+
+// TestExpandColumns_QuotesExoticNames guards a bug where the expansion
+// spliced decoded table and column names raw, so `SELECT * FROM "my table"`
+// became `SELECT my table.x y, my table.select FROM "my table"`. A keyword
+// qualifier is quoted as well: ClickHouse rejects `SELECT distinct.x`.
+func TestExpandColumns_QuotesExoticNames(t *testing.T) {
+	pass := ExpandColumns(NewStaticSchemaProvider(map[string][]string{
+		"my table": {"x y", "select", "plain"},
+		"u":        {"a:b", "c.d"},
+	}), "")
+	for sql, want := range map[string]string{
+		`SELECT * FROM u AS distinct`:         `SELECT "distinct"."a:b", "distinct"."c.d" FROM u AS distinct`,
+		`SELECT * FROM "my table"`:            `SELECT "my table"."x y", "my table".select, "my table".plain FROM "my table"`,
+		`SELECT "my table".* FROM "my table"`: `SELECT "my table"."x y", "my table".select, "my table".plain FROM "my table"`,
+		`SELECT COLUMNS('l') FROM "my table"`: `SELECT "my table".select, "my table".plain FROM "my table"`,
+	} {
+		got, err := pass.Run(sql)
+		if err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		if got != want {
+			t.Errorf("%s:\n got %s\nwant %s", sql, got, want)
+		}
+	}
+}

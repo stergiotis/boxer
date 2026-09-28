@@ -326,6 +326,40 @@ func extractStringLiteralFromDynamic(ctx *grammar1.DynamicColumnSelectionContext
 	}
 	return
 }
+
+// spellQualifier renders a decoded table name or alias as identifier text:
+// bare when the lexer reads it back as exactly one IDENTIFIER token with the
+// same text, double-quoted otherwise. A keyword is quoted too, since at the
+// head of a projection item (`distinct.x`) ClickHouse reads it as the keyword.
+// Splicing the decoded name raw turned `"my table"` into `my table`.
+func spellQualifier(name string) string {
+	if name != "" && name[0] != '"' && name[0] != '`' {
+		lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(name))
+		lexer.RemoveErrorListeners()
+		tok := lexer.NextToken()
+		if tok.GetTokenType() == grammar1.ClickHouseLexerIDENTIFIER &&
+			tok.GetText() == name &&
+			lexer.NextToken().GetTokenType() == antlr.TokenEOF {
+			return name
+		}
+	}
+	return nanopass.QuoteIdentifier(name)
+}
+
+// bareColumnRe matches the column names safe to emit bare after `qualifier.`:
+// there ClickHouse (and grammar1) read any bare word as an identifier,
+// keywords such as `select` or `id` included.
+var bareColumnRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// spellColumn renders a schema column name for the position after a
+// qualifier's dot, double-quoting anything that is not a bare word.
+func spellColumn(name string) string {
+	if bareColumnRe.MatchString(name) {
+		return name
+	}
+	return nanopass.QuoteIdentifier(name)
+}
+
 func expandForTable(nameOrAlias string, scope *nanopass.SelectScope, schema SchemaProviderI) (expanded string) {
 	source, found := scope.ResolveAlias(nameOrAlias)
 	if !found || source.IsCTE || source.IsSubquery || source.IsFunction {
@@ -338,10 +372,11 @@ func expandForTable(nameOrAlias string, scope *nanopass.SelectScope, schema Sche
 		return ""
 	}
 
+	// nameOrAlias is the qualifier's text as written, so it re-lexes as is.
 	qualifier := nameOrAlias
 	parts := make([]string, 0, nColumns)
 	for col := range columns {
-		parts = append(parts, qualifier+"."+col)
+		parts = append(parts, qualifier+"."+spellColumn(col))
 	}
 	expanded = strings.Join(parts, ", ")
 	return
@@ -368,9 +403,10 @@ func expandForAllTables(scope *nanopass.SelectScope, schema SchemaProviderI) (ex
 		if ts.Alias != "" {
 			qualifier = ts.Alias
 		}
+		qualifier = spellQualifier(qualifier)
 
 		for col := range columns {
-			allParts = append(allParts, qualifier+"."+col)
+			allParts = append(allParts, qualifier+"."+spellColumn(col))
 		}
 	}
 
@@ -422,10 +458,11 @@ func expandDynamic(ctx *grammar1.ColumnExprDynamicContext, scope *nanopass.Selec
 		if ts.Alias != "" {
 			qualifier = ts.Alias
 		}
+		qualifier = spellQualifier(qualifier)
 
 		for col := range columns {
 			if re.MatchString(col) {
-				matched = append(matched, qualifier+"."+col)
+				matched = append(matched, qualifier+"."+spellColumn(col))
 			}
 		}
 	}
