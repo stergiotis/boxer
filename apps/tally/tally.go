@@ -244,7 +244,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		inst.applyLaunch(cfg)
 	}
 	layout := inst.layout
-	inst.conn.Demand("connect", func(cctx context.Context) (*storeConn, error) {
+	// Kick off the connect now; the render path polls the result.
+	_, _, _, _ = inst.conn.Demand("connect", func(cctx context.Context) (*storeConn, error) {
 		cctx, cancel := context.WithTimeout(cctx, connectTimeout)
 		defer cancel()
 		return connect(cctx, layout)

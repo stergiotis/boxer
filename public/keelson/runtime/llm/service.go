@@ -168,7 +168,9 @@ func (inst *Service) Close() {
 	inst.cancelBase()
 	inst.inflight.Wait()
 	if inst.busClient != nil {
-		inst.busClient.Close()
+		if err := inst.busClient.Close(); err != nil {
+			inst.log.Warn().Err(err).Msg("llm: closing the bus client")
+		}
 		inst.busClient = nil
 	}
 	if inst.client != nil {

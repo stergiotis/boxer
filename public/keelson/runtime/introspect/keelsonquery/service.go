@@ -52,12 +52,16 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, reg *introspect.Registr
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps(poolName))
 	s.engine, err = introspectengine.New(introspectengine.Config{Registry: reg, Bus: s.busClient, PoolName: poolName}, s.log)
 	if err != nil {
-		s.busClient.Close()
+		if cerr := s.busClient.Close(); cerr != nil {
+			s.log.Warn().Err(cerr).Msg("keelson.query: closing the bus client after a failed start")
+		}
 		return nil, err
 	}
 	s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handleRequest)
 	if err != nil {
-		s.busClient.Close()
+		if cerr := s.busClient.Close(); cerr != nil {
+			s.log.Warn().Err(cerr).Msg("keelson.query: closing the bus client after a failed start")
+		}
 		err = eb.Build().Str("subject", SubjectAll).Errorf("keelson.query: subscribe: %w", err)
 		return nil, err
 	}
@@ -77,7 +81,9 @@ func (inst *Service) Close() {
 		inst.unsub = nil
 	}
 	if inst.busClient != nil {
-		inst.busClient.Close()
+		if err := inst.busClient.Close(); err != nil {
+			inst.log.Warn().Err(err).Msg("keelson.query: closing the bus client")
+		}
 		inst.busClient = nil
 	}
 }

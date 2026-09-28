@@ -92,7 +92,9 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
 	s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handleRequest)
 	if err != nil {
-		s.busClient.Close()
+		if cerr := s.busClient.Close(); cerr != nil {
+			s.log.Warn().Err(cerr).Msg("httpegress: closing the bus client after a failed subscribe")
+		}
 		err = eh.Errorf("httpegress: subscribe: %w", err)
 		return nil, err
 	}
