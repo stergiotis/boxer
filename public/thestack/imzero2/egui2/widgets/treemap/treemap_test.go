@@ -819,3 +819,24 @@ func TestAnimMachine_CancelIsIdempotent(t *testing.T) {
 		t.Errorf("State() = %v, want idle", m.State())
 	}
 }
+
+// formatBytes tops out at the largest suffix instead of indexing past the
+// table; +Inf must terminate rather than divide forever.
+func TestFormatBytes_LargeAndNonFinite(t *testing.T) {
+	cases := []struct {
+		in   float64
+		want string
+	}{
+		{512, "512 B"},
+		{2048, "2.00 KB"},
+		{math.Pow(1024, 6), "1.00 EB"},
+		{math.Pow(1024, 8), "1.00 YB"},
+		{math.Pow(1024, 9), "1024.00 YB"},
+		{math.Inf(1), "+Inf YB"},
+	}
+	for _, tc := range cases {
+		if got := formatBytes(tc.in); got != tc.want {
+			t.Errorf("formatBytes(%g): got %q want %q", tc.in, got, tc.want)
+		}
+	}
+}

@@ -1325,12 +1325,11 @@ func formatBytes(bytes float64) string {
 	if bytes < 1024 {
 		return fmt.Sprintf("%.0f B", bytes)
 	}
-	div, exp := int64(1024), 0
-	for n := bytes / 1024; n >= 1024; n /= 1024 {
+	var suffixes = []string{"KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"}
+	div, exp := 1024.0, 0
+	for n := bytes / 1024; n >= 1024 && exp < len(suffixes)-1; n /= 1024 {
 		div *= 1024
 		exp++
 	}
-	var suffixes = []string{"KB", "MB", "GB", "TB", "PB"}
-	suffix := suffixes[exp]
-	return fmt.Sprintf("%.2f %s", bytes/float64(div), suffix)
+	return fmt.Sprintf("%.2f %s", bytes/div, suffixes[exp])
 }
