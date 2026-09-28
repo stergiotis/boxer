@@ -398,6 +398,13 @@ func (inst *Service) handleHandleOp(msg *app.Msg) {
 	inst.mu.Lock()
 	h, ok := inst.handles[uuid]
 	inst.mu.Unlock()
+	// The bus cap check is not the only gate: a handle answers only the app
+	// it was granted to, so a manifest declaring a broad fs.handle.> cannot
+	// reach another app's grant. Refused as unknown, so the reply does not
+	// confirm that the handle exists.
+	if ok && msg.Sender != h.appId {
+		ok = false
+	}
 	if !ok {
 		inst.replyError(msg.Reply, "unknown handle: "+uuid)
 		return
