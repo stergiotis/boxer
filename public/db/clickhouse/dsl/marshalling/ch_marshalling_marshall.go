@@ -469,35 +469,13 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 	}
 	switch v := val.(type) {
 	case TypedLiteral:
-		if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
-			castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
-			if err != nil {
-				err = eh.Errorf("unable to map cast type: %w", err)
-				return
-			}
-		}
-		sql, err = MarshalTypedLiteralToSQLEx(v, opts.MapCanonicalToClickHouse)
-		if err != nil {
-			err = eh.Errorf("marshal typed literal: %w", err)
-		}
-		return
+		return marshalTypedLiteralWithOptionsCast(v, opts)
 	case *TypedLiteral:
 		if v == nil {
 			sql = "NULL"
 			return
 		}
-		if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
-			castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
-			if err != nil {
-				err = eh.Errorf("unable to map cast type: %w", err)
-				return
-			}
-		}
-		sql, err = MarshalTypedLiteralToSQLEx(*v, opts.MapCanonicalToClickHouse)
-		if err != nil {
-			err = eh.Errorf("marshal typed literal: %w", err)
-		}
-		return
+		return marshalTypedLiteralWithOptionsCast(*v, opts)
 
 	// --- Verbatim SQL (caller-supplied raw fragment) ---
 	case VerbatimSql:
@@ -725,6 +703,27 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		err = eb.Build().Type("type", val).Errorf("unsupported type")
 		return
 	}
+}
+
+// marshalTypedLiteralWithOptionsCast returns the literal's cast as castType
+// when opts ask for casts to be preserved, and then marshals the value
+// without it, so the caller's CAST is the only one.
+func marshalTypedLiteralWithOptionsCast(v TypedLiteral, opts MarshalOptions) (sql string, castType string, err error) {
+	if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
+		castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
+		if err != nil {
+			err = eh.Errorf("unable to map cast type: %w", err)
+			return
+		}
+		if castType != "" {
+			v.CastTypeCanonical = ""
+		}
+	}
+	sql, err = MarshalTypedLiteralToSQLEx(v, opts.MapCanonicalToClickHouse)
+	if err != nil {
+		err = eh.Errorf("marshal typed literal: %w", err)
+	}
+	return
 }
 
 func marshalGoArray[T any](arr []T, opts MarshalOptions) (sql string, err error) {

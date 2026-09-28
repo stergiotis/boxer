@@ -1659,3 +1659,28 @@ func TestMarshalGoValueNilTuple(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "NULL", sql)
 }
+
+// With PreserveCasts a cast-carrying TypedLiteral is wrapped once, not by
+// both MarshalTypedLiteralToSQLEx and the caller.
+func TestMarshalGoValuePreserveCastsWrapsOnce(t *testing.T) {
+	opts := marshalling.MarshalOptions{PreserveCasts: true, MapCanonicalToClickHouse: marshalling.MapCanonicalToClickHouseTypeStr}
+	lit := marshalling.NewScalarUint64(1).WithCast("u8")
+
+	sql, err := marshalling.MarshalGoValueToSQLWithOptions(lit, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "CAST(1, 'UInt8')", sql)
+
+	sql, err = marshalling.MarshalGoValueToSQLWithOptions(&lit, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "CAST(1, 'UInt8')", sql)
+
+	sql, castType, err := marshalling.MarshalGoValueToSQLWithOptionsCast(lit, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "1", sql)
+	assert.Equal(t, "UInt8", castType)
+
+	// Without PreserveCasts the literal still carries its own cast.
+	sql, err = marshalling.MarshalGoValueToSQLWithOptions(lit, marshalling.MarshalOptions{MapCanonicalToClickHouse: marshalling.MapCanonicalToClickHouseTypeStr})
+	require.NoError(t, err)
+	assert.Equal(t, "CAST(1, 'UInt8')", sql)
+}
