@@ -39,6 +39,12 @@ func TestSqlIsCacheable(t *testing.T) {
 		{"   ", false, "whitespace only"},
 		{"/* unterminated", false, "unterminated block comment"},
 		{"SET allow_experimental = 1", false, "SET not allowed"},
+		{"SELECT 1;", true, "trailing semicolon"},
+		{"SELECT 1; -- done\n", true, "trailing semicolon and comment"},
+		{"SELECT 1; INSERT INTO FUNCTION file('out.arrow', 'Arrow') SELECT 2", false, "second statement"},
+		{"SELECT 1;;DROP TABLE t", false, "second statement after empty one"},
+		{"SELECT 1 INTO OUTFILE 'out.tsv'", false, "INTO OUTFILE writes a file"},
+		{"select 1 into\n outfile 'out.tsv'", false, "lowercase INTO OUTFILE"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.hint, func(t *testing.T) {
