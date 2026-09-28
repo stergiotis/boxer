@@ -1209,6 +1209,17 @@ Mentions of a downstream repository were replaced with a generic
 description. That repository is private, and this one is public. The
 decision is unchanged.
 
+### 2026-09-28 — a pinned snapshot is checked for completeness too
+
+§SD7 sketched `fs(m, snap)` as `… AND ts = snap`, and the expansion did
+exactly that, so a caller who knew the ts of a walk that died (the failed
+call's `Result.Snap`, or the raw table) read its partial rows back as a
+snapshot. That contradicted §SD6, which makes an incomplete walk invisible
+to every query. The pinned form now also requires the instant to be in
+`fssnap` for the mount (the `(id, ts)` pair for a wildcard mount), as `'*'`
+and the latest form already did; the plain equality stays beside it for key
+pruning. `TestAPinnedPartialWalkIsInvisible` pins it against a live server.
+
 
 ## References
 

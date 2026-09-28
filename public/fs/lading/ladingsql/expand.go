@@ -180,8 +180,15 @@ func (inst Config) where(mount mountArg, snap snapshotArg, presence string) stri
 		// row — which is the answer, not an error.
 		parts = append(parts, fmt.Sprintf("%s = (SELECT max(%s) FROM %s WHERE %s = %d AND %s)",
 			colTs, colTs, inst.qualified(inst.SnapTable), colID, mount.id.Value(), notExpired))
+	case mount.all:
+		// A pinned instant is still "of the complete snapshots" (§SD6): a walk
+		// that died leaves rows at a ts someone can learn, and naming it must
+		// not surface them. The bare equality stays for key pruning.
+		parts = append(parts, colTs+" = "+snap.expr,
+			fmt.Sprintf("(%s, %s) IN (%s AND %s = %s)", colID, colTs, inst.completeSnapshotsOfEvery(mount), colTs, snap.expr))
 	default:
-		parts = append(parts, colTs+" = "+snap.expr)
+		parts = append(parts, colTs+" = "+snap.expr,
+			fmt.Sprintf("%s IN (%s AND %s = %s)", colTs, inst.completeSnapshots(mount), colTs, snap.expr))
 	}
 	parts = append(parts, "("+presence+")")
 	return strings.Join(parts, " AND ")
