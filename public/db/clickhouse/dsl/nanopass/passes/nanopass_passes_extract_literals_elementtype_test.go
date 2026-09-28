@@ -44,3 +44,44 @@ func TestExtractLiterals_IncompatibleListLeftAlone(t *testing.T) {
 		t.Errorf("got %s, want it unchanged", got)
 	}
 }
+
+// TestExtractLiterals_ScalarAndCompositeNamesDisjoint guards a bug where
+// scalar and composite parameters were named from separate name sets and
+// sequence counters: with sequential names, the scalar 1 inside array(1, 2)
+// and the composite array(3, 4, 5) got the same name, so one SET bound both
+// a UInt64 slot and an Array slot.
+func TestExtractLiterals_ScalarAndCompositeNamesDisjoint(t *testing.T) {
+	config := NewExtractLiteralsConfig(0)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(3)
+	sql := "SELECT has(array(1, 2), x), has(array(3, 4, 5), y) FROM t"
+
+	got, err := ExtractLiterals(config).Run(sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sets, _, _ := ParseExtractedQuery(got, "")
+	seen := make(map[string]bool)
+	for _, set := range sets {
+		name, _, _ := strings.Cut(strings.TrimPrefix(set, "SET "), " = ")
+		if seen[name] {
+			t.Fatalf("parameter %s bound twice:\n%s", name, got)
+		}
+		seen[name] = true
+	}
+	if len(sets) != 3 {
+		t.Fatalf("got %d SET lines, want 3 (1, 2 and [3, 4, 5]):\n%s", len(sets), got)
+	}
+
+	extractions, err := AnalyzeExtractions(sql, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make(map[string]bool)
+	for _, x := range extractions {
+		if names[x.ParamName] {
+			t.Fatalf("AnalyzeExtractions reports %s twice", x.ParamName)
+		}
+		names[x.ParamName] = true
+	}
+}

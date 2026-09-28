@@ -174,9 +174,10 @@ func extractLiteralsApply(config *ExtractLiteralsConfig) nanopass.ApplyFunc {
 
 		var allParams []extractedParam
 		rw := nanopass.NewRewriter(pr)
+		names := newParamNameSpace()
 
 		if len(filtered) > 0 {
-			params, paramByNode := assignParamNames(filtered, config)
+			params, paramByNode := assignParamNames(filtered, config, names)
 			allParams = append(allParams, params...)
 			for _, cand := range filtered {
 				p := paramByNode[cand.node]
@@ -190,7 +191,7 @@ func extractLiteralsApply(config *ExtractLiteralsConfig) nanopass.ApplyFunc {
 		}
 
 		if len(filteredComposites) > 0 {
-			compositeParams := assignCompositeParamNames(filteredComposites, config)
+			compositeParams := assignCompositeParamNames(filteredComposites, config, names)
 			allParams = append(allParams, compositeParams...)
 			for i, cc := range filteredComposites {
 				p := &compositeParams[i]
@@ -883,7 +884,21 @@ func literalHash(literalText string) uint64 {
 	return h.Lo
 }
 
-func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConfig) (params []extractedParam, paramByNode map[*grammar1.ColumnExprLiteralContext]*extractedParam) {
+// paramNameSpace is the set of names one run has handed out, and the
+// sequence counter behind sequential names. Scalar and composite parameters
+// draw from the same space: with separate ones a scalar inside array(1, 2)
+// (context "array", arg 0) and a composite array(3, 4, 5) got the same
+// sequential name, and one value overwrote the other in env.Params.
+type paramNameSpace struct {
+	used map[string]bool
+	seq  uint32
+}
+
+func newParamNameSpace() *paramNameSpace {
+	return &paramNameSpace{used: make(map[string]bool)}
+}
+
+func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConfig, names *paramNameSpace) (params []extractedParam, paramByNode map[*grammar1.ColumnExprLiteralContext]*extractedParam) {
 	paramByNode = make(map[*grammar1.ColumnExprLiteralContext]*extractedParam, len(candidates))
 	type dedupKey struct {
 		contextName string
@@ -892,9 +907,8 @@ func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConf
 		castCanon   string
 	}
 	dedupMap := make(map[dedupKey]*extractedParam)
-	usedNames := make(map[string]bool)
+	usedNames := names.used
 	params = make([]extractedParam, 0, len(candidates))
-	seqCounter := uint32(0)
 
 	for i := range candidates {
 		c := &candidates[i]
@@ -910,8 +924,8 @@ func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConf
 		meta := ParamMetadata{ArgIndex: uint32(c.argIndex), CastTypeCanonical: castCanon}
 		if config.useSequentialNames {
 			meta.IsSequential = true
-			meta.SequentialIndex = seqCounter
-			seqCounter++
+			meta.SequentialIndex = names.seq
+			names.seq++
 		} else {
 			meta.ContentHash = literalHash(c.literalText)
 		}
@@ -942,10 +956,9 @@ func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConf
 	return
 }
 
-func assignCompositeParamNames(candidates []compositeCandidate, config *ExtractLiteralsConfig) (params []extractedParam) {
-	usedNames := make(map[string]bool)
+func assignCompositeParamNames(candidates []compositeCandidate, config *ExtractLiteralsConfig, names *paramNameSpace) (params []extractedParam) {
+	usedNames := names.used
 	params = make([]extractedParam, 0, len(candidates))
-	seqCounter := uint32(0)
 	for _, c := range candidates {
 		value := formatCompositeValue(&c)
 		typeName := defaultCompositeTypeName(&c)
@@ -962,8 +975,8 @@ func assignCompositeParamNames(candidates []compositeCandidate, config *ExtractL
 		meta := ParamMetadata{ArgIndex: 0, CastTypeCanonical: castCanon}
 		if config.useSequentialNames {
 			meta.IsSequential = true
-			meta.SequentialIndex = seqCounter
-			seqCounter++
+			meta.SequentialIndex = names.seq
+			names.seq++
 		} else {
 			meta.ContentHash = literalHash(value)
 		}
@@ -1050,8 +1063,9 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 	filtered := filterCandidates(candidates, config)
 	filteredComposites := filterCompositeCandidates(compositeCandidates, config)
 	extractions = make([]ExtractionInfo, 0, len(filtered)+len(filteredComposites))
+	names := newParamNameSpace()
 	if len(filtered) > 0 {
-		_, paramByNode := assignParamNames(filtered, config)
+		_, paramByNode := assignParamNames(filtered, config, names)
 		seen := make(map[string]bool)
 		for _, c := range filtered {
 			p := paramByNode[c.node]
@@ -1068,7 +1082,7 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 		}
 	}
 	if len(filteredComposites) > 0 {
-		compositeParams := assignCompositeParamNames(filteredComposites, config)
+		compositeParams := assignCompositeParamNames(filteredComposites, config, names)
 		for i, cc := range filteredComposites {
 			p := &compositeParams[i]
 			extractions = append(extractions, ExtractionInfo{
