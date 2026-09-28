@@ -554,6 +554,18 @@ fn fetch_run_start(b: &[u8], fetch_ops: &HashSet<u32>) -> usize {
 mod randomness {
     use std::cell::Cell;
 
+    #[allow(unsafe_code)]
+    mod imports {
+        // The clock import `clock::Instant` reads, taken here as an absolute
+        // value: an `Instant` only yields differences, and the difference of
+        // two back-to-back reads is about zero, which made every page load
+        // seed the same stream.
+        #[link(wasm_import_module = "env")]
+        unsafe extern "C" {
+            pub fn now_ms() -> f64;
+        }
+    }
+
     thread_local! {
         static STATE: Cell<u64> = const { Cell::new(0) };
     }
@@ -562,8 +574,12 @@ mod randomness {
         STATE.with(|st| {
             let mut x = st.get();
             if x == 0 {
-                x = (crate::imzero2::clock::Instant::now().elapsed().as_nanos() as u64)
-                    ^ 0x9E37_79B9_7F4A_7C15;
+                // SAFETY: the import takes no arguments and returns a plain
+                // f64; the host binds it to `performance.now` before
+                // instantiation.
+                #[allow(unsafe_code)]
+                let now = unsafe { imports::now_ms() };
+                x = now.to_bits() ^ 0x9E37_79B9_7F4A_7C15;
                 if x == 0 {
                     x = 0x2545_F491_4F6C_DD1D;
                 }
