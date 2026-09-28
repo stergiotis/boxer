@@ -69,7 +69,7 @@ func TestDFACacheBounded(t *testing.T) {
 	// Cold-cache novel parses are intrinsically slow (full ALL(*) prediction);
 	// a couple thousand is plenty to cross the 2000-state threshold many times.
 	n := 2500
-	if testing.Short() {
+	if testing.Short() || raceEnabled {
 		n = 800
 	}
 	for i := 0; i < n; i++ {
@@ -122,7 +122,7 @@ func TestDFACacheConcurrent(t *testing.T) {
 	g1Before, _ := nanopass.DFACacheStats()
 
 	workers, perWorker := 8, 500
-	if testing.Short() {
+	if testing.Short() || raceEnabled {
 		perWorker = 150 // enough to force resets under -race without the wall-clock
 	}
 	var wg sync.WaitGroup
