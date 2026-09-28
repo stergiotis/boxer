@@ -222,8 +222,8 @@ func (inst *TableValidator) ValidateTable(table *TableDesc) (err error) {
 	}
 	err = table.OpaqueStreamingGroup.Validate()
 	if err != nil {
-		err = eh.Errorf("opaque streaming group is not a valid key: %w", err)
-		return
+		inst.errors = append(inst.errors, eh.Errorf("opaque streaming group is not a valid key: %w", err))
+		err = nil
 	}
 	return inst.buildError(inst.errors)
 }
