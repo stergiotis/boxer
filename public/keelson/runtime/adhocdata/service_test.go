@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -314,4 +315,45 @@ func TestNewHandleShape(t *testing.T) {
 	assert.True(t, strings.HasPrefix(h, "adhoc_"))
 	assert.Len(t, h, len("adhoc_")+16)
 	assert.True(t, introspect.ValidTableName(h), "a minted handle is a valid table name")
+}
+
+// A read racing a republish gets one revision or the other, never a file
+// the republish already retired.
+func TestOpenRacingRepublish(t *testing.T) {
+	svc := newTestService(t)
+	res, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
+	require.NoError(t, err)
+	p, ok := svc.reg.Lookup(res.Handle)
+	require.True(t, ok)
+	enc := p.(introspect.EncryptedDatasetI)
+	stream := int64Stream(t, false, 2)
+	done := make(chan struct{})
+	var readers sync.WaitGroup
+	var failures atomic.Int64
+	for range 8 {
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				rc, _, oErr := enc.Open()
+				if oErr != nil {
+					failures.Add(1)
+					continue
+				}
+				_ = rc.Close()
+			}
+		}()
+	}
+	for range 2000 {
+		_, err = svc.Publish(PublishInput{Alias: "items", Handle: res.Handle, ArrowIPCStream: stream})
+		require.NoError(t, err)
+	}
+	close(done)
+	readers.Wait()
+	assert.Zero(t, failures.Load(), "opens that found the file already retired")
 }

@@ -191,10 +191,13 @@ func (inst *record) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
 // Open returns a reader over the plaintext and the revision it belongs to,
 // taken together under the record's lock so a republish cannot split them.
 func (inst *record) Open() (rc io.ReadSeekCloser, revision uint64, err error) {
+	// Opened under the lock: the reader is counted before a republish
+	// can swap the file out and retire it, which closes an unread file
+	// at once.
 	inst.mu.RLock()
-	f, rev := inst.file, inst.revision
+	rev := inst.revision
+	r, err := inst.file.Open()
 	inst.mu.RUnlock()
-	r, err := f.Open()
 	if err != nil {
 		return nil, 0, err
 	}
