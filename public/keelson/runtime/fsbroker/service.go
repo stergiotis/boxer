@@ -19,6 +19,7 @@ package fsbroker
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -259,9 +260,13 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 		err = eb.Build().Str("reqId", reqId).Errorf("fsbroker: no pending request")
 		return
 	}
+	handleUuid, err = mintHandleUuid()
+	if err != nil {
+		inst.mu.Unlock()
+		return
+	}
 	delete(inst.pending, reqId)
 	mode := modeFor(p.op)
-	handleUuid = mintHandleUuid(p.appId, path, p.op)
 	inst.handles[handleUuid] = &handle{
 		uuid:    handleUuid,
 		path:    path,
@@ -556,25 +561,20 @@ func mintRequestId(sender app.AppIdT, op string) (id string) {
 	return
 }
 
-// mintHandleUuid is stable across the (appId, path, op) tuple within a
-// session — re-resolving the same path for the same app AND the same dialog
-// kind yields the same uuid, so the app's prior cap covers the new handle.
-//
-// The op is in the hash because two dialog kinds on the SAME file must not
-// share a uuid: without it, opening a file and then saving to it minted one
-// uuid whose handle entry the second Resolve overwrote — the mode flipped
-// underneath the first grant, and closing either destroyed both (plus any
-// watch riding the read handle). Stability narrows from (app, path) to
-// (app, path, op); nothing relied on the wider form, since a re-grant of the
-// same kind still reuses its uuid.
-func mintHandleUuid(appId app.AppIdT, path string, op string) (uuid string) {
-	h := blake3.New(8, nil)
-	_, _ = h.Write([]byte(appId))
-	_, _ = h.Write([]byte{0})
-	_, _ = h.Write([]byte(path))
-	_, _ = h.Write([]byte{0})
-	_, _ = h.Write([]byte(op))
-	uuid = hex.EncodeToString(h.Sum(nil))
+// mintHandleUuid draws a fresh uuid for every grant. Each Resolve is its own
+// grant with its own handle entry and cap, so two opens of one file (two
+// editor tabs, a read beside a save) close independently: a uuid derived from
+// (appId, path, op) made them share one entry, and closing either revoked
+// both, watch included. Random rather than derived also keeps the subject
+// unguessable to an app that does not hold the grant.
+func mintHandleUuid() (uuid string, err error) {
+	var b [16]byte
+	_, err = rand.Read(b[:])
+	if err != nil {
+		err = eh.Errorf("fsbroker: mint handle uuid: %w", err)
+		return
+	}
+	uuid = hex.EncodeToString(b[:])
 	return
 }
 

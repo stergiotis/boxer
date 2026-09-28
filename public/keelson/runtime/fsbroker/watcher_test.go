@@ -546,3 +546,32 @@ func TestService_Watch_NonRecursive_SubdirEventNotReported(t *testing.T) {
 		}
 	}
 }
+
+// TestService_TwoReadGrantsOnOnePathCloseIndependently: two opens of the same
+// file by the same app (two editor tabs) are two grants. Closing one must
+// leave the other's handle, cap and read path intact.
+func TestService_TwoReadGrantsOnOnePathCloseIndependently(t *testing.T) {
+	inst := inprocbus.NewInst(zerolog.Nop())
+	inst.SetRequestTimeout(time.Second)
+	svc, err := fsbroker.NewService(inst, zerolog.Nop())
+	require.NoError(t, err)
+	defer svc.Close()
+
+	appBus := inst.NewClient("test.tworeads", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	path := filepath.Join(t.TempDir(), "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("body"), 0o644))
+
+	first := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogRead, "read", path)
+	second := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogRead, "read", path)
+	require.NotEqual(t, first.HandleSubjectPrefix, second.HandleSubjectPrefix,
+		"two grants of one file must not share a handle")
+
+	_, err = appBus.Request(first.HandleSubjectPrefix+".close", nil)
+	require.NoError(t, err)
+
+	body, err := appBus.Request(second.HandleSubjectPrefix+".read", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("body"), body, "closing one grant must not revoke the other")
+}

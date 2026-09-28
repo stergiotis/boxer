@@ -359,6 +359,17 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-09-28 — §SD7: a handle uuid is random per grant
+
+`mintHandleUuid` draws the uuid from `crypto/rand` for every `Resolve`
+instead of hashing (appId, path, op). A derived uuid made two grants of the
+same kind on one file — two editor tabs on one document — share a handle
+entry and a cap, so closing either revoked both, including a watch riding
+on it. Each grant now closes on its own. This retracts the "a re-grant of the
+same kind reuses its uuid" property of the 2026-09-02 entry below: nothing
+in the tree depended on it. A random uuid is also one an app cannot compute
+for a file it was not granted.
+
 ### 2026-09-28 — §SD7: `fs.appdata.*`, a data area per app
 
 The Powerbox answered only for files a person hands an app, so an app keeping
