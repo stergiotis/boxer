@@ -7,7 +7,7 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** An exploration dated 2026-09-26, done
-> with the vizeval harness ([ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md),
+> with the vizeval harness ([ADR-0266](../adr/0266-vizeval-scored-renderings-of-leeway-batches.md),
 > proposed). Every quality judgement below is one reader's reading of
 > captures plus vizeval's geometry gates; no task-accuracy judge was run.
 

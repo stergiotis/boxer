@@ -342,7 +342,7 @@ var (
 	MembLlmCallRefused         = NkRegistry.MustBegin("llmCallRefused", 120).End()
 	MembLlmCallError           = NkRegistry.MustBegin("llmCallError", 121).End()
 
-	// vizeval scorecards (ADR-0257 §SD8) — one boxer.facts row per candidate
+	// vizeval scorecards (ADR-0266 §SD8) — one boxer.facts row per candidate
 	// scored over a scenario at a build: which rendering, of which data, how
 	// far it got, and its metrics. Append-only. Metrics are two parallel
 	// arrays, names and values, so a new metric needs no new membership; the
@@ -365,7 +365,7 @@ var (
 	MembVizevalGatePassed  = NkRegistry.MustBegin("vizevalGatePassed", 136).End()
 	MembVizevalGateFailed  = NkRegistry.MustBegin("vizevalGateFailed", 137).End()
 
-	// vizeval pairwise judgements (ADR-0257 §SD6, §SD8) — one boxer.facts
+	// vizeval pairwise judgements (ADR-0266 §SD6, §SD8) — one boxer.facts
 	// row per pair of candidates a model compared, both orders merged: which
 	// two drawings, by which model and prompt, and per criterion which side
 	// it preferred (a, b, tie, or split when the orders disagreed).

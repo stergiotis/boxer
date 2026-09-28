@@ -12,7 +12,7 @@
 //!   with one `x` per character at the position egui laid the glyph out at,
 //!   so a viewer's own shaping never moves a glyph; the runs of a shape are
 //!   wrapped in a `<g class="imz-text">` carrying the string and ink bounds
-//!   (ADR-0257 §SD5). Family hint (sans-serif/monospace) from `FontFamily`;
+//!   (ADR-0266 §SD5). Family hint (sans-serif/monospace) from `FontFamily`;
 //!   `PLACEHOLDER` resolves via `TextShape::fallback_color`. Mixed sections
 //!   are routed by a byte cursor over `job.text` (`Glyph::section_index` is
 //!   `pub(crate)`).
@@ -1620,7 +1620,7 @@ impl SvgBuilder {
 
         // The glyphs of one text shape are wrapped in one `<g class="imz-text">`
         // carrying what a program measuring the drawing needs and cannot
-        // recover from glyphs alone (ADR-0257, proposed, §SD6): the string,
+        // recover from glyphs alone (ADR-0266, proposed, §SD6): the string,
         // the ink bounds of the glyphs actually drawn (their atlas quads — not
         // in the per-glyph elements), the largest font size, and whether
         // egui elided the text to fit. The opening tag is inserted once the

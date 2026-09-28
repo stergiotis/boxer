@@ -16,7 +16,7 @@ import (
 // ScenarioSuffix names a scenario document.
 const ScenarioSuffix = ".vizeval.md"
 
-// Scenario is the fixed part of a problem (ADR-0257 §SD4): a dataset, what a
+// Scenario is the fixed part of a problem (ADR-0266 §SD4): a dataset, what a
 // reader wants from it, the viewport, the sinks that may answer, questions
 // with computable answers, and the gates a candidate must pass.
 type Scenario struct {

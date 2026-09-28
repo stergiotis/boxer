@@ -737,7 +737,7 @@ fn close_requested(out: &egui::FullOutput) -> bool {
 /// Round up to the next even number — H.264 4:2:0 (the Phase 2 encoder)
 /// requires even frame dimensions; bake that in from the start so the
 /// dumped frames and the future encoded stream agree.
-/// Queue the SVG sidecar of a capture (ADR-0257 (proposed) §SD5) on the
+/// Queue the SVG sidecar of a capture (ADR-0266 (proposed) §SD5) on the
 /// export plugin, which writes it from this pass's shapes in `on_end_pass` —
 /// the pass whose pixels the PNG is read back from. Returns the path it asked
 /// for, which [`capture_svg_written`] checks after the pass. The backdrop is
@@ -1241,7 +1241,7 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             }
         }
         // ADR-0154 SD4: a capture request is taken before the pass, so that an
-        // SVG sidecar (ADR-0257 (proposed) §SD5) can be queued for the export
+        // SVG sidecar (ADR-0266 (proposed) §SD5) can be queued for the export
         // plugin to write from the same pass the PNG below rasterizes.
         #[cfg(feature = "headless_raster")]
         let capture = carrier.as_ref().and_then(|c| c.take_capture_request());

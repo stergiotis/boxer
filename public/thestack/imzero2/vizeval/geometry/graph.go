@@ -2,7 +2,7 @@ package geometry
 
 import "math"
 
-// Graph metric names (ADR-0257 §SD6). They are measured only for a graph
+// Graph metric names (ADR-0266 §SD6). They are measured only for a graph
 // sink's drawing, where every stroked line or curve is an edge and every
 // filled circle a node; in a chart the grid would count as edges.
 const (

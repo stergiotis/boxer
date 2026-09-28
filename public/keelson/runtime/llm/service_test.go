@@ -261,7 +261,7 @@ func TestCallsLandOnTheFactsTable(t *testing.T) {
 }
 
 // An image attached to a message crosses the bus intact and counts toward
-// the call's prompt size (ADR-0257, proposed, §SD7).
+// the call's prompt size (ADR-0266, proposed, §SD7).
 func TestImagesCrossTheBus(t *testing.T) {
 	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a", FinishReason: "stop"}}
 	cli, svc, _ := serve(t, localCfg(p))

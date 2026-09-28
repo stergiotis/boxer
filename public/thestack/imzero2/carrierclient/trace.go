@@ -148,7 +148,7 @@ type Step struct {
 	Comment string `json:"comment,omitempty"`
 
 	// Sidecars names what a `capture` writes beside its PNG, for a program to
-	// measure rather than a reader to look at (ADR-0257 (proposed) §SD5):
+	// measure rather than a reader to look at (ADR-0266 (proposed) §SD5):
 	// [SidecarSVG] (or [SidecarSVGFonts]) and [SidecarTree]. A requested
 	// sidecar that is not written fails the step.
 	Sidecars []string `json:"sidecars,omitempty"`

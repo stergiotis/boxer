@@ -10,7 +10,7 @@ import (
 )
 
 // GraphOptions are the encoding choices a GraphModel is drawn under — the
-// settings the Experiments graph sink declares (ADR-0257, proposed, §SD2).
+// settings the Experiments graph sink declares (ADR-0266, proposed, §SD2).
 type GraphOptions struct {
 	Layout      graphview.LayoutE
 	Orientation graphview.OrientationE

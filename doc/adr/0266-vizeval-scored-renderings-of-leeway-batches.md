@@ -8,7 +8,7 @@ date: 2026-09-25
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0257: vizeval — scored renderings of leeway batches, for searching the encoding space
+# ADR-0266: vizeval — scored renderings of leeway batches, for searching the encoding space
 
 ## Context
 

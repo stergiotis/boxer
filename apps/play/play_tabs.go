@@ -493,7 +493,7 @@ var TabZoneNames = map[string]TabZoneE{
 // TabZonesOverride is the launch-time re-zoning knob. Its use is a scripted
 // capture that needs one pane large: "*=body" puts every tab in one leaf, the
 // whole central panel, and a BOXER_PLAY_FOCUS_* knob raises the pane to draw
-// (ADR-0257, proposed — the vizeval harness captures the Experiments pane
+// (ADR-0266, proposed — the vizeval harness captures the Experiments pane
 // this way).
 var TabZonesOverride = env.NewString(env.Spec{
 	Name:        "BOXER_PLAY_TAB_ZONES",

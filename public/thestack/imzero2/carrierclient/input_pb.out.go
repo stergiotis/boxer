@@ -1373,7 +1373,7 @@ func (x *TreeNode) GetChildren() []uint64 {
 type CaptureRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// ADR-0257 (proposed) §SD5: also write the frame's shapes as an SVG
+	// ADR-0266 (proposed) §SD5: also write the frame's shapes as an SVG
 	// beside the PNG — same basename, `.svg` — from the same pass. The SVG
 	// carries what the pixels do not: text as `<text>` runs with a position
 	// per character, and shapes as primitives, for geometry to be measured

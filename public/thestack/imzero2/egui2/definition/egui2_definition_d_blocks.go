@@ -886,7 +886,7 @@ let mut layout = egui::Layout::default();`)).
 	// clipped to the enclosing ui's clip, so inside a scroll area it is the
 	// viewport's share, not the whole content. It exists so a headless driver
 	// can find where a painter-drawn artifact sits — to crop a capture to it or
-	// scope a measurement to it (ADR-0257, proposed, §SD1). Nothing is drawn
+	// scope a measurement to it (ADR-0266, proposed, §SD1). Nothing is drawn
 	// and no interaction is added. The body's own nodes stay parented where
 	// they were: the region node is created after them, so it names an area,
 	// not a subtree.
