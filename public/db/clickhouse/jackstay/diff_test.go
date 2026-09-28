@@ -5,6 +5,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -137,14 +138,19 @@ func TestUnmatched(t *testing.T) {
 }
 
 // fakeQuery answers the digest and pair queries with canned JSONEachRow bodies.
+// DiffTable queries both sides concurrently, and a test may pass one fake for
+// both, so the log of seen queries is locked.
 type fakeQuery struct {
 	leaves string
 	pairs  string
+	mu     sync.Mutex
 	seen   []string
 }
 
 func (inst *fakeQuery) Query(_ context.Context, sql string) (io.ReadCloser, error) {
+	inst.mu.Lock()
 	inst.seen = append(inst.seen, sql)
+	inst.mu.Unlock()
 	if strings.Contains(sql, "sumWithOverflow(kh)") {
 		return io.NopCloser(strings.NewReader(inst.leaves)), nil
 	}

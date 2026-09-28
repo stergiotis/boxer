@@ -15,7 +15,9 @@ import (
 
 // QueryI is the one method discovery needs from a ClickHouse client;
 // [github.com/stergiotis/boxer/public/keelson/data/chclient.Client] satisfies
-// it.
+// it. Implementations must be safe for concurrent use: [DiffTable] queries the
+// source and the destination at the same time, and a caller may pass the same
+// value for both.
 type QueryI interface {
 	Query(ctx context.Context, sql string) (body io.ReadCloser, err error)
 }
