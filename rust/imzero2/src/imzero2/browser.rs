@@ -353,20 +353,7 @@ impl Host {
         // Split off the trailing run of fetch messages: Go issues every
         // fetch of a Sync before it blocks on the first reply, so what
         // follows the frame is the whole batch, answered here in order.
-        let fetch_start = {
-            let b = &self.pending;
-            let mut off = 0usize;
-            let mut start = 0usize;
-            while off < complete {
-                let len = u32::from_ne_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]]) as usize;
-                let op = u32::from_ne_bytes([b[off + 4], b[off + 5], b[off + 6], b[off + 7]]);
-                if !self.fetch_ops.contains(&op) {
-                    start = off + 4 + len;
-                }
-                off += 4 + len;
-            }
-            start
-        };
+        let fetch_start = fetch_run_start(&self.pending[..complete], &self.fetch_ops);
         let rendered = fetch_start > 0;
         if rendered {
             let frame: Vec<u8> = self.pending[..fetch_start].to_vec();
@@ -534,6 +521,29 @@ impl Host {
     }
 }
 
+/// Offset of the trailing run of fetch messages in `b`, which holds complete
+/// length-prefixed messages only. A message shorter than an opcode is not a
+/// fetch, matching [`Host::complete_messages`], and is not read past its end.
+fn fetch_run_start(b: &[u8], fetch_ops: &HashSet<u32>) -> usize {
+    let mut off = 0usize;
+    let mut start = 0usize;
+    while off < b.len() {
+        let len = u32::from_ne_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]]) as usize;
+        let is_fetch = len >= 4
+            && fetch_ops.contains(&u32::from_ne_bytes([
+                b[off + 4],
+                b[off + 5],
+                b[off + 6],
+                b[off + 7],
+            ]));
+        if !is_fetch {
+            start = off + 4 + len;
+        }
+        off += 4 + len;
+    }
+    start
+}
+
 // ---- randomness for the graph layouts on wasm32 ---------------------------
 //
 // A xorshift generator seeded from the clock: not for anything that needs
@@ -590,5 +600,34 @@ mod randomness {
         let slice = unsafe { std::slice::from_raw_parts_mut(dest, len) };
         fill(slice);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn msg(out: &mut Vec<u8>, payload: &[u8]) {
+        out.extend_from_slice(&(payload.len() as u32).to_ne_bytes());
+        out.extend_from_slice(payload);
+    }
+
+    #[test]
+    fn fetch_run_start_splits_after_the_last_non_fetch() {
+        let fetch_ops: HashSet<u32> = std::iter::once(7u32).collect();
+        let mut b = Vec::new();
+        msg(&mut b, &3u32.to_ne_bytes());
+        let frame_end = b.len();
+        msg(&mut b, &7u32.to_ne_bytes());
+        assert_eq!(fetch_run_start(&b, &fetch_ops), frame_end);
+    }
+
+    #[test]
+    fn fetch_run_start_does_not_read_past_a_short_trailing_message() {
+        let fetch_ops: HashSet<u32> = std::iter::once(7u32).collect();
+        let mut b = Vec::new();
+        msg(&mut b, &7u32.to_ne_bytes());
+        msg(&mut b, &[]);
+        assert_eq!(fetch_run_start(&b, &fetch_ops), b.len());
     }
 }
