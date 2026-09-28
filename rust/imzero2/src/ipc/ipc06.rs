@@ -180,7 +180,15 @@ impl MeshNode {
     }
 
     // Producer Write
+    //
+    // Panics if `payload` does not fit the ring with its header.
     pub fn write(&mut self, payload: &[u8]) {
+        assert!(
+            payload.len() as u64 <= BUFFER_SIZE - MSG_HEADER_SIZE,
+            "ipc06 payload of {} bytes exceeds the {}-byte ring",
+            payload.len(),
+            BUFFER_SIZE - MSG_HEADER_SIZE
+        );
         // SAFETY: `meta` points into `_mmap`, which this node owns and keeps
         // mapped for its whole life, at a `#[repr(C)]` block both peers agree
         // on; the borrow does not outlive the node.
@@ -203,7 +211,7 @@ impl MeshNode {
 
         self.write_raw_bytes(ring_offset, &header);
 
-        let next_pos = aligned_pos + MSG_HEADER_SIZE + msg_len as u64;
+        let next_pos = Self::pad_to_header(aligned_pos + MSG_HEADER_SIZE + msg_len as u64);
         meta.write_cursor.store(next_pos, Ordering::Release);
     }
 
@@ -255,8 +263,10 @@ impl MeshNode {
         // Atomic Load for Post-Check
         // SAFETY: `ring_offset` is `< BUFFER_SIZE` and `align_cursor` has
         // already moved the cursor forward if fewer than MSG_HEADER_SIZE bytes
-        // remained, so the four header bytes are contiguous inside the ring and
-        // aligned for the atomic read.
+        // remained, so the four header bytes are contiguous inside the ring.
+        // Every cursor is padded to a multiple of MSG_HEADER_SIZE
+        // (`pad_to_header`) and `data_buffer` sits at an 8-byte offset of a
+        // page-aligned mapping, so the header is aligned for the atomic read.
         #[allow(unsafe_code)]
         let post_lap = unsafe {
             // We align logic guarantees header is contiguous (align_cursor moves us if <8 bytes remain)
@@ -272,8 +282,14 @@ impl MeshNode {
             return Err("Tearing".to_owned());
         }
 
-        self.local_pos = aligned_pos + MSG_HEADER_SIZE + msg_len as u64;
+        self.local_pos = Self::pad_to_header(aligned_pos + MSG_HEADER_SIZE + msg_len as u64);
         Ok(Some(payload))
+    }
+
+    // Round a cursor up to the next header boundary, so the next message's
+    // header is aligned for the lap word's atomic load.
+    fn pad_to_header(cursor: u64) -> u64 {
+        cursor.next_multiple_of(MSG_HEADER_SIZE)
     }
 
     fn align_cursor(mut cursor: u64) -> (u64, u64) {
@@ -343,5 +359,32 @@ impl MeshNode {
 impl Drop for MeshNode {
     fn drop(&mut self) {
         self.unregister();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MeshNode;
+
+    /// Payload lengths that are not a multiple of the header size must not
+    /// put the next header at a misaligned ring offset: the consumer's lap
+    /// post-check is an atomic load there (a debug build panics on the
+    /// misaligned dereference).
+    #[test]
+    fn odd_payload_lengths_round_trip() {
+        let path = std::env::temp_dir().join(format!("ipc06-test-{}.shm", std::process::id()));
+        let path_str = path.to_str().expect("utf-8 temp path");
+        let mut producer = MeshNode::new(path_str, "producer").expect("producer");
+        let mut consumer = MeshNode::new(path_str, "consumer").expect("consumer");
+        let payloads: [&[u8]; 3] = [b"abc", b"hello", b"x"];
+        for p in payloads {
+            producer.write(p);
+        }
+        for p in payloads {
+            assert_eq!(consumer.read().expect("read").as_deref(), Some(p));
+        }
+        drop(consumer);
+        drop(producer);
+        let _ = std::fs::remove_file(&path);
     }
 }
