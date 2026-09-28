@@ -347,6 +347,27 @@ func TestComputeViewRange_Explicit(t *testing.T) {
 	}
 }
 
+// A timeline fed only points or only annotations auto-fits to them rather
+// than to the last hour, where historical data would be off-screen.
+func TestComputeViewRange_PointsAndAnnotationsOnly(t *testing.T) {
+	t.Run("points", func(t *testing.T) {
+		tl := newTestTimeline(t, nil)
+		tl.SetPoints([]*layout.PointEvent{{TMS: 1000}, {TMS: 6000}})
+		t0, t1 := tl.computeViewRange()
+		if t0 >= 1000 || t0 < 900 || t1 <= 6000 || t1 > 6100 {
+			t.Errorf("points auto-fit: got [%d,%d] want padded [1000,6000]", t0, t1)
+		}
+	})
+	t.Run("annotations", func(t *testing.T) {
+		tl := newTestTimeline(t, nil)
+		tl.SetAnnotations([]*layout.Annotation{{TMS: 2000, Number: 1}, {TMS: 3000, Number: 2}})
+		t0, t1 := tl.computeViewRange()
+		if t0 >= 2000 || t0 < 1900 || t1 <= 3000 || t1 > 3100 {
+			t.Errorf("annotations auto-fit: got [%d,%d] want padded [2000,3000]", t0, t1)
+		}
+	})
+}
+
 func TestComputeViewRange_EmptyFallbackToNowHour(t *testing.T) {
 	tl := newTestTimeline(t, nil)
 	t0, t1 := tl.computeViewRange()

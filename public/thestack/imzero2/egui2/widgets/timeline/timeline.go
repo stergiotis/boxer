@@ -2315,6 +2315,22 @@ func (inst *Timeline) computeViewRange() (v0, v1 int64) {
 		minMS = min(minMS, ev.FromMS)
 		maxMS = max(maxMS, ev.ToMS)
 	}
+	// Points and annotations count toward the extent too: a timeline fed
+	// only a rug or only markers must fit to them, not to the last hour.
+	for _, p := range inst.points {
+		if p == nil {
+			continue
+		}
+		minMS = min(minMS, p.TMS)
+		maxMS = max(maxMS, p.TMS)
+	}
+	for _, a := range inst.annotations {
+		if a == nil {
+			continue
+		}
+		minMS = min(minMS, a.TMS)
+		maxMS = max(maxMS, a.TMS)
+	}
 	if minMS == int64(math.MaxInt64) {
 		if inst.offsetAxis {
 			// No events on an offset axis: the first stretch from zero.
