@@ -476,6 +476,14 @@ Mentions of the first consumer's repository were replaced with a generic
 description. That repository is private, and this one is public. The
 decision is unchanged.
 
+### 2026-09-28 — the sweep keeps a requested cancel
+
+§SD4's sweep set a dead run's held rows `abandoned`, then `queued` where
+attempts remained, and a row in `cancel` was among them, so a job whose
+cancel was requested before its run died ran again. The sweep now moves
+such a row to `cancelled` with its event; only `running` rows are
+abandoned and re-queued.
+
 ## References
 
 - [ADR-0038](./0038-keelson-background-task-primitive.md) — the task primitive; the Update of 2026-06-22 this ADR withdraws.

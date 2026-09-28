@@ -324,8 +324,20 @@ func (inst *Worker) sweep(ctx context.Context, now time.Time) (err error) {
 
 // abandon writes abandoned on a job held by a dead run, then queued when
 // attempts remain; a competing sweeper loses the first guard and writes
-// nothing.
+// nothing. A job whose cancel was requested is cancelled instead: the
+// dead run cannot acknowledge the request, and re-queuing would run the
+// job it asked to stop.
 func (inst *Worker) abandon(ctx context.Context, j watchbillstore.Job, now time.Time) (err error) {
+	if j.State == watchbillstore.StateCancel {
+		job, ok, terr := inst.cfg.Store.Transition(ctx, Transition{
+			ID: j.ID, From: []string{watchbillstore.StateCancel}, HeldBy: j.WorkerRun, To: watchbillstore.StateCancelled,
+			Actor: inst.cfg.RunId, FinishedAt: &now,
+		})
+		if terr != nil || !ok {
+			return terr
+		}
+		return inst.event(ctx, now, job, watchbillstore.StateCancelled, nil, "cancel requested; worker run "+j.WorkerRun+" showed no life")
+	}
 	job, ok, err := inst.cfg.Store.Transition(ctx, Transition{
 		ID: j.ID, From: heldStates, HeldBy: j.WorkerRun, To: watchbillstore.StateAbandoned,
 		Actor: inst.cfg.RunId, FinishedAt: &now,

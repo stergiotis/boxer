@@ -374,3 +374,20 @@ func TestStopLeavesRunsForTheSweep(t *testing.T) {
 		}
 	}
 }
+
+// A job whose cancel was requested while its run died is cancelled by the
+// sweep, not re-queued: the user's cancel outlives the holder.
+func TestSweepHonoursCancelOfDeadRun(t *testing.T) {
+	f := newFixture(t, "run-a", func(c *Config) { c.Liveness = MemLiveness{Live: map[string]bool{}} })
+	id := f.enqueue(t, Request{MaxAttempts: 3})
+	_, won, err := f.store.Claim(context.Background(), id, "run-dead", t0)
+	require.NoError(t, err)
+	require.True(t, won)
+	ok, err := RequestCancel(context.Background(), f.store, id, "someone", "", t0)
+	require.NoError(t, err)
+	require.True(t, ok)
+	f.tick(t)
+	assert.Empty(t, f.ran, "the cancelled job does not run again")
+	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
+	assert.Equal(t, []string{"cancel", "cancelled"}, states(f.store.Events(id)))
+}
