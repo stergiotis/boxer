@@ -1375,7 +1375,7 @@ func (inst *Timeline) renderBody() {
 	// width and overspill a narrow pane, clipping its right edge (the newest
 	// event). Only the pan/zoom input handling here is gated on interactivity.
 	if inst.interactionEnabled && !inst.lockedView {
-		inst.applyZoomInput(wheel, effW)
+		inst.applyZoomInput(wheel, labelW, effW)
 		inst.applyPanInput(stateMgr, labelW, effW)
 	}
 
@@ -1647,11 +1647,16 @@ func (inst *Timeline) effectiveContainerW(availW float32, ok bool) (w float32) {
 // gesture is owned by whichever canvas the pointer was actually over — a scroll
 // over a neighbouring etable or a sibling canvas no longer zooms this strip, and
 // the anchor no longer depends on the single-slot global canvas pointer.
-func (inst *Timeline) applyZoomInput(wheel c.CanvasWheelValue, effW float32) {
+//
+// The anchor fraction is taken over the time axis, [labelW, effW], the same
+// span panBy and ComputeTickMap use; measuring it over the whole canvas would
+// drift the instant under the cursor whenever the lane-label band is present.
+func (inst *Timeline) applyZoomInput(wheel c.CanvasWheelValue, labelW, effW float32) {
 	if wheel.Zoom == 1.0 || wheel.Zoom <= 0 {
 		return
 	}
-	if math.IsNaN(float64(wheel.HoverX)) || effW <= 0 {
+	axisW := effW - labelW
+	if math.IsNaN(float64(wheel.HoverX)) || axisW <= 0 {
 		return
 	}
 	if !inst.pinToCurrentView() {
@@ -1661,7 +1666,7 @@ func (inst *Timeline) applyZoomInput(wheel c.CanvasWheelValue, effW float32) {
 	if spanMS <= 0 {
 		return
 	}
-	anchorFrac := clamp01(wheel.HoverX / effW)
+	anchorFrac := clamp01((wheel.HoverX - labelW) / axisW)
 	anchorMS := inst.viewMinMS + int64(float64(anchorFrac)*float64(spanMS))
 	// zoom > 1 → smaller span; zoom < 1 → larger span. Invert + clamp.
 	mul := clamp01ToRange(1.0/wheel.Zoom, minZoomMul, maxZoomMul)

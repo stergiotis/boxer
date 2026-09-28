@@ -93,7 +93,7 @@ func TestApplyZoomInput(t *testing.T) {
 
 	t.Run("identity_zoom_is_noop", func(t *testing.T) {
 		tl := newTL()
-		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 1.0, HoverX: 50}, effW)
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 1.0, HoverX: 50}, 0, effW)
 		if tl.viewMinMS != 0 || tl.viewMaxMS != 1000 {
 			t.Errorf("zoom==1 mutated view: [%d,%d]", tl.viewMinMS, tl.viewMaxMS)
 		}
@@ -103,7 +103,7 @@ func TestApplyZoomInput(t *testing.T) {
 	// default) — even a real zoom factor must be ignored.
 	t.Run("nan_anchor_is_noop", func(t *testing.T) {
 		tl := newTL()
-		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: float32(math.NaN())}, effW)
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: float32(math.NaN())}, 0, effW)
 		if tl.viewMinMS != 0 || tl.viewMaxMS != 1000 {
 			t.Errorf("NaN anchor mutated view: [%d,%d]", tl.viewMinMS, tl.viewMaxMS)
 		}
@@ -113,7 +113,7 @@ func TestApplyZoomInput(t *testing.T) {
 	// (t=0) stays put.
 	t.Run("zoom_in_left_anchor", func(t *testing.T) {
 		tl := newTL()
-		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: 0}, effW)
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: 0}, 0, effW)
 		if got := tl.viewMaxMS - tl.viewMinMS; got != 500 {
 			t.Errorf("span: got %d want 500", got)
 		}
@@ -125,7 +125,7 @@ func TestApplyZoomInput(t *testing.T) {
 	// Zoom in x2 anchored at the centre: span halves around t=500.
 	t.Run("zoom_in_centre_anchor", func(t *testing.T) {
 		tl := newTL()
-		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: effW / 2}, effW)
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: effW / 2}, 0, effW)
 		if tl.viewMinMS != 250 || tl.viewMaxMS != 750 {
 			t.Errorf("centre anchor: got [%d,%d] want [250,750]", tl.viewMinMS, tl.viewMaxMS)
 		}
@@ -134,12 +134,28 @@ func TestApplyZoomInput(t *testing.T) {
 	// Zoom out (factor < 1) widens the span; centre anchor keeps t=500 centred.
 	t.Run("zoom_out_centre_anchor", func(t *testing.T) {
 		tl := newTL()
-		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 0.5, HoverX: effW / 2}, effW)
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 0.5, HoverX: effW / 2}, 0, effW)
 		if got := tl.viewMaxMS - tl.viewMinMS; got != 2000 {
 			t.Errorf("span: got %d want 2000", got)
 		}
 		if tl.viewMinMS != -500 || tl.viewMaxMS != 1500 {
 			t.Errorf("centre anchor: got [%d,%d] want [-500,1500]", tl.viewMinMS, tl.viewMaxMS)
+		}
+	})
+
+	// With a lane-label band the axis spans [labelW, effW]: the cursor at
+	// labelW sits on viewMin, and at the axis midpoint on the view centre.
+	t.Run("label_band_offsets_anchor", func(t *testing.T) {
+		const labelW float32 = 20
+		tl := newTL()
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: labelW}, labelW, effW)
+		if tl.viewMinMS != 0 || tl.viewMaxMS != 500 {
+			t.Errorf("axis-start anchor: got [%d,%d] want [0,500]", tl.viewMinMS, tl.viewMaxMS)
+		}
+		tl = newTL()
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 2.0, HoverX: labelW + (effW-labelW)/2}, labelW, effW)
+		if tl.viewMinMS != 250 || tl.viewMaxMS != 750 {
+			t.Errorf("axis-centre anchor: got [%d,%d] want [250,750]", tl.viewMinMS, tl.viewMaxMS)
 		}
 	})
 }
