@@ -28,14 +28,14 @@ func TestButtonRetainedHandleRoundTrip(t *testing.T) {
 	require.Equal(t, expectedId, h.Resolve(), "handle should resolve to the factory-derived ID")
 }
 
-// TestFrameRetainedHandleRoundTrip verifies the same for a container widget
-// (Frame uses DeriveStacked, which affects the id stack beyond the current frame).
+// TestFrameRetainedHandleRoundTrip verifies the same for a container widget.
+// A block iterator pushes its id only while KeepIter's body runs, so building
+// it with Keep leaves the stack as it was.
 func TestFrameRetainedHandleRoundTrip(t *testing.T) {
 	ids := NewWidgetIdStack()
 
 	held := Frame(ids.PrepareStr("integration-test-frame")).Keep()
-	// Pop the stacked ID the factory pushed so the stack is clean for other tests.
-	defer ids.PopIdFromStack()
+	require.Equal(t, 0, ids.Depth())
 
 	h := held.GetWidgetHandle()
 	require.NotEqual(t, widgethandle.NoWidget, h)
