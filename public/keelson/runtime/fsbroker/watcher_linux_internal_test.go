@@ -5,6 +5,7 @@ package fsbroker
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,5 +53,28 @@ func TestInotify_Recursive_SubtreeMovedOutStopsReporting(t *testing.T) {
 	for _, n := range names {
 		assert.NotContains(t, n, "secret-name", "a file outside the grant was named: %v", names)
 		assert.NotContains(t, n, "outside", "a file outside the grant was named: %v", names)
+	}
+}
+
+// TestInotify_Recursive_RenamedSubdirReportsUnderNewName: a subdirectory
+// renamed inside the tree keeps reporting, and its descendants report under
+// the new path rather than the old one.
+func TestInotify_Recursive_RenamedSubdirReportsUnderNewName(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "sub", "deep"), 0o755))
+	w, err := newInotifyWatcher(root, true)
+	require.NoError(t, err)
+	require.NoError(t, w.Start())
+	defer w.Stop()
+
+	require.NoError(t, os.Rename(filepath.Join(root, "sub"), filepath.Join(root, "renamed")))
+	settle()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "renamed", "a.txt"), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "renamed", "deep", "b.txt"), []byte("x"), 0o644))
+	names := collectInotify(w, 300*time.Millisecond)
+	assert.Contains(t, names, "create renamed/a.txt")
+	assert.Contains(t, names, "create renamed/deep/b.txt")
+	for _, n := range names {
+		assert.False(t, strings.HasPrefix(n, "create sub/"), "stale path reported: %v", names)
 	}
 }

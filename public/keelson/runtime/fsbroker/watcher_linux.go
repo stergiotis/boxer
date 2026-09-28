@@ -110,17 +110,18 @@ func newInotifyWatcher(path string, recursive bool) (w *inotifyWatcher, err erro
 		wdToRelDir: map[int32]string{int32(rootWd): ""},
 	}
 	if recursive {
-		w.walkAndAddSubdirs()
+		w.walkAndAddSubdirs(path)
 	}
 	return
 }
 
-// walkAndAddSubdirs traverses the watch root and AddWatches every
-// subdirectory it finds. Best-effort — directories that can't be
+// walkAndAddSubdirs traverses from (the watch root, or a directory that
+// arrived in the tree) and AddWatches every directory it finds below the
+// root, from included. Best-effort — directories that can't be
 // AddWatched (e.g. permission denied, fs.inotify.max_user_watches
 // exhausted) are skipped silently. Symlinks aren't followed.
-func (inst *inotifyWatcher) walkAndAddSubdirs() {
-	_ = filepath.WalkDir(inst.path, func(p string, d fs.DirEntry, walkErr error) (err error) {
+func (inst *inotifyWatcher) walkAndAddSubdirs(from string) {
+	_ = filepath.WalkDir(from, func(p string, d fs.DirEntry, walkErr error) (err error) {
 		if walkErr != nil {
 			// Permission denied / vanished mid-walk — skip subtree if
 			// it's a directory.
@@ -352,10 +353,12 @@ func (inst *inotifyWatcher) parseBuf(buf []byte) (rootGone bool) {
 		}
 		if mask&unix.IN_MOVED_TO != 0 {
 			inst.emit(WatchEvent{Kind: WatchEventRenameTo, Name: fullName, Cookie: cookie, Ts: now})
-			// Dynamic add: directories moved into the watch tree need
-			// a watch too, mirroring the IN_CREATE+IN_ISDIR path.
+			// Dynamic add: a directory moved into the tree, or renamed
+			// within it, needs watches under its new name — on itself and
+			// on everything below it, which IN_MOVED_FROM dropped (or which
+			// was never watched, arriving from outside).
 			if inst.recursive && mask&unix.IN_ISDIR != 0 && name != "" {
-				inst.addSubdirWatch(filepath.Join(inst.path, fullName))
+				inst.walkAndAddSubdirs(filepath.Join(inst.path, fullName))
 			}
 		}
 	}
