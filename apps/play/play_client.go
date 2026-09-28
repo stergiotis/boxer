@@ -367,7 +367,7 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 	}
 	req := queryengine.Request{
 		SQL:         sql,
-		Params:      bareParams(nil, params),
+		Params:      bareParams(sql, nil, params),
 		Settings:    settings,
 		Sensitivity: dec.sensitivity,
 	}
@@ -412,24 +412,67 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 
 // bareParams merges the caller's signal and SET-harvested bindings into the
 // bare `{name:Type}` names the engine expects, dropping the `param_` prefix
-// play carries them under.
+// play carries them under, and puts each value in the form the HTTP param
+// channel decodes (see paramWireValue). wireSQL is the statement the
+// bindings travel with; its placeholders supply each name's declared type.
 //
 // A SET-bound name SHADOWS a same-named signal (ADR-0097 slice-5 D1: a SET
 // pins a signal into a constant), which is why params are applied second.
-func bareParams(signals map[string]string, params map[string]string) (out map[string]string) {
+func bareParams(wireSQL string, signals map[string]string, params map[string]string) (out map[string]string) {
 	if len(signals) == 0 && len(params) == 0 {
 		return
+	}
+	var types map[string]string
+	if pr, err := nanopass.Parse(wireSQL); err == nil {
+		slots := collectParamSlots(pr)
+		types = make(map[string]string, len(slots))
+		for _, s := range slots {
+			types[s.Name] = s.Type
+		}
 	}
 	out = make(map[string]string, len(signals)+len(params))
 	add := func(src map[string]string) {
 		for k, v := range src {
-			out[strings.TrimPrefix(k, chhttp.ParamPrefix)] = v
+			name := strings.TrimPrefix(k, chhttp.ParamPrefix)
+			typeExpr, known := types[name]
+			out[name] = paramWireValue(v, typeExpr, known)
 		}
 	}
 	add(signals)
 	add(params)
 	return
 }
+
+// paramWireValue encodes one binding for ClickHouse's HTTP `param_*`
+// channel. The server reads a scalar value there in TSV-escaped form, so a
+// raw backslash, tab, newline, carriage return or NUL is escaped: `C:\new`
+// sent as-is arrives with a newline in it, and a raw newline fails the whole
+// run with BAD_QUERY_PARAMETER. A compound value (Array, Tuple, Map) is a
+// literal whose strings carry their own quoted escapes and gets no second
+// layer, and `\N` stays the NULL marker. When the placeholder's type is
+// unknown (the wire statement did not parse, or the name is not a slot in
+// it), a value that opens like a compound literal is taken for one.
+func paramWireValue(v string, typeExpr string, typeKnown bool) string {
+	if v == `\N` {
+		return v
+	}
+	if typeKnown {
+		if isCompoundType(typeExpr) {
+			return v
+		}
+	} else if t := strings.TrimSpace(v); t != "" && (t[0] == '[' || t[0] == '(' || t[0] == '{') {
+		return v
+	}
+	return paramTSVEscape.Replace(v)
+}
+
+var paramTSVEscape = strings.NewReplacer(
+	`\`, `\\`,
+	"\t", `\t`,
+	"\n", `\n`,
+	"\r", `\r`,
+	"\x00", `\0`,
+)
 
 // engineFor builds the delivery engine a decision names (ADR-0144).
 //
@@ -889,7 +932,7 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		// body verbatim as SQL, and the typed substitution from
 		// `{name:Type}` placeholders is what it expects on that channel.
 		// See the function doc for the size limits that bounds.
-		Params:   bareParams(signals, params),
+		Params:   bareParams(q, signals, params),
 		Settings: map[string]string{},
 		// What the statement declared about its own result size, for the
 		// engine to judge the delivery against (R9). play parses it; the

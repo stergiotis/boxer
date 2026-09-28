@@ -577,3 +577,56 @@ func TestExecuteArrowStreamCanonicalizesViaHostSet(t *testing.T) {
 		t.Errorf("== not canonicalised after a comment: %q", bs)
 	}
 }
+
+// The HTTP param channel reads a scalar value TSV-escaped, so a backslash or
+// a newline in a String binding must be escaped on the way out or the server
+// decodes `C:\new` into a newline. A compound literal carries its own quoted
+// escapes and must not gain a second layer.
+func TestExecuteArrowStreamEscapesParamValuesForTheParamChannel(t *testing.T) {
+	body := emptyArrowStream(t)
+	var gotURLParams url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURLParams = r.URL.Query()
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	const sql = `SET param_s = 'a\nb'; SELECT {s : String}, {p : String}, {a : Array(String)}, {n : Nullable(String)}`
+	signals := map[string]string{
+		"param_p": `C:\new`,
+		"param_a": `['x\\y']`,
+		"param_n": `\N`,
+	}
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, signals, c.Dispatch(sql, ""))
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+
+	for name, want := range map[string]string{
+		"param_s": `a\nb`,
+		"param_p": `C:\\new`,
+		"param_a": `['x\\y']`,
+		"param_n": `\N`,
+	} {
+		if got := gotURLParams.Get(name); got != want {
+			t.Errorf("URL %s = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestParamWireValueUnknownType(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"a\tb", `a\tb`},
+		{`['x\\y']`, `['x\\y']`},
+		{`('x\\y', 1)`, `('x\\y', 1)`},
+		{"42", "42"},
+	} {
+		if got := paramWireValue(c.in, "", false); got != c.want {
+			t.Errorf("paramWireValue(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

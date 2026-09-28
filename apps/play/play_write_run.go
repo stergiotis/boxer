@@ -114,7 +114,7 @@ func (inst *Client) ExecuteWrite(ctx context.Context, sql string, signals map[st
 	opts := newExecOptions("write")
 	req := queryengine.Request{
 		SQL:         q,
-		Params:      bareParams(signals, params),
+		Params:      bareParams(q, signals, params),
 		Settings:    map[string]string{"replace_running_query": "1"},
 		Sensitivity: dec.sensitivity,
 		RunID:       opts.QueryID,

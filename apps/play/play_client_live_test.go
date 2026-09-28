@@ -87,3 +87,26 @@ func TestLiveExecuteArrowStreamLargeStringParam(t *testing.T) {
 		t.Errorf("length = %q, want %q", got, want)
 	}
 }
+
+// A backslash or a newline in a String binding reaches the server as the
+// bytes the author meant, not as a TSV escape the server decodes.
+func TestLiveExecuteArrowStreamStringParamEscapes(t *testing.T) {
+	c := NewClient(ClientConfig{URL: liveClickHouseURL(t)}, nil)
+	const sql = `SET param_nl = 'a\nb'; SELECT length({p : String}) AS p, length({nl : String}) AS nl, length({a : Array(String)}[1]) AS a`
+	signals := map[string]string{"param_p": `C:\new`, "param_a": `['x\\y']`}
+	rdr, body, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, signals, c.Dispatch(sql, ""))
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	defer body.Close()
+	defer rdr.Release()
+	if !rdr.Next() {
+		t.Fatalf("no record batch: %v", rdr.Err())
+	}
+	rec := rdr.RecordBatch()
+	for i, want := range []string{"6", "3", "3"} {
+		if got := formatCell(rec, i, 0); got != want {
+			t.Errorf("col %d = %q, want %q", i, got, want)
+		}
+	}
+}
