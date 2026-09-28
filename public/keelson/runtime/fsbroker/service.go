@@ -690,9 +690,31 @@ func (inst *Service) handleWatch(msg *app.Msg, h *handle) {
 		uuid:    h.uuid,
 		backend: backend,
 	}
+	// Re-check under the insert lock: a concurrent watch on the same handle,
+	// or a close, may have landed while the backend was being built. A
+	// backend no map holds would never be stopped, so the loser stops its own.
 	inst.mu.Lock()
-	inst.watches[h.uuid] = w
+	_, already = inst.watches[h.uuid]
+	cur, live := inst.handles[h.uuid]
+	if !already && live && cur == h {
+		inst.watches[h.uuid] = w
+	}
 	inst.mu.Unlock()
+	if already || !live || cur != h {
+		// Drain as the pump would, so a backend whose forwarder blocks on
+		// send (fileWatchBackend) can still close its stream.
+		backend.Stop()
+		go func() {
+			for range backend.Events() {
+			}
+		}()
+		reason := "watch already active"
+		if !already {
+			reason = "handle closed"
+		}
+		_ = inst.replyWatch(msg.Reply, WatchReply{Started: false, Reason: reason})
+		return
+	}
 	go inst.pumpWatch(w)
 	eventSubject := HandleSubjectPrefix + h.uuid + "." + HandleEventOp
 	err = inst.replyWatch(msg.Reply, WatchReply{

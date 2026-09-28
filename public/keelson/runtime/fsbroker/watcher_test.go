@@ -634,3 +634,45 @@ func TestService_Handle_WriteReplacesRatherThanTruncates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []byte("first"), got)
 }
+
+// TestService_Watch_ConcurrentStartsOnlyOne: concurrent watch requests on one
+// handle start exactly one backend. The losers are told the watch is already
+// active; a second backend that no map holds would never be stopped.
+func TestService_Watch_ConcurrentStartsOnlyOne(t *testing.T) {
+	inst, svc, appBus, cleanup := newWatchSetup(t)
+	defer cleanup()
+	_ = inst
+	dir := t.TempDir()
+	for i := 0; i < 64; i++ {
+		require.NoError(t, os.Mkdir(filepath.Join(dir, "d"+string(rune('a'+i%26))+string(rune('a'+i/26))), 0o755))
+	}
+	prefix := resolveWatchPath(t, svc, appBus, dir)
+	reqPayload, err := fsbroker.MarshalWatchRequest(fsbroker.WatchRequest{Recursive: true})
+	require.NoError(t, err)
+
+	const n = 16
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	started := 0
+	gate := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-gate
+			raw, rerr := appBus.Request(prefix+".watch", reqPayload)
+			if rerr != nil {
+				return
+			}
+			wr, derr := fsbroker.UnmarshalWatchReply(raw)
+			if derr == nil && wr.Started {
+				mu.Lock()
+				started++
+				mu.Unlock()
+			}
+		}()
+	}
+	close(gate)
+	wg.Wait()
+	assert.Equal(t, 1, started, "exactly one of %d concurrent watch requests starts a backend", n)
+}
