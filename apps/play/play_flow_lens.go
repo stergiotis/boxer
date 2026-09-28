@@ -87,8 +87,11 @@ func explainWrap(l flowLens) func(string) string {
 	default:
 		return nil
 	}
+	// The closing paren goes on its own line, as fuseNode's does: the
+	// residual keeps comments, and one ending in a `--` line comment would
+	// otherwise swallow the paren and the outer FORMAT.
 	return func(residual string) string {
-		return "SELECT * FROM (" + kind + " " + strings.TrimRight(strings.TrimSpace(residual), ";") + ")"
+		return "SELECT * FROM (" + kind + " " + strings.TrimRight(strings.TrimSpace(residual), ";") + "\n)"
 	}
 }
 

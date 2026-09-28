@@ -21,14 +21,16 @@ import (
 // dialect, these pin what the parsers were written against.
 
 func TestExplainWrapKinds(t *testing.T) {
-	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1)", explainWrap(lensAST)("SELECT 1"))
-	require.Equal(t, "SELECT * FROM (EXPLAIN PLAN json = 1 SELECT 1)", explainWrap(lensPlan)("SELECT 1"))
-	require.Equal(t, "SELECT * FROM (EXPLAIN PIPELINE SELECT 1)", explainWrap(lensPipeline)("SELECT 1"))
-	require.Equal(t, "SELECT * FROM (EXPLAIN ESTIMATE SELECT 1)", explainWrap(lensEstimate)("SELECT 1"))
-	require.Equal(t, "SELECT * FROM (EXPLAIN PLAN indexes = 1, json = 1 SELECT 1)", explainWrap(lensIndexes)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1\n)", explainWrap(lensAST)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN PLAN json = 1 SELECT 1\n)", explainWrap(lensPlan)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN PIPELINE SELECT 1\n)", explainWrap(lensPipeline)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN ESTIMATE SELECT 1\n)", explainWrap(lensEstimate)("SELECT 1"))
+	require.Equal(t, "SELECT * FROM (EXPLAIN PLAN indexes = 1, json = 1 SELECT 1\n)", explainWrap(lensIndexes)("SELECT 1"))
 	require.Nil(t, explainWrap(lensStatement), "the static lens has no wire wrap")
-	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1)", explainWrap(lensAST)("SELECT 1;\n"),
+	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1\n)", explainWrap(lensAST)("SELECT 1;\n"),
 		"a trailing delimiter must not end up inside the parens")
+	require.Equal(t, "SELECT * FROM (EXPLAIN AST SELECT 1 -- note\n)", explainWrap(lensAST)("SELECT 1 -- note"),
+		"a trailing line comment must not swallow the closing paren")
 }
 
 // ESTIMATE rows arrive tab-joined (database, table, parts, rows, marks):
