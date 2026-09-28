@@ -108,6 +108,17 @@ func TestCanonicalizeToLiteralTupleElement(t *testing.T) {
 			input:    "SELECT t.1 FROM (SELECT (1, 2) AS t)",
 			expected: "SELECT t.1 FROM (SELECT (1, 2) AS t)",
 		},
+		{
+			// `t.'name'` does not parse: a named index keeps the call.
+			name:     "tuple_element_named_stays_function",
+			input:    "SELECT tupleElement(t, 'name') FROM x",
+			expected: "SELECT tupleElement(t, 'name') FROM x",
+		},
+		{
+			name:     "tuple_element_operator_operand_parenthesised",
+			input:    "SELECT tupleElement(if(c, a, b), 1), tupleElement(c ? a : b, 1) FROM x",
+			expected: "SELECT if(c, a, b).1, (c ? a : b).1 FROM x",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -143,6 +154,12 @@ func TestCanonicalizeToLiteralArrayElement(t *testing.T) {
 			name:     "array_element_complex_index",
 			input:    "SELECT arrayElement(arr, n + 1) FROM t",
 			expected: "SELECT arr[n + 1] FROM t",
+		},
+		{
+			// `a + b[1]` would bind the subscript to b alone.
+			name:     "array_element_operator_operand_parenthesised",
+			input:    "SELECT arrayElement(a + b, 1), arrayElement(c ? a : b, 1), arrayElement(-a, 1) FROM t",
+			expected: "SELECT (a + b)[1], (c ? a : b)[1], (-a)[1] FROM t",
 		},
 	}
 	for _, tt := range tests {
