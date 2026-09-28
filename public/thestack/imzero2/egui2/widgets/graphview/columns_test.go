@@ -429,3 +429,22 @@ func TestEdgeRowsFollowTheDeclaration(t *testing.T) {
 	require.Equal(t, []int32{0, 1, 2}, v.g.eRow)
 	require.Equal(t, []int32{0, 1, 2}, v.g.eFrom)
 }
+
+// A non-nil empty column is absent, as Validate treats it: rendering it
+// must not index past its end.
+func TestEmptyNonNilColumnIsAbsent(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	v := New(c.NewWidgetIdStack(), "empty", Options{})
+	nc := NodeColumns{
+		Ids:         []uint64{1, 2},
+		Label:       []string{},
+		Color:       []color.Color{},
+		Radius:      make([]float32, 0, 2),
+		NoPick:      []bool{},
+		LabelAlways: []bool{},
+	}
+	ec := EdgeColumns{From: []uint64{1}, To: []uint64{2}, Id: []uint64{}, Width: []float32{}}
+	require.NoError(t, nc.Validate())
+	require.NoError(t, v.RenderColumns(&nc, &ec, 100, 100))
+	require.Equal(t, uint32(2), v.Metrics().NodeCount)
+}
