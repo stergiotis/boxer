@@ -175,7 +175,7 @@ func TestChatFold(t *testing.T) {
 	}
 	defer reactions.rec.Release()
 
-	m, rows, keys, skipped, truncated, unmatched := foldChat(rec, k, roster, reactions, "", 0)
+	m, rows, keys, skipped, truncated, unmatched := foldChat(rec, k, roster, reactions, "", 0, false)
 	require.NoError(t, m.Validate())
 	assert.Equal(t, 2, skipped, "a null ts and a null sender")
 	assert.Zero(t, truncated)
@@ -229,7 +229,7 @@ func TestChatFoldUint8Flags(t *testing.T) {
 	defer rec.Release()
 	k, reason := resolveChatColumns(rec.Schema())
 	require.Empty(t, reason)
-	m, _, _, _, _, _ := foldChat(rec, k, nil, nil, "", 0)
+	m, _, _, _, _, _ := foldChat(rec, k, nil, nil, "", 0, false)
 	require.NoError(t, m.Validate())
 	assert.Equal(t, []chatview.FlagsE{chatview.FlagDeleted, chatview.FlagSystem, 0}, m.Flags)
 	assert.Equal(t, []int32{0, -1, 0}, m.Sender)
@@ -252,7 +252,7 @@ func TestChatFoldRowNumberIdentity(t *testing.T) {
 		claim: chatReactionsClaim{idCol: 0, keyCol: 1, senderCol: -1},
 	}
 	defer reactions.rec.Release()
-	m, _, _, _, _, unmatched := foldChat(rec, k, nil, reactions, "", 0)
+	m, _, _, _, _, unmatched := foldChat(rec, k, nil, reactions, "", 0, false)
 	require.NoError(t, m.Validate())
 	assert.Zero(t, unmatched)
 	assert.Equal(t, []int32{-1, 0}, m.ReplyTo)
@@ -273,13 +273,13 @@ func TestChatFoldCapAndConversation(t *testing.T) {
 	require.Empty(t, reason)
 	assert.Equal(t, []string{"work", "home"}, chatConversations(rec, k))
 
-	m, rows, _, _, truncated, _ := foldChat(rec, k, nil, nil, "work", 2)
+	m, rows, _, _, truncated, _ := foldChat(rec, k, nil, nil, "work", 2, false)
 	require.NoError(t, m.Validate())
 	assert.Equal(t, int64(1), truncated)
 	assert.Equal(t, []string{"3", "4"}, m.Body)
 	assert.Equal(t, []int64{2, 3}, rows)
 
-	m, _, _, _, _, _ = foldChat(rec, k, nil, nil, "home", 0)
+	m, _, _, _, _, _ = foldChat(rec, k, nil, nil, "home", 0, false)
 	assert.Equal(t, []string{"2"}, m.Body)
 }
 
@@ -304,15 +304,51 @@ func TestChatDriverRebuildCache(t *testing.T) {
 	require.Empty(t, reason)
 	d := NewChatDriver(nil, nil)
 	d.conversation = "stale"
-	d.rebuild(rec, ResultID(7), k, nil, nil)
+	d.rebuild(rec, ResultID(7), k, nil, nil, false)
 	first := d.model
 	assert.Equal(t, "one", d.conversation)
 	assert.Equal(t, []string{"x"}, first.Body)
-	d.rebuild(rec, ResultID(7), k, nil, nil)
+	d.rebuild(rec, ResultID(7), k, nil, nil, false)
 	assert.Same(t, first, d.model, "unchanged inputs keep the fold")
 	d.conversation = "two"
-	d.rebuild(rec, ResultID(7), k, nil, nil)
+	d.rebuild(rec, ResultID(7), k, nil, nil, false)
 	assert.NotSame(t, first, d.model)
 	assert.Equal(t, []string{"y"}, d.model.Body)
 	assert.Equal(t, int32(0), d.ordOf[1])
+	second := d.model
+	d.rebuild(rec, ResultID(7), k, nil, nil, true)
+	assert.NotSame(t, second, d.model, "a body gloss change refolds")
+}
+
+// A markdown body reaches the model as the text a reader sees: the quote
+// strip and a system line draw Body as plain text, where markup would show
+// verbatim.
+func TestChatFoldMarkdownBodyIsPlain(t *testing.T) {
+	rec := chatRec(t,
+		chatCol{chatTsField("ts"), []any{int64(1), int64(2)}},
+		chatCol{strField("sender"), []any{"a", "b"}},
+		chatCol{strField("body"), []any{"run is **green**", "the `sealed` test"}},
+	)
+	defer rec.Release()
+	k, reason := resolveChatColumns(rec.Schema())
+	require.Empty(t, reason)
+	m, _, _, _, _, _ := foldChat(rec, k, nil, nil, "", 0, true)
+	assert.Equal(t, []string{"run is green", "the sealed test"}, m.Body)
+	m, _, _, _, _, _ = foldChat(rec, k, nil, nil, "", 0, false)
+	assert.Equal(t, []string{"run is **green**", "the `sealed` test"}, m.Body, "an unglossed body is kept as written")
+}
+
+func TestMarkdownPlainText(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"plain", "plain"},
+		{"**bold** and _em_", "bold and em"},
+		{"a [link](https://example.com) here", "a link here"},
+		{"soft\nbreak", "soft break"},
+		{"# Title\n\nbody", "Title\nbody"},
+		{"one line:\n\n```go\nf.Sync()\n```", "one line:\nf.Sync()"},
+		{"- a\n- b", "a\nb"},
+		{"", ""},
+	} {
+		assert.Equal(t, tc.want, markdownPlainText(tc.in), "%q", tc.in)
+	}
 }
