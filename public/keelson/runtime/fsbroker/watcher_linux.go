@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -145,8 +146,11 @@ func (inst *inotifyWatcher) walkAndAddSubdirs() {
 // addSubdirWatch records a new wd→relDir mapping. Caller has verified
 // p is a directory under the watch root. Errors (e.g. max watches
 // exhausted) are swallowed — the subdir simply won't fire events.
+// IN_ONLYDIR|IN_DONT_FOLLOW close the gap between that check and the add: a
+// directory swapped for a symlink in between is refused rather than followed
+// out of the tree.
 func (inst *inotifyWatcher) addSubdirWatch(p string) {
-	wd, addErr := unix.InotifyAddWatch(inst.fd, p, inst.mask)
+	wd, addErr := unix.InotifyAddWatch(inst.fd, p, inst.mask|unix.IN_ONLYDIR|unix.IN_DONT_FOLLOW)
 	if addErr != nil {
 		return
 	}
@@ -155,6 +159,21 @@ func (inst *inotifyWatcher) addSubdirWatch(p string) {
 		return
 	}
 	inst.wdToRelDir[int32(wd)] = filepath.ToSlash(rel)
+}
+
+// dropSubtreeWatches removes the watch on relDir and on every directory
+// below it, from the kernel and from the map. A directory moved out of the
+// tree keeps its inode, so its watches — and its descendants' — would go on
+// reporting files the grant no longer covers, under the old relative names.
+func (inst *inotifyWatcher) dropSubtreeWatches(relDir string) {
+	prefix := relDir + "/"
+	for wd, rd := range inst.wdToRelDir {
+		if wd == inst.rootWd || (rd != relDir && !strings.HasPrefix(rd, prefix)) {
+			continue
+		}
+		_, _ = unix.InotifyRmWatch(inst.fd, uint32(wd))
+		delete(inst.wdToRelDir, wd)
+	}
 }
 
 var _ watcherBackendI = (*inotifyWatcher)(nil)
@@ -324,6 +343,12 @@ func (inst *inotifyWatcher) parseBuf(buf []byte) (rootGone bool) {
 		}
 		if mask&unix.IN_MOVED_FROM != 0 {
 			inst.emit(WatchEvent{Kind: WatchEventRenameFrom, Name: fullName, Cookie: cookie, Ts: now})
+			// The directory leaves its old name: whether it lands outside
+			// the tree or under a new name (IN_MOVED_TO re-adds it), the
+			// watches under the old name must go.
+			if inst.recursive && mask&unix.IN_ISDIR != 0 && name != "" {
+				inst.dropSubtreeWatches(fullName)
+			}
 		}
 		if mask&unix.IN_MOVED_TO != 0 {
 			inst.emit(WatchEvent{Kind: WatchEventRenameTo, Name: fullName, Cookie: cookie, Ts: now})
