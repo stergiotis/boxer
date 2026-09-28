@@ -630,6 +630,10 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 
 	// --- Tuple ---
 	case *Tuple:
+		if v == nil {
+			sql = "NULL"
+			return
+		}
 		sql, err = marshalGoTuple(v, opts)
 		return
 

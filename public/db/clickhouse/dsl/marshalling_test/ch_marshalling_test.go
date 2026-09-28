@@ -1652,3 +1652,10 @@ func TestUnmarshalScalarNegativeOverflow(t *testing.T) {
 		assert.Equal(t, want, lit.FloatVal, tok)
 	}
 }
+
+// A typed-nil *Tuple marshals to NULL like every other nil pointer case.
+func TestMarshalGoValueNilTuple(t *testing.T) {
+	sql, err := marshalling.MarshalGoValueToSQL((*marshalling.Tuple)(nil))
+	require.NoError(t, err)
+	assert.Equal(t, "NULL", sql)
+}
