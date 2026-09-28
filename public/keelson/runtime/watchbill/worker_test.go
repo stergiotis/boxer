@@ -391,3 +391,68 @@ func TestSweepHonoursCancelOfDeadRun(t *testing.T) {
 	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
 	assert.Equal(t, []string{"cancel", "cancelled"}, states(f.store.Events(id)))
 }
+
+// flakyStore fails the next Claim after its update landed, or the next
+// Transition before it lands, as a transient server error would.
+type flakyStore struct {
+	*MemStore
+	failClaim      atomic.Bool
+	failTransition atomic.Bool
+}
+
+func (inst *flakyStore) Claim(ctx context.Context, id string, workerRun string, now time.Time) (job watchbillstore.Job, won bool, err error) {
+	job, won, err = inst.MemStore.Claim(ctx, id, workerRun, now)
+	if err == nil && inst.failClaim.CompareAndSwap(true, false) {
+		return watchbillstore.Job{}, false, errors.New("read-back lost")
+	}
+	return
+}
+
+func (inst *flakyStore) Transition(ctx context.Context, t Transition) (job watchbillstore.Job, ok bool, err error) {
+	if inst.failTransition.CompareAndSwap(true, false) {
+		return watchbillstore.Job{}, false, errors.New("transition lost")
+	}
+	return inst.MemStore.Transition(ctx, t)
+}
+
+// A row this run holds with no run in flight is settled at the next poll
+// rather than left running until the process restarts.
+func TestOrphanedClaimIsSettled(t *testing.T) {
+	var fs *flakyStore
+	f := newFixture(t, "run-a", func(c *Config) {
+		fs = &flakyStore{MemStore: c.Store.(*MemStore)}
+		c.Store = fs
+	})
+	id := f.enqueue(t, Request{MaxAttempts: 2})
+	fs.failClaim.Store(true)
+	assert.Error(t, f.w.Tick(context.Background(), nil))
+	require.Equal(t, watchbillstore.StateRunning, f.job(t, id).State, "the update landed")
+	require.Empty(t, f.ran)
+
+	f.tick(t)
+	j := f.job(t, id)
+	assert.Equal(t, watchbillstore.StateSucceeded, j.State, "failed as an orphan, then re-queued and run")
+	assert.EqualValues(t, 2, j.Attempt)
+	assert.Equal(t, []string{"failed", "running", "succeeded"}, states(f.store.Events(id)))
+}
+
+// A settle whose transition failed leaves the row held; the next poll
+// settles it, and a cancel requested meanwhile is honoured.
+func TestOrphanedSettleIsSettled(t *testing.T) {
+	var fs *flakyStore
+	f := newFixture(t, "run-a", func(c *Config) {
+		fs = &flakyStore{MemStore: c.Store.(*MemStore)}
+		c.Store = fs
+	})
+	id := f.enqueue(t, Request{MaxAttempts: 1})
+	fs.failTransition.Store(true)
+	f.tick(t)
+	require.Equal(t, watchbillstore.StateRunning, f.job(t, id).State, "the settle was lost")
+	ok, err := RequestCancel(context.Background(), f.store, id, "someone", "", t0)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	f.tick(t)
+	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
+	assert.Equal(t, []string{"running", "cancel", "cancelled"}, states(f.store.Events(id)))
+}

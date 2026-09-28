@@ -268,21 +268,40 @@ func (inst *Worker) Tick(ctx context.Context, wg *sync.WaitGroup) (err error) {
 }
 
 // honourCancels cancels the context of every held job whose row says
-// cancel; the run's goroutine then writes cancelled.
+// cancel; the run's goroutine then writes cancelled. A row this run holds
+// with no run in flight — a claim whose read-back failed, a settle whose
+// transition failed — is an orphan the sweep never reaches, since the
+// sweep skips this run's rows; it is settled here: cancelled when a
+// cancel was requested, a failed attempt otherwise.
 func (inst *Worker) honourCancels(ctx context.Context) (err error) {
 	held, err := inst.cfg.Store.Held(ctx, inst.cfg.RunId)
 	if err != nil {
 		return
 	}
+	var orphans []watchbillstore.Job
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
 	for _, j := range held {
-		if j.State != watchbillstore.StateCancel {
+		r, ok := inst.running[j.ID]
+		if !ok {
+			orphans = append(orphans, j)
 			continue
 		}
-		if r, ok := inst.running[j.ID]; ok {
+		if j.State == watchbillstore.StateCancel {
 			r.cancel(errCancelRequested)
 		}
+	}
+	inst.mu.Unlock()
+	if ctx.Err() != nil || inst.stopping.Load() {
+		// A run that ended on the worker stopping left its row for the
+		// sweep; read after the lock, which ordered its leaving.
+		return
+	}
+	for _, j := range orphans {
+		if j.State == watchbillstore.StateCancel {
+			inst.settle(j, outcomeCancelled, nil, "cancel requested; no run in flight")
+			continue
+		}
+		inst.settle(j, outcomeFailed, eb.Build().Str("id", j.ID).Errorf("held by this run with no run in flight"), "")
 	}
 	return
 }
