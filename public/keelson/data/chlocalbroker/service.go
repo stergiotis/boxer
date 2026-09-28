@@ -15,6 +15,8 @@ package chlocalbroker
 import (
 	"context"
 	"encoding/hex"
+	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +48,11 @@ const ServiceAppId app.AppIdT = "runtime.chlocal"
 // timeout; the bus may give up sooner.
 const DefaultRequestTimeout = 30 * time.Second
 
+// DefaultMaxResultBytes caps one buffered result (ADR-0028 §SD4). The
+// worker's own --max_memory_usage bounds ClickHouse, not its output;
+// without this cap a large result is held whole in the host process.
+const DefaultMaxResultBytes = 64 << 20 // 64 MiB
+
 // Service is the broker's runtime presence. NewService subscribes;
 // Stop unsubscribes and tears down all pools it spawned.
 type Service struct {
@@ -54,6 +61,7 @@ type Service struct {
 	poolCfg   chlocalpool.Config
 	cacheCfg  CacheConfig
 	timeout   time.Duration
+	maxResult int64
 	busClient *inprocbus.Client
 	unsub     func()
 
@@ -73,13 +81,14 @@ func NewService(bus *inprocbus.Inst, poolCfg chlocalpool.Config, log zerolog.Log
 		return
 	}
 	svc = &Service{
-		bus:      bus,
-		log:      log,
-		poolCfg:  poolCfg,
-		cacheCfg: CacheConfig{}.withDefaults(),
-		timeout:  DefaultRequestTimeout,
-		pools:    make(map[string]*chlocalpool.Pool),
-		caches:   make(map[string]*poolCache),
+		bus:       bus,
+		log:       log,
+		poolCfg:   poolCfg,
+		cacheCfg:  CacheConfig{}.withDefaults(),
+		timeout:   DefaultRequestTimeout,
+		maxResult: DefaultMaxResultBytes,
+		pools:     make(map[string]*chlocalpool.Pool),
+		caches:    make(map[string]*poolCache),
 	}
 	caps := []app.SubjectFilter{
 		{
@@ -114,6 +123,17 @@ func (inst *Service) SetRequestTimeout(d time.Duration) {
 	}
 	inst.mu.Lock()
 	inst.timeout = d
+	inst.mu.Unlock()
+}
+
+// SetMaxResultBytes overrides DefaultMaxResultBytes. A result past the
+// cap fails the request with a structured error and kills the worker.
+func (inst *Service) SetMaxResultBytes(n int64) {
+	if n <= 0 {
+		return
+	}
+	inst.mu.Lock()
+	inst.maxResult = n
 	inst.mu.Unlock()
 }
 
@@ -357,6 +377,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 
 	inst.mu.Lock()
 	timeout := inst.timeout
+	maxResult := inst.maxResult
 	inst.mu.Unlock()
 	brokerDeadline := time.Now().Add(timeout)
 	effectiveDeadline := brokerDeadline
@@ -416,13 +437,20 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	bb := bytebufferpool.Get()
 	defer bytebufferpool.Put(bb)
 
-	if _, err = bb.ReadFrom(w.Stdout()); err != nil {
+	// One byte past the cap is read so an exact-cap result still passes.
+	if _, err = bb.ReadFrom(io.LimitReader(w.Stdout(), maxResult+1)); err != nil {
 		aud.errMsg = "drain stdout: " + err.Error()
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			aud.errMsg = "killed by cancellation: " + ctxErr.Error()
 		}
 		aud.stderrTail = string(w.StderrTail())
 		inst.sendError(msg.Reply, aud.errMsg, aud.stderrTail, 0)
+		return
+	}
+	if int64(len(bb.B)) > maxResult {
+		_ = w.Close()
+		aud.errMsg = "result exceeds " + strconv.FormatInt(maxResult, 10) + " bytes; narrow the query or raise the broker's MaxResultBytes"
+		inst.sendError(msg.Reply, aud.errMsg, "", 0)
 		return
 	}
 	waitErr := w.Wait()

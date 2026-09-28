@@ -274,3 +274,29 @@ func waitForPoolWarm(t *testing.T, svc *Service, caller *inprocbus.Client) {
 	require.NoError(t, rep.Err())
 	waitForPool(t, svc, "scratchpad", 3*time.Second)
 }
+
+// A result past MaxResultBytes fails with a structured error instead of
+// growing the host's buffer without bound (ADR-0028 §SD4); one at the
+// cap still passes.
+func TestExecOnPool_ResultCap(t *testing.T) {
+	svc, caller := newTestBroker(t)
+	svc.SetMaxResultBytes(1000)
+
+	rep, err := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
+		SQL:    "SELECT repeat('x', 999)",
+		Format: "TabSeparated",
+	})
+	require.NoError(t, err)
+	require.NoError(t, rep.Err())
+	body, err := io.ReadAll(rep)
+	require.NoError(t, err)
+	assert.Len(t, body, 1000)
+
+	rep, err = ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{
+		SQL:    "SELECT number FROM numbers(100000)",
+		Format: "TabSeparated",
+	})
+	require.NoError(t, err)
+	require.Error(t, rep.Err())
+	assert.Contains(t, ebtest.Text(t, rep.Err()), "result exceeds 1000 bytes")
+}

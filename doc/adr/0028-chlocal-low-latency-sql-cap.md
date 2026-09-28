@@ -542,6 +542,21 @@ a worker, and the handler, for up to `WatchdogMaxLifetime`.
 `SetRequestTimeout` longer than `WatchdogMaxLifetime` needs the watchdog raised
 with it.
 
+### 2026-09-28 — the per-request memory ceiling exists
+
+§SD4's per-request ceiling was never built: the drain read the worker's stdout
+to EOF with no limit, so a result of any size was held in the host process —
+three times at the peak, counting the reply copy and its encoding. The broker
+now stops reading one byte past `DefaultMaxResultBytes` (64 MiB, the figure
+§SD4 names), kills the worker, and fails the request with a structured
+"result exceeds" error. `Service.SetMaxResultBytes` overrides it; §SD4's
+`Config.MaxInMemoryBytes` became a setter beside `SetRequestTimeout`, since
+the broker has no config struct of its own.
+
+**Why.** `--max_memory_usage` bounds ClickHouse, not what it writes; any app
+holding `ch.local.exec.<pool>` could otherwise grow the host until the OOM
+killer ended every app in it.
+
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).
