@@ -101,6 +101,12 @@ once named, so client-side they become static GPU buffers. A joiner
 bootstraps from the current texture store plus one all-bodies frame — no
 keyframe scheduling, no GOP.
 
+A position is unsigned, so the wire carries `[0, 8191.875]` px per axis. The
+tessellator leaves a shape's off-screen vertices for the GPU scissor to cut.
+Clamping them onto the edge would bend the visible part (a zoomed graph edge
+would end at the corner), so the host clips each triangle that leaves that
+range before quantizing. A triangle inside the range keeps its vertices.
+
 ### SD2 — Texture plane: `TexturesDelta` verbatim
 
 Whole/partial texture messages map 1:1 onto `texSubImage2D`. The atlas ships

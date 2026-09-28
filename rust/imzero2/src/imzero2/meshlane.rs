@@ -74,10 +74,87 @@ pub struct SerializedFrame {
     pub callbacks: usize,
 }
 
+/// Clip one polygon (convex, from a triangle) to the square `[0, lim]²`,
+/// interpolating uv and colour at the cut (Sutherland–Hodgman, one axis-
+/// aligned edge at a time).
+fn clip_polygon(poly: Vec<egui::epaint::Vertex>, lim: f32) -> Vec<egui::epaint::Vertex> {
+    let lerp = |a: &egui::epaint::Vertex, b: &egui::epaint::Vertex, t: f32| {
+        let (ca, cb) = (a.color.to_array(), b.color.to_array());
+        let c =
+            |i: usize| (f32::from(ca[i]) + (f32::from(cb[i]) - f32::from(ca[i])) * t).round() as u8;
+        egui::epaint::Vertex {
+            pos: a.pos + (b.pos - a.pos) * t,
+            uv: a.uv + (b.uv - a.uv) * t,
+            color: egui::Color32::from_rgba_premultiplied(c(0), c(1), c(2), c(3)),
+        }
+    };
+    // Signed distance to each edge, positive inside.
+    let edges: [&dyn Fn(egui::Pos2) -> f32; 4] =
+        [&|p| p.x, &|p| lim - p.x, &|p| p.y, &|p| lim - p.y];
+    let mut poly = poly;
+    for dist in edges {
+        if poly.is_empty() {
+            break;
+        }
+        let mut out = Vec::with_capacity(poly.len() + 1);
+        for (i, cur) in poly.iter().enumerate() {
+            let prev = &poly[(i + poly.len() - 1) % poly.len()];
+            let (dc, dp) = (dist(cur.pos), dist(prev.pos));
+            if dc >= 0.0 {
+                if dp < 0.0 {
+                    out.push(lerp(prev, cur, dp / (dp - dc)));
+                }
+                out.push(*cur);
+            } else if dp >= 0.0 {
+                out.push(lerp(prev, cur, dp / (dp - dc)));
+            }
+        }
+        poly = out;
+    }
+    poly
+}
+
+/// Clip `mesh` to the positions the wire can carry, `[0, lim]²` points. The
+/// tessellator keeps a shape's off-screen vertices and leaves the cut to the
+/// GPU scissor, but the u16 quantizer would clamp them onto the edge and
+/// bend the visible part (a zoomed graph edge ending at the corner). A
+/// triangle wholly inside keeps its vertices; one that crosses the range is
+/// replaced by its clipped fan.
+fn clip_mesh_to_wire_range(mesh: &egui::epaint::Mesh, lim: f32) -> egui::epaint::Mesh {
+    let inside = |p: egui::Pos2| p.x >= 0.0 && p.y >= 0.0 && p.x <= lim && p.y <= lim;
+    let mut out = egui::epaint::Mesh::with_texture(mesh.texture_id);
+    out.vertices.clone_from(&mesh.vertices);
+    for tri in mesh.indices.chunks_exact(3) {
+        let vs = [
+            mesh.vertices[tri[0] as usize],
+            mesh.vertices[tri[1] as usize],
+            mesh.vertices[tri[2] as usize],
+        ];
+        if vs.iter().all(|v| inside(v.pos)) {
+            out.indices.extend_from_slice(tri);
+            continue;
+        }
+        let poly = clip_polygon(vs.to_vec(), lim);
+        if poly.len() < 3 {
+            continue;
+        }
+        let base = out.vertices.len() as u32;
+        let n = poly.len() as u32;
+        out.vertices.extend(poly);
+        for k in 1..n - 1 {
+            out.indices.extend([base, base + k, base + k + 1]);
+        }
+    }
+    out
+}
+
 /// Serialize tessellated primitives into wire bodies. `ppp` converts egui
 /// points into viewer pixels before quantization.
 pub fn serialize(clipped: &[egui::ClippedPrimitive], ppp: f32) -> SerializedFrame {
     let q = |v: f32| -> u16 { (v * ppp * 8.0).round().clamp(0.0, 65535.0) as u16 };
+    // The largest position a u16 at 1/8 px carries, in points.
+    let lim = 65535.0 / (8.0 * ppp);
+    let in_range = |p: egui::Pos2| p.x >= 0.0 && p.y >= 0.0 && p.x <= lim && p.y <= lim;
     let quv = |v: f32| -> u16 { (v * 65535.0).round().clamp(0.0, 65535.0) as u16 };
     let mut out = SerializedFrame {
         scratch: Vec::new(),
@@ -92,6 +169,13 @@ pub fn serialize(clipped: &[egui::ClippedPrimitive], ppp: f32) -> SerializedFram
                 out.callbacks += 1;
                 continue;
             }
+        };
+        let clipped_mesh;
+        let mesh = if mesh.vertices.iter().all(|v| in_range(v.pos)) {
+            mesh
+        } else {
+            clipped_mesh = clip_mesh_to_wire_range(mesh, lim);
+            &clipped_mesh
         };
         let start = out.scratch.len();
         for v in [
@@ -425,6 +509,75 @@ mod tests {
         // a differing frame gets a different name
         let c = serialize(&[one_triangle(50.0)], 2.0);
         assert_ne!(a.hashes[0], c.hashes[0]);
+    }
+
+    /// Decode a body's referenced vertex positions back to points.
+    fn decoded_triangles(body: &[u8], ppp: f32) -> Vec<[egui::Pos2; 3]> {
+        let n_verts = u32::from_le_bytes(body[12..16].try_into().unwrap()) as usize;
+        let wide = body[16] == 4;
+        let n_idx = u32::from_le_bytes(body[17..21].try_into().unwrap()) as usize;
+        let pos = |i: usize| {
+            let v = &body[21 + i * 12..];
+            let c = |o: usize| f32::from(u16::from_le_bytes([v[o], v[o + 1]])) / 8.0 / ppp;
+            egui::pos2(c(0), c(2))
+        };
+        let idx_base = 21 + n_verts * 12;
+        let idx = |k: usize| {
+            if wide {
+                u32::from_le_bytes(body[idx_base + k * 4..idx_base + k * 4 + 4].try_into().unwrap())
+                    as usize
+            } else {
+                u16::from_le_bytes([body[idx_base + k * 2], body[idx_base + k * 2 + 1]]) as usize
+            }
+        };
+        (0..n_idx / 3)
+            .map(|t| [pos(idx(t * 3)), pos(idx(t * 3 + 1)), pos(idx(t * 3 + 2))])
+            .collect()
+    }
+
+    /// A triangle reaching off-screen is clipped, not clamped: every vertex
+    /// on the wire still lies inside the original triangle, so the visible
+    /// part keeps its angle.
+    #[test]
+    fn off_range_vertices_are_clipped_not_clamped() {
+        let tri = [
+            egui::pos2(400.0, 300.0),
+            egui::pos2(-3000.0, -800.0),
+            egui::pos2(400.0, 310.0),
+        ];
+        let mut mesh = egui::epaint::Mesh::default();
+        for p in tri {
+            mesh.vertices.push(egui::epaint::Vertex {
+                pos: p,
+                uv: egui::Pos2::ZERO,
+                color: egui::Color32::WHITE,
+            });
+        }
+        mesh.indices.extend([0, 1, 2]);
+        let prim = egui::ClippedPrimitive {
+            clip_rect: egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(800.0, 600.0)),
+            primitive: egui::epaint::Primitive::Mesh(mesh),
+        };
+        let frame = serialize(&[prim], 1.0);
+        let body = &frame.scratch[frame.ranges[0].0..frame.ranges[0].1];
+        let tris = decoded_triangles(body, 1.0);
+        assert!(!tris.is_empty(), "the on-screen part survives");
+        let cross = |o: egui::Pos2, a: egui::Pos2, b: egui::Pos2| {
+            (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+        };
+        let area = cross(tri[0], tri[1], tri[2]);
+        for t in &tris {
+            for &p in t {
+                // Inside every edge, with a 1/8 px quantization slack.
+                for (a, b) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+                    let tol = 0.125 * (b - a).length();
+                    assert!(
+                        cross(a, b, p) * area.signum() >= -tol,
+                        "decoded vertex {p:?} lies outside the source triangle"
+                    );
+                }
+            }
+        }
     }
 
     /// Frame message carries the full order and only the requested bodies.
