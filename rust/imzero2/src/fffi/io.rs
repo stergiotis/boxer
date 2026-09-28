@@ -374,9 +374,23 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         let u = self.read_plain_u64()?;
         Ok(f64::from_bits(u))
     }
+    /// Read a slice length prefix. The Go marshaller writes a nil slice as
+    /// the sentinel `u32::MAX` (`Marshaller.WriteNilSlice`); the Rust side
+    /// has no nil/empty distinction, so the sentinel reads as length 0.
+    /// Taking it as a real length would ask `Vec::with_capacity` for ~4G
+    /// elements and consume the pipe past the frame.
+    #[inline(always)]
+    pub fn read_slice_len(&mut self) -> FffiResult<usize> {
+        let len = self.read_plain_u32()?;
+        if len == u32::MAX {
+            return Ok(0);
+        }
+        Ok(len as usize)
+    }
     pub fn read_plain_s(&mut self) -> FffiResult<String> {
         let len_offset = self.read_bytes_count;
         let len = self.read_plain_u32()?;
+        let len = if len == u32::MAX { 0 } else { len };
         let body_offset = self.read_bytes_count;
         let mut buffer: Vec<u8> = vec![0; len as usize];
         // read_bytes_count already updated by read_plain_u32 above;
@@ -436,7 +450,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         }
     }
     pub fn read_plain_f32h(&mut self) -> FffiResult<Vec<f32>> {
-        let len = self.read_plain_u32()? as usize;
+        let len = self.read_slice_len()?;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             v.push(self.read_plain_f32()?);
@@ -444,7 +458,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         Ok(v)
     }
     pub fn read_plain_f64h(&mut self) -> FffiResult<Vec<f64>> {
-        let len = self.read_plain_u32()? as usize;
+        let len = self.read_slice_len()?;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             v.push(self.read_plain_f64()?);
@@ -452,7 +466,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         Ok(v)
     }
     pub fn read_plain_u64h(&mut self) -> FffiResult<Vec<u64>> {
-        let len = self.read_plain_u32()? as usize;
+        let len = self.read_slice_len()?;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             v.push(self.read_plain_u64()?);
@@ -460,7 +474,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         Ok(v)
     }
     pub fn read_plain_i64h(&mut self) -> FffiResult<Vec<i64>> {
-        let len = self.read_plain_u32()? as usize;
+        let len = self.read_slice_len()?;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             v.push(self.read_plain_i64()?);
@@ -468,7 +482,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         Ok(v)
     }
     pub fn read_plain_u32h(&mut self) -> FffiResult<Vec<u32>> {
-        let len = self.read_plain_u32()? as usize;
+        let len = self.read_slice_len()?;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             v.push(self.read_plain_u32()?);
@@ -476,7 +490,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         Ok(v)
     }
     pub fn read_plain_u8h(&mut self) -> FffiResult<Vec<u8>> {
-        let len = self.read_plain_u32()? as usize;
+        let len = self.read_slice_len()?;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             v.push(self.read_plain_u8()?);
@@ -484,7 +498,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         Ok(v)
     }
     pub fn read_plain_sh(&mut self) -> FffiResult<Vec<String>> {
-        let len = self.read_plain_u32()? as usize;
+        let len = self.read_slice_len()?;
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             v.push(self.read_plain_s()?);
@@ -692,5 +706,47 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     #[inline(always)]
     pub fn skip_bytes(&mut self, n: usize) -> FffiResult<()> {
         self.skip(n)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ImZeroFffiIo;
+
+    fn io_over(bytes: Vec<u8>) -> ImZeroFffiIo<std::io::Cursor<Vec<u8>>, Vec<u8>> {
+        ImZeroFffiIo::new(std::io::Cursor::new(bytes), Vec::new())
+    }
+
+    /// A nil Go slice arrives as the `u32::MAX` length sentinel; every
+    /// slice reader must take it as empty and leave the following bytes
+    /// on the wire.
+    #[test]
+    fn nil_slice_sentinel_reads_as_empty() {
+        let mut wire = Vec::new();
+        for _ in 0..8 {
+            wire.extend_from_slice(&u32::MAX.to_le_bytes());
+        }
+        wire.extend_from_slice(&0xdead_beef_u32.to_le_bytes());
+        let mut io = io_over(wire);
+        assert!(io.read_plain_f32h().unwrap().is_empty());
+        assert!(io.read_plain_f64h().unwrap().is_empty());
+        assert!(io.read_plain_u64h().unwrap().is_empty());
+        assert!(io.read_plain_i64h().unwrap().is_empty());
+        assert!(io.read_plain_u32h().unwrap().is_empty());
+        assert!(io.read_plain_u8h().unwrap().is_empty());
+        assert!(io.read_plain_sh().unwrap().is_empty());
+        assert!(io.read_plain_s().unwrap().is_empty());
+        assert_eq!(io.read_plain_u32().unwrap(), 0xdead_beef);
+        assert_eq!(io.read_bytes_count, 9 * 4);
+    }
+
+    #[test]
+    fn non_nil_slice_reads_its_elements() {
+        let mut wire = Vec::new();
+        wire.extend_from_slice(&2u32.to_le_bytes());
+        wire.extend_from_slice(&7u64.to_le_bytes());
+        wire.extend_from_slice(&9u64.to_le_bytes());
+        let mut io = io_over(wire);
+        assert_eq!(io.read_plain_u64h().unwrap(), vec![7, 9]);
     }
 }
