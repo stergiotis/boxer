@@ -13,13 +13,13 @@ import (
 //	bare_ident   → bare_ident
 //	"dq""uoted"  → dq"uoted
 //	`bt``icked`  → bt`icked
-//	"esc\"aped"  → esc"aped   (lexer escape: BACKSLASH followed by any char)
+//	"esc\"aped"  → esc"aped
+//	"a\nb"       → a<LF>b
 //
-// Backslash escapes decode as the raw following character. ClickHouse
-// additionally interprets control sequences (\n, \t, …) inside quoted
-// identifiers; this decoder deliberately does not — it exists so that two
-// spellings of the same name compare equal after decoding, and both sides
-// of every comparison in this package go through it. Re-encode with
+// Backslash escapes decode as the server decodes them ([UnescapeQuoted]),
+// so two spellings compare equal after decoding exactly when ClickHouse
+// resolves them to the same name. A quoted token with a malformed \x
+// escape, which the server rejects, is returned undecoded. Re-encode with
 // [QuoteIdentifier].
 func DecodeIdentifier(s string) string {
 	if len(s) < 2 {
@@ -33,23 +33,11 @@ func DecodeIdentifier(s string) string {
 	if !strings.ContainsAny(inner, "\\\"`") {
 		return inner
 	}
-	var b strings.Builder
-	b.Grow(len(inner))
-	for i := 0; i < len(inner); i++ {
-		c := inner[i]
-		if c == '\\' && i+1 < len(inner) {
-			b.WriteByte(inner[i+1])
-			i++
-			continue
-		}
-		if c == q && i+1 < len(inner) && inner[i+1] == q {
-			b.WriteByte(q)
-			i++
-			continue
-		}
-		b.WriteByte(c)
+	name, err := UnescapeQuoted(inner, q)
+	if err != nil {
+		return s
 	}
-	return b.String()
+	return name
 }
 
 // QuoteIdentifier encodes a raw name as a double-quoted identifier token.
