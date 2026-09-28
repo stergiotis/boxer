@@ -461,7 +461,7 @@ func (inst *Worker) start(ctx context.Context, job watchbillstore.Job, now time.
 				wg.Done()
 			}
 		}()
-		inst.execute(ctx, jobCtx, job, now)
+		inst.execute(jobCtx, job, now, ctx.Err)
 	}()
 }
 
@@ -479,9 +479,9 @@ const (
 
 // execute runs one claimed job to its transition (ADR-0223 §SD2, §SD5).
 // jobCtx is the run's, ended by a cancel request, a timeout, or the worker
-// stopping; workerCtx is the one it derives from, whose end is the
-// worker stopping.
-func (inst *Worker) execute(workerCtx context.Context, jobCtx context.Context, job watchbillstore.Job, claimedAt time.Time) {
+// stopping; workerErr is the Err of the worker's context it derives from,
+// whose end is the worker stopping.
+func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, claimedAt time.Time, workerErr func() error) {
 	// The claim is the running transition; its event is written here,
 	// after the read-back said the claim was won.
 	if err := inst.event(context.Background(), claimedAt, job, watchbillstore.StateRunning, nil, ""); err != nil {
@@ -521,7 +521,7 @@ func (inst *Worker) execute(workerCtx context.Context, jobCtx context.Context, j
 	case errors.Is(cause, errTimedOut):
 		outcome = outcomeFailed
 		runErr = eb.Build().Str("timeout", msDuration(job.TimeoutMs).String()).Errorf("timed out: %w", runErr)
-	case workerCtx.Err() != nil || inst.stopping.Load():
+	case workerErr() != nil || inst.stopping.Load():
 		// The worker's own context ended — Stop, or Start's context —
 		// which a parent records before any child sees it.
 		outcome = outcomeAbandon
