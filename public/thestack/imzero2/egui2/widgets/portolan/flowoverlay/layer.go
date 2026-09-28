@@ -473,6 +473,19 @@ func (inst *Layer) field(proj crsProjection) (f field) {
 	return
 }
 
+// Pace is what a legend needs to say about the trails: the magnitude at
+// which a particle reaches the fastest pace and tops the palette, and the
+// one below which every particle creeps alike at the floor — pace is a
+// clamped linear function of magnitude (ADR-0249 §SD4), so between the two
+// a trail's pace is proportional to speed and outside them it is not. Both
+// are in the field's unit, from the options as the simulation resolves them.
+func (inst *Layer) Pace() (floorSpeed, fullSpeed float32) {
+	params := inst.resolveSimParams()
+	fullSpeed = params.speedMax
+	floorSpeed = params.speedMax * params.minPace / params.maxPace
+	return
+}
+
 func (inst *Layer) resolveSimParams() (params simParams) {
 	o := &inst.Opts
 	pick := func(v, def float32) float32 {

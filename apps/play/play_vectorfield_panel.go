@@ -312,8 +312,13 @@ type VectorFieldDriver struct {
 	marks       []timescrubber.Mark
 	barColors   *colormap.Config
 	barColorMax float32
-	settledView vectorfield.Request
-	hasSettled  bool
+	// legendColors is the legend ramp's map, rebuilt when the range or the
+	// palette changes, like barColors.
+	legendColors   *colormap.Config
+	legendColorMax float32
+	legendPalette  []uint32
+	settledView    vectorfield.Request
+	hasSettled     bool
 
 	noTiles bool
 	paused  bool
@@ -614,6 +619,11 @@ func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, o
 		}
 		c.Label(inst.statusLine(meta, has, opts)).Truncate().Send()
 	}
+	unit := opts.unit
+	if unit == "" {
+		unit = meta.Unit
+	}
+	inst.renderVectorFieldLegend(has, unit)
 	diagWeak(inst.hoverLine(meta, has, opts))
 }
 
@@ -773,7 +783,7 @@ func (inst *VectorFieldDriver) hoverLine(meta vectorfield.Meta, has bool, opts v
 	}
 	ll, ok := inst.pm.Hover()
 	if !ok {
-		return "hover the map to read the field · the animation shows direction and relative speed, not transport"
+		return "hover the map to read the speed and direction under the pointer · the animation shows direction and relative speed, not transport"
 	}
 	u, v, speed, found := inst.guest.layer.At(ll)
 	if !found {
