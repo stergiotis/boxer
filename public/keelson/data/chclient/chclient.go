@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -99,18 +100,25 @@ const defaultResponseHeaderTimeout = 30 * time.Second
 // most 30s for the server's response headers and puts no bound on the body:
 // a streamed read (QueryArrow) lasts as long as its consumer takes, and an
 // insert is not cut off after the server may already have committed it. The
-// caller's ctx bounds the whole exchange.
+// caller's ctx bounds the whole exchange. That client is shared by every
+// New(cfg, nil), so callers that build a Client per operation reuse one
+// connection pool, as they did with http.DefaultTransport.
 func New(cfg Config, httpClient *http.Client) (inst *Client) {
 	if httpClient == nil {
-		httpClient = newDefaultHTTPClient(defaultResponseHeaderTimeout)
+		httpClient = sharedDefaultHTTPClient()
 	}
 	inst = &Client{cfg: cfg, http: httpClient}
 	return
 }
 
-// newDefaultHTTPClient is the nil-argument client of [New]. No
-// http.Client.Timeout: that one also covers reading the body, so it would
-// fail a healthy stream whose consumer is slow.
+// sharedDefaultHTTPClient is the nil-argument client of [New], built once.
+var sharedDefaultHTTPClient = sync.OnceValue(func() *http.Client {
+	return newDefaultHTTPClient(defaultResponseHeaderTimeout)
+})
+
+// newDefaultHTTPClient builds a client that bounds only the wait for response
+// headers. No http.Client.Timeout: that one also covers reading the body, so
+// it would fail a healthy stream whose consumer is slow.
 func newDefaultHTTPClient(headerTimeout time.Duration) *http.Client {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.ResponseHeaderTimeout = headerTimeout
