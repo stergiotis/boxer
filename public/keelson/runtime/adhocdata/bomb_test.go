@@ -74,3 +74,35 @@ func TestPublishRefusesDeclaredHugeBuffer(t *testing.T) {
 	assert.ErrorContains(t, err, "per-dataset quota")
 	assert.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(PerDatasetMaxBytes), "the declared length was not allocated")
 }
+
+// A compressed stream that barely compresses decodes to about its own
+// length; the message bodies the reader allocates must not count against
+// the decoded bytes' share of the budget, or such a stream is refused
+// well under the quota.
+func TestSealStreamAcceptsIncompressibleCompressedStream(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.PrimitiveTypes.Int64}}, nil)
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer rb.Release()
+	vals := make([]int64, 80000) // 640 KB decoded
+	x := uint64(0x9e3779b97f4a7c15)
+	for i := range vals {
+		x ^= x << 13
+		x ^= x >> 7
+		x ^= x << 17
+		vals[i] = int64(x)
+	}
+	rb.Field(0).(*array.Int64Builder).AppendValues(vals, nil)
+	rec := rb.NewRecordBatch()
+	defer rec.Release()
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema), ipc.WithZstd())
+	require.NoError(t, w.Write(rec))
+	require.NoError(t, w.Close())
+
+	f, err := sealed.CreateIn(t.TempDir())
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+	_, _, rows, err := sealStreamCapped(f, buf.Bytes(), 1<<20)
+	require.NoError(t, err)
+	assert.EqualValues(t, len(vals), rows)
+}

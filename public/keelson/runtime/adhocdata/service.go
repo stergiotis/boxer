@@ -680,10 +680,15 @@ func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, struc
 // sealStreamCapped is sealStream with the plaintext bounded by limit. A
 // compressed IPC body is decoded to the uncompressed length it declares,
 // so the stream's own length bounds neither memory nor the sealed file:
-// the reader allocates through a budget of limit bytes over the whole
-// stream, and the sealed writer takes at most limit bytes.
+// the reader allocates through a budget over the whole stream, and the
+// sealed writer takes at most limit bytes. The budget is limit plus the
+// stream's own length, because the reader also allocates each message
+// body it reads: a compressed body and what it decodes to are both
+// counted, and a budget of limit alone would refuse a compressed stream
+// that decodes to well under the quota.
 func sealStreamCapped(f *sealed.File, streamBytes []byte, limit uint64) (schema *arrow.Schema, structure string, rows uint64, err error) {
-	rdr, err := ipc.NewReader(bytes.NewReader(streamBytes), ipc.WithAllocator(&budgetAllocator{limit: limit}))
+	budget := &budgetAllocator{limit: limit + uint64(len(streamBytes))}
+	rdr, err := ipc.NewReader(bytes.NewReader(streamBytes), ipc.WithAllocator(budget))
 	if err != nil {
 		return nil, "", 0, eh.Errorf("adhocdata: decode arrow stream: %w", err)
 	}
