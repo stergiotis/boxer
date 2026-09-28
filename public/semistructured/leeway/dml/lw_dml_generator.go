@@ -1021,8 +1021,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		if err != nil {
 			return
 		}
-		sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalarSupport)
-		for cc, cp := range sectionIRH.IterateColumnProps() {
+		for cc, cp := range nonScalarSupportIRH.IterateColumnProps() {
 			switch cc.SubType {
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport:
 				for i := 0; i < cp.Length(); i++ {
@@ -1039,7 +1038,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 				}
 			}
 		}
-		for cc, cp := range sectionIRH.IterateColumnProps() {
+		for cc, cp := range nonScalarSupportIRH.IterateColumnProps() {
 			switch cc.SubType {
 			case common.IntermediateColumnsSubTypeSetSupport:
 				for i := 0; i < cp.Length(); i++ {

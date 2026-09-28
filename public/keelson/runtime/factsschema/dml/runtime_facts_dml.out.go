@@ -215,7 +215,7 @@ func CreateSchemaFacts() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
 
 type InEntityFacts struct {
 	errs               []error
@@ -355,7 +355,7 @@ var InEntityFactsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityFacts) SetId(id0 uint64, naturalKey1 []byte) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -371,7 +371,7 @@ func (inst *InEntityFacts) SetId(id0 uint64, naturalKey1 []byte) *InEntityFacts 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityFacts) SetTimestamp(ts2 time.Time) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -386,7 +386,7 @@ func (inst *InEntityFacts) SetTimestamp(ts2 time.Time) *InEntityFacts {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityFacts) SetLifecycle(expiresAt3 time.Time) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {

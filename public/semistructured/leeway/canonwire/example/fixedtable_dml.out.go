@@ -40,7 +40,7 @@ func CreateSchemaFixedTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
 
 type InEntityFixedTable struct {
 	allocator             memory.Allocator
@@ -111,7 +111,7 @@ var InEntityFixedTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityFixedTable) SetId(id0 uint64) *InEntityFixedTable {
 	if inst.state != runtime.EntityStateInEntity {

@@ -82,7 +82,7 @@ func CreateSchemaWatchbilleventTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1488
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
 
 type InEntityWatchbilleventTable struct {
 	errs               []error
@@ -159,7 +159,7 @@ var InEntityWatchbilleventTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityWatchbilleventTable) setId(id0 string) *InEntityWatchbilleventTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -174,7 +174,7 @@ func (inst *InEntityWatchbilleventTable) setId(id0 string) *InEntityWatchbilleve
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1683
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
 
 func (inst *InEntityWatchbilleventTable) setTimestamp(ts1 time.Time) *InEntityWatchbilleventTable {
 	if inst.state != runtime.EntityStateInEntity {
