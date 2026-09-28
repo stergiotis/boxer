@@ -3,6 +3,8 @@ package implot
 import (
 	"math"
 	"testing"
+
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
 )
 
 // An infinite sample, or a finite range whose span overflows, once gave a
@@ -38,5 +40,22 @@ func TestBin2D_NonFinite(t *testing.T) {
 	}
 	if _, _, _, _, _, ok = bin2D([]float64{-1e308, 1e308}, []float64{0, 1}, 4, 4); ok {
 		t.Error("overflowing x span: want ok=false")
+	}
+}
+
+// Histogram2D auto-ranges a degenerate Config per frame on a copy: the
+// caller's Config stays degenerate, so a later frame with larger counts
+// re-ranges rather than saturating at the first frame's maximum.
+func TestHistogram2D_AutoRangeDoesNotMutateConfig(t *testing.T) {
+	cm := &colormap.Config{Palette: []uint32{0x000000ff, 0xffffffff}}
+	p := newTestPlot()
+	p.Histogram2D("h", []float64{0, 1, 1}, []float64{0, 1, 1}, 2, 2, cm)
+	if cm.DataMin != 0 || cm.DataMax != 0 {
+		t.Fatalf("caller Config mutated: [%v,%v]", cm.DataMin, cm.DataMax)
+	}
+	p.Histogram2D("h2", []float64{0, 1, 1, 1, 1}, []float64{0, 1, 1, 1, 1}, 2, 2, cm)
+	last := p.series[len(p.series)-1].heat.cm
+	if last.DataMax != 4 {
+		t.Errorf("second frame range max: got %v want 4", last.DataMax)
 	}
 }

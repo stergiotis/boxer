@@ -79,11 +79,16 @@ func (p *Plot) Histogram2D(label string, xs []float64, ys []float64, xBins int, 
 		return p
 	}
 	if cm.DataMax <= cm.DataMin {
+		// Auto-range on a copy: writing the range into the caller's Config
+		// would make it non-degenerate, freezing every later frame at this
+		// frame's maximum count and leaking into plots sharing the Config.
 		vmax := 0.0
 		for _, v := range values {
 			vmax = math.Max(vmax, v)
 		}
-		cm.DataMin, cm.DataMax = 0, math.Max(vmax, 1)
+		local := *cm
+		local.DataMin, local.DataMax = 0, math.Max(vmax, 1)
+		cm = &local
 	}
 	return p.Heatmap(label, values, yBins, xBins, cm, x0, y0, x1, y1)
 }
