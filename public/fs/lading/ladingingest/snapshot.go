@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"math"
 	"time"
 
 	"github.com/stergiotis/boxer/public/fs/lading"
@@ -291,10 +292,13 @@ func (inst *walk) flushPending() (err error) {
 // content stores or references one regular file's bytes and fills the fields
 // that describe them.
 //
-// The size the policy compares against is the one Lstat reported. A file that
-// grows past InlineMax between the stat and the read is stored as it was read
-// — the row's Size is restated from what arrived, so the row and the blocks
-// agree even when the source did not hold still.
+// The size the policy compares against is the one Lstat reported, and the
+// read stops one byte past InlineMax whatever the stat said, since InlineMax
+// is also the walker's memory bound per file (ADR-0198). A file that turns out
+// larger — it grew between the stat and the read, or it is a pseudo-file whose
+// stat size means nothing — is referenced instead, its remainder streamed
+// through the hash. Either way the row's Size is restated from what arrived,
+// so the row and the blocks agree even when the source did not hold still.
 func (inst *walk) content(path string, row *ladingmeta.LadingEntry) (err error) {
 	if row.Size > inst.policy.InlineMax {
 		// Referenced, not stored — but still hashed, so `identical content`
@@ -314,7 +318,7 @@ func (inst *walk) content(path string, row *ladingmeta.LadingEntry) (err error) 
 		return nil
 	}
 
-	data, rerr := fs.ReadFile(inst.fsys, path)
+	data, over, sum, total, rerr := inst.readBounded(path)
 	if rerr != nil {
 		row.Err = rerr.Error()
 		row.Content = contentNone
@@ -322,9 +326,16 @@ func (inst *walk) content(path string, row *ladingmeta.LadingEntry) (err error) 
 		inst.res.Skipped++
 		return nil
 	}
-	sum := blake3.Sum256(data)
+	if over {
+		row.Content = contentRef
+		row.ContentHash = sum
+		row.Size = total
+		inst.res.Referenced++
+		return nil
+	}
+	full := blake3.Sum256(data)
 	row.Content = contentBlocks
-	row.ContentHash = sum[:]
+	row.ContentHash = full[:]
 	row.Size = uint64(len(data))
 	row.BlockSize = inst.policy.Profile.BlockSize
 
@@ -355,6 +366,39 @@ func (inst *walk) content(path string, row *ladingmeta.LadingEntry) (err error) 
 		inst.buffered += uint64(len(b.data))
 	}
 	return inst.maybeFlush()
+}
+
+// readBounded reads at most InlineMax bytes of a file. When the file holds
+// more, over is set, data is nil, and the whole file — the part read and the
+// rest, streamed — has gone through BLAKE3 instead: sum is its digest and
+// total its length.
+func (inst *walk) readBounded(path string) (data []byte, over bool, sum []byte, total uint64, err error) {
+	f, err := inst.fsys.Open(path)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	limit := inst.policy.InlineMax
+	data, err = io.ReadAll(io.LimitReader(f, int64(min(limit, math.MaxInt64-1))+1))
+	if err != nil {
+		data = nil
+		return
+	}
+	if uint64(len(data)) <= limit {
+		return
+	}
+	h := blake3.New(32, nil)
+	_, _ = h.Write(data)
+	rest, err := io.Copy(h, f)
+	if err != nil {
+		data = nil
+		return
+	}
+	total = uint64(len(data)) + uint64(rest)
+	data = nil
+	over = true
+	sum = h.Sum(nil)
+	return
 }
 
 // hashOnly streams a file through BLAKE3 without holding it.
