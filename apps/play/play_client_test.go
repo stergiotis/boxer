@@ -630,3 +630,36 @@ func TestParamWireValueUnknownType(t *testing.T) {
 		}
 	}
 }
+
+// A statement outside grammar1 that mentions "format " in a literal skips
+// the textual FORMAT append; default_format still asks for ArrowStream, so
+// the reply is decodable rather than TabSeparated.
+func TestExecuteArrowStreamSetsDefaultFormat(t *testing.T) {
+	body := emptyArrowStream(t)
+	var (
+		gotURLParams url.Values
+		gotBody      []byte
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURLParams = r.URL.Query()
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	const sql = `SELEKT 'format later' FROM t`
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil, c.Dispatch(sql, ""))
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+	if strings.Contains(string(gotBody), "FORMAT ArrowStream") {
+		t.Fatalf("fixture no longer exercises the skipped append: %q", gotBody)
+	}
+	if got := gotURLParams.Get("default_format"); got != "ArrowStream" {
+		t.Errorf("default_format = %q, want ArrowStream", got)
+	}
+}

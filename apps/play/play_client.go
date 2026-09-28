@@ -928,6 +928,12 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	}
 	req := queryengine.Request{
 		SQL: q,
+		// default_format as well as the FORMAT clause: the textual fallback
+		// in buildStatementObserved skips its append when "FORMAT " occurs
+		// anywhere in the body, a literal or a comment included, and a body
+		// left without one would come back TabSeparated. A FORMAT the
+		// statement carries itself still wins on the server.
+		Format: "ArrowStream",
 		// Params ride the URL rather than the body: ClickHouse reads the
 		// body verbatim as SQL, and the typed substitution from
 		// `{name:Type}` placeholders is what it expects on that channel.
