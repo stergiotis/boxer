@@ -2262,7 +2262,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             .message_offsets
             .pop()
             .ok_or(InterpretError::FrameStackUnderflow("frame_offset"))?;
-        let consumed = after - frame_offset;
+        let consumed = after.checked_sub(frame_offset).ok_or(
+            InterpretError::FrameStackUnderflow("frame_offset past cursor"),
+        )?;
         if consumed != frame_len {
             let func_proc_id = FuncProcId::from_repr(func_proc_id_raw);
             if consumed < frame_len {
@@ -2464,11 +2466,22 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         if block.is_empty() {
             return Ok(());
         }
+        let depth = self.message_offsets.len();
         self.io.begin_replay(block);
         // Capture so end_replay() runs even on Err — the replay overlay state
         // must be cleaned up regardless of whether dispatch propagated an error.
         let r = self.interpret_outer(ctx, &mut Some(ui));
         self.io.end_replay();
+        if r.is_err() {
+            // A message that errored mid-block leaves its begin_consume_message
+            // entry on the frame stacks. The block is length-bounded and the
+            // pipe cursor was restored by end_replay, so drop those entries;
+            // otherwise the enclosing message's end_consume_message would pop
+            // a replay-relative offset and fail a pipe that is in sync.
+            self.message_offsets.truncate(depth);
+            self.message_lengths.truncate(depth);
+            self.message_func_proc_ids_raw.truncate(depth);
+        }
         r
     }
     /// Logged variant of `replay_deferred_block` — same wrapping rationale
@@ -12310,6 +12323,42 @@ fn new_table_render_body_builder<R: std::io::BufRead, W: std::io::Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A deferred block whose message errors mid-apply must not leave that
+    /// message's entry on the frame stacks: the enclosing pipe message's
+    /// `end_consume_message` would otherwise pop the stale replay entry.
+    #[test]
+    fn replay_error_leaves_frame_stacks_balanced() {
+        let mut interp = ImZeroFffi::new(std::io::Cursor::new(Vec::<u8>::new()), Vec::<u8>::new());
+        // AddSpace declares 4 argument bytes, but the block ends before them.
+        let mut block = Vec::new();
+        block.extend_from_slice(&8u32.to_le_bytes());
+        block.extend_from_slice(&(FuncProcId::AddSpace as u32).to_le_bytes());
+        let ctx = egui::Context::default();
+        let mut replay_result = None;
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let ctx = ui.ctx().clone();
+            replay_result = Some(interp.replay_deferred_block(&ctx, ui, &block));
+        });
+        assert!(matches!(replay_result, Some(Err(_))));
+        assert!(interp.message_offsets.is_empty());
+        assert!(interp.message_lengths.is_empty());
+        assert!(interp.message_func_proc_ids_raw.is_empty());
+    }
+
+    /// An offset above the live cursor is a stack inconsistency, reported as
+    /// an error rather than an integer underflow.
+    #[test]
+    fn end_consume_message_offset_past_cursor_is_an_error() {
+        let mut interp = ImZeroFffi::new(std::io::Cursor::new(Vec::<u8>::new()), Vec::<u8>::new());
+        interp.message_offsets.push(16);
+        interp.message_lengths.push(4);
+        interp.message_func_proc_ids_raw.push(FuncProcId::AddSpace as u32);
+        assert!(matches!(
+            interp.end_consume_message(),
+            Err(InterpretError::FrameStackUnderflow(_))
+        ));
+    }
 
     #[test]
     fn test_write_png_creates_valid_file() {
