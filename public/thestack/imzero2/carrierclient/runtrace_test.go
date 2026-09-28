@@ -107,3 +107,17 @@ func TestRunTraceSettlesAfterWaitAndRead(t *testing.T) {
 		assert.GreaterOrEqual(t, time.Since(start), 300*time.Millisecond, st.Do)
 	}
 }
+
+func TestRunTraceDryRunSkipsWait(t *testing.T) {
+	// A dry run sends no input, so a wait on what that input would have
+	// produced must not poll until the timeout and fail the run.
+	ws, server := pipeConn(t)
+	fakeCarrier(t, server, &TreeSnapshot{Nodes: []*TreeNode{{Id: 1, Role: "button", Name: "Run"}}})
+	c := &Client{ws: ws, log: zerolog.Nop()}
+	start := time.Now()
+	err := RunTrace(c, []Step{{Do: "wait", Name: "Result"}}, RunOptions{
+		DryRun: true, Timeout: time.Second, Logger: zerolog.Nop(),
+	})
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), 500*time.Millisecond)
+}

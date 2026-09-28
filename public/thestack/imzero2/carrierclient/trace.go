@@ -402,6 +402,13 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 			if !st.hasAnchor() {
 				return eb.Build().Int("step", i+1).Errorf("wait needs an anchor")
 			}
+			// What a wait waits for is usually the consequence of an input
+			// step a dry run did not send, so polling for it would only time
+			// out; it is skipped, as `read` is.
+			if opts.DryRun {
+				log.Info().Msg("dry run: " + st.describe())
+				continue
+			}
 			if err = waitFor(c, st, opts); err != nil {
 				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
 					Errorf("wait failed: %w", err)
