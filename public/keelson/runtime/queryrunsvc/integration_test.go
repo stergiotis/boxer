@@ -4,6 +4,7 @@ package queryrunsvc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
@@ -199,7 +202,29 @@ func TestLiveReconcileRefusesDriftedDestination(t *testing.T) {
 	err = svc.Start(ctx)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "older schema generation")
-	require.Contains(t, err.Error(), db+".facts")
+	// The table travels as an eb field, not in the message (house style keeps
+	// the message bare), so the assertion reads the structured payload.
+	require.Equal(t, db+".facts", errorField(t, err, "destination"),
+		"the refusal must name the table it refused")
+}
+
+// errorField returns the first value the error chain carries under key in an
+// eb-built structured payload, decoding with an independent CBOR library.
+func errorField(t *testing.T, err error, key string) any {
+	t.Helper()
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		esd, ok := e.(eh.ErrorWithStructuredDataI)
+		if !ok || len(esd.GetCBORStructuredData()) == 0 {
+			continue
+		}
+		var v map[any]any
+		require.NoError(t, cbor.Unmarshal(esd.GetCBORStructuredData(), &v))
+		if val, present := v[key]; present {
+			return val
+		}
+	}
+	require.Failf(t, "field missing", "no %q field in the error chain of %v", key, err)
+	return nil
 }
 
 // expandAuthored rewrites an authored readback query into the one that
