@@ -235,7 +235,7 @@ func (inst *Parser) MustParseTypeOrGroupAst(typeOrGroup string) (ast AstNodeI) {
 	var err error
 	ast, err = inst.ParsePrimitiveTypeOrGroupAst(typeOrGroup)
 	if err != nil {
-		err = eb.Build().Str("input", typeOrGroup).Errorf("unable to parse canonical type or group")
+		err = eb.Build().Str("input", typeOrGroup).Errorf("unable to parse canonical type or group: %w", err)
 		log.Panic().Err(err).Str("typeOrGroup", typeOrGroup).Msg("")
 	}
 	return
@@ -244,7 +244,7 @@ func (inst *Parser) MustParsePrimitiveTypeAst(typeS string) (ast PrimitiveAstNod
 	var err error
 	ast, err = inst.ParsePrimitiveTypeAst(typeS)
 	if err != nil {
-		err = eb.Build().Str("input", typeS).Errorf("unable to parse canonical type")
+		err = eb.Build().Str("input", typeS).Errorf("unable to parse canonical type: %w", err)
 		log.Panic().Err(err).Str("typeS", typeS).Msg("")
 	}
 	return
