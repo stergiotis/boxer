@@ -314,6 +314,12 @@ type SyncOutcome struct {
 // tables' reports; err is a table-level failure, after which the plan is
 // still saved.
 func RunSync(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, planPath string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
+	return RunSyncIn(ctx, src, dst, prep, OsFiles{}, planPath, restart, opts, now)
+}
+
+// RunSyncIn is [RunSync] with the plan and its journal kept in files under
+// planName.
+func RunSyncIn(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, files FilesI, planName string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
 	if len(prep.Stale) > 0 {
 		err = eb.Build().Int("stale", len(prep.Stale)).Errorf("plan is stale: %w", ErrStale)
 		return
@@ -327,7 +333,7 @@ func RunSync(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, 
 		return
 	}
 	var j *Journal
-	j, err = OpenJournal(JournalPath(planPath), out.Run.RunId)
+	j, err = OpenJournalIn(files, JournalPath(planName), out.Run.RunId)
 	if err != nil {
 		return
 	}
@@ -341,7 +347,7 @@ func RunSync(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, 
 			return
 		}
 	}
-	if err = plan.Save(planPath); err != nil {
+	if err = plan.SaveIn(files, planName); err != nil {
 		return
 	}
 	for _, pt := range prep.Chosen {
@@ -352,14 +358,14 @@ func RunSync(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, 
 		rep, err = SyncTable(ctx, src, dst, pt, j, opts, now)
 		if err != nil {
 			err = eb.Build().Str("table", pt.Source.String()).Errorf("unable to sync table: %w", err)
-			_ = plan.Save(planPath)
+			_ = plan.SaveIn(files, planName)
 			return
 		}
 		pt.SyncReport = &rep
 		// The diff described the target before the run.
 		pt.Diff = nil
 		out.Failed += rep.Failed + rep.Stale
-		if err = plan.Save(planPath); err != nil {
+		if err = plan.SaveIn(files, planName); err != nil {
 			return
 		}
 		if opts.AfterTable != nil {
@@ -369,7 +375,8 @@ func RunSync(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, 
 	return
 }
 
-// JournalPath is where the journal of the plan at planPath lives.
+// JournalPath is where the journal of the plan at planPath lives: beside it,
+// under the plan's name with a suffix, which is also its name in a [FilesI].
 func JournalPath(planPath string) (path string) {
 	return planPath + ".journal"
 }

@@ -3,8 +3,6 @@ package jackstay
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -303,58 +301,68 @@ func versionGapNote(src string, dst string) (note string) {
 	return "server releases differ: source " + src + ", target " + dst + "; hashes and Native encodings are assumed to agree"
 }
 
-// Save writes the plan atomically: to a temporary file in the same directory,
-// then renamed over path.
-func (inst *Plan) Save(path string) (err error) {
-	var data []byte
+// Marshal is the plan document's bytes, as [Plan.Save] writes them.
+func (inst *Plan) Marshal() (data []byte, err error) {
 	data, err = json.Marshal(inst, json.Deterministic(true), jsontext.Multiline(true), jsontext.WithIndent("  "))
 	if err != nil {
 		err = eh.Errorf("unable to encode plan: %w", err)
 		return
 	}
 	data = append(data, '\n')
-	dir := filepath.Dir(path)
-	var f *os.File
-	f, err = os.CreateTemp(dir, ".jackstay-plan-*")
+	return
+}
+
+// Save writes the plan atomically: to a temporary file in the same directory,
+// then renamed over path.
+func (inst *Plan) Save(path string) (err error) {
+	return inst.SaveIn(OsFiles{}, path)
+}
+
+// SaveIn writes the plan to name in files, atomically.
+func (inst *Plan) SaveIn(files FilesI, name string) (err error) {
+	var data []byte
+	data, err = inst.Marshal()
 	if err != nil {
-		err = eb.Build().Str("dir", dir).Errorf("unable to create temporary plan file: %w", err)
 		return
 	}
-	tmp := f.Name()
-	_, err = f.Write(data)
-	if err == nil {
-		err = f.Sync()
-	}
-	closeErr := f.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Rename(tmp, path)
-	}
+	err = files.WriteFile(name, data)
 	if err != nil {
-		_ = os.Remove(tmp)
-		err = eb.Build().Str("path", path).Errorf("unable to write plan: %w", err)
+		err = eb.Build().Str("name", name).Errorf("unable to write plan: %w", err)
 	}
 	return
 }
 
 // LoadPlan reads a plan written by [Plan.Save].
 func LoadPlan(path string) (plan Plan, err error) {
+	return LoadPlanIn(OsFiles{}, path)
+}
+
+// LoadPlanIn reads a plan written by [Plan.SaveIn]. A missing file is an
+// error wrapping fs.ErrNotExist.
+func LoadPlanIn(files FilesI, name string) (plan Plan, err error) {
 	var data []byte
-	data, err = os.ReadFile(path)
+	data, err = files.ReadFile(name)
 	if err != nil {
-		err = eb.Build().Str("path", path).Errorf("unable to read plan: %w", err)
+		err = eb.Build().Str("name", name).Errorf("unable to read plan: %w", err)
 		return
 	}
+	plan, err = ParsePlan(data)
+	if err != nil {
+		err = eb.Build().Str("name", name).Errorf("unable to load plan: %w", err)
+	}
+	return
+}
+
+// ParsePlan decodes and validates a plan document.
+func ParsePlan(data []byte) (plan Plan, err error) {
 	err = json.Unmarshal(data, &plan)
 	if err != nil {
-		err = eb.Build().Str("path", path).Errorf("unable to decode plan: %w", err)
+		err = eh.Errorf("unable to decode plan: %w", err)
 		return
 	}
 	err = plan.Validate()
 	if err != nil {
-		err = eb.Build().Str("path", path).Errorf("invalid plan: %w", err)
+		err = eh.Errorf("invalid plan: %w", err)
 	}
 	return
 }

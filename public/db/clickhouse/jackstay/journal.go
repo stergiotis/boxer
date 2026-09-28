@@ -2,10 +2,10 @@ package jackstay
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json/v2"
 	"errors"
 	"io/fs"
-	"os"
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -46,12 +46,13 @@ type journalKey struct {
 
 // Journal is the local, append-only record of one sync run (ADR-0259 §SD5):
 // what a resumed run may skip, and which tables it owns. Lines of other runs in
-// the same file are ignored. Each line is synced to disk before the call
-// returns, so a chunk is never recorded as done before it is.
+// the same file are ignored. Each line is durable before the call returns, so
+// a chunk is never recorded as done before it is.
 type Journal struct {
-	path      string
+	files     FilesI
+	name      string
 	run       string
-	f         *os.File
+	writable  bool
 	start     map[string]JournalEntry
 	done      map[journalKey]JournalEntry
 	attempted map[journalKey]bool
@@ -60,64 +61,68 @@ type Journal struct {
 // OpenJournal reads the entries of run from path, if the file exists, and
 // opens it for appending.
 func OpenJournal(path string, run string) (j *Journal, err error) {
-	j, err = ReadJournal(path, run)
+	return OpenJournalIn(OsFiles{}, path, run)
+}
+
+// OpenJournalIn is [OpenJournal] over files.
+func OpenJournalIn(files FilesI, name string, run string) (j *Journal, err error) {
+	j, err = ReadJournalIn(files, name, run)
 	if err != nil {
 		return
 	}
-	j.f, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		err = eb.Build().Str("path", path).Errorf("unable to open journal for appending: %w", err)
-	}
+	j.writable = true
 	return
 }
 
 // ReadJournal reads the entries of run from path without opening it for
 // writing; a missing file is an empty journal. Record methods fail on it.
 func ReadJournal(path string, run string) (j *Journal, err error) {
-	j = &Journal{path: path, run: run, start: make(map[string]JournalEntry, 8), done: make(map[journalKey]JournalEntry, 64), attempted: make(map[journalKey]bool, 8)}
-	var rf *os.File
-	rf, err = os.Open(path)
+	return ReadJournalIn(OsFiles{}, path, run)
+}
+
+// ReadJournalIn is [ReadJournal] over files.
+func ReadJournalIn(files FilesI, name string, run string) (j *Journal, err error) {
+	j = &Journal{files: files, name: name, run: run, start: make(map[string]JournalEntry, 8), done: make(map[journalKey]JournalEntry, 64), attempted: make(map[journalKey]bool, 8)}
+	var data []byte
+	data, err = files.ReadFile(name)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		err = nil
-	case err != nil:
-		err = eb.Build().Str("path", path).Errorf("unable to open journal: %w", err)
 		return
-	default:
-		sc := bufio.NewScanner(rf)
-		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		line := 0
-		for sc.Scan() {
-			line++
-			var e JournalEntry
-			if uerr := json.Unmarshal(sc.Bytes(), &e); uerr != nil {
-				// A line cut short by a crash is the last line; anything
-				// else is not a journal this code wrote.
-				if !sc.Scan() {
-					break
-				}
-				_ = rf.Close()
-				err = eb.Build().Str("path", path).Int("line", line).Errorf("unable to decode journal line: %w", uerr)
-				return
+	case err != nil:
+		err = eb.Build().Str("name", name).Errorf("unable to open journal: %w", err)
+		return
+	}
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	line := 0
+	for sc.Scan() {
+		line++
+		var e JournalEntry
+		if uerr := json.Unmarshal(sc.Bytes(), &e); uerr != nil {
+			// A line cut short by a crash is the last line; anything
+			// else is not a journal this code wrote.
+			if !sc.Scan() {
+				break
 			}
-			if e.Run != run {
-				continue
-			}
-			switch e.Event {
-			case "start":
-				j.start[e.Table] = e
-			case "chunk":
-				j.done[journalKey{e.Table, e.Chunk}] = e
-			case "attempt":
-				j.attempted[journalKey{e.Table, e.Chunk}] = true
-			}
-		}
-		_ = rf.Close()
-		err = sc.Err()
-		if err != nil {
-			err = eb.Build().Str("path", path).Errorf("unable to read journal: %w", err)
+			err = eb.Build().Str("name", name).Int("line", line).Errorf("unable to decode journal line: %w", uerr)
 			return
 		}
+		if e.Run != run {
+			continue
+		}
+		switch e.Event {
+		case "start":
+			j.start[e.Table] = e
+		case "chunk":
+			j.done[journalKey{e.Table, e.Chunk}] = e
+		case "attempt":
+			j.attempted[journalKey{e.Table, e.Chunk}] = true
+		}
+	}
+	err = sc.Err()
+	if err != nil {
+		err = eb.Build().Str("name", name).Errorf("unable to read journal: %w", err)
 	}
 	return
 }
@@ -134,18 +139,15 @@ func (inst *Journal) DoneChunks(table string) (chunks int, rows uint64) {
 	return
 }
 
+// Close ends appending; every line is already durable.
 func (inst *Journal) Close() (err error) {
-	if inst.f == nil {
-		return
-	}
-	err = inst.f.Close()
-	inst.f = nil
+	inst.writable = false
 	return
 }
 
 func (inst *Journal) write(e JournalEntry) (err error) {
-	if inst.f == nil {
-		return eb.Build().Str("path", inst.path).Errorf("journal is not open for writing")
+	if !inst.writable {
+		return eb.Build().Str("name", inst.name).Errorf("journal is not open for writing")
 	}
 	e.Run = inst.run
 	var data []byte
@@ -154,12 +156,9 @@ func (inst *Journal) write(e JournalEntry) (err error) {
 		return eh.Errorf("unable to encode journal entry: %w", err)
 	}
 	data = append(data, '\n')
-	_, err = inst.f.Write(data)
-	if err == nil {
-		err = inst.f.Sync()
-	}
+	err = inst.files.AppendFile(inst.name, data)
 	if err != nil {
-		err = eb.Build().Str("path", inst.path).Errorf("unable to write journal: %w", err)
+		err = eb.Build().Str("name", inst.name).Errorf("unable to write journal: %w", err)
 	}
 	return
 }
