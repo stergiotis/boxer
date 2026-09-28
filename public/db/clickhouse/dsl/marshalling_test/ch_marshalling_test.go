@@ -1232,13 +1232,33 @@ func TestUnmarshalTupleExprWithDoubleColonCast(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprWithOuterCast(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("CAST((1, 'hello'), 'Tuple(UInt64, String)')")
+	// The default mapper has no canonical form for a Tuple type; dropping
+	// the cast would re-marshal as tuple(1, 'hello'), whose element types
+	// the server infers differently, so the cast is an error.
+	_, err := marshalling.UnmarshalCompositeLiteral("CAST((1, 'hello'), 'Tuple(UInt64, String)')")
+	assert.Error(t, err)
+}
+
+// A cast target the mapper cannot represent must not be dropped silently:
+// the bare inner literal would re-marshal with a different type.
+func TestUnmarshalUnmappableCastIsError(t *testing.T) {
+	for _, sql := range []string{
+		"CAST('2024-01-01', 'Date')",
+		"CAST(1.5, 'Decimal(10,2)')",
+		"CAST(1, 'Nullable(Int64)')",
+		"'2024-01-01'::Date",
+	} {
+		_, err := marshalling.UnmarshalCompositeLiteral(sql)
+		assert.Error(t, err, sql)
+	}
+	lit, err := marshalling.UnmarshalCompositeLiteral("CAST(1, 'UInt8')")
 	require.NoError(t, err)
-	assert.True(t, lit.IsTuple())
-	assert.Equal(t, 2, len(lit.Elements))
-	// Outer cast — may or may not be representable depending on mapper
-	// Our mock doesn't handle "Tuple(UInt64, String)" so cast is empty
-	t.Logf("outer cast: %q", lit.CastTypeCanonical)
+	assert.Equal(t, "u8", lit.CastTypeCanonical)
+
+	// A nil mapper opts out of cast preservation, as documented.
+	lit, err = marshalling.UnmarshalCompositeLiteralEx("CAST('2024-01-01', 'Date')", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "", lit.CastTypeCanonical)
 }
 
 // --- Round-trip for tuple expr forms ---

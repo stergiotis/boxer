@@ -246,7 +246,7 @@ func unmarshalCastFunctionCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExpr
 		err = eh.Errorf("unmarshalCastFunctionCST: inner expression: %w", err)
 		return
 	}
-	result.CastTypeCanonical = mapChTypeToCanonical(chType, mapType)
+	result.CastTypeCanonical, err = mapChTypeToCanonical(chType, mapType)
 	return
 }
 
@@ -354,7 +354,7 @@ func unmarshalCastExprCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprCast
 		err = eh.Errorf("unmarshalCastExprCST: inner expression: %w", err)
 		return
 	}
-	result.CastTypeCanonical = mapChTypeToCanonical(chType, mapType)
+	result.CastTypeCanonical, err = mapChTypeToCanonical(chType, mapType)
 	return
 }
 
@@ -413,13 +413,18 @@ func isColumnTypeExprNode(ctx antlr.ParserRuleContext) bool {
 	return false
 }
 
-func mapChTypeToCanonical(chType string, mapFunc func(string) (canonicaltypes.PrimitiveAstNodeI, error)) string {
+func mapChTypeToCanonical(chType string, mapFunc func(string) (canonicaltypes.PrimitiveAstNodeI, error)) (canonical string, err error) {
 	if mapFunc == nil || chType == "" {
-		return ""
+		return
 	}
-	canonical, err := mapFunc(chType)
-	if err != nil {
-		return ""
+	// A cast the mapper cannot represent is an error, not a dropped cast:
+	// re-marshalling the bare inner literal would change its type
+	// (CAST('2024-01-01', 'Date') would come back as a String).
+	ct, mapErr := mapFunc(chType)
+	if mapErr != nil {
+		err = eb.Build().Str("type", chType).Errorf("cast target has no canonical type: %w", mapErr)
+		return
 	}
-	return canonical.String()
+	canonical = ct.String()
+	return
 }
