@@ -162,6 +162,19 @@ type State struct {
 	jump     int32 // ordinal+1; 0 none
 	paneW    float32
 	shown    bool
+	// fits holds the measured width of the viewer's host-drawn bubbles, by
+	// ordinal (see blockFit).
+	fits map[int]blockFit
+}
+
+// blockFit is one viewer's bubble's host-drawn body, measured: its natural
+// width under a bubble limit, for the message body it was measured on. A
+// changed body or limit measures again.
+type blockFit struct {
+	body      string
+	bubbleW   float32
+	w         float32
+	measuring bool
 }
 
 // Selected is the selected message's ordinal, -1 for none.
@@ -206,7 +219,8 @@ func (inst *State) JumpTo(ordinal int32) {
 }
 
 // Block is a host-drawn message body: Render runs at draw time inside the
-// bubble and must scope its own widget ids. Height is the height the host
+// bubble and must scope its own widget ids. The body is laid out
+// left-aligned on either side, and a viewer's bubble is fitted to it. Height is the height the host
 // expects the body to take, advisory in this cut — the scroll area lays the
 // body out itself — and the contract the etable path would read.
 type Block struct {

@@ -20,6 +20,9 @@ const (
 	composerMaxHeight float32 = 140
 	// fallbackComposerW stands in for the pane probe on its first frame.
 	fallbackComposerW float32 = 600
+	// composerProbeSalt makes the composer's pane probe this window's own:
+	// folded through the id stack, which carries the host's window salt.
+	composerProbeSalt uint64 = 0x636861742d636f6d
 
 	tipKeep    = "Keep this conversation on boxer.facts, where the host's BOXER_LLM_RETAIN is durable. Fixed at the first send."
 	tipContext = "Tokens the last answered call used, prompt and answer. The whole conversation is resent each turn, so this grows until the model's context is full, and then the turn fails."
@@ -105,7 +108,7 @@ func (inst *App) renderComposer() {
 		}
 		return
 	}
-	w, _, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer"))
+	w, _, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer") ^ inst.ids.PrepareHighEntropy(composerProbeSalt).Derive())
 	if !ok || w <= 0 {
 		w = fallbackComposerW
 	}
@@ -191,13 +194,8 @@ func (inst *App) renderTranscript() {
 				}
 				doc := e.doc
 				return chatview.Block{Render: func() {
-					// The user's bubbles sit in a right-aligned column, and
-					// markdown would inherit that alignment line by line; a
-					// message reads left-aligned on either side.
-					for range c.UiWithLayout().MainDirTopDown().CrossAlignMin().KeepIter() {
-						for range c.IdScope(inst.ids.PrepareSeq(uint64(0x5100 + ord))) {
-							doc.Render(inst.ids)
-						}
+					for range c.IdScope(inst.ids.PrepareSeq(uint64(0x5100 + ord))) {
+						doc.Render(inst.ids)
 					}
 				}}, true
 			}
