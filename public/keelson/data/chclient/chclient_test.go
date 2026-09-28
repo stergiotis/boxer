@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -285,4 +286,35 @@ func scrubClickHouseEnv(environ []string) (out []string) {
 		out = append(out, kv)
 	}
 	return
+}
+
+// The default client bounds the wait for headers, never the body: a stream
+// whose consumer is slower than the bound still reads to its end.
+func TestDefaultHTTPClient_BoundsHeadersNotBody(t *testing.T) {
+	assert.Zero(t, New(Defaults(), nil).http.Timeout, "a whole-exchange timeout would cut a streamed body")
+
+	slowBody := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		for range 3 {
+			_, _ = w.Write([]byte("x"))
+			w.(http.Flusher).Flush()
+			time.Sleep(150 * time.Millisecond)
+		}
+	}))
+	defer slowBody.Close()
+	c := newDefaultHTTPClient(100 * time.Millisecond)
+	resp, err := c.Get(slowBody.URL)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	require.NoError(t, err)
+	assert.Equal(t, "xxx", string(body))
+
+	slowHeaders := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(400 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slowHeaders.Close()
+	_, err = c.Get(slowHeaders.URL)
+	require.Error(t, err, "a server that never starts answering is still bounded")
 }

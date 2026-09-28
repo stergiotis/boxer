@@ -91,13 +91,30 @@ type Client struct {
 	http *http.Client
 }
 
-// New constructs a Client. Passing nil for httpClient applies a 30s timeout.
+// defaultResponseHeaderTimeout bounds how long the default client waits for
+// the server to start answering once the request is sent.
+const defaultResponseHeaderTimeout = 30 * time.Second
+
+// New constructs a Client. Passing nil for httpClient builds one that waits at
+// most 30s for the server's response headers and puts no bound on the body:
+// a streamed read (QueryArrow) lasts as long as its consumer takes, and an
+// insert is not cut off after the server may already have committed it. The
+// caller's ctx bounds the whole exchange.
 func New(cfg Config, httpClient *http.Client) (inst *Client) {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		httpClient = newDefaultHTTPClient(defaultResponseHeaderTimeout)
 	}
 	inst = &Client{cfg: cfg, http: httpClient}
 	return
+}
+
+// newDefaultHTTPClient is the nil-argument client of [New]. No
+// http.Client.Timeout: that one also covers reading the body, so it would
+// fail a healthy stream whose consumer is slow.
+func newDefaultHTTPClient(headerTimeout time.Duration) *http.Client {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = headerTimeout
+	return &http.Client{Transport: tr}
 }
 
 func (inst *Client) injectHeaders(req *http.Request) {
