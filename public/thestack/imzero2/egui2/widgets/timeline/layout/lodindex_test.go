@@ -309,3 +309,20 @@ func TestFloorBin_NegativeValues(t *testing.T) {
 		}
 	}
 }
+
+// A ladder finer than the axis unit collapses onto its first resolvable
+// rung instead of panicking: 1ms/10ms/100ms at a 1 s unit all land on 1.
+func TestBuildLODIndexUnit_CollapsesRungsFinerThanUnit(t *testing.T) {
+	idx := BuildLODIndexUnit([]PointEvent{{TMS: 0}},
+		[]time.Duration{time.Millisecond, 10 * time.Millisecond, 100 * time.Millisecond, time.Second, 10 * time.Second},
+		time.Second)
+	want := []int64{1, 10}
+	for i, w := range want {
+		if got := idx.ScaleMS(int32(i)); got != w {
+			t.Errorf("scale %d: got %d want %d", i, got, w)
+		}
+	}
+	if got := idx.ScaleMS(int32(len(want))); got != 0 {
+		t.Errorf("expected %d scales, found one more with width %d", len(want), got)
+	}
+}

@@ -135,6 +135,15 @@ See [`DOCUMENTATION_STANDARD.md`](../DOCUMENTATION_STANDARD.md) for the edit-pol
 
 ## Updates
 
+### 2026-09-28 — LOD rungs finer than the axis unit collapse instead of panicking (refines the 2026-05-19 panic-on-non-ascending entry)
+
+`layout.BuildLODIndexUnit` still panics on scales that do not ascend as
+durations. A rung that ascends as a duration but lands on the same bin width
+as the rung before it once converted to the axis unit is now dropped. The
+default ladder starts at 1 ms, so an offset axis with a unit of 10 ms or more
+used to panic inside `timeline.New` unless the caller also passed
+`WithLODScales`.
+
 ### 2026-09-06 — The brush gesture reads egui's edges (refines SD16)
 
 **Built.** Verified in the widget gallery, whose synthesised clicks are the case
