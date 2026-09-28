@@ -113,6 +113,17 @@ func (inst *SqlStore) Close() {
 func (inst *SqlStore) Enqueue(ctx context.Context, job watchbillstore.Job) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	// An id the caller chose may already name a row, and a second row
+	// under it would shadow the first one's read-backs: refuse it, as
+	// MemStore does. The check holds against enqueues through this store;
+	// two stores racing the same id on one server can still both insert.
+	_, dup, err := inst.getLocked(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+	if dup {
+		return eb.Build().Str("id", job.ID).Errorf("duplicate job id")
+	}
 	if err = inst.st.Job.Begin(job.ID, time.Now().UTC()).AddJob(job).Commit(); err != nil {
 		return eb.Build().Str("id", job.ID).Errorf("buffer job: %w", err)
 	}

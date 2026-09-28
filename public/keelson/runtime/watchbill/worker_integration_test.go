@@ -139,3 +139,30 @@ func TestSweepOnTheServer(t *testing.T) {
 	assert.EqualValues(t, 2, job.Attempt)
 	assert.EqualValues(t, 1, ran.Load())
 }
+
+// A caller-chosen id that already names a job is refused, as MemStore
+// refuses it: a second row under the id would shadow the first one's
+// read-backs, and its settle would go unrecorded.
+func TestSqlStoreRefusesADuplicateId(t *testing.T) {
+	ctx := context.Background()
+	exec := serverExec(t)
+	layout := watchbillstore.Layout{Database: "wbtest_dup"}
+	require.NoError(t, exec.Exec(ctx, "DROP TABLE IF EXISTS "+layout.JobTable()))
+	require.NoError(t, exec.Exec(ctx, "DROP TABLE IF EXISTS "+layout.EventTable()))
+	require.NoError(t, watchbillstore.ProvisionIn(ctx, exec, layout))
+
+	st := NewSqlStore(exec, layout)
+	defer st.Close()
+	id, err := Enqueue(ctx, st, Request{Kind: "dup.kind", Subject: "first"})
+	require.NoError(t, err)
+	_, err = Enqueue(ctx, st, Request{ID: id, Kind: "dup.kind", Subject: "second"})
+	require.Error(t, err)
+
+	ids, err := st.Queue(ctx, nil, nil, time.Now().UTC().Add(time.Second), 10)
+	require.NoError(t, err)
+	assert.Equal(t, []string{id}, ids)
+	job, found, err := st.Get(ctx, id)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "first", job.Subject)
+}
