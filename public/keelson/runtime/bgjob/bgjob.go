@@ -254,6 +254,12 @@ func (r *Runner[T]) run(ctx context.Context, tasks task.TaskApiI, token uint64, 
 		r.finishCancelled(token)
 		return
 	}
+	// Without pacing stages there is no trailing stage to notice a cancel
+	// during compute: check it here, as runReporting does.
+	if total == 0 && ctx.Err() != nil {
+		r.finishCancelled(token)
+		return
+	}
 	r.finish(token, spec, result, err, h)
 }
 
@@ -332,7 +338,8 @@ func spawnTask(ctx context.Context, tasks task.TaskApiI, spec Spec) (context.Con
 }
 
 // finish records a completed compute under the run's token: Done with the
-// result, or Failed with the error (also reported to the task handle).
+// result, Failed with the error (also reported to the task handle), or Idle
+// for a nil result, which there is nothing to hand out for.
 func (r *Runner[T]) finish(token uint64, spec Spec, result *T, err error, h task.HandleI) {
 	r.mu.Lock()
 	if r.token != token {
@@ -342,6 +349,10 @@ func (r *Runner[T]) finish(token uint64, spec Spec, result *T, err error, h task
 	if err != nil {
 		r.state = StateFailed
 		r.err = err
+	} else if result == nil {
+		// Nothing to hand out: TakeResult never takes a nil result, so a
+		// Done here would stay Done with nothing to consume.
+		r.state = StateIdle
 	} else {
 		r.state = StateDone
 		r.result = result
