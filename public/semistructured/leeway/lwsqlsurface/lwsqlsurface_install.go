@@ -294,6 +294,15 @@ func ReconcileInto(ctx context.Context, conn Conn, target chviews.TargetDatabase
 	if mode != ReconcileDrop {
 		return
 	}
+	// The names are spliced into DROP unquoted, so one the server spells
+	// with anything but identifier characters is refused before any drop
+	// runs rather than guessed at.
+	for _, name := range rep.Undeclared {
+		if !plainIdentifier(name) {
+			err = eb.Build().Str("function", name).Errorf("reconcile: drop: refusing a function name that is not a plain identifier; drop it by hand")
+			return
+		}
+	}
 	for _, name := range rep.Undeclared {
 		e := conn.Exec(ctx, "DROP FUNCTION IF EXISTS "+name)
 		if e != nil {
@@ -320,10 +329,27 @@ func serverFunctions(ctx context.Context, conn Conn) (names map[string]struct{},
 		return
 	}
 	names = make(map[string]struct{}, 32)
-	for f := range strings.FieldsSeq(out) {
-		names[f] = struct{}{}
+	// One name per line: a quoted name may contain spaces, and splitting it
+	// on whitespace would report — and drop — its fragments.
+	for f := range strings.SplitSeq(out, "\n") {
+		if f != "" {
+			names[f] = struct{}{}
+		}
 	}
 	return
+}
+
+// plainIdentifier reports whether name is safe to splice into SQL unquoted.
+func plainIdentifier(name string) (ok bool) {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if !(r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
 }
 
 // viewDrift reports which declared views the server lacks, and which it
