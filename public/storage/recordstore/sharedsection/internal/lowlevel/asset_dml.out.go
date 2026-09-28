@@ -35,7 +35,7 @@ func CreateSchemaAssetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityAssetTable struct {
 	errs               []error
@@ -73,8 +73,11 @@ func NewInEntityAssetTable(allocator memory.Allocator, estimatedNumberOfRecords 
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityAssetTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -100,7 +103,7 @@ var InEntityAssetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityAssetTable) setId(id0 uint64) *InEntityAssetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -115,7 +118,7 @@ func (inst *InEntityAssetTable) setId(id0 uint64) *InEntityAssetTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityAssetTable) setTimestamp(ts1 time.Time) *InEntityAssetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -168,12 +171,6 @@ func (inst *InEntityAssetTable) initSections(builder *array.RecordBuilder) {
 	inst.section00Inst = NewInEntityAssetTableSectionSymbol(builder, inst)
 }
 func (inst *InEntityAssetTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 }
 func (inst *InEntityAssetTable) resetSections() {

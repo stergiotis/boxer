@@ -41,7 +41,7 @@ func CreateSchemaNetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityNetTable struct {
 	plainTs1              time.Time
@@ -79,8 +79,11 @@ func NewInEntityNetTable(allocator memory.Allocator, estimatedNumberOfRecords in
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityNetTable) SetActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -111,7 +114,7 @@ var InEntityNetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityNetTable) SetId(id0 uint64) *InEntityNetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -126,7 +129,7 @@ func (inst *InEntityNetTable) SetId(id0 uint64) *InEntityNetTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityNetTable) SetTimestamp(ts1 time.Time) *InEntityNetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -179,12 +182,6 @@ func (inst *InEntityNetTable) initSections(builder *array.RecordBuilder) {
 	inst.section00Inst = NewInEntityNetTableSectionNet(builder, inst)
 }
 func (inst *InEntityNetTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 }
 func (inst *InEntityNetTable) resetSections() {
