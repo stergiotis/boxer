@@ -422,3 +422,33 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 	}
 	t.Fatalf("timed out waiting: %s", what)
 }
+
+// A verdict answered before a retract of the handle it names, but replayed
+// after it, binds nothing: the handle has left and the alias stays pending.
+func TestFollowerVerdictOutdatedByRetract(t *testing.T) {
+	r := newFakeResolver()
+	f := newFollowerWith(r, zerolog.Nop())
+	f.seed(nil, []string{"items"})
+	target := newRecordingTarget()
+	_, _ = f.Sync(target)
+
+	// The worker's answer is parked, then the retract arrives — one frame.
+	f.mu.Lock()
+	f.verdicts = append(f.verdicts, verdict{alias: "items", handle: "adhoc_h1000000000000000", revision: 1})
+	f.mu.Unlock()
+	f.onEvent(Event{Op: EventOpRetracted, Alias: "items", Handle: "adhoc_h1000000000000000"})
+	bound, _ := f.Sync(target)
+	assert.False(t, bound)
+	assert.Empty(t, target.bound, "the retracted handle is not bound")
+	assert.Equal(t, []string{"items"}, f.Pending())
+
+	// The successor binds as usual once asked.
+	r.publish("items", "adhoc_h2000000000000000")
+	f.onEvent(Event{Op: EventOpPublished, Alias: "items", Handle: "adhoc_h2000000000000000", Revision: 1})
+	bound, _ = settle(t, f, target)
+	assert.True(t, bound)
+	assert.Equal(t, "adhoc_h2000000000000000", target.bound["items"])
+	f.mu.Lock()
+	assert.Empty(t, f.retracted, "cleared once no round is outstanding")
+	f.mu.Unlock()
+}

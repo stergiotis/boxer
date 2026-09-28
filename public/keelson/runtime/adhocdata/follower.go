@@ -176,13 +176,22 @@ type Follower struct {
 	revision map[string]uint64   // alias → last revision seen of the bound handle; 0 = unknown
 	pending  map[string]struct{} // aliases with no live dataset
 
-	// Mailbox from the arriving side to the caller's thread, in arrival
-	// order: hints from the bus and verdicts from the worker. Order matters
-	// — a `retracted` of the bound handle followed by the verdict that binds
-	// its successor must unbind and then bind — so the log is replayed
-	// sequentially against (bound, pending) rather than folded into sets.
+	// Mailbox from the arriving side to the caller's thread: hints from
+	// the bus and verdicts from the worker, each in arrival order. Order
+	// matters — a `retracted` of the bound handle followed by the verdict
+	// that binds its successor must unbind and then bind — so each log is
+	// replayed sequentially against (bound, pending) rather than folded
+	// into sets, the events before the verdicts; retracted covers the one
+	// case where that reorders a verdict past a retract it predates.
 	events   []Event
 	verdicts []verdict
+	// retracted holds the handles retracted while a verdict may still be
+	// on its way: a verdict is replayed after the events of the same Sync
+	// whatever the order they arrived in, and one asked before a retract
+	// may name the handle it retracted. A handle never comes back once
+	// retracted, so a verdict naming one is stale. Cleared once no round
+	// is outstanding.
+	retracted map[string]struct{}
 	// dirty marks aliases whose hint asked for a resolve before the next
 	// tick would have.
 	dirty    map[string]struct{}
@@ -247,6 +256,8 @@ func newFollowerWith(resolver resolverI, logger zerolog.Logger) (f *Follower) {
 		revision: make(map[string]uint64),
 		pending:  make(map[string]struct{}),
 		dirty:    make(map[string]struct{}),
+
+		retracted: make(map[string]struct{}),
 	}
 	return
 }
@@ -294,12 +305,16 @@ func (f *Follower) onEvent(ev Event) {
 // pending alias to the handle it names, and for a bound alias either
 // confirms the binding (its handle is live — whatever else is under the
 // alias) or replaces it (unbind, then bind the successor if there is one).
-// A verdict about a handle the alias no longer holds is stale and ignored.
+// A verdict about a handle the alias no longer holds is stale and ignored,
+// and so is one that names a handle retracted since its round began.
 func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 	f.mu.Lock()
 	events := f.events
 	verdicts := f.verdicts
 	f.events, f.verdicts = nil, nil
+	// With no round in flight every verdict is in hand: once they are
+	// replayed no answer is outstanding that a retract could outdate.
+	settled := !f.inFlight
 	f.mu.Unlock()
 
 	for _, ev := range events {
@@ -319,6 +334,9 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 				target.NotifyDatasetRevision(ev.Alias, ev.Revision)
 			}
 		case EventOpRetracted:
+			f.mu.Lock()
+			f.retracted[ev.Handle] = struct{}{}
+			f.mu.Unlock()
 			f.unbindHandle(target, ev.Handle)
 		}
 	}
@@ -327,16 +345,20 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 		held, isBound := f.bound[v.alias]
 		_, waiting := f.pending[v.alias]
 		known := f.revision[v.alias]
+		// Answered before a retract of the handle it names was replayed:
+		// the handle has left, and binding it would hold a dead name
+		// until the next round.
+		_, gone := f.retracted[v.handle]
 		f.mu.Unlock()
 		switch {
-		case waiting && v.handle != "":
+		case waiting && v.handle != "" && !gone:
 			if f.bindAlias(target, v.alias, v.handle, v.revision) {
 				bound = true
 			}
 		case isBound && v.askedHandle == held && !v.askedLive:
 			// Our handle has left; the successor, if any, replaces it.
 			f.unbindHandle(target, held)
-			if v.handle != "" && v.handle != held {
+			if v.handle != "" && v.handle != held && !gone {
 				if f.bindAlias(target, v.alias, v.handle, v.revision) {
 					bound = true
 				}
@@ -356,6 +378,9 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 	}
 
 	f.mu.Lock()
+	if settled {
+		clear(f.retracted)
+	}
 	pendingChanged = f.pendingDirty
 	f.pendingDirty = false
 	var askPending []string
