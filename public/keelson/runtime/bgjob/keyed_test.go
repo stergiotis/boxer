@@ -239,7 +239,7 @@ func (a *parentWatchingApi) Spawn(ctx context.Context, _ task.SpawnOpts) (task.H
 	return &parentWatchingHandle{api: a, parent: ctx, ctx: ctx}, nil
 }
 
-func (h *parentWatchingHandle) Ctx() context.Context      { return h.ctx }
+func (h *parentWatchingHandle) Ctx() context.Context       { return h.ctx }
 func (h *parentWatchingHandle) Report(task.ProgressReport) {}
 func (h *parentWatchingHandle) Done([]byte) error {
 	h.once.Do(func() {
