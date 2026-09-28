@@ -89,10 +89,11 @@ func diameterFor(size SizeE, density styletokens.DensityE) float32 {
 }
 
 // valueToAngle maps v on [min,max] to an angle on [startDeg,endDeg], clamping
-// v into range so the needle never leaves the sweep. A degenerate range parks
-// at startDeg.
+// v into range so the needle never leaves the sweep. A degenerate range or a
+// NaN reading parks at startDeg; min/max would otherwise pass the NaN through
+// to every needle vertex.
 func valueToAngle(v, lo, hi float64, startDeg, endDeg float32) float32 {
-	if hi <= lo {
+	if !(hi > lo) || math.IsNaN(v) {
 		return startDeg
 	}
 	t := min(1, max(0, (v-lo)/(hi-lo)))

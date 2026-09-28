@@ -82,6 +82,12 @@ func TestValueToAngle(t *testing.T) {
 	if got := valueToAngle(5, 10, 10, start, end); !approx(got, start) {
 		t.Errorf("degenerate range = %v, want start %v", got, start)
 	}
+	if got := valueToAngle(math.NaN(), 0, 100, start, end); !approx(got, start) {
+		t.Errorf("NaN reading = %v, want start %v", got, start)
+	}
+	if got := valueToAngle(5, math.NaN(), 100, start, end); !approx(got, start) {
+		t.Errorf("NaN range = %v, want start %v", got, start)
+	}
 }
 
 func TestResolveZones(t *testing.T) {
