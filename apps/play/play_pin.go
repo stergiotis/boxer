@@ -179,10 +179,25 @@ func composePinTableDDL(tableName string, schema *arrow.Schema) (ddl string, err
 		cols = append(cols, "`"+f.Name+"` "+chType)
 	}
 	// Frozen, small, order-preserving: tuple() ordering keeps the
-	// insertion order stable enough for a snapshot table.
+	// insertion order stable enough for a snapshot table. The deduplication
+	// window is what makes the data insert's insert_deduplication_token
+	// (pinDataInsertSQL) bite: plain MergeTree keeps no insert log without
+	// it, and a pin round is not atomic — a retry after a failed metadata
+	// insert, or two windows pinning the same result at once, would append
+	// the frozen rows a second time.
 	ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (\n  " +
-		strings.Join(cols, ",\n  ") + "\n) ENGINE MergeTree() ORDER BY tuple()"
+		strings.Join(cols, ",\n  ") + "\n) ENGINE MergeTree() ORDER BY tuple()" +
+		" SETTINGS non_replicated_deduplication_window = 1000"
 	return
+}
+
+// pinDataInsertSQL is the frozen table's data insert. The token is the
+// content fingerprint the table is named after, so any second insert of the
+// same content — a retried round, a concurrent pin — is dropped by the
+// server rather than appended (see composePinTableDDL).
+func pinDataInsertSQL(meta pinMetaRow) string {
+	return "INSERT INTO " + meta.DataTable +
+		" SETTINGS insert_deduplication_token = 'pin-" + strconv.FormatUint(meta.Fingerprint, 16) + "' FORMAT Arrow"
 }
 
 // pinMetaRow is the metadata insert, shipped as JSONEachRow so string
@@ -307,7 +322,7 @@ func (inst *pinDriver) doPin(ctx context.Context, rec arrow.RecordBatch, meta pi
 		err = eh.Errorf("play: pin: ipc close: %w", err)
 		return
 	}
-	err = cli.rawInsertBody(ctx, "INSERT INTO "+meta.DataTable+" FORMAT Arrow", buf)
+	err = cli.rawInsertBody(ctx, pinDataInsertSQL(meta), buf)
 	if err != nil {
 		err = eh.Errorf("play: pin: data insert: %w", err)
 		return

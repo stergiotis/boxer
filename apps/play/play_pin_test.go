@@ -59,6 +59,8 @@ func TestComposePinTableDDL(t *testing.T) {
 	require.Contains(t, ddl, "`note` Nullable(String)")
 	require.Contains(t, ddl, "`tags` Array(String)", "arrays must not be wrapped Nullable")
 	require.Contains(t, ddl, "ENGINE MergeTree() ORDER BY tuple()")
+	require.Contains(t, ddl, "SETTINGS non_replicated_deduplication_window = ",
+		"without an insert log the data insert's dedup token is ignored")
 
 	_, err = composePinTableDDL("t", arrow.NewSchema([]arrow.Field{
 		{Name: "bad`name", Type: arrow.PrimitiveTypes.Int64}}, nil))
@@ -130,4 +132,11 @@ func TestPinRowLabel(t *testing.T) {
 
 	noQuery := pinRowLabel(pinRow{DataTable: "boxer.pin_ab", NumRows: 1, NumCols: 1})
 	require.Contains(t, noQuery, "boxer.pin_ab")
+}
+
+// The data insert carries a token derived from the content fingerprint, so
+// a retried or concurrent pin of the same result is deduplicated server-side.
+func TestPinDataInsertSQLCarriesDedupToken(t *testing.T) {
+	q := pinDataInsertSQL(pinMetaRow{Fingerprint: 0xff, DataTable: "boxer.pin_00ff"})
+	require.Equal(t, "INSERT INTO boxer.pin_00ff SETTINGS insert_deduplication_token = 'pin-ff' FORMAT Arrow", q)
 }
