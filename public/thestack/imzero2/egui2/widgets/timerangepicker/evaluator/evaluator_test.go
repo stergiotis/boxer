@@ -170,6 +170,25 @@ func TestEvalNonUTCZoneKeepsAnchorInstant(t *testing.T) {
 	}
 }
 
+// The System zone once reached ClickHouse as Go's "Local" whenever TZ was
+// unset, and every evaluation failed with "Cannot load time zone Local".
+func TestEvalSystemZone(t *testing.T) {
+	if _, err := timerangepicker.IanaName(timerangepicker.TzIDSystem); err != nil {
+		t.Skipf("host zone has no IANA name: %v", err)
+	}
+	ev := setupTestEvaluator(t)
+
+	anchor := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	_, toMs, err := ev.Eval(context.Background(), anchor, timerangepicker.TzIDSystem,
+		"anchor_now - INTERVAL 1 HOUR", "anchor_now")
+	if err != nil {
+		t.Fatalf("Eval System: %v", err)
+	}
+	if toMs != anchor.UnixMilli() {
+		t.Errorf("toMs: want %d, got %d", anchor.UnixMilli(), toMs)
+	}
+}
+
 func TestNewEvaluatorRejectsNilBus(t *testing.T) {
 	_, err := evaluator.NewEvaluator(nil, "any")
 	if err == nil {
