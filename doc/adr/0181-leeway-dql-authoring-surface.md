@@ -768,3 +768,19 @@ changes, so ADR-0171 §SD2's reconciler scope is untouched.
 `LW_GET_NULL` guard on a mixed channel matches the pair (which is what makes
 it meaningful) but is only as prunable as its two `has()` conjuncts; and the
 selectors do not prune at all, which the docs say rather than the pass fixing.
+
+## Update 2026-09-28 — the Arrow run path is readonly; FORMAT never kept DDL out
+
+The M3 note that "the appended FORMAT is exactly why DDL from play fails" was
+wrong: ClickHouse's parser accepts a FORMAT clause on `DROP`, `TRUNCATE` and
+`ALTER … DELETE`, so any write `runIsInsertWrapper` did not recognise — DDL, a
+mutation, an INSERT outside grammar1 — ran on the server whenever the user was
+not already read-only, `BOXER_PLAY_ALLOW_WRITES` unset or not.
+
+`Client.ExecuteArrowStream` now sends `readonly=2` on every run. The server
+refuses a write or DDL on that path while still admitting the per-query
+settings play sends (`log_comment`, `replace_running_query`). The recognised
+INSERT wrapper keeps its own path (`Client.ExecuteWrite`, gated as before) and
+carries no `readonly`. What this gives up: DDL and `SYSTEM` statements no
+longer run from play's Run at all, even with writes allowed; they go through
+`clickhouse client`, as the gate's copy-out hint already says for writes.

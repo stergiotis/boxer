@@ -663,3 +663,29 @@ func TestExecuteArrowStreamSetsDefaultFormat(t *testing.T) {
 		t.Errorf("default_format = %q, want ArrowStream", got)
 	}
 }
+
+// The Arrow path is the read path: every run carries readonly=2, so a DDL
+// or a write the INSERT-wrapper gate did not recognise is refused by the
+// server rather than executed with the appended FORMAT.
+func TestExecuteArrowStreamRunsReadonly(t *testing.T) {
+	body := emptyArrowStream(t)
+	var gotURLParams url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURLParams = r.URL.Query()
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	const sql = `DROP TABLE IF EXISTS t`
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil, c.Dispatch(sql, ""))
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+	if got := gotURLParams.Get("readonly"); got != "2" {
+		t.Errorf("readonly = %q, want 2", got)
+	}
+}

@@ -247,9 +247,11 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 func (inst *Client) buildStatementObserved(sql string, observe func(passreg.ApplyObservation)) (body string, params map[string]string) {
 	residual, params := inst.buildResidualObserved(sql, observe)
 	started := stepClock(observe)
-	// ADR-0181 §SD8 M3: an INSERT wrapper takes no FORMAT clause — the
-	// appended FORMAT is exactly why DDL from play fails, and a write
-	// answers with a summary, not a stream. The step still reports itself
+	// ADR-0181 §SD8 M3: an INSERT wrapper takes no FORMAT clause — a write
+	// answers with a summary, not a stream. (What keeps DDL and other
+	// writes off the Arrow path is the readonly setting ExecuteArrowStream
+	// sends, not the appended FORMAT: ClickHouse accepts FORMAT on DDL.)
+	// The step still reports itself
 	// (applied, unchanged), so the Preview trace accounts for the wire body
 	// carrying no FORMAT rather than looking like a skipped rewrite.
 	if pr, perr := nanopass.Parse(residual); perr == nil && pr.InsertStmt() != nil {
@@ -950,6 +952,12 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		// than trusting whatever placed it (ADR-0145 §SD4).
 		Sensitivity: dec.sensitivity,
 	}
+	// The Arrow path is the read path. readonly=2 has the server refuse a
+	// write or DDL that reaches it — any statement runIsInsertWrapper did
+	// not recognise as the gated INSERT wrapper, which ClickHouse would
+	// otherwise execute with the appended FORMAT — while still admitting
+	// the per-query settings play sends (ADR-0181 Update 2026-09-28).
+	req.Settings["readonly"] = "2"
 	if opts != nil {
 		if opts.QueryID != "" {
 			req.RunID = opts.QueryID
