@@ -21,7 +21,8 @@ import (
 // this module from the test's working directory, and that the counts the
 // header reports agree with the rows the other two tables serve.
 func TestLiveCollectionServesThisModule(t *testing.T) {
-	c := newCache(resolveConfig(Config{}))
+	cfg := resolveConfig(Config{})
+	c := newCache(cfg)
 	c.budget = 2 * time.Minute
 
 	s := c.get()
@@ -32,7 +33,10 @@ func TestLiveCollectionServesThisModule(t *testing.T) {
 	// tags; the floors are loose so a dependency change does not fail this.
 	assert.Greater(t, len(s.man.Packages), 500)
 	assert.Greater(t, len(s.edges), 5000)
-	assert.NotEmpty(t, s.man.Run.BuildTags, "the repo's tags file drives collection")
+	// The repo's tags file drives collection. It has been empty since
+	// ADR-0212, so the resolved list may be too: pin that collection ran under
+	// exactly what resolveConfig chose, not that there was something to choose.
+	assert.ElementsMatch(t, cfg.Tags, s.man.Run.BuildTags, "collection must run under the resolved tags")
 
 	// The denormalised header counts are what go_collection reports; they
 	// must match the rows go_packages and go_imports actually serve.
