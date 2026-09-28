@@ -5,6 +5,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 )
 
@@ -60,10 +61,10 @@ func castRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, b
 	if exprNode == nil || typeText == "" {
 		return "", false
 	}
-	// Enum types carry single-quoted member names (Enum8('a' = 1)) — escape them
-	// for splicing into the single-quoted type string.
-	escapedType := strings.ReplaceAll(typeText, `'`, `\'`)
-	return callForm("CAST", spanOf(pr, exprNode), "'"+escapedType+"'"), true
+	// Enum types carry single-quoted member names (Enum8('a' = 1)), possibly
+	// with their own escapes — escape the whole text, backslashes included, for
+	// the single-quoted type string.
+	return callForm("CAST", spanOf(pr, exprNode), marshalling.EscapeString(typeText)), true
 }
 
 // typeTextOf renders a columnTypeExpr as compact type text: its default-channel
