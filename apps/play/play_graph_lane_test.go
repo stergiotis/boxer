@@ -318,13 +318,16 @@ func TestNodeLaneAbortStopsWithoutRestarting(t *testing.T) {
 	view := lane.demand(compiledNode{SQL: "A"}) // the frame after the click
 	require.False(t, view.loading, "an aborted fetch stays aborted")
 	require.Nil(t, view.rec)
-	require.Never(t, func() bool {
+	// Polled here rather than through require.Never: Never returns on its
+	// timer while a condition goroutine it started may still be pending, and
+	// that stray demand(A) landing after demand(B) below restarts the lane.
+	for deadline := time.Now().Add(150 * time.Millisecond); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
 		v := lane.demand(compiledNode{SQL: "A"}) // every subsequent frame
 		if v.rec != nil {
 			v.rec.Release()
 		}
-		return v.loading
-	}, 150*time.Millisecond, 5*time.Millisecond, "the unchanged demand must not re-arm the lane")
+		require.False(t, v.loading, "the unchanged demand must not re-arm the lane")
+	}
 	require.Equal(t, 1, g.callCount(), "the cancelled run is the only execution")
 
 	// A changed demand (a pan) is a new pair, so it runs.
