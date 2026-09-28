@@ -52,6 +52,9 @@ func TestStructureForSupported(t *testing.T) {
 		{"space_name", []arrow.Field{field("a b", arrow.PrimitiveTypes.Int64)}, "`a b` Int64"},
 		{"leading_digit_name", []arrow.Field{field("1a", arrow.PrimitiveTypes.Int64)}, "`1a` Int64"},
 		{"backtick_name", []arrow.Field{field("a`b", arrow.PrimitiveTypes.Int64)}, "`a``b` Int64"},
+		{"backslash_name", []arrow.Field{field(`a\`, arrow.PrimitiveTypes.Int64), field("b", arrow.PrimitiveTypes.Int64)}, "`a\\\\` Int64, `b` Int64"},
+		{"backslash_t_name", []arrow.Field{field(`a\t`, arrow.PrimitiveTypes.Int64)}, "`a\\\\t` Int64"},
+		{"backslash_backtick_name", []arrow.Field{field("a\\`", arrow.PrimitiveTypes.Int64)}, "`a\\\\``` Int64"},
 
 		// Repeated sections — the leeway shape — become Array(T). ListOf marks
 		// its element nullable; ListOfNonNullable does not.
