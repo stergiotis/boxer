@@ -133,11 +133,22 @@ fn run_imzero2(cfg: imzero2::appconfig::AppConfig) -> Result<(), Box<dyn std::er
     {
         imzero2::run_imzero2_main_loop(cfg).map_err(Into::into)
     }
-    #[cfg(not(feature = "desktop"))]
+    #[cfg(all(
+        not(feature = "desktop"),
+        any(feature = "headless", feature = "headless_svg")
+    ))]
     {
-        // With `headless` enabled (the only way to compile this far per the
-        // lib.rs compile_error guard) the branch above always returns.
+        // Without `desktop`, the `headless` or `headless_svg` branch above
+        // always returns.
         unreachable!("no host feature matched");
+    }
+    #[cfg(not(any(feature = "desktop", feature = "headless", feature = "headless_svg")))]
+    {
+        // A `browser`-only build: the lib.rs guard accepts it because the
+        // feature is a host, but that host is a wasm32 library driven by a
+        // JS worker (build_rust_browser.sh), not a loop this binary can run.
+        let _ = cfg;
+        Err("this imzero2 binary has no native host: build it with the `desktop`, `headless` or `headless_svg` feature; `browser` builds the wasm32 library (build_rust_browser.sh)".into())
     }
 }
 
