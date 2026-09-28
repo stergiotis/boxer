@@ -55,18 +55,10 @@ func (inst *App) renderBar() {
 		}
 		for range c.HoverText(tipKeep).KeepIter() {
 			if conv.started {
-				// What the host did, not what was asked: a keep the host
-				// declined reads as not kept, with the reason below.
-				label, tone := "kept", badge.ToneSuccess
-				switch {
-				case !conv.keep:
-					label, tone = "not kept", badge.ToneNeutral
-				case conv.notKept != "":
-					label, tone = "not kept", badge.ToneWarning
-				}
+				label, tone := keepBadge(conv)
 				badge.New(inst.ids.PrepareStr("keep-state"), label).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
-			} else if c.Checkbox(inst.ids.PrepareStr("keep"), conv.keep, "Keep this conversation").SendRespVal(&conv.keep).HasChanged() {
-				inst.keepNext = conv.keep
+			} else {
+				c.Checkbox(inst.ids.PrepareStr("keep"), inst.keep, "Keep this conversation").SendRespVal(&inst.keep)
 			}
 		}
 		if used := int64(conv.lastIn) + int64(conv.lastOut); used > 0 {
@@ -126,15 +118,18 @@ func (inst *App) renderComposer() {
 			Interactive(!busy).
 			SendRespVal(&inst.draft)
 	}
+	// While a turn runs, Cancel takes Send's place: Button has no disabled
+	// state, and a Send that does nothing would read as broken.
 	send := false
 	for range c.HorizontalTop().KeepIter() {
-		send = c.Button(inst.ids.PrepareStr("send"), atomsSend).SendResp().HasPrimaryClicked()
-		if busy {
-			c.Spinner().Send()
-			c.Label("waiting for the model · " + elapsed(inst.pending.started)).Selectable(false).Send()
+		if !busy {
+			send = c.Button(inst.ids.PrepareStr("send"), atomsSend).SendResp().HasPrimaryClicked()
+		} else {
 			if c.Button(inst.ids.PrepareStr("cancel"), atomsCancel).SendResp().HasPrimaryClicked() {
 				inst.turn.Cancel()
 			}
+			c.Spinner().Send()
+			c.Label("waiting for the model · " + elapsed(inst.pending.started)).Selectable(false).Send()
 			c.RequestRepaint()
 		}
 	}
@@ -152,7 +147,7 @@ func (inst *App) renderComposer() {
 // drawn as markdown, and a placeholder bubble while a turn is in flight.
 func (inst *App) renderTranscript() {
 	conv := inst.conv
-	m, kinds := transcriptModel(conv, inst.pending != nil && inst.pending.conv == conv, time.Now().UnixMilli())
+	m, kinds := transcriptModel(conv, inst.pending != nil, time.Now().UnixMilli())
 	chatview.Render(chatview.Input{
 		Ids: inst.ids, ScopeKey: "transcript", Model: m, State: &inst.view,
 		Viewer: 0, Layout: chatview.LayoutDialogue, Location: time.Local, FillHost: true,
@@ -181,6 +176,22 @@ func (inst *App) renderTranscript() {
 			return chatview.Block{}, false
 		},
 	})
+}
+
+// keepBadge says what the host did with a started conversation, not what
+// was asked: a keep the host declined reads as not kept, and one with no
+// verdict yet as asked.
+func keepBadge(conv *conversation) (label string, tone badge.ToneE) {
+	switch {
+	case !conv.keep:
+		return "not kept", badge.ToneNeutral
+	case conv.notKept != "":
+		return "not kept", badge.ToneWarning
+	case conv.kept:
+		return "kept", badge.ToneSuccess
+	default:
+		return "keep asked", badge.ToneNeutral
+	}
 }
 
 // ordinalKind says what a transcript ordinal shows: an entry, a failure

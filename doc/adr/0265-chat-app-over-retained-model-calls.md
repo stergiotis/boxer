@@ -205,7 +205,9 @@ to the text above:
 - `BOXER_CHAT_DRAFT` seeds the composer, because the driver cannot focus
   an empty unnamed text input — play's `BOXER_PLAY_SQL` shape.
 - The Keep badge shows what the host did: a keep the host declined reads
-  "not kept", beside the reason.
+  "not kept", beside the reason, and one with no verdict yet "keep asked".
+- While a turn runs, Cancel takes Send's place — a button cannot be
+  disabled here.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
