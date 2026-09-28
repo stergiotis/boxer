@@ -566,7 +566,7 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 		if !ok {
 			return true
 		}
-		if excludeNodes[litExpr] {
+		if excludeNodes[litExpr] || isPositionalReference(litExpr) {
 			return true
 		}
 		litCtx := findLiteralChild(litExpr)
@@ -608,6 +608,29 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 		return true
 	})
 	return
+}
+
+// isPositionalReference reports a literal that is the whole expression of an
+// ORDER BY item or a GROUP BY / LIMIT BY list item. ClickHouse reads an
+// integer there as a positional reference to a projection column; a
+// parameter slot substitutes as _CAST(1, 'UInt64'), which is a constant, so
+// extracting it turned ORDER BY 1 into ordering by a constant and GROUP BY 1
+// into NOT_AN_AGGREGATE.
+func isPositionalReference(litExpr *grammar1.ColumnExprLiteralContext) bool {
+	switch p := litExpr.GetParent().(type) {
+	case *grammar1.OrderExprContext:
+		return true
+	case *grammar1.ColumnsExprColumnContext:
+		list, ok := p.GetParent().(*grammar1.ColumnExprListContext)
+		if !ok {
+			return false
+		}
+		switch list.GetParent().(type) {
+		case *grammar1.GroupByClauseContext, *grammar1.LimitByClauseContext:
+			return true
+		}
+	}
+	return false
 }
 
 // --- Cast type extraction ---

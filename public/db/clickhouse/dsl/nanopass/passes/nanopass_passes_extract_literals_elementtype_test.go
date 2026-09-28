@@ -85,3 +85,35 @@ func TestExtractLiterals_ScalarAndCompositeNamesDisjoint(t *testing.T) {
 		names[x.ParamName] = true
 	}
 }
+
+// TestExtractLiterals_PositionalReferencesKept guards a bug where positional
+// ORDER BY / GROUP BY / LIMIT BY integers were extracted: the slot binds as
+// _CAST(1, 'UInt64'), a constant rather than a column position, so
+// ORDER BY 1 DESC stopped ordering and GROUP BY 1 failed.
+func TestExtractLiterals_PositionalReferencesKept(t *testing.T) {
+	pass := ExtractLiterals(NewExtractLiteralsConfig(0))
+	for _, sql := range []string{
+		"SELECT number FROM numbers(3) ORDER BY 1 DESC",
+		"SELECT number % 2, count() FROM numbers(3) GROUP BY 1",
+		"SELECT number FROM numbers(3) ORDER BY number LIMIT 1 BY 1",
+	} {
+		got, err := pass.Run(sql)
+		if err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		_, _, query := ParseExtractedQuery(got, "")
+		for _, tail := range []string{"ORDER BY 1 DESC", "GROUP BY 1", "BY 1"} {
+			if strings.HasSuffix(sql, tail) && !strings.HasSuffix(query, tail) {
+				t.Errorf("%s: positional reference extracted:\n%s", sql, got)
+			}
+		}
+	}
+	// A non-positional literal in the same clauses is still extracted.
+	got, err := pass.Run("SELECT number FROM numbers(3) ORDER BY number + 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "{param_x") {
+		t.Errorf("ORDER BY number + 1: literal not extracted:\n%s", got)
+	}
+}
