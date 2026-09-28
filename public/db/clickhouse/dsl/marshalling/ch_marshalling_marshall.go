@@ -118,12 +118,12 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		result.Null = true
 		return
 	}
-	if token == "true" {
+	if strings.EqualFold(token, "true") {
 		result.ScalarType = ctabb.B
 		result.BoolVal = true
 		return
 	}
-	if token == "false" {
+	if strings.EqualFold(token, "false") {
 		result.ScalarType = ctabb.B
 		result.BoolVal = false
 		return

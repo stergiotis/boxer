@@ -2,6 +2,7 @@ package marshalling_test
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
@@ -1600,4 +1601,27 @@ func TestToAnyArrayMarshalRoundTrip(t *testing.T) {
 	t.Logf("sql: %s", sql)
 
 	assert.Contains(t, sql, "array(")
+}
+
+// ClickHouse reads TRUE / False as Bool; so must both unmarshal paths.
+func TestUnmarshalBoolCaseInsensitive(t *testing.T) {
+	for _, tok := range []string{"TRUE", "True", "FALSE", "False"} {
+		want := strings.EqualFold(tok, "true")
+		lit, err := marshalling.UnmarshalScalarLiteral(tok)
+		require.NoError(t, err, tok)
+		assert.Equal(t, ctabb.B, lit.ScalarType)
+		assert.Equal(t, want, lit.BoolVal)
+
+		lit, err = marshalling.UnmarshalCompositeLiteral(tok)
+		require.NoError(t, err, tok)
+		assert.Equal(t, ctabb.B, lit.ScalarType)
+		assert.Equal(t, want, lit.BoolVal)
+	}
+	lit, err := marshalling.UnmarshalCompositeLiteral("(1, TRUE)")
+	require.NoError(t, err)
+	require.Len(t, lit.Elements, 2)
+	assert.True(t, lit.Elements[1].BoolVal)
+
+	_, err = marshalling.UnmarshalCompositeLiteral("[False]")
+	require.NoError(t, err)
 }

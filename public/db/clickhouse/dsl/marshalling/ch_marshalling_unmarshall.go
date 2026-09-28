@@ -128,11 +128,10 @@ func unmarshalIdentifierCST(pr *nanopass.ParseResult, ctx *grammar1.ColumnExprId
 	text := nanopass.NodeText(pr, ctx)
 	text = strings.TrimSpace(text)
 	switch strings.ToLower(text) {
-	case "true", "false":
-		result, err = UnmarshalScalarLiteral(text)
-		if err != nil {
-			err = eh.Errorf("unmarshalIdentifierCST: %w", err)
-		}
+	case "true":
+		result = NewScalarBool(true)
+	case "false":
+		result = NewScalarBool(false)
 	case "null":
 		result = NewScalarNull()
 	default:
