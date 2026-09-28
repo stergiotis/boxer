@@ -51,18 +51,29 @@ WITH RECURSIVE
     WHERE i.src_path IN (SELECT import_path FROM fp)
   ),
   -- Reverse reachability inside first-party code, seeded on the direct
-  -- importers. Depth-bounded so the walk terminates on a pathological graph;
-  -- measured on this repository the answer stops changing at depth 8.
+  -- importers. A breadth-first walk: one row per module and level, carrying
+  -- the packages seen so far and the frontier just reached, so the work grows
+  -- with the package count and not with the number of import paths (a
+  -- recursive CTE here takes UNION ALL only, so a per-path walk cannot be
+  -- deduplicated and outgrows the memory limit). Depth-bounded so the walk
+  -- terminates on a pathological graph; measured on this repository the
+  -- answer stops changing at depth 8.
   up AS (
-    SELECT module, importer AS path, 0 AS depth FROM direct
+    SELECT module, groupUniqArray(importer) AS seen, seen AS frontier, 0 AS depth
+    FROM direct
+    GROUP BY module
     UNION ALL
-    SELECT u.module, i.src_path, u.depth + 1
-    FROM keelson('go_imports') AS i
-    INNER JOIN up AS u ON i.dst_path = u.path
-    WHERE i.src_path IN (SELECT import_path FROM fp) AND u.depth < {blast_depth:UInt8}
+    SELECT u.module, arrayConcat(u.seen, groupUniqArray(i.src_path)), groupUniqArray(i.src_path), u.depth + 1
+    FROM (SELECT module, seen, depth, arrayJoin(frontier) AS f FROM up) AS u
+    INNER JOIN keelson('go_imports') AS i ON i.dst_path = u.f
+    WHERE i.src_path IN (SELECT import_path FROM fp)
+      AND NOT has(u.seen, i.src_path)
+      AND u.depth < {blast_depth:UInt8}
+    GROUP BY u.module, u.seen, u.depth
   ),
   blast AS (
-    SELECT module, uniqExact(path) AS n, arraySlice(groupUniqArray(path), 1, {list_cap:UInt16}) AS paths
+    SELECT module, length(argMax(seen, depth)) AS n,
+           arraySlice(argMax(seen, depth), 1, {list_cap:UInt16}) AS paths
     FROM up
     GROUP BY module
   ),
