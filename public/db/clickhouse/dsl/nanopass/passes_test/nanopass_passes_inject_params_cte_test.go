@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stretchr/testify/assert"
@@ -381,4 +382,17 @@ func TestInjectParamsAsCTEExistingWithMultiple(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(strings.ToUpper(result), "WITH "))
 
 	t.Logf("Result:\n%s", result)
+}
+
+// A string literal holding a raw newline: the param must come back whole in
+// the CTE definition and its slot must be bound.
+func TestInjectParamsAsCTERawNewlineInString(t *testing.T) {
+	config := passes.NewExtractLiteralsConfig(1)
+	config.SetUseSequentialNames(true)
+	config.SetMinINListSize(0)
+	seq := nanopass.Sequence("ExtractThenInject", passes.ExtractLiterals(config), passes.InjectParamsAsCTE("", acceptAll, nil))
+	result, err := seq.Run("SELECT concat('a\nb', x) FROM t")
+	require.NoError(t, err)
+	assert.NotContains(t, result, "{", "slot left unbound: %s", result)
+	assert.True(t, strings.HasPrefix(result, "WITH 'a\nb' AS "), "CTE value cut at the newline: %s", result)
 }
