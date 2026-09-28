@@ -659,40 +659,6 @@ func applyDataBindings[V any](blacklist *containers.HashSet[uint64], bindings *c
 		functional.ConsumeIterator(vals)
 	}
 }
-func applyDataBindingsConst[V any](blacklist *containers.HashSet[uint64], bindings *containers.BinarySearchGrowingKV[uint64, *V], ids iter.Seq[uint64], val V, def V) {
-	if !bindings.IsEmpty() {
-		if blacklist.IsEmpty() {
-			for f := range bindings.IterateValues() {
-				*f = def
-			}
-			for id := range ids {
-				f := bindings.GetDefault(id, nil)
-				if f != nil {
-					*f = val
-				}
-			}
-		} else {
-			for id, f := range bindings.IteratePairs() {
-				if blacklist.Has(id) {
-					continue
-				}
-				*f = def
-			}
-			for id := range ids {
-				if blacklist.Has(id) {
-					continue
-				}
-				f := bindings.GetDefault(id, nil)
-				if f != nil {
-					*f = val
-				}
-			}
-		}
-		bindings.Reset()
-	} else {
-		functional.ConsumeIterator(ids)
-	}
-}
 func applyDataBindingsConst2[V any](blacklist *containers.HashSet[uint64], bindings *containers.BinarySearchGrowingKV[uint64, *V], fetcher func() (idsVal1 []uint64, idsVal2 iter.Seq[uint64]), val1 V, val2 V) {
 	idsVal1, idsVal2 := fetcher()
 	if !bindings.IsEmpty() {

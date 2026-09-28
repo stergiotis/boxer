@@ -730,10 +730,6 @@ func computePreviewState(hasChildren, hovered bool) CellStateE {
 	return s
 }
 
-// startZoom triggers a zoom-from-rect animation by delegating to animMachine.
-// Kept as a thin wrapper so Render's call sites stay readable.
-func (t *Treemap) startZoom(fromRect layout.Rect) { t.anim.Start(fromRect) }
-
 // cellIds derives matching ids for a cell's Frame and its response handle.
 // Two PrepareSeq+Derive cycles with the same seq produce the same scoped id
 // under the active IdScope, so the Frame's server-side id equals cellHandle's.

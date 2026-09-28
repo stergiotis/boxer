@@ -166,11 +166,11 @@ func (inst *Transport) Dwelling() bool { return inst.dwelling }
 // an editor's in and out points do.
 func (inst *Transport) SetIn(step, steps int) {
 	last := max(steps-1, 0)
-	lo, hi := inst.Bounds(steps)
+	_, hi := inst.Bounds(steps)
 	if !inst.RangeOn {
 		hi = last
 	}
-	lo = min(max(step, 0), last)
+	lo := min(max(step, 0), last)
 	if lo >= hi {
 		hi = last
 	}
@@ -179,11 +179,11 @@ func (inst *Transport) SetIn(step, steps int) {
 
 func (inst *Transport) SetOut(step, steps int) {
 	last := max(steps-1, 0)
-	lo, hi := inst.Bounds(steps)
+	lo, _ := inst.Bounds(steps)
 	if !inst.RangeOn {
 		lo = 0
 	}
-	hi = min(max(step, 0), last)
+	hi := min(max(step, 0), last)
 	if hi <= lo {
 		lo = 0
 	}
