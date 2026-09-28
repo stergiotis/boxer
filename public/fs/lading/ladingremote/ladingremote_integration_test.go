@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/fxamacker/cbor/v2"
@@ -141,6 +142,27 @@ func openRemote(t *testing.T, dir string, opts ...ladingremote.Option) *ladingre
 	return src
 }
 
+// processUmask reads the umask the rclone child inherits from
+// /proc/self/status, which reads it without the set-and-restore round trip
+// syscall.Umask needs. The test skips where the field is not available.
+func processUmask(t *testing.T) (mask fs.FileMode) {
+	t.Helper()
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		t.Skipf("cannot read the process umask: %v", err)
+	}
+	for ln := range strings.SplitSeq(string(status), "\n") {
+		if v, ok := strings.CutPrefix(ln, "Umask:"); ok {
+			u, perr := strconv.ParseUint(strings.TrimSpace(v), 8, 32)
+			require.NoError(t, perr, "Umask field %q", v)
+			mask = fs.FileMode(u) & fs.ModePerm
+			return
+		}
+	}
+	t.Skip("no Umask field in /proc/self/status")
+	return
+}
+
 // TestARemoteWalkEqualsALocalWalk is M6's acceptance: the same directory
 // snapshotted twice — once straight off the disk, once through
 // `rclone serve sftp --stdio` — agrees, up to what SFTP can carry.
@@ -171,6 +193,8 @@ func TestARemoteWalkEqualsALocalWalk(t *testing.T) {
 	rv, err := ladingadapter.Open(h.stores, mountRemote, remote.Snap)
 	require.NoError(t, err)
 
+	rcloneFilePerm := fs.FileMode(0o666) &^ processUmask(t)
+
 	var walked int
 	require.NoError(t, fs.WalkDir(dv, ".", func(p string, d fs.DirEntry, werr error) error {
 		require.NoError(t, werr)
@@ -191,13 +215,14 @@ func TestARemoteWalkEqualsALocalWalk(t *testing.T) {
 			return nil
 		}
 		assert.Equalf(t, di.Size(), ri.Size(), "size of %s", p)
-		// Modes do NOT survive: rclone's sftp server reports 0644 for every
-		// regular file whatever the source's permissions are — the ingress
-		// mirror of the egress finding that `--metadata` carries no mode.
-		// Asserted rather than skipped, so a future rclone that starts
-		// carrying them is a test failure someone reads rather than a silent
-		// improvement nobody notices.
-		assert.EqualValuesf(t, 0o644, ri.Mode().Perm(),
+		// Modes do NOT survive: rclone's sftp server reports its default
+		// file permissions, 0666 &^ umask, for every regular file whatever
+		// the source's permissions are — the ingress mirror of the egress
+		// finding that `--metadata` carries no mode. Asserted rather than
+		// skipped, so a future rclone that starts carrying them is a test
+		// failure someone reads rather than a silent improvement nobody
+		// notices.
+		assert.Equalf(t, rcloneFilePerm, ri.Mode().Perm(),
 			"rclone normalises the mode of %s; the source's own is %v", p, di.Mode().Perm())
 
 		want, rerr := fs.ReadFile(dv, p)
