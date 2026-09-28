@@ -14,6 +14,7 @@ type RetainedFffiHolder struct {
 	content           []byte
 	retainedElementId RetainedElementId
 	widgetIdOffset    uint32
+	hasWidgetId       bool
 }
 type RetainedFffiHolderTyped[T any] struct {
 	_                 T
@@ -21,10 +22,12 @@ type RetainedFffiHolderTyped[T any] struct {
 	content           []byte
 	retainedElementId RetainedElementId
 	widgetIdOffset    uint32
+	hasWidgetId       bool
 }
 type RetainedFffiBuilder struct {
 	builder        *retainedFffiBuilderPooled
 	widgetIdOffset uint32
+	hasWidgetId    bool
 }
 
 var _ runtime.MarshallWriterI = (*RetainedFffiBuilder)(nil)
@@ -34,6 +37,7 @@ var _ runtime.MarshallWriterI = (*RetainedFffiBuilder)(nil)
 // writes the widget ID.
 func (inst *RetainedFffiBuilder) MarkWidgetIdOffset() {
 	inst.widgetIdOffset = uint32(inst.builder.buf.Len())
+	inst.hasWidgetId = true
 }
 
 // WriteWidgetId records the current buffer position as the widget ID offset
@@ -41,25 +45,27 @@ func (inst *RetainedFffiBuilder) MarkWidgetIdOffset() {
 // a bare WriteUint64 for the widget ID argument.
 func (inst *RetainedFffiBuilder) WriteWidgetId(id uint64) {
 	inst.widgetIdOffset = uint32(inst.builder.buf.Len())
+	inst.hasWidgetId = true
 	inst.builder.marshaller.WriteUint64(id)
 }
 
 // GetWidgetHandle returns a WidgetHandle for the retained holder's widget ID.
-// Returns widgethandle.NoWidget if this holder does not contain a widget ID
-// (widgetIdOffset == 0 and the bytes at that offset are not a valid ID).
+// Returns widgethandle.NoWidget if the builder never recorded a widget ID
+// (neither WriteWidgetId nor MarkWidgetIdOffset was called).
 func (inst RetainedFffiHolderTyped[T]) GetWidgetHandle() widgethandle.WidgetHandle {
 	off := inst.widgetIdOffset
-	if int(off)+8 > len(inst.content) {
+	if !inst.hasWidgetId || int(off)+8 > len(inst.content) {
 		return widgethandle.NoWidget
 	}
 	id := binary.LittleEndian.Uint64(inst.content[off : off+8])
 	return widgethandle.Make(id)
 }
 
-// GetWidgetHandle returns a WidgetHandle for the retained holder's widget ID.
+// GetWidgetHandle returns a WidgetHandle for the retained holder's widget ID,
+// or widgethandle.NoWidget if the holder carries none.
 func (inst *RetainedFffiHolder) GetWidgetHandle() widgethandle.WidgetHandle {
 	off := inst.widgetIdOffset
-	if int(off)+8 > len(inst.content) {
+	if !inst.hasWidgetId || int(off)+8 > len(inst.content) {
 		return widgethandle.NoWidget
 	}
 	id := binary.LittleEndian.Uint64(inst.content[off : off+8])
