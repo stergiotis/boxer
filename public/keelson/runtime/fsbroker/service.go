@@ -7,6 +7,10 @@
 // fs.handle.{uuid}.read to actually fetch the file content — it never
 // sees a path.
 //
+// Beside the dialogs and their handles, each app has a data area it reaches
+// by file name over fs.appdata.{op}, for records it keeps for itself (see
+// appdata.go).
+//
 // M2.6 ships the service + a programmatic Resolve API for tests and for
 // the M2.6b egui picker bridge. The bridge calls Pending to learn what
 // dialogs are active, drives the picker widget, and feeds the selection
@@ -169,6 +173,7 @@ type Service struct {
 	pending      map[string]*pendingEntry
 	watches      map[string]*activeWatch
 	maxReadBytes int64
+	appDataRoot  string
 }
 
 // SetMaxReadBytes overrides DefaultMaxReadBytes for single-shot handle
@@ -195,6 +200,7 @@ func NewService(inst *inprocbus.Inst, log zerolog.Logger) (s *Service, err error
 		pending:      make(map[string]*pendingEntry),
 		watches:      make(map[string]*activeWatch),
 		maxReadBytes: DefaultMaxReadBytes,
+		appDataRoot:  defaultAppDataRoot(),
 	}
 	s.busClient = inst.NewClient(ServiceAppId, []app.SubjectFilter{
 		{Pattern: "fs.>", Direction: app.CapDirectionBoth, Reason: "fs Powerbox serves all fs subjects"},
@@ -343,6 +349,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.queuePending(msg, "watch")
 	case strings.HasPrefix(msg.Subject, HandleSubjectPrefix):
 		inst.handleHandleOp(msg)
+	case strings.HasPrefix(msg.Subject, SubjectAppDataPrefix):
+		inst.handleAppData(msg)
 	default:
 		inst.replyError(msg.Reply, "unknown fs subject: "+msg.Subject)
 	}

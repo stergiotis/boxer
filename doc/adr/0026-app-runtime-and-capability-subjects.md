@@ -359,6 +359,23 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-09-28 — §SD7: `fs.appdata.*`, a data area per app
+
+The Powerbox answered only for files a person hands an app, so an app keeping
+its own records had nowhere to put them but the disk, directly, which §SD10
+exists to make visible. The broker now also serves **a data area per app**:
+`fs.appdata.{read|write|append|stat|list}`, addressed by file name. No
+dialog is involved: the authority is the manifest's `fs.appdata.>`
+declaration, which the bus enforces on publish, and the broker keys the
+directory on the message's sender, so an app can reach only its own area. A
+name is one path component (letters, digits, `.`, `_`, `-`, not leading
+`.`). Write replaces atomically (temporary file, fsync, rename) and append
+is durable when the reply lands, which the handle ops do not give. A stat or
+write reply carries the file's host path for display only. The root is
+`BOXER_FS_APPDATA_DIR`, else `<user config dir>/boxer/appdata`; with neither,
+the ops refuse. The first consumer is jackstay's plan store (ADR-0259,
+2026-09-28).
+
 ### 2026-09-26 — `net.http.fetch.<destination>` joins the taxonomy (ADR-0262)
 
 §SD10's `net.` prefix gains its first family: HTTP egress to a destination
