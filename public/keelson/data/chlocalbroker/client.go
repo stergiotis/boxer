@@ -85,11 +85,12 @@ func (inst *ExecReply) Err() (err error) {
 // matching `ch.local.exec.<poolName>` (or a wildcard that covers it).
 //
 // ctx is honoured two ways: (1) if it has a deadline, the deadline is
-// encoded into the wire request so the broker can shorten its own
-// execution ctx; (2) ctx.Err() is checked at entry. ctx cancellation
-// during the bus.Request call is NOT propagated to the broker — the
-// in-proc bus API has no per-call ctx. The bus's global request
-// timeout still applies.
+// encoded into the wire request, and the broker kills the worker when
+// it passes; (2) ctx.Err() is checked at entry. ctx cancellation
+// without a deadline is NOT propagated to the broker — the in-proc bus
+// API has no per-call ctx. The bus's request timeout ends at most the
+// caller's wait, never the running query; give ctx a deadline to
+// bound the query itself.
 //
 // On success rep.ReadCloser delivers the SQL output bytes; on
 // worker-side failure rep is non-nil with Err() set to the worker's

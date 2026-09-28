@@ -245,3 +245,32 @@ func TestService_SeparatePoolsAreIsolated(t *testing.T) {
 type assertionErr string
 
 func (e assertionErr) Error() string { return string(e) }
+
+// A caller deadline that passes while the worker is running kills the
+// worker (ADR-0028 §SD8) instead of leaving the inline bus dispatch
+// blocked until the pool watchdog reaps it.
+func TestExecOnPool_DeadlineKillsRunningQuery(t *testing.T) {
+	svc, caller := newTestBroker(t)
+	waitForPoolWarm(t, svc, caller)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	started := time.Now()
+	rep, err := ExecOnPool(ctx, caller, "scratchpad", ExecRequest{
+		SQL:    "SELECT sleepEachRow(1) FROM numbers(20) SETTINGS max_block_size = 1",
+		Format: "TabSeparated",
+	})
+	elapsed := time.Since(started)
+	require.NoError(t, err)
+	require.Error(t, rep.Err())
+	assert.Contains(t, ebtest.Text(t, rep.Err()), "deadline")
+	assert.Less(t, elapsed, 8*time.Second, "the deadline must end the query, not the watchdog")
+}
+
+func waitForPoolWarm(t *testing.T, svc *Service, caller *inprocbus.Client) {
+	t.Helper()
+	rep, err := ExecOnPool(context.Background(), caller, "scratchpad", ExecRequest{SQL: "SELECT 1", Format: "TabSeparated"})
+	require.NoError(t, err)
+	require.NoError(t, rep.Err())
+	waitForPool(t, svc, "scratchpad", 3*time.Second)
+}

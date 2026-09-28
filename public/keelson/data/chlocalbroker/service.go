@@ -106,7 +106,8 @@ func NewService(bus *inprocbus.Inst, poolCfg chlocalpool.Config, log zerolog.Log
 
 // SetRequestTimeout overrides DefaultRequestTimeout; useful when the
 // pool is expected to handle long-running queries (large data
-// conversions).
+// conversions). The pool's Config.WatchdogMaxLifetime still reaps a
+// worker by age, so a timeout past it needs the watchdog raised too.
 func (inst *Service) SetRequestTimeout(d time.Duration) {
 	if d <= 0 {
 		return
@@ -253,8 +254,9 @@ func (inst *Service) emitAudit(f auditFields) {
 }
 
 // handleRequest is the bus subscription callback. Bounded by the
-// service's request timeout; SQL execution is gated by chlocalpool's
-// own ctx-respecting Acquire. Every code path through this handler
+// shorter of the service's request timeout and the caller's wire
+// deadline: the deadline gates chlocalpool's Acquire and, once a worker
+// runs, kills it. Every code path through this handler
 // updates `aud` and the deferred emitAudit produces exactly one
 // audit row per request.
 func (inst *Service) handleRequest(msg *app.Msg) {
@@ -374,6 +376,12 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		return
 	}
 	defer func() { _ = w.Close() }()
+	// The deadline bounds the query, not only the Acquire (ADR-0028 §SD8):
+	// the bus carries no per-call ctx, so nothing else ends a running
+	// worker short of the pool watchdog. Close SIGTERMs, then SIGKILLs
+	// after KillGrace; the drain below then sees EOF or a closed pipe.
+	stopKill := context.AfterFunc(ctx, func() { _ = w.Close() })
+	defer stopKill()
 
 	// Bind any InputTables as TEMPORARY tables ahead of the query
 	// (ADR-0094 §SD5). The files must outlive the worker's read, so
@@ -410,6 +418,9 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 
 	if _, err = bb.ReadFrom(w.Stdout()); err != nil {
 		aud.errMsg = "drain stdout: " + err.Error()
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			aud.errMsg = "killed by cancellation: " + ctxErr.Error()
+		}
 		aud.stderrTail = string(w.StderrTail())
 		inst.sendError(msg.Reply, aud.errMsg, aud.stderrTail, 0)
 		return
@@ -418,6 +429,9 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// Join the encrypted-input streamers regardless of the worker's exit:
 	if waitErr != nil {
 		aud.errMsg = waitErr.Error()
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			aud.errMsg = "killed by cancellation: " + ctxErr.Error() + ": " + aud.errMsg
+		}
 		aud.stderrTail = string(w.StderrTail())
 		inst.sendError(msg.Reply, aud.errMsg, aud.stderrTail, 0)
 		return

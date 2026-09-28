@@ -526,6 +526,22 @@ cannot rank it above a path it checks itself without a second reader of the
 same variable. An operator with both who wants the override to win sets
 `Config.BinaryPath`.
 
+### 2026-09-28 — the request deadline kills a running worker
+
+§SD8's mid-query cancellation was not wired: the broker's deadline reached
+`pool.Acquire` only, and a worker already running its SQL ran until it exited
+or the pool watchdog reaped it by age. The deadline — the shorter of the
+broker's request timeout and the caller's wire deadline — now closes the
+worker when it passes, and the reply's error reads "killed by cancellation".
+
+**Why.** The bus carries no per-call ctx, so the deadline is the only thing
+that can end a query the caller has given up on; without it a slow query held
+a worker, and the handler, for up to `WatchdogMaxLifetime`.
+
+**What did not change.** The watchdog still reaps by worker age, so a
+`SetRequestTimeout` longer than `WatchdogMaxLifetime` needs the watchdog raised
+with it.
+
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).
