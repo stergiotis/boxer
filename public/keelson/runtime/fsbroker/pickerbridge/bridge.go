@@ -24,6 +24,7 @@ import (
 	boxerenv "github.com/stergiotis/boxer/public/config/env"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -43,7 +44,8 @@ type Config struct {
 	// outside FsRoot.
 	StartDir string
 	// TitleOverride replaces the per-op default title ("Open file" /
-	// "Save as" / "Pick folder"). Empty leaves the default.
+	// "Save as" / "Pick folder"). Empty leaves the default. Either way the
+	// requesting app's id is appended (see attributedTitle).
 	TitleOverride string
 	// ColumnWidths persists the dialogs' column widths (ADR-0151). Build
 	// it with filepicker.NewColumnWidths; the bridge hands it to every
@@ -138,6 +140,7 @@ func (inst *Bridge) CurrentRequestId() (id string) {
 
 func (inst *Bridge) startPicker(req *fsbroker.PendingRequest) {
 	mode, title := pickerOptionsFor(req.Op, inst.cfg.TitleOverride)
+	title = attributedTitle(title, req.AppId)
 	idStr := "fs-picker-" + req.Id
 	opts := []filepicker.Option{
 		filepicker.WithFsBackend(inst.fsys),
@@ -201,6 +204,19 @@ func pickerOptionsFor(op string, titleOverride string) (mode filepicker.ModeE, t
 		title = titleOverride
 	}
 	return
+}
+
+// attributedTitle names the requesting app in the picker's title. The picker
+// is the grant prompt (ADR-0026 §SD7): a file the user picks goes to whoever
+// asked, and a request can come from a window that is not the one in front,
+// so the prompt has to say whose it is. The app id is the bus's record of the
+// sender, not a payload claim. Applied after pickerOptionsFor, so a host's
+// TitleOverride replaces the wording and never the attribution.
+func attributedTitle(title string, appId app.AppIdT) (out string) {
+	if appId == "" {
+		return title
+	}
+	return title + " — for " + string(appId)
 }
 
 func (inst *Bridge) clearCurrent() {

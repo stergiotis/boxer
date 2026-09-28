@@ -153,3 +153,16 @@ func TestSaveFilenameHint(t *testing.T) {
 		})
 	}
 }
+
+// The picker is the grant prompt, so it names the app the grant goes to — a
+// request can come from a window other than the one in front. A host's
+// TitleOverride changes the wording, never the attribution.
+func TestAttributedTitle_NamesTheRequestingApp(t *testing.T) {
+	_, title := pickerOptionsFor("read", "")
+	assert.Equal(t, "Open file — for example.test/bg", attributedTitle(title, "example.test/bg"))
+
+	_, title = pickerOptionsFor("write", "Pick a destination")
+	assert.Equal(t, "Pick a destination — for example.test/editor", attributedTitle(title, "example.test/editor"))
+
+	assert.Equal(t, "Open file", attributedTitle("Open file", ""), "an unattributed request keeps the plain title")
+}
