@@ -144,8 +144,15 @@ func (inst *Service) SetAppDataRoot(root string) {
 	inst.mu.Unlock()
 }
 
+// appDataFilesDir is the leaf directory that holds an area's files. App ids
+// nest ("x/widgets" and "x/widgets/table" are both valid), so the directory of
+// one id's segments can hold another's; keeping the files one level down, in
+// a directory no segment can be named, keeps an app's file names apart from
+// the directories of the apps nested under it.
+const appDataFilesDir = "@files"
+
 // appDataDir is the data area of appId: the root, then one directory per
-// segment of the id, so the tree reads as the ids do.
+// segment of the id, so the tree reads as the ids do, then [appDataFilesDir].
 func (inst *Service) appDataDir(appId app.AppIdT) (dir string, err error) {
 	inst.mu.Lock()
 	root := inst.appDataRoot
@@ -156,12 +163,12 @@ func (inst *Service) appDataDir(appId app.AppIdT) (dir string, err error) {
 	}
 	segs := strings.Split(string(appId), "/")
 	for _, s := range segs {
-		if s == "" || strings.HasPrefix(s, ".") || strings.ContainsAny(s, "\\\x00") {
+		if s == "" || strings.HasPrefix(s, ".") || strings.HasPrefix(s, "@") || strings.ContainsAny(s, "\\\x00") {
 			err = fmt.Errorf("app id %q does not name a data area", appId)
 			return
 		}
 	}
-	dir = filepath.Join(append([]string{root}, segs...)...)
+	dir = filepath.Join(append(append([]string{root}, segs...), appDataFilesDir)...)
 	return
 }
 

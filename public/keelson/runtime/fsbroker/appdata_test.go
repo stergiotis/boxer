@@ -40,7 +40,7 @@ func TestAppData_WriteReadAppendStatList(t *testing.T) {
 
 	w, err := c.Write("plan.json", []byte("{}\n"))
 	require.NoError(t, err)
-	want := filepath.Join(root, "example.test", "some", "app", "plan.json")
+	want := filepath.Join(root, "example.test", "some", "app", "@files", "plan.json")
 	assert.Equal(t, want, w.Location)
 	assert.EqualValues(t, 3, w.Entry.Size)
 
@@ -116,6 +116,29 @@ func TestAppData_AreasAreSeparateByApp(t *testing.T) {
 	entries, err := b.List()
 	require.NoError(t, err)
 	assert.Empty(t, entries)
+}
+
+// App ids nest, so one app's area can sit under another's directory. The
+// outer app must not be able to see the inner one's directory, nor break it by
+// taking its name first.
+func TestAppData_NestedAppIdsAreSeparate(t *testing.T) {
+	inst, _, _ := newAppDataSetup(t)
+	outer := appDataClient(inst, "example.test/widgets")
+	inner := appDataClient(inst, "example.test/widgets/table")
+
+	require.NoError(t, outer.WriteFile("table", []byte("outer")), "the outer app names a file after the inner app's segment")
+	require.NoError(t, inner.WriteFile("x.json", []byte("inner")), "the inner app's area still works")
+
+	data, err := outer.ReadFile("table")
+	require.NoError(t, err)
+	assert.Equal(t, "outer", string(data))
+	entries, err := outer.List()
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "table", entries[0].Name)
+
+	_, err = outer.ReadFile("x.json")
+	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
 
 func TestAppData_NeedsTheCap(t *testing.T) {
