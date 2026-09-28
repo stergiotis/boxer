@@ -15,106 +15,16 @@ import (
 
 // --- String escape/unescape ---
 
-// UnescapeString removes surrounding single quotes and resolves escape sequences.
+// UnescapeString removes surrounding single quotes and resolves escape
+// sequences as the ClickHouse server does ([nanopass.UnescapeQuoted]): an
+// escape the server does not name keeps its backslash, so a regex or LIKE
+// pattern survives UnescapeString followed by [EscapeString] unchanged.
 func UnescapeString(raw string) (result string, err error) {
 	if len(raw) < 2 || raw[0] != '\'' || raw[len(raw)-1] != '\'' {
 		err = eb.Build().Str("input", raw).Errorf("input must be a single-quoted string")
 		return
 	}
-	inner := raw[1 : len(raw)-1]
-	var buf strings.Builder
-	buf.Grow(len(inner))
-
-	i := 0
-	for i < len(inner) {
-		ch := inner[i]
-		switch {
-		case ch == '\\' && i+1 < len(inner):
-			next := inner[i+1]
-			switch next {
-			case '\\':
-				buf.WriteByte('\\')
-				i += 2
-			case '\'':
-				buf.WriteByte('\'')
-				i += 2
-			case 'n':
-				buf.WriteByte('\n')
-				i += 2
-			case 't':
-				buf.WriteByte('\t')
-				i += 2
-			case 'r':
-				buf.WriteByte('\r')
-				i += 2
-			case '0':
-				buf.WriteByte(0)
-				i += 2
-			case 'b':
-				buf.WriteByte('\b')
-				i += 2
-			case 'f':
-				buf.WriteByte('\f')
-				i += 2
-			case 'a':
-				buf.WriteByte('\a')
-				i += 2
-			case 'v':
-				buf.WriteByte('\v')
-				i += 2
-			case 'x':
-				if i+3 >= len(inner) {
-					err = eb.Build().Int("position", i).Errorf("truncated \\x escape")
-					return
-				}
-				val, parseErr := strconv.ParseUint(inner[i+2:i+4], 16, 8)
-				if parseErr != nil {
-					err = eb.Build().Int("position", i).Errorf("invalid \\x escape: %w", parseErr)
-					return
-				}
-				buf.WriteByte(byte(val))
-				i += 4
-			case 'u':
-				if i+5 >= len(inner) {
-					err = eb.Build().Int("position", i).Errorf("truncated \\u escape")
-					return
-				}
-				val, parseErr := strconv.ParseUint(inner[i+2:i+6], 16, 32)
-				if parseErr != nil {
-					err = eb.Build().Int("position", i).Errorf("invalid \\u escape: %w", parseErr)
-					return
-				}
-				buf.WriteRune(rune(val))
-				i += 6
-			case 'U':
-				if i+9 >= len(inner) {
-					err = eb.Build().Int("position", i).Errorf("truncated \\U escape")
-					return
-				}
-				val, parseErr := strconv.ParseUint(inner[i+2:i+10], 16, 32)
-				if parseErr != nil {
-					err = eb.Build().Int("position", i).Errorf("invalid \\U escape: %w", parseErr)
-					return
-				}
-				if !utf8.ValidRune(rune(val)) {
-					err = eb.Build().Uint64("codePoint", val).Int("position", i).Errorf("invalid Unicode code point")
-					return
-				}
-				buf.WriteRune(rune(val))
-				i += 10
-			default:
-				buf.WriteByte(next)
-				i += 2
-			}
-		case ch == '\'' && i+1 < len(inner) && inner[i+1] == '\'':
-			buf.WriteByte('\'')
-			i += 2
-		default:
-			buf.WriteByte(ch)
-			i++
-		}
-	}
-	result = buf.String()
+	result, err = nanopass.UnescapeQuoted(raw[1:len(raw)-1], '\'')
 	return
 }
 

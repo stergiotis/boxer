@@ -61,16 +61,51 @@ func TestUnescapeStringHex(t *testing.T) {
 	assert.Equal(t, "A", result)
 }
 
-func TestUnescapeStringUnicode(t *testing.T) {
+// ClickHouse has no \u / \U escape; the server reads '\u0041' as six
+// bytes of text, and so must UnescapeString.
+func TestUnescapeStringUnicodeIsLiteral(t *testing.T) {
 	result, err := marshalling.UnescapeString("'\\u0041'")
 	require.NoError(t, err)
-	assert.Equal(t, "A", result)
+	assert.Equal(t, "\\u0041", result)
+
+	result, err = marshalling.UnescapeString("'\\U0001F600'")
+	require.NoError(t, err)
+	assert.Equal(t, "\\U0001F600", result)
 }
 
-func TestUnescapeStringFullUnicode(t *testing.T) {
-	result, err := marshalling.UnescapeString("'\\U0001F600'")
-	require.NoError(t, err)
-	assert.Equal(t, "\U0001F600", result)
+// Expected values were read back from a live server with SELECT hex('…').
+func TestUnescapeStringServerEscapeRules(t *testing.T) {
+	cases := map[string]string{
+		`'\d+'`:    `\d+`,
+		`'a\_b'`:   `a\_b`,
+		`'100\%'`:  `100\%`,
+		`'\e'`:     "\x1b",
+		`'\N'`:     "",
+		`'\"'`:     `"`,
+		"'\\`'":    "`",
+		`'\/'`:     "/",
+		`'\='`:     "=",
+		`'a\\b'`:   `a\b`,
+		`'\x41'`:   "A",
+		`'\ud800'`: `\ud800`,
+	}
+	for raw, want := range cases {
+		got, err := marshalling.UnescapeString(raw)
+		require.NoError(t, err, raw)
+		assert.Equal(t, want, got, "unescape %s", raw)
+	}
+}
+
+// Unescape followed by escape must keep a regex's meaning.
+func TestUnescapeEscapeKeepsRegex(t *testing.T) {
+	for _, raw := range []string{`'^c\d+$'`, `'a\_b'`, `'\w\s'`} {
+		val, err := marshalling.UnescapeString(raw)
+		require.NoError(t, err)
+		back, err := marshalling.UnescapeString(marshalling.EscapeString(val))
+		require.NoError(t, err)
+		assert.Equal(t, val, back)
+		assert.Contains(t, val, `\`, raw)
+	}
 }
 
 func TestEscapeUnescapeRoundTrip(t *testing.T) {
