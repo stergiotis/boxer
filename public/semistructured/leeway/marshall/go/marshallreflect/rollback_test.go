@@ -1,0 +1,50 @@
+package marshallreflect_test
+
+import (
+	"testing"
+
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire/example"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
+)
+
+// A write that fails mid-entity must leave the DML ready for the next entity:
+// the membership lookup miss on the first call is the only error, and a later
+// write of valid rows to the same DML commits.
+func TestMarshal_FailedRowRollsBack(t *testing.T) {
+	dml := example.NewInEntityFixedTable(memory.NewGoAllocator(), 2)
+	rows := []fixedHashRow{{Id: 1, H: [4]byte{1, 2, 3, 4}}}
+	require.Error(t, marshallreflect.Marshal(dml, rows, marshallreflect.MapLookup{}))
+	require.NoError(t, marshallreflect.Marshal(dml, rows, marshallreflect.MapLookup{"m": 7}))
+	recs, err := dml.TransferRecords(nil)
+	require.NoError(t, err)
+	var n int64
+	for _, r := range recs {
+		n += r.NumRows()
+		r.Release()
+	}
+	require.EqualValues(t, 1, n, "only the committed entity is written")
+}
+
+func TestRowComposer_FailedCommitRollsBack(t *testing.T) {
+	dml := example.NewInEntityFixedTable(memory.NewGoAllocator(), 2)
+	row := fixedHashRow{Id: 1, H: [4]byte{1, 2, 3, 4}}
+
+	bad := marshallreflect.NewRowComposer(dml, marshallreflect.MapLookup{})
+	require.NoError(t, bad.BeginRow(row))
+	require.Error(t, bad.CommitRow())
+
+	good := marshallreflect.NewRowComposer(dml, marshallreflect.MapLookup{"m": 7})
+	require.NoError(t, good.BeginRow(row))
+	require.NoError(t, good.CommitRow())
+	recs, err := dml.TransferRecords(nil)
+	require.NoError(t, err)
+	var n int64
+	for _, r := range recs {
+		n += r.NumRows()
+		r.Release()
+	}
+	require.EqualValues(t, 1, n, "only the committed entity is written")
+}

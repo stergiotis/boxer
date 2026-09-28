@@ -27,6 +27,10 @@ import (
 // A dml missing a method the plan drives is returned as an error, not raised as
 // a panic; call Validate[T](dml) first to get every mismatch at once instead of
 // the first one reached.
+//
+// A row that fails after its entity is opened is rolled back through the
+// dml's RollbackEntity (when it has one), so Marshal stops at that row but
+// leaves the dml accepting further entities; rows before it stay written.
 func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
 	defer recoverContract(&err)
 	if lookup == nil {
@@ -50,6 +54,11 @@ func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
 
 func marshalRow(dml, row reflect.Value, plan *mappingplan.Plan, groups []goplan.SectionGroup, lookup LookupI) (err error) {
 	mustCall(dml, "BeginEntity")
+	defer func() {
+		if err != nil {
+			rollbackEntity(dml)
+		}
+	}()
 	err = marshalPlain(dml, row, plan)
 	if err != nil {
 		return
@@ -65,6 +74,18 @@ func marshalRow(dml, row reflect.Value, plan *mappingplan.Plan, groups []goplan.
 		err = rets[0].Interface().(error)
 	}
 	return
+}
+
+// rollbackEntity abandons the open entity after a failed write, so the DML
+// accepts the next BeginEntity instead of failing every later commit. It is
+// best-effort: the write's own error is the one reported, and a DML without a
+// RollbackEntity method is left as it is.
+func rollbackEntity(dml reflect.Value) {
+	m := dml.MethodByName("RollbackEntity")
+	if !m.IsValid() {
+		return
+	}
+	m.Call(nil)
 }
 
 // marshalPlain drives the entity-header setters from the DTO's plain
