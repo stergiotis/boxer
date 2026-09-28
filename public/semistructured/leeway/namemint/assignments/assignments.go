@@ -227,6 +227,10 @@ func Diff(golden, live []Assignment) (differences []string) {
 	return
 }
 
+func skipDirName(name string) bool {
+	return name == "node_modules" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
+}
+
 // TagValueOf returns the tag value the id was composed under — which
 // vocabulary it belongs to, read out of the id itself.
 func TagValueOf(id uint64) identifier.TagValue {
@@ -234,7 +238,9 @@ func TagValueOf(id uint64) identifier.TagValue {
 }
 
 // FindGoldens walks root and returns every committed assignment table it
-// finds, keyed by the path it was read from.
+// finds, keyed by the path it was read from. It skips the directories the go
+// tool skips for ./... — names starting with "." or "_", which is where
+// agent worktrees and other checkouts of the same tree live — and node_modules.
 func FindGoldens(root string) (r map[string][]Assignment, err error) {
 	r = make(map[string][]Assignment)
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
@@ -242,7 +248,7 @@ func FindGoldens(root string) (r map[string][]Assignment, err error) {
 			return walkErr
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "node_modules" {
+			if path != root && skipDirName(d.Name()) {
 				return fs.SkipDir
 			}
 			return nil
