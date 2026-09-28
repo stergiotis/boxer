@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 )
@@ -40,8 +41,12 @@ type App struct {
 	conv *conversation
 	// keep is the Keep toggle; a conversation takes it at its first send.
 	keep bool
-	// draft is the composer's text, bound to the text input.
+	// draft is the composer's text, bound to the text input; hlJob colours
+	// it as markdown, rebuilt only when hlSrc no longer equals it.
 	draft string
+	hlSrc string
+	hlJob typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	hlOk  bool
 	view  chatview.State
 	// focused is whether this window is the shell's active one, which
 	// gates the process-wide Ctrl+Enter chord (play's claimRunChord).

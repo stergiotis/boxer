@@ -8,7 +8,9 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
 )
 
 const (
@@ -110,13 +112,17 @@ func (inst *App) renderComposer() {
 	busy := inst.pending != nil
 	// Hscroll keeps the input's width from feeding back into the window's
 	// minimum width (mdedit's editor found this).
+	inst.ensureHighlight()
 	for range c.ScrollArea().Hscroll(true).Vscroll(true).MaxHeight(composerMaxHeight).AutoShrink(false, true).KeepIter() {
-		c.TextEdit(inst.ids.PrepareStr("draft"), inst.draft, true).
+		b := c.TextEdit(inst.ids.PrepareStr("draft"), inst.draft, true).
 			DesiredWidth(w).
 			DesiredRows(composerRows).
 			HintText(hintDraft).
-			Interactive(!busy).
-			SendRespVal(&inst.draft)
+			Interactive(!busy)
+		if inst.hlOk {
+			b = b.HighlightJob(inst.hlJob)
+		}
+		b.SendRespVal(&inst.draft)
 	}
 	// While a turn runs, Cancel takes Send's place: Button has no disabled
 	// state, and a Send that does nothing would read as broken.
@@ -143,8 +149,25 @@ func (inst *App) renderComposer() {
 	}
 }
 
-// renderTranscript is chatview over the conversation, the model's replies
-// drawn as markdown, and a placeholder bubble while a turn is in flight.
+// ensureHighlight colours the draft as markdown, mdedit's editor pipeline:
+// the lexer, not the canonicalising highlighter, because the spans must
+// index the draft's own bytes. Rebuilt only when the draft changed, on the
+// render goroutine since building the job issues opcodes; an empty draft
+// gets no job, so the hint text shows.
+func (inst *App) ensureHighlight() {
+	if inst.hlSrc == inst.draft {
+		return
+	}
+	inst.hlSrc = inst.draft
+	inst.hlOk = inst.draft != ""
+	if inst.hlOk {
+		inst.hlJob = codeview.BuildMarkdownFromSpans(inst.draft, markdownhighlight.HighlightLex([]byte(inst.draft)))
+	}
+}
+
+// renderTranscript is chatview over the conversation, every message drawn
+// as markdown — the composer highlights it, so a fence typed there is a
+// fence in the bubble — and a placeholder bubble while a turn is in flight.
 func (inst *App) renderTranscript() {
 	conv := inst.conv
 	m, kinds := transcriptModel(conv, inst.pending != nil, time.Now().UnixMilli())
@@ -161,15 +184,20 @@ func (inst *App) renderTranscript() {
 						c.Label("thinking…").Selectable(false).Send()
 					}
 				}}, true
-			case k.entry >= 0 && conv.entries[k.entry].speaker == speakerModel:
+			case k.entry >= 0:
 				e := &conv.entries[k.entry]
 				if e.doc == nil {
 					e.doc = markdown.Parse([]byte(e.text))
 				}
 				doc := e.doc
 				return chatview.Block{Render: func() {
-					for range c.IdScope(inst.ids.PrepareSeq(uint64(0x5100 + ord))) {
-						doc.Render(inst.ids)
+					// The user's bubbles sit in a right-aligned column, and
+					// markdown would inherit that alignment line by line; a
+					// message reads left-aligned on either side.
+					for range c.UiWithLayout().MainDirTopDown().CrossAlignMin().KeepIter() {
+						for range c.IdScope(inst.ids.PrepareSeq(uint64(0x5100 + ord))) {
+							doc.Render(inst.ids)
+						}
 					}
 				}}, true
 			}
