@@ -17,8 +17,8 @@ when no target is configured. The scene discovers the server, chooses the
 `default` database, and plans its structure onto a renamed copy. It stops
 before anything is written: the DDL, the diff and the sync each wait for a
 click the scene does not make. What is listed is whatever the live server
-holds. The plan file the wizard names for itself lands under
-`BOXER_JACKSTAY_PLAN_DIR`.
+holds. The plan file the wizard names for itself lands in its data area,
+under `BOXER_FS_APPDATA_DIR`.
 
 ```jsonl trace
 {"do":"wait","name":"Discover the servers","role":"button","settleMs":500}

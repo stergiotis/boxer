@@ -9,6 +9,11 @@
 // uses. The plan file is proposed by the app, so the sync never refuses for
 // want of one, and the plans used before are listed on the first page.
 //
+// Plans and their journals live in the window's data area, which the
+// runtime's fs broker owns (fs.appdata.*): the window names files and never
+// holds a path. A plan comes in from elsewhere, or goes out, through the file
+// dialogs (Import, Export), which the user answers.
+//
 // Nothing waits on a server from the frame goroutine. Every step runs as a
 // bgjob on a copy of the plan and lands a new plan value, which the frame
 // takes, shows and saves. The worker goroutines never call imzero2.
@@ -21,8 +26,6 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,9 +40,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
 )
 
 type stepE uint8
@@ -118,36 +121,14 @@ func (inst stepE) describe() (s string) {
 	return ""
 }
 
-// PlanEnv names a plan file the window opens at start and saves to — the
-// seed that lets a headless scene reach the steps that need a saved plan
-// without the file dialog.
+// PlanEnv names a plan in the window's data area that it opens at start and
+// saves to — the seed that lets a headless scene reach the steps that need a
+// saved plan without a dialog.
 var PlanEnv = env.NewString(env.Spec{
 	Name:        "BOXER_JACKSTAY_PLAN",
-	Description: "jackstay window: plan file opened at start and saved to (created on first save when missing)",
+	Description: "jackstay window: plan, by file name in the window's data area (fs.appdata), opened at start and saved to (created on first save when missing)",
 	Category:    env.CategoryDatabase,
 })
-
-// PlanDirEnv is where the window puts a plan it proposes a path for. Empty
-// resolves through [resolvePlanDir].
-var PlanDirEnv = env.NewPath(env.Spec{
-	Name:        "BOXER_JACKSTAY_PLAN_DIR",
-	Description: "jackstay window: directory for plans the window names itself; empty uses <user config dir>/boxer/jackstay",
-	Category:    env.CategoryDatabase,
-})
-
-// resolvePlanDir is [PlanDirEnv] when set, else <user config dir>/boxer/jackstay,
-// else a directory under the temp dir for a host with no config directory.
-// A plan's journal lives beside it, so the directory should survive a
-// reboot, which rules the cache directory out.
-func resolvePlanDir() (dir string) {
-	if dir = PlanDirEnv.Get(); dir != "" {
-		return dir
-	}
-	if cfg, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(cfg, "boxer", "jackstay")
-	}
-	return filepath.Join(os.TempDir(), "boxer-jackstay")
-}
 
 // recentKey is the persisted key under which the window keeps the plans it
 // used, newest first.
@@ -159,9 +140,11 @@ const recentCap = 8
 // chunkLogCap bounds the chunk results the Run page lists.
 const chunkLogCap = 200
 
-// recentPlan is one row of the first page's "Resume a plan" list.
+// recentPlan is one row of the first page's "Resume a plan" list. Name is
+// the plan's file in the data area; rows from before the data area held a
+// path instead, and are dropped on load.
 type recentPlan struct {
-	Path   string    `json:"path"`
+	Name   string    `json:"name"`
 	Source string    `json:"source"`
 	Target string    `json:"target"`
 	Step   string    `json:"step"`
@@ -187,6 +170,34 @@ type stepResult struct {
 	applied []string
 	skipped []string
 	note    string
+	saved   planSaved
+}
+
+// planSaved is what a worker's save of the plan left: the name it chose for
+// a plan that had none, where the broker put it, and the save's error.
+type planSaved struct {
+	name, location string
+	at             time.Time
+	err            error
+}
+
+// fileOpE is the file gesture a [fileResult] answers.
+type fileOpE uint8
+
+const (
+	fileOpOpen fileOpE = iota
+	fileOpImport
+	fileOpExport
+)
+
+// fileResult is what a file gesture hands back to the frame.
+type fileResult struct {
+	op        fileOpE
+	plan      jk.Plan
+	saved     planSaved
+	cancelled bool
+	// exported is the name the user saved an exported copy under.
+	exported string
 }
 
 // preflightResult is what the Sync page shows before the operator starts:
@@ -205,6 +216,9 @@ type App struct {
 	ids    *c.WidgetIdStack
 	logger zerolog.Logger
 	store  app.StorageI
+	bus    app.BusI
+	// files is the window's data area, where plans and journals live.
+	files *fsbroker.AppDataClient
 
 	step stepE
 
@@ -221,13 +235,14 @@ type App struct {
 	leewayOnly bool
 
 	// The plan and its file. planRev counts plan replacements, so a page
-	// can tell a new plan from the one it last read.
-	plan     *jk.Plan
-	planRev  uint64
-	planPath string
-	savedAt  time.Time
-	openDlg  *filepicker.Inst
-	saveDlg  *filepicker.Inst
+	// can tell a new plan from the one it last read. planName is the file in
+	// the data area; planLocation is its host path, for display only.
+	plan         *jk.Plan
+	planRev      uint64
+	planName     string
+	planLocation string
+	savedAt      time.Time
+	fileJob      bgjob.Runner[fileResult]
 
 	// Structure and its confirmation.
 	structureJob bgjob.Runner[stepResult]
@@ -304,21 +319,18 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
 	inst.store = ctx.Storage()
-	inst.openDlg = filepicker.New("jackstay-open", filepicker.ModeOpen,
-		filepicker.WithTitle("Open a jackstay plan"), filepicker.WithExtensionFilter(".json"), filepicker.WithStartAtOsHome())
-	inst.saveDlg = filepicker.New("jackstay-save", filepicker.ModeSave,
-		filepicker.WithTitle("Save the jackstay plan as"), filepicker.WithExtensionFilter(".json"), filepicker.WithDefaultFilename("plan.json"), filepicker.WithStartAtOsHome())
+	inst.bus = ctx.Bus()
+	inst.files = fsbroker.NewAppDataClient(inst.bus)
 	inst.loadRecent()
-	if path := PlanEnv.Get(); path != "" {
-		inst.planPath = path
-		p, lerr := jk.LoadPlan(path)
-		switch {
-		case lerr == nil:
-			inst.adoptPlan(&p, path)
-			inst.step = inst.furthestStep()
-		case !errors.Is(lerr, fs.ErrNotExist):
-			inst.lastError = "unable to open the plan: " + lerr.Error()
+	if name := PlanEnv.Get(); name != "" {
+		if !fsbroker.ValidAppDataName(name) {
+			inst.lastError = "BOXER_JACKSTAY_PLAN is not a plan file name: " + name
+			return
 		}
+		// Named before it is read, so a missing plan is created on the
+		// first save under the name the scene gave.
+		inst.planName = name
+		inst.startOpen(name, true)
 	}
 	return
 }
@@ -331,6 +343,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.diffJob.Cancel()
 	inst.syncJob.Cancel()
 	inst.previewJob.Cancel()
+	inst.fileJob.Cancel()
 	inst.disks.Close()
 	return
 }
@@ -346,7 +359,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 func (inst *App) anyRunning() (running bool) {
 	return inst.discoverJob.Running() || inst.structureJob.Running() || inst.diffJob.Running() ||
-		inst.syncJob.Running() || inst.previewJob.Running()
+		inst.syncJob.Running() || inst.previewJob.Running() || inst.fileJob.Running()
 }
 
 // --- endpoints and clients -------------------------------------------------
@@ -394,21 +407,36 @@ func fileToken(s string) (t string) {
 
 // adoptPlan makes p the window's plan: the endpoints follow it, the pages
 // re-read it, and the file it came from is remembered.
-func (inst *App) adoptPlan(p *jk.Plan, path string) {
+func (inst *App) adoptPlan(p *jk.Plan, saved planSaved) {
 	inst.plan = p
 	inst.planRev++
-	inst.planPath = path
 	inst.srcURL, inst.srcUser = p.Source.URL, p.Source.User
 	inst.dstURL, inst.dstUser = p.Target.URL, p.Target.User
 	inst.syncModeChosen = false
 	inst.applyArmed, inst.syncArmed = false, false
 	inst.preflight, inst.preflightKey = nil, ""
-	if path != "" {
-		if st, err := os.Stat(path); err == nil {
-			inst.savedAt = st.ModTime()
-		}
-		inst.noteRecent()
+	inst.planName = saved.name
+	inst.noteSaved(saved)
+}
+
+// noteSaved takes what a save left: the plan's name and place, the time, and
+// the recent list; a failed save is the status line's error.
+func (inst *App) noteSaved(saved planSaved) {
+	if saved.err != nil {
+		inst.lastError = "unable to save the plan: " + saved.err.Error()
+		return
 	}
+	if saved.name == "" {
+		return
+	}
+	inst.planName = saved.name
+	if saved.location != "" {
+		inst.planLocation = saved.location
+	}
+	if !saved.at.IsZero() {
+		inst.savedAt = saved.at
+	}
+	inst.noteRecent()
 }
 
 // furthestStep is where the operator left off: the furthest step that has
@@ -423,34 +451,61 @@ func (inst *App) furthestStep() (st stepE) {
 	return
 }
 
-// proposePlanPath names a plan file for a plan that has none, under the plan
-// directory, by date and servers, so the sync never waits on a save.
-func (inst *App) proposePlanPath(src jk.Endpoint, dst jk.Endpoint) (path string) {
-	dir := resolvePlanDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		inst.lastError = "unable to create the plan directory: " + err.Error()
-		return ""
-	}
-	base := time.Now().Format("2006-01-02") + "-" + fileToken(hostLabel(src.URL)) + "-to-" + fileToken(hostLabel(dst.URL))
-	path = filepath.Join(dir, base+".json")
-	for i := 2; ; i++ {
-		if _, err := os.Stat(path); err != nil {
-			return path
-		}
-		path = filepath.Join(dir, base+"-"+strconv.Itoa(i)+".json")
-	}
+// proposePlanName names a plan that has none, by date and servers, so the
+// sync never waits on a save; taken are the names already in the data area.
+func proposePlanName(src jk.Endpoint, dst jk.Endpoint, now time.Time, taken []fsbroker.AppDataEntry) (name string) {
+	base := now.Format("2006-01-02") + "-" + fileToken(hostLabel(src.URL)) + "-to-" + fileToken(hostLabel(dst.URL))
+	return freeName(base, ".json", taken)
 }
 
-func (inst *App) autosave() {
-	if inst.plan == nil || inst.planPath == "" {
+// freeName is base+ext, or base-N+ext for the first N that is not taken.
+func freeName(base string, ext string, taken []fsbroker.AppDataEntry) (name string) {
+	used := make(map[string]bool, len(taken))
+	for _, e := range taken {
+		used[e.Name] = true
+	}
+	name = base + ext
+	for i := 2; used[name]; i++ {
+		name = base + "-" + strconv.Itoa(i) + ext
+	}
+	return
+}
+
+// savePlan writes p to name in files, from a worker, and reports what the
+// save left. An empty name is chosen from the servers first.
+func savePlan(files *fsbroker.AppDataClient, name string, p *jk.Plan) (saved planSaved) {
+	if name == "" {
+		taken, err := files.List()
+		if err != nil {
+			saved.err = err
+			return
+		}
+		name = proposePlanName(p.Source, p.Target, time.Now(), taken)
+	}
+	saved.name = name
+	data, err := p.Marshal()
+	if err != nil {
+		saved.err = err
 		return
 	}
-	if err := inst.plan.Save(inst.planPath); err != nil {
-		inst.lastError = "unable to save the plan: " + err.Error()
+	r, err := files.Write(name, data)
+	if err != nil {
+		saved.err = err
 		return
 	}
-	inst.savedAt = time.Now()
-	inst.noteRecent()
+	saved.location, saved.at = r.Location, time.Unix(0, r.Entry.ModTime)
+	return
+}
+
+// statPlan reports where a plan the worker did not write itself lives, and
+// when it was last written.
+func statPlan(files *fsbroker.AppDataClient, name string) (saved planSaved) {
+	saved.name = name
+	r, err := files.Stat(name)
+	if err == nil && !r.NotExist {
+		saved.location, saved.at = r.Location, time.Unix(0, r.Entry.ModTime)
+	}
+	return
 }
 
 // loadRecent reads the recent-plans list; a host without the persist
@@ -465,70 +520,221 @@ func (inst *App) loadRecent() {
 	}
 	var list []recentPlan
 	if json.Unmarshal(data, &list) == nil {
-		inst.recent = list
+		kept := list[:0]
+		for _, r := range list {
+			if r.Name != "" {
+				kept = append(kept, r)
+			}
+		}
+		inst.recent = kept
 	}
 }
 
 // noteRecent moves the current plan to the front of the recent list.
 func (inst *App) noteRecent() {
-	if inst.plan == nil || inst.planPath == "" {
+	if inst.plan == nil || inst.planName == "" {
 		return
 	}
-	entry := recentPlan{Path: inst.planPath, Source: hostLabel(inst.plan.Source.URL), Target: hostLabel(inst.plan.Target.URL),
+	entry := recentPlan{Name: inst.planName, Source: hostLabel(inst.plan.Source.URL), Target: hostLabel(inst.plan.Target.URL),
 		Step: inst.furthestStep().short(), At: time.Now()}
 	list := make([]recentPlan, 0, recentCap)
 	list = append(list, entry)
 	for _, r := range inst.recent {
-		if r.Path != entry.Path && len(list) < recentCap {
+		if r.Name != entry.Name && len(list) < recentCap {
 			list = append(list, r)
 		}
 	}
 	inst.recent = list
+	inst.storeRecent()
+}
+
+// forgetRecent drops a row whose file has gone.
+func (inst *App) forgetRecent(name string) {
+	kept := inst.recent[:0]
+	for _, r := range inst.recent {
+		if r.Name != name {
+			kept = append(kept, r)
+		}
+	}
+	inst.recent = kept
+	inst.storeRecent()
+}
+
+func (inst *App) storeRecent() {
 	if inst.store == nil {
 		return
 	}
-	if data, err := json.Marshal(list); err == nil {
+	if data, err := json.Marshal(inst.recent); err == nil {
 		if serr := inst.store.Set(recentKey, data); serr != nil {
 			inst.logger.Debug().Err(serr).Msg("jackstay: recent plans not persisted")
 		}
 	}
 }
 
-// forgetRecent drops a row whose file has gone.
-func (inst *App) forgetRecent(path string) {
-	kept := inst.recent[:0]
-	for _, r := range inst.recent {
-		if r.Path != path {
-			kept = append(kept, r)
-		}
-	}
-	inst.recent = kept
-	if inst.store != nil {
-		if data, err := json.Marshal(inst.recent); err == nil {
-			_ = inst.store.Set(recentKey, data)
-		}
-	}
+// --- file gestures: open, import, export; each runs off the frame ------------
+
+// errPlanGone marks an open of a plan whose file is no longer in the data
+// area, so the frame drops its recent row.
+var errPlanGone = errors.New("the plan file is gone")
+
+// startOpen loads a plan from the data area and lands on the step it was left
+// at. seed is the start-up open of [PlanEnv], for which a missing file is
+// the plan still to be written, not an error.
+func (inst *App) startOpen(name string, seed bool) {
+	files := inst.files
+	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.open", Title: "open the plan"},
+		func(ctx context.Context) (*fileResult, error) {
+			p, err := jk.LoadPlanIn(files, name)
+			switch {
+			case errors.Is(err, fs.ErrNotExist) && seed:
+				return &fileResult{op: fileOpOpen, cancelled: true}, nil
+			case errors.Is(err, fs.ErrNotExist):
+				return &fileResult{op: fileOpOpen, saved: planSaved{name: name, err: errPlanGone}}, nil
+			case err != nil:
+				return nil, err
+			}
+			return &fileResult{op: fileOpOpen, plan: p, saved: statPlan(files, name)}, nil
+		})
 }
 
-// openPlan loads a plan file and lands on the step it was left at.
-func (inst *App) openPlan(path string) {
-	p, err := jk.LoadPlan(path)
-	if err != nil {
-		inst.lastError = "unable to open the plan: " + err.Error()
-		if os.IsNotExist(err) {
-			inst.forgetRecent(path)
-		}
+// startImport asks the user for a plan file, through the broker's picker,
+// and copies it into the data area under the name it had, made free.
+func (inst *App) startImport() {
+	bus, files := inst.bus, inst.files
+	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.import", Title: "import a plan"},
+		func(ctx context.Context) (*fileResult, error) {
+			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
+			if err != nil {
+				return nil, err
+			}
+			dr, err := fsbroker.UnmarshalDialogReply(reply)
+			if err != nil {
+				return nil, err
+			}
+			if !dr.Granted {
+				return &fileResult{op: fileOpImport, cancelled: true}, nil
+			}
+			body, err := bus.RequestWithTimeout(dr.HandleSubjectPrefix+".read", nil, fsbroker.HandleOpTimeout)
+			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+".close", nil, fsbroker.HandleOpTimeout)
+			if err != nil {
+				return nil, err
+			}
+			p, perr := jk.ParsePlan(body)
+			if perr != nil {
+				// A refused read answers with a denial where the bytes
+				// would be; its reason says more than the parse error.
+				if r, derr := fsbroker.UnmarshalDialogReply(body); derr == nil && !r.Granted && r.Reason != "" {
+					return nil, errors.New(r.Reason)
+				}
+				return nil, perr
+			}
+			taken, err := files.List()
+			if err != nil {
+				return nil, err
+			}
+			base, ext := importBase(dr.DisplayName)
+			saved := savePlan(files, freeName(base, ext, taken), &p)
+			if saved.err != nil {
+				return nil, saved.err
+			}
+			return &fileResult{op: fileOpImport, plan: p, saved: saved}, nil
+		})
+}
+
+// importBase splits a picked file's name into a data area name's base and
+// extension, keeping what a name allows.
+func importBase(displayName string) (base string, ext string) {
+	base, ext = strings.TrimSuffix(displayName, ".json"), ".json"
+	base = strings.TrimLeft(fileToken(base), ".")
+	if base == "" {
+		base = "imported"
+	}
+	if max := 100; len(base) > max {
+		base = base[:max]
+	}
+	return
+}
+
+// startExport asks the user where to put a copy of the plan, through the
+// broker's picker. The plan in the data area stays the window's plan, and the
+// journal stays beside it.
+func (inst *App) startExport() {
+	if inst.plan == nil {
 		return
 	}
-	inst.adoptPlan(&p, path)
-	inst.disc = nil
-	inst.note, inst.lastError = "plan opened", ""
-	inst.step = inst.furthestStep()
+	data, err := inst.plan.Marshal()
+	if err != nil {
+		inst.lastError = err.Error()
+		return
+	}
+	suggested := inst.planName
+	if suggested == "" {
+		suggested = "plan.json"
+	}
+	bus := inst.bus
+	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.export", Title: "export the plan"},
+		func(ctx context.Context) (*fileResult, error) {
+			req, err := fsbroker.MarshalDialogRequest(fsbroker.DialogRequest{SuggestedName: suggested})
+			if err != nil {
+				return nil, err
+			}
+			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogWrite, req, fsbroker.DialogTimeout)
+			if err != nil {
+				return nil, err
+			}
+			dr, err := fsbroker.UnmarshalDialogReply(reply)
+			if err != nil {
+				return nil, err
+			}
+			if !dr.Granted {
+				return &fileResult{op: fileOpExport, cancelled: true}, nil
+			}
+			ack, err := bus.RequestWithTimeout(dr.HandleSubjectPrefix+".write", data, fsbroker.HandleOpTimeout)
+			_, _ = bus.RequestWithTimeout(dr.HandleSubjectPrefix+".close", nil, fsbroker.HandleOpTimeout)
+			if err != nil {
+				return nil, err
+			}
+			wr, err := fsbroker.UnmarshalDialogReply(ack)
+			if err != nil {
+				return nil, err
+			}
+			if !wr.Granted {
+				return nil, errors.New("the copy was not written: " + wr.Reason)
+			}
+			return &fileResult{op: fileOpExport, exported: dr.DisplayName}, nil
+		})
+}
+
+// takeFileResult lands a finished file gesture.
+func (inst *App) takeFileResult() {
+	r, _, ok := inst.fileJob.TakeResult()
+	if !ok || r.cancelled {
+		return
+	}
+	switch r.op {
+	case fileOpOpen, fileOpImport:
+		if errors.Is(r.saved.err, errPlanGone) {
+			inst.lastError = "unable to open the plan: " + r.saved.name + " is no longer in the plan store"
+			inst.forgetRecent(r.saved.name)
+			return
+		}
+		p := r.plan
+		inst.adoptPlan(&p, r.saved)
+		inst.disc = nil
+		inst.note, inst.lastError = "plan opened", ""
+		if r.op == fileOpImport {
+			inst.note = "plan imported as " + r.saved.name
+		}
+		inst.step = inst.furthestStep()
+	case fileOpExport:
+		inst.note, inst.lastError = "a copy of the plan was saved as "+r.exported, ""
+	}
 }
 
 // --- results, on the frame goroutine ----------------------------------------
 
 func (inst *App) takeResults() {
+	inst.takeFileResult()
 	if r, _, ok := inst.discoverJob.TakeResult(); ok {
 		inst.disc = r
 		inst.seedDatabases()
@@ -549,7 +755,7 @@ func (inst *App) takeResults() {
 		inst.planRev++
 		inst.note, inst.lastError = r.note, ""
 		inst.skipped = r.skipped
-		inst.autosave()
+		inst.noteSaved(r.saved)
 		if !inst.syncModeChosen {
 			inst.syncMode, _ = inst.recommendMode()
 		}
@@ -800,9 +1006,7 @@ func (inst *App) startStructure() {
 	if p, ok := inst.clonePlan(); ok {
 		old = &p
 	}
-	if inst.planPath == "" {
-		inst.planPath = inst.proposePlanPath(srcEp, dstEp)
-	}
+	files, name := inst.files, inst.planName
 	src, dst := clients(srcEp, dstEp, false)
 	inst.applyArmed = false
 	inst.structureJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.structure", Title: "plan the structure"},
@@ -812,7 +1016,7 @@ func (inst *App) startStructure() {
 			if err != nil {
 				return nil, err
 			}
-			return &stepResult{plan: p, note: "structure planned"}, nil
+			return &stepResult{plan: p, note: "structure planned", saved: savePlan(files, name, &p)}, nil
 		})
 	inst.step = stepStructure
 }
@@ -824,6 +1028,7 @@ func (inst *App) startApply() {
 	}
 	src, dst := clients(p.Source, p.Target, false)
 	dstCfg := jk.TargetClientConfig(p.Target)
+	files, name := inst.files, inst.planName
 	inst.applyArmed = false
 	inst.structureJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.apply", Title: "apply the DDL"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
@@ -837,7 +1042,11 @@ func (inst *App) startApply() {
 			if err != nil {
 				return nil, err
 			}
-			return &stepResult{plan: after, stale: stale, applied: applied, note: plural(len(applied), "statement") + " ran on the target"}, nil
+			r := &stepResult{plan: after, stale: stale, applied: applied, note: plural(len(applied), "statement") + " ran on the target"}
+			if len(stale) == 0 {
+				r.saved = savePlan(files, name, &r.plan)
+			}
+			return r, nil
 		})
 }
 
@@ -848,6 +1057,7 @@ func (inst *App) startDiff() {
 	}
 	scanS, scanD := clients(p.Source, p.Target, true)
 	final := inst.final
+	files, name := inst.files, inst.planName
 	inst.diffJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.diff", Title: "compare content"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
@@ -863,7 +1073,7 @@ func (inst *App) startDiff() {
 			if err != nil || len(stale) > 0 {
 				return &stepResult{stale: stale}, err
 			}
-			return &stepResult{plan: fresh, skipped: skipped, note: "content compared"}, nil
+			return &stepResult{plan: fresh, skipped: skipped, note: "content compared", saved: savePlan(files, name, &fresh)}, nil
 		})
 }
 
@@ -911,8 +1121,8 @@ func (inst *App) startPreview() {
 }
 
 func (inst *App) startSync() {
-	if inst.planPath == "" {
-		inst.lastError = "save the plan first: the sync journal lives beside it"
+	if inst.planName == "" {
+		inst.lastError = "plan the structure first: the sync journal lives beside the plan"
 		return
 	}
 	p, ok := inst.clonePlan()
@@ -924,7 +1134,7 @@ func (inst *App) startSync() {
 		inst.lastError = err.Error()
 		return
 	}
-	planPath, compression := inst.planPath, inst.compression
+	files, planName, compression := inst.files, inst.planName, inst.compression
 	scanS, scanD := clients(p.Source, p.Target, true)
 	inst.rows.Store(0)
 	inst.bytes.Store(0)
@@ -941,7 +1151,7 @@ func (inst *App) startSync() {
 				return &stepResult{stale: prep.Stale}, err
 			}
 			if len(prep.Chosen) == 0 {
-				return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: "nothing to sync"}, nil
+				return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: "nothing to sync", saved: savePlan(files, planName, &prep.Plan)}, nil
 			}
 
 			expected := uint64(prep.ExpectedRows)
@@ -985,20 +1195,16 @@ func (inst *App) startSync() {
 				s := pt.Source.String()
 				current.Store(&s)
 			}
-			out, err := jk.RunSync(ctx, scanS, scanD, &prep, planPath, req.Restart, opts, time.Now)
+			out, err := jk.RunSyncIn(ctx, scanS, scanD, &prep, files, planName, req.Restart, opts, time.Now)
 			if err != nil {
-				// The plan on disk is what the run left; the frame reads it
-				// back so the reports of the tables that finished show.
-				if saved, lerr := jk.LoadPlan(planPath); lerr == nil {
-					return &stepResult{plan: saved, skipped: prep.Skipped, note: "the sync stopped"}, err
-				}
 				return nil, err
 			}
 			note := "sync done; compare the content again to confirm"
 			if out.Failed > 0 {
 				note = plural(out.Failed, "chunk") + " not synced; see the tables' problems"
 			}
-			return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: note}, nil
+			// RunSyncIn saved the plan; what is left to learn is where.
+			return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: note, saved: statPlan(files, planName)}, nil
 		})
 	inst.step = stepRun
 }

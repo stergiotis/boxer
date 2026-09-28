@@ -2,7 +2,6 @@ package jackstay
 
 import (
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +16,6 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/filepicker"
 )
 
 // footer is what a page puts in the bottom bar: the page's own action in the
@@ -63,7 +61,6 @@ func (inst *App) render() {
 			}
 		}
 	}
-	inst.renderDialogs()
 }
 
 // goTo moves to a step, unless it is locked.
@@ -152,30 +149,40 @@ func (inst *App) renderBrief() {
 	}
 }
 
-// renderPlanRow is one small line about the plan file: where it is and
-// when it was saved, with Open and Save as at hand.
+// renderPlanRow is one small line about the plan file: its name in the plan
+// store and when it was saved, with Import and Export at hand.
 func (inst *App) renderPlanRow() {
 	for range c.Horizontal().KeepIter() {
 		switch {
-		case inst.planPath == "" && inst.plan == nil:
+		case inst.planName == "" && inst.plan == nil:
 			small("No plan yet. One is written when the structure is planned, and kept up to date after every step.")
-		case inst.planPath == "":
+		case inst.planName == "":
 			small("plan not saved")
 		default:
-			s := "plan " + inst.planPath
+			s := "plan " + inst.planName
 			if !inst.savedAt.IsZero() {
 				s += " · saved " + inst.savedAt.Local().Format("15:04:05")
 			}
-			small(s)
-		}
-		if c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text("Open…").Keep()).Small().SendResp().HasPrimaryClicked() {
-			inst.openDlg.Show()
-		}
-		if inst.plan != nil {
-			if c.Button(inst.ids.PrepareStr("saveas"), c.Atoms().Text("Save as…").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.saveDlg.Show()
+			if inst.planLocation == "" {
+				small(s)
+				break
+			}
+			for range c.HoverText(inst.planLocation).KeepIter() {
+				small(s)
 			}
 		}
+		// A click while a gesture runs is dropped rather than hiding the
+		// buttons mid-gesture.
+		busy := inst.fileJob.Running()
+		if c.Button(inst.ids.PrepareStr("import"), c.Atoms().Text("Import…").Keep()).Small().SendResp().HasPrimaryClicked() && !busy {
+			inst.startImport()
+		}
+		if inst.plan != nil {
+			if c.Button(inst.ids.PrepareStr("export"), c.Atoms().Text("Export…").Keep()).Small().SendResp().HasPrimaryClicked() && !busy {
+				inst.startExport()
+			}
+		}
+		inst.failedNote("file", &inst.fileJob)
 	}
 }
 
@@ -277,19 +284,6 @@ func (inst *App) renderFooter(ft footer) {
 			if c.Button(inst.ids.PrepareStr("back"), c.Atoms().Text(icons.PhArrowLeft+" "+prev.short()).Keep()).SendResp().HasPrimaryClicked() {
 				inst.goTo(prev)
 			}
-		}
-	}
-}
-
-func (inst *App) renderDialogs() {
-	if action, paths := inst.openDlg.Render(inst.ids); action == filepicker.ActionOpen && len(paths) == 1 {
-		inst.openPlan(paths[0])
-	}
-	if action, paths := inst.saveDlg.Render(inst.ids); action == filepicker.ActionSave && len(paths) == 1 {
-		inst.planPath = paths[0]
-		inst.autosave()
-		if inst.lastError == "" {
-			inst.note = "plan saved"
 		}
 	}
 }
@@ -441,7 +435,7 @@ func tableGloss(t *jk.PlanTable) (s string) {
 func (inst *App) cliHint(cmd string) {
 	space()
 	for range c.CollapsingHeader(inst.ids.PrepareStr("cli"), c.WidgetText().Text("The same step from a shell").Keep()).KeepIter() {
-		plan := inst.planPath
+		plan := inst.planLocation
 		if plan == "" {
 			plan = "<plan.json>"
 		}
@@ -537,10 +531,8 @@ func (inst *App) renderRecent() {
 	for range c.Grid(inst.ids.PrepareStr("recent")).NumColumns(4).Striped(true).KeepIter() {
 		for i, r := range inst.recent {
 			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
-				for range c.HoverText(r.Path).KeepIter() {
-					if c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text(filepath.Base(r.Path)).Keep()).Frame(false).SendResp().HasPrimaryClicked() {
-						inst.openPlan(r.Path)
-					}
+				if c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text(r.Name).Keep()).Frame(false).SendResp().HasPrimaryClicked() && !inst.fileJob.Running() {
+					inst.startOpen(r.Name, false)
 				}
 				c.Label(r.Source + " → " + r.Target).Send()
 				c.Label("at " + r.Step).Send()

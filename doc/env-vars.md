@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-09-27T20:27:04Z
+generated-at: 2026-09-28T17:39:34Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -105,12 +105,11 @@ generated-at: 2026-09-27T20:27:04Z
 | `BOXER_SQLAPPLET_DATASET_RECONCILE` | duration | `30s` | — |  | dataset binder reconcile interval with events subscribed (ADR-0188 §SD3); a Go duration such as 30s or 5s |
 | `BOXER_SQLAPPLET_WINDOW_SIZE` | string | — | — |  | open an applet window at "WxH" logical points (scripted screenshots); empty or unparseable keeps the host's archetype default |
 
-## database (10)
+## database (9)
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
-| `BOXER_JACKSTAY_PLAN` | string | — | — |  | jackstay window: plan file opened at start and saved to (created on first save when missing) |
-| `BOXER_JACKSTAY_PLAN_DIR` | path | — | — |  | jackstay window: directory for plans the window names itself; empty uses <user config dir>/boxer/jackstay |
+| `BOXER_JACKSTAY_PLAN` | string | — | — |  | jackstay window: plan, by file name in the window's data area (fs.appdata), opened at start and saved to (created on first save when missing) |
 | `BOXER_JACKSTAY_TARGET_ENDPOINT` | string | — | `--target` |  | jackstay target server: HTTP URL or host:port (e.g. http://replica:8123/); empty means no target |
 | `BOXER_JACKSTAY_TARGET_PASSWORD` | string | — | — | yes | jackstay target server password; read from the environment only, never stored in a plan |
 | `BOXER_JACKSTAY_TARGET_USER` | string | `default` | `--target-user` |  | jackstay target server user |
@@ -225,13 +224,14 @@ generated-at: 2026-09-27T20:27:04Z
 |------|------|---------|----------|-----------|-------------|
 | `SWISSTOPO_TILES_DIR` | path | `~/data/swisstopo` | — |  | directory containing swissALTI3D 2m COG tiles for the terrainscope app |
 
-## system (27)
+## system (28)
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_ADHOC_DIR` | string | — | — |  | directory whose filesystem holds the unnamed sealed files of ad-hoc datasets and staged recordings (ADR-0240 §SD1); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs) |
 | `BOXER_AUDIO_PEAKS_CACHE_DIR` | path | — | — |  | directory holding cached audio peaks pyramids (ADR-0208 §SD4); empty uses <user cache dir>/boxer/audio-peaks |
 | `BOXER_COMPONENT` | string | — | — |  | component identity mark, injected by the supervisor (unit Environment= line, launcher script) and inherited by children; read by the topology layer (ADR-0126); empty = unmarked |
+| `BOXER_FS_APPDATA_DIR` | path | — | — |  | fs broker: root of the per-app data areas (fs.appdata.*); empty uses <user config dir>/boxer/appdata |
 | `BOXER_LAUNCHER_FRECENCY_HALFLIFE` | duration | `336h` | — |  | launcher ranking decay: a launch this old counts half as much as one just now |
 | `GOPATH` | path | — | — |  | Go workspace root; empty means $HOME/go applied by the Go toolchain |
 | `GOROOT` | path | — | — |  | Go installation root; empty means consult `go env GOROOT` |
@@ -277,11 +277,11 @@ generated-at: 2026-09-27T20:27:04Z
 | `BOXER_COMPONENT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/topo` |
 | `BOXER_FLIGHT_RECORDER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/tracing` |
 | `BOXER_FLIGHT_RECORDER_OUTPUT_FILE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/observability/tracing` |
+| `BOXER_FS_APPDATA_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/fsbroker` |
 | `BOXER_GODEP_ROOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep` |
 | `BOXER_GODEP_TAGS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep` |
 | `BOXER_IMZERO_DEBUG_MODE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env` |
 | `BOXER_JACKSTAY_PLAN` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/jackstay` |
-| `BOXER_JACKSTAY_PLAN_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/jackstay` |
 | `BOXER_JACKSTAY_TARGET_ENDPOINT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/db/clickhouse/jackstay` |
 | `BOXER_JACKSTAY_TARGET_PASSWORD` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/db/clickhouse/jackstay` |
 | `BOXER_JACKSTAY_TARGET_USER` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/db/clickhouse/jackstay` |
