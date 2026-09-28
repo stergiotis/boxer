@@ -82,19 +82,20 @@ func chatDemoModel(group bool) *chatview.Model {
 	}
 	add(20*minute, 0, "oops wrong chat", -1, chatview.FlagDeleted, chatview.StatusSent)
 	add(24*60*minute-30*minute, 0, "Thanks — closing the ticket.", 2, 0, chatview.StatusDelivered)
-	add(24*60*minute-29*minute, 1, "👍", -1, 0, 0)
+	add(24*60*minute-29*minute, 1, icons.PhThumbsUp, -1, 0, 0)
 
-	// Reactions on the second message, and one on the reply.
+	// Reactions on the second message, and one on the reply. Phosphor glyphs
+	// rather than emoji: no face in the font chain draws colour emoji.
 	n := m.Len()
 	m.ReactionOff = make([]int32, n+1)
 	for i := 1; i <= n; i++ {
 		switch i - 1 {
 		case 1:
-			m.ReactionKey = append(m.ReactionKey, "👍", "❤️")
+			m.ReactionKey = append(m.ReactionKey, icons.PhThumbsUp, icons.PhHeart)
 			m.ReactionCount = append(m.ReactionCount, 2, 1)
 			m.ReactionWho = append(m.ReactionWho, "Bob, Cy", "Bob")
 		case 2:
-			m.ReactionKey = append(m.ReactionKey, "🎉")
+			m.ReactionKey = append(m.ReactionKey, icons.PhConfetti)
 			m.ReactionCount = append(m.ReactionCount, 1)
 			m.ReactionWho = append(m.ReactionWho, "Ada Lovelace")
 		}

@@ -100,7 +100,7 @@ import (
 // under it, and its searches are tasks of it. The dialog is the host's, not an
 // app's: whichever app's request raised it, it is one dialog to its user, so
 // it has a synthetic id of its own, the way the fs broker is "runtime.fs".
-const AppId app.AppIdT = "runtime.filepicker"
+const AppId app.AppIdT = "runtime.filepicker" // designlint:ignore=L12 (a host-owned dialog, named like the runtime services; widths are stored under it)
 
 // NewColumnWidths builds the resolver a host hands to its dialogs through
 // [WithColumnWidths], over the host's column-width store (its state store
