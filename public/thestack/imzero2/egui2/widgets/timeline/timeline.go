@@ -328,6 +328,10 @@ const (
 	playheadCaretW  float32 = 9
 	playheadCaretH  float32 = 6
 	emptyFallback           = 1 * time.Hour
+	// maxViewSpanSeconds is the widest view zoom-out reaches: 1000 years,
+	// held in seconds because it overflows time.Duration.
+	maxViewSpanSeconds  float64 = 1000 * 365.25 * 24 * 3600
+	maxViewSpanUnitsCap float64 = 1 << 60
 	// canvasIdKey names the PaintCanvas this widget drains into. It is a
 	// const because the id is derived twice per frame: once at the top of
 	// renderBody to read last frame's response flags (the pan gate), and
@@ -1670,9 +1674,20 @@ func (inst *Timeline) applyZoomInput(wheel c.CanvasWheelValue, labelW, effW floa
 	anchorMS := inst.viewMinMS + int64(float64(anchorFrac)*float64(spanMS))
 	// zoom > 1 → smaller span; zoom < 1 → larger span. Invert + clamp.
 	mul := clamp01ToRange(1.0/wheel.Zoom, minZoomMul, maxZoomMul)
-	newSpan := max(int64(float64(spanMS)*float64(mul)), 1)
+	// The product is formed in float64 and bounded before the int64
+	// conversion: past 2^63 the conversion yields MinInt64, which max(…, 1)
+	// would turn into a 1-unit view.
+	newSpan := int64(max(min(float64(spanMS)*float64(mul), inst.maxViewSpanUnits()), 1))
 	inst.viewMinMS = anchorMS - int64(float64(anchorFrac)*float64(newSpan))
 	inst.viewMaxMS = inst.viewMinMS + newSpan
+}
+
+// maxViewSpanUnits bounds how far zoom-out can widen the view: maxViewSpanSeconds in
+// axis units, and never past maxViewSpanUnitsCap so viewMin±span stays clear
+// of int64 overflow on a fine offset-axis unit.
+func (inst *Timeline) maxViewSpanUnits() (units float64) {
+	units = maxViewSpanSeconds * float64(time.Second) / float64(inst.unitOrMS())
+	return min(units, maxViewSpanUnitsCap)
 }
 
 // applyPanInput mutates the viewport from a pointer drag over the canvas:

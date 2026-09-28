@@ -160,6 +160,21 @@ func TestApplyZoomInput(t *testing.T) {
 	})
 }
 
+// Zoom-out is bounded: a long run of 20x steps must settle at the maximum
+// span rather than overflow the int64 conversion and collapse to one unit.
+func TestApplyZoomInput_ZoomOutIsBounded(t *testing.T) {
+	const effW float32 = 100
+	day := int64(24 * time.Hour / time.Millisecond)
+	tl := &Timeline{explicitRange: true, viewMinMS: 0, viewMaxMS: day}
+	for range 40 {
+		tl.applyZoomInput(c.CanvasWheelValue{Zoom: 0.01, HoverX: effW / 2}, 0, effW)
+	}
+	span := tl.viewMaxMS - tl.viewMinMS
+	if want := int64(tl.maxViewSpanUnits()); span != want {
+		t.Errorf("span after repeated zoom-out: got %d want %d", span, want)
+	}
+}
+
 func TestSplitLines(t *testing.T) {
 	cases := []struct {
 		in   string
