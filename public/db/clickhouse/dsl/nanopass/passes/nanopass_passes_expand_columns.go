@@ -257,14 +257,17 @@ func expandColumnsInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, sc
 			return false
 
 		case *grammar1.ColumnExprDynamicContext:
+			// Only a COLUMNS() that is a whole projection item expands to a
+			// column list. As an operand (COLUMNS('a') + 1) or under an alias
+			// ClickHouse applies the surrounding expression per column, which
+			// a plain list cannot express, so it is left alone.
+			parent, ok := c.GetParent().(*grammar1.ColumnsExprColumnContext)
+			if !ok {
+				return false
+			}
 			expanded := expandDynamic(c, scope, schema)
 			if expanded != "" {
-				// Replace the parent ColumnsExprColumn, not just the dynamic expr,
-				// to get clean output
-				parent := c.GetParent()
-				if prc, ok := parent.(antlr.ParserRuleContext); ok {
-					nanopass.ReplaceNode(rw, prc, expanded)
-				}
+				nanopass.ReplaceNode(rw, parent, expanded)
 			}
 			return false
 		}

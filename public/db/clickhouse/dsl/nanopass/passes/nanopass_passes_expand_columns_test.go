@@ -92,3 +92,30 @@ func TestExpandColumns_DeclinesWhenASourceHasNoSchema(t *testing.T) {
 		}
 	}
 }
+
+// TestExpandColumns_DynamicOperandLeftAlone guards a bug where the
+// COLUMNS() expansion replaced whatever node was its parent, so
+// `SELECT COLUMNS('a') + 1 FROM t` became `SELECT t.a1, t.a2 FROM t` and
+// lost the `+ 1` ClickHouse applies to every matched column.
+func TestExpandColumns_DynamicOperandLeftAlone(t *testing.T) {
+	pass := ExpandColumns(NewStaticSchemaProvider(map[string][]string{"t": {"a1", "a2", "b"}}), "")
+	for _, sql := range []string{
+		"SELECT COLUMNS('a') + 1 FROM t",
+		"SELECT toString(COLUMNS('a')) FROM t",
+	} {
+		got, err := pass.Run(sql)
+		if err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		if got != sql {
+			t.Errorf("%s: rewritten to %s, want it left alone", sql, got)
+		}
+	}
+	got, err := pass.Run("SELECT COLUMNS('a'), b FROM t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "SELECT t.a1, t.a2, b FROM t"; got != want {
+		t.Errorf("projection item: got %s, want %s", got, want)
+	}
+}
