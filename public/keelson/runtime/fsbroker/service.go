@@ -19,12 +19,14 @@ package fsbroker
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -150,28 +152,34 @@ type handle struct {
 
 // pendingEntry tracks an in-flight dialog. replySubject is the inbox the
 // requesting app's Request is waiting on; suggestedName is the optional
-// picker pre-fill decoded from the DialogRequest payload.
+// picker pre-fill decoded from the DialogRequest payload. instanceKey is the
+// requesting window (zero when unattributed), so its closing can drop the
+// entry; seq orders entries by arrival.
 type pendingEntry struct {
 	id            string
 	op            string
 	appId         app.AppIdT
+	instanceKey   uint64
 	replySubject  string
 	suggestedName string
 	created       time.Time
+	seq           uint64
 }
 
 // Service subscribes to fs.> and dispatches dialog opens, handle ops, and
 // handle close to either a pending queue (dialogs) or local syscalls
 // (handles).
 type Service struct {
-	inst      *inprocbus.Inst
-	log       zerolog.Logger
-	busClient *inprocbus.Client
-	unsub     func()
+	inst        *inprocbus.Inst
+	log         zerolog.Logger
+	busClient   *inprocbus.Client
+	unsub       func()
+	unsubClosed func()
 
 	mu           sync.Mutex
 	handles      map[string]*handle
 	pending      map[string]*pendingEntry
+	pendingSeq   uint64
 	watches      map[string]*activeWatch
 	maxReadBytes int64
 	appDataRoot  string
@@ -206,9 +214,17 @@ func NewService(inst *inprocbus.Inst, log zerolog.Logger) (s *Service, err error
 	s.busClient = inst.NewClient(ServiceAppId, []app.SubjectFilter{
 		{Pattern: "fs.>", Direction: app.CapDirectionBoth, Reason: "fs Powerbox serves all fs subjects"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "fs replies to inboxes"},
+		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "fs drops the pending dialogs of a closed instance"},
 	})
 	s.unsub, err = s.busClient.Subscribe("fs.>", s.handleRequest)
 	if err != nil {
+		err = eh.Errorf("fsbroker: subscribe: %w", err)
+		return
+	}
+	s.unsubClosed, err = s.busClient.Subscribe(app.SubjectInstanceClosed, s.handleInstanceClosed)
+	if err != nil {
+		s.unsub()
+		s.unsub = nil
 		err = eh.Errorf("fsbroker: subscribe: %w", err)
 		return
 	}
@@ -232,19 +248,57 @@ func (inst *Service) Close() {
 		inst.unsub()
 		inst.unsub = nil
 	}
+	if inst.unsubClosed != nil {
+		inst.unsubClosed()
+		inst.unsubClosed = nil
+	}
 }
 
 // Pending returns the set of currently-pending dialog requests in
 // insertion-time order. The host UI bridge calls this each frame to learn
-// what to draw.
+// what to draw. A dialog older than DialogTimeout is dropped here: its
+// requester has stopped waiting, and a picker for it would mint a grant no
+// one receives.
 func (inst *Service) Pending() (out []PendingRequest) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	out = make([]PendingRequest, 0, len(inst.pending))
+	inst.pruneExpiredLocked(time.Now())
+	entries := make([]*pendingEntry, 0, len(inst.pending))
 	for _, p := range inst.pending {
+		entries = append(entries, p)
+	}
+	slices.SortFunc(entries, func(a, b *pendingEntry) int { return cmp.Compare(a.seq, b.seq) })
+	out = make([]PendingRequest, 0, len(entries))
+	for _, p := range entries {
 		out = append(out, PendingRequest{Id: p.id, Op: p.op, AppId: p.appId, SuggestedName: p.suggestedName})
 	}
 	return
+}
+
+// pruneExpiredLocked drops pending dialogs whose requester has timed out.
+// Caller holds inst.mu.
+func (inst *Service) pruneExpiredLocked(now time.Time) {
+	for id, p := range inst.pending {
+		if now.Sub(p.created) > DialogTimeout {
+			delete(inst.pending, id)
+		}
+	}
+}
+
+// handleInstanceClosed drops the pending dialogs of a window that closed
+// (ADR-0240 §SD5): nobody is waiting on their reply inbox any more. The
+// envelope's sender is the closed client's own identity.
+func (inst *Service) handleInstanceClosed(msg *app.Msg) {
+	if msg.SenderInstance == 0 {
+		return
+	}
+	inst.mu.Lock()
+	for id, p := range inst.pending {
+		if p.appId == msg.Sender && p.instanceKey == msg.SenderInstance {
+			delete(inst.pending, id)
+		}
+	}
+	inst.mu.Unlock()
 }
 
 // Resolve completes a pending dialog with the user's chosen path. Mints a
@@ -254,6 +308,7 @@ func (inst *Service) Pending() (out []PendingRequest) {
 // app's client cannot be found.
 func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err error) {
 	inst.mu.Lock()
+	inst.pruneExpiredLocked(time.Now())
 	p, ok := inst.pending[reqId]
 	if !ok {
 		inst.mu.Unlock()
@@ -374,13 +429,16 @@ func (inst *Service) queuePending(msg *app.Msg, op string) {
 		inst.log.Debug().Err(derr).Str("op", op).Msg("fsbroker: ignoring malformed dialog request hint")
 	}
 	inst.mu.Lock()
+	inst.pendingSeq++
 	inst.pending[reqId] = &pendingEntry{
 		id:            reqId,
 		op:            op,
 		appId:         msg.Sender,
+		instanceKey:   msg.SenderInstance,
 		replySubject:  msg.Reply,
 		suggestedName: suggestedName,
 		created:       time.Now(),
+		seq:           inst.pendingSeq,
 	}
 	inst.mu.Unlock()
 	inst.log.Info().Str("reqId", reqId).Str("op", op).Str("from", string(msg.Sender)).

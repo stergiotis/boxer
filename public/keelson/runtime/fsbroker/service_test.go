@@ -387,3 +387,60 @@ func TestDialogRequest_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, fsbroker.DialogRequest{}, zero)
 }
+
+// TestService_Pending_InArrivalOrder: the bridge takes Pending()[0], so the
+// list is ordered by arrival, not by map iteration.
+func TestService_Pending_InArrivalOrder(t *testing.T) {
+	inst, svc, _, cleanup := newSetup(t)
+	defer cleanup()
+	const n = 8
+	for i := 0; i < n; i++ {
+		c := inst.NewClient(app.AppIdT("test.order"+string(rune('a'+i))), []app.SubjectFilter{
+			{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+		})
+		go func() { _, _ = c.Request(fsbroker.SubjectDialogRead, nil) }()
+		deadline := time.Now().Add(time.Second)
+		for len(svc.Pending()) != i+1 && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		require.Len(t, svc.Pending(), i+1)
+	}
+	for round := 0; round < 20; round++ {
+		all := svc.Pending()
+		require.Len(t, all, n)
+		for i, p := range all {
+			require.Equal(t, app.AppIdT("test.order"+string(rune('a'+i))), p.AppId, "round %d", round)
+		}
+	}
+}
+
+// TestService_Pending_DroppedWhenInstanceCloses: a window that closes with a
+// dialog open leaves nobody on the reply inbox, so the picker must not pop up
+// for it and a late Resolve must not mint a grant.
+func TestService_Pending_DroppedWhenInstanceCloses(t *testing.T) {
+	inst, svc, _, cleanup := newSetup(t)
+	defer cleanup()
+	window := inst.NewClient("test.window", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	window.SetInstanceKey(7)
+	other := inst.NewClient("test.window", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	other.SetInstanceKey(8)
+	go func() { _, _ = window.Request(fsbroker.SubjectDialogRead, nil) }()
+	req := pendingOnce(t, svc)
+	go func() { _, _ = other.Request(fsbroker.SubjectDialogRead, nil) }()
+	deadline := time.Now().Add(time.Second)
+	for len(svc.Pending()) != 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	require.Len(t, svc.Pending(), 2)
+
+	require.NoError(t, window.Close())
+	left := svc.Pending()
+	require.Len(t, left, 1, "only the closed window's dialog is dropped")
+	assert.NotEqual(t, req.Id, left[0].Id)
+	_, err := svc.Resolve(req.Id, "/etc/hostname")
+	require.Error(t, err)
+}
