@@ -225,10 +225,18 @@ func (inst *walk) node(path string, d fs.DirEntry) error {
 	info, err := inst.lstat(path, d)
 	if err != nil {
 		inst.res.Errors++
-		return inst.writeEntry(path, ladingmeta.LadingEntry{
+		row := ladingmeta.LadingEntry{
 			Kind: "entry", NodeKind: kindOther, Content: contentNone,
 			Err: err.Error(),
-		})
+		}
+		if d != nil && d.IsDir() {
+			// fs.WalkDir goes by the dirent's type and still tries ReadDir,
+			// whose failure calls back a second time. Held back like any
+			// directory row, so that call amends it. See [walk.pending].
+			inst.pending = &pendingEntry{path: path, row: row}
+			return nil
+		}
+		return inst.writeEntry(path, row)
 	}
 	row := ladingmeta.LadingEntry{
 		Kind:     "entry",

@@ -488,3 +488,60 @@ var _ = strings.TrimSpace
 func tsLiteral(t time.Time) string {
 	return fmt.Sprintf("fromUnixTimestamp64Nano(%d, 'UTC')", t.UTC().UnixNano())
 }
+
+// vanishingDirFS models a directory removed between its parent's ReadDir and
+// its own lstat: its DirEntry still says directory, its Info fails, and the
+// ReadDir that fs.WalkDir then attempts on it fails too.
+type vanishingDirFS struct {
+	fstest.MapFS
+	dir string
+}
+
+type vanishingEntry struct {
+	fs.DirEntry
+}
+
+func (inst vanishingEntry) Info() (fs.FileInfo, error) {
+	return nil, &fs.PathError{Op: "lstat", Path: inst.Name(), Err: fs.ErrNotExist}
+}
+
+func (inst vanishingDirFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	if name == inst.dir {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
+	}
+	ents, err := inst.MapFS.ReadDir(name)
+	for i, e := range ents {
+		if pathJoin(name, e.Name()) == inst.dir {
+			ents[i] = vanishingEntry{DirEntry: e}
+		}
+	}
+	return ents, err
+}
+
+func pathJoin(dir, name string) string {
+	if dir == "." {
+		return name
+	}
+	return dir + "/" + name
+}
+
+// TestVanishedDirectoryIsOneRow. A directory whose lstat and ReadDir both fail
+// is called back twice by fs.WalkDir; it must still be one row under its key.
+func TestVanishedDirectoryIsOneRow(t *testing.T) {
+	h := newHarness(t)
+	fsys := vanishingDirFS{MapFS: tree(), dir: "a/c"}
+
+	res, err := ladingingest.Snapshot(context.Background(), fsys, testMount, testPolicy(), h.stores())
+	require.NoError(t, err)
+
+	n := 0
+	for ent, err := range h.meta.ScanLadingEntry(context.Background(), recordstore.ScanOpts{
+		ExtraPredicate: fmt.Sprintf("%s = %d AND %s = %s AND %s = 'a/c'",
+			plain(t, "id"), testMount.Value(), plain(t, "ts"), tsLiteral(res.Snap), plain(t, "naturalKey")),
+	}) {
+		require.NoError(t, err)
+		n++
+		assert.NotEmpty(t, ent.LadingEntry.Val.Err)
+	}
+	assert.Equal(t, 1, n, "one row per (mount, snapshot, path)")
+}
