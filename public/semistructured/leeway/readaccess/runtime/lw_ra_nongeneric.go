@@ -40,7 +40,10 @@ func LoadAccelFieldFromRecord[F, B IndexConstraintI](idx uint32, rec RecordI, de
 		return
 	}
 	e := array.NewUint64Data(d.ListValues().Data())
+	// The values stay valid after e is released: d, kept as the releaser,
+	// holds the buffers.
 	dest.LoadCardinalities(e.Values())
+	e.Release()
 	dest.SetRanger(d)
 	dest.SetReleaser(d)
 	return
