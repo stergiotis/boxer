@@ -1076,7 +1076,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 				inst.pendingExportKey = w.key
 				inst.fpSaveSvg.Show()
 			}
-			renderWindowBody(w, inst.logger, &inst.frameTimes)
+			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes)
 		}
 	}
 	// Render the SVG-save picker once per Frame. It draws its own
@@ -1281,6 +1281,16 @@ func windowhostInstanceSalt(key WindowKeyT) uint64 {
 	return (uint64(key) * 0x9e3779b97f4a7c15) ^ saltTag
 }
 
+// closeRequested reads w.closeReq under inst.mu: Close and CloseAll
+// write it from off the render thread, so the render loop must not
+// read it bare.
+func (inst *Inst) closeRequested(w *window) (closeReq bool) {
+	inst.mu.Lock()
+	closeReq = w.closeReq
+	inst.mu.Unlock()
+	return
+}
+
 // renderWindowBody draws one window's body: the app's Frame call,
 // gated by lazy Mount + sticky mountErr handling. The close
 // affordance is the egui::Window title-bar X (wired via openBound +
@@ -1293,14 +1303,14 @@ func windowhostInstanceSalt(key WindowKeyT) uint64 {
 // on their outermost panel cannot collide on the wire id — each derives
 // its id under a different salt. The IdScope wrapper pops the salt on
 // return so the stack is empty between frames.
-func renderWindowBody(w *window, logger zerolog.Logger, ft *frameTimes) {
+func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frameTimes) {
 	if windowhostDebugRender {
 		logger.Info().
 			Uint64("windowKey", uint64(w.key)).
 			Str("id", string(w.manifest.Id)).
 			Msg("windowhost: rendering window body")
 	}
-	if w.closeReq {
+	if closeReq {
 		// closeReq was set this frame (external Close or shutdown
 		// reap). Skip Frame to avoid drawing content the next reap is
 		// about to tear down anyway.
