@@ -181,7 +181,9 @@ var _ SchemaProviderI = (*StaticSchemaProvider)(nil)
 //   - `COLUMNS('regex')` — expands to all columns (from all tables) matching the regex
 //
 // If a table is not found in the schema, the expression is left unexpanded.
-// CTE references and subquery sources are skipped (no schema for them).
+// CTE, subquery and table-function sources have no schema: `*` and
+// `COLUMNS()` are left unexpanded when any such source is in scope, and
+// `src.*` naming one is left unexpanded.
 // ExpandColumns returns a Pass that expands `*`, `table.*`, and
 // `COLUMNS('regex')`. Optional defaultDatabase is used for resolving
 // unqualified table names in schema lookups.
@@ -346,8 +348,11 @@ func expandForAllTables(scope *nanopass.SelectScope, schema SchemaProviderI) (ex
 	var allParts []string
 
 	for _, ts := range scope.Tables {
+		// A source without a schema (CTE, subquery, table function) still
+		// contributes columns to `*`; skipping it would silently drop them,
+		// so decline exactly as for a table the schema does not know.
 		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
-			continue
+			return ""
 		}
 
 		db := ts.ResolvedDatabase(scope)
@@ -398,14 +403,16 @@ func expandDynamic(ctx *grammar1.ColumnExprDynamicContext, scope *nanopass.Selec
 
 	var matched []string
 	for _, ts := range scope.Tables {
+		// Any source whose columns are unknown may hold a match; expanding
+		// from the known ones alone would silently drop it. Decline instead.
 		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
-			continue
+			return ""
 		}
 
 		db := ts.ResolvedDatabase(scope)
 		columns, _, found := schema.GetColumns(db, ts.Table)
 		if !found {
-			continue
+			return ""
 		}
 
 		qualifier := ts.Table

@@ -69,3 +69,26 @@ func TestCachingSchemaProvider_KeysByDatabase(t *testing.T) {
 		t.Fatalf("b.facts on cache hit: got %q n=%d, want \"y\" n=2", got, n)
 	}
 }
+
+// TestExpandColumns_DeclinesWhenASourceHasNoSchema guards a bug where bare
+// `*` and COLUMNS() skipped CTE, subquery and table-function sources, so
+// `SELECT * FROM t, numbers(3)` expanded to t's columns alone and silently
+// dropped `number`.
+func TestExpandColumns_DeclinesWhenASourceHasNoSchema(t *testing.T) {
+	pass := ExpandColumns(NewStaticSchemaProvider(map[string][]string{"t": {"a1", "a2", "b"}}), "")
+	for _, sql := range []string{
+		"SELECT * FROM t, numbers(3)",
+		"SELECT * FROM t AS x JOIN (SELECT 1 AS z) AS s ON 1",
+		"WITH c AS (SELECT 1 AS a3) SELECT * FROM t, c",
+		"SELECT COLUMNS('a') FROM t, numbers(3)",
+		"SELECT COLUMNS('a') FROM t JOIN unknown AS u ON 1",
+	} {
+		got, err := pass.Run(sql)
+		if err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		if got != sql {
+			t.Errorf("%s: expanded to %s, want it left unexpanded", sql, got)
+		}
+	}
+}
