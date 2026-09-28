@@ -1221,6 +1221,16 @@ and the latest form already did; the plain equality stays beside it for key
 pruning. `TestAPinnedPartialWalkIsInvisible` pins it against a live server.
 
 
+### 2026-09-28 — the adapter resolves links in every path component
+
+M3's resolution followed a symlink only when it was a path's last
+component, so `ReadDir("linkdir")` listed children that `Stat` and `Open`
+of `linkdir/<child>` then reported absent. Every component is now
+resolved, with one depth budget across the path, and `Lstat` / `ReadLink`
+follow the directories on the way while still reporting a link in the last
+component. An exact-path hit stays one point lookup: the walker never
+descends into a link, so a row under a path means nothing above it is one.
+
 ## References
 
 - [The snapshot-store note](../adr-background-work/iofs-clickhouse-snapshot-store.md)

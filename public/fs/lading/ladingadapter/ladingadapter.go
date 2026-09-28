@@ -376,54 +376,119 @@ func (inst *FS) full(name string) string {
 	return inst.prefix + "/" + name
 }
 
-// lookup is one entry by name, without following symlinks.
+// lookup is one entry by name, without following a symlink in its last
+// component. Links in the components before it are followed — a path through
+// a linked directory names what is under the directory it points at.
 func (inst *FS) lookup(name string) (*entry, error) {
 	if !fs.ValidPath(name) {
 		return nil, fs.ErrInvalid
 	}
-	return inst.byPath(inst.full(name))
+	return inst.walkPath(inst.full(name), false)
 }
 
-// resolve is [FS.lookup] with symlinks followed, the way io/fs expects of a
-// ReadLinkFS. A target is interpreted relative to the link's own directory,
-// and an absolute target is taken as rooted at the snapshot — a snapshot has
-// no other root to offer.
+// resolve is [FS.lookup] with the last component's symlinks followed too, the
+// way io/fs expects of a ReadLinkFS. A target is interpreted relative to the
+// link's own directory, and an absolute target is taken as rooted at the
+// snapshot — a snapshot has no other root to offer.
 func (inst *FS) resolve(name string) (*entry, error) {
-	e, err := inst.lookup(name)
-	if err != nil {
-		return nil, err
+	if !fs.ValidPath(name) {
+		return nil, fs.ErrInvalid
 	}
-	for depth := 0; isSymlink(e); depth++ {
-		if depth >= maxLinkDepth {
-			return nil, ErrTooManyLinks
+	return inst.walkPath(inst.full(name), true)
+}
+
+// walkPath resolves a full snapshot path component by component, following
+// every symlink on the way and, when follow is set, the one the path ends in.
+// All links followed share one maxLinkDepth budget.
+//
+// The exact path is tried first: the walker never descends into a link, so a
+// row under a path means no component above it is one, and the common case
+// stays one point lookup. Only a miss looks for a linked ancestor.
+func (inst *FS) walkPath(full string, follow bool) (*entry, error) {
+	depth := 0
+	for {
+		e, err := inst.byPath(full)
+		if errors.Is(err, fs.ErrNotExist) {
+			next, moved, aerr := inst.viaLinkedAncestor(full, &depth)
+			if aerr != nil {
+				return nil, aerr
+			}
+			if !moved {
+				return nil, err
+			}
+			full = next
+			continue
 		}
-		target := e.row.LinkTarget
-		if target == "" {
-			return nil, fs.ErrInvalid
+		if err != nil {
+			return nil, err
 		}
-		var next string
-		if strings.HasPrefix(target, "/") {
-			next = path.Clean(strings.TrimPrefix(target, "/"))
-		} else {
-			next = path.Join(path.Dir(e.name), target)
+		if !follow || !isSymlink(e) {
+			return e, nil
 		}
-		if next == "" || !fs.ValidPath(next) {
-			return nil, fs.ErrInvalid
-		}
-		if !inst.contains(next) {
-			// A Sub is a boundary, not a relabelling: resolution walks full
-			// snapshot paths, so without this a link inside the subtree could
-			// name anything in the snapshot and be followed there. `..` above
-			// the snapshot root is already refused by fs.ValidPath; this is
-			// the same refusal one level in.
-			return nil, fs.ErrNotExist
-		}
-		e, err = inst.byPath(next)
+		full, err = inst.linkTarget(e, &depth)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return e, nil
+}
+
+// viaLinkedAncestor finds the first component of full that is a symlink and
+// rewrites full through the link's target. moved is false when every ancestor
+// is a real directory, i.e. full is simply absent.
+func (inst *FS) viaLinkedAncestor(full string, depth *int) (next string, moved bool, err error) {
+	comps := strings.Split(full, "/")
+	for i := 1; i < len(comps); i++ {
+		prefix := strings.Join(comps[:i], "/")
+		pe, perr := inst.byPath(prefix)
+		if perr != nil {
+			return "", false, perr
+		}
+		if isSymlink(pe) {
+			target, terr := inst.linkTarget(pe, depth)
+			if terr != nil {
+				return "", false, terr
+			}
+			rest := strings.Join(comps[i:], "/")
+			if target == "." {
+				return rest, true, nil
+			}
+			return target + "/" + rest, true, nil
+		}
+		if !modeOf(pe).IsDir() {
+			return "", false, fs.ErrNotExist
+		}
+	}
+	return "", false, nil
+}
+
+// linkTarget is the full snapshot path one symlink names, counted against the
+// depth budget.
+func (inst *FS) linkTarget(e *entry, depth *int) (next string, err error) {
+	if *depth >= maxLinkDepth {
+		return "", ErrTooManyLinks
+	}
+	*depth++
+	target := e.row.LinkTarget
+	if target == "" {
+		return "", fs.ErrInvalid
+	}
+	if strings.HasPrefix(target, "/") {
+		next = path.Clean(strings.TrimPrefix(target, "/"))
+	} else {
+		next = path.Join(path.Dir(e.name), target)
+	}
+	if next == "" || !fs.ValidPath(next) {
+		return "", fs.ErrInvalid
+	}
+	if !inst.contains(next) {
+		// A Sub is a boundary, not a relabelling: resolution walks full
+		// snapshot paths, so without this a link inside the subtree could
+		// name anything in the snapshot and be followed there. `..` above
+		// the snapshot root is already refused by fs.ValidPath; this is
+		// the same refusal one level in.
+		return "", fs.ErrNotExist
+	}
+	return next, nil
 }
 
 // byPath reads one entry of the snapshot, by its full path.
