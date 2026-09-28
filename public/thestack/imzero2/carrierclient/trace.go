@@ -380,6 +380,24 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 		// while a query is in flight, so "Run is enabled again" is a precise
 		// "the result has landed", and a single resolution would just fail on
 		// the disabled state it exists to wait out.
+		settle := time.Duration(st.SettleMs) * time.Millisecond
+		if settle == 0 {
+			settle = time.Duration(opts.SettleMs) * time.Millisecond
+		}
+		// settleAfter pauses for what a step set in motion. Idle, not
+		// time.Sleep: the pause must keep answering the carrier's keepalive or
+		// a long `sleep` gets the driver reaped.
+		settleAfter := func() error {
+			if settle <= 0 {
+				return nil
+			}
+			if e := c.Idle(settle); e != nil {
+				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
+					Errorf("settle after the step failed: %w", e)
+			}
+			return nil
+		}
+
 		if st.Do == "wait" {
 			if !st.hasAnchor() {
 				return eb.Build().Int("step", i+1).Errorf("wait needs an anchor")
@@ -390,6 +408,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 			}
 			stale = true // the tree it settled on is newer than any we cached
 			tree = nil
+			if err = settleAfter(); err != nil {
+				return err
+			}
 			log.Info().Msg(st.describe())
 			continue
 		}
@@ -410,6 +431,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 			}
 			stale = true
 			tree = nil
+			if err = settleAfter(); err != nil {
+				return err
+			}
 			log.Info().Msg(st.describe())
 			continue
 		}
@@ -441,10 +465,6 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 			log.Info().Msg("dry run: " + st.describe())
 			continue
 		}
-		settle := time.Duration(st.SettleMs) * time.Millisecond
-		if settle == 0 {
-			settle = time.Duration(opts.SettleMs) * time.Millisecond
-		}
 		if settleBefore(st.Do) && settle > 0 {
 			if err = c.Idle(settle); err != nil {
 				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
@@ -460,12 +480,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 		if st.Do != "wait" && st.Do != "note" && st.Do != "capture" && st.Do != "tree" && st.Do != "expect" {
 			stale = true
 		}
-		if !settleBefore(st.Do) && settle > 0 {
-			// Idle, not time.Sleep: the pause must keep answering the
-			// carrier's keepalive or a long `sleep` gets the driver reaped.
-			if err = c.Idle(settle); err != nil {
-				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
-					Errorf("settle after the step failed: %w", err)
+		if !settleBefore(st.Do) {
+			if err = settleAfter(); err != nil {
+				return err
 			}
 		}
 		log.Info().Msg(st.describe())
