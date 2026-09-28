@@ -86,6 +86,9 @@ func (inst *StaticSchemaProvider) GetColumns(db string, tableName string) (colum
 // endpoint change — in play, the UI thread — while a query may be probing on
 // another, and lwsql.Resolver already calls GetColumns outside its own lock so
 // two probes can land here at once.
+//
+// maxSize bounds the number of entries (<= 0 leaves it unbounded); a miss
+// that would exceed it evicts the entry fetched longest ago.
 type CachingSchemaProvider struct {
 	delegate SchemaProviderI
 	mu       sync.Mutex
@@ -153,6 +156,9 @@ func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns
 			cs2 = append(cs2, v)
 		}
 		inst.mu.Lock()
+		if _, present := inst.cache[key]; !present && inst.maxSize > 0 && len(inst.cache) >= inst.maxSize {
+			inst.evictOldestLocked()
+		}
 		inst.cache[key] = struct {
 			timestamp time.Time
 			columns   []string
@@ -167,6 +173,23 @@ func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns
 		found = true
 	}
 	return
+}
+
+// evictOldestLocked drops the entry fetched longest ago, keeping the cache
+// within maxSize. A linear scan: maxSize bounds a schema cache of tables, and
+// eviction runs only on a miss that would outgrow it. Caller holds mu.
+func (inst *CachingSchemaProvider) evictOldestLocked() {
+	var oldestKey string
+	var oldest time.Time
+	first := true
+	for k, v := range inst.cache {
+		if first || v.timestamp.Before(oldest) {
+			oldestKey, oldest, first = k, v.timestamp, false
+		}
+	}
+	if !first {
+		delete(inst.cache, oldestKey)
+	}
 }
 
 var _ SchemaProviderI = (*CachingSchemaProvider)(nil)

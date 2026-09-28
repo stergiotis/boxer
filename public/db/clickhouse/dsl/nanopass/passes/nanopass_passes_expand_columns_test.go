@@ -144,3 +144,37 @@ func TestExpandColumns_QuotesExoticNames(t *testing.T) {
 		}
 	}
 }
+
+// TestCachingSchemaProvider_BoundedByMaxSize guards a bug where maxSize was
+// stored but never enforced, so a long-running session that probed many
+// tables kept every entry.
+func TestCachingSchemaProvider_BoundedByMaxSize(t *testing.T) {
+	delegate := NewStaticSchemaProvider(map[string][]string{"a": {"x"}, "b": {"x"}, "c": {"x"}})
+	c := NewCachingSchemaProvider(time.Minute, delegate, 2)
+	probe := func(tbl string) {
+		t.Helper()
+		if _, _, found := c.GetColumns("", tbl); !found {
+			t.Fatalf("%s not found", tbl)
+		}
+	}
+	probe("a")
+	probe("b")
+	// Back-date a so the eviction order does not hinge on clock resolution.
+	c.mu.Lock()
+	e := c.cache[cacheKey("", "a")]
+	e.timestamp = e.timestamp.Add(-time.Second)
+	c.cache[cacheKey("", "a")] = e
+	c.mu.Unlock()
+	probe("c")
+	probe("c")
+	c.mu.Lock()
+	n := len(c.cache)
+	_, hasA := c.cache[cacheKey("", "a")]
+	c.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("cache holds %d entries, want 2", n)
+	}
+	if hasA {
+		t.Fatal("oldest entry a survived eviction")
+	}
+}
