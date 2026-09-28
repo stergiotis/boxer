@@ -62,6 +62,13 @@ func startRedpanda(t *testing.T) (brokerAddr string) {
 	defer cancel()
 
 	container, err := redpanda.Run(ctx, redpandaImage)
+	if err != nil && strings.Contains(err.Error(), "get provider: ") {
+		// No Docker/Podman provider on this host: the integration lane's
+		// members skip when their server is unreachable. testcontainers
+		// wraps every provider-lookup failure with this prefix before any
+		// container is created, and exposes no sentinel for it.
+		t.Skipf("no container provider for redpanda: %v", err)
+	}
 	require.NoError(t, err, "start redpanda container")
 	t.Cleanup(func() {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
