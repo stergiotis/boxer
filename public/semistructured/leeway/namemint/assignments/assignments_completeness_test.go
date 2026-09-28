@@ -46,8 +46,7 @@ func TestEveryVcsManagedVocabularyHasAGolden(t *testing.T) {
 			return walkErr
 		}
 		if d.IsDir() {
-			switch d.Name() {
-			case ".git", "node_modules", "testdata":
+			if path != root && (d.Name() == "testdata" || d.Name() == "node_modules" || strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_")) {
 				return filepath.SkipDir
 			}
 			return nil

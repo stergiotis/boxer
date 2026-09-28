@@ -23,12 +23,14 @@ const appletMaxHistory = 25
 // lists what a buffer could call, which an applet — a published query with no
 // editor — has no buffer for. Glosses (ADR-0186) is chrome for the same
 // reason: it explains how a buffer's rules resolved, an authoring view; the
-// glosses themselves still render in an applet's Table and Detail.
+// glosses themselves still render in an applet's Table and Detail. Model
+// (ADR-0254 §SD6) is chrome by the Snippets criterion: its prompts read the
+// buffer and its Insert and Replace write into the editor.
 // A snippet library a host contributed (ADR-0097's RegisterSnippetLibraryE)
 // is chrome by the same criterion as Snippets and goes with it, but it cannot
 // be listed here: its slug is the contributor's, chosen in another repository
 // and unknown at this line. attenuateTabs removes it by its Contributed mark.
-var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary", "glosses", "completion"}
+var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary", "glosses", "completion", "model"}
 
 // orderedResultTabIDs is resultTabIDs in play's registration order, for
 // deterministic removal when an explicit `tabs:` list prunes the set.

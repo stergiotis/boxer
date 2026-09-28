@@ -587,6 +587,28 @@ A source-level review of the engine, the CLI and the wizard found the core of
 - A scripted fake client drives the retry, resume and replace branches in
   the default lane.
 
+### 2026-09-28 — The wizard's plans live in its fs data area
+
+The capslock gate (ADR-0026 §SD10) found the wizard writing plan files
+itself, under the user's config directory, with no manifest subject to
+justify it. The plans and their journals now live in the window's data area,
+which the fs broker owns (ADR-0026, 2026-09-28): the window addresses a plan
+by file name, and the manifest declares `fs.appdata.>`.
+
+- `BOXER_JACKSTAY_PLAN_DIR` is gone; the broker's `BOXER_FS_APPDATA_DIR`
+  sets the root. `BOXER_JACKSTAY_PLAN` names a plan in the data area rather
+  than a path. The recent-plans list holds names, and rows written before
+  this change, which held paths, are dropped.
+- `Open…` and `Save as…` become **Import…** (copy a plan in through
+  `fs.dialog.read`) and **Export…** (write a copy out through
+  `fs.dialog.write`). The plan in the data area stays the window's plan, so
+  the journal stays beside it. A plan a CLI run left elsewhere comes in
+  without its journal, so a run begun from the CLI resumes from the CLI.
+- The engine takes the file operations through `FilesI` (`SaveIn`,
+  `LoadPlanIn`, `OpenJournalIn`, `RunSyncIn`); the CLI keeps the path forms
+  over `OsFiles`. The journal appends one durable line per record as before.
+- Saves run in the step's worker rather than on the frame.
+
 ## References
 
 - [ADR-0170](./0170-data-catalog-competence.md) — the data catalog: classification, restoration, shape relation.
