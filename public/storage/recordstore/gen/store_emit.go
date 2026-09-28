@@ -1607,7 +1607,13 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 		ord := inst.orderArg()
 		p("// Ingest%s buffers one whole entity per row carrying only the", c.Kind)
 		p("// %s component, all stamped with %s — rows ship on the next Flush,", c.Kind, ord)
-		p("// like every write. Keys must be distinct within one call (rows")
+		if len(inst.model.passthrough) > 0 {
+			p("// like every write. The envelope carries the pass-through columns")
+			p("// the row binds; the others are written zero — use Begin with a")
+			p("// filled envelope to set them. Keys must be distinct within one call (rows")
+		} else {
+			p("// like every write. Keys must be distinct within one call (rows")
+		}
 		p("// share %s, so duplicates would tie on Order): a duplicate returns", ord)
 		p("// recordstore.ErrDuplicateIngestKey. On any error the rows buffered")
 		p("// so far remain buffered — Flush ships them, DiscardPending drops")
@@ -1622,7 +1628,16 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 		p("\t\tseen[rows[i].%s] = struct{}{}", idCol.GoField)
 		beginArgs := fmt.Sprintf("rows[i].%s, %s", idCol.GoField, ord)
 		if len(inst.model.passthrough) > 0 {
-			beginArgs += fmt.Sprintf(", %sEnvelope{}", inst.StoreName)
+			// A pass-through column the DTO binds (e.g. `lw:",naturalKey"`)
+			// rides the row into the envelope; one it does not is written
+			// zero, as it would be through Begin with an empty envelope.
+			fields := make([]string, 0, len(inst.model.passthrough))
+			for _, pt := range inst.model.passthrough {
+				if dc := goplan.FindPlainCol(c.plan, pt.name); dc != nil && dc.GoType() == pt.goType {
+					fields = append(fields, fmt.Sprintf("%s: rows[i].%s", pt.pascal, dc.GoField))
+				}
+			}
+			beginArgs += fmt.Sprintf(", %sEnvelope{%s}", inst.StoreName, strings.Join(fields, ", "))
 		}
 		p("\t\terr = inst.Begin(%s).Add%s(rows[i]).Commit()", beginArgs, c.Kind)
 		p("\t\tif err != nil {")

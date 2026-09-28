@@ -25,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallreflect"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/assignments"
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )
 
@@ -307,4 +308,33 @@ func splitStatements(t *testing.T, path string) (stmts []string) {
 		}
 	}
 	return
+}
+
+// TestIngestCarriesTheRowsNaturalKey. The generated Ingest<Kind> opens each
+// entity with an envelope built from the row: a DTO field bound to a
+// pass-through column (here `lw:",naturalKey"`) must reach the row, not be
+// replaced by an empty envelope.
+func TestIngestCarriesTheRowsNaturalKey(t *testing.T) {
+	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx := context.Background()
+	for _, stmt := range splitStatements(t, "facts_ddl_clickhouse.out.sql") {
+		require.NoError(t, exec.Exec(ctx, stmt))
+	}
+	store := meshdemo.NewFleetStore(exec, nil, meshdemo.FleetStoreConfig{})
+	defer store.Close()
+	require.NoError(t, store.IngestFleetSample(time.Unix(1_700_000_000, 0).UTC(), agentRows))
+	_, err = store.Flush(ctx)
+	require.NoError(t, err)
+
+	got := map[uint64]string{}
+	for ent, serr := range store.ScanFleetSample(ctx, recordstore.ScanOpts{}) {
+		require.NoError(t, serr)
+		got[ent.ID] = string(ent.NaturalKey)
+	}
+	for _, want := range agentRows {
+		assert.Equal(t, string(want.NaturalKey), got[want.Id], "id %d", want.Id)
+	}
 }

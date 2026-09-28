@@ -514,7 +514,9 @@ func (inst *CallEntityBuilder) Rollback() (err error) {
 
 // IngestLlmCall buffers one whole entity per row carrying only the
 // LlmCall component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -527,7 +529,7 @@ func (inst *CallStore) IngestLlmCall(ts time.Time, rows []LlmCall) (err error) {
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, CallEnvelope{}).AddLlmCall(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, CallEnvelope{NaturalKey: rows[i].NaturalKey}).AddLlmCall(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest llmCall row %d: %w", i, err)
 			return
@@ -538,7 +540,9 @@ func (inst *CallStore) IngestLlmCall(ts time.Time, rows []LlmCall) (err error) {
 
 // IngestLlmMessage buffers one whole entity per row carrying only the
 // LlmMessage component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -551,7 +555,7 @@ func (inst *CallStore) IngestLlmMessage(ts time.Time, rows []LlmMessage) (err er
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, CallEnvelope{}).AddLlmMessage(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, CallEnvelope{NaturalKey: rows[i].NaturalKey}).AddLlmMessage(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest llmMessage row %d: %w", i, err)
 			return

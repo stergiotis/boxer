@@ -1169,6 +1169,20 @@ description. That repository is private, and this one is public. The
 decision is unchanged.
 
 
+### 2026-09-28 — `Ingest<Kind>` fills the envelope from the row
+
+On a store with pass-through envelope columns, the emitted `Ingest<Kind>`
+opened every entity with an empty `<Store>Envelope{}`, so a value the DTO
+binds to one of those columns — typically `lw:",naturalKey"` — was dropped
+and the row carried an empty natural key. The verb now copies each
+pass-through column the DTO binds, with a matching Go type, from the row into
+the envelope; a column the DTO does not bind (usually `expiresAt`) is still
+written zero, and the verb's doc comment says so. `Begin` with a filled
+envelope remains the way to set those. ADR-0198's 2026-08-20 note that the
+verb drops a DTO's `naturalKey` describes the behaviour before this entry;
+its other reason for the walker not using the verb — one key per call —
+stands.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

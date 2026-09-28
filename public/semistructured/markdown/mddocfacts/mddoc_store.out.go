@@ -704,7 +704,9 @@ func (inst *MddocEntityBuilder) Rollback() (err error) {
 
 // IngestMdDoc buffers one whole entity per row carrying only the
 // MdDoc component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -717,7 +719,7 @@ func (inst *MddocStore) IngestMdDoc(ts time.Time, rows []MdDoc) (err error) {
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{}).AddMdDoc(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdDoc(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdDoc row %d: %w", i, err)
 			return
@@ -728,7 +730,9 @@ func (inst *MddocStore) IngestMdDoc(ts time.Time, rows []MdDoc) (err error) {
 
 // IngestMdHeading buffers one whole entity per row carrying only the
 // MdHeading component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -741,7 +745,7 @@ func (inst *MddocStore) IngestMdHeading(ts time.Time, rows []MdHeading) (err err
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{}).AddMdHeading(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdHeading(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdHeading row %d: %w", i, err)
 			return
@@ -752,7 +756,9 @@ func (inst *MddocStore) IngestMdHeading(ts time.Time, rows []MdHeading) (err err
 
 // IngestMdCodeBlock buffers one whole entity per row carrying only the
 // MdCodeBlock component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -765,7 +771,7 @@ func (inst *MddocStore) IngestMdCodeBlock(ts time.Time, rows []MdCodeBlock) (err
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{}).AddMdCodeBlock(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdCodeBlock(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdCodeBlock row %d: %w", i, err)
 			return
@@ -776,7 +782,9 @@ func (inst *MddocStore) IngestMdCodeBlock(ts time.Time, rows []MdCodeBlock) (err
 
 // IngestMdLink buffers one whole entity per row carrying only the
 // MdLink component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -789,7 +797,7 @@ func (inst *MddocStore) IngestMdLink(ts time.Time, rows []MdLink) (err error) {
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{}).AddMdLink(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdLink(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdLink row %d: %w", i, err)
 			return
@@ -800,7 +808,9 @@ func (inst *MddocStore) IngestMdLink(ts time.Time, rows []MdLink) (err error) {
 
 // IngestMdEmphasis buffers one whole entity per row carrying only the
 // MdEmphasis component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -813,7 +823,7 @@ func (inst *MddocStore) IngestMdEmphasis(ts time.Time, rows []MdEmphasis) (err e
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{}).AddMdEmphasis(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdEmphasis(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdEmphasis row %d: %w", i, err)
 			return
@@ -824,7 +834,9 @@ func (inst *MddocStore) IngestMdEmphasis(ts time.Time, rows []MdEmphasis) (err e
 
 // IngestMdTag buffers one whole entity per row carrying only the
 // MdTag component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -837,7 +849,7 @@ func (inst *MddocStore) IngestMdTag(ts time.Time, rows []MdTag) (err error) {
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{}).AddMdTag(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdTag(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdTag row %d: %w", i, err)
 			return
