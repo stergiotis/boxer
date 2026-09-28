@@ -3,6 +3,7 @@ package watchbill
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -455,4 +456,39 @@ func TestOrphanedSettleIsSettled(t *testing.T) {
 	f.tick(t)
 	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
 	assert.Equal(t, []string{"running", "cancel", "cancelled"}, states(f.store.Events(id)))
+}
+
+// Policy durations from the row saturate rather than wrap: a huge base or
+// attempt count waits the longest backoff, never a negative one.
+func TestBackoffSaturates(t *testing.T) {
+	hour := uint64(time.Hour / time.Millisecond)
+	for _, c := range []struct {
+		name string
+		job  watchbillstore.Job
+		want time.Duration
+	}{
+		{"exponential small", watchbillstore.Job{Backoff: watchbillstore.BackoffExponential, BackoffBaseMs: 1000, Attempt: 3}, 4 * time.Second},
+		{"exponential 1h at attempt 25", watchbillstore.Job{Backoff: watchbillstore.BackoffExponential, BackoffBaseMs: hour, Attempt: 25}, maxBackoff},
+		{"exponential huge base", watchbillstore.Job{Backoff: watchbillstore.BackoffExponential, BackoffBaseMs: 1 << 62, Attempt: 1}, maxBackoff},
+		{"linear huge attempt", watchbillstore.Job{Backoff: watchbillstore.BackoffLinear, BackoffBaseMs: hour, Attempt: 1 << 31}, maxBackoff},
+		{"linear small", watchbillstore.Job{Backoff: watchbillstore.BackoffLinear, BackoffBaseMs: 1000, Attempt: 3}, 3 * time.Second},
+	} {
+		assert.Equal(t, c.want, backoffOf(c.job), c.name)
+	}
+	assert.Equal(t, time.Duration(math.MaxInt64), msDuration(1<<54))
+}
+
+// A timeout too large for a duration is the longest one, not an instant
+// failure.
+func TestHugeTimeoutDoesNotFireAtOnce(t *testing.T) {
+	f := newFixture(t, "run-a")
+	f.blocking.Store(true)
+	time.AfterFunc(50*time.Millisecond, func() { close(f.release) })
+	id := "huge-timeout"
+	require.NoError(t, f.store.Enqueue(context.Background(), watchbillstore.Job{
+		ID: id, Kind: "test.kind", Queue: "default", MaxAttempts: 1, Backoff: watchbillstore.BackoffNone,
+		TimeoutMs: uint64(math.MaxInt64/int64(time.Millisecond)) + 1, State: watchbillstore.StateQueued, RunAfter: t0,
+	}))
+	f.tick(t)
+	assert.Equal(t, watchbillstore.StateSucceeded, f.job(t, id).State)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -440,7 +441,7 @@ func (inst *Worker) start(ctx context.Context, job watchbillstore.Job, now time.
 	jobCtx, cancel := context.WithCancelCause(ctx)
 	if job.TimeoutMs > 0 {
 		var stop context.CancelFunc
-		jobCtx, stop = context.WithTimeoutCause(jobCtx, time.Duration(job.TimeoutMs)*time.Millisecond, errTimedOut)
+		jobCtx, stop = context.WithTimeoutCause(jobCtx, msDuration(job.TimeoutMs), errTimedOut)
 		prev := cancel
 		cancel = func(cause error) { prev(cause); stop() }
 	}
@@ -519,7 +520,7 @@ func (inst *Worker) execute(workerCtx context.Context, jobCtx context.Context, j
 		note = "cancelled through the task"
 	case errors.Is(cause, errTimedOut):
 		outcome = outcomeFailed
-		runErr = eb.Build().Str("timeout", (time.Duration(job.TimeoutMs)*time.Millisecond).String()).Errorf("timed out: %w", runErr)
+		runErr = eb.Build().Str("timeout", msDuration(job.TimeoutMs).String()).Errorf("timed out: %w", runErr)
 	case workerCtx.Err() != nil || inst.stopping.Load():
 		// The worker's own context ended — Stop, or Start's context —
 		// which a parent records before any child sees it.
@@ -624,18 +625,40 @@ func (inst *Worker) settle(job watchbillstore.Job, outcome outcomeE, runErr erro
 	}
 }
 
+// maxBackoff bounds the wait before a retry: the row's base and attempt
+// come from the enqueuing client unchecked, and an unbounded product
+// wraps into the past and retries at once.
+const maxBackoff = 30 * 24 * time.Hour
+
 // backoffOf is the wait before the next attempt (ADR-0223 §SD6), from the
-// attempt that just failed.
+// attempt that just failed, saturated at maxBackoff.
 func backoffOf(job watchbillstore.Job) (d time.Duration) {
-	base := time.Duration(job.BackoffBaseMs) * time.Millisecond
+	base := min(msDuration(job.BackoffBaseMs), maxBackoff)
 	switch job.Backoff {
 	case watchbillstore.BackoffLinear:
-		return base * time.Duration(max(job.Attempt, 1))
+		n := time.Duration(max(job.Attempt, 1))
+		if base > maxBackoff/n {
+			return maxBackoff
+		}
+		return base * n
 	case watchbillstore.BackoffExponential:
-		return base << min(job.Attempt-1, 30)
+		shift := min(job.Attempt-1, 30)
+		if base > maxBackoff>>shift {
+			return maxBackoff
+		}
+		return base << shift
 	default:
 		return 0
 	}
+}
+
+// msDuration is ms milliseconds, saturated at the longest duration rather
+// than wrapped negative.
+func msDuration(ms uint64) (d time.Duration) {
+	if ms > uint64(math.MaxInt64/int64(time.Millisecond)) {
+		return math.MaxInt64
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 // event writes the transition row after the update it records, then

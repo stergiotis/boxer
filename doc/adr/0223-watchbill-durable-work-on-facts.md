@@ -494,6 +494,14 @@ failed attempt under the policy, or `cancelled` where a cancel was
 requested. A worker that is stopping settles none, leaving them to the
 sweep as before.
 
+### 2026-09-28 — policy durations saturate
+
+§SD6's base and timeout come from the enqueuing client, and the worker
+multiplied them into a duration unchecked, so a large value wrapped
+negative: the timeout fired at once, or the retry was due in the past.
+The worker now saturates both, and bounds the backoff at 30 days
+(`maxBackoff`).
+
 ## References
 
 - [ADR-0038](./0038-keelson-background-task-primitive.md) — the task primitive; the Update of 2026-06-22 this ADR withdraws.
