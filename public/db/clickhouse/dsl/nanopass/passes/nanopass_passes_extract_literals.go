@@ -292,6 +292,11 @@ func buildCompositeFunctionCandidate(pr *nanopass.ParseResult, funcCtx *grammar1
 	if !allLiterals || len(literalTexts) < config.minINListSize {
 		return
 	}
+	if elementType == "" && kind != compositeKindTuple {
+		// No common element type (see unifyElementType); a tuple is typed
+		// per element and needs none.
+		return
+	}
 
 	var castNode *grammar1.ColumnExprCastContext
 	var castType canonicaltypes.PrimitiveAstNodeI
@@ -346,11 +351,7 @@ func extractLiteralsFromArgList(pr *nanopass.ParseResult, argList *grammar1.Colu
 			return
 		}
 		thisType := inferClickHouseType(litCtx)
-		if elementType == "" {
-			elementType = thisType
-		} else if elementType != thisType {
-			elementType = "String"
-		}
+		elementType = unifyElementType(elementType, thisType, len(perElementTypes) == 0)
 		perElementTypes = append(perElementTypes, thisType)
 		texts = append(texts, nanopass.NodeText(pr, litExpr))
 	}
@@ -358,6 +359,31 @@ func extractLiteralsFromArgList(pr *nanopass.ParseResult, argList *grammar1.Colu
 		allLiterals = false
 	}
 	return
+}
+
+// unifyElementType folds one more element's inferred type into the list's
+// element type. Integers of differing signedness widen to Int64 and any
+// integer beside a float to Float64, as ClickHouse would read the literal
+// list. Any other disagreement (a string beside a number, a Bool beside
+// either) has no element type the unquoted values parse as, and yields ""
+// — which then stays "" for the rest of the list. Falling back to String
+// instead bound `[1, -2, 3]` to an Array(String) parameter ClickHouse
+// cannot parse.
+func unifyElementType(acc string, t string, first bool) string {
+	switch {
+	case first:
+		return t
+	case acc == "" || acc == t:
+		return acc
+	}
+	numeric := func(x string) bool { return x == "UInt64" || x == "Int64" || x == "Float64" }
+	if !numeric(acc) || !numeric(t) {
+		return ""
+	}
+	if acc == "Float64" || t == "Float64" {
+		return "Float64"
+	}
+	return "Int64"
 }
 
 func collectINTupleSet(pr *nanopass.ParseResult) (set map[*grammar1.ColumnExprTupleContext]bool) {
@@ -385,7 +411,9 @@ func buildCompositeCandidate(pr *nanopass.ParseResult, container antlr.ParserRul
 	}
 
 	literalTexts, elementType, perElementTypes, allLiterals := extractListLiteralsFromContainer(pr, container)
-	if !allLiterals || len(literalTexts) < config.minINListSize {
+	if !allLiterals || len(literalTexts) < config.minINListSize || elementType == "" {
+		// elementType "" is a list with no common element type (see
+		// unifyElementType).
 		return
 	}
 
@@ -500,11 +528,7 @@ func extractListLiteralsFromContainer(pr *nanopass.ParseResult, container antlr.
 			return
 		}
 		thisType := inferClickHouseType(litCtx)
-		if elementType == "" {
-			elementType = thisType
-		} else if elementType != thisType {
-			elementType = "String"
-		}
+		elementType = unifyElementType(elementType, thisType, len(perElementTypes) == 0)
 		perElementTypes = append(perElementTypes, thisType)
 		texts = append(texts, nanopass.NodeText(pr, litExpr))
 	}
