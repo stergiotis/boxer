@@ -1017,10 +1017,28 @@ func (inst *Inst) canCommit() (ok bool) {
 	case ModeOpen:
 		ok = len(inst.picked) > 0
 	case ModeSave:
-		ok = strings.TrimSpace(inst.filename) != ""
+		_, ok = inst.saveTarget()
 	case ModePickFolder:
 		ok = true
 	}
+	return
+}
+
+// saveTarget is the io/fs path the typed filename names, relative to the
+// cwd. The name may carry subdirectories, but ok is false when it is blank,
+// names a directory ("." or "..") rather than a file, or climbs above the
+// FS root (fs.ValidPath rejects a leading "..").
+func (inst *Inst) saveTarget() (p string, ok bool) {
+	name := strings.TrimSpace(inst.filename)
+	if name == "" {
+		return
+	}
+	switch path.Base(path.Clean(name)) {
+	case ".", "..", "/":
+		return
+	}
+	p = path.Clean(path.Join(inst.st.Dir(), name))
+	ok = fs.ValidPath(p)
 	return
 }
 
@@ -1049,8 +1067,9 @@ func (inst *Inst) commitPaths() (out []string) {
 			out = append(out, inst.applyDisplayRoot(p))
 		}
 	case ModeSave:
-		p := path.Clean(path.Join(inst.st.Dir(), strings.TrimSpace(inst.filename)))
-		out = []string{inst.applyDisplayRoot(p)}
+		if p, ok := inst.saveTarget(); ok {
+			out = []string{inst.applyDisplayRoot(p)}
+		}
 	case ModePickFolder:
 		out = []string{inst.applyDisplayRoot(inst.folderToCommit())}
 	}

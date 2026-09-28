@@ -812,3 +812,33 @@ func TestColumnWidths(t *testing.T) {
 		}
 	})
 }
+
+// A save name may carry subdirectories, but not name a directory or climb
+// above the FS root.
+func TestCanCommit_SaveRejectsDirectoryAndEscapingNames(t *testing.T) {
+	for _, tc := range []struct {
+		dir, name string
+		ok        bool
+	}{
+		{"", "out.txt", true},
+		{"work/proj", "../x.txt", true},
+		{"work/proj", "sub/out.txt", true},
+		{"", "..", false},
+		{"", ".", false},
+		{"work", "..", false},
+		{"work", "sub/..", false},
+		{"", "../../etc/app.conf", false},
+		{"work", "../../x", false},
+		{"", "/", false},
+	} {
+		inst := New("a", ModeSave)
+		inst.st.SetDir(tc.dir)
+		inst.filename = tc.name
+		if got := inst.canCommit(); got != tc.ok {
+			t.Errorf("dir %q name %q: canCommit=%v want %v", tc.dir, tc.name, got, tc.ok)
+		}
+		if paths := inst.commitPaths(); (len(paths) == 1) != tc.ok {
+			t.Errorf("dir %q name %q: commitPaths=%v", tc.dir, tc.name, paths)
+		}
+	}
+}
