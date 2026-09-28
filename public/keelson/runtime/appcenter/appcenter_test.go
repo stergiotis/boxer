@@ -108,6 +108,18 @@ func TestStatementsPassTheGate(t *testing.T) {
 	}
 }
 
+// busReadBudget bounds each bus request in [TestEveryLensReadsOverTheBus].
+// The keelson('adr') lens re-reads the ADR corpus and scans the tree for
+// citations on every query (FreshnessLive), which takes seconds on a busy host
+// and several times that under the race detector — past a 30s budget, where
+// the request's context expired before it reached the broker.
+func busReadBudget() time.Duration {
+	if raceBuild {
+		return 4 * time.Minute
+	}
+	return time.Minute
+}
+
 // Over the host's arrangement — the chlocal broker and the keelson.query
 // service on one bus — every statement answers and decodes into its columns,
 // so a misspelt column or a mistyped field fails here.
@@ -117,7 +129,7 @@ func TestEveryLensReadsOverTheBus(t *testing.T) {
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus := inprocbus.NewInst(logger)
-	bus.SetRequestTimeout(30 * time.Second)
+	bus.SetRequestTimeout(busReadBudget())
 	broker, err := chlocalbroker.NewService(bus, chlocalpool.Config{
 		BaseTmpDir: t.TempDir(), MinIdle: 1, MaxConcurrent: 3, SpawnConcurrency: 1,
 	}, logger)
@@ -129,11 +141,11 @@ func TestEveryLensReadsOverTheBus(t *testing.T) {
 	})
 	svc, err := keelsonquery.NewService(bus, logger, hostRegistry(t), "introspect")
 	require.NoError(t, err)
-	svc.Timeout = 30 * time.Second
+	svc.Timeout = busReadBudget()
 	t.Cleanup(svc.Close)
 
 	r := newBusReader(bus.NewClient(AppId, manifest.Caps))
-	r.cli.Timeout = 30 * time.Second
+	r.cli.Timeout = busReadBudget()
 	ctx := context.Background()
 	g := readGlobal(ctx, r, global{})
 	for name, st := range map[string]struct {
@@ -362,7 +374,7 @@ func TestPlayQueriesRunOnTheEngine(t *testing.T) {
 	}
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 	bus := inprocbus.NewInst(logger)
-	bus.SetRequestTimeout(30 * time.Second)
+	bus.SetRequestTimeout(busReadBudget())
 	broker, err := chlocalbroker.NewService(bus, chlocalpool.Config{
 		BaseTmpDir: t.TempDir(), MinIdle: 1, MaxConcurrent: 3, SpawnConcurrency: 1,
 	}, logger)
