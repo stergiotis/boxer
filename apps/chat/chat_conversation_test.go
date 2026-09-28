@@ -48,6 +48,13 @@ func host(t *testing.T, cfg llm.Config) (cli *llm.Client, svc *llm.Service, fm *
 	return
 }
 
+// keeping is a conversation whose first send asked to keep it.
+func keeping() (conv *conversation) {
+	conv = newConversation()
+	conv.keep = true
+	return
+}
+
 // turn runs one turn the way the app does: request, complete, land.
 func turn(t *testing.T, cli *llm.Client, conv *conversation, text string) (res llm.Response) {
 	t.Helper()
@@ -66,7 +73,7 @@ func turn(t *testing.T, cli *llm.Client, conv *conversation, text string) (res l
 // resends it verbatim; the manifest's grants are enough for both subjects.
 func TestSecondTurnContinuesTheFirst(t *testing.T) {
 	cli, svc, fm := host(t, llm.Config{Retain: llm.RetainRing})
-	conv := newConversation(true)
+	conv := keeping()
 	r1 := turn(t, cli, conv, "q1")
 	require.NotEmpty(t, r1.CallId)
 	turn(t, cli, conv, "q2")
@@ -88,7 +95,7 @@ func TestSecondTurnContinuesTheFirst(t *testing.T) {
 
 // A failed turn stays in the transcript and is never resent or a parent.
 func TestFailedTurnIsNotAParent(t *testing.T) {
-	conv := newConversation(true)
+	conv := keeping()
 	req := conv.request("q1")
 	conv.begin("q1", 1)
 	conv.land(req, &llm.Response{Content: "a1", CallId: "call-1"}, nil, 2)
@@ -110,7 +117,7 @@ func TestFailedTurnIsNotAParent(t *testing.T) {
 // Keep off sends on llm.complete: the call carries no conversation.
 func TestKeepOffIsNotRetained(t *testing.T) {
 	cli, svc, _ := host(t, llm.Config{Retain: llm.RetainDurable})
-	conv := newConversation(false)
+	conv := newConversation()
 	res := turn(t, cli, conv, "q1")
 	assert.Equal(t, llm.RetentionNotAsked, res.Retention)
 	require.Len(t, svc.Calls(), 1)
@@ -120,7 +127,7 @@ func TestKeepOffIsNotRetained(t *testing.T) {
 
 // New conversations get fresh ids.
 func TestNewConversationMintsAFreshId(t *testing.T) {
-	a, b := newConversation(true), newConversation(true)
+	a, b := newConversation(), newConversation()
 	assert.NotEqual(t, a.id, b.id)
 	assert.True(t, strings.HasPrefix(a.id, "chat-"))
 }
@@ -128,7 +135,7 @@ func TestNewConversationMintsAFreshId(t *testing.T) {
 // The transcript model validates, marks a failure and shows the pending
 // bubble last.
 func TestTranscriptModel(t *testing.T) {
-	conv := newConversation(true)
+	conv := keeping()
 	conv.entries = []entry{
 		{speaker: speakerUser, text: "q1", atMs: 10},
 		{speaker: speakerModel, text: "a1", atMs: 5},
@@ -161,7 +168,7 @@ func TestKeptTurnsStoreOnlyWhatIsNew(t *testing.T) {
 		}
 	}
 	cli, svc, _ := host(t, llm.Config{Retain: llm.RetainDurable, Exec: exec})
-	conv := newConversation(true)
+	conv := keeping()
 	r1 := turn(t, cli, conv, "q1")
 	require.Equal(t, llm.RetentionKept, r1.Retention, r1.RetentionReason)
 	r2 := turn(t, cli, conv, "q2")
@@ -172,4 +179,84 @@ func TestKeptTurnsStoreOnlyWhatIsNew(t *testing.T) {
 	require.Len(t, calls, 2)
 	assert.Equal(t, 0, calls[0].RetainedFrom)
 	assert.Equal(t, 2, calls[1].RetainedFrom, "q1 and a1 were kept by the first turn")
+}
+
+// appOn is the app mounted on a host whose model is fm, without a frame:
+// startTurn and drain touch no UI.
+func appOn(t *testing.T, fm openaichat.ClientI) (inst *App) {
+	t.Helper()
+	bus := inprocbus.NewInst(zerolog.Nop())
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: fm, Retain: llm.RetainRing})
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+	inst = newApp()
+	inst.cli = llm.NewClient(bus.NewClient(ManifestId, manifest.Caps))
+	inst.cli.Timeout = 5 * time.Second
+	return
+}
+
+// drainUntil drains until the turn in flight has landed.
+func drainUntil(t *testing.T, inst *App) {
+	t.Helper()
+	require.Eventually(t, func() bool { inst.drain(); return inst.pending == nil }, 5*time.Second, 5*time.Millisecond)
+}
+
+// blockingModel answers only when its context ends.
+type blockingModel struct{}
+
+func (blockingModel) Complete(ctx context.Context, _ openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
+	<-ctx.Done()
+	return openaichat.CompletionResponse{}, ctx.Err()
+}
+func (blockingModel) Close() (err error) { return }
+
+// Cancel lands the turn as failed and frees the composer: bgjob resets a
+// cancelled run to idle, with neither a result nor an error.
+func TestCancelLandsAndFreesTheComposer(t *testing.T) {
+	inst := appOn(t, blockingModel{})
+	require.True(t, inst.startTurn("q1"))
+	assert.False(t, inst.startTurn("q2"), "one turn at a time")
+	inst.turn.Cancel()
+	drainUntil(t, inst)
+	require.Len(t, inst.conv.entries, 1)
+	assert.True(t, inst.conv.entries[0].failed)
+	assert.Equal(t, "cancelled", inst.conv.entries[0].reason)
+	assert.Empty(t, inst.conv.history, "a cancelled turn is not resent")
+}
+
+// The first send takes the Keep toggle; later changes do not reach the
+// started conversation. New conversation drops a turn in flight.
+func TestKeepIsFixedAtTheFirstSendAndNewConversationStartsOver(t *testing.T) {
+	inst := appOn(t, &fakeModel{})
+	inst.keep = false
+	require.True(t, inst.startTurn("q1"))
+	drainUntil(t, inst)
+	inst.keep = true
+	require.True(t, inst.startTurn("q2"))
+	drainUntil(t, inst)
+	assert.False(t, inst.conv.keep)
+	label, _ := keepBadge(inst.conv)
+	assert.Equal(t, "not kept", label)
+
+	inst = appOn(t, blockingModel{})
+	old := inst.conv
+	require.True(t, inst.startTurn("q1"))
+	inst.newConversation()
+	assert.NotSame(t, old, inst.conv)
+	assert.Nil(t, inst.pending)
+	assert.True(t, inst.startTurn("q2"), "the invalidated run no longer blocks a new one")
+	assert.False(t, inst.startTurn("   "), "a blank draft is not sent")
+}
+
+// The badge says what the host did.
+func TestKeepBadge(t *testing.T) {
+	conv := keeping()
+	label, _ := keepBadge(conv)
+	assert.Equal(t, "keep asked", label, "no verdict yet")
+	conv.kept = true
+	label, _ = keepBadge(conv)
+	assert.Equal(t, "kept", label)
+	conv.notKept = "ring"
+	label, _ = keepBadge(conv)
+	assert.Equal(t, "not kept", label, "a decline wins over an earlier keep")
 }

@@ -27,14 +27,14 @@ const plantedSVG = `<?xml version="1.0" encoding="UTF-8"?>
   <rect x="0" y="0" width="400" height="200" fill="#1e1e1e" fill-opacity="1.000"/>
   <rect x="300" y="100" width="80" height="40" fill="#777777" fill-opacity="1.000"/>
   <g class="imz-text" data-text="alpha" data-bbox="10.00 10.00 50.00 16.00" data-size="13.00">
-  <text x="10" y="22" font-size="13" fill="#e5e8eb" fill-opacity="1.000">a</text>
+  <text y="22" x="10 17 24 31 38" font-size="13" fill="#e5e8eb" fill-opacity="1.000" xml:space="preserve">alpha</text>
   </g>
   <g class="imz-text" data-text="beta" data-bbox="40.00 12.00 50.00 16.00" data-size="13.00">
-  <text x="40" y="24" font-size="13" fill="#e5e8eb" fill-opacity="1.000">b</text>
+  <text y="24" x="40 47 54 61" font-size="13" fill="#e5e8eb" fill-opacity="1.000" xml:space="preserve">beta</text>
   </g>
   <g clip-path="url(#c1)">
   <g class="imz-text" data-text="too long for its cell" data-bbox="200.00 12.00 90.00 16.00" data-size="13.00">
-  <text x="200" y="24" font-size="13" fill="#e5e8eb" fill-opacity="1.000">t</text>
+  <text y="24" x="200 207 214 221 228 235 242 249 256 263 270 277 284 291 298 305 312 319 326 333 340" font-size="13" fill="#e5e8eb" fill-opacity="1.000" xml:space="preserve">too long for its cell</text>
   </g>
   </g>
   <g class="imz-text" data-text="bottom" data-bbox="10.00 190.00 40.00 16.00" data-size="13.00">

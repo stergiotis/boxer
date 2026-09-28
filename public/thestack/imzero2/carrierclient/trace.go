@@ -149,16 +149,22 @@ type Step struct {
 
 	// Sidecars names what a `capture` writes beside its PNG, for a program to
 	// measure rather than a reader to look at (ADR-0257 (proposed) §SD5):
-	// [SidecarSVG] and [SidecarTree]. A requested sidecar that is not written
-	// fails the step.
+	// [SidecarSVG] (or [SidecarSVGFonts]) and [SidecarTree]. A requested
+	// sidecar that is not written fails the step.
 	Sidecars []string `json:"sidecars,omitempty"`
 }
 
 const (
 	// SidecarSVG is the frame's shapes as an SVG, written by the host from the
-	// same pass as the PNG: text as glyph-positioned `<text>`, shapes as
-	// primitives. Named <capture>.svg.
+	// same pass as the PNG: text as `<text>` runs with a position per
+	// character, shapes as primitives, fonts named rather than embedded.
+	// Named <capture>.svg.
 	SidecarSVG = "svg"
+	// SidecarSVGFonts is the same file with a subset of each used font
+	// embedded, so it renders the same on a machine without the fonts. The
+	// fonts are most of the bytes, which a program reading the text does not
+	// need; ask for this one to look at the file, not to measure it.
+	SidecarSVGFonts = "svg+fonts"
 	// SidecarTree is the accessibility tree as JSONL ([WriteTreeJSONL]), every
 	// node, requested right after the capture — so it is the next pass's tree,
 	// not the captured pass's, which a settled frame does not tell apart.
@@ -179,6 +185,8 @@ func SidecarFile(name string, sidecar string) string {
 		return stem + ".png"
 	case SidecarTree:
 		return stem + ".tree.jsonl"
+	case SidecarSVGFonts:
+		return stem + ".svg"
 	default:
 		return stem + "." + sidecar
 	}
@@ -199,8 +207,8 @@ func (inst Step) check() (err error) {
 		return eb.Build().Str("do", inst.Do).Errorf("only a capture step takes \"sidecars\"")
 	}
 	for _, sc := range inst.Sidecars {
-		if sc != SidecarSVG && sc != SidecarTree {
-			return eb.Build().Str("sidecar", sc).Errorf("unknown capture sidecar (want %q or %q)", SidecarSVG, SidecarTree)
+		if sc != SidecarSVG && sc != SidecarSVGFonts && sc != SidecarTree {
+			return eb.Build().Str("sidecar", sc).Errorf("unknown capture sidecar (want %q, %q or %q)", SidecarSVG, SidecarSVGFonts, SidecarTree)
 		}
 	}
 	return nil
@@ -718,8 +726,9 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		if name == "" {
 			return eh.Errorf("capture step needs a name in \"text\"")
 		}
-		svg := st.wants(SidecarSVG)
-		done, e := c.Capture(name, svg, opts.Timeout)
+		fonts := st.wants(SidecarSVGFonts)
+		svg := fonts || st.wants(SidecarSVG)
+		done, e := c.Capture(name, svg, fonts, opts.Timeout)
 		if e != nil {
 			return e
 		}

@@ -42,9 +42,12 @@ type entry struct {
 // the UI.
 type conversation struct {
 	id string
-	// keep sends the turns on llm.retain.complete; fixed at the first send.
+	// keep sends the turns on llm.retain.complete; set at the first send.
 	keep    bool
 	started bool
+	// kept says a turn's verdict was kept; notKept is the first reason one
+	// was not. Neither set means no verdict yet.
+	kept    bool
 	entries []entry
 	// history is what the next request resends: every answered turn, each
 	// reply exactly as it came back, so the host keeps only what is new.
@@ -62,9 +65,9 @@ type conversation struct {
 var minted atomic.Uint64
 
 // newConversation starts an empty conversation with a fresh id.
-func newConversation(keep bool) (inst *conversation) {
+func newConversation() (inst *conversation) {
 	id := "chat-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 36) + "-" + strconv.FormatUint(minted.Add(1), 36)
-	inst = &conversation{id: id, keep: keep}
+	inst = &conversation{id: id}
 	return
 }
 
@@ -82,7 +85,7 @@ func (inst *conversation) request(text string) (r llm.Request) {
 	return
 }
 
-// begin shows the user's message as sent; from here keep is fixed.
+// begin shows the user's message as sent.
 func (inst *conversation) begin(text string, atMs int64) {
 	inst.started = true
 	inst.entries = append(inst.entries, entry{speaker: speakerUser, text: text, atMs: atMs})
@@ -103,21 +106,18 @@ func (inst *conversation) land(req llm.Request, res *llm.Response, err error, at
 	inst.history = append(append(inst.history[:0:0], req.Messages...), reply)
 	inst.parent = res.CallId
 	inst.lastIn, inst.lastOut = res.InputTokens, res.OutputTokens
-	inst.entries = append(inst.entries, entry{speaker: speakerModel, text: res.Content, atMs: max(atMs, inst.lastAt())})
-	if res.Retention == llm.RetentionNotKept && inst.notKept == "" {
-		inst.notKept = res.RetentionReason
+	inst.entries = append(inst.entries, entry{speaker: speakerModel, text: res.Content, atMs: atMs})
+	switch res.Retention {
+	case llm.RetentionKept:
+		inst.kept = true
+	case llm.RetentionNotKept:
 		if inst.notKept == "" {
-			inst.notKept = "the host did not keep this conversation"
+			inst.notKept = res.RetentionReason
+			if inst.notKept == "" {
+				inst.notKept = "the host did not keep this conversation"
+			}
 		}
 	}
-}
-
-// lastAt is the newest entry's time, so the transcript stays ascending.
-func (inst *conversation) lastAt() (ms int64) {
-	if n := len(inst.entries); n > 0 {
-		return inst.entries[n-1].atMs
-	}
-	return 0
 }
 
 // failureReason is the line a failed bubble shows.

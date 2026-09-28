@@ -8,11 +8,14 @@
 //! state (window positions, collapsing-header open/closed, scroll offsets).
 //!
 //! Strategy per Shape variant:
-//! - `Text` — one `<text>` per glyph at baseline coords; family hint
-//!   (sans-serif/monospace) from `FontFamily`; `PLACEHOLDER` resolves via
-//!   `TextShape::fallback_color`. Galleys with mixed sections currently use
-//!   `sections[0]` (the `pub(crate)` `Glyph::section_index` prevents fast
-//!   per-glyph routing — punt).
+//! - `Text` — one `<text>` per run of glyphs sharing a baseline and a style,
+//!   with one `x` per character at the position egui laid the glyph out at,
+//!   so a viewer's own shaping never moves a glyph; the runs of a shape are
+//!   wrapped in a `<g class="imz-text">` carrying the string and ink bounds
+//!   (ADR-0257 §SD5). Family hint (sans-serif/monospace) from `FontFamily`;
+//!   `PLACEHOLDER` resolves via `TextShape::fallback_color`. Mixed sections
+//!   are routed by a byte cursor over `job.text` (`Glyph::section_index` is
+//!   `pub(crate)`).
 //! - `Mesh` (untextured) — one `<polygon>` per triangle, `fill =
 //!   vertex[0].color`. Gradient triangles flat-shade; documented limitation.
 //! - `Mesh` (textured) — emits an HTML comment and reserves no geometry;
@@ -1626,6 +1629,16 @@ impl SvgBuilder {
         let mut ink: Option<Rect> = None;
         let mut max_size: f32 = 0.0;
 
+        // Inside the group, glyphs are gathered into runs: one `<text>` per
+        // stretch of glyphs sharing a baseline and a style, written with one
+        // `x` per character. A viewer places every character where egui's
+        // layout put it (so its own kerning and fallback never move a glyph)
+        // while the string stays whole for a program reading the file — a
+        // `<text>` per glyph splits every word and costs about three times
+        // the bytes. Decorations of a run are held back and written after
+        // its text, so they paint on top of it as on screen.
+        let mut run: Option<TextRun> = None;
+
         // Syntax-highlighted text (CodeView, json, markdown, ...) uses one
         // `LayoutSection` per token, each carrying its own colour and font.
         // `Glyph::section_index` is `pub(crate)` so we can't read it
@@ -1671,8 +1684,9 @@ impl SvgBuilder {
                 byte_cursor += glyph.chr.len_utf8();
 
                 // 1. Background (emit even for whitespace so spaces inside
-                //    a styled run stay highlighted). Drawn before the
-                //    glyph so the text sits on top.
+                //    a styled run stay highlighted). Written straight to the
+                //    body: it precedes the run's text in document order
+                //    whichever glyph it belongs to, so the text sits on top.
                 let bg = resolve(format.background);
                 if bg.a() > 0 && advance > 0.0 {
                     let bg_y = by - glyph.font_ascent;
@@ -1685,7 +1699,9 @@ impl SvgBuilder {
                     );
                 }
 
-                // 2. Text — only when there's an actual glyph to draw.
+                // 2. Text. A glyph with ink joins the open run when it shares
+                //    the run's baseline and style, else starts a new one.
+                let baseline = format!("{by:.2}");
                 if !glyph.chr.is_whitespace() && !glyph.uv_rect.is_nothing() && text_alpha > 0.0 {
                     let family_hint =
                         if let Some(chain) = self.embed_for_family.get(&format.font_id.family) {
@@ -1713,11 +1729,18 @@ impl SvgBuilder {
                     } else {
                         ""
                     };
-                    let _ = writeln!(
-                        self.body,
-                        "  <text x=\"{bx:.2}\" y=\"{by:.2}\" font-size=\"{em_size:.2}\" font-family=\"{family_hint}\"{style_attr}{weight_attr} fill=\"{fill}\" fill-opacity=\"{text_alpha:.3}\">{ch}</text>",
-                        ch = xml_escape_char(glyph.chr),
+                    let style = format!(
+                        "font-size=\"{em_size:.2}\" font-family=\"{family_hint}\"{style_attr}{weight_attr} fill=\"{fill}\" fill-opacity=\"{text_alpha:.3}\""
                     );
+                    let joins =
+                        run.as_ref().is_some_and(|r| r.baseline == baseline && r.style == style);
+                    if !joins {
+                        self.flush_text_run(run.take());
+                        run = Some(TextRun::new(baseline.clone(), style));
+                    }
+                    if let Some(r) = run.as_mut() {
+                        r.push(bx, glyph.chr);
+                    }
                     self.counts.glyphs_emitted += 1;
                     // The glyph's ink, where egui's own tessellation puts
                     // its quad: position plus the atlas entry's offset, at
@@ -1731,15 +1754,27 @@ impl SvgBuilder {
                     );
                     ink = Some(ink.map_or(glyph_box, |r| r.union(glyph_box)));
                     max_size = max_size.max(em_size);
+                } else if glyph.chr.is_whitespace() && advance > 0.0 {
+                    // Whitespace inside a run keeps the string whole; the
+                    // run's trailing whitespace is dropped when it is
+                    // written. Before any ink there is no run to join.
+                    if let Some(r) = run.as_mut().filter(|r| r.baseline == baseline) {
+                        r.push(bx, glyph.chr);
+                    }
+                    self.counts.glyphs_skipped += 1;
                 } else {
+                    // No ink (a glyph the fonts lack, or transparent text):
+                    // what follows must not read as adjacent to what came
+                    // before, so the run ends here.
+                    self.flush_text_run(run.take());
                     self.counts.glyphs_skipped += 1;
                 }
 
-                // 3. Underline — drawn after the glyph so it sits on top.
-                //    Width comes from `format.underline.width`; one short
-                //    segment per glyph (adjacent glyphs concatenate into a
-                //    continuous line). Whitespace inside an underlined run
-                //    still gets its segment so spaces don't create gaps.
+                // 3. Underline — held back so it lands after the run's text
+                //    and sits on top. One short segment per glyph, adjacent
+                //    segments concatenate into a continuous line; whitespace
+                //    inside an underlined run still gets its segment so
+                //    spaces don't create gaps.
                 if format.underline.width > 0.0 && advance > 0.0 {
                     let ul_color = resolve(format.underline.color);
                     if ul_color.a() > 0 {
@@ -1747,14 +1782,17 @@ impl SvgBuilder {
                         // exact offset is font-specific in real typography
                         // but a small constant looks fine at UI sizes.
                         let ul_y = by + format.underline.width.max(1.0);
-                        let _ = writeln!(
-                            self.body,
-                            "  <line x1=\"{bx:.2}\" y1=\"{ul_y:.2}\" x2=\"{x2:.2}\" y2=\"{ul_y:.2}\" stroke=\"{c}\" stroke-opacity=\"{a:.3}\" stroke-width=\"{w:.2}\"/>",
+                        let line = format!(
+                            "  <line x1=\"{bx:.2}\" y1=\"{ul_y:.2}\" x2=\"{x2:.2}\" y2=\"{ul_y:.2}\" stroke=\"{c}\" stroke-opacity=\"{a:.3}\" stroke-width=\"{w:.2}\"/>\n",
                             x2 = bx + advance,
                             c = color_hex(ul_color),
                             a = (ul_color.a() as f32) * opacity / 255.0,
                             w = format.underline.width,
                         );
+                        match run.as_mut() {
+                            Some(r) => r.after.push_str(&line),
+                            None => self.body.push_str(&line),
+                        }
                     }
                 }
 
@@ -1766,14 +1804,17 @@ impl SvgBuilder {
                     let st_color = resolve(format.strikethrough.color);
                     if st_color.a() > 0 {
                         let st_y = by - em_size * 0.25;
-                        let _ = writeln!(
-                            self.body,
-                            "  <line x1=\"{bx:.2}\" y1=\"{st_y:.2}\" x2=\"{x2:.2}\" y2=\"{st_y:.2}\" stroke=\"{c}\" stroke-opacity=\"{a:.3}\" stroke-width=\"{w:.2}\"/>",
+                        let line = format!(
+                            "  <line x1=\"{bx:.2}\" y1=\"{st_y:.2}\" x2=\"{x2:.2}\" y2=\"{st_y:.2}\" stroke=\"{c}\" stroke-opacity=\"{a:.3}\" stroke-width=\"{w:.2}\"/>\n",
                             x2 = bx + advance,
                             c = color_hex(st_color),
                             a = (st_color.a() as f32) * opacity / 255.0,
                             w = format.strikethrough.width,
                         );
+                        match run.as_mut() {
+                            Some(r) => r.after.push_str(&line),
+                            None => self.body.push_str(&line),
+                        }
                     }
                 }
             }
@@ -1784,6 +1825,7 @@ impl SvgBuilder {
                 byte_cursor += 1; // `\n` is one UTF-8 byte
             }
         }
+        self.flush_text_run(run.take());
         if let Some(r) = ink {
             let open = format!(
                 "  <g class=\"imz-text\" data-text=\"{t}\" data-bbox=\"{x:.2} {y:.2} {w:.2} {h:.2}\" data-size=\"{max_size:.2}\"{elided}>\n",
@@ -1801,6 +1843,30 @@ impl SvgBuilder {
             self.body.insert_str(group_at, &open);
             self.body.push_str("  </g>\n");
         }
+    }
+
+    /// Write a gathered run as one `<text>` with an `x` per character, then
+    /// the decorations it held back. Trailing whitespace is dropped: it has
+    /// no ink and would only pad the string.
+    fn flush_text_run(&mut self, run: Option<TextRun>) {
+        let Some(mut run) = run else {
+            return;
+        };
+        while run.chars.last().is_some_and(|c| c.is_whitespace()) {
+            run.chars.pop();
+            run.xs.pop();
+        }
+        if !run.chars.is_empty() {
+            let xs = run.xs.iter().map(|x| format!("{x:.2}")).collect::<Vec<_>>().join(" ");
+            let text: String = run.chars.iter().map(|c| xml_escape_char(*c)).collect();
+            let _ = writeln!(
+                self.body,
+                "  <text y=\"{y}\" x=\"{xs}\" {style} xml:space=\"preserve\">{text}</text>",
+                y = run.baseline,
+                style = run.style,
+            );
+        }
+        self.body.push_str(&run.after);
     }
 
     // ------------------------------------------------------------------
@@ -2280,6 +2346,34 @@ fn path_stroke_attr(s: &PathStroke) -> String {
     }
 }
 
+/// A stretch of glyphs the text emitter writes as one `<text>`: same
+/// baseline, same style, one `x` per character. `after` holds the run's
+/// underline and strikethrough segments until the text is written.
+struct TextRun {
+    baseline: String,
+    style: String,
+    xs: Vec<f32>,
+    chars: Vec<char>,
+    after: String,
+}
+
+impl TextRun {
+    fn new(baseline: String, style: String) -> Self {
+        Self {
+            baseline,
+            style,
+            xs: Vec::new(),
+            chars: Vec::new(),
+            after: String::new(),
+        }
+    }
+
+    fn push(&mut self, x: f32, c: char) {
+        self.xs.push(x);
+        self.chars.push(c);
+    }
+}
+
 fn color_hex(c: Color32) -> String {
     // `Color32` stores premultiplied RGBA — every channel has already been
     // multiplied by `a/255`. SVG `fill` / `stroke` use straight alpha and
@@ -2524,20 +2618,20 @@ mod tests {
         // window titles "Alpha"/"Beta" share no letters with either
         // sentinel, so a per-window filter produces a clean partition.
         assert!(
-            alpha.contains(">Z</text>"),
-            "alpha SVG should carry the Z glyph from its body"
+            alpha.contains(">ZZZ</text>"),
+            "alpha SVG should carry the ZZZ run from its body"
         );
         assert!(
-            !alpha.contains(">Q</text>"),
-            "alpha SVG must not leak the Q glyph from beta's body"
+            !alpha.contains(">QQQ</text>"),
+            "alpha SVG must not leak the QQQ run from beta's body"
         );
         assert!(
-            beta.contains(">Q</text>"),
-            "beta SVG should carry the Q glyph from its body"
+            beta.contains(">QQQ</text>"),
+            "beta SVG should carry the QQQ run from its body"
         );
         assert!(
-            !beta.contains(">Z</text>"),
-            "beta SVG must not leak the Z glyph from alpha's body"
+            !beta.contains(">ZZZ</text>"),
+            "beta SVG must not leak the ZZZ run from alpha's body"
         );
     }
 
@@ -2727,5 +2821,62 @@ mod tests {
             vtx((40.0, 0.0), (1.0, 0.0)),
         ];
         assert!(solve_textured_quad_affine(&v, 100.0, 100.0, 0, 0).is_none());
+    }
+
+    #[test]
+    fn text_shape_becomes_one_run_with_an_x_per_character() {
+        // A label is one `<text>` carrying the whole string and one `x` per
+        // character (spaces included), not a `<text>` per glyph; its group
+        // still carries the string for a reader that never parses glyphs.
+        use egui::{RawInput, Vec2};
+
+        let ctx = Context::default();
+        let win_id = egui::Id::new("runs-window");
+        let resolver = FontResolver::default();
+        let textures: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
+        let links: LinkZonesHandle = Arc::new(Mutex::new(Vec::new()));
+        let raw = RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0))),
+            ..Default::default()
+        };
+        let show_ui = |ctx: &Context| {
+            egui::Window::new("Runs").id(win_id).default_pos([10.0, 10.0]).show(ctx, |ui| {
+                ui.label("Alice Chen");
+            });
+        };
+        for _ in 0..2 {
+            let _ = ctx.run_ui(raw.clone(), |ctx| show_ui(ctx));
+        }
+        let mut svg: Option<String> = None;
+        let _ = ctx.run_ui(raw, |ctx| {
+            show_ui(ctx);
+            svg = render_svg_window(
+                ctx,
+                &resolver,
+                &textures,
+                &links,
+                false,
+                win_id,
+                WindowMode::Faithful,
+                Some(VIEWPORT_BG),
+            );
+        });
+        let svg = svg.expect("window export");
+        let run = svg
+            .lines()
+            .find(|l| l.contains(">Alice Chen</text>"))
+            .unwrap_or_else(|| panic!("no run element for the label in:\n{svg}"));
+        assert!(run.contains("xml:space=\"preserve\""), "{run}");
+        let xs = run.split(" x=\"").nth(1).and_then(|rest| rest.split('"').next()).expect("x list");
+        assert_eq!(
+            xs.split(' ').count(),
+            "Alice Chen".chars().count(),
+            "one x per character, the space included: {xs}"
+        );
+        assert!(
+            !svg.contains(">A</text>") && !svg.contains(">e</text>"),
+            "no per-glyph elements remain:\n{svg}"
+        );
+        assert!(svg.contains("data-text=\"Alice Chen\""), "{svg}");
     }
 }

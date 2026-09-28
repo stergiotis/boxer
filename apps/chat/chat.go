@@ -11,9 +11,8 @@ package chat
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
-
-	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
@@ -24,9 +23,8 @@ import (
 
 // App is one chat window.
 type App struct {
-	ids    *c.WidgetIdStack
-	logger zerolog.Logger
-	cli    *llm.Client
+	ids *c.WidgetIdStack
+	cli *llm.Client
 
 	// describe asks the host once whether it offers a model.
 	describe bgjob.Runner[llm.Description]
@@ -34,13 +32,14 @@ type App struct {
 	answered bool
 
 	// turn runs one completion at a time; pending is what it was started
-	// with, so the answer lands on the conversation that asked.
+	// with. New conversation invalidates the run, so a late answer never
+	// lands on the conversation that replaced the one that asked.
 	turn    bgjob.Runner[llm.Response]
 	pending *pendingTurn
 
 	conv *conversation
-	// keepNext is the Keep toggle's value for the next conversation.
-	keepNext bool
+	// keep is the Keep toggle; a conversation takes it at its first send.
+	keep bool
 	// draft is the composer's text, bound to the text input.
 	draft string
 	view  chatview.State
@@ -53,7 +52,6 @@ type App struct {
 
 // pendingTurn is a turn in flight.
 type pendingTurn struct {
-	conv    *conversation
 	req     llm.Request
 	started time.Time
 }
@@ -61,8 +59,7 @@ type pendingTurn struct {
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), keepNext: true, draft: DraftSeed.Get()}
-	inst.conv = newConversation(inst.keepNext)
+	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation()}
 	return
 }
 
@@ -72,20 +69,22 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // a model is offered.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
-	inst.logger = ctx.Log()
-	if bus := ctx.Bus(); bus != nil {
-		inst.cli = llm.NewClient(bus)
-		cli := inst.cli
-		inst.describe.Start(nil, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
-			func(ctx context.Context) (d *llm.Description, err error) {
-				got, err := cli.Describe(ctx)
-				if err != nil {
-					return
-				}
-				d = &got
-				return
-			})
+	bus := ctx.Bus()
+	if bus == nil {
+		inst.model, inst.answered = llm.Description{Reason: "this host gives the app no bus"}, true
+		return
 	}
+	cli := llm.NewClient(bus)
+	inst.cli = cli
+	inst.describe.Start(nil, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
+		func(ctx context.Context) (d *llm.Description, err error) {
+			got, err := cli.Describe(ctx)
+			if err != nil {
+				return
+			}
+			d = &got
+			return
+		})
 	return
 }
 
@@ -114,37 +113,58 @@ func (inst *App) drain() {
 		inst.model, inst.answered = *d, true
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {
 		inst.describe.Invalidate()
-		inst.model = llm.Description{Reason: "the host did not answer llm.describe: " + errText(snap.Err)}
-		inst.answered = true
+		reason := "the host did not answer llm.describe"
+		if snap.Err != nil {
+			reason += ": " + snap.Err.Error()
+		}
+		inst.model, inst.answered = llm.Description{Reason: reason}, true
 	}
 	p := inst.pending
 	if p == nil {
 		return
 	}
+	now := time.Now().UnixMilli()
 	if res, _, ok := inst.turn.TakeResult(); ok {
-		p.conv.land(p.req, res, nil, time.Now().UnixMilli())
+		inst.conv.land(p.req, res, nil, now)
 		inst.pending = nil
 		return
 	}
-	if snap := inst.turn.Snapshot(); snap.State == bgjob.StateFailed {
+	switch snap := inst.turn.Snapshot(); snap.State {
+	case bgjob.StateFailed:
 		inst.turn.Invalidate()
 		err := snap.Err
 		if err == nil {
 			err = errors.New("the turn failed")
 		}
-		p.conv.land(p.req, nil, err, time.Now().UnixMilli())
+		inst.conv.land(p.req, nil, err, now)
+		inst.pending = nil
+	case bgjob.StateIdle:
+		// A cancelled run resets to idle without a result or an error
+		// (bgjob's contract), so idle with a turn pending is the cancel.
+		inst.conv.land(p.req, nil, context.Canceled, now)
 		inst.pending = nil
 	}
 }
 
-// send starts a turn for the draft. The request is built on the render
-// thread; the job touches only its copy.
+// send starts a turn for the draft and clears the composer.
 func (inst *App) send() {
-	text := inst.draft
-	if inst.cli == nil || inst.pending != nil || isBlank(text) {
-		return
+	if inst.startTurn(inst.draft) {
+		inst.draft = ""
+		c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
+	}
+}
+
+// startTurn sends text as the next turn, unless one is in flight. The
+// request is built here, on the render thread; the job touches only its
+// copy. The first send fixes the conversation's Keep.
+func (inst *App) startTurn(text string) (started bool) {
+	if inst.cli == nil || inst.pending != nil || strings.TrimSpace(text) == "" {
+		return false
 	}
 	conv := inst.conv
+	if !conv.started {
+		conv.keep = inst.keep
+	}
 	req := conv.request(text)
 	cli := inst.cli
 	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
@@ -157,37 +177,18 @@ func (inst *App) send() {
 			return
 		})
 	if !ok {
-		return
+		return false
 	}
 	conv.begin(text, time.Now().UnixMilli())
-	inst.pending = &pendingTurn{conv: conv, req: req, started: time.Now()}
-	inst.draft = ""
-	c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.draft)
-}
-
-// newConversation abandons a turn in flight and starts over.
-func (inst *App) newConversation() {
-	if inst.pending != nil {
-		inst.turn.Cancel()
-		inst.pending = nil
-	}
-	inst.turn.Invalidate()
-	inst.conv = newConversation(inst.keepNext)
-	inst.view = chatview.State{}
-}
-
-func isBlank(s string) (yes bool) {
-	for _, r := range s {
-		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
-			return false
-		}
-	}
+	inst.pending = &pendingTurn{req: req, started: time.Now()}
 	return true
 }
 
-func errText(err error) (s string) {
-	if err == nil {
-		return "no reason given"
-	}
-	return err.Error()
+// newConversation stops a turn in flight — Invalidate cancels it and drops
+// its answer — and starts over.
+func (inst *App) newConversation() {
+	inst.turn.Invalidate()
+	inst.pending = nil
+	inst.conv = newConversation()
+	inst.view = chatview.State{}
 }
