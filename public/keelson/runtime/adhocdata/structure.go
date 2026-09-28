@@ -19,10 +19,6 @@ import (
 // the gate (ADR-0134 SD1).
 const maxColumnNameLen = 256
 
-// maxBareIdentLen bounds a bare (unquoted) identifier — a dataset alias or
-// handle — which must stay safe to interpolate without quoting.
-const maxBareIdentLen = 64
-
 // StructureFor renders the ClickHouse structure string — a comma-joined
 // list of backtick-quoted `name Type` columns — that the
 // `url(...,'ArrowStream',<structure>)` read of a sealed dataset is handed,
@@ -278,28 +274,4 @@ func checkColumnName(name, col string) (err error) {
 // special in that literal, so the two escaping layers do not interfere.
 func quoteIdent(name string) string {
 	return "`" + strings.ReplaceAll(strings.ReplaceAll(name, `\`, `\\`), "`", "``") + "`"
-}
-
-// validColumnName reports whether name is a bare ClickHouse identifier —
-// `[A-Za-z_][A-Za-z0-9_]*`, up to maxBareIdentLen bytes — safe to
-// interpolate unquoted. Column names in the structure string no longer need
-// this (they are backtick-quoted); it guards nested field names and stays
-// the rule a dataset alias and handle satisfy, which stay bare so they can
-// name a table and a frontmatter binding without quoting.
-func validColumnName(name string) (ok bool) {
-	if name == "" || len(name) > maxBareIdentLen {
-		return
-	}
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		valid := c == '_' ||
-			(c >= 'a' && c <= 'z') ||
-			(c >= 'A' && c <= 'Z') ||
-			(i > 0 && c >= '0' && c <= '9')
-		if !valid {
-			return
-		}
-	}
-	ok = true
-	return
 }
