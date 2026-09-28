@@ -227,6 +227,26 @@ pub struct GraphState {
     /// frames before trusting the settle signal — otherwise a deterministic
     /// layout fits once against empty bounds and latches off mis-framed.
     pub fit_frames: u32,
+    /// Frames since `reconcile_graph_state` last ran on this graph, i.e.
+    /// since it was last shown. [`evict_idle_graph_states`] drops the state
+    /// once this reaches [`GRAPH_STATE_MAX_IDLE_FRAMES`].
+    pub idle_frames: u64,
+}
+
+/// Idle window after which a graph's retained layout is dropped — the same
+/// ~10 s at 60 Hz the image and scrolling-texture caches use. There is no
+/// release opcode, so without this every graph id an app ever showed would
+/// keep its nodes, edges and labels for the life of the process.
+pub const GRAPH_STATE_MAX_IDLE_FRAMES: u64 = 600;
+
+/// Advance every graph's idle counter and drop the ones not shown within
+/// [`GRAPH_STATE_MAX_IDLE_FRAMES`]. Called once per real frame, before
+/// dispatch resets the counters of the graphs shown this frame.
+pub fn evict_idle_graph_states(states: &mut std::collections::HashMap<u64, GraphState>) {
+    states.retain(|_, s| {
+        s.idle_frames = s.idle_frames.saturating_add(1);
+        s.idle_frames < GRAPH_STATE_MAX_IDLE_FRAMES
+    });
 }
 
 pub fn new_graph_state() -> GraphState {
@@ -239,6 +259,7 @@ pub fn new_graph_state() -> GraphState {
         // Fit the freshly created graph, then latch off once it settles.
         fit_pending: true,
         fit_frames: 0,
+        idle_frames: 0,
     }
 }
 
@@ -847,6 +868,10 @@ pub fn reconcile_graph_state(
     pending_edges: &[GraphEdgeData],
 ) {
     use std::collections::HashSet;
+
+    // Runs once per frame the graph is shown: the liveness signal for
+    // `evict_idle_graph_states`.
+    state.idle_frames = 0;
 
     // Remove nodes Go no longer declares + their incident edges.
     let wanted_nodes: HashSet<u64> = pending_nodes.iter().map(|n| n.id).collect();
@@ -1998,7 +2023,8 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.r24_styled_sections.clear();
         self.graph_pending_nodes.clear();
         self.graph_pending_edges.clear();
-        // graph_states NOT cleared — persists layout positions across frames
+        // graph_states NOT cleared — persists layout positions across frames;
+        // idle graphs are evicted by `evict_idle_graph_states` instead
         if !self.graph_events_pending.is_empty() {
             tracing::debug!(
                 len = self.graph_events_pending.len(),
@@ -2029,6 +2055,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.scrolling_texture.tick();
         self.image_cache.tick();
         self.paint_image_cache.tick();
+        evict_idle_graph_states(&mut self.graph_states);
         // egui 0.35: root panels (`Panel::{top,bottom,left,right}`, `CentralPanel`)
         // now render *inside* a `Ui` — the `Panel::show(&Context)` that attached
         // straight to the screen in 0.34 was removed. Every host drives us from a
@@ -12364,6 +12391,20 @@ mod tests {
             interp.end_consume_message(),
             Err(InterpretError::FrameStackUnderflow(_))
         ));
+    }
+
+    #[test]
+    fn idle_graph_state_is_evicted_and_a_shown_one_kept() {
+        let mut states = std::collections::HashMap::new();
+        states.insert(1u64, new_graph_state());
+        states.insert(2u64, new_graph_state());
+        for _ in 0..GRAPH_STATE_MAX_IDLE_FRAMES {
+            evict_idle_graph_states(&mut states);
+            // Graph 1 is shown every frame; graph 2 never again.
+            reconcile_graph_state(states.get_mut(&1).expect("graph 1 kept"), &[], &[]);
+        }
+        assert!(states.contains_key(&1));
+        assert!(!states.contains_key(&2));
     }
 
     #[test]

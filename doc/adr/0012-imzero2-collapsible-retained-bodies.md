@@ -449,6 +449,10 @@ O4 (retained bodies, Phase 2) remains ⬜ future work. In the meantime a lighter
 
 **Adopted in play** (commit e7434c1a): `TabSpec.Lazy` gates the heavy bodies (map, world, timeline, projection, graph, schema, diagnostics, history) through per-`DockID` panes; eager tabs are the editor, table, snippets, and the preview/detail panes that are effectively always visible. Live-verified via the dock-tab walk ([`doc/howto/verify-dock-tab-walk.md`](../howto/verify-dock-tab-walk.md)): every lazy tab shows placeholder→content on activation with no empty pane. The phase machine (hidden/warming/live) is pure and unit-tested; FFFI emission is isolated in `Skip()`.
 
+### 2026-09-28: `graph_states` moves from E1 to E3
+
+The eviction survey listed `graph_states` as immortal. An app that opens a graph widget per selected entity shows an open-ended set of ids, and each `GraphState` keeps its nodes, edges and labels, so the E1 bound did not hold. It now follows E3 with the scrolling-texture window (`GRAPH_STATE_MAX_IDLE_FRAMES` = 600 frames, about 10 s at 60 Hz): `evict_idle_graph_states` runs once per frame, and `reconcile_graph_state` marks a graph live on each frame it is shown. The graph binding has no release opcode, so there is no E2 fast path. A graph hidden for longer than the window, such as one in an inactive dock tab, loses its layout and lays out again when it is shown.
+
 ## Status
 
 Accepted — 2026-06-21 (reviewed by @spx).
