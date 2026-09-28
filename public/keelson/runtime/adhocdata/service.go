@@ -20,6 +20,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -34,7 +35,8 @@ import (
 // is refused with a named error, never discovered at query time.
 const (
 	// PerDatasetMaxBytes caps one dataset — checked against the incoming
-	// stream before it is decoded, and against the ciphertext after.
+	// stream before it is decoded, against what it decodes to while it
+	// is, and against the ciphertext after.
 	PerDatasetMaxBytes = 256 << 20 // 256 MiB
 	// StoreMaxBytes caps the live datasets' ciphertext together.
 	StoreMaxBytes = 1 << 30 // 1 GiB
@@ -669,7 +671,16 @@ func (inst *Service) emitAudit(op, handle, alias string, revision uint64) {
 // copy — returning the schema, its ClickHouse structure and the row count.
 // The writer is closed on success; on failure the caller closes the file.
 func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, structure string, rows uint64, err error) {
-	rdr, err := ipc.NewReader(bytes.NewReader(streamBytes))
+	return sealStreamCapped(f, streamBytes, PerDatasetMaxBytes)
+}
+
+// sealStreamCapped is sealStream with the plaintext bounded by limit. A
+// compressed IPC body is decoded to the uncompressed length it declares,
+// so the stream's own length bounds neither memory nor the sealed file:
+// the reader allocates through a budget of limit bytes over the whole
+// stream, and the sealed writer takes at most limit bytes.
+func sealStreamCapped(f *sealed.File, streamBytes []byte, limit uint64) (schema *arrow.Schema, structure string, rows uint64, err error) {
+	rdr, err := ipc.NewReader(bytes.NewReader(streamBytes), ipc.WithAllocator(&budgetAllocator{limit: limit}))
 	if err != nil {
 		return nil, "", 0, eh.Errorf("adhocdata: decode arrow stream: %w", err)
 	}
@@ -683,7 +694,7 @@ func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, struc
 	if err != nil {
 		return nil, "", 0, err
 	}
-	w := ipc.NewWriter(sw, ipc.WithSchema(schema))
+	w := ipc.NewWriter(&cappedWriter{w: sw, limit: limit}, ipc.WithSchema(schema))
 	for rdr.Next() {
 		rec := rdr.RecordBatch()
 		rows += uint64(rec.NumRows())
@@ -703,6 +714,56 @@ func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, struc
 		return nil, "", 0, eh.Errorf("adhocdata: seal: %w", cErr)
 	}
 	return schema, structure, rows, nil
+}
+
+// budgetAllocator is the Go allocator with a budget over its lifetime: a
+// request that would take the bytes handed out past limit panics before
+// anything is allocated, which the IPC reader recovers into its error.
+// Freed bytes are not returned to the budget — it bounds the decoding
+// work of one stream, not its live memory.
+type budgetAllocator struct {
+	limit uint64
+	used  uint64
+}
+
+var _ memory.Allocator = (*budgetAllocator)(nil)
+
+func (inst *budgetAllocator) take(n int) {
+	if n < 0 || uint64(n) > inst.limit-inst.used {
+		panic(eb.Build().Int("requested", n).Uint64("limit", inst.limit).Errorf("adhocdata: decoded stream exceeds the per-dataset quota"))
+	}
+	inst.used += uint64(n)
+}
+
+func (inst *budgetAllocator) Allocate(size int) []byte {
+	inst.take(size)
+	return memory.DefaultAllocator.Allocate(size)
+}
+
+func (inst *budgetAllocator) Reallocate(size int, b []byte) []byte {
+	if size > len(b) {
+		inst.take(size - len(b))
+	}
+	return memory.DefaultAllocator.Reallocate(size, b)
+}
+
+func (inst *budgetAllocator) Free(b []byte) { memory.DefaultAllocator.Free(b) }
+
+// cappedWriter refuses a write that would take the bytes written past
+// limit.
+type cappedWriter struct {
+	w     io.Writer
+	n     uint64
+	limit uint64
+}
+
+func (inst *cappedWriter) Write(p []byte) (n int, err error) {
+	if uint64(len(p)) > inst.limit-inst.n {
+		return 0, eb.Build().Uint64("limit", inst.limit).Errorf("adhocdata: dataset exceeds the per-dataset quota")
+	}
+	n, err = inst.w.Write(p)
+	inst.n += uint64(n)
+	return
 }
 
 // newHandle mints an unguessable handle: adhoc_ + 16 lowercase hex chars
