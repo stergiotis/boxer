@@ -1684,3 +1684,13 @@ func TestMarshalGoValuePreserveCastsWrapsOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "CAST(1, 'UInt8')", sql)
 }
+
+// A backslash in a name must not escape the identifier's closing quote.
+func TestEscapeIdentifierBackslash(t *testing.T) {
+	assert.Equal(t, `"a""b"`, marshalling.EscapeIdentifier(`a"b`))
+	assert.Equal(t, `"a\\"`, marshalling.EscapeIdentifier(`a\`))
+	name := `\" , 42 AS injected --`
+	quoted := marshalling.EscapeIdentifier(name)
+	assert.Equal(t, `"\\"" , 42 AS injected --"`, quoted)
+	assert.Equal(t, name, nanopass.DecodeIdentifier(quoted))
+}

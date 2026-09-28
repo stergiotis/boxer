@@ -29,22 +29,12 @@ func UnescapeString(raw string) (result string, err error) {
 }
 
 // EscapeIdentifier produces a ClickHouse double-quoted identifier from a Go
-// string. Inner double quotes are doubled (the ANSI-SQL convention ClickHouse
-// also accepts), so a column literally named `a"b` becomes `"a""b"`.
+// string. Inner double quotes are doubled and backslashes escaped
+// ([nanopass.QuoteIdentifier]): the server reads a backslash inside a quoted
+// identifier as an escape, so an unescaped one could end the identifier
+// early. A column literally named `a"b` becomes `"a""b"`.
 func EscapeIdentifier(s string) string {
-	var buf strings.Builder
-	buf.Grow(len(s) + 2)
-	buf.WriteByte('"')
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if ch == '"' {
-			buf.WriteString(`""`)
-		} else {
-			buf.WriteByte(ch)
-		}
-	}
-	buf.WriteByte('"')
-	return buf.String()
+	return nanopass.QuoteIdentifier(s)
 }
 
 // EscapeString produces a ClickHouse single-quoted string literal from a Go
