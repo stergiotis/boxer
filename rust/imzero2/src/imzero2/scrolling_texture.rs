@@ -125,6 +125,13 @@ struct Entry {
     /// updates so the SVG-export cache can hand the visitor a complete
     /// 2D image even though the GPU side only sees one-column patches.
     rgba: Vec<u8>,
+    /// Columns landed in `rgba` since it was last copied into the export
+    /// cache. The copy is W×H×4 bytes, so it waits for
+    /// [`ScrollingTextureCache::sync_export_mirror`] instead of running on
+    /// every push.
+    mirror_stale: bool,
+    /// Magnification filter of the latest push, carried into the mirror.
+    nearest: bool,
 }
 
 #[derive(Default)]
@@ -169,6 +176,28 @@ impl ScrollingTextureCache {
             }
             keep
         });
+    }
+
+    /// Copy every ring whose columns moved since the last copy into the
+    /// SVG-export cache. The interpreter calls this at the end of a frame
+    /// that has an export pending, so the export plugin, which runs at the
+    /// end of that pass, reads current pixels while frames without an export
+    /// skip the full-texture copy.
+    pub fn sync_export_mirror(&mut self) {
+        let Some(cache) = &self.texture_cache else {
+            return;
+        };
+        let mut cache = cache.lock().expect("texture cache poisoned");
+        for entry in self.entries.values_mut().filter(|e| e.mirror_stale) {
+            cache.insert(
+                entry.tex.id(),
+                entry.width_slots,
+                entry.height_slots,
+                entry.rgba.clone(),
+                entry.nearest,
+            );
+            entry.mirror_stale = false;
+        }
     }
 
     /// Drop the cache entry (and its GPU texture) for `id`. Invoked from the
@@ -225,6 +254,8 @@ impl ScrollingTextureCache {
                     height_slots,
                     last_touched_frame: self.frame,
                     rgba,
+                    mirror_stale: false,
+                    nearest,
                 },
             );
             // A reshape allocates a fresh TextureId; the old one's mirror
@@ -329,16 +360,8 @@ impl ScrollingTextureCache {
                     entry.rgba[dst + 3] = (v & 0xff) as u8;
                 }
             }
-            if let Some(cache) = &self.texture_cache {
-                let nearest = filter_opts.magnification == egui::TextureFilter::Nearest;
-                cache.lock().expect("texture cache poisoned").insert(
-                    entry.tex.id(),
-                    entry.width_slots,
-                    entry.height_slots,
-                    entry.rgba.clone(),
-                    nearest,
-                );
-            }
+            entry.mirror_stale = true;
+            entry.nearest = filter_opts.magnification == egui::TextureFilter::Nearest;
         }
 
         let tex_id = entry.tex.id();
@@ -702,6 +725,38 @@ mod tests {
             assert!(!r.fresh_texture);
         });
         assert!(c.entries.is_empty());
+    }
+
+    #[test]
+    fn pushes_reach_the_mirror_only_on_sync() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        let column = [0x1122_33ffu32, 0x4455_66ffu32];
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            c.push_and_draw(
+                ui,
+                &ctx,
+                4,
+                3,
+                2,
+                ORIENTATION_SCROLL_LEFT,
+                FILTER_LINEAR,
+                1,
+                1,
+                &column,
+                0.0,
+                0.0,
+            );
+        });
+        let tex = tex_id(&c, 4);
+        let at = |m: &TexturePixelCache| m.get(tex).map(|t| (t.rgba[4..8].to_vec(), t.nearest));
+        assert_eq!(
+            at(&mirror.lock().unwrap()),
+            Some((vec![0, 0, 0, 0], false)),
+            "a push without an export pending leaves the seeded mirror alone"
+        );
+        c.sync_export_mirror();
+        assert_eq!(at(&mirror.lock().unwrap()), Some((vec![0x11, 0x22, 0x33, 0xff], false)));
     }
 
     #[test]

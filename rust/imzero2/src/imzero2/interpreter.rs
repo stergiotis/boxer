@@ -2050,6 +2050,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         );
         let mut root = Some(&mut root_ui);
         let result = self.interpret_outer(ctx, &mut root);
+        // The export plugin runs at the end of this pass. Bring the ring
+        // textures' mirror up to date only when it will read it: the copy
+        // is the whole texture, too much to repeat on every push.
+        if self.export_state.lock().is_ok_and(|s| s.pending.is_some()) {
+            self.scrolling_texture.sync_export_mirror();
+        }
         // Capture even on error so the overlay keeps reporting the time spent
         // before the failure rather than freezing on a stale value. The span is
         // net of the time spent blocked on Go's stream (see `read_blocked_ns`),
