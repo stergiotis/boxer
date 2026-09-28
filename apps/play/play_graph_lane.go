@@ -122,18 +122,23 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 	demandKey := c.key()
 	memoCurrent := inst.result != nil && inst.servedKey == demandKey
 	switch {
-	case memoCurrent && inst.loading:
+	case memoCurrent:
 		// Flip-back: the demand returned to the pair the memo already serves
 		// while a superseding run is still in flight (A→B→A). Cancel that run
 		// and serve the memo — re-executing would break minimality: nothing
 		// the memo covers changed (a forced re-fetch goes through forget,
 		// which clears servedKey and so never lands here).
-		inst.gen++ // the in-flight completion is stale now
-		if inst.cancel != nil {
-			inst.cancel()
-			inst.cancel = nil
+		if inst.loading {
+			inst.gen++ // the in-flight completion is stale now
+			if inst.cancel != nil {
+				inst.cancel()
+				inst.cancel = nil
+			}
+			inst.loading = false
 		}
-		inst.loading = false
+		// Converged on the memo whether or not a run was in flight: after
+		// an abort, wantKey still names the cancelled pair, and a later
+		// demand for it is a change that must start it again.
 		inst.wantKey = demandKey
 	case !memoCurrent && inst.wantKey != demandKey:
 		inst.startLocked(c, demandKey)

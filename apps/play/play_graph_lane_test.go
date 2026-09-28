@@ -390,3 +390,65 @@ func TestNodeLaneRefusesEmptySQL(t *testing.T) {
 	require.Error(t, view.err)
 	require.Zero(t, g.callCount())
 }
+
+// blockingOnExecutor answers every SQL at once except `block`, which parks
+// until its context is cancelled.
+type blockingOnExecutor struct {
+	block string
+	mu    sync.Mutex
+	calls int
+}
+
+func (inst *blockingOnExecutor) execute(ctx context.Context, c compiledNode, _ memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	inst.mu.Lock()
+	inst.calls++
+	inst.mu.Unlock()
+	if c.SQL == inst.block {
+		<-ctx.Done()
+		err = ctx.Err()
+		return
+	}
+	rec = int64Rec("n", 1)
+	schema = rec.Schema()
+	return
+}
+
+func (inst *blockingOnExecutor) callCount() int {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.calls
+}
+
+// A cancel lasts until the demand changes. A→B, Cancel, back to the memo'd A,
+// then B again is a changed demand and must start B, not find the lane still
+// "converged" on the aborted B.
+func TestNodeLaneAbortThenFlipBackThenReturnRestarts(t *testing.T) {
+	g := &blockingOnExecutor{block: "B"}
+	lane := newNodeLane(g, memory.NewGoAllocator(), 0)
+	defer lane.close()
+
+	_ = lane.demand(compiledNode{SQL: "A"})
+	waitLaneReady(t, lane, "A")
+	calls := g.callCount()
+
+	v := lane.demand(compiledNode{SQL: "B"})
+	if v.rec != nil {
+		v.rec.Release()
+	}
+	require.True(t, v.loading)
+	lane.abort()
+
+	v = lane.demand(compiledNode{SQL: "A"}) // back to the memo
+	if v.rec != nil {
+		v.rec.Release()
+	}
+	require.False(t, v.loading)
+
+	v = lane.demand(compiledNode{SQL: "B"}) // the demand changed again
+	if v.rec != nil {
+		v.rec.Release()
+	}
+	require.True(t, v.loading, "B is a changed demand and must run")
+	require.Eventually(t, func() bool { return g.callCount() == calls+2 },
+		2*time.Second, time.Millisecond, "B executed a second time")
+}
