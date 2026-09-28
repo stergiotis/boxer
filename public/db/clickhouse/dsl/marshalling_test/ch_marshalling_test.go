@@ -1625,3 +1625,30 @@ func TestUnmarshalBoolCaseInsensitive(t *testing.T) {
 	_, err = marshalling.UnmarshalCompositeLiteral("[False]")
 	require.NoError(t, err)
 }
+
+// A negation past math.MinInt64 is Float64 on the server, not a wrapped
+// Int64. Types were read back from a live server with toTypeName.
+func TestUnmarshalScalarNegativeOverflow(t *testing.T) {
+	lit, err := marshalling.UnmarshalScalarLiteral("-9223372036854775808")
+	require.NoError(t, err)
+	assert.Equal(t, ctabb.I64, lit.ScalarType)
+	assert.Equal(t, int64(math.MinInt64), lit.IntVal)
+
+	lit, err = marshalling.UnmarshalScalarLiteral("-0x8000000000000000")
+	require.NoError(t, err)
+	assert.Equal(t, ctabb.I64, lit.ScalarType)
+	assert.Equal(t, int64(math.MinInt64), lit.IntVal)
+
+	cases := map[string]float64{
+		"-9223372036854775809":  -9223372036854775809.0,
+		"-18446744073709551615": -18446744073709551615.0,
+		"-0x8000000000000001":   -9223372036854775809.0,
+		"-0xFFFFFFFFFFFFFFFF":   -18446744073709551615.0,
+	}
+	for tok, want := range cases {
+		lit, err = marshalling.UnmarshalScalarLiteral(tok)
+		require.NoError(t, err, tok)
+		assert.Equal(t, ctabb.F64, lit.ScalarType, tok)
+		assert.Equal(t, want, lit.FloatVal, tok)
+	}
+}

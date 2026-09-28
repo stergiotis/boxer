@@ -181,15 +181,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 			err = eb.Build().Str("token", token).Errorf("invalid hex literal: %w", err)
 			return
 		}
-		if sign >= 0 || val == 0 {
-			// Negative zero is zero — keep the unsigned domain so the
-			// marshal⇄unmarshal normal form is type-stable.
-			result.ScalarType = ctabb.U64
-			result.UintVal = val
-		} else {
-			result.ScalarType = ctabb.I64
-			result.IntVal = -int64(val)
-		}
+		setSignedInteger(&result, sign < 0, val)
 		return
 	}
 
@@ -217,16 +209,28 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 			result.Unknown = true
 			return
 		}
-		if sign >= 0 || val == 0 {
-			// Negative zero is zero — keep the unsigned domain so the
-			// marshal⇄unmarshal normal form is type-stable.
-			result.ScalarType = ctabb.U64
-			result.UintVal = val
-		} else {
-			result.ScalarType = ctabb.I64
-			result.IntVal = -int64(val)
-		}
+		setSignedInteger(&result, sign < 0, val)
 		return
+	}
+}
+
+// setSignedInteger stores an integer literal's magnitude and sign the way
+// the server types it: non-negative (and negative zero) as UInt64, a
+// negation down to math.MinInt64 as Int64, and a negation past it as
+// Float64.
+func setSignedInteger(result *TypedLiteral, negative bool, val uint64) {
+	switch {
+	case !negative || val == 0:
+		// Negative zero is zero — keep the unsigned domain so the
+		// marshal⇄unmarshal normal form is type-stable.
+		result.ScalarType = ctabb.U64
+		result.UintVal = val
+	case val <= 1<<63:
+		result.ScalarType = ctabb.I64
+		result.IntVal = int64(-val)
+	default:
+		result.ScalarType = ctabb.F64
+		result.FloatVal = -float64(val)
 	}
 }
 
