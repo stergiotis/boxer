@@ -52,19 +52,44 @@ func MarshalControlFlowMarker(sentinel uuid.UUID) string {
 // The scan is quote-aware: marker text inside single-quoted string
 // literals, double-quoted identifiers, or backquoted identifiers does NOT
 // trigger discard — a query selecting the marker as a string constant is
-// processed normally. Marker text inside a comment does trigger: the
+// processed normally. A quote character inside a `--` or `/* */` comment
+// opens no quoted span. Marker text inside a comment does trigger: the
 // signal itself is a comment, so the two are indistinguishable by
 // construction. Don't paste marker-laced debug output into comments.
 func IsDiscardOutput(out string) bool {
 	marker := PassDiscardOutputMarker
 	for i := 0; i+len(marker) <= len(out); {
 		c := out[i]
-		if c == '\'' || c == '"' || c == '`' {
-			i = skipQuoted(out, i)
-			continue
-		}
 		if c == marker[0] && strings.HasPrefix(out[i:], marker) {
 			return true
+		}
+		switch {
+		case c == '\'' || c == '"' || c == '`':
+			i = skipQuoted(out, i)
+			continue
+		case c == '-' && i+1 < len(out) && out[i+1] == '-':
+			// A quote inside a line comment opens nothing; the marker
+			// inside one still counts (see above).
+			end := strings.IndexByte(out[i:], '\n')
+			if end < 0 {
+				end = len(out) - i
+			}
+			if strings.Contains(out[i:i+end], marker) {
+				return true
+			}
+			i += end
+			continue
+		case c == '/' && i+1 < len(out) && out[i+1] == '*':
+			end := strings.Index(out[i+2:], "*/")
+			if end < 0 {
+				return strings.Contains(out[i:], marker)
+			}
+			end += i + 4
+			if strings.Contains(out[i:end], marker) {
+				return true
+			}
+			i = end
+			continue
 		}
 		i++
 	}
