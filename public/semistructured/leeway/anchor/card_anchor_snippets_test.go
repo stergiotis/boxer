@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -183,7 +184,7 @@ func TestSnippetsAgainstFixture(t *testing.T) {
 				require.Contains(t, lines[1], "[0,1,1]")
 				require.Contains(t, lines[1], "68.1")
 			case strings.Contains(f.sql, "LW_SURFACE_VERSION"):
-				require.Equalf(t, "1", strings.TrimSpace(lines[1]), "%s", loc)
+				require.Equalf(t, strconv.Itoa(lwsqlsurface.Version), strings.TrimSpace(lines[1]), "%s", loc)
 			case strings.Contains(f.sql, "'attack-count'"):
 				require.Containsf(t, lines[0], "attack-count", "%s: minted physical name must be the result column", loc)
 				require.Equalf(t, 60, dataRows, "%s", loc)
