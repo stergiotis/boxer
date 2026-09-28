@@ -340,8 +340,7 @@ func (inst *ColorScale) renderHorizontal() {
 	stepW := inst.width / float32(steps)
 	for i := range steps {
 		t := float64(i) / float64(steps-1)
-		val := min + t*(max-min)
-		rgba := cm.At(val)
+		rgba := cm.At(sampleAtNormalized(cm, t))
 		x := float32(i) * stepW
 		c.PaintRectFilled(x, 0, x+stepW+0.5, gradientH, 0, color.Hex(rgba)).Send()
 	}
@@ -445,9 +444,8 @@ func (inst *ColorScale) renderVertical() {
 	const steps = 128
 	stepH := inst.height / float32(steps)
 	for i := range steps {
-		t := float64(i) / float64(steps-1) // 0 at the top
-		val := max - t*(max-min)           // top=max, bottom=min
-		rgba := cm.At(val)
+		t := float64(i) / float64(steps-1)         // 0 at the top
+		rgba := cm.At(sampleAtNormalized(cm, 1-t)) // top=max, bottom=min
 		y := float32(i) * stepH
 		c.PaintRectFilled(0, y, gradientW, y+stepH+0.5, 0, color.Hex(rgba)).Send()
 	}
@@ -765,4 +763,27 @@ func defaultLogLabelFormat(v float64) string {
 		}
 	}
 	return fmt.Sprintf("%.3g", v)
+}
+
+// sampleAtNormalized returns the sample value whose palette position under
+// cm is t, inverting Normalize per scale. The gradient is walked in palette
+// space, as the ticks and the hover readout are, so on a log or dB scale
+// the colour at an x matches the tick drawn there; stepping linearly in
+// value instead painted a 1..1e6 log bar almost wholly in its top decade.
+// A range the scale cannot invert (a non-positive log bound) falls back to
+// the linear step, which Normalize maps to the palette start either way.
+func sampleAtNormalized(cm *colormap.Config, t float64) (v float64) {
+	min, max := cm.Range()
+	v = min + t*(max-min)
+	switch cm.Scale {
+	case colormap.ScaleLogE:
+		if min > 0 && max > 0 {
+			lMin, lMax := math.Log10(min), math.Log10(max)
+			v = math.Pow(10, lMin+t*(lMax-lMin))
+		}
+	case colormap.ScaleDbE:
+		// DataMin/DataMax are dB; the sample is the power with that dB.
+		v = math.Pow(10, v/10)
+	}
+	return
 }
