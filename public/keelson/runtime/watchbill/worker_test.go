@@ -348,3 +348,29 @@ func TestWorkerDrainsOnlyItsQueues(t *testing.T) {
 	every.tick(t)
 	assert.Equal(t, watchbillstore.StateSucceeded, every.job(t, other).State)
 }
+
+// A run interrupted by Stop, or by Start's context ending, records no
+// outcome: the row stays running for the sweep, with its attempt unspent.
+// Repeated, since the run and the loop race to see the context end.
+func TestStopLeavesRunsForTheSweep(t *testing.T) {
+	for _, viaCtx := range []bool{false, true} {
+		for i := 0; i < 50; i++ {
+			f := newFixture(t, "run-a", func(c *Config) { c.Poll = time.Millisecond })
+			f.blocking.Store(true)
+			id := f.enqueue(t, Request{MaxAttempts: 1})
+			ctx, cancel := context.WithCancel(context.Background())
+			require.NoError(t, f.w.Start(ctx))
+			require.Eventually(t, func() bool { return f.running.Load() == 1 }, time.Second, time.Millisecond)
+			if viaCtx {
+				cancel()
+				<-f.w.done
+			} else {
+				f.w.Stop()
+			}
+			cancel()
+			j := f.job(t, id)
+			require.Equal(t, watchbillstore.StateRunning, j.State, "viaCtx=%v iteration %d: %q", viaCtx, i, j.LastError)
+			require.Equal(t, []string{watchbillstore.StateRunning}, states(f.store.Events(id)))
+		}
+	}
+}

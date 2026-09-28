@@ -68,8 +68,9 @@ type Worker struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	// stopping is set when the loop leaves; a run that ends after it
-	// records no outcome, since the row belongs to the sweep from then on.
+	// stopping is set by Stop before it cancels, and when the loop
+	// leaves; a run that ends after it records no outcome, since the row
+	// belongs to the sweep from then on.
 	stopping atomic.Bool
 
 	mu       sync.Mutex
@@ -165,6 +166,9 @@ func (inst *Worker) Stop() {
 	if inst.unsubReq != nil {
 		inst.unsubReq()
 	}
+	// Before the cancel, so a run that sees its context end already
+	// reads the worker as stopping.
+	inst.stopping.Store(true)
 	inst.cancel()
 	<-inst.done
 	if inst.cfg.Presence != nil {
@@ -425,7 +429,7 @@ func (inst *Worker) start(ctx context.Context, job watchbillstore.Job, now time.
 				wg.Done()
 			}
 		}()
-		inst.execute(jobCtx, job, now)
+		inst.execute(ctx, jobCtx, job, now)
 	}()
 }
 
@@ -443,8 +447,9 @@ const (
 
 // execute runs one claimed job to its transition (ADR-0223 §SD2, §SD5).
 // jobCtx is the run's, ended by a cancel request, a timeout, or the worker
-// stopping.
-func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, claimedAt time.Time) {
+// stopping; workerCtx is the one it derives from, whose end is the
+// worker stopping.
+func (inst *Worker) execute(workerCtx context.Context, jobCtx context.Context, job watchbillstore.Job, claimedAt time.Time) {
 	// The claim is the running transition; its event is written here,
 	// after the read-back said the claim was won.
 	if err := inst.event(context.Background(), claimedAt, job, watchbillstore.StateRunning, nil, ""); err != nil {
@@ -484,7 +489,9 @@ func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, clai
 	case errors.Is(cause, errTimedOut):
 		outcome = outcomeFailed
 		runErr = eb.Build().Str("timeout", (time.Duration(job.TimeoutMs)*time.Millisecond).String()).Errorf("timed out: %w", runErr)
-	case inst.stopping.Load():
+	case workerCtx.Err() != nil || inst.stopping.Load():
+		// The worker's own context ended — Stop, or Start's context —
+		// which a parent records before any child sees it.
 		outcome = outcomeAbandon
 	default:
 		outcome = outcomeFailed
