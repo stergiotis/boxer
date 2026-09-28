@@ -176,7 +176,7 @@ func CodeViewJob(text string) (inst CodeViewJobFluid) {
 func CollapsingHeader(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]) (inst CollapsingHeaderFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdCollapsingHeader))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 	r.SpliceRetained(label.Untype())
 
@@ -204,7 +204,7 @@ func Color() (inst ColorFluid) {
 func ComboBox(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS], selectedText typed.RetainedFffiHolderTyped[WidgetTextS]) (inst ComboBoxFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdComboBox))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 	r.SpliceRetained(label.Untype())
 	r.SpliceRetained(selectedText.Untype())
@@ -472,7 +472,7 @@ func ExportSvgWindow(h widgethandle.WidgetHandle, path string, embedFonts bool, 
 func Frame(i WidgetIdCreatorI) (inst FrameFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdFrame))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = FrameFluid{
@@ -530,7 +530,7 @@ func GraphNode(nodeId uint64, label string) (inst GraphNodeFluid) {
 func Grid(i WidgetIdCreatorI) (inst GridFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdGrid))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = GridFluid{
@@ -700,7 +700,7 @@ func ImageRelease(i WidgetIdCreatorI) (inst ImageReleaseFluid) {
 func Indent(i WidgetIdCreatorI) (inst IndentFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdIndent))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = IndentFluid{
@@ -1215,7 +1215,7 @@ func PaintText(px float32, py float32, anchorH uint8, anchorV uint8, text string
 func PanelBottom(i WidgetIdCreatorI) (inst PanelBottomFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelBottom))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PanelBottomFluid{
@@ -1231,7 +1231,7 @@ func PanelBottom(i WidgetIdCreatorI) (inst PanelBottomFluid) {
 func PanelBottomInside(i WidgetIdCreatorI) (inst PanelBottomInsideFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelBottomInside))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PanelBottomInsideFluid{
@@ -1269,7 +1269,7 @@ func PanelCentralInside() (inst PanelCentralInsideFluid) {
 func PanelLeft(i WidgetIdCreatorI) (inst PanelLeftFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelLeft))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PanelLeftFluid{
@@ -1285,7 +1285,7 @@ func PanelLeft(i WidgetIdCreatorI) (inst PanelLeftFluid) {
 func PanelLeftInside(i WidgetIdCreatorI) (inst PanelLeftInsideFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelLeftInside))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PanelLeftInsideFluid{
@@ -1301,7 +1301,7 @@ func PanelLeftInside(i WidgetIdCreatorI) (inst PanelLeftInsideFluid) {
 func PanelRight(i WidgetIdCreatorI) (inst PanelRightFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelRight))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PanelRightFluid{
@@ -1317,7 +1317,7 @@ func PanelRight(i WidgetIdCreatorI) (inst PanelRightFluid) {
 func PanelRightInside(i WidgetIdCreatorI) (inst PanelRightInsideFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelRightInside))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PanelRightInsideFluid{
@@ -1333,7 +1333,7 @@ func PanelRightInside(i WidgetIdCreatorI) (inst PanelRightInsideFluid) {
 func PanelTop(i WidgetIdCreatorI) (inst PanelTopFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelTop))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PanelTopFluid{
@@ -1349,7 +1349,7 @@ func PanelTop(i WidgetIdCreatorI) (inst PanelTopFluid) {
 func PanelTopInside(i WidgetIdCreatorI) (inst PanelTopInsideFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPanelTopInside))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PanelTopInsideFluid{
@@ -1394,7 +1394,7 @@ func ProgressBar(progress float32) (inst ProgressBarFluid) {
 func PushId(i WidgetIdCreatorI) (inst PushIdFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdPushId))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 
 	inst = PushIdFluid{
@@ -1810,7 +1810,7 @@ func TimeRangePicker(i WidgetIdCreatorI, fromInitial string, toInitial string) (
 func TintedScope(i WidgetIdCreatorI, col color.Color) (inst TintedScopeFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdTintedScope))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 	color.PutAsU32(r, col)
 
@@ -1985,7 +1985,7 @@ func WidgetsGlobalThemePreferenceButtons() {
 func Window(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]) (inst WindowFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdWindow))
-	v := i.DeriveStacked()
+	v := i.Derive()
 	r.WriteWidgetId(checkId(v))
 	r.SpliceRetained(label.Untype())
 

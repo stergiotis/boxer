@@ -622,15 +622,11 @@ func generateFactoryCode(w io.Writer, factory *ir.BuilderFactoryNode, tracker *c
 	r.WriteOpCode(uint32(FuncProcId%s))
 `, factory.Name.Convert(naming.UpperCamelCase))
 	tracker.MergeError(err)
-	idVariant := ""
-	idDefer := ""
-	if factory.Settings.BlockIterator {
-		idVariant = "Stacked"
-		// deferred: a stacked builder carrying an id may want
-		// idDefer = "i.PopIdFromStackChecked(v)\n" here. idDefer stays "" until
-		// then, so the template hole emits nothing.
-	}
-	generateIdentityHandling(w, factory.IdentityArguments, tracker, idVariant)
+	// A block iterator's id is derived here but pushed only when KeepIter's
+	// body runs, and popped when it ends. Pushing here instead leaked the id
+	// onto the stack for the rest of the frame whenever the builder was
+	// finished with Send or Keep, or dropped, rather than ranged.
+	generateIdentityHandling(w, factory.IdentityArguments, tracker, "")
 	generateFactoryArgumentsHandlingPlain(false, w, factory.Arguments.PlainArguments, tracker)
 	generateFactoryArgumentsHandlingEvaluated(w, factory.Arguments.EvaluatedArguments, tracker)
 
@@ -660,12 +656,11 @@ func generateFactoryCode(w io.Writer, factory *ir.BuilderFactoryNode, tracker *c
 			dbmName, dbmName)
 		tracker.MergeError(err)
 	}
-	_, err = fmt.Fprintf(w, `
-	%s
+	_, err = fmt.Fprint(w, `
 	return
 }
 
-`, idDefer)
+`)
 	tracker.MergeError(err)
 }
 func generateMethodCodeBuildMethods(w io.Writer, factory *ir.BuilderFactoryNode, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
@@ -724,11 +719,8 @@ func generateMethodCodeBuildMethods(w io.Writer, factory *ir.BuilderFactoryNode,
 	if factory.Settings.BlockIterator {
 		var idHandlingDefer = ""
 		if factory.IdentityArguments.HasId {
-			// FIXME
-			idHandlingDefer = `/*if inst.idGen.DeriveStacked() != inst.id {
-	panic("id handling is incorrect. iterators are nested in an unhandled way.")
-}*/
-defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+			idHandlingDefer = `inst.idGen.PushIdToStack(inst.id)
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 `
 		}
 		if buildMethodInvoke != "" {

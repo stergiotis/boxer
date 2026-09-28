@@ -134,3 +134,20 @@ func TestWidgetIdStackBaseSalt(t *testing.T) {
 	b.PopIdFromStackChecked(base)
 	assert.Equal(t, idB, b.PrepareStr("topbar").Derive())
 }
+
+// TestBlockIteratorBuilderLeavesTheStackAlone pins that building a block
+// iterator does not open its scope: only ranging KeepIter does. A builder
+// finished with Keep (or Send), or dropped, used to leave its id pushed for
+// the rest of the frame, so every later sibling derived against the wrong
+// base and its id drifted.
+func TestBlockIteratorBuilderLeavesTheStackAlone(t *testing.T) {
+	ids := NewWidgetIdStack()
+	want := ids.PrepareStr("sibling").Derive()
+
+	f := Frame(ids.PrepareStr("row"))
+	_ = f.Keep()
+	_ = CollapsingHeader(ids.PrepareStr("dropped"), WidgetText().Text("x").Keep())
+
+	assert.Equal(t, 0, ids.Depth())
+	assert.Equal(t, want, ids.PrepareStr("sibling").Derive())
+}

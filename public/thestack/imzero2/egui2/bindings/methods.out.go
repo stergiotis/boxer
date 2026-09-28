@@ -379,9 +379,7 @@ func (inst CollapsingHeaderFluid) KeepIter() iter.Seq[functional.NilIteratorValu
 	inst.r.WriteOpCode(uint32(CollapsingHeaderMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -696,9 +694,7 @@ func (inst ComboBoxFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(ComboBoxMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -1568,9 +1564,7 @@ func (inst FrameFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(FrameMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -1929,9 +1923,7 @@ func (inst GridFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(GridMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2141,9 +2133,7 @@ func (inst IndentFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2676,9 +2666,7 @@ func (inst PanelBottomFluid) KeepIter() iter.Seq[functional.NilIteratorValueType
 	inst.r.WriteOpCode(uint32(PanelBottomMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2723,9 +2711,7 @@ func (inst PanelBottomInsideFluid) KeepIter() iter.Seq[functional.NilIteratorVal
 	inst.r.WriteOpCode(uint32(PanelBottomInsideMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2808,9 +2794,7 @@ func (inst PanelLeftFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] 
 	inst.r.WriteOpCode(uint32(PanelLeftMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2855,9 +2839,7 @@ func (inst PanelLeftInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValue
 	inst.r.WriteOpCode(uint32(PanelLeftInsideMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2902,9 +2884,7 @@ func (inst PanelRightFluid) KeepIter() iter.Seq[functional.NilIteratorValueType]
 	inst.r.WriteOpCode(uint32(PanelRightMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2949,9 +2929,7 @@ func (inst PanelRightInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValu
 	inst.r.WriteOpCode(uint32(PanelRightInsideMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2996,9 +2974,7 @@ func (inst PanelTopFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(PanelTopMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -3043,9 +3019,7 @@ func (inst PanelTopInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValueT
 	inst.r.WriteOpCode(uint32(PanelTopInsideMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -3131,9 +3105,7 @@ func (inst PushIdFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -4246,9 +4218,7 @@ func (inst TintedScopeFluid) KeepIter() iter.Seq[functional.NilIteratorValueType
 	inst.r.WriteOpCode(uint32(TintedScopeMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -4560,9 +4530,7 @@ func (inst WindowFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(WindowMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
