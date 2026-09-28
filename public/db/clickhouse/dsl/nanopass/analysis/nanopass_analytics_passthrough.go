@@ -27,7 +27,9 @@ const maxPassthroughDepth = 64
 //   - every projection item is a bare column (`c`, `t.c`) or a star (`*`,
 //     `t.*`, `* EXCEPT c`) — any alias (`c AS x`, including a pure rename),
 //     expression, function, CASE, cast, or scalar subquery taints the whole
-//     table out. A column *subset* is still 1:1; a value or name change is not;
+//     table out, as does a name bound by a WITH expression (`WITH e AS a
+//     SELECT a`), which is that expression rather than a column. A column
+//     *subset* is still 1:1; a value or name change is not;
 //   - the SELECT carries no GROUP BY, HAVING, DISTINCT, ARRAY JOIN, WINDOW, or
 //     QUALIFY. WHERE / PREWHERE / ORDER BY / LIMIT are fine — they restrict or
 //     reorder stored rows without transforming them;
@@ -183,8 +185,9 @@ func projectionIsAllVerbatim(scope *nanopass.SelectScope) (ok bool) {
 	if len(items) == 0 {
 		return
 	}
+	withAliases := withExpressionAliases(scope)
 	for _, item := range items {
-		if !columnsExprIsVerbatim(item) {
+		if !columnsExprIsVerbatim(item, withAliases) {
 			return
 		}
 	}
@@ -194,15 +197,98 @@ func projectionIsAllVerbatim(scope *nanopass.SelectScope) (ok bool) {
 
 // columnsExprIsVerbatim classifies one projection item. Only a star and a bare
 // column identifier pass the stored data through unchanged; an alias (rename or
-// derivation), any expression, and a scalar subquery do not.
-func columnsExprIsVerbatim(item grammar1.IColumnsExprContext) (verbatim bool) {
+// derivation), any expression, and a scalar subquery do not. An identifier
+// whose leading component names a WITH expression alias (`WITH expr AS a
+// SELECT a …`) is that expression, not a stored column, so it is not verbatim.
+func columnsExprIsVerbatim(item grammar1.IColumnsExprContext, withAliases map[string]struct{}) (verbatim bool) {
 	switch c := item.(type) {
 	case *grammar1.ColumnsExprAsteriskContext:
 		verbatim = true
 	case *grammar1.ColumnsExprColumnContext:
-		_, verbatim = c.ColumnExpr().(*grammar1.ColumnExprIdentifierContext)
+		var ident *grammar1.ColumnExprIdentifierContext
+		ident, verbatim = c.ColumnExpr().(*grammar1.ColumnExprIdentifierContext)
+		if verbatim && len(withAliases) > 0 {
+			if lead, found := leadingIdentifier(ident); found {
+				_, isAlias := withAliases[nanopass.DecodeIdentifier(lead.GetText())]
+				verbatim = !isAlias
+			}
+		}
 	case *grammar1.ColumnsExprSubqueryContext:
 		verbatim = false
+	}
+	return
+}
+
+// withExpressionAliases collects the names bound by WITH expression items
+// (`WITH expr AS name`) on every union statement enclosing scope, up to the
+// top level. It over-approximates — a non-first arm's WITH is counted for
+// every arm, and an enclosing query's alias counts in its subqueries, where
+// ClickHouse lets a same-named stored column shadow it (the classifier cannot
+// see the schema) — which can only make an identifier non-verbatim, so the
+// classifier errs closed.
+func withExpressionAliases(scope *nanopass.SelectScope) (names map[string]struct{}) {
+	for p := scope.Node.GetParent(); p != nil; p = p.GetParent() {
+		union, ok := p.(*grammar1.SelectUnionStmtContext)
+		if !ok {
+			continue
+		}
+		names = addCtesExpressionAliases(names, union.Ctes())
+		for _, item := range union.AllSelectUnionStmtItem() {
+			if it, ok := item.(*grammar1.SelectUnionStmtItemContext); ok {
+				names = addCtesExpressionAliases(names, it.Ctes())
+			}
+		}
+	}
+	return
+}
+
+func addCtesExpressionAliases(names map[string]struct{}, ctes grammar1.ICtesContext) map[string]struct{} {
+	c, ok := ctes.(*grammar1.CtesContext)
+	if !ok {
+		return names
+	}
+	for _, wi := range c.AllWithItem() {
+		ce, ok := wi.(*grammar1.WithItemColumnsExprContext)
+		if !ok {
+			continue
+		}
+		col, ok := ce.ColumnsExpr().(*grammar1.ColumnsExprColumnContext)
+		if !ok {
+			continue
+		}
+		alias, ok := col.ColumnExpr().(*grammar1.ColumnExprAliasContext)
+		if !ok {
+			continue
+		}
+		var name string
+		switch {
+		case alias.Alias() != nil:
+			name = alias.Alias().GetText()
+		case alias.Identifier() != nil:
+			name = alias.Identifier().GetText()
+		default:
+			continue
+		}
+		if names == nil {
+			names = make(map[string]struct{}, 4)
+		}
+		names[nanopass.DecodeIdentifier(name)] = struct{}{}
+	}
+	return names
+}
+
+// leadingIdentifier returns the first identifier of a column reference in
+// source order — the database or table qualifier when present, else the
+// column name.
+func leadingIdentifier(node antlr.Tree) (ident *grammar1.IdentifierContext, found bool) {
+	if id, ok := node.(*grammar1.IdentifierContext); ok {
+		ident, found = id, true
+		return
+	}
+	for i := 0; i < node.GetChildCount(); i++ {
+		if ident, found = leadingIdentifier(node.GetChild(i)); found {
+			return
+		}
 	}
 	return
 }

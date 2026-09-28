@@ -171,3 +171,18 @@ it is built by a separate pass and never flagged. Five cases were added to the
 table for the duplicate (referenced, unreferenced, beside a clean sibling, nested
 in a subquery) and the shadowing it must not over-reject, their expected values
 cross-checked against clickhouse-local 26.6 under the default analyzer.
+
+### 2026-09-28 — a WITH expression alias is not a stored column
+
+The projection rule took any bare identifier for a stored column. A name bound
+by a `WITH` expression item is not one: in
+`WITH (SELECT secret FROM other LIMIT 1) AS a SELECT a FROM t` the projected `a`
+is the scalar subquery over `other`, yet the query was reported as a 1:1 read of
+`t`. Within one `SELECT` the alias shadows a same-named column, so the value can
+come from any expression.
+
+A projection identifier whose leading component names a `WITH` expression alias
+on any enclosing union statement now taints the table out. The name set
+over-approximates visibility on purpose: an enclosing query's alias is counted
+inside its subqueries, where a same-named stored column would shadow it, because
+the classifier cannot see the schema. The error lands on the closed side.
