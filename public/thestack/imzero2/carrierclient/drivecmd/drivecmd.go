@@ -103,6 +103,10 @@ func NewCommand() *cli.Command {
 			&cli.StringSliceFlag{
 				Name:  flagStep,
 				Usage: "one trace step as JSON; repeatable, run in order after --" + flagTrace,
+				// The value is split on commas and joined back in run; a
+				// trimmed piece would lose the space after a comma inside a
+				// JSON string.
+				KeepSpace: true,
 			},
 			&cli.BoolFlag{
 				Name:  flagDumpTree,
