@@ -49,7 +49,7 @@ func castRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, b
 		}
 		if isColumnTypeExprNode(child) {
 			if typeText == "" {
-				typeText = child.GetText()
+				typeText = typeTextOf(pr, child)
 			}
 			continue
 		}
@@ -64,6 +64,41 @@ func castRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, b
 	// for splicing into the single-quoted type string.
 	escapedType := strings.ReplaceAll(typeText, `'`, `\'`)
 	return callForm("CAST", spanOf(pr, exprNode), "'"+escapedType+"'"), true
+}
+
+// typeTextOf renders a columnTypeExpr as compact type text: its default-channel
+// tokens concatenated, with one space kept between two tokens that would
+// otherwise fuse into one word. GetText would drop that separator and turn a
+// named tuple element `Tuple(a UInt8)` into the unknown type family `aUInt8`;
+// the source span would carry comments and layout into the type string.
+func typeTextOf(pr *nanopass.ParseResult, node antlr.ParserRuleContext) string {
+	start, stop := node.GetStart(), node.GetStop()
+	if start == nil || stop == nil {
+		return node.GetText()
+	}
+	var b strings.Builder
+	for i := start.GetTokenIndex(); i <= stop.GetTokenIndex(); i++ {
+		tok := pr.TokenStream.Get(i)
+		if tok.GetChannel() != antlr.TokenDefaultChannel {
+			continue
+		}
+		text := tok.GetText()
+		if text == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			prev := b.String()
+			if isTypeWordByte(prev[len(prev)-1]) && isTypeWordByte(text[0]) {
+				b.WriteByte(' ')
+			}
+		}
+		b.WriteString(text)
+	}
+	return b.String()
+}
+
+func isTypeWordByte(c byte) bool {
+	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= 0x80
 }
 
 // isColumnTypeExprNode reports whether the node is any alternative of the
