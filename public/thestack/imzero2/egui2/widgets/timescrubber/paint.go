@@ -16,7 +16,7 @@ type visuals struct {
 	background, band, rangeFill, rangeEdge, shade color.Color
 	bar, peak, playhead, playheadText, hover      color.Color
 	hoverText, context, now, past, day, mark      color.Color
-	held, loading, missing, idle, hint            color.Color
+	held, loading, missing, idle, hint, textPlate color.Color
 }
 
 func newVisuals() visuals {
@@ -32,7 +32,8 @@ func newVisuals() visuals {
 		playhead:     hex(styletokens.WarningDefault),
 		playheadText: hex(styletokens.NeutralTextPrimary),
 		hover:        withAlpha(hex(styletokens.NeutralTextSecondary), 0x90),
-		hoverText:    hex(styletokens.NeutralTextSecondary),
+		hoverText:    hex(styletokens.NeutralTextPrimary),
+		textPlate:    withAlpha(hex(styletokens.NeutralBgPanel), 0xe0),
 		context:      hex(styletokens.NeutralTextSecondary),
 		now:          hex(styletokens.InfoDefault),
 		past:         withAlpha(hex(styletokens.NeutralTextSecondary), 0x22),
@@ -443,7 +444,17 @@ func (inst *Scrubber) paintHover(axis timeAxis, steps []Step, step int, g geomet
 	if x > g.w/2 {
 		anchorH, tx = 2, x-5
 	}
-	c.PaintText(tx, g.baseY-notchH-5, anchorH, 2, text, 11, vis.hoverText).Send()
+	// The readout sits over the bars, whose colour is the caller's, so its
+	// contrast comes from a plate in the panel's and not from its own hue.
+	const size = 11
+	ty := g.baseY - notchH - 5
+	w := textWidth(text, size)
+	x0 := tx - 3
+	if anchorH == 2 {
+		x0 = tx - w - 3
+	}
+	c.PaintRectFilled(x0, ty-size-4, x0+w+6, ty+1, 2, vis.textPlate).Send()
+	c.PaintText(tx, ty, anchorH, 2, text, size, vis.hoverText).Send()
 }
 
 func (inst *Scrubber) paintPlayhead(axis timeAxis, steps []Step, g geometry, vis visuals) {
