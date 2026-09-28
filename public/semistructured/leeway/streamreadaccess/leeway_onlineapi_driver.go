@@ -116,7 +116,10 @@ func NewDriver(tblDesc *common.TableDesc, ir *common.IntermediateTableRepresenta
 // subsetted RecordBatches where IR column order ≠ Arrow column order.
 //
 // Columns present in the IR but absent from the schema are silently skipped
-// (arrowIdx = -1). The driving code must tolerate this.
+// (arrowIdx = -1). The driving code must tolerate this. The exception is a
+// count lane: a schema carrying array, set or membership columns without the
+// column that counts them per attribute is refused, since the elements could
+// only be sliced by guessing.
 func NewDriverFromSchema(
 	tblDesc *common.TableDesc,
 	ir *common.IntermediateTableRepresentation,
@@ -393,6 +396,18 @@ func (inst *Driver) prepareFromSchema(
 	plainMap := make(map[common.PlainItemTypeE]int, len(inst.ir.PlainValueDesc))
 	taggedOrd := 0
 
+	// Count lanes the IR declares but the schema lacks, per section index
+	// (see checkCountLanesResolved).
+	missing := make(map[int]*missingCountLanes, 4)
+	missingOf := func(sIdx int) *missingCountLanes {
+		m, ok := missing[sIdx]
+		if !ok {
+			m = &missingCountLanes{}
+			missing[sIdx] = m
+		}
+		return m
+	}
+
 	var physBuf []common.PhysicalColumnDesc
 	for cc, cp := range inst.ir.IterateColumnProps() {
 		// Map IR columns to physical column descriptors.
@@ -436,7 +451,8 @@ func (inst *Driver) prepareFromSchema(
 				inst.sections = append(inst.sections, sec)
 				taggedOrd++
 			}
-			sec := &inst.sections[len(inst.sections)-1]
+			sIdx := len(inst.sections) - 1
+			sec := &inst.sections[sIdx]
 
 			switch cc.SubType {
 			case common.IntermediateColumnsSubTypeScalar:
@@ -444,17 +460,27 @@ func (inst *Driver) prepareFromSchema(
 			case common.IntermediateColumnsSubTypeHomogenousArray:
 				appendValueColsResolved(&sec.arrayCols, cp, physBuf, resolveArrowIdx)
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport:
-				appendCardColsResolved(&sec.arrayCardCols, cp, physBuf, resolveArrowIdx)
+				if appendCardColsResolved(&sec.arrayCardCols, cp, physBuf, resolveArrowIdx) {
+					missingOf(sIdx).array = true
+				}
 			case common.IntermediateColumnsSubTypeSet:
 				appendValueColsResolved(&sec.setCols, cp, physBuf, resolveArrowIdx)
 			case common.IntermediateColumnsSubTypeSetSupport:
-				appendCardColsResolved(&sec.setCardCols, cp, physBuf, resolveArrowIdx)
+				if appendCardColsResolved(&sec.setCardCols, cp, physBuf, resolveArrowIdx) {
+					missingOf(sIdx).set = true
+				}
 			case common.IntermediateColumnsSubTypeMembership:
 				appendMemberColsResolved(&sec.memberCols, cp, physBuf, resolveArrowIdx)
 			case common.IntermediateColumnsSubTypeMembershipSupport:
-				appendMemberCardDetailsResolved(&sec.memberCardDetails, cp, physBuf, resolveArrowIdx)
+				m := missingOf(sIdx)
+				m.memberCardRoles = appendMemberCardDetailsResolved(&sec.memberCardDetails, cp, physBuf, resolveArrowIdx, m.memberCardRoles)
 			}
 		}
+	}
+
+	err = inst.checkCountLanesResolved(missing)
+	if err != nil {
+		return
 	}
 
 	inst.buildCoGroups()
@@ -497,17 +523,21 @@ func appendValueColsResolved(out *[]valueColLayout, cp *common.IntermediateColum
 	}
 }
 
-func appendCardColsResolved(out *[]int, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) {
+// appendCardColsResolved reports unresolved when the IR declares a
+// per-attribute count lane the schema does not carry.
+func appendCardColsResolved(out *[]int, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) (unresolved bool) {
 	for j := range cp.Names {
 		if !isPerAttributeCountRole(cp.Roles[j]) {
 			continue
 		}
 		arrowIdx := resolve(phys[j])
 		if arrowIdx < 0 {
+			unresolved = true
 			continue
 		}
 		*out = append(*out, arrowIdx)
 	}
+	return
 }
 
 func appendMemberColsResolved(out *[]memberColLayout, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) {
@@ -524,10 +554,14 @@ func appendMemberColsResolved(out *[]memberColLayout, cp *common.IntermediateCol
 	}
 }
 
-func appendMemberCardDetailsResolved(out *[]memberCardDetail, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) {
+// appendMemberCardDetailsResolved appends the roles of the cardinality
+// columns the IR declares but the schema does not carry to unresolved.
+func appendMemberCardDetailsResolved(out *[]memberCardDetail, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int, unresolvedIn []common.ColumnRoleE) (unresolved []common.ColumnRoleE) {
+	unresolved = unresolvedIn
 	for j := range cp.Names {
 		arrowIdx := resolve(phys[j])
 		if arrowIdx < 0 {
+			unresolved = append(unresolved, cp.Roles[j])
 			continue
 		}
 		*out = append(*out, memberCardDetail{
@@ -535,6 +569,44 @@ func appendMemberCardDetailsResolved(out *[]memberCardDetail, cp *common.Interme
 			role:     cp.Roles[j],
 		})
 	}
+	return
+}
+
+// missingCountLanes records, for one section, the count lanes the IR
+// declares that the schema did not resolve.
+type missingCountLanes struct {
+	array           bool
+	set             bool
+	memberCardRoles []common.ColumnRoleE
+}
+
+// checkCountLanesResolved refuses a schema that projects array, set or
+// membership columns without the lane that counts their elements per
+// attribute. Driving them anyway would fall back to one element per
+// attribute and slice every multi-element attribute at the wrong offsets —
+// the inference ADR-0213 forbids: an absent lane is not a declaration that
+// the channel is single. A channel the schema declares single has no
+// cardinality column in the IR and is not affected.
+func (inst *Driver) checkCountLanesResolved(missing map[int]*missingCountLanes) (err error) {
+	for sIdx, m := range missing {
+		sec := &inst.sections[sIdx]
+		if m.array && len(sec.arrayCardCols) == 0 && len(sec.arrayCols) > 0 {
+			return eb.Build().Stringer("section", sec.name).Errorf("schema carries homogenous-array value columns without their length column")
+		}
+		if m.set && len(sec.setCardCols) == 0 && len(sec.setCols) > 0 {
+			return eb.Build().Stringer("section", sec.name).Errorf("schema carries set value columns without their cardinality column")
+		}
+		for _, mc := range sec.memberCols {
+			cardRole, rErr := common.GetCardinalityRoleByMembershipRole(mc.role)
+			if rErr != nil {
+				continue
+			}
+			if slices.Contains(m.memberCardRoles, cardRole) {
+				return eb.Build().Stringer("section", sec.name).Stringer("role", mc.role).Errorf("schema carries a membership column without its cardinality column")
+			}
+		}
+	}
+	return
 }
 
 func (inst *Driver) buildCoGroups() {
