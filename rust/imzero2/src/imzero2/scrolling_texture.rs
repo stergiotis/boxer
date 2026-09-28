@@ -269,6 +269,21 @@ impl ScrollingTextureCache {
         if width_slots == 0 || height_slots == 0 {
             return ScrollingTextureResponse::none();
         }
+        // egui only `debug_assert!`s `max_texture_side`, and wgpu's default
+        // error handler panics on the oversized `create_texture`, so a ring the
+        // app sized past the limit (a long waterfall history) is refused here.
+        // The bound also caps the CPU mirror at max² × 4 bytes.
+        let max_side = ctx.input(|i| i.max_texture_side);
+        if width_slots as usize > max_side || height_slots as usize > max_side {
+            tracing::warn!(
+                id = id,
+                width_slots = width_slots,
+                height_slots = height_slots,
+                max_texture_side = max_side,
+                "scrollingTexture: ring exceeds max_texture_side; not drawn"
+            );
+            return ScrollingTextureResponse::none();
+        }
 
         let filter_opts = filter_to_options(filter);
         let expected_len = (new_count as usize).saturating_mul(height_slots as usize);
@@ -662,6 +677,31 @@ mod tests {
         let m = mirror.lock().unwrap();
         assert!(m.get(first).is_none(), "the replaced texture's pixels must leave the mirror");
         assert!(m.get(second).is_some());
+    }
+
+    #[test]
+    fn oversized_ring_is_refused_not_allocated() {
+        let ctx = Context::default();
+        let max = ctx.input(|i| i.max_texture_side) as u32;
+        let mut c = ScrollingTextureCache::new();
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let r = c.push_and_draw(
+                ui,
+                &ctx,
+                2,
+                max + 1,
+                1,
+                ORIENTATION_SCROLL_LEFT,
+                FILTER_NEAREST,
+                0,
+                0,
+                &[],
+                0.0,
+                0.0,
+            );
+            assert!(!r.fresh_texture);
+        });
+        assert!(c.entries.is_empty());
     }
 
     #[test]

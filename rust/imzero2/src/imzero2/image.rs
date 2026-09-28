@@ -86,6 +86,25 @@ impl ImageCache {
         });
     }
 
+    /// True when a `w`×`h` texture fits the device's `max_texture_side`.
+    /// egui only `debug_assert!`s the limit, and wgpu's default error handler
+    /// panics on the oversized `create_texture`, so an image the app sized
+    /// past the limit is refused here rather than taking the host down.
+    fn fits_texture_side(ctx: &Context, id: u64, w: u32, h: u32) -> bool {
+        let max = ctx.input(|i| i.max_texture_side);
+        let fits = (w as usize) <= max && (h as usize) <= max;
+        if !fits {
+            tracing::warn!(
+                id = id,
+                w = w,
+                h = h,
+                max_texture_side = max,
+                "image: texture exceeds max_texture_side; skipping upload"
+            );
+        }
+        fits
+    }
+
     /// Drop the cache entry (and its GPU texture) for `id`. Invoked from the
     /// `imageRelease` opcode.
     pub fn release(&mut self, id: u64) {
@@ -183,7 +202,9 @@ impl ImageCache {
         if needs_upload && !pixels.is_empty() {
             let expected = (w as usize).saturating_mul(h as usize);
             if pixels.len() == expected {
-                self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
+                if Self::fits_texture_side(ctx, id, w, h) {
+                    self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
+                }
             } else {
                 tracing::warn!(
                     id = id,
@@ -318,7 +339,7 @@ impl ImageCache {
                     );
                     // Fall through to draw whatever was cached (may be stale or
                     // absent — handled below).
-                } else {
+                } else if Self::fits_texture_side(ctx, id, w, h) {
                     self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
                 }
             }
@@ -407,6 +428,16 @@ mod tests {
         let m = mirror.lock().unwrap();
         assert!(m.get(first).is_none(), "the replaced texture's pixels must leave the mirror");
         assert!(m.get(second).is_some());
+    }
+
+    #[test]
+    fn oversized_image_is_refused_not_uploaded() {
+        let ctx = Context::default();
+        let max = ctx.input(|i| i.max_texture_side) as u32;
+        let (mut c, _mirror) = cache_with_mirror();
+        let px = vec![0u32; (max + 1) as usize];
+        assert!(c.ensure(&ctx, 1, max + 1, 1, 1, TextureOptions::NEAREST, &px).is_none());
+        assert!(c.entries.is_empty());
     }
 
     #[test]
