@@ -698,7 +698,10 @@ mod tests {
         assert!(c.ensure_entry(&ctx, 5, 8, 2, TextureOptions::NEAREST));
         let second = tex_id(&c, 5);
         let m = mirror.lock().unwrap();
-        assert!(m.get(first).is_none(), "the replaced texture's pixels must leave the mirror");
+        assert!(
+            m.get(first).is_none(),
+            "the replaced texture's pixels must leave the mirror"
+        );
         assert!(m.get(second).is_some());
     }
 
@@ -756,7 +759,10 @@ mod tests {
             "a push without an export pending leaves the seeded mirror alone"
         );
         c.sync_export_mirror();
-        assert_eq!(at(&mirror.lock().unwrap()), Some((vec![0x11, 0x22, 0x33, 0xff], false)));
+        assert_eq!(
+            at(&mirror.lock().unwrap()),
+            Some((vec![0x11, 0x22, 0x33, 0xff], false))
+        );
     }
 
     #[test]

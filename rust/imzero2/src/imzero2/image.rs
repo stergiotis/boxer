@@ -424,9 +424,15 @@ mod tests {
         let px = [0xff00_00ffu32; 4];
         let first = c.ensure(&ctx, 7, 2, 2, 1, TextureOptions::NEAREST, &px).unwrap();
         let second = c.ensure(&ctx, 7, 2, 2, 2, TextureOptions::NEAREST, &px).unwrap();
-        assert_ne!(first, second, "load_texture hands out a fresh id per upload");
+        assert_ne!(
+            first, second,
+            "load_texture hands out a fresh id per upload"
+        );
         let m = mirror.lock().unwrap();
-        assert!(m.get(first).is_none(), "the replaced texture's pixels must leave the mirror");
+        assert!(
+            m.get(first).is_none(),
+            "the replaced texture's pixels must leave the mirror"
+        );
         assert!(m.get(second).is_some());
     }
 
