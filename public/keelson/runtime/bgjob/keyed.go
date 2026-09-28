@@ -221,12 +221,16 @@ func (k *Keyed[T]) start(key string, run func(ctx context.Context, report Report
 		k.val, k.err, k.done, k.running = v, err, true, false
 		k.cancel = nil
 		k.mu.Unlock()
-		cancel()
+		// The handle is finished before its parent context is cancelled: the
+		// task's monitor races parent.Done against the terminal, and a
+		// cancel it saw first would be announced on the bus as a cancel of
+		// a run that ended on its own.
 		if h != nil {
 			if err != nil && !errors.Is(err, ErrCancelled) {
 				_ = h.Error(err, "background job failed")
 			}
 			_ = h.Done(nil) // idempotent if Error ran first
 		}
+		cancel()
 	}()
 }

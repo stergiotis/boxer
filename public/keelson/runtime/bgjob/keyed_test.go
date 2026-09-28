@@ -217,3 +217,55 @@ func TestKeyedRunIsATaskTheBusCanCancel(t *testing.T) {
 		t.Errorf("err: got %v, want ErrCancelled — a cancel from the bus is a cancel", err)
 	}
 }
+
+// parentWatchingApi hands out handles that record whether the context given
+// to Spawn was already cancelled when the run reached its terminal — the
+// window in which the real handle's monitor announces a parent cancel.
+type parentWatchingApi struct {
+	task.TaskApiI
+	mu                sync.Mutex
+	parentCancelledAt []bool
+}
+
+type parentWatchingHandle struct {
+	task.HandleI
+	api    *parentWatchingApi
+	parent context.Context
+	ctx    context.Context
+	once   sync.Once
+}
+
+func (a *parentWatchingApi) Spawn(ctx context.Context, _ task.SpawnOpts) (task.HandleI, error) {
+	return &parentWatchingHandle{api: a, parent: ctx, ctx: ctx}, nil
+}
+
+func (h *parentWatchingHandle) Ctx() context.Context      { return h.ctx }
+func (h *parentWatchingHandle) Report(task.ProgressReport) {}
+func (h *parentWatchingHandle) Done([]byte) error {
+	h.once.Do(func() {
+		h.api.mu.Lock()
+		h.api.parentCancelledAt = append(h.api.parentCancelledAt, h.parent.Err() != nil)
+		h.api.mu.Unlock()
+	})
+	return nil
+}
+
+func TestKeyedFinishesTheTaskBeforeCancellingItsParent(t *testing.T) {
+	api := &parentWatchingApi{}
+	var k Keyed[int]
+	k.Configure(api, "test-ok", "succeeds")
+	k.Demand("q", func(context.Context) (int, error) { return 3, nil })
+	if v, err := settled(t, &k, "q"); v != 3 || err != nil {
+		t.Fatalf("settled: %v %v", v, err)
+	}
+	eventually(t, "the task is done", func() bool {
+		api.mu.Lock()
+		defer api.mu.Unlock()
+		return len(api.parentCancelledAt) == 1
+	})
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	if api.parentCancelledAt[0] {
+		t.Error("the parent context was cancelled before Done: the task monitor can announce a cancel for a run that succeeded")
+	}
+}
