@@ -18,7 +18,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "jackstay",
 	Title:    "jackstay — ClickHouse sync",
-	Summary:  "Compare and sync tables from one ClickHouse server to another, step by step",
+	Summary:  "Compare and sync tables between two ClickHouse servers, step by step",
 	Icon:     icons.PhArrowsLeftRight,
 	Topics:   []app.TopicT{app.TopicData},
 	Keywords: []string{"clickhouse", "sync", "copy", "migrate", "diff", "replicate", "leeway"},

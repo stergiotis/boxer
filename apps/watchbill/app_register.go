@@ -21,7 +21,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Watchbill",
 	Title:    "Watchbill",
-	Summary:  "Inspect, cancel and retry durable jobs, read their trail, see who serves them",
+	Summary:  "Inspect, cancel and retry durable jobs, and see their trail and workers",
 	Icon:     icons.PhClipboard,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"watchbill", "job", "queue", "durable", "worker", "retry", "cancel", "river"},
