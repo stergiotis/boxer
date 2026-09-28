@@ -359,6 +359,16 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-09-28 — §SD7: a handle write replaces the file
+
+`fs.handle.{uuid}.write` wrote in place with create-or-truncate, so a save
+that failed partway (a full disk, a killed process) left the user's document
+truncated after the broker had already destroyed the previous contents. It
+now writes a temporary file beside the target, syncs it and renames it over,
+keeping the target's permission bits and resolving a symlinked target so the
+link survives. A target that is not a regular file is still written in place.
+A watch on a read handle already follows a rename-replace save.
+
 ### 2026-09-28 — §SD7: a handle uuid is random per grant
 
 `mintHandleUuid` draws the uuid from `crypto/rand` for every `Resolve`

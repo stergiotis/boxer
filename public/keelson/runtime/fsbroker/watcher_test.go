@@ -575,3 +575,62 @@ func TestService_TwoReadGrantsOnOnePathCloseIndependently(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []byte("body"), body, "closing one grant must not revoke the other")
 }
+
+// TestService_Handle_WriteReplacesRatherThanTruncates: a save over an
+// existing document goes to a temporary file that is renamed over the
+// target, so a write that fails partway (ENOSPC, a kill) leaves the previous
+// contents whole. The target's permission bits survive the replace, and a
+// symlinked target stays a symlink: the bytes land in the file it names.
+func TestService_Handle_WriteReplacesRatherThanTruncates(t *testing.T) {
+	inst := inprocbus.NewInst(zerolog.Nop())
+	inst.SetRequestTimeout(time.Second)
+	svc, err := fsbroker.NewService(inst, zerolog.Nop())
+	require.NoError(t, err)
+	defer svc.Close()
+	appBus := inst.NewClient("test.replace", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogWrite, Direction: app.CapDirectionPub},
+	})
+	write := func(path string, body []byte) {
+		t.Helper()
+		grant := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogWrite, "write", path)
+		raw, err := appBus.Request(grant.HandleSubjectPrefix+".write", body)
+		require.NoError(t, err)
+		ack, err := fsbroker.UnmarshalDialogReply(raw)
+		require.NoError(t, err)
+		require.True(t, ack.Granted, "write ack: %q", ack.Reason)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.md")
+	require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
+	before, err := os.Stat(path)
+	require.NoError(t, err)
+
+	write(path, []byte("new"))
+	after, err := os.Stat(path)
+	require.NoError(t, err)
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("new"), got)
+	assert.False(t, os.SameFile(before, after), "the document is replaced, not truncated in place")
+	assert.Equal(t, os.FileMode(0o600), after.Mode().Perm(), "the replace keeps the target's mode")
+	des, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Len(t, des, 1, "no temporary file is left behind")
+
+	link := filepath.Join(dir, "link.md")
+	require.NoError(t, os.Symlink(path, link))
+	write(link, []byte("via link"))
+	fi, err := os.Lstat(link)
+	require.NoError(t, err)
+	assert.NotZero(t, fi.Mode()&os.ModeSymlink, "a symlinked target stays a symlink")
+	got, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("via link"), got)
+
+	fresh := filepath.Join(dir, "fresh.md")
+	write(fresh, []byte("first"))
+	got, err = os.ReadFile(fresh)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("first"), got)
+}

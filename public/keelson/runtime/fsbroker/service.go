@@ -461,10 +461,10 @@ func (inst *Service) handleRead(reply string, h *handle) {
 // handleWrite persists the request payload to the handle's path. Rejected
 // unless the handle was minted via fs.dialog.write (HandleModeWrite) — a
 // read-mode handle can never be turned into a write. The payload is written
-// whole with os.WriteFile (create-or-truncate, 0o644): it already sits in
-// memory as the inbound bus message, so there is no incremental streaming or
-// additional size cap to impose beyond what the bus itself already did when it
-// delivered the message. On success the broker replies DialogReply{Granted:
+// whole by replaceHandleFile (temporary file, fsync, rename): it already sits
+// in memory as the inbound bus message, so there is no incremental streaming
+// or additional size cap to impose beyond what the bus itself already did when
+// it delivered the message. On success the broker replies DialogReply{Granted:
 // true}; a mode mismatch or filesystem error replies DialogReply{Granted:
 // false, Reason:...} through replyError — the same shape every other handle op
 // uses — so the app gets an explicit positive or negative acknowledgement it
@@ -474,12 +474,65 @@ func (inst *Service) handleWrite(msg *app.Msg, h *handle) {
 		inst.replyError(msg.Reply, "handle not opened for write")
 		return
 	}
-	err := os.WriteFile(h.path, msg.Payload, 0o644)
+	err := replaceHandleFile(h.path, msg.Payload)
 	if err != nil {
 		inst.replyError(msg.Reply, "write: "+err.Error())
 		return
 	}
 	_ = inst.replyDialog(msg.Reply, DialogReply{Granted: true})
+}
+
+// replaceHandleFile writes data over path without ever truncating the
+// original: the bytes go to a temporary file beside the target, which is
+// synced and renamed over it, so a write that fails partway (ENOSPC, EIO, a
+// kill) leaves the user's previous document whole. A symlinked target is
+// resolved first, so the link survives and the file it names is replaced. The
+// target's permission bits carry over; a new file gets 0o644. A target that
+// is not a regular file (a device, a FIFO, a dangling link) cannot be renamed
+// over meaningfully and is written in place as before.
+func replaceHandleFile(path string, data []byte) (err error) {
+	target := path
+	if resolved, rerr := filepath.EvalSymlinks(path); rerr == nil {
+		target = resolved
+	}
+	perm := os.FileMode(0o644)
+	fi, serr := os.Lstat(target)
+	switch {
+	case serr == nil && !fi.Mode().IsRegular():
+		err = os.WriteFile(path, data, 0o644)
+		return
+	case serr == nil:
+		perm = fi.Mode().Perm()
+	case !os.IsNotExist(serr):
+		err = serr
+		return
+	}
+	dir := filepath.Dir(target)
+	var f *os.File
+	f, err = os.CreateTemp(dir, "."+filepath.Base(target)+".*.tmp")
+	if err != nil {
+		return
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Chmod(perm)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, target)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return
+	}
+	syncDir(dir)
+	return
 }
 
 func (inst *Service) handleClose(reply string, uuid string) {
