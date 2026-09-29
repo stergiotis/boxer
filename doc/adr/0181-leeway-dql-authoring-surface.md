@@ -777,10 +777,11 @@ wrong: ClickHouse's parser accepts a FORMAT clause on `DROP`, `TRUNCATE` and
 mutation, an INSERT outside grammar1 — ran on the server whenever the user was
 not already read-only, `BOXER_PLAY_ALLOW_WRITES` unset or not.
 
-`Client.ExecuteArrowStream` now sends `readonly=2` on every run. The server
-refuses a write or DDL on that path while still admitting the per-query
-settings play sends (`log_comment`, `replace_running_query`). The recognised
-INSERT wrapper keeps its own path (`Client.ExecuteWrite`, gated as before) and
-carries no `readonly`. What this gives up: DDL and `SYSTEM` statements no
-longer run from play's Run at all, even with writes allowed; they go through
-`clickhouse client`, as the gate's copy-out hint already says for writes.
+With `BOXER_PLAY_ALLOW_WRITES` unset, `Client.ExecuteArrowStream` now sends
+`readonly=2` on every run. The server refuses a write or DDL on that path
+while still admitting the per-query settings play sends (`log_comment`,
+`replace_running_query`). The recognised INSERT wrapper keeps its own path
+(`Client.ExecuteWrite`, gated as before) and carries no `readonly`. With the
+variable set, the Arrow path sends no `readonly`, so DDL and `SYSTEM`
+statements run from Run as they did before; setting it opts into every
+write, not only the INSERT wrapper.

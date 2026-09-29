@@ -80,7 +80,7 @@ var (
 
 	AllowWrites = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_ALLOW_WRITES",
-		Description: "non-empty lets Run execute an INSERT … SELECT wrapper (ADR-0181 §SD8); unset, Run refuses the write with a copy-out hint. Governs every play-engined host, sqlapplet included",
+		Description: "non-empty lets Run execute an INSERT … SELECT wrapper (ADR-0181 §SD8) and DDL; unset, Run refuses the write with a copy-out hint and every Arrow run is sent readonly=2. Governs every play-engined host, sqlapplet included",
 		Category:    env.CategoryE("boxer-play"),
 	})
 
@@ -366,9 +366,10 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		initSQL = "SELECT * FROM boxer.facts"
 	}
 	cfg := ClientConfig{
-		URL:      clickhouseenv.URL.Get(),
-		User:     clickhouseenv.User.Get(),
-		Password: clickhouseenv.Password.Get(),
+		URL:         clickhouseenv.URL.Get(),
+		User:        clickhouseenv.User.Get(),
+		Password:    clickhouseenv.Password.Get(),
+		AllowWrites: AllowWrites.Get() != "",
 	}
 	// Reconcile leeway's SQL read surface (ADR-0171 §SD2) against the env
 	// endpoint, once per process and off the open path — before the

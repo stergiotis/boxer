@@ -34,6 +34,10 @@ type ClientConfig struct {
 	URL      string
 	User     string
 	Password string
+	// AllowWrites mirrors BOXER_PLAY_ALLOW_WRITES. Unset, the Arrow run
+	// path sends readonly=2 so the server refuses any write or DDL that
+	// reaches it (ADR-0181 Update 2026-09-28).
+	AllowWrites bool
 }
 
 type Client struct {
@@ -249,8 +253,9 @@ func (inst *Client) buildStatementObserved(sql string, observe func(passreg.Appl
 	started := stepClock(observe)
 	// ADR-0181 §SD8 M3: an INSERT wrapper takes no FORMAT clause — a write
 	// answers with a summary, not a stream. (What keeps DDL and other
-	// writes off the Arrow path is the readonly setting ExecuteArrowStream
-	// sends, not the appended FORMAT: ClickHouse accepts FORMAT on DDL.)
+	// writes off the Arrow path, unless writes are allowed, is the readonly
+	// setting ExecuteArrowStream sends, not the appended FORMAT: ClickHouse
+	// accepts FORMAT on DDL.)
 	// The step still reports itself
 	// (applied, unchanged), so the Preview trace accounts for the wire body
 	// carrying no FORMAT rather than looking like a skipped rewrite.
@@ -952,12 +957,15 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		// than trusting whatever placed it (ADR-0145 §SD4).
 		Sensitivity: dec.sensitivity,
 	}
-	// The Arrow path is the read path. readonly=2 has the server refuse a
-	// write or DDL that reaches it — any statement runIsInsertWrapper did
-	// not recognise as the gated INSERT wrapper, which ClickHouse would
-	// otherwise execute with the appended FORMAT — while still admitting
-	// the per-query settings play sends (ADR-0181 Update 2026-09-28).
-	req.Settings["readonly"] = "2"
+	// Without BOXER_PLAY_ALLOW_WRITES the Arrow path is the read path.
+	// readonly=2 has the server refuse a write or DDL that reaches it — any
+	// statement runIsInsertWrapper did not recognise as the gated INSERT
+	// wrapper, which ClickHouse would otherwise execute with the appended
+	// FORMAT — while still admitting the per-query settings play sends
+	// (ADR-0181 Update 2026-09-28). With writes allowed, DDL runs as before.
+	if !inst.cfg.AllowWrites {
+		req.Settings["readonly"] = "2"
+	}
 	if opts != nil {
 		if opts.QueryID != "" {
 			req.RunID = opts.QueryID

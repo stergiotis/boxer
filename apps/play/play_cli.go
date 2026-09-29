@@ -67,9 +67,10 @@ func NewCliCommand() *cli.Command {
 			RegisterHostSql(log.Logger)
 
 			clientCfg := ClientConfig{
-				URL:      ctx.String(flagURL),
-				User:     ctx.String(flagUser),
-				Password: ctx.String(flagPassword),
+				URL:         ctx.String(flagURL),
+				User:        ctx.String(flagUser),
+				Password:    ctx.String(flagPassword),
+				AllowWrites: AllowWrites.Get() != "",
 			}
 			client := NewClient(clientCfg, nil)
 
