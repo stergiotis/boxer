@@ -13,7 +13,7 @@ import (
 // key is idempotent (no error, no duplicate spawn observable via the
 // shared snapshot).
 func TestEnsureBandWarmCompletes(t *testing.T) {
-	const jobKey = "test-completes"
+	const jobKey BandJobKey = 12764
 	const n = 48
 	const alpha = 0.029 // unique to this test so the cache starts cold
 	method := ecdfbands.BandMethodBerkJones
@@ -43,7 +43,7 @@ func TestEnsureBandWarmCompletes(t *testing.T) {
 // entry, so a later reopen schedules a fresh solve rather than reading
 // the cancelled one. Cancelling an absent key is a no-op.
 func TestCancelBandJobRemovesEntry(t *testing.T) {
-	const jobKey = "test-cancel"
+	const jobKey BandJobKey = 1286
 	const n = 4096      // large enough that the solve cannot finish before we cancel
 	const alpha = 0.013 // unique so the cache starts cold
 	method := ecdfbands.BandMethodBerkJones
@@ -53,18 +53,18 @@ func TestCancelBandJobRemovesEntry(t *testing.T) {
 		t.Fatalf("scheduling reported an error: %v", snap.Err)
 	}
 	if _, ok := bandJobs.Load(jobKey); !ok {
-		t.Fatalf("job was not registered under %q", jobKey)
+		t.Fatalf("job was not registered under %d", jobKey)
 	}
 
 	cancelBandJob(jobKey)
 	if _, ok := bandJobs.Load(jobKey); ok {
-		t.Fatalf("cancelBandJob left a registry entry under %q", jobKey)
+		t.Fatalf("cancelBandJob left a registry entry under %d", jobKey)
 	}
 
 	// Idempotent: cancelling an already-forgotten or never-seen key must
 	// not panic.
 	cancelBandJob(jobKey)
-	cancelBandJob("never-scheduled")
+	cancelBandJob(BandJobKey(999_999))
 }
 
 // TestEnsureBandWarmReschedulesOnParamChange confirms that when the
@@ -72,7 +72,7 @@ func TestCancelBandJobRemovesEntry(t *testing.T) {
 // advancing n) the stale solve is replaced rather than reused: the entry
 // under the key becomes a distinct job carrying the new n.
 func TestEnsureBandWarmReschedulesOnParamChange(t *testing.T) {
-	const jobKey = "test-reschedule"
+	const jobKey BandJobKey = 75051
 	const alpha = 0.017 // unique so the cache starts cold
 	method := ecdfbands.BandMethodBerkJones
 

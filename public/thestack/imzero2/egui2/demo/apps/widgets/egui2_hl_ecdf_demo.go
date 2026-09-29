@@ -181,10 +181,11 @@ func demoEcdf(ids *c.WidgetIdStack, st *ecdfDemoState) {
 	alpha := ecdfDemoAlphas[st.alphaIdx]
 	sample := ecdfDemoSamples[st.sampleIdx]
 
-	r := ecdf.New().
-		Method(method).
-		Alpha(alpha).
-		SeriesName(sample.name)
+	in := ecdf.Input{
+		Style:  ecdf.Style{Method: method, Alpha: alpha, SeriesName: sample.name},
+		Sorted: sample.sorted,
+		Band:   ecdf.BandExact,
+	}
 
 	// The plot renders through the implot port (ADR-0149 SD7). The
 	// viewport constraints pin the outer view so zooming out cannot
@@ -208,9 +209,9 @@ func demoEcdf(ids *c.WidgetIdStack, st *ecdfDemoState) {
 	if resetZoom {
 		p.FitNext()
 	}
-	ch := r.At(p, sample.sorted)
-	_ = r.Render(p, sample.sorted)
-	r.PaintCrosshair(p, ch)
+	ch := ecdf.At(p, in)
+	_ = ecdf.Paint(p, in)
+	ecdf.PaintCrosshair(p, in.Style, ch)
 	p.End()
 
 	c.AddSpace(padInner())

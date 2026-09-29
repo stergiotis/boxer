@@ -264,6 +264,22 @@ func (m *Map) Close() { m.loader.Close() }
 func (m *Map) View() *View { return m.view }
 
 // Events are the view events of the last rendered frame.
+// Events is what one Render produced from the previous frame's input
+// (ADR-0267 W3): the view's events and a primary click, if there was one.
+// Hover is continuous and stays a getter.
+type Events struct {
+	ViewEvents
+	// Clicked is the geographic point of a primary click last frame — a
+	// press and release without a drag in between; ClickedOk says there
+	// was one.
+	Clicked   LatLng
+	ClickedOk bool
+}
+
+// Events returns the last Render's view events.
+//
+// Deprecated: use the value Render or RenderFill returns; this accessor
+// leaves with ADR-0267 M6.
 func (m *Map) Events() ViewEvents { return m.events }
 
 // ViewHash changes whenever the view does — centre, zoom or size — for
@@ -384,19 +400,24 @@ func (m *Map) absorbArrivals(arrivals []TileArrival, now time.Time) {
 // RenderFill is Render sized to the pane the map sits in, as reported by the
 // layout probe one frame late; fallbackW/fallbackH are used on the first
 // frame and whenever the probe has nothing (a hidden tab).
-func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) {
+func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) (ev Events) {
 	w, h := fallbackW, fallbackH
-	if pw, ph, ok := c.CapturePaneSize(m.ids.PrepareStr("portolan-pane").Derive()); ok && pw > 0 && ph > 0 {
-		w, h = pw, ph
+	// The probe's slot is keyed under the map's own scope (ADR-0267 W7); the
+	// scope is opened for the derivation alone and emits nothing.
+	for range c.IdScope(m.ids.PrepareStr("portolan")) {
+		if pw, ph, ok := c.CapturePaneSize(m.ids.ProbeSeq("pane")); ok && pw > 0 && ph > 0 {
+			w, h = pw, ph
+		}
 	}
-	m.Render(w, h, overlay)
+	return m.Render(w, h, overlay)
 }
 
 // Render draws the map into a w×h canvas at the current layout position and
 // applies the previous frame's input. overlay, when not nil, is called after
 // the tiles and before the canvas is flushed, to paint on top with c.Paint*
 // in canvas coordinates through the Projector.
-func (m *Map) Render(w, h float32, overlay func(Projector)) {
+func (m *Map) Render(w, h float32, overlay func(Projector)) (ev Events) {
+	defer func() { ev = Events{ViewEvents: m.events, Clicked: m.clicked, ClickedOk: m.clickedOk} }()
 	for range c.IdScope(m.ids.PrepareStr("portolan")) {
 		// The key-capturing Frame around the body: while it has focus (a
 		// click on the map gives it), the arrows pan and Escape cancels a box
@@ -407,6 +428,7 @@ func (m *Map) Render(w, h float32, overlay func(Projector)) {
 			m.frame(w, h, overlay)
 		}
 	}
+	return
 }
 
 func (m *Map) frame(w, h float32, overlay func(Projector)) {

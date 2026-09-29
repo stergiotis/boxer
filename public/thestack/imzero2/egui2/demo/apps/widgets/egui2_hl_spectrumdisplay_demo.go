@@ -40,6 +40,7 @@ type spectrumDemoState struct {
 	showLine bool
 	colBuf   []float32
 	sd       *spectrumdisplay.SpectrumDisplay
+	readout  spectrumdisplay.Readout // last frame's, for the row above the display
 }
 
 var spectrumDemoTitle = icons.IconWaveform + " spectrumdisplay"
@@ -61,18 +62,17 @@ func init() {
 			cfg := colormap.NewConfig(colormap.Turbo8, -110, -20)
 			cfg.UnderflowColor = color.NRGBA{A: 0xff}
 			cfg.OverflowColor = color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
-			sd := spectrumdisplay.New(ids, "specdemo", cfg, spectrumDemoWidthSlots, spectrumDemoHeightSlots)
-			sd.SetFrequencyAxis(spectrumdisplay.AxisSpec{Min: 88e6, Max: 108e6, Unit: spectrumdisplay.AxisUnitHertz})
-			sd.SetPowerAxis(spectrumdisplay.AxisSpec{Min: -110, Max: -20, Unit: spectrumdisplay.AxisUnitDecibel, UnitLabel: "dBm"})
-			sd.SetTimeAxis(spectrumdisplay.AxisSpec{Min: 0, Max: 6, Unit: spectrumdisplay.AxisUnitSeconds})
+			sd := spectrumdisplay.New(ids, "specdemo", cfg, spectrumdisplay.Options{WidthSlots: spectrumDemoWidthSlots, HeightSlots: spectrumDemoHeightSlots})
+			sd.FreqAxis = spectrumdisplay.AxisSpec{Min: 88e6, Max: 108e6, Unit: spectrumdisplay.AxisUnitHertz}
+			sd.PowerAxis = spectrumdisplay.AxisSpec{Min: -110, Max: -20, Unit: spectrumdisplay.AxisUnitDecibel, UnitLabel: "dBm"}
+			sd.TimeAxis = spectrumdisplay.AxisSpec{Min: 0, Max: 6, Unit: spectrumdisplay.AxisUnitSeconds}
 			sd.SetWaterfallRange(-110, -20)
-			sd.SetLinePanelVisible(true)
-			sd.SetMarkers([]spectrumdisplay.Marker{
+			sd.Markers = []spectrumdisplay.Marker{
 				{Kind: spectrumdisplay.MarkerVertical, Freq: 98.5e6, Label: "tuned", Color: 0xffcc44ff},
-			})
-			sd.SetRegions([]spectrumdisplay.Region{
+			}
+			sd.Regions = []spectrumdisplay.Region{
 				{StartHz: 97e6, EndHz: 100e6, Label: "ch", Color: 0x44ff8833},
-			})
+			}
 			st.sd = sd
 			state = st
 			return
@@ -119,7 +119,7 @@ func demoSpectrumDisplay(ids *c.WidgetIdStack, st *spectrumDemoState) {
 			c.AddSpace(padDefault())
 			c.Checkbox(ids.PrepareStr("sd-line"), st.showLine, "Line panel").SendRespVal(&st.showLine)
 			c.AddSpace(padDefault())
-			r := st.sd.Readout()
+			r := st.readout
 			txt := "cursor: —"
 			if r.Ok {
 				txt = fmt.Sprintf("cursor: %.3f MHz  %.0f dB  %d cols ago", r.Freq/1e6, r.Db, r.Age)
@@ -129,9 +129,8 @@ func demoSpectrumDisplay(ids *c.WidgetIdStack, st *spectrumDemoState) {
 		c.AddSpace(padInner())
 		spectrumDemoFeatures(ids)
 		c.AddSpace(padInner())
-		st.sd.SetLinePanelVisible(st.showLine)
-		st.sd.SetDisplaySize(840, 560)
-		st.sd.Render()
+		st.sd.Opts.HideLinePanel = !st.showLine
+		st.readout = st.sd.Render(840, 560).Readout
 	}
 }
 

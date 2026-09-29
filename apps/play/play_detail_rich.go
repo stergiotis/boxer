@@ -688,10 +688,23 @@ const regexpAnchorHeight = 24.0
 // explorer. pattern must be a string of our own, not a cell's raw view of
 // the Arrow buffer — the widget retains what it is seeded with.
 func (inst *PlayApp) renderRegexpAnchor(scope string, label string, pattern string) {
-	regexsummary.New(label).
-		Bus(inst.bus).
-		ShowPattern(false).
-		Render(inst.ids.PrepareStr("play-regexp-"+scope), pattern)
+	if inst.regexAnchors == nil {
+		inst.regexAnchors = map[string]*regexsummary.State{}
+	}
+	st := inst.regexAnchors[scope]
+	if st == nil {
+		st = &regexsummary.State{}
+		inst.regexAnchors[scope] = st
+	}
+	regexsummary.Render(regexsummary.Input{
+		Ids:         inst.ids,
+		ScopeKey:    "regexp-" + scope,
+		Pattern:     pattern,
+		State:       st,
+		Bus:         inst.bus,
+		Title:       "regex: " + label,
+		HidePattern: true,
+	})
 }
 
 // firstLineOf is the fallback rendering for text that could not be rendered

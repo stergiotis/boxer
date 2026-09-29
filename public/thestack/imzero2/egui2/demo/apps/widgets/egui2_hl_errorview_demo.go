@@ -21,7 +21,7 @@ import (
 // errorview widget demo — structured wrapped-error chain renderer
 //
 // Three sample contexts (small leaf, multi-stream wrap, structured-data on
-// the leaf) rendered through an errorview.Renderer whose DefaultOpen / Indent
+// the leaf) rendered through errorview.Render, whose StartCollapsed / Indent
 // knobs are wired to live UI controls so the operator sees how each option
 // affects the rendered samples without restarting.
 //
@@ -99,26 +99,32 @@ func demoErrorView(ids *c.WidgetIdStack, st *errorviewDemoState) {
 	}
 	c.Separator().Horizontal().Send()
 
-	r := errorview.New(ids, "ev-demo").
-		DefaultOpen(st.defaultOpen).
-		Indent(float32(st.indent))
+	// indent 0 in the controls means none, which the widget spells as a
+	// negative value (0 is its default of 12).
+	indent := float32(st.indent)
+	if indent == 0 {
+		indent = -1
+	}
+	chain := func(scopeKey string, ctx errorview.Context) errorview.Input {
+		return errorview.Input{Ids: ids, ScopeKey: scopeKey, Chain: ctx, StartCollapsed: !st.defaultOpen, Indent: indent}
+	}
 
 	for range c.CollapsingHeader(ids.PrepareStr("ev-sec-simple"),
 		c.WidgetText().Text("Simple — single stackless error").Keep()).
 		DefaultOpen(true).KeepIter() {
-		r.Render(evSampleSimple)
+		errorview.Render(chain("ev-simple", evSampleSimple))
 	}
 	c.AddSpace(gapInline())
 	for range c.CollapsingHeader(ids.PrepareStr("ev-sec-wrapped"),
 		c.WidgetText().Text("Wrapped — multi-stream chain with stack frames").Keep()).
 		DefaultOpen(true).KeepIter() {
-		r.Render(evSampleWrapped)
+		errorview.Render(chain("ev-wrapped", evSampleWrapped))
 	}
 	c.AddSpace(gapInline())
 	for range c.CollapsingHeader(ids.PrepareStr("ev-sec-structured"),
 		c.WidgetText().Text("Structured — leaf carries CBOR-diagnostic fields").Keep()).
 		DefaultOpen(true).KeepIter() {
-		r.Render(evSampleStructured)
+		errorview.Render(chain("ev-structured", evSampleStructured))
 	}
 	c.AddSpace(gapInline())
 	for range c.CollapsingHeader(ids.PrepareStr("ev-sec-realboxer"),
@@ -126,7 +132,7 @@ func demoErrorView(ids *c.WidgetIdStack, st *errorviewDemoState) {
 		DefaultOpen(true).KeepIter() {
 		c.Label("Errorview projection (presentation tree):").Send()
 		c.AddSpace(padInner())
-		r.Render(evRealErrorviewContext)
+		errorview.Render(chain("ev-real", evRealErrorviewContext))
 		c.AddSpace(gapSections())
 		c.Separator().Horizontal().Send()
 		c.AddSpace(gapSections())

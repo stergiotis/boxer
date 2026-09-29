@@ -49,11 +49,18 @@ type worldClaim struct {
 	countryCol int
 }
 
+// worldFallbackW / worldFallbackH size the map on the frame before its pane
+// probe answers (the widget's own former default and its height cap).
+const (
+	worldFallbackW = 760
+	worldFallbackH = 900
+)
+
 // WorldDriver owns the World tab state: the worldmap widget, the value-column
 // choice, and the per-result extraction cache.
 type WorldDriver struct {
 	ids    *c.WidgetIdStack
-	widget *worldmap.Widget
+	widget *worldmap.Map
 
 	// valueCol is the user's value-column pick (index into the schema);
 	// worldValueAuto means "first numeric column". Persisted across runs;
@@ -98,12 +105,12 @@ const (
 func NewWorldDriver(ids *c.WidgetIdStack) *WorldDriver {
 	d := &WorldDriver{
 		ids:       ids,
-		widget:    worldmap.New(ids, "world"),
+		widget:    worldmap.New(ids, "world", worldmap.Options{}),
 		valueCol:  worldValueAuto,
 		rowOf:     map[worldmap.CountryIdx]int64{},
 		detectCol: -1,
 	}
-	// No SetPixelWidth: the widget rasterizes at its own canvas width, which it
+	// No Options.RasterWidth: the widget rasterizes at its own canvas width, which it
 	// reads from a ui-rect probe of this pane (ADR-0114 Update 2026-08-01). A
 	// pinned resolution was either wasted on a narrow pane or upscaled on a
 	// wide one.
@@ -156,7 +163,7 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 	atlas := inst.widget.Atlas()
 	if atlas == nil {
 		// Widget renders the load error itself.
-		inst.widget.Render()
+		inst.widget.RenderFill(worldFallbackW, worldFallbackH)
 		return
 	}
 	countryCol := inst.detectCountryColumn(rec, schema, atlas)
@@ -199,8 +206,8 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 	// Detail split at common pane widths.
 	c.Label(inst.statusLine(rec.NumRows(), valueCol, schema)).Send()
 
-	if clicked, ok := inst.widget.Render(); ok {
-		if row, found := inst.rowOf[clicked]; found {
+	if ev := inst.widget.RenderFill(worldFallbackW, worldFallbackH); ev.ClickedOk {
+		if row, found := inst.rowOf[ev.Clicked]; found {
 			emit.Emit(signalSelection, row)
 			// Companion string to the selection (cf. the selection_node /
 			// selection_id stamper in play_bindings.go): publish the clicked
@@ -285,7 +292,7 @@ func (inst *WorldDriver) renderValueCombo(schema *arrow.Schema, numeric []int) {
 // look; Equal Earth is the pick when the fills are read by area, since it
 // does not inflate the high-latitude countries against the tropical ones.
 func (inst *WorldDriver) renderProjectionCombo() {
-	cur := inst.widget.Projection()
+	cur := inst.widget.Opts.Projection
 	for range c.ComboBox(inst.ids.PrepareStr("world-projection"),
 		c.WidgetText().Text("projection").Keep(),
 		c.WidgetText().Text(cur.String()).Keep()).
@@ -296,7 +303,7 @@ func (inst *WorldDriver) renderProjectionCombo() {
 				Frame(false).
 				Selected(p == cur).
 				SendResp().HasPrimaryClicked() {
-				inst.widget.SetProjection(p)
+				inst.widget.Opts.Projection = p
 			}
 		}
 	}

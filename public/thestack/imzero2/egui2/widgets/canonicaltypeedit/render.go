@@ -1,6 +1,8 @@
 package canonicaltypeedit
 
 import (
+	"errors"
+
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
@@ -12,10 +14,18 @@ import (
 
 const editorMinWidth = 460
 
+// defaultScopeKey names the widget when Input.ScopeKey is empty.
+const defaultScopeKey = "canonicaltypeedit"
+
 // formToggleTip is the hover tooltip on the inline disclosure caret that
 // reveals/hides the structured form, keeping the editor a single bar row when
 // collapsed.
 const formToggleTip = "structured editor"
+
+// ErrNeedsIdsModelAndState is Result.Err when Input.Ids, Input.Model or
+// Input.State is nil: the editor has nowhere to derive its ids, no value to
+// edit, or nowhere to keep its bar. Drawn in place of the editor.
+var ErrNeedsIdsModelAndState = errors.New("canonicaltypeedit: Input.Ids, Input.Model and Input.State are required")
 
 type familyOpt struct {
 	key, label string
@@ -78,19 +88,60 @@ var scalarOrder = []scalarOpt{
 	{"set", "set", canonicaltypes.ScalarModifierSet},
 }
 
+// Input is one frame's declaration of a primitive editor.
+type Input struct {
+	// Ids is the host's widget id stack. Render opens its own IdScope under
+	// it, so two editors in one host need only differ in ScopeKey.
+	Ids *c.WidgetIdStack
+	// ScopeKey names this editor within the host's id space; empty uses
+	// "canonicaltypeedit".
+	ScopeKey string
+	// Model is the value being edited; edits mutate it in place. Required.
+	Model *Model
+	// State is the editor's host-owned UI state. Required, and at a stable
+	// address across frames: the bar binds to it.
+	State *State
+}
+
+// Result is what one Render reports.
+type Result struct {
+	// Changed is true on a frame an edit moved the model — a bar entry that
+	// parsed, a form control — or left the bar unparseable (the model then
+	// holds the last type that parsed; see [State.BarError]).
+	Changed bool
+	// Err is [ErrNeedsIdsModelAndState] when the Input cannot be drawn; the
+	// message is drawn in place of the editor.
+	Err error
+}
+
+func (in Input) scopeKey() string {
+	if in.ScopeKey == "" {
+		return defaultScopeKey
+	}
+	return in.ScopeKey
+}
+
 // Render draws the editor (formula bar + structured form + live status chip)
 // and applies the ADR-0067 §SD2 bidirectional sync. Call once per frame;
-// scopeKey scopes every widget id (pass a stable short string per call site,
-// e.g. "ctedit"). All edits mutate the receiver in place.
-func (m *Model) Render(ids *c.WidgetIdStack, scopeKey string) {
-	for range c.IdScope(ids.PrepareStr(scopeKey)) {
+// every widget id is derived under one IdScope keyed by ScopeKey. All edits
+// mutate Input.Model and Input.State in place.
+func Render(in Input) (res Result) {
+	if in.Ids == nil || in.Model == nil || in.State == nil {
+		res.Err = ErrNeedsIdsModelAndState
+		for rt := range c.RichTextLabel(res.Err.Error()) {
+			rt.Small().Weak()
+		}
+		return
+	}
+	for range c.IdScope(in.Ids.PrepareStr(in.scopeKey())) {
 		for range c.Vertical().KeepIter() {
 			c.UiSetMinWidth(editorMinWidth)
-			m.renderEditBody(ids)
+			res.Changed = renderEditBody(in.Ids, in.Model, in.State)
 			c.Separator().Send()
-			m.renderStatus(ids)
+			renderStatus(in.Ids, in.Model.canonical, &in.State.summary, "live type")
 		}
 	}
+	return
 }
 
 // renderEditBody draws the formula bar (with its inline form-disclosure caret)
@@ -98,37 +149,40 @@ func (m *Model) Render(ids *c.WidgetIdStack, scopeKey string) {
 // edge-ownership sync and mutating the draft in place. It assumes the caller has
 // already opened an IdScope and a layout container. Returns whether the type
 // changed this frame — the signature editor uses this to know when to reassemble.
-func (m *Model) renderEditBody(ids *c.WidgetIdStack) (changed bool) {
-	barChanged := m.renderBar(ids)
+func renderEditBody(ids *c.WidgetIdStack, m *Model, st *State) (changed bool) {
+	st.syncBar(m)
+	barChanged := renderBar(ids, st)
 
 	// The grammar-mirroring form is gated behind the bar's inline disclosure
 	// caret (drawn by renderBar), so a collapsed editor stays a single bar row:
-	// the form is simply not rendered until m.formOpen. That also means a hidden
+	// the form is simply not rendered until st.formOpen. That also means a hidden
 	// form emits no widgets and cannot report a stray edit, so the edge-ownership
 	// rule below reads formChanged=false whenever it is collapsed.
 	var formChanged bool
-	if m.formOpen {
+	if st.formOpen {
 		c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
-		formChanged = m.renderForm(ids)
+		formChanged = renderForm(ids, m)
 	}
 
 	// Edge ownership: at most one side was edited this frame.
 	switch {
 	case barChanged:
-		if n, err := parsePrimitive(m.barBuf); err != nil {
+		if n, err := parsePrimitive(st.barBuf); err != nil {
 			// Keep the draft + buffer so a mid-typing intermediate survives;
 			// just surface the headline.
-			m.barErr = firstLine(err.Error())
+			st.barErr = firstLine(err.Error())
 		} else {
-			m.barErr = ""
+			st.barErr = ""
 			m.nodeToDraft(n)
 			m.rebuildFromDraft()
+			st.barFor = m.canonical
 		}
 		changed = true
 	case formChanged:
-		m.barErr = ""
+		st.barErr = ""
 		m.rebuildFromDraft()
-		m.barBuf = m.canonical
+		st.barBuf = m.canonical
+		st.barFor = m.canonical
 		changed = true
 	}
 	return
@@ -137,21 +191,21 @@ func (m *Model) renderEditBody(ids *c.WidgetIdStack) (changed bool) {
 // renderBar draws the free-text formula bar plus the trailing inline disclosure
 // caret (renderFormToggle) on one row, and reports whether the bar text changed
 // this frame (the caret toggles form visibility, not the bar, so it is excluded).
-func (m *Model) renderBar(ids *c.WidgetIdStack) (changed bool) {
+func renderBar(ids *c.WidgetIdStack, st *State) (changed bool) {
 	for range c.Horizontal().KeepIter() {
 		rowLabel("type")
-		changed = c.TextEdit(ids.PrepareStr("bar"), m.barBuf, false).
+		changed = c.TextEdit(ids.PrepareStr("bar"), st.barBuf, false).
 			HintText("canonical, e.g. u32l").
 			DesiredWidth(240).
-			SendRespVal(&m.barBuf).
+			SendRespVal(&st.barBuf).
 			HasChanged()
-		m.renderFormToggle(ids)
+		renderFormToggle(ids, st)
 	}
-	if m.barErr != "" {
+	if st.barErr != "" {
 		for rt := range c.RichTextLabelColored(
 			color.Hex(styletokens.ErrorDefault.AsHex()).Keep(),
 			color.Transparent.Keep(),
-			"parse error: "+m.barErr) {
+			"parse error: "+st.barErr) {
 			rt.Small()
 		}
 	}
@@ -163,15 +217,15 @@ func (m *Model) renderBar(ids *c.WidgetIdStack) (changed bool) {
 // collapsed editor is a single line. The caret points right when collapsed and
 // down when open (the usual tree-disclosure convention); the hover tooltip names
 // what it reveals.
-func (m *Model) renderFormToggle(ids *c.WidgetIdStack) {
+func renderFormToggle(ids *c.WidgetIdStack, st *State) {
 	caret := icons.PhCaretRight
-	if m.formOpen {
+	if st.formOpen {
 		caret = icons.PhCaretDown
 	}
 	for range c.HoverText(formToggleTip).KeepIter() {
 		if c.Button(ids.PrepareStr("form-toggle"), c.Atoms().Text(caret).Keep()).
 			Small().SendResp().HasPrimaryClicked() {
-			m.formOpen = !m.formOpen
+			st.formOpen = !st.formOpen
 		}
 	}
 }
@@ -179,21 +233,23 @@ func (m *Model) renderFormToggle(ids *c.WidgetIdStack) {
 // renderForm draws the structured controls. Each control sits on the grammar
 // production for the current family, so only applicable modifiers are shown.
 // Returns whether any control changed this frame.
-func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
+func renderForm(ids *c.WidgetIdStack, m *Model) (changed bool) {
 	fam := familyOf(m.base)
 
 	// Family selector.
 	for range c.Horizontal().KeepIter() {
 		rowLabel("family")
-		for _, f := range familyOrder {
-			if c.SelectableLabel(ids.PrepareStr("fam-"+f.key), fam == f.fam, f.label).
-				SendResp().HasPrimaryClicked() {
-				if fam != f.fam {
-					m.base = familyDefaultBase(f.fam)
-					if (f.fam == familyNumeric || f.fam == familyTemporal) && m.width == 0 {
-						m.width = defaultWidth(f.fam)
+		for range c.IdScope(ids.PrepareStr("family")) {
+			for i, f := range familyOrder {
+				if c.SelectableLabel(ids.PrepareSeq(uint64(i)), fam == f.fam, f.label).
+					SendResp().HasPrimaryClicked() {
+					if fam != f.fam {
+						m.base = familyDefaultBase(f.fam)
+						if (f.fam == familyNumeric || f.fam == familyTemporal) && m.width == 0 {
+							m.width = defaultWidth(f.fam)
+						}
+						changed = true
 					}
-					changed = true
 				}
 			}
 		}
@@ -288,10 +344,17 @@ func (m *Model) renderForm(ids *c.WidgetIdStack) (changed bool) {
 // renderStatus shows the live result: the embedded canonicaltypesummary
 // level-1 chip over the current canonical string. Its validity dot and
 // footprint trailer are the editor's status line, and its anchor toggle pops
-// the full tethered inspector (ADR-0067 §SD4).
-func (m *Model) renderStatus(ids *c.WidgetIdStack) {
-	smallLabel("live type")
-	canonicaltypesummary.New("ctedit-sum").Render(ids.PrepareSeq(0xC7ED17), m.canonical)
+// the full tethered inspector (ADR-0067 §SD4). The chip's own state is the
+// editor State's.
+func renderStatus(ids *c.WidgetIdStack, canonical string, summary *canonicaltypesummary.State, label string) {
+	smallLabel(label)
+	canonicaltypesummary.Render(canonicaltypesummary.Input{
+		Ids:       ids,
+		ScopeKey:  "summary",
+		Canonical: canonical,
+		State:     summary,
+		Title:     "type: " + label,
+	})
 }
 
 // rowLabelWidth pins the editor's left label column so the controls that follow

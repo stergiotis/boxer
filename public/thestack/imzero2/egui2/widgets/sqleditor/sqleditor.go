@@ -2,7 +2,6 @@ package sqleditor
 
 import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlcomplete"
-	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/highlight"
@@ -33,10 +32,12 @@ const (
 // Frame is one frame's binding: what the editor is bound to and how it is
 // sized. See the package doc for the coordinate contract Offset establishes.
 type Frame struct {
-	// IDSlot is the stable widget-id slot for the TextEdit and its gutter.
-	// Two editors in one app need two slots; switching an editor's slot
-	// mid-session resets its caret channel, so treat it as an identity.
-	IDSlot string
+	// View names the bound buffer when the editor alternates between two —
+	// play binds its whole buffer or a residual view of it behind a toggle —
+	// so each keeps its own TextEdit identity (caret, scroll) under the
+	// editor's scope. Empty is the ordinary single-buffer case. Switching
+	// views resets the caret channel, so treat a View as an identity.
+	View string
 	// Value is the bound buffer. The widget writes edits back through it
 	// (SendRespVal), so it must outlive the frame.
 	Value *string
@@ -159,11 +160,18 @@ type Result struct {
 }
 
 // Editor is one SQL editing surface's cross-frame state: the caret channel,
-// the colour tiers and the statement-split memo. Construct with [New]; call
-// [Editor.Bind] then [Editor.Render] once per frame, in that order.
+// the colour tiers and the statement-split memo — a semi-retained widget
+// (ADR-0267). Construct with [New]; call [Editor.Bind] then [Editor.Render]
+// once per frame, in that order.
 //
 // Render-thread-only, like every stateful widget (ADR-0013).
 type Editor struct {
+	// ids and scopeKey are the host's id stack and this editor's scope in it;
+	// Render opens one IdScope under them and derives every child id and
+	// register slot there.
+	ids      *c.WidgetIdStack
+	scopeKey string
+
 	// caretPacked is the packed cursor range the TextEdit reported last
 	// frame, in char offsets into the buffer it was bound to.
 	caretPacked uint64
@@ -215,36 +223,15 @@ type Editor struct {
 	// change re-seeds rather than carrying the old font's answer.
 	rowPx     float64
 	rowFontPt float32
-
-	// probeSalt is this editor's share of the register slot map, minted per
-	// construction. See [nextEditorSalt].
-	probeSalt uint64
 }
 
-// editorSeq numbers Editor constructions in this process; nextEditorSalt spaces
-// them out so each editor owns its register slots.
-var editorSeq atomic.Uint64
-
-// nextEditorSalt mints a per-editor slot salt. The IDSlot alone cannot separate
-// two editors that are not in the same app: embedders pass a constant
-// ("sqlEditor"), so two windows of one app hash to the same seq and read each
-// other's pane and row-height measurements — the r18 shape, surviving in the
-// seq-keyed register for as long as the seq ignores the instance. The tag keeps
-// another package's equal counter off these slots.
-func nextEditorSalt() (salt uint64) {
-	const editorSaltTag = 0x53716c45_64697421 // "SqlEdit!"
-	return (editorSeq.Add(1) * 0x9e3779b97f4a7c15) ^ editorSaltTag
-}
-
-// slotId derives a stable per-editor register slot from the IDSlot and a role,
-// so two editors read their own measurements and not each other's — whether
-// they sit in one app or in two windows of it.
-func (inst *Editor) slotId(idSlot, role string) (id uint64) {
-	if inst.probeSalt == 0 {
-		// The zero-value Editor is a documented construction; mint on first use.
-		inst.probeSalt = nextEditorSalt()
-	}
-	return c.ProbeSeq("sqleditor#"+idSlot, role) ^ inst.probeSalt
+// slotId is this editor's register slot for one role — the r21 pane probe, an
+// r9 measure — derived from the id stack under the editor's own scope
+// (ADR-0267 W7), so two editors read their own measurements and not each
+// other's whether they sit in one app or in two windows of it: the window's
+// scope is on the stack at render time. Call it inside Render's scope.
+func (inst *Editor) slotId(role string) (id uint64) {
+	return inst.ids.ProbeSeq(role)
 }
 
 // PaneHeight is the height that was free for the editor where it last rendered
@@ -288,14 +275,20 @@ func (inst *Editor) measureRowHeight(f Frame) {
 		inst.rowFontPt = pt
 		inst.rowPx = float64(pt) * rowHeightSeedFactor
 	}
-	c.MeasureTextSizeBind(inst.slotId(f.IDSlot, "row-w"), inst.slotId(f.IDSlot, "row-h"),
+	c.MeasureTextSizeBind(inst.slotId("row-w"), inst.slotId("row-h"),
 		rowProbeText, pt, true, nil, &inst.rowPx)
 }
 
-// New returns an editor. The zero value is also usable; New exists so a
-// construction site reads as one.
-func New() (inst *Editor) {
-	inst = &Editor{probeSalt: nextEditorSalt()}
+// New returns an editor scoped under scopeKey on the host's ids; empty
+// scopeKey uses "sqleditor". Two editors under one stack need distinct keys.
+//
+// The zero value binds ([Editor.Bind] reads no ids) but draws nothing: a test
+// of what follows from buffer and caret may pass nil ids.
+func New(ids *c.WidgetIdStack, scopeKey string) (inst *Editor) {
+	if scopeKey == "" {
+		scopeKey = "sqleditor"
+	}
+	inst = &Editor{ids: ids, scopeKey: scopeKey}
 	return
 }
 
@@ -421,10 +414,6 @@ func (inst *Editor) SetCaretForTest(chars uint64) {
 	inst.caretPacked = chars | chars<<32
 }
 
-// Result returns what the last [Editor.Bind] published, for a consumer that
-// runs outside the render call — a status line, a run gate, a docs pane.
-func (inst *Editor) Result() (res Result) { return inst.result }
-
 // statementTint is the active statement's background, the one overlay the
 // widget owns (ADR-0147 §SD2 — it follows from buffer and caret alone).
 //
@@ -446,7 +435,9 @@ func (inst *Editor) statementTint() (secs []codeview.StyledSection) {
 }
 
 // Render draws the editor with the decoration the embedder composed from the
-// [Editor.Bind] result. It must follow a Bind in the same frame.
+// [Editor.Bind] result, and returns that result — what the frame produced, for
+// a consumer that runs after the render (a status line, a docs pane). It must
+// follow a Bind in the same frame. An editor without ids draws nothing.
 //
 // One horizontal row. The gutter and the editor share the enclosing VERTICAL
 // scroll scope — they are siblings in it, so a line's number stays on its line
@@ -454,10 +445,26 @@ func (inst *Editor) statementTint() (secs []codeview.StyledSection) {
 // as the longest line, and a gutter that slid out of view on the first long
 // line would not be a gutter. The editor's own scroll area is therefore inside
 // the row, with the gutter pinned outside it.
-func (inst *Editor) Render(ids *c.WidgetIdStack, d Decoration) {
-	if !inst.bound {
+func (inst *Editor) Render(d Decoration) (res Result) {
+	res = inst.result
+	if !inst.bound || inst.ids == nil {
 		return
 	}
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		if inst.frame.View == "" {
+			inst.render(d)
+			continue
+		}
+		for range c.IdScope(inst.ids.PrepareStr(inst.frame.View)) {
+			inst.render(d)
+		}
+	}
+	return
+}
+
+// render is Render's body, inside the editor's scope.
+func (inst *Editor) render(d Decoration) {
+	ids := inst.ids
 	f := inst.frame
 	view := *f.Value
 	rows := f.Rows
@@ -484,7 +491,7 @@ func (inst *Editor) Render(ids *c.WidgetIdStack, d Decoration) {
 	// by whichever unrelated panel captured after it — play's Detail pane,
 	// whose timeline captures the narrow side column, was the case that
 	// surfaced this. One-frame lag, like every register read.
-	if w, h, ok := c.CapturePaneSize(inst.slotId(f.IDSlot, "pane")); ok && w > 0 {
+	if w, h, ok := c.CapturePaneSize(inst.slotId("pane")); ok && w > 0 {
 		inst.paneW, inst.paneH = w, h
 	}
 	paneW := inst.paneW
@@ -494,15 +501,14 @@ func (inst *Editor) Render(ids *c.WidgetIdStack, d Decoration) {
 	m := buildGutterModel(view, styled, subq, f.Density)
 	editorW := editorWidthPx(view, m.charPx, paneW-m.widthPx())
 
-	// Both children carry IDSlot in their own r7 key, so two editors in one
-	// app are already isolated without an enclosing IdScope — which is why
-	// IDSlot is documented as an identity rather than a label.
+	// Both children are relative under the editor's scope, so two editors in
+	// one app are isolated by their scope keys alone.
 	for range c.Horizontal().KeepIter() {
 		for range c.Vertical().KeepIter() {
 			// Nudge the gutter down by the TextEdit's inner top margin so
 			// row 1 sits on line 1 rather than on the frame.
 			c.AddSpace(textEditTopMarginPx)
-			renderGutter(ids, f.IDSlot+"Gutter", m)
+			renderGutter(ids, m)
 		}
 		// AutoShrink(false, false): the row must keep its full width and
 		// height rather than collapsing onto the content, which is the
@@ -523,8 +529,8 @@ func (inst *Editor) Render(ids *c.WidgetIdStack, d Decoration) {
 func (inst *Editor) textField(ids *c.WidgetIdStack, f Frame, view string, rows uint32, styled []codeview.StyledSection, widthPx float32) {
 	// Derive() resolves the prepared id to the value the widget registers
 	// under, which is what the key capture is read back by.
-	inst.slotID = ids.PrepareStr(f.IDSlot).Derive()
-	b := c.TextEdit(ids.PrepareStr(f.IDSlot), view, true).
+	inst.slotID = ids.PrepareStr("text").Derive()
+	b := c.TextEdit(ids.PrepareStr("text"), view, true).
 		CodeEditor().
 		NoWrapLayout().
 		DesiredRows(rows).

@@ -16,14 +16,15 @@ import (
 // there is no background parse whose landing a screenshot could race.
 
 type sqlFieldDemoState struct {
-	predicate  sqleditor.Field
+	// The fields are built on the first frame, on the ids they render with.
+	predicate  *sqleditor.Field
 	predicated string
 
-	list     sqleditor.Field
+	list     *sqleditor.Field
 	listSQL  string
-	source   sqleditor.Field
+	source   *sqleditor.Field
 	table    string
-	broken   sqleditor.Field
+	broken   *sqleditor.Field
 	brokenEx string
 }
 
@@ -52,28 +53,25 @@ func init() {
 }
 
 func demoSqlField(ids *c.WidgetIdStack, s *sqlFieldDemoState) {
-	sqlFieldRow(ids, "predicate", &s.predicate, sqleditor.FieldFrame{
-		IDSlot: "demoSqlFieldPredicate",
-		Value:  &s.predicated,
-		Hint:   "-- a WHERE fragment",
-		Width:  520,
+	sqlFieldRow(ids, "predicate", &s.predicate, "predicate", sqleditor.FieldFrame{
+		Value: &s.predicated,
+		Hint:  "-- a WHERE fragment",
+		Width: 520,
 	})
-	sqlFieldRow(ids, "table source", &s.source, sqleditor.FieldFrame{
-		IDSlot: "demoSqlFieldSource",
-		Value:  &s.table,
-		Hint:   "-- a table or table function",
-		Width:  520,
+	sqlFieldRow(ids, "table source", &s.source, "source", sqleditor.FieldFrame{
+		Value: &s.table,
+		Hint:  "-- a table or table function",
+		Width: 520,
 	})
 
 	c.Separator().Send()
 	for rt := range c.RichTextLabel("Rows > 1 takes the multi-line form — a colour block, the control this shape exists for:") {
 		rt.Small().Weak()
 	}
-	sqlFieldRow(ids, "expression list", &s.list, sqleditor.FieldFrame{
-		IDSlot: "demoSqlFieldList",
-		Value:  &s.listSQL,
-		Rows:   4,
-		Width:  520,
+	sqlFieldRow(ids, "expression list", &s.list, "list", sqleditor.FieldFrame{
+		Value: &s.listSQL,
+		Rows:  4,
+		Width: 520,
 	})
 
 	c.Separator().Send()
@@ -83,22 +81,24 @@ func demoSqlField(ids *c.WidgetIdStack, s *sqlFieldDemoState) {
 	// The mark stands in for what a validating embedder would derive from a
 	// parse of the substituted query; here it is a fixed range, which is enough
 	// to show the tone and the clamp.
-	sqlFieldRow(ids, "with a mark", &s.broken, sqleditor.FieldFrame{
-		IDSlot: "demoSqlFieldBroken",
-		Value:  &s.brokenEx,
-		Width:  520,
-		Mark:   nanopass.SourceRange{Start: 8, End: 16},
+	sqlFieldRow(ids, "with a mark", &s.broken, "broken", sqleditor.FieldFrame{
+		Value: &s.brokenEx,
+		Width: 520,
+		Mark:  nanopass.SourceRange{Start: 8, End: 16},
 	})
 }
 
 // sqlFieldRow draws one captioned field. The caption is a plain label rather
 // than a widget affordance: the field is the demo, and a heavier chrome would
 // be the demo's own design rather than the widget's.
-func sqlFieldRow(ids *c.WidgetIdStack, caption string, f *sqleditor.Field, frame sqleditor.FieldFrame) {
+func sqlFieldRow(ids *c.WidgetIdStack, caption string, f **sqleditor.Field, scopeKey string, frame sqleditor.FieldFrame) {
+	if *f == nil {
+		*f = sqleditor.NewField(ids, scopeKey)
+	}
 	for range c.Horizontal().KeepIter() {
 		for rt := range c.RichTextLabel(caption) {
 			rt.Small().Weak()
 		}
-		f.Render(ids, frame)
+		(*f).Render(frame)
 	}
 }

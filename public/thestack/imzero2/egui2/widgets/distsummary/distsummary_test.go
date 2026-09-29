@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,79 +106,37 @@ func TestFormatSummaryUnitOptional(t *testing.T) {
 	assert.NotContains(t, noUnit, "fps")
 }
 
-func TestRendererUnitSetter(t *testing.T) {
-	r := New("u").Unit("ms")
-	assert.Equal(t, "ms", r.unit)
-	// Value-receiver builder: setting Unit on a copy leaves the original empty.
-	assert.Equal(t, "", New("u").unit)
+// TestResolvedDefaults pins the documented defaults a zero Input takes,
+// and that a set field survives.
+func TestResolvedDefaults(t *testing.T) {
+	r := Input{}.resolved()
+	assert.Equal(t, "distsummary", r.ScopeKey)
+	assert.Equal(t, float32(320), r.PopupWidth)
+	assert.Equal(t, float32(200), r.PopupHeight)
+	assert.False(t, r.HideN)
+	assert.False(t, r.HideIcon)
+	require.NotNil(t, r.Format)
+	_ = r.Format(0.0)
+	assert.Equal(t, humanizeValue(0.5), r.Format(0.5))
+	assert.Equal(t, defaultEcdfGridN, r.GridN)
+	assert.Equal(t, "", Input{}.Unit)
+	mod := Input{PopupWidth: 640, PopupHeight: 400, HideN: true, HideIcon: true, Unit: "ms"}.resolved()
+	assert.Equal(t, float32(640), mod.PopupWidth)
+	assert.True(t, mod.HideN)
+	assert.True(t, mod.HideIcon)
+	assert.Equal(t, "ms", mod.Unit)
+	custom := ecdf.Style{Method: ecdfbands.BandMethodDKW, Alpha: 0.10, SeriesName: "custom"}
+	assert.Equal(t, custom, Input{Ecdf: custom}.resolved().Ecdf, "the ECDF style passes through untouched")
 }
 
-func TestRendererDefaultsAreUsable(t *testing.T) {
-	r := New("test")
-	assert.Equal(t, "test", r.idPrefix)
-	assert.Equal(t, float32(320), r.popupWidth)
-	assert.Equal(t, float32(200), r.popupHeight)
-	assert.True(t, r.showN)
-	assert.True(t, r.showIcon)
-	require.NotNil(t, r.formatFunc)
-	// formatFunc is callable on a zero-valued input without panic.
-	_ = r.formatFunc(0.0)
-	// Default grid resolution must land on the documented constant
-	// so callers reading the docstring can predict band smoothness.
-	assert.Equal(t, defaultEcdfGridN, r.gridN)
-}
-
-func TestRendererFluentSettersReturnCopies(t *testing.T) {
-	base := New("test")
-	mod := base.PopupSize(640, 400).ShowN(false).ShowIcon(false)
-	// Originals untouched (value receiver pattern).
-	assert.Equal(t, float32(320), base.popupWidth)
-	assert.True(t, base.showN)
-	assert.True(t, base.showIcon)
-	assert.Equal(t, float32(640), mod.popupWidth)
-	assert.False(t, mod.showN)
-	assert.False(t, mod.showIcon)
-}
-
-func TestRendererFormatNilIsNoop(t *testing.T) {
-	r := New("test").Format(nil)
-	require.NotNil(t, r.formatFunc)
-	assert.Equal(t, humanizeValue(0.5), r.formatFunc(0.5))
-}
-
-// TestRendererEcdfSetterReturnsCopy locks the value-receiver contract
-// on the new ECDF setter: the base Renderer's embedded ecdfPlot stays
-// untouched after a fluent override. The check is a struct-equality
-// comparison — ecdf.Renderer is a value type with all-comparable
-// fields, so a single assert.Equal pins both the propagation of the
-// caller's configuration into mod and the immutability of base.
-func TestRendererEcdfSetterReturnsCopy(t *testing.T) {
-	base := New("test")
-	custom := ecdf.New().Method(ecdfbands.BandMethodDKW).Alpha(0.10).SeriesName("custom")
-	defaults := ecdf.New()
-	mod := base.Ecdf(custom)
-	assert.Equal(t, defaults, base.ecdfPlot, "base must retain default ecdf renderer")
-	assert.Equal(t, custom, mod.ecdfPlot, "mod must carry the caller-supplied ecdf renderer")
-	assert.NotEqual(t, base.ecdfPlot, mod.ecdfPlot, "Ecdf setter did not produce a distinct value")
-}
-
-// TestRendererGridNClampsBelowMinimum exercises the documented
+// TestResolvedGridNClampsBelowMinimum exercises the documented
 // "values < 2 → defaultEcdfGridN" contract so a typo at the call
 // site cannot silently produce a degenerate two-point grid.
-func TestRendererGridNClampsBelowMinimum(t *testing.T) {
-	r := New("test").GridN(1)
-	assert.Equal(t, defaultEcdfGridN, r.gridN)
-	r = New("test").GridN(0)
-	assert.Equal(t, defaultEcdfGridN, r.gridN)
-	r = New("test").GridN(-5)
-	assert.Equal(t, defaultEcdfGridN, r.gridN)
-}
-
-// TestRendererGridNAcceptsValid confirms an in-range value flows
-// through unchanged.
-func TestRendererGridNAcceptsValid(t *testing.T) {
-	r := New("test").GridN(64)
-	assert.Equal(t, 64, r.gridN)
+func TestResolvedGridNClampsBelowMinimum(t *testing.T) {
+	assert.Equal(t, defaultEcdfGridN, Input{GridN: 1}.resolved().GridN)
+	assert.Equal(t, defaultEcdfGridN, Input{GridN: 0}.resolved().GridN)
+	assert.Equal(t, defaultEcdfGridN, Input{GridN: -5}.resolved().GridN)
+	assert.Equal(t, 64, Input{GridN: 64}.resolved().GridN)
 }
 
 // TestHumanizeValue pins the default formatter's contract: plain
@@ -236,47 +195,38 @@ func TestHumanizeValue(t *testing.T) {
 	assert.Equal(t, "-Inf", humanizeValue(math.Inf(-1)))
 }
 
-// TestInstanceStateDefaultsToEcdfTab pins the zero-value contract:
-// a freshly-opened inspector window must show the ECDF tab without
-// any explicit initialiser at the call site or factory.
-func TestInstanceStateDefaultsToEcdfTab(t *testing.T) {
-	var s instanceState
+// TestStateDefaultsToEcdfTab pins the zero-value contract: a freshly
+// opened inspector window must show the ECDF tab without any explicit
+// initialiser at the call site.
+func TestStateDefaultsToEcdfTab(t *testing.T) {
+	var s State
 	assert.Equal(t, tabECDF, s.tab)
+	assert.False(t, s.Pinned())
 }
 
-// TestRendererTailClipDefaults pins the documented default-on adaptive
+// TestResolvedTailClipDefaults pins the documented default-on adaptive
 // cutoff so existing callers get it without opting in.
-func TestRendererTailClipDefaults(t *testing.T) {
-	r := New("t")
-	assert.True(t, r.tailClipEnabled)
-	assert.Equal(t, defaultTailLowerP, r.tailLowerP)
-	assert.Equal(t, defaultTailUpperP, r.tailUpperP)
-	assert.Equal(t, defaultTailTriggerIQR, r.tailTriggerIQR)
-	assert.Equal(t, defaultExactBandBucketRatio, r.exactBandBucketRatio)
+func TestResolvedTailClipDefaults(t *testing.T) {
+	r := Input{}.resolved()
+	assert.False(t, r.NoTailClip)
+	assert.Equal(t, defaultTailLowerP, r.TailLowerP)
+	assert.Equal(t, defaultTailUpperP, r.TailUpperP)
+	assert.Equal(t, defaultTailTriggerIQR, r.TailTriggerIQR)
+	assert.Equal(t, defaultExactBandBucketRatio, r.ExactBandBucketRatio)
 }
 
-// TestRendererTailClipSetters exercises the value-receiver builders:
-// TailClip swaps mis-ordered args and clamps to [0,1] and enables;
-// NoTailClip disables; TailTrigger / ExactBandBucket set their knobs;
-// all return copies that leave the base untouched.
-func TestRendererTailClipSetters(t *testing.T) {
-	base := New("t")
-	// Mis-ordered + out-of-range args are normalised.
-	clip := base.TailClip(1.5, -0.2)
-	assert.Equal(t, 0.0, clip.tailLowerP)
-	assert.Equal(t, 1.0, clip.tailUpperP)
-	assert.True(t, clip.tailClipEnabled)
-	// In-range pass-through.
-	clip2 := base.TailClip(0.005, 0.995)
-	assert.Equal(t, 0.005, clip2.tailLowerP)
-	assert.Equal(t, 0.995, clip2.tailUpperP)
-	// NoTailClip disables; base untouched (value receiver).
-	off := base.NoTailClip()
-	assert.False(t, off.tailClipEnabled)
-	assert.True(t, base.tailClipEnabled)
-	// TailTrigger / ExactBandBucket set their knobs.
-	assert.Equal(t, 5.0, base.TailTrigger(5).tailTriggerIQR)
-	assert.Equal(t, 2.0, base.ExactBandBucket(2).exactBandBucketRatio)
+// TestResolvedTailClipNormalises: mis-ordered args are swapped and clamped
+// to [0,1]; in-range values pass through; the other knobs are kept.
+func TestResolvedTailClipNormalises(t *testing.T) {
+	clip := Input{TailLowerP: 1.5, TailUpperP: -0.2}.resolved()
+	assert.Equal(t, 0.0, clip.TailLowerP)
+	assert.Equal(t, 1.0, clip.TailUpperP)
+	clip2 := Input{TailLowerP: 0.005, TailUpperP: 0.995}.resolved()
+	assert.Equal(t, 0.005, clip2.TailLowerP)
+	assert.Equal(t, 0.995, clip2.TailUpperP)
+	assert.True(t, Input{NoTailClip: true}.resolved().NoTailClip)
+	assert.Equal(t, 5.0, Input{TailTriggerIQR: 5}.resolved().TailTriggerIQR)
+	assert.Equal(t, 2.0, Input{ExactBandBucketRatio: 2}.resolved().ExactBandBucketRatio)
 }
 
 // TestBucketExactN pins the round-down ladder: identity below the floor
@@ -374,27 +324,64 @@ func TestFormatTailClipNote(t *testing.T) {
 	assert.Contains(t, note, "% of n")
 }
 
-// TestPaneProbeSeqIsPerScope guards the r21 pane probes the two popup bodies
-// arm. They used to key on idPrefix, which embedders pass as a constant
-// ("fps", "scc-dist", "imztop-"+suffix): two windows of one app, or two
-// .Render(...) calls sharing a Renderer, then held ONE slot and whichever
-// armed last decided the width both read — the process-wide-slot failure r18
-// had, inside the seq-keyed register. `scope` carries the caller's derived id,
-// so it separates both cases; this asserts the derivation it relies on.
-func TestPaneProbeSeqIsPerScope(t *testing.T) {
-	const prefix = "fps"
-	// Two callers of one Renderer: same prefix, different derived ids — the
-	// two windows case and the two-Render-calls case have the same shape.
-	a := callScope(prefix, 0x1111_2222_3333_4444)
-	b := callScope(prefix, 0x5555_6666_7777_8888)
-	require.NotEqual(t, a, b, "callScope collapsed two callers onto one scope")
-
-	for _, role := range []string{"distsummary-boxen-pane", "distsummary-ecdf-pane"} {
-		assert.NotEqual(t, c.ProbeSeq(a, role), c.ProbeSeq(b, role),
-			"two callers share the %s probe slot", role)
+// TestProbeSlotsArePerScope guards the r21 pane probes and the band-job key
+// the two popup bodies use. Two summaries whose hosts chose the same
+// ScopeKey under different parent scopes must hold distinct slots, and the
+// two bodies of one summary must not share one either (ADR-0267 W7).
+func TestProbeSlotsArePerScope(t *testing.T) {
+	slots := func(parent string) (boxen, ecdfPane, job uint64) {
+		ids := c.NewWidgetIdStack()
+		for range c.IdScope(ids.PrepareStr(parent)) {
+			in := Input{Ids: ids, ScopeKey: "fps"}.resolved()
+			for range c.IdScope(ids.PrepareStr(in.ScopeKey)) {
+				boxen, ecdfPane, job = ids.ProbeSeq("boxen-pane"), ids.ProbeSeq("ecdf-pane"), uint64(in.bandJobKey())
+			}
+		}
+		return
 	}
-	// The two bodies of ONE caller must not share a slot either.
-	assert.NotEqual(t,
-		c.ProbeSeq(a, "distsummary-boxen-pane"),
-		c.ProbeSeq(a, "distsummary-ecdf-pane"))
+	b1, e1, j1 := slots("left")
+	b2, e2, j2 := slots("right")
+	require.NotEqual(t, b1, b2, "two hosts share the boxen probe slot")
+	require.NotEqual(t, e1, e2, "two hosts share the ecdf probe slot")
+	require.NotEqual(t, j1, j2, "two hosts share the band job key")
+	assert.NotEqual(t, b1, e1, "the two bodies of one summary share a slot")
+}
+
+// TestRenderWithoutStateReportsAnError: a nil State or Ids is a host bug the
+// widget names in Result.Err instead of panicking (ADR-0267 W17).
+func TestRenderWithoutStateReportsAnError(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	res := Render(Input{Ids: c.NewWidgetIdStack()})
+	require.Error(t, res.Err)
+	res = Render(Input{State: &State{}})
+	require.Error(t, res.Err)
+}
+
+// TestRenderOneFrameHeadless renders the level-1 anchor and, pinned, the
+// inspector window under the discard channel (ADR-0267 W19).
+func TestRenderOneFrameHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	d := tdigest.NewTDigest()
+	rnd := rand.New(rand.NewSource(9))
+	for range 2_000 {
+		d.Push(rnd.NormFloat64())
+	}
+	ids := c.NewWidgetIdStack()
+	st := &State{}
+	in := Input{Ids: ids, ScopeKey: "t", Digest: d, State: st, ExactBandMaxN: 64}
+	res := Render(in)
+	require.NoError(t, res.Err)
+	assert.False(t, res.Pinned)
+	st.SetPinned(true)
+	res = Render(in)
+	require.NoError(t, res.Err)
+	assert.True(t, res.Pinned)
+	assert.True(t, st.Pinned())
+	st.tab = tabBoxenplot
+	require.NoError(t, Render(in).Err)
+	// Closing cancels the warm-up the pinned frames may have started.
+	st.SetPinned(false)
+	require.NoError(t, Render(in).Err)
+	// An empty digest draws the placeholder and reports nothing.
+	require.NoError(t, Render(Input{Ids: ids, ScopeKey: "e", Digest: tdigest.NewTDigest(), State: &State{}}).Err)
 }

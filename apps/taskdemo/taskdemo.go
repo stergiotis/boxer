@@ -69,7 +69,7 @@ type App struct {
 	// monitor is the reusable widget that owns in-flight + history
 	// rendering. Constructed in Mount, Started immediately, Stopped
 	// in Unmount.
-	monitor *taskmonitor.Inst
+	monitor *taskmonitor.Monitor
 
 	// density resolves IDS spacing tokens at the active preset
 	// (ADR-0032 §SD2); cached once at newApp.
@@ -111,7 +111,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.tasks = task.ForApp(ctx)
 	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
 
-	inst.monitor = taskmonitor.New(inst.tasks, inst.ids, "tm", taskmonitor.Opts{
+	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{
 		DefaultOpen: true,
 	})
 	if startErr := inst.monitor.Start(); startErr != nil {
@@ -142,7 +142,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	if inst.monitor != nil {
-		_ = inst.monitor.Stop()
+		_ = inst.monitor.Close()
 	}
 	return
 }

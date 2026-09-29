@@ -37,11 +37,6 @@ const (
 	// reactionIdBase likewise keeps a bubble's reaction pills clear of its
 	// other widgets.
 	reactionIdBase uint64 = 0x100
-	// paneProbeSalt and blockProbeSalt make the pane and block-width probes
-	// unique to this instance: folded through the host's id stack, which
-	// carries its window salt, so two transcripts never share a probe.
-	paneProbeSalt  uint64 = 0x63686174766965f1
-	blockProbeSalt uint64 = 0x63686174766965f2
 	// fitSlack keeps a measured body from wrapping its widest line again at
 	// exactly its own width.
 	fitSlack float32 = 1
@@ -75,7 +70,7 @@ func Render(in Input) (res Result) {
 		// The pane probe goes first: the rect is the room left for the next
 		// widget, and it answers one frame late — hold the last good width
 		// so the bubbles do not flash to the fallback on a hidden→shown edge.
-		if w, _, ok := c.CapturePaneSize(c.ProbeSeq(in.ScopeKey, "chatview") ^ ids.PrepareHighEntropy(paneProbeSalt).Derive()); ok {
+		if w, _, ok := c.CapturePaneSize(ids.ProbeSeq("pane")); ok {
 			st.paneW = w
 			st.shown = true
 		} else {
@@ -400,7 +395,7 @@ func renderBlock(ids *c.WidgetIdStack, st *State, b Block, i int, body string, m
 	var probe uint64
 	measure := false
 	if mine {
-		probe = ids.PrepareHighEntropy(blockProbeSalt).Derive()
+		probe = ids.ProbeSeq("block")
 		var w float32
 		if w, measure = st.blockWidth(i, body, bubbleW, probe); w > 0 {
 			c.UiSetMaxWidth(min(w+fitSlack, bubbleW))

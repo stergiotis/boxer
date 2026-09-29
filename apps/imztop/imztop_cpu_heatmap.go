@@ -117,6 +117,7 @@ func cpuHeatmapPalette() (palette []uint32) {
 // that never see a published snapshot.
 type cpuHeatmapState struct {
 	hs           *heatmapscroll.HeatmapScroll
+	heatEv       heatmapscroll.Events // this frame's hover, for the cursor strip below
 	cfg          *colormap.Config
 	nCores       uint32 // logical core count, locked at first push
 	heightSlots  uint32 // = nCores * cpuHeatmapBandHeight
@@ -176,14 +177,14 @@ func (inst *App) renderCPUHeatmap(snap *PublishedSnapshot) {
 			B: styletokens.NeutralBgSurface.B,
 			A: 0xff,
 		}
-		st.hs = heatmapscroll.New(inst.ids, "cpu-heatmap", st.cfg, cpuHeatmapWidthSlots, st.heightSlots)
+		st.hs = heatmapscroll.New(inst.ids, "cpu-heatmap", st.cfg, heatmapscroll.Options{WidthSlots: cpuHeatmapWidthSlots, HeightSlots: st.heightSlots})
 		// ScrollLeft: newest column on the RIGHT, oldest on the LEFT,
 		// scrolling right-to-left like the per-core sparklines below and
 		// every other plot in the app. X tick labels render in the same
 		// order (newest rightmost) so motion and labels point the same way.
 		// (Until 2026-06-17 this used ScrollRight/newest-left; flipped in
 		// tandem with imzrt's spectrogram so both dashboards scroll alike.)
-		st.hs.SetOrientation(heatmapscroll.ScrollLeft)
+		st.hs.Opts.Orientation = heatmapscroll.ScrollLeft
 		st.colBuf = make([]float32, st.heightSlots)
 		// Prefill the ring so the widget shows a full rectangle on first open
 		// instead of a sparse strip of "real" data on one edge with
@@ -258,9 +259,7 @@ func (inst *App) renderCPUHeatmap(snap *PublishedSnapshot) {
 			texH = maxH
 		}
 	}
-	st.hs.SetDisplaySize(texW, texH)
-
-	st.hs.Render()
+	st.heatEv = st.hs.Render(texW, texH)
 
 	// Effective rendered width for the x-axis + cursor strip below: the
 	// stretched texW, or the native slot count before the size is known.
@@ -329,7 +328,7 @@ func (inst *App) cpuPercentBgColor(pct float32) (col egcolor.Color) {
 // ago"). When the pointer isn't over the heatmap the label falls back to
 // "—" so the row's vertical space stays stable.
 func (st *cpuHeatmapState) renderCPUHeatmapCursor(inst *App, w float32) {
-	_, col, hovered := st.hs.HoveredCell()
+	col, hovered := st.heatEv.Col, st.heatEv.Hovered
 	slots := cpuHeatmapWidthSlots
 
 	// The frame's own sampler, not the live singleton: during replay the two

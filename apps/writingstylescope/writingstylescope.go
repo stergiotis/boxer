@@ -34,7 +34,6 @@ import (
 	"math"
 	"sort"
 	"sync"
-	"sync/atomic"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -136,11 +135,6 @@ const (
 	tipWarm = "The exact confidence band is an O(n²) inversion. Until it is ready the plot shows the wider closed-form band instead, so the curve is never held up."
 )
 
-// bandJobSeq gives every App instance a distinct confidence-band job key, so
-// two open windows warming bands for different matrices do not cancel each
-// other's solve.
-var bandJobSeq atomic.Uint64
-
 // paneProbeSalt namespaces this app's pane-probe register slots. The seq is
 // XORed with the instance id stack so two open windows probe different slots
 // (the r21 map is process-wide).
@@ -196,8 +190,11 @@ type App struct {
 	cmap  *colormap.Config
 	scale *colorscale.ColorScale
 
-	// bandKey identifies this instance's confidence-band warm-up job.
-	bandKey string
+	// bandKey identifies this instance's confidence-band warm-up job. Derived
+	// from the instance's id stack on first use in Frame — the host's
+	// per-window salt is on the stack then, not at construction — so two
+	// open windows never cancel each other's solve; zero means not yet.
+	bandKey ecdf.BandJobKey
 
 	// heatPane / ecdfPane hold the last good pane measurement for each plot.
 	// CapturePaneSize answers one frame behind and reports ok=false on the
@@ -232,7 +229,6 @@ func newApp() (inst *App) {
 		docB:            sampleDocB,
 		minSectionBytes: defaultMinSectionBytes,
 		pending:         true,
-		bandKey:         fmt.Sprintf("writingstylescope/%d", bandJobSeq.Add(1)),
 		pub:             adhocdata.NewPublisher(datasetAlias, false),
 	}
 	return
@@ -245,6 +241,17 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	return
+}
+
+// bandJobKey derives this instance's band warm-up key from the id stack on
+// first use and returns it. Called from Frame, where the host's per-window
+// scope is on the stack (ADR-0267 W7); a key minted at construction would
+// read an empty stack and two windows would share one.
+func (inst *App) bandJobKey() ecdf.BandJobKey {
+	if inst.bandKey == 0 {
+		inst.bandKey = ecdf.BandJobKey(inst.ids.ProbeSeq("band-job"))
+	}
+	return inst.bandKey
 }
 
 // Unmount cancels a confidence-band solve still running for this window. A
@@ -495,11 +502,10 @@ func (inst *App) ensureColormap() {
 		inst.scale = nil
 	}
 	if inst.scale == nil {
-		inst.scale = colorscale.New(inst.ids, "wss-scale", inst.cmap,
-			colorscale.WithOrientation(colorscale.OrientationHorizontal))
+		inst.scale = colorscale.New(inst.ids, "wss-scale", inst.cmap, colorscale.Options{})
 	}
 	w, _ := boxSize(inst.heatPane, heatPrefH, heatChromeBelow)
-	inst.scale.SetSize(w, colorBarH)
+	inst.scale.Opts.Width, inst.scale.Opts.Height = w, colorBarH
 }
 
 func (inst *App) renderScale() {
@@ -600,11 +606,15 @@ func (inst *App) renderDistribution() {
 	}
 
 	xs, fnAt := ecdfGrid(r.Sorted, ecdfGridN)
-	rr := ecdf.New().SeriesName("NCD, all section pairs")
-	exact := rr.BandReady(n)
+	inst.bandJobKey()
+	in := ecdf.Input{Style: ecdf.Style{SeriesName: "NCD, all section pairs"}, Xs: xs, FnAt: fnAt, N: n, Band: ecdf.BandPreview}
+	exact := ecdf.BandReady(in.Style, n)
+	if exact {
+		in.Band = ecdf.BandExact
+	}
 	var snap ecdf.BandJobSnapshot
 	if !exact {
-		snap = rr.EnsureBandJob(inst.bandKey, nil, n)
+		snap = ecdf.EnsureBandJob(inst.bandKey, nil, n, in.Style)
 	}
 
 	// Probe after the chrome above the plot, before the plot — see renderMatrix.
@@ -616,18 +626,13 @@ func (inst *App) renderDistribution() {
 	p.SetupAxes("NCD", "fraction of pairs at or below", implot.AxisFlagsNone, implot.AxisFlagsNone)
 	p.IncludeY(0)
 	p.IncludeY(1)
-	if exact {
-		_ = rr.RenderGrid(p, xs, fnAt, n)
-		ch = rr.AtGrid(p, xs, fnAt, n)
-	} else {
-		_ = rr.RenderGridPreview(p, xs, fnAt, n)
-		ch = rr.AtGridPreview(p, xs, fnAt, n)
-	}
+	_ = ecdf.Paint(p, in)
+	ch = ecdf.At(p, in)
 	if marks := markValues(r.Pairs); len(marks) > 0 {
 		p.SetNextWeight(1.2)
 		p.InfLinesV("closest pairs", marks)
 	}
-	rr.PaintCrosshair(p, ch)
+	ecdf.PaintCrosshair(p, in.Style, ch)
 	p.End()
 	c.AddSpace(margin)
 

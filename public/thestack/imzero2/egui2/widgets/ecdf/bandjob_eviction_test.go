@@ -13,7 +13,7 @@ import (
 // ensure under the same key reports Done from the cache without registering
 // or spawning a redundant job.
 func TestEnsureBandWarmEvictsOnDone(t *testing.T) {
-	const jobKey = "test-evict-on-done"
+	const jobKey BandJobKey = 57651
 	const n = 64
 	const alpha = 0.023 // unique so the cache starts cold
 	method := ecdfbands.BandMethodBerkJones

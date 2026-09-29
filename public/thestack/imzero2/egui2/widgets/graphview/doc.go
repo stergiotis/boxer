@@ -9,13 +9,12 @@
 // the widget retains positions, selection and the camera across frames and
 // reconciles the declaration against them. Input is read from the previous
 // frame's canvas registers, so events and hover lag one frame like every
-// canvas widget. Read [View.Events], [View.Metrics] and the selection
-// iterators after [View.Render].
+// canvas widget. [View.Render] returns the frame's [Events]; read
+// [View.Metrics] and the selection iterators after it.
 //
 //	gv := graphview.New(ids, "my-graph", graphview.Options{Layout: graphview.LayoutForceDirectedCG})
 //	// every frame:
-//	gv.Render(nodes, edges, w, h)
-//	for _, ev := range gv.Events() { … }
+//	for _, ev := range gv.Render(nodes, edges, w, h) { … }
 //
 // Nodes that name the same aura id are drawn over one translucent blob when
 // [Options.Auras] is enabled (ADR-0224 §SD11): a per-aura scalar field on a

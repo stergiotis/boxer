@@ -193,7 +193,7 @@ type State struct {
 	filterSrc     string
 	filterRe      *regexp.Regexp
 	filterLiteral bool
-	filterHl      regexedit.Edit
+	filterHl      regexedit.Cache
 	found         searchT
 	// job runs the filter's search off the render thread (search.go). A
 	// pointer, made in ensure: the runner holds a mutex, and a State is

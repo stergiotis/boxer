@@ -117,7 +117,6 @@ type Player struct {
 	height   float32
 
 	keyFrameID uint64
-	probeSalt  uint64
 
 	dragging      bool
 	dragOriginX   float32
@@ -180,8 +179,6 @@ const (
 	areaKey   = "waveform-area"
 	keysKey   = "waveform-keys"
 
-	probeSaltSeed uint64 = 0x7a8e_5b1c_0a44_d9f3
-
 	rulerGap        float32 = 2
 	playheadCaretW  float32 = 10
 	playheadCaretH  float32 = 6
@@ -236,6 +233,10 @@ func (inst *Player) SetLayers(l *Layers) { inst.layers = l }
 func (inst *Player) Layers() (l *Layers) { return inst.layers }
 
 // Events reports what the pointer did to the layers during the last frame.
+// Events returns the last Render's events.
+//
+// Deprecated: use the value Render, RenderFill or RenderFillWidth returns;
+// this accessor leaves with ADR-0267 M6.
 func (inst *Player) Events() (ev Events) { return inst.events }
 
 // SetReadout selects how frames are printed on the ruler and by
@@ -315,7 +316,8 @@ func (inst *Player) FormatOffset(frame int64) (s string) {
 
 // Render draws the player into a canvas of w×h logical pixels at the current
 // position of the enclosing Ui.
-func (inst *Player) Render(w, h float32) {
+func (inst *Player) Render(w, h float32) (ev Events) {
+	defer func() { ev = inst.events }()
 	for range c.IdScope(inst.ids.PrepareStr(inst.opts.ScopeKey)) {
 		if inst.opts.NoKeyboard {
 			inst.keyFrameID = 0
@@ -328,34 +330,38 @@ func (inst *Player) Render(w, h float32) {
 			inst.frame(w, h)
 		}
 	}
+	return
 }
 
 // RenderFillWidth draws the player h pixels tall across the width of the
 // enclosing pane, read back through a size probe (one frame behind); the
 // fallback width is used until the probe reports.
-func (inst *Player) RenderFillWidth(h float32, fallbackW float32) {
-	w, _, ok := c.CapturePaneSize(inst.probeSeq("waveform-pane"))
+func (inst *Player) RenderFillWidth(h float32, fallbackW float32) (ev Events) {
+	w, _, ok := inst.paneSize()
 	if !ok || w < 1 {
 		w = fallbackW
 	}
-	inst.Render(w, h)
+	return inst.Render(w, h)
 }
 
 // RenderFill draws the player across the whole enclosing pane, with the
 // fallback size until the probe reports.
-func (inst *Player) RenderFill(fallbackW, fallbackH float32) {
-	w, h, ok := c.CapturePaneSize(inst.probeSeq("waveform-pane"))
+func (inst *Player) RenderFill(fallbackW, fallbackH float32) (ev Events) {
+	w, h, ok := inst.paneSize()
 	if !ok || w < 1 || h < 1 {
 		w, h = fallbackW, fallbackH
 	}
-	inst.Render(w, h)
+	return inst.Render(w, h)
 }
 
-func (inst *Player) probeSeq(role string) (seq uint64) {
-	if inst.probeSalt == 0 {
-		inst.probeSalt = inst.ids.PrepareHighEntropy(probeSaltSeed).Derive()
+// paneSize arms the pane probe under the player's own scope (ADR-0267 W7)
+// and returns what it reported last frame; the scope is opened for the
+// derivation alone and emits nothing.
+func (inst *Player) paneSize() (w, h float32, ok bool) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.opts.ScopeKey)) {
+		w, h, ok = c.CapturePaneSize(inst.ids.ProbeSeq("pane"))
 	}
-	return c.ProbeSeq(inst.opts.ScopeKey, role) ^ inst.probeSalt
+	return
 }
 
 func (inst *Player) frame(w, h float32) {

@@ -1,9 +1,10 @@
-// Package gauge renders a read-only radial dial: one scalar value mapped onto
-// a bounded [min,max] range, drawn as a ~270° needle dial with optional
-// colored zones, ticks, and a center value readout. It is the observability
-// "single scalar judged against thresholds" widget (cf. metricsoverlay /
-// runtimestatus / taskmonitor) — not progress-over-time (a sparkline) and not
-// a bare number. See ADR-0068.
+// Package gauge is an immediate-mode widget (ADR-0267) that renders a
+// read-only radial dial: one scalar value mapped onto a bounded [min,max]
+// range, drawn as a ~270° needle dial with optional colored zones, ticks, and
+// a center value readout. It is the observability "single scalar judged
+// against thresholds" widget (cf. metricsoverlay / runtimestatus /
+// taskmonitor) — not progress-over-time (a sparkline) and not a bare number.
+// See ADR-0068.
 //
 // It is painted on the egui2 painter substrate (the treemap / colorscale
 // idiom): a sequence of Paint* commands in canvas-relative coordinates,
@@ -17,18 +18,17 @@
 // (styletokens) — nothing is hardcoded. Zones are semantic styletokens.Tone
 // values, each carrying a Label so color is never the sole encoding channel
 // (ADR-0031 §SD5); the needle itself is a neutral monochrome silhouette,
-// encoding the value by its angle alone. The widget is read-only — Render takes
-// the value by copy and mutates none of its inputs. The one piece of state it
-// keeps across frames is a per-instance text-measurement cache for the readout
-// auto-fit (fit.go), so the center value shrinks to fit the dial; nothing else
-// persists between frames.
+// encoding the value by its angle alone. The widget is read-only — Render
+// takes the value by copy and mutates none of its inputs. The one piece of
+// state that outlives a frame is the readout auto-fit measurement (fit.go),
+// which the host keeps in a [State] so the center value shrinks to fit the
+// dial; without one the fit is an approximation.
 //
-// Usage follows the distsummary value-receiver idiom — a New(idPrefix)
-// constructor, fluent copy-returning setters, and Render(idGen, value):
-//
-//	gauge.New("cpu").Range(0, 100).Suffix("%").Label("CPU").
-//	    Zones(gauge.TrafficLight(0, 100)...).
-//	    Render(ids.PrepareSeq(seq), 72)
+//	gauge.Render(gauge.Input{
+//	    Ids: ids, ScopeKey: "cpu", Value: 72,
+//	    Min: 0, Max: 100, Suffix: "%", Label: "CPU",
+//	    Zones: gauge.TrafficLight(0, 100), State: &st.cpuFit,
+//	})
 package gauge
 
 import (
@@ -40,17 +40,17 @@ import (
 // FormatFunc converts the gauge value into the center readout string (before
 // the optional Suffix is appended). The default ([defaultFormat]) prints an
 // integer when the value is integral and one decimal otherwise. Override via
-// [Renderer.Format] for units or domain-specific precision.
+// [Input.Format] for units or domain-specific precision.
 type FormatFunc func(v float64) string
 
 // SizeE is a density-scaled diameter preset (the badge SizeSm/Md/Lg idiom).
-// The concrete diameters live in [diameterFor]; an explicit [Renderer.Diameter]
-// overrides the preset (ADR-0068 §SD4).
+// The concrete diameters live in [diameterFor]; an explicit [Input.Diameter]
+// overrides the preset (ADR-0068 §SD4). The zero value is SizeMd.
 type SizeE uint8
 
 const (
-	SizeSm SizeE = iota
-	SizeMd
+	SizeMd SizeE = iota
+	SizeSm
 	SizeLg
 )
 
@@ -72,6 +72,9 @@ const (
 const (
 	defaultStartDeg float32 = 225
 	defaultEndDeg   float32 = -45
+	defaultMin      float64 = 0
+	defaultMax      float64 = 100
+	defaultScopeKey         = "gauge"
 )
 
 // Zone is a colored qualitative band over a sub-range of the scale. Tone is an
@@ -83,20 +86,86 @@ type Zone struct {
 	Label    string
 }
 
-// Renderer is the configured gauge. Values are immutable after construction;
-// fluent setters return modified copies. The configured Renderer carries no
-// per-frame state; the only cross-frame state in the package is the readout
-// auto-fit measurement cache (fit.go), keyed by instance id, not held on the
-// Renderer.
-type Renderer struct {
-	idPrefix string
+// Input is one frame's dial. Every zero value is the documented default, so
+// a dial needs only Ids, ScopeKey and Value.
+type Input struct {
+	// Ids is the host's widget id stack. Render opens its own IdScope under
+	// it, so two dials in one frame need only differ in ScopeKey.
+	Ids *c.WidgetIdStack
+	// ScopeKey names this dial within the host's id space; empty uses "gauge".
+	ScopeKey string
 
+	// Value is the scalar the needle points at; the readout shows it as is,
+	// the needle clamps to the sweep.
+	Value float64
+	// Min and Max bound the scale. Both zero takes 0..100; a degenerate range
+	// (Max <= Min) parks the needle at the start.
+	Min, Max float64
+	// StartDeg and EndDeg are the arc's start and end angles in degrees (0° =
+	// three o'clock, counter-clockwise positive). Both zero takes 225 → -45,
+	// a 270° bottom-gap dial.
+	StartDeg, EndDeg float32
+
+	// Size is the density-scaled diameter preset; the zero value is SizeMd.
+	// Ignored when Diameter is set.
+	Size SizeE
+	// Diameter overrides the Size preset with an explicit diameter in logical
+	// points when positive.
+	Diameter float32
+
+	// Zones are the colored bands; none draws a single neutral track.
+	Zones []Zone
+	// ZoneMode selects absolute (the default) or percentage zone bounds.
+	ZoneMode ZoneModeE
+
+	// MajorTicks is the number of major tick marks including both ends; below
+	// 2 the count is derived from the range. MinorTicks is the number of
+	// subdivisions between adjacent majors; 0 draws none.
+	MajorTicks, MinorTicks int
+	// HideTicks drops the tick marks and tick labels.
+	HideTicks bool
+
+	// Label is the metric name drawn under the dial.
+	Label string
+	// Format renders the value for the readout and the tick labels; nil takes
+	// the default (an integer when integral, else one decimal).
+	Format FormatFunc
+	// Suffix is appended to the formatted readout (e.g. "%", " ms").
+	Suffix string
+	// HideValue drops the center value readout. That removes the only textual
+	// encoding of the value; keep it shown for accessibility-critical
+	// surfaces (ADR-0031 §SD5).
+	HideValue bool
+
+	// State is the host-owned readout-fit memo, one per dial the host draws.
+	// Optional: without it the readout's width is estimated every frame
+	// instead of measured, so a long readout may sit a little wide or narrow.
+	State *State
+}
+
+// Result is what one Render reports.
+type Result struct {
+	// Diameter is the side of the square canvas the dial took, in logical
+	// points; zero when nothing was drawn.
+	Diameter float32
+}
+
+// State is the host-owned cross-frame state of one dial: the readout's
+// measured width, which lands one frame after it is asked for (fit.go). The
+// zero value is usable.
+type State struct {
+	fit fitState
+}
+
+// dial is one frame's Input with every default resolved; the paint helpers
+// hang off it.
+type dial struct {
 	min, max float64
 	startDeg float32
 	endDeg   float32
 
 	size     SizeE
-	diameter float32 // explicit override in logical points; 0 = derive from size
+	diameter float32
 
 	zones    []Zone
 	zoneMode ZoneModeE
@@ -113,124 +182,44 @@ type Renderer struct {
 	density styletokens.DensityE
 }
 
-// New returns a gauge with documented defaults: range 0..100, the 270° sweep,
-// SizeMd, ticks shown, value shown, the humanizing default formatter, and the
-// active IDS density. idPrefix scopes the canvas id; distinct instances on one
-// idGen should use distinct prefixes.
-func New(idPrefix string) (inst Renderer) {
-	inst = Renderer{
-		idPrefix:   idPrefix,
-		min:        0,
-		max:        100,
-		startDeg:   defaultStartDeg,
-		endDeg:     defaultEndDeg,
-		size:       SizeMd,
-		showTicks:  true,
-		showValue:  true,
-		formatFunc: defaultFormat,
+// resolve fills the Input's defaults. The density preset is re-read every
+// frame because it is runtime-switchable (Layout ▸ Density).
+func (in Input) resolve() (d dial) {
+	d = dial{
+		min:        in.Min,
+		max:        in.Max,
+		startDeg:   in.StartDeg,
+		endDeg:     in.EndDeg,
+		size:       in.Size,
+		diameter:   max(in.Diameter, 0),
+		zones:      in.Zones,
+		zoneMode:   in.ZoneMode,
+		majorTicks: in.MajorTicks,
+		minorTicks: max(in.MinorTicks, 0),
+		showTicks:  !in.HideTicks,
+		label:      in.Label,
+		formatFunc: in.Format,
+		suffix:     in.Suffix,
+		showValue:  !in.HideValue,
 		density:    styletokens.ActiveDensity(),
 	}
-	return
-}
-
-// Range sets the scale bounds. A degenerate range (max <= min) parks the
-// needle at the start.
-func (inst Renderer) Range(min, max float64) (out Renderer) {
-	inst.min, inst.max = min, max
-	out = inst
-	return
-}
-
-// Sweep sets the arc start/end angles in degrees (0° = three o'clock,
-// counter-clockwise positive). Defaults to 225 → -45 (a 270° bottom-gap dial).
-func (inst Renderer) Sweep(startDeg, endDeg float32) (out Renderer) {
-	inst.startDeg, inst.endDeg = startDeg, endDeg
-	out = inst
-	return
-}
-
-// Size selects a density-scaled diameter preset. Ignored when Diameter is set.
-func (inst Renderer) Size(s SizeE) (out Renderer) {
-	inst.size = s
-	out = inst
-	return
-}
-
-// Diameter overrides the size preset with an explicit diameter in logical
-// points. A non-positive value clears the override (back to the Size preset).
-func (inst Renderer) Diameter(px float32) (out Renderer) {
-	if px < 0 {
-		px = 0
+	if d.min == 0 && d.max == 0 {
+		d.min, d.max = defaultMin, defaultMax
 	}
-	inst.diameter = px
-	out = inst
-	return
-}
-
-// Zones sets the colored bands. Empty (default) draws a single neutral track.
-func (inst Renderer) Zones(z ...Zone) (out Renderer) {
-	inst.zones = z
-	out = inst
-	return
-}
-
-// ZoneMode selects absolute vs percentage interpretation of zone bounds.
-func (inst Renderer) ZoneMode(m ZoneModeE) (out Renderer) {
-	inst.zoneMode = m
-	out = inst
-	return
-}
-
-// Ticks sets the number of major tick marks (including both ends) and the
-// number of minor subdivisions between adjacent majors. major < 2 falls back
-// to the derived default; minor < 0 is treated as 0.
-func (inst Renderer) Ticks(major, minor int) (out Renderer) {
-	if minor < 0 {
-		minor = 0
+	if d.startDeg == 0 && d.endDeg == 0 {
+		d.startDeg, d.endDeg = defaultStartDeg, defaultEndDeg
 	}
-	inst.majorTicks, inst.minorTicks = major, minor
-	out = inst
-	return
-}
-
-// ShowTicks toggles the tick marks and tick labels.
-func (inst Renderer) ShowTicks(b bool) (out Renderer) {
-	inst.showTicks = b
-	out = inst
-	return
-}
-
-// Label sets the metric name drawn under the dial.
-func (inst Renderer) Label(s string) (out Renderer) {
-	inst.label = s
-	out = inst
-	return
-}
-
-// Format sets the value formatter. A nil argument is a no-op (keeps the
-// current formatter) so callers cannot accidentally clear it.
-func (inst Renderer) Format(fn FormatFunc) (out Renderer) {
-	if fn != nil {
-		inst.formatFunc = fn
+	if d.formatFunc == nil {
+		d.formatFunc = defaultFormat
 	}
-	out = inst
 	return
 }
 
-// Suffix sets a string appended to the formatted readout (e.g. "%", " ms").
-func (inst Renderer) Suffix(s string) (out Renderer) {
-	inst.suffix = s
-	out = inst
-	return
-}
-
-// ShowValue toggles the center value readout. Disabling it removes the only
-// textual encoding of the value; keep it on for accessibility-critical
-// surfaces (ADR-0031 §SD5).
-func (inst Renderer) ShowValue(b bool) (out Renderer) {
-	inst.showValue = b
-	out = inst
-	return
+func (in Input) scopeKey() string {
+	if in.ScopeKey == "" {
+		return defaultScopeKey
+	}
+	return in.ScopeKey
 }
 
 // TrafficLight returns three equal Success/Warning/Error bands across
@@ -246,14 +235,20 @@ func TrafficLight(min, max float64) []Zone {
 	}
 }
 
-// Render draws the dial for value at the current layout cursor, allocating a
-// square canvas sized by the Size preset (or the Diameter override). It
-// consumes idGen.Derive() exactly once. The needle clamps to the sweep; the
-// readout shows the true value.
-func (inst Renderer) Render(idGen c.WidgetIdCreatorI, value float64) {
-	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
-	inst.density = styletokens.ActiveDensity()
-	callId := idGen.Derive()
+// Render draws the dial at the current layout cursor, allocating a square
+// canvas sized by the Size preset (or the Diameter override), inside one
+// IdScope under Input.Ids. A nil Ids draws nothing.
+func Render(in Input) (res Result) {
+	if in.Ids == nil {
+		return
+	}
+	for range c.IdScope(in.Ids.PrepareStr(in.scopeKey())) {
+		res = in.resolve().render(in)
+	}
+	return
+}
+
+func (inst dial) render(in Input) (res Result) {
 	d := inst.resolveDiameter()
 	if d <= 0 {
 		return
@@ -274,8 +269,12 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, value float64) {
 	if inst.showTicks {
 		inst.paintTicks(cx, cy, zoneR-bandT/2, r)
 	}
-	inst.paintNeedleHub(cx, cy, r, bandT, value)
-	inst.paintValue(cx, cy, r, bandT, value, readoutMeasureId(inst.idPrefix, callId))
+	inst.paintNeedleHub(cx, cy, r, bandT, in.Value)
+	var fit *fitState
+	if in.State != nil {
+		fit = &in.State.fit
+	}
+	inst.paintValue(cx, cy, r, bandT, in.Value, fit, in.Ids.ProbeSeq("readout"))
 	// Metric label below the dial, anchored to the canvas bottom so it never
 	// overlaps the readout or the arc ends (even at the small size preset).
 	if inst.label != "" {
@@ -284,16 +283,15 @@ func (inst Renderer) Render(idGen c.WidgetIdCreatorI, value float64) {
 			color.Hex(styletokens.NeutralTextSecondary.AsHex())).Send()
 	}
 
-	// Drain into a regular stack-derived canvas id scoped under this call.
-	wis := c.NewWidgetIdStack()
-	for range c.IdScope(wis.PrepareHighEntropy(callId)) {
-		c.PaintCanvas(wis.PrepareStr("canvas"), d, d).Send()
-	}
+	// Drain into the canvas, whose id is relative under the dial's scope.
+	c.PaintCanvas(in.Ids.PrepareStr("canvas"), d, d).Send()
+	res.Diameter = d
+	return
 }
 
 // paintBands draws the zone arcs (or a single neutral track when no zones are
 // configured) as thick stroked polylines.
-func (inst Renderer) paintBands(cx, cy, zoneR, bandT float32, zones []Zone) {
+func (inst dial) paintBands(cx, cy, zoneR, bandT float32, zones []Zone) {
 	// Decorative neutral brim, drawn first (behind the range): a slightly wider
 	// arc so a neutral bezel frames the colored band on both edges — and serves
 	// as the track across any uncovered part of the sweep.
@@ -316,7 +314,7 @@ func (inst Renderer) paintBands(cx, cy, zoneR, bandT float32, zones []Zone) {
 // when a readout is shown, see below) and minor tick marks, radially inside
 // the band. innerR is the band's inner edge; r is the outer radius (used only
 // to scale tick lengths).
-func (inst Renderer) paintTicks(cx, cy, innerR, r float32) {
+func (inst dial) paintTicks(cx, cy, innerR, r float32) {
 	majors, minors := tickValues(inst.min, inst.max, inst.majorTicks, inst.minorTicks)
 	minorCol := color.Hex(styletokens.NeutralBorderFaint.AsHex())
 	majorCol := color.Hex(styletokens.NeutralTextSecondary.AsHex())
@@ -351,7 +349,7 @@ func (inst Renderer) paintTicks(cx, cy, innerR, r float32) {
 // the hub cap on top of its base. The needle is a neutral monochrome silhouette
 // (PaintPolygonFilled in NeutralTextPrimary): the value is encoded by angle and
 // shape, never by color — the colored zone bands carry the qualitative reading.
-func (inst Renderer) paintNeedleHub(cx, cy, r, bandT float32, value float64) {
+func (inst dial) paintNeedleHub(cx, cy, r, bandT float32, value float64) {
 	a := valueToAngle(value, inst.min, inst.max, inst.startDeg, inst.endDeg)
 	tipR := r - bandT - r*needleGapFrac
 	xs, ys := needlePolygon(cx, cy, a, tipR, r*needleShoulderFrac, r*needleTailFrac, r*needleHalfWidthFrac)
@@ -367,15 +365,15 @@ func (inst Renderer) paintNeedleHub(cx, cy, r, bandT float32, value float64) {
 // multi-digit value plus a unit suffix, e.g. "8500 mAh" — at the full display
 // size would otherwise overrun the arc and collide with the interior tick
 // labels. The metric label is drawn separately at the canvas bottom (see
-// Render) so it cannot overlap the readout or arc ends on small dials.
-func (inst Renderer) paintValue(cx, cy, r, bandT float32, value float64, measureId uint64) {
+// render) so it cannot overlap the readout or arc ends on small dials.
+func (inst dial) paintValue(cx, cy, r, bandT float32, value float64, fit *fitState, measureId uint64) {
 	if !inst.showValue {
 		return
 	}
 	baseFont, _ := inst.fonts()
 	text := inst.formatValue(value)
 	yOff := r * readoutYFrac
-	font := fitReadoutFont(measureId, text, baseFont, readoutAvailWidth(r-bandT, yOff))
+	font := fitReadoutFont(fit, measureId, text, baseFont, readoutAvailWidth(r-bandT, yOff))
 	c.PaintText(cx, cy+yOff, anchorCenter, anchorCenter, text, font,
 		color.Hex(styletokens.NeutralTextExtreme.AsHex())).Send()
 }

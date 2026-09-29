@@ -279,11 +279,11 @@ func (inst *App) ensureTopoScale() {
 	} else {
 		labelFmt = func(v float64) string { return fmt.Sprintf("%.0f%%", v) }
 	}
-	inst.topoScale = colorscale.New(inst.ids, "imztop-topo-scale", cm,
-		colorscale.WithSize(topoScaleW, topoScaleH),
-		colorscale.WithDesiredTicks(5),
-		colorscale.WithLabelFormat(labelFmt),
-	)
+	inst.topoScale = colorscale.New(inst.ids, "imztop-topo-scale", cm, colorscale.Options{
+		Width: topoScaleW, Height: topoScaleH,
+		DesiredTicks: 5,
+		LabelFormat:  labelFmt,
+	})
 }
 
 // renderTopoHoverDetail prints a one-line readout of the hovered object: its

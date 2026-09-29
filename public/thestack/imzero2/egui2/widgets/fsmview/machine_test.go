@@ -12,7 +12,7 @@ import (
 // TestNewMachine_initial confirms the initial state is observed and the
 // FSM reports it via Current() before any transitions fire.
 func TestNewMachine_initial(t *testing.T) {
-	m := NewMachine("red", 4)
+	m := NewMachine("red", 4, MachineOptions[string]{})
 	assert.Equal(t, "red", m.Current())
 	assert.Equal(t, 0, m.HistoryLen())
 	_, ok := m.LastTransition()
@@ -23,7 +23,7 @@ func TestNewMachine_initial(t *testing.T) {
 // order with both endpoints (in addition to forwarding to the FSM rules
 // for CanTransition queries).
 func TestAddRule_observesStates(t *testing.T) {
-	m := NewMachine("a", 4)
+	m := NewMachine("a", 4, MachineOptions[string]{})
 	m.AddRule("a", "b", "c").AddRule("b", "a")
 	want := []string{"a", "b", "c"}
 	got := slices.Collect(m.States())
@@ -38,16 +38,16 @@ func TestAddRule_observesStates(t *testing.T) {
 // rather than first-seen.
 func TestWithStateOrder(t *testing.T) {
 	pinned := []string{"green", "yellow", "red"}
-	m := NewMachine("red", 4, WithStateOrder(pinned))
+	m := NewMachine("red", 4, MachineOptions[string]{StateOrder: pinned})
 	m.AddRule("red", "green").AddRule("green", "yellow")
 	got := slices.Collect(m.States())
-	assert.Equal(t, pinned, got, "WithStateOrder must override insertion order")
+	assert.Equal(t, pinned, got, "StateOrder must override insertion order")
 }
 
 // TestEdges enumerates edges with their labels; unlabeled edges read as
 // empty strings rather than missing entries.
 func TestEdges(t *testing.T) {
-	m := NewMachine("a", 4)
+	m := NewMachine("a", 4, MachineOptions[string]{})
 	m.AddRule("a", "b", "c").
 		EdgeLabel("a", "b", "trigger-ab")
 
@@ -69,7 +69,7 @@ func TestEdges(t *testing.T) {
 // TestEdgeLabel_clear confirms passing "" wipes the entry rather than
 // recording an empty-labeled edge.
 func TestEdgeLabel_clear(t *testing.T) {
-	m := NewMachine("a", 4)
+	m := NewMachine("a", 4, MachineOptions[string]{})
 	m.AddRule("a", "b").EdgeLabel("a", "b", "trig").EdgeLabel("a", "b", "")
 	for k, lbl := range m.Edges() {
 		assert.Equal(t, EdgeKey[string]{From: "a", To: "b"}, k)
@@ -81,7 +81,7 @@ func TestEdgeLabel_clear(t *testing.T) {
 // Transition appends to history, Current() reflects the new state,
 // LastTransition() returns the most-recent record.
 func TestTransition_recordsHistory(t *testing.T) {
-	m := NewMachine("red", 4)
+	m := NewMachine("red", 4, MachineOptions[string]{})
 	m.AddRule("red", "green").
 		AddRule("green", "yellow").
 		AddRule("yellow", "red")
@@ -102,7 +102,7 @@ func TestTransition_recordsHistory(t *testing.T) {
 // TestTransition_invalid leaves the FSM and history untouched when the
 // rule isn't permitted.
 func TestTransition_invalid(t *testing.T) {
-	m := NewMachine("red", 4)
+	m := NewMachine("red", 4, MachineOptions[string]{})
 	m.AddRule("red", "green")
 	err := m.Transition("yellow")
 	assert.Error(t, err, "invalid transition must surface statetrooper's error")
@@ -113,7 +113,7 @@ func TestTransition_invalid(t *testing.T) {
 // TestMirror_declaredEdge behaves exactly like Transition for a declared
 // edge: advances Current, records history, reports declared=true.
 func TestMirror_declaredEdge(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green")
 	assert.True(t, m.Mirror("green"), "declared edge must report declared=true")
 	assert.Equal(t, "green", m.Current())
 	assert.Equal(t, 1, m.HistoryLen())
@@ -124,7 +124,7 @@ func TestMirror_declaredEdge(t *testing.T) {
 // follow an undeclared edge (Current advances, the real edge is recorded in
 // history) and report declared=false — never refuse and stick a state behind.
 func TestMirror_undeclaredEdgeFollows(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green")
 	assert.False(t, m.Mirror("yellow"), "undeclared edge must report declared=false")
 	assert.Equal(t, "yellow", m.Current(), "Mirror must follow the undeclared edge, not wedge")
 	require.Equal(t, 1, m.HistoryLen(), "the forced edge is still recorded in history")
@@ -143,7 +143,7 @@ func TestMirror_undeclaredEdgeFollows(t *testing.T) {
 // into the drawn rule graph — Edges() keeps only what AddRule declared, while
 // States() gains the forced node so it still renders.
 func TestMirror_undeclaredEdgeNotDrawn(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green")
 	m.Mirror("yellow")
 	var edges []EdgeKey[string]
 	for k := range m.Edges() {
@@ -158,7 +158,7 @@ func TestMirror_undeclaredEdgeNotDrawn(t *testing.T) {
 // TestMirror_sameStateNoop guards against self-loop history spam when the
 // observed state already matches Current.
 func TestMirror_sameStateNoop(t *testing.T) {
-	m := NewMachine("red", 4)
+	m := NewMachine("red", 4, MachineOptions[string]{})
 	assert.True(t, m.Mirror("red"))
 	assert.Equal(t, 0, m.HistoryLen(), "same-state Mirror must not record a self-loop")
 }
@@ -167,7 +167,7 @@ func TestMirror_sameStateNoop(t *testing.T) {
 // mirrored transition surfaces on the recorded Transition — the History view's
 // "why did this fire" reading (e.g. a validity mirror's rejection reason).
 func TestMirrorWithMetadata_recordsReason(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green")
 	assert.True(t, m.MirrorWithMetadata("green", map[string]string{"reason": "light cycled"}),
 		"declared edge must still report declared=true with metadata")
 	assert.Equal(t, "green", m.Current())
@@ -180,7 +180,7 @@ func TestMirrorWithMetadata_recordsReason(t *testing.T) {
 // TestMirrorWithMetadata_undeclaredCarriesMetadata confirms a forced
 // (undeclared) edge records its metadata too, and still reports declared=false.
 func TestMirrorWithMetadata_undeclaredCarriesMetadata(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green")
 	assert.False(t, m.MirrorWithMetadata("yellow", map[string]string{"reason": "forced"}))
 	last, ok := m.LastTransition()
 	require.True(t, ok)
@@ -190,7 +190,7 @@ func TestMirrorWithMetadata_undeclaredCarriesMetadata(t *testing.T) {
 // TestMirrorWithMetadata_sameStateNoop confirms a same-state mirror records
 // nothing even with metadata (no self-loop spam), matching Mirror.
 func TestMirrorWithMetadata_sameStateNoop(t *testing.T) {
-	m := NewMachine("red", 4)
+	m := NewMachine("red", 4, MachineOptions[string]{})
 	assert.True(t, m.MirrorWithMetadata("red", map[string]string{"reason": "x"}))
 	assert.Equal(t, 0, m.HistoryLen(), "same-state mirror must not record even with metadata")
 }
@@ -199,7 +199,7 @@ func TestMirrorWithMetadata_sameStateNoop(t *testing.T) {
 // statetrooper's append-only ordering. Used by the History tab's "scroll
 // back through time" reading.
 func TestHistory_orderChronological(t *testing.T) {
-	m := NewMachine("red", 4).
+	m := NewMachine("red", 4, MachineOptions[string]{}).
 		AddRule("red", "green").
 		AddRule("green", "yellow").
 		AddRule("yellow", "red")
@@ -222,7 +222,7 @@ func TestHistory_orderChronological(t *testing.T) {
 // TestHistoryReverse iterates newest → oldest, the order the History tab
 // renders so the latest activity is at the top.
 func TestHistoryReverse(t *testing.T) {
-	m := NewMachine("a", 4).AddRule("a", "b").AddRule("b", "a")
+	m := NewMachine("a", 4, MachineOptions[string]{}).AddRule("a", "b").AddRule("b", "a")
 	require.NoError(t, m.Transition("b"))
 	require.NoError(t, m.Transition("a"))
 	var got []string
@@ -236,7 +236,7 @@ func TestHistoryReverse(t *testing.T) {
 // state across repeated calls — load-bearing for egui_graphs to retain
 // layout positions across frames.
 func TestNodeId_stable(t *testing.T) {
-	m := NewMachine("red", 4)
+	m := NewMachine("red", 4, MachineOptions[string]{})
 	first := m.NodeId("red")
 	second := m.NodeId("red")
 	assert.Equal(t, first, second)
@@ -247,14 +247,14 @@ func TestNodeId_stable(t *testing.T) {
 // not a guarantee in general (FNV can collide), but holds for the small
 // alphabet used here and guards against an accidental constant.
 func TestNodeId_differentStates(t *testing.T) {
-	m := NewMachine("a", 4)
+	m := NewMachine("a", 4, MachineOptions[string]{})
 	assert.NotEqual(t, m.NodeId("a"), m.NodeId("b"))
 }
 
 // TestColor_currentVsRest uses the default StateColorFn: active state
 // lights with AccentDefault, others fall to NeutralSubtle.
 func TestColor_currentVsRest(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green")
 	currentColor := m.Color("red")
 	otherColor := m.Color("green")
 	assert.NotEqual(t, currentColor, otherColor,
@@ -266,7 +266,7 @@ func TestColor_currentVsRest(t *testing.T) {
 // closure, so a consumer sampling an async lifecycle can tell "the sampler
 // missed the states in between" from "the model says this cannot happen".
 func TestCanReach_multiStep(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green").AddRule("green", "yellow")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green").AddRule("green", "yellow")
 	assert.True(t, m.CanReach("red", "green"), "one declared hop")
 	assert.True(t, m.CanReach("red", "yellow"), "two declared hops are still reachable")
 	assert.False(t, m.CanReach("yellow", "red"), "this graph has no way back")
@@ -277,7 +277,7 @@ func TestCanReach_multiStep(t *testing.T) {
 // reaches itself only over a real cycle — and, with it, that the walk
 // terminates on a cyclic graph.
 func TestCanReach_selfNeedsCycle(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green")
 	assert.False(t, m.CanReach("red", "red"), "no cycle: red does not reach itself")
 	m.AddRule("green", "red")
 	assert.True(t, m.CanReach("red", "red"), "red→green→red closes the cycle")
@@ -288,7 +288,7 @@ func TestCanReach_selfNeedsCycle(t *testing.T) {
 // silently widen what counts as a declared path — otherwise the first
 // surprise would license every later one.
 func TestCanReach_ignoresForcedEdges(t *testing.T) {
-	m := NewMachine("red", 4).AddRule("red", "green")
+	m := NewMachine("red", 4, MachineOptions[string]{}).AddRule("red", "green")
 	m.Mirror("yellow") // forces the undeclared red→yellow
 	assert.False(t, m.CanReach("red", "yellow"),
 		"a forced edge must stay out of the declared closure")

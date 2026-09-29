@@ -120,7 +120,7 @@ type snippetPane struct {
 	literal  bool
 	altHint  string
 	coverage search.Coverage
-	hl       regexedit.Edit
+	hl       regexedit.Cache
 }
 
 // SnippetLibrary is a snippet pane contributed to every play window: a doc of
@@ -324,7 +324,7 @@ func (pane *snippetPane) renderFilterRow(inst *PlayApp) {
 	for range c.Horizontal().KeepIter() {
 		// regexedit paints the battery shape: one independent pattern
 		// per whitespace-separated token, monospace (ADR-0164 §SD4).
-		pane.hl.Prepare(inst.ids.PrepareStr(pane.key+"Filter"), pane.filter, false, regexedit.ModeTokens).
+		pane.hl.TextEdit(inst.ids.PrepareStr(pane.key+"Filter"), pane.filter, false, regexedit.ModeTokens).
 			HintText("Filter (regex, space = AND)").
 			SendRespVal(&pane.filter)
 		if pane.filter != "" {

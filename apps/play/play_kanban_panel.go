@@ -91,6 +91,8 @@ type kanbanClaim struct {
 type KanbanDriver struct {
 	ids   *c.WidgetIdStack
 	model *kanban.Model
+	// board is the widget's host-owned selection and drag (ADR-0267 W9).
+	board kanban.State
 
 	// lanesLane runs the `lanes` CTE when the board query carries one. It is a
 	// node of the user's split graph demanded on its own lane, so a lane
@@ -105,10 +107,8 @@ type KanbanDriver struct {
 	// Fold cache key: the result identity (executed timestamp — the same
 	// freshness token the pager and the World pane use) + the schema the claim
 	// was resolved from, + the declared lanes, which are an input to the fold
-	// and can change without the result changing. Caching here is not only
-	// about the per-frame allocation: kanban.Model owns the widget's
-	// selection, so a Model rebuilt every frame would clear the highlight
-	// every frame.
+	// and can change without the result changing. Caching here is about the
+	// per-frame allocation; the selection lives in board, not the Model.
 	forExecuted time.Time
 	forSchema   *arrow.Schema
 	forLanes    string
@@ -349,9 +349,9 @@ func (inst *KanbanDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	// keep painting its own last click while the rest of the dock had moved on
 	// — showing a selection nothing else agrees with.
 	if k.selRow >= 0 && k.selRow < int64(len(m.Cards)) {
-		m.SetSelected(uint64(k.selRow + 1))
+		inst.board.SetSelected(uint64(k.selRow + 1))
 	} else {
-		m.SetSelected(0)
+		inst.board.SetSelected(0)
 	}
 
 	dens := styletokens.ActiveDensity()
@@ -359,21 +359,22 @@ func (inst *KanbanDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	c.AddSpace(styletokens.GapInline(dens))
 	kanban.RenderLegend(m.DotLegend) // no-op when the board carries no dots
 	c.AddSpace(styletokens.GapItems(dens))
-	kanban.Render(kanban.Input{
+	res := kanban.Render(kanban.Input{
 		Ids:      inst.ids,
 		ScopeKey: "play-kanban",
 		Model:    m,
+		State:    &inst.board,
 		FillHost: true,
 		// Read-only: a result is a query output, so there is nowhere to write a
-		// dragged card back to. DrainMoves stays unused.
+		// dragged card back to. Result.Moves stays unused.
 		ReadOnly: true,
 	})
 
 	// Publish a click. Card ids are row+1, so the row is recoverable; comparing
 	// against the claim's row means a selection that merely echoes the signal
 	// back does not re-emit.
-	if sel := m.Selected(); sel != 0 {
-		if row := int64(sel) - 1; row != k.selRow {
+	if res.Clicked != 0 {
+		if row := int64(res.Clicked) - 1; row != k.selRow {
 			emit.Emit(signalSelection, row)
 		}
 	}

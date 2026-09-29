@@ -69,7 +69,7 @@ type Inst struct {
 	// colours it. Held here rather than per mount point so typing a query in
 	// the pane and reopening in the window shows the same result set.
 	searchText string
-	searchHl   regexedit.Edit
+	searchHl   regexedit.Cache
 
 	// kindShown mirrors the provenance toggles as a []bool because
 	// Checkbox.SendRespVal needs a stable address and writes into it at
@@ -250,7 +250,7 @@ func (inst *Inst) renderSearchBox(ids *c.WidgetIdStack) (fieldId uint64) {
 			// CaptureKeys on the field itself, not on a wrapping Frame:
 			// capture is gated on the capturing widget having focus, and the
 			// widget with focus while someone types is this one (§SD9, keys.go).
-			edit := inst.searchHl.Prepare(ids.PrepareStr("launcher-search"), inst.searchText, false, regexedit.ModeTokens).
+			edit := inst.searchHl.TextEdit(ids.PrepareStr("launcher-search"), inst.searchText, false, regexedit.ModeTokens).
 				HintText("Search apps").
 				CaptureKeys(uint64(launcherKeyMask))
 			if inst.wantFocus {

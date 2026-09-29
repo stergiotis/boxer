@@ -15,6 +15,7 @@ package capinspector
 
 import (
 	"embed"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"slices"
 	"sort"
 	"sync"
@@ -119,7 +120,8 @@ type App struct {
 	// schemaErr carries a failed build so the section can say so instead
 	// of rendering an empty pane. schemaScope is the per-window half of
 	// the widget's scope key, derived lazily — see schemaScopePrefix.
-	schemaModel *schemaview.Model
+	schemaTable *common.TableDesc
+	schemaState schemaview.State
 	schemaCap   CapId
 	schemaErr   error
 	schemaScope string

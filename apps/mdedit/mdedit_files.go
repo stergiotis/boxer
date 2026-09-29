@@ -144,9 +144,12 @@ func (inst *App) renderFiles() {
 	case busy:
 		// The standard job row: a store that does not answer can be given
 		// up on, and the Retry below is the way back.
-		bgjobrow.Render(&f.mounts, bgjobrow.Input{
+		bgjobrow.Render(bgjobrow.Input{
+			Job:      &f.mounts,
+			Ids:      inst.ids,
+			ScopeKey: "files-mounts",
+			Cancel:   true,
 			Note:     "listing mounts…",
-			CancelId: inst.ids.PrepareStr("files-mounts-cancel"),
 		})
 		return
 	case !done:

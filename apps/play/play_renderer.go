@@ -2,6 +2,7 @@ package play
 
 import (
 	"fmt"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"os"
 	"slices"
 	"sort"
@@ -41,6 +42,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
@@ -209,8 +211,11 @@ type PlayApp struct {
 	// editor is the SQL editing surface (ADR-0147). It owns what follows
 	// from the buffer and the caret alone — the colour tiers, the statement
 	// split and its memo, the gutter, the run-under-cursor composition — and
-	// publishes them through its Result. The zero value is ready.
-	editor sqleditor.Editor
+	// publishes them through its Result. Constructed in NewPlayApp on its own
+	// id stack; editorResult is what this frame's Bind published, for the
+	// panels that read it after the render (the docs pane).
+	editor       *sqleditor.Editor
+	editorResult sqleditor.Result
 
 	// Slice-5a signal-store state. frameSig is the per-frame immutable
 	// snapshot of the graph's signal store, taken at Render top so every
@@ -321,7 +326,11 @@ type PlayApp struct {
 	// refreshed from the editor's Bind whether or not the tab is open, because
 	// the editor's own tint reads the same result.
 	completion completionState
-	vocabHl    regexedit.Edit
+	vocabHl    regexedit.Cache
+	// regexAnchors holds one regexsummary.State per anchored regexp cell,
+	// keyed by the cell scope renderRegexpAnchor is given; a cell that goes
+	// away leaves its closed inspector behind, which is cheap.
+	regexAnchors map[string]*regexsummary.State
 	// Per-buffer outcomes of the client-side rewrite (play_passes_tab.go),
 	// shared by the Passes and Diagnostics tabs and computed on first demand
 	// per frame — both tabs are lazy, so a session with neither open pays
@@ -401,7 +410,8 @@ type PlayApp struct {
 	// ad-hoc result; see play_schema_infer.go). schemaForSchema is the pointer-
 	// identity cache that gates the rebuild, mirroring colWidthsForSchema and
 	// the projector's forSchema.
-	schemaModel     *schemaview.Model
+	schemaTable     *common.TableDesc
+	schemaState     schemaview.State
 	schemaForSchema *arrow.Schema
 
 	// detailContent, when non-nil, replaces the Detail panel's built-in body
@@ -417,12 +427,12 @@ type PlayApp struct {
 	// observed status transition so the popup graph view paints the full
 	// lifecycle.
 	projFSM       *fsmview.Machine[projectorStatusE]
-	projFSMWidget *fsmview.Widget[projectorStatusE]
+	projFSMWidget *fsmview.View[projectorStatusE]
 	// queryFSM tracks the result↔input lifecycle (play_querystate.go) so the
 	// status bar names the state and flags stale/empty output; queryFSMWidget
 	// surfaces the graph + transition history + provenance as a status-bar chip.
 	queryFSM       *fsmview.Machine[queryStateE]
-	queryFSMWidget *fsmview.Widget[queryStateE]
+	queryFSMWidget *fsmview.View[queryStateE]
 	// progress folds the observed lane's live ticks into a smoothed rate and
 	// a damped ETA (play_progress.go); frameProgress is this frame's answer,
 	// computed once in Render and read by every display site — the top bar,
@@ -1067,6 +1077,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	projFSMIds := mk()
 	queryFSMIds := mk()
 	timelineIds := mk()
+	editorIds := mk()
 	cards := NewCardDriver(cardIds, nil)
 	projFSM := newProjectorFSM()
 	queryFSM := newQueryFSM()
@@ -1091,20 +1102,22 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 		sigEmit:          graphEmitter{graph: graph},
 		cards:            cards,
 		projector:        NewProjector(projectorIds, cards),
-		schemaModel:      schemaview.NewModel(nil),
+		editor:           sqleditor.New(editorIds, "sql-editor"),
 		projFSM:          projFSM,
-		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
-			Title("projector").
-			ShowSubscript(true).
-			AutoAnchor(true),
+		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM, fsmview.Options[projectorStatusE]{
+			Title:         "projector",
+			ShowSubscript: true,
+			AutoAnchor:    true,
+		}),
 		queryFSM: queryFSM,
-		queryFSMWidget: fsmview.New(queryFSMIds, "query-state-fsm", queryFSM).
-			Title("Query result state").
-			Tethered().
-			BadgeTone(queryStateTone).
-			AutoAnchor(true),
+		queryFSMWidget: fsmview.New(queryFSMIds, "query-state-fsm", queryFSM, fsmview.Options[queryStateE]{
+			Title:      "Query result state",
+			Tethered:   true,
+			BadgeTone:  queryStateTone,
+			AutoAnchor: true,
+		}),
 		colorByFeature: -1,
-		pager:          pager.New(pagerIds, int64(defaultPageSize)),
+		pager:          pager.New(pagerIds, "pager", pager.Options{PageSize: int64(defaultPageSize)}),
 		affordances: []sqlAffordanceI{
 			&multiMatchAffordance{},
 		},
@@ -1289,9 +1302,9 @@ func (inst *PlayApp) Close() {
 // renderProjection's mirror step, and a missing arrow in the popup
 // graph view.
 func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
-	m := fsmview.NewMachine(projectorStatusIdle, 64,
-		fsmview.WithLabel(func(s projectorStatusE) string { return s.String() }),
-		fsmview.WithStateOrder([]projectorStatusE{
+	m := fsmview.NewMachine(projectorStatusIdle, 64, fsmview.MachineOptions[projectorStatusE]{
+		Label: func(s projectorStatusE) string { return s.String() },
+		StateOrder: []projectorStatusE{
 			projectorStatusIdle,
 			projectorStatusExtracting,
 			projectorStatusRunning,
@@ -1299,8 +1312,8 @@ func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
 			projectorStatusCancelled,
 			projectorStatusDone,
 			projectorStatusFailed,
-		}),
-	)
+		},
+	})
 	m.AddRule(projectorStatusIdle, projectorStatusExtracting).
 		AddRule(projectorStatusExtracting, projectorStatusRunning, projectorStatusCancelling, projectorStatusFailed).
 		AddRule(projectorStatusRunning, projectorStatusDone, projectorStatusCancelling, projectorStatusFailed).
@@ -2627,7 +2640,6 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	pending := inst.consumePendingSnippet()
 
 	f := sqleditor.Frame{
-		IDSlot:  "sqlEditor",
 		Value:   &inst.sql,
 		Hint:    mainHint,
 		Rows:    rows,
@@ -2652,7 +2664,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 			// recomposeMirror guarantees Canonical == Prelude+Mirror, so the
 			// mirror is a suffix view: the widget rebases the overlays onto it
 			// by the elided prelude's length rather than dropping them.
-			f.IDSlot = "sqlEditorResidual"
+			f.View = "residual"
 			f.Value = &inst.paramSqlEdit
 			f.Offset = len(pre.Prelude)
 			f.Canonical = pre.Canonical
@@ -2661,6 +2673,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	}
 
 	res := inst.editor.Bind(f)
+	inst.editorResult = res
 	// One caret per frame, in inst.sql coordinates, for the producers below
 	// and for everything outside this render that reads it.
 	inst.caretByte = res.Caret
@@ -2683,7 +2696,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	// ADR-0130 L3 overlays, in inst.sql coordinates. Composed after Bind
 	// because every one of them reads the caret the Bind just published; the
 	// statement tint is absent because the widget emits that itself.
-	inst.editor.Render(inst.ids, sqleditor.Decoration{
+	inst.editor.Render(sqleditor.Decoration{
 		Styled: inst.editorStyledSections(),
 		// The subquery mark travels beside the sections rather than inside
 		// them: it is drawn whether or not the Subquery toggle produced any.
@@ -2945,14 +2958,13 @@ func (inst *PlayApp) updateWirePreview() {
 // history / provenance). The FSM is mirrored each frame in Render so the badge
 // and summary agree.
 func (inst *PlayApp) renderStatus(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) {
-	inst.queryFSMWidget.
-		Provenance(inspector.Provenance{
-			Subject:   "app.play.query.result-state",
-			SourceApp: "github.com/stergiotis/boxer/apps/play",
-			SampledAt: executed,
-		}).
-		Summary(func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err, truncation) }).
-		Render()
+	inst.queryFSMWidget.Opts.Provenance = inspector.Provenance{
+		Subject:   "app.play.query.result-state",
+		SourceApp: "github.com/stergiotis/boxer/apps/play",
+		SampledAt: executed,
+	}
+	inst.queryFSMWidget.Opts.Summary = func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err, truncation) }
+	inst.queryFSMWidget.Render()
 }
 
 // renderHistoryTab is the History dock tab body. The tab title already

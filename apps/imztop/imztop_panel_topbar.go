@@ -2,6 +2,7 @@ package imztop
 
 import (
 	"fmt"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/trendsmooth"
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
@@ -53,7 +54,7 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s SamplerI) {
 		c.Separator().Vertical().Send()
 
 		// Trend smoothing (ADR-0152); acts on the history plots only.
-		inst.smooth.RenderControls(inst.ids)
+		trendsmooth.Render(trendsmooth.Input{Ids: inst.ids, ScopeKey: "trendsmooth", State: inst.smooth})
 		c.Separator().Vertical().Send()
 
 		// Replay entry (ADR-0197). While a session is off this is the whole

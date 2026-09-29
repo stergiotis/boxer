@@ -101,23 +101,32 @@ func (inst *App) renderCPUDistsummaries(snap *PublishedSnapshot) {
 // uint8, uint64) without the helper growing a generic adapter
 // argument. The digest, the inspector.Provenance subject, and a
 // stable widget-id suffix are all caller-supplied so the helper has
-// no per-panel knowledge.
+// no per-panel knowledge. The inspector state per suffix lives in
+// distStates, keyed by that suffix.
 func (inst *App) renderDistsummaryRow(
 	digest *tdigest.TDigest,
 	label, idSuffix, subject string,
 	sampledAt time.Time,
 	format distsummary.FormatFunc,
 ) {
-	ds := distsummary.New("imztop-" + idSuffix).Tasks(inst.tasks).Format(format)
+	st, ok := inst.distStates[idSuffix]
+	if !ok {
+		st = &distsummary.State{}
+		inst.distStates[idSuffix] = st
+	}
 	for range c.Horizontal().KeepIter() {
 		c.UiSetMinWidth(cpuDistsumLabelWidth)
 		c.Label(label).Send()
 		c.AddSpace(inst.spaceTight())
-		ds.Provenance(inspector.Provenance{
-			Subject:   subject,
-			SourceApp: "imztop",
-			SampledAt: sampledAt,
-		}).Render(inst.ids.PrepareStr(idSuffix), digest, nil)
+		distsummary.Render(distsummary.Input{
+			Ids: inst.ids, ScopeKey: idSuffix, Digest: digest, State: st,
+			Title: label, Tasks: inst.tasks, Format: format,
+			Provenance: inspector.Provenance{
+				Subject:   subject,
+				SourceApp: "imztop",
+				SampledAt: sampledAt,
+			},
+		})
 	}
 }
 

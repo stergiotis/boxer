@@ -158,22 +158,23 @@ func demoBoxenplot(ids *c.WidgetIdStack, st *boxenplotDemoState) {
 	// --- Plot ------------------------------------------------------------
 	mode := bpOutlierModes[st.outlierModeIdx].mode
 
-	// Default-combo defers to New()'s env-resolved preset (so a user
-	// who sets IDS_ACCESSIBILITY in the shell sees that preset honoured
-	// when the combo is at Default). Non-default combos override
-	// explicitly — the combo wins over env for this session.
-	r := boxenplot.New("bp-demo").
-		OutlierMode(mode).
-		BoxWidth(0.6, st.shrink).
-		OutlierAutoThreshold(int64(st.autoThreshold))
-
+	// Default-combo defers to the env-resolved preset (so a user who sets
+	// IDS_ACCESSIBILITY in the shell sees that preset honoured when the
+	// combo is at Default). Non-default combos override explicitly — the
+	// combo wins over env for this session.
+	style := boxenplot.Style{
+		OutlierMode:          mode,
+		BoxWidth:             0.6,
+		WidthShrink:          st.shrink,
+		OutlierAutoThreshold: int64(st.autoThreshold),
+	}
 	switch bpAccessOptions[st.accessIdx].access {
 	case styletokens.AccessibilityHighContrast:
-		r = r.Palette(styletokens.SequentialBatlowK).
-			PaletteRange(0.10, 0.95).
-			FillAlpha(0xFF)
+		style.Palette = styletokens.SequentialBatlowK
+		style.PaletteTStart, style.PaletteTEnd = 0.10, 0.95
+		style.FillAlpha = 0xFF
 	case styletokens.AccessibilityMonochrome:
-		r = r.Palette(styletokens.SequentialGrayC)
+		style.Palette = styletokens.SequentialGrayC
 	}
 
 	// The plot renders through the implot port (ADR-0149 SD7); the
@@ -185,14 +186,15 @@ func demoBoxenplot(ids *c.WidgetIdStack, st *boxenplotDemoState) {
 	var ch boxenplot.Crosshair
 	for i, d := range bpDistributions {
 		arg := float64(i) + 1.0
-		levels := letterval.RecommendedLevels(d.digest)
-		rd := r.SeriesName(d.name)
-		if maybe := rd.At(p, arg, d.name, levels); maybe.Valid {
+		rs := style
+		rs.SeriesName = d.name
+		in := boxenplot.Input{Style: rs, Argument: arg, Levels: letterval.RecommendedLevels(d.digest), Extremes: d.extremes, Name: d.name}
+		if maybe := boxenplot.At(p, in); maybe.Valid {
 			ch = maybe
 		}
-		rd.Render(p, arg, levels, d.extremes, -1)
+		boxenplot.Paint(p, in)
 	}
-	r.PaintCrosshair(p, ch)
+	boxenplot.PaintCrosshair(p, style, ch)
 	p.End()
 
 	c.AddSpace(padInner())

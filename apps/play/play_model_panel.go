@@ -478,8 +478,8 @@ func (inst *PlayApp) renderModelProgress() {
 	snap := m.runner.Snapshot()
 	if jobprogress.Render(jobprogress.Input{
 		Title: m.reqTitle, Fraction: snap.Fraction, EtaMs: snap.EtaMs, Note: snap.Note,
-		CancelId: inst.ids.PrepareStr("model-cancel"),
-	}) {
+		Ids: inst.ids, ScopeKey: "model-job", Cancel: true,
+	}).CancelClicked {
 		m.runner.Cancel()
 	}
 }

@@ -43,16 +43,12 @@ type identityDetail struct {
 	wireItem   []byte
 	itemsErr   error
 
-	canonView  cbordiag.Renderer
-	wireView   cbordiag.Renderer
 	canonState cbordiag.State
 	wireState  cbordiag.State
 }
 
 func newIdentityDetail(ids *c.WidgetIdStack) (inst *identityDetail) {
 	inst = &identityDetail{ids: ids, row: -1}
-	inst.canonView = cbordiag.New(ids, "idn-cf")
-	inst.wireView = cbordiag.New(ids, "idn-cw")
 	return
 }
 
@@ -165,12 +161,12 @@ func (inst *identityDetail) render(app *PlayApp, rec arrow.RecordBatch, row int6
 		for rt := range c.RichTextLabel("canonform · attribute items, then the entity item") {
 			rt.Weak().Small()
 		}
-		inst.canonView.Render(&inst.canonState, canonItems, diag.Options{Sequence: true, TagComments: true, Annotate: annotateCanonform})
+		cbordiag.Render(cbordiag.Input{Ids: inst.ids, ScopeKey: "idn-cf", State: &inst.canonState, Item: canonItems, Options: diag.Options{Sequence: true, TagComments: true, Annotate: annotateCanonform}})
 		for rt := range c.RichTextLabel("canonwire · entity item") {
 			rt.Weak().Small()
 		}
 		inst.wireState.Verdict = verdict
-		inst.wireView.Render(&inst.wireState, wireItem, diag.Options{TagComments: true, Annotate: annotateCanonwire})
+		cbordiag.Render(cbordiag.Input{Ids: inst.ids, ScopeKey: "idn-cw", State: &inst.wireState, Item: wireItem, Options: diag.Options{TagComments: true, Annotate: annotateCanonwire}})
 	}
 	return true
 }

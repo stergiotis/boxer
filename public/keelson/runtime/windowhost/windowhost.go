@@ -208,7 +208,11 @@ type Inst struct {
 	// because the in-loop `c.Window(...)` call already consumed the
 	// original handle this frame.
 	pendingExportKey WindowKeyT
-	fpSaveSvg        *filepicker.Inst
+	// fpSaveSvg is built on the first Frame, when the id stack is at hand;
+	// dialogWidths and dialogTasks hold what the setters were given before.
+	fpSaveSvg    *filepicker.Dialog
+	dialogWidths *colwidth.Resolver
+	dialogTasks  task.TaskApiI
 
 	// activeKey names the shell's active window — the one whose frame
 	// context reads focused (app.WindowFocusI), and therefore the one
@@ -245,12 +249,25 @@ func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 		logger:     logger,
 		density:    styletokens.ActiveDensity(),
 		mountState: make(map[app.AppI]*instMount),
-		fpSaveSvg: filepicker.New("windowhost-save-svg", filepicker.ModeSave,
-			filepicker.WithExtensionFilter(".svg"),
-			filepicker.WithDefaultFilename("window.svg"),
-			filepicker.WithStartAtOsHome()),
 	}
 	return
+}
+
+// saveDialog returns the SVG-save dialog, building it on first use under the
+// frame's id stack with whatever SetDialogColumnWidths / SetDialogTasks
+// supplied before.
+func (inst *Inst) saveDialog(ids *c.WidgetIdStack) *filepicker.Dialog {
+	if inst.fpSaveSvg == nil {
+		inst.fpSaveSvg = filepicker.New(ids, "windowhost-save-svg", filepicker.Options{
+			Mode:            filepicker.ModeSave,
+			Extensions:      []string{".svg"},
+			DefaultFilename: "window.svg",
+			StartAtOsHome:   true,
+			ColumnWidths:    inst.dialogWidths,
+			Tasks:           inst.dialogTasks,
+		})
+	}
+	return inst.fpSaveSvg
 }
 
 // SetBus attaches a bus provider to the window host. Once set, each Open
@@ -303,7 +320,10 @@ func (inst *Inst) SetState(state statestore.StoreI) {
 func (inst *Inst) SetDialogColumnWidths(res *colwidth.Resolver) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	inst.fpSaveSvg.SetColumnWidths(res)
+	inst.dialogWidths = res
+	if inst.fpSaveSvg != nil {
+		inst.fpSaveSvg.Opts.ColumnWidths = res
+	}
 }
 
 // SetDialogTasks publishes the filter searches of the dialogs the window host
@@ -313,7 +333,10 @@ func (inst *Inst) SetDialogColumnWidths(res *colwidth.Resolver) {
 func (inst *Inst) SetDialogTasks(tasks task.TaskApiI) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	inst.fpSaveSvg.SetTasks(tasks)
+	inst.dialogTasks = tasks
+	if inst.fpSaveSvg != nil {
+		inst.fpSaveSvg.Opts.Tasks = tasks
+	}
 }
 
 // Open allocates a new window for the given AppId. Returns the fresh
@@ -1074,7 +1097,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 				c.Atoms().Text(icons.IconSaveAs+" SVG").Keep()).
 				SendResp().HasPrimaryClicked() {
 				inst.pendingExportKey = w.key
-				inst.fpSaveSvg.Show()
+				inst.saveDialog(ids).Show()
 			}
 			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes)
 		}
@@ -1087,7 +1110,8 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// the ExportSvgWindow opcode. The SvgExportPlugin drains it in
 	// on_end_pass this same frame, so the captured shapes match what
 	// the user just saw.
-	switch act, paths := inst.fpSaveSvg.Render(ids); act {
+	saveEv := inst.saveDialog(ids).Render()
+	switch act, paths := saveEv.Action, saveEv.Paths; act {
 	case filepicker.ActionSave:
 		if inst.pendingExportKey != 0 && len(paths) > 0 {
 			key := inst.pendingExportKey

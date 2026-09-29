@@ -77,8 +77,8 @@ type Card struct {
 
 // Move records a card that changed lane (or order) this frame. The widget
 // applies the change to the [Model] immediately — so the card relocates on the
-// same frame — and appends the event here for the host to persist; drain it with
-// [Model.DrainMoves]. A within-column reorder reports FromColumn == ToColumn.
+// same frame — and reports it in [Result.Moves] for the host to persist. A
+// within-column reorder reports FromColumn == ToColumn.
 type Move struct {
 	CardID     uint64
 	FromColumn uint64
@@ -104,11 +104,11 @@ type dragState struct {
 	dropOK     bool
 }
 
-// Model is the board state. Columns and Cards are owned by the host, which
-// builds them and reads them back after a move; the widget additionally holds
-// the transient selection, the pending-move queue, and any in-progress drag.
-// Render mutates only a card's ColumnID and its position in Cards; it never
-// touches Columns.
+// Model is the board's data, owned by the host, which builds it and reads it
+// back after a move. Render mutates only a card's ColumnID and its position
+// in Cards — so a moved card relocates on the same frame — and reports each
+// change in [Result.Moves]; it never touches Columns. The selection and an
+// in-progress drag live in the host's [State], not here (ADR-0267 W8).
 type Model struct {
 	Columns []Column
 	Cards   []Card
@@ -117,11 +117,6 @@ type Model struct {
 	// with [RenderLegend], wherever the host wants the legend placed; it is
 	// not drawn automatically by [Render].
 	DotLegend []DotKind
-
-	sel      uint64 // selected card id; 0 = none
-	moves    []Move
-	drag     *dragState // non-nil while a card is being dragged
-	dragStop bool       // the dragged card reported drag-stopped this frame
 }
 
 // NewModel binds a board. The slices are retained (not copied); the host may
@@ -131,26 +126,6 @@ type Model struct {
 func NewModel(columns []Column, cards []Card) *Model {
 	return &Model{Columns: columns, Cards: cards}
 }
-
-// DrainMoves returns the moves applied since the last call and empties the
-// queue. Call once per frame after [Render] to persist lane changes; ignore the
-// result to discard them.
-func (m *Model) DrainMoves() (out []Move) {
-	out = m.moves
-	m.moves = nil
-	return
-}
-
-// Selected returns the id of the selected card, or 0 for none.
-func (m *Model) Selected() uint64 { return m.sel }
-
-// SetSelected selects a card by id (0 = none), the write side of [Model.Selected].
-// It is for hosts whose selection is owned elsewhere — a board fed by a shared
-// cursor follows it here before [Render], and reads back the user's own click
-// after. An id no card carries selects nothing, which is what a cursor pointing
-// outside this board should do. Render writes the same field on a click, so a
-// host that does not call this keeps the widget's own selection behaviour.
-func (m *Model) SetSelected(id uint64) { m.sel = id }
 
 // columnIndex returns the position of column cid in Columns, or -1.
 func (m *Model) columnIndex(cid uint64) int {
@@ -321,8 +296,8 @@ func (m *Model) standaloneIndices() (idxs []int) {
 
 // shiftColumn moves the card at idx to the column dir steps away (-1 left,
 // +1 right) in Columns order, landing at the bottom of the destination lane. A
-// no-op at a board edge or on a bad index. Records a [Move].
-func (m *Model) shiftColumn(idx, dir int) {
+// no-op at a board edge or on a bad index; ok says whether a [Move] happened.
+func (m *Model) shiftColumn(idx, dir int) (mv Move, ok bool) {
 	if idx < 0 || idx >= len(m.Cards) {
 		return
 	}
@@ -352,13 +327,13 @@ func (m *Model) shiftColumn(idx, dir int) {
 	copy(m.Cards[insert+1:], m.Cards[insert:]) // shift the tail right
 	m.Cards[insert] = card
 
-	m.moves = append(m.moves, Move{CardID: card.ID, FromColumn: from, ToColumn: to})
+	return Move{CardID: card.ID, FromColumn: from, ToColumn: to}, true
 }
 
 // reorderWithin swaps the card at idx with its nearest same-lane neighbour dir
 // steps away in slice order (-1 up, +1 down). A no-op at a lane end or on a bad
-// index. Records a same-lane [Move].
-func (m *Model) reorderWithin(idx, dir int) {
+// index; ok says whether a same-lane [Move] happened.
+func (m *Model) reorderWithin(idx, dir int) (mv Move, ok bool) {
 	if idx < 0 || idx >= len(m.Cards) {
 		return
 	}
@@ -383,15 +358,15 @@ func (m *Model) reorderWithin(idx, dir int) {
 		return
 	}
 	m.Cards[idx], m.Cards[j] = m.Cards[j], m.Cards[idx]
-	m.moves = append(m.moves, Move{CardID: m.Cards[j].ID, FromColumn: cid, ToColumn: cid})
+	return Move{CardID: m.Cards[j].ID, FromColumn: cid, ToColumn: cid}, true
 }
 
 // moveTo relocates the card cardID into column toColumn at insertion position
-// toIndex among that column's other cards (clamped to [0, len]). Records a
-// [Move]. This is the drag-drop mutator; shiftColumn / reorderWithin back the
+// toIndex among that column's other cards (clamped to [0, len]); ok says
+// whether a [Move] happened. This is the drag-drop mutator; shiftColumn / reorderWithin back the
 // button controls. toIndex counts the destination column's cards excluding the
 // dragged one, so it composes directly with the drag hit-test.
-func (m *Model) moveTo(cardID, toColumn uint64, toIndex int) {
+func (m *Model) moveTo(cardID, toColumn uint64, toIndex int) (mv Move, ok bool) {
 	src := m.cardIndex(cardID)
 	if src < 0 || m.columnIndex(toColumn) < 0 {
 		return
@@ -416,5 +391,5 @@ func (m *Model) moveTo(cardID, toColumn uint64, toIndex int) {
 	m.Cards = append(m.Cards, Card{})
 	copy(m.Cards[insert+1:], m.Cards[insert:])
 	m.Cards[insert] = card
-	m.moves = append(m.moves, Move{CardID: cardID, FromColumn: from, ToColumn: toColumn})
+	return Move{CardID: cardID, FromColumn: from, ToColumn: toColumn}, true
 }

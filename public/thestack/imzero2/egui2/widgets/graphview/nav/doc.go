@@ -11,8 +11,7 @@
 //	nv.Focus(rootId, 1)
 //	// every frame:
 //	ns, es := nv.Declare()
-//	gv.Render(ns, es, w, h)
-//	for _, ev := range gv.Events() { nv.Apply(ev) }
+//	for _, ev := range gv.Render(ns, es, w, h) { nv.Apply(ev) }
 //	for _, id := range nv.Pending() { load(id) } // then AddNodes / AddEdges
 //
 // Loading is a request, not a callback (§SD5): a stub the walk would

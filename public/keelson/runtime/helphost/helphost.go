@@ -133,7 +133,7 @@ type HelpHost struct {
 	searchHits      []search.Hit
 	searchCoverage  search.Coverage
 	searchIndex     *search.Index
-	searchHl        regexedit.Edit
+	searchHl        regexedit.Cache
 	searchThesaurus search.Thesaurus
 }
 
@@ -294,7 +294,7 @@ func (inst *HelpHost) renderSearchBox() {
 		// The regexedit widget attaches the token-mode syntax
 		// highlighting (one independent pattern per token — the
 		// battery shape) and the monospace font that goes with it.
-		inst.searchHl.Prepare(inst.ids.PrepareStr("nav-search"), inst.searchText, false, regexedit.ModeTokens).
+		inst.searchHl.TextEdit(inst.ids.PrepareStr("nav-search"), inst.searchText, false, regexedit.ModeTokens).
 			HintText("Search (regex, space = AND)").
 			SendRespVal(&inst.searchText)
 		if inst.searchText != "" {

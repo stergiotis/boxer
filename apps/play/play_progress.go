@@ -357,10 +357,8 @@ func renderLaneProgress(ids *c.WidgetIdStack, cancelID string, v progressView) (
 	c.Spinner().Size(14).Send()
 	in := laneInput(v)
 	in.BarWidth = paneProgressWidth
-	if cancelID != "" {
-		in.CancelId = ids.PrepareStr(cancelID)
-	}
-	cancelled = jobprogress.Render(in)
+	in.Ids, in.ScopeKey, in.Cancel = ids, cancelID, cancelID != ""
+	cancelled = jobprogress.Render(in).CancelClicked
 	return
 }
 

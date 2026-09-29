@@ -4,7 +4,10 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewSignatureModel pins the default: one `u32` element, valid, not yet a
@@ -61,8 +64,11 @@ func TestSignatureRemoveAt(t *testing.T) {
 	sm := NewSignatureModel()
 	sm.SetCanonical("u32-s_vc")
 	assert.Len(t, sm.elems, 3)
-	sm.removeAt(1)
+	st := &SignatureState{}
+	st.sync(sm)
+	sm.removeAt(st, 1)
 	sm.rebuild()
+	assert.Len(t, st.elems, 2, "the element states follow the model")
 	assert.Equal(t, "u32-vc", sm.Canonical())
 	assert.Len(t, sm.elems, 2)
 }
@@ -70,7 +76,7 @@ func TestSignatureRemoveAt(t *testing.T) {
 // TestSignatureRemoveAtGuards the never-empty contract.
 func TestSignatureRemoveAtGuard(t *testing.T) {
 	sm := NewSignatureModel()
-	sm.removeAt(0) // only one element — must be a no-op
+	sm.removeAt(&SignatureState{}, 0) // only one element — must be a no-op
 	assert.Len(t, sm.elems, 1)
 }
 
@@ -80,34 +86,36 @@ func TestSignatureRemoveAtGuard(t *testing.T) {
 func TestSignatureMoveSelected(t *testing.T) {
 	sm := NewSignatureModel()
 	sm.SetCanonical("u32-s_vc")
-	sm.sel = 1 // select s
-	sm.moveSelected(-1)
+	st := &SignatureState{sel: 1} // select s
+	st.sync(sm)
+	sm.moveSelected(st, -1)
 	sm.rebuild()
 	assert.Equal(t, "s-u32_vc", sm.Canonical())
-	assert.Equal(t, 0, sm.sel)
+	assert.Equal(t, 0, st.sel)
 
 	// Move it back to where it started.
-	sm.moveSelected(1)
+	sm.moveSelected(st, 1)
 	sm.rebuild()
 	assert.Equal(t, "u32-s_vc", sm.Canonical())
-	assert.Equal(t, 1, sm.sel)
+	assert.Equal(t, 1, st.sel)
 }
 
 // TestSignatureMoveSelectedEdges confirms moves past either end are no-ops.
 func TestSignatureMoveSelectedEdges(t *testing.T) {
 	sm := NewSignatureModel()
 	sm.SetCanonical("u32-s")
-	sm.sel = 0
-	sm.moveSelected(-1) // already leftmost
+	st := &SignatureState{}
+	st.sync(sm)
+	sm.moveSelected(st, -1) // already leftmost
 	sm.rebuild()
 	assert.Equal(t, "u32-s", sm.Canonical())
-	assert.Equal(t, 0, sm.sel)
+	assert.Equal(t, 0, st.sel)
 
-	sm.sel = 1
-	sm.moveSelected(1) // already rightmost
+	st.sel = 1
+	sm.moveSelected(st, 1) // already rightmost
 	sm.rebuild()
 	assert.Equal(t, "u32-s", sm.Canonical())
-	assert.Equal(t, 1, sm.sel)
+	assert.Equal(t, 1, st.sel)
 }
 
 // TestSignatureInvalidElement propagates element invalidity to the whole
@@ -120,9 +128,24 @@ func TestSignatureInvalidElement(t *testing.T) {
 	bad.rebuildFromDraft()
 	sm := &SignatureModel{
 		elems: []*sigElem{{prim: good, sep: grpSepByte}, {prim: bad, sep: sigSepByte}},
-		sel:   0,
 	}
 	sm.rebuild()
 	assert.Equal(t, "u32-sx0", sm.Canonical())
 	assert.False(t, sm.Valid())
+}
+
+// TestRenderSignatureHeadless renders the signature editor for one frame
+// under the discard channel — a grown signature so the chip strip draws —
+// and pins the W17 nil-input path (ADR-0267 W19).
+func TestRenderSignatureHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	sm := NewSignatureModel()
+	sm.SetCanonical("u32-s_vc")
+	st := &SignatureState{}
+	res := RenderSignature(SignatureInput{Ids: ids, ScopeKey: "t", Model: sm, State: st})
+	require.NoError(t, res.Err)
+	assert.Len(t, st.elems, 3, "one editor state per element")
+	assert.ErrorIs(t, RenderSignature(SignatureInput{Ids: ids}).Err, ErrNeedsIdsSignatureAndState)
+	assert.Equal(t, 0, ids.Depth(), "the id stack is left balanced")
 }

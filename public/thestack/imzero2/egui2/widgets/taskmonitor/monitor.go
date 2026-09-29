@@ -26,9 +26,10 @@ import (
 // audit trail.
 const DefaultMaxHistory = 20
 
-// Opts configures the widget at construction. Zero value is valid
-// (DefaultOpen on, MaxHistory = DefaultMaxHistory).
-type Opts struct {
+// Options configures the monitor. The zero value is valid (MaxHistory =
+// DefaultMaxHistory); MaxHistory and DefaultOpen are re-read on every frame
+// through [Monitor.Opts], SeedFromSupervisor at Start.
+type Options struct {
 	// MaxHistory is the rolling-window size for the history pane.
 	// Zero ⇒ DefaultMaxHistory.
 	MaxHistory int
@@ -47,20 +48,23 @@ type Opts struct {
 	SeedFromSupervisor bool
 }
 
-// Inst is the widget instance. Construct via New, then drive
-// Start / Render / Stop from the host's frame loop.
+// Monitor is the widget instance (semi-retained, ADR-0267). Construct via
+// New, then drive Start / Render / Close from the host's frame loop; Close
+// is required once Start succeeded (W14) — it releases the bus subscription.
 //
 // Goroutine safety: ObserverI callbacks land on the bus dispatch
 // goroutine (synchronous for in-proc, separate goroutine for NATS in
 // M4); Render runs on the host's frame goroutine. The mutex guards
 // the in-memory state shared between the two; Render snapshots
 // under the lock and renders outside it.
-type Inst struct {
+type Monitor struct {
+	// Opts is re-read on every Render, so a change is an assignment.
+	Opts Options
+
 	api      task.TaskApiI
 	ids      *c.WidgetIdStack
-	idPrefix string
+	scopeKey string
 	density  styletokens.DensityE
-	opts     Opts
 
 	mu sync.Mutex
 	// inflight is keyed by TaskId; iteration order is lexicographic on
@@ -73,7 +77,7 @@ type Inst struct {
 	started     atomic.Bool
 }
 
-var _ task.ObserverI = (*Inst)(nil)
+var _ task.ObserverI = (*Monitor)(nil)
 
 // inflightRow is the per-running-task UI state. Updated by ObserverI
 // callbacks under inst.mu; read by Render under the same lock.
@@ -97,34 +101,41 @@ type historyRow struct {
 	errorText string
 }
 
-// New constructs a monitor bound to api. idPrefix scopes every widget
-// id under the caller's ids stack — pass a stable short string so two
-// monitors in the same panel don't collide.
-func New(api task.TaskApiI, ids *c.WidgetIdStack, idPrefix string, opts Opts) (inst *Inst) {
-	if opts.MaxHistory <= 0 {
-		opts.MaxHistory = DefaultMaxHistory
+// New constructs a monitor bound to api whose ids are scoped under scopeKey
+// on ids (empty uses "taskmonitor"); two monitors under one stack need
+// distinct keys.
+func New(ids *c.WidgetIdStack, scopeKey string, api task.TaskApiI, opts Options) (inst *Monitor) {
+	if scopeKey == "" {
+		scopeKey = "taskmonitor"
 	}
-	inst = &Inst{
+	inst = &Monitor{
+		Opts:     opts,
 		api:      api,
 		ids:      ids,
-		idPrefix: idPrefix,
+		scopeKey: scopeKey,
 		density:  styletokens.ActiveDensity(),
-		opts:     opts,
 		inflight: containers.NewBinarySearchGrowingKVOrdered[task.TaskIdT, *inflightRow](16),
 	}
 	return
+}
+
+func (inst *Monitor) maxHistory() int {
+	if inst.Opts.MaxHistory <= 0 {
+		return DefaultMaxHistory
+	}
+	return inst.Opts.MaxHistory
 }
 
 // Start attaches the observer to the bus. Idempotent: a second call
 // returns an error without altering state. Seeds from supervisor when
 // Opts.SeedFromSupervisor is set; a failed seed is logged-by-caller
 // (the returned err is best-effort) but does not block subscribing.
-func (inst *Inst) Start() (err error) {
+func (inst *Monitor) Start() (err error) {
 	if !inst.started.CompareAndSwap(false, true) {
 		err = eh.Errorf("taskmonitor: already started")
 		return
 	}
-	if inst.opts.SeedFromSupervisor {
+	if inst.Opts.SeedFromSupervisor {
 		entries, lErr := inst.api.ListInflight()
 		if lErr == nil {
 			inst.seedFromSnapshot(entries)
@@ -142,8 +153,9 @@ func (inst *Inst) Start() (err error) {
 	return
 }
 
-// Stop unsubscribes. Safe to call on a non-started monitor (no-op).
-func (inst *Inst) Stop() (err error) {
+// Close unsubscribes from the bus. Safe to call on a non-started monitor
+// (no-op). Required after a successful Start.
+func (inst *Monitor) Close() (err error) {
 	if !inst.started.CompareAndSwap(true, false) {
 		return
 	}
@@ -157,14 +169,14 @@ func (inst *Inst) Stop() (err error) {
 // InflightCount + HistoryCount expose row counts for callers that
 // want to render a header summary or status line outside the widget
 // body.
-func (inst *Inst) InflightCount() (n int) {
+func (inst *Monitor) InflightCount() (n int) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	n = inst.inflight.Len()
 	return
 }
 
-func (inst *Inst) HistoryCount() (n int) {
+func (inst *Monitor) HistoryCount() (n int) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	n = len(inst.history)
@@ -176,7 +188,7 @@ func (inst *Inst) HistoryCount() (n int) {
 // snapshot entries lack the original TaskCreated payload, so we
 // reconstruct a partial Created from the entry fields the supervisor
 // surfaces.
-func (inst *Inst) seedFromSnapshot(entries []task.InflightSnapshotEntry) {
+func (inst *Monitor) seedFromSnapshot(entries []task.InflightSnapshotEntry) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, e := range entries {
@@ -205,13 +217,13 @@ func (inst *Inst) seedFromSnapshot(entries []task.InflightSnapshotEntry) {
 
 // --- task.ObserverI ---------------------------------------------------
 
-func (inst *Inst) OnCreated(cr taskcreated.TaskCreated) {
+func (inst *Monitor) OnCreated(cr taskcreated.TaskCreated) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.inflight.UpsertSingle(task.TaskIdT(cr.TaskId), &inflightRow{created: cr})
 }
 
-func (inst *Inst) OnProgress(p taskprogress.TaskProgress) {
+func (inst *Monitor) OnProgress(p taskprogress.TaskProgress) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	row, ok := inst.inflight.Get(task.TaskIdT(p.TaskId))
@@ -221,7 +233,7 @@ func (inst *Inst) OnProgress(p taskprogress.TaskProgress) {
 	row.latest = p
 }
 
-func (inst *Inst) OnCancel(cn taskcancel.TaskCancel) {
+func (inst *Monitor) OnCancel(cn taskcancel.TaskCancel) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if row, ok := inst.inflight.Get(task.TaskIdT(cn.TaskId)); ok {
@@ -233,15 +245,15 @@ func (inst *Inst) OnCancel(cn taskcancel.TaskCancel) {
 	}
 }
 
-func (inst *Inst) OnDone(d taskdone.TaskDone) {
+func (inst *Monitor) OnDone(d taskdone.TaskDone) {
 	inst.terminal(task.TaskIdT(d.TaskId), "done", d.At.UnixMilli(), "", nil)
 }
 
-func (inst *Inst) OnError(e taskerror.TaskError) {
+func (inst *Monitor) OnError(e taskerror.TaskError) {
 	inst.terminal(task.TaskIdT(e.TaskId), "error", e.At.UnixMilli(), e.Reason, []byte(e.ErrorText))
 }
 
-func (inst *Inst) terminal(id task.TaskIdT, final string, atMs int64, reason string, errorBytes []byte) {
+func (inst *Monitor) terminal(id task.TaskIdT, final string, atMs int64, reason string, errorBytes []byte) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	row, ok := inst.inflight.Get(id)
@@ -262,8 +274,8 @@ func (inst *Inst) terminal(id task.TaskIdT, final string, atMs int64, reason str
 		reason:    reason,
 		errorText: string(errorBytes),
 	})
-	if len(inst.history) > inst.opts.MaxHistory {
-		inst.history = inst.history[len(inst.history)-inst.opts.MaxHistory:]
+	if maxHist := inst.maxHistory(); len(inst.history) > maxHist {
+		inst.history = inst.history[len(inst.history)-maxHist:]
 	}
 }
 
@@ -277,7 +289,21 @@ func (inst *Inst) terminal(id task.TaskIdT, final string, atMs int64, reason str
 // of milliseconds), and well under any idle heartbeat.
 const inflightRepaintSecs = 0.1
 
-func (inst *Inst) Render() {
+// Events is what one Render reports.
+type Events struct {
+	// CancelRequested lists the tasks whose Cancel was clicked this frame;
+	// the monitor has already asked the api to cancel them.
+	CancelRequested []task.TaskIdT
+}
+
+func (inst *Monitor) Render() (ev Events) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		ev = inst.render()
+	}
+	return
+}
+
+func (inst *Monitor) render() (ev Events) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
 	inst.mu.Lock()
@@ -297,33 +323,42 @@ func (inst *Inst) Render() {
 	if len(inflight) > 0 {
 		c.RequestRepaintAfter(inflightRepaintSecs)
 	}
-	inst.renderInflight(inflight)
+	ev.CancelRequested = inst.renderInflight(inflight)
 	c.AddSpace(styletokens.PaddingOuter(inst.density))
 	inst.renderHistory(history)
+	return
 }
 
-func (inst *Inst) renderInflight(rows []inflightRow) {
+func (inst *Monitor) renderInflight(rows []inflightRow) (cancelled []task.TaskIdT) {
 	hdr := c.WidgetText().Text(fmt.Sprintf("In-flight (%d)", len(rows))).Keep()
-	for range c.CollapsingHeader(inst.ids.PrepareStr(inst.idPrefix+":hdr-inflight"), hdr).
-		DefaultOpen(inst.opts.DefaultOpen).KeepIter() {
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-inflight"), hdr).
+		DefaultOpen(inst.Opts.DefaultOpen).KeepIter() {
 		if len(rows) == 0 {
 			c.Label("(no running tasks)").Send()
 			return
 		}
-		for _, row := range rows {
-			inst.renderInflightRow(row)
-			c.AddSpace(styletokens.PaddingInner(inst.density))
+		for range c.IdScope(inst.ids.PrepareStr("tasks")) {
+			for _, row := range rows {
+				// One scope per task, keyed by its id (a nanoid), so the row's
+				// widgets survive the list reordering around it.
+				for range c.IdScope(inst.ids.PrepareStr(row.created.TaskId)) {
+					if inst.renderInflightRow(row) {
+						cancelled = append(cancelled, task.TaskIdT(row.created.TaskId))
+					}
+				}
+				c.AddSpace(styletokens.PaddingInner(inst.density))
+			}
 		}
 	}
+	return
 }
 
-func (inst *Inst) renderInflightRow(row inflightRow) {
+func (inst *Monitor) renderInflightRow(row inflightRow) (cancelClicked bool) {
 	in := progressInput(row.latest, row.pending)
 	in.Title = row.created.Title
-	if !row.pending {
-		in.CancelId = inst.ids.PrepareStr(inst.idPrefix + ":cancel-" + row.created.TaskId)
-	}
-	if jobprogress.Render(in) {
+	in.Ids, in.ScopeKey, in.Cancel = inst.ids, "job", !row.pending
+	if jobprogress.Render(in).CancelClicked {
+		cancelClicked = true
 		id := task.TaskIdT(row.created.TaskId)
 		go func() {
 			_ = inst.api.RequestCancel(id, "user clicked cancel")
@@ -332,26 +367,31 @@ func (inst *Inst) renderInflightRow(row inflightRow) {
 	for rt := range c.RichTextLabel(fmt.Sprintf("id %s · kind %s", row.created.TaskId, row.created.Kind)) {
 		rt.Small().Weak()
 	}
+	return
 }
 
-func (inst *Inst) renderHistory(rows []historyRow) {
+func (inst *Monitor) renderHistory(rows []historyRow) {
 	hdr := c.WidgetText().Text(fmt.Sprintf("History (%d)", len(rows))).Keep()
-	for range c.CollapsingHeader(inst.ids.PrepareStr(inst.idPrefix+":hdr-history"), hdr).
-		DefaultOpen(inst.opts.DefaultOpen).KeepIter() {
+	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-history"), hdr).
+		DefaultOpen(inst.Opts.DefaultOpen).KeepIter() {
 		if len(rows) == 0 {
 			c.Label("(no finished tasks yet)").Send()
 			return
 		}
 		// Newest-first so the most recent terminal is at the top —
 		// matches the user's mental model after clicking Cancel.
-		for i := len(rows) - 1; i >= 0; i-- {
-			inst.renderHistoryRow(rows[i], i)
-			c.AddSpace(styletokens.PaddingInner(inst.density))
+		for range c.IdScope(inst.ids.PrepareStr("history")) {
+			for i := len(rows) - 1; i >= 0; i-- {
+				for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+					inst.renderHistoryRow(rows[i])
+				}
+				c.AddSpace(styletokens.PaddingInner(inst.density))
+			}
 		}
 	}
 }
 
-func (inst *Inst) renderHistoryRow(row historyRow, idx int) {
+func (inst *Monitor) renderHistoryRow(row historyRow) {
 	label := fmt.Sprintf("[%s] %s · %s",
 		row.final, row.created.Title, jobprogress.StatusLine(progressInput(row.progress, false)))
 	if row.reason != "" {
@@ -364,9 +404,8 @@ func (inst *Inst) renderHistoryRow(row historyRow, idx int) {
 	// text v1 — see EXPLANATION on why we don't decode a structured
 	// chain here.
 	if row.errorText != "" {
-		errId := inst.ids.PrepareStr(fmt.Sprintf("%s:err-%d", inst.idPrefix, idx))
 		errHdr := c.WidgetText().Text("details").Keep()
-		for range c.CollapsingHeader(errId, errHdr).DefaultOpen(false).KeepIter() {
+		for range c.CollapsingHeader(inst.ids.PrepareStr("err"), errHdr).DefaultOpen(false).KeepIter() {
 			c.Label(row.errorText).Send()
 		}
 	}

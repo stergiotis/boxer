@@ -1,6 +1,10 @@
 package selector
 
-import "testing"
+import (
+	"testing"
+
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+)
 
 type gran uint8
 
@@ -88,20 +92,26 @@ func TestLayoutFlags(t *testing.T) {
 	}
 }
 
-// TestSegmentedAbs pins the absolute-id form: no stack, an absScope prefix, and
-// distinct per-option ids derived from it.
-func TestSegmentedAbs(t *testing.T) {
+// TestSegmentedIdsAreScopedAndDistinct pins the id derivation: every option
+// id is relative under the bar's scope, so two bars differ by scope key
+// alone and options within one bar never collide (ADR-0267 W4, W5).
+func TestSegmentedIdsAreScopedAndDistinct(t *testing.T) {
 	var cur gran
-	g := SegmentedAbs("mywidget-tab", &cur).Option(perRow, "a").Option(perAttr, "b")
-	if g.ids != nil {
-		t.Error("SegmentedAbs should not carry a WidgetIdStack")
+	ids := c.NewWidgetIdStack()
+	idsUnder := func(scope string) (a, b uint64) {
+		g := Segmented(ids, scope, &cur).Option(perRow, "a").Option(perAttr, "b")
+		for range c.IdScope(ids.PrepareStr(scope)) {
+			a, b = g.idFor(0).Derive(), g.idFor(1).Derive()
+		}
+		return
 	}
-	if g.absScope != "mywidget-tab" {
-		t.Errorf("absScope = %q", g.absScope)
+	a0, b0 := idsUnder("tab")
+	a1, _ := idsUnder("other")
+	if a0 == b0 {
+		t.Errorf("two options of one bar share id %#x", a0)
 	}
-	id0, id1 := g.idFor(0), g.idFor(1)
-	if id0 == nil || id1 == nil || id0.Derive() == id1.Derive() {
-		t.Errorf("idFor produced colliding/nil ids: %v %v", id0, id1)
+	if a0 == a1 {
+		t.Errorf("the same option under two scopes shares id %#x", a0)
 	}
 }
 

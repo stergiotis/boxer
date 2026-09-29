@@ -50,10 +50,10 @@ func (s *hostScene) pointerAt(x, y float32, area c.ResponseFlagsE, mods c.Modifi
 // frame runs the hosted pair and returns the claim and the events.
 func (s *hostScene) frame(nodes []NodeSpec, edges []EdgeSpec) (HostClaim, []Event) {
 	claim := s.v.HostedInput(s.host)
-	s.v.HostedPaint(nodes, edges)
+	ev := s.v.HostedPaint(nodes, edges)
 	require.False(s.t, typed.HasErrors(), typed.GetError())
 	s.sm.ScriptReset()
-	return claim, slices.Clone(s.v.Events())
+	return claim, slices.Clone(ev)
 }
 
 // twoNodes sits at world (0,0) and (100,0); with an identity camera those are

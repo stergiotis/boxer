@@ -123,15 +123,16 @@ func (v *View) SetHostCamera(c cam.Camera) {
 //
 // Call it inside the host's paint slot, after HostedInput, with the same
 // declaration Render would take.
-func (v *View) HostedPaint(nodes []NodeSpec, edges []EdgeSpec) {
+func (v *View) HostedPaint(nodes []NodeSpec, edges []EdgeSpec) (ev Events) {
 	v.g.declN.fromSpecs(nodes)
 	v.g.declE.fromSpecs(edges)
 	v.hostedPaintColumns(&v.g.declN, &v.g.declE)
+	return v.events
 }
 
 // HostedPaintColumns is HostedPaint over a columnar declaration, under
 // RenderColumns' rules for a malformed one.
-func (v *View) HostedPaintColumns(nodes *NodeColumns, edges *EdgeColumns) (err error) {
+func (v *View) HostedPaintColumns(nodes *NodeColumns, edges *EdgeColumns) (ev Events, err error) {
 	if err = nodes.Validate(); err != nil {
 		v.hosted = false
 		return
@@ -141,7 +142,7 @@ func (v *View) HostedPaintColumns(nodes *NodeColumns, edges *EdgeColumns) (err e
 		return
 	}
 	v.hostedPaintColumns(nodes, edges)
-	return
+	return v.events, nil
 }
 
 func (v *View) hostedPaintColumns(nodes *NodeColumns, edges *EdgeColumns) {

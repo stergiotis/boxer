@@ -397,8 +397,7 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 	// A button above may have swapped the track; draw the current player,
 	// the lanes locked under it (SD8) and the minimap (SD10).
 	p = st.player
-	p.RenderFillWidth(waveformDemoHeight, waveformDemoWidth)
-	ev := p.Events()
+	ev := p.RenderFillWidth(waveformDemoHeight, waveformDemoWidth)
 	if ev.RegionEdit != nil {
 		e := ev.RegionEdit
 		if e.Index >= 0 && e.Index < len(st.layers.Regions) {
@@ -431,7 +430,7 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 		if bp.Err != nil {
 			note = "build stopped: " + bp.Err.Error()
 		}
-		if jobprogress.Render(jobprogress.Input{Title: "peaks", Fraction: frac, EtaMs: bp.EtaMs, Note: note, CancelId: ids.PrepareStr("wf-cancel-build")}) {
+		if jobprogress.Render(jobprogress.Input{Title: "peaks", Fraction: frac, EtaMs: bp.EtaMs, Note: note, Ids: ids, ScopeKey: "wf-cancel-build", Cancel: true}).CancelClicked {
 			st.tr.CancelBuild()
 		}
 	}

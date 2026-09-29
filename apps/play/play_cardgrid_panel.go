@@ -299,7 +299,7 @@ type CardGridDriver struct {
 func NewCardGridDriver(ids *c.WidgetIdStack, pagerIds *c.WidgetIdStack) (inst *CardGridDriver) {
 	return &CardGridDriver{
 		ids:     ids,
-		pager:   pager.New(pagerIds, cardgridDefaultPageSize).WithPageSizeOptions(cardgridPageSizes).WithUnit("cards"),
+		pager:   pager.New(pagerIds, "pager", pager.Options{PageSize: cardgridDefaultPageSize, PageSizeOptions: cardgridPageSizes, Unit: "cards"}),
 		cache:   newRichCellCache(ids),
 		lastSel: -1,
 	}

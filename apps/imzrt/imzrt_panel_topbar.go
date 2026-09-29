@@ -2,6 +2,7 @@ package imzrt
 
 import (
 	"fmt"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/trendsmooth"
 	"runtime"
 	"time"
 
@@ -54,7 +55,7 @@ func (inst *App) renderTopBar(snap *PublishedSnapshot, s *Sampler) {
 		c.Separator().Vertical().Send()
 
 		// Trend smoothing (ADR-0152); acts on the rate/latency plots only.
-		inst.smooth.RenderControls(inst.ids)
+		trendsmooth.Render(trendsmooth.Input{Ids: inst.ids, ScopeKey: "trendsmooth", State: inst.smooth})
 		c.Separator().Vertical().Send()
 
 		ts := time.UnixMilli(snap.SampledAtUnixMs).Format("15:04:05")

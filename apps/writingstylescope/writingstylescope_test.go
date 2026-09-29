@@ -3,6 +3,7 @@ package writingstylescope
 import (
 	"bytes"
 	"fmt"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"math"
 	"strings"
 	"testing"
@@ -442,8 +443,20 @@ func TestStaleTracksEveryInput(t *testing.T) {
 	assert.True(t, inst.stale())
 }
 
+// TestBandJobKeysAreDistinctPerInstance: two windows of the app render under
+// different host scopes, and their band keys — derived from the stack on
+// first use — differ, so neither cancels the other's solve.
 func TestBandJobKeysAreDistinctPerInstance(t *testing.T) {
-	assert.NotEqual(t, newApp().bandKey, newApp().bandKey)
+	keyUnder := func(window string) (k ecdf.BandJobKey) {
+		inst := newApp()
+		for range c.IdScope(inst.ids.PrepareStr(window)) {
+			k = inst.bandJobKey()
+		}
+		return
+	}
+	a, b := keyUnder("window-1"), keyUnder("window-2")
+	assert.NotEqual(t, a, b)
+	assert.Equal(t, a, keyUnder("window-1"), "the key is stable for one window")
 }
 
 func TestRunRecordsFailureWithoutStaleResult(t *testing.T) {
@@ -495,14 +508,16 @@ func TestEcdfDeclaresWithoutError(t *testing.T) {
 	require.NotEmpty(t, xs)
 	n := len(res.Sorted)
 
-	rr := ecdf.New().SeriesName("NCD, all section pairs")
+	in := ecdf.Input{Style: ecdf.Style{SeriesName: "NCD, all section pairs"}, Xs: xs, FnAt: fnAt, N: n, Band: ecdf.BandPreview}
 	p := implot.NewDetached()
-	require.NoError(t, rr.RenderGridPreview(p, xs, fnAt, n), "DKW preview band")
-	require.NoError(t, rr.RenderGrid(p, xs, fnAt, n), "exact band")
+	require.NoError(t, ecdf.Paint(p, in).Err, "DKW preview band")
+	in.Band = ecdf.BandExact
+	require.NoError(t, ecdf.Paint(p, in).Err, "exact band")
 
 	// The crosshair readers must tolerate "no plot has rendered yet".
-	assert.False(t, rr.AtGrid(p, xs, fnAt, n).Valid)
-	rr.PaintCrosshair(p, rr.AtGridPreview(p, xs, fnAt, n))
+	assert.False(t, ecdf.At(p, in).Valid)
+	in.Band = ecdf.BandPreview
+	ecdf.PaintCrosshair(p, in.Style, ecdf.At(p, in))
 }
 
 // TestHeatmapDeclaresOverTheWholeMatrix checks the Matrix tab's declaration

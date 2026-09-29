@@ -24,35 +24,52 @@ type JobI interface {
 
 // Input places and labels the row. The job's own note wins over Note.
 type Input struct {
+	// Ids and ScopeKey are [jobprogress.Input]'s (ADR-0267 W4): required
+	// when Cancel is set, otherwise Ids may be nil.
+	Ids      *c.WidgetIdStack
+	ScopeKey string
+	// Job is the job the row waits on.
+	Job JobI
 	// Title is shown above a stacked row; not drawn Inline.
 	Title string
 	// Note is what the row says while the job has published no note of its
 	// own — "searching…" for a job that only ever runs indeterminate.
 	Note string
-	// CancelId, when non-nil, draws Cancel; see [jobprogress.Input.CancelId]
-	// for what makes a good id. nil draws a row that cannot be cancelled.
-	CancelId c.WidgetIdCreatorI
+	// Cancel draws Cancel, which cancels Job when clicked; see
+	// [jobprogress.Input.Cancel]. False draws a row that cannot be cancelled.
+	Cancel bool
 	// Inline, BarWidth and RateUnit are [jobprogress.Input]'s.
 	Inline   bool
 	BarWidth float32
 	RateUnit string
 }
 
-// Render draws the row while job is running and nothing otherwise, and
-// reports which. While it draws it keeps frames coming — the job runs on its
-// own goroutine and cannot ask for one — and a click on Cancel cancels the
-// job. What a cancelled or failed job then shows is the caller's: the row is
-// for the wait.
-func Render(job JobI, in Input) (running bool) {
-	snap := job.Snapshot()
+// Result is what one Render reports.
+type Result struct {
+	// Running is whether the row drew: true while the job runs.
+	Running bool
+	// Cancelled is true on the frame Cancel was clicked; the job has been
+	// told to cancel.
+	Cancelled bool
+}
+
+// Render draws the row while Input.Job is running and nothing otherwise,
+// and reports which. While it draws it keeps frames coming — the job runs on
+// its own goroutine and cannot ask for one — and a click on Cancel cancels
+// the job. What a cancelled or failed job then shows is the caller's: the
+// row is for the wait.
+func Render(in Input) (res Result) {
+	snap := in.Job.Snapshot()
 	if snap.State != bgjob.StateRunning {
-		return false
+		return
 	}
 	c.RequestRepaint()
-	if jobprogress.Render(ToProgress(snap, in)) {
-		job.Cancel()
+	res.Running = true
+	if jobprogress.Render(ToProgress(snap, in)).CancelClicked {
+		in.Job.Cancel()
+		res.Cancelled = true
 	}
-	return true
+	return
 }
 
 // ToProgress is the mapping Render draws, for a caller that places the row
@@ -63,13 +80,15 @@ func ToProgress(snap bgjob.Snapshot, in Input) jobprogress.Input {
 		note = in.Note
 	}
 	return jobprogress.Input{
+		Ids:      in.Ids,
+		ScopeKey: in.ScopeKey,
 		Title:    in.Title,
 		Fraction: snap.Fraction,
 		EtaMs:    snap.EtaMs,
 		Rate:     snap.Rate,
 		RateUnit: in.RateUnit,
 		Note:     note,
-		CancelId: in.CancelId,
+		Cancel:   in.Cancel,
 		Inline:   in.Inline,
 		BarWidth: in.BarWidth,
 	}

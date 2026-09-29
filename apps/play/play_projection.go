@@ -981,7 +981,8 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 	o.HideEdges = !inst.showEdges
 	o.Auras = graphview.AuraParams{Enabled: inst.auras && res.clusters.NumClusters > 0, Legend: graphview.AuraLegendInside}
 
-	if err := inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
+	events, err := inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h)
+	if err != nil {
 		log.Error().Err(err).Msg("play: projection declaration rejected")
 	}
 
@@ -992,7 +993,7 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 	// A node select publishes its row; a deselect of the published row
 	// clears it to -1, the Table's own "no row". Events arrive in order, so
 	// replaying them leaves the right value.
-	for _, ev := range inst.view.Events() {
+	for _, ev := range events {
 		s := int(ev.Node) - 1
 		if s < 0 || s >= len(res.rows) {
 			continue

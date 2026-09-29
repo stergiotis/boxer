@@ -1,0 +1,37 @@
+package pager
+
+import (
+	"testing"
+
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+)
+
+// TestRenderHeadless renders one frame of a pager without a host: the widget
+// must not panic, a quiet frame reports no change, and a programmatic page
+// move is the next frame's change.
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	sm := c.CurrentApplicationState.StateManager
+	p := New(ids, "t", Options{PageSize: 10, Unit: "items"})
+	p.Configure(95)
+	if ev := p.Render(); ev.Changed {
+		t.Fatalf("quiet frame reported a change: %+v", ev)
+	}
+	sm.ScriptReset() // the frame boundary
+	if n := p.NumPages(); n != 10 {
+		t.Fatalf("NumPages = %d, want 10", n)
+	}
+	// A programmatic move is the host's own doing, so Render does not report
+	// it as a change; the range moves.
+	p.GoToLast()
+	p.Render()
+	sm.ScriptReset()
+	if start, end := p.Range(); start != 90 || end != 95 {
+		t.Fatalf("Range = [%d,%d), want [90,95)", start, end)
+	}
+	// Options are re-read every frame.
+	p.Opts.HideSizeCombo = true
+	p.Render()
+}

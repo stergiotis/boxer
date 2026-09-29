@@ -194,10 +194,6 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 			st.gv.HostedPaint(st.nodes, st.edges)
 		}
 	})
-	if st.showGraph {
-		for range st.gv.Events() {
-		}
-	}
 
 	// The time strip: each step at its valid time, with what the layer holds
 	// of it. This source has no per-step summary, so the strip has no bars.

@@ -1,6 +1,7 @@
 package canonicaltypeedit
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -19,29 +20,23 @@ const (
 	sigSepByte byte = '_'
 )
 
-// Widget-id seq bases for the chip strip; kept distinct so chips, separator
-// toggles, the per-element edit scope, and the embedded summary do not collide.
-const (
-	chipSeqBase   uint64 = 0xC4190000
-	sepSeqBase    uint64 = 0xC4191000
-	editScopeBase uint64 = 0xC4192000
-	sigSummarySeq uint64 = 0xC4193001
-)
+// ErrNeedsIdsSignatureAndState is Result.Err when SignatureInput.Ids,
+// SignatureInput.Model or SignatureInput.State is nil.
+var ErrNeedsIdsSignatureAndState = errors.New("canonicaltypeedit: SignatureInput.Ids, SignatureInput.Model and SignatureInput.State are required")
 
-// sigElem is one element of a signature: a single-primitive editor plus the
+// sigElem is one element of a signature: a single-primitive value plus the
 // separator to the next element (ignored for the last element).
 type sigElem struct {
 	prim *Model
 	sep  byte // grpSepByte or sigSepByte
 }
 
-// SignatureModel is the caller-owned editor for a canonical-type signature: a
-// chip strip of primitive elements joined by '-'/'_' separators, with one
-// shared bar+form editing the selected chip (ADR-0067 group/signature cut).
-// The single-primitive [Model] is reused as each element's editor.
+// SignatureModel is the host-owned value of a canonical-type signature: a
+// sequence of primitive elements joined by '-'/'_' separators (ADR-0067
+// group/signature cut). The single-primitive [Model] is each element's value.
+// Which element is selected for editing is [SignatureState]'s.
 type SignatureModel struct {
 	elems []*sigElem
-	sel   int
 
 	// Derived cache, refreshed by rebuild from the elements + separators.
 	canonical string
@@ -49,12 +44,53 @@ type SignatureModel struct {
 	valid     bool
 }
 
+// SignatureState is the host-owned UI state of one signature editor: the
+// selected chip, one [State] per element (the bar and form of each chip's
+// editor, kept in step with the model's elements by RenderSignature), and
+// the embedded summary chip's state. The zero value selects the first
+// element. It must live at a stable address across frames, like [State].
+type SignatureState struct {
+	sel     int
+	elems   []*State
+	summary canonicaltypesummary.State
+}
+
+// Selected reports the index of the chip being edited.
+func (st *SignatureState) Selected() int { return st.sel }
+
+// Element returns the editor state of element i, or nil when the state has
+// not yet been rendered against a model with that many elements.
+func (st *SignatureState) Element(i int) *State {
+	if i < 0 || i >= len(st.elems) {
+		return nil
+	}
+	return st.elems[i]
+}
+
+// sync brings the per-element states in step with the model's elements: a
+// grown model gets fresh states, a shrunk one drops the tail, and the
+// selection is clamped. Element states are pointers, so a slice that grows
+// leaves the bars' bound buffers where they are.
+func (st *SignatureState) sync(sm *SignatureModel) {
+	for len(st.elems) < len(sm.elems) {
+		st.elems = append(st.elems, &State{})
+	}
+	if len(st.elems) > len(sm.elems) {
+		st.elems = st.elems[:len(sm.elems)]
+	}
+	if st.sel >= len(sm.elems) {
+		st.sel = len(sm.elems) - 1
+	}
+	if st.sel < 0 {
+		st.sel = 0
+	}
+}
+
 // NewSignatureModel returns a signature editor seeded with a single `u32`
 // element.
 func NewSignatureModel() (sm *SignatureModel) {
 	sm = &SignatureModel{
 		elems: []*sigElem{{prim: NewModel(), sep: grpSepByte}},
-		sel:   0,
 	}
 	sm.rebuild()
 	return
@@ -69,6 +105,9 @@ func (sm *SignatureModel) Valid() bool { return sm.valid }
 // Node returns the assembled AST: a bare primitive for one scalar element, a
 // group for one '-'-joined run, or a signature once a '_' separator splits it.
 func (sm *SignatureModel) Node() canonicaltypes.AstNodeI { return sm.ast }
+
+// Len is the number of elements.
+func (sm *SignatureModel) Len() int { return len(sm.elems) }
 
 // SetCanonical seeds the editor from a signature string, splitting on '_' into
 // groups and each group on '-' into primitive elements. Unparseable primitives
@@ -95,7 +134,6 @@ func (sm *SignatureModel) SetCanonical(s string) {
 		return
 	}
 	sm.elems = elems
-	sm.sel = 0
 	sm.rebuild()
 }
 
@@ -145,15 +183,18 @@ func (sm *SignatureModel) rebuild() {
 	}
 }
 
-// removeAt drops element i (clamping the selection); a no-op when it would
-// empty the editor.
-func (sm *SignatureModel) removeAt(i int) {
+// removeAt drops element i from the model and its editor state from st
+// (clamping the selection); a no-op when it would empty the editor.
+func (sm *SignatureModel) removeAt(st *SignatureState, i int) {
 	if i < 0 || i >= len(sm.elems) || len(sm.elems) <= 1 {
 		return
 	}
 	sm.elems = append(sm.elems[:i], sm.elems[i+1:]...)
-	if sm.sel >= len(sm.elems) {
-		sm.sel = len(sm.elems) - 1
+	if i < len(st.elems) {
+		st.elems = append(st.elems[:i], st.elems[i+1:]...)
+	}
+	if st.sel >= len(sm.elems) {
+		st.sel = len(sm.elems) - 1
 	}
 }
 
@@ -162,21 +203,67 @@ func (sm *SignatureModel) removeAt(i int) {
 // moves — the separators stay in their positional gap slots, so a chip slides
 // through the existing `-`/`_` structure rather than dragging its separator
 // along (e.g. moving `s` left in `u32-s_vc` yields `s-u32_vc`, not `s_u32-vc`).
-// A no-op at the ends.
-func (sm *SignatureModel) moveSelected(delta int) {
-	j := sm.sel + delta
-	if sm.sel < 0 || sm.sel >= len(sm.elems) || j < 0 || j >= len(sm.elems) {
+// The element's editor state moves with it. A no-op at the ends.
+func (sm *SignatureModel) moveSelected(st *SignatureState, delta int) {
+	j := st.sel + delta
+	if st.sel < 0 || st.sel >= len(sm.elems) || j < 0 || j >= len(sm.elems) {
 		return
 	}
-	sm.elems[sm.sel].prim, sm.elems[j].prim = sm.elems[j].prim, sm.elems[sm.sel].prim
-	sm.sel = j
+	sm.elems[st.sel].prim, sm.elems[j].prim = sm.elems[j].prim, sm.elems[st.sel].prim
+	if st.sel < len(st.elems) && j < len(st.elems) {
+		st.elems[st.sel], st.elems[j] = st.elems[j], st.elems[st.sel]
+	}
+	st.sel = j
 }
 
-// Render draws the chip strip, the selected element's editor, and the assembled
-// signature status. Call once per frame; scopeKey scopes every widget id. All
-// edits mutate the receiver in place.
-func (sm *SignatureModel) Render(ids *c.WidgetIdStack, scopeKey string) {
-	for range c.IdScope(ids.PrepareStr(scopeKey)) {
+// appendElem grows the signature by a default element and selects it.
+func (sm *SignatureModel) appendElem(st *SignatureState) {
+	sm.elems = append(sm.elems, &sigElem{prim: NewModel(), sep: grpSepByte})
+	st.elems = append(st.elems, &State{})
+	st.sel = len(sm.elems) - 1
+}
+
+// SignatureInput is one frame's declaration of a signature editor. It is a
+// type of its own because its Model and State are the signature's, not a
+// primitive's.
+type SignatureInput struct {
+	// Ids is the host's widget id stack. RenderSignature opens its own
+	// IdScope under it, so two editors in one host need only differ in
+	// ScopeKey.
+	Ids *c.WidgetIdStack
+	// ScopeKey names this editor within the host's id space; empty uses
+	// "canonicaltypeedit".
+	ScopeKey string
+	// Model is the signature being edited; edits mutate it in place.
+	// Required.
+	Model *SignatureModel
+	// State is the editor's host-owned UI state. Required, and at a stable
+	// address across frames: the bars bind to it.
+	State *SignatureState
+}
+
+func (in SignatureInput) scopeKey() string {
+	if in.ScopeKey == "" {
+		return defaultScopeKey
+	}
+	return in.ScopeKey
+}
+
+// RenderSignature draws the chip strip, the selected element's editor, and
+// the assembled signature status. Call once per frame; every widget id is
+// derived under one IdScope keyed by ScopeKey. All edits mutate Input.Model
+// and Input.State in place.
+func RenderSignature(in SignatureInput) (res Result) {
+	if in.Ids == nil || in.Model == nil || in.State == nil {
+		res.Err = ErrNeedsIdsSignatureAndState
+		for rt := range c.RichTextLabel(res.Err.Error()) {
+			rt.Small().Weak()
+		}
+		return
+	}
+	ids, sm, st := in.Ids, in.Model, in.State
+	st.sync(sm)
+	for range c.IdScope(ids.PrepareStr(in.scopeKey())) {
 		for range c.Vertical().KeepIter() {
 			c.UiSetMinWidth(editorMinWidth)
 			var changed bool
@@ -185,16 +272,18 @@ func (sm *SignatureModel) Render(ids *c.WidgetIdStack, scopeKey string) {
 			// common single-primitive case stays a bare bar+form editor with no
 			// sequence chrome.
 			if len(sm.elems) > 1 {
-				changed = sm.renderChipStrip(ids)
+				changed = renderChipStrip(ids, sm, st)
 				c.Separator().Send()
 			}
-			if sm.sel >= 0 && sm.sel < len(sm.elems) {
+			if st.sel >= 0 && st.sel < len(sm.elems) {
 				// Each element edits under its own id scope so switching the
 				// selected chip swaps the bar/form widget-id namespace (and thus
 				// the displayed buffer) cleanly.
-				for range c.IdScope(ids.PrepareSeq(editScopeBase + uint64(sm.sel))) {
-					if sm.elems[sm.sel].prim.renderEditBody(ids) {
-						changed = true
+				for range c.IdScope(ids.PrepareStr("elem")) {
+					for range c.IdScope(ids.PrepareSeq(uint64(st.sel))) {
+						if renderEditBody(ids, sm.elems[st.sel].prim, st.elems[st.sel]) {
+							changed = true
+						}
 					}
 				}
 			}
@@ -205,99 +294,95 @@ func (sm *SignatureModel) Render(ids *c.WidgetIdStack, scopeKey string) {
 				c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 				if c.Button(ids.PrepareStr("grow"), c.Atoms().Text("+ element").Keep()).
 					Small().SendResp().HasPrimaryClicked() {
-					sm.elems = append(sm.elems, &sigElem{prim: NewModel(), sep: grpSepByte})
-					sm.sel = len(sm.elems) - 1
+					sm.appendElem(st)
 					changed = true
 				}
 			}
 			if changed {
 				sm.rebuild()
 			}
+			res.Changed = changed
 			c.Separator().Send()
-			sm.renderStatus(ids)
+			// Name the readout for what it currently is: a single primitive
+			// until the editor grows into a multi-element group/signature.
+			label := "live type"
+			if len(sm.elems) > 1 {
+				label = "live signature"
+			}
+			renderStatus(ids, sm.canonical, &st.summary, label)
 		}
 	}
+	return
 }
 
 // renderChipStrip draws the element chips (click to select), the per-gap
 // separator toggles ('-'/'_'), an add button, and a remove button for the
 // selected element. Returns whether the structure changed (needs reassembly).
-func (sm *SignatureModel) renderChipStrip(ids *c.WidgetIdStack) (structureChanged bool) {
+func renderChipStrip(ids *c.WidgetIdStack, sm *SignatureModel, st *SignatureState) (structureChanged bool) {
 	removeReq := -1
 	for range c.Horizontal().KeepIter() {
-		for i, e := range sm.elems {
-			label := e.prim.canonical
-			if label == "" {
-				label = "?"
-			}
-			selector.RadioValue(ids.PrepareSeq(chipSeqBase+uint64(i)), &sm.sel, i).
-				Style(selector.StyleSelectable).Text(label).Send()
-			if i < len(sm.elems)-1 {
-				if c.Button(ids.PrepareSeq(sepSeqBase+uint64(i)), c.Atoms().Text(string(e.sep)).Keep()).
-					Small().SendResp().HasPrimaryClicked() {
-					if e.sep == grpSepByte {
-						e.sep = sigSepByte
-					} else {
-						e.sep = grpSepByte
+		for range c.IdScope(ids.PrepareStr("chips")) {
+			for i, e := range sm.elems {
+				for range c.IdScope(ids.PrepareSeq(uint64(i))) {
+					label := e.prim.canonical
+					if label == "" {
+						label = "?"
 					}
-					structureChanged = true
+					selector.RadioValue(ids.PrepareStr("chip"), &st.sel, i).
+						Style(selector.StyleSelectable).Text(label).Send()
+					if i < len(sm.elems)-1 {
+						if c.Button(ids.PrepareStr("sep"), c.Atoms().Text(string(e.sep)).Keep()).
+							Small().SendResp().HasPrimaryClicked() {
+							if e.sep == grpSepByte {
+								e.sep = sigSepByte
+							} else {
+								e.sep = grpSepByte
+							}
+							structureChanged = true
+						}
+					}
 				}
 			}
 		}
 		c.AddSpace(styletokens.GapItems(styletokens.ActiveDensity()))
 		if c.Button(ids.PrepareStr("add-elem"), c.Atoms().Text("+").Keep()).
 			SendResp().HasPrimaryClicked() {
-			sm.elems = append(sm.elems, &sigElem{prim: NewModel(), sep: grpSepByte})
-			sm.sel = len(sm.elems) - 1
+			sm.appendElem(st)
 			structureChanged = true
 		}
 		// Reorder the selected element through the positional separator gaps.
 		// The buttons grey out at the ends; the click guard also rejects an
 		// out-of-range move so a greyed button can never act.
-		leftDisabled := sm.sel <= 0
+		leftDisabled := st.sel <= 0
 		for range c.Scope().KeepIter() {
 			if leftDisabled {
 				c.UiDisable()
 			}
 			if c.Button(ids.PrepareStr("move-left"), c.Atoms().Text(icons.PhCaretLeft).Keep()).
 				SendResp().HasPrimaryClicked() && !leftDisabled {
-				sm.moveSelected(-1)
+				sm.moveSelected(st, -1)
 				structureChanged = true
 			}
 		}
-		rightDisabled := sm.sel >= len(sm.elems)-1
+		rightDisabled := st.sel >= len(sm.elems)-1
 		for range c.Scope().KeepIter() {
 			if rightDisabled {
 				c.UiDisable()
 			}
 			if c.Button(ids.PrepareStr("move-right"), c.Atoms().Text(icons.PhCaretRight).Keep()).
 				SendResp().HasPrimaryClicked() && !rightDisabled {
-				sm.moveSelected(1)
+				sm.moveSelected(st, 1)
 				structureChanged = true
 			}
 		}
 		if c.Button(ids.PrepareStr("rm-elem"), c.Atoms().Text("× remove").Keep()).
 			SendResp().HasPrimaryClicked() {
-			removeReq = sm.sel
+			removeReq = st.sel
 		}
 	}
 	if removeReq >= 0 {
-		sm.removeAt(removeReq)
+		sm.removeAt(st, removeReq)
 		structureChanged = true
 	}
 	return
-}
-
-// renderStatus shows the assembled signature via the embedded
-// canonicaltypesummary level-1 chip (validity dot + footprint + inspector
-// toggle over the whole signature).
-func (sm *SignatureModel) renderStatus(ids *c.WidgetIdStack) {
-	// Name the readout for what it currently is: a single primitive until the
-	// editor grows into a multi-element group/signature.
-	label := "live type"
-	if len(sm.elems) > 1 {
-		label = "live signature"
-	}
-	smallLabel(label)
-	canonicaltypesummary.New("ctedit-sig-sum").Render(ids.PrepareSeq(sigSummarySeq), sm.canonical)
 }

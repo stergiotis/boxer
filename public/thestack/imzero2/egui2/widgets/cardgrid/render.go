@@ -72,7 +72,7 @@ func Render(in Input) (res Result) {
 		// The pane probe goes first: the rect is the room left for the next
 		// widget, and it answers one frame late — hold the last good width
 		// so the grid does not reflow to the fallback on a hidden→shown edge.
-		paneSeq := c.ProbeSeq(in.ScopeKey, "cardgrid")
+		paneSeq := ids.ProbeSeq("pane")
 		if w, _, ok := c.CapturePaneSize(paneSeq); ok {
 			st.paneW = w
 		}
@@ -102,7 +102,7 @@ func Render(in Input) (res Result) {
 			for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 				// The content's top, before anything moves the cursor: with
 				// the viewport's, it gives the scroll offset.
-				contentSeq := c.ProbeSeq(in.ScopeKey, "cardgrid-content")
+				contentSeq := ids.ProbeSeq("content")
 				c.CaptureUiAvailableRect(contentSeq)
 				content, contentOK := c.CurrentApplicationState.StateManager.GetUiRect(contentSeq)
 				if contentOK {

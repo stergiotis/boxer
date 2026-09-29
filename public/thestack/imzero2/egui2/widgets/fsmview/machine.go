@@ -34,9 +34,9 @@ type Transition[T comparable] struct {
 }
 
 // StateColorFn returns the IDS palette colour for a given state, with
-// isCurrent flagging the active state. Override via [WithStateColor]; the
-// default scheme lights the active state with AccentDefault and keeps the
-// rest in NeutralSubtle.
+// isCurrent flagging the active state. Override via
+// [MachineOptions.StateColor]; the default scheme lights the active state
+// with AccentDefault and keeps the rest in NeutralSubtle.
 type StateColorFn[T comparable] func(state T, isCurrent bool) styletokens.RGBA8
 
 // Machine is the visualization-aware wrapper around [statetrooper.FSM]. It
@@ -44,8 +44,9 @@ type StateColorFn[T comparable] func(state T, isCurrent bool) styletokens.RGBA8
 // mirror of the rule graph (statetrooper's ruleset is unexported, so the
 // widget can't enumerate transitions from the FSM alone).
 //
-// Construct via [NewMachine] + [Option]; declare valid transitions via
-// [Machine.AddRule]; drive runtime state with [Machine.Transition].
+// Construct via [NewMachine] with a [MachineOptions]; declare valid
+// transitions via [Machine.AddRule]; drive runtime state with
+// [Machine.Transition].
 type Machine[T comparable] struct {
 	fsm       *statetrooper.FSM[T]
 	rules     map[T][]T
@@ -57,44 +58,28 @@ type Machine[T comparable] struct {
 	nodeId    map[T]uint64
 }
 
-// Option configures a Machine at construction.
-type Option[T comparable] func(inst *Machine[T])
-
-// WithLabel sets a human-readable label for each state. Defaults to
-// [fmt.Sprint], which is fine for string / int states and produces "{a b}"
-// for struct states (callers should override for structs).
-func WithLabel[T comparable](fn func(T) string) Option[T] {
-	return func(inst *Machine[T]) {
-		inst.labelFn = fn
-	}
-}
-
-// WithStateOrder pins the display order used by the level-2 table. States
-// not listed here appear after the listed ones in insertion order (i.e.
-// the order they first show up via AddRule). Useful when alphabetic order
-// hides the FSM's natural flow.
-func WithStateOrder[T comparable](order []T) Option[T] {
-	return func(inst *Machine[T]) {
-		inst.order = append(inst.order[:0], order...)
-		for _, s := range order {
-			inst.known[s] = struct{}{}
-		}
-	}
-}
-
-// WithStateColor overrides the default per-state colour scheme. Callers
-// typically use this to flag domain-specific severity (error states red,
-// terminal states muted, etc.) on top of the isCurrent emphasis.
-func WithStateColor[T comparable](fn StateColorFn[T]) Option[T] {
-	return func(inst *Machine[T]) {
-		inst.colorFn = fn
-	}
+// MachineOptions configures a Machine at construction. Every zero value is a
+// default (ADR-0267 W11).
+type MachineOptions[T comparable] struct {
+	// Label is the human-readable label of each state. nil takes
+	// [fmt.Sprint], which is fine for string / int states and produces
+	// "{a b}" for struct states (callers should set it for structs).
+	Label func(T) string
+	// StateOrder pins the display order used by the level-2 table. States
+	// not listed appear after the listed ones in insertion order (i.e. the
+	// order they first show up via AddRule). Useful when alphabetic order
+	// hides the FSM's natural flow.
+	StateOrder []T
+	// StateColor overrides the default per-state colour scheme. Callers
+	// typically use it to flag domain-specific severity (error states red,
+	// terminal states muted, etc.) on top of the isCurrent emphasis.
+	StateColor StateColorFn[T]
 }
 
 // NewMachine constructs a Machine with the given initial state. maxHistory
 // caps the [statetrooper.FSM] transition history; pass 0 to disable
-// history tracking. Options apply in order; later options win.
-func NewMachine[T comparable](initial T, maxHistory int, opts ...Option[T]) *Machine[T] {
+// history tracking.
+func NewMachine[T comparable](initial T, maxHistory int, opts MachineOptions[T]) *Machine[T] {
 	const expectedStates = 8
 	inst := &Machine[T]{
 		fsm:       statetrooper.NewFSM(initial, maxHistory),
@@ -106,8 +91,17 @@ func NewMachine[T comparable](initial T, maxHistory int, opts ...Option[T]) *Mac
 		colorFn:   defaultStateColor[T],
 	}
 	inst.observe(initial)
-	for _, opt := range opts {
-		opt(inst)
+	if opts.Label != nil {
+		inst.labelFn = opts.Label
+	}
+	if len(opts.StateOrder) > 0 {
+		inst.order = append(inst.order[:0], opts.StateOrder...)
+		for _, st := range opts.StateOrder {
+			inst.known[st] = struct{}{}
+		}
+	}
+	if opts.StateColor != nil {
+		inst.colorFn = opts.StateColor
 	}
 	return inst
 }
@@ -253,7 +247,7 @@ func (inst *Machine[T]) Color(state T) styletokens.RGBA8 {
 }
 
 // States iterates the known states in display order — pinned states first
-// (via [WithStateOrder]), then any states observed via AddRule that weren't
+// (via [MachineOptions.StateOrder]), then any states observed via AddRule that weren't
 // pinned, in observation order.
 func (inst *Machine[T]) States() iter.Seq[T] {
 	return func(yield func(T) bool) {
@@ -284,8 +278,8 @@ func (inst *Machine[T]) Edges() iter.Seq2[EdgeKey[T], string] {
 // Uses FNV-1a over the state's fmt.Sprint representation so two states with
 // the same label collide — but that's also true on the visualization side
 // (same label looks like the same state to the user). For domain states
-// distinguished only by an internal field, callers should override
-// WithLabel to make the representation unique.
+// distinguished only by an internal field, callers should set
+// [MachineOptions.Label] to make the representation unique.
 func (inst *Machine[T]) NodeId(state T) uint64 {
 	if id, ok := inst.nodeId[state]; ok {
 		return id
@@ -363,7 +357,7 @@ func toTransition[T comparable](t statetrooper.Transition[T]) Transition[T] {
 }
 
 // observe records a state as known and assigns it a position in the display
-// order if it wasn't pinned via [WithStateOrder].
+// order if it wasn't pinned via [MachineOptions.StateOrder].
 func (inst *Machine[T]) observe(s T) {
 	if _, ok := inst.known[s]; ok {
 		return

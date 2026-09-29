@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
@@ -19,7 +20,8 @@ import (
 // =============================================================================
 
 type cvSchemaDemoState struct {
-	model  *schemaview.Model
+	table  *common.TableDesc
+	state  schemaview.State
 	errMsg string
 }
 
@@ -30,7 +32,7 @@ func newCvSchemaState() (st *cvSchemaDemoState) {
 		st.errMsg = d.err
 		return
 	}
-	st.model = schemaview.NewModel(&d.tblDesc)
+	st.table = &d.tblDesc
 	return
 }
 
@@ -62,5 +64,5 @@ func renderCvSchemaDemo(ids *c.WidgetIdStack, st *cvSchemaDemoState) {
 		c.Label("componentview schema unavailable: " + st.errMsg).Wrap().Send()
 		return
 	}
-	schemaview.Render(schemaview.Input{Ids: ids, ScopeKey: "cvschema", Model: st.model})
+	schemaview.Render(schemaview.Input{Ids: ids, ScopeKey: "cvschema", Table: st.table, State: &st.state})
 }

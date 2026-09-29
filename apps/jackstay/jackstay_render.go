@@ -370,18 +370,16 @@ func (inst *App) actionButton(key string, label string, busy bool) (clicked bool
 	return
 }
 
-// jobRow draws a job's progress row while it runs. The Cancel id is prepared
-// only then: bgjobrow consumes it only for a running job, and a prepared id
-// left unconsumed breaks the id stack.
+// jobRow draws a job's progress row while it runs; cancelKey names the
+// row's id scope and, when empty, leaves the row without a Cancel.
 func (inst *App) jobRow(job bgjobrow.JobI, title string, cancelKey string, rateUnit string) (running bool) {
 	if job.Snapshot().State != bgjob.StateRunning {
 		return false
 	}
-	in := bgjobrow.Input{Title: title, RateUnit: rateUnit}
-	if cancelKey != "" {
-		in.CancelId = inst.ids.PrepareStr(cancelKey)
-	}
-	return bgjobrow.Render(job, in)
+	return bgjobrow.Render(bgjobrow.Input{
+		Job: job, Ids: inst.ids, ScopeKey: cancelKey, Cancel: cancelKey != "",
+		Title: title, RateUnit: rateUnit,
+	}).Running
 }
 
 func (inst *App) failedNote(key string, job interface{ Snapshot() bgjob.Snapshot }) {

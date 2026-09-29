@@ -2,7 +2,10 @@
 // [c.TextEdit] with a line-number gutter and marks lane beside it, lexical and
 // semantic syntax colour, a sparse overlay channel for the embedder's own
 // decorations, and multi-statement awareness (which statement the caret is in,
-// and what a run-under-cursor would ship).
+// and what a run-under-cursor would ship). [Editor] and [Field] are
+// semi-retained widgets (ADR-0267) — the caret channel and the colour-tier
+// memos survive frames — and the completion pane ([RenderPane]) is an
+// immediate-mode one over a host-owned [PaneState].
 //
 // It was play's editor until ADR-0147 §SD1; the extraction is what lets a
 // second SQL surface inherit the affordances rather than re-implement them.
@@ -39,9 +42,10 @@
 // [Editor.Bind] must run before [Editor.Render], and before the embedder
 // composes its [Decoration]:
 //
-//	res := ed.Bind(sqleditor.Frame{IDSlot: "sql", Value: &buf, Rows: rows})
+//	ed := sqleditor.New(ids, "sql")  // once, on the host's id stack
+//	res := ed.Bind(sqleditor.Frame{Value: &buf, Rows: rows})
 //	deco := myOverlays(res)          // optional; reads res.Caret, res.Statement
-//	ed.Render(ids, deco)
+//	ed.Render(deco)                  // returns res again, for readers after the render
 //
 // The order is load-bearing rather than stylistic. The caret arrives one frame
 // late through the FFI, so Bind is where last frame's packed caret is resolved
@@ -70,6 +74,8 @@
 //
 // # Ids
 //
-// Multi-child, so every embedded widget id derives from [Frame.IDSlot] under
-// the caller's own stack (ADR-0013). Two editors in one app need two id slots.
+// Multi-child, so every embedded widget id and register slot derives from the
+// scope key given to [New] under the caller's own stack (ADR-0267 W4, W7).
+// Two editors on one stack need two scope keys; a [Frame.View] adds a child
+// scope when one editor alternates between two buffers.
 package sqleditor

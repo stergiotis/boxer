@@ -43,7 +43,7 @@ const completionPaneProbeSalt uint64 = 0x704ab1e5a1700002
 
 // completionState is the tab's cross-frame state plus this frame's answer.
 type completionState struct {
-	pane   sqleditor.Pane
+	pane   sqleditor.PaneState
 	engine *sqlcomplete.Engine
 	// result is recomputed every frame from the editor's published site, so
 	// the tint and the pane never disagree about which caret they describe.
@@ -393,20 +393,19 @@ func (inst *PlayApp) renderCompletionTab() {
 		st.paneW, st.paneH = w, h
 	}
 
-	st.pane.Render(sqleditor.PaneInput{
+	res := sqleditor.RenderPane(sqleditor.PaneInput{
 		Ids:               inst.ids,
 		ScopeKey:          "completion",
+		State:             &st.pane,
 		Result:            st.result,
 		MaxHeight:         st.paneH,
 		Width:             st.paneW,
 		Typed:             st.typed,
 		CaretAtPartialEnd: st.atEnd,
-		OnAccept: func(_ sqlcomplete.Item, suffix string) {
-			if suffix != "" {
-				inst.InsertSqlAtCaret(suffix)
-			}
-		},
 	})
+	if res.Accepted && res.Suffix != "" {
+		inst.InsertSqlAtCaret(res.Suffix)
+	}
 }
 
 // completionVocabularyItems are the names this build declares, with the marks

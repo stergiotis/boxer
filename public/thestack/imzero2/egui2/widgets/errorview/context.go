@@ -1,6 +1,7 @@
-// Package errorview renders a structured wrapped-error chain as a
-// collapsing tree: per-stream sub-headers, per-fact rows showing
-// message (red), stack frame triple (monospace muted), and CBOR
+// Package errorview is an immediate-mode widget (ADR-0267) that renders a
+// structured wrapped-error chain as a collapsing tree: per-stream
+// sub-headers, per-fact rows showing message (red), stack frame triple
+// (monospace muted), and CBOR
 // diagnostic of any attached structured data (in a dark canvas
 // Frame). Lifted out of the logviewer detail pane so any consumer
 // of an `eh.MarshalError`-shaped chain — observability dashboards,

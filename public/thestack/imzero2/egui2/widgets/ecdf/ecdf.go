@@ -1,13 +1,15 @@
-// Package ecdf is the imzero2 widget for plotting an empirical CDF
+// Package ecdf is a painter helper (ADR-0267) for plotting an empirical CDF
 // together with a finite-sample exact simultaneous confidence band
 // (Berk-Jones by default; DKW / equal-precision / higher-criticism
 // available per the underlying ecdfbands library).
 //
-// The widget is stateless: construct one Renderer with a fluent
-// builder, then call Render once per frame with the host's open
-// *implot.Plot (between Begin and End — the widget renders through the
-// implot port per ADR-0149 SD7). Each Render declares the shaded band
-// and the ECDF step curve into that plot.
+// The helper takes no widget ids and holds no state: [Paint] declares the
+// shaded band and the ECDF step curve into the host's open *implot.Plot
+// (between Begin and End — through the implot port per ADR-0149 SD7) from
+// an [Input] whose [Style] fields are zero for the defaults [DefaultStyle]
+// resolves. The exact band's O(n²) critical value is warmed off the render
+// goroutine by [EnsureBandJob], under a key the host derives from its own
+// ids, and cancelled by [CancelBandJob].
 package ecdf
 
 import (
@@ -22,214 +24,192 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
-// Renderer is the configured ECDF + confidence band visualiser.
-// Zero value is not usable — construct via New.
-type Renderer struct {
-	method           ecdfbands.BandMethodE
-	alpha            float64
-	bandFillPacked   uint32
-	bandStrokePacked uint32
-	bandStrokeWidth  float32
-	ecdfStrokePacked uint32
-	ecdfStrokeWidth  float32
-	seriesName       string
-	bandSeriesName   string
+// Style is the appearance and calibration of the band and curve. A zero
+// field takes the value [DefaultStyle] resolves for it; [Style.Resolved]
+// returns the style with every default filled in.
+type Style struct {
+	// Method is the confidence-band family; zero → BandMethodBerkJones.
+	Method ecdfbands.BandMethodE
+	// Alpha is the complement of coverage: the band realises (1-α)·100%
+	// simultaneous coverage. Zero → 0.05.
+	Alpha float64
+	// BandFill is the band polygon's fill; zero → AccentDefault at 0x40 alpha.
+	BandFill color.Color
+	// BandStroke and BandStrokeWidth outline the band; the default width 0
+	// draws no outline, so the band reads as a fill alone.
+	BandStroke      color.Color
+	BandStrokeWidth float32
+	// EcdfStroke and EcdfStrokeWidth draw the ECDF step polyline; zero →
+	// NeutralTextPrimary at 1.5 px.
+	EcdfStroke      color.Color
+	EcdfStrokeWidth float32
+	// SeriesName is the legend label of the curve; "" → "ECDF". The band's
+	// label is "<SeriesName> band".
+	SeriesName string
 }
 
-// New constructs a Renderer with IDS-aligned defaults.
-//
-// Static defaults:
-//
-//   - method:      BandMethodBerkJones (tail-tight, default)
-//   - alpha:       0.05 (95% simultaneous coverage)
-//   - bandFill:    AccentDefault with 0x40 alpha overlay
-//   - bandStroke:  AccentDefault at 0px width (no outline)
-//   - ecdfStroke:  NeutralTextPrimary at 1.5 px
-//   - seriesName:  "ECDF" (band's legend label is "<seriesName> band")
-func New() (inst Renderer) {
-	inst = Renderer{
-		method:           ecdfbands.BandMethodBerkJones,
-		alpha:            0.05,
-		bandFillPacked:   packRGBA(styletokens.AccentDefault, 0x40),
-		bandStrokePacked: styletokens.AccentDefault.AsHex(),
-		bandStrokeWidth:  0,
-		ecdfStrokePacked: styletokens.NeutralTextPrimary.AsHex(),
-		ecdfStrokeWidth:  1.5,
-		seriesName:       "ECDF",
-		bandSeriesName:   "ECDF band",
+// Input is what one Paint or At draws or reads: the Style, the sample as
+// either a sorted raw sample or an (Xs, FnAt, N) grid, and which band.
+type Input struct {
+	Style
+	// Sorted is a non-decreasing iid sample. When set it is the data and
+	// the grid fields are ignored; fewer than two values paint nothing.
+	Sorted []float64
+	// Xs and FnAt are an explicit ECDF grid — monotone non-decreasing Xs
+	// with FnAt ∈ [0, 1] — and N the total sample size the estimator was
+	// built on (typically far larger than len(Xs)); the band's calibration
+	// depends on N, not on the grid resolution. For a t-digest or another
+	// sketch, and for a grid intentionally coarser than the data.
+	Xs   []float64
+	FnAt []float64
+	N    int
+	// Band selects what is drawn beside the curve: BandNone draws the curve
+	// alone (the band-free counterpart while a warm-up runs), BandExact the
+	// configured family at N (blocking on the O(n²) inversion unless it is
+	// cached — see BandReady), BandPreview the instant closed-form DKW band,
+	// wider than the exact one and never blocking. The raw-sample path
+	// treats BandPreview as BandExact.
+	Band BandKindE
+}
+
+// Result is what one Paint reports.
+type Result struct {
+	// Err is the band library's rejection of the input (an unsorted sample,
+	// a non-monotone grid). The curve is still drawn where it can be.
+	Err error
+}
+
+// DefaultStyle is the style a zero [Style] resolves to.
+func DefaultStyle() (st Style) {
+	st = Style{
+		Method:          ecdfbands.BandMethodBerkJones,
+		Alpha:           0.05,
+		BandFill:        color.Hex(packRGBA(styletokens.AccentDefault, 0x40)),
+		BandStroke:      color.Hex(styletokens.AccentDefault.AsHex()),
+		BandStrokeWidth: 0,
+		EcdfStroke:      color.Hex(styletokens.NeutralTextPrimary.AsHex()),
+		EcdfStrokeWidth: 1.5,
+		SeriesName:      "ECDF",
 	}
 	return
 }
 
-// Method sets the confidence-band family. Default BandMethodBerkJones.
-func (inst Renderer) Method(m ecdfbands.BandMethodE) (out Renderer) {
-	inst.method = m
-	out = inst
+// Resolved returns st with every zero field replaced by its default.
+func (st Style) Resolved() (out Style) {
+	def := DefaultStyle()
+	out = st
+	if out.Method == 0 {
+		out.Method = def.Method
+	}
+	if out.Alpha == 0 {
+		out.Alpha = def.Alpha
+	}
+	if out.BandFill == (color.Color{}) {
+		out.BandFill = def.BandFill
+	}
+	if out.BandStroke == (color.Color{}) {
+		out.BandStroke = def.BandStroke
+	}
+	if out.EcdfStroke == (color.Color{}) {
+		out.EcdfStroke = def.EcdfStroke
+	}
+	if out.EcdfStrokeWidth == 0 {
+		out.EcdfStrokeWidth = def.EcdfStrokeWidth
+	}
+	if out.SeriesName == "" {
+		out.SeriesName = def.SeriesName
+	}
 	return
 }
 
-// BandMethod returns the configured exact-band family — the getter
-// counterpart to [Renderer.Method], so a host widget can name the band
-// (e.g. in an always-visible status line) without re-deriving it.
-func (inst Renderer) BandMethod() ecdfbands.BandMethodE { return inst.method }
+// bandSeriesName is the band's legend label.
+func (st Style) bandSeriesName() string { return st.SeriesName + " band" }
 
-// Alpha sets the complement-of-coverage level. The band realises
-// (1-α)·100% simultaneous coverage. Default 0.05.
-func (inst Renderer) Alpha(a float64) (out Renderer) {
-	inst.alpha = a
-	out = inst
-	return
+// Paint declares the ECDF and, per in.Band, its confidence band into the
+// host's open plot. The band goes first (it sits under the curve), then the
+// step polyline. A raw sample of fewer than two values, or a grid of fewer
+// than two points, paints nothing.
+func Paint(p *implot.Plot, in Input) (res Result) {
+	st := in.Style.Resolved()
+	if in.Sorted != nil {
+		return st.paintSample(p, in.Sorted, in.Band)
+	}
+	return st.paintGrid(p, in.Xs, in.FnAt, in.N, in.Band)
 }
 
-// BandFill overrides the polygon fill colour applied to the band
-// region. Default AccentDefault at 0x40 alpha.
-func (inst Renderer) BandFill(col color.Color) (out Renderer) {
-	inst.bandFillPacked = col.Literal()
-	out = inst
-	return
-}
-
-// BandStroke sets the polygon outline colour and width for the band.
-// Default 0 px (no outline) — the band reads as a fill alone.
-func (inst Renderer) BandStroke(col color.Color, widthPx float32) (out Renderer) {
-	inst.bandStrokePacked = col.Literal()
-	inst.bandStrokeWidth = widthPx
-	out = inst
-	return
-}
-
-// EcdfStroke sets the colour and width of the ECDF step polyline.
-// Default NeutralTextPrimary at 1.5 px.
-func (inst Renderer) EcdfStroke(col color.Color, widthPx float32) (out Renderer) {
-	inst.ecdfStrokePacked = col.Literal()
-	inst.ecdfStrokeWidth = widthPx
-	out = inst
-	return
-}
-
-// SeriesName sets the legend label for the ECDF series. The band
-// series uses "<seriesName> band".
-func (inst Renderer) SeriesName(name string) (out Renderer) {
-	inst.seriesName = name
-	inst.bandSeriesName = name + " band"
-	out = inst
-	return
-}
-
-// Render declares the ECDF + confidence band for one sorted iid sample
-// into the host's open plot.
-//
-// sorted must be non-decreasing; the underlying ecdfbands library
-// rejects unsorted inputs with an error. n must be ≥ 2 for a
-// meaningful band; n = 0 / 1 short-circuit (no emit).
-//
-// The render order is: the shaded band first (it sits under the
-// curve), then the ECDF step polyline.
-func (inst Renderer) Render(p *implot.Plot, sorted []float64) (err error) {
-	n := len(sorted)
-	if n < 2 {
+func (st Style) paintSample(p *implot.Plot, sorted []float64, band BandKindE) (res Result) {
+	if len(sorted) < 2 {
 		return
 	}
-	band, err := ecdfbands.BandsForSample(sorted, inst.alpha, inst.method)
-	if err != nil {
-		err = eh.Errorf("ecdf band: %w", err)
-		return
+	if band != BandNone {
+		b, err := ecdfbands.BandsForSample(sorted, st.Alpha, st.Method)
+		if err != nil {
+			res.Err = eh.Errorf("ecdf band: %w", err)
+		} else {
+			st.emitBand(p, b.Xs, b.LowerCDF, b.UpperCDF)
+		}
 	}
-	inst.emitBand(p, band.Xs, band.LowerCDF, band.UpperCDF)
-	inst.emitEcdfPolyline(p, sorted)
+	st.emitEcdfPolyline(p, sorted)
 	return
 }
 
-// RenderGrid renders the ECDF + confidence band at an explicit
-// (xs, fnAt) grid, mirroring ecdfbands.BandsForGrid. n is the total
-// sample size on which the ECDF estimator was built (typically much
-// larger than len(xs)) — the band's calibration depends on n, not
-// on the grid resolution.
-//
-// Use this when the sample is too large to sort (a t-digest or
-// Greenwald-Khanna sketch is the typical source) or when the
-// visualisation grid is intentionally coarser than the underlying
-// data. xs and fnAt must satisfy the same validation as
-// BandsForGrid: monotone non-decreasing, fnAt ∈ [0, 1].
-//
-// Render order matches Render: band rectangles first, then the
-// ECDF step curve from the (xs, fnAt) grid.
-func (inst Renderer) RenderGrid(p *implot.Plot, xs, fnAt []float64, n int) (err error) {
+func (st Style) paintGrid(p *implot.Plot, xs, fnAt []float64, n int, band BandKindE) (res Result) {
 	if len(xs) < 2 {
 		return
 	}
-	g, err := ecdfbands.BandsForGrid(xs, fnAt, n, inst.alpha, inst.method)
-	if err != nil {
-		err = eh.Errorf("ecdf grid band: %w", err)
-		return
+	switch band {
+	case BandExact:
+		g, err := ecdfbands.BandsForGrid(xs, fnAt, n, st.Alpha, st.Method)
+		if err != nil {
+			res.Err = eh.Errorf("ecdf grid band: %w", err)
+		} else {
+			st.emitBand(p, g.Xs, g.LowerCDF, g.UpperCDF)
+		}
+	case BandPreview:
+		g, err := ecdfbands.DkwBandForGrid(xs, fnAt, n, st.Alpha)
+		if err != nil {
+			res.Err = eh.Errorf("ecdf preview band: %w", err)
+		} else {
+			st.emitBand(p, g.Xs, g.LowerCDF, g.UpperCDF)
+		}
 	}
-	inst.emitBand(p, g.Xs, g.LowerCDF, g.UpperCDF)
-	inst.emitGridEcdfPolyline(p, g.Xs, fnAt)
+	st.emitGridEcdfPolyline(p, xs, fnAt)
 	return
 }
 
-// RenderGridPreview draws the instant closed-form DKW preview band (via
-// [ecdfbands.DkwBandForGrid]) plus the ECDF grid curve. Unlike RenderGrid
-// it never blocks on the O(n²) inversion, so it is the band to draw every
-// frame while the tighter exact band (the renderer's configured Method)
-// warms in the background or waits behind an explicit compute request. The
-// conservative DKW strip is wider than the exact band — most visibly in
-// the tails — so swapping to the exact band reads as a tightening.
-func (inst Renderer) RenderGridPreview(p *implot.Plot, xs, fnAt []float64, n int) (err error) {
-	if len(xs) < 2 {
-		return
-	}
-	g, err := ecdfbands.DkwBandForGrid(xs, fnAt, n, inst.alpha)
-	if err != nil {
-		err = eh.Errorf("ecdf preview band: %w", err)
-		return
-	}
-	inst.emitBand(p, g.Xs, g.LowerCDF, g.UpperCDF)
-	inst.emitGridEcdfPolyline(p, g.Xs, fnAt)
-	return
+// BandReady reports whether the style's (n, α, method) exact band is
+// already cached — whether a BandExact Paint or At will draw without
+// blocking on the O(n²) inversion. Non-blocking; pair it with
+// [EnsureBandJob] to drive the schedule-and-show-progress path.
+func BandReady(st Style, n int) bool {
+	st = st.Resolved()
+	return ecdfbands.BandReady(n, st.Alpha, st.Method)
 }
 
-// BandReady reports whether this renderer's (n, α, method) confidence
-// band is already cached — i.e. whether RenderGrid/AtGrid will draw
-// without blocking on the O(n²) inversion. Non-blocking probe; pair it
-// with EnsureBandJob to drive the schedule-and-show-progress path.
-func (inst Renderer) BandReady(n int) bool {
-	return ecdfbands.BandReady(n, inst.alpha, inst.method)
+// BandJobKey identifies one consumer's band warm-up. A host derives it from
+// its own ids inside its scope — `BandJobKey(ids.ProbeSeq("band-job"))` —
+// so two instances never share or cancel each other's solve.
+type BandJobKey uint64
+
+// EnsureBandJob schedules (once, idempotently) a background warm-up of the
+// style's (n, α, method) band under key and returns the current progress
+// snapshot. tasks may be nil (the solve still runs; only keelson task
+// integration is skipped). Call it on frames where BandReady is false,
+// paint the curve with BandPreview or BandNone meanwhile, and show the
+// snapshot through a progress widget. Pair it with [CancelBandJob] when the
+// consumer closes so a long solve does not outlive the window that asked.
+func EnsureBandJob(key BandJobKey, tasks task.TaskApiI, n int, st Style) BandJobSnapshot {
+	st = st.Resolved()
+	return ensureBandWarm(key, tasks, n, st.Alpha, st.Method)
 }
 
-// EnsureBandJob schedules (once, idempotently) a background warm-up of
-// this renderer's (n, α, method) band under jobKey — a stable per-inspector
-// identity the host widget supplies (its per-call scope) — and returns the
-// current progress snapshot. tasks may be nil (the solve still runs; only
-// keelson task integration is skipped). Call on frames where BandReady(n)
-// is false: render RenderGridCurveOnly for the curve and show the returned
-// snapshot via a progress widget below the plot. Pair it with
-// CancelBandJob(jobKey) when the inspector closes so a long solve does not
-// outlive the window that asked for it.
-func (inst Renderer) EnsureBandJob(jobKey string, tasks task.TaskApiI, n int) BandJobSnapshot {
-	return ensureBandWarm(jobKey, tasks, n, inst.alpha, inst.method)
-}
-
-// CancelBandJob aborts the background band warm-up scheduled under jobKey
-// by EnsureBandJob, if one is in flight, and forgets it. Idempotent — a
-// no-op when nothing is registered for jobKey — so it is safe to call every
-// frame an inspector is closed. It is a package function rather than a
-// Renderer method because the job is identified by jobKey alone: the
-// renderer's own (α, method) configuration is irrelevant to which solve to
-// stop. A band that already finished stays in the shared ecdfbands cache,
-// so a reopen still renders instantly.
-func CancelBandJob(jobKey string) {
-	cancelBandJob(jobKey)
-}
-
-// RenderGridCurveOnly emits only the ECDF step polyline for an (xs,
-// fnAt) grid — the band-free counterpart to RenderGrid, drawn while the
-// confidence band is still warming in the background.
-func (inst Renderer) RenderGridCurveOnly(p *implot.Plot, xs, fnAt []float64) {
-	if len(xs) < 2 {
-		return
-	}
-	inst.emitGridEcdfPolyline(p, xs, fnAt)
+// CancelBandJob aborts the warm-up scheduled under key by EnsureBandJob, if
+// one is in flight, and forgets it. Idempotent — a no-op when nothing is
+// registered — so it is safe to call every frame a consumer is closed. A
+// band that already finished stays in the shared ecdfbands cache, so a
+// reopen still renders instantly.
+func CancelBandJob(key BandJobKey) {
+	cancelBandJob(key)
 }
 
 // emitBand declares the confidence band as one step-expanded
@@ -239,7 +219,7 @@ func (inst Renderer) RenderGridCurveOnly(p *implot.Plot, xs, fnAt []float64) {
 // version emitted as individual polygons (a plain two-curve fill
 // would slant across the plateaus). An optional staircase outline
 // follows when a band stroke is configured.
-func (inst Renderer) emitBand(p *implot.Plot, xs, lower, upper []float64) {
+func (st Style) emitBand(p *implot.Plot, xs, lower, upper []float64) {
 	n := len(xs)
 	if n < 2 {
 		return
@@ -252,23 +232,23 @@ func (inst Renderer) emitBand(p *implot.Plot, xs, lower, upper []float64) {
 		el = append(el, lower[i], lower[i])
 		eu = append(eu, upper[i], upper[i])
 	}
-	p.SetNextColor(inst.bandFillPacked)
-	p.ShadedBetween(inst.bandSeriesName, ex, el, eu)
-	if inst.bandStrokeWidth > 0 {
-		p.SetNextColor(inst.bandStrokePacked).SetNextWeight(inst.bandStrokeWidth)
-		p.Stairs(inst.bandSeriesName, xs, upper)
-		p.SetNextColor(inst.bandStrokePacked).SetNextWeight(inst.bandStrokeWidth)
-		p.Stairs(inst.bandSeriesName, xs, lower)
+	p.SetNextColor(st.BandFill.Literal())
+	p.ShadedBetween(st.bandSeriesName(), ex, el, eu)
+	if st.BandStrokeWidth > 0 {
+		p.SetNextColor(st.BandStroke.Literal()).SetNextWeight(st.BandStrokeWidth)
+		p.Stairs(st.bandSeriesName(), xs, upper)
+		p.SetNextColor(st.BandStroke.Literal()).SetNextWeight(st.BandStrokeWidth)
+		p.Stairs(st.bandSeriesName(), xs, lower)
 	}
 }
 
 // emitEcdfPolyline walks the ECDF step function for a complete
 // sorted sample and declares one line series. The polyline starts at
 // (sorted[0], 0) and ascends in 1/n steps up to (sorted[n-1], 1).
-func (inst Renderer) emitEcdfPolyline(p *implot.Plot, sorted []float64) {
+func (st Style) emitEcdfPolyline(p *implot.Plot, sorted []float64) {
 	xs, ys := buildEcdfPolyline(sorted)
-	p.SetNextColor(inst.ecdfStrokePacked).SetNextWeight(inst.ecdfStrokeWidth)
-	p.Line(inst.seriesName, xs, ys)
+	p.SetNextColor(st.EcdfStroke.Literal()).SetNextWeight(st.EcdfStrokeWidth)
+	p.Line(st.SeriesName, xs, ys)
 }
 
 // emitGridEcdfPolyline declares the ECDF curve at an explicit grid
@@ -277,9 +257,9 @@ func (inst Renderer) emitEcdfPolyline(p *implot.Plot, sorted []float64) {
 // dense enough that the underlying step structure is below visual
 // resolution. Coarse grids will show as linear segments between
 // known points; that is the right visual for sketch-backed ECDFs.
-func (inst Renderer) emitGridEcdfPolyline(p *implot.Plot, xs, fnAt []float64) {
-	p.SetNextColor(inst.ecdfStrokePacked).SetNextWeight(inst.ecdfStrokeWidth)
-	p.Line(inst.seriesName, xs, fnAt)
+func (st Style) emitGridEcdfPolyline(p *implot.Plot, xs, fnAt []float64) {
+	p.SetNextColor(st.EcdfStroke.Literal()).SetNextWeight(st.EcdfStrokeWidth)
+	p.Line(st.SeriesName, xs, fnAt)
 }
 
 // packRGBA combines an RGBA color token with an explicit alpha byte
@@ -314,7 +294,7 @@ const (
 // the cursor is outside the plot, no plot has rendered yet this
 // session, or the cached hover refers to a different plot id.
 //
-// Alpha echoes Renderer.Alpha so WriteStatusLine can derive the
+// Alpha echoes Style.Alpha so WriteStatusLine can derive the
 // coverage label "(1-α)·100%" without the caller having to plumb it
 // through. The band-provenance fields (BandKind, Method, BandN,
 // SampleN, FromGrid) let WriteStatusLine name the band honestly and
@@ -352,124 +332,91 @@ type Crosshair struct {
 	FromGrid bool
 }
 
-// At returns the crosshair info for the sample at the cursor position
-// over the given plot (implot's per-plot hover state — one frame
-// behind, like every register read; a pointer over a different plot
-// never surfaces here).
+// At returns the crosshair for in at the cursor position over the given
+// plot (implot's per-plot hover state — one frame behind, like every
+// register read; a pointer over a different plot never surfaces here).
+// The band edges come from the band in.Band names, so a hover readout is
+// available before (or without) the exact inversion when in.Band is
+// BandPreview; BandNone reads no edges.
 //
-// Crosshair.Valid is false when the plot is not hovered or sorted is
-// empty. Cheap to call: BandsForSample is cached by (n, α, method);
-// the per-call cost is two O(log n) binary searches plus a slice copy
-// out of the band cache.
-func (inst Renderer) At(p *implot.Plot, sorted []float64) (out Crosshair) {
+// Crosshair.Valid is false when the plot is not hovered or the input is
+// empty. Cheap to call: the bands are cached by (n, α, method); the
+// per-call cost is two O(log n) binary searches plus a slice copy out of
+// the band cache.
+func At(p *implot.Plot, in Input) (out Crosshair) {
+	st := in.Style.Resolved()
 	out.NearestIdx = -1
-	out.Alpha = inst.alpha
-	if len(sorted) < 1 {
+	out.Alpha = st.Alpha
+	xsData, fromGrid := in.Sorted, false
+	if in.Sorted == nil {
+		xsData, fromGrid = in.Xs, true
+	}
+	if len(xsData) < 1 {
 		return
 	}
 	x, y, ok := p.HoverPlotPos()
 	if !ok {
 		return
 	}
-	band, err := ecdfbands.BandsForSample(sorted, inst.alpha, inst.method)
-	if err != nil {
-		return
-	}
-	nIdx := nearestIdx(sorted, x)
+	nIdx := nearestIdx(xsData, x)
 	out.Valid = true
 	out.X = x
 	out.Y = y
-	out.FnX = fnAtXSorted(sorted, x)
-	out.LowerX, out.UpperX = bandAtX(band.Xs, band.LowerCDF, band.UpperCDF, x)
-	out.NearestX = sorted[nIdx]
+	out.NearestX = xsData[nIdx]
 	out.NearestIdx = nIdx
-	out.BandKind = BandExact
-	out.Method = inst.method
-	out.BandN = len(sorted)
-	out.SampleN = len(sorted)
-	out.FromGrid = false
-	return
-}
-
-// AtGrid mirrors At for the streaming/grid path used by RenderGrid.
-// xs and fnAt are the same grid arrays passed to RenderGrid; n is
-// the total sample size on which the underlying ECDF estimator was
-// built (typically much larger than len(xs)).
-func (inst Renderer) AtGrid(p *implot.Plot, xs, fnAt []float64, n int) (out Crosshair) {
-	out.NearestIdx = -1
-	out.Alpha = inst.alpha
-	if len(xs) < 1 {
-		return
+	out.FromGrid = fromGrid
+	if fromGrid {
+		out.FnX = fnAtXGrid(in.Xs, in.FnAt, x)
+		out.BandN, out.SampleN = in.N, in.N
+	} else {
+		out.FnX = fnAtXSorted(in.Sorted, x)
+		out.BandN, out.SampleN = len(in.Sorted), len(in.Sorted)
 	}
-	x, y, ok := p.HoverPlotPos()
-	if !ok {
-		return
+	switch {
+	case in.Band == BandNone:
+		out.BandKind = BandNone
+	case !fromGrid:
+		band, err := ecdfbands.BandsForSample(in.Sorted, st.Alpha, st.Method)
+		if err != nil {
+			out.BandKind = BandNone
+			return
+		}
+		out.LowerX, out.UpperX = bandAtX(band.Xs, band.LowerCDF, band.UpperCDF, x)
+		out.BandKind = BandExact
+		out.Method = st.Method
+	case in.Band == BandPreview:
+		g, err := ecdfbands.DkwBandForGrid(in.Xs, in.FnAt, in.N, st.Alpha)
+		if err != nil {
+			out.BandKind = BandNone
+			return
+		}
+		out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
+		out.BandKind = BandPreview
+		out.Method = ecdfbands.BandMethodDKW
+	default:
+		g, err := ecdfbands.BandsForGrid(in.Xs, in.FnAt, in.N, st.Alpha, st.Method)
+		if err != nil {
+			out.BandKind = BandNone
+			return
+		}
+		out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
+		out.BandKind = BandExact
+		out.Method = st.Method
 	}
-	g, err := ecdfbands.BandsForGrid(xs, fnAt, n, inst.alpha, inst.method)
-	if err != nil {
-		return
-	}
-	nIdx := nearestIdx(xs, x)
-	out.Valid = true
-	out.X = x
-	out.Y = y
-	out.FnX = fnAtXGrid(xs, fnAt, x)
-	out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
-	out.NearestX = xs[nIdx]
-	out.NearestIdx = nIdx
-	out.BandKind = BandExact
-	out.Method = inst.method
-	out.BandN = n
-	out.SampleN = n
-	out.FromGrid = true
-	return
-}
-
-// AtGridPreview mirrors AtGrid for the DKW preview band: it reads the band
-// edges at the cursor from the instant closed-form [ecdfbands.DkwBandForGrid]
-// rather than the warmed exact band, so a hover readout is available before
-// (or without) the exact inversion. Crosshair.Alpha echoes the renderer's
-// alpha as usual.
-func (inst Renderer) AtGridPreview(p *implot.Plot, xs, fnAt []float64, n int) (out Crosshair) {
-	out.NearestIdx = -1
-	out.Alpha = inst.alpha
-	if len(xs) < 1 {
-		return
-	}
-	x, y, ok := p.HoverPlotPos()
-	if !ok {
-		return
-	}
-	g, err := ecdfbands.DkwBandForGrid(xs, fnAt, n, inst.alpha)
-	if err != nil {
-		return
-	}
-	nIdx := nearestIdx(xs, x)
-	out.Valid = true
-	out.X = x
-	out.Y = y
-	out.FnX = fnAtXGrid(xs, fnAt, x)
-	out.LowerX, out.UpperX = bandAtX(g.Xs, g.LowerCDF, g.UpperCDF, x)
-	out.NearestX = xs[nIdx]
-	out.NearestIdx = nIdx
-	out.BandKind = BandPreview
-	out.Method = ecdfbands.BandMethodDKW
-	out.BandN = n
-	out.SampleN = n
-	out.FromGrid = true
 	return
 }
 
 // PaintCrosshair declares a vertical reference line at ch.X using the
-// renderer's ECDF stroke colour at half alpha. No-op when ch.Valid is
-// false. Declare it after Render inside the same plot so the line
-// draws on top of the band and curve.
-func (inst Renderer) PaintCrosshair(p *implot.Plot, ch Crosshair) {
+// style's ECDF stroke colour at half alpha. No-op when ch.Valid is false.
+// Declare it after Paint inside the same plot so the line draws on top of
+// the band and curve.
+func PaintCrosshair(p *implot.Plot, st Style, ch Crosshair) {
 	if !ch.Valid {
 		return
 	}
-	p.SetNextColor(withAlpha(inst.ecdfStrokePacked, 0x80)).SetNextWeight(1.0)
-	p.InfLinesV(inst.seriesName+" cursor", []float64{ch.X})
+	st = st.Resolved()
+	p.SetNextColor(withAlpha(st.EcdfStroke.Literal(), 0x80)).SetNextWeight(1.0)
+	p.InfLinesV(st.SeriesName+" cursor", []float64{ch.X})
 }
 
 // ReadoutLineCount is the fixed number of text rows WriteStatusLine

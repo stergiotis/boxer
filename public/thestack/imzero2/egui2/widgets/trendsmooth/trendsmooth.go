@@ -28,12 +28,14 @@
 // worked examples.
 //
 // One [State] per window, [State.BeginFrame] once per frame entry point:
-// smoothed series live in a per-frame arena because implot does not copy,
-// and [State.RenderControls] derives fixed widget ids, so a second State in
-// the same id scope would collide.
+// smoothed series live in a per-frame arena because implot does not copy.
+// The control row is an immediate-mode widget (ADR-0267): [Render]
+// takes the host's ids and a ScopeKey on its [Input] and binds the checkbox
+// to the host-owned State, so two States in one host differ by ScopeKey.
 package trendsmooth
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/analytics/timeseries/mssmooth"
@@ -100,23 +102,71 @@ func (inst *State) SetHalfWidth(halfWidth int32) {
 	inst.halfWidth = min(max(halfWidth, mssmooth.MinHalfWidth(degree)), MaxHalfWidth)
 }
 
-// RenderControls renders the top-bar segment: a "smooth" checkbox bound to
+// defaultScopeKey names the control row when Input.ScopeKey is empty.
+const defaultScopeKey = "trendsmooth"
+
+// ErrNeedsIdsAndState is Result.Err when Input.Ids or Input.State is nil.
+var ErrNeedsIdsAndState = errors.New("trendsmooth: Input.Ids and Input.State are required")
+
+// Input is one frame's declaration of the control row.
+type Input struct {
+	// Ids is the host's widget id stack. Render opens its own
+	// IdScope under it, so two rows in one host need only differ in
+	// ScopeKey.
+	Ids *c.WidgetIdStack
+	// ScopeKey names this row within the host's id space; empty uses
+	// "trendsmooth".
+	ScopeKey string
+	// State is the host-owned smoothing selection the row edits. Required,
+	// and at a stable address: the checkbox binds to State.On.
+	State *State
+}
+
+// Result is what one Render reports.
+type Result struct {
+	// Changed is true on a frame the toggle or the stepper moved the State.
+	Changed bool
+	// Err is [ErrNeedsIdsAndState] when the Input cannot be drawn; the
+	// message is drawn in place of the row.
+	Err error
+}
+
+// Render renders the top-bar segment: a "smooth" checkbox bound to
 // [State.On] plus the ±half-width stepper. The stepper stays visible while
 // smoothing is off so the row does not reflow on toggle. The checkbox binds
-// &inst.On directly — a State lives on its window's heap-held app, which
+// &State.On directly — a State lives on its window's heap-held app, which
 // satisfies the stable-pointer rule.
-func (inst *State) RenderControls(ids *c.WidgetIdStack) {
-	c.Checkbox(ids.PrepareStr("trendsmooth-on"), inst.On, "smooth").
-		SendRespVal(&inst.On)
-	c.Label(fmt.Sprintf("±%d", inst.halfWidth)).Send()
-	if c.Button(ids.PrepareStr("trendsmooth-down"), c.Atoms().Text("−").Keep()).
-		SendResp().HasPrimaryClicked() {
-		inst.SetHalfWidth(inst.halfWidth - stepHalfWidth)
+func Render(in Input) (res Result) {
+	if in.Ids == nil || in.State == nil {
+		res.Err = ErrNeedsIdsAndState
+		for rt := range c.RichTextLabel(res.Err.Error()) {
+			rt.Small().Weak()
+		}
+		return
 	}
-	if c.Button(ids.PrepareStr("trendsmooth-up"), c.Atoms().Text("+").Keep()).
-		SendResp().HasPrimaryClicked() {
-		inst.SetHalfWidth(inst.halfWidth + stepHalfWidth)
+	ids, st := in.Ids, in.State
+	scopeKey := in.ScopeKey
+	if scopeKey == "" {
+		scopeKey = defaultScopeKey
 	}
+	for range c.IdScope(ids.PrepareStr(scopeKey)) {
+		if c.Checkbox(ids.PrepareStr("on"), st.On, "smooth").
+			SendRespVal(&st.On).HasChanged() {
+			res.Changed = true
+		}
+		c.Label(fmt.Sprintf("±%d", st.halfWidth)).Send()
+		if c.Button(ids.PrepareStr("down"), c.Atoms().Text("−").Keep()).
+			SendResp().HasPrimaryClicked() {
+			st.SetHalfWidth(st.halfWidth - stepHalfWidth)
+			res.Changed = true
+		}
+		if c.Button(ids.PrepareStr("up"), c.Atoms().Text("+").Keep()).
+			SendResp().HasPrimaryClicked() {
+			st.SetHalfWidth(st.halfWidth + stepHalfWidth)
+			res.Changed = true
+		}
+	}
+	return
 }
 
 // Line declares one trend series on p. With smoothing off — or on any

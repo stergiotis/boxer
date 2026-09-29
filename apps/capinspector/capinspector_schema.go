@@ -153,11 +153,7 @@ func (inst *App) renderSchemaInspector(spec CapSpec) {
 		tbl, err := spec.Schema.Load()
 		inst.schemaCap = spec.Id
 		inst.schemaErr = err
-		if inst.schemaModel == nil {
-			inst.schemaModel = schemaview.NewModel(tbl)
-		} else {
-			inst.schemaModel.SetTable(tbl)
-		}
+		inst.schemaTable = tbl
 	}
 	if inst.schemaErr != nil {
 		// A build failure is a bug in the schema definition, not a
@@ -175,6 +171,7 @@ func (inst *App) renderSchemaInspector(spec CapSpec) {
 	schemaview.Render(schemaview.Input{
 		Ids:      inst.ids,
 		ScopeKey: inst.schemaScopePrefix() + "-" + spec.Id,
-		Model:    inst.schemaModel,
+		Table:    inst.schemaTable,
+		State:    &inst.schemaState,
 	})
 }

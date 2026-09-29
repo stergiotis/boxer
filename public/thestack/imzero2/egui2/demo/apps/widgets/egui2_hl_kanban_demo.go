@@ -29,6 +29,7 @@ func init() {
 // kanbanDemoState holds the board model across frames.
 type kanbanDemoState struct {
 	model  *kanban.Model
+	state  kanban.State
 	group  kanban.GroupModeE
 	owners map[uint64]string // card id → owner, demoing GroupByField
 }
@@ -106,12 +107,11 @@ func demoKanban(ids *c.WidgetIdStack, st *kanbanDemoState) {
 	kanban.RenderLegend(st.model.DotLegend)
 	c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 	kanban.Render(kanban.Input{
-		Ids: ids, ScopeKey: "kanban", Model: st.model, Group: st.group,
+		Ids: ids, ScopeKey: "kanban", Model: st.model, State: &st.state, Group: st.group,
 		GroupField: func(cd *kanban.Card) (key, label string) {
 			o := st.owners[cd.ID]
 			return o, o
 		},
 	})
-	// The demo doesn't persist; drain so the queue doesn't grow unbounded.
-	st.model.DrainMoves()
+	// The demo doesn't persist, so the frame's Result.Moves are dropped.
 }

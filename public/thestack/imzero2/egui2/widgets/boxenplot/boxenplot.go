@@ -1,17 +1,17 @@
-// Package boxenplot is the imzero2 widget for letter-value (Hofmann,
-// Wickham & Kafadar 2017) plots. It composes:
+// Package boxenplot is a painter helper (ADR-0267) for letter-value
+// (Hofmann, Wickham & Kafadar 2017) plots. It composes:
 //
 //   - boxer/public/analytics/stats/letterval — LV math + oracle
 //   - boxer/public/analytics/stats/tdigest   — streaming quantile source
 //   - the implot port's Boxes / Scatter / Text items — rendering
 //     (ADR-0149 SD7; formerly the egui_plot bridge's plotBoxes)
 //
-// The widget is stateless: construct one Renderer, then call Render
-// any number of times per frame with the host's open *implot.Plot
-// (between Begin and End). Configure-once / render-many is the
-// canonical pattern (see fieldview / errorview). Each Render declares
-// one nested letter-value box series plus optional outlier
-// scatter/text annotations.
+// The helper takes no widget ids and holds no state: [Paint] declares one
+// nested letter-value box series plus optional outlier scatter / text
+// annotations into the host's open *implot.Plot (between Begin and End),
+// from an [Input] whose [Style] fields are zero for the defaults
+// [DefaultStyle] resolves. A host that draws several distributions into one
+// plot calls Paint once per distribution with the same Style.
 package boxenplot
 
 import (
@@ -46,46 +46,84 @@ const (
 	OutlierModeCount
 )
 
-// Renderer is the configured boxenplot. Values are immutable after
-// construction; fluent setters return modified copies.
-type Renderer struct {
-	idPrefix              string
-	outlierMode           OutlierModeE
-	outlierAutoThreshold  int64
-	palette               styletokens.SequentialE
-	paletteTStart         float32
-	paletteTEnd           float32
-	fillAlpha             uint8
-	strokeColorPacked     uint32
-	strokeWidth           float32
-	annotationColorPacked uint32
-	boxWidth              float64
-	widthShrink           float64
-	seriesName            string
-	snapWindow            float64
+// Style is the appearance of a letter-value plot. A zero field takes the
+// value [DefaultStyle] resolves for it; [Style.Resolved] returns the style
+// with every default filled in.
+type Style struct {
+	// OutlierMode selects the outlier-rendering strategy; see OutlierModeE.
+	// The zero value is OutlierModeAuto.
+	OutlierMode OutlierModeE
+	// OutlierAutoThreshold is the per-tail observation count at which Auto
+	// mode switches from Points (small counts) to Count (large). 0 → 20.
+	OutlierAutoThreshold int64
+	// Palette is the IDS sequential data-encoding palette for the per-depth
+	// fills. The zero value takes [styletokens.SequentialDefault], which
+	// honours the IDS_PALETTE_SEQUENTIAL environment.
+	Palette styletokens.SequentialE
+	// PaletteTStart / PaletteTEnd clamp the t ∈ [0, 1] range sampled from the
+	// palette. Both zero → (0.20, 0.85), or (0.10, 0.95) under
+	// AccessibilityHighContrast, avoiding the extreme dark/light ends.
+	//
+	// When the resolved palette ramps in the opposite direction to batlow
+	// (white→black; only SequentialGrayC) fillForDepth swaps the range so
+	// "deep=light, shallow=dark" reads consistently across presets.
+	PaletteTStart float32
+	PaletteTEnd   float32
+	// FillAlpha is the alpha applied to every per-depth fill. 0 → 0xC0, or
+	// 0xFF under AccessibilityHighContrast.
+	FillAlpha uint8
+	// Stroke and StrokeWidth are the box outline. Zero → NeutralBorderDefault
+	// at 1.0 px.
+	Stroke      color.Color
+	StrokeWidth float32
+	// AnnotationColor colours the "+N" outlier-count labels and the outlier
+	// scatter points. Zero → NeutralTextSecondary.
+	AnnotationColor color.Color
+	// BoxWidth is the depth-2 (innermost LV) box width in argument-axis units
+	// and WidthShrink the per-depth multiplier: each successive box is
+	// BoxWidth × WidthShrink^(depth-2) wide. Zero → 0.6 and 0.85; a shrink
+	// above 1 is clamped to 1 (Hofmann's constant-width convention).
+	BoxWidth    float64
+	WidthShrink float64
+	// SeriesName is the legend label for the box series; "" → "boxen".
+	// NoLegend suppresses every legend entry the helper emits.
+	SeriesName string
+	NoLegend   bool
+	// SnapWindow is the half-width (argument-axis units) within which [At]
+	// claims a hover for a distribution. 0 → 0.5, which matches unit-spaced
+	// arguments and selects the nearest distribution by construction. A
+	// negative value is clamped to a small positive epsilon so At never
+	// matches everywhere.
+	SnapWindow float64
 }
 
-// New constructs a Renderer with IDS-aligned defaults. Palette and
-// fill alpha are resolved from the styletokens Tier-1 / Tier-2 env
-// surface (IDS_PALETTE_SEQUENTIAL / IDS_ACCESSIBILITY), so a typical
-// caller never touches palette plumbing:
-//
-//	r := boxenplot.New("p99-mem")    // honours user's IDS env
-//	r.Render(arg, levels, nil, -1)
-//
-// Static defaults:
-//
-//   - palette: styletokens.SequentialDefault()
-//   - paletteTStart/End: [0.20, 0.85] (default) or [0.10, 0.95] under
-//     AccessibilityHighContrast for boosted discriminability
-//   - fillAlpha: 0xC0 (default) or 0xFF under AccessibilityHighContrast
-//   - stroke: NeutralBorderDefault at 1.0 px
-//   - box width: 0.6 (argument-axis units), shrink 0.85 per depth
-//   - outlier mode: Auto with threshold 20
-//
-// idPrefix scopes any widget-id-bearing primitive emitted by Render —
-// pass a stable short string (e.g. "lat-cluster", "p99-mem").
-func New(idPrefix string) (inst Renderer) {
+// Input is one distribution to paint: the Style and where and what.
+type Input struct {
+	Style
+	// Argument is the x position (the column) of this distribution.
+	Argument float64
+	// Levels are from letterval.RecommendedLevels(oracle) or
+	// letterval.Levels(oracle, maxDepth). Empty paints nothing; a single
+	// depth-1 entry paints the median marker alone.
+	Levels []letterval.LVLevel
+	// Extremes are raw extreme values for OutlierModePoints — both tails in
+	// one slice, treated as opaque points. Ignored by the other modes.
+	Extremes []float64
+	// TailCount is an explicit per-tail outlier count for the Count / Auto
+	// modes, used when TailCountKnown is set; otherwise the deepest level's
+	// analytical estimate is drawn. Set it when the caller tracks the true
+	// count (a top-K plus a counter).
+	TailCount      int64
+	TailCountKnown bool
+	// Name is the distribution's display name in [Crosshair.Name]; "" takes
+	// the resolved SeriesName.
+	Name string
+}
+
+// DefaultStyle is the style a zero [Style] resolves to, with the palette
+// range and fill alpha read from the styletokens accessibility preset
+// (IDS_ACCESSIBILITY) so a typical caller never touches palette plumbing.
+func DefaultStyle() (st Style) {
 	access := styletokens.AccessibilityFromEnv()
 	tStart, tEnd := float32(0.20), float32(0.85)
 	fillAlpha := uint8(0xC0)
@@ -93,151 +131,99 @@ func New(idPrefix string) (inst Renderer) {
 		tStart, tEnd = 0.10, 0.95
 		fillAlpha = 0xFF
 	}
-	inst = Renderer{
-		idPrefix:              idPrefix,
-		outlierMode:           OutlierModeAuto,
-		outlierAutoThreshold:  20,
-		palette:               styletokens.SequentialDefault(),
-		paletteTStart:         tStart,
-		paletteTEnd:           tEnd,
-		fillAlpha:             fillAlpha,
-		strokeColorPacked:     styletokens.NeutralBorderDefault.AsHex(),
-		strokeWidth:           1.0,
-		annotationColorPacked: styletokens.NeutralTextSecondary.AsHex(),
-		boxWidth:              0.6,
-		widthShrink:           0.85,
-		seriesName:            "boxen",
-		snapWindow:            0.5,
+	st = Style{
+		OutlierMode:          OutlierModeAuto,
+		OutlierAutoThreshold: 20,
+		Palette:              styletokens.SequentialDefault(),
+		PaletteTStart:        tStart,
+		PaletteTEnd:          tEnd,
+		FillAlpha:            fillAlpha,
+		Stroke:               color.Hex(styletokens.NeutralBorderDefault.AsHex()),
+		StrokeWidth:          1.0,
+		AnnotationColor:      color.Hex(styletokens.NeutralTextSecondary.AsHex()),
+		BoxWidth:             0.6,
+		WidthShrink:          0.85,
+		SeriesName:           "boxen",
+		SnapWindow:           0.5,
 	}
 	return
 }
 
-// SnapWindow sets the half-width (in argument-axis units) within which
-// At() claims a hover for this distribution. The default 0.5 matches
-// unit-spaced arguments (1, 2, 3, …) and selects the nearest
-// distribution by construction: hovering at x=1.4 lands inside argument
-// 1's window but outside argument 2's. Callers with denser or sparser
-// argument layouts should override accordingly. Non-positive values
-// are clamped to a small positive epsilon so At() never matches
-// everywhere.
-func (inst Renderer) SnapWindow(w float64) (out Renderer) {
-	if w <= 0 {
-		w = 1e-9
+// Resolved returns st with every zero field replaced by its default and
+// the clamps applied.
+func (st Style) Resolved() (out Style) {
+	def := DefaultStyle()
+	out = st
+	if out.OutlierAutoThreshold == 0 {
+		out.OutlierAutoThreshold = def.OutlierAutoThreshold
 	}
-	inst.snapWindow = w
-	out = inst
-	return
-}
-
-// SeriesName sets the legend label for the BoxPlot series. Empty
-// disables the legend entry for this series. Default "boxen".
-func (inst Renderer) SeriesName(name string) (out Renderer) {
-	inst.seriesName = name
-	out = inst
-	return
-}
-
-// OutlierMode selects the outlier-rendering strategy. See OutlierModeE
-// for the enumerated semantics.
-func (inst Renderer) OutlierMode(m OutlierModeE) (out Renderer) {
-	inst.outlierMode = m
-	out = inst
-	return
-}
-
-// OutlierAutoThreshold sets the per-tail observation count at which
-// Auto mode switches from Points (small counts) to Count (large).
-// Default 20.
-func (inst Renderer) OutlierAutoThreshold(n int64) (out Renderer) {
-	inst.outlierAutoThreshold = n
-	out = inst
-	return
-}
-
-// Palette selects the IDS sequential data-encoding palette used for
-// per-depth fills. Default SequentialBatlow.
-func (inst Renderer) Palette(p styletokens.SequentialE) (out Renderer) {
-	inst.palette = p
-	out = inst
-	return
-}
-
-// PaletteRange clamps the t ∈ [0, 1] range sampled from the palette.
-// Defaults (0.20, 0.85) avoid the extreme dark/light ends which lose
-// shape against typical dark IDS backgrounds.
-//
-// Note: when the resolved palette ramps in the opposite direction to
-// batlow (white→black; currently only SequentialGrayC), fillForDepth
-// silently swaps the supplied (start, end) so "deep=light,
-// shallow=dark" reads consistently across presets. Callers needing
-// the supplied range verbatim must avoid SequentialGrayC or override
-// fillForDepth directly — there is no per-call opt-out today.
-func (inst Renderer) PaletteRange(start, end float32) (out Renderer) {
-	inst.paletteTStart = start
-	inst.paletteTEnd = end
-	out = inst
-	return
-}
-
-// FillAlpha sets the alpha channel applied to every per-depth fill,
-// overriding the palette's opaque output. Default 0xC0.
-func (inst Renderer) FillAlpha(a uint8) (out Renderer) {
-	inst.fillAlpha = a
-	out = inst
-	return
-}
-
-// Stroke sets the box outline colour and width (px). Default
-// NeutralBorderDefault at 1.0 px.
-func (inst Renderer) Stroke(col color.Color, widthPx float32) (out Renderer) {
-	inst.strokeColorPacked = col.Literal()
-	inst.strokeWidth = widthPx
-	out = inst
-	return
-}
-
-// AnnotationColor sets the colour used for the "+N" outlier-count
-// labels and for any outlier scatter points. Default
-// NeutralTextSecondary.
-func (inst Renderer) AnnotationColor(col color.Color) (out Renderer) {
-	inst.annotationColorPacked = col.Literal()
-	out = inst
-	return
-}
-
-// BoxWidth sets the depth-2 (innermost LV) box width in argument-axis
-// units, plus a per-depth shrink multiplier. Each successive box is
-// width × shrink^(depth-2) wide. Defaults: base 0.6, shrink 0.85.
-// shrink = 1.0 gives Hofmann's constant-width convention; shrink < 1
-// produces the seaborn-style taper. Values outside (0, 1] are
-// clamped.
-func (inst Renderer) BoxWidth(base, shrink float64) (out Renderer) {
-	inst.boxWidth = base
-	if shrink <= 0 {
-		shrink = 0.01
-	} else if shrink > 1 {
-		shrink = 1
+	if out.Palette == 0 {
+		out.Palette = def.Palette
 	}
-	inst.widthShrink = shrink
-	out = inst
+	if out.PaletteTStart == 0 && out.PaletteTEnd == 0 {
+		out.PaletteTStart, out.PaletteTEnd = def.PaletteTStart, def.PaletteTEnd
+	}
+	if out.FillAlpha == 0 {
+		out.FillAlpha = def.FillAlpha
+	}
+	if out.Stroke == (color.Color{}) {
+		out.Stroke = def.Stroke
+	}
+	if out.StrokeWidth == 0 {
+		out.StrokeWidth = def.StrokeWidth
+	}
+	if out.AnnotationColor == (color.Color{}) {
+		out.AnnotationColor = def.AnnotationColor
+	}
+	if out.BoxWidth == 0 {
+		out.BoxWidth = def.BoxWidth
+	}
+	switch {
+	case out.WidthShrink == 0:
+		out.WidthShrink = def.WidthShrink
+	case out.WidthShrink < 0:
+		out.WidthShrink = 0.01
+	case out.WidthShrink > 1:
+		out.WidthShrink = 1
+	}
+	if out.SeriesName == "" {
+		out.SeriesName = def.SeriesName
+	}
+	switch {
+	case out.SnapWindow == 0:
+		out.SnapWindow = def.SnapWindow
+	case out.SnapWindow < 0:
+		out.SnapWindow = 1e-9
+	}
 	return
 }
 
-// Render declares the boxenplot items for one distribution at the
-// given x position, into the host's open plot.
-//
-//   - levels: from letterval.RecommendedLevels(oracle) or
-//     letterval.Levels(oracle, maxDepth). May be empty (no-op) or
-//     contain only depth 1 (single median marker is drawn).
-//   - extremes: raw extreme values for OutlierModePoints. Ignored by
-//     other modes; can be nil there. Provide both lower and upper
-//     extremes in one slice (the renderer treats the slice as
-//     opaque points, no sign convention).
-//   - perTailCountOverride: optional explicit per-tail outlier count
-//     for Count / Auto modes. Pass -1 to use the analytical estimate
-//     (deepest LV's TailCount). Use the override when the caller
-//     tracks the true count separately (a top-K + counter).
-func (inst Renderer) Render(p *implot.Plot, argument float64, levels []letterval.LVLevel, extremes []float64, perTailCountOverride int64) {
+// seriesName is the legend label, or "" under NoLegend.
+func (st Style) seriesName() string {
+	if st.NoLegend {
+		return ""
+	}
+	return st.SeriesName
+}
+
+// suffixedName decorates the series name with a fixed suffix, or stays ""
+// under NoLegend so every legend entry the helper emits is suppressed.
+func (st Style) suffixedName(suffix string) string {
+	if st.NoLegend {
+		return ""
+	}
+	return st.SeriesName + suffix
+}
+
+// Paint declares the boxenplot items for one distribution into the host's
+// open plot: the nested letter-value boxes as one Boxes series, then the
+// outliers as the resolved mode asks. Empty Levels paint nothing; a single
+// depth-1 level paints the median marker alone. There is no per-box hover
+// highlight on the port — [At], [PaintCrosshair] and the status lines are
+// the "this box is selected" affordance.
+func Paint(p *implot.Plot, in Input) {
+	inst := in.Style.Resolved()
+	levels, argument, extremes := in.Levels, in.Argument, in.Extremes
 	if len(levels) == 0 {
 		return
 	}
@@ -282,7 +268,7 @@ func (inst Renderer) Render(p *implot.Plot, argument float64, levels []letterval
 		q3s[i] = lv.UpperValue
 		wmins[i] = lv.LowerValue
 		wmaxs[i] = lv.UpperValue
-		widths[i] = computeBoxWidth(inst.boxWidth, inst.widthShrink, lv.Depth)
+		widths[i] = computeBoxWidth(inst.BoxWidth, inst.WidthShrink, lv.Depth)
 		fills[i] = inst.fillForDepth(lv.Depth, maxDepth)
 	}
 
@@ -290,14 +276,14 @@ func (inst Renderer) Render(p *implot.Plot, argument float64, levels []letterval
 	// the box edges here, so only the rects and the median line draw).
 	// There is no per-box hover highlight on the port — the crosshair +
 	// WriteStatusLine remain the "this box is selected" affordance.
-	p.Boxes(inst.seriesName, arguments, q1s, medians, q3s, wmins, wmaxs,
-		widths, fills, inst.strokeColorPacked, inst.strokeWidth)
+	p.Boxes(inst.seriesName(), arguments, q1s, medians, q3s, wmins, wmaxs,
+		widths, fills, inst.Stroke.Literal(), inst.StrokeWidth)
 
-	tailCount := perTailCountOverride
-	if tailCount < 0 {
-		tailCount = deepest.TailCount
+	tailCount := deepest.TailCount
+	if in.TailCountKnown {
+		tailCount = in.TailCount
 	}
-	mode := resolveOutlierMode(inst.outlierMode, tailCount, inst.outlierAutoThreshold)
+	mode := resolveOutlierMode(inst.OutlierMode, tailCount, inst.OutlierAutoThreshold)
 	switch mode {
 	case OutlierModePoints:
 		inst.emitOutlierPoints(p, argument, extremes)
@@ -309,12 +295,12 @@ func (inst Renderer) Render(p *implot.Plot, argument float64, levels []letterval
 // emitMedianMarker draws a single scatter point when only depth-1 LV
 // (the median) is available — small-n case where no boxes are
 // statistically meaningful.
-func (inst Renderer) emitMedianMarker(p *implot.Plot, argument, median float64) {
-	p.SetNextColor(inst.annotationColorPacked)
-	p.Scatter(inst.seriesName, []float64{argument}, []float64{median}, implot.MarkerCircle, 3)
+func (inst Style) emitMedianMarker(p *implot.Plot, argument, median float64) {
+	p.SetNextColor(inst.AnnotationColor.Literal())
+	p.Scatter(inst.seriesName(), []float64{argument}, []float64{median}, implot.MarkerCircle, 3)
 }
 
-func (inst Renderer) emitOutlierPoints(p *implot.Plot, argument float64, extremes []float64) {
+func (inst Style) emitOutlierPoints(p *implot.Plot, argument float64, extremes []float64) {
 	if len(extremes) == 0 {
 		return
 	}
@@ -324,28 +310,17 @@ func (inst Renderer) emitOutlierPoints(p *implot.Plot, argument float64, extreme
 	}
 	ys := make([]float64, len(extremes))
 	copy(ys, extremes)
-	p.SetNextColor(inst.annotationColorPacked)
+	p.SetNextColor(inst.AnnotationColor.Literal())
 	p.Scatter(inst.suffixedName("-out"), xs, ys, implot.MarkerCircle, 2)
 }
 
-func (inst Renderer) emitOutlierCount(p *implot.Plot, argument float64, deepest letterval.LVLevel, perTailCount int64) {
+func (inst Style) emitOutlierCount(p *implot.Plot, argument float64, deepest letterval.LVLevel, perTailCount int64) {
 	if perTailCount <= 0 {
 		return
 	}
 	label := fmt.Sprintf("+%d", perTailCount)
-	p.Text(argument, deepest.LowerValue, inst.annotationColorPacked, label)
-	p.Text(argument, deepest.UpperValue, inst.annotationColorPacked, label)
-}
-
-// suffixedName decorates the series name with a fixed suffix. Returns
-// the empty string when seriesName is empty, so SeriesName("") truly
-// suppresses every legend entry the renderer emits (not just the box
-// series).
-func (inst Renderer) suffixedName(suffix string) string {
-	if inst.seriesName == "" {
-		return ""
-	}
-	return inst.seriesName + suffix
+	p.Text(argument, deepest.LowerValue, inst.AnnotationColor.Literal(), label)
+	p.Text(argument, deepest.UpperValue, inst.AnnotationColor.Literal(), label)
 }
 
 // fillForDepth maps an LV depth to its RGBA-packed fill colour. The
@@ -359,18 +334,18 @@ func (inst Renderer) suffixedName(suffix string) string {
 // the Hofmann reading consistent across all palettes — toggling the
 // IDS_ACCESSIBILITY preset must not silently flip "deep=light" to
 // "deep=dark".
-func (inst Renderer) fillForDepth(depth, maxDepth uint8) uint32 {
-	tStart, tEnd := inst.paletteTStart, inst.paletteTEnd
-	if paletteIsWhiteToBlack(inst.palette) {
+func (inst Style) fillForDepth(depth, maxDepth uint8) uint32 {
+	tStart, tEnd := inst.PaletteTStart, inst.PaletteTEnd
+	if paletteIsWhiteToBlack(inst.Palette) {
 		tStart, tEnd = tEnd, tStart
 	}
 	t := paletteT(depth, maxDepth, tStart, tEnd)
-	rgba := styletokens.Sequential(inst.palette, t)
+	rgba := styletokens.Sequential(inst.Palette, t)
 	// Straight 0xRRGGBBAA — the Rust unpacker
 	// (interpreter.rs::color32_from_rgba_u32) calls
 	// Color32::from_rgba_unmultiplied, so egui handles the
 	// pre-multiplication. No Go-side scaling needed.
-	packed := (uint32(rgba.R) << 24) | (uint32(rgba.G) << 16) | (uint32(rgba.B) << 8) | uint32(inst.fillAlpha)
+	packed := (uint32(rgba.R) << 24) | (uint32(rgba.G) << 16) | (uint32(rgba.B) << 8) | uint32(inst.FillAlpha)
 	return packed
 }
 
@@ -434,28 +409,28 @@ type Crosshair struct {
 	MaxDepthTailCount int64
 }
 
-// At returns the Crosshair for the (argument, name, levels) tuple
-// describing one distribution rendered into the given plot, using the
+// At returns the Crosshair for the distribution in describes, using the
 // plot's own hover state (one frame behind, like every register read).
 //
-// Crosshair.Valid is true when:
-//   - the plot area is hovered,
-//   - and |hoverX - argument| ≤ snapWindow (default 0.5).
-//
-// The typical caller loops over its distributions and keeps the last
-// Valid Crosshair the loop produced — the snap window is half the
-// argument-axis spacing, so at most one distribution claims any given
-// hover. levels may be empty (the depth-1-only median-marker case);
-// the returned Crosshair still reports the median and Argument while
-// Depth stays at 0.
-func (inst Renderer) At(p *implot.Plot, argument float64, name string, levels []letterval.LVLevel) (out Crosshair) {
+// Crosshair.Valid is true when the plot area is hovered and
+// |hoverX - in.Argument| ≤ the resolved SnapWindow. The typical caller
+// loops over its distributions and keeps the last Valid Crosshair the loop
+// produced — the snap window is half the argument-axis spacing, so at most
+// one distribution claims any given hover. Empty Levels give an invalid
+// Crosshair that still carries Argument and Name.
+func At(p *implot.Plot, in Input) (out Crosshair) {
+	inst := in.Style.Resolved()
+	argument, levels := in.Argument, in.Levels
 	out.Argument = argument
-	out.Name = name
+	out.Name = in.Name
+	if out.Name == "" {
+		out.Name = inst.SeriesName
+	}
 	hx, hy, ok := p.HoverPlotPos()
 	if !ok {
 		return
 	}
-	if math.Abs(hx-argument) > inst.snapWindow {
+	if math.Abs(hx-argument) > inst.SnapWindow {
 		return
 	}
 	if len(levels) == 0 {
@@ -491,20 +466,21 @@ func (inst Renderer) At(p *implot.Plot, argument float64, name string, levels []
 
 // PaintCrosshair declares a vertical reference line at ch.Argument
 // (snapped to the matched distribution's centre, not the raw hover X)
-// using the renderer's annotation colour at half alpha. No-op when
-// ch.Valid is false. Declare it after Render inside the same plot so
-// the line draws on top of every box.
+// using the style's annotation colour at half alpha. No-op when ch.Valid
+// is false. Declare it after Paint inside the same plot so the line draws
+// on top of every box.
 //
 // The vline anchors to the argument rather than HoverX because the
 // boxenplot's argument axis is categorical (one column per
 // distribution); a vline at the raw cursor X would slide between
 // columns and read as a "no-man's-land" cursor instead of a
 // "selected distribution" affordance.
-func (inst Renderer) PaintCrosshair(p *implot.Plot, ch Crosshair) {
+func PaintCrosshair(p *implot.Plot, st Style, ch Crosshair) {
 	if !ch.Valid {
 		return
 	}
-	p.SetNextColor(withAlpha(inst.annotationColorPacked, 0x80)).SetNextWeight(1.0)
+	inst := st.Resolved()
+	p.SetNextColor(withAlpha(inst.AnnotationColor.Literal(), 0x80)).SetNextWeight(1.0)
 	p.InfLinesV(inst.suffixedName("-cursor"), []float64{ch.Argument})
 }
 

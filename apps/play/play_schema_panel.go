@@ -77,26 +77,26 @@ func (inst *PlayApp) renderSchemaTab(rec arrow.RecordBatch, schema *arrow.Schema
 // the (shorter) leaf and its nested dock paints across the neighbouring panes
 // once the section list scrolls.
 func (inst *PlayApp) renderSchemaView() {
-	if inst.schemaModel == nil || inst.schemaModel.Table == nil {
+	if inst.schemaTable == nil {
 		for rt := range c.RichTextLabel("No schema to display.") {
 			rt.Small().Weak()
 		}
 		return
 	}
-	schemaview.Render(schemaview.Input{Ids: inst.ids, ScopeKey: "play-schema", Model: inst.schemaModel, FillHost: true})
+	schemaview.Render(schemaview.Input{Ids: inst.ids, ScopeKey: "play-schema", Table: inst.schemaTable, State: &inst.schemaState, FillHost: true})
 }
 
 // syncSchemaModel rebinds the inspector's TableDesc when the active result's
 // Arrow schema changes, keyed by pointer identity — the same cheap once-per-
 // result cache as colWidthsForSchema and the projector's forSchema. The
-// pointer gate also keeps SetTable (which resets the widget's selection /
-// filter) from firing every frame.
+// widget resets its selection when the Table pointer changes, so the gate
+// also keeps that from firing every frame.
 func (inst *PlayApp) syncSchemaModel(schema *arrow.Schema) {
 	if inst.schemaForSchema == schema {
 		return
 	}
 	inst.schemaForSchema = schema
-	inst.schemaModel.SetTable(inst.resultTableDesc(schema))
+	inst.schemaTable = inst.resultTableDesc(schema)
 }
 
 // resultTableDesc returns the leeway schema for the current result. The faithful

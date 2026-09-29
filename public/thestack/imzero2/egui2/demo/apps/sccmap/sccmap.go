@@ -345,11 +345,9 @@ type App struct {
 	// mirrors sizeTotal when the two metric indices coincide.
 	sizeTotal  float64
 	colorTotal float64
-	// distRenderer is the configure-once distsummary template shared by
-	// both metric summaries. Renderer is value-typed and stateless, so
-	// per-row .Render calls take fresh prepared ids without disturbing
-	// each other.
-	distRenderer distsummary.Renderer
+	// sizeDist / colorDist are the two metric summaries' inspector states.
+	sizeDist  distsummary.State
+	colorDist distsummary.State
 
 	// density is re-resolved from styletokens.ActiveDensity at the top of
 	// every Frame — the preset is runtime-switchable (Layout ▸ Density) —
@@ -381,7 +379,6 @@ func newApp() (inst *App) {
 		colorMetricIdx: defaultColorMetricIdx,
 		showValues:     true,
 		density:        styletokens.ActiveDensity(),
-		distRenderer:   distsummary.New("scc-dist"),
 	}
 	return
 }
@@ -510,20 +507,9 @@ func (inst *App) rebuildTreemap() {
 	// clip rect and clipping the digits vertically. h=56 puts the
 	// gradient at 30 px (still legible) with ~26 px of room for the
 	// axis below.
-	inst.cs = colorscale.New(inst.ids, "scc-colorscale", cm.Config(),
-		colorscale.WithSize(280, colorscaleH),
-		colorscale.WithDesiredTicks(4),
-	)
-	// Wire the legend hover into the hover-band decorator. The closure
-	// captures inst (not inst.hoverBand directly), so subsequent rebuilds
-	// pick up the fresh *HoverBand pointer automatically — no need to
-	// reattach the callback when the user switches metrics.
-	inst.cs.OnHover(func(h colorscale.HoverInfo) {
-		if !h.Ok {
-			inst.hoverBand.ClearBand()
-			return
-		}
-		inst.hoverBand.SetBand(h.Value)
+	inst.cs = colorscale.New(inst.ids, "scc-colorscale", cm.Config(), colorscale.Options{
+		Width: 280, Height: colorscaleH,
+		DesiredTicks: 4,
 	})
 }
 
@@ -645,7 +631,13 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	// branch) stole it and cs.OnHover never fired unless cs wrote last. The
 	// colorscale reads the per-canvas R24 row now and R14 is retired, so the
 	// order no longer decides whether hover works — it is kept as layout.
-	inst.cs.Render()
+	// The legend hover feeds the hover-band decorator: the band follows the
+	// value under the pointer and clears when it leaves.
+	if h := inst.cs.Render().Hover; h.Ok {
+		inst.hoverBand.SetBand(h.Value)
+	} else {
+		inst.hoverBand.ClearBand()
+	}
 	return
 }
 
@@ -710,8 +702,10 @@ func (inst *App) renderScanOrProgress() {
 				Fraction: snap.Fraction,
 				EtaMs:    snap.EtaMs,
 				Note:     snap.Note,
-				CancelId: inst.ids.PrepareStr("scan-cancel"),
-			}) {
+				Ids:      inst.ids,
+				ScopeKey: "scan-job",
+				Cancel:   true,
+			}).CancelClicked {
 				inst.job.Cancel()
 			}
 		}
@@ -846,12 +840,12 @@ func (inst *App) renderDistSummaries() {
 			inst.gutterLabel("Size (" + sizeName + "):")
 		}
 		c.AddSpace(styletokens.GapItems(inst.density))
-		inst.distRenderer.Render(inst.ids.PrepareStr("size-dist"), inst.sizeDigest, nil)
+		distsummary.Render(distsummary.Input{Ids: inst.ids, ScopeKey: "size-dist", Digest: inst.sizeDigest, State: &inst.sizeDist, Title: "size: " + sizeName})
 		if !aliased {
 			c.AddSpace(styletokens.GapSections(inst.density))
 			inst.gutterLabel("Color (" + colorName + "):")
 			c.AddSpace(styletokens.GapItems(inst.density))
-			inst.distRenderer.Render(inst.ids.PrepareStr("color-dist"), inst.colorDigest, nil)
+			distsummary.Render(distsummary.Input{Ids: inst.ids, ScopeKey: "color-dist", Digest: inst.colorDigest, State: &inst.colorDist, Title: "color: " + colorName})
 		}
 	}
 }

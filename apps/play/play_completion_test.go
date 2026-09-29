@@ -177,11 +177,11 @@ func TestRefreshCompletionUsesTheEditorsSite(t *testing.T) {
 	t.Cleanup(sqlvocab.Default.Reset)
 
 	app := tabsTestApp()
-	ed := sqleditor.New()
+	ed := sqleditor.New(nil, "t")
 	buf := "SELECT LW_COMPONENT('Sys"
 	n := uint64(len([]rune(buf)))
 	ed.SetCaretForTest(n)
-	app.refreshCompletion(ed.Bind(sqleditor.Frame{IDSlot: "t", Value: &buf}))
+	app.refreshCompletion(ed.Bind(sqleditor.Frame{Value: &buf}))
 
 	assert.Equal(t, "Sys", app.completion.typed)
 	assert.True(t, app.completion.atEnd)
@@ -308,24 +308,24 @@ func TestRefreshCompletionMemoIsPerRequest(t *testing.T) {
 	t.Cleanup(sqlvocab.Default.Reset)
 
 	app := tabsTestApp()
-	ed := sqleditor.New()
+	ed := sqleditor.New(nil, "t")
 	buf := "SELECT LW_COMPONENT('Sys"
 	ed.SetCaretForTest(uint64(len([]rune(buf))))
-	app.refreshCompletion(ed.Bind(sqleditor.Frame{IDSlot: "t", Value: &buf}))
+	app.refreshCompletion(ed.Bind(sqleditor.Frame{Value: &buf}))
 	require.True(t, app.completion.resultValid)
 	first := app.completion.result
 	key := app.completion.resultKey
 
 	// Same buffer, same caret: the key is unchanged, so the answer is the one
 	// already computed rather than an equal one computed again.
-	app.refreshCompletion(ed.Bind(sqleditor.Frame{IDSlot: "t", Value: &buf}))
+	app.refreshCompletion(ed.Bind(sqleditor.Frame{Value: &buf}))
 	assert.Equal(t, key, app.completion.resultKey)
 	assert.Equal(t, completionTexts(first), completionTexts(app.completion.result))
 
 	// A caret one byte back is a different site — a stale hit here would be
 	// the pane describing a caret the editor has left.
 	ed.SetCaretForTest(uint64(len([]rune(buf))) - 1)
-	app.refreshCompletion(ed.Bind(sqleditor.Frame{IDSlot: "t", Value: &buf}))
+	app.refreshCompletion(ed.Bind(sqleditor.Frame{Value: &buf}))
 	assert.NotEqual(t, key, app.completion.resultKey)
 	assert.Equal(t, "Sy", app.completion.typed)
 }

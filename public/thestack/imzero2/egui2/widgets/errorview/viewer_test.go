@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
 
 // TestContext_IsEmpty matches the Renderer's short-circuit
@@ -47,34 +49,35 @@ func TestFormatFrame(t *testing.T) {
 // TestNew_Defaults documents the constructor's defaults so a
 // future retune is a deliberate, reviewable change rather than an
 // accidental behavioural shift.
-func TestNew_Defaults(t *testing.T) {
-	r := New(c.NewWidgetIdStack(), "test")
-	assert.True(t, r.defaultOpen,
-		"DefaultOpen on so freshly-rendered chains reveal facts immediately")
-	assert.Equal(t, float32(12), r.indent, "Indent default 12 px (matches fieldview)")
-	assert.Equal(t, "test", r.idPrefix)
-	// Palette defaults exercised here by their non-zero literal —
-	// a future palette retune that lands at zero would be caught.
-	assert.NotZero(t, r.errorFg.Literal())
-	assert.NotZero(t, r.mutedFg.Literal())
+func TestInputDefaults(t *testing.T) {
+	s := (Input{}).resolve()
+	if !s.defaultOpen || s.indent != 12 || s.errorFg != defaultErrorFg || s.mutedFg != defaultMutedFg {
+		t.Errorf("defaults: %+v", s)
+	}
+	if (Input{}).scopeKey() != "errorview" {
+		t.Error("scope key default")
+	}
+	s = (Input{StartCollapsed: true, Indent: -1, ErrorFg: color.Hex(0x11223344)}).resolve()
+	if s.defaultOpen || s.indent != 0 || s.errorFg != color.Hex(0x11223344) || s.mutedFg != defaultMutedFg {
+		t.Errorf("resolve lost fields: %+v", s)
+	}
 }
 
-// TestFluentSetters_AreImmutable proves the fluent setters return
-// a modified copy rather than mutating the receiver. Load-bearing
-// claim that makes "build a base config once, override per-call"
-// safe — same contract as fieldview.Renderer.
-func TestFluentSetters_AreImmutable(t *testing.T) {
-	base := New(c.NewWidgetIdStack(), "test")
-
-	_ = base.DefaultOpen(false)
-	assert.True(t, base.defaultOpen, "DefaultOpen must not mutate the receiver")
-
-	_ = base.Indent(99)
-	assert.Equal(t, float32(12), base.indent, "Indent must not mutate the receiver")
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	chain := Context{Streams: []Stream{{Name: "s", Facts: []Fact{{Msg: "boom", Source: "a.go", Line: "1", Function: "f", DataDiag: "{1: 2}"}}}}}
+	if !Render(Input{Ids: ids, ScopeKey: "t", Chain: chain}).Drawn {
+		t.Error("a chain with a fact must draw")
+	}
+	if Render(Input{Ids: ids, ScopeKey: "t"}).Drawn {
+		t.Error("an empty chain must draw nothing")
+	}
+	if RenderCaptured(Input{Ids: ids, ScopeKey: "t"}).Drawn {
+		t.Error("a zero Captured must draw nothing")
+	}
 }
 
-// TestPluralize is a paranoia guard — a wrong arm here surfaces
-// as "1 streams" / "1 facts" in collapsing headers.
 func TestPluralize(t *testing.T) {
 	assert.Equal(t, "stream", pluralize("stream", 1))
 	assert.Equal(t, "streams", pluralize("stream", 0))

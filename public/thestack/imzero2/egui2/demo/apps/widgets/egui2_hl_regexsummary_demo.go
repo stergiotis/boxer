@@ -31,14 +31,12 @@ import (
 // =============================================================================
 
 // regexsumDemoRow seeds one row's pattern, label, and inspector
-// metadata. Each row owns a distinct idPrefix — required because
-// regexsummary derives toggle / window / tether / pinned-state map keys
-// from the per-call scope, and a shared idPrefix across rows would
-// collide on every one of those.
+// metadata, and holds the row's summary State — each row is its own
+// widget instance, drawn under its own id scope.
 type regexsumDemoRow struct {
-	name     string
-	pattern  string
-	idPrefix string
+	name    string
+	pattern string
+	state   regexsummary.State
 	// provenance, when non-zero, surfaces as the inspector.ProvenanceChip
 	// at the top of the inspector window. Only one row in the demo
 	// carries one so the chip's optional-by-default behaviour is
@@ -48,9 +46,8 @@ type regexsumDemoRow struct {
 
 // regexsumDemoState is the per-app-instance state for the demo. The
 // gallery host's BusInit captures the BusI from MountContextI and
-// stores it here so the per-frame Render hook can re-attach it on
-// every Renderer (cheap: Bus is a pointer setter on the value-
-// receiver Renderer).
+// stores it here so the per-frame Render hook can pass it on every
+// Input.
 type regexsumDemoState struct {
 	bus  runtimeapp.BusI
 	rows []*regexsumDemoRow
@@ -80,24 +77,20 @@ func init() {
 				bus: bus,
 				rows: []*regexsumDemoRow{
 					{
-						name:     "simple word",
-						pattern:  `\w+`,
-						idPrefix: "rxs-demo-row0",
+						name:    "simple word",
+						pattern: `\w+`,
 					},
 					{
-						name:     "invalid (open group)",
-						pattern:  `(unclosed`,
-						idPrefix: "rxs-demo-row1",
+						name:    "invalid (open group)",
+						pattern: `(unclosed`,
 					},
 					{
-						name:     "long — truncated",
-						pattern:  `^([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\.([a-zA-Z]{2,})$`,
-						idPrefix: "rxs-demo-row2",
+						name:    "long — truncated",
+						pattern: `^([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\.([a-zA-Z]{2,})$`,
 					},
 					{
-						name:     "with provenance",
-						pattern:  `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})`,
-						idPrefix: "rxs-demo-row3",
+						name:    "with provenance",
+						pattern: `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})`,
 						provenance: inspector.Provenance{
 							Subject:   "app.spinnaker.event.rules.iso8601",
 							SourceApp: "spinnaker",
@@ -122,21 +115,27 @@ func demoRegexsummary(ids *c.WidgetIdStack, st *regexsumDemoState) {
 	c.AddSpace(padInner())
 
 	for i, row := range st.rows {
-		// Per-row Renderer with a distinct idPrefix so each row owns
-		// its own toggle / window / tether identities. Bus is attached
+		// Each row is its own summary under a per-row id scope, so the
+		// rows' toggles, windows and tethers stay apart. Bus is passed
 		// every frame from the BusInit-captured handle — the embedded
 		// explorer re-reads it on each open so CH-backed tabs work.
-		r := regexsummary.New(row.idPrefix).Bus(st.bus)
-		if !row.provenance.IsZero() {
-			r = r.Provenance(row.provenance)
-		}
-		for range c.Horizontal().KeepIter() {
-			// Fixed-width label column keeps every regexsummary cell
-			// at the same x — visually aligned across rows.
-			c.UiSetMinWidth(180)
-			c.Label(row.name).Send()
-			c.AddSpace(gapSections())
-			r.Render(ids.PrepareSeq(uint64(0xE5E000+i)), row.pattern)
+		for range c.IdScope(ids.PrepareSeq(uint64(i))) {
+			for range c.Horizontal().KeepIter() {
+				// Fixed-width label column keeps every regexsummary cell
+				// at the same x — visually aligned across rows.
+				c.UiSetMinWidth(180)
+				c.Label(row.name).Send()
+				c.AddSpace(gapSections())
+				regexsummary.Render(regexsummary.Input{
+					Ids:        ids,
+					ScopeKey:   "row",
+					Pattern:    row.pattern,
+					State:      &row.state,
+					Bus:        st.bus,
+					Provenance: row.provenance,
+					Title:      "regex: " + row.name,
+				})
+			}
 		}
 		c.AddSpace(padInner())
 	}

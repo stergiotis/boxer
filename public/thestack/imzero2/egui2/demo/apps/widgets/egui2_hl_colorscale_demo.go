@@ -135,18 +135,10 @@ func (st *colorscaleDemoState) rebuildCsWidgets() {
 		treemap.WithColoring(st.hoverBand),
 	)
 
-	st.scale = colorscale.New(st.ids, "cs-scale", st.colormap.Config(),
-		colorscale.WithSize(700, 42),
-		colorscale.WithDesiredTicks(int(st.cfg.ticks)),
-		colorscale.WithTicker(csTickers[st.cfg.tickerIdx].t),
-	)
-
-	st.scale.OnHover(func(h colorscale.HoverInfo) {
-		if !h.Ok {
-			st.hoverBand.ClearBand()
-			return
-		}
-		st.hoverBand.SetBand(h.Value)
+	st.scale = colorscale.New(st.ids, "cs-scale", st.colormap.Config(), colorscale.Options{
+		Width: 700, Height: 42,
+		DesiredTicks: int(st.cfg.ticks),
+		Ticker:       csTickers[st.cfg.tickerIdx].t,
 	})
 }
 
@@ -184,7 +176,12 @@ func demoColorscale(st *colorscaleDemoState) {
 	for range c.Vertical().KeepIter() {
 		st.renderCsControls()
 		c.AddSpace(gapItems())
-		st.scale.Render()
+		// The legend hover feeds the hover-band decorator on the treemap below.
+		if h := st.scale.Render().Hover; h.Ok {
+			st.hoverBand.SetBand(h.Value)
+		} else {
+			st.hoverBand.ClearBand()
+		}
 		c.AddSpace(gapSections()) // clearer visual separation between legend and map
 		st.tm.Render()
 	}

@@ -174,7 +174,7 @@ func (in Input) renderBreadcrumb(st *State, density styletokens.DensityE) (navig
 func (in Input) renderFilter(st *State, density styletokens.DensityE) {
 	for range c.Horizontal().KeepIter() {
 		c.Label(icons.PhFunnelSimple).Selectable(false).Send()
-		st.filterHl.Prepare(in.Ids.PrepareStr("filter"), st.filter, false, regexedit.ModeSingle).
+		st.filterHl.TextEdit(in.Ids.PrepareStr("filter"), st.filter, false, regexedit.ModeSingle).
 			HintText("filter paths (regex)").
 			DesiredWidth(filterWidth).
 			SendRespVal(&st.filter)
@@ -207,8 +207,11 @@ func (in Input) renderFilter(st *State, density styletokens.DensityE) {
 // height and the table below it does not move when a search starts and ends.
 // The figures are the job's, a frame old like the rest of this row.
 func (in Input) renderSearchProgress(st *State) {
-	bgjobrow.Render(st.job, bgjobrow.Input{
-		CancelId: in.Ids.PrepareStr("filter-cancel"),
+	bgjobrow.Render(bgjobrow.Input{
+		Job:      st.job,
+		Ids:      in.Ids,
+		ScopeKey: "filter-search",
+		Cancel:   true,
 		Inline:   true,
 		BarWidth: searchBarWidth,
 	})
@@ -656,7 +659,13 @@ func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Resu
 		// The epoch is the resolver's, or the seed when there is none.
 		WidthEpoch: plan.epoch,
 	}
-	if plan.on {
+	// The tree takes a column's Width as its drag floor. That is right for
+	// the defaults, and wrong for a width that is the column's own last
+	// reading: fed back as the floor it lets the column grow and never
+	// narrow. So whenever observed widths reach the columns — under a
+	// resolver, or under the FillWidth layout on its own — the floor is the
+	// density's minimum and the ceiling the widget's.
+	if plan.on || plan.fill != nil {
 		treeIn.MinColumnWidth = MinColumnWidth(density)
 		treeIn.MaxColumnWidth = MaxColumnWidth
 	}

@@ -481,28 +481,13 @@ type laneRef struct {
 	index int32
 }
 
-// timelineProbeSalt namespaces one Timeline's register slots (the r21 pane
-// probe) inside the shared slot map. The scopeKey alone cannot: embedders pass
-// a constant ("play-timeline"), so two windows of the same app hash to one seq
-// and size each other — the shape the r18 retirement removed between panels,
-// which survives between windows for as long as the seq ignores the instance.
-// Mixed through the instance's own id stack, which carries whatever separates
-// the instances — a base salt, or the host's per-window scope. Mirrors
-// imztop's paneProbeSeq.
-const timelineProbeSalt uint64 = 0x4b3f21c7a95e6d03
-
-// probeSeq is this instance's slot for one probe role. The salt is derived on
-// FIRST USE rather than at New, which is what makes it window-unique for every
-// embedder: windowhost pushes its per-window salt as an id SCOPE around Frame,
-// so a widget constructed in Mount would read an empty stack (peek falls back
-// to the base salt, zero unless the embedder set one) and two windows would
-// mint the same value. At render time the scope is on the stack. Derive is
-// non-zero by construction, so zero is an unambiguous "not yet".
+// probeSeq is this instance's slot for one probe role, derived from the id
+// stack at RENDER time rather than at New: windowhost pushes its per-window
+// salt as an id scope around Frame, so a value minted in Mount would read an
+// empty stack and two windows would share a slot (ADR-0267 W7). Called
+// inside the Render scope, [c.WidgetIdStack.ProbeSeq] sees that scope.
 func (inst *Timeline) probeSeq(role string) (seq uint64) {
-	if inst.probeSalt == 0 {
-		inst.probeSalt = inst.ids.PrepareHighEntropy(timelineProbeSalt).Derive()
-	}
-	return c.ProbeSeq(inst.scopeKey, role) ^ inst.probeSalt
+	return inst.ids.ProbeSeq(role)
 }
 
 // defaultLODScales is the binning ladder used by Timeline when the caller
@@ -532,9 +517,6 @@ var defaultLODScales = []time.Duration{
 type Timeline struct {
 	ids      *c.WidgetIdStack
 	scopeKey string
-	// probeSalt makes this instance's register slots window-unique. See
-	// [timelineProbeSalt].
-	probeSalt uint64
 
 	intervals   []*layout.IntervalEvent
 	points      []*layout.PointEvent

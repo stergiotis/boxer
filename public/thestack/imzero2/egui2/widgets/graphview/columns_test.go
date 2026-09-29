@@ -148,7 +148,7 @@ func TestColumnsAndSpecsReconcileAndPaintIdentically(t *testing.T) {
 	var colSum []uint64
 	for range 4 {
 		zero()
-		require.NoError(t, cols.RenderColumns(&nc, &ec, 400, 300))
+		require.NoError(t, errOf(cols.RenderColumns(&nc, &ec, 400, 300)))
 		colSum = append(colSum, sum())
 		reset()
 	}
@@ -159,7 +159,7 @@ func TestColumnsAndSpecsReconcileAndPaintIdentically(t *testing.T) {
 	require.Equal(t, rows.auraSet.start, cols.auraSet.start)
 	require.Equal(t, rows.auraSet.list, cols.auraSet.list)
 	// The hosted paint takes the columns too.
-	require.NoError(t, cols.HostedPaintColumns(&nc, &ec))
+	require.NoError(t, errOf(cols.HostedPaintColumns(&nc, &ec)))
 }
 
 // NaN is the unset value in every float column and a declared zero is a
@@ -223,7 +223,7 @@ func TestColumnsNaNIsUnsetAndZeroIsZero(t *testing.T) {
 	// A declared zero opacity paints nothing: the fill's alpha is zero.
 	v := New(nil, "t", Options{})
 	v.style = DefaultStyle()
-	require.NoError(t, v.RenderColumns(&NodeColumns{Ids: []uint64{1}, Opacity: []float32{0}}, &EdgeColumns{}, 0, 0))
+	require.NoError(t, errOf(v.RenderColumns(&NodeColumns{Ids: []uint64{1}, Opacity: []float32{0}}, &EdgeColumns{}, 0, 0)))
 	v.g.reconcileColumns(&NodeColumns{Ids: []uint64{1}, Opacity: []float32{0}}, &EdgeColumns{})
 	require.Equal(t, uint32(0), alphaOf(v.nodeFill(0)))
 }
@@ -305,12 +305,12 @@ func TestPositionColumnsFollowTheDeclaration(t *testing.T) {
 func TestRenderColumnsRefusesAMalformedDeclaration(t *testing.T) {
 	t.Cleanup(scenetest.Install())
 	v := New(c.NewWidgetIdStack(), "bad", Options{})
-	require.NoError(t, v.RenderColumns(&NodeColumns{Ids: []uint64{1, 2}}, &EdgeColumns{}, 100, 100))
+	require.NoError(t, errOf(v.RenderColumns(&NodeColumns{Ids: []uint64{1, 2}}, &EdgeColumns{}, 100, 100)))
 	require.Equal(t, uint32(2), v.Metrics().NodeCount)
 
 	short := NodeColumns{Ids: []uint64{1, 2, 3}, Radius: []float32{1}}
 	require.Error(t, short.Validate())
-	require.Error(t, v.RenderColumns(&short, &EdgeColumns{}, 100, 100))
+	require.Error(t, errOf(v.RenderColumns(&short, &EdgeColumns{}, 100, 100)))
 	require.Equal(t, uint32(2), v.Metrics().NodeCount, "a refused declaration leaves the state alone")
 
 	offsets := NodeColumns{Ids: []uint64{1, 2}, AuraOffsets: []int32{0, 2, 1}, AuraIds: []string{"a", "b"}}
@@ -325,8 +325,8 @@ func TestRenderColumnsRefusesAMalformedDeclaration(t *testing.T) {
 
 	edges := EdgeColumns{From: []uint64{1}, To: []uint64{1, 2}}
 	require.Error(t, edges.Validate())
-	require.Error(t, v.RenderColumns(&NodeColumns{Ids: []uint64{1, 2}}, &edges, 100, 100))
-	require.Error(t, v.HostedPaintColumns(&short, &EdgeColumns{}))
+	require.Error(t, errOf(v.RenderColumns(&NodeColumns{Ids: []uint64{1, 2}}, &edges, 100, 100)))
+	require.Error(t, errOf(v.HostedPaintColumns(&short, &EdgeColumns{})))
 }
 
 // A declared LabelAlways paints the node's label under the label budget:
@@ -445,6 +445,10 @@ func TestEmptyNonNilColumnIsAbsent(t *testing.T) {
 	}
 	ec := EdgeColumns{From: []uint64{1}, To: []uint64{2}, Id: []uint64{}, Width: []float32{}}
 	require.NoError(t, nc.Validate())
-	require.NoError(t, v.RenderColumns(&nc, &ec, 100, 100))
+	require.NoError(t, errOf(v.RenderColumns(&nc, &ec, 100, 100)))
 	require.Equal(t, uint32(2), v.Metrics().NodeCount)
 }
+
+// errOf drops the events of a RenderColumns / HostedPaintColumns pair, for
+// assertions on the error alone.
+func errOf(_ Events, err error) error { return err }

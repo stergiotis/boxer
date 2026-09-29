@@ -1,5 +1,5 @@
-// Package fsmview provides a two-level finite-state-machine visualization
-// widget for the ImZero2 framework.
+// Package fsmview is a semi-retained imzero2 widget (ADR-0267): a two-level
+// finite-state-machine viewer.
 //
 // Level 1 is a compact chip (built on widgets/badge) that shows the
 // current state of an FSM. Clicking the chip opens a floating Window
@@ -8,26 +8,26 @@
 //
 // Basic usage:
 //
-//	m := fsmview.NewMachine[string]("red", 16,
-//	    fsmview.WithLabel(strings.ToUpper),
-//	    fsmview.WithStateOrder([]string{"red", "yellow", "green"}),
-//	).
+//	m := fsmview.NewMachine("red", 16, fsmview.MachineOptions[string]{
+//	    Label:      strings.ToUpper,
+//	    StateOrder: []string{"red", "yellow", "green"},
+//	}).
 //	    AddRule("red", "green").
 //	    AddRule("green", "yellow").
 //	    AddRule("yellow", "red")
 //
-//	v := fsmview.New(ids, "traffic", m)
+//	v := fsmview.New(ids, "traffic", m, fsmview.Options[string]{Title: "Traffic light"})
 //	for range c.Window(...).KeepIter() {
-//	    v.Render()
+//	    ev := v.Render()
 //	}
 //
 // # Tethered mode
 //
-// [Widget.Tethered] promotes the level-1 chip to a "tethered inspector
+// [Options.Tethered] promotes the level-1 chip to a "tethered inspector
 // summary" (ADR-0046): the state badge gains an [inspector.AnchorToggle] and
 // the level-2 window is linked back to it by the spring-animated bezier
-// [inspector.AnchorTether]. Pair with [Widget.Summary] for a caller-supplied
-// stat line and [Widget.BadgeTone] to colour the badge by state severity. Off
+// [inspector.AnchorTether]. Pair with [Options.Summary] for a caller-supplied
+// stat line and [Options.BadgeTone] to colour the badge by state severity. Off
 // by default — plain chips keep the click-to-open popup.
 //
 // # Choice of FSM library

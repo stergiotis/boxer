@@ -1,6 +1,7 @@
 package schemaview
 
 import (
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
@@ -20,8 +21,8 @@ const (
 
 // selection identifies the tree node whose detail the right pane shows.
 // Indices reference the live TableDesc; they stay valid as long as the bound
-// TableDesc is stable, which it is — the host swaps the whole binding via
-// [Model.SetTable] when the fixture changes, and SetTable resets selection.
+// TableDesc is stable, which it is — a different Input.Table pointer resets
+// the selection ([State.bind]).
 type selection struct {
 	kind     selKind
 	plainCol int // index into PlainValues* (selPlainColumn)
@@ -29,27 +30,34 @@ type selection struct {
 	col      int // index into a section's ValueColumn* (selSectionColumn)
 }
 
-// Model is the editable state of the inspector: the schema under view plus
-// the navigator's selection, filter, and legend-popup flag. The schema is
-// owned by the host (a [*common.TableDesc] handed in at construction); the
-// widget mutates only sel, filter, and legendOpen.
-type Model struct {
-	Table  *common.TableDesc
+// State is the host-owned UI state of one inspector (ADR-0267 W9): the
+// navigator's selection, filter and legend-popup flag, the detail pane's
+// canonical-type summary state, and the tree widget's view state. Its zero
+// value is usable; keep one per inspector across frames. The schema itself
+// is data and arrives on Input.Table every frame; a different Table pointer
+// resets the selection, which indexed into the previous one, and keeps the
+// filter.
+type State struct {
+	// table is the TableDesc sel indexes; see bind.
+	table  *common.TableDesc
 	sel    selection
 	filter string // case-insensitive substring; "" shows everything
 	// legendOpen pins the tethered glyph-legend window (the "?" affordance in
 	// the navigator header). The window's title-bar close writes back here via
 	// an R10 databinding, so it stays a plain widget-owned bool.
 	legendOpen bool
+	// colType is the detail pane's canonical-type summary state (the tethered
+	// inspector of whichever column is selected).
+	colType canonicaltypesummary.State
 
 	// navState is the tree widget's view state, and the authority for which
 	// sections are open. It survives the rebuild every filter keystroke
 	// triggers because the hierarchy carries [navNode.key] as its key column,
 	// so the widget files expansion under the section rather than under an
 	// index the next keystroke reassigns. Its selection is projected from sel,
-	// which is the richer thing the detail pane reads ([Model.syncNav]).
+	// which is the richer thing the detail pane reads ([view.syncNav]).
 	navState tree.State
-	// navLabels / navParents / navKeys / navNodes are [Model.buildNav]'s
+	// navLabels / navParents / navKeys / navNodes are [view.buildNav]'s
 	// scratch: the hierarchy is rebuilt every frame — the filter can change on
 	// any of them — so the slices are retained and refilled rather than
 	// reallocated.
@@ -65,17 +73,28 @@ type Model struct {
 	navNodes   []navNode
 }
 
-// NewModel binds a schema and selects a sensible default node so the detail
-// pane is populated on the first frame.
-func NewModel(table *common.TableDesc) *Model {
-	return &Model{Table: table, sel: defaultSelection(table)}
+// view is one frame's pairing of the host's schema with its State: the
+// receiver every render and navigation helper works on.
+type view struct {
+	Table *common.TableDesc
+	*State
 }
 
-// SetTable rebinds the schema (used when the host swaps fixtures) and resets
-// the selection, which indexed into the previous TableDesc.
-func (m *Model) SetTable(table *common.TableDesc) {
-	m.Table = table
-	m.sel = defaultSelection(table)
+// bind points the State at table, resetting the selection when the table is
+// a different one from last frame (it indexed into the previous TableDesc)
+// and selecting a sensible default node so the detail pane is populated.
+func (st *State) bind(table *common.TableDesc) {
+	if st.table == table {
+		return
+	}
+	st.table = table
+	st.sel = defaultSelection(table)
+}
+
+// newView binds st to table for one frame.
+func newView(table *common.TableDesc, st *State) *view {
+	st.bind(table)
+	return &view{Table: table, State: st}
 }
 
 // defaultSelection prefers the first plain column, then the first tagged
@@ -98,7 +117,7 @@ func defaultSelection(t *common.TableDesc) selection {
 
 // matches reports whether any of the supplied names contains the current
 // filter (case-insensitive). An empty/blank filter matches everything.
-func (m *Model) matches(names ...string) bool {
+func (m *view) matches(names ...string) bool {
 	f := strings.ToLower(strings.TrimSpace(m.filter))
 	if f == "" {
 		return true
@@ -114,7 +133,7 @@ func (m *Model) matches(names ...string) bool {
 // matchesSection reports whether a section is visible under the filter — by
 // its own name or any of its column names. Filtering is per-section, not
 // per-column: a matching section shows all its columns.
-func (m *Model) matchesSection(sec *common.TaggedValuesSection) bool {
+func (m *view) matchesSection(sec *common.TaggedValuesSection) bool {
 	names := make([]string, 0, len(sec.ValueColumnNames)+1)
 	names = append(names, sec.Name.String())
 	for _, n := range sec.ValueColumnNames {

@@ -779,7 +779,7 @@ func (inst *ChartDriver) renderGrid(w float32, h float32, k chartClaim, emit Sig
 		// The ticker is chosen at construction from the Config's scale, so a
 		// scale change needs a fresh legend rather than a re-render.
 		inst.cbar = colorscale.New(inst.ids, "play-chart-cbar", inst.cm,
-			colorscale.WithSize(min(w, chartColorbarMaxW), chartColorbarH))
+			colorscale.Options{Width: min(w, chartColorbarMaxW), Height: chartColorbarH})
 		inst.cmLog = inst.cm.IsLog()
 	}
 	inst.cbar.Render()

@@ -30,20 +30,13 @@ var legendEntries = []legendEntry{
 	{"·∅", badge.ToneNeutral, "value-less (membership-only) section"},
 }
 
-// legendScope derives the tether / window / toggle id scope from the host's
-// ScopeKey so two inspector instances in one app keep independent legend
-// windows.
-func legendScope(scopeKey string) string {
-	return scopeKey + "-legend"
-}
-
 // renderLegendToggle draws the "?" affordance that pins the glyph-legend window,
 // then captures its rect so the bezier tether anchors at the toggle's right
 // edge. Call inside the navigator's header Horizontal, after the title. Mirrors
 // inspector.AnchorToggle's click-capture grammar but carries a help glyph
 // (PhQuestion) rather than the pop-out arrow, since this opens a key, not a
 // value inspector.
-func renderLegendToggle(m *Model, scope string) {
+func renderLegendToggle(ids *c.WidgetIdStack, m *view, scope string) {
 	accent := color.Hex(styletokens.AccentDefault.AsHex())
 	transparent := color.Transparent
 	fill := transparent
@@ -52,8 +45,7 @@ func renderLegendToggle(m *Model, scope string) {
 	}
 	atoms := c.Atoms().BeginRichTextColored(accent, transparent, icons.PhQuestion).End().Keep()
 
-	toggleId := c.MakeAbsoluteIdStr(scope + "-toggle")
-	f := c.Frame(toggleId).
+	f := c.Frame(ids.PrepareStr("legend-toggle")).
 		Fill(fill).
 		CornerRadius(styletokens.RoundingSm).
 		InnerMarginSides(4, 4, 1, 1).
@@ -82,12 +74,13 @@ func renderLegendToggle(m *Model, scope string) {
 // tether links toggle ↔ window purely by scope, so the two need not be nested.
 // The native title-bar X is wired back to m.legendOpen via OpenBound + an R10
 // databinding (the canonicaltypesummary / distsummary pattern).
-func renderLegendWindow(ids *c.WidgetIdStack, m *Model, scope string) {
+func renderLegendWindow(ids *c.WidgetIdStack, m *view, scope string) {
 	if !m.legendOpen {
 		return
 	}
 	tether := inspector.NewAnchorTether(scope)
-	winId := c.MakeAbsoluteIdStr(scope + "-window")
+	// The one absolute id the widget owns: its floating window (W6).
+	winId := c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("legend-window").Derive())
 	win := c.Window(winId, c.WidgetText().Text("glyph legend").Keep()).
 		DefaultOpen(true).
 		Resizable(true).
@@ -115,7 +108,7 @@ func renderLegendBody(ids *c.WidgetIdStack) {
 	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 	for range c.Grid(ids.PrepareStr("legend-grid")).NumColumns(2).KeepIter() {
 		for i, e := range legendEntries {
-			badge.New(ids.PrepareSeq(uint64(0x1e6e_0000+i)), e.glyph).
+			badge.New(ids.PrepareSeq(uint64(i)), e.glyph).
 				Tone(e.tone).
 				Variant(badge.VariantSoft).
 				Size(badge.SizeSm).

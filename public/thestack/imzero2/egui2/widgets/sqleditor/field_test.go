@@ -52,7 +52,7 @@ func TestFieldMarkSectionsClampsToTheFragment(t *testing.T) {
 // serialized bytes — see codeview's memo tests), so comparing holders would
 // pass with the memo removed.
 func TestFieldHighlightJobRebuildsOnlyOnChange(t *testing.T) {
-	f := NewField()
+	f := NewField(nil, "t")
 
 	_, ok := f.highlightJob("")
 	require.False(t, ok, "an empty fragment has no bytes to colour")

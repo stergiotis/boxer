@@ -237,8 +237,8 @@ func TestExprWidgetMatchesEveryCategoryAndPassesOnValues(t *testing.T) {
 func TestExprWidgetPrunesFieldsForAbsentSlots(t *testing.T) {
 	w := newExprWidget()
 	w.fields = map[string]*sqleditor.Field{
-		"cond": sqleditor.NewField(),
-		"cols": sqleditor.NewField(),
+		"cond": sqleditor.NewField(nil, "cond"),
+		"cols": sqleditor.NewField(nil, "cols"),
 	}
 	w.ClearStateForAbsent(map[string]struct{}{"cond": {}})
 	require.Len(t, w.fields, 1)

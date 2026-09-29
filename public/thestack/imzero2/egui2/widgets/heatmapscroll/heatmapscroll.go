@@ -1,7 +1,10 @@
 // Package heatmapscroll composes the colormap package with the
 // scrollingTexture widget (ADR-0058) into a single, opinionated wrapper
 // for "streaming scalar → colour heatmap" use cases: audio spectrograms,
-// RF waterfalls, thermal streams, rolling metrics heatmaps.
+// RF waterfalls, thermal streams, rolling metrics heatmaps. It is a
+// semi-retained widget (ADR-0267): the object owns the ring's write cursor
+// and the frame's staged columns, New takes its [Options], Render draws it
+// once per frame and returns its [Events].
 //
 // # Ownership model
 //
@@ -17,16 +20,15 @@
 //
 // # Per-frame loop
 //
-//	hs := heatmapscroll.New(ids, "spectrogram", cfg, 512, 1024)
-//	hs.SetOrientation(heatmapscroll.ScrollLeft)
+//	hs := heatmapscroll.New(ids, "spectrogram", cfg, heatmapscroll.Options{WidthSlots: 512, HeightSlots: 1024})
 //	// ... each frame:
 //	for _, col := range columnsThisFrame {
 //	    stats := hs.PushColumn(col)
 //	    if stats.BadSamples > 0 { log.Warn(...) }
 //	}
-//	hs.Render()
-//	if row, col, ok := hs.HoveredCell(); ok { ... }
-//	if hs.Clicked() { ... }
+//	ev := hs.Render(0, 0) // or hs.RenderFill(fallbackW, fallbackH)
+//	if ev.Hovered { /* ev.Row, ev.Col */ }
+//	if ev.Clicked { ... }
 //
 // Hover and click readouts are one frame behind the pixels that produced
 // them, per ADR-0058 "Consequences / Negative" (FFFI r9/r10 databindings
@@ -75,28 +77,62 @@ const FilterNearest Filter = Filter(c.FilterNearestE)
 // See ADR-0058 SD3 for why the default is Nearest for scientific data.
 const FilterLinear Filter = Filter(c.FilterLinearE)
 
+// Options configures a HeatmapScroll (ADR-0267 W11). The widget re-reads
+// [HeatmapScroll.Opts] on every Render, so a change is an assignment; a
+// change of the ring's shape restarts it from a blank texture.
+type Options struct {
+	// WidthSlots and HeightSlots are the ring's dimensions: columns of
+	// history and samples per column. Both must be positive (New panics
+	// otherwise).
+	WidthSlots, HeightSlots uint32
+	// Orientation is the scroll direction; the zero value is [ScrollLeft].
+	Orientation Orientation
+	// Filter is the GPU sampling mode; the zero value is [FilterNearest]
+	// (ADR-0058 SD3).
+	Filter Filter
+	// CaptureScroll opts the widget into owning the mouse wheel while the
+	// pointer is over it (ADR-0140): the scroll delta is delivered through
+	// Events.Wheel and zeroed for everything else that frame, so an enclosing
+	// ScrollArea does not scroll under a waterfall that pans on the wheel.
+	CaptureScroll bool
+	// CaptureZoom opts the widget into reading the zoom gesture (ctrl+wheel /
+	// pinch) while the pointer is over it (ADR-0140); the factor arrives
+	// through Events.Wheel with the hover anchor.
+	CaptureZoom bool
+}
+
+// Events is what one Render reports. Everything is one frame behind the
+// pixels that produced it (ADR-0058 "Consequences / Negative").
+type Events struct {
+	// Hovered says the pointer is over the widget; Row is then the bin index
+	// (0 .. HeightSlots-1) and Col the ring position (0 .. WidthSlots-1).
+	Hovered  bool
+	Row, Col uint32
+	// Clicked reports a primary click on the widget rect.
+	Clicked bool
+	// Wheel is the scroll / zoom the widget captured while the pointer was
+	// over it, with the pointer's position relative to the widget origin as
+	// the zoom anchor; the identity {0, 0, 1, NaN, NaN} when it did not own
+	// the wheel — capture off, pointer elsewhere, or nothing scrolled.
+	Wheel c.CanvasWheelValue
+}
+
 // HeatmapScroll is a streaming-scalar heatmap widget. Construct once
 // with New, push columns each frame with PushColumn, and call Render
 // once per frame to emit the underlying scrollingTexture opcode.
 //
 // Not goroutine-safe; expected to be used from the UI goroutine.
 type HeatmapScroll struct {
+	// Opts is re-read on every Render; a change is an assignment.
+	Opts Options
+
 	ids      *c.WidgetIdStack
 	scopeKey string
+	cfg      *colormap.Config
 
-	cfg         *colormap.Config
-	widthSlots  uint32
-	heightSlots uint32
-	orientation Orientation
-	filter      Filter
-
-	// displayWidthPx / displayHeightPx override the rendered rect size
-	// independently of the slot count. 0 keeps the slot-count default
-	// (1 slot = 1 px). Non-zero stretches the texture via
-	// painter.image's sampler; hover (row, col) is scaled back to slot
-	// units inside the Rust widget so the readout stays in ring space.
-	displayWidthPx  float32
-	displayHeightPx float32
+	// shape is the ring shape the texture was last rendered with; a change
+	// in Opts restarts the ring.
+	shapeW, shapeH uint32
 
 	head         uint32
 	pending      []uint32 // mapped RGBA columns queued for this frame's Render
@@ -105,68 +141,35 @@ type HeatmapScroll struct {
 	hoverRc uint64 // r9_u64 databound; packed (row<<32)|col or u64::MAX
 	clicked bool   // r10 databound; primary-click on previous frame
 
-	// captureScroll / captureZoom opt the widget into owning the wheel while
-	// the pointer is over it (ADR-0140, second capture site); read back via
-	// Wheel.
-	captureScroll bool
-	captureZoom   bool
-
 	totalStats colormap.ColumnStats // accumulated across all PushColumn calls
 }
 
 // New constructs a HeatmapScroll with the given scope key, colormap
-// configuration, and ring dimensions. Panics if widthSlots or
-// heightSlots is zero, or if cfg is nil. scopeKey must be unique within
-// the caller's current WidgetIdStack scope; it identifies the widget
-// across frames so the Rust-side texture cache can key on it.
-//
-// Defaults: ScrollLeft + FilterNearest (the scientific-visualisation
-// defaults called out in ADR-0058 SD3).
-func New(ids *c.WidgetIdStack, scopeKey string, cfg *colormap.Config, widthSlots, heightSlots uint32) *HeatmapScroll {
+// configuration and options. Panics if the ring dimensions are zero or if
+// ids or cfg is nil. scopeKey must be unique within the caller's current
+// WidgetIdStack scope; it identifies the widget across frames so the
+// Rust-side texture cache can key on it.
+func New(ids *c.WidgetIdStack, scopeKey string, cfg *colormap.Config, opts Options) *HeatmapScroll {
 	if ids == nil {
 		panic("heatmapscroll: New requires a non-nil WidgetIdStack")
 	}
 	if cfg == nil {
 		panic("heatmapscroll: New requires a non-nil colormap.Config")
 	}
-	if widthSlots == 0 || heightSlots == 0 {
-		panic(fmt.Sprintf("heatmapscroll: widthSlots (%d) and heightSlots (%d) must be positive", widthSlots, heightSlots))
+	if opts.WidthSlots == 0 || opts.HeightSlots == 0 {
+		panic(fmt.Sprintf("heatmapscroll: WidthSlots (%d) and HeightSlots (%d) must be positive", opts.WidthSlots, opts.HeightSlots))
 	}
 	return &HeatmapScroll{
-		ids:         ids,
-		scopeKey:    scopeKey,
-		cfg:         cfg,
-		widthSlots:  widthSlots,
-		heightSlots: heightSlots,
-		orientation: ScrollLeft,
-		filter:      FilterNearest,
-		hoverRc:     ^uint64(0), // start with "not hovered" sentinel
-		pending:     make([]uint32, 0),
+		Opts:     opts,
+		ids:      ids,
+		scopeKey: scopeKey,
+		cfg:      cfg,
+		shapeW:   opts.WidthSlots,
+		shapeH:   opts.HeightSlots,
+		hoverRc:  ^uint64(0), // start with "not hovered" sentinel
+		pending:  make([]uint32, 0),
 	}
 }
-
-// SetOrientation selects one of the four scroll directions.
-// Takes effect on the next Render call.
-func (inst *HeatmapScroll) SetOrientation(o Orientation) { inst.orientation = o }
-
-// SetDisplaySize overrides the rendered pixel rect independently of
-// the slot count: 0 along an axis keeps the historical slot-count
-// default (1 slot = 1 px); a positive value stretches the texture
-// to that pixel size via egui's painter sampler. Useful when the
-// caller wants the heatmap to grow with its enclosing panel without
-// re-allocating the underlying ring texture.
-//
-// Hover (row, col) coordinates are converted back to slot units in
-// the Rust widget, so display-size changes do not shift the ring
-// readout. Takes effect on the next Render call.
-func (inst *HeatmapScroll) SetDisplaySize(widthPx, heightPx float32) {
-	inst.displayWidthPx = widthPx
-	inst.displayHeightPx = heightPx
-}
-
-// SetFilter selects GPU texture sampling (see ADR-0058 SD3).
-// Takes effect on the next Render call.
-func (inst *HeatmapScroll) SetFilter(f Filter) { inst.filter = f }
 
 // SetConfig replaces the colormap configuration used by subsequent
 // PushColumn calls. Does NOT re-map already-pushed columns: the live
@@ -186,8 +189,8 @@ func (inst *HeatmapScroll) SetConfig(cfg *colormap.Config) {
 // len(samples) != heightSlots — a silent truncation would misalign the
 // ring and corrupt later columns.
 func (inst *HeatmapScroll) PushColumn(samples []float32) (stats colormap.ColumnStats) {
-	if uint32(len(samples)) != inst.heightSlots {
-		panic(fmt.Sprintf("heatmapscroll: PushColumn expects %d samples, got %d", inst.heightSlots, len(samples)))
+	if uint32(len(samples)) != inst.Opts.HeightSlots {
+		panic(fmt.Sprintf("heatmapscroll: PushColumn expects %d samples, got %d", inst.Opts.HeightSlots, len(samples)))
 	}
 	base := len(inst.pending)
 	// Grow pending by one column's worth. A later implementation can
@@ -195,7 +198,7 @@ func (inst *HeatmapScroll) PushColumn(samples []float32) (stats colormap.ColumnS
 	// happen in one frame, older ones are redundant — the Rust side
 	// overwrites them anyway), but for now we ship everything the
 	// caller gives us; the texture upload loop is O(new_count).
-	need := base + int(inst.heightSlots)
+	need := base + int(inst.Opts.HeightSlots)
 	if cap(inst.pending) < need {
 		grown := make([]uint32, need, need*2)
 		copy(grown, inst.pending)
@@ -211,8 +214,13 @@ func (inst *HeatmapScroll) PushColumn(samples []float32) (stats colormap.ColumnS
 
 // Render emits the scrollingTexture opcode with the columns queued by
 // PushColumn since the last Render, binds the r9_u64 / r10 databindings,
-// and advances head. Call once per frame, even if no columns were
-// pushed (the widget still needs to render its current texture content).
+// advances head and reports last frame's interaction. Call once per frame,
+// even if no columns were pushed (the widget still needs to render its
+// current texture content). w and h are the rendered rect in logical pixels;
+// 0 along an axis keeps the slot-count default (1 slot = 1 px), a positive
+// value stretches the texture to that size via egui's painter sampler, with
+// hover (row, col) converted back to slot units so the readout stays in ring
+// space.
 //
 // Host starvation (StateManager.TextureStarved): the ring texture is
 // (re)created host-side on first show, on a slot-shape change, and after
@@ -220,37 +228,78 @@ func (inst *HeatmapScroll) PushColumn(samples []float32) (stats colormap.ColumnS
 // dock tab — imztop's panels). Columns shipped in that window are gone;
 // the host reports the id and Render resets head to 0 so the ring restarts
 // honestly from a blank texture instead of desyncing around a gap.
-func (inst *HeatmapScroll) Render() {
+func (inst *HeatmapScroll) Render(w, h float32) (ev Events) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		ev = inst.render(w, h)
+	}
+	return
+}
+
+// RenderFill is Render sized to the pane: the room left in the parent, read
+// back through a probe one frame behind, with the fallbacks serving until it
+// reports (ADR-0267 W12).
+func (inst *HeatmapScroll) RenderFill(fallbackW, fallbackH float32) (ev Events) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		w, h, ok := c.CapturePaneSize(inst.ids.ProbeSeq("pane"))
+		if !ok || w < 1 || h < 1 {
+			w, h = fallbackW, fallbackH
+		}
+		ev = inst.render(w, h)
+	}
+	return
+}
+
+// render runs inside the widget's id scope.
+func (inst *HeatmapScroll) render(w, h float32) (ev Events) {
+	o := inst.Opts
+	if o.WidthSlots == 0 || o.HeightSlots == 0 {
+		panic(fmt.Sprintf("heatmapscroll: Opts.WidthSlots (%d) and HeightSlots (%d) must be positive", o.WidthSlots, o.HeightSlots))
+	}
+	if o.WidthSlots != inst.shapeW || o.HeightSlots != inst.shapeH {
+		// The host recreates the texture on a shape change; the columns
+		// staged for the old shape do not fit the new one.
+		inst.shapeW, inst.shapeH = o.WidthSlots, o.HeightSlots
+		inst.head = 0
+		inst.pending = inst.pending[:0]
+		inst.pendingCount = 0
+	}
+	sm := c.CurrentApplicationState.StateManager
 	// Separate PrepareStr creators: same derived value, but each creator is
 	// a single-use state machine (a second Derive on one panics).
-	if c.CurrentApplicationState.StateManager.TextureStarved(inst.ids.PrepareStr(inst.scopeKey).Derive()) {
+	texId := inst.ids.PrepareStr("texture").Derive()
+	if sm.TextureStarved(texId) {
 		inst.head = 0
 	}
 	f := c.ScrollingTexture(
-		inst.ids.PrepareStr(inst.scopeKey),
-		inst.widthSlots,
-		inst.heightSlots,
-		uint8(inst.orientation),
-		uint8(inst.filter),
+		inst.ids.PrepareStr("texture"),
+		o.WidthSlots,
+		o.HeightSlots,
+		uint8(o.Orientation),
+		uint8(o.Filter),
 		inst.head,
 		inst.pendingCount,
 		inst.pending,
-		inst.displayWidthPx,
-		inst.displayHeightPx,
+		w,
+		h,
 	)
-	if inst.captureScroll {
+	if o.CaptureScroll {
 		f = f.CaptureScroll()
 	}
-	if inst.captureZoom {
+	if o.CaptureZoom {
 		f = f.CaptureZoom()
 	}
 	f.SendRespVal(&inst.hoverRc, &inst.clicked)
 
 	if inst.pendingCount > 0 {
-		inst.head = (inst.head + inst.pendingCount) % inst.widthSlots
+		inst.head = (inst.head + inst.pendingCount) % o.WidthSlots
 	}
 	inst.pending = inst.pending[:0]
 	inst.pendingCount = 0
+
+	ev.Row, ev.Col, ev.Hovered = c.UnpackHoverRc(inst.hoverRc)
+	ev.Clicked = inst.clicked
+	ev.Wheel = sm.GetCanvasWheel(widgethandle.Make(texId))
+	return
 }
 
 // Release emits the scrollingTextureRelease opcode, dropping the
@@ -258,42 +307,9 @@ func (inst *HeatmapScroll) Render() {
 // predictable lifecycle callers (tab close, demo teardown); otherwise
 // the frame-LRU reaps idle entries after ~10 s at 60 Hz (ADR-0058 SD7).
 func (inst *HeatmapScroll) Release() {
-	creator := inst.ids.PrepareStr(inst.scopeKey)
-	c.ScrollingTextureRelease(creator).Send()
-}
-
-// HoveredCell returns the data-index coordinates currently under the
-// pointer, and whether the pointer is over the widget at all. Row is
-// the bin index (0 .. heightSlots-1); col is the ring position
-// (0 .. widthSlots-1). The value carries a one-frame lag.
-func (inst *HeatmapScroll) HoveredCell() (row uint32, col uint32, hovered bool) {
-	return c.UnpackHoverRc(inst.hoverRc)
-}
-
-// Clicked reports whether egui registered a primary click on the
-// widget rect on the previous frame. One-frame lag, same as HoveredCell.
-func (inst *HeatmapScroll) Clicked() bool { return inst.clicked }
-
-// SetCaptureScroll opts the widget into owning the mouse wheel while the
-// pointer is over it (ADR-0140): the scroll delta is delivered through Wheel
-// and zeroed for everything else that frame, so an enclosing ScrollArea does
-// not scroll under a waterfall that pans on the wheel. Off by default.
-func (inst *HeatmapScroll) SetCaptureScroll(on bool) { inst.captureScroll = on }
-
-// SetCaptureZoom opts the widget into reading the zoom gesture (ctrl+wheel /
-// pinch) while the pointer is over it (ADR-0140); the factor arrives through
-// Wheel with the hover anchor. Zoom needs no global consume, so other widgets
-// are unaffected. Off by default.
-func (inst *HeatmapScroll) SetCaptureZoom(on bool) { inst.captureZoom = on }
-
-// Wheel returns the scroll / zoom the widget captured on the previous frame
-// while the pointer was over it, with the pointer's position relative to the
-// widget origin as the zoom anchor. The identity {0, 0, 1, NaN, NaN} when the
-// widget did not own the wheel — capture off, pointer elsewhere, or nothing
-// scrolled. One-frame lag, same as HoveredCell.
-func (inst *HeatmapScroll) Wheel() c.CanvasWheelValue {
-	return c.CurrentApplicationState.StateManager.GetCanvasWheel(
-		widgethandle.Make(inst.ids.PrepareStr(inst.scopeKey).Derive()))
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		c.ScrollingTextureRelease(inst.ids.PrepareStr("texture")).Send()
+	}
 }
 
 // Head returns the current ring-buffer write cursor. Useful for callers
@@ -309,7 +325,8 @@ func (inst *HeatmapScroll) TotalStats() colormap.ColumnStats { return inst.total
 // already-mapped columns.
 func (inst *HeatmapScroll) ResetTotalStats() { inst.totalStats = colormap.ColumnStats{} }
 
-// Size returns the widget's ring dimensions as given to New.
+// Size returns the widget's ring dimensions, Opts.WidthSlots and
+// Opts.HeightSlots.
 func (inst *HeatmapScroll) Size() (widthSlots, heightSlots uint32) {
-	return inst.widthSlots, inst.heightSlots
+	return inst.Opts.WidthSlots, inst.Opts.HeightSlots
 }

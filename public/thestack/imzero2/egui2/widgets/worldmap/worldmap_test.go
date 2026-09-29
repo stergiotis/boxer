@@ -1,6 +1,8 @@
 package worldmap
 
 import (
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"hash/fnv"
 	"math"
 	"testing"
@@ -149,11 +151,11 @@ func TestResolve(t *testing.T) {
 }
 
 func TestCanvasBox(t *testing.T) {
-	var w Widget // canvasBox reads only the display knobs, not the atlas.
+	var w Map // canvasBox reads only the display knobs, not the atlas.
 
-	// Default: span the probed pane width (less the scrollbar margin), height
-	// from the projection aspect.
-	cw, ch := w.canvasBox(1000)
+	// Default: span the width offered (RenderFill hands it the pane less the
+	// scrollbar margin), height from the projection aspect.
+	cw, ch := w.canvasBox(1000-canvasMargin, 0)
 	if cw != 1000-canvasMargin {
 		t.Fatalf("pane-sized width = %d, want %d", cw, 1000-canvasMargin)
 	}
@@ -166,8 +168,7 @@ func TestCanvasBox(t *testing.T) {
 
 	// A height cap binds, and the width follows it back down to keep the
 	// aspect rather than stretching the map.
-	w.SetDisplayHeight(200)
-	cw, ch = w.canvasBox(1000)
+	cw, ch = w.canvasBox(1000, 200)
 	if ch != 200 {
 		t.Fatalf("height-capped height = %d, want 200", ch)
 	}
@@ -175,31 +176,22 @@ func TestCanvasBox(t *testing.T) {
 		t.Fatalf("height-capped width = %d, want %d (aspect-derived)", cw, want)
 	}
 
-	// An explicit display width wins over the pane probe (the demo's "Width:"
-	// slider must resize the map) — the height still follows the aspect, so a
-	// height cap under it still binds.
-	w.SetDisplayHeight(0)
-	w.SetDisplayWidth(900)
-	cw, ch = w.canvasBox(1000)
+	// An explicit width (the demo's "Width:" slider must resize the map) —
+	// the height follows the aspect.
+	cw, ch = w.canvasBox(900, 0)
 	if cw != 900 {
-		t.Fatalf("display-width width = %d, want 900 (the pane probe must not shadow it)", cw)
+		t.Fatalf("display-width width = %d, want 900", cw)
 	}
 	if want := max(int(float64(900)/ProjectionNaturalEarth.Aspect()), 1); ch != want {
 		t.Fatalf("display-width height = %d, want %d (aspect-derived)", ch, want)
 	}
 
-	// Clearing the width falls back to the pane probe.
-	w.SetDisplayWidth(0)
-	if cw, _ = w.canvasBox(600); cw != 600-canvasMargin {
-		t.Fatalf("after clearing width, width = %d, want %d", cw, 600-canvasMargin)
-	}
-
-	// A degenerate probe (first frame passes the fallback) still yields a
-	// drawable box, and an absurd one is clamped rather than trusted.
-	if cw, ch = w.canvasBox(0); cw < minCanvasW || ch < 1 {
+	// A degenerate width still yields a drawable box, and an absurd one is
+	// clamped rather than trusted.
+	if cw, ch = w.canvasBox(0, 0); cw < minCanvasW || ch < 1 {
 		t.Fatalf("zero-pane box = %dx%d, want at least %d wide", cw, ch, minCanvasW)
 	}
-	if cw, ch = w.canvasBox(1e6); cw > maxCanvasW || ch > maxCanvasH {
+	if cw, ch = w.canvasBox(1e6, 0); cw > maxCanvasW || ch > maxCanvasH {
 		t.Fatalf("huge-pane box = %dx%d, want clamped to %dx%d", cw, ch, maxCanvasW, maxCanvasH)
 	}
 }
@@ -535,9 +527,10 @@ func TestResolveReusesGeometry(t *testing.T) {
 // The widget keeps the geometry across data changes and must drop it when the
 // raster size changes — a stale one would repaint into a buffer of the wrong
 // shape, or silently keep the old resolution.
-func TestWidgetGeometryCacheLifecycle(t *testing.T) {
+func TestMapGeometryCacheLifecycle(t *testing.T) {
 	a := mustAtlas(t)
-	w := &Widget{atlas: a, NoDataRGBA: 0x555555ff, StrokeRGBA: 0x0a0a0a8c}
+	w := &Map{atlas: a, Opts: Options{Style: Style{NoData: 0x555555ff, Stroke: 0x0a0a0a8c}}}
+	w.resolve()
 
 	h1 := int(float64(256) / ProjectionNaturalEarth.Aspect())
 	w.rasterizeNow(256, h1)
@@ -551,7 +544,6 @@ func TestWidgetGeometryCacheLifecycle(t *testing.T) {
 
 	// A data change at the same size keeps the geometry and the buffer.
 	rgbaBefore := w.rgba
-	w.PresenceRGBA = 0x2a788eff
 	w.presence, w.haveValues = true, true
 	w.values = make([]float64, len(a.Countries))
 	w.values[0] = 1
@@ -581,18 +573,20 @@ func TestWidgetGeometryCacheLifecycle(t *testing.T) {
 // (outlines, size) and the outlines move — and re-derive the aspect-following
 // height. A kept geometry would leave the previous projection's shapes on
 // screen, with the hit-test index buffer to match.
-func TestWidgetSetProjection(t *testing.T) {
+func TestMapProjectionOption(t *testing.T) {
 	a := mustAtlas(t)
-	w := &Widget{atlas: a, NoDataRGBA: 0x555555ff, StrokeRGBA: 0x0a0a0a8c, wantW: 256}
+	w := &Map{atlas: a, Opts: Options{Style: Style{NoData: 0x555555ff, Stroke: 0x0a0a0a8c}}, wantW: 256}
+	w.resolve()
 	w.wantH = w.heightFor(w.wantW)
 	if w.projection != ProjectionNaturalEarth {
-		t.Fatalf("the zero Widget draws %s, want the Natural Earth default", w.projection)
+		t.Fatalf("the zero Map draws %s, want the Natural Earth default", w.projection)
 	}
 	// A fixed height for both arms, so the two index buffers are comparable.
 	w.rasterizeNow(256, 100)
 	natGeom, natIndex := w.geom, hashIndex(w.index)
 
-	w.SetProjection(ProjectionEqualEarth)
+	w.Opts.Projection = ProjectionEqualEarth
+	w.resolve()
 	if !w.dirty {
 		t.Error("a projection change did not mark the texture dirty")
 	}
@@ -613,12 +607,13 @@ func TestWidgetSetProjection(t *testing.T) {
 	// Re-selecting the current projection is a no-op — no dirty flag, so no
 	// re-raster on the next frame.
 	w.dirty = false
-	w.SetProjection(ProjectionEqualEarth)
+	w.resolve()
 	if w.dirty {
 		t.Error("re-selecting the current projection re-rasterizes")
 	}
 	// An unknown value falls back to the default rather than to no map.
-	w.SetProjection(Projection(200))
+	w.Opts.Projection = Projection(200)
+	w.resolve()
 	if w.projection != ProjectionNaturalEarth {
 		t.Errorf("unknown projection left %s selected, want the default", w.projection)
 	}
@@ -689,5 +684,29 @@ func TestRasterizeFillMatchesIndex(t *testing.T) {
 	}
 	if rgba[o] != style.fills[bra] {
 		t.Errorf("interior fill %08x, want %08x", rgba[o], style.fills[bra])
+	}
+}
+
+// TestRenderHeadless renders one frame without a host: the map must not
+// panic, must report a quiet frame, and the fill variant must key its probe
+// per instance.
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	m := New(ids, "t", Options{})
+	if m.Atlas() == nil {
+		t.Skip("atlas unavailable")
+	}
+	m.SetValues(map[CountryIdx]float64{0: 1, 1: 2})
+	ev := m.Render(600, 0)
+	if ev.ClickedOk || ev.HoveredOk || ev.Clicked != NoCountry {
+		t.Fatalf("quiet frame reported %+v", ev)
+	}
+	if m.rgba == nil {
+		t.Fatal("the first frame did not rasterize")
+	}
+	ev = m.RenderFill(600, 400)
+	if ev.ClickedOk {
+		t.Fatalf("quiet fill frame reported %+v", ev)
 	}
 }

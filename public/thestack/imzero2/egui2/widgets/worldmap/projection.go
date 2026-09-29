@@ -12,7 +12,7 @@ import (
 // atlas projects lazily per projection and the raster follows.
 
 // Projection selects a forward projection. The zero value is the widget's
-// default, so a Widget that never calls SetProjection draws Natural Earth.
+// default, so a Map whose Options leave it zero draws Natural Earth.
 type Projection uint8
 
 const (

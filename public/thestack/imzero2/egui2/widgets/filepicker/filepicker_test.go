@@ -11,8 +11,14 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsbrowser"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
+
+// testIds is the id stack every dialog in these tests is built on; only the
+// headless test derives ids from it.
+var testIds = c.NewWidgetIdStack()
 
 // testDirEntry is a minimal fs.DirEntry stub for unit-testing
 // sort/filter without going through a full fstest.MapFS round-trip.
@@ -52,7 +58,7 @@ func dirRow(p string) fsbrowser.Entry {
 // selectRows stands in for the browser reporting a selection change:
 // the browser state holds exactly sel, cursor on the last of them, and
 // the dialog re-derives its picks from rows.
-func selectRows(inst *Inst, rows []fsbrowser.Entry, sel ...string) {
+func selectRows(inst *Dialog, rows []fsbrowser.Entry, sel ...string) {
 	inst.st.ClearSelection()
 	for _, p := range sel {
 		inst.st.Select(p, true)
@@ -109,80 +115,81 @@ func TestPassesExtFilter(t *testing.T) {
 
 func TestNew_DefaultsAndOptions(t *testing.T) {
 	t.Run("open-mode-defaults", func(t *testing.T) {
-		inst := New("a", ModeOpen)
-		if inst.title != "Open" {
-			t.Errorf("title: got %q, want Open", inst.title)
+		inst := New(testIds, "a", Options{Mode: ModeOpen})
+		if inst.title() != "Open" {
+			t.Errorf("title: got %q, want Open", inst.title())
 		}
 		if inst.open {
 			t.Error("expected hidden by default")
 		}
-		if inst.fsys == nil {
+		if inst.fsys() == nil {
 			t.Error("expected non-nil fsys")
 		}
-		if inst.displayRoot != "" {
-			t.Errorf("expected empty displayRoot, got %q", inst.displayRoot)
+		if inst.displayRoot() != "" {
+			t.Errorf("expected empty displayRoot, got %q", inst.displayRoot())
 		}
 	})
 	t.Run("save-mode-with-options", func(t *testing.T) {
 		fsys := fstest.MapFS{}
-		inst := New("b", ModeSave,
-			WithTitle("Custom"),
-			WithDefaultFilename("init.txt"),
-			WithFsBackend(fsys),
-			WithStartDir("start"),
-			WithExtensionFilter(".GO", "md"))
-		if inst.title != "Custom" {
-			t.Errorf("title: got %q", inst.title)
+		inst := New(testIds, "b", Options{Mode: ModeSave, Title: "Custom", DefaultFilename: "init.txt", FS: fsys, StartDir: "start", Extensions: []string{".GO", "md"}})
+		if inst.title() != "Custom" {
+			t.Errorf("title: got %q", inst.title())
 		}
 		if inst.filename != "init.txt" {
 			t.Errorf("filename: got %q", inst.filename)
 		}
-		if inst.startDir != "start" {
-			t.Errorf("startDir: got %q", inst.startDir)
+		if inst.startDir() != "start" {
+			t.Errorf("startDir: got %q", inst.startDir())
 		}
-		if inst.fileFilter == nil {
+		if inst.filterPred() == nil {
 			t.Error("expected fileFilter set by WithExtensionFilter")
 		} else {
-			if !inst.fileFilter(testDirEntry{name: "x.go"}) {
+			if !inst.filterPred()(testDirEntry{name: "x.go"}) {
 				t.Error("expected x.go to pass go|md filter")
 			}
-			if inst.fileFilter(testDirEntry{name: "z.txt"}) {
+			if inst.filterPred()(testDirEntry{name: "z.txt"}) {
 				t.Error("expected z.txt to be rejected by go|md filter")
 			}
 		}
-		if inst.filterDesc != "go md" {
-			t.Errorf("filterDesc: got %q, want %q", inst.filterDesc, "go md")
+		if inst.filterDesc() != "go md" {
+			t.Errorf("filterDesc: got %q, want %q", inst.filterDesc(), "go md")
 		}
-		if _, ok := inst.fsys.(fstest.MapFS); !ok {
-			t.Errorf("expected MapFS backend, got %T", inst.fsys)
+		if _, ok := inst.fsys().(fstest.MapFS); !ok {
+			t.Errorf("expected MapFS backend, got %T", inst.fsys())
 		}
 	})
-	t.Run("two-instances-have-distinct-scope-keys-and-abs-ids", func(t *testing.T) {
-		a := New("a", ModeOpen)
-		b := New("b", ModeOpen)
+	t.Run("two-instances-have-distinct-scope-keys-and-window-ids", func(t *testing.T) {
+		a := New(testIds, "a", Options{Mode: ModeOpen})
+		b := New(testIds, "b", Options{Mode: ModeOpen})
 		if a.scopeKey == b.scopeKey {
 			t.Error("expected distinct scopeKeys")
 		}
-		if a.absId == b.absId {
-			t.Error("expected distinct absIds")
+		winId := func(d *Dialog) (id uint64) {
+			for range c.IdScope(testIds.PrepareStr(d.scopeKey)) {
+				id = testIds.PrepareStr("window").Derive()
+			}
+			return
+		}
+		if winId(a) == winId(b) {
+			t.Error("expected distinct window ids under distinct scopes")
 		}
 	})
 	t.Run("nil-fs-option-is-ignored", func(t *testing.T) {
-		inst := New("c", ModeOpen, WithFsBackend(nil))
-		if inst.fsys == nil {
+		inst := New(testIds, "c", Options{Mode: ModeOpen, FS: nil})
+		if inst.fsys() == nil {
 			t.Error("expected default fsys to remain after nil option")
 		}
 	})
 	t.Run("empty-title-option-is-ignored", func(t *testing.T) {
-		inst := New("d", ModeSave, WithTitle(""))
-		if inst.title != "Save" {
-			t.Errorf("title: got %q, want Save", inst.title)
+		inst := New(testIds, "d", Options{Mode: ModeSave, Title: ""})
+		if inst.title() != "Save" {
+			t.Errorf("title: got %q, want Save", inst.title())
 		}
 	})
 	t.Run("display-root-option", func(t *testing.T) {
-		inst := New("e", ModeOpen, WithDisplayRoot("/sandbox/"))
-		if inst.displayRoot != "/sandbox/" {
-			t.Errorf("expected displayRoot to be set, got %q", inst.displayRoot)
+		inst := New(testIds, "e", Options{Mode: ModeOpen, DisplayRoot: "/sandbox/"})
+		if inst.displayRoot() != "/sandbox/" {
+			t.Errorf("expected displayRoot to be set, got %q", inst.displayRoot())
 		}
 	})
 }
@@ -192,7 +199,7 @@ func TestShow(t *testing.T) {
 		fsys := fstest.MapFS{
 			"home/me/f.go": {},
 		}
-		inst := New("a", ModeOpen, WithFsBackend(fsys))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, FS: fsys})
 		inst.Show()
 		if inst.st.Dir() != "." {
 			t.Errorf("cwd: got %q, want \".\"", inst.st.Dir())
@@ -205,9 +212,7 @@ func TestShow(t *testing.T) {
 		fsys := fstest.MapFS{
 			"some/path/f.txt": {},
 		}
-		inst := New("a", ModeOpen,
-			WithFsBackend(fsys),
-			WithStartDir("some/path"))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, FS: fsys, StartDir: "some/path"})
 		inst.Show()
 		if inst.st.Dir() != "some/path" {
 			t.Errorf("cwd: got %q, want some/path", inst.st.Dir())
@@ -215,7 +220,7 @@ func TestShow(t *testing.T) {
 	})
 	t.Run("idempotent-when-already-open", func(t *testing.T) {
 		fsys := fstest.MapFS{}
-		inst := New("a", ModeOpen, WithFsBackend(fsys))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, FS: fsys})
 		inst.Show()
 		inst.st.SetDir("elsewhere")
 		inst.Show() // second Show should not reset cwd
@@ -224,7 +229,7 @@ func TestShow(t *testing.T) {
 		}
 	})
 	t.Run("re-show-keeps-cwd-over-start-dir", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithFsBackend(fstest.MapFS{}), WithStartDir("start"))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, FS: fstest.MapFS{}, StartDir: "start"})
 		inst.Show()
 		inst.st.SetDir("elsewhere")
 		inst.Hide()
@@ -236,7 +241,7 @@ func TestShow(t *testing.T) {
 }
 
 func TestHide(t *testing.T) {
-	inst := New("a", ModeOpen, WithFsBackend(fstest.MapFS{"a": {}}))
+	inst := New(testIds, "a", Options{Mode: ModeOpen, FS: fstest.MapFS{"a": {}}})
 	inst.Show()
 	selectRows(inst, []fsbrowser.Entry{fileRow("a")}, "a")
 	if inst.selected != "a" || len(inst.picked) != 1 {
@@ -256,7 +261,7 @@ func TestHide(t *testing.T) {
 
 func TestCanCommit(t *testing.T) {
 	t.Run("open-needs-selection", func(t *testing.T) {
-		inst := New("a", ModeOpen)
+		inst := New(testIds, "a", Options{Mode: ModeOpen})
 		if inst.canCommit() {
 			t.Error("expected canCommit=false without selection")
 		}
@@ -270,7 +275,7 @@ func TestCanCommit(t *testing.T) {
 		}
 	})
 	t.Run("save-needs-filename", func(t *testing.T) {
-		inst := New("a", ModeSave)
+		inst := New(testIds, "a", Options{Mode: ModeSave})
 		if inst.canCommit() {
 			t.Error("expected canCommit=false without filename")
 		}
@@ -284,7 +289,7 @@ func TestCanCommit(t *testing.T) {
 		}
 	})
 	t.Run("pickfolder-always-commitable", func(t *testing.T) {
-		inst := New("a", ModePickFolder)
+		inst := New(testIds, "a", Options{Mode: ModePickFolder})
 		// Even at the FS root with no selection, ModePickFolder
 		// commits the cwd. canCommit() must be true.
 		if !inst.canCommit() {
@@ -295,7 +300,7 @@ func TestCanCommit(t *testing.T) {
 
 func TestCommitPaths(t *testing.T) {
 	t.Run("open-single-returns-one-path", func(t *testing.T) {
-		inst := New("a", ModeOpen)
+		inst := New(testIds, "a", Options{Mode: ModeOpen})
 		selectRows(inst, []fsbrowser.Entry{fileRow("path/to/file.txt")}, "path/to/file.txt")
 		got := inst.commitPaths()
 		want := []string{"path/to/file.txt"}
@@ -304,7 +309,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("save-joins-cwd-and-filename", func(t *testing.T) {
-		inst := New("a", ModeSave)
+		inst := New(testIds, "a", Options{Mode: ModeSave})
 		inst.st.SetDir("work/proj")
 		inst.filename = "out.txt"
 		got := inst.commitPaths()
@@ -314,7 +319,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("save-cleans-and-trims-filename", func(t *testing.T) {
-		inst := New("a", ModeSave)
+		inst := New(testIds, "a", Options{Mode: ModeSave})
 		inst.st.SetDir("work/proj")
 		inst.filename = "  sub/out.txt  "
 		got := inst.commitPaths()
@@ -324,7 +329,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("open-applies-os-display-root", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithDisplayRoot("/"))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, DisplayRoot: "/"})
 		selectRows(inst, []fsbrowser.Entry{fileRow("home/test-user/file.go")}, "home/test-user/file.go")
 		got := inst.commitPaths()
 		want := []string{"/home/test-user/file.go"}
@@ -333,7 +338,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("save-applies-sandbox-display-root", func(t *testing.T) {
-		inst := New("a", ModeSave, WithDisplayRoot("/sandbox/"))
+		inst := New(testIds, "a", Options{Mode: ModeSave, DisplayRoot: "/sandbox/"})
 		inst.st.SetDir("conf")
 		inst.filename = "app.toml"
 		got := inst.commitPaths()
@@ -343,7 +348,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("display-root-on-fs-root-cwd", func(t *testing.T) {
-		inst := New("a", ModeSave, WithDisplayRoot("/"))
+		inst := New(testIds, "a", Options{Mode: ModeSave, DisplayRoot: "/"})
 		inst.st.SetDir(".")
 		inst.filename = "x.txt"
 		got := inst.commitPaths()
@@ -353,7 +358,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("pickfolder-returns-cwd", func(t *testing.T) {
-		inst := New("a", ModePickFolder)
+		inst := New(testIds, "a", Options{Mode: ModePickFolder})
 		inst.st.SetDir("home/test-user/repo")
 		got := inst.commitPaths()
 		want := []string{"home/test-user/repo"}
@@ -362,7 +367,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("pickfolder-applies-display-root", func(t *testing.T) {
-		inst := New("a", ModePickFolder, WithDisplayRoot("/"))
+		inst := New(testIds, "a", Options{Mode: ModePickFolder, DisplayRoot: "/"})
 		inst.st.SetDir("home/test-user/repo")
 		got := inst.commitPaths()
 		want := []string{"/home/test-user/repo"}
@@ -371,7 +376,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("pickfolder-returns-the-one-selected-directory", func(t *testing.T) {
-		inst := New("a", ModePickFolder, WithDisplayRoot("/"))
+		inst := New(testIds, "a", Options{Mode: ModePickFolder, DisplayRoot: "/"})
 		inst.st.SetDir("home/test-user")
 		rows := []fsbrowser.Entry{dirRow("home/test-user/repo"), dirRow("home/test-user/tmp")}
 		selectRows(inst, rows, "home/test-user/repo")
@@ -382,7 +387,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("multiselect-returns-pick-order", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithMultiSelect(true))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, MultiSelect: true})
 		// Pick three files in a specific order — commitPaths must
 		// preserve that order although the browser's selection is a set.
 		rows := []fsbrowser.Entry{fileRow("d/x.go"), fileRow("d/y.go"), fileRow("d/z.go")}
@@ -396,7 +401,7 @@ func TestCommitPaths(t *testing.T) {
 		}
 	})
 	t.Run("multiselect-applies-display-root-per-path", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithMultiSelect(true), WithDisplayRoot("/"))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, MultiSelect: true, DisplayRoot: "/"})
 		rows := []fsbrowser.Entry{fileRow("home/a.go"), fileRow("home/b.go")}
 		selectRows(inst, rows, "home/a.go", "home/b.go")
 		got := inst.commitPaths()
@@ -416,7 +421,7 @@ func TestRefreshStat(t *testing.T) {
 			ModTime: mtime,
 		},
 	}
-	inst := New("a", ModeOpen, WithFsBackend(fsys))
+	inst := New(testIds, "a", Options{Mode: ModeOpen, FS: fsys})
 
 	t.Run("empty-selection-clears-cache", func(t *testing.T) {
 		inst.selected = ""
@@ -502,9 +507,9 @@ func TestNew_TitleDefaultsByMode(t *testing.T) {
 		ModePickFolder: "Pick folder",
 	}
 	for mode, want := range cases {
-		inst := New("a", mode)
-		if inst.title != want {
-			t.Errorf("mode %d: got title %q, want %q", mode, inst.title, want)
+		inst := New(testIds, "a", Options{Mode: mode})
+		if inst.title() != want {
+			t.Errorf("mode %d: got title %q, want %q", mode, inst.title(), want)
 		}
 	}
 }
@@ -534,29 +539,29 @@ func TestPrimaryButtonFor(t *testing.T) {
 
 func TestWithGlobFilter(t *testing.T) {
 	t.Run("matches-go-files", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithGlobFilter("*.go"))
-		if !inst.fileFilter(testDirEntry{name: "main.go"}) {
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Globs: []string{"*.go"}})
+		if !inst.filterPred()(testDirEntry{name: "main.go"}) {
 			t.Error("expected main.go to pass *.go")
 		}
-		if inst.fileFilter(testDirEntry{name: "doc.md"}) {
+		if inst.filterPred()(testDirEntry{name: "doc.md"}) {
 			t.Error("expected doc.md to be rejected by *.go")
 		}
 	})
 	t.Run("multiple-patterns-or-combined", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithGlobFilter("*.go", "*.md"))
-		if !inst.fileFilter(testDirEntry{name: "main.go"}) {
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Globs: []string{"*.go", "*.md"}})
+		if !inst.filterPred()(testDirEntry{name: "main.go"}) {
 			t.Error("expected main.go to pass go|md glob")
 		}
-		if !inst.fileFilter(testDirEntry{name: "README.md"}) {
+		if !inst.filterPred()(testDirEntry{name: "README.md"}) {
 			t.Error("expected README.md to pass go|md glob")
 		}
-		if inst.fileFilter(testDirEntry{name: "data.bin"}) {
+		if inst.filterPred()(testDirEntry{name: "data.bin"}) {
 			t.Error("expected data.bin to be rejected")
 		}
 	})
 	t.Run("dirs-always-pass", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithGlobFilter("*.go"))
-		if !inst.fileFilter(testDirEntry{name: "subdir", isDir: true}) {
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Globs: []string{"*.go"}})
+		if !inst.filterPred()(testDirEntry{name: "subdir", isDir: true}) {
 			t.Error("expected dirs to bypass glob filter for navigation")
 		}
 	})
@@ -564,31 +569,31 @@ func TestWithGlobFilter(t *testing.T) {
 		// path.Match errors on "[" (unclosed bracket). A typo in a host
 		// config must not crash the dialog — the bad pattern silently
 		// drops out and any remaining good patterns keep working.
-		inst := New("a", ModeOpen, WithGlobFilter("[", "*.go"))
-		if !inst.fileFilter(testDirEntry{name: "main.go"}) {
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Globs: []string{"[", "*.go"}})
+		if !inst.filterPred()(testDirEntry{name: "main.go"}) {
 			t.Error("expected main.go to pass despite malformed sibling")
 		}
-		if inst.fileFilter(testDirEntry{name: "data.bin"}) {
+		if inst.filterPred()(testDirEntry{name: "data.bin"}) {
 			t.Error("expected data.bin to be rejected (malformed pattern doesn't open the gate)")
 		}
 	})
 	t.Run("empty-patterns-disable-filter", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithGlobFilter("  ", ""))
-		if inst.fileFilter != nil {
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Globs: []string{"  ", ""}})
+		if inst.filterPred() != nil {
 			t.Error("expected fileFilter to remain nil when all patterns whitespace/empty")
 		}
-		if inst.filterDesc != "" {
-			t.Errorf("filterDesc: got %q, want empty", inst.filterDesc)
+		if inst.filterDesc() != "" {
+			t.Errorf("filterDesc: got %q, want empty", inst.filterDesc())
 		}
 	})
 	t.Run("matches-basename-not-path", func(t *testing.T) {
 		// path.Match("*.go", "vendor/x.go") is false — '*' doesn't cross
 		// separators. The picker passes only the basename to the
 		// predicate, so this test documents that contract.
-		inst := New("a", ModeOpen, WithGlobFilter("*.go"))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Globs: []string{"*.go"}})
 		// The DirEntry name is just the leaf — no slash. Glob applies
 		// to the leaf only.
-		if !inst.fileFilter(testDirEntry{name: "x.go"}) {
+		if !inst.filterPred()(testDirEntry{name: "x.go"}) {
 			t.Error("expected leaf-only x.go to pass *.go")
 		}
 	})
@@ -600,38 +605,34 @@ func TestWithFilter(t *testing.T) {
 		pred := func(de fs.DirEntry) bool {
 			return !strings.HasPrefix(de.Name(), "_")
 		}
-		inst := New("a", ModeOpen, WithFilter(pred, "no underscore"))
-		if !inst.fileFilter(testDirEntry{name: "main.go"}) {
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Filter: pred, FilterDesc: "no underscore"})
+		if !inst.filterPred()(testDirEntry{name: "main.go"}) {
 			t.Error("expected main.go to pass")
 		}
-		if inst.fileFilter(testDirEntry{name: "_skip.go"}) {
+		if inst.filterPred()(testDirEntry{name: "_skip.go"}) {
 			t.Error("expected _skip.go to be hidden")
 		}
-		if inst.filterDesc != "no underscore" {
-			t.Errorf("filterDesc: got %q", inst.filterDesc)
+		if inst.filterDesc() != "no underscore" {
+			t.Errorf("filterDesc: got %q", inst.filterDesc())
 		}
 	})
-	t.Run("nil-predicate-disables-filter", func(t *testing.T) {
-		inst := New("a", ModeOpen,
-			WithExtensionFilter(".go"), // set a filter first
-			WithFilter(nil, ""))        // then clear it via WithFilter
-		if inst.fileFilter != nil {
-			t.Error("expected nil predicate to clear fileFilter")
+	t.Run("an-unset-filter-leaves-the-extensions", func(t *testing.T) {
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Extensions: []string{".go"}, Filter: nil, FilterDesc: ""})
+		if inst.filterPred() == nil {
+			t.Error("expected the extension filter to stand when Filter is unset")
 		}
 	})
-	t.Run("last-option-wins", func(t *testing.T) {
-		// Extension filter installed first, then overridden by a glob.
-		inst := New("a", ModeOpen,
-			WithExtensionFilter(".bin"),
-			WithGlobFilter("*.go"))
-		if !inst.fileFilter(testDirEntry{name: "main.go"}) {
+	t.Run("globs-outrank-extensions", func(t *testing.T) {
+		// Both set: the glob decides, the extensions are ignored.
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Extensions: []string{".bin"}, Globs: []string{"*.go"}})
+		if !inst.filterPred()(testDirEntry{name: "main.go"}) {
 			t.Error("expected glob to override ext filter")
 		}
-		if inst.fileFilter(testDirEntry{name: "data.bin"}) {
+		if inst.filterPred()(testDirEntry{name: "data.bin"}) {
 			t.Error("expected ext filter to be discarded")
 		}
-		if inst.filterDesc != "*.go" {
-			t.Errorf("filterDesc: got %q, want *.go", inst.filterDesc)
+		if inst.filterDesc() != "*.go" {
+			t.Errorf("filterDesc: got %q, want *.go", inst.filterDesc())
 		}
 	})
 }
@@ -674,7 +675,7 @@ func TestReconcilePicks(t *testing.T) {
 func TestSyncPicks(t *testing.T) {
 	rows := []fsbrowser.Entry{dirRow("h/sub"), fileRow("h/a.go"), fileRow("h/b.go")}
 	t.Run("the-stat-pane-follows-the-cursor-when-it-is-a-picked-file", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithMultiSelect(true))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, MultiSelect: true})
 		selectRows(inst, rows, "h/a.go", "h/b.go")
 		if inst.selected != "h/b.go" {
 			t.Errorf("selected: got %q, want h/b.go", inst.selected)
@@ -685,7 +686,7 @@ func TestSyncPicks(t *testing.T) {
 		}
 	})
 	t.Run("navigation-clears-the-picks", func(t *testing.T) {
-		inst := New("a", ModeOpen)
+		inst := New(testIds, "a", Options{Mode: ModeOpen})
 		selectRows(inst, rows, "h/a.go")
 		inst.st.SetDir("h/sub") // the browser clears its selection on a directory change
 		inst.syncPicks(nil)
@@ -694,7 +695,7 @@ func TestSyncPicks(t *testing.T) {
 		}
 	})
 	t.Run("pickedDir-needs-exactly-one-directory", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithMultiSelect(true))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, MultiSelect: true})
 		selectRows(inst, rows, "h/sub", "h/a.go")
 		if inst.pickedDir != "" {
 			t.Errorf("pickedDir: got %q, want none for a mixed selection", inst.pickedDir)
@@ -704,7 +705,7 @@ func TestSyncPicks(t *testing.T) {
 
 func TestKeep(t *testing.T) {
 	t.Run("pickfolder-lists-directories-only", func(t *testing.T) {
-		inst := New("a", ModePickFolder)
+		inst := New(testIds, "a", Options{Mode: ModePickFolder})
 		if inst.keep(fileRow("x.go")) {
 			t.Error("expected files to hide in ModePickFolder")
 		}
@@ -713,7 +714,7 @@ func TestKeep(t *testing.T) {
 		}
 	})
 	t.Run("filter-skipped-for-dirs", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithExtensionFilter(".go"))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, Extensions: []string{".go"}})
 		if !inst.keep(dirRow("subdir.d")) {
 			t.Error("expected dirs to bypass extension filter for navigation")
 		}
@@ -725,7 +726,7 @@ func TestKeep(t *testing.T) {
 		}
 	})
 	t.Run("no-filter-keeps-everything", func(t *testing.T) {
-		inst := New("a", ModeSave)
+		inst := New(testIds, "a", Options{Mode: ModeSave})
 		if !inst.keep(fileRow("anything.bin")) {
 			t.Error("expected every file kept without a filter")
 		}
@@ -757,13 +758,13 @@ func TestEntryAsDirEntry(t *testing.T) {
 
 func TestWithShowHiddenFilesOption(t *testing.T) {
 	t.Run("default-off", func(t *testing.T) {
-		inst := New("a", ModeOpen)
+		inst := New(testIds, "a", Options{Mode: ModeOpen})
 		if inst.showHidden {
 			t.Error("expected showHidden=false by default")
 		}
 	})
 	t.Run("opted-on", func(t *testing.T) {
-		inst := New("a", ModeOpen, WithShowHiddenFiles(true))
+		inst := New(testIds, "a", Options{Mode: ModeOpen, ShowHidden: true})
 		if !inst.showHidden {
 			t.Error("expected showHidden=true after option")
 		}
@@ -793,21 +794,21 @@ func TestColumnWidths(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewColumnWidths: %v", err)
 		}
-		if inst := New("a", ModeOpen, WithColumnWidths(res)); inst.widths != res {
+		if inst := New(testIds, "a", Options{Mode: ModeOpen, ColumnWidths: res}); inst.Opts.ColumnWidths != res {
 			t.Error("expected the option to set the resolver")
 		}
-		inst := New("b", ModeSave)
-		inst.SetColumnWidths(res)
-		if inst.widths != res {
+		inst := New(testIds, "b", Options{Mode: ModeSave})
+		inst.Opts.ColumnWidths = res
+		if inst.Opts.ColumnWidths != res {
 			t.Error("expected the setter to set the resolver")
 		}
 	})
 	t.Run("the-tag-is-the-mode-not-the-instance", func(t *testing.T) {
-		a, b := New("req-1", ModeOpen), New("req-2", ModeOpen, WithMultiSelect(true))
+		a, b := New(testIds, "req-1", Options{Mode: ModeOpen}), New(testIds, "req-2", Options{Mode: ModeOpen, MultiSelect: true})
 		if a.widthTag() != b.widthTag() {
 			t.Errorf("two open dialogs: %q vs %q", a.widthTag(), b.widthTag())
 		}
-		if New("s", ModeSave).widthTag() == a.widthTag() {
+		if New(testIds, "s", Options{Mode: ModeSave}).widthTag() == a.widthTag() {
 			t.Error("expected save and open to be different tables")
 		}
 	})
@@ -831,7 +832,7 @@ func TestCanCommit_SaveRejectsDirectoryAndEscapingNames(t *testing.T) {
 		{"work", "../../x", false},
 		{"", "/", false},
 	} {
-		inst := New("a", ModeSave)
+		inst := New(testIds, "a", Options{Mode: ModeSave})
 		inst.st.SetDir(tc.dir)
 		inst.filename = tc.name
 		if got := inst.canCommit(); got != tc.ok {
@@ -840,5 +841,25 @@ func TestCanCommit_SaveRejectsDirectoryAndEscapingNames(t *testing.T) {
 		if paths := inst.commitPaths(); (len(paths) == 1) != tc.ok {
 			t.Errorf("dir %q name %q: commitPaths=%v", tc.dir, tc.name, paths)
 		}
+	}
+}
+
+// TestRenderHeadless renders one frame of an open dialog without a host: it
+// must not panic, a hidden dialog draws nothing, and a quiet frame reports
+// ActionNone.
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	fsys := fstest.MapFS{"docs/a.go": {}, "docs/b.md": {}}
+	inst := New(ids, "t", Options{Mode: ModeOpen, FS: fsys, StartDir: "docs", Extensions: []string{".go"}})
+	if ev := inst.Render(); ev.Action != ActionNone || ev.Paths != nil {
+		t.Fatalf("a hidden dialog reported %+v", ev)
+	}
+	inst.Show()
+	if ev := inst.Render(); ev.Action != ActionNone {
+		t.Fatalf("a quiet frame reported %+v", ev)
+	}
+	if !inst.IsOpen() {
+		t.Fatal("the dialog closed itself")
 	}
 }

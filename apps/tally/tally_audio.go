@@ -460,8 +460,8 @@ func (inst *App) renderAudioPreview(s *audioSession) {
 		}
 		if jobprogress.Render(jobprogress.Input{
 			Title: "peaks", Fraction: frac, EtaMs: bp.EtaMs, Note: note,
-			CancelId: inst.ids.PrepareStr("audio-cancel-build"),
-		}) {
+			Ids: inst.ids, ScopeKey: "audio-build", Cancel: true,
+		}).CancelClicked {
 			s.tr.CancelBuild()
 		}
 	}

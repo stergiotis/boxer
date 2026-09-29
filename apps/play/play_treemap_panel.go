@@ -637,16 +637,16 @@ func (inst *treemapDriver) ensureScale() {
 	if inst.scale != nil || inst.cmap == nil {
 		return
 	}
-	inst.scale = colorscale.New(inst.ids, "play-treemap-legend", inst.cmap.Config(),
-		colorscale.WithSize(treemapLegendW, treemapLegendH),
-		colorscale.WithDesiredTicks(treemapLegendTicks),
+	inst.scale = colorscale.New(inst.ids, "play-treemap-legend", inst.cmap.Config(), colorscale.Options{
+		Width: treemapLegendW, Height: treemapLegendH,
+		DesiredTicks: treemapLegendTicks,
 		// `unit` labels the VALUE, so it cannot serve here; the colour channel
 		// has its own, `color_unit`, and reads as a bare SI-suffixed number
 		// without one. Read through inst rather than captured, so a re-resolve
 		// that keeps the same colormap cannot leave the ticks labelled for the
 		// previous result.
-		colorscale.WithLabelFormat(func(v float64) string { return treemapQty(v, inst.color.unit) }),
-	)
+		LabelFormat: func(v float64) string { return treemapQty(v, inst.color.unit) },
+	})
 }
 
 // renderLegend says what a fill means, for the mode that is actually on.

@@ -17,30 +17,32 @@ Two-level finite-state-machine viewer for the ImZero2 framework. Level 1 is a co
 | Type | Role |
 |---|---|
 | [`Machine[T comparable]`](./machine.go) | Visualization-aware wrapper around `*statetrooper.FSM[T]`. Owns rule mirror, display labels, edge labels, per-state colours, stable node ids. |
-| [`Widget[T comparable]`](./widget.go) | The two-level composite IM widget. Holds popup-open / selected-renderer / graph-prewarm state on the receiver pointer. |
-| [`Option[T comparable]`](./machine.go) | Construction-time builder for [`Machine`]. Each option mutates the in-progress machine; later options win. |
-| [`StateColorFn[T comparable]`](./machine.go) | `func(state T, isCurrent bool) styletokens.RGBA8`. Hook for [`WithStateColor`] — domain-specific per-state colouring. |
+| [`View[T comparable]`](./widget.go) | The two-level composite, a semi-retained widget (ADR-0267). Holds popup-open / selected-renderer / cached-graph-layout state on the receiver pointer; its `Opts` are re-read every frame. |
+| [`Options[T comparable]`](./widget.go) | The view's configuration: title, subscript, auto-anchor, tethering, initial renderer, provenance, badge tone, the host-drawn summary and history footer. Zero values are defaults. |
+| [`Events`](./widget.go) | What one render reports: `Toggled` (the user opened or closed the popup), `Driven` (a graph-node click drove the machine). |
+| [`MachineOptions[T comparable]`](./machine.go) | Construction-time configuration of a [`Machine`]: display label, pinned state order, per-state colour. Zero values are defaults. |
+| [`StateColorFn[T comparable]`](./machine.go) | `func(state T, isCurrent bool) styletokens.RGBA8`. Hook for [`MachineOptions.StateColor`] — domain-specific per-state colouring. |
 | [`EdgeKey[T comparable]`](./machine.go) | `struct { From, To T }`. Comparable map key over arbitrary state types. Used by [`Machine.Edges`] iteration. |
 | [`Transition[T comparable]`](./machine.go) | A recorded state change `{From, To, At, Metadata}`. Defined locally so the public API does not leak `statetrooper.Transition`. |
 | [`RendererE`](./widget.go) | `uint8` enum: `RendererTable` (default), `RendererGraph`, `RendererHistory`. |
 
 ## Constructors
 
-### `NewMachine[T comparable](initial T, maxHistory int, opts ...Option[T]) *Machine[T]`
+### `NewMachine[T comparable](initial T, maxHistory int, opts MachineOptions[T]) *Machine[T]`
 
-Build a fresh machine. `maxHistory` caps the [`statetrooper.FSM`] transition history; pass `0` to disable history tracking (the History tab then renders "no transitions yet" indefinitely, and the [`Widget.ShowSubscript`] readout reads "").
+Build a fresh machine. `maxHistory` caps the [`statetrooper.FSM`] transition history; pass `0` to disable history tracking (the History tab then renders "no transitions yet" indefinitely, and the [`Options.ShowSubscript`] readout reads "").
 
-### `New[T comparable](ids *c.WidgetIdStack, scopeKey string, m *Machine[T]) *Widget[T]`
+### `New[T comparable](ids *c.WidgetIdStack, scopeKey string, m *Machine[T], opts Options[T]) *View[T]`
 
-Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empty `scopeKey` — these are programmer errors. `scopeKey` is folded into every emitted widget id so two viewers on the same id stack do not collide.
+Build a viewer bound to the given machine. Panics on nil `ids` or nil `m` — programmer errors; an empty `scopeKey` takes `"fsmview"`. Every emitted id is relative under one `IdScope(scopeKey)`, so two viewers on the same id stack differ by scope key alone; the popup window is the one absolute id, derived from the scope.
 
-## `Option[T]` builders
+## `MachineOptions[T]` fields
 
-| Option | Default | Purpose |
+| Field | Default | Purpose |
 |---|---|---|
-| [`WithLabel(fn func(T) string)`](./machine.go) | `fmt.Sprint` | Display label per state. Override for struct states. |
-| [`WithStateOrder(order []T)`](./machine.go) | first-seen via `AddRule` | Pin the table-display order. Useful when alphabetic order hides the FSM's natural flow. |
-| [`WithStateColor(fn StateColorFn[T])`](./machine.go) | `AccentDefault` if current, `NeutralSubtle` otherwise | Override per-state colouring. Domain-specific (error states red, terminal states muted, …). |
+| [`Label func(T) string`](./machine.go) | `fmt.Sprint` | Display label per state. Set for struct states. |
+| [`StateOrder []T`](./machine.go) | first-seen via `AddRule` | Pin the table-display order. Useful when alphabetic order hides the FSM's natural flow. |
+| [`StateColor StateColorFn[T]`](./machine.go) | `AccentDefault` if current, `NeutralSubtle` otherwise | Override per-state colouring. Domain-specific (error states red, terminal states muted, …). |
 
 ## `Machine[T]` methods
 
@@ -61,9 +63,9 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 | `Current() T` | The current FSM state. |
 | `CanTransition(target T) bool` | Whether `target` is reachable in one step from the current state. |
 | `CanReach(from, to T) bool` | Whether `to` is reachable from `from` over one or more DECLARED rules — the transitive closure, where `CanTransition` is the single step. Excludes edges taught by `Mirror`. Lets a per-frame mirror separate "the sampler missed the states in between" from "the model says this cannot happen". `CanReach(s, s)` holds only when `s` sits on a cycle. |
-| `Label(state T) string` | The display label, via `WithLabel` (or `fmt.Sprint` default). |
-| `Color(state T) styletokens.RGBA8` | The IDS palette colour, via `WithStateColor` (or the default scheme). |
-| `States() iter.Seq[T]` | Display-ordered states (pinned via `WithStateOrder`, then `AddRule` insertion order). |
+| `Label(state T) string` | The display label, via `MachineOptions.Label` (or `fmt.Sprint` default). |
+| `Color(state T) styletokens.RGBA8` | The IDS palette colour, via `MachineOptions.StateColor` (or the default scheme). |
+| `States() iter.Seq[T]` | Display-ordered states (pinned via `MachineOptions.StateOrder`, then `AddRule` insertion order). |
 | `Edges() iter.Seq2[EdgeKey[T], string]` | All declared transitions with their labels (empty string when unlabelled). |
 | `History() iter.Seq[Transition[T]]` | Recorded transitions, oldest first. |
 | `HistoryReverse() iter.Seq[Transition[T]]` | Recorded transitions, newest first — drives the History tab and the chip subscript. |
@@ -71,24 +73,34 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 | `HistoryLen() int` | Cap-bounded count of retained transitions. |
 | `NodeId(state T) uint64` | Stable FNV-derived `u64` for `c.GraphNode`. Two states with identical labels collide intentionally (the operator can't tell them apart visually either). |
 
-## `Widget[T]` methods
+## `View[T]`
 
-### Construction-time toggles
+### `Options[T]` fields (re-read every frame through `View.Opts`)
 
-| Method | Default | Purpose |
+| Field | Default | Purpose |
 |---|---|---|
-| `Title(name string) *Widget[T]` | `scopeKey` | Human-facing FSM name shown in the level-2 popup header (`"<Name> · <CurrentState>"`) and the chip's hover-tooltip. Override when `scopeKey` is a terse id and the operator-facing label needs to read differently. |
-| `ShowSubscript(on bool) *Widget[T]` | `false` | Render the "Xs ago" subscript next to the chip (sourced from [`Machine.LastTransition`] via `dustin/go-humanize`; switches to absolute UTC for transitions older than 24h). Returns the receiver for chaining. |
-| `PopupAnchor(x, y float32) *Widget[T]` | unset (egui cascade) | Pin the level-2 Window's `default_pos` to `(x, y)` in egui logical pixels. Applies on the first open of a fresh widget instance; egui retains the user's dragged position thereafter. |
-| `ClearPopupAnchor() *Widget[T]` | — | Revert to egui's default cascade positioning. |
-| `AutoAnchor(on bool) *Widget[T]` | `false` | Capture the cursor position the frame the chip is clicked (via [`StateManager.GetPointer`] / R20) and write it into `PopupAnchor` so the popup pops where the click landed. Overrides any prior manual anchor on the click frame. |
-| `HistoryFooter(fn func()) *Widget[T]` | `nil` (no footer, no separator) | Caller-owned action row under the History tab's table — the seam for exporting the log (publish it, copy it, hand it to a playground). Runs inside a `c.Horizontal`, so emit inline widgets only. The widget supplies no action of its own: what a log is worth exporting *to* depends on the host's capabilities, which a widget cannot know. |
+| `Title string` | `scopeKey` | Human-facing FSM name shown in the level-2 popup header (`"<Name> · <CurrentState>"`) and the chip's hover-tooltip. Set when `scopeKey` is a terse id and the operator-facing label needs to read differently. |
+| `ShowSubscript bool` | `false` | Render the "Xs ago" subscript next to the chip (sourced from [`Machine.LastTransition`] via `dustin/go-humanize`; switches to absolute UTC for transitions older than 24h). |
+| `AutoAnchor bool` | `false` | Capture the cursor position the frame the chip is clicked (via [`StateManager.GetPointer`] / R20) and pin the popup there, so it pops where the click landed. Overrides any prior manual anchor on the click frame. |
+| `Tethered bool` | `false` | Promote the chip to a tethered inspector summary (ADR-0046): anchor toggle + bezier to the window. |
+| `Renderer RendererE` | `RendererTable` | The level-2 view a fresh View opens on; read once at `New`. |
+| `Provenance inspector.Provenance` | zero (no chip) | The source value's identity card, drawn in the popup header. |
+| `BadgeTone func(T) badge.ToneE` | `nil` (TonePrimary) | Colour the level-1 badge by state severity. |
+| `Summary func()` | `nil` | Caller-drawn addendum right of the badge in tethered mode; inline widgets only. |
+| `HistoryFooter func()` | `nil` (no footer, no separator) | Caller-owned action row under the History tab's table — the seam for exporting the log (publish it, copy it, hand it to a playground). Runs inside a `c.Horizontal`, so emit inline widgets only. The widget supplies no action of its own: what a log is worth exporting *to* depends on the host's capabilities, which a widget cannot know. |
+
+### Anchoring
+
+| Method | Effect |
+|---|---|
+| `PopupAnchor(x, y float32)` | Pin the level-2 Window's `default_pos` to `(x, y)` in egui logical pixels. Applies on the first open of a fresh view; egui retains the user's dragged position thereafter. |
+| `ClearPopupAnchor()` | Revert to egui's default cascade positioning. |
 
 ### Per-frame state
 
 | Method | Effect |
 |---|---|
-| `Render()` | Emit the chip + (when open) the popup. Call once per frame inside an active egui surface. The chip renders inline at the current cursor; embed inside a `c.Horizontal` flow or a panel. |
+| `Render() Events` | Emit the chip + (when open) the popup and report the frame's events. Call once per frame inside an active egui surface. The chip renders inline at the current cursor; embed inside a `c.Horizontal` flow or a panel. `RenderChip()` / `RenderPopup()` are the two halves for a chip inside a dock tab and a window after the DockArea. |
 | `IsOpen() bool` | Whether the popup is currently open. |
 | `Open()` / `Close()` | Programmatically toggle the popup. |
 | `SelectedRenderer() RendererE` | Current level-2 view. |
@@ -104,7 +116,7 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 | Tab switch | `c.SelectableLabel(...).SendResp().HasPrimaryClicked()`. | one frame |
 | Graph node hover / click | per-node `PaintSenseRegion` in `layeredgraph/view`; clicking a state drives the FSM there when that transition is declared. | one frame |
 | Graph pan / zoom | drag (global pointer) + zoom gesture (`GetZoomDelta`) over the painter canvas. | one frame |
-| Active state highlight | `defaultStateColor` returns `AccentDefault` for current, `NeutralSubtle` otherwise. Overridable via [`WithStateColor`]. | none |
+| Active state highlight | `defaultStateColor` returns `AccentDefault` for current, `NeutralSubtle` otherwise. Overridable via `MachineOptions.StateColor`. | none |
 | Next-possible edge highlight | Edges leaving the current state are tinted `AccentSubtle`; others tinted `NeutralBorderFaint`. | none |
 | Graph layout | Static Graphviz layout computed once via `layeredgraph`/`goccyengine`, cached on the Widget and recomputed only when the state/edge count changes. | none |
 | History scroll | The History tab is a `c.EndETable` (`#` / From / To / When / Dwell, plus Reason when some retained row carries one), so it bounds its own height and scrolls internally instead of growing the popup. Rows are emitted only inside `et.VisibleRange()`. | one frame (the visible window is the previous frame's) |
@@ -112,7 +124,7 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 
 ## Conventions
 
-- **Receivers**: pointer (`*Widget[T]`) for the stateful composite; pointer (`*Machine[T]`) so callers can pass the machine to multiple widgets without copying.
+- **Receivers**: pointer (`*View[T]`) for the stateful composite; pointer (`*Machine[T]`) so callers can pass the machine to multiple widgets without copying.
 - **Build tag**: none — the widget compiles unconditionally.
 - **IDS tokens**: `AccentDefault` for the active state, `AccentSubtle` for next-possible edges, `NeutralBorderFaint` / `NeutralSubtle` / `NeutralTextSecondary` for resting affordances. No raw hex; everything goes through `styletokens.*.AsHex()` + `widgets/color.Hex` per ADR-0031 §SD2.
 - **One-frame lag**: chip click, tab switch, popup-X — all reflect the previous frame's input, like every other R7/R10-backed widget in the framework.
@@ -120,17 +132,17 @@ Build a viewer bound to the given machine. Panics on nil `ids`, nil `m`, or empt
 ## Example
 
 ```go
-m := fsmview.NewMachine("idle", 32,
-    fsmview.WithStateOrder([]string{"idle", "running", "cancelling", "cancelled", "done"}),
-    fsmview.WithLabel(strings.ToUpper),
-)
+m := fsmview.NewMachine("idle", 32, fsmview.MachineOptions[string]{
+    StateOrder: []string{"idle", "running", "cancelling", "cancelled", "done"},
+    Label:      strings.ToUpper,
+})
 m.AddRule("idle", "running").
     AddRule("running", "cancelling", "done").
     AddRule("cancelling", "cancelled").
     EdgeLabel("running", "cancelling", "cancel()").
     EdgeLabel("running", "done", "complete")
 
-view := fsmview.New(ids, "projector", m).ShowSubscript(true)
+view := fsmview.New(ids, "projector", m, fsmview.Options[string]{ShowSubscript: true})
 
 for range c.Window(...).KeepIter() {
     for range c.Horizontal().KeepIter() {

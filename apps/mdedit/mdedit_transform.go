@@ -332,8 +332,10 @@ func (inst *App) renderTransformProgress() {
 		Fraction: snap.Fraction,
 		EtaMs:    snap.EtaMs,
 		Note:     snap.Note,
-		CancelId: inst.ids.PrepareStr("xform-cancel"),
-	}) {
+		Ids:      inst.ids,
+		ScopeKey: "xform-job",
+		Cancel:   true,
+	}).CancelClicked {
 		x.runner.Cancel()
 	}
 }

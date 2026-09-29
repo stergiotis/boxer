@@ -241,7 +241,7 @@ func (inst *ChartView) renderHeatmap(r oriented, o ChartOptions, valueName strin
 		p.Heatmap(valueName, vals, rows, cols, inst.cm, 0, 0, float64(cols), float64(rows))
 	}
 	if inst.cbar == nil {
-		inst.cbar = colorscale.New(inst.ids, "leeway-chart-cbar", inst.cm, colorscale.WithSize(min(w, 640), barH))
+		inst.cbar = colorscale.New(inst.ids, "leeway-chart-cbar", inst.cm, colorscale.Options{Width: min(w, 640), Height: barH})
 	}
 	inst.cbar.Render()
 	// The colour scale draws its tick labels below the box it is given;

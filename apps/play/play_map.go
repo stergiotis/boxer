@@ -65,11 +65,10 @@ type MapDriver struct {
 	// The two controls whose value is SQL get the SQL field rather than a
 	// plain TextEdit (ADR-0187 §M0). One per control, not one
 	// shared: each memoises its own lex job against its own text, so a shared
-	// instance would rebuild both on every frame that drew both. Held by value
-	// — the zero Field is usable, so neither needs reaching into the driver's
-	// constructor.
-	tableField sqleditor.Field
-	colorField sqleditor.Field
+	// instance would rebuild both on every frame that drew both. Built in
+	// NewMapDriver on the driver's ids.
+	tableField *sqleditor.Field
+	colorField *sqleditor.Field
 
 	// Debounce on the map's view hash: reset the timer whenever it changes,
 	// fire only once the view has been stable for mapDebounce.
@@ -217,8 +216,10 @@ var builtinRenders = []rasterRender{
 
 func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	d := &MapDriver{
-		ids:    ids,
-		client: client,
+		ids:        ids,
+		client:     client,
+		tableField: sqleditor.NewField(ids, "map-table"),
+		colorField: sqleditor.NewField(ids, "map-color"),
 		// The stable query_id + replace_running_query make a superseding
 		// pan/zoom fetch replace its predecessor server-side (SD5).
 		lane:      newNodeLane(clientExecutor{client: client, opts: newExecOptions("map")}, memory.NewGoAllocator(), mapFetchTimeout),
@@ -498,8 +499,7 @@ func (inst *MapDriver) renderTableEditor() {
 		// fills the panel instead of hugging a short table name.
 		c.UiSetMaxHeight(mapTablePaneH)
 		for range c.ScrollArea().Vscroll(true).AutoShrink(false, true).KeepIter() {
-			inst.tableField.Render(inst.ids, sqleditor.FieldFrame{
-				IDSlot:    "map-table",
+			inst.tableField.Render(sqleditor.FieldFrame{
 				Value:     &inst.table,
 				Hint:      "table, or a table function",
 				Rows:      1,
@@ -569,11 +569,10 @@ func (inst *MapDriver) renderColorEditor() {
 		c.UiSetMinHeight(mapColorPaneH)
 		c.UiSetMaxHeight(mapColorPaneH)
 		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-			inst.colorField.Render(inst.ids, sqleditor.FieldFrame{
-				IDSlot: "map-color",
-				Value:  &inst.customColorSQL,
-				Rows:   mapColorRows,
-				Width:  float32(math.Inf(1)),
+			inst.colorField.Render(sqleditor.FieldFrame{
+				Value: &inst.customColorSQL,
+				Rows:  mapColorRows,
+				Width: float32(math.Inf(1)),
 			})
 		}
 	}

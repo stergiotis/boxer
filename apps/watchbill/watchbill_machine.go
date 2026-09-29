@@ -11,8 +11,8 @@ import (
 // for the popup's graph, and the retry edges back to queued are what an
 // operator can cause.
 func newJobMachine() *fsmview.Machine[string] {
-	m := fsmview.NewMachine[string](watchbillstore.StateQueued, 32,
-		fsmview.WithStateOrder(watchbillstore.AllStates))
+	m := fsmview.NewMachine(watchbillstore.StateQueued, 32,
+		fsmview.MachineOptions[string]{StateOrder: watchbillstore.AllStates})
 	m.AddRule(watchbillstore.StateQueued, watchbillstore.StateRunning, watchbillstore.StateCancelled).
 		AddRule(watchbillstore.StateRunning, watchbillstore.StateSucceeded, watchbillstore.StateFailed, watchbillstore.StateDiscarded, watchbillstore.StateCancel, watchbillstore.StateAbandoned).
 		AddRule(watchbillstore.StateFailed, watchbillstore.StateQueued).

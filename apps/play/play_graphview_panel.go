@@ -297,6 +297,9 @@ type GraphviewDriver struct {
 	idSeed uint64
 	src    *networkSource
 	view   *graphview.View
+	// events is what this frame's render (plain or hosted) produced;
+	// publishGestures reads it after the render.
+	events graphview.Events
 
 	layout  graphviewLayoutE
 	orient  graphview.OrientationE
@@ -612,7 +615,8 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		inst.renderHosted(w, h)
 	} else {
 		o.Style.NodeRadius = 0 // the style default, in world units
-		if err := inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
+		var err error
+		if inst.events, err = inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
 			// Validate ran at rebuild, so reaching here is a panel bug rather
 			// than a malformed query; the widget rendered nothing and kept its
 			// state, and the next rebuild is the recovery.
@@ -747,7 +751,7 @@ func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
 	}
 
 	// --- moments ---------------------------------------------------------
-	for _, ev := range v.Events() {
+	for _, ev := range inst.events {
 		switch ev.Kind {
 		case graphview.EventKindNodeDoubleClick:
 			// The expansion gesture: with Live on, this is what turns the
@@ -1808,7 +1812,8 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 		cam := p.CameraAt(netWebMercatorZoom, origin)
 		inst.view.SetHostCamera(cam)
 		inst.scaleForHost(cam.Zoom)
-		if err := inst.view.HostedPaintColumns(&inst.hostNodes, &inst.edges); err != nil {
+		var err error
+		if inst.events, err = inst.view.HostedPaintColumns(&inst.hostNodes, &inst.edges); err != nil {
 			log.Error().Err(err).Msg("graphview hosted paint refused the declaration")
 		}
 	})

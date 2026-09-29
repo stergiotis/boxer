@@ -19,8 +19,8 @@ import (
 // same tone the editor uses to say the token resolves.
 
 type sqlCompletionDemoState struct {
-	ed   *sqleditor.Editor
-	pane sqleditor.Pane
+	ed   *sqleditor.Editor // built on the first frame, on the ids it renders with
+	pane sqleditor.PaneState
 	eng  *sqlcomplete.Engine
 	sql  string
 }
@@ -38,7 +38,6 @@ func init() {
 		Description: "The completion pane beside a SQL editor (ADR-0190). The caret's position decides what the table shows: the component kinds inside `LW_COMPONENT('…')`, and the kind's own fields inside `tupleElement(…, '…')`. It is a table and not a popup — no focus, no captured key, so a click completes and a driver can assert the rows. Rows the typed text extends are outlined; the row it equals is outlined in the success tone. Where nothing can answer, the pane says why rather than showing an empty table.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			s := &sqlCompletionDemoState{
-				ed:  sqleditor.New(),
 				sql: "SELECT tupleElement(LW_COMPONENT('SysMem'), 'Tot",
 			}
 			r := sqlvocab.NewRegistry()
@@ -76,11 +75,13 @@ func init() {
 }
 
 func demoSqlCompletion(ids *c.WidgetIdStack, s *sqlCompletionDemoState) {
+	if s.ed == nil {
+		s.ed = sqleditor.New(ids, "editor")
+	}
 	res := s.ed.Bind(sqleditor.Frame{
-		IDSlot: "demoSqlCompletion",
-		Value:  &s.sql,
-		Hint:   "-- type inside the quotes",
-		Rows:   4,
+		Value: &s.sql,
+		Hint:  "-- type inside the quotes",
+		Rows:  4,
 	})
 
 	comp := s.eng.Complete(sqlcomplete.Request{
@@ -95,22 +96,23 @@ func demoSqlCompletion(ids *c.WidgetIdStack, s *sqlCompletionDemoState) {
 	if comp.Match == sqlcomplete.MatchExact {
 		deco.Styled = append(deco.Styled, resolvedSection(comp.Partial))
 	}
-	s.ed.Render(ids, deco)
+	s.ed.Render(deco)
 
 	c.Separator().Send()
-	s.pane.Render(sqleditor.PaneInput{
+	accepted := sqleditor.RenderPane(sqleditor.PaneInput{
 		Ids:               ids,
 		ScopeKey:          "demoCompletion",
+		State:             &s.pane,
 		Result:            comp,
 		Heading:           sqleditor.PaneHeading(comp),
 		MaxHeight:         260,
 		Width:             880,
 		Typed:             res.Site.PartialText,
 		CaretAtPartialEnd: res.Site.CaretAtPartialEnd(),
-		OnAccept: func(_ sqlcomplete.Item, suffix string) {
-			s.sql += suffix
-		},
 	})
+	if accepted.Accepted {
+		s.sql += accepted.Suffix
+	}
 }
 
 func resolvedSection(r highlight.Range) codeview.StyledSection {

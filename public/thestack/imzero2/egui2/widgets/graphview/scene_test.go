@@ -38,10 +38,10 @@ func newScene(t *testing.T, key string, o Options, w, h float32) *scene {
 // frame renders one frame against the scripted registers, then clears them
 // as the frame boundary would, and returns the events the frame produced.
 func (s *scene) frame(nodes []NodeSpec, edges []EdgeSpec) []Event {
-	s.v.Render(nodes, edges, s.w, s.h)
+	ev := s.v.Render(nodes, edges, s.w, s.h)
 	require.False(s.t, typed.HasErrors(), typed.GetError())
 	s.sm.ScriptReset()
-	return slices.Clone(s.v.Events())
+	return slices.Clone(ev)
 }
 
 // pointerAt scripts the pointer over the canvas at canvas pixel (x, y): the

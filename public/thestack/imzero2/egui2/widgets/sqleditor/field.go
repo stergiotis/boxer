@@ -16,9 +16,6 @@ import (
 // FieldFrame is one frame's binding for a [Field]: what it is bound to, how it
 // is sized, and what the embedder wants marked.
 type FieldFrame struct {
-	// IDSlot is the stable widget-id slot. Two fields in one app need two
-	// slots; it is an identity, not a label.
-	IDSlot string
 	// Value is the bound fragment. The widget writes edits back through it
 	// (SendRespVal), so it must outlive the frame. A nil Value makes
 	// [Field.Render] a no-op.
@@ -77,25 +74,51 @@ type FieldFrame struct {
 //
 // It carries no caret channel. Nothing it draws is derived from the caret, so
 // one Render call is the whole contract — unlike [Editor], whose overlays are
-// computed from the caret and therefore force the Bind-then-Render split.
+// computed from the caret and therefore force the Bind-then-Render split. It
+// is semi-retained (ADR-0267) for the lex job it memoises across frames.
 //
 // Render-thread-only, like every stateful widget (ADR-0013).
 type Field struct {
+	// ids and scopeKey are the host's id stack and this field's scope in it.
+	ids      *c.WidgetIdStack
+	scopeKey string
+
 	// Lex-tier colour job, keyed by the fragment it describes.
 	job    typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	jobFor string
 	jobOk  bool
 }
 
-// NewField returns a field. The zero value is also usable; NewField exists so
-// a construction site reads as one.
-func NewField() (inst *Field) { return &Field{} }
+// NewField returns a field scoped under scopeKey on the host's ids; empty
+// scopeKey uses "sqlfield". Two fields under one stack need distinct keys. A
+// field without ids draws nothing.
+func NewField(ids *c.WidgetIdStack, scopeKey string) (inst *Field) {
+	if scopeKey == "" {
+		scopeKey = "sqlfield"
+	}
+	return &Field{ids: ids, scopeKey: scopeKey}
+}
+
+// FieldResult is what one [Field.Render] reports.
+type FieldResult struct {
+	// Changed is true on the frame the bound fragment was edited.
+	Changed bool
+}
 
 // Render draws the field. A nil [FieldFrame.Value] makes it a no-op.
-func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
-	if f.Value == nil {
+func (inst *Field) Render(f FieldFrame) (res FieldResult) {
+	if f.Value == nil || inst.ids == nil {
 		return
 	}
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		res = inst.render(f)
+	}
+	return
+}
+
+// render is Render's body, inside the field's scope.
+func (inst *Field) render(f FieldFrame) (res FieldResult) {
+	ids := inst.ids
 	view := *f.Value
 	rows := f.Rows
 	if rows == 0 {
@@ -132,7 +155,7 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 	// released rather than inherited: a field is a CONTROL in a strip, not a
 	// document, so Tab has to reach the control beside it. [Editor] keeps the
 	// capture because there an indent is part of the text being written.
-	b := c.TextEdit(ids.PrepareStr(f.IDSlot), view, multiline).
+	b := c.TextEdit(ids.PrepareStr("text"), view, multiline).
 		CodeEditor().
 		LockFocus(false).
 		DesiredRows(rows).
@@ -152,7 +175,8 @@ func (inst *Field) Render(ids *c.WidgetIdStack, f FieldFrame) {
 			b = b.SectionStyled(styled)
 		}
 	}
-	b.SendRespVal(f.Value)
+	res.Changed = b.SendRespVal(f.Value).HasChanged()
+	return
 }
 
 // newlineFolder turns every line break into a single space. A replacer rather

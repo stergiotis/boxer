@@ -218,6 +218,7 @@ func demoGraphOnMap(ids *c.WidgetIdStack, st *graphOnMapState) {
 
 	// 2. The map draws; the offline outlines and the graph paint inside its
 	//    canvas, through the same projector.
+	var events graphview.Events
 	m.Render(graphOnMapW, graphOnMapH, func(p portolan.Projector) {
 		if st.showLand {
 			ls := landoverlay.DefaultStyle()
@@ -230,11 +231,11 @@ func demoGraphOnMap(ids *c.WidgetIdStack, st *graphOnMapState) {
 		now := p.CameraAt(graphOnMapRefZoom, st.origin)
 		gv.SetHostCamera(now)
 		st.declare(p.View(), now.Zoom)
-		gv.HostedPaint(st.nodes, st.edges)
+		events = gv.HostedPaint(st.nodes, st.edges)
 	})
 
 	// 3. The guest's events are read after the paint, as after Render.
-	for _, ev := range gv.Events() {
+	for _, ev := range events {
 		switch ev.Kind {
 		case graphview.EventKindNodeClick:
 			st.lastEvent = fmt.Sprintf("click on %s", graphOnMapLabel(ev.Node))

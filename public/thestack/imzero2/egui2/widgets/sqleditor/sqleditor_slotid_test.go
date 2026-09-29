@@ -1,29 +1,43 @@
 package sqleditor
 
-import "testing"
+import (
+	"testing"
+
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+)
 
 // TestSlotIdIsPerEditor guards the editor's register slots (the r21 pane probe
-// and the r9 row-height measure) against being shared. IDSlot separates two
-// editors inside one app, which is what it was introduced for; it cannot
-// separate two windows of the same app, because the embedder passes a constant
-// ("sqlEditor" in play). Sharing means each editor sizes itself from the
-// other's pane — the r18 failure, reproduced inside the seq-keyed register.
+// and the r9 row-height measure) against being shared: the slot is derived
+// from the id stack under the editor's own scope (ADR-0267 W7), so two editors
+// under one stack differ by scope key, and two windows of one app — whose
+// host pushes a per-window scope around Frame — differ by that scope.
 func TestSlotIdIsPerEditor(t *testing.T) {
-	a, b := New(), New()
-	if a.slotId("sqlEditor", "pane") == b.slotId("sqlEditor", "pane") {
+	ids := c.NewWidgetIdStack()
+	a, b := New(ids, "a"), New(ids, "b")
+	slot := func(e *Editor, role string) (seq uint64) {
+		for range c.IdScope(ids.PrepareStr(e.scopeKey)) {
+			seq = e.slotId(role)
+		}
+		return
+	}
+	if slot(a, "pane") == slot(b, "pane") {
 		t.Fatal("two editors share one pane slot")
 	}
-	if a.slotId("sqlEditor", "pane") == a.slotId("sqlEditor", "row-h") {
+	if slot(a, "pane") == slot(a, "row-h") {
 		t.Fatal("two roles of one editor share a slot")
 	}
-	if first, again := a.slotId("sqlEditor", "pane"), a.slotId("sqlEditor", "pane"); first != again {
+	if first, again := slot(a, "pane"), slot(a, "pane"); first != again {
 		t.Fatalf("slot moved between calls: %#016x then %#016x", first, again)
 	}
-
-	// The zero value is a documented construction, so it has to mint a salt on
-	// first use rather than fall through to the unsalted seq.
-	var z1, z2 Editor
-	if z1.slotId("sqlEditor", "pane") == z2.slotId("sqlEditor", "pane") {
-		t.Fatal("two zero-value editors share one pane slot")
+	// The same scope key under two host scopes — two windows of one app.
+	var w1, w2 uint64
+	for range c.IdScope(ids.PrepareStr("window-1")) {
+		w1 = slot(a, "pane")
+	}
+	for range c.IdScope(ids.PrepareStr("window-2")) {
+		w2 = slot(a, "pane")
+	}
+	if w1 == w2 {
+		t.Fatal("two windows share one pane slot")
 	}
 }

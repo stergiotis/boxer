@@ -85,9 +85,9 @@ type App struct {
 	client  *wb.Client
 	reads   *tableReader
 	tasks   task.TaskApiI
-	monitor *taskmonitor.Inst
+	monitor *taskmonitor.Monitor
 	machine *fsmview.Machine[string]
-	chip    *fsmview.Widget[string]
+	chip    *fsmview.View[string]
 
 	appCtx    context.Context
 	cancelApp context.CancelFunc
@@ -149,7 +149,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.reads = newTableReader(ctx.Bus())
 	inst.tasks = task.ForApp(ctx)
 	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
-	inst.chip = fsmview.New(inst.ids, "job-state", inst.machine).Title("job state")
+	inst.chip = fsmview.New(inst.ids, "job-state", inst.machine, fsmview.Options[string]{Title: "job state"})
 	inst.storage = ctx.Storage()
 	if inst.storage != nil {
 		if raw, found, gerr := inst.storage.Get(splitKey); gerr == nil && found {
@@ -167,7 +167,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		inst.applyLaunch(cfg)
 	}
 
-	inst.monitor = taskmonitor.New(inst.tasks, inst.ids, "tm", taskmonitor.Opts{DefaultOpen: true})
+	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{DefaultOpen: true})
 	if startErr := inst.monitor.Start(); startErr != nil {
 		inst.logger.Debug().Err(startErr).Msg("watchbill app: task monitor not started")
 	}
@@ -206,7 +206,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	}
 	inst.wg.Wait()
 	if inst.monitor != nil {
-		_ = inst.monitor.Stop()
+		_ = inst.monitor.Close()
 	}
 	return
 }

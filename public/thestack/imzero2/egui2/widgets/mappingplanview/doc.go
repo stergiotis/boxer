@@ -1,5 +1,6 @@
-// Package mappingplanview is an interactive ImZero2 widget for authoring a
-// leeway mappingplan spec and live-previewing the code it compiles to.
+// Package mappingplanview is a semi-retained imzero2 widget (ADR-0267) for
+// authoring a leeway mappingplan spec and live-previewing the code it compiles
+// to: a [View] built once with [New] draws a host-owned [Model] every frame.
 //
 // # What it is
 //

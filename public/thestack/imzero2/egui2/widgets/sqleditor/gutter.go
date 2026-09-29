@@ -228,7 +228,7 @@ func editorWidthPx(buf string, charPx, atLeast float32) float32 {
 
 // renderGutter draws the gutter column for a model the caller already built
 // (it also needs the model's width to size the editor beside it).
-func renderGutter(ids *c.WidgetIdStack, idSlot string, m gutterModel) {
+func renderGutter(ids *c.WidgetIdStack, m gutterModel) {
 	if !m.present {
 		return
 	}
@@ -246,7 +246,7 @@ func renderGutter(ids *c.WidgetIdStack, idSlot string, m gutterModel) {
 		job = job.Section(uint32(markSpans[i][0]), uint32(markSpans[i][1]), tone)
 		job = job.Section(uint32(restSpans[i][0]), uint32(restSpans[i][1]), weak)
 	}
-	c.CodeView(ids.PrepareStr(idSlot), job.Keep()).
+	c.CodeView(ids.PrepareStr("gutter"), job.Keep()).
 		Selectable(false).
 		Extend().
 		Send()

@@ -423,15 +423,16 @@ func (inst *DistDriver) renderEcdf(w float32, h float32) {
 			if s.degenerate() {
 				continue
 			}
-			r := ecdf.New().SeriesName(s.label).
-				EcdfStroke(distSeriesColor(i), 1.6).
-				Alpha(distBandAlpha)
-			if len(inst.series) <= distMaxBandsAll || i == inst.selected {
-				r = r.BandFill(distSeriesFill(i))
-				_ = r.RenderGridPreview(p, s.qs, s.ps, int(s.n))
-			} else {
-				r.RenderGridCurveOnly(p, s.qs, s.ps)
+			in := ecdf.Input{
+				Style: ecdf.Style{SeriesName: s.label, EcdfStroke: distSeriesColor(i), EcdfStrokeWidth: 1.6, Alpha: distBandAlpha},
+				Xs:    s.qs, FnAt: s.ps, N: int(s.n),
+				Band: ecdf.BandNone,
 			}
+			if len(inst.series) <= distMaxBandsAll || i == inst.selected {
+				in.BandFill = distSeriesFill(i)
+				in.Band = ecdf.BandPreview
+			}
+			_ = ecdf.Paint(p, in)
 		}
 	}
 }
@@ -501,8 +502,10 @@ func (inst *DistDriver) renderBoxen(w float32, h float32) {
 			if s.haveExtremes {
 				extremes = []float64{s.xMin, s.xMax}
 			}
-			boxenplot.New("play-dist-boxen").SeriesName(s.label).
-				Render(p, float64(i), levels, extremes, letterval.BudgetFor(levels).Each)
+			boxenplot.Paint(p, boxenplot.Input{
+				Style: boxenplot.Style{SeriesName: s.label}, Argument: float64(i), Levels: levels, Extremes: extremes,
+				TailCount: letterval.BudgetFor(levels).Each, TailCountKnown: true,
+			})
 		}
 	}
 }

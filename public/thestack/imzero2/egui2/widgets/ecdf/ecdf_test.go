@@ -1,6 +1,7 @@
 package ecdf
 
 import (
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 	"strings"
 	"testing"
 
@@ -27,37 +28,53 @@ func TestBuildEcdfPolylineShape(t *testing.T) {
 	}
 }
 
-// TestFluentSettersAreImmutable mirrors the boxenplot convention:
-// returning Renderer by value, each setter produces a modified copy
-// without mutating the receiver.
-func TestFluentSettersAreImmutable(t *testing.T) {
-	base := New()
-	other := base.Method(ecdfbands.BandMethodDKW).Alpha(0.01).SeriesName("renamed")
-	assert.Equal(t, ecdfbands.BandMethodBerkJones, base.method)
-	assert.Equal(t, 0.05, base.alpha)
-	assert.Equal(t, "ECDF", base.seriesName)
-	assert.Equal(t, ecdfbands.BandMethodDKW, other.method)
-	assert.Equal(t, 0.01, other.alpha)
-	assert.Equal(t, "renamed", other.seriesName)
-	assert.Equal(t, "renamed band", other.bandSeriesName)
+// TestResolvedFillsZeroFields pins the zero-value-is-default contract: a
+// zero Style resolves to DefaultStyle and a set field survives.
+func TestResolvedFillsZeroFields(t *testing.T) {
+	base := Style{}.Resolved()
+	other := Style{Method: ecdfbands.BandMethodDKW, Alpha: 0.01, SeriesName: "renamed"}.Resolved()
+	assert.Equal(t, DefaultStyle(), base)
+	assert.Equal(t, ecdfbands.BandMethodBerkJones, base.Method)
+	assert.Equal(t, 0.05, base.Alpha)
+	assert.Equal(t, "ECDF", base.SeriesName)
+	assert.Equal(t, ecdfbands.BandMethodDKW, other.Method)
+	assert.Equal(t, 0.01, other.Alpha)
+	assert.Equal(t, "renamed", other.SeriesName)
+	assert.Equal(t, "renamed band", other.bandSeriesName())
+	assert.Equal(t, base.EcdfStroke, other.EcdfStroke, "an unset field still takes the default")
 }
 
-// TestRenderShortSampleNoOp confirms n < 2 short-circuits without
-// error (and without invoking the underlying band library, which
-// requires n ≥ 1 and would otherwise allocate).
-func TestRenderShortSampleNoOp(t *testing.T) {
-	r := New()
-	require.NoError(t, r.Render(nil, nil))
-	require.NoError(t, r.Render(nil, []float64{}))
-	require.NoError(t, r.Render(nil, []float64{0.5}))
+// TestPaintShortSampleNoOp confirms n < 2 short-circuits without error
+// (and without invoking the underlying band library, which requires n ≥ 1
+// and would otherwise allocate).
+func TestPaintShortSampleNoOp(t *testing.T) {
+	require.NoError(t, Paint(nil, Input{Sorted: []float64{}, Band: BandExact}).Err)
+	require.NoError(t, Paint(nil, Input{Sorted: []float64{0.5}, Band: BandExact}).Err)
+	require.NoError(t, Paint(nil, Input{Xs: []float64{1}, FnAt: []float64{1}, N: 1, Band: BandExact}).Err)
 }
 
-// TestRenderRejectsUnsortedSample propagates the underlying
-// ecdfbands.BandsForSample validation error.
-func TestRenderRejectsUnsortedSample(t *testing.T) {
-	r := New()
-	err := r.Render(nil, []float64{0.5, 0.2, 0.8})
-	require.Error(t, err)
+// TestPaintRejectsUnsortedSample propagates the underlying
+// ecdfbands.BandsForSample validation error, and still draws the curve.
+func TestPaintRejectsUnsortedSample(t *testing.T) {
+	res := Paint(implot.NewDetached(), Input{Sorted: []float64{0.5, 0.2, 0.8}, Band: BandExact})
+	require.Error(t, res.Err)
+}
+
+// TestPaintGridPathsDeclare paints the three band choices of the grid path
+// into a detached plot (ADR-0267 W19: one frame without a host) and reads
+// the crosshair back invalid since nothing is hovered.
+func TestPaintGridPathsDeclare(t *testing.T) {
+	xs := []float64{0, 0.25, 0.5, 0.75, 1}
+	fn := []float64{0, 0.2, 0.5, 0.8, 1}
+	p := implot.NewDetached()
+	for _, band := range []BandKindE{BandNone, BandPreview, BandExact} {
+		in := Input{Xs: xs, FnAt: fn, N: 40, Band: band}
+		require.NoError(t, Paint(p, in).Err, "band %v", band)
+		ch := At(p, in)
+		assert.False(t, ch.Valid)
+		assert.Equal(t, -1, ch.NearestIdx)
+		PaintCrosshair(p, in.Style, ch)
+	}
 }
 
 // TestPackRGBAOverridesAlpha sanity-checks the alpha override used
@@ -172,8 +189,7 @@ func TestWithAlphaReplacesLowByte(t *testing.T) {
 // path of At — even without any hover register state, an empty sample
 // must produce an invalid Crosshair.
 func TestAtReturnsInvalidWhenSortedEmpty(t *testing.T) {
-	r := New()
-	ch := r.At(nil, nil)
+	ch := At(nil, Input{Sorted: []float64{}, Band: BandExact})
 	assert.False(t, ch.Valid)
 	assert.Equal(t, -1, ch.NearestIdx)
 	assert.Equal(t, 0.05, ch.Alpha)

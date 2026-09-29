@@ -49,7 +49,7 @@ func init() {
 }
 
 func renderVideoOutputDemo(ids *c.WidgetIdStack, st *videoOutputDemoState) {
-	videooutput.ShowGallery(ids, st.st)
+	videooutput.RenderGallery(videooutput.Input{Ids: ids, ScopeKey: "videooutput", State: st.st})
 }
 
 // videoOutputDemoModel is a representative capability model: the three video

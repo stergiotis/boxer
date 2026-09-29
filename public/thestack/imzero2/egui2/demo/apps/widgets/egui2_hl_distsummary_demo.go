@@ -33,11 +33,9 @@ type distsumDemoRow struct {
 	subject  string
 	digest   *tdigest.TDigest
 	extremes []float64
-	// idPrefix scopes the per-row distsummary.Renderer. Distinct per
-	// row so the toggle id, window id, bezier rect-capture seqs, and
-	// pinned-state map slot don't collide — every row carries the
-	// AnchorToggle by default and can be pinned open independently.
-	idPrefix string
+	// state is the row's inspector state: every row carries the
+	// AnchorToggle and can be pinned open independently.
+	state distsummary.State
 }
 
 var distsumDemoRows = buildDistsumDemoRows()
@@ -91,28 +89,29 @@ func demoDistsummary(ids *c.WidgetIdStack) {
 
 	now := time.Now()
 	for i, row := range distsumDemoRows {
-		// Per-row Renderer with a distinct idPrefix so each row owns its
-		// own toggle / window / tether identities — required because
-		// distsummary derives those ids from idPrefix and the pinned
-		// state lives in a package-level map keyed by the same string.
-		r := distsummary.New(row.idPrefix).
-			Tasks(distsumDemoTasks).
-			// Cap the exact band's effective n so the opt-in Berk-Jones solve
-			// at the demo's n=10 000 stays a ~30 s, cancellable job (it would
-			// otherwise run ~14 min) — the instant DKW preview band is always
-			// drawn at the true n meanwhile. See distsummary.ExactBandMaxN.
-			ExactBandMaxN(2000).
-			Provenance(inspector.Provenance{
-				Subject:   row.subject,
-				SampledAt: now,
-			})
 		for range c.Horizontal().KeepIter() {
 			// Fixed-width label column keeps every distsummary cell at
 			// the same x — visually aligned across rows.
 			c.UiSetMinWidth(160)
 			c.Label(row.name).Send()
 			c.AddSpace(gapSections())
-			r.Render(ids.PrepareSeq(uint64(0xDD5000+i)), row.digest, row.extremes)
+			// Each row is its own id scope, so each owns its toggle, window
+			// and tether identities and can be pinned independently.
+			for range c.IdScope(ids.PrepareSeq(uint64(i))) {
+				distsummary.Render(distsummary.Input{
+					Ids: ids, ScopeKey: "dist", Digest: row.digest, Extremes: row.extremes, State: &row.state,
+					Title: row.name, Tasks: distsumDemoTasks,
+					// Cap the exact band's effective n so the opt-in Berk-Jones
+					// solve at the demo's n=10 000 stays a ~30 s, cancellable job
+					// (it would otherwise run ~14 min) — the instant DKW preview
+					// band is always drawn at the true n meanwhile.
+					ExactBandMaxN: 2000,
+					Provenance: inspector.Provenance{
+						Subject:   row.subject,
+						SampledAt: now,
+					},
+				})
+			}
 		}
 		c.AddSpace(padInner())
 	}
@@ -169,17 +168,6 @@ func buildDistsumDemoRows() (out []*distsumDemoRow) {
 		"app.store.event.payload.bytes",
 		"app.play.event.jitter.s",
 	}
-	// Per-row idPrefix — required for distsummary.Pinned's absolute-id
-	// derivation contract. Unique per row so multi-row pinning would
-	// not collide (today only row 0 opts in).
-	idPrefixes := []string{
-		"ds-demo-row0",
-		"ds-demo-row1",
-		"ds-demo-row2",
-		"ds-demo-row3",
-		"ds-demo-row4",
-		"ds-demo-row5",
-	}
 	const n = 10_000
 	const k = 8
 	out = make([]*distsumDemoRow, 0, len(variants))
@@ -207,7 +195,6 @@ func buildDistsumDemoRows() (out []*distsumDemoRow) {
 		out = append(out, &distsumDemoRow{
 			name:     v.name,
 			subject:  subjects[vi],
-			idPrefix: idPrefixes[vi],
 			digest:   d,
 			extremes: extremes,
 		})

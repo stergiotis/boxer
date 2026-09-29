@@ -2,6 +2,7 @@ package mappingplanview
 
 import (
 	"fmt"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypeedit"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -10,19 +11,12 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 )
 
-// Input is the per-frame render state for the mappingplan playground.
-type Input struct {
-	// Ids is the widget ID stack. Render opens its own IdScope via
-	// Ids.PrepareStr(ScopeKey) and derives a stable per-row scope from each
-	// row's uid.
-	Ids *c.WidgetIdStack
-	// ScopeKey scopes every id Render emits. Pass a stable short string per
-	// call site (e.g. "mpv").
-	ScopeKey string
-	// Model is the editable state, mutated in place by the editor controls.
-	Model *Model
+// Options configures a View; the View re-reads [View.Opts] every frame, so a
+// change is an assignment (ADR-0267 W11).
+type Options struct {
 	// Recompute rebuilds the output panes from the Model. The host supplies it
 	// (it owns the mappingplan / marshallgen / dql wiring); Render calls it at
 	// most once per frame, only when the Model is dirty, reporting back through
@@ -40,6 +34,56 @@ type Input struct {
 	// which carries the same field, and the imzero2 SKILL "Gallery Scroll-Host
 	// Layout" section for both sides of the pattern.
 	FillHost bool
+}
+
+// Events is what one Render reports.
+type Events struct {
+	// Edited is true when an editor control changed the Model this frame.
+	Edited bool
+	// Recomputed is true when Options.Recompute ran this frame.
+	Recomputed bool
+}
+
+// View is the playground's semi-retained widget (ADR-0267): it owns the field
+// pager, the plan-level and per-field inspector chips and the read-only error
+// buffer, and draws a host-owned [Model] every frame.
+type View struct {
+	// Opts is re-read on every Render.
+	Opts Options
+
+	ids      *c.WidgetIdStack
+	scopeKey string
+
+	// pager paginates the field list — configured for a short list: a small
+	// fixed page (cards don't virtualise, so a page must fit the editor
+	// pane), no page-size combo, "fields" unit.
+	pager *pager.Pager
+	// planFSMView is the plan-level inspector chip; fieldViews the per-field
+	// ones, keyed by row uid and pruned when a row goes.
+	planFSMView *fsmview.View[PlanState]
+	fieldViews  map[uint64]*fsmview.View[FieldState]
+	// viewBuf is the stable backing string of the read-only error TextEdit.
+	viewBuf string
+	// fieldsSeen is Render's scratch for pruning fieldViews.
+	fieldsSeen map[uint64]struct{}
+}
+
+// New returns a View whose ids are scoped under scopeKey on ids (empty uses
+// "mappingplanview"); two views under one stack need distinct keys.
+func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *View {
+	if scopeKey == "" {
+		scopeKey = "mappingplanview"
+	}
+	return &View{
+		Opts:     opts,
+		ids:      ids,
+		scopeKey: scopeKey,
+		pager: pager.New(ids, "fields-pager", pager.Options{
+			PageSize: 3, Unit: "fields", HideSizeCombo: true,
+		}),
+		fieldViews: make(map[uint64]*fsmview.View[FieldState], 8),
+		fieldsSeen: make(map[uint64]struct{}, 8),
+	}
 }
 
 const (
@@ -76,16 +120,21 @@ func channelLabel(ch mappingplan.MembershipChannel) string {
 // Render draws the whole widget as a single dock area: the editor pane on the
 // left and one generated-output pane (Go / SQL / JSON) per Output on the right.
 // The split is the initial preset — the user can drag panes around and the
-// layout persists (egui_dock). Call once per frame.
-func Render(in Input) {
-	m := in.Model
-	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
+// layout persists (egui_dock). Call once per frame with the host's Model.
+func (inst *View) Render(m *Model) (ev Events) {
+	if m == nil {
+		return
+	}
+	in := inst.Opts
+	wasDirty := m.dirty
+	inst.pruneFieldViews(m)
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		// Floor the dock's height only in an unbounded scroll host (the gallery);
 		// a bounded host (FillHost) lets the dock fill its leaf, not overflow it.
 		if !in.FillHost {
 			c.UiSetMinHeight(dockMinHeight)
 		}
-		for dock := range c.DockArea(in.Ids.PrepareStr("mpvdock")) {
+		for dock := range c.DockArea(inst.ids.PrepareStr("mpvdock")) {
 			// Initial layout (honoured once, on first dock_state construction):
 			// editor in the root leaf, the output panes split off to its right.
 			// The output ids come from the panes the host produced — populated
@@ -100,14 +149,16 @@ func Render(in Input) {
 			// during this tab's capture (pure-Go pointer writes), so the model
 			// reflects the edits before the recompute below.
 			for range dock.Tab(editorTabID, "plan") {
-				renderEditor(in.Ids, m)
+				inst.renderEditor(m)
 			}
+			ev.Edited = m.dirty && !wasDirty
 
 			// Recompute between the editor tab and the output tabs — pure Go,
 			// emits no UI — so the output panes show this frame's edits.
 			if m.dirty && in.Recompute != nil {
 				in.Recompute(m)
 				m.dirty = false
+				ev.Recomputed = true
 			}
 
 			// One dock tab per output pane. Format-agnostic: a new format is
@@ -117,7 +168,7 @@ func Render(in Input) {
 				p := &m.panes[i]
 				for range dock.Tab(p.out.TabID, p.out.Title) {
 					for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-						c.CodeView(in.Ids.PrepareSeq(p.out.TabID), p.job).Wrap().Send()
+						c.CodeView(inst.ids.PrepareSeq(p.out.TabID), p.job).Wrap().Send()
 					}
 				}
 			}
@@ -126,22 +177,52 @@ func Render(in Input) {
 		// floating window cannot be created from inside a dock-tab body. The
 		// chips in the editor tab only captured their toggle rects; the tether
 		// bridges toggle ↔ window by scope. Mirrors schemaview's glyph-legend.
-		renderFieldPopups(in.Ids, m)
-		renderPlanPopup(m)
+		inst.renderFieldPopups(m)
+		inst.renderPlanPopup()
 	}
+	return
+}
+
+// pruneFieldViews drops the inspector views of rows the model no longer has.
+func (inst *View) pruneFieldViews(m *Model) {
+	clear(inst.fieldsSeen)
+	for _, r := range m.Fields {
+		inst.fieldsSeen[r.uid] = struct{}{}
+	}
+	for uid := range inst.fieldViews {
+		if _, ok := inst.fieldsSeen[uid]; !ok {
+			delete(inst.fieldViews, uid)
+		}
+	}
+}
+
+// fieldView returns the row's inspector view, building it on first use. Its
+// ids live under the per-row scope the callers open (PrepareSeq(uid)), so
+// the constant key is unique per field.
+func (inst *View) fieldView(r *FieldRow) *fsmview.View[FieldState] {
+	v, ok := inst.fieldViews[r.uid]
+	if !ok {
+		v = fsmview.New(inst.ids, "field-fsm", r.fsm, fsmview.Options[FieldState]{
+			Tethered:  true,
+			BadgeTone: FieldState.tone,
+			Renderer:  fsmview.RendererGraph, // open to the state graph (most visual)
+		})
+		inst.fieldViews[r.uid] = v
+	}
+	return v
 }
 
 // renderFieldPopups draws the open per-field inspector windows for the rows on
 // the current page — the only rows whose chips (hence toggle rects) were emitted
 // this frame. A field whose inspector is left open while you page away is simply
-// not drawn until you page back; its open flag is retained on the Widget.
-func renderFieldPopups(ids *c.WidgetIdStack, m *Model) {
-	start, end := m.pager.Range()
+// not drawn until you page back; its open flag is retained on the view.
+func (inst *View) renderFieldPopups(m *Model) {
+	start, end := inst.pager.Range()
 	for i := start; i < end && i < int64(len(m.Fields)); i++ {
 		r := m.Fields[i]
-		if r.fsmW != nil && r.fsmW.IsOpen() {
-			for range c.IdScope(ids.PrepareSeq(r.uid)) {
-				r.fsmW.RenderPopup()
+		if v, ok := inst.fieldViews[r.uid]; ok && v.IsOpen() {
+			for range c.IdScope(inst.ids.PrepareSeq(r.uid)) {
+				v.RenderPopup()
 			}
 		}
 	}
@@ -151,9 +232,9 @@ func renderFieldPopups(ids *c.WidgetIdStack, m *Model) {
 // DockArea block (same window-cannot-spawn-in-a-dock-tab rule as the field
 // popups: the chip + toggle were emitted in renderVerdict inside the editor
 // tab, and the tether bridges them by scope).
-func renderPlanPopup(m *Model) {
-	if m.planFSMW != nil && m.planFSMW.IsOpen() {
-		m.planFSMW.RenderPopup()
+func (inst *View) renderPlanPopup() {
+	if inst.planFSMView != nil && inst.planFSMView.IsOpen() {
+		inst.planFSMView.RenderPopup()
 	}
 }
 
@@ -166,9 +247,10 @@ func paneTabIDs(m *Model) []uint64 {
 	return out
 }
 
-func renderEditor(ids *c.WidgetIdStack, m *Model) {
+func (inst *View) renderEditor(m *Model) {
+	ids := inst.ids
 	density := styletokens.ActiveDensity()
-	renderVerdict(ids, m)
+	inst.renderVerdict(m)
 	c.Separator().Send()
 
 	// Plan identity — the `_`-field's kind / package / Go type. Styled like the
@@ -203,15 +285,15 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 	// Pagination via the shared pager widget (extracted from apps/play):
 	// Configure with the field total, draw the bar, then render the current
 	// page's cards from the pager's Range.
-	m.pager.Configure(int64(len(m.Fields)))
-	m.pager.Render()
-	start, end := m.pager.Range()
+	inst.pager.Configure(int64(len(m.Fields)))
+	inst.pager.Render()
+	start, end := inst.pager.Range()
 	var removeUID uint64
 	hasRemove := false
 	for i := start; i < end; i++ {
 		r := m.Fields[i]
 		for range c.IdScope(ids.PrepareSeq(r.uid)) {
-			if renderRow(ids, m, r) {
+			if inst.renderRow(m, r) {
 				removeUID = r.uid
 				hasRemove = true
 			}
@@ -229,7 +311,7 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(ids.PrepareStr("add-plain"), c.Atoms().Text("+ plain column").Keep()).SendResp().HasPrimaryClicked() {
 			m.AddRow() // empty membership ⇒ plain column
-			m.pager.GoToLast()
+			inst.pager.GoToLast()
 		}
 		c.AddSpace(styletokens.GapInline(density))
 		if c.Button(ids.PrepareStr("add-tagged"), c.Atoms().Text("+ tagged field").Keep()).SendResp().HasPrimaryClicked() {
@@ -238,7 +320,7 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 			// ⇒ tagged); reads as an intentional new field to rename, and stays
 			// incomplete (no section yet) to guide the next step.
 			r.GoField, r.Membership = "NewField", "newMembership"
-			m.pager.GoToLast()
+			inst.pager.GoToLast()
 		}
 		c.AddSpace(styletokens.GapInline(density))
 		// Seeds a complete dynamic-membership tuple over the anchor example
@@ -259,22 +341,27 @@ func renderEditor(ids *c.WidgetIdStack, m *Model) {
 			wb := m.AddElem(r)
 			wb.GoField, wb.Column = "WordBag", "wordBag"
 			wb.SetCanonical("sh")
-			m.pager.GoToLast()
+			inst.pager.GoToLast()
 		}
 	}
 }
 
 // renderVerdict draws the PlanBuilder verdict at the top of the editor pane —
 // green "valid" or red "invalid" plus the full error text (read-only).
-func renderVerdict(ids *c.WidgetIdStack, m *Model) {
+func (inst *View) renderVerdict(m *Model) {
+	ids := inst.ids
 	// Plan-level compile-pipeline chip (empty → incomplete → invalid /
 	// schema-mismatch / queryable), tethered like the per-field chips; its
 	// window is emitted after the DockArea block (renderPlanPopup). Driven from
 	// the last recompute's verdict — same one-frame lag as the text below.
 	if m.planFSM != nil {
-		if m.planFSMW == nil {
-			m.planFSMW = fsmview.New(ids, "mpv-plan", m.planFSM).Tethered().BadgeTone(PlanState.tone).Title("plan")
-			m.planFSMW.SetRenderer(fsmview.RendererGraph) // open to the state graph (most visual)
+		if inst.planFSMView == nil {
+			inst.planFSMView = fsmview.New(ids, "plan-fsm", m.planFSM, fsmview.Options[PlanState]{
+				Title:     "plan",
+				Tethered:  true,
+				BadgeTone: PlanState.tone,
+				Renderer:  fsmview.RendererGraph, // open to the state graph (most visual)
+			})
 		}
 		st, reason := m.planState()
 		var md map[string]string
@@ -282,7 +369,7 @@ func renderVerdict(ids *c.WidgetIdStack, m *Model) {
 			md = map[string]string{"reason": reason}
 		}
 		m.planFSM.MirrorWithMetadata(st, md)
-		m.planFSMW.RenderChip()
+		inst.planFSMView.RenderChip()
 	}
 	if m.Valid {
 		for rt := range c.RichTextLabelColored(
@@ -298,11 +385,11 @@ func renderVerdict(ids *c.WidgetIdStack, m *Model) {
 			"invalid: "+firstLine(m.ErrText)) {
 			rt.Strong()
 		}
-		m.viewBuf = m.ErrText
-		c.TextEdit(ids.PrepareStr("err"), m.viewBuf, true).
+		inst.viewBuf = m.ErrText
+		c.TextEdit(ids.PrepareStr("err"), inst.viewBuf, true).
 			Interactive(false).
 			DesiredRows(4).
-			SendRespVal(&m.viewBuf)
+			SendRespVal(&inst.viewBuf)
 	}
 	// Per-field roll-up — how many fields sit in each validity state — so the
 	// editor reads at a glance before scanning individual chips. (A plan-level
@@ -317,7 +404,8 @@ func renderVerdict(ids *c.WidgetIdStack, m *Model) {
 
 // renderRow draws one field row as a fixed-size bordered card (uniform width +
 // min height so the cards line up) and returns true if its remove button fired.
-func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
+func (inst *View) renderRow(m *Model, r *FieldRow) (remove bool) {
+	ids := inst.ids
 	// A const is a fixed literal declared on a `_` field: no Go field, no
 	// Option. Normalise that off so the row stays valid and the type editor
 	// + flags below render disabled.
@@ -351,7 +439,7 @@ func renderRow(ids *c.WidgetIdStack, m *Model, r *FieldRow) (remove bool) {
 				c.UiSetMinWidth(cardWidth)
 				c.UiSetMaxWidth(cardWidth)
 				c.UiSetMinHeight(cardMinHeight)
-				renderRowHeader(ids, r, glyph, word, catCol)
+				inst.renderRowHeader(r, glyph, word, catCol)
 				renderRowReason(r)
 
 				// Go field + remove (the value type is its own editor below).
@@ -512,8 +600,8 @@ func renderTupleElem(ids *c.WidgetIdStack, m *Model, e *TupleElemRow) (remove bo
 				if !e.IsMembership {
 					// Value element's canonical type, watched for edits like the
 					// row-level editor (canonicaltypeedit has no change signal).
-					e.typeModel.Render(ids, "ectype")
-					cur, barErr := e.typeModel.Canonical(), e.typeModel.BarError()
+					canonicaltypeedit.Render(canonicaltypeedit.Input{Ids: ids, ScopeKey: "ectype", Model: e.typeModel, State: &e.typeState})
+					cur, barErr := e.typeModel.Canonical(), e.typeState.BarError()
 					if cur != e.lastCanonical || barErr != e.lastBarErr {
 						e.lastCanonical, e.lastBarErr = cur, barErr
 						m.dirty = true
@@ -531,15 +619,17 @@ func renderTupleMembControls(ids *c.WidgetIdStack, m *Model, e *TupleElemRow) {
 	for range c.ComboBox(ids.PrepareStr("echan"),
 		c.WidgetText().Text("channel").Keep(),
 		c.WidgetText().Text(channelLabel(e.Channel)).Keep()).KeepIter() {
-		for i, ch := range tupleMembChannelChoices {
-			selected := ch == e.Channel
-			if c.Button(ids.PrepareSeq(uint64(0x74636800)+uint64(i)),
-				c.Atoms().Text(channelLabel(ch)).Keep()).
-				Selected(selected).
-				SendResp().HasPrimaryClicked() {
-				if e.Channel != ch {
-					e.Channel = ch
-					m.dirty = true
+		for range c.IdScope(ids.PrepareStr("echan-opts")) {
+			for i, ch := range tupleMembChannelChoices {
+				selected := ch == e.Channel
+				if c.Button(ids.PrepareSeq(uint64(i)),
+					c.Atoms().Text(channelLabel(ch)).Keep()).
+					Selected(selected).
+					SendResp().HasPrimaryClicked() {
+					if e.Channel != ch {
+						e.Channel = ch
+						m.dirty = true
+					}
 				}
 			}
 		}
@@ -552,28 +642,25 @@ func renderTupleMembControls(ids *c.WidgetIdStack, m *Model, e *TupleElemRow) {
 // renderRowHeader draws the category glyph + word (coloured, echoing the
 // schemaview navigator), the field name, and the live assembled lw: tag
 // (monospace, since it is a code string).
-func renderRowHeader(ids *c.WidgetIdStack, r *FieldRow, glyph, word string, catCol styletokens.RGBA8) {
+func (inst *View) renderRowHeader(r *FieldRow, glyph, word string, catCol styletokens.RGBA8) {
 	name := rowDisplayName(r)
 
 	// Per-field validity chip on its own row (validity-first; a chip is itself a
 	// nested Horizontal, so keeping it off the identity row avoids the baseline
 	// staircase nested layout containers cause — see editField). The
-	// fsmview.Widget is lazily built (it needs the frame's id stack); its title
-	// tracks the field name; the machine is mirrored to this row's derived state
-	// each frame, carrying the reason so the inspector History shows *why* it
-	// moved. Same-state mirrors are no-ops, so a steady field records nothing.
+	// fsmview.View is built on first use; its title tracks the field name; the
+	// machine is mirrored to this row's derived state each frame, carrying the
+	// reason so the inspector History shows *why* it moved. Same-state mirrors
+	// are no-ops, so a steady field records nothing.
 	if r.fsm != nil {
-		if r.fsmW == nil {
-			r.fsmW = fsmview.New(ids, fieldFSMScope(r.uid), r.fsm).Tethered().BadgeTone(FieldState.tone)
-			r.fsmW.SetRenderer(fsmview.RendererGraph) // open to the state graph (most visual)
-		}
-		r.fsmW.Title("field: " + name)
+		v := inst.fieldView(r)
+		v.Opts.Title = "field: " + name
 		var md map[string]string
 		if r.reason != "" {
 			md = map[string]string{"reason": r.reason}
 		}
 		r.fsm.MirrorWithMetadata(r.state, md)
-		r.fsmW.RenderChip()
+		v.RenderChip()
 	}
 
 	density := styletokens.ActiveDensity()
@@ -604,12 +691,6 @@ func rowDisplayName(r *FieldRow) string {
 	return "field"
 }
 
-// fieldFSMScope is the per-row fsmview scope key — stable (keyed by the row's
-// uid) and unique, so each field's chip / inspector / tether stay independent.
-func fieldFSMScope(uid uint64) string {
-	return fmt.Sprintf("mpv-fld-%d", uid)
-}
-
 // renderRowReason shows a terse "<state>: <why>" line under the header for any
 // field that isn't cleanly Valid or Empty — the at-a-glance "why" without
 // opening the inspector. Coloured by state severity; the full reason + the
@@ -633,13 +714,13 @@ func renderTypeEditor(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 		if r.IsConst {
 			c.UiDisable()
 		}
-		r.typeModel.Render(ids, "ctype")
+		canonicaltypeedit.Render(canonicaltypeedit.Input{Ids: ids, ScopeKey: "ctype", Model: r.typeModel, State: &r.typeState})
 	}
 	// An unparseable bar entry keeps Canonical()/Valid() at the last good value
 	// (canonicaltypeedit retains the draft on a parse failure), so watch the bar
 	// error too — otherwise entering an invalid type triggers no recompute and
 	// the field's validity state never updates.
-	cur, barErr := r.typeModel.Canonical(), r.typeModel.BarError()
+	cur, barErr := r.typeModel.Canonical(), r.typeState.BarError()
 	if cur != r.lastCanonical || barErr != r.lastBarErr {
 		r.lastCanonical, r.lastBarErr = cur, barErr
 		m.dirty = true
@@ -749,15 +830,17 @@ func renderChannelCombo(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 	for range c.ComboBox(ids.PrepareStr("chan"),
 		c.WidgetText().Text("channel").Keep(),
 		c.WidgetText().Text(channelLabel(r.Channel)).Keep()).KeepIter() {
-		for i, ch := range channelChoices {
-			selected := ch == r.Channel
-			if c.Button(ids.PrepareSeq(uint64(0x6368616e<<8)+uint64(i)),
-				c.Atoms().Text(channelLabel(ch)).Keep()).
-				Selected(selected).
-				SendResp().HasPrimaryClicked() {
-				if r.Channel != ch {
-					r.Channel = ch
-					m.dirty = true
+		for range c.IdScope(ids.PrepareStr("chan-opts")) {
+			for i, ch := range channelChoices {
+				selected := ch == r.Channel
+				if c.Button(ids.PrepareSeq(uint64(i)),
+					c.Atoms().Text(channelLabel(ch)).Keep()).
+					Selected(selected).
+					SendResp().HasPrimaryClicked() {
+					if r.Channel != ch {
+						r.Channel = ch
+						m.dirty = true
+					}
 				}
 			}
 		}
@@ -803,16 +886,18 @@ func renderPlainColumnCombo(ids *c.WidgetIdStack, m *Model, r *FieldRow) {
 	for range c.ComboBox(ids.PrepareStr("plaincol"),
 		c.WidgetText().Text("plain column").Keep(),
 		c.WidgetText().Text(plainColumnLabel(r.Section)).Keep()).KeepIter() {
-		for i, pc := range plainColumns {
-			selected := pc.section == r.Section
-			if c.Button(ids.PrepareSeq(uint64(0x706c6e00)+uint64(i)),
-				c.Atoms().Text(pc.label).Keep()).
-				Selected(selected).
-				SendResp().HasPrimaryClicked() {
-				if r.Section != pc.section {
-					r.Section = pc.section
-					r.SetGoType(pc.goType)
-					m.dirty = true
+		for range c.IdScope(ids.PrepareStr("plaincol-opts")) {
+			for i, pc := range plainColumns {
+				selected := pc.section == r.Section
+				if c.Button(ids.PrepareSeq(uint64(i)),
+					c.Atoms().Text(pc.label).Keep()).
+					Selected(selected).
+					SendResp().HasPrimaryClicked() {
+					if r.Section != pc.section {
+						r.Section = pc.section
+						r.SetGoType(pc.goType)
+						m.dirty = true
+					}
 				}
 			}
 		}

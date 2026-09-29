@@ -98,7 +98,7 @@ func (inst *PlayApp) renderDocsTab() {
 
 	// The editor already knows what the caret is on (ADR-0147 §SD2); the pane
 	// reads it rather than deriving a second answer from the same buffer.
-	er := inst.editor.Result()
+	er := inst.editorResult
 	res := inst.resolveDocs(docsCandidates(er.Entity, er.EntityOk))
 
 	// The body.

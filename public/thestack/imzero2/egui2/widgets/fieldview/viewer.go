@@ -1,6 +1,8 @@
 package fieldview
 
 import (
+	"errors"
+
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -15,56 +17,54 @@ var (
 	transparentBgFv = color.Transparent
 )
 
-// Renderer is the configured field viewer. Construct via New, tune
-// with the fluent setters (each returns a modified copy), then call
-// Render any number of times. Holds a pointer to the caller's
-// WidgetIdStack so widget IDs derive deterministically from the
-// caller's id scope plus the per-Renderer idPrefix — two viewers on
-// the same id stack don't collide as long as their prefixes differ.
-//
-// The Renderer is intentionally a value (not a pointer): config
-// changes don't mutate the caller's instance, which makes it safe to
-// build a "base" config once and customise per-call:
-//
-//	base := fieldview.New(ids, "card").BytesMax(64)
-//	base.Render(&headerState, headerFields)
-//	base.ShowKind(false).Render(&footerState, footerFields)
-//
-// View state is not config and does not travel in the copies: each
-// call takes the [State] belonging to the place it draws.
-type Renderer struct {
-	ids         *c.WidgetIdStack
-	idPrefix    string
-	showKind    bool
-	indent      float32
-	bytesMax    int
-	defaultOpen bool
-	nameWidth   float32
-	valueWidth  float32
-	maxHeight   float32
-	// density resolves IDS spacing tokens at the active preset
-	// (ADR-0032 §SD2); cached once at construction.
-	density styletokens.DensityE
+// Input is one frame's field list. Every zero value is the documented
+// default, so a list needs only Ids, ScopeKey, Fields and State.
+type Input struct {
+	// Ids is the host's widget id stack. Render opens its own IdScope under
+	// it, so two lists in one frame need only differ in ScopeKey.
+	Ids *c.WidgetIdStack
+	// ScopeKey names this list within the host's id space; empty uses
+	// "fieldview".
+	ScopeKey string
+	// Fields are drawn in slice order; container fields hold their children
+	// beneath them.
+	Fields []Field
+	// State is the host-owned view state — which containers are open, and
+	// the rebuild's scratch. Required: a list with nowhere to record what is
+	// open cannot be drawn. One State belongs to one place a list is shown.
+	State *State
+
+	// HideKind drops the "[str]" / "[uint]" tag next to each leaf's name, for
+	// compact contexts where the kind is obvious or unimportant.
+	HideKind bool
+	// Indent is the horizontal step per nesting level, in points; 0 takes 12.
+	Indent float32
+	// BytesMax bounds the hex dump of Bytes values: 0 takes 64, a negative
+	// value disables truncation. Past the bound a value renders as
+	// "<hex>… (N bytes)".
+	BytesMax int
+	// StartCollapsed is the state a container (Object / Array) takes until
+	// the reader opens or closes it. Off, a freshly rendered tree shows
+	// everything. It is a default rather than a seed — changing it still moves
+	// every container the reader has not touched.
+	StartCollapsed bool
+	// NameWidth and ValueWidth are the two columns' starting widths in points,
+	// both resizable at runtime; 0 takes 220 and 320.
+	NameWidth, ValueWidth float32
+	// MaxHeight caps the vertical extent the field list claims. Leave it 0 in
+	// a host that already bounds it; set it in a tall or unbounded one, where
+	// the underlying table otherwise auto-fits to a 400 pt cap that a long
+	// field list overruns.
+	MaxHeight float32
 }
 
-// New constructs a Renderer with sensible defaults: ShowKind on,
-// Indent 12 px, BytesMax 64, DefaultOpen for container fields. The
-// idPrefix scopes every widget ID this Renderer emits so multiple
-// viewers can share an ids stack without collisions; pass a stable
-// short string ("card-fld" / "log-fld" / "settings").
-func New(ids *c.WidgetIdStack, idPrefix string) (inst Renderer) {
-	inst = Renderer{
-		ids:         ids,
-		idPrefix:    idPrefix,
-		showKind:    true,
-		indent:      12,
-		bytesMax:    64,
-		defaultOpen: true,
-		nameWidth:   defaultNameWidth,
-		valueWidth:  defaultValueWidth,
-		density:     styletokens.ActiveDensity(),
-	}
-	return
+// Result is what one Render reports.
+type Result struct {
+	// Rows is how many rows the outline drew this frame.
+	Rows int
+	// Err is set when Input.State is nil; the widget draws the message in
+	// place of the list.
+	Err error
 }
 
 // Column widths, both resizable so these are starting points rather
@@ -73,95 +73,93 @@ func New(ids *c.WidgetIdStack, idPrefix string) (inst Renderer) {
 const (
 	defaultNameWidth  float32 = 220
 	defaultValueWidth float32 = 320
+	defaultIndent     float32 = 12
+	defaultBytesMax           = 64
+	defaultScopeKey           = "fieldview"
 )
 
-// NameWidth and ValueWidth set the two columns' starting widths in
-// points. Both are resizable at runtime, so these matter mainly for
-// the first frame and for a host that knows its own proportions.
-func (inst Renderer) NameWidth(v float32) (out Renderer) {
-	inst.nameWidth = v
-	out = inst
-	return
+// settings is one frame's Input with every default resolved.
+type settings struct {
+	showKind    bool
+	indent      float32
+	bytesMax    int
+	defaultOpen bool
+	nameWidth   float32
+	valueWidth  float32
+	maxHeight   float32
+	// density resolves IDS spacing tokens at the active preset (ADR-0032
+	// §SD2), re-read every frame because the preset is runtime-switchable.
+	density styletokens.DensityE
 }
 
-func (inst Renderer) ValueWidth(v float32) (out Renderer) {
-	inst.valueWidth = v
-	out = inst
-	return
-}
-
-// MaxHeight caps the vertical extent the field list claims. Leave it
-// 0 in a host that already bounds it; set it in a tall or unbounded
-// one, where the underlying table otherwise auto-fits to a 400 pt cap
-// that a long field list overruns.
-func (inst Renderer) MaxHeight(v float32) (out Renderer) {
-	inst.maxHeight = v
-	out = inst
-	return
-}
-
-// ShowKind toggles the "[str]" / "[uint]" tag rendered next to each
-// leaf field's name. Useful to disable in compact contexts where the
-// kind is obvious from the value or unimportant.
-func (inst Renderer) ShowKind(v bool) (out Renderer) {
-	inst.showKind = v
-	out = inst
-	return
-}
-
-// Indent sets the horizontal step per nesting level, in points.
-// Default 12. Zero is allowed and takes the outline's own default,
-// since a tree with no indent has no visible hierarchy.
-func (inst Renderer) Indent(v float32) (out Renderer) {
-	inst.indent = v
-	out = inst
-	return
-}
-
-// BytesMax bounds the hex dump of Bytes values. 0 disables
-// truncation (full dump). Default 64 — past this, the value renders
-// as "<hex>… (N bytes)".
-func (inst Renderer) BytesMax(v int) (out Renderer) {
-	inst.bytesMax = v
-	out = inst
-	return
-}
-
-// DefaultOpen sets the collapsed/expanded state a container (Object
-// / Array) takes until the reader opens or closes it. Default true so
-// a freshly-rendered tree shows everything; set false for deep trees
-// where the initial summary should be terse. It is a default rather
-// than a seed — changing it still moves every container the reader
-// has not touched.
-func (inst Renderer) DefaultOpen(v bool) (out Renderer) {
-	inst.defaultOpen = v
-	out = inst
-	return
-}
-
-// Render draws the field list at the current ui scope, into the
-// caller-owned state. Iteration order is the slice order; container
-// fields hold their children beneath them. No outer wrapper is added
-// — the caller owns whatever surrounding scope (CollapsingHeader,
-// Frame, panel) frames the viewer.
-//
-// A nil state renders a fully collapsed list, which is only useful
-// for a one-shot draw nobody interacts with; pass a retained *State
-// for anything the reader can open.
-func (inst Renderer) Render(state *State, fields []Field) {
-	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
-	inst.density = styletokens.ActiveDensity()
-	if state == nil {
-		state = &State{}
+func (in Input) resolve() (s settings) {
+	s = settings{
+		showKind:    !in.HideKind,
+		indent:      in.Indent,
+		bytesMax:    in.BytesMax,
+		defaultOpen: !in.StartCollapsed,
+		nameWidth:   in.NameWidth,
+		valueWidth:  in.ValueWidth,
+		maxHeight:   in.MaxHeight,
+		density:     styletokens.ActiveDensity(),
 	}
-	inst.build(state, fields)
-	// DefaultOpen is a default and not a seed, so it is pushed every frame
-	// rather than at construction: changing it still moves every container the
-	// reader has not touched, which is what it promises.
+	if s.indent == 0 {
+		s.indent = defaultIndent
+	}
+	switch {
+	case s.bytesMax == 0:
+		s.bytesMax = defaultBytesMax
+	case s.bytesMax < 0:
+		s.bytesMax = 0 // formatField's "no truncation"
+	}
+	if s.nameWidth == 0 {
+		s.nameWidth = defaultNameWidth
+	}
+	if s.valueWidth == 0 {
+		s.valueWidth = defaultValueWidth
+	}
+	return
+}
+
+func (in Input) scopeKey() string {
+	if in.ScopeKey == "" {
+		return defaultScopeKey
+	}
+	return in.ScopeKey
+}
+
+// Render draws the field list at the current ui scope, into the host's
+// State, inside one IdScope under Input.Ids. No outer wrapper is added — the
+// caller owns whatever surrounding scope (CollapsingHeader, Frame, panel)
+// frames the viewer. A nil Ids draws nothing.
+func Render(in Input) (res Result) {
+	if in.Ids == nil {
+		return
+	}
+	for range c.IdScope(in.Ids.PrepareStr(in.scopeKey())) {
+		res = in.render()
+	}
+	return
+}
+
+func (in Input) render() (res Result) {
+	if in.State == nil {
+		res.Err = errors.New("fieldview: Input.State is nil")
+		for rt := range c.RichTextLabel(res.Err.Error()) {
+			rt.Small().Weak()
+		}
+		return
+	}
+	inst := in.resolve()
+	state := in.State
+	inst.build(state, in.Fields)
+	// The default open state is a default and not a seed, so it is pushed
+	// every frame: changing it still moves every container the reader has not
+	// touched, which is what it promises.
 	state.st.SetDefaultExpanded(inst.defaultOpen)
-	tree.Render(tree.Input{
-		Ids:      inst.ids,
-		ScopeKey: inst.idPrefix,
+	tr := tree.Render(tree.Input{
+		Ids:      in.Ids,
+		ScopeKey: "outline",
 		Tree:     state.tree(),
 		State:    &state.st,
 		Indent:   inst.indent,
@@ -176,13 +174,16 @@ func (inst Renderer) Render(state *State, fields []Field) {
 		}},
 		MaxHeight: inst.maxHeight,
 	})
+	res.Rows = len(tr.Rows)
+	res.Err = tr.Err
+	return
 }
 
 // nameCell draws the field's name and, when ShowKind is on, its typed-slot
 // tag. Both are Selectable(false): a selectable label senses click-and-drag
 // and is registered after the row's own sense region, so it would sit over it
 // and swallow clicks on its rect (ADR-0176 SD7).
-func (inst Renderer) nameCell(state *State, node int32) {
+func (inst settings) nameCell(state *State, node int32) {
 	c.LabelAtoms(c.Atoms().BeginRichText(state.labels[node]).Strong().End().Keep()).
 		Selectable(false).Truncate().Send()
 	kind := state.nodes[node].kind
@@ -199,7 +200,7 @@ func (inst Renderer) nameCell(state *State, node int32) {
 // down the column. It truncates rather than wrapping — the row is one line
 // high — and carries the full text as a tooltip, which is where a long JSON
 // string or a hex dump is now read.
-func (inst Renderer) valueCell(state *State, node int32) {
+func (inst settings) valueCell(state *State, node int32) {
 	val := state.nodes[node].value
 	if val == "" {
 		return

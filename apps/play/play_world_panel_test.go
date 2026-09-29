@@ -53,7 +53,7 @@ func testWorldDriver(t *testing.T) *WorldDriver {
 // the default a fresh driver draws.
 func TestWorldProjectionPicker(t *testing.T) {
 	d := testWorldDriver(t)
-	if got := d.widget.Projection(); got != worldmap.ProjectionNaturalEarth {
+	if got := d.widget.Opts.Projection; got != worldmap.ProjectionNaturalEarth {
 		t.Fatalf("fresh driver draws %s, want the Natural Earth default", got)
 	}
 	if len(worldmap.Projections) < 2 {
@@ -61,8 +61,8 @@ func TestWorldProjectionPicker(t *testing.T) {
 			len(worldmap.Projections))
 	}
 	for _, p := range worldmap.Projections {
-		d.widget.SetProjection(p)
-		if got := d.widget.Projection(); got != p {
+		d.widget.Opts.Projection = p
+		if got := d.widget.Opts.Projection; got != p {
 			t.Errorf("picked %s, widget draws %s", p, got)
 		}
 	}

@@ -69,8 +69,8 @@ func TestPinOnDragHoldsWhereTheNodeWasDropped(t *testing.T) {
 	down := c.IsPointerButtonDownResponseFlags
 	// Press on the node, drag 40 px right, release.
 	v.applyInput(800, 600, 100, 100, true, true, c.DragStartedResponseFlags|down, wheel, c.ModifiersValue{})
-	require.Len(t, v.Events(), 2, "hover enter and drag start")
-	require.Equal(t, EventKindNodeDragStart, v.Events()[1].Kind)
+	require.Len(t, v.events, 2, "hover enter and drag start")
+	require.Equal(t, EventKindNodeDragStart, v.events[1].Kind)
 	v.g.applyPins(v.dragSlot())
 	require.True(t, v.g.fixed[0], "fixed while dragged")
 	v.applyInput(800, 600, 140, 100, true, true, c.DraggedResponseFlags|down, wheel, c.ModifiersValue{})

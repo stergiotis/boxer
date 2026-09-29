@@ -13,7 +13,7 @@ import (
 // fieldview widget demo — hierarchical typed-field inspector
 //
 // Three sample fixtures (every primitive kind, nested object/array, long-value
-// wrap) rendered through a fieldview.Renderer whose ShowKind / Indent /
+// wrap) rendered through fieldview.Render, whose HideKind / Indent /
 // BytesMax / DefaultOpen knobs are wired to live UI controls, so the operator
 // sees how each option affects the rendered samples without restarting.
 //
@@ -98,30 +98,38 @@ func demoFieldView(ids *c.WidgetIdStack, st *fieldviewDemoState) {
 	}
 	c.Separator().Horizontal().Send()
 
-	cfg := func(prefix string) fieldview.Renderer {
-		return fieldview.New(ids, prefix).
-			ShowKind(st.showKind).
-			Indent(float32(st.indent)).
-			BytesMax(int(st.bytesMax)).
-			DefaultOpen(st.defaultOpen)
+	// bytesMax 0 in the controls means "no truncation", which the widget
+	// spells as a negative bound.
+	bytesMax := int(st.bytesMax)
+	if bytesMax == 0 {
+		bytesMax = -1
+	}
+	cfg := func(scopeKey string, state *fieldview.State, fields []fieldview.Field) fieldview.Input {
+		return fieldview.Input{
+			Ids: ids, ScopeKey: scopeKey, State: state, Fields: fields,
+			HideKind:       !st.showKind,
+			Indent:         float32(st.indent),
+			BytesMax:       bytesMax,
+			StartCollapsed: !st.defaultOpen,
+		}
 	}
 
 	for range c.CollapsingHeader(ids.PrepareStr("fv-sec-prim"),
 		c.WidgetText().Text("Primitives — one of every kind").Keep()).
 		DefaultOpen(true).KeepIter() {
-		cfg("fv-prim").Render(&st.stPrim, fvSamplePrimitives)
+		fieldview.Render(cfg("fv-prim", &st.stPrim, fvSamplePrimitives))
 	}
 	c.AddSpace(gapInline())
 	for range c.CollapsingHeader(ids.PrepareStr("fv-sec-nested"),
 		c.WidgetText().Text("Hierarchical — nested object + array").Keep()).
 		DefaultOpen(true).KeepIter() {
-		cfg("fv-nested").Render(&st.stNested, fvSampleNested)
+		fieldview.Render(cfg("fv-nested", &st.stNested, fvSampleNested))
 	}
 	c.AddSpace(gapInline())
 	for range c.CollapsingHeader(ids.PrepareStr("fv-sec-long"),
 		c.WidgetText().Text("Long values — truncate + hover demo").Keep()).
 		DefaultOpen(true).KeepIter() {
-		cfg("fv-long").Render(&st.stLong, fvSampleLong)
+		fieldview.Render(cfg("fv-long", &st.stLong, fvSampleLong))
 	}
 }
 

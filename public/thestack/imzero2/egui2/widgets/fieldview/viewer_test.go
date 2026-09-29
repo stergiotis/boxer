@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -113,41 +115,43 @@ func TestFormatField_ContainerSummary(t *testing.T) {
 // TestNew_Defaults documents the constructor's defaults so a future
 // retune (e.g. ShowKind off by default) is a deliberate, reviewable
 // change rather than an accidental behavioural shift.
-func TestNew_Defaults(t *testing.T) {
-	r := New(c.NewWidgetIdStack(), "test")
-	assert.True(t, r.showKind, "ShowKind defaults on so the viewer is self-describing")
-	assert.Equal(t, float32(12), r.indent, "Indent default 12 px")
-	assert.Equal(t, 64, r.bytesMax, "BytesMax default 64")
-	assert.True(t, r.defaultOpen, "DefaultOpen default true so freshly-rendered trees show contents")
-	assert.Equal(t, "test", r.idPrefix)
+func TestInputDefaults(t *testing.T) {
+	s := (Input{}).resolve()
+	if !s.showKind || s.indent != 12 || s.bytesMax != 64 || !s.defaultOpen ||
+		s.nameWidth != defaultNameWidth || s.valueWidth != defaultValueWidth {
+		t.Errorf("defaults: %+v", s)
+	}
+	if (Input{}).scopeKey() != "fieldview" {
+		t.Error("scope key default")
+	}
 }
 
-// TestFluentSetters_AreImmutable proves the fluent setters return a
-// modified copy rather than mutating the receiver. This is the
-// load-bearing claim that makes "build a base config once, override
-// per-call" safe.
-func TestFluentSetters_AreImmutable(t *testing.T) {
-	base := New(c.NewWidgetIdStack(), "test")
-	// Each setter returns a new value with the field changed; base
-	// must stay at its original.
-	_ = base.ShowKind(false)
-	assert.True(t, base.showKind, "ShowKind must not mutate the receiver")
-
-	_ = base.Indent(99)
-	assert.Equal(t, float32(12), base.indent, "Indent must not mutate the receiver")
-
-	_ = base.BytesMax(7)
-	assert.Equal(t, 64, base.bytesMax, "BytesMax must not mutate the receiver")
-
-	_ = base.DefaultOpen(false)
-	assert.True(t, base.defaultOpen, "DefaultOpen must not mutate the receiver")
+func TestInputFieldsResolve(t *testing.T) {
+	s := (Input{HideKind: true, Indent: 4, BytesMax: -1, StartCollapsed: true, NameWidth: 10, ValueWidth: 20}).resolve()
+	if s.showKind || s.indent != 4 || s.bytesMax != 0 || s.defaultOpen || s.nameWidth != 10 || s.valueWidth != 20 {
+		t.Errorf("resolve lost fields: %+v", s)
+	}
+	if (Input{BytesMax: 8}).resolve().bytesMax != 8 {
+		t.Error("explicit BytesMax lost")
+	}
 }
 
-// TestNestedFieldShape documents the shape callers must produce for
-// hierarchical rendering. Container fields populate Children and
-// leave the typed slots zero; leaf fields populate exactly one slot.
-// The renderer relies on this discipline (mixed shapes silently
-// drop the typed slot and walk Children).
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	var st State
+	res := Render(Input{Ids: ids, ScopeKey: "t", State: &st, Fields: []Field{
+		{Name: "a", Kind: KindString, Str: "x"},
+		{Name: "o", Kind: KindObject, Children: []Field{{Name: "n", Kind: KindInt, Int: 1}}},
+	}})
+	if res.Err != nil || res.Rows != 3 {
+		t.Fatalf("rows=%d err=%v", res.Rows, res.Err)
+	}
+	if Render(Input{Ids: ids, ScopeKey: "t2"}).Err == nil {
+		t.Error("a nil State must be reported")
+	}
+}
+
 func TestNestedFieldShape(t *testing.T) {
 	tree := []Field{
 		{Name: "request", Kind: KindObject, Children: []Field{

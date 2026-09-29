@@ -125,35 +125,33 @@ func (st *heatmapscrollDemoState) initPanels(ids *c.WidgetIdStack) {
 		{
 			label:       "ScrollLeft · Viridis · NEAREST",
 			orientation: heatmapscroll.ScrollLeft,
-			hs:          heatmapscroll.New(ids, "hm-scroll-left", mkCfg(colormap.Viridis8), heatmapDemoWidthSlots, heatmapDemoHeightSlots),
+			hs:          heatmapscroll.New(ids, "hm-scroll-left", mkCfg(colormap.Viridis8), heatmapscroll.Options{WidthSlots: heatmapDemoWidthSlots, HeightSlots: heatmapDemoHeightSlots}),
 		},
 		{
 			label:       "ScrollRight · Plasma · LINEAR",
 			orientation: heatmapscroll.ScrollRight,
-			hs:          heatmapscroll.New(ids, "hm-scroll-right", mkCfg(colormap.Plasma8), heatmapDemoWidthSlots, heatmapDemoHeightSlots),
+			hs:          heatmapscroll.New(ids, "hm-scroll-right", mkCfg(colormap.Plasma8), heatmapscroll.Options{WidthSlots: heatmapDemoWidthSlots, HeightSlots: heatmapDemoHeightSlots}),
 		},
 		{
 			label:       "ScrollUp · Inferno · NEAREST",
 			orientation: heatmapscroll.ScrollUp,
-			hs:          heatmapscroll.New(ids, "hm-scroll-up", mkCfg(colormap.Inferno8), heatmapDemoWidthSlots, heatmapDemoHeightSlots),
+			hs:          heatmapscroll.New(ids, "hm-scroll-up", mkCfg(colormap.Inferno8), heatmapscroll.Options{WidthSlots: heatmapDemoWidthSlots, HeightSlots: heatmapDemoHeightSlots}),
 		},
 		{
 			label:       "ScrollDown · Cividis · NEAREST",
 			orientation: heatmapscroll.ScrollDown,
-			hs:          heatmapscroll.New(ids, "hm-scroll-down", mkCfg(colormap.Cividis8), heatmapDemoWidthSlots, heatmapDemoHeightSlots),
+			hs:          heatmapscroll.New(ids, "hm-scroll-down", mkCfg(colormap.Cividis8), heatmapscroll.Options{WidthSlots: heatmapDemoWidthSlots, HeightSlots: heatmapDemoHeightSlots}),
 		},
 	}
 	for i := range st.panels {
-		st.panels[i].hs.SetOrientation(st.panels[i].orientation)
+		o := &st.panels[i].hs.Opts
+		o.Orientation = st.panels[i].orientation
+		// Every panel owns the wheel while hovered (ADR-0140, second capture
+		// site): scrolling over a panel no longer scrolls the gallery pane,
+		// and the captured delta / zoom factor show in the panel readout.
+		o.CaptureScroll, o.CaptureZoom = true, true
 	}
-	st.panels[1].hs.SetFilter(heatmapscroll.FilterLinear) // contrast sampling modes
-	// Every panel owns the wheel while hovered (ADR-0140, second capture
-	// site): scrolling over a panel no longer scrolls the gallery pane, and
-	// the captured delta / zoom factor show in the panel readout.
-	for i := range st.panels {
-		st.panels[i].hs.SetCaptureScroll(true)
-		st.panels[i].hs.SetCaptureZoom(true)
-	}
+	st.panels[1].hs.Opts.Filter = heatmapscroll.FilterLinear // contrast sampling modes
 }
 
 // heatmapDemoPseudoRand returns a deterministic noise value in [0, 1)
@@ -276,11 +274,11 @@ func (st *heatmapscrollDemoState) renderHeatmapDemoGrid() {
 func (st *heatmapscrollDemoState) renderHeatmapDemoPanel(p *heatmapDemoPanel) {
 	for range c.Vertical().KeepIter() {
 		c.LabelAtoms(c.Atoms().Text(p.label).Keep()).Send()
-		p.hs.Render()
-		if p.hs.Clicked() {
+		ev := p.hs.Render(0, 0)
+		if ev.Clicked {
 			st.clicks++
 		}
-		row, col, ok := p.hs.HoveredCell()
+		row, col, ok := ev.Row, ev.Col, ev.Hovered
 		var txt string
 		if ok {
 			// Annotate the semantic meaning of row/col per the
@@ -297,7 +295,7 @@ func (st *heatmapscrollDemoState) renderHeatmapDemoPanel(p *heatmapDemoPanel) {
 			txt = "hover: —"
 		}
 		c.LabelAtoms(c.Atoms().Text(txt).Keep()).Send()
-		if w := p.hs.Wheel(); w.ScrollX != 0 || w.ScrollY != 0 || w.Zoom != 1 {
+		if w := ev.Wheel; w.ScrollX != 0 || w.ScrollY != 0 || w.Zoom != 1 {
 			p.lastWheel = fmt.Sprintf("wheel: dx=%.0f dy=%.0f zoom=%.2f at (%.0f, %.0f)", w.ScrollX, w.ScrollY, w.Zoom, w.HoverX, w.HoverY)
 		}
 		if p.lastWheel == "" {

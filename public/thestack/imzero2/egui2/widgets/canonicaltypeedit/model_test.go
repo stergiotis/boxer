@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,16 +36,21 @@ func TestNewModelDefault(t *testing.T) {
 	m := NewModel()
 	assert.Equal(t, "u32", m.Canonical())
 	assert.True(t, m.Valid())
-	assert.Equal(t, "u32", m.barBuf)
+	var st State
+	st.syncBar(m)
+	assert.Equal(t, "u32", st.barBuf, "the bar follows the model on first sync")
 }
 
 // TestSetCanonical confirms seeding from a string and the no-op-on-garbage
 // contract.
 func TestSetCanonical(t *testing.T) {
 	m := NewModel()
+	var st State
+	st.syncBar(m)
 	m.SetCanonical("i64n")
+	st.syncBar(m)
 	assert.Equal(t, "i64n", m.Canonical())
-	assert.Equal(t, "i64n", m.barBuf)
+	assert.Equal(t, "i64n", st.barBuf, "a seed moves the bar")
 	assert.True(t, m.Valid())
 	// Invalid input leaves the editor unchanged.
 	m.SetCanonical("@@@")
@@ -86,4 +93,21 @@ func TestClampWidth(t *testing.T) {
 func TestFirstLine(t *testing.T) {
 	assert.Equal(t, "headline", firstLine("headline\ndetail"))
 	assert.Equal(t, "solo", firstLine("solo"))
+}
+
+// TestRenderHeadless renders the primitive editor for one frame under the
+// discard channel from a zero State, with the form disclosed, and pins the
+// W17 nil-input path (ADR-0267 W19).
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	m := NewModel()
+	st := &State{}
+	st.SetFormOpen(true)
+	res := Render(Input{Ids: ids, ScopeKey: "t", Model: m, State: st})
+	require.NoError(t, res.Err)
+	assert.False(t, res.Changed)
+	assert.Equal(t, "u32", st.barBuf)
+	assert.ErrorIs(t, Render(Input{Ids: ids, Model: m}).Err, ErrNeedsIdsModelAndState)
+	assert.Equal(t, 0, ids.Depth(), "the id stack is left balanced")
 }

@@ -5,11 +5,11 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
 
 // TestTruncatePatternShort exercises the "no truncation needed" branch:
@@ -92,107 +92,20 @@ func TestCompileStatusColorInvalid(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-// TestCallScopeDeterministic locks the format and stability contract:
-// the same (idPrefix, callId) pair always yields the same scope
-// string, and distinct callIds always produce distinct strings.
-func TestCallScopeDeterministic(t *testing.T) {
-	a := callScope("my-regex", 0xDEADBEEF)
-	b := callScope("my-regex", 0xDEADBEEF)
-	c := callScope("my-regex", 0xCAFEBABE)
-	assert.Equal(t, a, b)
-	assert.NotEqual(t, a, c)
-	// Format must remain "idPrefix#<hex>" so log greps and id-collision
-	// debugging stay tractable.
-	assert.Equal(t, "my-regex#deadbeef", a)
-}
-
-// TestRendererDefaultsAreUsable pins the documented defaults.
-func TestRendererDefaultsAreUsable(t *testing.T) {
-	r := New("test")
-	assert.Equal(t, "test", r.idPrefix)
-	assert.Equal(t, defaultPopupW, r.popupWidth)
-	assert.Equal(t, defaultPopupH, r.popupHeight)
-	assert.Equal(t, defaultPatternMaxLen, r.patternMaxLen)
-	assert.True(t, r.showIcon)
-	assert.True(t, r.showPattern)
-	assert.True(t, r.showStatusDot)
-	assert.Nil(t, r.bus)
-	assert.True(t, r.provenance.IsZero())
-}
-
-// TestRendererFluentSettersReturnCopies locks the value-receiver
-// contract on every fluent setter: the base Renderer's fields are
-// unchanged after a setter call, and the returned modified Renderer
-// carries the new value.
-func TestRendererFluentSettersReturnCopies(t *testing.T) {
-	base := New("test")
-	mod := base.
-		PopupSize(640, 480).
-		PatternMaxLen(64).
-		ShowIcon(false).
-		ShowPattern(false).
-		ShowStatusDot(false)
-	// Originals untouched.
-	assert.Equal(t, defaultPopupW, base.popupWidth)
-	assert.Equal(t, defaultPopupH, base.popupHeight)
-	assert.Equal(t, defaultPatternMaxLen, base.patternMaxLen)
-	assert.True(t, base.showIcon)
-	assert.True(t, base.showPattern)
-	assert.True(t, base.showStatusDot)
-	// Mods propagated.
-	assert.Equal(t, float32(640), mod.popupWidth)
-	assert.Equal(t, float32(480), mod.popupHeight)
-	assert.Equal(t, 64, mod.patternMaxLen)
-	assert.False(t, mod.showIcon)
-	assert.False(t, mod.showPattern)
-	assert.False(t, mod.showStatusDot)
-}
-
-// TestRendererPatternMaxLenClampsBelowMinimum exercises the documented
-// "values < 1 → defaultPatternMaxLen" contract so a typo at the call
-// site cannot silently produce a zero-width inline label.
-func TestRendererPatternMaxLenClampsBelowMinimum(t *testing.T) {
-	r := New("test").PatternMaxLen(0)
-	assert.Equal(t, defaultPatternMaxLen, r.patternMaxLen)
-	r = New("test").PatternMaxLen(-5)
-	assert.Equal(t, defaultPatternMaxLen, r.patternMaxLen)
-}
-
-// TestRendererBusFluentPassthrough confirms the optional-bus contract:
-// passing a non-nil BusI stores the pointer; subsequent Bus(nil) calls
-// land a nil on the Renderer (the eventual SetBus on the embedded app
-// converts that nil into a NoopBus).
-func TestRendererBusFluentPassthrough(t *testing.T) {
-	var stub runtimeapp.BusI = &runtimeapp.NoopBus{}
-	r := New("test").Bus(stub)
-	assert.Same(t, stub, r.bus)
-	r2 := r.Bus(nil)
-	assert.Nil(t, r2.bus)
-	// Original unchanged.
-	assert.Same(t, stub, r.bus)
-}
-
-// TestRendererProvenanceFluentPassthrough confirms the optional-
-// provenance contract: setting a non-zero Provenance flips IsZero
-// to false on the modified Renderer while the base stays zero.
-func TestRendererProvenanceFluentPassthrough(t *testing.T) {
-	p := inspector.Provenance{SourceApp: "host", Subject: "rules.user-regex"}
-	r := New("test").Provenance(p)
-	assert.False(t, r.provenance.IsZero())
-	base := New("test")
-	assert.True(t, base.provenance.IsZero())
-}
-
-// TestGetInstanceStateIdempotent locks the documented LoadOrStore
-// behaviour: repeated lookups for the same scope return the same
-// *instanceState pointer so per-instance state (pinned flag, embedded
-// app) survives across frames.
-func TestGetInstanceStateIdempotent(t *testing.T) {
-	scope := callScope("idempotent-test", 0x1234)
-	a := getInstanceState(scope)
-	b := getInstanceState(scope)
-	assert.Same(t, a, b)
-	// Distinct scopes yield distinct states.
-	other := getInstanceState(callScope("idempotent-test", 0x5678))
-	assert.NotSame(t, a, other)
+// TestRenderHeadless renders one frame under the discard channel from a
+// zero State, closed and open, and pins the W17 nil-Ids path (ADR-0267 W19).
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	var st State
+	res := Render(Input{Ids: ids, ScopeKey: "t", Pattern: `\w+`, State: &st})
+	require.NoError(t, res.Err)
+	assert.False(t, res.Toggled)
+	st.Pinned = true
+	res = Render(Input{Ids: ids, ScopeKey: "t", Pattern: `\w+`, State: &st})
+	require.NoError(t, res.Err)
+	assert.NotNil(t, st.embedded, "an open inspector allocates its explorer")
+	assert.Equal(t, `\w+`, st.lastSeededPat)
+	assert.ErrorIs(t, Render(Input{Pattern: "x"}).Err, ErrNeedsIdsAndState)
+	assert.Equal(t, 0, ids.Depth(), "the id stack is left balanced")
 }
