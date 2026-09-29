@@ -2,13 +2,14 @@ package play
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/observability/logging"
 )
 
 // TestQueryFSMMirrorNeverWedges is the regression guard for the "stuck in
@@ -93,7 +94,7 @@ func TestQueryFSMHappyPathStaysDeclared(t *testing.T) {
 // the warning for a target the declared graph cannot reach at all.
 func TestQueryFSMSubFrameRunIsASkipNotAWarning(t *testing.T) {
 	prev := log.Logger
-	var buf bytes.Buffer
+	var buf eventBuffer
 	log.Logger = zerolog.New(&buf).Level(zerolog.DebugLevel)
 	defer func() { log.Logger = prev }()
 
@@ -107,23 +108,40 @@ func TestQueryFSMSubFrameRunIsASkipNotAWarning(t *testing.T) {
 	require.NotContains(t, out, "cannot reach",
 		"a sub-frame-fast run is an unsampled skip, not a contradiction of the graph")
 	require.Contains(t, out, "skipped states no frame sampled")
-	require.Equal(t, "debug", firstLogLevel(out), "the skip must not log at warn")
+	require.Equal(t, "debug", buf.firstLevel(), "the skip must not log at warn")
 }
 
-// firstLogLevel plucks the level of the first line zerolog wrote, without a JSON
-// dependency: the field is first in zerolog's fixed field order.
-func firstLogLevel(out string) string {
-	const key = `"level":"`
-	i := strings.Index(out, key)
-	if i < 0 {
-		return ""
+// eventBuffer keeps each zerolog event as the one Write zerolog hands it,
+// because under binary_log the events are CBOR and cannot be split on
+// newlines; String still serves the substring checks, since CBOR carries
+// text strings as plain UTF-8.
+type eventBuffer struct {
+	bytes.Buffer
+	events [][]byte
+}
+
+func (inst *eventBuffer) Write(p []byte) (n int, err error) {
+	inst.events = append(inst.events, bytes.Clone(p))
+	return inst.Buffer.Write(p)
+}
+
+// firstLevel decodes the level of the first event in whichever encoding the
+// build tags select; empty when there is none.
+func (inst *eventBuffer) firstLevel() (level string) {
+	if len(inst.events) == 0 {
+		return
 	}
-	rest := out[i+len(key):]
-	j := strings.IndexByte(rest, '"')
-	if j < 0 {
-		return ""
+	v, err := logging.UnmarshallZerologMsg(inst.events[0])
+	if err != nil {
+		return
 	}
-	return rest[:j]
+	switch m := v.(type) {
+	case map[string]any:
+		level, _ = m[zerolog.LevelFieldName].(string)
+	case map[any]any:
+		level, _ = m[zerolog.LevelFieldName].(string)
+	}
+	return
 }
 
 // TestQueryFSMIdleIsTheOnlyUnreachableState pins the invariant the grading
