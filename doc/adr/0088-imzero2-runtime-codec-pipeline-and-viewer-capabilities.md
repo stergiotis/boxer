@@ -181,6 +181,18 @@ current frame. Producer-stamped generations prevent obsolete encoded output
 from being interpreted under a newer hello. Codec selection and the single
 shared encoder are unchanged.
 
+
+### 2026-09-29 — the runtime switch reuses a remembered lane; probes have a deadline
+
+SD5 caches the startup probe, but the runtime switch did not: every
+`setVideoPipeline` ran `CodecLane::best`, up to three trial encodes, on the
+render thread, with no bound on an ffmpeg that never returns. The choice is
+now remembered per codec for the process, a carrier's startup chooses every
+codec's lane on a background thread (`warm_best_lanes`), and each trial
+encode is killed at `codeclane::PROBE_TIMEOUT` and read as unusable. A lane
+that probed clean but degraded to mesh at runtime is forgotten, so the next
+switch to its codec probes again.
+
 ## References
 
 - [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) — the headless render + ffmpeg + browser WebCodecs foundation this ADR extends; SD3/SD4/SD5 (encoder, Annex-B framing, WebCodecs), SD8 (input edge bent here), SD11 (encoder-backend selection deferred — revisited here), and the acceptance notes (VAAPI ENOSYS, resize teardown/rebuild, SD9 mailbox).

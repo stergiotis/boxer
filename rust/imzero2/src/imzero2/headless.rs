@@ -994,6 +994,9 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     #[cfg(feature = "headless_raster")]
     let host_encode_caps = if carrier.is_some() {
         let caps = crate::imzero2::codeclane::probe_host_encode();
+        // A viewer can switch codecs at runtime; choose each codec's lane now,
+        // off the render thread, so the switch does not probe on it.
+        crate::imzero2::codeclane::warm_best_lanes();
         tracing::info!(
             encode = ?caps.iter().map(|(c, sw, hw)| format!("{}:sw={:?}hw={:?}", c.as_str(), sw, hw)).collect::<Vec<_>>(),
             "host video-encode probe"

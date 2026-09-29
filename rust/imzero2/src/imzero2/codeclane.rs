@@ -16,7 +16,7 @@
 //! the `IMZERO2_HEADLESS_ENCODER_ARGS` override) for forcing software or pinning
 //! specific encoder args.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum VideoCodec {
     H264,
     Vp9,
@@ -398,10 +398,37 @@ impl CodecLane {
     /// host serializes tessellated draw commands and the viewer rasterizes
     /// them in WebGL2. Losing video is worse than losing the requested codec,
     /// and a silently dead stream is worse than both.
+    ///
+    /// The choice is remembered per codec for the life of the process — the
+    /// probes depend on the ffmpeg binary and the driver, neither of which
+    /// changes under a running host — so a runtime switch to a codec already
+    /// chosen, at startup or by [`warm_best_lanes`], runs no ffmpeg on the
+    /// render thread. [`CodecLane::forget_best`] drops a choice whose lane
+    /// failed at runtime, so the next switch probes afresh.
     pub fn best(codec: VideoCodec) -> Self {
         if codec == VideoCodec::Mesh {
             return Self::mesh();
         }
+        if let Some(lane) = best_lanes().lock().ok().and_then(|m| m.get(&codec).cloned()) {
+            return lane;
+        }
+        let lane = Self::probe_best(codec);
+        if let Ok(mut m) = best_lanes().lock() {
+            m.insert(codec, lane.clone());
+        }
+        lane
+    }
+
+    /// Drop the remembered [`CodecLane::best`] choice for `codec`, so the next
+    /// call probes again. For a lane that probed clean but failed at runtime.
+    pub fn forget_best(codec: VideoCodec) {
+        if let Ok(mut m) = best_lanes().lock() {
+            m.remove(&codec);
+        }
+    }
+
+    /// The uncached [`CodecLane::best`]: probe the candidate lanes in order.
+    fn probe_best(codec: VideoCodec) -> Self {
         if let Some(gpu) = Self::hardware_gpu_conversion(codec)
             && gpu_conversion_is_bt709()
             && probe_lane(&gpu).is_ok()
@@ -711,6 +738,41 @@ fn is_bt709_red_luma(y: u8) -> bool {
     (60..=66).contains(&y)
 }
 
+/// [`CodecLane::best`]'s per-process choices.
+fn best_lanes() -> &'static std::sync::Mutex<std::collections::HashMap<VideoCodec, CodecLane>> {
+    static LANES: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<VideoCodec, CodecLane>>,
+    > = std::sync::OnceLock::new();
+    LANES.get_or_init(Default::default)
+}
+
+/// Choose [`CodecLane::best`] for every encoder codec on a background thread,
+/// so a later runtime `setVideoPipeline` switch finds its lane chosen instead
+/// of running up to three trial encodes on the render thread. Worth calling
+/// only where a viewer can switch codecs, i.e. with a carrier.
+pub fn warm_best_lanes() {
+    let spawned = std::thread::Builder::new().name("codec-lane-warm".into()).spawn(|| {
+        for codec in [
+            VideoCodec::H264,
+            VideoCodec::Vp9,
+            VideoCodec::Av1,
+            VideoCodec::Av1Hi444,
+        ] {
+            let _ = CodecLane::best(codec);
+        }
+    });
+    if let Err(e) = spawned {
+        tracing::warn!(error = %e, "could not start the codec-lane warm-up thread");
+    }
+}
+
+/// How long one [`probe_lane`] trial encode may take. Two 256×256 frames
+/// encode well inside a second on any working lane, software AV1 included;
+/// the bound is for an ffmpeg that never returns — a wedged VA driver can
+/// block device init indefinitely — which is killed and read as
+/// [`LaneProbe::Other`].
+pub const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
 /// Probe whether a specific lane actually encodes on this host (SD5): a 2-frame
 /// probe-encode to `-f null`. Returns [`LaneProbe::Ok`] on success, else the
 /// classified failure cause (e.g. `h264_vaapi` → [`LaneProbe::EncodeRejected`]
@@ -741,13 +803,17 @@ pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
     if let Some(bsf) = lane.bsf {
         cmd.arg("-bsf:v").arg(bsf);
     }
-    cmd.args(["-f", "null", "-"])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped());
-    match cmd.output() {
-        Ok(out) if out.status.success() => LaneProbe::Ok,
-        Ok(out) => classify_probe_stderr(&String::from_utf8_lossy(&out.stderr)),
+    cmd.args(["-f", "null", "-"]);
+    match run_probe(cmd, PROBE_TIMEOUT) {
+        Ok(Some((true, _))) => LaneProbe::Ok,
+        Ok(Some((false, stderr))) => classify_probe_stderr(&stderr),
+        Ok(None) => {
+            tracing::warn!(
+                ffmpeg = %ffmpeg_bin(), timeout = ?PROBE_TIMEOUT, args = ?lane.encoder_args,
+                "lane probe did not finish in time — killed, lane treated as unusable"
+            );
+            LaneProbe::Other
+        }
         Err(e) => {
             // The binary could not be spawned at all — every lane will fail
             // identically and the dialog would just say "unavailable". Name the
@@ -759,6 +825,45 @@ pub fn probe_lane(lane: &CodecLane) -> LaneProbe {
             LaneProbe::Other
         }
     }
+}
+
+/// Run a probe command with stdin and stdout closed, capturing stderr, and
+/// wait at most `timeout`. `Ok(Some((success, stderr)))` when it exited,
+/// `Ok(None)` when it was killed at the deadline, `Err` when it could not be
+/// spawned. stderr is drained on its own thread so a chatty child cannot
+/// block on a full pipe while the deadline runs.
+fn run_probe(
+    mut cmd: std::process::Command,
+    timeout: std::time::Duration,
+) -> std::io::Result<Option<(bool, String)>> {
+    use std::io::Read as _;
+    let mut child = cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let mut stderr_pipe = child.stderr.take();
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(p) = stderr_pipe.as_mut() {
+            let _ = p.read_to_end(&mut buf);
+        }
+        String::from_utf8_lossy(&buf).into_owned()
+    });
+    let deadline = std::time::Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break Some(status);
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    let stderr = reader.join().unwrap_or_default();
+    Ok(status.map(|s| (s.success(), stderr)))
 }
 
 /// Smallest VP9 level code (the `LL` field of `vp09.PP.LL.BD`) whose max luma
@@ -798,6 +903,35 @@ fn av1_level(width: u32, height: u32) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A probe that never exits is killed at its deadline instead of holding
+    // the caller: the render thread must not wait on a wedged ffmpeg.
+    #[test]
+    fn run_probe_kills_at_the_deadline() {
+        let mut cmd = std::process::Command::new("sleep");
+        cmd.arg("30");
+        let started = std::time::Instant::now();
+        let got = run_probe(cmd, std::time::Duration::from_millis(100)).expect("sleep spawns");
+        assert!(got.is_none(), "a probe past its deadline reports no exit");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "killed, not waited out"
+        );
+    }
+
+    #[test]
+    fn run_probe_reports_exit_and_stderr() {
+        let mut cmd = std::process::Command::new("sh");
+        cmd.args(["-c", "echo nope >&2; exit 3"]);
+        let got = run_probe(cmd, std::time::Duration::from_secs(10)).expect("sh spawns");
+        assert_eq!(got, Some((false, "nope\n".to_owned())));
+        let got = run_probe(
+            std::process::Command::new("true"),
+            std::time::Duration::from_secs(10),
+        )
+        .expect("true spawns");
+        assert_eq!(got.map(|(ok, _)| ok), Some(true));
+    }
 
     // IMZERO2_FFMPEG_BIN: an explicit path wins, anything blank falls back to
     // the PATH lookup. Blank-is-unset matters because a deployment env file
