@@ -59,6 +59,9 @@ func marshalRow(dml, row reflect.Value, plan *mappingplan.Plan, groups []goplan.
 			rollbackEntity(dml)
 		}
 	}()
+	// Deferred after the rollback so it runs first: a contract violation
+	// raised mid-row becomes err before the rollback checks it.
+	defer recoverContract(&err)
 	err = marshalPlain(dml, row, plan)
 	if err != nil {
 		return

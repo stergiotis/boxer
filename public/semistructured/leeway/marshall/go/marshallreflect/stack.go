@@ -109,6 +109,9 @@ func (c *RowComposer) BeginRow(plainOwner any) (err error) {
 			c.abandonRow()
 		}
 	}()
+	// Deferred after abandonRow so it runs first: a contract violation raised
+	// mid-row becomes err before abandonRow checks it.
+	defer recoverContract(&err)
 
 	if err = marshalPlain(c.dml, rowVal, plan); err != nil {
 		return
@@ -205,6 +208,9 @@ func (c *RowComposer) CommitRow() (err error) {
 			c.abandonRow()
 		}
 	}()
+	// Deferred after abandonRow so it runs first: a contract violation raised
+	// mid-row becomes err before abandonRow checks it.
+	defer recoverContract(&err)
 	if err = c.flushSections(); err != nil {
 		return
 	}
