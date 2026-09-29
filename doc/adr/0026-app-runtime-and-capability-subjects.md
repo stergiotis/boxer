@@ -359,6 +359,20 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-09-29 — §SD7: handle and appdata ops run off the requester's goroutine
+
+The in-process bus runs a responder inline, inside the requester's publish,
+so the broker's filesystem call ran before the requester's timer existed:
+a read of a FIFO nobody writes, or of a file on a hung mount, held the
+requesting goroutine for good, and `HandleOpTimeout` (the 2026-08-08 entry's
+bound for ops with no person in them) never applied. The broker now hands
+each handle and appdata op to a goroutine of its own, so the requester's
+timeout bounds its wait. At most `fsbroker.MaxInflightOps` run at once; an
+op wedged in the filesystem keeps its slot, and past the bound a request is
+refused at once. Dialog opens still queue inline. The bus itself is
+unchanged: making every in-process request asynchronous would apply
+timeouts callers never had in force, and is a separate decision.
+
 ### 2026-09-28 — §SD7: a handle write replaces the file
 
 `fs.handle.{uuid}.write` wrote in place with create-or-truncate, so a save

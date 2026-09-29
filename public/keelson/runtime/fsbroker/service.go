@@ -84,6 +84,15 @@ const (
 	HandleOpTimeout = 30 * time.Second
 )
 
+// MaxInflightOps bounds the handle and appdata ops running at once. The
+// in-process bus runs a responder inline on the requester's goroutine, so
+// the broker hands each such op to a goroutine of its own; without that, a
+// read that blocks in the filesystem would hold the requester past
+// HandleOpTimeout. An op wedged in the filesystem keeps its slot, so the
+// bound is what stops a hung mount from accumulating goroutines: past it,
+// a request is refused at once instead of queued.
+const MaxInflightOps = 64
+
 // DefaultMaxReadBytes caps a single fs.handle.{uuid}.read response. The
 // whole file is buffered into memory (and again as the bus payload), so an
 // app granted a handle to a multi-gigabyte file — or an unbounded special
@@ -184,6 +193,10 @@ type Service struct {
 	watches      map[string]*activeWatch
 	maxReadBytes int64
 	appDataRoot  string
+
+	// opSlots holds one token per handle or appdata op in flight
+	// (MaxInflightOps).
+	opSlots chan struct{}
 }
 
 // SetMaxReadBytes overrides DefaultMaxReadBytes for single-shot handle
@@ -211,6 +224,7 @@ func NewService(inst *inprocbus.Inst, log zerolog.Logger) (s *Service, err error
 		watches:      make(map[string]*activeWatch),
 		maxReadBytes: DefaultMaxReadBytes,
 		appDataRoot:  defaultAppDataRoot(),
+		opSlots:      make(chan struct{}, MaxInflightOps),
 	}
 	s.busClient = inst.NewClient(ServiceAppId, []app.SubjectFilter{
 		{Pattern: "fs.>", Direction: app.CapDirectionBoth, Reason: "fs Powerbox serves all fs subjects"},
@@ -412,12 +426,29 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	case msg.Subject == SubjectDialogWatch:
 		inst.queuePending(msg, "watch")
 	case strings.HasPrefix(msg.Subject, HandleSubjectPrefix):
-		inst.handleHandleOp(msg)
+		inst.dispatchOp(msg, inst.handleHandleOp)
 	case strings.HasPrefix(msg.Subject, SubjectAppDataPrefix):
-		inst.handleAppData(msg)
+		inst.dispatchOp(msg, inst.handleAppData)
 	default:
 		inst.replyError(msg.Reply, "unknown fs subject: "+msg.Subject)
 	}
+}
+
+// dispatchOp runs a handle or appdata op on its own goroutine, so the
+// requester's timeout bounds its wait however long the filesystem call
+// takes (MaxInflightOps). Each op still replies exactly once, and one
+// requester's ops stay ordered because each waits for its reply.
+func (inst *Service) dispatchOp(msg *app.Msg, op func(*app.Msg)) {
+	select {
+	case inst.opSlots <- struct{}{}:
+	default:
+		inst.replyError(msg.Reply, "fsbroker: too many operations in flight")
+		return
+	}
+	go func() {
+		defer func() { <-inst.opSlots }()
+		op(msg)
+	}()
 }
 
 func (inst *Service) queuePending(msg *app.Msg, op string) {
