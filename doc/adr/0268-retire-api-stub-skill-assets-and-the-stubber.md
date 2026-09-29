@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-29
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-29
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0268: retire the API-stub skill assets and the `stubber` / `llmuse` generators
 
@@ -71,7 +71,7 @@ Out of scope, and kept:
 
 ## Status
 
-Proposed 2026-09-29. The removal lands with this ADR.
+Accepted 2026-09-29. The removal landed with this ADR.
 
 ## Updates
 
