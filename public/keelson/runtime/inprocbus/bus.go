@@ -173,6 +173,27 @@ func (inst *Inst) ClientByAppId(appId app.AppIdT) (c *Client, ok bool) {
 	return
 }
 
+// ClientByInstance returns the live Client of appId whose instance key is
+// key: the one window a message came from (app.Msg.SenderInstance). A key
+// of 0 names no window, so the lookup falls back to ClientByAppId. A
+// non-zero key that matches no live client answers ok=false rather than
+// another window of the same app, so a grant meant for a closed window
+// lands nowhere.
+func (inst *Inst) ClientByInstance(appId app.AppIdT, key uint64) (c *Client, ok bool) {
+	if key == 0 {
+		return inst.ClientByAppId(appId)
+	}
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	for _, x := range inst.clients[appId] {
+		if x.InstanceKey() == key {
+			c, ok = x, true
+			return
+		}
+	}
+	return
+}
+
 // publish dispatches a message to all matching subscriptions. n is the
 // number of handlers invoked; sender and senderInstance are recorded on the
 // Msg so handlers can identify the originating app — and, since ADR-0191

@@ -143,11 +143,12 @@ type PendingRequest struct {
 // handle stores a resolved file grant. Path is never exposed back to the
 // app — the app addresses the file via fs.handle.{uuid}.{op} only.
 type handle struct {
-	uuid    string
-	path    string
-	mode    HandleModeE
-	appId   app.AppIdT
-	created time.Time
+	uuid        string
+	path        string
+	mode        HandleModeE
+	appId       app.AppIdT
+	instanceKey uint64 // the window the dialog came from; 0 when unattributed
+	created     time.Time
 }
 
 // pendingEntry tracks an in-flight dialog. replySubject is the inbox the
@@ -323,15 +324,18 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 	delete(inst.pending, reqId)
 	mode := modeFor(p.op)
 	inst.handles[handleUuid] = &handle{
-		uuid:    handleUuid,
-		path:    path,
-		mode:    mode,
-		appId:   p.appId,
-		created: time.Now(),
+		uuid:        handleUuid,
+		path:        path,
+		mode:        mode,
+		appId:       p.appId,
+		instanceKey: p.instanceKey,
+		created:     time.Now(),
 	}
 	inst.mu.Unlock()
 
-	client, ok := inst.inst.ClientByAppId(p.appId)
+	// The cap goes to the window that opened the dialog, not to whichever
+	// window of the app is newest.
+	client, ok := inst.inst.ClientByInstance(p.appId, p.instanceKey)
 	if ok {
 		dir := app.CapDirectionPub
 		if mode == HandleModeWatch {
@@ -359,7 +363,7 @@ func (inst *Service) Resolve(reqId string, path string) (handleUuid string, err 
 			})
 		}
 	} else {
-		inst.log.Warn().Str("appId", string(p.appId)).Msg("fsbroker: resolve: no client to grant handle cap")
+		inst.log.Warn().Str("appId", string(p.appId)).Uint64("instanceKey", p.instanceKey).Msg("fsbroker: resolve: no client to grant handle cap")
 	}
 	err = inst.replyDialog(p.replySubject, DialogReply{
 		Granted:             true,
@@ -609,18 +613,18 @@ func (inst *Service) handleClose(reply string, uuid string) {
 	// handle's subject stops matching and the app's cap set doesn't grow
 	// without bound across a long session.
 	if h != nil {
-		inst.revokeHandleCap(h.appId, uuid)
+		inst.revokeHandleCap(h.appId, h.instanceKey, uuid)
 	}
 	_ = inst.busClient.Publish(reply, nil)
 }
 
-// revokeHandleCap strips the per-handle caps from the owning app's bus
-// client. No-op when the client is gone. Mirrors the AddCaps performed in
+// revokeHandleCap strips the per-handle caps from the bus client of the
+// window the handle was granted to. No-op when that client is gone. Mirrors the AddCaps performed in
 // Resolve — the wildcard, and the read-handle event Sub (RemoveCap is
 // idempotent by pattern, so a handle that never had the second loses
 // nothing).
-func (inst *Service) revokeHandleCap(appId app.AppIdT, uuid string) {
-	client, ok := inst.inst.ClientByAppId(appId)
+func (inst *Service) revokeHandleCap(appId app.AppIdT, instanceKey uint64, uuid string) {
+	client, ok := inst.inst.ClientByInstance(appId, instanceKey)
 	if !ok {
 		return
 	}

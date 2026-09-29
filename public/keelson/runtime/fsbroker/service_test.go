@@ -444,3 +444,41 @@ func TestService_Pending_DroppedWhenInstanceCloses(t *testing.T) {
 	_, err := svc.Resolve(req.Id, "/etc/hostname")
 	require.Error(t, err)
 }
+
+// A grant lands on the window that opened the dialog, not on the newest
+// window of the same app, and Close revokes it from that same window.
+func TestService_Resolve_GrantsTheRequestingWindow(t *testing.T) {
+	inst, svc, _, cleanup := newSetup(t)
+	defer cleanup()
+	older := inst.NewClient("test.window", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	older.SetInstanceKey(7)
+	newer := inst.NewClient("test.window", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	newer.SetInstanceKey(8)
+
+	replies := make(chan []byte, 1)
+	go func() {
+		reply, _ := older.Request(fsbroker.SubjectDialogRead, nil)
+		replies <- reply
+	}()
+	req := pendingOnce(t, svc)
+	handleUuid, err := svc.Resolve(req.Id, "/etc/hostname")
+	require.NoError(t, err)
+	<-replies
+
+	pattern := fsbroker.HandleSubjectPrefix + handleUuid + ".>"
+	assert.True(t, hasCapPattern(older, pattern), "the requesting window holds the handle cap")
+	assert.False(t, hasCapPattern(newer, pattern), "another window of the app does not")
+}
+
+func hasCapPattern(c *inprocbus.Client, pattern string) bool {
+	for _, f := range c.Caps() {
+		if f.Pattern == pattern {
+			return true
+		}
+	}
+	return false
+}
