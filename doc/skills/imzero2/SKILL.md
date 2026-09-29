@@ -84,11 +84,18 @@ components.Button(ids.PrepareSeq(i), c.Atoms().Text("button").Keey()).Send()
 Two properties of the derivation are worth knowing, because response
 read-back depends on both:
 
-- **Derivation is injective.** Distinct inputs produce distinct wire ids,
-  for every creator above. Only one value is rewritten: an id that derives
-  to exactly `0`, which egui rejects (`egui::Id` is a `NonZeroU64`), is
-  replaced by a fixed high-entropy stand-in. Adjacent integers
-  (`MakeAbsoluteIdHighEntropy(base+0)`, `+1`, `+2`, …) are safe.
+- **Derivation is injective within one scope, not across scopes.** Under
+  one enclosing scope, distinct inputs produce distinct wire ids, for every
+  creator above. Only one value is rewritten: an id that derives to exactly
+  `0`, which egui rejects (`egui::Id` is a `NonZeroU64`), is replaced by a
+  fixed high-entropy stand-in. Adjacent integers
+  (`MakeAbsoluteIdHighEntropy(base+0)`, `+1`, `+2`, …) are safe. The scope
+  and the local id are combined by XOR, which cancels and commutes: a
+  widget keyed like its own scope (`IdScope(x)` around `W(x)`) derives to
+  the scope's parent, so two such pairs `x` and `y` share one id, and
+  `IdScope(a){W(b)}` collides with `IdScope(b){W(a)}`. `checkId` logs
+  "id has already been used" when that happens; key a widget differently
+  from the scope it sits in.
 - **An `AbsoluteWidgetId`'s numeric value *is* its wire id**, so
   `uint64(absId)` and `absId.Derive()` agree. Side tables keyed by an
   absolute id may use either spelling.
