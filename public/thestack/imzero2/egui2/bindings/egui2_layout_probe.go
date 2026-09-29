@@ -52,3 +52,23 @@ func ProbeSeq(scopeKey, role string) (seq uint64) {
 	_, _ = h.Write([]byte(scopeKey))
 	return h.Sum64()
 }
+
+// ProbeSeq derives a per-instance register slot — an r21 probe seq, an r9
+// measure id — from the CURRENT id scope and a role, for a widget that owns a
+// scope (ADR-0267 W7). Call it inside the widget's root IdScope: the slot is
+// then unique per host scope, so two instances whose hosts chose the same
+// scope key under different parents cannot share one, which the stack-free
+// [ProbeSeq] cannot guarantee. Salted per role so one instance can hold
+// several slots, and with a salt of its own so it cannot collide with a
+// child widget id prepared from the same string under the same scope.
+//
+// Side-effect free: the prepare/derive state is untouched, and the call
+// allocates nothing. Like every seq, the slot is shared between
+// [CapturePaneSize] and [CaptureUiRect], so one seq means one kind of rect.
+func (inst *WidgetIdStack) ProbeSeq(role string) (seq uint64) {
+	return ensureNotZeroId(inst.peekIdFromStack() ^ makeHighEntropy(hashLabelToId(role)^probeRoleSalt))
+}
+
+// probeRoleSalt separates a probe slot from a child widget id prepared from
+// the same role string under the same scope.
+const probeRoleSalt uint64 = 0x9e3779b97f4a7c15
