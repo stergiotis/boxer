@@ -124,6 +124,22 @@ func (inst Renderer) Render(ctx Context) {
 	}
 }
 
+// RenderCaptured draws a held error the way an app's status area wants
+// it: the error's text on one wrapped line in the error colour, and under
+// it the chain as Render draws it, following DefaultOpen. The zero
+// Captured draws nothing, so a caller may render its error slot
+// unconditionally. The chain carries what the one line drops — the frames
+// and the fields eb attached — so build the error with eh and eb and wrap
+// it with the surface's context rather than concatenating strings.
+func (inst Renderer) RenderCaptured(e Captured) {
+	if e.IsEmpty() {
+		return
+	}
+	msgAtoms := c.Atoms().BeginRichTextColored(inst.errorFg, transparentBgEv, "✗ "+e.Err().Error()).End().Keep()
+	c.LabelAtoms(msgAtoms).Wrap().Send()
+	inst.Render(e.Chain())
+}
+
 // renderStream emits one stream's collapsing block.
 func (inst Renderer) renderStream(si int, st Stream) {
 	header := fmt.Sprintf("%s · %d %s", st.Name, len(st.Facts), pluralize("fact", len(st.Facts)))

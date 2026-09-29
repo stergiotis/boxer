@@ -2,7 +2,7 @@ package vizevalfacts
 
 import "time"
 
-// VizevalScore is one scorecard as a `boxer.facts` row (ADR-0257 §SD8). Id
+// VizevalScore is one scorecard as a `boxer.facts` row (ADR-0266 §SD8). Id
 // is the xxh3 of NaturalKey, and NaturalKey names what makes two scorings
 // the same measurement — scenario, candidate, build and batch digest — so a
 // second scoring of it lands under the same key and Latest finds the newest.

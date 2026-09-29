@@ -78,6 +78,13 @@ const (
 	// projection is spherical Mercator, so a spherical ring is consistent
 	// with what it is drawn over.
 	earthRadiusKm = 6371.0
+
+	// vectorFieldStatusRowH pins the status line to the height it has with
+	// the fetch readout on it — egui's bar is interact_size.y (18) tall and
+	// a label less — so the readout coming and going does not move the map.
+	vectorFieldStatusRowH = 20
+	// vectorFieldStatusGap separates the readout's numbers from the words.
+	vectorFieldStatusGap = 8
 )
 
 // vectorFieldClaim is the relation's shape, and the frame's signals for the
@@ -305,8 +312,13 @@ type VectorFieldDriver struct {
 	marks       []timescrubber.Mark
 	barColors   *colormap.Config
 	barColorMax float32
-	settledView vectorfield.Request
-	hasSettled  bool
+	// legendColors is the legend ramp's map, rebuilt when the range or the
+	// palette changes, like barColors.
+	legendColors   *colormap.Config
+	legendColorMax float32
+	legendPalette  []uint32
+	settledView    vectorfield.Request
+	hasSettled     bool
 
 	noTiles bool
 	paused  bool
@@ -575,22 +587,27 @@ func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, o
 				inst.openQuery(inst.servedBuffer())
 			}
 		}
-		// A statement of the source in flight gets the mini-UI the main query
-		// has in the top bar — spinner, bar, numbers, and Cancel where
-		// cancelling means something — pointed at THIS pane's phases. Before
-		// it, the pane's only sign of the five round trips between opening
-		// the tab and the first particle was a sentence on the status line.
-		//
-		// It rides this row rather than taking one of its own: the map fills
-		// what the controls leave, and a row that came and went with the work
-		// would resize the map, move the view, and so ask for another window
-		// (the reason renderLaneProgress gives). Beside the sliders, which are
-		// always there, the row height cannot move.
-		//
-		// What the words are is the status line's business; this is the
-		// numbers.
+	}
+	// A statement of the source in flight gets the mini-UI the main query
+	// has in the top bar — spinner, bar, numbers, and Cancel where
+	// cancelling means something — pointed at THIS pane's phases. Before
+	// it, the pane's only sign of the five round trips between opening
+	// the tab and the first particle was a sentence on the status line.
+	//
+	// It rides the status line rather than a row of its own: the map fills
+	// what the controls leave, and a row that came and went with the work
+	// would resize the map, move the view, and so ask for another window
+	// (the reason renderLaneProgress gives). The status line is always
+	// there; its height is pinned, and its words are cut to one line, so
+	// neither the readout arriving nor the clauses the fetch adds to the
+	// words can move the map. Beside the sliders it ran past the edge of a
+	// narrow pane, and widened it.
+	//
+	// What the words are is the status line's business; this is the
+	// numbers.
+	for range c.Horizontal().KeepIter() {
+		c.UiSetMinHeight(vectorFieldStatusRowH)
 		if inst.progressOn {
-			c.Separator().Vertical().Send()
 			cancelID := ""
 			if inst.progressPurpose != sqlfield.PurposeWindow {
 				cancelID = "vf-cancel"
@@ -598,9 +615,15 @@ func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, o
 			if renderLaneProgress(inst.ids, cancelID, inst.frameProgress) {
 				inst.guest.Cancel(inst.progressPurpose)
 			}
+			c.AddSpace(vectorFieldStatusGap)
 		}
+		c.Label(inst.statusLine(meta, has, opts)).Truncate().Send()
 	}
-	c.Label(inst.statusLine(meta, has, opts)).Wrap().Send()
+	unit := opts.unit
+	if unit == "" {
+		unit = meta.Unit
+	}
+	inst.renderVectorFieldLegend(has, unit)
 	diagWeak(inst.hoverLine(meta, has, opts))
 }
 
@@ -760,7 +783,7 @@ func (inst *VectorFieldDriver) hoverLine(meta vectorfield.Meta, has bool, opts v
 	}
 	ll, ok := inst.pm.Hover()
 	if !ok {
-		return "hover the map to read the field · the animation shows direction and relative speed, not transport"
+		return "hover the map to read the speed and direction under the pointer · the animation shows direction and relative speed, not transport"
 	}
 	u, v, speed, found := inst.guest.layer.At(ll)
 	if !found {

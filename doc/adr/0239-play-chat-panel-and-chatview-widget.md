@@ -494,6 +494,23 @@ is that text's height plus a constant chrome, and a body several screens long
 occupies the ceiling. Without the ceiling the test reports messages 99, 189
 and 279 points short of their text.
 
+### 2026-09-28 — a host body is left-aligned, and the viewer's bubble fits it
+
+The viewer's bubbles sit in a right-aligned column, which a bubble hugs only
+while its content is drawn against the right edge: a plain label is, a host
+body is not. A markdown body in the chat app of
+[ADR-0265](./0265-chat-app-over-retained-model-calls.md) was right-aligned
+line by line, and once laid out left-aligned it stretched the bubble to the
+bubble limit. The widget now lays every host body out left-aligned, and on
+the viewer's side measures it once at the bubble limit — its rectangle, read
+back a frame later — and caps the bubble at the width it measured, which
+shrinks it from the left. A changed body or limit measures again, so a
+resize shows the bubble at the limit for the frames the limit moves. The
+other side's bubbles start at the left edge and fit their content already.
+
+The pane probe and the new width probe are now folded through the host's id
+stack, so two transcripts in two windows no longer share one probe slot.
+
 ## References
 
 - [ADR-0186](./0186-play-gloss-catalog.md) — the gloss catalog, faces and the

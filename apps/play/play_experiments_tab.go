@@ -46,7 +46,7 @@ import (
 // its schema is leeway-shaped (CardDriver.EnsureFor decides).
 //
 // The sinks, their row caps and their settings are vizeval's catalogue
-// (ADR-0257, proposed, §SD1–SD2): the sink bar and the option controls are
+// (ADR-0266, proposed, §SD1–SD2): the sink bar and the option controls are
 // drawn from it, and TestExperimentsImplementsTheCatalogue holds the pane to
 // it. What the pane shows can be seeded at launch as one candidate
 // (BOXER_PLAY_EXPERIMENTS, §SD3), and its output is wrapped in one named
@@ -267,7 +267,7 @@ type experimentsSeed struct {
 // applySeed puts the pane in the state a seed names. Anything that does not
 // resolve against the catalogue is refused — the caller fails the mount —
 // rather than drawn with defaults, because a scripted run that captures the
-// wrong candidate is worse than one that stops (ADR-0257 §SD3).
+// wrong candidate is worse than one that stops (ADR-0266 §SD3).
 func (inst *experimentsDriver) applySeed(raw string) (err error) {
 	var seed experimentsSeed
 	if err = json.Unmarshal([]byte(raw), &seed, json.RejectUnknownMembers(true)); err != nil {
@@ -303,7 +303,7 @@ func (inst *experimentsDriver) isTextSink() bool {
 }
 
 // capRows is how many of n rows the selected sink draws, and the notice to
-// show when that is fewer than n: the cut is said, never silent (ADR-0257
+// show when that is fewer than n: the cut is said, never silent (ADR-0266
 // §SD1).
 func (inst *experimentsDriver) capRows(n int64) (drawn int64, notice string) {
 	spec := inst.spec()

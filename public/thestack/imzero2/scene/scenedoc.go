@@ -98,7 +98,7 @@ type Fence struct {
 // SplitDoc separates frontmatter, fences and prose. Fences open with three
 // backticks at the start of a line and close with a bare three-backtick line,
 // which is the applet book's rule too. It is exported for documents that
-// share the scene document's shape (vizeval scenarios, ADR-0257).
+// share the scene document's shape (vizeval scenarios, ADR-0266).
 func SplitDoc(src []byte) (front []byte, fences []Fence, prose string) {
 	lines := strings.Split(string(src), "\n")
 	i := 0
@@ -218,7 +218,7 @@ func (inst *Doc) Captures() (names []string) {
 
 // CaptureFiles lists every file the scene's trace writes, relative to the
 // output directory: each capture's PNG and then the sidecars its step asks
-// for (ADR-0257 (proposed) §SD5), in trace order.
+// for (ADR-0266 (proposed) §SD5), in trace order.
 func (inst *Doc) CaptureFiles() (files []CaptureFile) {
 	for _, st := range inst.Steps {
 		if st.Do != "capture" || st.Text == "" {

@@ -33,7 +33,7 @@ const (
 )
 
 // ChartOptions are the encoding choices a ChartModel is drawn under — the
-// settings the Experiments chart sink declares (ADR-0257, proposed, §SD2).
+// settings the Experiments chart sink declares (ADR-0266, proposed, §SD2).
 type ChartOptions struct {
 	Mark ChartMarkE
 	// Transpose puts series on the category axis and categories in series:

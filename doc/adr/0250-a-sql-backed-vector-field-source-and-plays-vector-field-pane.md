@@ -412,6 +412,27 @@ Two restrictions are the decision here:
   two that can be cancelled latch — the describe keeps its identity claimed
   and the summary its view key — and a Run is what asks again.
 
+### 2026-09-28 — the pane says what its picture means
+
+A reader of shadow-boxer's windvane app, two days of ICON-EU wind on this
+pane, could not tell which of a trail's colour, length and number was the
+data. Nothing on the pane said: the hover line read the field under the
+pointer, and the idle line said the animation showed direction and relative
+speed, but the encoding itself was documented in ADR-0249 §SD4 and nowhere
+on screen. A legend row now sits between the status line and the hover
+line, pinned in height like the status row so its arrival with the field
+does not move the map. It is a ramp of the particles' palette over the
+particles' range — the same `colormap` config the time strip's bars use, so
+a colour is the same speed in all three places — ticked at zero, at round
+speeds, at the full pace with the unit, and at the creep floor; and beside
+it one sentence: colour is speed; pace is speed, clamped, below the floor
+every trail creeps alike and above the full pace every trail moves alike;
+the count of trails is a display setting and not data. The two clamp speeds
+come from the layer itself (`flowoverlay.Layer.Pace`, added for this), so
+the legend names the clamps the trails actually have rather than defaults
+a reader might have changed. `TestVectorFieldLegendTicksNameTheClamps`
+pins the ticks and the sentence; the `36_vector_field` scenes carry the row.
+
 ## References
 
 - ADR-0249 — the field contract, the flow layer, and the deferral taken up here.

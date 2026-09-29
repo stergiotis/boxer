@@ -87,9 +87,12 @@ its own (SD5).
 
 ### SD4 — What the app shows
 
-- **The transcript** is chatview over the in-memory history, message
-  bodies rendered as markdown.
-- **The composer** is a multi-line text input with a Send button;
+- **The transcript** is chatview over the in-memory history, every
+  message body — the user's as well as the model's — rendered as
+  markdown.
+- **The composer** is a multi-line text input highlighted as markdown
+  with mdedit's lexer (which colours the text's own bytes, where the
+  canonicalising highlighter would colour a rewrite), and a Send button;
   Ctrl+Enter sends, gated the way play's SQL editor gates Run: the chord
   is read for the whole process and acted on only by the instance whose
   window is focused (`app.WindowFocusI`), so two open chats do not both

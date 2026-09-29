@@ -60,7 +60,7 @@ impl FrameSink for PngDumpSink {
 
 /// The file a capture named `name` is written to under `dir`, with extension
 /// `ext` — the sanitising half of [`capture_named`], shared with the sidecars a
-/// capture may carry (ADR-0257 (proposed) §SD5) so a PNG and its SVG always
+/// capture may carry (ADR-0266 (proposed) §SD5) so a PNG and its SVG always
 /// share a basename. A trailing `.png` on the name is dropped first, so
 /// `"a.png"` and `"a"` name the same capture.
 pub fn capture_path(

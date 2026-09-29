@@ -2,7 +2,7 @@
 # vizeval.sh — build the imzero2 host once and run `imzero2 vizeval` with it.
 #
 # The same build as scene.sh, into the same launcher cache: the harness
-# (ADR-0257, proposed) renders each candidate as a scene, and the scene
+# (ADR-0266, proposed) renders each candidate as a scene, and the scene
 # launcher starts the host as a child of its own executable.
 #
 # Usage:

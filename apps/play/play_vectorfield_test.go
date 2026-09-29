@@ -505,3 +505,27 @@ func TestVectorFieldCancelLatchesTheWorkItStops(t *testing.T) {
 	assert.Empty(t, g.identity)
 	assert.False(t, g.cancelled)
 }
+
+// TestVectorFieldLegendTicksNameTheClamps pins the legend's ticks: zero and
+// the full pace with the unit, round speeds between them that fit their
+// labels, and the creep floor; a floor outside (0, full) is not a tick, and
+// no full pace means no ticks.
+func TestVectorFieldLegendTicksNameTheClamps(t *testing.T) {
+	ticks := legendTicks(3.5, 30, "m/s", 240)
+	labels := make([]string, 0, len(ticks))
+	for _, tk := range ticks {
+		labels = append(labels, tk.label)
+	}
+	require.Equal(t, []string{"0", "3.5", "5", "10", "15", "20", "25", "30 m/s"}, labels)
+	// The floor keeps its label and the round tick beside it gives its up;
+	// the pinned ends always read.
+	labelled := labelledTicks(ticks, 30, 240, 28)
+	require.Equal(t, []bool{true, true, false, true, true, true, true, true}, labelled)
+	require.Empty(t, legendTicks(3.5, 0, "m/s", 240))
+	ticks = legendTicks(40, 30, "", 240)
+	require.Equal(t, "30", ticks[len(ticks)-1].label, "a floor past the full pace is no tick")
+	require.Equal(t, 5.0, niceStep(30, 8))
+	require.Equal(t, 10.0, niceStep(30, 4))
+	require.Contains(t, legendWords(true, 3.5, 30, "m/s"), "below 3.5 m/s")
+	require.Contains(t, legendWords(false, 0, 0, ""), "display setting")
+}

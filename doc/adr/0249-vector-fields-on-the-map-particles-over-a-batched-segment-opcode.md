@@ -579,6 +579,16 @@ in a host, against 42 to 47 ms for a `paintLine` per segment, which sends no
 slices and did not move. The decisions of that entry stand, the first one by
 a wider margin; the trial's §0 has the current figures.
 
+### 2026-09-28 — the layer names its pace clamps
+
+`Layer.Pace` reports the two speeds §SD4's clamped pace turns on — the
+magnitude that moves at the fastest pace and tops the palette, and the one
+below which every particle creeps at the floor — in the field's unit, as
+the simulation resolves them from the options and the source's range. It
+exists for a legend (ADR-0250, Updates 2026-09-28): the pane that draws the
+trails could state that pace follows speed, but not from which speed to
+which, without reading the layer's defaults back out of its options.
+
 ## References
 
 - [Drawing a large vector field on a map — what the state of the art does, and what it had to fix](../adr-background-work/vector-field-flow-visualization-survey.md)

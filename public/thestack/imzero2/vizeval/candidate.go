@@ -10,7 +10,7 @@ import (
 )
 
 // Candidate is one rendering to score: a sink and its resolved options
-// (ADR-0257 §SD2). Build it with [NewCandidate], which is what makes two
+// (ADR-0266 §SD2). Build it with [NewCandidate], which is what makes two
 // spellings of the same rendering — an option left at its default, or set to
 // it — one candidate.
 type Candidate struct {

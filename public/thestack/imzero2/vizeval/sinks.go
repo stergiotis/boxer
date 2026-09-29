@@ -73,7 +73,7 @@ var (
 // RowCap is a property of the picture, not of the machine: a sink that reads
 // shape needs few rows because shape repeats, one that draws every row needs
 // them all. The pane drives at most RowCap rows and says so when it cuts; the
-// harness does not score a candidate whose batch exceeds it (ADR-0257 §SD1).
+// harness does not score a candidate whose batch exceeds it (ADR-0266 §SD1).
 type SinkSpec struct {
 	ID     string
 	Title  string

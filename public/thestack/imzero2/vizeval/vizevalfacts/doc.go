@@ -1,4 +1,4 @@
-// Package vizevalfacts is the facts-bound record store for vizeval (ADR-0257,
+// Package vizevalfacts is the facts-bound record store for vizeval (ADR-0266,
 // proposed, §SD8), over two kinds: [VizevalScore], one row per candidate
 // scored over a scenario at a build — which rendering, of which data, how far
 // it got, and what was measured — and [VizevalJudgement], one row per pair of

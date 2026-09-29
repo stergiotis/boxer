@@ -22,7 +22,7 @@ const kindLabel = "vizevalScore"
 
 // ScoreKey is the identity of one measurement: the same candidate over the
 // same data at the same build is the same measurement, and is filed under the
-// same key (ADR-0257 §SD8).
+// same key (ADR-0266 §SD8).
 func ScoreKey(scenario string, candidateID string, build string, digest string) (id uint64, nk string) {
 	nk = "vizeval/" + scenario + "/" + candidateID + "/" + build + "/" + digest
 	return xxh3.HashString(nk), nk

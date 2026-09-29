@@ -460,3 +460,22 @@ func TestStepsAheadAreHeldBeforeTheyAreNeeded(t *testing.T) {
 	s.frame(time.Second)
 	require.Equal(t, StepStateIdle, s.layer.StepState(5), "with nothing ahead it holds the bracket alone")
 }
+
+// TestPaceNamesTheClampsInTheFieldsUnit pins the two speeds a legend states:
+// the full pace is the option's SpeedMax, and the floor is where the linear
+// pace meets its minimum, so it moves with the pace bounds and not with the
+// palette.
+func TestPaceNamesTheClampsInTheFieldsUnit(t *testing.T) {
+	src := globalSource(t, vectorfield.Uniform(10, 0), 1)
+	layer := New(src, Options{SpeedMax: 30})
+	defer layer.Close()
+	floor, full := layer.Pace()
+	require.InDelta(t, 30, full, 1e-6)
+	require.InDelta(t, 30*defaultMinPace/defaultMaxPace, floor, 1e-5)
+
+	layer2 := New(src, Options{SpeedMax: 20, MinPacePx: 1, MaxPacePx: 4})
+	defer layer2.Close()
+	floor, full = layer2.Pace()
+	require.InDelta(t, 20, full, 1e-6)
+	require.InDelta(t, 5, floor, 1e-6)
+}

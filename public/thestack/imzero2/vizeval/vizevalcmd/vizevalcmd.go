@@ -1,4 +1,4 @@
-// Package vizevalcmd is the `imzero2 vizeval` subcommand (ADR-0257, proposed,
+// Package vizevalcmd is the `imzero2 vizeval` subcommand (ADR-0266, proposed,
 // §SD9): list what a scenario admits, and score candidates over it.
 //
 // It must run from the imzero2 binary: the scene launcher starts the host as a
@@ -48,7 +48,7 @@ const appId app.AppIdT = "imzero2.vizeval"
 func NewCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "vizeval",
-		Usage: "score renderings of a scenario's leeway batch in play's Experiments pane (ADR-0257)",
+		Usage: "score renderings of a scenario's leeway batch in play's Experiments pane (ADR-0266)",
 		Subcommands: []*cli.Command{
 			{
 				Name:      "space",

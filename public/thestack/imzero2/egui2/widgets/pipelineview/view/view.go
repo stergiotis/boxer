@@ -344,6 +344,18 @@ func drawOrtho(pts []pipelineview.Point, tf func(pipelineview.Point) (float32, f
 	for i, p := range pts {
 		xs[i], ys[i] = tf(p)
 	}
+	// The stroke ends at the head's base, not at the tip: a stroke drawn to
+	// the tip is wider than the triangle near its point, so a thick edge
+	// would show its own blunt end there and the head would read as sitting
+	// back from the target.
+	last := len(xs) - 1
+	dx, dy := norm(xs[last]-xs[last-1], ys[last]-ys[last-1])
+	if dx == 0 && dy == 0 {
+		return
+	}
+	headLen, headHalfW := headSize(strokeW)
+	tipX, tipY := xs[last], ys[last]
+	xs[last], ys[last] = headBase(xs[last-1], ys[last-1], tipX, tipY, headLen)
 	if dashed {
 		for i := 0; i+1 < len(xs); i++ {
 			c.PaintDashedLine(xs[i], ys[i], xs[i+1], ys[i+1], 6, 4, col, strokeW).Send()
@@ -372,28 +384,41 @@ func drawOrtho(pts []pipelineview.Point, tf func(pipelineview.Point) (float32, f
 			}
 			curX, curY = bx, by
 		}
-		last := len(xs) - 1
 		if hyp(xs[last]-curX, ys[last]-curY) > 0.5 {
 			c.PaintLine(curX, curY, xs[last], ys[last], col, strokeW).Send()
 		}
 	}
 	// Arrow head: a solid triangle whose tip is the final point, oriented
-	// along the final segment.
-	last := len(xs) - 1
-	dx, dy := norm(xs[last]-xs[last-1], ys[last]-ys[last-1])
-	if dx == 0 && dy == 0 {
-		return
-	}
-	// The head grows with the stroke, so a volume-thickened edge does not end
-	// in a pin. At the default stroke width both clamp to the original
-	// constants, leaving an overlay-free diagram byte-identical.
-	headLen := max(float32(8.0), strokeW*3.5)
-	headHalfW := max(float32(3.6), strokeW*1.7)
-	bxp, byp := xs[last]-dx*headLen, ys[last]-dy*headLen
+	// along the final segment, standing on the base the stroke ends at.
+	bxp, byp := xs[last], ys[last]
 	px, py := -dy*headHalfW, dx*headHalfW
 	c.PaintPolygonFilled(
-		[]float32{xs[last], bxp + px, bxp - px},
-		[]float32{ys[last], byp + py, byp - py}, col).Send()
+		[]float32{tipX, bxp + px, bxp - px},
+		[]float32{tipY, byp + py, byp - py}, col).Send()
+}
+
+// headSize is the arrow head's length along the edge and half its width
+// across it, for a stroke width. The head grows with the stroke, so a
+// volume-thickened edge does not end in a pin; at the default stroke width
+// both clamp to their floors.
+func headSize(strokeW float32) (headLen, headHalfW float32) {
+	headLen = max(float32(8.0), strokeW*3.5)
+	headHalfW = max(float32(3.6), strokeW*1.7)
+	return
+}
+
+// headBase is the point headLen before the tip along the final segment
+// from (x0, y0) to the tip: where the stroke ends and the head begins. A
+// segment shorter than the head yields its own start, so the head never
+// reaches back past the previous corner.
+func headBase(x0, y0, tipX, tipY, headLen float32) (bx, by float32) {
+	segLen := hyp(tipX-x0, tipY-y0)
+	if segLen <= headLen {
+		return x0, y0
+	}
+	dx, dy := norm(tipX-x0, tipY-y0)
+	bx, by = tipX-dx*headLen, tipY-dy*headLen
+	return
 }
 
 func hyp(dx, dy float32) float32 {

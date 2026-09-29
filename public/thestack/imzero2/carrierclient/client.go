@@ -261,7 +261,7 @@ func (inst *Client) Tree(timeout time.Duration) (snap *TreeSnapshot, err error) 
 // Capture asks the host to write the current frame as a PNG under its dump
 // directory and returns the acknowledgement (ADR-0154 SD4). With svg set the
 // host also writes the frame's shapes as an SVG of the same basename, from the
-// same pass (ADR-0257 (proposed) §SD5); the acknowledgement's SvgPath is empty
+// same pass (ADR-0266 (proposed) §SD5); the acknowledgement's SvgPath is empty
 // when that export did not land, and the caller decides whether that fails.
 // With svgFonts set as well, the SVG embeds a subset of each used font and
 // renders the same without them installed; off, it names the families, which

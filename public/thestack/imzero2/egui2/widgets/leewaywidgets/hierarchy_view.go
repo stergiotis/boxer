@@ -20,7 +20,7 @@ const (
 )
 
 // HierarchyOptions are the encoding choices a hierarchy is drawn under — the
-// settings the Experiments hierarchy sink declares (ADR-0257, proposed, §SD2).
+// settings the Experiments hierarchy sink declares (ADR-0266, proposed, §SD2).
 type HierarchyOptions struct {
 	Form HierarchyFormE
 	// Separator splits an entity's label into its path.

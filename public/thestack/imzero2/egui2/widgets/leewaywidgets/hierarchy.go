@@ -15,7 +15,7 @@ type HierarchyNode struct {
 	Children []*HierarchyNode
 }
 
-// Hierarchy is a leeway batch projected onto a tree (ADR-0257, proposed,
+// Hierarchy is a leeway batch projected onto a tree (ADR-0266, proposed,
 // §SD1): each entity is a leaf whose path is its label split on a separator —
 // a natural key like "research/vision/datasets" — and whose weight is the sum
 // of its values in the charted section (ChartModel), or 1 when counting.
