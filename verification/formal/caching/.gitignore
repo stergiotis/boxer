@@ -1,5 +1,6 @@
 node_modules/
-package-lock.json
 *.itf.json
 _apalache-out/
 states/
+# TLC 1.8+ writes a trace-exploration module beside the spec on a violation
+*_TTrace_*

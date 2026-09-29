@@ -4,7 +4,9 @@ name: formal-pushout
 # verification/formal/algebraicarch/pushout: Quint typecheck + witness runs,
 # randomized sweeps, Apalache bounded verifies, TLC liveness, and the
 # expected-violation counterexamples. What each step proves, at which depth,
-# is tabulated in that directory's README.md ("Status by file").
+# is tabulated in that directory's README.md ("Status by file"). The
+# `caching` job does the same for verification/formal/caching, whose README
+# lists its specs; it borrows the pushout directory's expect_violation.sh.
 
 on:
   workflow_dispatch:
@@ -16,17 +18,19 @@ permissions:
   contents: read
 
 env:
-  TLA_TOOLS_VERSION: v1.8.0
-
-defaults:
-  run:
-    working-directory: verification/formal/algebraicarch/pushout
+  # A stable release, pinned by digest: the v1.8.0 pre-release asset is
+  # rebuilt in place upstream, so its tag names no fixed jar.
+  TLA_TOOLS_VERSION: v1.7.4
+  TLA_TOOLS_SHA256: 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
 
 jobs:
   check:
     name: quint + apalache + tlc
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: verification/formal/algebraicarch/pushout
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,13 +62,17 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.tlaplus/tla2tools.jar
-          key: tla2tools-${{ env.TLA_TOOLS_VERSION }}
+          key: tla2tools-${{ env.TLA_TOOLS_VERSION }}-${{ env.TLA_TOOLS_SHA256 }}
       - name: Download tla2tools.jar
         if: steps.tla-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/.tlaplus
           curl -fsSL -o ~/.tlaplus/tla2tools.jar \
             "https://github.com/tlaplus/tlaplus/releases/download/${TLA_TOOLS_VERSION}/tla2tools.jar"
+      # Checked on cache hits too, so a stale or swapped jar fails here rather
+      # than as a changed TLC verdict further down.
+      - name: Verify tla2tools.jar digest
+        run: echo "${TLA_TOOLS_SHA256}  ${HOME}/.tlaplus/tla2tools.jar" | sha256sum -c -
       - name: Tool versions
         run: |
           node --version
@@ -74,6 +82,72 @@ jobs:
       # typecheck + test + sweep + verify:all + liveness:all
       - name: Check (positive results)
         run: npm run check
+      # The counterexample specs must still produce their violations.
+      - name: Findings (expected violations)
+        run: npm run findings
+
+  caching:
+    name: caching — quint + apalache + tlc
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: verification/formal/caching
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: verification/formal/caching/package-lock.json
+      # Apalache (quint verify) and TLC both run on the JVM.
+      - name: Set up Java
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install quint
+        run: npm ci
+      # quint downloads the Apalache distribution and the Rust evaluator into
+      # ~/.quint on first use; key the cache on the pinned quint version.
+      - name: Cache Apalache and the quint evaluator
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.quint
+          key: quint-home-${{ runner.os }}-${{ hashFiles('verification/formal/caching/package-lock.json') }}
+      - name: Cache tla2tools.jar
+        id: tla-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.tlaplus/tla2tools.jar
+          key: tla2tools-${{ env.TLA_TOOLS_VERSION }}-${{ env.TLA_TOOLS_SHA256 }}
+      - name: Download tla2tools.jar
+        if: steps.tla-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.tlaplus
+          curl -fsSL -o ~/.tlaplus/tla2tools.jar \
+            "https://github.com/tlaplus/tlaplus/releases/download/${TLA_TOOLS_VERSION}/tla2tools.jar"
+      # Checked on cache hits too, so a stale or swapped jar fails here rather
+      # than as a changed TLC verdict further down.
+      - name: Verify tla2tools.jar digest
+        run: echo "${TLA_TOOLS_SHA256}  ${HOME}/.tlaplus/tla2tools.jar" | sha256sum -c -
+      - name: Tool versions
+        run: |
+          node --version
+          npx quint --version
+          java -version
+          java -cp ~/.tlaplus/tla2tools.jar tlc2.TLC -h | head -n 3 || true
+      # check is typecheck + test + sweep; verify and liveness are separate
+      # scripts here.
+      - name: Check (positive results)
+        run: |
+          npm run check
+          npm run verify
+          npm run liveness:all
       # The counterexample specs must still produce their violations.
       - name: Findings (expected violations)
         run: npm run findings
