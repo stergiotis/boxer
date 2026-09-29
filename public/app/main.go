@@ -7,7 +7,6 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/adr"
 	"github.com/stergiotis/boxer/public/app/commands/capmap"
 	"github.com/stergiotis/boxer/public/app/commands/capslock"
-	"github.com/stergiotis/boxer/public/app/commands/codedriven"
 	"github.com/stergiotis/boxer/public/app/commands/compression"
 	"github.com/stergiotis/boxer/public/app/commands/datacatalog"
 	"github.com/stergiotis/boxer/public/app/commands/datasource"
@@ -123,7 +122,6 @@ func mainC() (exitCode int) {
 			capmap.NewCliCommand(),
 			capslock.NewCliCommand(),
 			stevedoredemo.NewCliCommand(),
-			codedriven.NewCliCommand(),
 			compression.NewCliCommand(),
 			datacatalog.NewCliCommand(),
 			datasource.NewCliCommand(),

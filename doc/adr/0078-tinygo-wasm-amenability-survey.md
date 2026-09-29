@@ -360,3 +360,10 @@ The curated props recorded for that package
 dependency cannot stop a package compiling. Open question 5 gains nothing
 either — `gofakeit` was on neither curated list, so this removes an unknown
 rather than resolving one.
+
+### 2026-09-29 — `llmuse` and `stubber` are removed
+
+The survey command's siblings under `public/code/analysis/golang/` are gone
+([ADR-0268](./0268-retire-api-stub-skill-assets-and-the-stubber.md)).
+`wasmsurvey` is now the only subcommand of `code analysis golang`; nothing
+here changes.

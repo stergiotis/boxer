@@ -257,9 +257,7 @@ func generateSummaryTable(w io.Writer, tls []ir.NodeI, tracker *compiletime.Stat
 }
 
 func GenerateDoc(w io.Writer, tls []ir.NodeI, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) error {
-	// Doc front-matter + status banner mirror the sibling skill-asset
-	// references (doc/skills/fffi2/assets/fffi2.md, doc/skills/imzero2/
-	// assets/bindings.md). Required by doclint: DL001 enforces the YAML
+	// Doc front-matter + status banner. Required by doclint: DL001 enforces the YAML
 	// stanza on every doc/ file and DL004 enforces the matching
 	// "Status: draft — pre-human-review." banner. type=reference matches
 	// the Diátaxis quadrant for an API catalogue; status stays at draft

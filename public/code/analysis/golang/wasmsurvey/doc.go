@@ -29,7 +29,7 @@
 // flags where a curated guess was refuted by the real compiler. Verdicts are
 // package-level (the exported API compiles and links), not per-function.
 //
-// The command is registered under `golang` (sibling to llmuse/stubber):
+// The command is registered under `golang`:
 //
 //	app code analysis golang wasmsurvey [--target …] [--mode …] [--json …]
 package wasmsurvey
