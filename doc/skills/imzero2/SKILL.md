@@ -1425,7 +1425,7 @@ The slippy map is a Go widget on the painter lane (ADR-0204: Leaflet's map core 
 | Basemap from the environment | `basemap.PortolanSource()`, `basemap.PortolanLoader(basemap.NewTiles(ctx.Bus(), purpose))` | the `BOXER_MAP_TILE_*` vars as a `TileSource`; tiles fetched through the host's `net.http.fetch.basemap` destination (ADR-0262), so the app declares `basemap.ClientCaps(reason)`. A loader without a fetcher fetches nothing; every app's map goes through these |
 | Draw | `m.Render(w, h, overlay func(portolan.Projector))`, `m.RenderFill(fallbackW, fallbackH, overlay)` | one canvas per frame; `RenderFill` takes the pane's captured size |
 | The view | `m.View() *portolan.View` | Leaflet's Map view: `SetView/SetZoom/PanTo/PanBy/FitBounds/FitWorld`, animated `SetViewAnimated/SetZoomAnimated/SetZoomAroundAnimated/PanToAnimated/PanByAnimated/FlyTo/FlyToBounds/FitBoundsAnimated`, `Stop`, `Center/Zoom/Bounds/Size`, `LatLngToContainerPoint/ContainerPointToLatLng`, `SetMaxBounds/SetMinZoom/SetMaxZoom` |
-| Readback | `m.Hover() (LatLng, bool)`, `m.Clicked() (LatLng, bool)`, `m.ViewHash()`, `m.Events()`, `m.Loading()`, `m.Stats()`, `m.Health()`, `m.BytesShipped()`, `m.Reships()` | all from the map itself, one frame behind the host like every canvas register |
+| Readback | `ev := m.Render(...)` / `m.RenderFill(...)` returns `Events` (the `ViewEvents` plus `Clicked`/`ClickedOk`); `m.Hover() (LatLng, bool)`, `m.ViewHash()`, `m.Loading()`, `m.Stats()`, `m.Health()`, `m.BytesShipped()`, `m.Reships()` | all from the map itself, one frame behind the host like every canvas register |
 | Tiles | `m.SetSource(src)`, `m.Source()`, `m.SetNoTiles(on)` | a source switch restarts the pyramid at the current view and re-uploads under the same ids |
 | Overlays (inside the callback) | `p.Marker`, `p.Label`, `p.Polyline`, `p.Polygon`, `p.ConvexPolygon`, `p.Image`; `p.ToCanvas/ToLatLng/View`, `p.Camera/CameraAt` | canvas-pixel painting through `c.Paint*`. A polyline, and a **convex** polygon, are projected, clipped to the padded viewport and simplified per frame (Leaflet's vector pipeline), so a geometry far larger than the view costs its visible part. A **concave** polygon is neither clipped nor simplified, only culled: the fill ear-clips the ring and an ear clipper needs a simple polygon, where Leaflet's canvas fill rule did not — clipping invents edges along the window and simplifying can make a ring cross itself, and both draw triangles the ring does not contain (ADR-0204's 2026-09-12 update). Prefer `ConvexPolygon` when the ring really is convex |
 | A camera for a widget drawn over the map | `m.View().CameraAt(refZoom, origin)`, `p.CameraAt(...)`; `Camera(refZoom)` is the origin-less form | the map's transform as a `camera.Camera`, for hosted rendering (ADR-0228 §SD5); prefer the local-origin form |
@@ -1648,7 +1648,7 @@ off-thread — draw the pyramid that frame and ask again; never call
 `ReadWindowE` from a frame.
 
 Annotations (SD8) are host-owned: `p.SetLayers(&layers)` with sorted
-`Regions` / `Markers` / `Curves`; read `p.Events()` after `Render` and apply a
+`Regions` / `Markers` / `Curves`; read the `Events` that `Render` returns and apply a
 `RegionEdit` to your own slice (the player never mutates it). Interval and
 point lanes are the `timeline` widget on its offset axis (ADR-0043 SD17):
 `lanes := waveform.NewLanes(ids, key, tr.TimeBase(), intervals)` with bounds
@@ -1702,8 +1702,7 @@ gv := graphview.New(ids, "deps", graphview.Options{
     Layout: graphview.LayoutForceDirectedCG, NodeClicking: true, NodeSelection: true, LabelsAlways: true,
 })
 // every frame — declare the whole graph, keyed by uint64 ids:
-gv.Render(nodes, edges, w, h)              // or gv.RenderFill(nodes, edges, fallbackW, fallbackH)
-for _, ev := range gv.Events() {          // same frame; the input is one frame old
+for _, ev := range gv.Render(nodes, edges, w, h) { // or gv.RenderFill(nodes, edges, fallbackW, fallbackH); the input is one frame old
     if ev.Kind == graphview.EventKindNodeDoubleClick { recenter(ev.Node) }
 }
 if m := gv.Metrics(); m.Steps > 0 && m.LastDisplacement <= eps { gv.Opts.Force.Paused = true }
@@ -1919,3 +1918,51 @@ so the same number frames a little tighter; a zero width or height no longer
 means "fill" — use `RenderFill` for that. Edge selection and hover are keyed
 by `EdgeRef{From, To, Id}`: parallel edges of one pair select together
 unless the declaration gives them distinct ids.
+
+## 21. Widget shapes — fluid, immediate-mode, semi-retained (ADR-0267)
+
+Every Go widget under `widgets/` is one of three shapes, and one question
+picks it: **does anything have to survive the frame that cannot be re-derived
+from the model?** ADR-0267 holds the twenty rules; this is the working
+summary. A conformance test in `widgets/conformance` checks the mechanical
+half and carries the allowlist of packages not yet migrated — a new package
+may not enter it.
+
+| Shape | When | Host writes | Reference |
+|---|---|---|---|
+| **F — fluid** | the widget *is* one binding widget with one id and no state | `pkg.New(id c.WidgetIdCreatorI, …).Knob(…).SendResp()` | `badge`, `selector` |
+| **IM — immediate** | only a small host-owned value survives: selection, expansion, cursor, a bound text buffer | `res := pkg.Render(pkg.Input{Ids, ScopeKey, Model, State, …})` | `tree`, `chatview`, `cardgrid`, `fsbrowser` |
+| **SR — semi-retained** | a cache, camera, simulation, worker or subscription survives | `w := pkg.New(ids, scopeKey, pkg.Options{…})`; per frame `ev := w.Render(model, …)`; `w.Close()` if it has workers | `graphview`, `timescrubber`, `portolan`, `waveform` |
+
+What to remember while writing one:
+
+- **Ids.** `Ids *c.WidgetIdStack` + `ScopeKey string` on `Input` (IM) or as
+  the first two arguments of `New` (SR). Open one
+  `c.IdScope(ids.PrepareStr(scopeKey))` at the root of every `Render`; every
+  child id is relative under it — `PrepareStr("literal")` for a singleton,
+  `PrepareSeq(uint64(ordinal))` inside a per-row `IdScope` for rows. No
+  `idPrefix`, no `PrepareStr(prefix + "-x")`, no hex seeds, no `Sprintf` keys.
+- **Absolute ids** only for a floating window or popup the widget owns, and
+  derived from the scope, never from a caller string:
+  `c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("window").Derive())`.
+- **Probe seqs** (`CapturePaneSize`, `CaptureUiRect`, measure ids) come from
+  `ids.ProbeSeq("role")`, called inside the root scope. It is stack-derived,
+  so two instances whose hosts chose the same scope key under different
+  parents get different slots. The stack-free `c.ProbeSeq(scopeKey, role)`
+  does not guarantee that and is not for widgets; the hand-rolled
+  `probeSalt` it replaces is the same eight lines in five packages.
+- **Model is data, columnar where rows are iterated; UI state is `State`
+  (IM) or the object (SR), never a package-level map.**
+- **Options are a struct** — fields on `Input`, or an `Options` passed to
+  `New` and kept as a public `Opts` the widget re-reads every frame. No
+  `With*` functional options, no `ShowX(b) Renderer` copy-returning setters.
+- **What `Render` produces, `Render` returns:** `Result` (IM) or `Events`
+  (SR). No `Events()` accessor, no bare `bool`, no tuple, no `OnX(fn)`
+  listener. Callbacks are for host-drawn content in a slot (`Cell`, `Block`,
+  an overlay `func(Projector)`) and pure functions only.
+- **Size:** canvas widgets take `Render(model, w, h)` with a `RenderFill`
+  twin; flow widgets take `Input.MaxHeight` and `Input.FillHost`; inline
+  widgets take nothing.
+- **Tests:** one frame renders under the discard channel from a zero
+  `State` / a fresh `New`; interactive widgets add one scripted-input test in
+  the `graphview/scenetest` pattern.
