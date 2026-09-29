@@ -51,9 +51,20 @@ type Sink struct {
 	state  sink.StateE
 	ended  bool
 	closed bool
-	// corked is true between Pause and the Resume or Stop that follows: the
-	// stream still holds its buffer, so Play resumes rather than restarts.
-	corked bool
+	// resumed wakes the pull callback parked by a pause. A pause never
+	// touches the stream: corking it and uncorking it again makes the server
+	// send a Started event the library delivers with a blocking send that
+	// nobody receives after the first Start, and its read loop parks for
+	// good (jfreymuth/pulse#52). The callback blocks on this instead, as
+	// oto's PulseAudio backend does; the stream stays running and the
+	// server, starved, reports one underflow per pause. Lazily made under mu
+	// so a Sink built without OpenE still reads.
+	resumed *sync.Cond
+	// underflowFrozen latches the stream's underflow report at the first
+	// pause since the last start, because from then on the report also
+	// counts the underflows the pauses cause.
+	underflowFrozen bool
+	underflowValue  bool
 
 	cursor int64   // next source frame the callback reads
 	frac   float64 // fractional part of the resampling position
@@ -150,48 +161,63 @@ func (inst *Sink) Format() (format pcm.Format) { return inst.format }
 func (inst *Sink) Frames() (frames int64) { return inst.frames }
 
 // Play implements [sink.SinkI]: a stopped sink starts (from 0 when it had
-// reached the end), a paused one resumes with its buffer intact.
+// reached the end), a paused one resumes by releasing the parked callback.
 func (inst *Sink) Play() {
 	inst.mu.Lock()
 	if inst.closed || inst.state == sink.StatePlaying {
 		inst.mu.Unlock()
 		return
 	}
-	resume := inst.state == sink.StatePaused && inst.corked
+	resume := inst.state == sink.StatePaused
 	if !resume {
 		if inst.ended || inst.cursor >= inst.frames {
 			inst.cursor, inst.frac, inst.held = 0, 0, 0
 		}
 		inst.startPos, inst.delivered = inst.cursor, 0
 		inst.lastPos = inst.cursor
+		inst.underflowFrozen = false
 	}
 	inst.ended = false
 	inst.state = sink.StatePlaying
 	inst.deliveredAt = inst.clock.Now()
-	inst.corked = false
+	if resume {
+		// The stream never stopped; the callback is waiting for this. The
+		// server buffer drained during the pause, so the position lags the
+		// truth by up to one buffer until the interpolation catches up.
+		inst.condLocked().Broadcast()
+		inst.mu.Unlock()
+		return
+	}
 	inst.mu.Unlock()
 	// Stream calls run unlocked: Start blocks until the server asks for data,
 	// and the callback that answers takes the lock.
-	if resume {
-		inst.stream.Resume()
-	} else {
-		inst.stream.Stop()
-		inst.stream.Start()
-	}
+	inst.stream.Stop()
+	inst.stream.Start()
 }
 
-// Pause implements [sink.SinkI]: corks the stream, keeping its buffer.
+// condLocked returns the resume condition, making it on first use; mu held.
+func (inst *Sink) condLocked() *sync.Cond {
+	if inst.resumed == nil {
+		inst.resumed = sync.NewCond(&inst.mu)
+	}
+	return inst.resumed
+}
+
+// Pause implements [sink.SinkI]: parks the pull callback on its next call.
+// The stream is not corked (see resumed), so what the server already holds,
+// one latency at most, still plays.
 func (inst *Sink) Pause() {
 	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	if inst.closed || inst.state != sink.StatePlaying {
-		inst.mu.Unlock()
 		return
 	}
 	inst.pausedPos = inst.positionLocked(inst.clock.Now())
 	inst.state = sink.StatePaused
-	inst.corked = true
-	inst.mu.Unlock()
-	inst.stream.Pause()
+	if !inst.underflowFrozen {
+		inst.underflowFrozen = true
+		inst.underflowValue = inst.stream.Underflow()
+	}
 }
 
 // State implements [sink.SinkI].
@@ -236,8 +262,9 @@ func (inst *Sink) positionLocked(now time.Time) (frame int64) {
 	return frame
 }
 
-// SeekE implements [sink.SinkI]: moves the cursor and, when the stream holds
-// audio, flushes it so the new position is heard at once.
+// SeekE implements [sink.SinkI]: moves the cursor and, while playing,
+// restarts the stream so the server buffer is flushed and the new position
+// is heard at once.
 func (inst *Sink) SeekE(frame int64) (err error) {
 	inst.mu.Lock()
 	if inst.closed {
@@ -251,15 +278,22 @@ func (inst *Sink) SeekE(frame int64) (err error) {
 	inst.ended = false
 	playing := inst.state == sink.StatePlaying
 	inst.deliveredAt = inst.clock.Now()
-	inst.corked = false
 	inst.mu.Unlock()
-	// Pause corks (a running stream only), Stop drops it to idle; Start then
-	// flushes the server buffer and restarts from the new cursor.
+	if !playing {
+		// Paused: the callback stays parked and picks the cursor up on Play.
+		// The stream is left alone — with its read loop possibly blocked on
+		// a buffer request, any round trip would only time out. A pause
+		// longer than one latency has drained the server anyway; a seek
+		// within that window lets up to one buffer of the old position play
+		// on resume. Stopped: the stream is idle and Play restarts it.
+		return nil
+	}
+	// Pause corks the running stream, Stop drops it to idle; Start then
+	// flushes the server buffer and restarts from the new cursor, and is the
+	// one call that waits for the Started event this sequence provokes.
 	inst.stream.Pause()
 	inst.stream.Stop()
-	if playing {
-		inst.stream.Start()
-	}
+	inst.stream.Start()
 	return nil
 }
 
@@ -336,8 +370,17 @@ func (inst *Sink) Ended() (ended bool) {
 }
 
 // Underflow reports whether the server ran dry since the stream last
-// started — the source was too slow for the requested latency.
-func (inst *Sink) Underflow() (yes bool) { return inst.stream.Underflow() }
+// started from stopped — the source was too slow for the requested latency.
+// A pause starves the server by design, so from the first pause until the
+// next start the report is frozen at the value it had when that pause began.
+func (inst *Sink) Underflow() (yes bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.underflowFrozen {
+		return inst.underflowValue
+	}
+	return inst.stream.Underflow()
+}
 
 // CloseE implements [sink.SinkI]: closes the stream and the connection.
 func (inst *Sink) CloseE() (err error) {
@@ -348,6 +391,10 @@ func (inst *Sink) CloseE() (err error) {
 	}
 	inst.closed = true
 	inst.state = sink.StateStopped
+	// A parked callback must return before the stream's close round trip
+	// can be answered: the library's read loop may be waiting to hand it
+	// the next buffer request.
+	inst.condLocked().Broadcast()
 	inst.mu.Unlock()
 	inst.stream.Close()
 	inst.client.Close()
@@ -363,6 +410,12 @@ func (inst *Sink) CloseE() (err error) {
 func (inst *Sink) read(out []float32) (n int, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	// A pause parks the callback here; Play or CloseE releases it. The
+	// stream goroutine and, once the server asks for more, the library's
+	// read loop wait with it.
+	for inst.state == sink.StatePaused && !inst.closed {
+		inst.condLocked().Wait()
+	}
 	if inst.closed || inst.state != sink.StatePlaying {
 		return 0, pulse.EndOfData
 	}
@@ -453,7 +506,6 @@ func (inst *Sink) endLocked(readErr error) (n int, err error) {
 	inst.cursor = inst.frames
 	inst.state = sink.StateStopped
 	inst.ended = true
-	inst.corked = false
 	inst.lastPos = inst.frames
 	_ = readErr // a failing source ends playback like a finished one; the position readout shows where
 	return 0, pulse.EndOfData
