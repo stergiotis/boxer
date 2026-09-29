@@ -123,6 +123,7 @@ type compositeCandidate struct {
 	kind            compositeKind
 	containerNode   antlr.ParserRuleContext
 	castNode        *grammar1.ColumnExprCastContext
+	castTypeText    string // the cast's type as typeTextOf renders it; set with castNode
 	literalTexts    []string
 	perElementTypes []string
 	elementType     string
@@ -300,15 +301,17 @@ func buildCompositeFunctionCandidate(pr *nanopass.ParseResult, funcCtx *grammar1
 	}
 
 	var castNode *grammar1.ColumnExprCastContext
+	var castNodeText string
 	var castType canonicaltypes.PrimitiveAstNodeI
 	if config.mapTypeToCanonical != nil {
 		if castCtx, isCast := funcCtx.GetParent().(*grammar1.ColumnExprCastContext); isCast {
-			castTypeText := extractCastTypeText(castCtx)
+			castTypeText := extractCastTypeText(pr, castCtx)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
 				if mapErr == nil && ct != nil {
 					castNode = castCtx
 					castType = ct
+					castNodeText = castTypeText
 				}
 			}
 		}
@@ -318,6 +321,7 @@ func buildCompositeFunctionCandidate(pr *nanopass.ParseResult, funcCtx *grammar1
 		kind:            kind,
 		containerNode:   funcCtx,
 		castNode:        castNode,
+		castTypeText:    castNodeText,
 		literalTexts:    literalTexts,
 		perElementTypes: perElementTypes,
 		elementType:     elementType,
@@ -419,16 +423,18 @@ func buildCompositeCandidate(pr *nanopass.ParseResult, container antlr.ParserRul
 	}
 
 	var castNode *grammar1.ColumnExprCastContext
+	var castNodeText string
 	var castType canonicaltypes.PrimitiveAstNodeI
 	if config.mapTypeToCanonical != nil {
 		castWrapper := findINTupleCastWrapper(container)
 		if castWrapper != nil {
-			castTypeText := extractCastTypeText(castWrapper)
+			castTypeText := extractCastTypeText(pr, castWrapper)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
 				if mapErr == nil && ct != nil {
 					castNode = castWrapper
 					castType = ct
+					castNodeText = castTypeText
 				}
 			}
 		}
@@ -438,6 +444,7 @@ func buildCompositeCandidate(pr *nanopass.ParseResult, container antlr.ParserRul
 		kind:            kind,
 		containerNode:   container,
 		castNode:        castNode,
+		castTypeText:    castNodeText,
 		literalTexts:    literalTexts,
 		perElementTypes: perElementTypes,
 		elementType:     elementType,
@@ -580,7 +587,7 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 		var castNode *grammar1.ColumnExprCastContext
 		var castType canonicaltypes.PrimitiveAstNodeI
 		if castCtx, isCast := litExpr.GetParent().(*grammar1.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
-			castTypeText := extractCastTypeText(castCtx)
+			castTypeText := extractCastTypeText(pr, castCtx)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
 				if mapErr == nil && ct != nil {
@@ -635,14 +642,14 @@ func isPositionalReference(litExpr *grammar1.ColumnExprLiteralContext) bool {
 
 // --- Cast type extraction ---
 
-func extractCastTypeText(castCtx *grammar1.ColumnExprCastContext) string {
+func extractCastTypeText(pr *nanopass.ParseResult, castCtx *grammar1.ColumnExprCastContext) string {
 	for i := 0; i < castCtx.GetChildCount(); i++ {
 		child := castCtx.GetChild(i)
 		switch c := child.(type) {
 		case *grammar1.ColumnTypeExprSimpleContext:
-			return c.GetText()
+			return typeTextOf(pr, c)
 		case *grammar1.ColumnTypeExprComplexContext:
-			return c.GetText()
+			return typeTextOf(pr, c)
 		}
 	}
 	return ""
@@ -985,10 +992,8 @@ func assignCompositeParamNames(candidates []compositeCandidate, config *ExtractL
 	for _, c := range candidates {
 		value := formatCompositeValue(&c)
 		typeName := defaultCompositeTypeName(&c)
-		if c.castNode != nil {
-			if castTypeText := extractCastTypeText(c.castNode); castTypeText != "" {
-				typeName = castTypeText
-			}
+		if c.castNode != nil && c.castTypeText != "" {
+			typeName = c.castTypeText
 		}
 		castCanon := ""
 		if c.castType != nil {
