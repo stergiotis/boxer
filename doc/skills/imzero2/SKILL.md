@@ -1919,50 +1919,123 @@ means "fill" — use `RenderFill` for that. Edge selection and hover are keyed
 by `EdgeRef{From, To, Id}`: parallel edges of one pair select together
 unless the declaration gives them distinct ids.
 
-## 21. Widget shapes — fluid, immediate-mode, semi-retained (ADR-0267)
+## 21. Writing a Go widget — the ADR-0267 contract
 
-Every Go widget under `widgets/` is one of three shapes, and one question
-picks it: **does anything have to survive the frame that cannot be re-derived
-from the model?** ADR-0267 holds the twenty rules; this is the working
-summary. A conformance test in `widgets/conformance` checks the mechanical
-half and carries the allowlist of packages not yet migrated — a new package
-may not enter it.
+This section is the authoring reference for every Go widget under
+`widgets/`; [ADR-0267](../../adr/0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md)
+records why it is shaped this way. `widgets/conformance` checks the
+mechanical rules over every package, and its allowlist is empty: a new
+package conforms from its first commit, and one that cannot needs an ADR,
+not an allowlist line.
+
+### 21.1 Pick the shape with one question
+
+**Does anything have to survive the frame that cannot be re-derived from the
+model?**
 
 | Shape | When | Host writes | Reference |
 |---|---|---|---|
-| **F — fluid** | the widget *is* one binding widget with one id and no state | `pkg.New(id c.WidgetIdCreatorI, …).Knob(…).SendResp()` | `badge`, `selector` |
-| **IM — immediate** | only a small host-owned value survives: selection, expansion, cursor, a bound text buffer | `res := pkg.Render(pkg.Input{Ids, ScopeKey, Model, State, …})` | `tree`, `chatview`, `cardgrid`, `fsbrowser` |
-| **SR — semi-retained** | a cache, camera, simulation, worker or subscription survives | `w := pkg.New(ids, scopeKey, pkg.Options{…})`; per frame `ev := w.Render(model, …)`; `w.Close()` if it has workers | `graphview`, `timescrubber`, `portolan`, `waveform` |
+| **F — fluid** | the widget *is* one binding widget with one id and no state | `pkg.New(id c.WidgetIdCreatorI, …).Knob(…).SendResp()` | `badge`, `selector`, `regexedit` |
+| **IM — immediate** | only a small host-ownable value survives: selection, expansion, cursor, a bound buffer | `res := pkg.Render(pkg.Input{Ids, ScopeKey, Model, State, …})` | `tree`, `chatview`, `kanban`, `markdown` |
+| **SR — semi-retained** | a cache, camera, simulation, worker or subscription survives | `w := pkg.New(ids, scopeKey, …, pkg.Options{…})`; per frame `ev := w.Render(…)`; `w.Close()` if it owns workers | `graphview`, `portolan`, `treemap`, `timeline` |
 
-What to remember while writing one:
+An IM widget embeds only IM and F widgets; the moment it needs an SR child
+it is SR (`mappingplanview` owns a pager, so it is SR). A painter helper that
+draws into a canvas the host owns takes no ids, is named `Paint`, and carries
+its knobs as a `Style` embedded in its `Input` (`boxenplot`, `ecdf`,
+`legend`, the portolan overlays).
 
-- **Ids.** `Ids *c.WidgetIdStack` + `ScopeKey string` on `Input` (IM) or as
-  the first two arguments of `New` (SR). Open one
-  `c.IdScope(ids.PrepareStr(scopeKey))` at the root of every `Render`; every
-  child id is relative under it — `PrepareStr("literal")` for a singleton,
-  `PrepareSeq(uint64(ordinal))` inside a per-row `IdScope` for rows. No
-  `idPrefix`, no `PrepareStr(prefix + "-x")`, no hex seeds, no `Sprintf` keys.
-- **Absolute ids** only for a floating window or popup the widget owns, and
-  derived from the scope, never from a caller string:
-  `c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("window").Derive())`.
-- **Probe seqs** (`CapturePaneSize`, `CaptureUiRect`, measure ids) come from
-  `ids.ProbeSeq("role")`, called inside the root scope. It is stack-derived,
-  so two instances whose hosts chose the same scope key under different
-  parents get different slots. The stack-free `c.ProbeSeq(scopeKey, role)`
-  does not guarantee that and is not for widgets; the hand-rolled
-  `probeSalt` it replaces is the same eight lines in five packages.
-- **Model is data, columnar where rows are iterated; UI state is `State`
-  (IM) or the object (SR), never a package-level map.**
-- **Options are a struct** — fields on `Input`, or an `Options` passed to
-  `New` and kept as a public `Opts` the widget re-reads every frame. No
-  `With*` functional options, no `ShowX(b) Renderer` copy-returning setters.
-- **What `Render` produces, `Render` returns:** `Result` (IM) or `Events`
-  (SR). No `Events()` accessor, no bare `bool`, no tuple, no `OnX(fn)`
-  listener. Callbacks are for host-drawn content in a slot (`Cell`, `Block`,
-  an overlay `func(Projector)`) and pure functions only.
-- **Size:** canvas widgets take `Render(model, w, h)` with a `RenderFill`
-  twin; flow widgets take `Input.MaxHeight` and `Input.FillHost`; inline
-  widgets take nothing.
-- **Tests:** one frame renders under the discard channel from a zero
-  `State` / a fresh `New`; interactive widgets add one scripted-input test in
-  the `graphview/scenetest` pattern.
+### 21.2 Names and entry points (W1–W3)
+
+- **Verbs:** `Render` (IM, SR), `Paint` (helper), `Send`/`SendResp` (F). A
+  second placeable part is `RenderPart` (`RenderChip`, `RenderMinimap`); a
+  size-probing twin is `RenderFill`. `Show` only as the half of a
+  `Show`/`Hide` pair.
+- **Types:** IM `Input`, `Result`, `State`, `Model`; SR `Options`, `Events`
+  and the object named for what it is (`Map`, `View`, `Dialog`, `Monitor`) —
+  never `Inst`, `Widget`, `Renderer`. Receivers are `inst`.
+- **What `Render` produces, `Render` returns:** a `Result` or `Events`
+  struct, never a bool, a tuple or a separate accessor. The one allowed pair
+  is `(Events, error)` from an entry that validates its declaration first
+  (`graphview.RenderColumns`). Slices in it are the widget's scratch, valid
+  until the next `Render`. Sentinels: `-1` for no ordinal, `false` for did
+  not happen.
+
+### 21.3 Identity (W4–W7)
+
+- **One scope.** IM: `Ids *c.WidgetIdStack` and `ScopeKey string` on `Input`.
+  SR: `ids, scopeKey` as the first two arguments of `New`. Either way, one
+  `c.IdScope(ids.PrepareStr(scopeKey))` at the root of every `Render`, empty
+  `ScopeKey` meaning a package default. Two instances under one host differ
+  by scope key alone; the host adds no `IdScope` of its own.
+- **Child ids from the vocabulary:** `PrepareStr("literal")` for a
+  singleton, `IdScope(PrepareSeq(uint64(i)))` for a row, `PrepareStr(key)`
+  of a stable key when ordinals shift. Never `PrepareStr(a + b)`, a
+  `Sprintf` key, a hex seed or `idBase + n` arithmetic. An id that must
+  survive an edit above it is keyed on content, not position (`markdown`
+  keys code blocks on a hash of language and text).
+- **Absolute ids** only for a floating window, popup or tether the widget
+  owns, derived from the scope:
+  `c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("window").Derive())`. Where
+  infrastructure takes a string, hand it that derived id in hex.
+- **Probe seqs** (`CapturePaneSize`, `CaptureUiRect`, measure ids) are
+  `ids.ProbeSeq("role")` called inside the scope. A step that runs before
+  `Render` (a `RenderFill` probe, a `Bind`) opens the scope for the
+  derivation alone — `for range c.IdScope(ids.PrepareStr(scopeKey)) { … }`
+  emits nothing. `c.ProbeSeq(scopeKey, role)` is stack-independent and is
+  not for widgets.
+
+### 21.4 Model, state, options, size (W8–W12)
+
+- **The model is the host's data**, passed every frame, columnar where rows
+  are iterated. It carries no UI state. `Set*` exists only for expensive
+  data the host does not re-declare per frame (`treemap.SetRoot`,
+  `timeline.SetIntervals`, `heatmapscroll.PushColumn`).
+- **UI state** is a host-owned `State` (IM, zero value usable, passed as
+  `*State`, kept at one address) or inside the SR object with getters and
+  idempotent setters. Never a package-level map. A table swap resets what
+  indexed into it (`schemaview`).
+- **Bound values** (`TextEdit`, `DragValue`) live in `State` or the object;
+  programmatic writes go through `OverrideDatabinding*`.
+- **Options are a struct.** IM: fields on `Input`. SR: `Options` at `New`,
+  kept as a public `Opts` the widget re-reads every frame, so a toggle is an
+  assignment. No `With*` functions, no copy-returning setters, no `Set*`
+  twin of an option. Zero is the default, so booleans take the inverted
+  spelling (`HideTicks`, `StartCollapsed`) and enums an `Auto` zero value; a
+  knob whose zero used to mean something takes a negative for "none". An
+  option that seeds persistent state is read once, and its doc says so.
+- **One sizing shape:** canvas `Render(w, h)` plus `RenderFill(fallbackW,
+  fallbackH)`; flow `Input.MaxHeight` (a ceiling) and `Input.FillHost`;
+  inline, no knob. Never size against a probe emitted after your own
+  content.
+
+### 21.5 Interaction, threads, composition (W13–W16)
+
+- **Interaction returns as data** in `Result`/`Events` — clicks, moves,
+  navigation, selection, brush, hover. No `OnX(fn)` registration. Callbacks
+  remain only for host-drawn content in a slot (`Cell`, `Block`, an overlay
+  `func(Projector)`) and pure functions (formatters, filters, predicates).
+  Navigation the host itself triggers is reported in the next `Events` too.
+- **Render goroutine only** (ADR-0261). A widget whose own methods start
+  goroutines drains them at the top of `Render` and exports `Close`, which
+  its doc says is required. Work a free function starts under a caller's
+  context or task handle is bounded by that, not by a widget.
+- **Host-skippable regions:** IM is idempotent per frame; an SR send-once
+  protocol re-arms on `TextureStarved` (§12 "Lost Sends").
+- **Composition:** embed by passing your `Ids` and a literal sub-scope key;
+  an SR widget constructs its SR children in `New` and closes them in
+  `Close`. A host with no id stack at construction (a window host, the demo
+  registry's `Init`) builds the widget on its first frame.
+
+### 21.6 Errors, docs, tests (W17–W19)
+
+- A structurally broken model or a missing required `State` draws a short
+  message in place and sets `Result.Err`; never a panic, never silence.
+- The package doc's first paragraph names the shape ("an immediate-mode
+  widget (ADR-0267)") and the ADR that decided the widget, and states the
+  one-frame lag of its readbacks once.
+- Two tests at least: one frame renders under the discard channel from a
+  zero `State` or a fresh `New` (`scenetest.Install()`), and a widget that
+  reacts to input has one scripted-input test in the
+  `graphview/scenetest` pattern. A multi-frame test calls
+  `StateManager.ScriptReset()` between frames.

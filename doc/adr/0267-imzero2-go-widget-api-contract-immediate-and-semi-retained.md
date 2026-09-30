@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-29
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-09-30
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0267: imzero2 Go widgets — one contract for immediate-mode widgets, one for semi-retained widgets
 
@@ -395,9 +393,11 @@ goroutines started in a rendering type's methods, since work a free function
 starts under a caller's context or task handle has no widget to own it (the
 ecdf band job, the waveform peaks task).
 
-**M6 — close.** Delete the deprecated `Events()` accessors M1 kept, move
-this ADR's rules into the skill as the single authoring reference (ADR-0059
-§SD5), and add the `## Updates` entry.
+**M6 — close.** Landed 2026-09-30: the deprecated `Events()` accessors
+M1 kept on `graphview`, `portolan` and `waveform` are deleted, and the
+rules are written out in the imzero2 skill §21 as the single authoring
+reference (ADR-0059 §SD5), with the refinements the phases made. The skill
+section now carries the rules; this ADR carries why.
 
 ### Deferred
 
@@ -489,15 +489,21 @@ this ADR's rules into the skill as the single authoring reference (ADR-0059
 
 ## Status
 
-Proposed — 2026-09-29. Becomes accepted when reviewed; M0 may land under
-`proposed` since it adds helpers and a green test and changes no widget.
+Accepted — 2026-09-30, with the migration complete: every widget under
+`widgets/` conforms and the conformance allowlist is empty.
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
 
 ## Updates
 
-_None yet._
+- **2026-09-30 — accepted with M0–M6 landed.** Three refinements were made
+  while applying the rules and are part of the decision: a render entry
+  that validates its declaration may return `(Events, error)` (W3); W14
+  binds to goroutines a widget's own methods start, not to work a free
+  function starts under a caller's context; and a painter helper's knobs are
+  a `Style` embedded in its `Input`. The deprecated wrappers M5 planned were
+  not needed, because every caller moved in the same change.
 
 ## References
 

@@ -231,9 +231,8 @@ need:
   render. A Go widget under `widgets/` is one of three shapes — fluid,
   immediate-mode, semi-retained — with one contract each
   ([ADR-0267](./doc/adr/0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md),
-  summarised in the imzero2 skill §21); `widgets/conformance` checks the
-  mechanical rules and carries the not-yet-migrated allowlist, which a new
-  package may not join.
+  written out in the imzero2 skill §21); `widgets/conformance` checks the
+  mechanical rules over every package, with an empty allowlist.
 - **nanopass / dsl** — the SQL pipeline. Fix downstream passes for the canonical
   (function-call) form; if a shape isn't canonicalised, fix the canonicalize
   pass, not the consumer.
