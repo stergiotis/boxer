@@ -24,6 +24,10 @@ type HostI interface {
 	// open. Raise-rather-than-open is the launcher's default action (§SD10):
 	// a second click on a visible app used to open a silent duplicate.
 	OpenOrRaiseApp(appId app.AppIdT) (err error)
+	// OpenNewApp opens a further window for appId even when one already
+	// exists: the explicit verb for a second instance, so the default action
+	// can stay raise without making duplicates unreachable.
+	OpenNewApp(appId app.AppIdT) (err error)
 	// OpenAppIds reports which apps currently hold a window, for the row's
 	// "open" badge. Order is not meaningful; the launcher builds a set.
 	OpenAppIds() (ids []app.AppIdT)
@@ -482,6 +486,19 @@ func (inst *Inst) open(id app.AppIdT) {
 	}
 	inst.logger.Info().Str("id", string(id)).Msg("launcher: open-or-raise")
 	if err := inst.host.OpenOrRaiseApp(id); err != nil {
+		inst.logger.Warn().Err(err).Str("id", string(id)).Msg("launcher: open failed")
+	}
+}
+
+// openNew opens a further window for id regardless of existing ones.
+func (inst *Inst) openNew(id app.AppIdT) {
+	if inst.host == nil {
+		inst.logger.Warn().Str("id", string(id)).
+			Msg("launcher: no host wired; open ignored")
+		return
+	}
+	inst.logger.Info().Str("id", string(id)).Msg("launcher: open new window")
+	if err := inst.host.OpenNewApp(id); err != nil {
 		inst.logger.Warn().Err(err).Str("id", string(id)).Msg("launcher: open failed")
 	}
 }

@@ -81,7 +81,9 @@ func (inst *Inst) renderDetailHead(ids *c.WidgetIdStack, m app.Manifest) {
 
 // renderDetailActions draws the verbs (§SD5's "a row is a noun with several
 // verbs"). Open is the default one the row already performs; the others exist
-// because they were previously unreachable from any launcher surface.
+// because they were previously unreachable from any launcher surface. New
+// window appears only while a window exists, since Open already opens one
+// otherwise.
 //
 // Open draws itself selected while the row list holds focus, because that is
 // exactly when Space and Enter perform it (keys.go). It is a readout of an
@@ -99,6 +101,12 @@ func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 			Selected(inst.listHasFocus()).
 			SendResp().HasPrimaryClicked() {
 			inst.open(m.Id)
+		}
+		if isOpen {
+			if c.Button(ids.PrepareStr("detail-open-new"), c.Atoms().Text(icons.PhPlus+" New window").Keep()).
+				SendResp().HasPrimaryClicked() {
+				inst.openNew(m.Id)
+			}
 		}
 		if inst.helpAppId != "" && inst.hasHelp(m) {
 			if c.Button(ids.PrepareStr("detail-help"), c.Atoms().Text(icons.PhBookOpen+" Help").Keep()).

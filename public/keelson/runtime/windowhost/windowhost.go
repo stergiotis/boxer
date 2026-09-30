@@ -1238,6 +1238,13 @@ func (inst *Inst) OpenOrRaiseApp(appId app.AppIdT) (err error) {
 	return
 }
 
+// OpenNewApp opens a further window for appId, discarding the window key.
+// It is the launcher host interface's explicit second-instance verb.
+func (inst *Inst) OpenNewApp(appId app.AppIdT) (err error) {
+	_, err = inst.Open(appId)
+	return
+}
+
 // OpenAppIds reports which apps currently hold a window, for the launcher's
 // "open" badge. Duplicates are possible and meaningful to nobody here — two
 // windows of one app are still one "open" — so callers build a set.

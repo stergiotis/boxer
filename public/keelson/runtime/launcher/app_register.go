@@ -119,7 +119,7 @@ func init() {
 }
 
 // hostAssertion documents the structural contract between this package and
-// windowhost without importing it: *windowhost.Inst carries OpenOrRaiseApp
-// and OpenAppIds precisely so it satisfies HostI, and hostboot wires the two
-// together. Written as a comment rather than a compile-time assertion because
+// windowhost without importing it: *windowhost.Inst carries OpenOrRaiseApp,
+// OpenNewApp and OpenAppIds precisely so it satisfies HostI, and hostboot
+// wires the two together. Written as a comment rather than a compile-time assertion because
 // the assertion would be the import the dependency direction forbids (§SD3).

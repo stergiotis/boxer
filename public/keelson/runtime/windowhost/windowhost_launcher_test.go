@@ -71,6 +71,10 @@ func TestOpenAppIds_ReportsWhatTheLauncherBadgesOn(t *testing.T) {
 	// the silent double-open §SD10 names as a bug.
 	require.NoError(t, inst.OpenOrRaiseApp("test.badged"))
 	assert.Len(t, inst.OpenAppIds(), 1, "raise, not a second window")
+
+	// OpenNewApp is the explicit verb for a second instance.
+	require.NoError(t, inst.OpenNewApp("test.badged"))
+	assert.Len(t, inst.OpenAppIds(), 2, "explicit second window")
 }
 
 type noopApp struct{ m app.Manifest }
