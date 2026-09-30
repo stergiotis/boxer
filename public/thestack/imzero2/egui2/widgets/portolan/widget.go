@@ -282,12 +282,6 @@ type Events struct {
 	ClickedOk bool
 }
 
-// Events returns the last Render's view events.
-//
-// Deprecated: use the value Render or RenderFill returns; this accessor
-// leaves with ADR-0267 M6.
-func (m *Map) Events() ViewEvents { return m.events }
-
 // ViewHash changes whenever the view does — centre, zoom or size — for
 // callers that debounce on a stable view rather than on events.
 func (m *Map) ViewHash() uint64 {

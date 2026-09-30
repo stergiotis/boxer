@@ -231,11 +231,6 @@ func (inst *Player) SetLayers(l *Layers) { inst.layers = l }
 func (inst *Player) Layers() (l *Layers) { return inst.layers }
 
 // Events reports what the pointer did to the layers during the last frame.
-// Events returns the last Render's events.
-//
-// Deprecated: use the value Render, RenderFill or RenderFillWidth returns;
-// this accessor leaves with ADR-0267 M6.
-func (inst *Player) Events() (ev Events) { return inst.events }
 
 // SetReadout selects how frames are printed on the ruler and by
 // [Player.FormatOffset] (SD9).

@@ -259,12 +259,6 @@ func (v *View) FastForward(steps uint32) {
 // return it.
 type Events []Event
 
-// Events returns the last Render's events.
-//
-// Deprecated: use the value Render, RenderFill or HostedPaint returns; this
-// accessor leaves with ADR-0267 M6.
-func (v *View) Events() Events { return v.events }
-
 // Metrics returns the counts and the force layout's settle state.
 func (v *View) Metrics() Metrics {
 	return Metrics{
