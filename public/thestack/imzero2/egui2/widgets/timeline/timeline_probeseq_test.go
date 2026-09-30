@@ -24,8 +24,8 @@ func TestProbeSeqIsPerInstance(t *testing.T) {
 			s.SetBaseSalt(salt)
 			return s
 		}
-		a := New(mk(0x1111_2222_3333_4444), scope, nil)
-		b := New(mk(0x5555_6666_7777_8888), scope, nil)
+		a := New(mk(0x1111_2222_3333_4444), scope, nil, Options{})
+		b := New(mk(0x5555_6666_7777_8888), scope, nil, Options{})
 		if a.probeSeq("timeline-pane") == b.probeSeq("timeline-pane") {
 			t.Fatalf("two instances share one probe slot: %#016x", a.probeSeq("timeline-pane"))
 		}
@@ -38,7 +38,7 @@ func TestProbeSeqIsPerInstance(t *testing.T) {
 		// and not in New.
 		seq := func(windowSalt uint64) uint64 {
 			ids := c.NewWidgetIdStack()
-			inst := New(ids, scope, nil)
+			inst := New(ids, scope, nil, Options{})
 			var got uint64
 			for range c.IdScope(ids.PrepareHighEntropy(windowSalt)) {
 				got = inst.probeSeq("timeline-pane")
@@ -51,7 +51,7 @@ func TestProbeSeqIsPerInstance(t *testing.T) {
 	})
 
 	t.Run("stable across frames and distinct per role", func(t *testing.T) {
-		inst := New(c.NewWidgetIdStack(), scope, nil)
+		inst := New(c.NewWidgetIdStack(), scope, nil, Options{})
 		first := inst.probeSeq("timeline-pane")
 		if again := inst.probeSeq("timeline-pane"); again != first {
 			t.Fatalf("probe seq moved between calls: %#016x then %#016x", first, again)

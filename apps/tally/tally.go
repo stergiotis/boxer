@@ -904,9 +904,7 @@ func (inst *App) renderPreview(sc *storeConn) {
 		for range c.IdScope(inst.ids.PrepareStr("preview-body")) {
 			switch content.kind {
 			case previewKindMarkdown:
-				if content.doc != nil {
-					content.doc.Render(inst.ids)
-				}
+				content.renderDoc(inst.ids)
 			case previewKindImage:
 				inst.renderImage(laneKey, content)
 			case previewKindNone, previewKindError:
@@ -1052,7 +1050,7 @@ func (inst *App) renderHistory(sc *storeConn) {
 // renderHistoryTimeline paints one flag per snapshot carrying the path.
 func (inst *App) renderHistoryTimeline(key string, res tableResult) {
 	if inst.historyTL == nil {
-		inst.historyTL = timeline.New(inst.ids, "tally-history-timeline", nil, timeline.WithInteractive(false))
+		inst.historyTL = timeline.New(inst.ids, "tally-history-timeline", nil, timeline.Options{NotInteractive: true})
 	}
 	if inst.historyTLKey != key {
 		inst.historyTLKey = key

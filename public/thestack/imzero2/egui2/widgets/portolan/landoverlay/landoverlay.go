@@ -23,7 +23,7 @@
 //	layer := &landoverlay.Layer{}
 //	atlas, _ := worldmap.LoadAtlas()
 //	m.Render(w, h, func(p portolan.Projector) {
-//	    layer.Draw(p, atlas, landoverlay.DefaultStyle())
+//	    layer.Paint(p, atlas, landoverlay.DefaultStyle())
 //	})
 package landoverlay
 
@@ -69,11 +69,11 @@ type Layer struct {
 // the viewport and cost their bounds test and nothing more.
 func (l *Layer) Drawn() int { return l.drawn }
 
-// Draw paints every country that meets the current viewport: the outer rings
+// Paint paints every country that meets the current viewport: the outer rings
 // filled and stroked, the holes stroked only, since a filled polygon on the
 // painter lane carries a single outer ring and would fill an enclave shut.
 // A nil atlas draws nothing.
-func (l *Layer) Draw(p portolan.Projector, atlas *worldmap.Atlas, st Style) {
+func (l *Layer) Paint(p portolan.Projector, atlas *worldmap.Atlas, st Style) {
 	l.drawn = 0
 	if atlas == nil {
 		return

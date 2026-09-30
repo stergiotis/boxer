@@ -250,8 +250,8 @@ func (inst *App) renderCapDoc(spec CapSpec) {
 		c.Label(spec.Description).Send()
 		return
 	}
-	for range c.IdScope(inst.ids.PrepareStr("doc-" + string(spec.Id))) {
-		doc.Render(inst.ids)
+	for range c.IdScope(inst.ids.PrepareStr(string(spec.Id))) {
+		markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "doc", Doc: doc})
 	}
 }
 

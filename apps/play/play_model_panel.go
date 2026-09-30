@@ -542,9 +542,7 @@ func (inst *PlayApp) renderModelResult() {
 		m.resDoc = markdown.Parse([]byte(m.res.Content))
 		m.resDocSrc = m.res.Content
 	}
-	for range c.IdScope(inst.ids.PrepareStr("model-doc")) {
-		m.resDoc.Render(inst.ids)
-	}
+	markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "model-doc", Doc: m.resDoc})
 }
 
 // modelSummaryLine is the pane header's provenance readout.

@@ -391,7 +391,7 @@ func (inst *App) renderAudioPreview(s *audioSession) {
 		return
 	}
 	if s.player == nil {
-		s.player = waveform.New(inst.ids, s.tr, waveform.Options{ScopeKey: "tally-audio"})
+		s.player = waveform.New(inst.ids, "tally-audio", s.tr, waveform.Options{})
 		s.player.SetReadout(waveform.ReadoutRelative)
 		s.volume = 1
 		sm := c.CurrentApplicationState.StateManager

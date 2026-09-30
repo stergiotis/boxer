@@ -49,20 +49,16 @@ func init() {
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			s := &timelineDemoState{}
 			s.annotations = makeAnnotationFixture()
-			s.tl = timeline.New(ids, "timeline-demo", makeTimelineFixture(),
-				timeline.WithContainerWidth(1180),
-				timeline.WithPointEvents(makeCommitFixture()),
-				timeline.WithAnnotations(s.annotations),
-				timeline.WithBackgroundBands(composeBandProducers(weekendBands, officeHoursBands)),
-				timeline.WithNowLine(true),
-				timeline.WithOnSelection(func(sel timeline.SelectionInfo) {
-					s.pushClick(formatSelectionClickLine(sel))
-				}),
+			s.tl = timeline.New(ids, "timeline-demo", makeTimelineFixture(), timeline.Options{
+				ContainerWidth:  1180,
+				BackgroundBands: composeBandProducers(weekendBands, officeHoursBands),
+				NowLine:         true,
 				// The range brush (ADR-0043 §SD16) on its own strip below the
 				// axis, so pan and click on the canvas are unchanged.
-				timeline.WithBrush(func(r timeline.BrushRange, ok bool) {
-					s.pushClick(formatBrushClickLine(r, ok))
-				}))
+				Brush: true,
+			})
+			s.tl.SetPoints(makeCommitFixture())
+			s.tl.SetAnnotations(s.annotations)
 			// The playhead: one instant a caller is stepping through, marked
 			// with a caret. Pinned into the fixture rather than at time.Now(),
 			// which is months past the fixture's three days and would put the
@@ -81,7 +77,13 @@ func init() {
 			c.Label("Click a bare stretch of a lane row (past the bars) to select the whole row: a faint hairline runs the lane's full width, painted under the bars so it never strikes through an event. Bars win over the row they sit on; the gap below a row belongs to it.").Send()
 			c.Label("Hover for tooltip · click to select (outline + card below) · Ctrl+scroll over a session zooms anchored at the cursor · drag to pan through time.").Send()
 			c.Label("Thin strip under the axis: drag it to brush a time range. It is a separate surface, so brushing never pans and panning never brushes; a click on it clears.").Send()
-			s.tl.Render()
+			ev := s.tl.Render()
+			if ev.SelectionChanged {
+				s.pushClick(formatSelectionClickLine(ev.Selection))
+			}
+			if ev.BrushChanged {
+				s.pushClick(formatBrushClickLine(ev.Brush, ev.BrushOk))
+			}
 			c.Separator().Send()
 			renderStrongLabel("Brushed range")
 			c.Label(formatBrushCard(s.tl)).Send()

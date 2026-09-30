@@ -76,6 +76,7 @@ var _ streamreadaccess.MembershipSinkI = (*Table2CardEmitter)(nil)
 // composed identity with the co-group key.
 type Table2CardEmitter struct {
 	ids        *c.WidgetIdStack
+	scopeKey   string
 	classifier membershiprole.ClassifierI
 	renderer   *membership.Renderer
 	palette    imgcolor.Palette
@@ -230,7 +231,10 @@ type table2Tag struct {
 
 // NewTable2CardEmitter constructs a Table2CardEmitter with an optional
 // membership classifier (membershiprole.PathPrefixClassifier{} when nil).
-func NewTable2CardEmitter(ids *c.WidgetIdStack, palette ColorPaletteE, classifier membershiprole.ClassifierI) (inst *Table2CardEmitter) {
+func NewTable2CardEmitter(ids *c.WidgetIdStack, scopeKey string, palette ColorPaletteE, classifier membershiprole.ClassifierI) (inst *Table2CardEmitter) {
+	if scopeKey == "" {
+		scopeKey = "leeway-card"
+	}
 	var pal imgcolor.Palette
 	switch palette {
 	case ColorPaletteViridis:
@@ -247,6 +251,7 @@ func NewTable2CardEmitter(ids *c.WidgetIdStack, palette ColorPaletteE, classifie
 	}
 	inst = &Table2CardEmitter{
 		ids:               ids,
+		scopeKey:          scopeKey,
 		classifier:        classifier,
 		renderer:          membership.DefaultRenderer(),
 		palette:           pal,
@@ -789,7 +794,15 @@ const (
 // persistence natively (its own TableState), so no manual fix-up is
 // needed here. Per-row variable height comes from rowHeight(...) → tbl.Row(h);
 // egui_extras::heterogeneous_rows is the upstream mechanism.
+// flushUnified draws the buffered rows under the emitter's scope
+// (ADR-0267 W4): every widget id the card derives is relative to it.
 func (inst *Table2CardEmitter) flushUnified() {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		inst.flushUnifiedScoped()
+	}
+}
+
+func (inst *Table2CardEmitter) flushUnifiedScoped() {
 	showEntity := inst.nEntities > 1
 
 	// Columns must be pushed BEFORE entering NewTable.Body() — they're
@@ -953,8 +966,7 @@ func (inst *Table2CardEmitter) renderSectionHeaderRow(
 	clicked := false
 	for col := range nCols {
 		for range r.Col() {
-			cellId := inst.ids.PrepareSeq(0x60000 + uint64(row.sectionAccentIdx)*16 + uint64(col))
-			ts := c.TintedScope(cellId, transparentFill).
+			ts := c.TintedScope(inst.sectionCellId(row.sectionAccentIdx, col), transparentFill).
 				Stroke(styletokens.StrokeRegular, accent).
 				OuterMargin(table2SectionHeaderOuterMargin).
 				InnerMargin(table2SectionHeaderInnerMargin).
@@ -1266,4 +1278,11 @@ func renderPackedValues(pairs []table2NamedValue, named bool) {
 	for rt := range c.RichTextLabel(b.String()) {
 		rt.Monospace().Small()
 	}
+}
+
+// sectionCellId is a section-header cell's id: the section's accent index
+// and the column, each an ordinal under its own scope rather than packed
+// into one seeded integer.
+func (inst *Table2CardEmitter) sectionCellId(accentIdx int32, col uint32) c.WidgetIdCreatorI {
+	return inst.ids.PrepareSeq(uint64(accentIdx)<<16 | uint64(col))
 }

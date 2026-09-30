@@ -195,7 +195,7 @@ func (inst *App) renderTranscript() {
 				doc := e.doc
 				return chatview.Block{Render: func() {
 					for range c.IdScope(inst.ids.PrepareSeq(uint64(0x5100 + ord))) {
-						doc.Render(inst.ids)
+						markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "doc", Doc: doc})
 					}
 				}}, true
 			}

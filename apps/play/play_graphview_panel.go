@@ -1773,7 +1773,7 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 	m := inst.lastModel
 	if inst.pm == nil {
 		lat0, lon0 := netUnprojectWebMercator(m.GeoOriginX, m.GeoOriginY)
-		inst.pm = portolan.New(inst.ids, portolan.Options{
+		inst.pm = portolan.New(inst.ids, "gv-map", portolan.Options{
 			Source:  basemap.PortolanSource(),
 			Loader:  basemap.PortolanLoader(inst.tiles),
 			Center:  portolan.LL(lat0, lon0),
@@ -1804,7 +1804,7 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 
 	inst.pm.Render(w, h, func(p portolan.Projector) {
 		if !basemap.Configured() && inst.atlas != nil {
-			inst.land.Draw(p, inst.atlas, landoverlay.DefaultStyle())
+			inst.land.Paint(p, inst.atlas, landoverlay.DefaultStyle())
 		}
 		// The map's handlers ran at the top of this Render, so the paint
 		// takes the view as it is now rather than the one the pick used

@@ -137,7 +137,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	inst.ir = ir
 	inst.conv = cl.Convention
 	inst.rowConfig = cl.RowConfig
-	inst.emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, leewaywidgets.ColorPaletteViridis, nil)
+	inst.emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, "card", leewaywidgets.ColorPaletteViridis, nil)
 	// Deferred rendering: Render walks the record in two steps (Prepare buffers,
 	// Render draws) so the Detail timeline can read the per-section digests
 	// between them.

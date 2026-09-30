@@ -56,7 +56,8 @@ var clipboardDoc = markdown.Parse([]byte("" +
 	"egui `copy_text` op. Click the Copy button above either block below.\n\n" +
 	"```go\n" +
 	"// the consumer wires the code-block button to any action:\n" +
-	"for act := range doc.RenderActions(ids, \"Copy\") {\n" +
+	"res := markdown.Render(markdown.Input{Ids: ids, Doc: doc, ActionLabels: []string{\"Copy\"}})\n" +
+	"for _, act := range res.Actions {\n" +
 	"\tgo func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(act.Text)) }()\n" +
 	"}\n" +
 	"```\n\n" +
@@ -186,7 +187,8 @@ func (inst *App) renderClipboardSection() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-clipboard"),
 		c.WidgetText().Text("clipboard.write — copy code blocks to the clipboard").Keep()).
 		DefaultOpen(true).KeepIter() {
-		for act := range clipboardDoc.RenderActions(inst.ids, "Copy") {
+		res := markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "clipboard-doc", Doc: clipboardDoc, ActionLabels: []string{"Copy"}})
+		for _, act := range res.Actions {
 			if inst.bus == nil {
 				continue
 			}

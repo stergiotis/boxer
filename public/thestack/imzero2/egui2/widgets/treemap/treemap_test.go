@@ -645,37 +645,35 @@ func TestColormap_RangeAndPalette(t *testing.T) {
 }
 
 // =============================================================================
-// WithMaxNestingDepth / previewDepth
+// Options.MaxNestingDepth / previewDepth
 // =============================================================================
 
-func TestWithMaxNestingDepth_SetsField(t *testing.T) {
-	tm := &Treemap{}
-	WithMaxNestingDepth(5)(tm)
-	if tm.maxNestingDepth != 5 {
-		t.Fatalf("WithMaxNestingDepth(5): maxNestingDepth = %d, want 5", tm.maxNestingDepth)
+func TestOptionsMaxNestingDepth_Resolves(t *testing.T) {
+	for _, tc := range []struct{ opt, want int }{{0, 1}, {5, 5}, {NestingAll, 0}, {-7, 0}} {
+		tm := &Treemap{Opts: Options{MaxNestingDepth: tc.opt}}
+		tm.applyOpts()
+		if tm.maxNestingDepth != tc.want {
+			t.Errorf("MaxNestingDepth %d: maxNestingDepth = %d, want %d", tc.opt, tm.maxNestingDepth, tc.want)
+		}
 	}
 }
 
-func TestWithCellLabel_SetAndClear(t *testing.T) {
+func TestOptionsCellLabel_SetAndClear(t *testing.T) {
 	tm := &Treemap{}
+	tm.applyOpts()
 	if tm.cellLabelFn != nil {
-		t.Fatal("zero Treemap should have a nil cellLabelFn")
+		t.Fatal("zero Options should leave cellLabelFn nil")
 	}
-	WithCellLabel(func(n *layout.Node) string { return "v:" + n.Name })(tm)
-	if tm.cellLabelFn == nil {
-		t.Fatal("WithCellLabel should set cellLabelFn")
-	}
+	tm.Opts.CellLabel = func(n *layout.Node) string { return "v:" + n.Name }
+	tm.applyOpts()
 	if got := tm.cellLabelFn(&layout.Node{Name: "x"}); got != "v:x" {
 		t.Fatalf("cellLabelFn not wired: got %q want %q", got, "v:x")
 	}
-	// SetCellLabel mirrors the option and accepts nil to disable.
-	tm.SetCellLabel(func(*layout.Node) string { return "y" })
-	if got := tm.cellLabelFn(&layout.Node{}); got != "y" {
-		t.Fatalf("SetCellLabel did not replace fn: got %q want %q", got, "y")
-	}
-	tm.SetCellLabel(nil)
+	// Opts is re-read every frame: clearing the field clears the label.
+	tm.Opts.CellLabel = nil
+	tm.applyOpts()
 	if tm.cellLabelFn != nil {
-		t.Fatal("SetCellLabel(nil) should clear cellLabelFn")
+		t.Fatal("a nil Opts.CellLabel should clear cellLabelFn")
 	}
 }
 
@@ -718,21 +716,20 @@ func mustPanic(t *testing.T, name string, fn func()) {
 // SetRoot and the self cell (ADR-0166)
 // =============================================================================
 
-func TestWithSelfCellLabel_SetAndIndependentOfCellLabel(t *testing.T) {
+func TestOptionsSelfCellLabel_SetAndIndependentOfCellLabel(t *testing.T) {
 	tm := &Treemap{}
+	tm.Opts.CellLabel = func(n *layout.Node) string { return "total:" + n.Name }
+	tm.applyOpts()
 	if tm.selfCellLabelFn != nil {
-		t.Fatal("zero Treemap should have a nil selfCellLabelFn")
+		t.Fatal("CellLabel must not populate selfCellLabelFn: a self cell shows a node's OWN size, not its total")
 	}
-	WithCellLabel(func(n *layout.Node) string { return "total:" + n.Name })(tm)
-	if tm.selfCellLabelFn != nil {
-		t.Fatal("WithCellLabel must not populate selfCellLabelFn: a self cell shows a node's OWN size, not its total")
-	}
-	WithSelfCellLabel(func(n *layout.Node) string { return "own:" + n.Name })(tm)
+	tm.Opts.SelfCellLabel = func(n *layout.Node) string { return "own:" + n.Name }
+	tm.applyOpts()
 	if got := tm.selfCellLabelFn(&layout.Node{Name: "x"}); got != "own:x" {
 		t.Fatalf("selfCellLabelFn not wired: got %q want %q", got, "own:x")
 	}
 	if got := tm.cellLabelFn(&layout.Node{Name: "x"}); got != "total:x" {
-		t.Fatalf("WithSelfCellLabel clobbered cellLabelFn: got %q", got)
+		t.Fatalf("SelfCellLabel clobbered cellLabelFn: got %q", got)
 	}
 }
 

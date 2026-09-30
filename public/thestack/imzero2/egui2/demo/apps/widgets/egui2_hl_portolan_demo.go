@@ -224,7 +224,7 @@ type demoHeatmap struct {
 
 func newPortolanDemoState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *portolanDemoState {
 	return &portolanDemoState{
-		m: portolan.New(ids, portolan.Options{
+		m: portolan.New(ids, "portolan-demo", portolan.Options{
 			Source: basemap.PortolanSource(),
 			Loader: portolan.LoaderOptions{Fetcher: newDemoTiles(bus)},
 			Center: portolan.LL(demoMapCenterLat, demoMapCenterLon),
@@ -419,7 +419,7 @@ func (st *portolanDemoState) choropleth(ids *c.WidgetIdStack) {
 	}
 	for range c.IdScope(ids.PrepareStr("choropleth-map")) {
 		if st.choro == nil {
-			st.choro = portolan.New(ids, portolan.Options{
+			st.choro = portolan.New(ids, "choropleth", portolan.Options{
 				NoTiles: true, HideAttribution: true,
 				Center: portolan.LL(demoMapCenterLat, demoMapCenterLon), Zoom: 11,
 			})
@@ -541,7 +541,7 @@ func demoMapRaster(ids *c.WidgetIdStack, st *rasterDemoState) {
 	c.SliderF64(ids.PrepareStr("mapraster-opacity"), st.opacity, 0.1, 1.0).Text("opacity").SendRespVal(&st.opacity)
 	c.Label("Synthetic raster pinned to a bbox: red band = north, green band = west.").Send()
 	if st.m == nil {
-		st.m = portolan.New(ids, portolan.Options{
+		st.m = portolan.New(ids, "mapraster", portolan.Options{
 			NoTiles: true, HideAttribution: true,
 			Center: portolan.LL(rasterDemoCenterLat, rasterDemoCenterLon), Zoom: 12,
 		})

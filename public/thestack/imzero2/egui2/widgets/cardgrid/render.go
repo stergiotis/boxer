@@ -570,43 +570,46 @@ func toneEdge(id c.WidgetIdCreatorI, x0, y0, x1, y1 float32, roundTop bool, fill
 func tok(t styletokens.RGBA8) color.Color { return color.Hex(t.AsHex()) }
 
 // Toolbar draws the density and hero-aspect controls inline — the host
-// places it in its own row, beside a pager. The aspect control is drawn only
+// places it in its own row, beside a pager. Its ids sit under the same
+// scopeKey the grid's Render uses, in a "toolbar" scope of their own. The aspect control is drawn only
 // for a page that has heroes.
 func Toolbar(ids *c.WidgetIdStack, scopeKey string, st *State, slots SlotsE) {
 	if st == nil || ids == nil {
 		return
 	}
-	for range c.IdScope(ids.PrepareStr(scopeKey + "-toolbar")) {
-		pick := func(key, label, tip string, on bool) (clicked bool) {
-			for range c.HoverText(tip).KeepIter() {
-				clicked = c.Button(ids.PrepareStr(key), c.Atoms().Text(label).Keep()).Small().
-					Selected(on).SendResp().HasPrimaryClicked()
+	for range c.IdScope(ids.PrepareStr(scopeKey)) {
+		for range c.IdScope(ids.PrepareStr("toolbar")) {
+			pick := func(key, label, tip string, on bool) (clicked bool) {
+				for range c.HoverText(tip).KeepIter() {
+					clicked = c.Button(ids.PrepareStr(key), c.Atoms().Text(label).Keep()).Small().
+						Selected(on).SendResp().HasPrimaryClicked()
+				}
+				return
 			}
-			return
-		}
-		if pick("d-s", "S", "small cards", st.density == DensitySmall) {
-			st.density = DensitySmall
-		}
-		if pick("d-m", "M", "medium cards", st.density == DensityMedium) {
-			st.density = DensityMedium
-		}
-		if pick("d-l", "L", "large cards", st.density == DensityLarge) {
-			st.density = DensityLarge
-		}
-		if !slots.Has(SlotsHero) {
-			return
-		}
-		// A gap, not a vertical Separator: that one grows to the height the
-		// row is offered, and a toolbar row is offered the whole pane.
-		c.AddSpace(toolbarGap)
-		if pick("a-169", "16:9", "hero aspect 16:9", st.aspect == Aspect16x9) {
-			st.aspect = Aspect16x9
-		}
-		if pick("a-43", "4:3", "hero aspect 4:3", st.aspect == Aspect4x3) {
-			st.aspect = Aspect4x3
-		}
-		if pick("a-11", "1:1", "hero aspect 1:1", st.aspect == Aspect1x1) {
-			st.aspect = Aspect1x1
+			if pick("d-s", "S", "small cards", st.density == DensitySmall) {
+				st.density = DensitySmall
+			}
+			if pick("d-m", "M", "medium cards", st.density == DensityMedium) {
+				st.density = DensityMedium
+			}
+			if pick("d-l", "L", "large cards", st.density == DensityLarge) {
+				st.density = DensityLarge
+			}
+			if !slots.Has(SlotsHero) {
+				return
+			}
+			// A gap, not a vertical Separator: that one grows to the height the
+			// row is offered, and a toolbar row is offered the whole pane.
+			c.AddSpace(toolbarGap)
+			if pick("a-169", "16:9", "hero aspect 16:9", st.aspect == Aspect16x9) {
+				st.aspect = Aspect16x9
+			}
+			if pick("a-43", "4:3", "hero aspect 4:3", st.aspect == Aspect4x3) {
+				st.aspect = Aspect4x3
+			}
+			if pick("a-11", "1:1", "hero aspect 1:1", st.aspect == Aspect1x1) {
+				st.aspect = Aspect1x1
+			}
 		}
 	}
 }

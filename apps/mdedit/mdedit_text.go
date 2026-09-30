@@ -69,7 +69,7 @@ func lineStart(src string, off int) (start int) {
 // headingSlugAt resolves a byte offset to the slug of the section containing
 // it: the last heading starting at or before off. An offset above the first
 // heading returns "" — the document-level section, which is also the value
-// [markdown.WithScrollToSection] treats as a no-op, so a document with no
+// [markdown.Input.ScrollToSection] treats as a no-op, so a document with no
 // headings simply never scrolls.
 //
 // Heading offsets are normalised to their line start before comparing.

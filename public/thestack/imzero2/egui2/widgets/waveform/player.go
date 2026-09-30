@@ -73,9 +73,6 @@ func DefaultVisuals() (vis Visuals) {
 // Options configure a [Player]. The zero value is a usable player: split
 // channels, continuous columns, auto-scroll on, keyboard on.
 type Options struct {
-	// ScopeKey names the id scope the player's widgets derive from; two
-	// players under one id stack need different keys. Empty is "waveform".
-	ScopeKey string
 	// OverlayChannels draws every channel over the same band instead of one
 	// band per channel.
 	OverlayChannels bool
@@ -106,10 +103,11 @@ type Options struct {
 // Player draws one track and owns the view over it. Construct with [New],
 // draw with [Player.Render] every frame from the frame goroutine.
 type Player struct {
-	ids  *c.WidgetIdStack
-	tr   *track.Track
-	opts Options
-	vis  Visuals
+	ids      *c.WidgetIdStack
+	scopeKey string
+	tr       *track.Track
+	opts     Options
+	vis      Visuals
 
 	view     View
 	viewInit bool
@@ -202,9 +200,9 @@ var keyMask = keycodes.MaskOf(keycodes.Space, keycodes.ArrowLeft, keycodes.Arrow
 
 // New makes a player over tr. ids scopes every id the player derives; the
 // player does not take ownership of the track.
-func New(ids *c.WidgetIdStack, tr *track.Track, opts Options) (inst *Player) {
-	if opts.ScopeKey == "" {
-		opts.ScopeKey = "waveform"
+func New(ids *c.WidgetIdStack, scopeKey string, tr *track.Track, opts Options) (inst *Player) {
+	if scopeKey == "" {
+		scopeKey = "waveform"
 	}
 	if opts.SeekStep <= 0 {
 		opts.SeekStep = defaultSeekStep
@@ -213,7 +211,7 @@ func New(ids *c.WidgetIdStack, tr *track.Track, opts Options) (inst *Player) {
 	if opts.Visuals != nil {
 		vis = *opts.Visuals
 	}
-	return &Player{ids: ids, tr: tr, opts: opts, vis: vis}
+	return &Player{ids: ids, scopeKey: scopeKey, tr: tr, opts: opts, vis: vis}
 }
 
 // Track returns the track the player draws.
@@ -318,7 +316,7 @@ func (inst *Player) FormatOffset(frame int64) (s string) {
 // position of the enclosing Ui.
 func (inst *Player) Render(w, h float32) (ev Events) {
 	defer func() { ev = inst.events }()
-	for range c.IdScope(inst.ids.PrepareStr(inst.opts.ScopeKey)) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		if inst.opts.NoKeyboard {
 			inst.keyFrameID = 0
 			inst.frame(w, h)
@@ -358,7 +356,7 @@ func (inst *Player) RenderFill(fallbackW, fallbackH float32) (ev Events) {
 // and returns what it reported last frame; the scope is opened for the
 // derivation alone and emits nothing.
 func (inst *Player) paneSize() (w, h float32, ok bool) {
-	for range c.IdScope(inst.ids.PrepareStr(inst.opts.ScopeKey)) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		w, h, ok = c.CapturePaneSize(inst.ids.ProbeSeq("pane"))
 	}
 	return

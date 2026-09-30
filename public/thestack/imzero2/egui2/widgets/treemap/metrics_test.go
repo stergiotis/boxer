@@ -1,6 +1,7 @@
 package treemap
 
 import (
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -25,7 +26,7 @@ func TestLabelMetrics_InitDerivesDensityTokens(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var m labelMetrics
-			m.init("k", tc.d)
+			m.init(tc.d)
 			if m.nameFontPt != tc.wantNamePt {
 				t.Errorf("nameFontPt = %v, want %v", m.nameFontPt, tc.wantNamePt)
 			}
@@ -44,7 +45,7 @@ func TestLabelMetrics_InitDerivesDensityTokens(t *testing.T) {
 // Real egui row heights run ≈1.2–1.3× pt, so the 1.45× seed stays above them.
 func TestLabelMetrics_SeedIsGenerous(t *testing.T) {
 	var m labelMetrics
-	m.init("k", styletokens.DensityStandard)
+	m.init(styletokens.DensityStandard)
 	if got, min := m.nameRowH, float64(m.nameFontPt)*1.3; got < min {
 		t.Errorf("seeded nameRowH = %v, want >= %v (1.3x pt)", got, min)
 	}
@@ -55,7 +56,7 @@ func TestLabelMetrics_SeedIsGenerous(t *testing.T) {
 
 func TestLabelMetrics_GateArithmetic(t *testing.T) {
 	var m labelMetrics
-	m.init("k", styletokens.DensityStandard)
+	m.init(styletokens.DensityStandard)
 	// Simulate the post-Sync state: measured row heights have replaced the
 	// seeds (values representative of Body 13pt / Small 11pt).
 	m.nameRowH = 16.25
@@ -86,7 +87,7 @@ func TestLabelMetrics_GateArithmetic(t *testing.T) {
 // box and silently reopen the overflow.
 func TestLabelMetrics_RowFloorsAtFontPt(t *testing.T) {
 	var m labelMetrics
-	m.init("k", styletokens.DensityStandard)
+	m.init(styletokens.DensityStandard)
 	m.nameRowH = 0
 	m.valueRowH = -3
 	if got, want := m.nameMinH(zoomCellVSlack), float64(m.nameFontPt)+5.0; got != want {
@@ -99,8 +100,15 @@ func TestLabelMetrics_RowFloorsAtFontPt(t *testing.T) {
 
 func TestLabelMetrics_MeasureIdsDistinct(t *testing.T) {
 	var a, b labelMetrics
-	a.init("scope-a", styletokens.DensityStandard)
-	b.init("scope-b", styletokens.DensityStandard)
+	a.init(styletokens.DensityStandard)
+	b.init(styletokens.DensityStandard)
+	ids := c.NewWidgetIdStack()
+	for range c.IdScope(ids.PrepareStr("scope-a")) {
+		a.bindIds(ids)
+	}
+	for range c.IdScope(ids.PrepareStr("scope-b")) {
+		b.bindIds(ids)
+	}
 
 	seen := map[uint64]string{}
 	for name, id := range map[string]uint64{

@@ -81,7 +81,7 @@ func newComponentViewState(ids *c.WidgetIdStack) (st *componentViewDemoState) {
 		return
 	}
 	st.cvDriver = driver
-	st.emitter = leewaywidgets.NewTable2CardEmitter(ids, leewaywidgets.ColorPaletteViridis, nil)
+	st.emitter = leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil)
 	// Page size 1: each page is exactly one drone, so the pager selects the
 	// single record whose report is shown.
 	st.pager = pager.New(c.NewWidgetIdStack(), "pager", pager.Options{PageSize: 1, Unit: "drones", HideSizeCombo: true})

@@ -62,15 +62,15 @@ func timeScrubberDemoColor(v float32) uint32 {
 	return uint32(60+190*t)<<24 | uint32(170-60*t)<<16 | uint32(200-150*t)<<8 | 0xff
 }
 
-func timeScrubberDemoOptions(key string) timescrubber.Options {
+func timeScrubberDemoOptions() timescrubber.Options {
 	return timescrubber.Options{
-		ScopeKey: key, ValueName: "mean speed", ValueUnit: "m/s",
+		ValueName: "mean speed", ValueUnit: "m/s",
 		Now: func() time.Time { return timeScrubberDemoNow },
 	}
 }
 
-func newTimeScrubberDemo(ids *c.WidgetIdStack, opts timescrubber.Options) (sc *timescrubber.Scrubber) {
-	sc = timescrubber.New(ids, opts)
+func newTimeScrubberDemo(ids *c.WidgetIdStack, key string, opts timescrubber.Options) (sc *timescrubber.Scrubber) {
+	sc = timescrubber.New(ids, key, opts)
 	sc.ValueColor = timeScrubberDemoColor
 	return
 }
@@ -85,7 +85,7 @@ type timeScrubberDemoState struct {
 
 func newTimeScrubberDemoState(ids *c.WidgetIdStack) (st *timeScrubberDemoState) {
 	st = &timeScrubberDemoState{steps: timeScrubberForecast()}
-	st.sc = newTimeScrubberDemo(ids, timeScrubberDemoOptions("ts-demo"))
+	st.sc = newTimeScrubberDemo(ids, "ts-demo", timeScrubberDemoOptions())
 	st.sc.Marks = []timescrubber.Mark{{At: timeScrubberDemoStart.Add(6 * time.Hour), Label: "run 06:00"}}
 	st.sc.Transport.Pos = 12
 	st.sc.Transport.SetRange(8, 30)
@@ -153,19 +153,19 @@ func newTimeScrubberFormsState(ids *c.WidgetIdStack) (st *timeScrubberFormsState
 	}
 	st.dense[1700].State = timescrubber.StepStateMissing
 
-	o := timeScrubberDemoOptions("ts-forms-compact")
+	o := timeScrubberDemoOptions()
 	o.Compact = true
-	st.compact = newTimeScrubberDemo(ids, o)
+	st.compact = newTimeScrubberDemo(ids, "ts-forms-compact", o)
 	st.compact.Transport.Pos = 12
 
-	o = timeScrubberDemoOptions("ts-forms-index")
+	o = timeScrubberDemoOptions()
 	o.ByIndex = true
-	st.byIndex = newTimeScrubberDemo(ids, o)
+	st.byIndex = newTimeScrubberDemo(ids, "ts-forms-index", o)
 	st.byIndex.Transport.Pos = 27
 
-	o = timeScrubberDemoOptions("ts-forms-crowd")
+	o = timeScrubberDemoOptions()
 	o.Now = func() time.Time { return timeScrubberDemoStart.Add(200 * time.Hour) }
-	st.crowd = newTimeScrubberDemo(ids, o)
+	st.crowd = newTimeScrubberDemo(ids, "ts-forms-crowd", o)
 	st.crowd.Transport.Pos = 900
 	return
 }

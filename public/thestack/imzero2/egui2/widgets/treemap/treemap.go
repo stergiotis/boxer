@@ -1,8 +1,9 @@
-// Package treemap provides an interactive Frame-based treemap widget with
-// zoom-from-rect transitions on drill-in and drill-up. Cells are egui Frames
-// with .SenseClick() so hover and click handling flows through egui's response
-// system. The zoom tween is driven by egui::Context::animate_bool_with_time
-// via the bindings.AnimateBoolWithTimeBind wrapper.
+// Package treemap is a semi-retained widget (ADR-0267): an interactive
+// Frame-based treemap with zoom-from-rect transitions on drill-in and
+// drill-up. Cells are egui Frames with .SenseClick() so hover and click
+// handling flows through egui's response system. The zoom tween is driven by
+// egui::Context::animate_bool_with_time via the bindings.AnimateBoolWithTimeBind
+// wrapper.
 //
 // The squarified layout algorithm and the tree data type (Node, Rect,
 // ComputeLayoutAt) live in the sibling package treemap/layout so they can be
@@ -11,12 +12,15 @@
 //
 // Basic usage:
 //
-//	var tm = treemap.New(ids, "disk-usage", scanDisk(),
-//	    treemap.WithContainerSize(700, 450),
-//	    treemap.WithAnimationDuration(0.28))
-//	for range c.Window(...).KeepIter() {
-//	    tm.Render()
-//	}
+//	tm := treemap.New(ids, "disk-usage", scanDisk(), treemap.Options{AnimationDuration: 0.28})
+//	// every frame:
+//	ev := tm.Render(700, 450) // or tm.RenderFill(700, 450) in a bounded pane
+//	if ev.ClickedLeaf != nil { open(ev.ClickedLeaf) }
+//
+// Options are a struct kept as the public [Treemap.Opts] and re-read every
+// frame, so switching what a cell's colour encodes is an assignment that keeps
+// the drill position. SetRoot replaces the tree; what the user did comes back
+// in [Events].
 //
 // Multiple instances can coexist safely: Render wraps its body in c.IdScope
 // keyed by scopeKey, so the imzero2 id stack automatically XORs the instance
@@ -28,7 +32,7 @@
 //
 //   - Panic: programmer errors (nil where required, structurally impossible
 //     input). Fails loudly at the call site so bugs surface during development.
-//     Examples: WithContainerSize(0,0), New(nil ids, …), WithColoring(nil).
+//     Examples: New(nil ids, …), SetRoot(nil).
 //
 //   - Error return: caller-controlled runtime input where the caller can
 //     react. Returns a documented sentinel error and leaves state unchanged.
@@ -37,7 +41,7 @@
 //   - Log + safe default: construction-time data input with an obvious
 //     recovery, where there is no caller to return to. Emits a single
 //     log.Warn (Str("pkg","treemap")) and falls back to a documented default.
-//     Example: WithInitialPath with a stale path → ignored, root view kept.
+//     Example: Options.InitialPath with a stale path → ignored, root view kept.
 //
 // Each option/method states its tier explicitly in its godoc.
 package treemap
@@ -67,129 +71,14 @@ const (
 	// to 0 when motion is disabled.
 	// animDoneEps lives in machine.go alongside animMachine.
 
-	// Cell ids iterate from this seq, stepping by 2 per cell to preserve
-	// the historical even-id convention. Well above bcButtonMaxLevel so the
-	// two ranges don't collide within a single IdScope.
-	cellSeqBase uint64 = 0xcc00ff0000
-	// Breadcrumb buttons use PrepareSeq(level); keep this well below cellSeqBase.
-	bcButtonMaxLevel uint64 = 1 << 20
+	// Cell seqs step by 2 per cell under the container Frame's own scope, so
+	// a hatch canvas can take the odd seq beside its cell's even one.
 
 	// maxPreviewRecursion safety-caps "unlimited" preview nesting
-	// (WithMaxNestingDepth(n<=0)); real trees terminate far sooner via the
+	// (Options.MaxNestingDepth < 0); real trees terminate far sooner via the
 	// minimum-cell-size cull. Guards against a pathologically deep tree.
 	maxPreviewRecursion int = 64
 )
-
-// Option configures a Treemap at construction time.
-type Option func(*Treemap)
-
-// WithContainerSize sets the fixed treemap canvas size in logical pixels.
-// Default 700x450. Panics if w or h is non-positive.
-func WithContainerSize(w, h float32) Option {
-	if w <= 0 || h <= 0 {
-		panic(fmt.Sprintf("treemap: WithContainerSize requires positive w,h (got %v,%v)", w, h))
-	}
-	return func(t *Treemap) { t.containerW, t.containerH = w, h }
-}
-
-// WithMaxNestingDepth sets how many non-interactive preview levels render
-// below the focused (frontier) node. The default, 1, shows the frontier's
-// children plus a single preview level of grandchildren — the drill-down
-// view. A value >1 nests that many levels; n<=0 renders the entire subtree
-// at once (an lstopo-style "show everything" view), bounded only by the
-// minimum cell size and an internal recursion cap. Drill-in/zoom still apply
-// to the frontier; deeper preview cells are display-only.
-func WithMaxNestingDepth(n int) Option {
-	return func(t *Treemap) { t.maxNestingDepth = n }
-}
-
-// WithAnimationDuration sets the zoom-transition duration in seconds.
-// Default is styletokens.MotionSlowSecs() (the IDS motion ladder's slow
-// rung, 320 ms; ADR-0032 §SD5). Panics if secs is negative; 0 means
-// instant (no animation).
-func WithAnimationDuration(secs float32) Option {
-	if secs < 0 {
-		panic(fmt.Sprintf("treemap: WithAnimationDuration requires secs >= 0 (got %v)", secs))
-	}
-	return func(t *Treemap) { t.animDurSecs = secs }
-}
-
-// WithColoring overrides the active ColoringI. Defaults to
-// DepthColoring(DefaultDepthColors).
-//
-// Compose multiple effects with CompositeColoring:
-//
-//	treemap.WithColoring(treemap.CompositeColoring(
-//	    treemap.DepthColoring(treemap.DefaultDepthColors),
-//	    treemap.CategoricalColoring(brewerSet1, errorSeverity),
-//	))
-func WithColoring(coloring ColoringI) Option {
-	if coloring == nil {
-		panic("treemap: WithColoring requires a non-nil ColoringI")
-	}
-	return func(t *Treemap) { t.coloring = coloring }
-}
-
-// WithDepthColors is a backwards-compatible shortcut for
-// WithColoring(DepthColoring(palette)). Prefer WithColoring directly.
-//
-// Deprecated: use WithColoring(DepthColoring(palette)).
-func WithDepthColors(colors []uint32) Option {
-	return WithColoring(DepthColoring(colors))
-}
-
-// WithInitialPath opens the widget pre-drilled along the given path from
-// root. Path must begin with root (pointer-equal to the `root` argument of
-// New) and walk down Children links.
-//
-// Validation tier: log + safe default. If the path is invalid, a single
-// log.Warn is emitted (Str("pkg","treemap")) and the breadcrumb stays at
-// [root]. The widget remains usable.
-func WithInitialPath(path []*layout.Node) Option {
-	return func(t *Treemap) {
-		if !t.validPath(path) {
-			log.Warn().
-				Str("pkg", "treemap").
-				Int("pathLen", len(path)).
-				Msg("WithInitialPath: invalid path, falling back to root")
-			return
-		}
-		t.breadcrumb = append(t.breadcrumb[:0], path...)
-	}
-}
-
-// WithLeafClickSensing enables click detection on frontier leaf cells.
-// When enabled, leaf cells at the visible frontier will sense clicks and
-// the result is accessible via ClickedLeaf(). Drill-in (drillable) and
-// drill-up behavior is unaffected; this only adds interaction to otherwise
-// inert leaf tiles. Default: false.
-func WithLeafClickSensing(enabled bool) Option {
-	return func(t *Treemap) { t.leafClickSensing = enabled }
-}
-
-// WithStatusLine controls the summary/hover line drawn UNDER the container:
-// the hovered cell, or the focus's item count and total. Default: shown.
-//
-// Pass false when the host already draws its own readout. The line is a second
-// voice on the same subject, and it speaks the widget's vocabulary — the totals
-// go through formatBytes, which is right for a filesystem and wrong for a host
-// counting something else. It is also chrome the caller has to budget its pane
-// for, so a host sizing the container to fill its pane can turn it off instead
-// of reserving a row for a line it did not want.
-func WithStatusLine(enabled bool) Option {
-	return func(t *Treemap) { t.statusLineHidden = !enabled }
-}
-
-// WithFilterSiblings controls whether non-active siblings are excluded from
-// the treemap layout when the user has drilled down past root. When true,
-// only the active breadcrumb child and its descendants occupy layout space;
-// sibling subtrees are not rendered at all. The breadcrumb bar remains as
-// the sole navigation affordance for returning to or switching between
-// siblings. Default (false) preserves the historic behavior where siblings
-// are laid out but rendered hatched/inert.
-func WithFilterSiblings(enabled bool) Option {
-	return func(t *Treemap) { t.filterSiblings = enabled }
-}
 
 // CellStateE is a bitfield of orthogonal per-cell state flags. Multiple flags
 // can be set simultaneously (e.g. a drill-up cell is both OnPath and DrillUp).
@@ -323,67 +212,6 @@ func (defaultStyle) Visuals(info CellInfo) CellVisuals {
 // the drilled-in view using the same function.
 type CellColorFn func(node *layout.Node) int
 
-// WithCellColor is a backwards-compatible shortcut that composes a CategoricalColoring on top of the default depth coloring.
-//
-// Equivalent to:
-//
-//	WithColoring(CompositeColoring(
-//	    DepthColoring(DefaultDepthColors),
-//	    CategoricalColoring(palette, fn),
-//	))
-//
-// Deprecated: prefer WithColoring with explicit CompositeColoring so the
-// fall-through semantics (fn returning negative idx → falls back to the
-// previous layer) are visible at the call site.
-func WithCellColor(palette []uint32, fn CellColorFn) Option {
-	return WithColoring(CompositeColoring(
-		DepthColoring(DefaultDepthColors),
-		CategoricalColoring(palette, fn),
-	))
-}
-
-// WithStyle overrides the per-cell geometry/decoration style. Defaults to
-// DefaultStyle(). Panics if s is nil.
-func WithStyle(s StyleI) Option {
-	if s == nil {
-		panic("treemap: WithStyle requires a non-nil StyleI")
-	}
-	return func(t *Treemap) { t.style = s }
-}
-
-// WithCellLabel sets an optional per-cell secondary label. When non-nil,
-// fn(node) is rendered on a second, de-emphasized (small + weak) line
-// beneath each cell's name — the place to surface a humanized metric value
-// (size, weight, …) directly on the tile. fn returning "" suppresses the
-// line for that cell, so callers can gate the label on a runtime toggle
-// without rebuilding the widget (see SetCellLabel).
-//
-// The line is painted only on cells that do not already display their own
-// children inside them (leaves, and collapsed / off-path blocks), so it
-// never overruns a drilled-in container's header into the nested content,
-// and only when the cell is tall enough for a second text line.
-//
-// Validation tier: none — a nil fn (the default) simply disables the label.
-func WithCellLabel(fn func(*layout.Node) string) Option {
-	return func(t *Treemap) { t.cellLabelFn = fn }
-}
-
-// WithSelfCellLabel supplies the secondary line for SELF cells — the cell a
-// container gets for its own size when it has one (ADR-0166 §SD3). fn is called
-// with the CONTAINER, and the number to format is its own Size rather than its
-// TotalSize.
-//
-// It does not default to WithCellLabel's fn. That one answers for a node's
-// total, which is precisely the wrong number on the cell that exists to show
-// the part of the total the container holds itself; printing it there would
-// make a container's own cell claim the container's whole weight.
-//
-// Validation tier: none — a nil fn (the default) leaves self cells with a name
-// and no value line.
-func WithSelfCellLabel(fn func(*layout.Node) string) Option {
-	return func(t *Treemap) { t.selfCellLabelFn = fn }
-}
-
 // cellDesc captures the per-frame state needed for the post-render
 // interaction pass. At most one of drillable (down) or drillUpTo>0 (up).
 type cellDesc struct {
@@ -398,6 +226,9 @@ type cellDesc struct {
 
 // Treemap is a Frame-based zoomable treemap widget.
 type Treemap struct {
+	// Opts is re-read at the top of every Render (see [Options]).
+	Opts Options
+
 	ids      *c.WidgetIdStack
 	scopeKey string
 	root     *layout.Node
@@ -420,10 +251,10 @@ type Treemap struct {
 	maxNestingDepth int
 	// cellLabelFn, when non-nil, supplies an optional secondary label
 	// rendered on a second de-emphasized line beneath each cell's name (see
-	// WithCellLabel). Returning "" suppresses the line for that cell.
+	// Options.CellLabel). Returning "" suppresses the line for that cell.
 	cellLabelFn func(*layout.Node) string
 	// selfCellLabelFn is cellLabelFn's counterpart for self cells (see
-	// WithSelfCellLabel). Deliberately separate rather than falling back to
+	// Options.SelfCellLabel). Deliberately separate rather than falling back to
 	// cellLabelFn: that one is called with a container and answers for its
 	// TOTAL, which is the wrong number to print on the cell that exists to
 	// show the part of it the container holds itself.
@@ -437,11 +268,11 @@ type Treemap struct {
 	filterSiblings bool
 
 	// leafClickSensing: when true, frontier leaf cells sense clicks and the
-	// result is accessible via ClickedLeaf(). Default: false.
+	// result is reported in Events.ClickedLeaf. Default: false.
 	leafClickSensing bool
 
 	// statusLineHidden suppresses the summary/hover line under the container
-	// (WithStatusLine). Stated negatively so the zero value keeps drawing it,
+	// (Options.HideStatusLine). Stated negatively so the zero value keeps drawing it,
 	// which is what every caller before the option got.
 	statusLineHidden bool
 
@@ -461,17 +292,79 @@ type Treemap struct {
 	// Per-frame transient; reset at the start of every Render.
 	cells []cellDesc
 
-	// leafClicked tracks the node of a frontier leaf cell that was clicked
-	// this frame (when leafClickSensing is enabled). Consumed on next read.
+	// leafClicked is the frontier or preview leaf clicked this frame (with
+	// leafClickSensing); reported in Events.
 	leafClicked *layout.Node
+	// pendingNav collects breadcrumb changes until the next Render reports
+	// them in Events.Nav.
+	pendingNav []NavEvent
 
 	// Zoom-transition animation state machine.
 	anim animMachine
+}
 
-	// Subscribers to NavEvent. dispatching guards against re-entry from
-	// inside an OnNavigate handler.
-	navSubs     []func(NavEvent)
-	dispatching bool
+// NestingAll is the Options.MaxNestingDepth that renders the entire subtree
+// below the frontier at once, bounded only by the minimum cell size.
+const NestingAll = -1
+
+// Options configures a Treemap. The zero value is the default widget: depth
+// colouring, the default style, one preview level, the IDS motion duration,
+// the status line shown. Render re-reads every field each frame, so a toggle
+// is an assignment on [Treemap.Opts]; InitialPath alone is read at New.
+type Options struct {
+	// MaxNestingDepth is how many non-interactive preview levels render below
+	// the focused (frontier) node. 0 is 1 — the frontier's children plus one
+	// preview level; NestingAll (any negative value) shows the whole subtree,
+	// capped by the minimum cell size and an internal recursion limit.
+	MaxNestingDepth int
+	// AnimationDuration is the zoom-transition duration in seconds; 0 is the
+	// IDS motion ladder's slow rung (styletokens.MotionSlowSecs), a negative
+	// value is instant.
+	AnimationDuration float32
+	// Coloring picks each cell's colours; nil is DepthColoring over
+	// DefaultDepthColors. Compose effects with CompositeColoring.
+	Coloring ColoringI
+	// Style picks each cell's geometry and decoration; nil is DefaultStyle.
+	Style StyleI
+	// CellLabel, when set, supplies a second, de-emphasized line beneath a
+	// cell's name — the place for a humanized metric. "" suppresses it for
+	// that cell. Painted only on cells that do not draw their own children
+	// and are tall enough for a second line.
+	CellLabel func(*layout.Node) string
+	// SelfCellLabel is CellLabel for SELF cells — the cell a container gets
+	// for its own size (ADR-0166 §SD3). It is called with the container and
+	// should format its own Size, not its TotalSize; it deliberately does
+	// not fall back to CellLabel, which answers for the total.
+	SelfCellLabel func(*layout.Node) string
+	// LeafClickSensing makes frontier and preview leaf cells report clicks in
+	// [Events.ClickedLeaf]. Drill-in and drill-up are unaffected.
+	LeafClickSensing bool
+	// HideStatusLine suppresses the summary/hover line under the container,
+	// for a host that draws its own readout: the line speaks the widget's
+	// byte vocabulary, which is wrong for a host counting something else.
+	HideStatusLine bool
+	// FilterSiblings lays out only the active child at each drilled level;
+	// siblings are excluded rather than drawn hatched and inert. The
+	// breadcrumb bar stays the way back.
+	FilterSiblings bool
+	// InitialPath opens the widget pre-drilled along a path from the root
+	// (pointer-equal) down Children links. Read at New. An invalid path logs
+	// one warning and keeps the root view.
+	InitialPath []*layout.Node
+}
+
+// Events is what one Render produced.
+type Events struct {
+	// Nav is every breadcrumb change since the last Render, in order: the
+	// user's cell and breadcrumb clicks and the host's own NavigateTo /
+	// DrillTo / DrillUp / Reset calls, each tagged with its Trigger.
+	Nav []NavEvent
+	// ClickedLeaf is the leaf cell clicked this frame, nil for none; only
+	// with Options.LeafClickSensing.
+	ClickedLeaf *layout.Node
+	// Hovered is the node whose cell is under the pointer this frame,
+	// innermost first, or nil. Carries the usual one-frame hover lag.
+	Hovered *layout.Node
 }
 
 // New constructs a Treemap widget rooted at root. scopeKey must be unique
@@ -479,7 +372,7 @@ type Treemap struct {
 // to c.IdScope so the id stack isolates each instance's widget ids.
 //
 // Panics if ids or root is nil, or if scopeKey is the empty string.
-func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts ...Option) *Treemap {
+func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts Options) *Treemap {
 	if ids == nil {
 		panic("treemap: New requires a non-nil ids stack")
 	}
@@ -490,17 +383,14 @@ func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts ...Optio
 		panic("treemap: New requires a non-nil root")
 	}
 	t := &Treemap{
-		ids:             ids,
-		scopeKey:        scopeKey,
-		root:            root,
-		density:         styletokens.ActiveDensity(),
-		breadcrumb:      []*layout.Node{root},
-		containerW:      defaultContainerW,
-		containerH:      defaultContainerH,
-		animDurSecs:     styletokens.MotionSlowSecs(),
-		style:           DefaultStyle(),
-		coloring:        DepthColoring(DefaultDepthColors),
-		maxNestingDepth: 1,
+		Opts:       opts,
+		ids:        ids,
+		scopeKey:   scopeKey,
+		root:       root,
+		density:    styletokens.ActiveDensity(),
+		breadcrumb: []*layout.Node{root},
+		containerW: defaultContainerW,
+		containerH: defaultContainerH,
 	}
 
 	// Chrome (breadcrumb / frame / container / leaf surfaces) sources from
@@ -516,55 +406,53 @@ func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts ...Optio
 	t.colorContainerBg = color.Hex(styletokens.NeutralBgPanel.AsHex()).Keep()
 	t.colorLeafBg = color.Hex(styletokens.NeutralBgSurface.AsHex()).Keep()
 
-	for _, opt := range opts {
-		opt(t)
+	if len(opts.InitialPath) > 0 {
+		if t.validPath(opts.InitialPath) {
+			t.breadcrumb = append(t.breadcrumb[:0], opts.InitialPath...)
+		} else {
+			log.Warn().
+				Str("pkg", "treemap").
+				Int("pathLen", len(opts.InitialPath)).
+				Msg("Options.InitialPath: invalid path, falling back to root")
+		}
 	}
-	t.metrics.init(scopeKey, t.density)
+	t.applyOpts()
+	t.metrics.init(t.density)
 	return t
 }
 
-// SetContainerSize updates the treemap canvas size after construction.
-// Mirrors WithContainerSize but lets callers resize each frame — e.g.,
-// to fill ui.available_size via a captureAvailableSize fetcher. Panics
-// on non-positive w or h, matching WithContainerSize's contract.
-func (t *Treemap) SetContainerSize(w, h float32) {
-	if w <= 0 || h <= 0 {
-		panic(fmt.Sprintf("treemap: SetContainerSize requires positive w,h (got %v,%v)", w, h))
+// applyOpts resolves Opts into the fields the renderer reads. Called from
+// New and at the top of every Render.
+func (t *Treemap) applyOpts() {
+	o := &t.Opts
+	t.maxNestingDepth = o.MaxNestingDepth
+	switch {
+	case t.maxNestingDepth == 0:
+		t.maxNestingDepth = 1
+	case t.maxNestingDepth < 0:
+		t.maxNestingDepth = 0 // the renderer's "all"
 	}
-	t.containerW, t.containerH = w, h
-}
-
-// SetCellLabel updates the per-cell secondary-label function after
-// construction (see WithCellLabel); pass nil to disable. Cheap enough to
-// call every frame, and — unlike re-running New — it preserves the
-// breadcrumb and zoom state, so a caller toggling the label on and off
-// does not reset the user's drill position.
-func (t *Treemap) SetCellLabel(fn func(*layout.Node) string) {
-	t.cellLabelFn = fn
-}
-
-// SetColoring replaces the active ColoringI after construction (see
-// WithColoring). Mirrors SetCellLabel: colour is a draw-time decision, so a
-// host switching what a cell's fill encodes should not have to rebuild the
-// widget and lose the drill position with it.
-//
-// Validation tier: panic — a nil coloring is a programmer error, as it is in
-// WithColoring.
-func (t *Treemap) SetColoring(coloring ColoringI) {
-	if coloring == nil {
-		panic("treemap: SetColoring requires a non-nil ColoringI")
+	switch {
+	case o.AnimationDuration == 0:
+		t.animDurSecs = styletokens.MotionSlowSecs()
+	case o.AnimationDuration < 0:
+		t.animDurSecs = 0
+	default:
+		t.animDurSecs = o.AnimationDuration
 	}
-	t.coloring = coloring
-}
-
-// SetMaxNestingDepth updates how many preview levels render below the frontier
-// after construction (see WithMaxNestingDepth). Like SetCellLabel it preserves
-// the breadcrumb, so toggling between the drill view and "show everything" does
-// not send the user back to the root.
-//
-// Validation tier: none — every int is meaningful, n<=0 being "all".
-func (t *Treemap) SetMaxNestingDepth(n int) {
-	t.maxNestingDepth = n
+	t.coloring = o.Coloring
+	if t.coloring == nil {
+		t.coloring = DepthColoring(DefaultDepthColors)
+	}
+	t.style = o.Style
+	if t.style == nil {
+		t.style = DefaultStyle()
+	}
+	t.cellLabelFn = o.CellLabel
+	t.selfCellLabelFn = o.SelfCellLabel
+	t.leafClickSensing = o.LeafClickSensing
+	t.statusLineHidden = o.HideStatusLine
+	t.filterSiblings = o.FilterSiblings
 }
 
 // SetRoot replaces the tree and resets the view to the root.
@@ -604,30 +492,6 @@ func (t *Treemap) Breadcrumb() []*layout.Node {
 	return out
 }
 
-// HoveredNode returns the node whose cell is under the pointer this frame, or
-// nil. Call it after Render(): it scans the cells painted this frame, innermost
-// first (matching the widget's own status-label readout). Carries the usual
-// one-frame egui hover lag.
-func (t *Treemap) HoveredNode() (node *layout.Node) {
-	sm := c.CurrentApplicationState.StateManager
-	for i := len(t.cells) - 1; i >= 0; i-- {
-		if sm.GetResponse(t.cells[i].handle).HasHovered() {
-			return t.cells[i].node
-		}
-	}
-	return nil
-}
-
-// ClickedLeaf returns the node of a frontier leaf cell that was clicked this
-// frame, or nil. Only populated when leafClickSensing is enabled. Call after
-// Render(); the result is consumed on next read (subsequent calls return nil
-// until the next click).
-func (t *Treemap) ClickedLeaf() *layout.Node {
-	node := t.leafClicked
-	t.leafClicked = nil
-	return node
-}
-
 // resolveColors picks the appropriate fill, border, and text color from
 // colors using the StyleI's role selectors and the cell's state. The text
 // color tracks whichever fill slot is selected so WCAG-picked contrast
@@ -654,17 +518,15 @@ func (t *Treemap) resolveColors(colors CellColors, visuals CellVisuals, state Ce
 }
 
 // containerRect returns the treemap canvas rect at its configured size.
-// The size is fixed — set once via WithContainerSize or per-frame via
-// SetContainerSize — and is deliberately NOT derived from ui.available_size
-// here. Consumers that want the treemap to track their pane (sccmap,
-// imztop) measure available_size themselves, apply their own grow-guard
-// and chrome budget, and push the result in through SetContainerSize each
-// frame. Capturing/reading available_size internally as well would (a)
-// double-write the process-global capture register those consumers depend
-// on, and (b) inside an auto-sizing host — e.g. the demo gallery's
-// ScrollArea — ratchet the host's height upward every frame, since the
-// Frame would request the full available height while the breadcrumb bar
-// and status label still need room above and below it.
+// The size is the last one handed to Render, and is deliberately NOT derived
+// from ui.available_size here. Consumers that want the treemap to track their
+// pane (sccmap, imztop) measure it themselves, apply their own grow-guard and
+// chrome budget, and pass the result to Render each frame; RenderFill does the
+// same with its own probe for a bounded pane. Inside an auto-sizing host —
+// e.g. the demo gallery's ScrollArea — a probed size would ratchet the host's
+// height upward every frame, since the Frame would request the full available
+// height while the breadcrumb bar and status label still need room above and
+// below it, so such hosts pass a fixed size.
 func (t *Treemap) containerRect() layout.Rect {
 	return layout.Rect{W: float64(t.containerW), H: float64(t.containerH)}
 }
@@ -733,9 +595,13 @@ func computePreviewState(hasChildren, hovered bool) CellStateE {
 // cellIds derives matching ids for a cell's Frame and its response handle.
 // Two PrepareSeq+Derive cycles with the same seq produce the same scoped id
 // under the active IdScope, so the Frame's server-side id equals cellHandle's.
+//
+// The id is derived relative to the container's scope and then held as an
+// absolute creator, so a cell Frame pushes nothing onto the stack: nested
+// cells keep numbering under the container's scope, not their parent cell's.
 func (t *Treemap) cellIds(seq uint64) (frameCreator c.WidgetIdCreatorI, handle widgethandle.WidgetHandle) {
-	id := t.ids.PrepareSeq(seq).Derive()
-	return c.AbsoluteWidgetId(id), widgethandle.Make(c.AbsoluteWidgetId(id).Derive())
+	id := c.MakeAbsoluteIdHighEntropy(t.ids.PrepareSeq(seq).Derive())
+	return id, widgethandle.Make(id.Derive())
 }
 
 // paintHatch draws a diagonal line pattern at `r` per spec, marking the cell
@@ -985,7 +851,7 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 // would make the container's own area a dead zone in a picture where every
 // other rectangle navigates.
 //
-// It is still appended to t.cells, so HoveredNode reports the CONTAINER when
+// It is still appended to t.cells, so Events.Hovered reports the CONTAINER when
 // the pointer is over its own cell — the honest answer, and the one a host
 // reading a hover into a status line wants.
 func (t *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds layout.Rect, depth int, cellSeq *uint64, minPx, vSlack float64, marginX, marginY float32) {
@@ -1055,7 +921,7 @@ func (t *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds la
 
 // previewDepth resolves the effective number of preview levels to render
 // below the frontier: maxNestingDepth when positive, else the "show all"
-// safety cap (WithMaxNestingDepth documents n<=0 as unlimited).
+// safety cap (Options.MaxNestingDepth documents NestingAll as unlimited).
 func (t *Treemap) previewDepth() (n int) {
 	if t.maxNestingDepth <= 0 {
 		return maxPreviewRecursion
@@ -1066,7 +932,7 @@ func (t *Treemap) previewDepth() (n int) {
 // renderLeafChildren paints a non-interactive preview of node's descendants,
 // up to `remaining` levels deep (1 = direct children only — the historic
 // behavior). Deeper levels nest inside their parent's inner rect, which is
-// what lets the whole subtree show at once (see WithMaxNestingDepth). These
+// what lets the whole subtree show at once (see Options.MaxNestingDepth). These
 // cells are display-only; interactivity stays on the frontier in renderZoom.
 func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, depth, remaining int, cellSeq *uint64) {
 	if remaining <= 0 || len(node.Children) == 0 {
@@ -1157,14 +1023,54 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 
 // Render emits the full treemap view (breadcrumb bar + treemap area + status
 // label), processes clicks and hovers, and drives the zoom animation.
-// Wraps its body in c.IdScope(scopeKey) so multiple instances sharing the
-// same WidgetIdStack don't collide.
-func (t *Treemap) Render() {
+// w × h is the container canvas in logical pixels; a non-positive size keeps
+// the last one (700 × 450 before the first). Wraps its body in
+// c.IdScope(scopeKey) so multiple instances sharing the same WidgetIdStack
+// don't collide, and returns what the frame produced.
+func (t *Treemap) Render(w, h float32) (ev Events) {
+	if w > 0 && h > 0 {
+		t.containerW, t.containerH = w, h
+	}
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	t.density = styletokens.ActiveDensity()
+	t.applyOpts()
+	t.leafClicked = nil
 	for range c.IdScope(t.ids.PrepareStr(t.scopeKey)) {
 		t.renderBody()
+		ev.Hovered = t.hovered()
 	}
+	ev.ClickedLeaf = t.leafClicked
+	ev.Nav, t.pendingNav = t.pendingNav, nil
+	return
+}
+
+// RenderFill is Render sized to the pane: the room left in the enclosing Ui
+// last frame, less the breadcrumb bar and the status line, with fallbackW ×
+// fallbackH until the probe answers.
+func (t *Treemap) RenderFill(fallbackW, fallbackH float32) (ev Events) {
+	w, h := fallbackW, fallbackH
+	for range c.IdScope(t.ids.PrepareStr(t.scopeKey)) {
+		if pw, ph, ok := c.CapturePaneSize(t.ids.ProbeSeq("pane")); ok && pw > 0 && ph > fillChromeH {
+			w, h = pw, ph-fillChromeH
+		}
+	}
+	return t.Render(w, h)
+}
+
+// fillChromeH is what RenderFill holds back from the pane height for the
+// breadcrumb bar above the container and the status line below it.
+const fillChromeH float32 = 64
+
+// hovered returns the node whose cell is under the pointer this frame,
+// innermost first (matching the status-label readout).
+func (t *Treemap) hovered() (node *layout.Node) {
+	sm := c.CurrentApplicationState.StateManager
+	for i := len(t.cells) - 1; i >= 0; i-- {
+		if sm.GetResponse(t.cells[i].handle).HasHovered() {
+			return t.cells[i].node
+		}
+	}
+	return nil
 }
 
 func (t *Treemap) renderBody() {
@@ -1172,6 +1078,7 @@ func (t *Treemap) renderBody() {
 
 	// Keep the measured label gates current across Sync's databind reset;
 	// the real row heights land one frame after the first call (metrics.go).
+	t.metrics.bindIds(t.ids)
 	t.metrics.renewBindings()
 
 	// --- Breadcrumb bar ---
@@ -1198,7 +1105,7 @@ func (t *Treemap) renderBody() {
 				}
 			} else {
 				// Tail chip: non-interactive, white-bordered so "you are here" reads at a glance.
-				for range c.Frame(t.ids.PrepareStr("bc-tail-"+node.Name)).
+				for range c.Frame(t.ids.PrepareStr("bc-tail")).
 					Fill(t.colorBreadcrumbBg).
 					CornerRadius(styletokens.RoundingSm).
 					Stroke(styletokens.StrokeRegular, t.colorBreadcrumbFg).
@@ -1228,7 +1135,7 @@ func (t *Treemap) renderBody() {
 			renderBounds = lerpRect(t.anim.FromRect(), renderBounds, effT)
 		}
 
-		for range c.Frame(t.ids.PrepareStr("container-" + t.scopeKey)).
+		for range c.Frame(t.ids.PrepareStr("container")).
 			Fill(t.colorContainerBg).
 			CornerRadius(styletokens.RoundingMd).
 			InnerMargin(0).
@@ -1244,12 +1151,12 @@ func (t *Treemap) renderBody() {
 			c.UiSetMinWidth(t.containerW)
 			c.UiSetMinHeight(t.containerH)
 
-			cellSeq := cellSeqBase
+			var cellSeq uint64
 			t.renderZoom(t.root, renderBounds, 0, 0, &cellSeq)
 		}
 
 		// Drive the tween every frame to keep egui's AnimationManager primed.
-		animId := t.ids.PrepareStr("anim-" + t.scopeKey).Derive()
+		animId := t.ids.PrepareStr("anim").Derive()
 		c.AnimateBoolWithTimeBind(animId, t.anim.Target(), t.animDurSecs, t.anim.TPtr())
 
 		// --- Interaction pass ---
@@ -1306,7 +1213,7 @@ func (t *Treemap) renderBody() {
 		}
 	} else {
 		c.Label(fmt.Sprintf("leaf: %s  |  size: %s", cur.Name, formatBytes(cur.TotalSize()))).Send()
-		for range c.Frame(t.ids.PrepareStr("leaf-" + t.scopeKey)).
+		for range c.Frame(t.ids.PrepareStr("leaf")).
 			Fill(t.colorLeafBg).
 			InnerMargin(styletokens.PaddingLoose(t.density)).
 			CornerRadius(styletokens.RoundingLg).

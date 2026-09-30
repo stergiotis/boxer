@@ -74,28 +74,14 @@ var rules = []rule{
 	{"W7", "probe seqs from WidgetIdStack.ProbeSeq, not the stack-free c.ProbeSeq or a probeSalt", checkW7Probes},
 	{"W11", "options are a struct: no With* functional options, no copy-returning setters on a value receiver", checkW11Options},
 	{"W13", "interaction is returned, not delivered to On* / *Listener callbacks", checkW13Callbacks},
-	{"W14", "a package that starts goroutines exports Close", checkW14Close},
+	{"W14", "a widget whose methods start goroutines exports Close", checkW14Close},
 }
 
 // allowlist is the remaining migration: package → rules it still violates.
 // Entries leave as the ADR-0267 phases land; a new package may not enter.
 var allowlist = map[string][]string{
-	// Frozen 2026-09-29 (ADR-0267 M0); M1 removed the W7 entries it closed,
-	// M2 the nineteen immediate-mode packages it migrated, M3 kanban and
-	// schemaview, M4 the ten semi-retained packages. Regenerate with
-	// WIDGET_CONFORMANCE_DUMP=1.
-	"cardgrid":             {"W5"},
-	"ecdf":                 {"W14"},
-	"graphview":            {"W3"},
-	"leewaywidgets":        {"W4"},
-	"markdown":             {"W11", "W3"},
-	"portolan":             {"W4", "W5"},
-	"portolan/flowoverlay": {"W1"},
-	"portolan/landoverlay": {"W1"},
-	"timeline":             {"W11", "W13"},
-	"timescrubber":         {"W4"},
-	"treemap":              {"W11", "W13", "W5", "W6"},
-	"waveform":             {"W14", "W4"},
+	// Emptied 2026-09-30 (ADR-0267 M5). A package may not enter it; a
+	// package that cannot yet conform needs an ADR, not a line here.
 }
 
 type pkg struct {
@@ -282,6 +268,12 @@ func checkW3Returns(p *pkg) (out []string) {
 		count := 0
 		for _, f := range res.List {
 			count += max(1, len(f.Names))
+		}
+		// A render entry that validates a declaration first may return
+		// (Events, error): the struct is still the frame's product, and the
+		// error says the declaration was refused (graphview.RenderColumns).
+		if count == 2 && isStructThenError(res) {
+			continue
 		}
 		if count > 1 {
 			out = append(out, fmt.Sprintf("%s %s returns %d values", p.at(d), fnLabel(d), count))
@@ -518,12 +510,19 @@ func takesFunc(d *ast.FuncDecl) bool {
 
 func checkW14Close(p *pkg) (out []string) {
 	// A goroutine that its own function joins (a .Wait() in the same body)
-	// is fork-join work scoped to the call and needs no Close.
+	// is fork-join work scoped to the call and needs no Close. One started
+	// by a free function or a non-rendering type is bounded by whatever the
+	// caller handed it (a context, a task handle), not by a widget, so a
+	// widget Close would own nothing (W14 is about widget-owned work).
+	renders := p.renderingTypes()
 	var firstGo ast.Node
 	for _, f := range p.files {
 		for _, d := range f.Decls {
 			fd, ok := d.(*ast.FuncDecl)
 			if !ok || fd.Body == nil || firstGo != nil {
+				continue
+			}
+			if fd.Recv == nil || !renders[receiverTypeName(fd)] {
 				continue
 			}
 			var g ast.Node
@@ -634,4 +633,29 @@ func TestWidgetsConformToADR0267(t *testing.T) {
 			t.Errorf("allowlist names %s, which does not exist", rel)
 		}
 	}
+}
+
+// isStructThenError reports a result list of exactly (T, error) where T is a
+// named, non-basic type.
+func isStructThenError(res *ast.FieldList) bool {
+	var types []ast.Expr
+	for _, f := range res.List {
+		for range max(1, len(f.Names)) {
+			types = append(types, f.Type)
+		}
+	}
+	if len(types) != 2 {
+		return false
+	}
+	last, ok := types[1].(*ast.Ident)
+	if !ok || last.Name != "error" {
+		return false
+	}
+	switch t := types[0].(type) {
+	case *ast.Ident:
+		return !basicNames[t.Name]
+	case *ast.SelectorExpr:
+		return true
+	}
+	return false
 }

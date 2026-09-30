@@ -525,7 +525,7 @@ func lowerCodeBlock(lines *text.Segments, src []byte, lang string) (seg segment)
 	// highlighted job: the markdown highlighter canonicalises its output
 	// (codeview.BuildMarkdown notes the rendered text is not verbatim) and
 	// the job holder exposes no way to read the text back. The
-	// [Doc.RenderActions] code-block button surfaces what the author
+	// [Input.ActionLabels] code-block button surfaces what the author
 	// wrote (codeText) and the language (codeLang) to the caller.
 	seg.codeText = source
 	seg.codeLang = normLang
@@ -782,7 +782,7 @@ func emitInline(ctx *lowerCtx, n ast.Node, b *inlineBuilder, parentStyle styleE)
 		// this node, so without a case here the state disappears and the
 		// item reads as an ordinary bullet. That was C1 in the rendering
 		// review: a silent drop contradicting this package's own contract
-		// comment on [WithFeatures].
+		// comment on [ParseOptions.Features].
 		//
 		// A glyph, not a real Checkbox widget: nothing maps render
 		// geometry back to source bytes (ADR-0178 rejected WYSIWYG), so a

@@ -72,7 +72,7 @@ func init() {
 			state = &errorviewDemoState{
 				defaultOpen:   true,
 				indent:        uint64(12),
-				table2Emitter: leewaywidgets.NewTable2CardEmitter(ids, leewaywidgets.ColorPaletteViridis, nil),
+				table2Emitter: leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil),
 			}
 			return
 		},

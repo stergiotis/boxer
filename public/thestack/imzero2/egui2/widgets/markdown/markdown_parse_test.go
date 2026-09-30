@@ -214,8 +214,8 @@ func TestParse_HeadingAnchor_MustTerminateTheLine(t *testing.T) {
 
 func TestParse_HeadingAnchor_DisabledByFeatures(t *testing.T) {
 	cfg := defaultConfig()
-	doc := Parse([]byte("## Creating a table {#creating-a-table}\n"),
-		WithFeatures(cfg.features&^obsidian.FeatureHeadingAnchor))
+	doc := ParseWith([]byte("## Creating a table {#creating-a-table}\n"),
+		ParseOptions{Features: cfg.features &^ obsidian.FeatureHeadingAnchor})
 	if len(doc.headings) != 1 {
 		t.Fatalf("headings: got %d want 1", len(doc.headings))
 	}
@@ -473,7 +473,7 @@ func TestParse_Footnote_UnresolvedStaysLiteralAndIsCounted(t *testing.T) {
 
 func TestParse_Footnote_DisabledByFeatures(t *testing.T) {
 	src := "Term[^t] here.\n\n[^t]: Two words.\n"
-	doc := Parse([]byte(src), WithFeatures(obsidian.FeatureGFM))
+	doc := ParseWith([]byte(src), ParseOptions{Features: obsidian.FeatureGFM})
 	if got := len(footnoteRuns(doc)); got != 0 {
 		t.Errorf("footnote runs with the flag off: got %d want 0", got)
 	}
@@ -1057,7 +1057,7 @@ func TestParse_GFMTable_WithoutGFMFeature_StaysProse(t *testing.T) {
 	// The table nodes only exist because FeatureGFM is in the default
 	// set. Dropping it must leave prose, not a half-lowered table.
 	src := "| a | b |\n|---|---|\n| 1 | 2 |\n"
-	doc := Parse([]byte(src), WithFeatures(obsidian.FeatureFrontmatter))
+	doc := ParseWith([]byte(src), ParseOptions{Features: obsidian.FeatureFrontmatter})
 	for _, seg := range doc.segments {
 		if seg.kind == segKindTable {
 			t.Fatal("table segment lowered even though FeatureGFM is off")
@@ -1294,7 +1294,7 @@ func TestParse_EmailAutoLink_GetsMailtoPrefix(t *testing.T) {
 	}
 }
 
-// ---------------- WithFeatures / WithResolver -----------------------------
+// ---------------- ParseOptions.Features / .Resolver -----------------------------
 
 func TestParse_FrontmatterPresent_PopulatesKV(t *testing.T) {
 	src := "---\ntitle: hello\ncount: 3\n---\n\nbody\n"
@@ -1308,9 +1308,9 @@ func TestParse_FrontmatterPresent_PopulatesKV(t *testing.T) {
 	}
 }
 
-func TestParse_WithFeaturesNoFrontmatter_DropsFrontmatter(t *testing.T) {
+func TestParse_FeaturesNoFrontmatter_DropsFrontmatter(t *testing.T) {
 	src := "---\ntitle: hello\n---\n\nbody\n"
-	doc := Parse([]byte(src), WithFeatures(obsidian.FeatureGFM))
+	doc := ParseWith([]byte(src), ParseOptions{Features: obsidian.FeatureGFM})
 	if doc.Frontmatter() != nil {
 		t.Error("Frontmatter() should be nil when FeatureFrontmatter is excluded")
 	}
@@ -1361,9 +1361,9 @@ func (s *stubResolver) LoadImage(ref string) (pixels []uint32, widthPx uint32, h
 	return
 }
 
-func TestParse_WithResolver_WikilinkUsesResolverURL(t *testing.T) {
+func TestParse_Resolver_WikilinkUsesResolverURL(t *testing.T) {
 	r := &stubResolver{}
-	doc := Parse([]byte("see [[SomePage]]\n"), WithResolver(r))
+	doc := ParseWith([]byte("see [[SomePage]]\n"), ParseOptions{Resolver: r})
 	if r.lastPage != "SomePage" {
 		t.Errorf("resolver.lastPage: got %q want %q", r.lastPage, "SomePage")
 	}
@@ -1380,11 +1380,11 @@ func TestParse_WithResolver_WikilinkUsesResolverURL(t *testing.T) {
 	}
 }
 
-func TestParse_WithResolver_NilArgIsIgnored(t *testing.T) {
-	// WithResolver(nil) must not blank out the default resolver.
-	doc := Parse([]byte("see [[Page]]\n"), WithResolver(nil))
+func TestParse_Resolver_NilArgIsIgnored(t *testing.T) {
+	// A nil Resolver must not blank out the default resolver.
+	doc := ParseWith([]byte("see [[Page]]\n"), ParseOptions{Resolver: nil})
 	if doc == nil || len(doc.segments) == 0 {
-		t.Fatal("Parse failed under WithResolver(nil)")
+		t.Fatal("Parse failed under a nil Resolver")
 	}
 	// Default resolver (NoopResolver) yields a non-empty URL like "/Page".
 	for _, run := range doc.segments[0].runs {
@@ -1420,7 +1420,7 @@ func TestParse_CommonMarkImage_WithLoader_ProducesImageRun(t *testing.T) {
 	r := &stubResolver{}
 	r.imagePayload, r.imageW, r.imageH = stubLoaderPixels()
 
-	doc := Parse([]byte("see ![my alt](pic.png) now\n"), WithResolver(r))
+	doc := ParseWith([]byte("see ![my alt](pic.png) now\n"), ParseOptions{Resolver: r})
 	if len(doc.segments) != 1 {
 		t.Fatalf("segments: got %d want 1", len(doc.segments))
 	}
@@ -1449,7 +1449,7 @@ func TestParse_CommonMarkImage_WithoutLoader_FallsBackToHyperlink(t *testing.T) 
 	// stubResolver with no imagePayload returns ok=false; image must fall
 	// back to a glyph-prefixed link so the reference stays discoverable.
 	r := &stubResolver{}
-	doc := Parse([]byte("see ![cap](pic.png) now\n"), WithResolver(r))
+	doc := ParseWith([]byte("see ![cap](pic.png) now\n"), ParseOptions{Resolver: r})
 	for _, run := range doc.segments[0].runs {
 		if run.kind == runKindImage {
 			t.Fatal("expected fallback runKindLink, not runKindImage")
@@ -1477,7 +1477,7 @@ func TestParse_ObsidianImageEmbed_WithLoader_ProducesImageRun(t *testing.T) {
 	r := &stubResolver{}
 	r.imagePayload, r.imageW, r.imageH = stubLoaderPixels()
 
-	doc := Parse([]byte("see ![[diagram.png]] now\n"), WithResolver(r))
+	doc := ParseWith([]byte("see ![[diagram.png]] now\n"), ParseOptions{Resolver: r})
 	var img *paragraphRun
 	for i, run := range doc.segments[0].runs {
 		if run.kind == runKindImage {
@@ -1512,7 +1512,7 @@ func TestParse_ObsidianImageEmbed_SizeSuffixStillResolvesAsAnImage(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			r := &stubResolver{}
 			r.imagePayload, r.imageW, r.imageH = stubLoaderPixels()
-			doc := Parse([]byte(tc.src), WithResolver(r))
+			doc := ParseWith([]byte(tc.src), ParseOptions{Resolver: r})
 			found := false
 			for _, run := range doc.segments[0].runs {
 				if run.kind == runKindImage {
@@ -1536,7 +1536,7 @@ func TestParse_ObsidianNoteEmbed_StaysAsHyperlink(t *testing.T) {
 	r := &stubResolver{}
 	r.imagePayload, r.imageW, r.imageH = stubLoaderPixels()
 
-	doc := Parse([]byte("see ![[SomeNote]] now\n"), WithResolver(r))
+	doc := ParseWith([]byte("see ![[SomeNote]] now\n"), ParseOptions{Resolver: r})
 	for _, run := range doc.segments[0].runs {
 		if run.kind == runKindImage {
 			t.Fatal("note embed must not produce runKindImage")
@@ -1554,7 +1554,7 @@ func TestParse_Image_LoaderDimMismatch_FallsBackToHyperlink(t *testing.T) {
 	r.imagePayload = []uint32{0xff0000ff, 0x00ff00ff} // 2 pixels
 	r.imageW, r.imageH = 4, 4                         // claims 16
 
-	doc := Parse([]byte("![bad](bad.png)\n"), WithResolver(r))
+	doc := ParseWith([]byte("![bad](bad.png)\n"), ParseOptions{Resolver: r})
 	for _, run := range doc.segments[0].runs {
 		if run.kind == runKindImage {
 			t.Fatal("malformed loader response must not produce runKindImage")
@@ -1562,8 +1562,8 @@ func TestParse_Image_LoaderDimMismatch_FallsBackToHyperlink(t *testing.T) {
 	}
 }
 
-func TestWithImageMaxSize_FlowsToDoc(t *testing.T) {
-	doc := Parse([]byte("hi\n"), WithImageMaxSize(123, 456))
+func TestParseOptionsImageMaxSize_FlowsToDoc(t *testing.T) {
+	doc := ParseWith([]byte("hi\n"), ParseOptions{ImageMaxW: 123, ImageMaxH: 456})
 	if doc.imageMaxW != 123 || doc.imageMaxH != 456 {
 		t.Errorf("imageMax: got (%d,%d) want (123,456)", doc.imageMaxW, doc.imageMaxH)
 	}
@@ -1635,7 +1635,7 @@ func TestParse_OversizedImage_RejectedAtVisitor(t *testing.T) {
 	// Width × height > imageMaxPixelCount (64 Mpx). 16384×16384 = 256 Mpx.
 	r.imageW, r.imageH = 16384, 16384
 	r.imagePayload = make([]uint32, 16384*16384)
-	doc := Parse([]byte("![oversized](huge.png)\n"), WithResolver(r))
+	doc := ParseWith([]byte("![oversized](huge.png)\n"), ParseOptions{Resolver: r})
 	for _, run := range doc.segments[0].runs {
 		if run.kind == runKindImage {
 			t.Fatal("oversized image must be rejected")
@@ -1649,7 +1649,7 @@ func TestParse_OversizedImage_RejectedAtVisitor(t *testing.T) {
 // pointing at the asset rather than a bare 🖼 glyph.
 func TestParse_CommonMarkImage_EmptyAlt_FallsBackToURLLabel(t *testing.T) {
 	r := &stubResolver{} // imagePayload empty → LoadImage returns ok=false
-	doc := Parse([]byte("![](pic.png)\n"), WithResolver(r))
+	doc := ParseWith([]byte("![](pic.png)\n"), ParseOptions{Resolver: r})
 	var found *paragraphRun
 	for i, run := range doc.segments[0].runs {
 		if run.kind == runKindLink {
@@ -1671,7 +1671,7 @@ func TestParse_CommonMarkImage_EmptyAlt_FallsBackToURLLabel(t *testing.T) {
 // string verbatim and is responsible for splitting it if it cares.
 func TestParse_ObsidianImageEmbed_WithHeading_PassesHeadingInRef(t *testing.T) {
 	r := &stubResolver{} // ok=false; we just verify the ref shape via imageRefs
-	doc := Parse([]byte("see ![[diagram.png#section A]] now\n"), WithResolver(r))
+	doc := ParseWith([]byte("see ![[diagram.png#section A]] now\n"), ParseOptions{Resolver: r})
 	_ = doc
 	if len(r.imageRefs) != 1 || r.imageRefs[0] != "diagram.png#section A" {
 		t.Errorf("LoadImage refs: got %v want [diagram.png#section A]", r.imageRefs)
@@ -1859,7 +1859,7 @@ func kindsOf(segs []segment) []segKindE {
 	return out
 }
 
-// WithCodeActionFilter must withhold the BUTTONS, not merely let the host
+// Input.CodeActionFilter must withhold the BUTTONS, not merely let the host
 // ignore the click — an affordance that does nothing is worse than none.
 //
 // The buttons themselves need a live Ui, so what is asserted here is the
@@ -1869,13 +1869,9 @@ func TestCodeActionFilterSeesEveryBlock(t *testing.T) {
 	doc := Parse([]byte("prose\n\n```sql\nSELECT 1\n```\n\n" +
 		"more\n\n```response\n\u250c\u2500a\u2500\u2510\n```\n\n```\nbare\n```\n"))
 
-	var ro renderOptions
-	WithCodeActionFilter(func(text, lang string) bool {
+	in := Input{CodeActionFilter: func(text, lang string) bool {
 		return lang == "sql" || lang == ""
-	})(&ro)
-	if ro.actionAccept == nil {
-		t.Fatal("WithCodeActionFilter must install the predicate")
-	}
+	}}
 
 	var got [][2]string
 	var accepted []string
@@ -1885,7 +1881,7 @@ func TestCodeActionFilterSeesEveryBlock(t *testing.T) {
 		}
 		text, lang := doc.segments[i].codeText, doc.segments[i].codeLang
 		got = append(got, [2]string{text, lang})
-		if ro.actionAccept(text, lang) {
+		if in.CodeActionFilter(text, lang) {
 			accepted = append(accepted, lang)
 		}
 	}
@@ -1900,15 +1896,6 @@ func TestCodeActionFilterSeesEveryBlock(t *testing.T) {
 	// The response block — ClickHouse query output — must not be actionable.
 	if !reflect.DeepEqual(accepted, []string{"sql", ""}) {
 		t.Errorf("accepted = %q, want the sql and untyped blocks only", accepted)
-	}
-}
-
-// The zero option set accepts everything, which is what keeps the behaviour of
-// callers that never pass the filter unchanged.
-func TestCodeActionFilterDefaultsToEverything(t *testing.T) {
-	var ro renderOptions
-	if ro.actionAccept != nil {
-		t.Error("nil predicate means accept every block")
 	}
 }
 
@@ -1946,21 +1933,6 @@ func TestVisibleSegments_SectionMembership(t *testing.T) {
 	}
 }
 
-// A section filter cannot coexist with scroll-to-section: skipped
-// headings would desynchronise the dispatch's heading ordinals, so
-// renderCollect disarms the scroll when a filter is present. Assert at
-// the option level (the render path needs a live FFFI sink).
-func TestVisibleSegments_FilterPresenceKnown(t *testing.T) {
-	var ro renderOptions
-	WithSectionFilter(func(string) bool { return true })(&ro)
-	if ro.sectionAccept == nil {
-		t.Fatal("WithSectionFilter did not install the predicate")
-	}
-	if ro.sectionAccept("anything") != true {
-		t.Error("predicate not passed through")
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Obsidian tags
 // ---------------------------------------------------------------------------
@@ -1987,7 +1959,7 @@ func TestParse_TagSurvivesLowering(t *testing.T) {
 	// section's address, and a hardcoded slug would assert SlugHeading's
 	// sanitisation instead — a different contract, owned elsewhere.
 	cfg := defaultConfig()
-	off := Parse([]byte("## Release #v2 notes\n"), WithFeatures(cfg.features&^obsidian.FeatureTag))
+	off := ParseWith([]byte("## Release #v2 notes\n"), ParseOptions{Features: cfg.features &^ obsidian.FeatureTag})
 	if len(off.headings) != 1 {
 		t.Fatalf("headings with the feature off: got %d want 1", len(off.headings))
 	}

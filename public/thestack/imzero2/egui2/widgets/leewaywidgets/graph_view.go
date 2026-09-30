@@ -41,17 +41,22 @@ const (
 // camera and layout state persist across frames, and a new model or new
 // options restart the layout from the same seed positions.
 type GraphView struct {
-	ids   *c.WidgetIdStack
-	view  *graphview.View
-	model *GraphModel
-	opts  GraphOptions
-	nodes []graphview.NodeSpec
-	edges []graphview.EdgeSpec
+	ids      *c.WidgetIdStack
+	scopeKey string
+	view     *graphview.View
+	model    *GraphModel
+	opts     GraphOptions
+	nodes    []graphview.NodeSpec
+	edges    []graphview.EdgeSpec
 }
 
-// NewGraphView returns a view drawing on ids.
-func NewGraphView(ids *c.WidgetIdStack) *GraphView {
-	return &GraphView{ids: ids}
+// NewGraphView returns a view drawing on ids under its own scope, scopeKey;
+// empty uses "leeway-graph-view" (ADR-0267 W4).
+func NewGraphView(ids *c.WidgetIdStack, scopeKey string) *GraphView {
+	if scopeKey == "" {
+		scopeKey = "leeway-graph-view"
+	}
+	return &GraphView{ids: ids, scopeKey: scopeKey}
 }
 
 func (inst *GraphView) rebuild(m *GraphModel, o GraphOptions) {
@@ -84,7 +89,14 @@ func (inst *GraphView) rebuild(m *GraphModel, o GraphOptions) {
 }
 
 // Render draws the model in a w×h box.
+// Render draws the view under its scope; see render.
 func (inst *GraphView) Render(m *GraphModel, o GraphOptions, w, h float32) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		inst.render(m, o, w, h)
+	}
+}
+
+func (inst *GraphView) render(m *GraphModel, o GraphOptions, w, h float32) {
 	if m == nil || m.Empty() {
 		c.Label("The batch has no entities to draw.").Send()
 		return

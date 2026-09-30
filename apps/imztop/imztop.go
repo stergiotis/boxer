@@ -162,6 +162,7 @@ type App struct {
 	//   topoFreqMaxMHz running max core MHz, for normalising the freq tint.
 	//   topoDim        which dimension the continuous tint encodes (% or MHz).
 	topoTreemap    *treemap.Treemap
+	topoEvents     treemap.Events // the treemap's last Render
 	topoNodeObj    map[*layout.Node]*sysmsnap.TopoObject
 	topoLoad       []uint8
 	topoFreq       []uint32
@@ -196,6 +197,7 @@ type App struct {
 	//   procBuiltMetric / procLastSampleMs / procBuiltView gate the rebuild to
 	//   sample, metric and view changes.
 	procTreemap      *treemap.Treemap
+	procEvents       treemap.Events // the treemap's last Render
 	procRoot         *layout.Node
 	procNodes        map[procEWMAKey]*layout.Node
 	procNodeObj      map[*layout.Node]*procCell

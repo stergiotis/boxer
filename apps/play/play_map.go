@@ -302,7 +302,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	// opcode's one-shot SetZoom and the keyed camera register are gone: the
 	// view is read directly, and the "no basemap" toggle is a switch on it.
 	if inst.pm == nil {
-		inst.pm = portolan.New(inst.ids, portolan.Options{
+		inst.pm = portolan.New(inst.ids, "play-map", portolan.Options{
 			Source:  basemap.PortolanSource(),
 			Loader:  basemap.PortolanLoader(inst.tiles),
 			Center:  portolan.LL(inst.initLat, inst.initLon),

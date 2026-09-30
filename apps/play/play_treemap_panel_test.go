@@ -470,7 +470,7 @@ func TestTreemapStatusLineReportsWhatDidNotReachThePicture(t *testing.T) {
 
 func TestTreemapNestingDepth(t *testing.T) {
 	assert.Equal(t, 1, treemapNestDrill.depth(), "the default bounds the cells by the frontier's fanout")
-	assert.Equal(t, 0, treemapNestAll.depth(), "0 is the widget's unlimited")
+	assert.Equal(t, treemap.NestingAll, treemapNestAll.depth(), "the widget's unlimited")
 }
 
 // An empty result must drop the tree with the stats that produced it: a status

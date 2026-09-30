@@ -133,7 +133,7 @@ type TimelineDriver struct {
 // persisted bands SQL string (mutated by the TextEdit inside
 // renderBandsControls). nowLinePtr points at the PlayApp-owned "now line"
 // toggle (mutated by the toolbar checkbox); the driver pushes its current
-// value into the widget via SetNowLine each frame so the flip survives
+// value into the widget's Opts.NowLine each frame so the flip survives
 // data swaps without recreating the widget.
 func NewTimelineDriver(ids *c.WidgetIdStack, client *Client, bandsSQLPtr *string, nowLinePtr *bool) (inst *TimelineDriver) {
 	inst = &TimelineDriver{
@@ -143,9 +143,9 @@ func NewTimelineDriver(ids *c.WidgetIdStack, client *Client, bandsSQLPtr *string
 		nowLinePtr:  nowLinePtr,
 		bandsLane:   newNodeLane(clientExecutor{client: client, opts: newExecOptions("bands")}, memory.NewGoAllocator(), bandsFetchTimeout),
 	}
-	inst.tl = timeline.New(ids, "play-timeline", nil,
-		timeline.WithOnSelection(inst.onSelect),
-		timeline.WithBackgroundBands(inst.bandsProducer))
+	inst.tl = timeline.New(ids, "play-timeline", nil, timeline.Options{
+		BackgroundBands: inst.bandsProducer,
+	})
 	return
 }
 
@@ -196,7 +196,7 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 		// and the sequential colormap collapses to its near-invisible dark end
 		// against the dark canvas. Without intensity, the widget paints flat
 		// legible accent fills instead.
-		inst.tl.SetIntensityEncoding(ct.ColIntensity >= 0)
+		inst.tl.Opts.NoIntensityEncoding = ct.ColIntensity < 0
 		inst.dataMinMS, inst.dataMaxMS, inst.dataExtentValid = extentOfEvents(ivs, pts, anns)
 	}
 	inst.publishExtent(emit)
@@ -204,7 +204,9 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 	inst.renderBandsControls()
 	// Bands are set via the chBands channel (4b-2) before this render, so
 	// bandsProducer reads inst.bands directly; renderContract just paints.
-	inst.tl.Render()
+	if ev := inst.tl.Render(); ev.SelectionChanged {
+		inst.onSelect(ev.Selection)
+	}
 }
 
 // RenderContractHelp emits a descriptive multi-line block listing the
@@ -265,7 +267,7 @@ func (inst *TimelineDriver) renderToolbar() {
 			}
 		}
 	}
-	inst.tl.SetNowLine(*inst.nowLinePtr)
+	inst.tl.Opts.NowLine = *inst.nowLinePtr
 }
 
 // publishExtent emits the events extent as the tl_min/tl_max signals (slice

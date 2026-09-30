@@ -79,7 +79,7 @@ func TestSchemaPathEmitsTaggedSections(t *testing.T) {
 	// Drive the real emitter, but swallow EndBatch so flushUnified (which needs
 	// a live egui context) is skipped, leaving `unified` populated for
 	// inspection.
-	emitter := NewTable2CardEmitter(nil, ColorPaletteViridis, nil)
+	emitter := NewTable2CardEmitter(nil, "", ColorPaletteViridis, nil)
 	if err = driver.DriveRecordBatch(noFlushSink{emitter}, rec); err != nil {
 		t.Fatalf("drive: %v", err)
 	}

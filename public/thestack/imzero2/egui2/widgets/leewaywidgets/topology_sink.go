@@ -185,15 +185,18 @@ func AttrStateColor(st AttrStateE) (col color.Color) {
 // caller owns the returned widget and calls Render() each frame; ids must be
 // the post-Mount stack so cell ids stay stable.
 //
-// MaxNestingDepth(0) renders the whole hierarchy at once — the point of the
-// view is to see an entity's shape in one glance — while drill-in still works
-// on the top-level boxes.
-func NewTopologyTreemap(ids *c.WidgetIdStack, scopeKey string, sink *TopologySink, opts ...treemap.Option) (inst *treemap.Treemap) {
-	base := []treemap.Option{
-		treemap.WithMaxNestingDepth(0),
-		treemap.WithColoring(sink.Coloring()),
+// Unless opts say otherwise, NestingAll renders the whole hierarchy at once —
+// the point of the view is to see an entity's shape in one glance — while
+// drill-in still works on the top-level boxes, and the sink's coloring paints
+// the cells.
+func NewTopologyTreemap(ids *c.WidgetIdStack, scopeKey string, sink *TopologySink, opts treemap.Options) (inst *treemap.Treemap) {
+	if opts.MaxNestingDepth == 0 {
+		opts.MaxNestingDepth = treemap.NestingAll
 	}
-	inst = treemap.New(ids, scopeKey, sink.Root(), append(base, opts...)...)
+	if opts.Coloring == nil {
+		opts.Coloring = sink.Coloring()
+	}
+	inst = treemap.New(ids, scopeKey, sink.Root(), opts)
 	return
 }
 

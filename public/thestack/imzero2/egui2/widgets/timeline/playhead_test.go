@@ -12,7 +12,7 @@ import (
 // real time, so a sentinel would have made 1970 unmarkable.
 
 func playheadFixture() (inst *Timeline) {
-	inst = New(c.NewWidgetIdStack(), "playhead-test", nil, WithContainerWidth(1200))
+	inst = New(c.NewWidgetIdStack(), "playhead-test", nil, Options{ContainerWidth: 1200})
 	return
 }
 
@@ -60,11 +60,13 @@ func TestClearPlayhead(t *testing.T) {
 func TestPlayheadIsIndependentOfTheNowLine(t *testing.T) {
 	inst := playheadFixture()
 	inst.SetPlayhead(1_700_000_000_000)
-	inst.SetNowLine(false)
+	inst.Opts.NowLine = false
+	inst.applyOpts()
 	if _, ok := inst.Playhead(); !ok {
 		t.Fatalf("turning the now line off cleared the playhead")
 	}
-	inst.SetNowLine(true)
+	inst.Opts.NowLine = true
+	inst.applyOpts()
 	inst.ClearPlayhead()
 	if !inst.nowLineEnabled {
 		t.Fatalf("clearing the playhead turned the now line off")

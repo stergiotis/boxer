@@ -129,11 +129,10 @@ func (st *colorscaleDemoState) rebuildCsWidgets() {
 		valFn,
 	)
 
-	st.tm = treemap.New(st.ids, "cs-tm", root,
-		treemap.WithContainerSize(700, 360),
-		treemap.WithAnimationDuration(0.28),
-		treemap.WithColoring(st.hoverBand),
-	)
+	st.tm = treemap.New(st.ids, "cs-tm", root, treemap.Options{
+		AnimationDuration: 0.28,
+		Coloring:          st.hoverBand,
+	})
 
 	st.scale = colorscale.New(st.ids, "cs-scale", st.colormap.Config(), colorscale.Options{
 		Width: 700, Height: 42,
@@ -183,7 +182,7 @@ func demoColorscale(st *colorscaleDemoState) {
 			st.hoverBand.ClearBand()
 		}
 		c.AddSpace(gapSections()) // clearer visual separation between legend and map
-		st.tm.Render()
+		st.tm.Render(700, 360)
 	}
 }
 

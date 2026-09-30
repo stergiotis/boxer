@@ -138,7 +138,10 @@ func (p Projector) polygon(lats, lngs []float64, fill, stroke color.Color, strok
 func (p Projector) Image(key string, bounds LatLngBounds, widthPx, heightPx uint32, contentVersion uint64, pixels []uint32) c.PaintImageFluid {
 	nw := p.ToCanvas(bounds.GetNorthWest())
 	se := p.ToCanvas(bounds.GetSouthEast())
-	id := p.m.ids.PrepareStr("portolan-overlay-" + key).Derive()
+	var id uint64
+	for range c.IdScope(p.m.ids.PrepareStr("overlay")) {
+		id = p.m.ids.PrepareStr(key).Derive()
+	}
 	send := p.m.overlayTracker.PixelsToSendFor(key, id, contentVersion, pixels)
 	return c.PaintImage(id, float32(nw.X), float32(nw.Y), float32(se.X), float32(se.Y), widthPx, heightPx, contentVersion, send)
 }

@@ -82,6 +82,7 @@ func (p Projector) CameraAt(refZoom float64, origin Point) camera.Camera {
 // frame (ADR-0204 §SD1, §SD2).
 type Map struct {
 	ids     *c.WidgetIdStack
+	key     string // the id scope every derivation sits under
 	opts    Options
 	hopts   HandlerOptions
 	view    *View
@@ -158,9 +159,13 @@ const defaultBackgroundRGBA = 0xd8d8dcff
 // cancels a box zoom. The zoom keys wait for keycodes the vocabulary lacks.
 var mapKeyMask = keycodes.MaskOf(keycodes.ArrowUp, keycodes.ArrowDown, keycodes.ArrowLeft, keycodes.ArrowRight, keycodes.Escape)
 
-// New makes a map. ids scopes every id the widget derives; opts.Source is
-// required.
-func New(ids *c.WidgetIdStack, opts Options) *Map {
+// New makes a map. Every id the widget derives is scoped under scopeKey on
+// ids, so two maps on one stack differ by scopeKey alone; empty takes
+// "portolan". opts.Source defaults to OpenStreetMap.
+func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Map {
+	if scopeKey == "" {
+		scopeKey = "portolan"
+	}
 	if opts.Source.URLTemplate == "" {
 		opts.Source = NewTileSource("https://tile.openstreetmap.org/{z}/{x}/{y}.png")
 	} else {
@@ -179,6 +184,7 @@ func New(ids *c.WidgetIdStack, opts Options) *Map {
 	view.SetZoomAnimation(!opts.NoZoomAnimation)
 	m := &Map{
 		ids:            ids,
+		key:            scopeKey,
 		opts:           opts,
 		hopts:          hopts,
 		view:           view,
@@ -208,7 +214,7 @@ func (m *Map) wirePyramid() {
 // the area is the drag-owning region the map emits last. They are derived,
 // not remembered, so this is valid before the first Render.
 func (m *Map) Handles() (canvas, area widgethandle.WidgetHandle) {
-	for range c.IdScope(m.ids.PrepareStr("portolan")) {
+	for range c.IdScope(m.ids.PrepareStr(m.key)) {
 		canvas = widgethandle.Make(m.ids.PrepareStr("portolan-canvas").Derive())
 		area = widgethandle.Make(m.ids.PrepareStr("portolan-area").Derive())
 	}
@@ -404,7 +410,7 @@ func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) 
 	w, h := fallbackW, fallbackH
 	// The probe's slot is keyed under the map's own scope (ADR-0267 W7); the
 	// scope is opened for the derivation alone and emits nothing.
-	for range c.IdScope(m.ids.PrepareStr("portolan")) {
+	for range c.IdScope(m.ids.PrepareStr(m.key)) {
 		if pw, ph, ok := c.CapturePaneSize(m.ids.ProbeSeq("pane")); ok && pw > 0 && ph > 0 {
 			w, h = pw, ph
 		}
@@ -418,7 +424,7 @@ func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) 
 // in canvas coordinates through the Projector.
 func (m *Map) Render(w, h float32, overlay func(Projector)) (ev Events) {
 	defer func() { ev = Events{ViewEvents: m.events, Clicked: m.clicked, ClickedOk: m.clickedOk} }()
-	for range c.IdScope(m.ids.PrepareStr("portolan")) {
+	for range c.IdScope(m.ids.PrepareStr(m.key)) {
 		// The key-capturing Frame around the body: while it has focus (a
 		// click on the map gives it), the arrows pan and Escape cancels a box
 		// zoom (ADR-0177).
@@ -501,7 +507,7 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 			if !ok || px == nil {
 				continue
 			}
-			id := m.ids.PrepareStr("tile-" + td.Wrapped.Key()).Derive()
+			id := m.tileId(td.Wrapped)
 			version := m.tileVersion(px)
 			send := m.tracker.PixelsToSendFor(td.Wrapped, id, version, px.px)
 			if len(send) > 0 {
@@ -670,3 +676,12 @@ func (m *Map) wheelAnchor(wheel c.CanvasWheelValue) Point {
 }
 
 func isNaN32(v float32) bool { return math.IsNaN(float64(v)) }
+
+// tileId is a tile's texture id: its coordinate key under a "tile" scope, so
+// no tile can collide with another id of the map's.
+func (m *Map) tileId(coords TileCoords) (id uint64) {
+	for range c.IdScope(m.ids.PrepareStr("tile")) {
+		id = m.ids.PrepareStr(coords.Key()).Derive()
+	}
+	return
+}

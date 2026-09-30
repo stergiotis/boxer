@@ -50,7 +50,7 @@ func TestMap_ErrorTileURL(t *testing.T) {
 
 	src := NewTileSource("http://tiles.example/{z}/{x}/{y}.png")
 	src.ErrorTileURL = errURL
-	m := New(nil, Options{Source: src, Loader: LoaderOptions{Workers: 2, Fetcher: tr}, Center: LL(0, 0), Zoom: 1})
+	m := New(nil, "", Options{Source: src, Loader: LoaderOptions{Workers: 2, Fetcher: tr}, Center: LL(0, 0), Zoom: 1})
 	defer m.Close()
 	m.view.SetSize(Pt(300, 300))
 	m.view.SetView(m.opts.Center, m.opts.Zoom)

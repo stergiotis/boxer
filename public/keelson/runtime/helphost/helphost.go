@@ -99,7 +99,7 @@ type HelpHost struct {
 	viewMode ViewModeE
 
 	// scrolledTo remembers the (app, doc, section) the last frame
-	// actually emitted a markdown.WithScrollToSection hint for. The
+	// actually emitted a markdown.Input.ScrollToSection hint for. The
 	// reader pane re-emits the hint only when the current selection
 	// differs — re-scrolling every frame would keep snapping the
 	// scrollbar back and prevent the user from reading content above
@@ -524,7 +524,7 @@ func (inst *HelpHost) renderReader() {
 }
 
 // consumeScrollTarget returns the slug to pass into
-// [markdown.WithScrollToSection] this frame. Returns the active
+// [markdown.Input.ScrollToSection] this frame. Returns the active
 // [HelpHost.selectedSection] exactly once per selection change —
 // subsequent frames with the same selection return empty so the
 // markdown widget doesn't keep re-emitting the scroll op and
@@ -569,12 +569,12 @@ func (inst *HelpHost) renderViewToggle() {
 // pane. The wrapping IdScope is load-bearing per markdown.Doc.Render's
 // documented invariant. scrollToSection — when non-empty — drives a
 // one-shot scroll to the named heading on the next paint via
-// markdown.WithScrollToSection; the caller is responsible for clearing
+// markdown.Input.ScrollToSection; the caller is responsible for clearing
 // the value after the scroll lands (HelpHost.consumeScrollTarget does
 // this).
 //
 // bus, when non-nil, enables a "Copy" button on each rendered
-// code/verbatim block via [markdown.Doc.RenderActions]; a click copies
+// code/verbatim block via [markdown.Input.ActionLabels]; a click copies
 // the block's verbatim source to the clipboard over clipboard.write. On
 // an M1 host (nil bus) the plain [markdown.Doc.Render] path is used and
 // no button is shown.
@@ -589,29 +589,23 @@ func (inst *HelpHost) renderViewToggle() {
 // invariant in the markdown package's EXPLANATION.md. Generation 2 is
 // the addition of table rendering.
 func renderRendered(ids *c.WidgetIdStack, doc *markdown.Doc, scrollToSection string, scrollTop bool, bus app.BusI) {
-	opts := make([]markdown.RenderOpt, 0, 1)
-	if scrollToSection != "" {
-		opts = append(opts, markdown.WithScrollToSection(scrollToSection))
+	in := markdown.Input{Ids: ids, ScopeKey: "doc-render-2", Doc: doc, ScrollToSection: scrollToSection}
+	if bus != nil {
+		in.ActionLabels = []string{"Copy"}
 	}
 	for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 		if scrollTop {
 			c.ScrollToCursor(0)
 		}
-		for range c.IdScope(ids.PrepareStr("doc-render-2")) {
-			if bus == nil {
-				doc.Render(ids, opts...)
-				continue
-			}
-			// Copy a clicked block's verbatim source over clipboard.write,
-			// off the frame goroutine: Request blocks until the broker
-			// acks, and the frame thread must not block. Errors are
-			// swallowed — a failed copy isn't worth interrupting a reader.
-			for act := range doc.RenderActions(ids, "Copy", opts...) {
-				text := act.Text
-				go func() {
-					_, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text))
-				}()
-			}
+		// Copy a clicked block's verbatim source over clipboard.write, off
+		// the frame goroutine: Request blocks until the broker acks, and the
+		// frame thread must not block. Errors are swallowed — a failed copy
+		// isn't worth interrupting a reader.
+		for _, act := range markdown.Render(in).Actions {
+			text := act.Text
+			go func() {
+				_, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text))
+			}()
 		}
 	}
 }

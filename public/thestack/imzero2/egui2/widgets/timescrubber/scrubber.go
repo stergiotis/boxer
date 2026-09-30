@@ -45,9 +45,6 @@ type Mark struct {
 
 // Options tunes a [Scrubber]; the zero value is usable.
 type Options struct {
-	// ScopeKey scopes the widget's ids; two scrubbers on one id stack need
-	// different keys. Empty takes "timescrubber".
-	ScopeKey string
 	// Height is the strip's height in logical pixels. Zero takes 104.
 	Height float32
 	// Location is the zone times are shown in. nil takes UTC.
@@ -158,6 +155,7 @@ type Scrubber struct {
 	Marks []Mark
 
 	ids        *c.WidgetIdStack
+	key        string
 	keyFrameID uint64
 	lastFrame  time.Time
 	// now is the frame clock: what a frame's elapsed time and the age of a
@@ -186,17 +184,17 @@ type Scrubber struct {
 	columns            []column
 }
 
-// New makes a scrubber. ids scopes every id it derives.
-func New(ids *c.WidgetIdStack, opts Options) (inst *Scrubber) {
-	return &Scrubber{Opts: opts, ids: ids, now: time.Now, loadingSince: make(map[int]time.Time)}
+// New makes a scrubber. Every id it derives is scoped under scopeKey on ids,
+// so two scrubbers on one stack differ by scopeKey alone; empty takes
+// "timescrubber".
+func New(ids *c.WidgetIdStack, scopeKey string, opts Options) (inst *Scrubber) {
+	if scopeKey == "" {
+		scopeKey = "timescrubber"
+	}
+	return &Scrubber{Opts: opts, ids: ids, key: scopeKey, now: time.Now, loadingSince: make(map[int]time.Time)}
 }
 
-func (inst *Scrubber) scopeKey() string {
-	if inst.Opts.ScopeKey != "" {
-		return inst.Opts.ScopeKey
-	}
-	return "timescrubber"
-}
+func (inst *Scrubber) scopeKey() string { return inst.key }
 
 // wall is the clock the now line and the offsets from now are read against.
 func (inst *Scrubber) wall() time.Time {

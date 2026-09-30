@@ -201,7 +201,7 @@ func (inst *book) ensureIndex() {
 					Msg("help.book: read failed, skipping doc")
 				return nil
 			}
-			md := markdown.Parse(src, markdown.WithResolver(NewFSImageResolver(inst.fsys)))
+			md := markdown.ParseWith(src, markdown.ParseOptions{Resolver: NewFSImageResolver(inst.fsys)})
 			docPath := strings.TrimSuffix(p, ".md")
 			info := buildDocInfo(docPath, md)
 			for _, prob := range ValidateDocInfo(info) {

@@ -31,11 +31,9 @@ type Lanes struct {
 
 // NewLanes builds the timeline over intervals in lane units. opts are the
 // timeline's own options; the offset axis and the locked view are always set.
-func NewLanes(ids *c.WidgetIdStack, scopeKey string, tb track.TimeBase, intervals []*layout.IntervalEvent, opts ...timeline.Option) (inst *Lanes) {
-	all := make([]timeline.Option, 0, len(opts)+2)
-	all = append(all, timeline.WithOffsetAxis(LaneUnit), timeline.WithLockedView(true))
-	all = append(all, opts...)
-	return &Lanes{tl: timeline.New(ids, scopeKey, intervals, all...), tb: tb}
+func NewLanes(ids *c.WidgetIdStack, scopeKey string, tb track.TimeBase, intervals []*layout.IntervalEvent, opts timeline.Options) (inst *Lanes) {
+	opts.OffsetAxis, opts.OffsetUnit, opts.LockedView = true, LaneUnit, true
+	return &Lanes{tl: timeline.New(ids, scopeKey, intervals, opts), tb: tb}
 }
 
 // Timeline is the underlying widget.
@@ -54,7 +52,7 @@ func LaneUnitToFrame(tb track.TimeBase, v int64) (frame int64) {
 // Render locks the lanes to the player's view and playhead and draws them
 // at the current position of the enclosing Ui — call it right after
 // [Player.Render] so they sit under the waveform.
-func (inst *Lanes) Render(p *Player) {
+func (inst *Lanes) Render(p *Player) (ev timeline.Events) {
 	v := p.View()
 	w, _ := p.Size()
 	from := FrameToLaneUnit(inst.tb, int64(math.Floor(v.FromFrame)))
@@ -64,5 +62,5 @@ func (inst *Lanes) Render(p *Player) {
 	}
 	inst.tl.SetRangeUnits(from, to)
 	inst.tl.SetPlayhead(FrameToLaneUnit(inst.tb, p.Position()))
-	inst.tl.Render()
+	return inst.tl.Render()
 }

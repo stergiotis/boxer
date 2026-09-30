@@ -31,48 +31,39 @@ const availabilityContextSpan = 6 * time.Hour
 
 // ensureAvailability builds this window's timeline on first use.
 //
-// The brush callback is the whole point of the widget being here: a completed
-// gesture seeks the shared session, which is what makes the strip a range
-// control rather than a picture.
+// The brush is the whole point of the widget being here: a completed gesture
+// seeks the shared session (see seekFromBrush), which is what makes the strip
+// a range control rather than a picture.
 func (inst *App) ensureAvailability() (tl *timeline.Timeline) {
 	if inst.availability != nil {
 		return inst.availability
 	}
 	now := time.Now().UTC()
-	tl = timeline.New(inst.ids, "imztop-availability", nil,
-		timeline.WithContainerWidth(900),
-		timeline.WithRange(now.Add(-availabilityContextSpan), now),
-		timeline.WithNowLine(true),
+	// No lanes are attached, so the lane area is dead space; the smallest the
+	// widget will draw is what this strip wants. The rug keeps a real height
+	// because it is not decoration here — it carries the load preview (§SD9),
+	// and a zero-height rug silently drops it.
+	v := timeline.DefaultVisuals()
+	v.LaneHeight = 8
+	v.RugStripH = 16
+	v.RugGap = 2
+	tl = timeline.New(inst.ids, "imztop-availability", nil, timeline.Options{
+		ContainerWidth: 900,
+		NowLine:        true,
 		// Local, to agree with every other time imztop prints. The widget
 		// defaults to UTC; leaving it there put the axis two hours off the
 		// transport row's readout of the same instant, which reads as a bug
 		// long before it reads as a zone.
-		timeline.WithTimeZone(time.Local),
-		timeline.WithBackgroundBands(availabilityBands),
-		// The load layer: one rug mark per preview bin, tinted by how busy the
-		// box was. It is what makes the strip answer "when was something
-		// happening" rather than only "when was anything recorded".
-		timeline.WithIntensityEncoding(true),
-		timeline.WithBrush(func(r timeline.BrushRange, ok bool) {
-			if !ok {
-				return // a click clears the brush; it does not cancel the window
-			}
-			if session := ActiveReplay(); session != nil {
-				session.SeekWindow(
-					time.UnixMilli(r.FromMS).UTC(),
-					time.UnixMilli(r.ToMS).UTC())
-			}
-		}),
-		timeline.WithVisuals(func(v *timeline.Visuals) {
-			// No lanes are attached, so the lane area is dead space; the
-			// smallest the widget will draw is what this strip wants. The rug
-			// keeps a real height because it is not decoration here — it
-			// carries the load preview (§SD9), and a zero-height rug silently
-			// drops it.
-			v.LaneHeight = 8
-			v.RugStripH = 16
-			v.RugGap = 2
-		}))
+		TimeZone:        time.Local,
+		BackgroundBands: availabilityBands,
+		// The load layer: one rug mark per preview bin, tinted by how busy
+		// the box was (intensity encoding is the default). It is what makes
+		// the strip answer "when was something happening" rather than only
+		// "when was anything recorded".
+		Brush:   true,
+		Visuals: &v,
+	})
+	tl.SetRange(now.Add(-availabilityContextSpan), now)
 	inst.availability = tl
 	return
 }
@@ -169,7 +160,7 @@ func (inst *App) renderAvailability(st ReplayStatus, snap *PublishedSnapshot) {
 	// bounded top panel. Forcing one grew the panel to the floor and stretched
 	// the transport row's vertical separators down the whole window with it.
 	// The timeline's height is content-driven, so it needs no help.
-	tl.Render()
+	seekFromBrush(tl.Render())
 	inst.renderAvailabilityLegend(st, snap)
 }
 
@@ -320,4 +311,15 @@ func availabilityWindowLabel(w sysmreplay.Window) (s string) {
 		return "unbounded"
 	}
 	return fmt.Sprintf("%s → %s", w.From.Local().Format("15:04:05"), w.To.Local().Format("15:04:05"))
+}
+
+// seekFromBrush seeks the shared session to a completed brush gesture. A
+// click clears the brush; it does not cancel the window.
+func seekFromBrush(ev timeline.Events) {
+	if !ev.BrushChanged || !ev.BrushOk {
+		return
+	}
+	if session := ActiveReplay(); session != nil {
+		session.SeekWindow(time.UnixMilli(ev.Brush.FromMS).UTC(), time.UnixMilli(ev.Brush.ToMS).UTC())
+	}
 }

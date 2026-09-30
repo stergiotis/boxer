@@ -169,14 +169,13 @@ func (inst *App) renderDu(sc *storeConn) {
 				root, _ := buildDuTree(dir, files)
 				if inst.duTree == nil {
 					inst.duTree = treemap.New(inst.ids, "tally-du-treemap", root,
-						treemap.WithStatusLine(true), treemap.WithLeafClickSensing(true))
+						treemap.Options{LeafClickSensing: true})
 				} else {
 					inst.duTree.SetRoot(root)
 				}
 			}
 			if inst.duTree != nil {
-				inst.duTree.SetContainerSize(treemapW, bodyH)
-				inst.duTree.Render()
+				inst.duTree.Render(treemapW, bodyH)
 			}
 		}
 	}

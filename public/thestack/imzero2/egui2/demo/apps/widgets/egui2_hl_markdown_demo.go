@@ -317,22 +317,21 @@ Wikilink with heading and alias: [[Doc#Intro|see intro]].
 
 Surrounding prose so wikilinks sit inline with regular text.`))
 
-	mdEmbeds = markdown.Parse([]byte(`Note embed: ![[Some Note]].
+	mdEmbeds = markdown.ParseWith([]byte(`Note embed: ![[Some Note]].
 
 Image embed: ![[diagram.png]].
 
 Embed with heading: ![[Reference#Section A]].
 
 Embed inline within prose: see ![[architecture.png]] for the layout.`),
-		markdown.WithResolver(demoMarkdownResolver{}),
-		markdown.WithImageMaxSize(200, 140))
+		markdown.ParseOptions{Resolver: demoMarkdownResolver{}, ImageMaxW: 200, ImageMaxH: 140})
 
 	// mdImages exercises the CommonMark inline-image path (the Obsidian
 	// embed path is already shown by mdEmbeds above). Two refs match
 	// demoMarkdownResolver's procedural assets and render as real
 	// images; one unknown ref falls back to the 🖼-glyph hyperlink so
 	// both paths are visible side-by-side in the demo.
-	mdImages = markdown.Parse([]byte(`CommonMark inline image with alt text:
+	mdImages = markdown.ParseWith([]byte(`CommonMark inline image with alt text:
 
 ![A schematic](diagram.png)
 
@@ -345,8 +344,7 @@ Hero image on its own line:
 Unknown ref falls back to a 🖼-prefixed hyperlink:
 
 ![missing asset](this-image-does-not-exist.png)`),
-		markdown.WithResolver(demoMarkdownResolver{}),
-		markdown.WithImageMaxSize(200, 140))
+		markdown.ParseOptions{Resolver: demoMarkdownResolver{}, ImageMaxW: 200, ImageMaxH: 140})
 
 	mdCallouts = markdown.Parse([]byte(`> [!note] A note callout
 > Standard note styling. Body can contain **inline** *formatting*
@@ -423,106 +421,71 @@ literal.
 )
 
 func demoMarkdownHeadings(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-headings")) {
-		mdHeadings.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-headings", Doc: mdHeadings})
 }
 
 func demoMarkdownInline(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-inline")) {
-		mdInline.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-inline", Doc: mdInline})
 }
 
 func demoMarkdownLists(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-lists")) {
-		mdLists.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-lists", Doc: mdLists})
 }
 
 func demoMarkdownTasks(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-tasks")) {
-		mdTasks.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-tasks", Doc: mdTasks})
 }
 
 func demoMarkdownBlockquote(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-blockquote")) {
-		mdBlockquote.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-blockquote", Doc: mdBlockquote})
 }
 
 func demoMarkdownCode(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-code")) {
-		mdCode.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-code", Doc: mdCode})
 }
 
 func demoMarkdownRule(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-rule")) {
-		mdRule.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-rule", Doc: mdRule})
 }
 
 func demoMarkdownTables(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-tables")) {
-		mdTables.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-tables", Doc: mdTables})
 }
 
 func demoMarkdownFrontmatter(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-frontmatter")) {
-		mdFrontmatter.Render(ids)
-		mdFrontmatter.RenderFrontmatter()
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-frontmatter", Doc: mdFrontmatter, Frontmatter: true})
 }
 
 func demoMarkdownHighlight(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-highlight")) {
-		mdHighlight.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-highlight", Doc: mdHighlight})
 }
 
 func demoMarkdownWikilinks(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-wikilinks")) {
-		mdWikilinks.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-wikilinks", Doc: mdWikilinks})
 }
 
 func demoMarkdownEmbeds(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-embeds")) {
-		mdEmbeds.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-embeds", Doc: mdEmbeds})
 }
 
 func demoMarkdownImages(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-images")) {
-		mdImages.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-images", Doc: mdImages})
 }
 
 func demoMarkdownCallouts(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-callouts")) {
-		mdCallouts.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-callouts", Doc: mdCallouts})
 }
 
 func demoMarkdownComment(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-comment")) {
-		mdComment.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-comment", Doc: mdComment})
 }
 
 func demoMarkdownFootnotes(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-footnotes")) {
-		mdFootnotes.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-footnotes", Doc: mdFootnotes})
 }
 
 func demoMarkdownSelfHl(ids *c.WidgetIdStack) {
-	for range c.IdScope(ids.PrepareStr("md-self-hl")) {
-		mdSelfHl.Render(ids)
-	}
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-self-hl", Doc: mdSelfHl})
 }
 
 func demoMarkdownLoad(ids *c.WidgetIdStack, st *markdownDemoState) {
@@ -549,10 +512,7 @@ func demoMarkdownLoad(ids *c.WidgetIdStack, st *markdownDemoState) {
 		}
 		c.Separator().Send()
 		if st.loadDoc != nil {
-			for range c.IdScope(ids.PrepareStr("md-load-rendered")) {
-				st.loadDoc.Render(ids)
-				st.loadDoc.RenderFrontmatter()
-			}
+			markdown.Render(markdown.Input{Ids: ids, ScopeKey: "md-load-rendered", Doc: st.loadDoc, Frontmatter: true})
 		} else {
 			c.Label("(no document loaded — enter a path and press Load)").Send()
 		}

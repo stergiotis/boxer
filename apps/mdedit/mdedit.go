@@ -1063,17 +1063,13 @@ func (inst *App) renderPreview() {
 		c.Label("Nothing to preview yet.").Send()
 		return
 	}
-	// markdown.Doc derives ids for its code blocks, blockquotes and callouts
-	// from a per-Render sequence and deliberately does NOT open its own scope;
-	// supplying one is the caller's job whenever more than one doc might share
-	// a parent scope (markdown EXPLANATION, "Caller-provided IdScope").
-	for range c.IdScope(inst.ids.PrepareStr("preview")) {
-		if slug, changed := inst.takeScrollTarget(); changed {
-			inst.doc.Render(inst.ids, markdown.WithScrollToSection(slug))
-		} else {
-			inst.doc.Render(inst.ids)
-		}
+	// markdown.Render opens its own scope under ScopeKey, so the preview and
+	// the transform preview in the same window cannot collide.
+	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc}
+	if slug, changed := inst.takeScrollTarget(); changed {
+		in.ScrollToSection = slug
 	}
+	markdown.Render(in)
 }
 
 // ---------------------------------------------------------------------------
@@ -1126,7 +1122,7 @@ func (inst *App) syncDoc() {
 //
 // It only ever queues on a CHANGE. Queuing every frame would re-issue the
 // scroll continuously and pin the preview against the reader's own scrolling,
-// which is the guard markdown.WithScrollToSection documents.
+// which is the guard markdown.Input.ScrollToSection documents.
 func (inst *App) trackCaretSection() {
 	if inst.doc == nil {
 		return

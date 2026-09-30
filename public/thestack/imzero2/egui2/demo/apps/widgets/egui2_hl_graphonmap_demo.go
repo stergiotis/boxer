@@ -119,7 +119,7 @@ type graphOnMapState struct {
 
 func newGraphOnMapState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *graphOnMapState {
 	st := &graphOnMapState{
-		m: portolan.New(ids, portolan.Options{
+		m: portolan.New(ids, "gom-map", portolan.Options{
 			Source: basemap.PortolanSource(),
 			Loader: basemap.PortolanLoader(basemap.NewTiles(bus, "gallery: graph on a map")),
 			Center: graphOnMapCentre,
@@ -223,7 +223,7 @@ func demoGraphOnMap(ids *c.WidgetIdStack, st *graphOnMapState) {
 		if st.showLand {
 			ls := landoverlay.DefaultStyle()
 			ls.NoFill = st.landNoFill
-			st.land.Draw(p, st.atlas, ls)
+			st.land.Paint(p, st.atlas, ls)
 		}
 		// The map's handlers ran at the top of this Render, so the paint
 		// takes the view as it is now — not the one the pick used, which

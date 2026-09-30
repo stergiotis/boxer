@@ -14,7 +14,7 @@ import (
 // text (per item, never the ", " joiner) and is keyed by the column's Arrow
 // index. Removing it restores the identity.
 func TestSetCellGloss(t *testing.T) {
-	e := NewTable2CardEmitter(nil, ColorPaletteViridis, nil)
+	e := NewTable2CardEmitter(nil, "", ColorPaletteViridis, nil)
 	e.colNames = []string{"temperature", "reading"}
 	e.colHidden = []bool{false, false}
 	e.currentRow = &table2UnifiedRow{kind: rowKindData}
@@ -86,7 +86,7 @@ func TestSetCellGloss(t *testing.T) {
 // gloss (SectionDigests read it), and the row grows by what the blocks ask
 // for — clamped, with a caption only when the row has more than one pair.
 func TestSetCellBlock(t *testing.T) {
-	e := NewTable2CardEmitter(nil, ColorPaletteViridis, nil)
+	e := NewTable2CardEmitter(nil, "", ColorPaletteViridis, nil)
 	e.colNames = []string{"body", "size"}
 	e.colHidden = []bool{false, false}
 	e.currentRow = &table2UnifiedRow{kind: rowKindData}
@@ -165,7 +165,7 @@ func TestSetCellBlock(t *testing.T) {
 // drew: exactly where a leeway entity's id sits, and so exactly where
 // gloss/taggedid's block face belongs.
 func TestSetCellBlockSurvivesThePlainFanOut(t *testing.T) {
-	e := NewTable2CardEmitter(nil, ColorPaletteViridis, nil)
+	e := NewTable2CardEmitter(nil, "", ColorPaletteViridis, nil)
 	e.colNames = []string{"id", "naturalKey"}
 	e.colHidden = []bool{false, false}
 	e.SetCellBlock(func(arrowIdx int, _ string) (CellBlock, bool) {

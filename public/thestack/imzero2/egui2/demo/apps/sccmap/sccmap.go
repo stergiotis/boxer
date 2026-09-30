@@ -491,16 +491,16 @@ func (inst *App) rebuildTreemap() {
 		treemap.ContinuousColoringFromMap(cm, valueFn),
 		valueFn,
 	)
-	inst.tm = treemap.New(inst.ids, "scc-treemap", root,
-		treemap.WithColoring(treemap.CompositeColoring(
+	inst.tm = treemap.New(inst.ids, "scc-treemap", root, treemap.Options{
+		Coloring: treemap.CompositeColoring(
 			treemap.DepthColoring(treemap.DefaultDepthColors),
 			inst.hoverBand,
-		)),
-	)
-	// Secondary in-cell label: humanized size/color values, gated live on
-	// inst.showValues so toggling needs no rebuild. Captures this build's
-	// valueFn so it tracks the current color metric.
-	inst.tm.SetCellLabel(inst.makeCellLabelFn(valueFn))
+		),
+		// Secondary in-cell label: humanized size/color values, gated live on
+		// inst.showValues so toggling needs no rebuild. Captures this build's
+		// valueFn so it tracks the current color metric.
+		CellLabel: inst.makeCellLabelFn(valueFn),
+	})
 	// ColorScale layout: gradient = 55% of height, then a 5 px tick row +
 	// 2 px gap + fontSize-10 labels = ~17 px of axis chrome. h=32 placed
 	// the label baseline at ~25, with text descending past the canvas's
@@ -616,13 +616,12 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	}
 	inst.lastContainerW = w
 	inst.lastContainerH = h
-	inst.tm.SetContainerSize(w, h)
 	// Arm the pane probe HERE — after the chrome above, before the treemap
 	// below — so the rect it reports next frame is the space the treemap
 	// actually gets, and does not include what the treemap itself drew.
 	inst.availW, inst.availH, inst.availOk = c.CapturePaneSize(inst.probeSeq("treemap-pane"))
 
-	inst.tm.Render()
+	inst.tm.Render(w, h)
 
 	// Colorscale legend renders last. This used to be load-bearing: the
 	// colorscale detected hovers through R14, one global slot that every

@@ -70,7 +70,7 @@ func newApp() (inst *App) {
 	ids := c.NewWidgetIdStack()
 	inst = &App{
 		ids:           ids,
-		table2Emitter: leewaywidgets.NewTable2CardEmitter(ids, leewaywidgets.ColorPaletteViridis, nil),
+		table2Emitter: leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil),
 		selectedView:  viewKeyTable2,
 	}
 	return
@@ -83,7 +83,7 @@ func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 	// emitter holds a pointer to the stack so it can't just be left
 	// pointing at the ctor's fallback.
 	inst.ids = ctx.Ids()
-	inst.table2Emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, leewaywidgets.ColorPaletteViridis, nil)
+	inst.table2Emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, "card", leewaywidgets.ColorPaletteViridis, nil)
 	return
 }
 func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) { return }

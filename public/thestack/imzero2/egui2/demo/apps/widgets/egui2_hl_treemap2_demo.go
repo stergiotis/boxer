@@ -35,16 +35,15 @@ func init() {
 		Description: "Frame-based treemap with click-to-zoom drill-down on a synthetic hierarchical dataset.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			state = &treemap2DemoState{
-				tm: treemap.New(ids, "tm2-demo", makeSampleTree(),
-					treemap.WithContainerSize(700, 450),
-					treemap.WithAnimationDuration(0.28),
-					treemap.WithColoring(treemap.DepthColoring(stretchedDepthPalette())),
-				),
+				tm: treemap.New(ids, "tm2-demo", makeSampleTree(), treemap.Options{
+					AnimationDuration: 0.28,
+					Coloring:          treemap.DepthColoring(stretchedDepthPalette()),
+				}),
 			}
 			return
 		},
 		RenderStateful: func(_ *c.WidgetIdStack, state any) {
-			state.(*treemap2DemoState).tm.Render()
+			state.(*treemap2DemoState).tm.Render(700, 450)
 		},
 	})
 	registry.Register(registry.Demo{
@@ -59,27 +58,25 @@ func init() {
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			root := makeSampleTree()
 			state = &treemap2DemoState{
-				tm: treemap.New(ids, "tm2-demo-drilled", root,
-					// Shorter than the interactive scene's 700x450: the
-					// container must fit the 600px stage below the window
-					// chrome (~200px) so the capture includes the treemap's
-					// bottom edge — the hatched bottom corners are exactly
-					// what this scene exists to show.
-					treemap.WithContainerSize(700, 360),
-					treemap.WithAnimationDuration(0.28),
-					treemap.WithColoring(treemap.DepthColoring(stretchedDepthPalette())),
+				tm: treemap.New(ids, "tm2-demo-drilled", root, treemap.Options{
+					AnimationDuration: 0.28,
+					Coloring:          treemap.DepthColoring(stretchedDepthPalette()),
 					// A value line under each name exercises the two-line
 					// label path on hatched cells (paintLabelsAboveHatch).
-					treemap.WithCellLabel(func(n *layout.Node) string {
+					CellLabel: func(n *layout.Node) string {
 						return fmt.Sprintf("%.0f lines", n.TotalSize())
-					}),
-					treemap.WithInitialPath(childPath(root, "src", "backend")),
-				),
+					},
+					InitialPath: childPath(root, "src", "backend"),
+				}),
 			}
 			return
 		},
 		RenderStateful: func(_ *c.WidgetIdStack, state any) {
-			state.(*treemap2DemoState).tm.Render()
+			// Shorter than the interactive scene's 700x450: the container
+			// must fit the 600px stage below the window chrome (~200px) so the
+			// capture includes the treemap's bottom edge — the hatched bottom
+			// corners are exactly what this scene exists to show.
+			state.(*treemap2DemoState).tm.Render(700, 360)
 		},
 	})
 }
@@ -103,7 +100,7 @@ func stretchedDepthPalette() []uint32 {
 }
 
 // childPath walks root's Children by name and returns the breadcrumb path
-// (root inclusive) in the form treemap.WithInitialPath expects. Panics on a
+// (root inclusive) in the form treemap.Options.InitialPath expects. Panics on a
 // missing name — it wires the fixed sample tree, so a miss is a typo here.
 func childPath(root *layout.Node, names ...string) []*layout.Node {
 	path := []*layout.Node{root}

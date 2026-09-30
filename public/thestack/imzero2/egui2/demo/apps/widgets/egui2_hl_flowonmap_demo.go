@@ -74,7 +74,7 @@ type flowOnMapState struct {
 
 func newFlowOnMapState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *flowOnMapState {
 	st := &flowOnMapState{
-		m: portolan.New(ids, portolan.Options{
+		m: portolan.New(ids, "fom-map", portolan.Options{
 			Source:  basemap.PortolanSource(),
 			Loader:  basemap.PortolanLoader(basemap.NewTiles(bus, "gallery: flow on a map")),
 			Center:  portolan.LL(35, 5),
@@ -113,7 +113,7 @@ func newFlowOnMapState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *flowOnMapStat
 		st.layer.Opts.Synchronous = true
 		st.layer.Opts.FixedTicks = flowOnMapCaptureTicks
 	}
-	st.scrub = timescrubber.New(ids, timescrubber.Options{ScopeKey: "fom-time"})
+	st.scrub = timescrubber.New(ids, "fom-time", timescrubber.Options{})
 	if st.capture {
 		// Between two steps, so the capture shows the blend.
 		st.scrub.Opts.NoSnap = true
@@ -177,8 +177,8 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 		if !st.tiles {
 			ls.Land, ls.Border = color.Hex(0x262d36ff), color.Hex(0x4a5563ff)
 		}
-		st.land.Draw(p, st.atlas, ls)
-		layer.Draw(p)
+		st.land.Paint(p, st.atlas, ls)
+		layer.Paint(p)
 		if st.showGraph {
 			cam := p.CameraAt(graphOnMapRefZoom, st.origin)
 			st.gv.SetHostCamera(cam)

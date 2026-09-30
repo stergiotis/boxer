@@ -434,7 +434,7 @@ func (inst *App) renderMap() {
 	// The map is created on first render; it owns its view Go-side
 	// (ADR-0204). Zoom 8 shows the whole country to pick the points on.
 	if inst.pm == nil {
-		inst.pm = portolan.New(inst.ids, portolan.Options{
+		inst.pm = portolan.New(inst.ids, "terrain-map", portolan.Options{
 			Source: basemap.PortolanSource(),
 			Loader: basemap.PortolanLoader(inst.tiles),
 			Center: portolan.LL(swissCenterLat, swissCenterLon),

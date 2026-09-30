@@ -137,9 +137,9 @@ type fetchReply struct {
 
 // Layer is a flow layer over one source.
 //
-// Draw and the setters belong to the frame goroutine. Window requests run on
+// Paint and the setters belong to the frame goroutine. Window requests run on
 // goroutines of the layer's own and hand their replies over through a
-// mailbox, which Draw empties.
+// mailbox, which Paint empties.
 type Layer struct {
 	Opts Options
 
@@ -405,9 +405,9 @@ func (p crsProjection) UnprojectAt(pt portolan.Point, zoom float64) portolan.Lat
 	return p.crs.PointToLatLng(pt, zoom)
 }
 
-// Draw advances the particles and paints them. It is called inside the map's
+// Paint advances the particles and paints them. It is called inside the map's
 // overlay callback, with that frame's projector.
-func (inst *Layer) Draw(p portolan.Projector) {
+func (inst *Layer) Paint(p portolan.Projector) {
 	view := p.View()
 	size := view.Size()
 	if !(size.X > 0) || !(size.Y > 0) {

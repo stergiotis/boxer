@@ -1,4 +1,5 @@
-// Package waveform is the audio waveform player of ADR-0208: the waveform of
+// Package waveform is the audio waveform player of ADR-0208, a semi-retained
+// widget in the sense of ADR-0267: the waveform of
 // a [track.Track] drawn on the painter lane with a playhead, click-to-seek,
 // drag-to-pan, wheel and pinch zoom, a duration ruler and a hover readout.
 // It imports track and nothing below it; every sample it draws comes from

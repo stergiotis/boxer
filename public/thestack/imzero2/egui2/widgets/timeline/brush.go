@@ -17,7 +17,7 @@ import (
 // would make that arbitration three-way for every caller, including the ones
 // that never asked for a brush. A second canvas has its own id, so its own
 // response flags and its own cursor row — the main canvas is untouched by
-// construction, and a timeline without WithBrush emits nothing extra at all.
+// construction, and a timeline without Options.Brush emits nothing extra at all.
 //
 // The brush deliberately does not go through [SelectionInfo]. A range is not
 // an interval, bucket, annotation or lane, and widening SelectionKindE to
@@ -37,33 +37,6 @@ type BrushRange struct {
 	ToMS   int64
 }
 
-// BrushListener fires once per completed brush gesture, on the frame the
-// release lands. A click that never travelled (see brushMinDragPx) clears the
-// brush and fires with ok=false.
-//
-// Validation: nil is a no-op — the brush still tracks and paints, and the
-// caller can poll [Timeline.Brush] instead.
-type BrushListener func(r BrushRange, ok bool)
-
-// WithBrush enables the range-brush strip and registers the completion
-// callback.
-//
-// Opt-in by design: without it no strip is emitted, no row is reserved, and
-// the widget renders exactly as it did before the brush existed — which is
-// what lets it land on a widget with existing callers.
-//
-// To shade the brushed range on the main canvas, feed it back through
-// [WithBackgroundBands]; that is what bands are for, and it keeps the brush
-// from reaching into the main paint path.
-//
-// Validation: nil listener is accepted (see [BrushListener]).
-func WithBrush(onBrush BrushListener) Option {
-	return func(inst *Timeline) {
-		inst.brushEnabled = true
-		inst.onBrush = onBrush
-	}
-}
-
 // Brush returns the committed range. ok is false when nothing is brushed.
 //
 // Validation: snapshot at boundary — the value reflects the last completed
@@ -80,8 +53,8 @@ func (inst *Timeline) Brush() (r BrushRange, ok bool) {
 // persisted selection, or reflecting one a sibling control made. Bounds are
 // normalised; an empty or inverted-to-equal range clears instead.
 //
-// Does not fire the listener: the callback reports what the user did, and a
-// caller that just set the value already knows.
+// Not reported in Events: those report what the user did, and a caller
+// that just set the value already knows.
 func (inst *Timeline) SetBrush(fromMS, toMS int64) {
 	if fromMS == toMS {
 		inst.ClearBrush()
@@ -93,7 +66,7 @@ func (inst *Timeline) SetBrush(fromMS, toMS int64) {
 	inst.brushFromMS, inst.brushToMS, inst.brushHas = fromMS, toMS, true
 }
 
-// ClearBrush drops the committed range. Does not fire the listener.
+// ClearBrush drops the committed range. Not reported in Events.
 func (inst *Timeline) ClearBrush() {
 	inst.brushHas = false
 	inst.brushFromMS, inst.brushToMS = 0, 0
@@ -263,19 +236,15 @@ func (inst *Timeline) commitBrush() {
 		return
 	}
 	inst.brushFromMS, inst.brushToMS, inst.brushHas = from, to, true
-	if inst.onBrush != nil {
-		inst.onBrush(BrushRange{FromMS: from, ToMS: to}, true)
-	}
+	inst.events.BrushChanged, inst.events.Brush, inst.events.BrushOk = true, BrushRange{FromMS: from, ToMS: to}, true
 }
 
-// clearBrushAndNotify drops the range and tells the listener it went. Both
-// ways a gesture can end in "no range" land here, so the listener cannot
+// clearBrushAndNotify drops the range and reports that it went. Both
+// ways a gesture can end in "no range" land here, so the host cannot
 // observe one of them and miss the other.
 func (inst *Timeline) clearBrushAndNotify() {
 	inst.ClearBrush()
-	if inst.onBrush != nil {
-		inst.onBrush(BrushRange{}, false)
-	}
+	inst.events.BrushChanged, inst.events.Brush, inst.events.BrushOk = true, BrushRange{}, false
 }
 
 // paintBrushStrip draws the committed range, or the pending one while a

@@ -20,6 +20,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/waveform"
 )
@@ -216,7 +217,7 @@ func (st *waveformDemoState) setTrack(tr *track.Track, source string, synthetic 
 	}
 	st.tr = tr
 	st.source = source
-	st.player = waveform.New(st.ids, tr, waveform.Options{ScopeKey: "waveform-demo"})
+	st.player = waveform.New(st.ids, "waveform-demo", tr, waveform.Options{})
 	st.player.SetReadout(waveform.ReadoutRelative)
 	st.wallClock, st.editRegions = false, false
 	c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&st.wallClock)
@@ -229,7 +230,7 @@ func (st *waveformDemoState) setTrack(tr *track.Track, source string, synthetic 
 		st.layers, intervals = waveformDemoAnnotations(tr.TimeBase(), tr.Frames())
 	}
 	st.player.SetLayers(&st.layers)
-	st.lanes = waveform.NewLanes(st.ids, "waveform-demo-lanes", tr.TimeBase(), intervals)
+	st.lanes = waveform.NewLanes(st.ids, "waveform-demo-lanes", tr.TimeBase(), intervals, timeline.Options{})
 	st.lastEdit, st.lastLayerClick = "", ""
 	// A build still running is a background job the host should see.
 	st.buildTaskId = ""

@@ -1,6 +1,7 @@
 package timeline
 
 import (
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"math"
 	"testing"
 	"time"
@@ -229,10 +230,51 @@ func TestFormatBandTooltip(t *testing.T) {
 // Timeline construction + state lifecycle (needs ids stack)
 // =============================================================================
 
-func newTestTimeline(t *testing.T, intervals []*layout.IntervalEvent, opts ...Option) *Timeline {
+// testOpt configures a test timeline: an Options field, or data set through
+// a setter after New, the way a host does it.
+type testOpt func(o *Options, after *[]func(*Timeline))
+
+func withOptions(f func(o *Options)) testOpt { return func(o *Options, _ *[]func(*Timeline)) { f(o) } }
+func withContainerWidth(w float32) testOpt {
+	return withOptions(func(o *Options) { o.ContainerWidth = w })
+}
+func withIntervalColors(p []color.Color) testOpt {
+	return withOptions(func(o *Options) { o.IntervalColors = p })
+}
+func withOffsetAxis(unit time.Duration) testOpt {
+	return withOptions(func(o *Options) { o.OffsetAxis, o.OffsetUnit = true, unit })
+}
+func withLockedView(locked bool) testOpt {
+	return withOptions(func(o *Options) { o.LockedView = locked })
+}
+func withLODScales(s []time.Duration) testOpt {
+	return withOptions(func(o *Options) { o.LODScales = s })
+}
+func withAfter(f func(*Timeline)) testOpt {
+	return func(_ *Options, after *[]func(*Timeline)) { *after = append(*after, f) }
+}
+func withRange(t0, t1 time.Time) testOpt {
+	return withAfter(func(tl *Timeline) { tl.SetRange(t0, t1) })
+}
+func withPointEvents(p []*layout.PointEvent) testOpt {
+	return withAfter(func(tl *Timeline) { tl.SetPoints(p) })
+}
+func withAnnotations(a []*layout.Annotation) testOpt {
+	return withAfter(func(tl *Timeline) { tl.SetAnnotations(a) })
+}
+
+func newTestTimeline(t *testing.T, intervals []*layout.IntervalEvent, opts ...testOpt) *Timeline {
 	t.Helper()
-	ids := c.NewWidgetIdStack()
-	return New(ids, "test-tl", intervals, opts...)
+	var o Options
+	var after []func(*Timeline)
+	for _, f := range opts {
+		f(&o, &after)
+	}
+	tl := New(c.NewWidgetIdStack(), "test-tl", intervals, o)
+	for _, f := range after {
+		f(tl)
+	}
+	return tl
 }
 
 func TestNew_DefaultsApplied(t *testing.T) {
@@ -268,17 +310,20 @@ func TestNew_DefaultsApplied(t *testing.T) {
 // near-invisible end, so the host turns encoding off to fall back to the
 // flat IntervalColor / PointColor fills.
 func TestIntensityEncoding_OptionAndSetter(t *testing.T) {
-	tl := newTestTimeline(t, nil, WithIntensityEncoding(false))
+	tl := newTestTimeline(t, nil, withOptions(func(o *Options) { o.NoIntensityEncoding = true }))
 	if tl.intensityEncoded {
-		t.Error("WithIntensityEncoding(false) should clear intensityEncoded")
+		t.Error("Options.NoIntensityEncoding should clear intensityEncoded")
 	}
-	tl.SetIntensityEncoding(true)
+	// Opts is re-read every frame: flipping it is the runtime toggle.
+	tl.Opts.NoIntensityEncoding = false
+	tl.applyOpts()
 	if !tl.intensityEncoded {
-		t.Error("SetIntensityEncoding(true) should set intensityEncoded")
+		t.Error("clearing Opts.NoIntensityEncoding should set intensityEncoded")
 	}
-	tl.SetIntensityEncoding(false)
+	tl.Opts.NoIntensityEncoding = true
+	tl.applyOpts()
 	if tl.intensityEncoded {
-		t.Error("SetIntensityEncoding(false) should clear intensityEncoded")
+		t.Error("setting Opts.NoIntensityEncoding should clear intensityEncoded")
 	}
 }
 
@@ -293,7 +338,7 @@ func TestIntervalColors_Option(t *testing.T) {
 		color.Hex(styletokens.SuccessDefault.AsHex()).Keep(),
 		color.Hex(styletokens.ErrorDefault.AsHex()).Keep(),
 	}
-	tl := newTestTimeline(t, nil, WithIntervalColors(palette))
+	tl := newTestTimeline(t, nil, withIntervalColors(palette))
 	if len(tl.intervalColors) != len(palette) {
 		t.Fatalf("intervalColors len: got %d want %d", len(tl.intervalColors), len(palette))
 	}
@@ -310,7 +355,7 @@ func TestNew_PanicsOnNilIds(t *testing.T) {
 			t.Error("expected panic on nil ids")
 		}
 	}()
-	_ = New(nil, "k", nil)
+	_ = New(nil, "k", nil, Options{})
 }
 
 func TestNew_PanicsOnEmptyScopeKey(t *testing.T) {
@@ -320,7 +365,7 @@ func TestNew_PanicsOnEmptyScopeKey(t *testing.T) {
 		}
 	}()
 	ids := c.NewWidgetIdStack()
-	_ = New(ids, "", nil)
+	_ = New(ids, "", nil, Options{})
 }
 
 func TestComputeViewRange_AutoFit(t *testing.T) {
@@ -340,7 +385,7 @@ func TestComputeViewRange_AutoFit(t *testing.T) {
 func TestComputeViewRange_Explicit(t *testing.T) {
 	pinned := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
 	pinnedEnd := pinned.Add(time.Hour)
-	tl := newTestTimeline(t, nil, WithRange(pinned, pinnedEnd))
+	tl := newTestTimeline(t, nil, withRange(pinned, pinnedEnd))
 	t0, t1 := tl.computeViewRange()
 	if t0 != pinned.UnixMilli() || t1 != pinnedEnd.UnixMilli() {
 		t.Errorf("explicit range not preserved: got [%v,%v]", t0, t1)
@@ -383,7 +428,7 @@ func TestComputeViewRange_EmptyFallbackToNowHour(t *testing.T) {
 func TestOffsetAxis_UnitsViewTicksAndTooltips(t *testing.T) {
 	// Microsecond axis over a 24 s recording.
 	a := &layout.IntervalEvent{FromMS: 1_000_000, ToMS: 2_500_000}
-	tl := newTestTimeline(t, []*layout.IntervalEvent{a}, WithOffsetAxis(time.Microsecond), WithLockedView(true))
+	tl := newTestTimeline(t, []*layout.IntervalEvent{a}, withOffsetAxis(time.Microsecond), withLockedView(true))
 	if !tl.IsOffsetAxis() || tl.Unit() != time.Microsecond {
 		t.Fatalf("offset axis not configured: offset=%v unit=%v", tl.IsOffsetAxis(), tl.Unit())
 	}
@@ -463,7 +508,7 @@ func TestPinToCurrentView_Idempotent(t *testing.T) {
 // dragging right walks the view backwards in time (content follows the
 // cursor) and the span is untouched — pan translates, only zoom scales.
 func TestPanBy_ShiftsViewWithoutResizing(t *testing.T) {
-	tl := newTestTimeline(t, nil, WithRange(
+	tl := newTestTimeline(t, nil, withRange(
 		time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC()))
 	// 1000 ms over a 100-px axis (labelW=0) → 10 ms/px. Drag right by 10 px
 	// → the view moves 100 ms earlier.
@@ -481,7 +526,7 @@ func TestPanBy_ShiftsViewWithoutResizing(t *testing.T) {
 // [labelW, effW] onto the view, so pan must divide by the axis width, not the
 // container width, or the data slides against the ticks under the cursor.
 func TestPanBy_ExcludesLabelBandFromScale(t *testing.T) {
-	tl := newTestTimeline(t, nil, WithRange(
+	tl := newTestTimeline(t, nil, withRange(
 		time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC()))
 	// effW=200, labelW=100 → axis is 100 px wide → 10 ms/px, as above. If the
 	// label band leaked into the scale it would be 5 ms/px and drift by half.
@@ -520,7 +565,7 @@ func TestPanBy_DegenerateInputsAreNoOps(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tl := newTestTimeline(t, nil, WithRange(
+			tl := newTestTimeline(t, nil, withRange(
 				time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC()))
 			tl.panBy(tc.dx, tc.labelW, tc.effW)
 			if tl.viewMinMS != 0 || tl.viewMaxMS != 1000 {
@@ -546,9 +591,9 @@ func TestSetIntervals_DropsInteractivePin(t *testing.T) {
 
 func TestSetIntervals_PreservesCallerDrivenPin(t *testing.T) {
 	pinned := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
-	tl := newTestTimeline(t, nil, WithRange(pinned, pinned.Add(time.Hour)))
+	tl := newTestTimeline(t, nil, withRange(pinned, pinned.Add(time.Hour)))
 	if tl.interactivePin {
-		t.Fatal("WithRange should not set interactivePin")
+		t.Fatal("SetRange should not set interactivePin")
 	}
 	tl.SetIntervals([]*layout.IntervalEvent{{FromMS: 0, ToMS: 100}})
 	if !tl.explicitRange {
@@ -570,7 +615,7 @@ func TestSelection_DefaultIsNone(t *testing.T) {
 func TestSelectAnnotationByNumber(t *testing.T) {
 	a1 := &layout.Annotation{TMS: 1000, Number: 1, Label: "one"}
 	a2 := &layout.Annotation{TMS: 2000, Number: 2, Label: "two"}
-	tl := newTestTimeline(t, nil, WithAnnotations([]*layout.Annotation{a1, a2}))
+	tl := newTestTimeline(t, nil, withAnnotations([]*layout.Annotation{a1, a2}))
 	tl.SelectAnnotationByNumber(2)
 	sel := tl.Selection()
 	if sel.Kind != SelectionAnnotation || sel.Annotation != a2 {
@@ -614,7 +659,7 @@ func TestSelectIntervalByPointer_NilNoOp(t *testing.T) {
 }
 
 func TestSelectBucketAt_BeforeFirstRenderNoOp(t *testing.T) {
-	tl := newTestTimeline(t, nil, WithPointEvents([]*layout.PointEvent{{TMS: 1000}}))
+	tl := newTestTimeline(t, nil, withPointEvents([]*layout.PointEvent{{TMS: 1000}}))
 	// lastViewPxWidth == 0 (no render yet).
 	tl.SelectBucketAt(1000)
 	if tl.Selection().Kind != SelectionNone {
@@ -637,10 +682,10 @@ func TestSelectBucketAt_NoLODIndexNoOp(t *testing.T) {
 
 func TestSelectBucketAt_HitsBucketContainingT(t *testing.T) {
 	tl := newTestTimeline(t, nil,
-		WithPointEvents([]*layout.PointEvent{
+		withPointEvents([]*layout.PointEvent{
 			{TMS: 1500, Intensity: 0.5},
 		}),
-		WithLODScales([]time.Duration{1 * time.Second}))
+		withLODScales([]time.Duration{1 * time.Second}))
 	// Simulate the renderBody view cache: 10-second view at 100 px wide
 	// → 1ms/px which is finer than the 1-second scale, so PickScale
 	// picks the 1-second bucket.
@@ -662,8 +707,8 @@ func TestSelectBucketAt_HitsBucketContainingT(t *testing.T) {
 
 func TestSelectBucketAt_NoEventInBucketNoOp(t *testing.T) {
 	tl := newTestTimeline(t, nil,
-		WithPointEvents([]*layout.PointEvent{{TMS: 1500}}),
-		WithLODScales([]time.Duration{1 * time.Second}))
+		withPointEvents([]*layout.PointEvent{{TMS: 1500}}),
+		withLODScales([]time.Duration{1 * time.Second}))
 	tl.lastViewMinMS = 0
 	tl.lastViewMaxMS = 10_000
 	tl.lastViewPxWidth = 100
@@ -675,7 +720,7 @@ func TestSelectBucketAt_NoEventInBucketNoOp(t *testing.T) {
 
 func TestClearSelection(t *testing.T) {
 	a := &layout.Annotation{TMS: 1000, Number: 1}
-	tl := newTestTimeline(t, nil, WithAnnotations([]*layout.Annotation{a}))
+	tl := newTestTimeline(t, nil, withAnnotations([]*layout.Annotation{a}))
 	tl.SelectAnnotationByNumber(1)
 	tl.ClearSelection()
 	if tl.Selection().Kind != SelectionNone {
@@ -685,7 +730,7 @@ func TestClearSelection(t *testing.T) {
 
 func TestSetAnnotations_ClearsAnnotationSelection(t *testing.T) {
 	a := &layout.Annotation{TMS: 1000, Number: 1}
-	tl := newTestTimeline(t, nil, WithAnnotations([]*layout.Annotation{a}))
+	tl := newTestTimeline(t, nil, withAnnotations([]*layout.Annotation{a}))
 	tl.SelectAnnotationByNumber(1)
 	if tl.Selection().Kind != SelectionAnnotation {
 		t.Fatal("setup: annotation should be selected")
@@ -697,14 +742,14 @@ func TestSetAnnotations_ClearsAnnotationSelection(t *testing.T) {
 }
 
 func TestEffectiveContainerW_AvailableOverridesFallback(t *testing.T) {
-	tl := newTestTimeline(t, nil, WithContainerWidth(500))
+	tl := newTestTimeline(t, nil, withContainerWidth(500))
 	if w := tl.effectiveContainerW(1000, true); w != 1000 {
 		t.Errorf("probe width: got %v want 1000", w)
 	}
 }
 
 func TestEffectiveContainerW_NaNFallsBackToContainer(t *testing.T) {
-	tl := newTestTimeline(t, nil, WithContainerWidth(500))
+	tl := newTestTimeline(t, nil, withContainerWidth(500))
 	if w := tl.effectiveContainerW(float32(math.NaN()), true); w != 500 {
 		t.Errorf("NaN probe width: got %v want 500 (fallback)", w)
 	}
@@ -713,7 +758,7 @@ func TestEffectiveContainerW_NaNFallsBackToContainer(t *testing.T) {
 // A seq that never captured reads back absent, not zero — the fallback has to
 // survive it, which is what a hidden tab hits on the frame it comes back.
 func TestEffectiveContainerW_NoProbeFallsBackToContainer(t *testing.T) {
-	tl := newTestTimeline(t, nil, WithContainerWidth(500))
+	tl := newTestTimeline(t, nil, withContainerWidth(500))
 	if w := tl.effectiveContainerW(0, false); w != 500 {
 		t.Errorf("absent probe: got %v want 500 (fallback)", w)
 	}
@@ -748,8 +793,8 @@ func TestComputeLabelW_WithHints(t *testing.T) {
 func TestComputeVerticalLayout_RugAndAnnotationsReserveSpace(t *testing.T) {
 	intervals := []*layout.IntervalEvent{{FromMS: 0, ToMS: 100}}
 	tl := newTestTimeline(t, intervals,
-		WithPointEvents([]*layout.PointEvent{{TMS: 50}}),
-		WithAnnotations([]*layout.Annotation{{TMS: 50, Number: 1}}))
+		withPointEvents([]*layout.PointEvent{{TMS: 50}}),
+		withAnnotations([]*layout.Annotation{{TMS: 50, Number: 1}}))
 	tl.laneAssn = layout.PackLanes(intervals)
 	vl := tl.computeVerticalLayout(0, 1, 0, 1000)
 	if vl.topReserved == 0 {
@@ -780,7 +825,7 @@ func TestComputeVerticalLayout_NoExtras(t *testing.T) {
 func TestComputeVerticalLayout_FlagRowsGrowAnnotationBand(t *testing.T) {
 	intervals := []*layout.IntervalEvent{{FromMS: 0, ToMS: 100}}
 	tl := newTestTimeline(t, intervals,
-		WithAnnotations([]*layout.Annotation{{TMS: 50, Number: 1}}))
+		withAnnotations([]*layout.Annotation{{TMS: 50, Number: 1}}))
 	tl.laneAssn = layout.PackLanes(intervals)
 	oneRow := tl.computeVerticalLayout(0, 1, 0, 1000)
 	twoRows := tl.computeVerticalLayout(0, 2, 0, 1000)
@@ -806,7 +851,7 @@ func TestComputeFlagLayout_FiltersOffscreenAndStaggers(t *testing.T) {
 	lone := &layout.Annotation{TMS: 800, Number: 3}
 	offscreen := &layout.Annotation{TMS: 2000, Number: 4}
 	tl := newTestTimeline(t, nil,
-		WithAnnotations([]*layout.Annotation{coincidentA, coincidentB, lone, nil, offscreen}))
+		withAnnotations([]*layout.Annotation{coincidentA, coincidentB, lone, nil, offscreen}))
 	tm := layout.ComputeTickMap(time.UnixMilli(0).UTC(), time.UnixMilli(1000).UTC(),
 		0, 1000, nil, timeticks.TimeStep{})
 	fl := tl.computeFlagLayout(tm, 0, 1000)
@@ -827,7 +872,7 @@ func TestComputeFlagLayout_FiltersOffscreenAndStaggers(t *testing.T) {
 func TestHitTestAnnotation_StaggeredFlagsResolveByRow(t *testing.T) {
 	a := &layout.Annotation{TMS: 500, Number: 1}
 	b := &layout.Annotation{TMS: 500, Number: 2} // same instant — full x tie
-	tl := newTestTimeline(t, nil, WithAnnotations([]*layout.Annotation{a, b}))
+	tl := newTestTimeline(t, nil, withAnnotations([]*layout.Annotation{a, b}))
 	fl := flagLayout{
 		anns:     []*layout.Annotation{a, b},
 		xs:       []float32{500, 500},
@@ -858,7 +903,7 @@ func TestHitTestAnnotation_CorridorFallbackInsideBand(t *testing.T) {
 	// dash corridor, because the dashed line passes through that space.
 	a := &layout.Annotation{TMS: 500, Number: 1}
 	b := &layout.Annotation{TMS: 900, Number: 2}
-	tl := newTestTimeline(t, nil, WithAnnotations([]*layout.Annotation{a, b}))
+	tl := newTestTimeline(t, nil, withAnnotations([]*layout.Annotation{a, b}))
 	fl := flagLayout{
 		anns:     []*layout.Annotation{a, b},
 		xs:       []float32{500, 900},
@@ -905,7 +950,7 @@ func TestClipToAxis(t *testing.T) {
 // newLaneTestTimeline builds a timeline over three hinted lanes and does
 // what renderBody would: run the packer. Lane order is first-seen hint
 // order — a, b, c — so lane i sits at laneBaseY + i*(LaneHeight+LaneGap).
-func newLaneTestTimeline(t *testing.T, opts ...Option) (tl *Timeline, intervals []*layout.IntervalEvent) {
+func newLaneTestTimeline(t *testing.T, opts ...testOpt) (tl *Timeline, intervals []*layout.IntervalEvent) {
 	t.Helper()
 	intervals = []*layout.IntervalEvent{
 		{FromMS: 0, ToMS: 100, LaneHint: "a"},
@@ -974,10 +1019,7 @@ func dispatchTestTickMap(vl verticalLayout) (tm layout.TickMap) {
 }
 
 func TestDispatchClick_BareLaneRowSelectsTheLane(t *testing.T) {
-	var fired []SelectionInfo
-	tl, _ := newLaneTestTimeline(t, WithOnSelection(func(sel SelectionInfo) {
-		fired = append(fired, sel)
-	}))
+	tl, _ := newLaneTestTimeline(t)
 	vl := tl.computeVerticalLayout(0, 0, 0, 1000)
 	tm := dispatchTestTickMap(vl)
 	pitch := tl.visuals.LaneHeight + tl.visuals.LaneGap
@@ -992,12 +1034,12 @@ func TestDispatchClick_BareLaneRowSelectsTheLane(t *testing.T) {
 	if sel.Lane == nil || sel.Lane.Hint != "b" {
 		t.Fatalf("Lane: got %+v want hint %q", sel.Lane, "b")
 	}
-	if len(fired) != 1 {
-		t.Fatalf("listener fired %d times, want 1", len(fired))
+	if !tl.events.SelectionChanged {
+		t.Fatal("a click that selects must report SelectionChanged")
 	}
-	// The listener must see the materialised lane, not a bare Kind.
-	if fired[0].Lane == nil || fired[0].Lane.Hint != "b" {
-		t.Errorf("listener payload: got %+v want hint %q", fired[0].Lane, "b")
+	// Events must carry the materialised lane, not a bare Kind.
+	if tl.events.Selection.Lane == nil || tl.events.Selection.Lane.Hint != "b" {
+		t.Errorf("Events.Selection: got %+v want hint %q", tl.events.Selection.Lane, "b")
 	}
 }
 
@@ -1160,5 +1202,26 @@ func TestSelectionInfo_LaneIsASnapshotNotAnAlias(t *testing.T) {
 	}
 	if after := tl.Selection().Lane; len(after.Items) != 2 {
 		t.Errorf("fresh read should see the repack: got %d items want 2", len(after.Items))
+	}
+}
+
+// TestRenderHeadless renders one frame without a host and checks that the
+// frame's Events are returned and a quiet frame reports nothing.
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	tl := newTestTimeline(t, []*layout.IntervalEvent{{FromMS: 0, ToMS: 1000, LaneHint: "a"}},
+		withOptions(func(o *Options) { o.NowLine = true; o.Brush = true }))
+	ev := tl.Render()
+	if ev.SelectionChanged || ev.BrushChanged {
+		t.Fatalf("a quiet frame reported %+v", ev)
+	}
+	if tl.LaneCount() != 1 {
+		t.Fatalf("lanes: got %d want 1", tl.LaneCount())
+	}
+	c.CurrentApplicationState.StateManager.ScriptReset() // the frame boundary
+	tl.Opts.NotInteractive = true
+	tl.Render()
+	if tl.interactionEnabled {
+		t.Fatal("Opts is re-read at Render")
 	}
 }

@@ -546,8 +546,8 @@ func (inst *vectorFieldGuest) SetTime(t time.Time) (pos float64) {
 	return inst.pos
 }
 
-// Draw paints the layer; it is called inside the host map's overlay callback.
-func (inst *vectorFieldGuest) Draw(p portolan.Projector) {
+// Paint paints the layer; it is called inside the host map's overlay callback.
+func (inst *vectorFieldGuest) Paint(p portolan.Projector) {
 	if inst.building != nil || inst.summaryJob != nil {
 		// Nothing else wakes a frame when a build or a summary lands.
 		c.RequestRepaintAfter(0.05)
@@ -558,5 +558,5 @@ func (inst *vectorFieldGuest) Draw(p portolan.Projector) {
 	// The source, the step position and the particles are the layer's own;
 	// everything else follows the controls.
 	inst.layer.Opts = inst.Opts
-	inst.layer.Draw(p)
+	inst.layer.Paint(p)
 }

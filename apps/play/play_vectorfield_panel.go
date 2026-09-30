@@ -362,7 +362,7 @@ func NewVectorFieldDriver(ids *c.WidgetIdStack, client *Client, openQuery func(s
 		sitesLane:   newNodeLane(clientExecutor{client: client, opts: newExecOptions("vectorfield-sites")}, memory.NewGoAllocator(), vectorFieldFetchTimeout),
 		showSites:   true,
 		land:        &landoverlay.Layer{},
-		scrubber:    timescrubber.New(ids, timescrubber.Options{ScopeKey: "vf-time", ValueName: "mean speed in view"}),
+		scrubber:    timescrubber.New(ids, "vf-time", timescrubber.Options{ValueName: "mean speed in view"}),
 		noTiles:     !basemap.Configured(),
 		density:     5,
 		opacity:     0.9,
@@ -430,7 +430,7 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 	g.SetStepPosition(inst.pos)
 
 	if inst.pm == nil {
-		inst.pm = portolan.New(inst.ids, portolan.Options{
+		inst.pm = portolan.New(inst.ids, "vf-map", portolan.Options{
 			Source:     basemap.PortolanSource(),
 			Loader:     basemap.PortolanLoader(inst.tiles),
 			Center:     portolan.LL(30, 0),
@@ -457,9 +457,9 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 		if inst.noTiles {
 			ls := landoverlay.DefaultStyle()
 			ls.Land, ls.Border = color.Hex(0x262d36ff), color.Hex(0x4a5563ff)
-			inst.land.Draw(p, inst.atlas, ls)
+			inst.land.Paint(p, inst.atlas, ls)
 		}
-		g.Draw(p)
+		g.Paint(p)
 		// After the layer, so a site is never painted under the flow it
 		// produced: call order is paint order.
 		inst.drawSites(p)

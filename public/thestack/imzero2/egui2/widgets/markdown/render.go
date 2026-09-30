@@ -83,21 +83,23 @@ func (inst *segment) render(rc *renderCtx) {
 	case segKindParagraph:
 		renderRuns(inst.runs, rc)
 	case segKindCodeBlock:
-		// Code-block action button ([Doc.RenderActions]). Only when the
+		// Code-block action button ([Input.ActionLabels]). Only when the
 		// caller enabled actions; otherwise the block is untouched. The
 		// small IDS button sits on its own line above the code; a click
-		// records a CodeBlockAction the caller consumes from the returned
-		// iter.Seq. The CodeView's own selectable text (Ctrl+C) is
+		// records a CodeBlockAction reported in Result.Actions. The CodeView's own selectable text (Ctrl+C) is
 		// independent of this. codeBlockIdx advances per code block so the
 		// action's ordinal is stable regardless of whether buttons render.
-		if rc.actionsEnabled &&
-			(rc.actionAccept == nil || rc.actionAccept(inst.codeText, inst.codeLang)) {
-			renderCodeActionButtons(rc, inst.codeText, inst.codeLang, rc.codeBlockIdx)
+		// The block's widgets live under its own key (assignCodeKeys), not
+		// under the document-order sequence, so inserting a block above it
+		// leaves its id and egui memory alone.
+		for range c.IdScope(rc.ids.PrepareHighEntropy(inst.codeKey)) {
+			if rc.actionsEnabled &&
+				(rc.actionAccept == nil || rc.actionAccept(inst.codeText, inst.codeLang)) {
+				renderCodeActionButtons(rc, inst.codeText, inst.codeLang, rc.codeBlockIdx)
+			}
+			c.CodeView(rc.ids.PrepareStr("code"), inst.codeJob()).Send()
 		}
 		rc.codeBlockIdx++
-		seq := rc.idSeq
-		rc.idSeq++
-		c.CodeView(rc.ids.PrepareSeq(seq), inst.codeJob()).Send()
 	case segKindList:
 		renderList(inst, rc)
 	case segKindListItem:
@@ -342,20 +344,16 @@ func renderTable(s *segment, rc *renderCtx) {
 }
 
 // renderCodeActionButtons emits a horizontal row of small IDS buttons above
-// a code block, one per rc.actionLabels entry — used only on the
-// [Doc.RenderActions]/[Doc.RenderActionsN] path. Each button consumes one
-// id-sequence slot (so layout state keyed by id stays stable across frames)
-// and, on click, records a [CodeBlockAction] carrying the block's verbatim
-// text, fence language, and ordinal, plus the 0-based index of the clicked
-// button — the caller consumes these from the returned iter.Seq and decides
-// what each click means. text/lang/idx are passed rather than read off rc so
+// a code block, one per rc.actionLabels entry — used only when
+// [Input.ActionLabels] is set. It runs inside the block's own id scope, so
+// each button's id is its label index. A click records a [CodeBlockAction]
+// carrying the block's verbatim text, fence language, and ordinal, plus the
+// 0-based index of the clicked button, reported in [Result.Actions]. text/lang/idx are passed rather than read off rc so
 // the call site stays adjacent to the CodeView it labels.
 func renderCodeActionButtons(rc *renderCtx, text, lang string, idx int) {
 	for range c.Horizontal().KeepIter() {
 		for btn, label := range rc.actionLabels {
-			seq := rc.idSeq
-			rc.idSeq++
-			if c.Button(rc.ids.PrepareSeq(seq), c.Atoms().Text(label).Keep()).
+			if c.Button(rc.ids.PrepareSeq(uint64(btn)), c.Atoms().Text(label).Keep()).
 				Small().SendResp().HasPrimaryClicked() {
 				rc.codeActions = append(rc.codeActions,
 					CodeBlockAction{Text: text, Lang: lang, Index: idx, Button: btn})
@@ -466,7 +464,7 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 }
 
 // renderLinkRun emits one link: a browser hyperlink by default, or — when
-// the host claimed it via [WithLinkRouter] — a frameless button that reads
+// the host claimed it via [Input.LinkClaims] — a frameless button that reads
 // as a link and reports its click instead of navigating away.
 //
 // A frameless Button rather than a Hyperlink because the two things a link
@@ -476,7 +474,7 @@ func renderRuns(runs []paragraphRun, rc *renderCtx) {
 // beside it, which matters — a reader should not have to learn which links
 // stay in the app.
 func renderLinkRun(r *paragraphRun, rc *renderCtx) {
-	if rc.linkClaims == nil || rc.linkClicked == nil || !rc.linkClaims(r.url) {
+	if rc.linkClaims == nil || !rc.linkClaims(r.url) {
 		c.HyperlinkTo(r.label, r.url).OpenInNewTab(true).Send()
 		return
 	}
@@ -488,7 +486,7 @@ func renderLinkRun(r *paragraphRun, rc *renderCtx) {
 		c.Atoms().BeginRichTextColored(linkFg, linkBg, r.label).End().Keep()).
 		Frame(false).
 		SendResp().HasPrimaryClicked() {
-		rc.linkClicked(r.label, r.url)
+		rc.links = append(rc.links, LinkClick{Label: r.label, URL: r.url})
 	}
 }
 
