@@ -375,16 +375,27 @@ window host, the demo registry's `Init`) and now build their widget on the
 first frame; `Bind`-style pre-render steps that need a slot open the widget's
 scope for the derivation alone.
 
-**M5 — the large surfaces.** Each with a one-phase deprecated wrapper.
+**M5 — the large surfaces.** Landed 2026-09-30, together with the
+single-rule leftovers of M1, and the allowlist is empty. The deprecated
+wrappers the plan called for were not needed: every importer is in-tree or in
+a workspace sibling, so each surface moved with its callers in one change.
 
-| Widget | Importers | Change |
-|---|---|---|
-| `treemap` | 15 | Fifteen `With*` and their `Set*` twins → `Options` + `Opts`; `SetRoot` stays (W8 expensive model); `ClickedLeaf`, `HoveredNode` → `Events`; cell ids relative under the scope instead of `AbsoluteWidgetId` (I10) |
-| `timeline` | 9 | Seventeen `With*` → `Options` + `Opts`; `onSelection`, `onBrush` listeners → `Events.Selection`, `Events.Brush`; `Set*` for the expensive inputs (`SetIntervals`, `SetPoints`, `SetAnnotations`) stay |
-| `markdown` | 25, eight apps | The `Doc` is a parsed model and stays; rendering becomes IM: `Render(Input{Ids, ScopeKey, Doc, ScrollTo, LinkRouter, CodeActionFilter, SectionFilter, State}) Result{Actions}`. `RenderOpt` closures become fields; `RenderActions`' `iter.Seq` becomes `Result.Actions`; code-block ids become `PrepareStr` of a block key held in `State` instead of document-order `PrepareSeq(n)` (I8). `Doc.Render` stays one phase as a wrapper |
-| `leewaywidgets` views | 13, one app | `NewXView(ids)` + `Render(model, options, …, w, h)` → `New(ids, key, Options)` + `Render(model, w, h) Events`; `Table2CardEmitter` likewise. **Deferred** to its own commit series after M5; the allowlist keeps it until then |
+| Widget | Change |
+|---|---|
+| `treemap` | Thirteen `With*`, their `Set*` twins and `OnNavigate` → `Options` + `Opts` and `Events{Nav, ClickedLeaf, Hovered}`; `Render(w, h)` + `RenderFill` replace the container-size pair; `SetRoot` and the navigation methods stay (W8). Navigation, including the host's own `NavigateTo`, is reported in the next frame's `Events` rather than synchronously. Cell ids are derived under the treemap's scope and then wrapped as absolute: a cell `Frame` pushes its creator, so a relative one would renumber nested cells under their parent. The label measure ids moved from a stack-free hash to `ids.ProbeSeq` |
+| `timeline` | Seventeen `With*`, `WithBrush` and both listener types → `Options` + `Opts` and `Events{SelectionChanged, Selection, BrushChanged, Brush}`; points, annotations and a range are data set after `New`. It keeps its self-probing `Render()`: its height is content-driven and its width fits the pane, so the canvas pair does not apply |
+| `markdown` | The parsed `Doc` stays the model; `ParseWith(md, ParseOptions)` replaces the parse-time `With*`; rendering is IM, `Render(Input) Result{Actions, Links}`, with the render-time options as `Input` fields and the link router's click returned rather than called back. Code blocks are keyed at parse time on a hash of language and text plus their occurrence among identical blocks, so an insertion above no longer moves them (I8). Nothing else survives a frame, so there is no `State` |
+| `leewaywidgets` | The five constructors take a scope key and draw under it; the card emitter opens its scope around the one flush every drawing path goes through, and its seeded section-header ids became composite ordinals |
+| M1 leftovers | `portolan.New` and `timescrubber.New` take the scope key as their second argument, so two maps under one host need only distinct keys; portolan's concatenated tile ids are scoped; the land and flow overlays' `Draw` became `Paint`; cardgrid's toolbar is a child scope |
 
-**M6 — close.** Delete the deprecated wrappers, empty the allowlist, move
+Two checker refinements came out of the phase, both narrowing a rule to
+what it was written for: a render entry may return `(Events, error)` when it
+validates a declaration first (graphview's columnar form), and W14 binds to
+goroutines started in a rendering type's methods, since work a free function
+starts under a caller's context or task handle has no widget to own it (the
+ecdf band job, the waveform peaks task).
+
+**M6 — close.** Delete the deprecated `Events()` accessors M1 kept, move
 this ADR's rules into the skill as the single authoring reference (ADR-0059
 §SD5), and add the `## Updates` entry.
 

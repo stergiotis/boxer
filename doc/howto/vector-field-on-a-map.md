@@ -126,8 +126,8 @@ defer layer.Close()
 // every frame:
 layer.SetTime(displayTime)
 m.Render(w, h, func(p portolan.Projector) {
-	land.Draw(p, atlas, landoverlay.DefaultStyle()) // call order is paint order
-	layer.Draw(p)
+	land.Paint(p, atlas, landoverlay.DefaultStyle()) // call order is paint order
+	layer.Paint(p)
 })
 ```
 

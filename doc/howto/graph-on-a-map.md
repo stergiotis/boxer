@@ -114,7 +114,7 @@ same projector, so a `NoTiles` map still shows geography:
 layer := &landoverlay.Layer{}          // keep it; it reuses its buffers
 atlas, _ := worldmap.LoadAtlas()
 // inside the overlay callback, before the graph:
-layer.Draw(p, atlas, landoverlay.DefaultStyle())
+layer.Paint(p, atlas, landoverlay.DefaultStyle())
 ```
 
 The outlines are 110m Natural Earth: a basemap at country-and-continent zooms,
