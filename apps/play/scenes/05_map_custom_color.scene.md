@@ -31,7 +31,7 @@ LIMIT 500
 ```jsonl trace
 {"do":"wait","name":"Run","comment":"the app has mounted"}
 {"do":"sleep","settleMs":4000}
-{"do":"click","role":"combo_box","value":"Altitude & Velocity","settleMs":400}
+{"do":"click","role":"combo_box","value":"Altitude & Speed","settleMs":400}
 {"do":"click","name":"Custom","settleMs":400}
 {"do":"key","text":"Escape","settleMs":400}
 {"do":"capture","text":"05_map_custom_color","settleMs":1200}

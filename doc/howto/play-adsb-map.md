@@ -14,7 +14,7 @@ ClickHouse*, then drawn on a slippy map
 ([portolan](../adr/0204-leaflet-map-core-port.md)) that re-queries as you pan
 and zoom. This recipe reproduces the
 canonical case — aircraft density over London, the
-[adsb.exposed](https://github.com/ClickHouse/adsb.exposed) technique — end to
+[adsb.exposed](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse) technique — end to
 end.
 
 The panel code ships with boxer; what it needs is a **ClickHouse HTTP server**
@@ -161,8 +161,8 @@ needs a small code change.
 ## Notes and limits
 
 - The panel is a first cut ([ADR-0096](../adr/0096-play-geo-raster-map-panel.md)
-  §SD10): one render mode ("Altitude & Velocity"), no hover→info query, no
-  progressive sample refinement, one map per frame.
+  §SD10): no hover→info query, no progressive sample refinement, one map per
+  frame. Renders are picked per panel (the 2026-07-10 Update).
 - The render SQL assumes the adsb schema. **Any** table with `mercator_x` /
   `mercator_y` / `altitude` / `ground_speed` works — including a synthetic one,
   if you only want to exercise the panel without the upstream corpus.

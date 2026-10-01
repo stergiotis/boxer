@@ -2,7 +2,10 @@ package play
 
 import (
 	"errors"
+	"math"
+	"os/exec"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -165,7 +169,7 @@ func TestMapStatusLineDoesNotLatchErrors(t *testing.T) {
 
 	d.packErr = nil
 	d.packW, d.packH = 2, 2
-	require.Equal(t, "2×2 raster · Altitude & Velocity", d.statusLine())
+	require.Equal(t, "2×2 raster · Altitude & Speed", d.statusLine())
 }
 
 // repack pins the packed state to the served fingerprint (the observers'
@@ -253,6 +257,111 @@ func TestRasterTemplateSurvivesCanonicalization(t *testing.T) {
 		require.Contains(t, out, "intDiv",
 			"render %q: integer division must stay the canonical intDiv() function", r.name)
 	}
+}
+
+// The default render, run through clickhouse-local on a synthetic
+// planes_mercator-shaped table (one point per 1000×1000 mercator cell, one
+// cell per pixel): every channel stays in 0..255 for negative, absurd and
+// non-finite inputs, empty pixels are black, distinct altitude and speed bands
+// get distinct colours, and a dense pixel is brighter than a lone sample. The
+// template's SELECT is swapped for the pre-cast floats so an out-of-range
+// value cannot hide behind the UInt8 cast.
+func TestAltitudeSpeedRenderOnClickHouse(t *testing.T) {
+	bin, err := chlocalpool.LookupBinary()
+	if err != nil {
+		t.Skipf("clickhouse not installed: %v", err)
+	}
+	const grid, cell = 8, 1000
+	pt := func(px, py int, alt, speed string) string {
+		return "(" + strconv.Itoa(px*cell+cell/2) + "," + strconv.Itoa(py*cell+cell/2) + "," + alt + "," + speed + ")"
+	}
+	var rows []string
+	// Row 0: altitude bands at 250 kt — ground, approach, the 10,000 ft
+	// terminal ceiling, climb, cruise.
+	altBands := []string{"0", "3000", "10000", "20000", "37000"}
+	for i, a := range altBands {
+		rows = append(rows, pt(i, 0, a, "250"))
+	}
+	// Row 1: speed bands at 10,000 ft — stationary, light aircraft, a jet
+	// under the 250 kt terminal limit, a jet at cruise.
+	speedBands := []string{"0", "100", "250", "450"}
+	for i, s := range speedBands {
+		rows = append(rows, pt(i, 1, "10000", s))
+	}
+	// Row 2: inputs no aircraft reports.
+	for i, as := range [][2]string{
+		{"-1200", "-50"}, {"-2147483648", "0"}, {"2147483647", "1e9"},
+		{"60000", "inf"}, {"45000", "nan"}, {"-500", "-inf"},
+	} {
+		rows = append(rows, pt(i, 2, as[0], as[1]))
+	}
+	// Row 3: a dense pixel beside a lone sample with the same altitude and speed.
+	for range 500 {
+		rows = append(rows, pt(0, 3, "10000", "250"))
+	}
+	rows = append(rows, pt(1, 3, "10000", "250"))
+
+	insert := "CREATE TABLE planes_mercator (mercator_x UInt32, mercator_y UInt32, altitude Int32, ground_speed Float32) ENGINE = Memory;\n" +
+		"INSERT INTO planes_mercator VALUES " + strings.Join(rows, ",") + ";\n"
+	span := strconv.Itoa(grid * cell)
+	const castSelect = "SELECT round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8"
+	render := func(sampling uint32) map[int][3]float64 {
+		r := builtinRenders[0]
+		tmpl := rasterTemplateSQL("planes_mercator", sampling, r.colorSQL, r.where)
+		require.Contains(t, tmpl, castSelect)
+		tmpl = strings.Replace(tmpl, castSelect, "SELECT pos, red, green, blue", 1)
+		tmpl, err := passes.CanonicalizeFull(100).Run(tmpl)
+		require.NoError(t, err)
+		out, err := exec.Command(bin, "local", "--output-format", "TSV",
+			"--param_vp_min_x=0", "--param_vp_max_x="+span, "--param_vp_min_y=0", "--param_vp_max_y="+span,
+			"--param_vp_w="+strconv.Itoa(grid), "--param_vp_h="+strconv.Itoa(grid),
+			"--query", insert+tmpl).CombinedOutput()
+		require.NoError(t, err, string(out))
+		px := make(map[int][3]float64, grid*grid)
+		for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+			f := strings.Split(line, "\t")
+			require.Len(t, f, 4, line)
+			pos, err := strconv.Atoi(f[0])
+			require.NoError(t, err, line)
+			var c [3]float64
+			for i := range c {
+				c[i], err = strconv.ParseFloat(f[i+1], 64)
+				require.NoError(t, err, line)
+				require.False(t, math.IsNaN(c[i]), "pixel %d: %s", pos, line)
+				require.GreaterOrEqual(t, c[i], 0.0, "pixel %d: %s", pos, line)
+				require.LessOrEqual(t, c[i], 255.0, "pixel %d: %s", pos, line)
+			}
+			px[pos] = c
+		}
+		require.Len(t, px, grid*grid, "WITH FILL pads to the full framebuffer")
+		return px
+	}
+	// Distinct: some channel differs by at least 12/255 between every pair.
+	distinct := func(px map[int][3]float64, row int, names []string) {
+		for i := range names {
+			for j := i + 1; j < len(names); j++ {
+				a, b := px[row*grid+i], px[row*grid+j]
+				require.True(t, max(math.Abs(a[0]-b[0]), math.Abs(a[1]-b[1]), math.Abs(a[2]-b[2])) >= 12,
+					"row %d: %s vs %s: %v vs %v", row, names[i], names[j], a, b)
+			}
+		}
+	}
+	sum := func(c [3]float64) float64 { return c[0] + c[1] + c[2] }
+
+	// Sampling 100 (the panel default): a lone sample here has transparency
+	// ≈0.84, so both altitude and speed must separate.
+	px := render(100)
+	require.Equal(t, [3]float64{}, px[grid*grid-1], "an empty pixel is black")
+	distinct(px, 0, altBands)
+	distinct(px, 1, speedBands)
+	require.Greater(t, sum(px[3*grid]), sum(px[3*grid+1]), "density brightens a pixel")
+
+	// Sampling 1: a lone sample is faint (transparency ≈0.33), where the sRGB
+	// gamut leaves chroma — and so speed — little room; altitude, carried by
+	// hue, must still separate.
+	px = render(1)
+	distinct(px, 0, altBands)
+	require.Greater(t, sum(px[3*grid]), sum(px[3*grid+1]), "density brightens a pixel")
 }
 
 // An extra WHERE is ANDed with in_view; an empty one leaves the filter bare.

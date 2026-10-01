@@ -19,7 +19,9 @@ pulls the result as Apache Arrow, and renders it through a dock of panels
 prelude in the editor buffer (`play_param_inject.go`).
 
 A known technique renders slippy-map tiles *inside the database*. ClickHouse's
-[`adsb.exposed`](https://github.com/ClickHouse/adsb.exposed) demo stores points
+`adsb.exposed` demo, as its
+[announcement post](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse)
+describes it, stores points
 in Web Mercator (`mercator_x/y` over the full `UInt32` world range, ordered by
 `mortonEncode(mercator_x, mercator_y)` so a viewport is a near-contiguous key
 range with minmax skip-index pruning), then a parameterized query bins the
@@ -147,10 +149,12 @@ The panel drives six reserved params; the rest of the query is the user's:
 | `table` | `Identifier` | human | table / sample |
 | `sampling` | `UInt32` | human | brightness sampling factor |
 
-The query is the `adsb.exposed` single-tile render generalized to an arbitrary
-viewport — three changes, everything else (the colour `WITH` block, `GROUP BY
-pos`, `WITH FILL`, the `round(…)::UInt8` projection, alpha-0 fill on empty
-pixels) verbatim:
+The query is the single-tile render published in ClickHouse's
+[`adsb.exposed` announcement](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse)
+generalized to an arbitrary viewport — three changes, the rest of the published
+skeleton (`GROUP BY pos`, `WITH FILL`, the `round(…)::UInt8` projection,
+alpha-0 fill on empty pixels) kept. The colour block below is boxer's own; see
+the 2026-10-01 Update:
 
 1. tile `z/x/y` bbox → the injected `vp_*` mercator bbox (still filters the
    morton-indexed `mercator_x/y`, so index pruning holds — SD4);
@@ -182,13 +186,12 @@ WITH
     count() AS total,
     greatest(1000000. / {sampling:UInt32} / zoom_factor, toFloat64(count())) AS max_total,
     pow(total / max_total, 1/5) AS transparency,
-    greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
-    greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
-    greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
     255 AS alpha,
-    (1 + transparency) / 2 * (1 - color3) * 255 AS red,
-    transparency * color1 * 255 AS green,
-    color2 * 255 AS blue
+    -- colour block: a render's red/green/blue expressions go here
+    -- (redacted 2026-10-01 — see the Update of that date)
+    transparency * 255 AS red,
+    transparency * 255 AS green,
+    transparency * 255 AS blue
 
 SELECT round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
 FROM {table:Identifier}
@@ -205,7 +208,7 @@ viewport (inflated ~1.3× per SD7) → mercator via the `setup.sql` formula
 reads exactly `vp_w·vp_h` rows × 4 `UInt8` and emits them via `mapRaster`.
 
 The geometry header (`span_*`, `in_view`, `px/py/pos`, `zoom_factor`) is
-render-agnostic: the four upstream modes become snippet variants that share it
+render-agnostic: colour modes become snippet variants that share it
 and swap only the colour `WITH` block + `WHERE`. Two items to verify at wiring:
 `WITH FILL … TO` with a param expression (else substitute the literal product),
 and the panel guarding a non-degenerate bbox (`span_x`, `span_y` > 0).
@@ -331,7 +334,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## Update — 2026-07-10: pluggable render (SD6 realized)
 
-The first cut hardcoded the adsb "Altitude & Velocity" colour block, so the panel
+The first cut hardcoded a single altitude-and-speed colour block, so the panel
 only worked on tables with `altitude`/`ground_speed`. SD6 anticipated the fix —
 the geometry + density header (`span_*`, `in_view`, `px/py/pos`, `zoom_factor`,
 `total`, `max_total`, `transparency`, `alpha`) is render-agnostic, and a render
@@ -339,8 +342,8 @@ swaps only the colour `WITH` block + optional `WHERE`. That split is now real.
 
 `apps/play/play_map.go` gains a `rasterRender` (name, `colorSQL` spliced after the
 shared header, optional `where`, `needs` columns for the status hint, `custom`
-flag) and a ComboBox render picker in the panel. Built-ins: **Altitude & Velocity**
-(default; the prior block, aviation), **Density** (table-agnostic — colour from
+flag) and a ComboBox render picker in the panel. Built-ins: an altitude-and-speed
+render (default; the prior block, aviation — replaced 2026-10-01, see that Update), **Density** (table-agnostic — colour from
 `count()` alone via `transparency`, assumes only `mercator_x/y`; the "any
 geo-point table" unlock), **Speed** (assumes `ground_speed`), and **Custom** (the
 user types the `red/green/blue` expression, matching the playground's existing
@@ -536,6 +539,22 @@ never plumbed a control for (`play_map.go`'s per-render `where`, ANDed with
 Nothing about the raster query changes here; this records what the forward path
 now costs, so the next reader does not re-derive it from a `Code: 60`.
 
+## Update — 2026-10-01: upstream colour block removed; published sources cited
+
+`adsb.exposed`'s repository is licensed CC BY-NC-SA 4.0. Its schema, the sampled
+tables and their materialized views, the tile-query skeleton and the brightness
+normaliser (`max_total` over `sampling` and `zoom_factor`, the fifth-root
+`transparency`) are all published in the 2024
+[announcement post](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse);
+this ADR, `apps/play/demo/adsb/setup.sql` and the Map panel now cite that post
+rather than the repository. The default "Altitude & Velocity" colour block was
+not found in any published material — only in the repository's source — so it
+was removed from `play_map.go`, from the Map snippet in
+`apps/play/help/snippets.md` and from §SD6's query above, and replaced by an
+altitude-and-speed render designed without reference to it (named in
+`builtinRenders`). Nothing else about the panel changes: the render split of
+the 2026-07-10 Update, the `vp_*` contract and SD1 stand.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
@@ -550,7 +569,10 @@ now costs, so the next reader does not re-derive it from a `Code: 60`.
 - `apps/play/play_param_inject.go`, `play_store.go`, `play_timeline_bands.go` —
   the param-injection seam, the single-flight store the panel avoids, and the
   panel-local async-lane precedent.
-- [`adsb.exposed`](https://github.com/ClickHouse/adsb.exposed) — the upstream
-  in-DB tile-rendering technique the bbox-variant query generalizes.
+- [Announcing adsb.exposed](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse)
+  (ClickHouse blog, 2024-04-24) — the published in-DB tile-rendering technique
+  the bbox-variant query generalizes; the
+  [repository](https://github.com/ClickHouse/adsb.exposed) is CC BY-NC-SA 4.0
+  and is not a source for this ADR's text or the panel's code.
 - [`walkers`](https://crates.io/crates/walkers) — slippy map widget; 0.53
   `with_layer` is the forward path for faithful tiles (O2/O3).

@@ -178,20 +178,15 @@ type rasterRender struct {
 	custom   bool     // colorSQL comes from the panel's editable field
 }
 
-// builtinRenders are the selectable colour modes. "Altitude & Velocity" is the
-// upstream adsb default (needs altitude+ground_speed); "Density" assumes only
+// builtinRenders are the selectable colour modes; the first is the default.
+// "Altitude & Speed" assumes the ADS-B columns; "Density" assumes only
 // mercator_x/y so it works on ANY geo-point table; "Custom" takes a user-typed
 // red/green/blue expression, matching the playground's arbitrary-table freedom.
 var builtinRenders = []rasterRender{
 	{
-		name:  "Altitude & Velocity",
-		needs: []string{"altitude", "ground_speed"},
-		colorSQL: `greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
-    greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
-    greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
-    (1 + transparency) / 2 * (1 - color3) * 255 AS red,
-    transparency * color1 * 255 AS green,
-    color2 * 255 AS blue`,
+		name:     "Altitude & Speed",
+		needs:    []string{"altitude", "ground_speed"},
+		colorSQL: altitudeSpeedColorSQL,
 	},
 	{
 		name: "Density",
@@ -203,7 +198,9 @@ var builtinRenders = []rasterRender{
 	{
 		name:  "Speed",
 		needs: []string{"ground_speed"},
-		colorSQL: `greatest(0, least(avg(ground_speed), 700)) / 700 AS s,
+		// 600 kt: the ground-speed ceiling of altitudeSpeedColorSQL, same
+		// reasoning.
+		colorSQL: `greatest(0, least(avg(ground_speed), 600)) / 600 AS s,
     transparency * (1 - s) * 255 AS red,
     transparency * 90 AS green,
     transparency * s * 255 AS blue`,
@@ -213,6 +210,46 @@ var builtinRenders = []rasterRender{
 		custom: true,
 	},
 }
+
+// altitudeSpeedColorSQL is the default render, in OKLCH so each channel of
+// the encoding moves one perceptual axis: hue ← mean altitude, chroma ← mean
+// ground speed, lightness ← density (transparency). It assumes the units ADS-B
+// reports: altitude in feet (barometric, may be negative near sea level),
+// ground_speed in knots.
+//
+// The constants come from aviation domain knowledge, not from the data:
+//   - 45,000 ft is the altitude ceiling: airliners cruise at FL290–FL410 and
+//     most business jets top out near FL450, so higher reports are rare and
+//     clamp to the top hue. Altitude enters as its square root so the busy
+//     band below ~10,000 ft (terminal areas, where the 250 kt limit applies)
+//     takes about half the hue range: ~30° red-orange on the ground, yellow
+//     on approach, green at 10,000 ft, cyan in the climb, sky blue at cruise.
+//   - 600 kt is the ground-speed ceiling: a jet near Mach 0.85 flies about
+//     480–500 kt true airspeed, and a strong jet-stream tailwind adds ~100 kt;
+//     faster reports saturate. Speed also enters as its square root, so the
+//     split that matters most — light aircraft and helicopters (60–160 kt)
+//     against jets (~250 kt under the terminal limit, 450+ at cruise) — gets
+//     the widest chroma step; light aircraft read pastel, cruising jets
+//     vivid. A chroma floor (a quarter of the maximum) keeps a stationary
+//     target's altitude hue readable instead of fading to grey.
+//   - Lightness spans 0.22..0.80 over transparency so a lone sample still
+//     shows on the default black (no-basemap) background and the densest
+//     pixels stay below white. Chroma shrinks with sqrt(lightness): dim
+//     pixels get less colour, as the sRGB gamut does, so they darken towards
+//     black rather than a muddy tint.
+//
+// colorOKLCHToSRGB needs ClickHouse 25.7+ (the adsb how-to verifies on 26.5);
+// it clips each channel to the sRGB gamut, and the outer clamp keeps 0..255
+// for any input regardless.
+const altitudeSpeedColorSQL = `greatest(0, least(avg(altitude), 45000)) / 45000 AS alt_t,
+    greatest(0, least(avg(ground_speed), 600)) / 600 AS spd_t,
+    0.22 + 0.58 * transparency AS lum,
+    0.19 * sqrt(lum / 0.8) * (0.25 + 0.75 * sqrt(spd_t)) AS chroma,
+    30 + 230 * sqrt(alt_t) AS hue,
+    colorOKLCHToSRGB(tuple(lum, chroma, hue)) AS rgb,
+    greatest(0, least(255, tupleElement(rgb, 1))) AS red,
+    greatest(0, least(255, tupleElement(rgb, 2))) AS green,
+    greatest(0, least(255, tupleElement(rgb, 3))) AS blue`
 
 func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	d := &MapDriver{
@@ -233,8 +270,8 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		initLat:   40.0,
 		initLon:   0.0,
 		initZoom:  4.0,
-		// renderIdx 0 = "Altitude & Velocity" (matches the demo table); Custom
-		// starts from an editable density expression.
+		// renderIdx 0 is the first builtinRenders entry; Custom starts from an
+		// editable density expression.
 		customColorSQL: "transparency * 255 AS red,\n    transparency * 200 AS green,\n    transparency * 120 AS blue",
 	}
 	// Scripted-screenshot overrides — the BOXER_PLAY_MAP_* knobs from the

@@ -2731,8 +2731,9 @@ LIMIT 20
 The Map tab's raster query as a snippet (ADR-0096 §SD6): it bins the visible
 points into a `W×H` grid and derives an RGBA value per pixel, so it returns one
 row per pixel — a `W*H`-row framebuffer, not a readable table (the **Map** tab
-draws it). Here the viewport is fixed to a Zürich box at 256×256; the Map tab
-injects the live viewport instead.
+draws it), coloured by the Map tab's default render, *Altitude & Speed*. Here
+the viewport is fixed to a Zürich box at 256×256; the Map tab injects the live
+viewport instead.
 
 ```sql
 WITH
@@ -2754,13 +2755,16 @@ WITH
   count() AS total,
   greatest(1000000. / sampling / zoom_factor, toFloat64(count())) AS max_total,
   pow(total / max_total, 1/5) AS transparency,
-  greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
-  greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
-  greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
   255 AS alpha,
-  (1 + transparency) / 2 * (1 - color3) * 255 AS red,
-  transparency * color1 * 255 AS green,
-  color2 * 255 AS blue
+  greatest(0, least(avg(altitude), 45000)) / 45000 AS alt_t,
+  greatest(0, least(avg(ground_speed), 600)) / 600 AS spd_t,
+  0.22 + 0.58 * transparency AS lum,
+  0.19 * sqrt(lum / 0.8) * (0.25 + 0.75 * sqrt(spd_t)) AS chroma,
+  30 + 230 * sqrt(alt_t) AS hue,
+  colorOKLCHToSRGB(tuple(lum, chroma, hue)) AS rgb,
+  greatest(0, least(255, tupleElement(rgb, 1))) AS red,
+  greatest(0, least(255, tupleElement(rgb, 2))) AS green,
+  greatest(0, least(255, tupleElement(rgb, 3))) AS blue
 SELECT round(red)::UInt8 AS r, round(green)::UInt8 AS g,
        round(blue)::UInt8 AS b, round(alpha)::UInt8 AS a
 FROM planes_mercator
