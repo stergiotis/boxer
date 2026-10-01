@@ -463,3 +463,109 @@ func TestSanitizeTableFoldCannotForgeAStatementBreaker(t *testing.T) {
 	require.Equal(t, "a- -b", sanitizeTable("a-\n-b"))
 	require.Equal(t, "a/ *b", sanitizeTable("a/\n*b"))
 }
+
+// The raster is sized in logical points (View.Size), clamped to [16,
+// mapMaxDim]; no device-pixel factor applies (ADR-0096 2026-10-01 Update).
+func TestClampDimPinsLogicalPointsAndCap(t *testing.T) {
+	require.EqualValues(t, 16, clampDim(5))
+	require.EqualValues(t, 800, clampDim(800.4))
+	require.EqualValues(t, mapMaxDim, clampDim(4000))
+}
+
+// foldViewLon folds a view onto the one world copy mercator_x covers: a view
+// panned whole turns asks for the same span, a world-wide view asks for the
+// whole world, and a view past ±180 keeps the side its midpoint is on.
+func TestFoldViewLon(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		west, east             float64
+		wantW, wantE, wantFrac float64
+	}{
+		{"inside", -10, 20, -10, 20, 1},
+		{"one turn east", 350, 380, -10, 20, 1},
+		{"two turns west", -730, -700, -10, 20, 1},
+		{"wider than a world", -200, 200, -180, 180, 0.9},
+		{"past +180, midpoint west of it", 150, 190, 150, 180, 0.75},
+		{"past +180, midpoint east of it", 170, 200, -180, -160, 20.0 / 30},
+	} {
+		w, e, frac := foldViewLon(tc.west, tc.east)
+		require.InDelta(t, tc.wantW, w, 1e-9, tc.name)
+		require.InDelta(t, tc.wantE, e, 1e-9, tc.name)
+		require.InDelta(t, tc.wantFrac, frac, 1e-9, tc.name)
+	}
+}
+
+// The raster is drawn on the world copy nearest the view, and on its
+// neighbours when the view is wide enough to show them.
+func TestRasterCopies(t *testing.T) {
+	require.Equal(t, []float64{0}, rasterCopies(-10, 20, -30, 30))
+	require.Equal(t, []float64{360}, rasterCopies(-10, 20, 330, 390), "follows the reader a turn east")
+	require.Equal(t, []float64{0, -360, 360}, rasterCopies(-180, 180, -200, 200), "a world view shows the edges of both neighbours")
+	require.Empty(t, rasterCopies(-10, 20, 40, 60), "a raster outside the view is not drawn")
+}
+
+// latCoverage is below 1 only when the view reaches past the mercator clamp.
+func TestLatCoverage(t *testing.T) {
+	require.InDelta(t, 1, latCoverage(40, 60), 1e-12)
+	c := latCoverage(-89.9, 89.9)
+	require.Greater(t, c, 0.0)
+	require.Less(t, c, 1.0)
+}
+
+// Regression: after a pan of one whole world, both edges used to clamp to the
+// world's edge, the viewport was dropped as degenerate, and the map went dark.
+// The folded request is the one the unpanned view makes.
+func TestUpdateViewportAfterFullWorldPan(t *testing.T) {
+	read := func(west, east float64, screenW float32) map[SignalID]string {
+		g := newQueryGraph(nil, nil)
+		d := NewMapDriver(nil, nil)
+		defer d.lane.close()
+		d.updateViewport(30, 60, west, east, screenW, 600, graphEmitter{graph: g})
+		sig := g.signals()
+		out := map[SignalID]string{}
+		for _, s := range mapViewportSignals {
+			p, found := sig.Get(s)
+			require.True(t, found, "signal %s must be emitted for view %v..%v", s, west, east)
+			out[s] = p.Raw
+		}
+		return out
+	}
+	require.Equal(t, read(-30, 30, 800), read(330, 390, 800))
+
+	world := read(-200, 200, 1000)
+	require.Equal(t, "0", world["vp_min_x"])
+	require.Equal(t, strconv.FormatUint(mercUnitMax, 10), world["vp_max_x"])
+	require.Equal(t, "900", world["vp_w"], "the raster spans the 90% of the view one world covers")
+}
+
+// A colour block may define alpha; only a block that does not gets the opaque
+// default appended, so the alias is never defined twice.
+func TestRasterTemplateAlphaFromColourBlock(t *testing.T) {
+	plain := rasterTemplateSQL("planes_mercator", 100, "0 AS red, 0 AS green, 0 AS blue", "")
+	require.Equal(t, 1, strings.Count(plain, "255 AS alpha"))
+
+	own := "transparency * 255 AS red, 0 AS green, 0 AS blue, transparency * 255 AS alpha"
+	tmpl := rasterTemplateSQL("planes_mercator", 100, own, "")
+	require.NotContains(t, tmpl, "255 AS alpha,")
+	require.Equal(t, 1, strings.Count(strings.ToLower(tmpl), "as alpha"))
+	canon, err := passes.CanonicalizeFull(100).Run(tmpl)
+	require.NoError(t, err)
+
+	bin, err := chlocalpool.LookupBinary()
+	if err != nil {
+		t.Skipf("clickhouse not installed: %v", err)
+	}
+	out, err := exec.Command(bin, "local", "--output-format", "TSV",
+		"--param_vp_min_x=0", "--param_vp_max_x=2000", "--param_vp_min_y=0", "--param_vp_max_y=1000",
+		"--param_vp_w=2", "--param_vp_h=1",
+		"--query", "CREATE TABLE planes_mercator (mercator_x UInt32, mercator_y UInt32) ENGINE = Memory;\n"+
+			"INSERT INTO planes_mercator VALUES (500, 500);\n"+canon).CombinedOutput()
+	require.NoError(t, err, string(out))
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	require.Len(t, lines, 2)
+	lit := strings.Split(lines[0], "\t")
+	require.Len(t, lit, 4)
+	require.NotEqual(t, "255", lit[3], "a lone sample's alpha follows its transparency")
+	require.Equal(t, lit[0], lit[3], "alpha is the block's own expression")
+	require.Equal(t, "0\t0\t0\t0", lines[1], "an empty pixel stays alpha 0")
+}

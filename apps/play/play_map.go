@@ -3,6 +3,7 @@ package play
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +15,9 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 )
 
 // MapDriver is the ADR-0096 geo-raster map panel: a slippy map whose
@@ -34,9 +37,13 @@ import (
 // keepBuffer margin, the progressive sampling ladder, and hover→info queries —
 // SD10 deferrals in the ADR.
 type MapDriver struct {
-	ids    *c.WidgetIdStack
-	pm     *portolan.Map // the map widget, created on first Render
-	tiles  *basemap.Tiles
+	ids   *c.WidgetIdStack
+	pm    *portolan.Map // the map widget, created on first Render
+	tiles *basemap.Tiles
+	// land is the offline ground drawn under the raster when there is no
+	// basemap, as the Vector field pane does; a nil atlas draws nothing.
+	land   *landoverlay.Layer
+	atlas  *worldmap.Atlas
 	client *Client
 
 	// Controls + display. The map fills the tab body by default (FillAvailable
@@ -163,15 +170,17 @@ type mercBox struct{ minX, maxX, minY, maxY uint32 }
 
 // rasterRender is a swappable colour mode (ADR-0096 §SD6). The geometry + density
 // header of the raster query (span_*, in_view, px/py/pos, zoom_factor, total,
-// max_total, transparency, alpha) is render-agnostic; a render supplies only the
-// colour block and an optional extra WHERE. This is what lets the panel target
+// max_total, transparency) is render-agnostic; a render supplies only the
+// colour block (and, optionally, alpha) and an optional extra WHERE. This is what lets the panel target
 // any table with mercator_x/mercator_y, not just the ADS-B schema.
 type rasterRender struct {
 	name string // UI label + fetch-key component
-	// colorSQL is spliced into the WITH block after `255 AS alpha,`. In scope:
-	// total, max_total, transparency, alpha, plus any table column via aggregates
-	// (avg(col), …). It MUST define red, green, blue (Float64, 0..255) and end
-	// without a trailing comma. Ignored when custom (customColorSQL is used).
+	// colorSQL is spliced into the WITH block after the shared header. In
+	// scope: total, max_total, transparency, plus any table column via
+	// aggregates (avg(col), …). It MUST define red, green, blue (Float64,
+	// 0..255) and end without a trailing comma. It MAY define alpha; when it
+	// does not, the template appends `255 AS alpha` (rasterAlphaRe). Ignored
+	// when custom (customColorSQL is used).
 	colorSQL string
 	where    string   // optional predicate ANDed with in_view; "" = none
 	needs    []string // columns beyond mercator_x/y assumed; nil = table-agnostic
@@ -255,6 +264,7 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	d := &MapDriver{
 		ids:        ids,
 		client:     client,
+		land:       &landoverlay.Layer{},
 		tableField: sqleditor.NewField(ids, "map-table"),
 		colorField: sqleditor.NewField(ids, "map-color"),
 		// The stable query_id + replace_running_query make a superseding
@@ -295,6 +305,9 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	// the "no basemap" checkbox still toggles it. Unset keeps noTiles=true.
 	if basemap.Configured() {
 		d.noTiles = false
+	}
+	if a, err := worldmap.LoadAtlas(); err == nil {
+		d.atlas = a
 	}
 	return d
 }
@@ -390,14 +403,22 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	// Projector.Image carries the send-once protocol the old raster opcode
 	// overlay had — pixels ship on a version bump or when the host reports
 	// the texture starved (a hidden tab's discarded upload, the idle LRU).
+	// The raster covers one world copy; rasterCopies places it on every copy
+	// the view shows, so it follows the reader across the antimeridian.
 	overlay := func(p portolan.Projector) {
+		vb := p.View().Bounds()
+		if inst.noTiles {
+			inst.land.Paint(p, inst.atlas, landoverlay.DefaultStyle())
+		}
 		if inst.packW > 0 && inst.packH > 0 {
-			p.Image("map-raster",
-				portolan.LatLngBoundsOf(
-					portolan.LL(inst.packBounds[0], inst.packBounds[1]),
-					portolan.LL(inst.packBounds[2], inst.packBounds[3])),
-				inst.packW, inst.packH, inst.version, inst.pixels,
-			).Opacity(float32(inst.opacity)).Send()
+			for i, shift := range rasterCopies(inst.packBounds[1], inst.packBounds[3], vb.GetWest(), vb.GetEast()) {
+				p.Image(mapRasterKeys[i],
+					portolan.LatLngBoundsOf(
+						portolan.LL(inst.packBounds[0], inst.packBounds[1]+shift),
+						portolan.LL(inst.packBounds[2], inst.packBounds[3]+shift)),
+					inst.packW, inst.packH, inst.version, inst.pixels,
+				).Opacity(float32(inst.opacity)).Send()
+			}
 		}
 	}
 
@@ -661,12 +682,16 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 		return
 	}
 	inst.controlErr = ""
-	b, ok := bboxFromLatLon(minLat, maxLat, minLon, maxLon)
+	west, east, fracX := foldViewLon(minLon, maxLon)
+	b, ok := bboxFromLatLon(minLat, maxLat, west, east)
 	if !ok {
 		return
 	}
-	w := clampDim(screenW)
-	h := clampDim(screenH)
+	// The raster covers only the part of the view the bbox kept (one world
+	// copy, the poles clamped); size it to that part so its pixels stay
+	// screen-sized rather than stretched.
+	w := clampDim(screenW * float32(fracX))
+	h := clampDim(screenH * float32(latCoverage(minLat, maxLat)))
 	sampling := max(uint32(inst.sampling), 1)
 	r := builtinRenders[inst.renderIdx]
 	colorSQL := r.colorSQL
@@ -880,14 +905,84 @@ func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere strin
     count() AS total,
     greatest(1000000. / %[2]d / zoom_factor, toFloat64(count())) AS max_total,
     pow(total / max_total, 1/5) AS transparency,
-    255 AS alpha,
-    %[3]s
+    %[3]s%[5]s
 SELECT round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
 FROM %[1]s
 WHERE %[4]s
 GROUP BY pos
 ORDER BY pos WITH FILL FROM 0 TO toUInt64({vp_w:UInt32}) * {vp_h:UInt32}`,
-		table, sampling, colorSQL, where)
+		table, sampling, colorSQL, where, alphaClause(colorSQL))
+}
+
+// rasterAlphaRe finds a colour block's own alpha definition. Textual on
+// purpose: a Custom block may sit outside Grammar1, and a false hit (the alias
+// in a comment) costs a visible "unknown identifier alpha" from the server,
+// never a silently wrong raster.
+var rasterAlphaRe = regexp.MustCompile(`(?i)\bAS\s+alpha\b`)
+
+// alphaClause is the opaque default a colour block gets unless it defines
+// alpha itself — a render may carry confidence or density in alpha (ADR-0096
+// 2026-10-01 Update). The WITH FILL rows stay alpha 0 either way.
+func alphaClause(colorSQL string) string {
+	if rasterAlphaRe.MatchString(colorSQL) {
+		return ""
+	}
+	return ",\n    255 AS alpha"
+}
+
+// mapRasterKeys name the raster's draw slots, one per world copy it can
+// appear on at once; each slot keeps its own send-once texture.
+var mapRasterKeys = [...]string{"map-raster", "map-raster-1", "map-raster-2"}
+
+// foldViewLon folds a view's longitude span into the one world copy the
+// mercator columns cover, for the request (ADR-0096 SD4: mercator_x spans
+// lon −180..180 once). A span of a world or more asks for the whole world;
+// a narrower one is shifted by whole turns so its midpoint lies in
+// [−180, 180), and the part past ±180 is cut — that edge is drawn empty
+// rather than requested twice (the straddling case stays deferred). fracX is
+// the share of the view's width the folded span keeps.
+func foldViewLon(west, east float64) (w, e, fracX float64) {
+	span := east - west
+	if span <= 0 {
+		return west, east, 1
+	}
+	if span >= 360 {
+		return -180, 180, 360 / span
+	}
+	k := math.Floor(((west+east)/2 + 180) / 360)
+	w, e = west-360*k, east-360*k
+	kept := min(e, 180) - max(w, -180)
+	return max(w, -180), min(e, 180), kept / span
+}
+
+// latCoverage is the share of the view's mercator height that lies inside
+// the Web-Mercator latitude clamp — below 1 only when the view reaches past
+// a pole, at the lowest zooms.
+func latCoverage(minLat, maxLat float64) float64 {
+	raw := func(lat float64) float64 {
+		lat = max(min(lat, 89.999), -89.999)
+		return math.Asinh(math.Tan(lat / 180.0 * math.Pi))
+	}
+	full := raw(maxLat) - raw(minLat)
+	if full <= 0 {
+		return 1
+	}
+	kept := raw(clampLat(maxLat)) - raw(clampLat(minLat))
+	return min(kept/full, 1)
+}
+
+// rasterCopies returns the longitude shifts (whole turns) at which a raster
+// spanning [west, east] in lon −180..180 meets the view [viewWest, viewEast]
+// — the copy nearest the view first, then its neighbours when the view is
+// wide enough to show them, at most len(mapRasterKeys).
+func rasterCopies(west, east, viewWest, viewEast float64) (shifts []float64) {
+	near := 360 * math.Round(((viewWest+viewEast)/2-(west+east)/2)/360)
+	for _, s := range [...]float64{near, near - 360, near + 360} {
+		if east+s > viewWest && west+s < viewEast && len(shifts) < len(mapRasterKeys) {
+			shifts = append(shifts, s)
+		}
+	}
+	return
 }
 
 // bboxFromLatLon converts a lat/lon viewport to the mercator bbox the SQL bins
