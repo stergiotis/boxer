@@ -399,6 +399,12 @@ func (inst *App) follow(ctx context.Context, handle string, r *row, out agent.Ou
 	switch {
 	case err != nil:
 		r.result = "read: " + err.Error()
+	case res.DataHandle != "":
+		r.result = "confined: data handle " + res.DataHandle + " (" + res.Source + ")"
+	case res.Text != "" && res.Untrusted:
+		// How a coordinator shows its model untrusted content: delimited
+		// and attributed, as data (ADR-0269 §SD7).
+		r.result = "untrusted, from " + res.Source + ": " + res.Text
 	case res.Text != "":
 		r.result = res.Text
 	default:

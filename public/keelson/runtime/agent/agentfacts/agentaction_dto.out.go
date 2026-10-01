@@ -30,6 +30,8 @@ const (
 	kindAgentActionReason        uint64 = 9223372049739677878
 	kindAgentActionBudgetLeft    uint64 = 9223372049739677879
 	kindAgentActionTest          uint64 = 9223372049739677880
+	kindAgentActionTainted       uint64 = 9223372049739677881
+	kindAgentActionConfined      uint64 = 9223372049739677882
 )
 
 // agentActionSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -250,6 +252,12 @@ func agentActionEmitSectionBool[
 	boolSecAttr_Test := boolSec.BeginAttribute(row.Test)
 	boolSecAttr_Test.AddMembershipLowCardRefP(kindAgentActionTest)
 	boolSecAttr_Test.EndAttributeP()
+	boolSecAttr_Tainted := boolSec.BeginAttribute(row.Tainted)
+	boolSecAttr_Tainted.AddMembershipLowCardRefP(kindAgentActionTainted)
+	boolSecAttr_Tainted.EndAttributeP()
+	boolSecAttr_Confined := boolSec.BeginAttribute(row.Confined)
+	boolSecAttr_Confined.AddMembershipLowCardRefP(kindAgentActionConfined)
+	boolSecAttr_Confined.EndAttributeP()
 	return
 }
 
@@ -740,6 +748,12 @@ func agentActionReadRow[
 	var boolTestVal bool
 	var boolTestCount int
 	var boolTestLastAttr int64
+	var boolTaintedVal bool
+	var boolTaintedCount int
+	var boolTaintedLastAttr int64
+	var boolConfinedVal bool
+	var boolConfinedCount int
+	var boolConfinedLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -751,6 +765,20 @@ func agentActionReadRow[
 				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolTestVal = val
+			case kindAgentActionTainted:
+				if boolTaintedLastAttr != attrJ+1 {
+					boolTaintedLastAttr = attrJ + 1
+					boolTaintedCount++
+				}
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolTaintedVal = val
+			case kindAgentActionConfined:
+				if boolConfinedLastAttr != attrJ+1 {
+					boolConfinedLastAttr = attrJ + 1
+					boolConfinedCount++
+				}
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolConfinedVal = val
 			}
 		}
 	}
@@ -760,6 +788,22 @@ func agentActionReadRow[
 	}
 	if boolTestCount == 1 {
 		row.Test = boolTestVal
+		present = true
+	}
+	if boolTaintedCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "agentActionTainted").Int("got", boolTaintedCount).Errorf("slot bool@agentActionTainted (field Tainted) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolTaintedCount)
+		return
+	}
+	if boolTaintedCount == 1 {
+		row.Tainted = boolTaintedVal
+		present = true
+	}
+	if boolConfinedCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "agentActionConfined").Int("got", boolConfinedCount).Errorf("slot bool@agentActionConfined (field Confined) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolConfinedCount)
+		return
+	}
+	if boolConfinedCount == 1 {
+		row.Confined = boolConfinedVal
 		present = true
 	}
 	return

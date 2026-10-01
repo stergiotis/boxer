@@ -318,25 +318,22 @@ type windowRow struct {
 func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, ids *c.WidgetIdStack) (approve bool, decline bool) {
 	svc := inst.svc
 	who := svc.display(r.actor) + " (window " + strconv.FormatUint(r.actorInstance, 10) + ")"
+	// Host-derived facts first; the model's words come last, as its claim
+	// (ADR-0269 §SD5).
 	switch {
 	case r.held != nil:
-		h := r.held
-		c.Label(who + " asks to call " + h.req.Operation + " in window " + strconv.FormatUint(h.req.Instance, 10) + ".").Wrap().Send()
-		c.Label(needText(h)).Wrap().Send()
-		if h.req.Reason != "" {
-			for rt := range c.RichTextLabel("its reason, as the model wrote it: " + h.req.Reason) {
-				rt.Weak()
-			}
-		}
+		c.Label(who + " asks to call " + r.held.req.Operation + " in window " + strconv.FormatUint(r.held.req.Instance, 10) + ".").Wrap().Send()
+		c.Label(needText(r.held)).Wrap().Send()
 	case r.task != nil:
 		c.Label(who + " asks to widen task " + r.task.id + ".").Wrap().Send()
 	default:
 		c.Label(who + " asks to start a task.").Wrap().Send()
 	}
-	if r.plan != "" && r.held == nil {
-		for rt := range c.RichTextLabel("its plan, as the model wrote it: " + r.plan) {
-			rt.Weak()
-		}
+	svc.mu.Lock()
+	taintedConv := r.task != nil && svc.tainted(r.task)
+	svc.mu.Unlock()
+	if taintedConv {
+		c.Label("This conversation has read untrusted content: what the model writes may have been steered by it.").Wrap().Send()
 	}
 	if r.held == nil || r.held.need == needInstance {
 		c.Separator().Send()
@@ -357,6 +354,16 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 			calls = DefaultCallBudget
 		}
 		c.Label("budget: " + strconv.FormatUint(uint64(calls), 10) + " calls").Send()
+	}
+	if r.held != nil && r.held.req.Reason != "" {
+		for rt := range c.RichTextLabel("its reason, as the model wrote it: " + r.held.req.Reason) {
+			rt.Weak()
+		}
+	}
+	if r.plan != "" && r.held == nil {
+		for rt := range c.RichTextLabel("its plan, as the model wrote it: " + r.plan) {
+			rt.Weak()
+		}
 	}
 	if waiting > 1 {
 		c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()

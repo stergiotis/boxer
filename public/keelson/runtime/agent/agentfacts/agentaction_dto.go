@@ -47,4 +47,8 @@ type AgentAction struct {
 	BudgetLeft uint32 `lw:"agentActionBudgetLeft,u32Array,unit"`
 	// Test marks a row of a test grant.
 	Test bool `lw:"agentActionTest,bool"`
+	// Tainted says the conversation had read untrusted content by then;
+	// Confined that the outcome carried confined content (ADR-0269 §SD7).
+	Tainted  bool `lw:"agentActionTainted,bool"`
+	Confined bool `lw:"agentActionConfined,bool"`
 }

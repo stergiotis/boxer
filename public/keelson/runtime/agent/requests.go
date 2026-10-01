@@ -86,6 +86,7 @@ type request struct {
 	key           string
 	actor         app.AppIdT
 	actorInstance uint64
+	conversation  string
 	// task is the task being widened; nil for a new grant.
 	task         *task
 	plan         string
@@ -141,7 +142,7 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		rep.Reason = "this app is not registered as a coordinator (BOXER_AGENT_COORDINATORS)"
 		return
 	}
-	r := &request{key: "req-" + randomHex(8), actor: msg.Sender, actorInstance: msg.SenderInstance, task: t,
+	r := &request{key: "req-" + randomHex(8), actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, task: t,
 		plan: req.Plan, wanted: make(map[uint64]ModeE), wantedOps: make(map[uint64][]string),
 		destinations: req.Destinations, calls: req.Calls, deadline: time.Duration(req.DeadlineSecs) * time.Second,
 		created: time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE)}
@@ -229,7 +230,7 @@ func (inst *Service) approve(r *request) (route *held) {
 		return
 	}
 	if r.task == nil {
-		t := inst.newTask(r.actor, r.actorInstance, r.plan, r.destinations, r.calls, r.deadline, false)
+		t := inst.newTask(r.actor, r.actorInstance, r.conversation, r.plan, r.destinations, r.calls, r.deadline, false)
 		r.task = t
 		inst.tasks[t.handle] = t
 	}

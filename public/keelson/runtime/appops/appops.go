@@ -49,6 +49,7 @@ type Set[A any, S any] struct {
 	queries   map[string]queryFn[S]
 	avail     map[string]func(snap S) (ok bool, reason string)
 	snapshot  func(inst A) S
+	confined  func(inst A) bool
 }
 
 // NewSet starts a catalog. snapshot captures what queries read; it runs on
@@ -89,6 +90,13 @@ func (inst *Set[A, S]) Editing(name string, fn func(inst A) bool) *Set[A, S] {
 // reports false when the value does not fit.
 func (inst *Set[A, S]) Restorable(name string, fn func(inst A, v any) bool) *Set[A, S] {
 	inst.restore[name] = fn
+	return inst
+}
+
+// Confined declares how to tell the window's label: true while any result
+// it holds is confined (ADR-0145). Without it, the window is ordinary.
+func (inst *Set[A, S]) Confined(fn func(inst A) bool) *Set[A, S] {
+	inst.confined = fn
 	return inst
 }
 
@@ -210,6 +218,13 @@ type bound[A any, S any] struct {
 func (inst *bound[A, S]) ResourceValue(name string) (v any) {
 	if fn, ok := inst.set.values[name]; ok {
 		v = fn(inst.inst)
+	}
+	return
+}
+
+func (inst *bound[A, S]) Confined() (confined bool) {
+	if fn := inst.set.confined; fn != nil {
+		confined = fn(inst.inst)
 	}
 	return
 }

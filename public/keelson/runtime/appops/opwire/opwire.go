@@ -148,6 +148,9 @@ type Outcome struct {
 	// Seq is, for a query, the instance's log sequence as of its snapshot:
 	// a later change was not in what it read.
 	Seq uint64 `json:"seq,omitempty"`
+	// Confined is the label of what the outcome carries: the window's
+	// label as of the snapshot or the command (ADR-0269 §SD7).
+	Confined bool `json:"confined,omitempty"`
 }
 
 // wireVersion versions [CallRequest] and [CallReply].
@@ -167,6 +170,10 @@ type CallRequest struct {
 	Writer string `json:"writer"`
 	Key    string `json:"key,omitempty"`
 	Reason string `json:"reason,omitempty"`
+	// RefData is, per argument declared as a reference, the CBOR of the
+	// result it names, resolved by the dispatcher: the app reads it, the
+	// model never does.
+	RefData map[string][]byte `json:"ref_data,omitempty"`
 }
 
 // CallReply answers a [CallRequest]: a command's acceptance into the
@@ -184,6 +191,8 @@ type InstanceInfo struct {
 	Title string
 	// Ops is true when the instance serves its app's catalog.
 	Ops bool
+	// Confined is the window's label as of its latest snapshot.
+	Confined bool
 }
 
 // WriterTask names a task as a writer.

@@ -24,9 +24,11 @@ import (
 // The test participant: a document with text and a consequential export.
 
 type doc struct {
-	mu      sync.Mutex
-	text    string
-	editing bool
+	mu       sync.Mutex
+	text     string
+	editing  bool
+	confined bool
+	gotRef   []byte
 }
 
 type docSnap struct{ text string }
@@ -35,6 +37,9 @@ type setTextArgs struct {
 	Text string `desc:"the new text"`
 }
 type textResult struct{ Text string }
+type useRefArgs struct {
+	Source string `desc:"a result reference"`
+}
 
 const docAppId app.AppIdT = "github.com/x/apps/doc"
 
@@ -42,13 +47,20 @@ var docOps = func() *appops.Set[*doc, docSnap] {
 	s := appops.NewSet(func(d *doc) docSnap { return docSnap{text: d.text} })
 	s.Resource("text", "the text", func(d *doc) any { return d.text })
 	s.Editing("text", func(d *doc) bool { return d.editing })
+	s.Confined(func(d *doc) bool { return d.confined })
 	appops.Command(s, app.OperationSpec{Name: "set_text", Version: 1, Summary: "replace the text",
 		Effect: app.OperationEffectDocument, Writes: []string{"text"}, Agents: true},
 		func(d *doc, call app.OperationCall, in setTextArgs) (appops.None, error) {
 			d.text = in.Text
 			return appops.None{}, nil
 		})
-	appops.Query(s, app.OperationSpec{Name: "get_text", Version: 1, Summary: "read the text", Reads: []string{"text"}, Agents: true},
+	appops.Command(s, app.OperationSpec{Name: "use_ref", Version: 1, Summary: "take a result by reference",
+		Effect: app.OperationEffectDocument, Writes: []string{"text"}, Refs: []string{"source"}, Agents: true},
+		func(d *doc, call app.OperationCall, in useRefArgs) (appops.None, error) {
+			d.gotRef = call.RefData["source"]
+			return appops.None{}, nil
+		})
+	appops.Query(s, app.OperationSpec{Name: "get_text", Version: 1, Summary: "read the text", Reads: []string{"text"}, Agents: true, Untrusted: true},
 		func(sn docSnap, in appops.None) (textResult, error) { return textResult{Text: sn.text}, nil })
 	appops.Command(s, app.OperationSpec{Name: "export", Version: 1, Summary: "export the text",
 		Effect: app.OperationEffectConsequential, Reads: []string{"text"}, Agents: true},
@@ -74,8 +86,9 @@ type fakeHost struct {
 func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	for k := range inst.engines {
-		out = append(out, opwire.InstanceInfo{App: docAppId, Alias: docAppId.SubjectAlias(), Key: k, Title: "Doc", Ops: true})
+	for k, e := range inst.engines {
+		out = append(out, opwire.InstanceInfo{App: docAppId, Alias: docAppId.SubjectAlias(), Key: k, Title: "Doc", Ops: true,
+			Confined: e.Confined()})
 	}
 	return
 }

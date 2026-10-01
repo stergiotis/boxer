@@ -103,9 +103,12 @@ func (inst *entry) covers(op string) (ok bool) {
 }
 
 type resultRef struct {
-	instance uint64
-	typ      reflect.Type
-	data     []byte
+	instance  uint64
+	typ       reflect.Type
+	data      []byte
+	confined  bool
+	untrusted bool
+	source    string
 }
 
 type callRec struct {
@@ -162,6 +165,7 @@ type task struct {
 	revoked       string
 	created       time.Time
 	test          bool
+	conversation  string
 	keys          map[string]*callRec
 	lastRead      map[uint64]map[string]uint64
 	refs          map[string]*resultRef
@@ -206,10 +210,10 @@ func (inst *Service) resolve(handle string, msg *app.Msg) (t *task, out opwire.O
 }
 
 // newTask builds a task. The caller registers it.
-func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, plan string, destinations []string, calls uint32,
-	deadline time.Duration, test bool) (t *task) {
+func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, conversation string, plan string, destinations []string,
+	calls uint32, deadline time.Duration, test bool) (t *task) {
 	t = &task{
-		id: "task-" + randomHex(6), handle: randomHex(16), actor: actor, actorInstance: actorInstance,
+		id: "task-" + randomHex(6), handle: randomHex(16), actor: actor, actorInstance: actorInstance, conversation: conversation,
 		plan: plan, entries: make(map[uint64]*entry), destinations: destinations,
 		callsBudget: int(calls), deadline: time.Now().Add(DefaultDeadline), epoch: 1, created: time.Now(), test: test,
 		keys: make(map[string]*callRec), lastRead: make(map[uint64]map[string]uint64), refs: make(map[string]*resultRef),
@@ -236,7 +240,7 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 		rep.Reason = "a grant names at least one instance"
 		return
 	}
-	t := inst.newTask(msg.Sender, msg.SenderInstance, req.Plan, req.Destinations, req.Calls,
+	t := inst.newTask(msg.Sender, msg.SenderInstance, req.Conversation, req.Plan, req.Destinations, req.Calls,
 		time.Duration(req.DeadlineSecs)*time.Second, true)
 	for _, e := range req.Entries {
 		info, isOpen := inst.openInstance(e.Instance)
@@ -361,8 +365,15 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 		inst.record(t, rec, "dispatch", out)
 		return
 	}
+	refData, why := inst.resolveRefs(t, spec, req)
+	if why != "" {
+		out := phaseOutcome(opwire.PhaseRefused, why)
+		inst.settle(t, rec, out, false)
+		inst.record(t, rec, "dispatch", out)
+		return
+	}
 	creq := opwire.CallRequest{V: opwire.WireVersion, CallId: rec.callId, Args: args, Expects: expects,
-		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason}
+		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason, RefData: refData}
 	payload, err := buscodec.Encode(creq)
 	if err != nil {
 		out := phaseOutcome(opwire.PhaseFailed, "encode: "+err.Error())
@@ -497,7 +508,9 @@ func (inst *Service) absorb(t *task, rec *callRec, out opwire.Outcome) {
 	}
 	if rec.ref == "" && len(out.Result) > 0 && rec.spec.Result != nil {
 		rec.ref = "ref-" + randomHex(8)
-		t.refs[rec.ref] = &resultRef{instance: rec.instance, typ: rec.spec.Result, data: out.Result}
+		t.refs[rec.ref] = &resultRef{instance: rec.instance, typ: rec.spec.Result, data: out.Result,
+			confined: out.Confined, untrusted: rec.spec.Untrusted,
+			source: "window " + strconv.FormatUint(rec.instance, 10) + " · " + string(rec.app) + " · " + rec.spec.Name}
 	}
 }
 
@@ -509,7 +522,9 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 	for {
 		if rec.job != "" && rec.outcome.Phase == opwire.PhaseRunning && inst.cfg.Host != nil {
 			if st, ok := inst.cfg.Host.OpsCaptureStatus(rec.job); ok {
+				confined := rec.outcome.Confined
 				rec.outcome = phaseOutcome(st.Phase, st.Reason)
+				rec.outcome.Confined = confined
 			}
 		} else if rec.routed && !rec.outcome.Phase.Final() && inst.cfg.Host != nil {
 			if out, ok := inst.cfg.Host.OpsStatus(rec.instance, rec.callId); ok {
@@ -533,6 +548,7 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 	}
 	w = wireOutcomeOf(rec.outcome, rec.ref, rec.job)
 	w.Held = rec.heldBy != nil && rec.outcome.Phase == opwire.PhaseInputRequired
+	w.Confined = rec.outcome.Confined
 	return
 }
 
@@ -636,6 +652,10 @@ func (inst *Service) read(msg *app.Msg) (rep wireReadReply) {
 	}
 	inst.mu.Unlock()
 	switch {
+	case ref != nil && ref.confined && !inst.modelLocal():
+		// Confined content the coordinator's model may not see stays a
+		// handle it can pass and never read (ADR-0269 §SD7).
+		rep.Ok, rep.Confined, rep.DataHandle, rep.Source = true, true, req.Ref, ref.source
 	case ref != nil:
 		ptr := reflect.New(ref.typ)
 		if err = buscodec.Default().Decode(ref.data, ptr.Interface()); err != nil {
@@ -648,14 +668,25 @@ func (inst *Service) read(msg *app.Msg) (rep wireReadReply) {
 			rep.Reason = err.Error()
 			return
 		}
-		rep.Ok, rep.MediaType, rep.Text = true, "application/json", string(js)
+		rep.Ok, rep.MediaType, rep.Text, rep.Confined = true, "application/json", string(js), ref.confined
+		rep.Untrusted, rep.Source = ref.untrusted, ref.source
+		if ref.untrusted {
+			inst.taint(t)
+		}
 	case job != nil && inst.cfg.Host != nil:
 		st, found := inst.cfg.Host.OpsCaptureStatus(job.job)
 		if !found || st.Phase != opwire.PhaseCompleted {
 			rep.Reason = "the capture is not complete"
 			return
 		}
-		rep.Ok, rep.MediaType, rep.Path = true, st.MediaType, st.Path
+		if job.outcome.Confined && !inst.modelLocal() {
+			rep.Reason = "a confined capture stays an artifact handle"
+			return
+		}
+		// Every capture is untrusted: it shows whatever the window holds.
+		rep.Ok, rep.MediaType, rep.Path, rep.Confined = true, st.MediaType, st.Path, job.outcome.Confined
+		rep.Untrusted, rep.Source = true, "window "+strconv.FormatUint(job.instance, 10)+" · capture"
+		inst.taint(t)
 	default:
 		rep.Reason = "no result or artifact by that reference in this task"
 	}
@@ -705,9 +736,11 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
 	}
+	info, _ := inst.openInstance(req.Instance)
 	inst.mu.Lock()
 	rec.job = job
 	rec.outcome = phaseOutcome(opwire.PhaseRunning, "")
+	rec.outcome.Confined = info.Confined
 	rep.Outcome = inst.outcomeOf(t, rec, 0)
 	inst.mu.Unlock()
 	inst.record(t, rec, "dispatch", rec.outcome)
@@ -728,12 +761,24 @@ func (inst *Service) list(msg *app.Msg) (rep wireListReply) {
 		rep.Reason = out.Reason
 		return
 	}
+	tainted := false
 	for _, info := range inst.cfg.Host.OpsInstances() {
 		e := t.entries[info.Key]
 		if e == nil {
 			continue
 		}
-		rep.Instances = append(rep.Instances, wireInstance{Instance: info.Key, App: string(info.App), Title: info.Title, Mode: e.mode.String(), Ops: info.Ops})
+		title := info.Title
+		if info.Confined {
+			title = ""
+		} else {
+			tainted = true
+		}
+		rep.Instances = append(rep.Instances, wireInstance{Instance: info.Key, App: string(info.App), Title: title,
+			Mode: e.mode.String(), Ops: info.Ops, Confined: info.Confined})
+	}
+	if tainted {
+		// Titles are untrusted text (ADR-0269 §SD7).
+		inst.taint(t)
 	}
 	rep.Ok = true
 	return

@@ -149,7 +149,10 @@ type GrantEntry struct {
 // GrantRequest asks for a task grant, or with Handle for the widening of
 // one.
 type GrantRequest struct {
-	Handle       string
+	Handle string
+	// Conversation names the coordinator's conversation; taint belongs to
+	// it.
+	Conversation string
 	Plan         string
 	Entries      []GrantEntry
 	Destinations []string
@@ -184,7 +187,7 @@ func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err e
 // RequestKey sends a request and returns its key without waiting; a test
 // grant comes back at once as g.
 func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string, g Grant, err error) {
-	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
+	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Conversation: r.Conversation, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
 		DeadlineSecs: uint32(r.Deadline / time.Second)}
 	for _, e := range r.Entries {
 		req.Entries = append(req.Entries, wireGrantEntry{Instance: e.Instance, Mode: e.Mode.String(), Operations: e.Operations})
@@ -214,6 +217,8 @@ type Outcome struct {
 	Job string
 	// Held marks an input_required call that waits on the person.
 	Held bool
+	// Confined is the label of what the call returned.
+	Confined bool
 	// Task and Handle answer an approved request's key.
 	Task   string
 	Handle string
@@ -247,7 +252,7 @@ type CallRequest struct {
 
 func outcomeOfWire(w wireOutcome) (out Outcome) {
 	return Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job,
-		Held: w.Held, Task: w.Task, Handle: w.Handle}
+		Held: w.Held, Confined: w.Confined, Task: w.Task, Handle: w.Handle}
 }
 
 func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
@@ -291,10 +296,18 @@ func (inst *Client) Capture(ctx context.Context, handle string, instance uint64,
 }
 
 // ReadResult is a result as JSON, or an artifact by media type and path.
+// Untrusted content comes with its Source; a coordinator delimits it and
+// tells its model it is data, never instruction (ADR-0269 §SD7). Confined
+// content the model may not see comes back as a DataHandle in place of
+// Text.
 type ReadResult struct {
-	MediaType string
-	Text      string
-	Path      string
+	MediaType  string
+	Text       string
+	Path       string
+	Untrusted  bool
+	Source     string
+	DataHandle string
+	Confined   bool
 }
 
 // Read reads a result reference or a completed capture.
@@ -307,17 +320,20 @@ func (inst *Client) Read(ctx context.Context, handle string, ref string) (res Re
 		err = &RefusedError{Reason: rep.Reason}
 		return
 	}
-	res = ReadResult{MediaType: rep.MediaType, Text: rep.Text, Path: rep.Path}
+	res = ReadResult{MediaType: rep.MediaType, Text: rep.Text, Path: rep.Path, Untrusted: rep.Untrusted, Source: rep.Source,
+		DataHandle: rep.DataHandle, Confined: rep.Confined}
 	return
 }
 
-// Instance is one window of the task.
+// Instance is one window of the task. Title is untrusted text, empty for a
+// confined window.
 type Instance struct {
 	Instance uint64
 	App      string
 	Title    string
 	Mode     string
 	Ops      bool
+	Confined bool
 }
 
 // List lists the task's open instances.

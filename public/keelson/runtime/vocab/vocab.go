@@ -428,6 +428,8 @@ var (
 	MembAgentActionReason        = NkRegistry.MustBegin("agentActionReason", 182).End()
 	MembAgentActionBudgetLeft    = NkRegistry.MustBegin("agentActionBudgetLeft", 183).End()
 	MembAgentActionTest          = NkRegistry.MustBegin("agentActionTest", 184).End()
+	MembAgentActionTainted       = NkRegistry.MustBegin("agentActionTainted", 185).End()
+	MembAgentActionConfined      = NkRegistry.MustBegin("agentActionConfined", 186).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -470,7 +472,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentActionActorInstance, MembAgentActionToolCallId, MembAgentActionCallId, MembAgentActionInstance,
 	MembAgentActionApp, MembAgentActionOperation, MembAgentActionEffect, MembAgentActionArgsDigest,
 	MembAgentActionDecision, MembAgentActionPhase, MembAgentActionReason, MembAgentActionBudgetLeft,
-	MembAgentActionTest,
+	MembAgentActionTest, MembAgentActionTainted, MembAgentActionConfined,
 	MembKindVizevalScore, MembVizevalScenario, MembVizevalCandidateId, MembVizevalSink, MembVizevalCandidate,
 	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
 	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,

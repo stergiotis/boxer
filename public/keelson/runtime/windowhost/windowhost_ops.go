@@ -116,9 +116,10 @@ func (inst *Inst) OpsInstances() (out []opwire.InstanceInfo) {
 		if w.closeReq {
 			continue
 		}
+		eng := w.ops.Load()
 		out = append(out, opwire.InstanceInfo{
 			App: w.manifest.Id, Alias: w.manifest.Id.SubjectAlias(), Key: uint64(w.key),
-			Title: w.manifest.WindowTitle(), Ops: w.ops.Load() != nil,
+			Title: w.manifest.WindowTitle(), Ops: eng != nil, Confined: eng != nil && eng.Confined(),
 		})
 	}
 	return

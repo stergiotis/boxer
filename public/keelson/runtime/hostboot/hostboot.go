@@ -732,6 +732,12 @@ func (rt *Runtime) bootAgent() {
 	// (ADR-0269 §SD9), as for llm_calls.
 	cfg := agent.Config{TestGrants: agentTestGrants(agent.TestGrantsEnv.Get(), imzero2env.HeadlessListen.Get() != ""),
 		Exec: rt.PersistExec, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get())}
+	if rt.LLM != nil {
+		// Confined content reaches a coordinator's model only where the host's
+		// endpoint is local (ADR-0254 §SD3, ADR-0269 §SD7).
+		llmSvc := rt.LLM
+		cfg.ModelLocal = func() bool { return llmSvc.Describe().Local }
+	}
 	if agent.TestGrantsEnv.Get() && !cfg.TestGrants {
 		logger.Warn().Msg("agent: BOXER_AGENT_TEST_GRANTS is honoured only on the headless host; refused here")
 	}

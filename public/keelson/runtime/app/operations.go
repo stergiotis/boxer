@@ -285,6 +285,10 @@ type OperationsHandlerI interface {
 	// The host compares values across the frame's write-back to bump
 	// revisions (ADR-0269 §SD4).
 	ResourceValue(name string) (v any)
+	// Confined reports the window's label (ADR-0145, ADR-0269 §SD7): true
+	// while any result it holds is confined. What its operations return
+	// carries this label.
+	Confined() (confined bool)
 	// Restore puts back a value ResourceValue returned earlier, for undo
 	// (ADR-0269 §SD8). It reports false for a resource it cannot restore —
 	// one whose value is a digest, or that has no setter — and undo leaves
@@ -331,6 +335,10 @@ type OperationCall struct {
 	Key string
 	// Reason is the caller's one-line reason.
 	Reason string
+	// RefData is, per argument declared as a reference, the CBOR of the
+	// result it names; the host resolved it, and it never reached the
+	// model.
+	RefData map[string][]byte
 }
 
 // OperationRefusal is an error a handler returns to decline a call without

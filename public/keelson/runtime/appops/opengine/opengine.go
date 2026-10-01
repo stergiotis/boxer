@@ -71,10 +71,11 @@ type call struct {
 }
 
 type snapshot struct {
-	asOf   uint64
-	view   app.OperationsSnapshotI
-	revs   map[string]uint64
-	logSeq uint64
+	asOf     uint64
+	view     app.OperationsSnapshotI
+	revs     map[string]uint64
+	logSeq   uint64
+	confined bool
 }
 
 // Engine serves one instance's catalog.
@@ -137,7 +138,7 @@ func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcom
 		return
 	}
 	c := &call{id: req.CallId, spec: spec, args: req.Args, expects: req.Expects,
-		call:    app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason},
+		call:    app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason, RefData: req.RefData},
 		outcome: opwire.Outcome{Phase: opwire.PhaseAccepted}}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -162,7 +163,7 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 	if out.Phase == opwire.PhaseUnspecified {
 		out = opwire.Outcome{Phase: opwire.PhaseCompleted, Result: result}
 	}
-	out.AsOf, out.Seq = s.asOf, s.logSeq
+	out.AsOf, out.Seq, out.Confined = s.asOf, s.logSeq, s.confined
 	out.Revisions = pick(s.revs, spec.Reads)
 	return
 }
@@ -370,7 +371,8 @@ func (inst *Engine) apply(c *call) (out opwire.Outcome) {
 	}
 	inst.observe(c.call.Writer, c.spec.Writes)
 	c.before, c.after = before, pick(inst.revs, c.spec.Writes)
-	out = opwire.Outcome{Phase: opwire.PhaseApplied, AsOf: inst.frame, Revisions: pick(inst.revs, c.spec.Writes), Result: result}
+	out = opwire.Outcome{Phase: opwire.PhaseApplied, AsOf: inst.frame, Revisions: pick(inst.revs, c.spec.Writes), Result: result,
+		Confined: inst.h.Confined()}
 	return
 }
 
@@ -436,6 +438,15 @@ func (inst *Engine) undo(id string) {
 		Phase: opwire.PhaseApplied, Reason: status, Resources: restored, Revisions: pick(inst.revs, restored)})
 }
 
+// Confined is the window's label as of the latest snapshot; safe from any
+// goroutine.
+func (inst *Engine) Confined() (confined bool) {
+	if s := inst.snap.Load(); s != nil {
+		confined = s.confined
+	}
+	return
+}
+
 // SnapshotRevisions returns the revisions as of the latest snapshot; safe
 // from any goroutine. A proposal is stale when one it expects has moved.
 func (inst *Engine) SnapshotRevisions() (revs map[string]uint64, asOf uint64) {
@@ -447,7 +458,8 @@ func (inst *Engine) SnapshotRevisions() (revs map[string]uint64, asOf uint64) {
 
 // TakeSnapshot captures what queries read until the next frame.
 func (inst *Engine) TakeSnapshot() {
-	inst.snap.Store(&snapshot{asOf: inst.frame, view: inst.h.Snapshot(), revs: maps.Clone(inst.revs), logSeq: inst.LogSeq()})
+	inst.snap.Store(&snapshot{asOf: inst.frame, view: inst.h.Snapshot(), revs: maps.Clone(inst.revs), logSeq: inst.LogSeq(),
+		confined: inst.h.Confined()})
 }
 
 // Gesture applies a command the person asked for through the app's own UI,

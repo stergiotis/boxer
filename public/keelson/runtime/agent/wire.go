@@ -82,8 +82,11 @@ type wireGrantEntry struct {
 // wireGrantRequest asks for a grant, or with Handle for the widening of
 // one.
 type wireGrantRequest struct {
-	V            uint8            `json:"v"`
-	Handle       string           `json:"handle,omitempty"`
+	V      uint8  `json:"v"`
+	Handle string `json:"handle,omitempty"`
+	// Conversation names the coordinator's conversation; taint belongs to
+	// it (ADR-0269 §SD7).
+	Conversation string           `json:"conversation,omitempty"`
 	Plan         string           `json:"plan"`
 	Entries      []wireGrantEntry `json:"entries"`
 	Destinations []string         `json:"destinations,omitempty"`
@@ -122,6 +125,7 @@ type wireOutcome struct {
 	Revisions map[string]uint64 `json:"revisions,omitempty"`
 	ResultRef string            `json:"result_ref,omitempty"`
 	Job       string            `json:"job,omitempty"`
+	Confined  bool              `json:"confined,omitempty"`
 	// Held marks an input_required call that waits on the person.
 	Held bool `json:"held,omitempty"`
 	// Task and Handle answer an approved request's key.
@@ -164,6 +168,14 @@ type wireReadReply struct {
 	MediaType string `json:"media_type,omitempty"`
 	Text      string `json:"text,omitempty"`
 	Path      string `json:"path,omitempty"`
+	// Untrusted marks content an attacker could influence; Source
+	// attributes it to its window and operation (ADR-0269 §SD7).
+	Untrusted bool   `json:"untrusted,omitempty"`
+	Source    string `json:"source,omitempty"`
+	// DataHandle stands in for confined content the coordinator's model
+	// may not see: a reference it may pass, never text.
+	DataHandle string `json:"data_handle,omitempty"`
+	Confined   bool   `json:"confined,omitempty"`
 }
 
 type wireCapture struct {
@@ -182,9 +194,11 @@ type wireHandle struct {
 type wireInstance struct {
 	Instance uint64 `json:"instance"`
 	App      string `json:"app"`
+	// Title is untrusted text, and withheld for a confined window.
 	Title    string `json:"title"`
 	Mode     string `json:"mode"`
 	Ops      bool   `json:"ops"`
+	Confined bool   `json:"confined,omitempty"`
 }
 
 type wireListReply struct {

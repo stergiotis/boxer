@@ -38,6 +38,10 @@ type ActionRecord struct {
 	Reason     string
 	BudgetLeft int32
 	Test       bool
+	// Tainted says the conversation had read untrusted content by then;
+	// Confined that the call's outcome carried confined content.
+	Tainted  bool
+	Confined bool
 }
 
 // GrantRow is one task grant as the grants table shows it.
@@ -67,12 +71,13 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 	r := ActionRecord{
 		At: time.Now(), Key: rec.key, CallId: rec.callId, Instance: rec.instance, App: rec.app,
 		Operation: rec.spec.Name, Effect: rec.spec.Effect.String(), ArgsDigest: rec.argsDigest,
-		Decision: decision, Phase: out.Phase.String(), Reason: out.Reason,
+		Decision: decision, Phase: out.Phase.String(), Reason: out.Reason, Confined: out.Confined,
 	}
 	if t != nil {
 		inst.mu.Lock()
 		r.Task, r.Actor, r.ActorInstance, r.Test = t.id, t.actor, t.actorInstance, t.test
 		r.BudgetLeft = int32(t.callsBudget - t.callsUsed)
+		r.Tainted = inst.tainted(t)
 		inst.mu.Unlock()
 	}
 	inst.recMu.Lock()
@@ -151,6 +156,7 @@ func RowOf(r ActionRecord) (row agentfacts.AgentAction) {
 		Task: r.Task, Actor: string(r.Actor), ActorInstance: r.ActorInstance, ToolCallId: r.Key, CallId: r.CallId,
 		Instance: r.Instance, App: string(r.App), Operation: r.Operation, Effect: r.Effect, ArgsDigest: r.ArgsDigest,
 		Decision: r.Decision, Phase: r.Phase, BudgetLeft: uint32(max(r.BudgetLeft, 0)), Test: r.Test,
+		Tainted: r.Tainted, Confined: r.Confined,
 	}
 	if r.Reason != "" {
 		row.Reason = []string{r.Reason}
@@ -279,5 +285,7 @@ func actionsTable(rows []ActionRecord) *introspect.Table {
 		String("phase", func(i int) string { return r(i).Phase }).
 		String("reason", func(i int) string { return r(i).Reason }).
 		Int32("budget_left", func(i int) int32 { return r(i).BudgetLeft }).
-		Bool("test", func(i int) bool { return r(i).Test })
+		Bool("test", func(i int) bool { return r(i).Test }).
+		Bool("tainted", func(i int) bool { return r(i).Tainted }).
+		Bool("confined", func(i int) bool { return r(i).Confined })
 }

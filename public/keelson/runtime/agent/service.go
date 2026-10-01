@@ -30,6 +30,10 @@ type Config struct {
 	// (ADR-0269 §SD6 "Test grants"). The host sets it only on the headless
 	// host and only when TestGrantsEnv asks for it.
 	TestGrants bool
+	// ModelLocal reports whether the coordinators' model endpoint is local
+	// (ADR-0254 §SD3); confined content reaches only a local one. nil
+	// treats it as remote.
+	ModelLocal func() (local bool)
 	// Coordinators are the app ids or subject aliases the person registered
 	// as coordinators (CoordinatorsEnv): the only apps whose requests reach
 	// the person.
@@ -56,7 +60,10 @@ type Service struct {
 	// in arrival order.
 	requests     map[string]*request
 	requestOrder []string
-	unsubClosed  func()
+	// taints holds the conversations that read untrusted content, keyed
+	// by coordinator, window and conversation.
+	taints      map[string]bool
+	unsubClosed func()
 
 	recMu   sync.Mutex
 	records []ActionRecord
@@ -86,7 +93,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		cfg.Registry = app.DefaultRegistry
 	}
 	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task),
-		requests: make(map[string]*request)}
+		requests: make(map[string]*request), taints: make(map[string]bool)}
 	if cfg.Exec != nil {
 		s.facts = agentfacts.NewActionStore(cfg.Exec, nil, agentfacts.ActionStoreConfig{})
 		s.flushCh, s.stopFlush, s.flushDone = make(chan struct{}, 1), make(chan struct{}), make(chan struct{})
