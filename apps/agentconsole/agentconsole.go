@@ -205,6 +205,7 @@ func (inst *App) requestGrant() {
 		inst.setNote("give a window key first")
 		return
 	}
+	inst.setNote("asked the person; waiting for approval")
 	inst.spawn(func(ctx context.Context) {
 		g, err := inst.cli.Request(ctx, agent.GrantRequest{Plan: "drive window " + strconv.FormatUint(key, 10) + " by hand",
 			Entries: []agent.GrantEntry{{Instance: key, Mode: agent.ModeAct}}})

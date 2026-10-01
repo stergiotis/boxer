@@ -119,6 +119,21 @@ func (inst *Inst) OpsInstances() (out []opwire.InstanceInfo) {
 	return
 }
 
+// AgentChromeI draws the host chrome of the app operations contract
+// (ADR-0269 §SD5), on the render goroutine. The host owns these surfaces, so
+// an app cannot draw over them and an agent cannot reach them.
+type AgentChromeI interface {
+	// RenderWindowChrome draws a window's badge, in the row at the top of its
+	// body; it draws nothing for a window no task works in.
+	RenderWindowChrome(key uint64, ids *c.WidgetIdStack)
+	// RenderDialogs draws the host's dialogs at top level: approvals,
+	// confirmations.
+	RenderDialogs(ids *c.WidgetIdStack)
+}
+
+// SetAgentChrome installs the agent chrome; call it before the first Frame.
+func (inst *Inst) SetAgentChrome(ch AgentChromeI) { inst.agentChrome = ch }
+
 // OpsRenderGoroutine is the id of the goroutine that last ran Frame; zero
 // before the first frame.
 func (inst *Inst) OpsRenderGoroutine() (id uint64) { return inst.renderGoroutine.Load() }

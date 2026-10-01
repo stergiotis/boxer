@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"lukechampine.com/blake3"
@@ -118,6 +119,8 @@ type callRec struct {
 	ref        string
 	finalNoted bool
 	argsDigest string
+	// heldBy is the widening a call outside the grant waits on.
+	heldBy *request
 }
 
 type task struct {
@@ -174,18 +177,28 @@ func (inst *Service) resolve(handle string, msg *app.Msg) (t *task, out opwire.O
 	return
 }
 
-// grant creates a test grant (ADR-0269 §SD6 "Test grants").
-func (inst *Service) grant(msg *app.Msg) (rep wireGrantReply) {
+// newTask builds a task. The caller registers it.
+func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, plan string, destinations []string, calls uint32,
+	deadline time.Duration, test bool) (t *task) {
+	t = &task{
+		id: "task-" + randomHex(6), handle: randomHex(16), actor: actor, actorInstance: actorInstance,
+		plan: plan, entries: make(map[uint64]*entry), destinations: destinations,
+		callsBudget: int(calls), deadline: time.Now().Add(DefaultDeadline), epoch: 1, created: time.Now(), test: test,
+		keys: make(map[string]*callRec), lastRead: make(map[uint64]map[string]uint64), refs: make(map[string]*resultRef),
+	}
+	if t.callsBudget == 0 {
+		t.callsBudget = DefaultCallBudget
+	}
+	if deadline > 0 {
+		t.deadline = time.Now().Add(deadline)
+	}
+	return
+}
+
+// testGrant issues a grant without the person (ADR-0269 §SD6 "Test
+// grants"), on the headless host behind TestGrantsEnv.
+func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGrantReply) {
 	rep.V = wireVersion
-	req, err := decode[wireGrantRequest](msg.Payload)
-	if err != nil {
-		rep.Reason = err.Error()
-		return
-	}
-	if !inst.cfg.TestGrants {
-		rep.Reason = "a grant needs the person's approval in host chrome; this host issues test grants only, and they are off"
-		return
-	}
 	if inst.cfg.Host == nil {
 		rep.Reason = "no window host"
 		return
@@ -194,24 +207,10 @@ func (inst *Service) grant(msg *app.Msg) (rep wireGrantReply) {
 		rep.Reason = "a grant names at least one instance"
 		return
 	}
-	open := make(map[uint64]opwire.InstanceInfo)
-	for _, info := range inst.cfg.Host.OpsInstances() {
-		open[info.Key] = info
-	}
-	t := &task{
-		id: "task-" + randomHex(6), handle: randomHex(16), actor: msg.Sender, actorInstance: msg.SenderInstance,
-		plan: req.Plan, entries: make(map[uint64]*entry), destinations: req.Destinations,
-		callsBudget: int(req.Calls), deadline: time.Now().Add(DefaultDeadline), epoch: 1, created: time.Now(), test: true,
-		keys: make(map[string]*callRec), lastRead: make(map[uint64]map[string]uint64), refs: make(map[string]*resultRef),
-	}
-	if t.callsBudget == 0 {
-		t.callsBudget = DefaultCallBudget
-	}
-	if req.DeadlineSecs > 0 {
-		t.deadline = time.Now().Add(time.Duration(req.DeadlineSecs) * time.Second)
-	}
+	t := inst.newTask(msg.Sender, msg.SenderInstance, req.Plan, req.Destinations, req.Calls,
+		time.Duration(req.DeadlineSecs)*time.Second, true)
 	for _, e := range req.Entries {
-		info, isOpen := open[e.Instance]
+		info, isOpen := inst.openInstance(e.Instance)
 		if !isOpen {
 			rep.Reason = "no open window by the key " + strconv.FormatUint(e.Instance, 10)
 			return
@@ -227,10 +226,10 @@ func (inst *Service) grant(msg *app.Msg) (rep wireGrantReply) {
 	inst.tasks[t.handle] = t
 	inst.mu.Unlock()
 	for k := range t.entries {
-		inst.cfg.Host.OpsAttach(k, true)
+		inst.attach(k)
 	}
 	inst.log.Info().Str("task", t.id).Str("actor", string(t.actor)).Int("entries", len(t.entries)).Msg("agent: test grant issued")
-	rep.Ok, rep.Task, rep.Handle = true, t.id, t.handle
+	rep.Ok, rep.Task, rep.Handle, rep.Phase = true, t.id, t.handle, reqStateApproved.String()
 	return
 }
 
@@ -262,18 +261,34 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	}
 	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args)}
 	t.keys[req.Key] = rec
-	out, spec, e := inst.check(t, req)
+	out, spec, e, need, mode := inst.check(t, req)
 	rec.spec = spec
 	if e != nil {
 		rec.app = e.app
+	}
+	if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
+		inst.holdForWidening(t, rec, req, need, mode)
 	}
 	if out.Phase != opwire.PhaseUnspecified {
 		rec.outcome = out
 		inst.mu.Unlock()
 		inst.record(t, rec, "dispatch", out)
 		rep.Outcome = wireOutcomeOf(out, "", "")
+		// A held call is not final; the caller polls status.
+		rep.Outcome.Held = rec.heldBy != nil
 		return
 	}
+	inst.mu.Unlock()
+	inst.route(t, rec, req, spec, e)
+	inst.mu.Lock()
+	rep.Outcome = inst.outcomeOf(t, rec, 0)
+	inst.mu.Unlock()
+	return
+}
+
+// route sends a checked call to its instance and settles what it answers.
+func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.OperationSpec, e *entry) {
+	inst.mu.Lock()
 	t.callsUsed++
 	expects := make(map[string]uint64, len(spec.Writes))
 	for _, r := range spec.Writes {
@@ -290,69 +305,83 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 
 	args, err := encodeArgs(spec, req.Args)
 	if err != nil {
-		out = phaseOutcome(opwire.PhaseRefused, "the arguments do not fit the schema: "+err.Error())
+		out := phaseOutcome(opwire.PhaseRefused, "the arguments do not fit the schema: "+err.Error())
 		inst.settle(t, rec, out, false)
-		rep.Outcome = wireOutcomeOf(out, "", "")
+		inst.record(t, rec, "dispatch", out)
 		return
 	}
 	creq := opwire.CallRequest{V: opwire.WireVersion, CallId: rec.callId, Args: args, Expects: expects,
 		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason}
 	payload, err := buscodec.Encode(creq)
 	if err != nil {
-		out = phaseOutcome(opwire.PhaseFailed, "encode: "+err.Error())
+		out := phaseOutcome(opwire.PhaseFailed, "encode: "+err.Error())
 		inst.settle(t, rec, out, false)
-		rep.Outcome = wireOutcomeOf(out, "", "")
+		inst.record(t, rec, "dispatch", out)
 		return
 	}
 	raw, err := inst.busClient.RequestWithTimeout(opwire.Subject(alias, req.Instance, spec.Name), payload, DefaultTimeout)
 	if err != nil {
-		out = phaseOutcome(opwire.PhaseFailed, "the instance did not answer: "+err.Error())
+		out := phaseOutcome(opwire.PhaseFailed, "the instance did not answer: "+err.Error())
 		inst.settle(t, rec, out, false)
-		rep.Outcome = wireOutcomeOf(out, "", "")
+		inst.record(t, rec, "dispatch", out)
 		return
 	}
 	creply, err := buscodec.Decode[opwire.CallReply](raw)
 	if err != nil {
-		out = phaseOutcome(opwire.PhaseFailed, "undecodable reply")
+		out := phaseOutcome(opwire.PhaseFailed, "undecodable reply")
 		inst.settle(t, rec, out, false)
-		rep.Outcome = wireOutcomeOf(out, "", "")
+		inst.record(t, rec, "dispatch", out)
 		return
 	}
 	inst.settle(t, rec, creply.Outcome, spec.Class == app.OperationClassCommand && creply.Outcome.Phase == opwire.PhaseAccepted)
 	inst.record(t, rec, "dispatch", creply.Outcome)
-	inst.mu.Lock()
-	rep.Outcome = inst.outcomeOf(t, rec, 0)
-	inst.mu.Unlock()
-	return
 }
 
 // check decides a call at the dispatcher, or returns the zero outcome when
-// it may be routed. The caller holds mu.
-func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.OperationSpec, e *entry) {
+// it may be routed. For an input_required outcome, need says what a
+// widening would add and mode the mode it would take. The caller holds mu.
+func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.OperationSpec, e *entry, need needE, mode ModeE) {
 	e = t.entries[req.Instance]
-	if e == nil {
-		out = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this instance")
+	appId := app.AppIdT("")
+	if e != nil {
+		appId = e.app
+	} else if info, open := inst.openInstance(req.Instance); open {
+		appId = info.App
+	} else {
+		out = phaseOutcome(opwire.PhaseRefused, "no open window by that key")
 		return
 	}
-	m, ok := inst.cfg.Registry.LookupManifest(e.app)
+	m, ok := inst.cfg.Registry.LookupManifest(appId)
 	if !ok || m.Operations == nil {
 		out = phaseOutcome(opwire.PhaseRefused, "the instance's app serves no catalog")
 		return
 	}
 	spec, ok = m.Operations.Lookup(req.Operation)
+	mode = ModeObserve
+	if ok && spec.Effect != app.OperationEffectNone {
+		mode = ModeAct
+	}
 	switch {
 	case !ok:
 		out = phaseOutcome(opwire.PhaseRefused, "no such operation")
 	case !spec.Agents:
 		out = phaseOutcome(opwire.PhaseDenied, "the operation is not exposed to agents")
+	case e == nil:
+		out, need = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this instance; the person is asked"), needInstance
 	case !e.covers(spec.Name):
-		out = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this operation")
+		out, need, mode = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this operation; the person is asked"), needOperation, e.mode
 	case spec.Effect != app.OperationEffectNone && e.mode == ModeObserve:
-		out = phaseOutcome(opwire.PhaseInputRequired, "observe mode: the person would have to raise the mode")
+		out, need = phaseOutcome(opwire.PhaseInputRequired, "observe mode: the person is asked to raise the mode"), needMode
+	case spec.Effect != app.OperationEffectNone && inst.holder(req.Instance, t) != nil:
+		out = phaseOutcome(opwire.PhaseRefused, "busy: another task holds the instance")
 	case spec.Effect == app.OperationEffectConsequential:
 		out = phaseOutcome(opwire.PhaseInputRequired, "a consequential command needs the person's confirmation")
 	case t.callsUsed >= t.callsBudget:
-		out = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent")
+		out, need, mode = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; the person is asked"), needBudget, e.mode
+	}
+	if t.test {
+		// Nobody answers a test grant's widening.
+		out.Reason = strings.TrimSuffix(strings.TrimSuffix(out.Reason, "; the person is asked"), ": the person is asked to raise the mode")
 	}
 	return
 }
@@ -424,7 +453,7 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 				inst.absorb(t, rec, out)
 			}
 		}
-		final := rec.outcome.Phase.Final()
+		final := rec.outcome.Phase.Final() || (rec.outcome.Phase == opwire.PhaseInputRequired && rec.heldBy == nil)
 		if final && !rec.finalNoted {
 			rec.finalNoted = true
 			inst.mu.Unlock()
@@ -439,11 +468,13 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 		inst.mu.Lock()
 	}
 	w = wireOutcomeOf(rec.outcome, rec.ref, rec.job)
+	w.Held = rec.heldBy != nil && rec.outcome.Phase == opwire.PhaseInputRequired
 	return
 }
 
 func wireOutcomeOf(out opwire.Outcome, ref string, job string) (w wireOutcome) {
-	return wireOutcome{Phase: out.Phase.String(), Reason: out.Reason, AsOf: out.AsOf, Revisions: out.Revisions, ResultRef: ref, Job: job}
+	w.Phase, w.Reason, w.AsOf, w.Revisions, w.ResultRef, w.Job = out.Phase.String(), out.Reason, out.AsOf, out.Revisions, ref, job
+	return
 }
 
 func (inst *Service) status(msg *app.Msg) (rep wireCallReply) {
@@ -456,6 +487,20 @@ func (inst *Service) status(msg *app.Msg) (rep wireCallReply) {
 	rep.Ok = true
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	wait := min(time.Duration(req.WaitMs)*time.Millisecond, MaxStatusWait)
+	if req.Handle == "" {
+		// A request's key: answered without a grant, to the requester only.
+		deadline := time.Now().Add(wait)
+		for {
+			rep.Outcome = inst.requestStatus(req.Key, msg)
+			if rep.Outcome.Phase != reqStatePending.String() || !time.Now().Before(deadline) {
+				return
+			}
+			inst.mu.Unlock()
+			time.Sleep(50 * time.Millisecond)
+			inst.mu.Lock()
+		}
+	}
 	t, out, ok := inst.resolve(req.Handle, msg)
 	if !ok {
 		rep.Outcome = wireOutcomeOf(out, "", "")
@@ -466,7 +511,6 @@ func (inst *Service) status(msg *app.Msg) (rep wireCallReply) {
 		rep.Outcome = wireOutcomeOf(phaseOutcome(opwire.PhaseRefused, "no call by that key"), "", "")
 		return
 	}
-	wait := min(time.Duration(req.WaitMs)*time.Millisecond, MaxStatusWait)
 	rep.Outcome = inst.outcomeOf(t, rec, wait)
 	return
 }
@@ -638,21 +682,17 @@ func (inst *Service) detach(msg *app.Msg) (rep wireAck) {
 	}
 	inst.mu.Lock()
 	t, out, ok := inst.resolve(req.Handle, msg)
+	covered := ok && t.entries[req.Instance] != nil
+	inst.mu.Unlock()
 	if !ok {
-		inst.mu.Unlock()
 		rep.Reason = out.Reason
 		return
 	}
-	e := t.entries[req.Instance]
-	delete(t.entries, req.Instance)
-	ids := t.queuedOn(req.Instance)
-	inst.mu.Unlock()
-	if e == nil {
+	if !covered {
 		rep.Reason = "the grant does not cover this instance"
 		return
 	}
-	inst.cfg.Host.OpsExpire(req.Instance, ids, "detached")
-	inst.cfg.Host.OpsAttach(req.Instance, false)
+	inst.detachEntry(t, req.Instance, "detached")
 	rep.Ok = true
 	return
 }
@@ -668,24 +708,12 @@ func (inst *Service) stop(msg *app.Msg) (rep wireAck) {
 	}
 	inst.mu.Lock()
 	t, out, ok := inst.resolve(req.Handle, msg)
+	inst.mu.Unlock()
 	if !ok {
-		inst.mu.Unlock()
 		rep.Reason = out.Reason
 		return
 	}
-	t.revoked = "stopped"
-	t.epoch++
-	queued := make(map[uint64][]string)
-	for k := range t.entries {
-		queued[k] = t.queuedOn(k)
-	}
-	inst.mu.Unlock()
-	for k, ids := range queued {
-		if len(ids) > 0 {
-			inst.cfg.Host.OpsExpire(k, ids, "task stopped")
-		}
-		inst.cfg.Host.OpsAttach(k, false)
-	}
+	inst.endTask(t, "stopped")
 	rep.Ok = true
 	return
 }

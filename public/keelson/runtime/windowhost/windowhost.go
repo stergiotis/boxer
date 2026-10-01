@@ -250,6 +250,11 @@ type Inst struct {
 	// renderGoroutine is the id of the goroutine running Frame, recorded
 	// each Frame so the dispatcher can refuse requests made on it.
 	renderGoroutine atomic.Uint64
+
+	// agentChrome draws the host chrome of the app operations contract
+	// (ADR-0269 §SD5): a badge row in each window a task works in, and the
+	// host's dialogs. nil draws nothing. Set before the first Frame.
+	agentChrome AgentChromeI
 }
 
 // NewInst constructs a WindowHost backed by registry. logger is used
@@ -1110,13 +1115,18 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 			// label) so the visual cost is bounded. Per-window keying
 			// avoids id collisions across windows on the shared ids
 			// stack.
-			saveBtnId := ids.PrepareStr("windowhost-save-svg-" +
-				strconv.FormatUint(uint64(w.key), 10))
-			if c.Button(saveBtnId,
-				c.Atoms().Text(icons.IconSaveAs+" SVG").Keep()).
-				SendResp().HasPrimaryClicked() {
-				inst.pendingExportKey = w.key
-				inst.saveDialog(ids).Show()
+			for range c.HorizontalTop().KeepIter() {
+				saveBtnId := ids.PrepareStr("windowhost-save-svg-" +
+					strconv.FormatUint(uint64(w.key), 10))
+				if c.Button(saveBtnId,
+					c.Atoms().Text(icons.IconSaveAs+" SVG").Keep()).
+					SendResp().HasPrimaryClicked() {
+					inst.pendingExportKey = w.key
+					inst.saveDialog(ids).Show()
+				}
+				if inst.agentChrome != nil {
+					inst.agentChrome.RenderWindowChrome(uint64(w.key), ids)
+				}
 			}
 			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes)
 		}
@@ -1138,6 +1148,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	}
 	if opsBusy(snapshot) {
 		c.RequestRepaintAfter(opsRepaintIntervalSecs)
+	}
+	if inst.agentChrome != nil {
+		inst.agentChrome.RenderDialogs(ids)
 	}
 	saveEv := inst.saveDialog(ids).Render()
 	switch act, paths := saveEv.Action, saveEv.Paths; act {

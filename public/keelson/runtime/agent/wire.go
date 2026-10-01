@@ -79,9 +79,11 @@ type wireGrantEntry struct {
 	Operations []string `json:"operations,omitempty"`
 }
 
-// wireGrantRequest asks for a grant.
+// wireGrantRequest asks for a grant, or with Handle for the widening of
+// one.
 type wireGrantRequest struct {
 	V            uint8            `json:"v"`
+	Handle       string           `json:"handle,omitempty"`
 	Plan         string           `json:"plan"`
 	Entries      []wireGrantEntry `json:"entries"`
 	Destinations []string         `json:"destinations,omitempty"`
@@ -93,6 +95,10 @@ type wireGrantReply struct {
 	V      uint8  `json:"v"`
 	Ok     bool   `json:"ok"`
 	Reason string `json:"reason,omitempty"`
+	// Key names the request for status; Phase is pending, approved,
+	// rejected or expired.
+	Key    string `json:"key,omitempty"`
+	Phase  string `json:"phase,omitempty"`
 	Task   string `json:"task,omitempty"`
 	Handle string `json:"handle,omitempty"`
 }
@@ -116,6 +122,11 @@ type wireOutcome struct {
 	Revisions map[string]uint64 `json:"revisions,omitempty"`
 	ResultRef string            `json:"result_ref,omitempty"`
 	Job       string            `json:"job,omitempty"`
+	// Held marks an input_required call that waits on the person.
+	Held bool `json:"held,omitempty"`
+	// Task and Handle answer an approved request's key.
+	Task   string `json:"task,omitempty"`
+	Handle string `json:"handle,omitempty"`
 }
 
 type wireCallReply struct {

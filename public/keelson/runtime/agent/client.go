@@ -92,7 +92,7 @@ func (inst *Client) wait(ctx context.Context) (d time.Duration) {
 	return
 }
 
-func request[Req any, Rep any](ctx context.Context, inst *Client, subject string, req Req) (rep Rep, err error) {
+func roundTrip[Req any, Rep any](ctx context.Context, inst *Client, subject string, req Req) (rep Rep, err error) {
 	if inst == nil || inst.bus == nil {
 		err = eh.Errorf("agent: client without a bus")
 		return
@@ -115,7 +115,7 @@ func request[Req any, Rep any](ctx context.Context, inst *Client, subject string
 
 // Describe lists operations agents may call; it needs no grant.
 func (inst *Client) Describe(ctx context.Context, r DescribeRequest) (apps []AppOperations, err error) {
-	rep, err := request[wireDescribeRequest, wireDescribeReply](ctx, inst, SubjectDescribe,
+	rep, err := roundTrip[wireDescribeRequest, wireDescribeReply](ctx, inst, SubjectDescribe,
 		wireDescribeRequest{V: wireVersion, App: r.App, Search: r.Search, Operation: r.Operation})
 	if err != nil {
 		return
@@ -146,8 +146,10 @@ type GrantEntry struct {
 	Operations []string
 }
 
-// GrantRequest asks for a task grant.
+// GrantRequest asks for a task grant, or with Handle for the widening of
+// one.
 type GrantRequest struct {
+	Handle       string
 	Plan         string
 	Entries      []GrantEntry
 	Destinations []string
@@ -164,15 +166,30 @@ type Grant struct {
 	Handle string
 }
 
-// Request asks for a grant. Only test grants are issued without the
-// person, and only where the host enables them.
+// Request asks for a grant and waits until the person decides or ctx ends.
+// Test grants, where the host enables them, are issued at once.
 func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err error) {
-	req := wireGrantRequest{V: wireVersion, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
+	key, g, err := inst.RequestKey(ctx, r)
+	if err != nil || g.Handle != "" {
+		return
+	}
+	g, err = inst.AwaitGrant(ctx, key)
+	if err == nil && g.Handle == "" && r.Handle != "" {
+		// A widening keeps the task's handle.
+		g = Grant{Handle: r.Handle}
+	}
+	return
+}
+
+// RequestKey sends a request and returns its key without waiting; a test
+// grant comes back at once as g.
+func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string, g Grant, err error) {
+	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
 		DeadlineSecs: uint32(r.Deadline / time.Second)}
 	for _, e := range r.Entries {
 		req.Entries = append(req.Entries, wireGrantEntry{Instance: e.Instance, Mode: e.Mode.String(), Operations: e.Operations})
 	}
-	rep, err := request[wireGrantRequest, wireGrantReply](ctx, inst, SubjectRequest, req)
+	rep, err := roundTrip[wireGrantRequest, wireGrantReply](ctx, inst, SubjectRequest, req)
 	if err != nil {
 		return
 	}
@@ -180,7 +197,7 @@ func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err e
 		err = &RefusedError{Reason: rep.Reason}
 		return
 	}
-	g = Grant{Task: rep.Task, Handle: rep.Handle}
+	key, g = rep.Key, Grant{Task: rep.Task, Handle: rep.Handle}
 	return
 }
 
@@ -195,10 +212,18 @@ type Outcome struct {
 	ResultRef string
 	// Job names a capture, to read with Read once completed.
 	Job string
+	// Held marks an input_required call that waits on the person.
+	Held bool
+	// Task and Handle answer an approved request's key.
+	Task   string
+	Handle string
 }
 
 // Final reports whether no later phase can follow.
 func (inst Outcome) Final() (final bool) {
+	if inst.Held {
+		return false
+	}
 	for _, p := range opwire.AllPhases {
 		if p.String() == inst.Phase {
 			return p.Final()
@@ -221,7 +246,8 @@ type CallRequest struct {
 }
 
 func outcomeOfWire(w wireOutcome) (out Outcome) {
-	return Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job}
+	return Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job,
+		Held: w.Held, Task: w.Task, Handle: w.Handle}
 }
 
 func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
@@ -239,7 +265,7 @@ func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
 
 // Call calls one command or query.
 func (inst *Client) Call(ctx context.Context, r CallRequest) (out Outcome, err error) {
-	return callReply(request[wireCall, wireCallReply](ctx, inst, SubjectCall, wireCall{V: wireVersion, Handle: r.Handle,
+	return callReply(roundTrip[wireCall, wireCallReply](ctx, inst, SubjectCall, wireCall{V: wireVersion, Handle: r.Handle,
 		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason}))
 }
 
@@ -248,19 +274,19 @@ func (inst *Client) Call(ctx context.Context, r CallRequest) (out Outcome, err e
 func (inst *Client) Status(ctx context.Context, handle string, key string, wait time.Duration) (out Outcome, err error) {
 	sub := *inst
 	sub.Timeout = inst.wait(ctx) + wait
-	return callReply(request[wireStatus, wireCallReply](ctx, &sub, SubjectStatus,
+	return callReply(roundTrip[wireStatus, wireCallReply](ctx, &sub, SubjectStatus,
 		wireStatus{V: wireVersion, Handle: handle, Key: key, WaitMs: uint32(wait / time.Millisecond)}))
 }
 
 // Cancel withdraws a queued call by key; a call past the queue keeps its
 // phase, which is returned.
 func (inst *Client) Cancel(ctx context.Context, handle string, key string) (out Outcome, err error) {
-	return callReply(request[wireCancel, wireCallReply](ctx, inst, SubjectCancel, wireCancel{V: wireVersion, Handle: handle, Key: key}))
+	return callReply(roundTrip[wireCancel, wireCallReply](ctx, inst, SubjectCancel, wireCancel{V: wireVersion, Handle: handle, Key: key}))
 }
 
 // Capture captures an instance's window; the outcome's Job names it.
 func (inst *Client) Capture(ctx context.Context, handle string, instance uint64, key string) (out Outcome, err error) {
-	return callReply(request[wireCapture, wireCallReply](ctx, inst, SubjectCapture,
+	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture,
 		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: key}))
 }
 
@@ -273,7 +299,7 @@ type ReadResult struct {
 
 // Read reads a result reference or a completed capture.
 func (inst *Client) Read(ctx context.Context, handle string, ref string) (res ReadResult, err error) {
-	rep, err := request[wireRead, wireReadReply](ctx, inst, SubjectRead, wireRead{V: wireVersion, Handle: handle, Ref: ref})
+	rep, err := roundTrip[wireRead, wireReadReply](ctx, inst, SubjectRead, wireRead{V: wireVersion, Handle: handle, Ref: ref})
 	if err != nil {
 		return
 	}
@@ -296,7 +322,7 @@ type Instance struct {
 
 // List lists the task's open instances.
 func (inst *Client) List(ctx context.Context, handle string) (out []Instance, err error) {
-	rep, err := request[wireHandle, wireListReply](ctx, inst, SubjectList, wireHandle{V: wireVersion, Handle: handle})
+	rep, err := roundTrip[wireHandle, wireListReply](ctx, inst, SubjectList, wireHandle{V: wireVersion, Handle: handle})
 	if err != nil {
 		return
 	}
@@ -322,10 +348,10 @@ func ack(rep wireAck, err error) (rerr error) {
 
 // Detach removes one instance from the task; its queued calls expire.
 func (inst *Client) Detach(ctx context.Context, handle string, instance uint64) (err error) {
-	return ack(request[wireHandle, wireAck](ctx, inst, SubjectDetach, wireHandle{V: wireVersion, Handle: handle, Instance: instance}))
+	return ack(roundTrip[wireHandle, wireAck](ctx, inst, SubjectDetach, wireHandle{V: wireVersion, Handle: handle, Instance: instance}))
 }
 
 // Stop ends the task.
 func (inst *Client) Stop(ctx context.Context, handle string) (err error) {
-	return ack(request[wireHandle, wireAck](ctx, inst, SubjectStop, wireHandle{V: wireVersion, Handle: handle}))
+	return ack(roundTrip[wireHandle, wireAck](ctx, inst, SubjectStop, wireHandle{V: wireVersion, Handle: handle}))
 }

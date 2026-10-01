@@ -29,6 +29,10 @@ type Config struct {
 	// (ADR-0269 §SD6 "Test grants"). The host sets it only on the headless
 	// host and only when TestGrantsEnv asks for it.
 	TestGrants bool
+	// Coordinators are the app ids or subject aliases the person registered
+	// as coordinators (CoordinatorsEnv): the only apps whose requests reach
+	// the person.
+	Coordinators []string
 	// Exec is the executor of the server holding boxer.facts; with it the
 	// action record is also kept there (§SD9). nil keeps only the
 	// in-process record.
@@ -47,6 +51,11 @@ type Service struct {
 	// tasks are keyed by grant handle.
 	tasks    map[string]*task
 	nextCall uint64
+	// requests are the decisions the person owes, keyed by request key,
+	// in arrival order.
+	requests     map[string]*request
+	requestOrder []string
+	unsubClosed  func()
 
 	recMu   sync.Mutex
 	records []ActionRecord
@@ -71,7 +80,8 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if cfg.Registry == nil {
 		cfg.Registry = app.DefaultRegistry
 	}
-	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task)}
+	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task),
+		requests: make(map[string]*request)}
 	if cfg.Exec != nil {
 		s.facts = agentfacts.NewActionStore(cfg.Exec, nil, agentfacts.ActionStoreConfig{})
 		s.flushCh, s.stopFlush, s.flushDone = make(chan struct{}, 1), make(chan struct{}), make(chan struct{})
@@ -86,6 +96,13 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		err = eh.Errorf("agent: subscribe: %w", err)
 		return nil, err
 	}
+	s.unsubClosed, err = s.busClient.Subscribe(app.SubjectInstanceClosed, s.instanceClosed)
+	if err != nil {
+		s.unsub()
+		_ = s.busClient.Close()
+		err = eh.Errorf("agent: subscribe to closing instances: %w", err)
+		return nil, err
+	}
 	return
 }
 
@@ -94,6 +111,9 @@ func (inst *Service) Close() {
 	inst.closeOnce.Do(func() {
 		if inst.unsub != nil {
 			inst.unsub()
+		}
+		if inst.unsubClosed != nil {
+			inst.unsubClosed()
 		}
 		if err := inst.busClient.Close(); err != nil {
 			inst.log.Warn().Err(err).Msg("agent: closing the bus client")
@@ -130,7 +150,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	case SubjectDescribe:
 		inst.reply(msg.Reply, inst.describe(msg))
 	case SubjectRequest:
-		inst.reply(msg.Reply, inst.grant(msg))
+		inst.reply(msg.Reply, inst.requestGrant(msg))
 	case SubjectCall:
 		inst.reply(msg.Reply, inst.call(msg))
 	case SubjectStatus:

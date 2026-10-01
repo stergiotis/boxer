@@ -5,9 +5,10 @@
 // window host's frame, queue and dispatcher — without a model; the chat app
 // becomes the coordinator a model drives.
 //
-// A grant needs the person's approval in host chrome. Where the host shows
-// none, the console works only on the headless host with
-// BOXER_AGENT_TEST_GRANTS set, which scenes do.
+// A grant needs the person's approval in host chrome, and the console must be
+// registered as a coordinator (BOXER_AGENT_COORDINATORS=agentconsole). On
+// the headless host, BOXER_AGENT_TEST_GRANTS issues grants without the
+// person, for scenes.
 package agentconsole
 
 import (

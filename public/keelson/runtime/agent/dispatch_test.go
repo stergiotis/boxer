@@ -183,7 +183,7 @@ func TestGrantNeedsTheTestFlag(t *testing.T) {
 	_, err := r.cli.Request(context.Background(), GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused))
-	assert.Contains(t, refused.Reason, "approval")
+	assert.Contains(t, refused.Reason, "coordinator", "without test grants, a request needs a registered coordinator and the person")
 }
 
 func TestReadThenWriteThroughTheDispatcher(t *testing.T) {
@@ -249,7 +249,7 @@ func TestTheDispatcherDecides(t *testing.T) {
 	assert.Equal(t, "refused", r.call(g, "d", "nope", "{}").Phase)
 	out, err := r.cli.Call(context.Background(), CallRequest{Handle: g.Handle, Instance: 99, Operation: "get_text", Key: "e"})
 	require.NoError(t, err)
-	assert.Equal(t, "input_required", out.Phase, "an instance outside the grant")
+	assert.Equal(t, "refused", out.Phase, "no window by that key is open")
 
 	obs := r.grant(ModeObserve)
 	assert.Equal(t, "completed", r.call(obs, "a", "get_text", "{}").Phase)
