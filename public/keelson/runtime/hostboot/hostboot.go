@@ -728,7 +728,10 @@ func (rt *Runtime) bootAgent() {
 		return
 	}
 	logger := rt.opts.Log
-	cfg := agent.Config{TestGrants: agentTestGrants(agent.TestGrantsEnv.Get(), imzero2env.HeadlessListen.Get() != "")}
+	// Durable where the persist backend is the server holding boxer.facts
+	// (ADR-0269 §SD9), as for llm_calls.
+	cfg := agent.Config{TestGrants: agentTestGrants(agent.TestGrantsEnv.Get(), imzero2env.HeadlessListen.Get() != ""),
+		Exec: rt.PersistExec}
 	if agent.TestGrantsEnv.Get() && !cfg.TestGrants {
 		logger.Warn().Msg("agent: BOXER_AGENT_TEST_GRANTS is honoured only on the headless host; refused here")
 	}
@@ -748,7 +751,7 @@ func (rt *Runtime) bootAgent() {
 	}
 	rt.Agent = svc
 	rt.cleanups = append(rt.cleanups, svc.Close)
-	logger.Info().Bool("testGrants", cfg.TestGrants).Msg("agent: service listening on runtime.agent.*")
+	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")
 }
 
 // agentTestGrants decides whether test grants are issued: only when asked

@@ -127,6 +127,11 @@ type rig struct {
 
 func newRig(t *testing.T, testGrants bool) *rig {
 	t.Helper()
+	return newRigWith(t, func(cfg *Config) { cfg.TestGrants = testGrants })
+}
+
+func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
+	t.Helper()
 	reg := app.NewRegistry()
 	require.NoError(t, reg.RegisterFactory(app.Manifest{Id: docAppId, Display: "Doc", Summary: "edit a doc",
 		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: docOps.Catalog()},
@@ -151,7 +156,9 @@ func newRig(t *testing.T, testGrants bool) *rig {
 		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.eng(key).Submit(op, req)})
 	})
 	require.NoError(t, err)
-	svc, err := NewService(bus, zerolog.Nop(), Config{Registry: reg, Host: host, TestGrants: testGrants})
+	cfg := Config{Registry: reg, Host: host}
+	configure(&cfg)
+	svc, err := NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	cli := NewClient(bus.NewClient("test.coordinator", ClientCaps("test: drive apps")))

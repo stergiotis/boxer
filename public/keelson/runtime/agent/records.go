@@ -1,12 +1,16 @@
 package agent
 
 import (
+	"context"
 	"slices"
 	"strconv"
 	"time"
 
+	"github.com/zeebo/xxh3"
+
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent/agentfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -72,14 +76,90 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 		inst.mu.Unlock()
 	}
 	inst.recMu.Lock()
-	defer inst.recMu.Unlock()
 	if len(inst.records) < keepRecords {
 		inst.records = append(inst.records, r)
+	} else {
+		inst.records[inst.recHead] = r
+		inst.recHead = (inst.recHead + 1) % keepRecords
+	}
+	inst.recMu.Unlock()
+	inst.persist(r)
+}
+
+// persist buffers the row for boxer.facts and wakes the flusher. A failed
+// buffer is logged; the in-process record keeps the row either way.
+func (inst *Service) persist(r ActionRecord) {
+	inst.factsMu.Lock()
+	defer inst.factsMu.Unlock()
+	if inst.facts == nil {
 		return
 	}
-	inst.records[inst.recHead] = r
-	inst.recHead = (inst.recHead + 1) % keepRecords
+	row := RowOf(r)
+	if err := inst.facts.Begin(row.Id, row.Ts, agentfacts.ActionEnvelope{NaturalKey: row.NaturalKey}).AddAgentAction(row).Commit(); err != nil {
+		inst.log.Warn().Err(err).Str("task", r.Task).Str("key", r.Key).Msg("agent: buffer action row")
+		return
+	}
+	select {
+	case inst.flushCh <- struct{}{}:
+	default:
+	}
 }
+
+// factsFlushTimeout bounds one flush of the action record.
+const factsFlushTimeout = 5 * time.Second
+
+// flusher lands buffered rows, once per wake-up and at shutdown.
+func (inst *Service) flusher() {
+	defer close(inst.flushDone)
+	flush := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), factsFlushTimeout)
+		defer cancel()
+		inst.factsMu.Lock()
+		defer inst.factsMu.Unlock()
+		if inst.facts == nil {
+			return
+		}
+		if _, err := inst.facts.Flush(ctx); err != nil {
+			inst.log.Warn().Err(err).Msg("agent: flush the action record (rows stay buffered for the next flush)")
+		}
+	}
+	for {
+		select {
+		case <-inst.flushCh:
+			flush()
+		case <-inst.stopFlush:
+			flush()
+			return
+		}
+	}
+}
+
+// Durable reports whether the action record is also kept on boxer.facts.
+func (inst *Service) Durable() (durable bool) {
+	inst.factsMu.Lock()
+	defer inst.factsMu.Unlock()
+	return inst.facts != nil
+}
+
+// RowOf is the action record row of r. Its natural key is task, key,
+// decision and time, so the dispatcher's row and the final row of one call
+// are two rows.
+func RowOf(r ActionRecord) (row agentfacts.AgentAction) {
+	nk := r.Task + "|" + r.Key + "|" + r.Decision + "|" + strconv.FormatInt(r.At.UnixNano(), 10)
+	row = agentfacts.AgentAction{
+		Id: xxh3.HashString(nk), NaturalKey: []byte(nk), Ts: r.At.UTC(), Kind: actionKindLabel,
+		Task: r.Task, Actor: string(r.Actor), ActorInstance: r.ActorInstance, ToolCallId: r.Key, CallId: r.CallId,
+		Instance: r.Instance, App: string(r.App), Operation: r.Operation, Effect: r.Effect, ArgsDigest: r.ArgsDigest,
+		Decision: r.Decision, Phase: r.Phase, BudgetLeft: uint32(max(r.BudgetLeft, 0)), Test: r.Test,
+	}
+	if r.Reason != "" {
+		row.Reason = []string{r.Reason}
+	}
+	return
+}
+
+// actionKindLabel is the value of the row's kind column.
+const actionKindLabel = "agentAction"
 
 // Actions returns the action record, oldest first.
 func (inst *Service) Actions() (rows []ActionRecord) {

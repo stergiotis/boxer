@@ -7,12 +7,14 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent/agentfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // Config is the service's configuration.
@@ -27,6 +29,10 @@ type Config struct {
 	// (ADR-0269 §SD6 "Test grants"). The host sets it only on the headless
 	// host and only when TestGrantsEnv asks for it.
 	TestGrants bool
+	// Exec is the executor of the server holding boxer.facts; with it the
+	// action record is also kept there (§SD9). nil keeps only the
+	// in-process record.
+	Exec recordstore.ExecutorI
 }
 
 // Service answers `runtime.agent.*` (ADR-0269 §SD3).
@@ -45,6 +51,15 @@ type Service struct {
 	recMu   sync.Mutex
 	records []ActionRecord
 	recHead int
+
+	// facts is the durable half of the action record, nil without an
+	// executor; factsMu guards it, and the flusher lands what record
+	// buffers, so a call never waits on the store.
+	factsMu   sync.Mutex
+	facts     *agentfacts.ActionStore
+	flushCh   chan struct{}
+	stopFlush chan struct{}
+	flushDone chan struct{}
 }
 
 // NewService subscribes the service. The caller MUST invoke Close.
@@ -57,6 +72,11 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		cfg.Registry = app.DefaultRegistry
 	}
 	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task)}
+	if cfg.Exec != nil {
+		s.facts = agentfacts.NewActionStore(cfg.Exec, nil, agentfacts.ActionStoreConfig{})
+		s.flushCh, s.stopFlush, s.flushDone = make(chan struct{}, 1), make(chan struct{}), make(chan struct{})
+		go s.flusher()
+	}
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
 	s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handleRequest)
 	if err != nil {
@@ -77,6 +97,14 @@ func (inst *Service) Close() {
 		}
 		if err := inst.busClient.Close(); err != nil {
 			inst.log.Warn().Err(err).Msg("agent: closing the bus client")
+		}
+		if inst.facts != nil {
+			close(inst.stopFlush)
+			<-inst.flushDone
+			inst.factsMu.Lock()
+			inst.facts.Close()
+			inst.facts = nil
+			inst.factsMu.Unlock()
 		}
 	})
 }
