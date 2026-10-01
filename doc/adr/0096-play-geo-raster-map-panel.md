@@ -633,6 +633,28 @@ time, for the rows it saves the browser tab's single-threaded decode, and
 because it takes the framebuffer size off the result-row count; a view that
 is both large and mostly full costs more bytes than it did.
 
+## Update — 2026-10-01: the server query cache, opt-in
+
+The panel has a **server cache** toggle, off by default. On, the raster runs
+carry `use_query_cache=1`; a Refresh computes every level of the climb it
+restarts afresh (`enable_reads_from_query_cache=0`, the entries rewritten)
+until the view changes. Parameter values are part of the cache key — the
+server keys on the statement with the `{vp_*}` values substituted — so a
+hit needs the same table, render and viewport again: under SD1 that is an
+exact revisit, a history restore, or a second window on the same view.
+
+It stays off by default because of what it can hold. On 2026-10-01, against
+a server with the default 1 MiB `query_cache.max_entry_size_in_bytes`, a
+1024×600 raster of the demo slice was cached when sparse (240 and 9,900
+non-empty pixels, answered again in 3–5 ms instead of 56–62 ms) and was not
+cached at 52 % fill (317,118 pixels, over the limit) — the expensive views
+are the ones the default limit refuses. A server with a larger limit, or
+tile addressing (O2), changes that.
+
+A `readonly=1` user is not asked to skip reading the cache (ClickHouse's
+public demo refuses that setting) but keeps `use_query_cache`, which that
+demo lets its user change; the ADR-0181 2026-10-01 degrade otherwise holds.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
