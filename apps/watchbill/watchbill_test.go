@@ -350,3 +350,29 @@ func TestSplitState(t *testing.T) {
 	assert.False(t, ok)
 	assert.Contains(t, manifest.PersistedKeys, splitKey)
 }
+
+func TestTheCatalogRegisters(t *testing.T) {
+	m, ok := app.LookupManifest(manifest.Id)
+	require.True(t, ok)
+	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	cancel, found := m.Operations.Lookup(opCancel)
+	require.True(t, found)
+	assert.Equal(t, app.OperationEffectConsequential, cancel.Effect, "cancel writes outside the window")
+}
+
+func TestSetFiltersThroughTheCatalog(t *testing.T) {
+	inst := newApp()
+	h := ops.Bind(inst)
+	args, err := buscodec.Encode(SetFiltersArgs{States: []string{"failed"}, Kind: "mail"})
+	require.NoError(t, err)
+	_, err = h.ApplyCommand(app.OperationCall{Writer: "task:t"}, opSetFilter, args)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"failed"}, inst.filters.stateList())
+	assert.Equal(t, "mail", inst.kindDraft)
+	assert.Equal(t, "failed|mail", h.ResourceValue(resFilters))
+
+	bad, err := buscodec.Encode(SetFiltersArgs{States: []string{"exploded"}})
+	require.NoError(t, err)
+	_, err = h.ApplyCommand(app.OperationCall{}, opSetFilter, bad)
+	require.Error(t, err)
+}
