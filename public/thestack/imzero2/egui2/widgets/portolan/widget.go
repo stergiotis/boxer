@@ -39,7 +39,9 @@ type Options struct {
 	NoPinchZoom, NoBoxZoom, NoKeyboard               bool
 	NoZoomAnimation                                  bool
 	Handlers                                         HandlerOptions
-	// Background is the colour under the tiles (0 = a light grey).
+	// Background is the colour under the tiles, 0xRRGGBBAA; 0 takes the
+	// design system's panel background (styletokens.NeutralBgPanel), which is
+	// also the sea under landoverlay's default land.
 	Background uint32
 	// HideAttribution suppresses the source's attribution label.
 	HideAttribution bool
@@ -153,8 +155,6 @@ type tilePixels struct {
 // generation above the per-tile pixel generation.
 func (m *Map) tileVersion(t *tilePixels) uint64 { return m.srcGen<<32 | t.gen }
 
-const defaultBackgroundRGBA = 0xd8d8dcff
-
 // mapKeyMask is what the map eats while focused: the arrows pan, Escape
 // cancels a box zoom. The zoom keys wait for keycodes the vocabulary lacks.
 var mapKeyMask = keycodes.MaskOf(keycodes.ArrowUp, keycodes.ArrowDown, keycodes.ArrowLeft, keycodes.ArrowRight, keycodes.Escape)
@@ -172,7 +172,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Map {
 		opts.Source = opts.Source.Normalized()
 	}
 	if opts.Background == 0 {
-		opts.Background = defaultBackgroundRGBA
+		opts.Background = styletokens.NeutralBgPanel.AsHex()
 	}
 	hopts := opts.Handlers.withDefaults()
 	view := NewView(ViewOptions{
