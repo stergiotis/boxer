@@ -60,6 +60,19 @@ Three things make a naive attempt fail:
    a real local table. This recipe does the latter: the panel re-aggregates on
    every settled viewport, so a local table is what makes pan/zoom fast.
 
+### Alternative — point play at the public instance
+
+Play can also read the demo's HTTPS endpoint directly, with no local server:
+set `CLICKHOUSE_URL` to the endpoint and `CLICKHOUSE_USER=website`. That user
+is `readonly=1`; play learns this from the first refused run and sends its
+runs without the settings such a user refuses, and the endpoint label reads
+"read-only user, runs unstamped"
+([ADR-0181](../adr/0181-leeway-dql-authoring-surface.md) Update 2026-10-01).
+Checked once on 2026-10-01 with a world view of `planes_mercator_sample100`.
+Every settled view re-aggregates the remote table and items 1 and 2 above
+still apply, so keep to the sampled tables; the local table below is what
+makes pan and zoom fast.
+
 ## Step 1 — start a local ClickHouse server
 
 Serves HTTP on `:8123` by default, which is also `play`'s default

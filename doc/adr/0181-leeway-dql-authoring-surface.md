@@ -785,3 +785,25 @@ while still admitting the per-query settings play sends (`log_comment`,
 variable set, the Arrow path sends no `readonly`, so DDL and `SYSTEM`
 statements run from Run as they did before; setting it opts into every
 write, not only the INSERT wrapper.
+
+## Update 2026-10-01 — a server that is already read-only for the user
+
+A server that holds play's user at `readonly=1` refuses any request that
+changes a setting, so `readonly=2` — and with it the ADR-0115 `log_comment`
+stamp and the HTTP progress pair — made every run fail with `READONLY`
+(Code 164) before a row was read; ClickHouse's public demo users are such
+users. At `readonly=2` the server refuses changing `readonly` itself.
+
+Play now degrades by what the server says, and only after it says it. A run
+goes out as before; when the server refuses it with `READONLY`, play asks the
+user's level once (`SELECT getSetting('readonly')`, which carries no
+settings), remembers it per user and endpoint, and sends the run again
+without what that level refuses: `readonly=2` at level 1 or more — the
+server already refuses writes and DDL for this user — and at level 1 also
+the stamp and the progress settings. Later runs to that endpoint go out
+degraded from the start, and the endpoint label says "read-only user" or
+"read-only user, runs unstamped". A writable server never sees the probe,
+and `readonly=2` is never dropped for a writable user. If the level cannot
+be learned the run fails with the server's own diagnostic, unchanged. The
+diagnostics probe (`Client.ProbeStatement`) follows the same rule. The
+mechanism is in `apps/play/play_readonly.go`.
