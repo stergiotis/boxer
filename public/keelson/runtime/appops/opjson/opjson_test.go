@@ -160,3 +160,18 @@ func TestFieldNames(t *testing.T) {
 	assert.Contains(t, names, "result_id")
 	assert.NotContains(t, names, "skipped")
 }
+
+func TestOmittableFieldsAreOptional(t *testing.T) {
+	type args struct {
+		Limit  uint32   `json:",omitzero"`
+		Fields []string `json:"cols,omitempty"`
+		Need   string
+	}
+	v, err := Decode([]byte(`{"need":"x"}`), reflect.TypeFor[args]())
+	require.NoError(t, err)
+	assert.Equal(t, args{Need: "x"}, v.Interface().(args))
+	s, err := Schema(reflect.TypeFor[args]())
+	require.NoError(t, err)
+	assert.Contains(t, string(s), `"required":["need"]`)
+	assert.Contains(t, string(s), `"cols"`)
+}

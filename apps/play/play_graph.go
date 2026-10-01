@@ -881,6 +881,9 @@ func (inst *queryGraph) RunMain(sql string, signals map[string]string, sourceBuf
 	inst.mainLane.Execute(sql, signals, sourceBuffer)
 }
 
+// MainConfined reports the label of `main`'s result (ADR-0270 §SD4).
+func (inst *queryGraph) MainConfined() bool { return inst.mainLane.Confined() }
+
 // CancelMain aborts an in-flight `main` execution.
 func (inst *queryGraph) CancelMain() { inst.mainLane.Cancel() }
 

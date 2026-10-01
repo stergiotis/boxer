@@ -308,6 +308,9 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// PlayLaunch out of a window the user acted in and hands it back
 		// at the next plain open. play is the reference adopter (§SD8).
 		Workingset: true,
+		// What an agent may read and do in a window under a task grant
+		// (ADR-0269, ADR-0270).
+		Operations: playOps.Catalog(),
 	}
 	return
 }
@@ -528,7 +531,11 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	// Every per-frame capability the engine reads off the context — the
 	// window-focus gate, the column-width store — is PlayApp.Frame's job, so
 	// this launcher and an out-of-tree re-host discharge it identically.
+	// The agent mark (ADR-0270 §SD3) is judged after the write-back and
+	// settled once the frame's own changes are in.
+	inst.inner.checkAgentMark()
 	err = inst.inner.Frame(ctx)
+	inst.inner.settleAgentMark()
 	return
 }
 

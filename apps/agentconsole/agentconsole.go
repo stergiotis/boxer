@@ -44,10 +44,12 @@ type App struct {
 	wg     sync.WaitGroup
 
 	// Bound to widgets; render goroutine only.
-	windowKey string
-	op        string
-	args      string
-	n         int
+	openApp      string
+	destinations string
+	windowKey    string
+	op           string
+	args         string
+	n            int
 
 	mu        sync.Mutex
 	grant     agent.Grant
@@ -60,7 +62,8 @@ type App struct {
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), op: "get_state", args: "{}"}
+	inst = &App{ids: c.NewWidgetIdStack(), op: "get_state", args: "{}", openApp: "opsdemo",
+		destinations: DestinationsSeed.Get()}
 	return
 }
 
@@ -135,7 +138,11 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(inst.ids.PrepareStr("open-demo"), c.Atoms().Text("Open operations demo").Keep()).SendResp().HasPrimaryClicked() {
-			inst.openDemo()
+			inst.openDemo(string(opsdemo.AppId))
+		}
+		c.TextEdit(inst.ids.PrepareStr("open-app"), inst.openApp, false).DesiredWidth(90).HintText("app").SendRespVal(&inst.openApp)
+		if c.Button(inst.ids.PrepareStr("open-app-button"), c.Atoms().Text("Open").Keep()).SendResp().HasPrimaryClicked() {
+			inst.openDemo(strings.TrimSpace(inst.openApp))
 		}
 		c.Label("window").Send()
 		c.TextEdit(inst.ids.PrepareStr("window-key"), inst.windowKey, false).DesiredWidth(80).HintText("window key").SendRespVal(&inst.windowKey)
@@ -145,6 +152,11 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		if c.Button(inst.ids.PrepareStr("stop"), c.Atoms().Text("Stop").Keep()).SendResp().HasPrimaryClicked() {
 			inst.stop()
 		}
+	}
+	for range c.HorizontalTop().KeepIter() {
+		c.Label("destinations").Send()
+		c.TextEdit(inst.ids.PrepareStr("destinations"), inst.destinations, false).DesiredWidth(320).
+			HintText("e.g. keelson:apps, clickhouse:localhost:8123").SendRespVal(&inst.destinations)
 	}
 	grantLine := "no grant"
 	if grant.Handle != "" {
@@ -187,10 +199,17 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	return
 }
 
-func (inst *App) openDemo() {
+// openDemo opens a window of an app by id or subject alias.
+func (inst *App) openDemo(name string) {
 	bus := inst.bus
+	target := app.AppIdT(name)
+	for _, m := range app.AllManifests() {
+		if string(m.Id) == name || m.Id.SubjectAlias() == name {
+			target = m.Id
+		}
+	}
 	inst.spawn(func(ctx context.Context) {
-		key, err := windowhost.RequestOpen(bus, opsdemo.AppId, "", nil)
+		key, err := windowhost.RequestOpen(bus, target, "", nil)
 		if err != nil {
 			inst.setNote("open: " + err.Error())
 			return
@@ -208,10 +227,16 @@ func (inst *App) requestGrant() {
 		inst.setNote("give a window key first")
 		return
 	}
+	var dests []string
+	for _, d := range strings.Split(inst.destinations, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			dests = append(dests, d)
+		}
+	}
 	inst.setNote("asked the person; waiting for approval")
 	inst.spawn(func(ctx context.Context) {
 		g, err := inst.cli.Request(ctx, agent.GrantRequest{Plan: "drive window " + strconv.FormatUint(key, 10) + " by hand",
-			Entries: []agent.GrantEntry{{Instance: key, Mode: agent.ModeAct}}})
+			Entries: []agent.GrantEntry{{Instance: key, Mode: agent.ModeAct}}, Destinations: dests})
 		if err != nil {
 			inst.setNote("grant: " + err.Error())
 			return

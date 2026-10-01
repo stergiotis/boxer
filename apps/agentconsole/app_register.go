@@ -14,6 +14,8 @@ package agentconsole
 import (
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/public/config/env"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -41,6 +43,15 @@ var manifest = app.Manifest{
 		PreferredHeight: 560,
 	},
 }
+
+// DestinationsSeed fills the destinations field of a new window (ADR-0009
+// seed variable, the BOXER_CHAT_DRAFT shape): a headless scene cannot focus
+// an empty unnamed text input.
+var DestinationsSeed = env.NewString(env.Spec{
+	Name:        "BOXER_AGENTCONSOLE_DESTINATIONS",
+	Description: "comma-separated grant destinations in the agent console's field when a window opens; for scenes and demos",
+	Category:    env.CategoryE("boxer-agentconsole"),
+})
 
 func init() {
 	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {

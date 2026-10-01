@@ -10,7 +10,8 @@
 //     name in snake_case; `json:"-"` and unexported fields are skipped,
 //     embedded fields are refused. A `desc` tag becomes the description.
 //     Every field is required unless it is a pointer, which may also be
-//     null. Unknown keys are refused.
+//     null, or its `json` tag says omitempty or omitzero, when a missing
+//     key leaves its zero value. Unknown keys are refused.
 //   - int8…int32, uint8…uint32 → integer within the type's range.
 //   - int, int64, uint, uint64 → a decimal string: a JSON number cannot
 //     carry 64 bits exactly.
@@ -98,10 +99,17 @@ func fields(t reflect.Type) (out []field, err error) {
 			continue
 		}
 		name := ""
+		omittable := false
 		if tag, ok := f.Tag.Lookup("json"); ok {
-			name, _, _ = strings.Cut(tag, ",")
+			var opts string
+			name, opts, _ = strings.Cut(tag, ",")
 			if name == "-" {
 				continue
+			}
+			for _, o := range strings.Split(opts, ",") {
+				if o == "omitempty" || o == "omitzero" {
+					omittable = true
+				}
 			}
 		}
 		if name == "" {
@@ -112,7 +120,7 @@ func fields(t reflect.Type) (out []field, err error) {
 			return
 		}
 		seen[name] = f.Name
-		out = append(out, field{index: i, name: name, desc: f.Tag.Get("desc"), optional: f.Type.Kind() == reflect.Pointer})
+		out = append(out, field{index: i, name: name, desc: f.Tag.Get("desc"), optional: f.Type.Kind() == reflect.Pointer || omittable})
 	}
 	return
 }
