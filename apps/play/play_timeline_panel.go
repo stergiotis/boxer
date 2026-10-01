@@ -29,6 +29,23 @@ const (
 	signalTimelineMax SignalID = "tl_max"
 )
 
+// signalTimelineFrom / signalTimelineTo carry the window brushed on the
+// Timeline (ADR-0043 §SD16's brush), for any query to filter on as
+// `{tl_from:DateTime64(3, 'UTC')}` / `{tl_to:DateTime64(3, 'UTC')}`. With no
+// window brushed they span every instant DateTime64 holds, so a filter on
+// them keeps everything and a query reading them runs before any brush.
+const (
+	signalTimelineFrom SignalID = "tl_from"
+	signalTimelineTo   SignalID = "tl_to"
+)
+
+// timelineWindowFloor / timelineWindowCeil are the unbrushed window: the
+// first and last instants DateTime64 represents.
+const (
+	timelineWindowFloor = "1900-01-01 00:00:00.000"
+	timelineWindowCeil  = "2299-12-31 23:59:59.999"
+)
+
 // bandsNodeID is the id of the Timeline's bands node — the bands-editor SQL run
 // on the driver's bands lane (4b). It is the chBands channel's fixed source
 // (option a): a panel-authored node, not one of the split-graph nodes.

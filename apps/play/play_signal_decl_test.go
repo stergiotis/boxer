@@ -68,7 +68,7 @@ func TestSignalSeeds(t *testing.T) {
 func TestSignalsWrittenByIsScoped(t *testing.T) {
 	assert.Nil(t, signalsWrittenBy("table"), "the selection family belongs to no tab")
 	assert.Nil(t, signalsWrittenBy("nonexistent"))
-	assert.Equal(t, []SignalID{signalTimelineMin, signalTimelineMax}, signalsWrittenBy("timeline"))
+	assert.Equal(t, []SignalID{signalTimelineMin, signalTimelineMax, signalTimelineFrom, signalTimelineTo}, signalsWrittenBy("timeline"))
 }
 
 // The array case of the signal encoder (ADR-0231 §SD8): a multi-selection has

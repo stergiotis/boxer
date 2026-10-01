@@ -86,6 +86,14 @@ type MapDriver struct {
 	cacheUse   atomic.Bool
 	cacheFresh atomic.Bool
 
+	// timeCol names the source's time column; while the Timeline has a
+	// window brushed (windowFrom/windowTo, read off the tl_from/tl_to
+	// signals each frame), the raster keeps only rows inside it. Empty, or
+	// no window, filters nothing.
+	timeCol    string
+	windowFrom string
+	windowTo   string
+
 	// renderIdx selects builtinRenders; customColorSQL is the colour expression
 	// used when the "Custom" render is active.
 	renderIdx      int
@@ -300,6 +308,7 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		table:     "planes_mercator_sample100",
 		sampling:  100,
 		refine:    true,
+		timeCol:   "time",
 		opacity:   0.9,
 		noTiles:   true,
 		live:      true,
@@ -399,6 +408,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 			inst.viewStableAt = time.Now()
 		}
 		settled := !inst.viewStableAt.IsZero() && time.Since(inst.viewStableAt) >= mapDebounce
+		inst.readWindow(sig)
 		if (inst.live && settled) || inst.forceRefresh {
 			inst.forceRefresh = false
 			b, sz := v.Bounds(), v.Size()
@@ -629,7 +639,75 @@ func (inst *MapDriver) renderTableEditor() {
 				Width:     float32(math.Inf(1)),
 			})
 		}
+		for range c.Horizontal().KeepIter() {
+			c.Label("time column").Send()
+			c.TextEdit(inst.ids.PrepareStr("map-time-col"), inst.timeCol, false).
+				HintText("none").SendRespVal(&inst.timeCol)
+			for rt := range c.RichTextLabel("filtered by the Timeline's brushed window") {
+				rt.Small().Weak()
+			}
+		}
 	}
+}
+
+// readWindow takes the Timeline's brushed window off this frame's signals.
+// The unbounded values tl_from/tl_to carry with nothing brushed read as no
+// window.
+func (inst *MapDriver) readWindow(sig SignalEnvI) {
+	inst.windowFrom, inst.windowTo = "", ""
+	if sig == nil {
+		return
+	}
+	from, ok1 := sig.Get(signalTimelineFrom)
+	to, ok2 := sig.Get(signalTimelineTo)
+	if !ok1 || !ok2 || (from.Raw == timelineWindowFloor && to.Raw == timelineWindowCeil) {
+		return
+	}
+	inst.windowFrom, inst.windowTo = from.Raw, to.Raw
+}
+
+// windowStatus names the window the raster is filtered to, for the status
+// line; empty when it is not filtered.
+func (inst *MapDriver) windowStatus() string {
+	if ww, _ := inst.windowWhere(); ww == "" {
+		return ""
+	}
+	return fmt.Sprintf("window %s on %s", formatWindow(inst.windowFrom, inst.windowTo), strings.TrimSpace(inst.timeCol))
+}
+
+// formatWindow shortens a window's two raw bounds for reading: to the second,
+// and the date once when both fall on the same day.
+func formatWindow(from, to string) string {
+	trim := func(s string) string {
+		if i := strings.IndexByte(s, '.'); i >= 0 {
+			return s[:i]
+		}
+		return s
+	}
+	from, to = trim(from), trim(to)
+	if len(from) > 11 && len(to) > 11 && from[:11] == to[:11] {
+		to = to[11:]
+	}
+	return from + " – " + to + " UTC"
+}
+
+// mapTimeColRe admits a plain column name for the time column.
+var mapTimeColRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// windowWhere is the predicate the brushed window adds to the raster's WHERE,
+// read through the tl_from/tl_to slots so a new brush re-keys on params; empty
+// with no window or no time column.
+func (inst *MapDriver) windowWhere() (where string, err string) {
+	col := strings.TrimSpace(inst.timeCol)
+	if inst.windowFrom == "" || col == "" {
+		return
+	}
+	if !mapTimeColRe.MatchString(col) {
+		err = "time column must be a plain column name"
+		return
+	}
+	where = col + " BETWEEN {tl_from:DateTime64(3, 'UTC')} AND {tl_to:DateTime64(3, 'UTC')}"
+	return
 }
 
 // Geometry of the custom-colour editor's pane.
@@ -773,17 +851,29 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 	if r.custom {
 		colorSQL = inst.customColorSQL
 	}
+	where := r.where
+	ww, werr := inst.windowWhere()
+	if werr != "" {
+		inst.controlErr = werr
+		return
+	}
+	if ww != "" {
+		if where != "" {
+			where = "(" + where + ") AND "
+		}
+		where += ww
+	}
 	// The ladder restarts only when what it was built for changed: this runs
 	// on every settled frame, and a restart re-demands the coarsest level.
 	levels := mapLadderLevels(table, sampling, inst.refine, inst.ladder.missing)
 	// Keyed on the source, not on the levels: dropping a missing level must
 	// not read as a change.
-	inputs := fmt.Sprintf("%v|%d|%d|%s|%d|%t|%s|%s", b, w, h, table, sampling, inst.refine, colorSQL, r.where)
+	inputs := fmt.Sprintf("%v|%d|%d|%s|%d|%t|%s|%s|%s|%s", b, w, h, table, sampling, inst.refine, colorSQL, where, inst.windowFrom, inst.windowTo)
 	if inst.ladder.reset(inputs, levels) {
 		inst.ladder.noBudget = inst.refreshPending
 	}
 	inst.refreshPending = false
-	inst.colorSQL, inst.extraWhere = colorSQL, r.where
+	inst.colorSQL, inst.extraWhere = colorSQL, where
 	inst.rebuildLevelTemplate()
 
 	emit.Emit("vp_min_x", uint64(b.minX))
@@ -992,6 +1082,9 @@ func (inst *MapDriver) statusLine() string {
 		msg := fmt.Sprintf("%d×%d raster · %s", inst.packW, inst.packH, builtinRenders[inst.renderIdx].name)
 		if ls := inst.ladder.status(inst.packLevel, inst.loading); ls != "" {
 			msg += " · " + ls
+		}
+		if ws := inst.windowStatus(); ws != "" {
+			msg += " · " + ws
 		}
 		return msg
 	default:
