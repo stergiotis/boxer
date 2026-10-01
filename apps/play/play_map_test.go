@@ -1,11 +1,14 @@
 package play
 
 import (
+	"context"
 	"errors"
 	"math"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -568,4 +571,119 @@ func TestRasterTemplateAlphaFromColourBlock(t *testing.T) {
 	require.NotEqual(t, "255", lit[3], "a lone sample's alpha follows its transparency")
 	require.Equal(t, lit[0], lit[3], "alpha is the block's own expression")
 	require.Equal(t, "0\t0\t0\t0", lines[1], "an empty pixel stays alpha 0")
+}
+
+// The ladder derives its levels from the source's name: coarsest first, each
+// with its own sampling factor, the reader's table never marked derived.
+func TestMapLadderLevels(t *testing.T) {
+	lv := func(table string, sampling uint32, derived bool) mapLevel {
+		return mapLevel{table: table, sampling: sampling, derived: derived}
+	}
+	require.Equal(t, []mapLevel{lv("planes_mercator_sample100", 100, false), lv("planes_mercator_sample10", 10, true), lv("planes_mercator", 1, true)},
+		mapLadderLevels("planes_mercator_sample100", 7, true, nil))
+	require.Equal(t, []mapLevel{lv("planes_mercator_sample100", 100, true), lv("planes_mercator_sample10", 10, true), lv("planes_mercator", 1, false)},
+		mapLadderLevels("planes_mercator", 7, true, nil))
+	require.Equal(t, []mapLevel{lv("db.t_sample10", 10, false), lv("db.t", 1, true)},
+		mapLadderLevels("db.t_sample10", 7, true, nil))
+	require.Equal(t, []mapLevel{lv("t_sample100", 100, false), lv("t", 1, true)},
+		mapLadderLevels("t_sample100", 7, true, map[string]bool{"t_sample10": true}), "a missing level is left out")
+	require.Equal(t, []mapLevel{lv("planes_mercator_sample100", 7, false)},
+		mapLadderLevels("planes_mercator_sample100", 7, false, nil), "refine off reads the one table at the manual sampling")
+	src := "remoteSecure('h:9440', default.planes_mercator_sample100, 'website', '')"
+	require.Equal(t, []mapLevel{lv(src, 7, false)}, mapLadderLevels(src, 7, true, nil), "a table function is not laddered")
+}
+
+func TestMapLevelLabel(t *testing.T) {
+	require.Equal(t, "1 % sample", mapLevel{sampling: 100}.label())
+	require.Equal(t, "10 % sample", mapLevel{sampling: 10}.label())
+	require.Equal(t, "full table", mapLevel{sampling: 1}.label())
+}
+
+// A level climbs only within budget, Refresh's noBudget climbs past it, and
+// the last level stays.
+func TestMapLadderServedAndBudget(t *testing.T) {
+	levels := mapLadderLevels("t_sample100", 1, true, nil)
+	var l mapLadder
+	require.True(t, l.reset("a", levels))
+	require.False(t, l.reset("a", levels), "the same inputs leave the ladder where it is")
+	require.True(t, l.served(time.Second))
+	require.Equal(t, 1, l.level)
+	require.False(t, l.served(mapLadderBudget+time.Second), "an overrun stops the climb")
+	require.True(t, l.stopped)
+	require.Contains(t, l.status(l.current(), false), "refinement paused")
+
+	require.True(t, l.reset("b", levels))
+	l.noBudget = true
+	require.True(t, l.served(mapLadderBudget+time.Second))
+	require.True(t, l.served(mapLadderBudget+time.Second))
+	require.False(t, l.served(0), "the last level stays")
+	require.Equal(t, "full table", l.status(l.current(), false))
+}
+
+// ladderExecutor serves a 1×1 raster for any table except the missing ones,
+// which fail as ClickHouse does, and records the tables it was asked for.
+type ladderExecutor struct {
+	mu      sync.Mutex
+	missing map[string]bool
+	tables  []string
+}
+
+func (inst *ladderExecutor) execute(_ context.Context, c compiledNode, _ memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	m := regexp.MustCompile(`(?m)^FROM (\S+)$`).FindStringSubmatch(c.SQL)
+	inst.mu.Lock()
+	inst.tables = append(inst.tables, m[1])
+	inst.mu.Unlock()
+	if inst.missing[m[1]] {
+		err = errString("clickhouse http 404: Code: 60. DB::Exception: Unknown table expression identifier '" + m[1] + "'. (UNKNOWN_TABLE)")
+		return
+	}
+	rec = rgbaRec([]uint8{1}, []uint8{2}, []uint8{3}, []uint8{4})
+	schema = rec.Schema()
+	return
+}
+
+func (inst *ladderExecutor) asked() []string {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return append([]string(nil), inst.tables...)
+}
+
+// The panel climbs the ladder one landed level at a time under one set of
+// vp_* params, skips a derived level the server lacks, names the level on
+// screen, and a settle with the same view does not start it over.
+func TestMapDriverClimbsTheLadder(t *testing.T) {
+	exec := &ladderExecutor{missing: map[string]bool{"planes_mercator_sample10": true}}
+	d := NewMapDriver(nil, nil)
+	d.lane.close()
+	d.lane = newNodeLane(exec, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+	g := newQueryGraph(nil, nil)
+
+	settle := func() map[string]string {
+		d.updateViewport(47, 48, 8, 9, 64, 64, graphEmitter{graph: g})
+		return resolveSignalNames(d.templateReads, nil, g.signals())
+	}
+	params := settle()
+	require.Eventually(t, func() bool {
+		d.demandRaster(params)
+		return d.packLevel.table == "planes_mercator" && !d.loading
+	}, 2*time.Second, time.Millisecond)
+	require.Equal(t, []string{"planes_mercator_sample100", "planes_mercator_sample10", "planes_mercator"}, exec.asked())
+	require.Nil(t, d.laneErr, "the skipped level's error is not the panel's")
+	require.True(t, d.ladder.missing["planes_mercator_sample10"])
+	require.Contains(t, d.statusLine(), "full table")
+
+	params = settle()
+	for range 20 {
+		d.demandRaster(params)
+	}
+	require.Len(t, exec.asked(), 3, "an unchanged settle neither restarts nor re-runs")
+
+	d.updateViewport(47, 48, 9, 10, 64, 64, graphEmitter{graph: g})
+	params = resolveSignalNames(d.templateReads, nil, g.signals())
+	require.Eventually(t, func() bool {
+		d.demandRaster(params)
+		return len(exec.asked()) == 5 && !d.loading
+	}, 2*time.Second, time.Millisecond)
+	require.Equal(t, []string{"planes_mercator_sample100", "planes_mercator"}, exec.asked()[3:], "a pan starts over, without the missing level")
 }

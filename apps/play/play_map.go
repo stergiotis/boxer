@@ -64,6 +64,19 @@ type MapDriver struct {
 	initZoom     float64
 	forceRefresh bool
 
+	// refine turns the sampling ladder on (play_map_ladder.go); off, the one
+	// table named is read at the manual sampling. ladder is its state, and
+	// colorSQL/extraWhere the render the last settle built the template
+	// with, which a climb rebuilds it from. packLevel is the level whose
+	// raster is on screen. refreshPending marks the settle a Refresh asked
+	// for, which lets the ladder climb past its budget.
+	refine         bool
+	ladder         mapLadder
+	colorSQL       string
+	extraWhere     string
+	packLevel      mapLevel
+	refreshPending bool
+
 	// renderIdx selects builtinRenders; customColorSQL is the colour expression
 	// used when the "Custom" render is active.
 	renderIdx      int
@@ -272,6 +285,7 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		lane:      newNodeLane(clientExecutor{client: client, opts: newExecOptions("map")}, memory.NewGoAllocator(), mapFetchTimeout),
 		table:     "planes_mercator_sample100",
 		sampling:  100,
+		refine:    true,
 		opacity:   0.9,
 		noTiles:   true,
 		live:      true,
@@ -387,14 +401,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	if inst.template != "" {
 		params := resolveSignalNamesWithDefaults(inst.templateReads, nil, sig)
 		if hasViewportParams(params) {
-			view := inst.lane.demand(compiledNode{SQL: inst.template, Params: params})
-			inst.noteLane(view)
-			if view.rec != nil {
-				if view.fingerprint != inst.lastPackedFP {
-					inst.repack(view.rec, view.params, view.fingerprint)
-				}
-				view.rec.Release()
-			}
+			inst.demandRaster(params)
 		}
 	}
 
@@ -429,6 +436,38 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 		inst.pm.Render(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
 	} else {
 		inst.pm.RenderFill(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
+	}
+}
+
+// demandRaster demands the raster node for this frame's compiled params,
+// repacks a newly served result, and moves the sampling ladder: a derived
+// level the server lacks is skipped, and a level whose own result landed
+// hands over to the next (play_map_ladder.go).
+func (inst *MapDriver) demandRaster(params map[string]string) {
+	node := compiledNode{SQL: inst.template, Params: params}
+	view := inst.lane.demand(node)
+	inst.noteLane(view)
+	// The current level's own result, not a last-good one from the
+	// level before it.
+	landed := view.key == node.key() && !view.loading
+	if landed && view.err != nil && isUnknownTable(view.err) && inst.ladder.dropMissing() {
+		// A derived level the server does not have: skip it.
+		inst.laneErr = nil
+		inst.rebuildLevelTemplate()
+	}
+	if view.rec != nil {
+		if view.fingerprint != inst.lastPackedFP {
+			inst.repack(view.rec, view.params, view.fingerprint)
+		}
+		view.rec.Release()
+	}
+	if landed && view.err == nil && view.rec != nil {
+		// Two levels can serve identical bytes, which repack skips; the
+		// level on screen is the one whose result landed either way.
+		inst.packLevel = inst.ladder.current()
+		if inst.ladder.served(view.elapsed) {
+			inst.rebuildLevelTemplate()
+		}
 	}
 }
 
@@ -474,8 +513,13 @@ func (inst *MapDriver) cancelFetch() {
 func (inst *MapDriver) renderControls() {
 	inst.renderTableEditor()
 	for range c.Horizontal().KeepIter() {
-		c.SliderF64(inst.ids.PrepareStr("map-sampling"), inst.sampling, 1, 100).
-			Text("sampling").SendRespVal(&inst.sampling)
+		// With refine on, each level brings its own sampling factor; the
+		// slider is the manual factor for a single table.
+		c.Checkbox(inst.ids.PrepareStr("map-refine"), inst.refine, "refine").SendRespVal(&inst.refine)
+		if !inst.refine {
+			c.SliderF64(inst.ids.PrepareStr("map-sampling"), inst.sampling, 1, 100).
+				Text("sampling").SendRespVal(&inst.sampling)
+		}
 		inst.renderModeCombo()
 	}
 	if builtinRenders[inst.renderIdx].custom {
@@ -666,6 +710,17 @@ func (inst *MapDriver) renderModeCombo() {
 func (inst *MapDriver) requestRefresh() {
 	inst.forceRefresh = true // re-emit even if the camera is unchanged
 	inst.lane.forget()       // re-execute even for the identical (SQL, params)
+	// Start the ladder over, and let it climb past its budget this time.
+	inst.ladder.inputs = ""
+	inst.refreshPending = true
+}
+
+// rebuildLevelTemplate points the raster node at the ladder's current level,
+// with the render the last settle used; the vp_* signals are unchanged, so
+// the next demand re-keys on the SQL alone.
+func (inst *MapDriver) rebuildLevelTemplate() {
+	lv := inst.ladder.current()
+	inst.ensureTemplate(lv.table, lv.sampling, inst.colorSQL, inst.extraWhere)
 }
 
 // updateViewport publishes the settled viewport as the six reserved vp_*
@@ -698,7 +753,18 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 	if r.custom {
 		colorSQL = inst.customColorSQL
 	}
-	inst.ensureTemplate(table, sampling, colorSQL, r.where)
+	// The ladder restarts only when what it was built for changed: this runs
+	// on every settled frame, and a restart re-demands the coarsest level.
+	levels := mapLadderLevels(table, sampling, inst.refine, inst.ladder.missing)
+	// Keyed on the source, not on the levels: dropping a missing level must
+	// not read as a change.
+	inputs := fmt.Sprintf("%v|%d|%d|%s|%d|%t|%s|%s", b, w, h, table, sampling, inst.refine, colorSQL, r.where)
+	if inst.ladder.reset(inputs, levels) {
+		inst.ladder.noBudget = inst.refreshPending
+	}
+	inst.refreshPending = false
+	inst.colorSQL, inst.extraWhere = colorSQL, r.where
+	inst.rebuildLevelTemplate()
 
 	emit.Emit("vp_min_x", uint64(b.minX))
 	emit.Emit("vp_max_x", uint64(b.maxX))
@@ -858,7 +924,11 @@ func (inst *MapDriver) statusLine() string {
 	case inst.cancelled:
 		return "fetch cancelled — pan, zoom, or Refresh to run again"
 	case inst.packW > 0:
-		return fmt.Sprintf("%d×%d raster · %s", inst.packW, inst.packH, builtinRenders[inst.renderIdx].name)
+		msg := fmt.Sprintf("%d×%d raster · %s", inst.packW, inst.packH, builtinRenders[inst.renderIdx].name)
+		if ls := inst.ladder.status(inst.packLevel, inst.loading); ls != "" {
+			msg += " · " + ls
+		}
+		return msg
 	default:
 		msg := "pan/zoom over a ClickHouse table with mercator_x/mercator_y (e.g. planes_mercator)"
 		if needs := builtinRenders[inst.renderIdx].needs; len(needs) > 0 {
