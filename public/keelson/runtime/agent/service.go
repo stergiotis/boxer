@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent/agentfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -64,6 +65,10 @@ type Service struct {
 	// facts is the durable half of the action record, nil without an
 	// executor; factsMu guards it, and the flusher lands what record
 	// buffers, so a call never waits on the store.
+	// events carries what hear queues to the publisher.
+	events     chan wireEvent
+	eventsDone chan struct{}
+
 	factsMu   sync.Mutex
 	facts     *agentfacts.ActionStore
 	flushCh   chan struct{}
@@ -87,7 +92,9 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		s.flushCh, s.stopFlush, s.flushDone = make(chan struct{}, 1), make(chan struct{}), make(chan struct{})
 		go s.flusher()
 	}
+	s.events, s.eventsDone = make(chan wireEvent, eventQueueLen), make(chan struct{})
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
+	go s.publishEvents()
 	s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handleRequest)
 	if err != nil {
 		if cerr := s.busClient.Close(); cerr != nil {
@@ -106,6 +113,10 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	return
 }
 
+// Listener is what the window host calls with every change a window's
+// engine logs (windowhost.SetOpsListener).
+func (inst *Service) Listener() (fn func(key uint64, e opengine.LogEntry)) { return inst.hear }
+
 // Close unsubscribes and closes the bus client.
 func (inst *Service) Close() {
 	inst.closeOnce.Do(func() {
@@ -115,6 +126,8 @@ func (inst *Service) Close() {
 		if inst.unsubClosed != nil {
 			inst.unsubClosed()
 		}
+		close(inst.events)
+		<-inst.eventsDone
 		if err := inst.busClient.Close(); err != nil {
 			inst.log.Warn().Err(err).Msg("agent: closing the bus client")
 		}
@@ -167,6 +180,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, inst.detach(msg))
 	case SubjectStop:
 		inst.reply(msg.Reply, inst.stop(msg))
+	case SubjectTurn:
+		inst.reply(msg.Reply, inst.turn(msg))
 	default:
 		inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "no such service"})
 	}

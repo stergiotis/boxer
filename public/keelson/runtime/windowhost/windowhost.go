@@ -251,6 +251,10 @@ type Inst struct {
 	// each Frame so the dispatcher can refuse requests made on it.
 	renderGoroutine atomic.Uint64
 
+	// opsListener hears every change a window's engine logs (ADR-0269
+	// §SD8); nil hears nothing. Set before the first Frame.
+	opsListener func(key uint64, e opengine.LogEntry)
+
 	// agentChrome draws the host chrome of the app operations contract
 	// (ADR-0269 §SD5): a badge row in each window a task works in, and the
 	// host's dialogs. nil draws nothing. Set before the first Frame.
@@ -1128,7 +1132,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 					inst.agentChrome.RenderWindowChrome(uint64(w.key), ids)
 				}
 			}
-			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes)
+			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes, inst.opsListener)
 		}
 	}
 	// Render the SVG-save picker once per Frame. It draws its own
@@ -1376,7 +1380,7 @@ func (inst *Inst) closeRequested(w *window) (closeReq bool) {
 // on their outermost panel cannot collide on the wire id — each derives
 // its id under a different salt. The IdScope wrapper pops the salt on
 // return so the stack is empty between frames.
-func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frameTimes) {
+func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frameTimes, opsListener func(key uint64, e opengine.LogEntry)) {
 	if windowhostDebugRender {
 		logger.Info().
 			Uint64("windowKey", uint64(w.key)).
@@ -1409,7 +1413,7 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 	// ADR-0269 §SD4: the previous frame's write-back has landed, so the
 	// person's changes are in Go state; queued commands apply now, and the
 	// app's Frame draws their effects.
-	w.startOps(logger)
+	w.startOps(logger, opsListener)
 	w.beginOps()
 	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
 		msgs := frameMessages()

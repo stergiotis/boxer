@@ -12,6 +12,7 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -35,6 +36,7 @@ type HostI interface {
 	OpsRevisions(key uint64) (revs map[string]uint64, ok bool)
 	OpsUndo(key uint64, callId string) (ok bool)
 	OpsUndoStatus(key uint64, callId string) (status string, ok bool)
+	OpsLogSince(key uint64, seq uint64) (entries []opengine.LogEntry, latest uint64, ok bool)
 }
 
 // ModeE is how far a task may act in one instance (ADR-0269 §SD5).
@@ -163,6 +165,10 @@ type task struct {
 	keys          map[string]*callRec
 	lastRead      map[uint64]map[string]uint64
 	refs          map[string]*resultRef
+	// turnSeq is, per window, the log sequence of the task's last turn;
+	// readSinceTurn what it read since (ADR-0269 §SD8).
+	turnSeq       map[uint64]uint64
+	readSinceTurn map[uint64]map[string]uint64
 }
 
 func randomHex(n int) (s string) {
@@ -207,6 +213,7 @@ func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, plan string
 		plan: plan, entries: make(map[uint64]*entry), destinations: destinations,
 		callsBudget: int(calls), deadline: time.Now().Add(DefaultDeadline), epoch: 1, created: time.Now(), test: test,
 		keys: make(map[string]*callRec), lastRead: make(map[uint64]map[string]uint64), refs: make(map[string]*resultRef),
+		turnSeq: make(map[uint64]uint64), readSinceTurn: make(map[uint64]map[string]uint64),
 	}
 	if t.callsBudget == 0 {
 		t.callsBudget = DefaultCallBudget
@@ -246,6 +253,9 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 	}
 	inst.mu.Lock()
 	inst.tasks[t.handle] = t
+	for k := range t.entries {
+		inst.startTurnAt(t, k)
+	}
 	inst.mu.Unlock()
 	for k := range t.entries {
 		inst.attach(k)
@@ -415,6 +425,9 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 		out, need = phaseOutcome(opwire.PhaseInputRequired, "observe mode: the person is asked to raise the mode"), needMode
 	case spec.Effect != app.OperationEffectNone && inst.holder(req.Instance, t) != nil:
 		out = phaseOutcome(opwire.PhaseRefused, "busy: another task holds the instance")
+	case spec.Effect != app.OperationEffectNone && inst.isPaused(t, req.Instance):
+		ch, _ := inst.pausedBy(t, req.Instance)
+		out = phaseOutcome(opwire.PhaseRefused, pausedReason(ch, t))
 	case t.callsUsed >= t.callsBudget:
 		out, need, mode = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; the person is asked"), needBudget, e.mode
 	case spec.Effect == app.OperationEffectConsequential && t.test:
@@ -461,8 +474,14 @@ func (inst *Service) absorb(t *task, rec *callRec, out opwire.Outcome) {
 			read = make(map[string]uint64)
 			t.lastRead[rec.instance] = read
 		}
+		since := t.readSinceTurn[rec.instance]
+		if since == nil {
+			since = make(map[string]uint64)
+			t.readSinceTurn[rec.instance] = since
+		}
 		for r, v := range out.Revisions {
 			read[r] = v
+			since[r] = out.Seq
 		}
 	}
 	if rec.spec.Class == app.OperationClassCommand && (out.Phase == opwire.PhaseApplied || out.Phase == opwire.PhaseRendered) {

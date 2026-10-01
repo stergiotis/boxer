@@ -107,6 +107,10 @@ func (inst *fakeHost) OpsRevisions(k uint64) (map[string]uint64, bool) {
 	return revs, true
 }
 func (inst *fakeHost) OpsUndo(k uint64, id string) bool { return inst.eng(k).Undo(id) }
+func (inst *fakeHost) OpsLogSince(k uint64, seq uint64) ([]opengine.LogEntry, uint64, bool) {
+	e := inst.eng(k)
+	return e.LogSince(seq), e.LogSeq(), true
+}
 func (inst *fakeHost) OpsUndoStatus(k uint64, id string) (string, bool) {
 	return inst.eng(k).UndoStatus(id)
 }
@@ -169,6 +173,7 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 	svc, err := NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
+	host.engines[7].SetListener(func(e opengine.LogEntry) { svc.Listener()(7, e) })
 	cli := NewClient(bus.NewClient("test.coordinator", ClientCaps("test: drive apps")))
 	return &rig{t: t, host: host, svc: svc, cli: cli, bus: bus, docKey: 7}
 }

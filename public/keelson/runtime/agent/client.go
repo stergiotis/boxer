@@ -355,3 +355,65 @@ func (inst *Client) Detach(ctx context.Context, handle string, instance uint64) 
 func (inst *Client) Stop(ctx context.Context, handle string) (err error) {
 	return ack(roundTrip[wireHandle, wireAck](ctx, inst, SubjectStop, wireHandle{V: wireVersion, Handle: handle}))
 }
+
+// Change is one change by another writer since the task's previous turn:
+// the person, the app, or another task.
+type Change struct {
+	Instance  uint64
+	Seq       uint64
+	Writer    string
+	Op        string
+	Phase     string
+	Reason    string
+	Resources []string
+	Revisions map[string]uint64
+}
+
+// Turn starts a model turn: it returns the changes by other writers since
+// the previous one and lifts the task's pauses (ADR-0269 §SD3, §SD8).
+func (inst *Client) Turn(ctx context.Context, handle string) (changes []Change, err error) {
+	rep, err := roundTrip[wireHandle, wireTurnReply](ctx, inst, SubjectTurn, wireHandle{V: wireVersion, Handle: handle})
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	for _, c := range rep.Changes {
+		changes = append(changes, Change(c))
+	}
+	return
+}
+
+// Event is one announcement on a task's event subject: what changed where,
+// never the content.
+type Event struct {
+	Task      string
+	Instance  uint64
+	Seq       uint64
+	Writer    string
+	Op        string
+	Phase     string
+	Resources []string
+	Pauses    bool
+}
+
+// SubscribeEvents delivers a task's events to fn, on the publisher's
+// goroutine; fn must not block. A coordinator that misses events reads
+// again.
+func (inst *Client) SubscribeEvents(task string, fn func(ev Event)) (unsubscribe func(), err error) {
+	if inst == nil || inst.bus == nil {
+		err = eh.Errorf("agent: client without a bus")
+		return
+	}
+	unsubscribe, err = inst.bus.Subscribe(EventSubject(task), func(msg *app.Msg) {
+		ev, derr := decode[wireEvent](msg.Payload)
+		if derr != nil {
+			return
+		}
+		fn(Event{Task: ev.Task, Instance: ev.Instance, Seq: ev.Seq, Writer: ev.Writer, Op: ev.Op, Phase: ev.Phase,
+			Resources: ev.Resource, Pauses: ev.Pauses})
+	})
+	return
+}

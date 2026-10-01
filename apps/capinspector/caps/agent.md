@@ -39,8 +39,11 @@ apps, err := agent.NewClient(ctx.Bus()).Describe(ctx, agent.DescribeRequest{Sear
 - **Subjects.** `runtime.agent.<service>`, request/reply. `describe` lists
   the operations agents may call, without schemas; naming one operation
   returns it with the JSON Schemas of its arguments and result. `request`,
-  `call`, `status`, `cancel`, `read`, `capture`, `list`, `detach` and `stop`
-  work under a task grant.
+  `call`, `status`, `cancel`, `read`, `capture`, `list`, `turn`, `detach`
+  and `stop` work under a task grant.
+- **Events.** `runtime.agent.event.<task>`: what changed in a window the
+  task works in, by whom, and whether it paused the task — never the
+  content. A coordinator that misses events reads again.
 - **Operation subjects.** `app.<alias>.<instance>.op.<name>`: the
   dispatcher's call to one window. Only the host publishes and subscribes
   there; registration refuses an app whose capability could reach them.

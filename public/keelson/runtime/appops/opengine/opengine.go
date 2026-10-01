@@ -42,6 +42,8 @@ const DefaultKeepLog = 1024
 // LogEntry is one change in the command log: a command, a gesture, or a
 // change the engine observed (a write-back, the app's frame logic).
 type LogEntry struct {
+	// Seq numbers the instance's entries from 1, without gaps.
+	Seq    uint64
 	Frame  uint64
 	Writer string
 	// Op is the operation, empty for an observed change.
@@ -69,9 +71,10 @@ type call struct {
 }
 
 type snapshot struct {
-	asOf uint64
-	view app.OperationsSnapshotI
-	revs map[string]uint64
+	asOf   uint64
+	view   app.OperationsSnapshotI
+	revs   map[string]uint64
+	logSeq uint64
 }
 
 // Engine serves one instance's catalog.
@@ -87,6 +90,8 @@ type Engine struct {
 	attached int
 	log      []LogEntry
 	logHead  int
+	logSeq   uint64
+	listener func(e LogEntry)
 
 	snap atomic.Pointer[snapshot]
 
@@ -157,7 +162,7 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 	if out.Phase == opwire.PhaseUnspecified {
 		out = opwire.Outcome{Phase: opwire.PhaseCompleted, Result: result}
 	}
-	out.AsOf = s.asOf
+	out.AsOf, out.Seq = s.asOf, s.logSeq
 	out.Revisions = pick(s.revs, spec.Reads)
 	return
 }
@@ -442,7 +447,7 @@ func (inst *Engine) SnapshotRevisions() (revs map[string]uint64, asOf uint64) {
 
 // TakeSnapshot captures what queries read until the next frame.
 func (inst *Engine) TakeSnapshot() {
-	inst.snap.Store(&snapshot{asOf: inst.frame, view: inst.h.Snapshot(), revs: maps.Clone(inst.revs)})
+	inst.snap.Store(&snapshot{asOf: inst.frame, view: inst.h.Snapshot(), revs: maps.Clone(inst.revs), logSeq: inst.LogSeq()})
 }
 
 // Gesture applies a command the person asked for through the app's own UI,
@@ -522,13 +527,45 @@ func same(a any, b any) (eq bool) {
 
 func (inst *Engine) appendLog(e LogEntry) {
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
+	inst.logSeq++
+	e.Seq = inst.logSeq
 	if len(inst.log) < DefaultKeepLog {
 		inst.log = append(inst.log, e)
-		return
+	} else {
+		inst.log[inst.logHead] = e
+		inst.logHead = (inst.logHead + 1) % DefaultKeepLog
 	}
-	inst.log[inst.logHead] = e
-	inst.logHead = (inst.logHead + 1) % DefaultKeepLog
+	listener := inst.listener
+	inst.mu.Unlock()
+	if listener != nil {
+		listener(e)
+	}
+}
+
+// SetListener installs a function called with every log entry, on the
+// render goroutine; it must not block.
+func (inst *Engine) SetListener(fn func(e LogEntry)) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.listener = fn
+}
+
+// LogSeq is the sequence number of the latest log entry; 0 before any.
+func (inst *Engine) LogSeq() (seq uint64) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.logSeq
+}
+
+// LogSince returns the entries after seq, oldest first. Entries older than
+// the log keeps are gone.
+func (inst *Engine) LogSince(seq uint64) (entries []LogEntry) {
+	for _, e := range inst.Log() {
+		if e.Seq > seq {
+			entries = append(entries, e)
+		}
+	}
+	return
 }
 
 // Log returns the command log, oldest first.

@@ -145,6 +145,9 @@ type Outcome struct {
 	Revisions map[string]uint64 `json:"revisions,omitempty"`
 	// Result is CBOR of the operation's declared result type.
 	Result []byte `json:"result,omitempty"`
+	// Seq is, for a query, the instance's log sequence as of its snapshot:
+	// a later change was not in what it read.
+	Seq uint64 `json:"seq,omitempty"`
 }
 
 // wireVersion versions [CallRequest] and [CallReply].

@@ -247,6 +247,7 @@ func (inst *Service) approve(r *request) (route *held) {
 			}
 			e = &entry{instance: k, app: info.App, alias: info.Alias, mode: m}
 			t.entries[k] = e
+			inst.startTurnAt(t, k)
 			inst.attach(k)
 		} else if m > e.mode {
 			e.mode = m

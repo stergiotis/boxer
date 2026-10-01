@@ -47,6 +47,14 @@ const (
 	SubjectDetach = SubjectPrefix + "detach"
 	// SubjectStop ends the task.
 	SubjectStop = SubjectPrefix + "stop"
+	// SubjectTurn starts a model turn: the changes by other writers since
+	// the previous one, and the task's pauses lifted.
+	SubjectTurn = SubjectPrefix + "turn"
+	// SubjectEventPrefix precedes a task id: the task's events, without
+	// content.
+	SubjectEventPrefix = SubjectPrefix + "event."
+	// SubjectEvents matches every task's events.
+	SubjectEvents = SubjectEventPrefix + "*"
 )
 
 // TableGrants is the introspection table of task grants (ADR-0269 §SD6).
@@ -76,6 +84,7 @@ func ServiceCaps() (caps []app.SubjectFilter) {
 		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "agent: serve runtime.agent requests"},
 		{Pattern: opwire.Pattern, Direction: app.CapDirectionPub, Reason: "agent: call operations of instances"},
 		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "agent: end a task when its coordinator closes"},
+		{Pattern: SubjectEvents, Direction: app.CapDirectionPub, Reason: "agent: announce a task's events"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "agent: reply to inboxes"},
 	}
 	return
@@ -87,6 +96,7 @@ func ServiceCaps() (caps []app.SubjectFilter) {
 func ClientCaps(reason string) (caps []app.SubjectFilter) {
 	caps = []app.SubjectFilter{
 		{Pattern: SubjectAll, Direction: app.CapDirectionPub, Reason: reason, Sticky: true},
+		{Pattern: SubjectEvents, Direction: app.CapDirectionSub, Reason: reason + " (task events, without content)", Sticky: true},
 	}
 	return
 }

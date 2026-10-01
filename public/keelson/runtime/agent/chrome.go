@@ -53,6 +53,12 @@ func (inst *Chrome) RenderWindowChrome(key uint64, ids *c.WidgetIdStack) {
 	}
 	proposed := len(svc.proposals(key, false))
 	confirming := len(svc.proposals(key, true))
+	paused := false
+	for _, wt := range here {
+		if svc.isPaused(wt.t, key) {
+			paused = true
+		}
+	}
 	svc.mu.Unlock()
 	if len(here) == 0 {
 		return
@@ -63,6 +69,9 @@ func (inst *Chrome) RenderWindowChrome(key uint64, ids *c.WidgetIdStack) {
 		label = icons.PhRobot + " " + strconv.Itoa(len(here)) + " agents"
 	}
 	// Badge flags (ADR-0269 §SD5): what waits on the person here.
+	if paused {
+		label += " · paused"
+	}
 	if proposed > 0 {
 		label += " · proposals " + strconv.Itoa(proposed)
 	}

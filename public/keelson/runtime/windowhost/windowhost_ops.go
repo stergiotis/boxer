@@ -35,8 +35,9 @@ const opsRepaintIntervalSecs = 0.1
 const captureTimeout = 5 * time.Second
 
 // startOps creates the window's engine after Mount, when the registered
-// manifest keeps a catalog and the instance serves it.
-func (w *window) startOps(logger zerolog.Logger) {
+// manifest keeps a catalog and the instance serves it. listener, when set,
+// hears every change the engine logs.
+func (w *window) startOps(logger zerolog.Logger, listener func(key uint64, e opengine.LogEntry)) {
 	if w.opsTried {
 		return
 	}
@@ -55,6 +56,10 @@ func (w *window) startOps(logger zerolog.Logger) {
 		return
 	}
 	eng := opengine.New(w.manifest.Operations, h)
+	if listener != nil {
+		key := uint64(w.key)
+		eng.SetListener(func(e opengine.LogEntry) { listener(key, e) })
+	}
 	w.ops.Store(eng)
 	w.frameCtx.SetOperationsGesture(eng.Gesture)
 }
@@ -197,6 +202,21 @@ func (inst *Inst) OpsUndoStatus(key uint64, callId string) (status string, ok bo
 	if eng, _ := inst.engineOf("", key); eng != nil {
 		status, ok = eng.UndoStatus(callId)
 	}
+	return
+}
+
+// SetOpsListener installs a function that hears every change any window's
+// engine logs, on the render goroutine; it must not block. Set it before
+// the first Frame.
+func (inst *Inst) SetOpsListener(fn func(key uint64, e opengine.LogEntry)) { inst.opsListener = fn }
+
+// OpsLogSince returns a window's log entries after seq, and the latest seq.
+func (inst *Inst) OpsLogSince(key uint64, seq uint64) (entries []opengine.LogEntry, latest uint64, ok bool) {
+	eng, _ := inst.engineOf("", key)
+	if eng == nil {
+		return
+	}
+	entries, latest, ok = eng.LogSince(seq), eng.LogSeq(), true
 	return
 }
 

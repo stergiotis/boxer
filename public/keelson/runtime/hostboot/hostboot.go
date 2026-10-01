@@ -755,6 +755,7 @@ func (rt *Runtime) bootAgent() {
 		// The person's side: the badge in each window a task works in and
 		// the dialog in which requests are decided (ADR-0269 §SD5).
 		rt.Host.SetAgentChrome(svc.Chrome())
+		rt.Host.SetOpsListener(svc.Listener())
 	}
 	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")
 }

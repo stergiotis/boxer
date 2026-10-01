@@ -15,7 +15,9 @@ scene:
 
 ADR-0269 §SD5 and §SD8 on the headless host, with the person approving. An
 agent's change to the demo's note is undone from the window's badge, which
-restores the note because nothing has changed it since. In suggest mode a
+restores the note because nothing has changed it since; the undo is the
+person's change, so it pauses the task until its next turn, which lists it.
+In suggest mode a
 write waits as a proposal on the badge until the person accepts it; one
 that still expects the revision the undo moved ends as stale when accepted,
 and one made after a fresh read applies. A
@@ -44,6 +46,9 @@ confirmation in its own dialog, in act mode as well.
 {"do":"read","id":10593799850196568197,"pattern":"^(?P<restored>A note both of you can edit\\.)$","comment":"nothing changed the note since, so undo restores it"}
 {"do":"click","name":"suggest","settleMs":500,"comment":"the person lowers the task to suggest"}
 {"do":"key","text":"Escape","settleMs":300}
+{"do":"wait","contains":"agent · suggest · paused","role":"button","comment":"the person's undo changed what the task read, so the task is paused"}
+{"do":"click","name":"Turn","role":"button","comment":"the coordinator's turn lists the undo and lifts the pause"}
+{"do":"wait","valueContains":"person changed note in window 2 (undo set_note)","role":"label"}
 {"do":"click","name":"Call","role":"button","comment":"k3: set_note again, without reading first: it expects the revision the undo moved"}
 {"do":"wait","valueContains":"k3 · set_note · proposed","role":"label"}
 {"do":"wait","contains":"proposals 1","role":"button","comment":"the badge says a proposal waits"}

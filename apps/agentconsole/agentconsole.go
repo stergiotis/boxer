@@ -160,6 +160,9 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		if c.Button(inst.ids.PrepareStr("capture"), c.Atoms().Text("Capture").Keep()).SendResp().HasPrimaryClicked() {
 			inst.capture()
 		}
+		if c.Button(inst.ids.PrepareStr("turn"), c.Atoms().Text("Turn").Keep()).SendResp().HasPrimaryClicked() {
+			inst.turn()
+		}
 	}
 	c.TextEdit(inst.ids.PrepareStr("args"), inst.args, true).DesiredRows(3).HintText("arguments").SendRespVal(&inst.args)
 	if c.Button(inst.ids.PrepareStr("call"), c.Atoms().Text("Call").Keep()).SendResp().HasPrimaryClicked() {
@@ -278,6 +281,35 @@ func (inst *App) describe() {
 			}
 		}
 		inst.setNote(strings.TrimSpace(b.String()))
+	})
+}
+
+// turn starts a turn the way a coordinator does before each model turn:
+// it lists what other writers changed and lifts the task's pauses.
+func (inst *App) turn() {
+	inst.mu.Lock()
+	handle := inst.grant.Handle
+	inst.mu.Unlock()
+	if handle == "" {
+		inst.setNote("a turn needs a grant")
+		return
+	}
+	inst.spawn(func(ctx context.Context) {
+		changes, err := inst.cli.Turn(ctx, handle)
+		if err != nil {
+			inst.setNote("turn: " + err.Error())
+			return
+		}
+		var b strings.Builder
+		b.WriteString("turn: " + strconv.Itoa(len(changes)) + " change(s) by others")
+		for _, ch := range changes {
+			b.WriteString("\n  " + ch.Writer + " changed " + strings.Join(ch.Resources, ", ") + " in window " +
+				strconv.FormatUint(ch.Instance, 10))
+			if ch.Op != "" {
+				b.WriteString(" (" + ch.Op + ")")
+			}
+		}
+		inst.setNote(b.String())
 	})
 }
 
