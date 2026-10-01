@@ -615,6 +615,24 @@ manual `sampling` as before. The mechanism is `apps/play/play_map_ladder.go`.
 Still open from SD10: a ladder per source chosen by row count rather than by
 name, hover→info, and the keepBuffer margin.
 
+## Update — 2026-10-01: a sparse raster result
+
+The template no longer fills the framebuffer server-side: it selects
+`(toUInt32(pos), r, g, b, a)` per non-empty pixel with no `ORDER BY … WITH
+FILL`, and `packRaster` scatters the rows into a zeroed `w×h` buffer. It
+still reads the dense four-column form, which the Map snippet keeps.
+
+Measured once on 2026-10-01 against the local demo slice at 1024×600, three
+views from 0.04 % to 52 % of pixels non-empty: the sparse query took about a
+third of the dense one's server time at every fill, `WITH FILL` being most of
+the latter, while after ClickHouse's default lz4 Arrow compression the dense
+result was up to about half the bytes once more than a few percent of pixels
+were non-empty, because empty rows compress and an unordered `pos` column
+does not (sorting it did not change that). Sparse was taken for the server
+time, for the rows it saves the browser tab's single-threaded decode, and
+because it takes the framebuffer size off the result-row count; a view that
+is both large and mostly full costs more bytes than it did.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
