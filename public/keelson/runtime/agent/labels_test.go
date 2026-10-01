@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -97,4 +98,24 @@ func TestTheCallCarriesTheOnBehalfOfContext(t *testing.T) {
 	ok, why = r.svc.AllowDestination(g.Task, 2, "http:tiles")
 	assert.False(t, ok)
 	assert.Contains(t, why, "ended")
+}
+
+func TestATaskOpensTheWindowsItsGrantAllows(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	g, err := r.cli.Request(ctx, GrantRequest{Launches: []GrantLaunch{{App: "doc", Mode: ModeAct, Count: 1}}})
+	require.NoError(t, err)
+	key, err := r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	require.NoError(t, err)
+	r.host.frame(key)
+	out, err := r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: key, Operation: "get_text", Args: "{}", Key: "q"})
+	require.NoError(t, err)
+	assert.Equal(t, "completed", out.Phase, "the opened window joins the task")
+
+	_, err = r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "one window was allowed")
+
+	require.NoError(t, r.cli.Stop(ctx, g.Handle))
+	assert.Equal(t, g.Task, r.svc.leftByTask(key), "the window passes to the person")
 }

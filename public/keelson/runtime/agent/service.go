@@ -64,6 +64,9 @@ type Service struct {
 	// by coordinator, window and conversation.
 	taints      map[string]bool
 	unsubClosed func()
+	// leftBy names, per window a task launched and then ended, the task
+	// that left it to the person.
+	leftBy map[uint64]string
 
 	recMu   sync.Mutex
 	records []ActionRecord
@@ -93,7 +96,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		cfg.Registry = app.DefaultRegistry
 	}
 	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task),
-		requests: make(map[string]*request), taints: make(map[string]bool)}
+		requests: make(map[string]*request), taints: make(map[string]bool), leftBy: make(map[uint64]string)}
 	if cfg.Exec != nil {
 		s.facts = agentfacts.NewActionStore(cfg.Exec, nil, agentfacts.ActionStoreConfig{})
 		s.flushCh, s.stopFlush, s.flushDone = make(chan struct{}, 1), make(chan struct{}), make(chan struct{})
@@ -189,6 +192,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, inst.stop(msg))
 	case SubjectTurn:
 		inst.reply(msg.Reply, inst.turn(msg))
+	case SubjectLaunch:
+		inst.reply(msg.Reply, inst.launch(msg))
 	default:
 		inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "no such service"})
 	}

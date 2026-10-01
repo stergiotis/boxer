@@ -160,6 +160,16 @@ type GrantRequest struct {
 	Calls uint32
 	// Deadline is how long the task may run; zero is DefaultDeadline.
 	Deadline time.Duration
+	// Launches are the apps the task may open windows of.
+	Launches []GrantLaunch
+}
+
+// GrantLaunch lets a task open up to Count windows of App (an id or a
+// subject alias); each starts in Mode.
+type GrantLaunch struct {
+	App   string
+	Mode  ModeE
+	Count uint32
 }
 
 // Grant is what a caller holds: the task id for the record and the handle
@@ -191,6 +201,9 @@ func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string,
 		DeadlineSecs: uint32(r.Deadline / time.Second)}
 	for _, e := range r.Entries {
 		req.Entries = append(req.Entries, wireGrantEntry{Instance: e.Instance, Mode: e.Mode.String(), Operations: e.Operations})
+	}
+	for _, l := range r.Launches {
+		req.Launches = append(req.Launches, wireLaunchEntry{App: l.App, Mode: l.Mode.String(), Count: l.Count})
 	}
 	rep, err := roundTrip[wireGrantRequest, wireGrantReply](ctx, inst, SubjectRequest, req)
 	if err != nil {

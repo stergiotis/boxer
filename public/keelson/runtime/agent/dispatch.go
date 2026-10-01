@@ -37,6 +37,7 @@ type HostI interface {
 	OpsUndo(key uint64, callId string) (ok bool)
 	OpsUndoStatus(key uint64, callId string) (status string, ok bool)
 	OpsLogSince(key uint64, seq uint64) (entries []opengine.LogEntry, latest uint64, ok bool)
+	OpsOpen(appId app.AppIdT, kind string, cfg []byte) (key uint64, err error)
 }
 
 // ModeE is how far a task may act in one instance (ADR-0269 §SD5).
@@ -173,6 +174,17 @@ type task struct {
 	// readSinceTurn what it read since (ADR-0269 §SD8).
 	turnSeq       map[uint64]uint64
 	readSinceTurn map[uint64]map[string]uint64
+	// launches are the apps the task may open windows of; launched the
+	// windows it opened, which pass to the person when it ends.
+	launches map[app.AppIdT]*launchEntry
+	launched map[uint64]bool
+}
+
+// launchEntry is one app a task may open windows of (ADR-0269 §SD6).
+type launchEntry struct {
+	mode  ModeE
+	count int
+	used  int
 }
 
 func randomHex(n int) (s string) {
@@ -218,6 +230,7 @@ func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, conversatio
 		callsBudget: int(calls), deadline: time.Now().Add(DefaultDeadline), epoch: 1, created: time.Now(), test: test,
 		keys: make(map[string]*callRec), lastRead: make(map[uint64]map[string]uint64), refs: make(map[string]*resultRef),
 		turnSeq: make(map[uint64]uint64), readSinceTurn: make(map[uint64]map[string]uint64),
+		launches: make(map[app.AppIdT]*launchEntry), launched: make(map[uint64]bool),
 	}
 	if t.callsBudget == 0 {
 		t.callsBudget = DefaultCallBudget
@@ -236,12 +249,13 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 		rep.Reason = "no window host"
 		return
 	}
-	if len(req.Entries) == 0 {
-		rep.Reason = "a grant names at least one instance"
+	if len(req.Entries) == 0 && len(req.Launches) == 0 {
+		rep.Reason = "a grant names at least one instance or an app to open"
 		return
 	}
 	t := inst.newTask(msg.Sender, msg.SenderInstance, req.Conversation, req.Plan, req.Destinations, req.Calls,
 		time.Duration(req.DeadlineSecs)*time.Second, true)
+	inst.addLaunches(t, req.Launches)
 	for _, e := range req.Entries {
 		info, isOpen := inst.openInstance(e.Instance)
 		if !isOpen {

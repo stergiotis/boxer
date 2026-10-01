@@ -120,6 +120,15 @@ func (inst *fakeHost) OpsRevisions(k uint64) (map[string]uint64, bool) {
 	return revs, true
 }
 func (inst *fakeHost) OpsUndo(k uint64, id string) bool { return inst.eng(k).Undo(id) }
+func (inst *fakeHost) OpsOpen(appId app.AppIdT, kind string, cfg []byte) (uint64, error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	key := uint64(100 + len(inst.engines))
+	d := &doc{text: "opened"}
+	inst.engines[key] = opengine.New(docOps.Catalog(), docOps.Bind(d))
+	inst.docs[key] = d
+	return key, nil
+}
 func (inst *fakeHost) OpsLogSince(k uint64, seq uint64) ([]opengine.LogEntry, uint64, bool) {
 	e := inst.eng(k)
 	return e.LogSince(seq), e.LogSeq(), true

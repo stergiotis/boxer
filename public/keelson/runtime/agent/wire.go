@@ -86,12 +86,36 @@ type wireGrantRequest struct {
 	Handle string `json:"handle,omitempty"`
 	// Conversation names the coordinator's conversation; taint belongs to
 	// it (ADR-0269 §SD7).
-	Conversation string           `json:"conversation,omitempty"`
-	Plan         string           `json:"plan"`
-	Entries      []wireGrantEntry `json:"entries"`
-	Destinations []string         `json:"destinations,omitempty"`
-	Calls        uint32           `json:"calls,omitempty"`
-	DeadlineSecs uint32           `json:"deadline_secs,omitempty"`
+	Conversation string            `json:"conversation,omitempty"`
+	Plan         string            `json:"plan"`
+	Entries      []wireGrantEntry  `json:"entries"`
+	Destinations []string          `json:"destinations,omitempty"`
+	Calls        uint32            `json:"calls,omitempty"`
+	DeadlineSecs uint32            `json:"deadline_secs,omitempty"`
+	Launches     []wireLaunchEntry `json:"launches,omitempty"`
+}
+
+// wireLaunchEntry names an app the task may open windows of.
+type wireLaunchEntry struct {
+	App   string `json:"app"`
+	Mode  string `json:"mode"`
+	Count uint32 `json:"count"`
+}
+
+// wireLaunch opens a window for the task.
+type wireLaunch struct {
+	V      uint8  `json:"v"`
+	Handle string `json:"handle"`
+	App    string `json:"app"`
+	Kind   string `json:"kind,omitempty"`
+	Config []byte `json:"config,omitempty"`
+}
+
+type wireLaunchReply struct {
+	V        uint8  `json:"v"`
+	Ok       bool   `json:"ok"`
+	Reason   string `json:"reason,omitempty"`
+	Instance uint64 `json:"instance,omitempty"`
 }
 
 type wireGrantReply struct {

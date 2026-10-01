@@ -96,6 +96,7 @@ type request struct {
 	calls        uint32
 	deadline     time.Duration
 	held         *held
+	launches     []wireLaunchEntry
 	created      time.Time
 	state        reqStateE
 	why          string
@@ -145,7 +146,8 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 	r := &request{key: "req-" + randomHex(8), actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, task: t,
 		plan: req.Plan, wanted: make(map[uint64]ModeE), wantedOps: make(map[uint64][]string),
 		destinations: req.Destinations, calls: req.Calls, deadline: time.Duration(req.DeadlineSecs) * time.Second,
-		created: time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE)}
+		launches: req.Launches,
+		created:  time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE)}
 	for _, e := range req.Entries {
 		m := ParseMode(e.Mode)
 		if m == ModeUnspecified {
@@ -264,6 +266,7 @@ func (inst *Service) approve(r *request) (route *held) {
 	if r.held != nil && r.held.need == needBudget {
 		t.callsBudget += DefaultCallBudget / 4
 	}
+	inst.addLaunches(t, r.launches)
 	r.state = reqStateApproved
 	route = r.held
 	return
@@ -373,6 +376,12 @@ func (inst *Service) endTask(t *task, why string) {
 		}
 	}
 	inst.discardProposals(t, 0, "the task ended")
+	// The windows it opened pass to the person (ADR-0269 §SD6).
+	for k := range t.launched {
+		if t.entries[k] != nil {
+			inst.leftBy[k] = t.id
+		}
+	}
 	inst.mu.Unlock()
 	for k, ids := range queued {
 		if inst.cfg.Host == nil {

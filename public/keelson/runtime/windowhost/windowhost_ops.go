@@ -221,6 +221,14 @@ func (inst *Inst) OpsLogSince(key uint64, seq uint64) (entries []opengine.LogEnt
 	return
 }
 
+// OpsOpen opens a window for a task's launch (ADR-0269 §SD3), with an
+// optional launch config (ADR-0135).
+func (inst *Inst) OpsOpen(appId app.AppIdT, kind string, cfg []byte) (key uint64, err error) {
+	k, err := inst.OpenWithConfig(appId, kind, cfg)
+	key = uint64(k)
+	return
+}
+
 // OpsLog returns a window's command log.
 func (inst *Inst) OpsLog(key uint64) (entries []opengine.LogEntry, ok bool) {
 	eng, _ := inst.engineOf("", key)

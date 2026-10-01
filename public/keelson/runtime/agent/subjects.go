@@ -47,6 +47,8 @@ const (
 	SubjectDetach = SubjectPrefix + "detach"
 	// SubjectStop ends the task.
 	SubjectStop = SubjectPrefix + "stop"
+	// SubjectLaunch opens a window of an app the grant names.
+	SubjectLaunch = SubjectPrefix + "launch"
 	// SubjectTurn starts a model turn: the changes by other writers since
 	// the previous one, and the task's pauses lifted.
 	SubjectTurn = SubjectPrefix + "turn"

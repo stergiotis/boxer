@@ -61,6 +61,10 @@ func (inst *Chrome) RenderWindowChrome(key uint64, ids *c.WidgetIdStack) {
 	}
 	svc.mu.Unlock()
 	if len(here) == 0 {
+		if left := svc.leftByTask(key); left != "" {
+			// A window a task opened, left to the person when it ended.
+			c.Label(icons.PhRobot + " left by " + left).Send()
+		}
 		return
 	}
 	slices.SortFunc(here, func(a, b windowTask) int { return a.t.created.Compare(b.t.created) })
@@ -344,6 +348,9 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		if len(windows) == 0 {
 			c.Label("no other window is open").Send()
 		}
+	}
+	for _, l := range r.launches {
+		c.Label("the task may " + launchText(l)).Wrap().Send()
 	}
 	if len(r.destinations) > 0 {
 		c.Label("destinations: " + joinComma(r.destinations)).Wrap().Send()
