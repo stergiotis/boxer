@@ -41,7 +41,7 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 	if cerr != nil || class != analysis.QuerySecurityRead {
 		why := "the statement is " + class.String() + ", not a plain read"
 		if len(witnesses) > 0 && witnesses[0].Name != "" {
-			why += " (" + witnesses[0].Name + ")"
+			why += " (" + witnesses[0].Name + ": " + witnesses[0].Describe() + ")"
 		}
 		return &AgentLimitError{Reason: why}
 	}

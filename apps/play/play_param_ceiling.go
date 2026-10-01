@@ -159,8 +159,11 @@ func firstWitnessOf(wits []analysis.SecurityWitness, class analysis.QuerySecurit
 // witnessText names what the classifier pointed at, falling back to the witness
 // kind when it carries no name.
 func witnessText(w analysis.SecurityWitness) string {
-	if w.Name != "" {
-		return "witness " + w.Name
+	if w.Name == "" {
+		return "witness " + w.Describe()
 	}
-	return "witness " + w.Kind.String()
+	if r := w.Reach.String(); r != "" {
+		return "witness " + w.Name + " (" + r + ")"
+	}
+	return "witness " + w.Name
 }

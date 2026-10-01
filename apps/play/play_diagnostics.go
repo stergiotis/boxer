@@ -616,7 +616,7 @@ func (inst *PlayApp) renderDiagSecurityClass() {
 			Send()
 	}
 	for _, w := range witnesses {
-		for rt := range c.RichTextLabel(w.Name + " — " + w.Kind.String()) {
+		for rt := range c.RichTextLabel(w.Name + " — " + w.Describe()) {
 			rt.Monospace()
 		}
 	}

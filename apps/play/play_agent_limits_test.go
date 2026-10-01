@@ -29,6 +29,11 @@ func TestAgentLimits(t *testing.T) {
 		"a write":                            {"INSERT INTO t SELECT 1", remote, grant, false},
 		"a settings change":                  {"SET max_threads = 1; SELECT 1", remote, grant, false},
 		"a statement that does not classify": {"DROP TABLE t", remote, grant, false},
+		// The residual is canonical: row literals in a table function's
+		// arguments are tuple() calls by then, and still a plain read.
+		"inline rows, canonical":   {`SELECT * FROM "values"('a String, b String', "tuple"('x', 'y'))`, remote, grant, true},
+		"a call to an AI provider": {"SELECT aiGenerate('x')", remote, grant, false},
+		"a state-changing call":    {"SELECT generateSerialID('s')", remote, grant, false},
 	} {
 		err := checkAgentLimits(tc.sql, tc.dec, tc.obo)
 		if tc.pass {
