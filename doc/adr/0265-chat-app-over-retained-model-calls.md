@@ -8,7 +8,7 @@ date: 2026-09-27
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0265: A chat app over retained model calls — session-only, no tools
+# ADR-0265: A chat app over retained model calls — session-only, and a coordinator of apps
 
 ## Context
 
@@ -39,7 +39,9 @@ the two grants.
 We will build a standalone app, named chat, that holds a conversation
 in memory for the length of its window session, sends its turns on
 `llm.retain.complete` unless the user turned keeping off for that
-conversation, and reads nothing back.
+conversation, and reads nothing back. With Apps on, a turn is a tool loop
+over the host's `runtime.agent` services, and the app is the conversation's
+coordinator under ADR-0269 (SD6).
 
 ### SD1 — A standalone app, not a play pane
 
@@ -123,16 +125,17 @@ its own (SD5).
   `llmMessage` kind, read under a `keelson.query` grant
   ([ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md))
   and scoped to the caller — the `app_logs` shape.
-- **Tools**: play's tool loop is private to play; lifting it into a
-  shared package is the prerequisite.
+- **Tools beyond the coordinator's** (SD6): a capture the model views as
+  an image, the operations of apps that serve no catalog.
 - **Streaming**, **titles** (ADR-0264 §SD7), **edit-and-resend** and
   **regenerate** as branches — a call with an earlier parent, which the
   service already keeps.
 - **A context window** (SD3): what to drop when the conversation
   outgrows the model, sent as a declared omission.
-- **A system prompt** per conversation. None in v1; when it comes it is
-  fixed before the first send, since changing it later rewrites ordinal
-  0 and costs a fully kept turn (ADR-0264 §SD3).
+- **A system prompt** of the person's. The only one is the coordinator's
+  (SD6), fixed before the first send of a conversation with Apps on, since
+  changing it later rewrites ordinal 0 and costs a fully kept turn
+  (ADR-0264 §SD3).
 - **Deleting a conversation.** Every hosted product surveyed offers it;
   here kept text stays until removed by hand (ADR-0264 §SD6/§SD7). The
   delete is its own decision, taken with ADR-0264's purge policy.
@@ -141,6 +144,32 @@ its own (SD5).
 - **Sensitivity**: typed text is `ordinary`. A chat that pastes query
   results would have to carry their label, and this one has no way to
   paste them.
+
+### SD6 — The coordinator (ADR-0269)
+
+With Apps on, the model may work in windows the person shares, and only
+through the host:
+
+- **Registration.** The person registers the app as a coordinator
+  (`BOXER_AGENT_COORDINATORS`); the manifest's `runtime.agent` grant alone
+  lets it ask for nothing.
+- **Fixed tools.** `request_access`, `list_windows`, `describe_app`,
+  `call`, `open_window` and `stop_task`. Operation schemas load on demand
+  through `describe_app`; a call's key is the model's tool-call id.
+- **A turn.** Before the first model call the app asks the host for the
+  changes others made since the previous turn (`runtime.agent.turn`) and
+  puts them before the person's message; then it alternates model calls
+  and tool calls, at most eight rounds, and the transcript shows each tool
+  call as a system line.
+- **What the model reads.** Content an app marks untrusted, window titles,
+  and every capture arrive between `<<untrusted …>>` delimiters with their
+  source, and the fixed system prompt says such content is data. A
+  confined result the host would not hand a remote model arrives as a data
+  handle. Every model call declares the highest label the conversation
+  holds.
+- **One task per conversation.** The grant names the conversation; a new
+  conversation stops the task, and the app's row shows the task, whether it
+  read untrusted content and whether it holds confined content, with Stop.
 
 ## Alternatives
 
@@ -192,7 +221,9 @@ its own (SD5).
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Proposed — awaiting review by the code owner. Revised in place on
+2026-10-01 for ADR-0269's M5: the coordinator of SD6, built and tested
+against a scripted model over the host's services.
 
 Built 2026-09-27, in the working tree, as the chat app beside the other
 apps. The default lane passes: the turn loop against the llm service over
@@ -226,6 +257,7 @@ YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.
+- [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract the coordinator of SD6 drives apps under.
 - [ADR-0254](./0254-model-inference-as-a-keelson-capability.md) — the capability, its timeout, and `llm.cancel`.
 - [ADR-0239](./0239-play-chat-panel-and-chatview-widget.md) — the transcript widget and play's pane as the reader.
 - [LLM chat app requirements survey](../adr-background-work/llm-chat-app-requirements-survey.md) — the requirements, and which touch the storage model.

@@ -14,9 +14,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
@@ -35,8 +37,15 @@ type App struct {
 	// turn runs one completion at a time; pending is what it was started
 	// with. New conversation invalidates the run, so a late answer never
 	// lands on the conversation that replaced the one that asked.
-	turn    bgjob.Runner[llm.Response]
+	turn    bgjob.Runner[turnResult]
 	pending *pendingTurn
+
+	// apps lets the model work in windows the person shares (ADR-0269):
+	// the turn becomes a tool loop over runtime.agent. coord is the
+	// conversation's side of it, renewed with the conversation.
+	apps     bool
+	agentCli *agent.Client
+	coord    *coordinator
 
 	conv *conversation
 	// keep is the Keep toggle; a conversation takes it at its first send.
@@ -64,7 +73,7 @@ type pendingTurn struct {
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation()}
+	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get()}
 	return
 }
 
@@ -81,6 +90,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 	cli := llm.NewClient(bus)
 	inst.cli = cli
+	inst.agentCli = agent.NewClient(bus)
+	inst.coord = newCoordinator(inst.agentCli, inst.conv.id)
 	inst.describe.Start(nil, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
 		func(ctx context.Context) (d *llm.Description, err error) {
 			got, err := cli.Describe(ctx)
@@ -130,7 +141,7 @@ func (inst *App) drain() {
 	}
 	now := time.Now().UnixMilli()
 	if res, _, ok := inst.turn.TakeResult(); ok {
-		inst.conv.land(p.req, res, nil, now)
+		inst.conv.landTurn(p.req, res, nil, now)
 		inst.pending = nil
 		return
 	}
@@ -172,13 +183,24 @@ func (inst *App) startTurn(text string) (started bool) {
 	}
 	req := conv.request(text)
 	cli := inst.cli
+	var coord *coordinator
+	if inst.apps && inst.coord != nil {
+		coord = inst.coord
+		if len(req.Messages) == 1 || req.Messages[0].Role != openaichat.ChatRoleSystem {
+			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: coordinatorPrompt}}, req.Messages...)
+		}
+	}
 	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
-		func(ctx context.Context, _ bgjob.Reporter) (res *llm.Response, err error) {
+		func(ctx context.Context, _ bgjob.Reporter) (res *turnResult, err error) {
+			if coord != nil {
+				return runTurn(ctx, cli, coord, req)
+			}
 			got, err := cli.Complete(ctx, req)
 			if err != nil {
 				return
 			}
-			res = &got
+			res = &turnResult{final: got, messages: append(append([]openaichat.Message(nil), req.Messages...),
+				openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: got.Content, ToolCalls: got.ToolCalls})}
 			return
 		})
 	if !ok {
@@ -194,6 +216,20 @@ func (inst *App) startTurn(text string) (started bool) {
 func (inst *App) newConversation() {
 	inst.turn.Invalidate()
 	inst.pending = nil
+	if inst.coord != nil {
+		if h := inst.coord.handle(); h != "" {
+			// A task belongs to one conversation (ADR-0269 §SD6).
+			cli := inst.agentCli
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), agent.DefaultTimeout)
+				defer cancel()
+				_ = cli.Stop(ctx, h)
+			}()
+		}
+	}
 	inst.conv = newConversation()
+	if inst.agentCli != nil {
+		inst.coord = newCoordinator(inst.agentCli, inst.conv.id)
+	}
 	inst.view = chatview.State{}
 }

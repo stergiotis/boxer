@@ -21,6 +21,9 @@ type speakerE uint8
 const (
 	speakerUser speakerE = iota
 	speakerModel
+	// speakerTool is a line of the coordinator's activity: a tool call and
+	// how it ended.
+	speakerTool
 )
 
 // entry is one message of the transcript as the app shows it.
@@ -118,6 +121,21 @@ func (inst *conversation) land(req llm.Request, res *llm.Response, err error, at
 			}
 		}
 	}
+}
+
+// landTurn applies a turn that ran the tool loop (ADR-0269 M5): the
+// activity lines first, as system entries, then the answer; the history
+// becomes every message the model saw.
+func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, atMs int64) {
+	if err != nil || res == nil {
+		inst.land(req, nil, err, atMs)
+		return
+	}
+	for _, a := range res.activity {
+		inst.entries = append(inst.entries, entry{speaker: speakerTool, text: a, atMs: atMs})
+	}
+	inst.land(req, &res.final, nil, atMs)
+	inst.history = append(inst.history[:0:0], res.messages...)
 }
 
 // failureReason is the line a failed bubble shows.

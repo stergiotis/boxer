@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 )
@@ -85,6 +86,7 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		rep.Reason = "the host did not open it: " + err.Error()
 		return
 	}
+	inst.waitServing(key)
 	inst.mu.Lock()
 	t.entries[key] = &entry{instance: key, app: id, alias: id.SubjectAlias(), mode: mode}
 	t.launched[key] = true
@@ -93,6 +95,22 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	inst.attach(key)
 	rep.Ok, rep.Instance = true, key
 	return
+}
+
+// launchSettle bounds how long launch waits for a new window to serve.
+const launchSettle = 3 * time.Second
+
+// waitServing waits until a new window has drawn and serves its catalog,
+// so the caller's first query does not meet a window that has not drawn.
+// A window whose app serves no catalog is not waited for past the bound.
+func (inst *Service) waitServing(key uint64) {
+	deadline := time.Now().Add(launchSettle)
+	for time.Now().Before(deadline) {
+		if revs, ok := inst.cfg.Host.OpsRevisions(key); ok && revs != nil {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // leftByTask names the task that left window key to the person, if one did.
