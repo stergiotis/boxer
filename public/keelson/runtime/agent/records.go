@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json/v2"
 	"slices"
 	"strconv"
 	"time"
@@ -86,6 +87,11 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 	} else {
 		inst.records[inst.recHead] = r
 		inst.recHead = (inst.recHead + 1) % keepRecords
+	}
+	if inst.cfg.ActionsLog != nil {
+		if line, err := json.Marshal(r); err == nil {
+			_, _ = inst.cfg.ActionsLog.Write(append(line, '\n'))
+		}
 	}
 	inst.recMu.Unlock()
 	inst.persist(r)

@@ -28,7 +28,7 @@ func TestScriptedClientAnswersByPosition(t *testing.T) {
 	assert.Equal(t, "s0", r.ToolCalls[0].Id)
 
 	msgs := []openaichat.Message{user, {Role: openaichat.ChatRoleAssistant, ToolCalls: r.ToolCalls},
-		{Role: openaichat.ChatRoleTool, ToolCallId: "s0", Content: `{"window":42}`}}
+		{Role: openaichat.ChatRoleTool, ToolCallId: "s0", Content: `{"window":42,"note":"a \"quoted\" word"}`}}
 	r, err = c.Complete(context.Background(), openaichat.CompletionRequest{Messages: msgs})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"window":42,"operation":"get_state"}`, r.ToolCalls[0].Arguments)
@@ -52,4 +52,19 @@ func TestScriptedClientRefusesBadLines(t *testing.T) {
 		_, err := NewScriptedClient([]byte(in))
 		assert.Error(t, err, in)
 	}
+}
+
+// "$name" takes the latest tool result's value of name, as its JSON token;
+// a name no result gave stays as written.
+func TestScriptedPlaceholders(t *testing.T) {
+	c, err := NewScriptedClient([]byte(`{"tool":"request_access","args":{"destinations":["$destination"],"n":"$count","x":"$unknown"}}`))
+	require.NoError(t, err)
+	msgs := []openaichat.Message{
+		{Role: openaichat.ChatRoleTool, Content: `{"destination":"clickhouse:old:1","count":1}`},
+		{Role: openaichat.ChatRoleTool, Content: `<<untrusted source="play">>` + "\n" + `{"destination":"clickhouse:ch.example:8123"}` + "\n<<end untrusted>>"},
+	}
+	r, err := c.Complete(context.Background(), openaichat.CompletionRequest{Messages: msgs})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"destinations":["clickhouse:ch.example:8123"],"n":1,"x":"$unknown"}`, r.ToolCalls[0].Arguments)
+	assert.Equal(t, int32(2), r.InputTokens)
 }

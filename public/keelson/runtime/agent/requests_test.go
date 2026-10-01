@@ -255,3 +255,41 @@ func TestLoweringToSuggestTurnsQueuedCommandsIntoProposals(t *testing.T) {
 	st, _ := r.cli.Status(context.Background(), g.Handle, "w", 0)
 	assert.Equal(t, "proposed", st.Phase)
 }
+
+// destinationsOf reads a task's destinations under the service's lock.
+func (inst *rig) destinationsOf(handle string) (ds []string) {
+	inst.svc.mu.Lock()
+	defer inst.svc.mu.Unlock()
+	if t := inst.svc.tasks[handle]; t != nil {
+		ds = append(ds, t.destinations...)
+	}
+	return
+}
+
+// A widening's destinations join the task when the person approves it.
+func TestAnApprovedWideningAddsItsDestinations(t *testing.T) {
+	r, g := approvedRig(t, ModeAct)
+	got := make(chan Grant, 1)
+	go func() {
+		w, err := r.cli.Request(context.Background(), GrantRequest{Handle: g.Handle, Plan: "run it", Destinations: []string{"keelson:apps"}})
+		assert.NoError(t, err)
+		got <- w
+	}()
+	r.person(true, nil)
+	assert.Equal(t, g.Handle, (<-got).Handle)
+	assert.Contains(t, r.destinationsOf(g.Handle), "keelson:apps")
+}
+
+// ADR-0269 §SD6: under test grants a widening is approved at once, since
+// nobody answers the dialog in a scene.
+func TestATestGrantApprovesAWidening(t *testing.T) {
+	r := newRig(t, true)
+	g := r.grant(ModeAct)
+	w, err := r.cli.Request(context.Background(), GrantRequest{Handle: g.Handle, Plan: "run it", Destinations: []string{"clickhouse:ch.example:8123"}})
+	require.NoError(t, err)
+	assert.Equal(t, g.Handle, w.Handle)
+	assert.Equal(t, g.Task, w.Task)
+	assert.Contains(t, r.destinationsOf(g.Handle), "clickhouse:ch.example:8123")
+	_, err = r.cli.Request(context.Background(), GrantRequest{Handle: g.Handle, Entries: []GrantEntry{{Instance: 7, Mode: ModeSuggest}}})
+	assert.Error(t, err, "suggest needs the person's proposal surface")
+}

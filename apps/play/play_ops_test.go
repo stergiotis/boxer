@@ -43,6 +43,15 @@ func TestSetSqlReplacesTheBufferAtOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "SELECT 2", st.Sql)
 	assert.Equal(t, "idle", st.Result.Phase)
+	assert.Empty(t, st.Destination, "no client, no endpoint to name")
+
+	// ADR-0270 §SD2: the destination a grant must list for the endpoint.
+	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
+	raw, err = h.Snapshot().Query(opGetState, nil)
+	require.NoError(t, err)
+	st, err = buscodec.Decode[PlayState](raw)
+	require.NoError(t, err)
+	assert.Equal(t, "clickhouse:ch.example:8123", st.Destination)
 }
 
 func TestSetSignalCarriesTheTaskAsWriter(t *testing.T) {

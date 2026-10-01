@@ -91,6 +91,10 @@ to send and before sending:
   tables;
 - `readonly = 2` is sent whatever `BOXER_PLAY_ALLOW_WRITES` says.
 
+`get_state` names the endpoint's destination as `clickhouse:<host>`, so a
+coordinator asks for it in the grant before a run fails for it; the endpoint
+itself stays unsettable (SD5).
+
 The limits fail a run; they do not change it. Views, dictionaries and table
 engines can still reach beyond the endpoint without the statement naming
 them, which ADR-0269 §SD6 records with the restricted database user that

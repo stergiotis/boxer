@@ -135,8 +135,16 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 		inst.land(req, nil, err, atMs)
 		return
 	}
+	asked := len(inst.entries) - 1
 	for _, a := range res.activity {
 		inst.entries = append(inst.entries, entry{speaker: speakerTool, text: a, atMs: atMs})
+	}
+	if res.stopped != "" {
+		// Not answered, so not resent (§SD3); the calls it made stay shown.
+		if asked >= 0 {
+			inst.entries[asked].failed, inst.entries[asked].reason = true, res.stopped
+		}
+		return
 	}
 	inst.land(req, &res.final, nil, atMs)
 	inst.history = append(inst.history[:0:0], res.messages...)

@@ -69,6 +69,9 @@ type PlayState struct {
 	Params     []ParamState  `desc:"the buffer's parameter slots"`
 	Signals    []SignalState `desc:"the signals held"`
 	Result     ResultState   `desc:"the main result"`
+	// Destination is what a grant must list for a run to reach the
+	// endpoint (ADR-0270 §SD2).
+	Destination string `desc:"the endpoint as a grant names it, clickhouse:<host>; a run that names a table outside keelson() needs it, and under Auto a run naming only keelson tables needs keelson:<table> for each instead"`
 }
 
 // Column is one result column.
@@ -263,6 +266,9 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	}
 	sn.mounted, sn.graph = true, p.graph
 	st := PlayState{Sql: p.sql, Live: p.liveMain}
+	if p.client != nil {
+		st.Destination = DestinationClickHouse(endpointHost(p.client.URL()))
+	}
 	if slug, ok := p.tabs.slugForDockID(p.raisedTab); ok {
 		st.RaisedPane = slug
 	}

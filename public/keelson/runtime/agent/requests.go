@@ -156,6 +156,11 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		r.wanted[e.Instance], r.wantedOps[e.Instance] = m, e.Operations
 		r.share[e.Instance], r.mode[e.Instance] = true, m
 	}
+	if inst.cfg.TestGrants {
+		// A widening under test grants: the test grant stands in for the
+		// person here too, since nobody answers the dialog (ADR-0269 §SD6).
+		return inst.testWiden(r)
+	}
 	inst.mu.Lock()
 	inst.requests[r.key] = r
 	inst.requestOrder = append(inst.requestOrder, r.key)
@@ -225,6 +230,26 @@ func (inst *Service) pending() (out []*request) {
 	return
 }
 
+// testWiden approves a widening of a test task in place.
+func (inst *Service) testWiden(r *request) (rep wireGrantReply) {
+	rep.V = wireVersion
+	for _, m := range r.mode {
+		if m != ModeObserve && m != ModeAct {
+			rep.Reason = "a test grant takes observe or act; suggest needs the person's proposal surface"
+			return
+		}
+	}
+	inst.mu.Lock()
+	route := inst.approve(r)
+	t := r.task
+	inst.mu.Unlock()
+	if route != nil {
+		inst.routeHeld(route)
+	}
+	rep.Ok, rep.Task, rep.Handle, rep.Phase = true, t.id, t.handle, reqStateApproved.String()
+	return
+}
+
 // approve applies the person's decision. The caller holds mu; a held call
 // is routed after it is released.
 func (inst *Service) approve(r *request) (route *held) {
@@ -237,6 +262,12 @@ func (inst *Service) approve(r *request) (route *held) {
 		inst.tasks[t.handle] = t
 	}
 	t := r.task
+	// A widening's destinations join the task's.
+	for _, d := range r.destinations {
+		if !slices.Contains(t.destinations, d) {
+			t.destinations = append(t.destinations, d)
+		}
+	}
 	for k, share := range r.share {
 		if !share {
 			continue

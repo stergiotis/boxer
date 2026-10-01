@@ -159,8 +159,9 @@ through the host:
 - **A turn.** Before the first model call the app asks the host for the
   changes others made since the previous turn (`runtime.agent.turn`) and
   puts them before the person's message; then it alternates model calls
-  and tool calls, at most eight rounds, and the transcript shows each tool
-  call as a system line.
+  and tool calls, at most 24 rounds, and the transcript shows each tool
+  call as a system line — also when the turn stops without an answer, which,
+  unanswered, is not resent.
 - **What the model reads.** Content an app marks untrusted, window titles,
   and every capture arrive between `<<untrusted …>>` delimiters with their
   source, and the fixed system prompt says such content is data. A

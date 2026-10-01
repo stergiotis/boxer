@@ -22,7 +22,7 @@ import (
 // headless host, like the agent's test grants.
 var ScriptEnv = env.NewString(env.Spec{
 	Name:        "BOXER_LLM_SCRIPT",
-	Description: "path to a scripted model (JSON lines, one reply each) the llm service answers from instead of an endpoint; honoured only on the headless host, for scenes",
+	Description: "path to a scripted model (JSON lines, one reply each; \"$name\" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on the headless host, for scenes",
 	Category:    env.CategoryLLM,
 })
 
@@ -31,8 +31,9 @@ var ScriptEnv = env.NewString(env.Spec{
 const ScriptedEndpoint = "http://127.0.0.1/scripted"
 
 // ScriptReply is one line of a script: a text answer, or one tool call.
-// In Args, the string "$window" stands for the last window number a tool
-// result reported ("window":N), since a scene cannot know it in advance.
+// In Args, a string "$name" stands for the last value a tool result gave
+// "name" — "$window" for the window a launch reported, "$destination" for
+// what play's get_state names — since a scene cannot know them in advance.
 type ScriptReply struct {
 	Content string         `json:"content,omitempty"`
 	Tool    string         `json:"tool,omitempty"`
@@ -43,6 +44,8 @@ type ScriptReply struct {
 // already holds n assistant messages: the conversation's position decides
 // the reply, so a call that is cancelled and resent repeats its reply
 // rather than skipping one. Past the end it answers that the script ended.
+// Its token counts are the request's message count and one, so a client's
+// count shows that a turn landed.
 type ScriptedClient struct {
 	replies []ScriptReply
 }
@@ -97,40 +100,54 @@ func LoadScript(path string) (inst *ScriptedClient, err error) {
 	return NewScriptedClient(b)
 }
 
-var windowInResult = regexp.MustCompile(`"window":\s*(\d+)`)
+// placeholder is a "$name" argument.
+var placeholder = regexp.MustCompile(`"\$([A-Za-z_][A-Za-z0-9_]*)"`)
+
+// lastValue is the JSON token the latest tool result gave name: a string,
+// a number or a boolean.
+func lastValue(msgs []openaichat.Message, name string) (tok string, ok bool) {
+	re := regexp.MustCompile(`"` + regexp.QuoteMeta(name) + `":\s*("(?:[^"\\]|\\.)*"|-?[0-9]+(?:\.[0-9]+)?|true|false)`)
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != openaichat.ChatRoleTool {
+			continue
+		}
+		if all := re.FindAllStringSubmatch(msgs[i].Content, -1); len(all) > 0 {
+			return all[len(all)-1][1], true
+		}
+	}
+	return
+}
 
 // Complete answers the reply at the request's position.
 func (inst *ScriptedClient) Complete(_ context.Context, req openaichat.CompletionRequest) (resp openaichat.CompletionResponse, err error) {
 	n := 0
-	window := ""
 	for _, m := range req.Messages {
-		switch m.Role {
-		case openaichat.ChatRoleAssistant:
+		if m.Role == openaichat.ChatRoleAssistant {
 			n++
-		case openaichat.ChatRoleTool:
-			if all := windowInResult.FindAllStringSubmatch(m.Content, -1); len(all) > 0 {
-				window = all[len(all)-1][1]
-			}
 		}
 	}
+	resp.InputTokens, resp.OutputTokens = int32(len(req.Messages)), 1
 	if n >= len(inst.replies) {
-		resp = openaichat.CompletionResponse{Content: "(the script has ended)", FinishReason: "stop"}
+		resp.Content, resp.FinishReason = "(the script has ended)", "stop"
 		return
 	}
 	r := inst.replies[n]
 	if r.Tool == "" {
-		resp = openaichat.CompletionResponse{Content: r.Content, FinishReason: "stop"}
+		resp.Content, resp.FinishReason = r.Content, "stop"
 		return
 	}
 	args := string(r.Args)
 	if args == "" {
 		args = "{}"
 	}
-	if window != "" {
-		args = string(bytes.ReplaceAll([]byte(args), []byte(`"$window"`), []byte(window)))
-	}
-	resp = openaichat.CompletionResponse{FinishReason: "tool_calls",
-		ToolCalls: []openaichat.ToolCall{{Id: "s" + strconv.Itoa(n), Name: r.Tool, Arguments: args}}}
+	args = placeholder.ReplaceAllStringFunc(args, func(m string) string {
+		if tok, ok := lastValue(req.Messages, m[2:len(m)-1]); ok {
+			return tok
+		}
+		return m
+	})
+	resp.FinishReason = "tool_calls"
+	resp.ToolCalls = []openaichat.ToolCall{{Id: "s" + strconv.Itoa(n), Name: r.Tool, Arguments: args}}
 	return
 }
 

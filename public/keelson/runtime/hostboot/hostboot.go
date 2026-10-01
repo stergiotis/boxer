@@ -468,7 +468,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		if path := llm.ScriptEnv.Get(); path != "" {
 			// A scripted model, for scenes (ADR-0269 M6): on the headless
 			// host only, where no person reads its answers as a model's.
-			if scriptedModel(true, imzero2env.HeadlessListen.Get() != "") {
+			if headlessOnly(true, imzero2env.HeadlessListen.Get() != "") {
 				scripted, sErr := llm.LoadScript(path)
 				if sErr != nil {
 					logger.Warn().Err(sErr).Msg("llm: BOXER_LLM_SCRIPT does not load; no scripted model")
@@ -744,7 +744,8 @@ func (rt *Runtime) bootAgent() {
 	logger := rt.opts.Log
 	// Durable where the persist backend is the server holding boxer.facts
 	// (ADR-0269 §SD9), as for llm_calls.
-	cfg := agent.Config{TestGrants: agentTestGrants(agent.TestGrantsEnv.Get(), imzero2env.HeadlessListen.Get() != ""),
+	headless := imzero2env.HeadlessListen.Get() != ""
+	cfg := agent.Config{TestGrants: headlessOnly(agent.TestGrantsEnv.Get(), headless),
 		Exec: rt.PersistExec, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get())}
 	if rt.LLM != nil {
 		// Confined content reaches a coordinator's model only where the host's
@@ -754,6 +755,19 @@ func (rt *Runtime) bootAgent() {
 	}
 	if agent.TestGrantsEnv.Get() && !cfg.TestGrants {
 		logger.Warn().Msg("agent: BOXER_AGENT_TEST_GRANTS is honoured only on the headless host; refused here")
+	}
+	if path := agent.ActionsFileEnv.Get(); path != "" {
+		if headlessOnly(true, headless) {
+			f, fErr := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+			if fErr != nil {
+				logger.Warn().Err(fErr).Str("path", path).Msg("agent: BOXER_AGENT_ACTIONS_FILE does not open; no action file")
+			} else {
+				cfg.ActionsLog = f
+				rt.cleanups = append(rt.cleanups, func() { _ = f.Close() })
+			}
+		} else {
+			logger.Warn().Msg("agent: BOXER_AGENT_ACTIONS_FILE is honoured only on the headless host; refused here")
+		}
 	}
 	if rt.Host != nil {
 		cfg.Host = rt.Host
@@ -788,17 +802,13 @@ func (rt *Runtime) bootAgent() {
 	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")
 }
 
-// agentTestGrants decides whether test grants are issued: only when asked
-// for, and only on the headless host (ADR-0269 §SD6) — the desktop host is
-// where a person's windows are, and a grant there needs the person.
-func agentTestGrants(requested bool, headless bool) (on bool) {
-	return requested && headless
-}
-
-// scriptedModel decides whether BOXER_LLM_SCRIPT replaces the endpoint:
-// only on the headless host (ADR-0269 M6), so no person reads a script's
-// answers as a model's.
-func scriptedModel(requested bool, headless bool) (on bool) {
+// headlessOnly decides whether a test-lane knob takes effect: only when
+// asked for, and only on the headless host. The desktop host is where a
+// person's windows are: a grant there needs the person (ADR-0269 §SD6), a
+// script's answers would read as a model's, and the action record has its
+// own home (§SD9). It gates BOXER_AGENT_TEST_GRANTS, BOXER_LLM_SCRIPT and
+// BOXER_AGENT_ACTIONS_FILE.
+func headlessOnly(requested bool, headless bool) (on bool) {
 	return requested && headless
 }
 

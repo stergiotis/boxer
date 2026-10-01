@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"io"
 	"slices"
 	"strings"
 	"sync"
@@ -42,6 +43,9 @@ type Config struct {
 	// action record is also kept there (§SD9). nil keeps only the
 	// in-process record.
 	Exec recordstore.ExecutorI
+	// ActionsLog, when set, receives every action record as one JSON line,
+	// for a trial's scorer (ActionsFileEnv); the headless host sets it.
+	ActionsLog io.Writer
 }
 
 // Service answers `runtime.agent.*` (ADR-0269 §SD3).

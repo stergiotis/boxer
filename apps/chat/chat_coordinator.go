@@ -22,8 +22,10 @@ import (
 // dispatcher, and what comes back from an app reaches the model delimited
 // and attributed, as data. Nothing here touches the UI.
 
-// maxRounds bounds the model calls of one turn.
-const maxRounds = 8
+// maxRounds bounds the model calls of one turn: a guard against a model
+// that never stops calling tools. The host's call budget per task is what
+// bounds the calls themselves.
+const maxRounds = 24
 
 // callWait bounds how long a tool call waits for its call to settle.
 const callWait = 10 * time.Second
@@ -323,11 +325,14 @@ func (inst *coordinator) call(ctx context.Context, key string, args map[string]a
 }
 
 // turnResult is a finished turn: every message the model saw, the last
-// answer, and the activity lines for the transcript.
+// answer, and the activity lines for the transcript. stopped says why a
+// turn that had called tools ended without an answer; its calls happened,
+// so the transcript shows them.
 type turnResult struct {
 	messages []openaichat.Message
 	final    llm.Response
 	activity []string
+	stopped  string
 }
 
 // runTurn is one turn with Apps on: the changes note, then model calls and
@@ -347,6 +352,9 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		var res llm.Response
 		res, err = cli.Complete(ctx, r)
 		if err != nil {
+			if len(out.activity) > 0 && !errors.Is(err, context.Canceled) {
+				out.stopped, err = failureReason(err), nil
+			}
 			return
 		}
 		parent = res.CallId
@@ -361,7 +369,7 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})
 		}
 		if round == maxRounds-1 {
-			err = errors.New("the model kept calling tools past " + strconv.Itoa(maxRounds) + " rounds")
+			out.stopped = "the model kept calling tools past " + strconv.Itoa(maxRounds) + " rounds"
 			return
 		}
 	}

@@ -215,3 +215,18 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 	assert.Len(t, model.seen[0].Tools, 6, "every call offers the fixed tools")
 	model.mu.Unlock()
 }
+
+// A turn that called tools and stopped without an answer keeps its calls
+// in the transcript and marks the person's message unanswered; history
+// stays as it was, since an unanswered turn is not resent (ADR-0265 §SD3).
+func TestAStoppedTurnKeepsItsCallsShown(t *testing.T) {
+	conv := newConversation()
+	req := conv.request("go")
+	conv.begin("go", 1)
+	conv.landTurn(req, &turnResult{activity: []string{"get_note in window 100 · completed"}, stopped: "the model kept calling tools past 24 rounds"}, nil, 2)
+	require.Len(t, conv.entries, 2)
+	assert.True(t, conv.entries[0].failed)
+	assert.Contains(t, conv.entries[0].reason, "24 rounds")
+	assert.Equal(t, speakerTool, conv.entries[1].speaker)
+	assert.Empty(t, conv.history)
+}
