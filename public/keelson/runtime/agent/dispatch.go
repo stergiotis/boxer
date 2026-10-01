@@ -32,6 +32,9 @@ type HostI interface {
 	OpsAttach(key uint64, attached bool) (ok bool)
 	OpsCapture(key uint64) (job string, err error)
 	OpsCaptureStatus(job string) (st opwire.CaptureStatus, ok bool)
+	OpsRevisions(key uint64) (revs map[string]uint64, ok bool)
+	OpsUndo(key uint64, callId string) (ok bool)
+	OpsUndoStatus(key uint64, callId string) (status string, ok bool)
 }
 
 // ModeE is how far a task may act in one instance (ADR-0269 §SD5).
@@ -121,6 +124,25 @@ type callRec struct {
 	argsDigest string
 	// heldBy is the widening a call outside the grant waits on.
 	heldBy *request
+	// req and entry are what route sent, with the expectations it sent, so
+	// a queued command can turn back into a proposal.
+	req   wireCall
+	entry *entry
+	// proposal is set while the call waits on the person: a suggestion, or
+	// a consequential command awaiting confirmation (ADR-0269 §SD5).
+	proposal *proposal
+	created  time.Time
+}
+
+// proposal is a command the person accepts or rejects in host chrome.
+type proposal struct {
+	// confirm marks a consequential command: accepting it is its
+	// confirmation, and it is asked for every time.
+	confirm bool
+	expects map[string]uint64
+	// taken marks a proposal the person accepted while it is being routed;
+	// the phase moves when the instance has queued it.
+	taken bool
 }
 
 type task struct {
@@ -259,7 +281,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		rep.Outcome = inst.outcomeOf(t, prev, 0)
 		return
 	}
-	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args)}
+	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args), created: time.Now()}
 	t.keys[req.Key] = rec
 	out, spec, e, need, mode := inst.check(t, req)
 	rec.spec = spec
@@ -268,6 +290,16 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	}
 	if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
 		inst.holdForWidening(t, rec, req, need, mode)
+	}
+	if out.Phase == opwire.PhaseProposed {
+		if _, aerr := encodeArgs(spec, req.Args); aerr != nil {
+			out = phaseOutcome(opwire.PhaseRefused, "the arguments do not fit the schema: "+aerr.Error())
+		} else {
+			t.callsUsed++
+			rec.req, rec.entry = req, e
+			rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential,
+				expects: inst.expectsFor(t, req, spec)}
+		}
 	}
 	if out.Phase != opwire.PhaseUnspecified {
 		rec.outcome = out
@@ -278,6 +310,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		rep.Outcome.Held = rec.heldBy != nil
 		return
 	}
+	t.callsUsed++
 	inst.mu.Unlock()
 	inst.route(t, rec, req, spec, e)
 	inst.mu.Lock()
@@ -286,11 +319,10 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	return
 }
 
-// route sends a checked call to its instance and settles what it answers.
-func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.OperationSpec, e *entry) {
-	inst.mu.Lock()
-	t.callsUsed++
-	expects := make(map[string]uint64, len(spec.Writes))
+// expectsFor is what a command expects of the resources it writes: what
+// the call names, else what the task last read. The caller holds mu.
+func (inst *Service) expectsFor(t *task, req wireCall, spec app.OperationSpec) (expects map[string]uint64) {
+	expects = make(map[string]uint64, len(spec.Writes))
 	for _, r := range spec.Writes {
 		if v, given := req.Expects[r]; given {
 			expects[r] = v
@@ -298,8 +330,17 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 			expects[r] = v
 		}
 	}
+	return
+}
+
+// route sends a checked call to its instance and settles what it answers.
+func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.OperationSpec, e *entry) {
+	inst.mu.Lock()
+	expects := inst.expectsFor(t, req, spec)
 	inst.nextCall++
 	rec.callId = t.id + "-" + strconv.FormatUint(inst.nextCall, 10)
+	rec.req, rec.entry = req, e
+	rec.req.Expects = expects
 	alias := e.alias
 	inst.mu.Unlock()
 
@@ -374,10 +415,14 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 		out, need = phaseOutcome(opwire.PhaseInputRequired, "observe mode: the person is asked to raise the mode"), needMode
 	case spec.Effect != app.OperationEffectNone && inst.holder(req.Instance, t) != nil:
 		out = phaseOutcome(opwire.PhaseRefused, "busy: another task holds the instance")
-	case spec.Effect == app.OperationEffectConsequential:
-		out = phaseOutcome(opwire.PhaseInputRequired, "a consequential command needs the person's confirmation")
 	case t.callsUsed >= t.callsBudget:
 		out, need, mode = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; the person is asked"), needBudget, e.mode
+	case spec.Effect == app.OperationEffectConsequential && t.test:
+		out = phaseOutcome(opwire.PhaseInputRequired, "a consequential command needs the person's confirmation")
+	case spec.Effect == app.OperationEffectConsequential:
+		out = phaseOutcome(opwire.PhaseProposed, "a consequential command: the person confirms it")
+	case spec.Effect != app.OperationEffectNone && e.mode == ModeSuggest:
+		out = phaseOutcome(opwire.PhaseProposed, "suggest mode: the person accepts or rejects it")
 	}
 	if t.test {
 		// Nobody answers a test grant's widening.
@@ -539,6 +584,9 @@ func (inst *Service) cancel(msg *app.Msg) (rep wireCallReply) {
 		if o, found := inst.cfg.Host.OpsCancel(rec.instance, rec.callId); found {
 			rec.outcome = o
 		}
+	}
+	if rec.proposal != nil && rec.outcome.Phase == opwire.PhaseProposed {
+		rec.outcome = phaseOutcome(opwire.PhaseCancelled, "withdrawn by cancel")
 	}
 	rep.Outcome = inst.outcomeOf(t, rec, 0)
 	return

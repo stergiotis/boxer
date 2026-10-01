@@ -43,6 +43,7 @@ type Set[A any, S any] struct {
 	resources []app.ResourceSpec
 	values    map[string]func(inst A) any
 	editing   map[string]func(inst A) bool
+	restore   map[string]func(inst A, v any) bool
 	ops       []app.OperationSpec
 	commands  map[string]commandFn[A]
 	queries   map[string]queryFn[S]
@@ -57,6 +58,7 @@ func NewSet[A any, S any](snapshot func(inst A) S) (s *Set[A, S]) {
 	s = &Set[A, S]{
 		values:   make(map[string]func(A) any),
 		editing:  make(map[string]func(A) bool),
+		restore:  make(map[string]func(A, any) bool),
 		commands: make(map[string]commandFn[A]),
 		queries:  make(map[string]queryFn[S]),
 		avail:    make(map[string]func(S) (bool, string)),
@@ -79,6 +81,14 @@ func (inst *Set[A, S]) Resource(name string, summary string, value func(inst A) 
 // Without it, a resource is never reported as being edited.
 func (inst *Set[A, S]) Editing(name string, fn func(inst A) bool) *Set[A, S] {
 	inst.editing[name] = fn
+	return inst
+}
+
+// Restorable declares how to put back a value of a resource that its
+// value function returned earlier; undo restores only such resources. fn
+// reports false when the value does not fit.
+func (inst *Set[A, S]) Restorable(name string, fn func(inst A, v any) bool) *Set[A, S] {
+	inst.restore[name] = fn
 	return inst
 }
 
@@ -200,6 +210,13 @@ type bound[A any, S any] struct {
 func (inst *bound[A, S]) ResourceValue(name string) (v any) {
 	if fn, ok := inst.set.values[name]; ok {
 		v = fn(inst.inst)
+	}
+	return
+}
+
+func (inst *bound[A, S]) Restore(name string, v any) (ok bool) {
+	if fn, declared := inst.set.restore[name]; declared {
+		ok = fn(inst.inst, v)
 	}
 	return
 }

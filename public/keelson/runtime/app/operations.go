@@ -285,6 +285,11 @@ type OperationsHandlerI interface {
 	// The host compares values across the frame's write-back to bump
 	// revisions (ADR-0269 §SD4).
 	ResourceValue(name string) (v any)
+	// Restore puts back a value ResourceValue returned earlier, for undo
+	// (ADR-0269 §SD8). It reports false for a resource it cannot restore —
+	// one whose value is a digest, or that has no setter — and undo leaves
+	// that resource alone.
+	Restore(name string, v any) (ok bool)
 	// Editing reports whether the person is editing a resource: its widget
 	// has keyboard focus or received input in the last frame. A command to
 	// it is a conflict (ADR-0269 §SD4).

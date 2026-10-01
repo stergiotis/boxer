@@ -128,7 +128,7 @@ func TestACallOutsideTheGrantWaitsForAWidening(t *testing.T) {
 	r.call(g, "q2", "get_text", "{}")
 	// A declined widening ends the call as rejected.
 	held = r.call(g, "e", "export", "{}")
-	assert.Equal(t, "input_required", held.Phase, "a consequential command is not a widening")
+	assert.Equal(t, "proposed", held.Phase, "a consequential command is confirmed, not widened")
 	assert.False(t, held.Held)
 }
 
@@ -158,4 +158,100 @@ func TestTheTaskEndsWithItsCoordinator(t *testing.T) {
 	closer := r.bus.NewClient("test.closer", []app.SubjectFilter{{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionPub}})
 	require.NoError(t, closer.Publish(app.SubjectInstanceClosed, payload))
 	assert.Equal(t, "denied", r.call(g, "q", "get_text", "{}").Phase)
+}
+
+// approvedRig is a rig with a person-approved grant over window 7 in mode.
+func approvedRig(t *testing.T, mode ModeE) (*rig, Grant) {
+	r := coordinatorRig(t)
+	got := make(chan Grant, 1)
+	go func() {
+		g, _ := r.cli.Request(context.Background(), GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: mode}}})
+		got <- g
+	}()
+	r.person(true, nil)
+	return r, <-got
+}
+
+func (inst *rig) decideProposal(accept bool, confirm bool) {
+	inst.t.Helper()
+	inst.svc.mu.Lock()
+	ps := inst.svc.proposals(0, confirm)
+	inst.svc.mu.Unlock()
+	require.NotEmpty(inst.t, ps)
+	if accept {
+		inst.svc.accept(ps[0])
+	} else {
+		inst.svc.rejectProposal(ps[0])
+	}
+}
+
+func TestSuggestModeProposesAndThePersonAccepts(t *testing.T) {
+	r, g := approvedRig(t, ModeSuggest)
+	ctx := context.Background()
+	r.call(g, "q", "get_text", "{}")
+	out := r.call(g, "w", "set_text", `{"text":"suggested"}`)
+	require.Equal(t, "proposed", out.Phase)
+	assert.False(t, out.Final())
+	r.host.frame(7)
+	assert.Equal(t, "start", r.host.docs[7].text, "a proposal changes nothing")
+	r.decideProposal(true, false)
+	require.Eventually(t, func() bool {
+		st, _ := r.cli.Status(ctx, g.Handle, "w", 0)
+		return st.Phase == "accepted"
+	}, 2*time.Second, 10*time.Millisecond)
+	r.host.frame(7)
+	assert.Equal(t, "suggested", r.host.docs[7].text)
+}
+
+func TestAProposalGoesStaleWhenItsResourceMoves(t *testing.T) {
+	r, g := approvedRig(t, ModeSuggest)
+	r.call(g, "q", "get_text", "{}")
+	r.call(g, "w", "set_text", `{"text":"suggested"}`)
+	r.host.docs[7].text = "the person moved on"
+	r.host.frame(7)
+	r.decideProposal(true, false)
+	st, err := r.cli.Status(context.Background(), g.Handle, "w", 0)
+	require.NoError(t, err)
+	assert.Equal(t, "stale", st.Phase)
+	assert.Equal(t, "the person moved on", r.host.docs[7].text)
+}
+
+func TestARejectedProposalIsFinal(t *testing.T) {
+	r, g := approvedRig(t, ModeSuggest)
+	r.call(g, "q", "get_text", "{}")
+	r.call(g, "w", "set_text", `{"text":"suggested"}`)
+	r.decideProposal(false, false)
+	st, _ := r.cli.Status(context.Background(), g.Handle, "w", 0)
+	assert.Equal(t, "rejected", st.Phase)
+	assert.True(t, st.Final())
+}
+
+func TestAConsequentialCommandIsConfirmedEachTime(t *testing.T) {
+	r, g := approvedRig(t, ModeAct)
+	out := r.call(g, "x1", "export", "{}")
+	require.Equal(t, "proposed", out.Phase, "act mode still asks for a consequential command")
+	r.decideProposal(true, true)
+	require.Eventually(t, func() bool {
+		st, _ := r.cli.Status(context.Background(), g.Handle, "x1", 0)
+		return st.Phase == "accepted"
+	}, 2*time.Second, 10*time.Millisecond)
+	out = r.call(g, "x2", "export", "{}")
+	assert.Equal(t, "proposed", out.Phase, "every time")
+}
+
+func TestLoweringToSuggestTurnsQueuedCommandsIntoProposals(t *testing.T) {
+	r, g := approvedRig(t, ModeAct)
+	r.call(g, "q", "get_text", "{}")
+	require.Equal(t, "accepted", r.call(g, "w", "set_text", `{"text":"queued"}`).Phase)
+	r.svc.mu.Lock()
+	var t0 *task
+	for _, cand := range r.svc.tasks {
+		t0 = cand
+	}
+	r.svc.mu.Unlock()
+	r.svc.setMode(t0, 7, ModeSuggest)
+	r.host.frame(7)
+	assert.Equal(t, "start", r.host.docs[7].text, "the queued command did not apply")
+	st, _ := r.cli.Status(context.Background(), g.Handle, "w", 0)
+	assert.Equal(t, "proposed", st.Phase)
 }

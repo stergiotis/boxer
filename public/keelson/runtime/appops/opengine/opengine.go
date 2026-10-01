@@ -24,6 +24,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -59,6 +60,12 @@ type call struct {
 	expects map[string]uint64
 	call    app.OperationCall
 	outcome opwire.Outcome
+	// before holds the written resources' values before the command, and
+	// after their revisions after it: what undo checks and puts back.
+	before map[string]any
+	after  map[string]uint64
+	// undone says how an undo of the call ended; empty until one ran.
+	undone string
 }
 
 type snapshot struct {
@@ -74,6 +81,7 @@ type Engine struct {
 
 	mu       sync.Mutex
 	queue    []*call
+	undos    []string
 	calls    map[string]*call
 	order    []string
 	attached int
@@ -257,11 +265,11 @@ func (inst *Engine) SetAttached(attached bool) {
 }
 
 // Busy reports whether the instance needs frames soon: a task is attached,
-// a command is queued, or an applied one has not been drawn.
+// or a command or an undo is queued.
 func (inst *Engine) Busy() (busy bool) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	busy = inst.attached > 0 || len(inst.queue) > 0
+	busy = inst.attached > 0 || len(inst.queue) > 0 || len(inst.undos) > 0
 	return
 }
 
@@ -293,12 +301,18 @@ func (inst *Engine) BeginFrame() {
 	}
 }
 
-// ApplyQueued applies the queued commands in order.
+// ApplyQueued runs the undos the person asked for, then applies the queued
+// commands in order.
 func (inst *Engine) ApplyQueued() {
 	inst.mu.Lock()
 	queue := inst.queue
 	inst.queue = nil
+	undos := inst.undos
+	inst.undos = nil
 	inst.mu.Unlock()
+	for _, id := range undos {
+		inst.undo(id)
+	}
 	for _, c := range queue {
 		out := inst.apply(c)
 		inst.mu.Lock()
@@ -337,6 +351,10 @@ func (inst *Engine) apply(c *call) (out opwire.Outcome) {
 			return opwire.Outcome{Phase: opwire.PhaseRefused, Reason: reason}
 		}
 	}
+	before := make(map[string]any, len(c.spec.Writes))
+	for _, r := range c.spec.Writes {
+		before[r] = inst.values[r]
+	}
 	result, err := inst.h.ApplyCommand(c.call, c.spec.Name, c.args)
 	out = outcomeOfError(err)
 	if out.Phase != opwire.PhaseUnspecified {
@@ -346,7 +364,79 @@ func (inst *Engine) apply(c *call) (out opwire.Outcome) {
 		return
 	}
 	inst.observe(c.call.Writer, c.spec.Writes)
+	c.before, c.after = before, pick(inst.revs, c.spec.Writes)
 	out = opwire.Outcome{Phase: opwire.PhaseApplied, AsOf: inst.frame, Revisions: pick(inst.revs, c.spec.Writes), Result: result}
+	return
+}
+
+// Undo asks for a command to be undone at the next command stage
+// (ADR-0269 §SD8). UndoStatus reports how it ended.
+func (inst *Engine) Undo(id string) (ok bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	c, found := inst.calls[id]
+	if !found || c.after == nil || c.undone != "" {
+		return
+	}
+	inst.undos = append(inst.undos, id)
+	ok = true
+	return
+}
+
+// UndoStatus reports how an undo of a call ended; empty while none ran.
+func (inst *Engine) UndoStatus(id string) (status string, ok bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	c, ok := inst.calls[id]
+	if ok {
+		status = c.undone
+	}
+	return
+}
+
+// undo restores each resource a command wrote while its revision is still
+// the one the command left; later work by anyone is never overwritten.
+func (inst *Engine) undo(id string) {
+	inst.mu.Lock()
+	c := inst.calls[id]
+	inst.mu.Unlock()
+	if c == nil || c.after == nil {
+		return
+	}
+	var restored, moved, fixed []string
+	for _, r := range c.spec.Writes {
+		switch {
+		case inst.revs[r] != c.after[r]:
+			moved = append(moved, r)
+		case !inst.h.Restore(r, c.before[r]):
+			fixed = append(fixed, r)
+		default:
+			restored = append(restored, r)
+		}
+	}
+	inst.observe(opwire.WriterPerson, restored)
+	status := "undone"
+	switch {
+	case len(restored) == 0 && len(moved) > 0:
+		status = "not undone: " + strings.Join(moved, ", ") + " moved since"
+	case len(restored) == 0:
+		status = "not undone: the app cannot restore " + strings.Join(fixed, ", ")
+	case len(moved)+len(fixed) > 0:
+		status = "partly undone: " + strings.Join(append(moved, fixed...), ", ") + " kept"
+	}
+	inst.mu.Lock()
+	c.undone = status
+	inst.mu.Unlock()
+	inst.appendLog(LogEntry{Frame: inst.frame, Writer: opwire.WriterPerson, Op: "undo " + c.spec.Name, CallId: id,
+		Phase: opwire.PhaseApplied, Reason: status, Resources: restored, Revisions: pick(inst.revs, restored)})
+}
+
+// SnapshotRevisions returns the revisions as of the latest snapshot; safe
+// from any goroutine. A proposal is stale when one it expects has moved.
+func (inst *Engine) SnapshotRevisions() (revs map[string]uint64, asOf uint64) {
+	if s := inst.snap.Load(); s != nil {
+		revs, asOf = maps.Clone(s.revs), s.asOf
+	}
 	return
 }
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -13,6 +14,7 @@ import (
 // bound to them, kept so the catalog can tell when the person is editing.
 type App struct {
 	ids    *c.WidgetIdStack
+	bus    app.BusI
 	note   string
 	level  float64
 	noteH  widgethandle.WidgetHandle
@@ -20,6 +22,8 @@ type App struct {
 	// cleared counts the Clear button's gestures, shown so a scene can see
 	// the person's path ran.
 	cleared int
+	// copied counts copies to the clipboard.
+	copied int
 }
 
 var _ app.AppI = (*App)(nil)
@@ -34,7 +38,18 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
+	inst.bus = ctx.Bus()
 	return
+}
+
+// copyNote sends the note to the clipboard, off the render goroutine.
+func (inst *App) copyNote() {
+	inst.copied++
+	bus, text := inst.bus, inst.note
+	if bus == nil {
+		return
+	}
+	go func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text)) }()
 }
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) { return }
@@ -64,6 +79,12 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 			inst.cleared++
 		}
 		c.Label("cleared " + strconv.Itoa(inst.cleared) + "×").Send()
+		if c.Button(inst.ids.PrepareStr("copy"), c.Atoms().Text("Copy").Keep()).SendResp().HasPrimaryClicked() {
+			if _, gErr := appops.Gesture[appops.None, appops.None](ctx, opCopyNote, appops.None{}); gErr != nil {
+				inst.copyNote()
+			}
+		}
+		c.Label("copied " + strconv.Itoa(inst.copied) + "×").Send()
 	}
 	c.Label("note: " + strconv.Itoa(len([]rune(inst.note))) + " characters · level " + strconv.FormatFloat(inst.level, 'f', 1, 64)).Send()
 	return

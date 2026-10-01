@@ -172,6 +172,34 @@ func (inst *Inst) OpsAttach(key uint64, attached bool) (ok bool) {
 	return
 }
 
+// OpsRevisions returns a window's revisions as of its latest snapshot.
+func (inst *Inst) OpsRevisions(key uint64) (revs map[string]uint64, ok bool) {
+	eng, _ := inst.engineOf("", key)
+	if eng == nil {
+		return
+	}
+	revs, _ = eng.SnapshotRevisions()
+	ok = true
+	return
+}
+
+// OpsUndo asks for a command of a window to be undone at its next command
+// stage.
+func (inst *Inst) OpsUndo(key uint64, callId string) (ok bool) {
+	if eng, _ := inst.engineOf("", key); eng != nil {
+		ok = eng.Undo(callId)
+	}
+	return
+}
+
+// OpsUndoStatus reports how an undo ended; empty while none ran.
+func (inst *Inst) OpsUndoStatus(key uint64, callId string) (status string, ok bool) {
+	if eng, _ := inst.engineOf("", key); eng != nil {
+		status, ok = eng.UndoStatus(callId)
+	}
+	return
+}
+
 // OpsLog returns a window's command log.
 func (inst *Inst) OpsLog(key uint64) (entries []opengine.LogEntry, ok bool) {
 	eng, _ := inst.engineOf("", key)

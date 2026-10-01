@@ -292,12 +292,18 @@ func (inst *Service) routeHeld(h *held) {
 		}
 		out, spec, e, _, _ := inst.check(t, h.req)
 		h.rec.spec = spec
+		if out.Phase == opwire.PhaseProposed {
+			h.rec.req, h.rec.entry = h.req, e
+			h.rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential,
+				expects: inst.expectsFor(t, h.req, spec)}
+		}
 		if out.Phase != opwire.PhaseUnspecified {
 			h.rec.outcome = out
 			inst.mu.Unlock()
 			inst.record(t, h.rec, "dispatch", out)
 			return
 		}
+		t.callsUsed++
 		inst.mu.Unlock()
 		inst.route(t, h.rec, h.req, spec, e)
 	}()
@@ -364,6 +370,7 @@ func (inst *Service) endTask(t *task, why string) {
 			r.state, r.why = reqStateExpired, "the task ended"
 		}
 	}
+	inst.discardProposals(t, 0, "the task ended")
 	inst.mu.Unlock()
 	for k, ids := range queued {
 		if inst.cfg.Host == nil {
@@ -382,6 +389,7 @@ func (inst *Service) detachEntry(t *task, key uint64, why string) {
 	e := t.entries[key]
 	delete(t.entries, key)
 	ids := t.queuedOn(key)
+	inst.discardProposals(t, key, why)
 	inst.mu.Unlock()
 	if e == nil || inst.cfg.Host == nil {
 		return

@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 )
 
@@ -26,6 +27,8 @@ var manifest = app.Manifest{
 	Kind:       app.KindDemo,
 	Surface:    app.SurfaceWindowed,
 	Operations: ops.Catalog(),
+	Caps: []app.SubjectFilter{{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
+		Reason: "opsdemo: copy the note to the clipboard"}},
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  520,
 		PreferredHeight: 360,

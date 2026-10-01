@@ -102,6 +102,14 @@ func (inst *fakeHost) OpsAttach(k uint64, a bool) bool {
 	return false
 }
 func (inst *fakeHost) OpsCapture(k uint64) (string, error) { return "cap-1", nil }
+func (inst *fakeHost) OpsRevisions(k uint64) (map[string]uint64, bool) {
+	revs, _ := inst.eng(k).SnapshotRevisions()
+	return revs, true
+}
+func (inst *fakeHost) OpsUndo(k uint64, id string) bool { return inst.eng(k).Undo(id) }
+func (inst *fakeHost) OpsUndoStatus(k uint64, id string) (string, bool) {
+	return inst.eng(k).UndoStatus(id)
+}
 func (inst *fakeHost) OpsCaptureStatus(job string) (opwire.CaptureStatus, bool) {
 	return opwire.CaptureStatus{Phase: opwire.PhaseCompleted, Path: "/dev/null", MediaType: "image/svg+xml"}, true
 }

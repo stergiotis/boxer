@@ -219,3 +219,52 @@ func TestSameComparesUncomparableValuesDeeply(t *testing.T) {
 	assert.True(t, same(nil, nil))
 	assert.True(t, same(struct{ A any }{A: []int{1}}, struct{ A any }{A: []int{1}}))
 }
+
+func TestUndoRestoresOnlyWhatStillHoldsTheCommandsValue(t *testing.T) {
+	set := editorSet()
+	set.Restorable("text", func(e *editor, v any) bool {
+		s, ok := v.(string)
+		if ok {
+			e.text = s
+		}
+		return ok
+	})
+	ed := &editor{text: "start"}
+	h := &harness{t: t, ed: ed, eng: New(set.Catalog(), set.Bind(ed))}
+	h.frame(nil)
+	_, rev := h.read()
+	h.call("set_text", setTextArgs{Text: "agent"}, map[string]uint64{"text": rev})
+	first := string(rune('a' + h.n))
+	h.frame(nil)
+	require.True(t, h.eng.Undo(first))
+	h.frame(nil)
+	assert.Equal(t, "start", ed.text)
+	st, _ := h.eng.UndoStatus(first)
+	assert.Equal(t, "undone", st)
+	assert.False(t, h.eng.Undo(first), "an undo runs once")
+
+	_, rev = h.read()
+	h.call("set_text", setTextArgs{Text: "agent again"}, map[string]uint64{"text": rev})
+	second := string(rune('a' + h.n))
+	h.frame(nil)
+	ed.text = "the person built on it" // the write-back moves the revision
+	h.frame(nil)
+	require.True(t, h.eng.Undo(second))
+	h.frame(nil)
+	assert.Equal(t, "the person built on it", ed.text, "later work is never overwritten")
+	st, _ = h.eng.UndoStatus(second)
+	assert.Contains(t, st, "moved since")
+}
+
+func TestUndoWithoutRestoreLeavesTheResource(t *testing.T) {
+	h := newHarness(t)
+	_, rev := h.read()
+	h.call("set_text", setTextArgs{Text: "agent"}, map[string]uint64{"text": rev})
+	id := string(rune('a' + h.n))
+	h.frame(nil)
+	require.True(t, h.eng.Undo(id))
+	h.frame(nil)
+	assert.Equal(t, "agent", h.ed.text)
+	st, _ := h.eng.UndoStatus(id)
+	assert.Contains(t, st, "cannot restore")
+}
