@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json/v2"
+	"slices"
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -75,3 +76,43 @@ func (inst *Service) resolveRefs(t *task, spec app.OperationSpec, req wireCall) 
 	}
 	return
 }
+
+// onBehalfOf is the context stamped on a routed call (ADR-0269 §SD6).
+func (inst *Service) onBehalfOf(t *task, e *entry) (obo *app.OnBehalfOf) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	obo = &app.OnBehalfOf{Task: t.id, Epoch: t.epoch, Principal: "person",
+		Act: []string{"person", string(t.actor) + "#" + strconv.FormatUint(t.actorInstance, 10),
+			string(e.app) + "#" + strconv.FormatUint(e.instance, 10)},
+		Destinations: slices.Clone(t.destinations)}
+	return
+}
+
+// AllowDestination answers a host service that reaches outside: the task
+// must be live at this epoch and its grant must list the destination
+// (ADR-0269 §SD6).
+func (inst *Service) AllowDestination(taskId string, epoch uint64, destination string) (ok bool, reason string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	var t *task
+	for _, cand := range inst.tasks {
+		if cand.id == taskId {
+			t = cand
+		}
+	}
+	switch {
+	case t == nil:
+		reason = "no task by that id"
+	case t.revoked != "":
+		reason = "the task ended: " + t.revoked
+	case t.epoch != epoch:
+		reason = "the task's epoch moved; the work belongs to a stopped turn"
+	case !slices.Contains(t.destinations, destination):
+		reason = "the task's grant does not list " + destination
+	default:
+		ok = true
+	}
+	return
+}
+
+var _ app.DelegationI = (*Service)(nil)

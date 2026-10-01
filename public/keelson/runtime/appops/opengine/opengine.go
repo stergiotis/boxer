@@ -138,7 +138,8 @@ func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcom
 		return
 	}
 	c := &call{id: req.CallId, spec: spec, args: req.Args, expects: req.Expects,
-		call:    app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason, RefData: req.RefData},
+		call: app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason, RefData: req.RefData,
+			OnBehalfOf: req.OnBehalfOf},
 		outcome: opwire.Outcome{Phase: opwire.PhaseAccepted}}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

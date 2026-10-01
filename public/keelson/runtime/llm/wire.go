@@ -47,6 +47,10 @@ type wireRequest struct {
 	// CancelKey is the requester's handle for llm.cancel; empty is a
 	// request that cannot be stopped early.
 	CancelKey string `json:"cancel_key,omitempty"`
+	// OnBehalfTask and OnBehalfEpoch name the agent task whose work this
+	// completion is (ADR-0269 §SD6); empty for the app's own.
+	OnBehalfTask  string `json:"obo_task,omitempty"`
+	OnBehalfEpoch uint64 `json:"obo_epoch,omitempty"`
 }
 
 // wireCancel is the message on llm.cancel: stop the sender's completion

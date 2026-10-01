@@ -373,7 +373,7 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 		return
 	}
 	creq := opwire.CallRequest{V: opwire.WireVersion, CallId: rec.callId, Args: args, Expects: expects,
-		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason, RefData: refData}
+		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason, RefData: refData, OnBehalfOf: inst.onBehalfOf(t, e)}
 	payload, err := buscodec.Encode(creq)
 	if err != nil {
 		out := phaseOutcome(opwire.PhaseFailed, "encode: "+err.Error())

@@ -757,6 +757,14 @@ func (rt *Runtime) bootAgent() {
 	}
 	rt.Agent = svc
 	rt.cleanups = append(rt.cleanups, svc.Close)
+	// Host services that reach outside check agent-caused work against the
+	// task's grant (ADR-0269 §SD6).
+	if rt.HTTP != nil {
+		rt.HTTP.SetDelegation(svc)
+	}
+	if rt.LLM != nil {
+		rt.LLM.SetDelegation(svc)
+	}
 	if rt.Host != nil {
 		// The person's side: the badge in each window a task works in and
 		// the dialog in which requests are decided (ADR-0269 §SD5).

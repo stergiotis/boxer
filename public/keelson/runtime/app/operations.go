@@ -339,6 +339,33 @@ type OperationCall struct {
 	// result it names; the host resolved it, and it never reached the
 	// model.
 	RefData map[string][]byte
+	// OnBehalfOf is set on an agent's call: the work the call starts is
+	// agent-caused, runs under the app's agent limits, and carries this
+	// context on every onward request it makes (ADR-0269 §SD6). nil on the
+	// person's gestures.
+	OnBehalfOf *OnBehalfOf
+}
+
+// OnBehalfOf is the context the host's dispatcher stamps on an agent's
+// call; the callee reads it and cannot change what the host checks it
+// against.
+type OnBehalfOf struct {
+	Task  string
+	Epoch uint64
+	// Principal is whose authority the task holds: the person.
+	Principal string
+	// Act is the chain the call came through: the person, the coordinator
+	// window, the called window.
+	Act []string
+	// Destinations are what the grant lets agent-caused work reach.
+	Destinations []string
+}
+
+// DelegationI is what a host service that reaches outside asks about an
+// on-behalf-of context: is the task live at this epoch, and does its grant
+// list the destination? The host's dispatcher implements it.
+type DelegationI interface {
+	AllowDestination(task string, epoch uint64, destination string) (ok bool, reason string)
 }
 
 // OperationRefusal is an error a handler returns to decline a call without

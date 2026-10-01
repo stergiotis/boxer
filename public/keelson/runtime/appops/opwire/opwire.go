@@ -174,6 +174,8 @@ type CallRequest struct {
 	// result it names, resolved by the dispatcher: the app reads it, the
 	// model never does.
 	RefData map[string][]byte `json:"ref_data,omitempty"`
+	// OnBehalfOf is the context the dispatcher stamped (ADR-0269 §SD6).
+	OnBehalfOf *app.OnBehalfOf `json:"on_behalf_of,omitempty"`
 }
 
 // CallReply answers a [CallRequest]: a command's acceptance into the

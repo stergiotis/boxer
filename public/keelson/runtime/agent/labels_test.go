@@ -80,3 +80,21 @@ func TestAReferenceArgumentIsResolvedForTheApp(t *testing.T) {
 	assert.Equal(t, "refused", out.Phase)
 	assert.Contains(t, out.Reason, "names no result")
 }
+
+func TestTheCallCarriesTheOnBehalfOfContext(t *testing.T) {
+	r := newRig(t, true)
+	g, err := r.cli.Request(context.Background(), GrantRequest{Destinations: []string{"http:tiles"},
+		Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
+	require.NoError(t, err)
+	ok, why := r.svc.AllowDestination(g.Task, 1, "http:tiles")
+	assert.True(t, ok, why)
+	ok, why = r.svc.AllowDestination(g.Task, 1, "llm")
+	assert.False(t, ok)
+	assert.Contains(t, why, "does not list")
+	ok, _ = r.svc.AllowDestination(g.Task, 2, "http:tiles")
+	assert.False(t, ok, "a moved epoch refuses")
+	require.NoError(t, r.cli.Stop(context.Background(), g.Handle))
+	ok, why = r.svc.AllowDestination(g.Task, 2, "http:tiles")
+	assert.False(t, ok)
+	assert.Contains(t, why, "ended")
+}

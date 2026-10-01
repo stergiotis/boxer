@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -57,6 +58,10 @@ type Service struct {
 	unsub     func()
 	closeOnce sync.Once
 	log       zerolog.Logger
+
+	// delegation checks agent-caused fetches (ADR-0269 §SD6); set once the
+	// host's dispatcher runs.
+	delegation atomic.Pointer[delegationRef]
 
 	mu sync.Mutex
 	// calls is a ring of cfg.KeepCalls records; head is the oldest once
@@ -153,6 +158,15 @@ func (inst *Service) resolve(spec DestinationSpec) (r *resolved) {
 	return
 }
 
+type delegationRef struct{ d app.DelegationI }
+
+// SetDelegation installs the check for agent-caused fetches: the host's
+// dispatcher (ADR-0269 §SD6). Until it is set, such fetches are refused.
+func (inst *Service) SetDelegation(d app.DelegationI) { inst.delegation.Store(&delegationRef{d: d}) }
+
+// DelegationDestination is how a grant names an egress destination.
+func DelegationDestination(destination string) (name string) { return "http:" + destination }
+
 // Close releases the subscription and the bus client. Safe to call more
 // than once. A fetch already in flight — the handler runs on the
 // requester's goroutine — finishes, and its reply meets the closed client
@@ -194,6 +208,18 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	if r.err != nil {
 		inst.refuse(msg, "destination "+name+" is unavailable: "+r.err.Error(), rec)
 		return
+	}
+	if req.OnBehalfTask != "" {
+		rec.Task = req.OnBehalfTask
+		ref := inst.delegation.Load()
+		if ref == nil {
+			inst.refuse(msg, "agent-caused work, and no dispatcher to check its grant", rec)
+			return
+		}
+		if ok, why := ref.d.AllowDestination(req.OnBehalfTask, req.OnBehalfEpoch, DelegationDestination(name)); !ok {
+			inst.refuse(msg, "agent-caused work: "+why, rec)
+			return
+		}
 	}
 	if rec.Method != http.MethodGet && rec.Method != http.MethodHead {
 		inst.refuse(msg, "method "+rec.Method+" is not offered; GET and HEAD are", rec)

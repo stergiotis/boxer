@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -73,13 +74,16 @@ const DefaultKeepCalls = 1000
 // subscribes and answers describe with the reason and complete with a
 // refusal, so a consumer is told rather than left to a timeout.
 type Service struct {
-	cfg       Config
-	client    openaichat.ClientI
-	host      string
-	local     bool
-	busClient *inprocbus.Client
-	unsubs    []func()
-	log       zerolog.Logger
+	// delegation checks agent-caused completions (ADR-0269 §SD6); set once
+	// the host's dispatcher runs.
+	delegation atomic.Pointer[delegationRef]
+	cfg        Config
+	client     openaichat.ClientI
+	host       string
+	local      bool
+	busClient  *inprocbus.Client
+	unsubs     []func()
+	log        zerolog.Logger
 	// base parents every completion's context; Close cancels it, then
 	// waits on inflight before it releases the clients the calls use.
 	base       context.Context
@@ -308,6 +312,17 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		inst.refuse(msg, "the request carries no messages", rec, t)
 		return
 	}
+	if req.OnBehalfTask != "" {
+		ref := inst.delegation.Load()
+		if ref == nil {
+			inst.refuse(msg, "agent-caused work, and no dispatcher to check its grant", rec, t)
+			return
+		}
+		if ok, why := ref.d.AllowDestination(req.OnBehalfTask, req.OnBehalfEpoch, DelegationDestination); !ok {
+			inst.refuse(msg, "agent-caused work: "+why, rec, t)
+			return
+		}
+	}
 	// The sensitivity wall (ADR-0254 §SD3, the ADR-0145 rule): confined
 	// content leaves for a loopback provider and nowhere else.
 	if rec.Sensitivity == queryengine.SensitivityConfined && !inst.local {
@@ -462,3 +477,13 @@ func (inst *Service) mintCallId() (id string) {
 	inst.mu.Unlock()
 	return "llm-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 36) + "-" + strconv.FormatUint(n, 36)
 }
+
+type delegationRef struct{ d app.DelegationI }
+
+// DelegationDestination is how a grant names the model service.
+const DelegationDestination = "llm"
+
+// SetDelegation installs the check for agent-caused completions: the host's
+// dispatcher (ADR-0269 §SD6). Until it is set, such completions are
+// refused.
+func (inst *Service) SetDelegation(d app.DelegationI) { inst.delegation.Store(&delegationRef{d: d}) }

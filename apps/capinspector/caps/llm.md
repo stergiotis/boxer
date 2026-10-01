@@ -60,6 +60,9 @@ res, err := inst.model.Complete(ctx, llm.Request{
   service never exercises a capability the app lacks.
 - **Consent and audit.** The grant is not sticky; the call is a request,
   so the bus records it with the app as sender.
+- **An agent's work.** A completion an agent's call started carries the
+  task's on-behalf-of context, and is refused unless the task is live and
+  its grant lists `llm` (ADR-0269 §SD6).
 
 ## Where the calls are read
 

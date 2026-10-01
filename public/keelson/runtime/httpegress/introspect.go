@@ -25,6 +25,9 @@ type CallRecord struct {
 	Status  int
 	Bytes   int
 	Elapsed time.Duration
+	// Task is the agent task whose work the fetch was, empty for the
+	// app's own (ADR-0269 §SD6).
+	Task    string
 	Refused bool
 	Error   string
 }
@@ -127,6 +130,7 @@ func callsTable(rows []CallRecord) *introspect.Table {
 		Uint64("instance_key", func(i int) uint64 { return rows[i].SenderInstance }).
 		String("destination", func(i int) string { return rows[i].Destination }).
 		String("purpose", func(i int) string { return rows[i].Purpose }).
+		String("task", func(i int) string { return rows[i].Task }).
 		String("sensitivity", func(i int) string { return sensitivityName(rows[i].Sensitivity) }).
 		String("method", func(i int) string { return rows[i].Method }).
 		String("url", func(i int) string { return rows[i].URL }).
