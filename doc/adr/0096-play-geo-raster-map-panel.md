@@ -595,6 +595,26 @@ ADR's body still describes the binding it replaced. What holds now:
 Unchanged: SD1's bbox-per-view, the `vp_*` contract, and the remaining SD10
 deferrals.
 
+## Update — 2026-10-01: SD10's sampling ladder, under SD1
+
+The progressive ladder is taken up without giving up bbox-per-view. A settled
+view is demanded from the most-sampled table first and then one level at a
+time towards the full one, under the same `vp_*` params on the panel's one
+lane; each level supersedes the last by the lane's (SQL, params) key, and the
+last-good raster stays on screen while the next loads. Levels come from the
+source's name — `<base>_sample100`, `<base>_sample10`, `<base>`, starting at
+the table the source control names — and each level's `sampling` is its own
+factor, so the brightness normaliser keeps the levels alike. A derived level
+the server does not have (`UNKNOWN_TABLE`) is skipped and remembered; the
+named table is never skipped. A level slower than `mapLadderBudget` stops the
+climb and the status line says so; Refresh climbs regardless. A pan or a
+control change starts again at the coarsest level. A table function or
+subquery source, or the **refine** toggle off, reads the one source at the
+manual `sampling` as before. The mechanism is `apps/play/play_map_ladder.go`.
+
+Still open from SD10: a ladder per source chosen by row count rather than by
+name, hover→info, and the keepBuffer margin.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding

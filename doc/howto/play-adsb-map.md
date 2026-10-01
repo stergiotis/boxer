@@ -176,8 +176,10 @@ default.
 ## Notes and limits
 
 - The panel is a first cut ([ADR-0096](../adr/0096-play-geo-raster-map-panel.md)
-  §SD10): no hover→info query, no progressive sample refinement, one map per
-  frame. Renders are picked per panel (the 2026-07-10 Update).
+  §SD10): no hover→info query. Renders are picked per panel (the 2026-07-10
+  Update). With **refine** on, a settled view is drawn from `_sample100`,
+  then `_sample10`, then the full table, by that naming convention; a level
+  slower than about 3 s stops the climb, and Refresh climbs regardless.
 - The default render needs `altitude` and `ground_speed`; the **Density**
   render needs only `mercator_x` / `mercator_y`, so any geo-point table with
   those columns works — including a synthetic one, if you only want to
