@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
 	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
@@ -129,6 +130,9 @@ type Services struct {
 	// (ADR-0262). A destination that failed to resolve is refused with the
 	// reason.
 	HTTP bool
+	// Agent is runtime.agent.*: the services through which a caller
+	// discovers and calls the operations apps declare (ADR-0269).
+	Agent bool
 }
 
 // AllServices is every service on — the carousel's configuration.
@@ -136,7 +140,7 @@ func AllServices() Services {
 	return Services{
 		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
-		AppState: true, LLM: true, HTTP: true,
+		AppState: true, LLM: true, HTTP: true, Agent: true,
 	}
 }
 
@@ -233,6 +237,9 @@ type Runtime struct {
 	// HTTP is the egress service (ADR-0262); nil when off or failed to
 	// start.
 	HTTP *httpegress.Service
+	// Agent is the app operations service (ADR-0269); nil when off or
+	// failed to start.
+	Agent *agent.Service
 	// State is where workingsets and column-width overrides live (ADR-0105
 	// Update 2026-08-15): the durable persist backend when ClickHouse is
 	// reachable, an in-memory twin otherwise. Never nil after Boot, and
@@ -386,6 +393,8 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			return
 		}
 	}
+
+	rt.bootAgent()
 
 	if opts.AfterHost != nil {
 		if err = opts.AfterHost(rt); err != nil {
@@ -710,6 +719,23 @@ func (rt *Runtime) bootSysmetrics() {
 	if _, serr := sysmscrape.StartScraper(context.Background(), metricPub, sysmetricsbus.DefaultHostToken(), sysmetricsInterval, logger); serr != nil {
 		logger.Warn().Err(serr).Msg("hostboot: sysmetrics scraper unavailable; metric panels will be empty")
 	}
+}
+
+// bootAgent starts the app operations service (ADR-0269) once the window
+// host exists, since calls are served by the instances it holds.
+func (rt *Runtime) bootAgent() {
+	if !rt.opts.Services.Agent {
+		return
+	}
+	logger := rt.opts.Log
+	svc, err := agent.NewService(rt.Bus, logger, agent.Config{})
+	if err != nil {
+		logger.Warn().Err(err).Msg("agent: service start failed; runtime.agent.* will be unbound")
+		return
+	}
+	rt.Agent = svc
+	rt.cleanups = append(rt.cleanups, svc.Close)
+	logger.Info().Msg("agent: service listening on runtime.agent.*")
 }
 
 // bootIntrospect starts the introspection HTTP host when the service is on;

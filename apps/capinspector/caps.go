@@ -3,6 +3,7 @@ package capinspector
 import (
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
@@ -46,6 +47,10 @@ const (
 	// CapHTTP is HTTP egress (ADR-0262): the grant an app holds per
 	// registered destination, and the service that holds the transports.
 	CapHTTP CapId = "http"
+	// CapAgent is the app operations contract (ADR-0269): the services
+	// through which a caller discovers and calls the operations apps
+	// declare, under a task grant the person approved.
+	CapAgent CapId = "agent"
 )
 
 // BackendImpl is one realisation of a capability's contract. A cap
@@ -435,12 +440,32 @@ var Registry = map[CapId]CapSpec{
 			{Id: "httpegress", Display: "httpegress.Service"},
 		},
 	},
+	CapAgent: {
+		Id:            CapAgent,
+		Display:       "runtime.agent.* app operations",
+		SubjectFamily: "runtime.agent.{service} (request/reply)",
+		Description: "Operating apps on the person's behalf (ADR-0269): an app " +
+			"declares the commands and queries it offers in its manifest, " +
+			"and a caller — a coordinator running a model's tool loop — " +
+			"reaches them only through the host's runtime.agent services. " +
+			"describe needs no grant; every call past it is checked against " +
+			"a task grant the person approved. keelson('app_operations') " +
+			"lists every registered catalog, including those withdrawn at " +
+			"registration and why.",
+		Backend: "runtime/agent",
+		AppFilter: func(f app.SubjectFilter) bool {
+			return strings.HasPrefix(f.Pattern, agent.SubjectPrefix)
+		},
+		Backends: []BackendImpl{
+			{Id: "agent", Display: "agent.Service"},
+		},
+	},
 }
 
 // allCapIdsOrdered returns the canonical render order so the
 // inspector picker UI doesn't shuffle entries across frames (Go map
 // iteration is randomised).
 func allCapIdsOrdered() (ids []CapId) {
-	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapLLM, CapHTTP}
+	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapLLM, CapHTTP, CapAgent}
 	return
 }

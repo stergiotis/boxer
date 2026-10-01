@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
@@ -186,6 +187,8 @@ func classify(subject string) (capId CapId) {
 		capId = CapLLM
 	case strings.HasPrefix(subject, httpegress.SubjectPrefix):
 		capId = CapHTTP
+	case strings.HasPrefix(subject, agent.SubjectPrefix):
+		capId = CapAgent
 	case strings.HasPrefix(subject, "task."):
 		capId = CapTask
 	case strings.HasPrefix(subject, "runtime.facts."):

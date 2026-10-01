@@ -283,6 +283,8 @@ func diagramCapLabel(capId CapId) (s string) {
 		s = "Model inference"
 	case CapHTTP:
 		s = "HTTP egress"
+	case CapAgent:
+		s = "App operations"
 	}
 	return
 }
