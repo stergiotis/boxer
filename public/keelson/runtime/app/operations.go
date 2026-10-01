@@ -283,7 +283,10 @@ type OperationsHandlerI interface {
 	// ResourceValue returns the current value of a declared resource as a
 	// comparable value — the value itself, or a revision or digest of it.
 	// The host compares values across the frame's write-back to bump
-	// revisions (ADR-0269 §SD4).
+	// revisions (ADR-0269 §SD4). The value changes only on the render
+	// goroutine, inside a frame: a value set by a background job is
+	// latched in the app's Frame, since a change that appears between
+	// frames is the person's.
 	ResourceValue(name string) (v any)
 	// Confined reports the window's label (ADR-0145, ADR-0269 §SD7): true
 	// while any result it holds is confined. What its operations return

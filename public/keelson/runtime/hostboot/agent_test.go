@@ -13,3 +13,9 @@ func TestDesktopHostRefusesTestGrants(t *testing.T) {
 	assert.True(t, agentTestGrants(true, true))
 	assert.False(t, agentTestGrants(false, true))
 }
+
+// ADR-0269 M6: the scripted model is for scenes; the desktop host refuses it.
+func TestDesktopHostRefusesTheScriptedModel(t *testing.T) {
+	assert.False(t, scriptedModel(true, false))
+	assert.True(t, scriptedModel(true, true))
+}

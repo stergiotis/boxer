@@ -179,14 +179,14 @@ func (inst *App) startTurn(text string) (started bool) {
 	}
 	conv := inst.conv
 	if !conv.started {
-		conv.keep = inst.keep
+		conv.keep, conv.apps = inst.keep, inst.apps
 	}
 	req := conv.request(text)
 	cli := inst.cli
 	var coord *coordinator
-	if inst.apps && inst.coord != nil {
+	if conv.apps && inst.coord != nil {
 		coord = inst.coord
-		if len(req.Messages) == 1 || req.Messages[0].Role != openaichat.ChatRoleSystem {
+		if req.Messages[0].Role != openaichat.ChatRoleSystem {
 			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: coordinatorPrompt}}, req.Messages...)
 		}
 	}

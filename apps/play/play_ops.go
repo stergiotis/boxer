@@ -148,11 +148,14 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		}
 		return inst.inner.graph.signals().Revision()
 	})
+	// The result the frame draws, not the store's: a result lands on the
+	// query's goroutine, and its revision must move inside a frame, where
+	// the change is the app's (ADR-0269 §SD4).
 	s.Resource(opsResResult, "the main result", func(inst *PlayLauncher) any {
 		if inst.inner == nil {
 			return ResultID(0)
 		}
-		return inst.inner.graph.mainLane.ResultID()
+		return inst.inner.frameResult
 	})
 	s.Resource(opsResPanes, "the raised pane and the pane bindings", func(inst *PlayLauncher) any {
 		if inst.inner == nil {

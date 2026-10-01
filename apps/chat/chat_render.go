@@ -285,7 +285,11 @@ func (inst *App) renderApps() {
 		return
 	}
 	for range c.HorizontalTop().KeepIter() {
-		c.Checkbox(inst.ids.PrepareStr("apps"), inst.apps, "Apps: let the model ask to work in windows").SendRespVal(&inst.apps)
+		if !inst.conv.started {
+			c.Checkbox(inst.ids.PrepareStr("apps"), inst.apps, "Apps: let the model ask to work in windows").SendRespVal(&inst.apps)
+		} else if inst.conv.apps {
+			c.Label("Apps on").Selectable(false).Send()
+		}
 		task, tainted, confined := inst.coord.state()
 		if task == "" {
 			continue

@@ -465,6 +465,20 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		// service's own record.
 		llmCfg := llm.ConfigFromEnv()
 		llmCfg.Exec = rt.PersistExec
+		if path := llm.ScriptEnv.Get(); path != "" {
+			// A scripted model, for scenes (ADR-0269 M6): on the headless
+			// host only, where no person reads its answers as a model's.
+			if scriptedModel(true, imzero2env.HeadlessListen.Get() != "") {
+				scripted, sErr := llm.LoadScript(path)
+				if sErr != nil {
+					logger.Warn().Err(sErr).Msg("llm: BOXER_LLM_SCRIPT does not load; no scripted model")
+				} else {
+					llmCfg.Client, llmCfg.Endpoint, llmCfg.Model = scripted, llm.ScriptedEndpoint, "scripted"
+				}
+			} else {
+				logger.Warn().Msg("llm: BOXER_LLM_SCRIPT is honoured only on the headless host; refused here")
+			}
+		}
 		llmSvc, lErr := llm.NewService(rt.Bus, logger, llmCfg)
 		if lErr != nil {
 			logger.Warn().Err(lErr).Msg("llm: service start failed; llm.* will be unbound")
@@ -778,6 +792,13 @@ func (rt *Runtime) bootAgent() {
 // for, and only on the headless host (ADR-0269 §SD6) — the desktop host is
 // where a person's windows are, and a grant there needs the person.
 func agentTestGrants(requested bool, headless bool) (on bool) {
+	return requested && headless
+}
+
+// scriptedModel decides whether BOXER_LLM_SCRIPT replaces the endpoint:
+// only on the headless host (ADR-0269 M6), so no person reads a script's
+// answers as a model's.
+func scriptedModel(requested bool, headless bool) (on bool) {
 	return requested && headless
 }
 

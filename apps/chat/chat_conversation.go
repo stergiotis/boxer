@@ -46,7 +46,11 @@ type entry struct {
 type conversation struct {
 	id string
 	// keep sends the turns on llm.retain.complete; set at the first send.
-	keep    bool
+	keep bool
+	// apps runs the turns as the coordinator's tool loop (ADR-0265 §SD6);
+	// set at the first send, since the coordinator's system prompt is the
+	// conversation's first message.
+	apps    bool
 	started bool
 	// kept says a turn's verdict was kept; notKept is the first reason one
 	// was not. Neither set means no verdict yet.
