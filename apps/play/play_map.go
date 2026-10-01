@@ -255,7 +255,7 @@ var builtinRenders = []rasterRender{
 //     vivid. A chroma floor (a quarter of the maximum) keeps a stationary
 //     target's altitude hue readable instead of fading to grey.
 //   - Lightness spans 0.22..0.80 over transparency so a lone sample still
-//     shows on the default black (no-basemap) background and the densest
+//     shows on the dark no-basemap background and the densest
 //     pixels stay below white. Chroma shrinks with sqrt(lightness): dim
 //     pixels get less colour, as the sRGB gamut does, so they darken towards
 //     black rather than a muddy tint.
@@ -874,23 +874,33 @@ func (inst *MapDriver) repack(rec arrow.RecordBatch, served map[string]string, f
 	inst.packErr = nil
 }
 
-// packRaster packs a dense 4×UInt8 (r,g,b,a) raster record into a row-major
-// []uint32 of 0xRRGGBBAA. WITH FILL yields exactly w*h rows; the length is
-// padded/truncated defensively so the texture upload always matches.
+// packRaster packs a raster record into a row-major []uint32 of 0xRRGGBBAA,
+// w*h long. Two shapes are read, told apart by the first column's type:
+//
+//   - sparse — (pos UInt32, r, g, b, a UInt8), one row per non-empty pixel in
+//     any order, which the template emits: every other pixel stays 0, and a
+//     pos past w*h is dropped;
+//   - dense — (r, g, b, a UInt8), w*h rows in pixel order, the
+//     `ORDER BY pos WITH FILL` form of the snippet; the length is padded or
+//     truncated so the texture upload always matches.
+//
+// The sparse form replaced the dense one in the template (ADR-0096
+// 2026-10-01 sparse Update): WITH FILL was most of the server's time on the
+// demo slice, while lz4 makes the empty rows cheap on the wire, so the dense
+// form is smaller there above a few percent fill but slower to produce.
+// Columns past the raster's are ignored in either shape.
 func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error) {
+	if rec.NumCols() >= 5 {
+		if pos, ok := rec.Column(0).(*array.Uint32); ok {
+			return packSparseRaster(rec, pos, w, h)
+		}
+	}
 	if rec.NumCols() < 4 {
-		err = eb.Build().Int64("columns", rec.NumCols()).Errorf("raster query must SELECT 4 columns (r,g,b,a)")
+		err = eb.Build().Int64("columns", rec.NumCols()).Errorf("raster query must SELECT 4 columns (r,g,b,a), or (pos, r, g, b, a)")
 		return
 	}
-	ra, ok1 := rec.Column(0).(*array.Uint8)
-	ga, ok2 := rec.Column(1).(*array.Uint8)
-	ba, ok3 := rec.Column(2).(*array.Uint8)
-	aa, ok4 := rec.Column(3).(*array.Uint8)
-	if !ok1 || !ok2 || !ok3 || !ok4 {
-		err = eb.Build().
-			Stringer("column0", rec.Column(0).DataType()).Stringer("column1", rec.Column(1).DataType()).
-			Stringer("column2", rec.Column(2).DataType()).Stringer("column3", rec.Column(3).DataType()).
-			Errorf("raster columns must be UInt8")
+	ra, ga, ba, aa, err := rgbaColumns(rec, 0)
+	if err != nil {
 		return
 	}
 	n := int(w) * int(h)
@@ -904,6 +914,41 @@ func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error)
 		pixels = append(pixels, make([]uint32, n-len(pixels))...)
 	} else if len(pixels) > n {
 		pixels = pixels[:n]
+	}
+	return
+}
+
+// packSparseRaster scatters (pos, r, g, b, a) rows into a zeroed w*h buffer.
+func packSparseRaster(rec arrow.RecordBatch, pos *array.Uint32, w, h uint32) (pixels []uint32, err error) {
+	ra, ga, ba, aa, err := rgbaColumns(rec, 1)
+	if err != nil {
+		return
+	}
+	n := int(w) * int(h)
+	pixels = make([]uint32, n)
+	for i := range int(rec.NumRows()) {
+		p := int(pos.Value(i))
+		if p >= n {
+			continue
+		}
+		pixels[p] = (uint32(ra.Value(i)) << 24) | (uint32(ga.Value(i)) << 16) |
+			(uint32(ba.Value(i)) << 8) | uint32(aa.Value(i))
+	}
+	return
+}
+
+// rgbaColumns reads the four UInt8 channel columns starting at column from.
+func rgbaColumns(rec arrow.RecordBatch, from int) (ra, ga, ba, aa *array.Uint8, err error) {
+	var ok [4]bool
+	ra, ok[0] = rec.Column(from).(*array.Uint8)
+	ga, ok[1] = rec.Column(from + 1).(*array.Uint8)
+	ba, ok[2] = rec.Column(from + 2).(*array.Uint8)
+	aa, ok[3] = rec.Column(from + 3).(*array.Uint8)
+	if !ok[0] || !ok[1] || !ok[2] || !ok[3] {
+		err = eb.Build().
+			Stringer("r", rec.Column(from).DataType()).Stringer("g", rec.Column(from+1).DataType()).
+			Stringer("b", rec.Column(from+2).DataType()).Stringer("a", rec.Column(from+3).DataType()).
+			Errorf("raster channel columns must be UInt8")
 	}
 	return
 }
@@ -945,9 +990,8 @@ func (inst *MapDriver) statusLine() string {
 // render's colour block spliced in and an optional extra WHERE. The viewport
 // is NOT in the text — it rides the param_* channel at execution (the values
 // come from the vp_* signals the panel emits), so a pan re-executes via the
-// lane's (SQL, params) key with the SQL unchanged. Server-verified: ClickHouse
-// substitutes the slots everywhere they appear, including the
-// `WITH FILL … TO` bound (the wiring check ADR-0096 called out). The header
+// lane's (SQL, params) key with the SQL unchanged. The result is sparse — one
+// (pos, r, g, b, a) row per non-empty pixel, see packRaster. The header
 // assumes only mercator_x/mercator_y; what other columns are needed depends
 // on colorSQL. table/sampling stay spliced panel controls.
 //
@@ -976,11 +1020,10 @@ func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere strin
     greatest(1000000. / %[2]d / zoom_factor, toFloat64(count())) AS max_total,
     pow(total / max_total, 1/5) AS transparency,
     %[3]s%[5]s
-SELECT round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
+SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
 FROM %[1]s
 WHERE %[4]s
-GROUP BY pos
-ORDER BY pos WITH FILL FROM 0 TO toUInt64({vp_w:UInt32}) * {vp_h:UInt32}`,
+GROUP BY pos`,
 		table, sampling, colorSQL, where, alphaClause(colorSQL))
 }
 
@@ -992,7 +1035,7 @@ var rasterAlphaRe = regexp.MustCompile(`(?i)\bAS\s+alpha\b`)
 
 // alphaClause is the opaque default a colour block gets unless it defines
 // alpha itself — a render may carry confidence or density in alpha (ADR-0096
-// 2026-10-01 Update). The WITH FILL rows stay alpha 0 either way.
+// 2026-10-01 Update). Pixels with no rows stay alpha 0 either way.
 func alphaClause(colorSQL string) string {
 	if rasterAlphaRe.MatchString(colorSQL) {
 		return ""

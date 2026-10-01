@@ -224,7 +224,7 @@ func TestRasterTemplateRendersWellFormed(t *testing.T) {
 			colorSQL = "transparency * 255 AS red, transparency AS green, 0 AS blue"
 		}
 		sql := rasterTemplateSQL("planes_mercator", 100, colorSQL, r.where)
-		for _, want := range []string{"255 AS alpha", "AS red", "AS green", "AS blue", "GROUP BY pos", "WITH FILL FROM 0 TO"} {
+		for _, want := range []string{"255 AS alpha", "AS red", "AS green", "AS blue", "GROUP BY pos", "SELECT toUInt32(pos), "} {
 			require.Contains(t, sql, want, "render %q missing %q", r.name, want)
 		}
 		slots, _, err := extractSlotsAndParams(sql)
@@ -307,7 +307,7 @@ func TestAltitudeSpeedRenderOnClickHouse(t *testing.T) {
 	insert := "CREATE TABLE planes_mercator (mercator_x UInt32, mercator_y UInt32, altitude Int32, ground_speed Float32) ENGINE = Memory;\n" +
 		"INSERT INTO planes_mercator VALUES " + strings.Join(rows, ",") + ";\n"
 	span := strconv.Itoa(grid * cell)
-	const castSelect = "SELECT round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8"
+	const castSelect = "SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8"
 	render := func(sampling uint32) map[int][3]float64 {
 		r := builtinRenders[0]
 		tmpl := rasterTemplateSQL("planes_mercator", sampling, r.colorSQL, r.where)
@@ -336,7 +336,7 @@ func TestAltitudeSpeedRenderOnClickHouse(t *testing.T) {
 			}
 			px[pos] = c
 		}
-		require.Len(t, px, grid*grid, "WITH FILL pads to the full framebuffer")
+		require.NotContains(t, px, grid*grid-1, "an empty pixel has no row (sparse result)")
 		return px
 	}
 	// Distinct: some channel differs by at least 12/255 between every pair.
@@ -354,7 +354,6 @@ func TestAltitudeSpeedRenderOnClickHouse(t *testing.T) {
 	// Sampling 100 (the panel default): a lone sample here has transparency
 	// ≈0.84, so both altitude and speed must separate.
 	px := render(100)
-	require.Equal(t, [3]float64{}, px[grid*grid-1], "an empty pixel is black")
 	distinct(px, 0, altBands)
 	distinct(px, 1, speedBands)
 	require.Greater(t, sum(px[3*grid]), sum(px[3*grid+1]), "density brightens a pixel")
@@ -565,12 +564,12 @@ func TestRasterTemplateAlphaFromColourBlock(t *testing.T) {
 			"INSERT INTO planes_mercator VALUES (500, 500);\n"+canon).CombinedOutput()
 	require.NoError(t, err, string(out))
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	require.Len(t, lines, 2)
+	require.Len(t, lines, 1, "the empty pixel has no row; packRaster leaves it alpha 0")
 	lit := strings.Split(lines[0], "\t")
-	require.Len(t, lit, 4)
-	require.NotEqual(t, "255", lit[3], "a lone sample's alpha follows its transparency")
-	require.Equal(t, lit[0], lit[3], "alpha is the block's own expression")
-	require.Equal(t, "0\t0\t0\t0", lines[1], "an empty pixel stays alpha 0")
+	require.Len(t, lit, 5)
+	require.Equal(t, "0", lit[0], "pos")
+	require.NotEqual(t, "255", lit[4], "a lone sample's alpha follows its transparency")
+	require.Equal(t, lit[1], lit[4], "alpha is the block's own expression")
 }
 
 // The ladder derives its levels from the source's name: coarsest first, each
@@ -686,4 +685,28 @@ func TestMapDriverClimbsTheLadder(t *testing.T) {
 		return len(exec.asked()) == 5 && !d.loading
 	}, 2*time.Second, time.Millisecond)
 	require.Equal(t, []string{"planes_mercator_sample100", "planes_mercator"}, exec.asked()[3:], "a pan starts over, without the missing level")
+}
+
+// The sparse shape scatters (pos, r, g, b, a) rows into a zeroed buffer in
+// any order, and drops a pos past the raster; extra columns are ignored.
+func TestPackRasterSparse(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	b := array.NewRecordBuilder(mem, arrow.NewSchema([]arrow.Field{
+		{Name: "pos", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "r", Type: arrow.PrimitiveTypes.Uint8}, {Name: "g", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "b", Type: arrow.PrimitiveTypes.Uint8}, {Name: "a", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "extra", Type: arrow.PrimitiveTypes.Uint32},
+	}, nil))
+	defer b.Release()
+	b.Field(0).(*array.Uint32Builder).AppendValues([]uint32{3, 0, 99}, nil)
+	for i := 1; i <= 4; i++ {
+		b.Field(i).(*array.Uint8Builder).AppendValues([]uint8{uint8(i), uint8(10 + i), 7}, nil)
+	}
+	b.Field(5).(*array.Uint32Builder).AppendValues([]uint32{1, 2, 3}, nil)
+	rec := b.NewRecordBatch()
+	defer rec.Release()
+
+	px, err := packRaster(rec, 2, 2)
+	require.NoError(t, err)
+	require.Equal(t, []uint32{0x0b0c0d0e, 0, 0, 0x01020304}, px)
 }
