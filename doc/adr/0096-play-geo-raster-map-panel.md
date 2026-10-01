@@ -555,6 +555,46 @@ altitude-and-speed render designed without reference to it (named in
 `builtinRenders`). Nothing else about the panel changes: the render split of
 the 2026-07-10 Update, the `vp_*` contract and SD1 stand.
 
+## Update — 2026-10-01: the panel as ADR-0204 rebuilt it; SD7 as built; antimeridian, alpha and offline land
+
+ADR-0204 replaced the `walkers` binding with the Go `portolan` map, and this
+ADR's body still describes the binding it replaced. What holds now:
+
+- **SD3 / the view.** The panel reads the view from `portolan.Map.View()` and
+  debounces on `ViewHash()`; the raster is drawn with `Projector.Image`, which
+  carries the send-once texture protocol `mapRaster` had. `fetchR15WalkersCamera`
+  and the `mapRaster` node are gone, and with them the Negative "one map per
+  frame": each pane owns its map.
+- **SD7 as built.** The raster is sized from `View.Size` in logical points, with
+  no device-pixel factor, and `clampDim` caps each side at `mapMaxDim` (1024),
+  not ~1536². No bbox inflation was built; the keepBuffer margin stays an SD10
+  deferral, as the Status section says. 1024² is also the public ADS-B
+  instance's result-row cap, so a larger dense raster would fail there.
+- **SD8.** Basemap tiles are painter images (ADR-0204 M4), so captures include
+  them, and they are fetched through the `basemap` egress destination
+  (ADR-0262); `BOXER_MAP_TILE_URL` both moves the source and turns the basemap
+  on by default. With no basemap the pane now paints the `landoverlay` atlas
+  under the raster, as the Vector field pane does, in its design-system style
+  over portolan's default background (`styletokens.NeutralBgPanel`).
+- **SD4 at the antimeridian.** The map wraps in longitude and `mercator_x`
+  covers one world. `foldViewLon` folds a settled view by whole turns onto that
+  world before the request (a view a world wide or more asks for the whole
+  world), sizes the raster to the share of the view it keeps, and
+  `rasterCopies` draws the served raster on every world copy the view shows.
+  Before, a view panned one world width projected to a degenerate bbox and the
+  pane went dark. A narrower view straddling ±180 still loses the part past
+  the edge; requesting both sides stays deferred. `landoverlay` paints world
+  copies the same way.
+- **SD6, alpha.** The header no longer fixes `255 AS alpha`: a colour block may
+  define `alpha`, and the template appends the opaque default only when it does
+  not (`alphaClause`). `WITH FILL` rows stay transparent either way.
+- The chserver engine sends the HTTP progress settings only with the transport
+  that reads them (ADR-0115 plane A), so an https endpoint or a wasm build
+  no longer asks for progress it cannot receive.
+
+Unchanged: SD1's bbox-per-view, the `vp_*` contract, and the remaining SD10
+deferrals.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding

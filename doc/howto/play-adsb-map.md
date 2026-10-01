@@ -147,25 +147,28 @@ Uncheck **"no basemap"** in the Map controls to draw the raster over OSM tiles
 (the default source), and lower **opacity** to about 0.5–0.7 so the map reads
 through. Two caveats:
 
-- It is **online** — tiles load from `tile.openstreetmap.org`, which breaks the
-  offline/airgap path (that is why `noTiles` is the default).
+- It is **online** — tiles come from `tile.openstreetmap.org` through the
+  `basemap` egress destination (ADR-0262), which breaks the offline/airgap
+  path; that is why `noTiles` is the default. With no basemap the pane draws
+  coarse country outlines under the raster instead.
 - The basemap shows in headless PNG captures (tiles are painter images since
   ADR-0204 M4), but whether the SVG export embeds them is still open (ADR-0204
   Q3) — check the export before relying on it. There is no env knob for the
   toggle.
 
-A custom XYZ tile server can be substituted, but the panel currently hardcodes
-the default source; passing a real `.TileUrl("https://.../{z}/{x}/{y}.png")`
-needs a small code change.
+A custom XYZ tile server is set with `BOXER_MAP_TILE_URL`
+([doc/env-vars.md](../env-vars.md)); setting it also turns the basemap on by
+default.
 
 ## Notes and limits
 
 - The panel is a first cut ([ADR-0096](../adr/0096-play-geo-raster-map-panel.md)
   §SD10): no hover→info query, no progressive sample refinement, one map per
   frame. Renders are picked per panel (the 2026-07-10 Update).
-- The render SQL assumes the adsb schema. **Any** table with `mercator_x` /
-  `mercator_y` / `altitude` / `ground_speed` works — including a synthetic one,
-  if you only want to exercise the panel without the upstream corpus.
+- The default render needs `altitude` and `ground_speed`; the **Density**
+  render needs only `mercator_x` / `mercator_y`, so any geo-point table with
+  those columns works — including a synthetic one, if you only want to
+  exercise the panel without the upstream corpus.
 - Querying `remoteSecure(...)` directly in the table control also works (no local
   ingest), but each tile is a transatlantic round-trip (~20–40 s); the local
   table avoids that.
