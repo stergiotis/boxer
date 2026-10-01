@@ -655,6 +655,24 @@ A `readonly=1` user is not asked to skip reading the cache (ClickHouse's
 public demo refuses that setting) but keeps `use_query_cache`, which that
 demo lets its user change; the ADR-0181 2026-10-01 degrade otherwise holds.
 
+## Update — 2026-10-01: a time window from the Timeline's brush
+
+play's Timeline turns on its range brush (ADR-0043 §SD16) and publishes the
+brushed window as two play-wide signals, `tl_from` and `tl_to`
+(`DateTime64(3, 'UTC')`, declared in `play_signal_decl.go`). With nothing
+brushed they span every instant `DateTime64` holds, and they are seeded that
+way, so any query can filter on them from the first frame and an unbrushed
+window keeps every row; ADR-0251's deferred "range as signals" could publish
+the same pair from the time strip.
+
+The Map takes a **time column** (default `time`, the ADS-B schema's). While
+a window is brushed, the raster template ANDs `<column> BETWEEN
+{tl_from:DateTime64(3, 'UTC')} AND {tl_to:DateTime64(3, 'UTC')}` onto its
+WHERE, so a new window re-keys on params, restarts the ladder, and the status
+line names the window; with no window, or no column, the template carries no
+predicate, so a table without that column keeps working. This is SD6's
+human-owned predicate, filled from the Timeline rather than typed.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding

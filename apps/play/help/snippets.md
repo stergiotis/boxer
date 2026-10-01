@@ -2728,6 +2728,21 @@ ORDER BY positions DESC
 LIMIT 20
 ```
 
+Traffic per hour on the **Timeline**, to window the **Map**: brush a range in
+the strip under the Timeline's axis and the Map draws only the positions whose
+`time` falls inside it — the window is published as `tl_from` / `tl_to`, which
+any query can read as `{tl_from:DateTime64(3, 'UTC')}`. With nothing brushed
+the two span all of time.
+
+```sql
+SELECT toDateTime64(toStartOfHour(time), 3, 'UTC') AS _tl_time,
+       toDateTime64(toStartOfHour(time) + INTERVAL 1 HOUR, 3, 'UTC') AS _tl_time_end,
+       toFloat64(count()) AS _tl_intensity
+FROM planes_mercator_sample10
+GROUP BY toStartOfHour(time)
+ORDER BY _tl_time
+```
+
 The Map tab's raster query as a snippet (ADR-0096 §SD6): it bins the visible
 points into a `W×H` grid and derives an RGBA value per pixel, so it returns one
 row per pixel — a `W*H`-row framebuffer, not a readable table (the **Map** tab
