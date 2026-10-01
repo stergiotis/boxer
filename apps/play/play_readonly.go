@@ -68,18 +68,20 @@ func (inst *Client) knownReadonlyLevel(target string) (level uint8) {
 }
 
 // learnReadonlyLevel handles a refused run: when err is the server's
-// READONLY refusal and the level for target was not known yet, it asks the
-// server and remembers the answer. retry says the caller should send the run
-// again degraded to level.
-func (inst *Client) learnReadonlyLevel(ctx context.Context, eng *chserver.Engine, target string, err error) (level uint8, retry bool) {
+// READONLY refusal of a run sent degraded to sentLevel, it finds the level
+// for target — learned meanwhile by a concurrent run, or asked of the server
+// now — and remembers it. retry says the caller should send the run again
+// degraded to level.
+func (inst *Client) learnReadonlyLevel(ctx context.Context, eng *chserver.Engine, target string, sentLevel uint8, err error) (level uint8, retry bool) {
 	if err == nil || !isReadonlyRefusal(err) {
 		return
 	}
 	key := readonlyKey(inst.cfg.User, target)
-	if _, known := inst.readonly.get(key); known {
-		// Already degraded and still refused: something else the run
-		// carries is refused, and the server's message says what.
-		return
+	if known, ok := inst.readonly.get(key); ok {
+		// Another run learned the level while this one was in flight:
+		// retry at it. Sent at it already and still refused: something else
+		// the run carries is refused, and the server's message says what.
+		return known, known != sentLevel
 	}
 	pctx, cancel := context.WithTimeout(ctx, readonlyProbeTimeout)
 	defer cancel()

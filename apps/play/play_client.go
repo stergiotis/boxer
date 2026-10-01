@@ -398,9 +398,10 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 	// A server holding this user read-only refuses the stamp; what it
 	// refused before is not sent again (play_readonly.go).
 	target, _ := dec.target()
-	degradeForReadonly(&req, inst.knownReadonlyLevel(target))
+	sentLevel := inst.knownReadonlyLevel(target)
+	degradeForReadonly(&req, sentLevel)
 	err = deliverVerdict(ctx, eng, req)
-	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, err); retry {
+	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, sentLevel, err); retry {
 		degradeForReadonly(&req, level)
 		err = deliverVerdict(ctx, eng, req)
 	}
@@ -1017,7 +1018,8 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	// A server holding this user read-only refuses some of the above; what
 	// it refused before is not sent again (play_readonly.go).
 	target, _ := dec.target()
-	degradeForReadonly(&req, inst.knownReadonlyLevel(target))
+	sentLevel := inst.knownReadonlyLevel(target)
+	degradeForReadonly(&req, sentLevel)
 
 	// A run the server rejected ends before any bytes arrive, and opening
 	// the stream is what surfaces its diagnostic — handing an empty body to
@@ -1033,7 +1035,7 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		return
 	}
 	err = deliver()
-	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, err); retry {
+	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, sentLevel, err); retry {
 		degradeForReadonly(&req, level)
 		err = deliver()
 	}

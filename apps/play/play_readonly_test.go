@@ -143,3 +143,20 @@ func TestIsReadonlyRefusal(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// Two runs refused at once: the one that finds the level already learned by
+// the other retries at it rather than failing, and asks the server nothing;
+// a run already sent at the known level is not retried.
+func TestReadonlyLevelLearnedByAConcurrentRun(t *testing.T) {
+	c := NewClient(ClientConfig{URL: "http://ch.invalid/"}, nil)
+	const target = "http://ch.invalid/"
+	c.readonly.put(readonlyKey(c.cfg.User, target), 1)
+	refusal := errString("clickhouse http 500: Code: 164. DB::Exception: Cannot modify 'log_comment' setting in readonly mode. (READONLY)")
+
+	level, retry := c.learnReadonlyLevel(context.Background(), nil, target, 0, refusal)
+	require.True(t, retry)
+	require.EqualValues(t, 1, level)
+
+	_, retry = c.learnReadonlyLevel(context.Background(), nil, target, 1, refusal)
+	require.False(t, retry)
+}
