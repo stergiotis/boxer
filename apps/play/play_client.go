@@ -160,6 +160,13 @@ type ExecOptions struct {
 	// QueryID embeds — carried separately so the SD7 log_comment stamp
 	// can record it without parsing it back out of the id.
 	Label string
+	// QueryCache, when set, is asked on each request whether the run may use
+	// the server's query cache (use_query_cache=1) and whether it must not
+	// read from it (fresh: the result is computed and the entry rewritten).
+	// A func rather than two fields so a lane's stable options follow a
+	// toggle the panel flips between runs; it is called on the run's
+	// goroutine and must be safe there.
+	QueryCache func() (use bool, fresh bool)
 	// OnProgress, when set, opts the request into ClickHouse's in-band
 	// progress headers (ADR-0115 plane A): the server streams
 	// X-ClickHouse-Progress lines inside the open response-header block,
@@ -1007,6 +1014,14 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 			}
 		}
 		req.OnProgress = opts.OnProgress
+		if opts.QueryCache != nil {
+			if use, fresh := opts.QueryCache(); use {
+				req.Settings["use_query_cache"] = "1"
+				if fresh {
+					req.Settings["enable_reads_from_query_cache"] = "0"
+				}
+			}
+		}
 	}
 	// SD7 identity stamp (ADR-0115): {run_id, app, lane, four
 	// fingerprints} as compact JSON, so the server's query_log row is

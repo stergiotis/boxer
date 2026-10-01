@@ -30,7 +30,7 @@ func newReadonlyServer(t *testing.T, level string, probeFails bool) (srv *httpte
 	t.Helper()
 	body := emptyArrowStream(t)
 	refuses := map[string][]string{
-		"1": {"readonly", "log_comment", "send_progress_in_http_headers"},
+		"1": {"readonly", "log_comment", "send_progress_in_http_headers", "enable_reads_from_query_cache"},
 		"2": {"readonly"},
 	}[level]
 	rec = &readonlyServer{}
@@ -159,4 +159,26 @@ func TestReadonlyLevelLearnedByAConcurrentRun(t *testing.T) {
 
 	_, retry = c.learnReadonlyLevel(context.Background(), nil, target, 1, refusal)
 	require.False(t, retry)
+}
+
+// A lane that opts into the query cache sends use_query_cache, and a fresh
+// run also skips reading it; a readonly=1 user keeps the first and is not
+// asked for the second.
+func TestQueryCacheSettingsAndTheirReadonlyDegrade(t *testing.T) {
+	for _, tc := range []struct {
+		level      string
+		wantNoRead bool
+	}{{"0", true}, {"1", false}} {
+		srv, rec := newReadonlyServer(t, tc.level, false)
+		c := NewClient(ClientConfig{URL: srv.URL}, nil)
+		const sql = `SELECT 1`
+		opts := &ExecOptions{QueryID: "q1", QueryCache: func() (bool, bool) { return true, true }}
+		rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), opts, nil, c.Dispatch(sql, ""))
+		require.NoError(t, err, "level %s", tc.level)
+		_ = closer.Close()
+		rdr.Release()
+		q := rec.accepted[len(rec.accepted)-1]
+		require.Equal(t, "1", q.Get("use_query_cache"), "level %s", tc.level)
+		require.Equal(t, tc.wantNoRead, q.Has("enable_reads_from_query_cache"), "level %s", tc.level)
+	}
 }

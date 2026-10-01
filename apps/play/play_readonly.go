@@ -28,8 +28,11 @@ import (
 //   - readonly ≥ 1: readonly=2 is not sent. The server already refuses writes
 //     and DDL for this user, which is what readonly=2 was there for.
 //   - readonly = 1: neither is the log_comment stamp, nor the progress
-//     settings (the run reports when it completes). The endpoint label says
-//     the runs go unstamped.
+//     settings (the run reports when it completes), nor a request to skip
+//     reading the query cache. The endpoint label says the runs go
+//     unstamped. use_query_cache itself is kept: a server that lets this
+//     user change it (ClickHouse's public demo does) is what makes it worth
+//     sending, and one that refuses it names it in the error.
 //
 // A level once learned degrades every later run to that endpoint up front.
 
@@ -109,6 +112,7 @@ func degradeForReadonly(req *queryengine.Request, level uint8) {
 	delete(req.Settings, "readonly")
 	if level == 1 {
 		delete(req.Settings, "log_comment")
+		delete(req.Settings, "enable_reads_from_query_cache")
 		req.OnProgress = nil
 	}
 }

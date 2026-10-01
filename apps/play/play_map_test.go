@@ -710,3 +710,33 @@ func TestPackRasterSparse(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []uint32{0x0b0c0d0e, 0, 0, 0x01020304}, px)
 }
+
+// The cache toggle reaches the lane's requests, and Refresh's freshness
+// lasts until the view changes.
+func TestMapCacheFollowsToggleAndRefresh(t *testing.T) {
+	exec := &ladderExecutor{}
+	d := NewMapDriver(nil, nil)
+	d.lane.close()
+	d.lane = newNodeLane(exec, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+	g := newQueryGraph(nil, nil)
+	settle := func(lon float64) {
+		d.updateViewport(47, 48, lon, lon+1, 64, 64, graphEmitter{graph: g})
+		d.demandRaster(resolveSignalNames(d.templateReads, nil, g.signals()))
+	}
+
+	settle(8)
+	require.False(t, d.cacheUse.Load(), "off by default")
+	d.cache = true
+	settle(8)
+	require.True(t, d.cacheUse.Load())
+	require.False(t, d.cacheFresh.Load())
+
+	d.requestRefresh()
+	settle(8)
+	require.True(t, d.cacheFresh.Load(), "a Refresh computes afresh")
+	settle(8)
+	require.True(t, d.cacheFresh.Load(), "for the whole climb it restarted")
+	settle(9)
+	require.False(t, d.cacheFresh.Load(), "a pan reads the cache again")
+}

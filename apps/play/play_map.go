@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -76,6 +77,14 @@ type MapDriver struct {
 	extraWhere     string
 	packLevel      mapLevel
 	refreshPending bool
+
+	// cache opts the raster runs into the server's query cache (off by
+	// default; ADR-0096 2026-10-01 cache Update). cacheUse/cacheFresh mirror
+	// it and the ladder's Refresh state for the lane's goroutine, which reads
+	// them through the lane's ExecOptions.QueryCache on every request.
+	cache      bool
+	cacheUse   atomic.Bool
+	cacheFresh atomic.Bool
 
 	// renderIdx selects builtinRenders; customColorSQL is the colour expression
 	// used when the "Custom" render is active.
@@ -274,7 +283,12 @@ const altitudeSpeedColorSQL = `greatest(0, least(avg(altitude), 45000)) / 45000 
     greatest(0, least(255, tupleElement(rgb, 3))) AS blue`
 
 func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
-	d := &MapDriver{
+	opts := newExecOptions("map")
+	var d *MapDriver
+	opts.QueryCache = func() (use bool, fresh bool) {
+		return d.cacheUse.Load(), d.cacheFresh.Load()
+	}
+	d = &MapDriver{
 		ids:        ids,
 		client:     client,
 		land:       &landoverlay.Layer{},
@@ -282,7 +296,7 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		colorField: sqleditor.NewField(ids, "map-color"),
 		// The stable query_id + replace_running_query make a superseding
 		// pan/zoom fetch replace its predecessor server-side (SD5).
-		lane:      newNodeLane(clientExecutor{client: client, opts: newExecOptions("map")}, memory.NewGoAllocator(), mapFetchTimeout),
+		lane:      newNodeLane(clientExecutor{client: client, opts: opts}, memory.NewGoAllocator(), mapFetchTimeout),
 		table:     "planes_mercator_sample100",
 		sampling:  100,
 		refine:    true,
@@ -444,6 +458,10 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 // level the server lacks is skipped, and a level whose own result landed
 // hands over to the next (play_map_ladder.go).
 func (inst *MapDriver) demandRaster(params map[string]string) {
+	// Read by the run this demand may start: a Refresh's climb computes
+	// every level afresh rather than reading what the cache holds.
+	inst.cacheUse.Store(inst.cache)
+	inst.cacheFresh.Store(inst.ladder.noBudget)
 	node := compiledNode{SQL: inst.template, Params: params}
 	view := inst.lane.demand(node)
 	inst.noteLane(view)
@@ -531,6 +549,8 @@ func (inst *MapDriver) renderControls() {
 		c.Checkbox(inst.ids.PrepareStr("map-live"), inst.live, "live").SendRespVal(&inst.live)
 		c.Checkbox(inst.ids.PrepareStr("map-notiles"), inst.noTiles, "no basemap").
 			SendRespVal(&inst.noTiles)
+		c.Checkbox(inst.ids.PrepareStr("map-cache"), inst.cache, "server cache").
+			SendRespVal(&inst.cache)
 		if c.Button(inst.ids.PrepareStr("map-refresh"),
 			c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.requestRefresh()
