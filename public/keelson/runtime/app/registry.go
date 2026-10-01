@@ -163,6 +163,16 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 			Errorf("registry: Workingset requires factory registration (RegisterFactory), not Register")
 		return
 	}
+	// ADR-0269 §SD3: only the host publishes or subscribes on the operation
+	// subjects; an app whose capability could reach them is refused, since
+	// it could call another app's operations past the dispatcher.
+	for _, cap := range m.Caps {
+		if CapReachesOperationSubjects(cap.Pattern) {
+			err = eb.Build().Str("id", string(m.Id)).Str("pattern", cap.Pattern).
+				Errorf("registry: a capability reaches the operation subjects app.{id}.{instance}.op.{name}")
+			return
+		}
+	}
 	// ADR-0269 §SD2: a catalog is served per instance, so it needs one
 	// instance per window, as a workingset does. Unlike a workingset, a bad
 	// catalog costs only the catalog: the app registers without it.

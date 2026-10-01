@@ -15,6 +15,7 @@ import (
 	// app.DefaultRegistry. Carousel is the single import site that pulls all
 	// M3-migrated apps; the dock host iterates the registry directly.
 	_ "github.com/stergiotis/boxer/apps/adhocdemo"
+	_ "github.com/stergiotis/boxer/apps/agentconsole"
 	_ "github.com/stergiotis/boxer/apps/appstate"
 	_ "github.com/stergiotis/boxer/apps/capdemo"
 	_ "github.com/stergiotis/boxer/apps/capinspector"
@@ -24,6 +25,7 @@ import (
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/jackstay"
 	_ "github.com/stergiotis/boxer/apps/mdedit"
+	_ "github.com/stergiotis/boxer/apps/opsdemo"
 	_ "github.com/stergiotis/boxer/apps/play"
 	_ "github.com/stergiotis/boxer/apps/splashscreen"
 	_ "github.com/stergiotis/boxer/apps/sqlappletcreator"

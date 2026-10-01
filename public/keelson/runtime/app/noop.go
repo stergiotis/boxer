@@ -203,10 +203,14 @@ type StaticFrameContext struct {
 	// (windowhost) overwrites it before every Frame with whether this
 	// context's window is the shell's topmost.
 	windowFocused bool
+	// gesture backs OperationsGestureI; nil when the host serves no catalog
+	// for this window.
+	gesture func(op string, args []byte) (result []byte, err error)
 }
 
 var _ FrameContextI = (*StaticFrameContext)(nil)
 var _ WindowFocusI = (*StaticFrameContext)(nil)
+var _ OperationsGestureI = (*StaticFrameContext)(nil)
 
 // NewStaticFrameContext wraps a MountContext with a host-supplied egui scope.
 // scope may be nil in M1; consumers that need it should error at the per-app
@@ -217,6 +221,24 @@ func NewStaticFrameContext(mc *StaticMountContext, scope any) (inst *StaticFrame
 		scope:              scope,
 		windowFocused:      true,
 	}
+	return
+}
+
+// SetOperationsGesture installs the host's gesture path for this window
+// (ADR-0269 §SD8); nil removes it.
+func (inst *StaticFrameContext) SetOperationsGesture(fn func(op string, args []byte) (result []byte, err error)) {
+	inst.gesture = fn
+}
+
+// OperationGesture applies a command of the app's catalog as the person,
+// through the host, so it is logged and bumps revisions like any other
+// writer's.
+func (inst *StaticFrameContext) OperationGesture(op string, args []byte) (result []byte, err error) {
+	if inst.gesture == nil {
+		err = RefuseOperation("the host serves no catalog for this window")
+		return
+	}
+	result, err = inst.gesture(op, args)
 	return
 }
 

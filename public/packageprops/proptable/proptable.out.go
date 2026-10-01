@@ -6,7 +6,9 @@ import "github.com/stergiotis/boxer/public/packageprops"
 
 // Table is every package's declared PackageProps, harvested from source.
 var Table = packageprops.Table{
+	{ImportPath: "github.com/stergiotis/boxer/apps/agentconsole", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/apps/appstate", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
+	{ImportPath: "github.com/stergiotis/boxer/apps/opsdemo", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/apps/watchbill/launchcfg", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/algebraicarch/pushout/envelope/codectest", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles, Kind: packageprops.KindIntegrationTest}},
@@ -216,7 +218,9 @@ var Table = packageprops.Table{
 	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/appcenter", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/appops", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
+	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
+	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/appstate", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},
 	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/audit", Props: packageprops.Props{WASMWASI: packageprops.WASMCompiles, WASMJS: packageprops.WASMCompiles, WASMFreestanding: packageprops.WASMCompiles}},
 	{ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/bgjob", Props: packageprops.Props{WASMWASI: packageprops.WASMUnknown, WASMJS: packageprops.WASMUnknown, WASMFreestanding: packageprops.WASMUnknown}},

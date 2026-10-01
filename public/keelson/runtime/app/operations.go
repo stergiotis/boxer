@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
 )
@@ -284,6 +285,10 @@ type OperationsHandlerI interface {
 	// The host compares values across the frame's write-back to bump
 	// revisions (ADR-0269 §SD4).
 	ResourceValue(name string) (v any)
+	// Editing reports whether the person is editing a resource: its widget
+	// has keyboard focus or received input in the last frame. A command to
+	// it is a conflict (ADR-0269 §SD4).
+	Editing(name string) (editing bool)
 	// ApplyCommand runs a command. args and result are CBOR of the
 	// declared types. Refuse with [OperationRefusal]; any other error
 	// fails the call.
@@ -302,6 +307,14 @@ type OperationsSnapshotI interface {
 	// Query answers a query or an external read. args and result are CBOR
 	// of the declared types.
 	Query(name string, args []byte) (result []byte, err error)
+}
+
+// OperationsGestureI is the capability a frame context offers an app whose
+// catalog the host serves: a gesture of the person's that the catalog also
+// exposes as a command goes through it, so it calls the same handler and
+// enters the same log (ADR-0269 §SD8 "One path"). Call it from Frame.
+type OperationsGestureI interface {
+	OperationGesture(op string, args []byte) (result []byte, err error)
 }
 
 // OperationCall is what the host passes a handler with each command.
@@ -339,4 +352,43 @@ func RefuseOperation(reason string) (err error) {
 // again.
 func ConflictOperation(reason string) (err error) {
 	return &OperationRefusal{Conflict: true, Reason: reason}
+}
+
+// CapReachesOperationSubjects reports whether a NATS pattern can match an
+// operation subject, app.{alias}.{instance}.op.{name} (ADR-0269 §SD3). Only
+// the host publishes or subscribes there, so registration refuses an app
+// declaring such a capability.
+func CapReachesOperationSubjects(pattern string) (overlap bool) {
+	template := []string{"app", "*", "*", "op", "*"}
+	tokens := strings.Split(pattern, ".")
+	for i, tok := range tokens {
+		if tok == ">" {
+			return i <= len(template)-1
+		}
+		if i >= len(template) {
+			return false
+		}
+		if tok != "*" && template[i] != "*" && tok != template[i] {
+			return false
+		}
+		// The instance token is numeric: a literal that is not cannot reach
+		// the family, which is what keeps app.{id}.request.> apart from it.
+		if i == 2 && tok != "*" && !numeric(tok) {
+			return false
+		}
+	}
+	return len(tokens) == len(template)
+}
+
+func numeric(s string) (ok bool) {
+	if s == "" {
+		return
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return
+		}
+	}
+	ok = true
+	return
 }

@@ -103,3 +103,12 @@ func TestRegistryKeepsAValidCatalog(t *testing.T) {
 func validManifestForOps(id AppIdT) Manifest {
 	return Manifest{Id: id, Display: "x", Surface: SurfaceWindowed, Topics: []TopicT{AllTopics[0]}, Summary: "does x"}
 }
+
+func TestRegistryRefusesACapabilityOnOperationSubjects(t *testing.T) {
+	r := NewRegistry()
+	m := validManifestForOps("github.com/x/apps/snoop")
+	m.Caps = []SubjectFilter{{Pattern: "app.>", Direction: CapDirectionPub}}
+	require.Error(t, r.RegisterFactory(m, func() (AppI, error) { return nil, nil }))
+	m.Caps = []SubjectFilter{{Pattern: "app.snoop.request.>", Direction: CapDirectionPub}}
+	require.NoError(t, r.RegisterFactory(m, func() (AppI, error) { return nil, nil }))
+}

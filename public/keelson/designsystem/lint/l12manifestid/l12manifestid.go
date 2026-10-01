@@ -85,6 +85,9 @@ var AllowedSpecialIds = map[string]bool{
 	"runtime.http": true,
 	// runtime.agent — the app operations service (ADR-0269). Same class.
 	"runtime.agent": true,
+	// runtime.windowhost.ops — the window host's side of the operation
+	// subjects (ADR-0269 §SD3). Same class.
+	"runtime.windowhost.ops": true,
 }
 
 // Analyzer is the L12 default analyzer used by the designlint binary.

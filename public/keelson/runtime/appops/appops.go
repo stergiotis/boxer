@@ -42,6 +42,7 @@ type queryFn[S any] func(snap S, args []byte) (result []byte, err error)
 type Set[A any, S any] struct {
 	resources []app.ResourceSpec
 	values    map[string]func(inst A) any
+	editing   map[string]func(inst A) bool
 	ops       []app.OperationSpec
 	commands  map[string]commandFn[A]
 	queries   map[string]queryFn[S]
@@ -55,6 +56,7 @@ type Set[A any, S any] struct {
 func NewSet[A any, S any](snapshot func(inst A) S) (s *Set[A, S]) {
 	s = &Set[A, S]{
 		values:   make(map[string]func(A) any),
+		editing:  make(map[string]func(A) bool),
 		commands: make(map[string]commandFn[A]),
 		queries:  make(map[string]queryFn[S]),
 		avail:    make(map[string]func(S) (bool, string)),
@@ -69,6 +71,14 @@ func NewSet[A any, S any](snapshot func(inst A) S) (s *Set[A, S]) {
 func (inst *Set[A, S]) Resource(name string, summary string, value func(inst A) any) *Set[A, S] {
 	inst.resources = append(inst.resources, app.ResourceSpec{Name: name, Summary: summary})
 	inst.values[name] = value
+	return inst
+}
+
+// Editing declares how to tell that the person is editing a resource,
+// usually from the bound widget's response flags (see [WidgetEditing]).
+// Without it, a resource is never reported as being edited.
+func (inst *Set[A, S]) Editing(name string, fn func(inst A) bool) *Set[A, S] {
+	inst.editing[name] = fn
 	return inst
 }
 
@@ -194,6 +204,13 @@ func (inst *bound[A, S]) ResourceValue(name string) (v any) {
 	return
 }
 
+func (inst *bound[A, S]) Editing(name string) (editing bool) {
+	if fn, ok := inst.set.editing[name]; ok {
+		editing = fn(inst.inst)
+	}
+	return
+}
+
 func (inst *bound[A, S]) ApplyCommand(call app.OperationCall, name string, args []byte) (result []byte, err error) {
 	fn, ok := inst.set.commands[name]
 	if !ok {
@@ -241,5 +258,32 @@ func (inst *snapshot[A, S]) Query(name string, args []byte) (result []byte, err 
 // ResourceNames lists the declared resources in declaration order.
 func (inst *Set[A, S]) ResourceNames() (names []string) {
 	names = slices.Sorted(maps.Keys(inst.values))
+	return
+}
+
+// Gesture applies one of the app's commands as the person, from Frame,
+// through the host (ADR-0269 §SD8 "One path"): the handler runs at once,
+// and the change is logged with the person as writer. Where the host serves
+// no catalog for the window, the call is refused and the app should apply
+// the change itself.
+func Gesture[In any, Out any](ctx app.FrameContextI, op string, in In) (out Out, err error) {
+	g, ok := ctx.(app.OperationsGestureI)
+	if !ok {
+		err = app.RefuseOperation("the frame context offers no gesture path")
+		return
+	}
+	args, err := buscodec.Encode(in)
+	if err != nil {
+		err = eb.Build().Str("operation", op).Errorf("appops: encode arguments: %w", err)
+		return
+	}
+	raw, err := g.OperationGesture(op, args)
+	if err != nil || len(raw) == 0 {
+		return
+	}
+	out, err = buscodec.Decode[Out](raw)
+	if err != nil {
+		err = eb.Build().Str("operation", op).Errorf("appops: decode result: %w", err)
+	}
 	return
 }

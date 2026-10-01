@@ -71,3 +71,120 @@ func decode[T any](b []byte) (v T, err error) {
 	}
 	return
 }
+
+// wireGrantEntry is one instance a task may work in.
+type wireGrantEntry struct {
+	Instance   uint64   `json:"instance"`
+	Mode       string   `json:"mode"`
+	Operations []string `json:"operations,omitempty"`
+}
+
+// wireGrantRequest asks for a grant.
+type wireGrantRequest struct {
+	V            uint8            `json:"v"`
+	Plan         string           `json:"plan"`
+	Entries      []wireGrantEntry `json:"entries"`
+	Destinations []string         `json:"destinations,omitempty"`
+	Calls        uint32           `json:"calls,omitempty"`
+	DeadlineSecs uint32           `json:"deadline_secs,omitempty"`
+}
+
+type wireGrantReply struct {
+	V      uint8  `json:"v"`
+	Ok     bool   `json:"ok"`
+	Reason string `json:"reason,omitempty"`
+	Task   string `json:"task,omitempty"`
+	Handle string `json:"handle,omitempty"`
+}
+
+// wireCall is the envelope on runtime.agent.call. Args is the model's JSON.
+type wireCall struct {
+	V         uint8             `json:"v"`
+	Handle    string            `json:"handle"`
+	Instance  uint64            `json:"instance"`
+	Operation string            `json:"operation"`
+	Args      string            `json:"args,omitempty"`
+	Expects   map[string]uint64 `json:"expects,omitempty"`
+	Key       string            `json:"key"`
+	Reason    string            `json:"reason,omitempty"`
+}
+
+type wireOutcome struct {
+	Phase     string            `json:"phase"`
+	Reason    string            `json:"reason,omitempty"`
+	AsOf      uint64            `json:"as_of,omitempty"`
+	Revisions map[string]uint64 `json:"revisions,omitempty"`
+	ResultRef string            `json:"result_ref,omitempty"`
+	Job       string            `json:"job,omitempty"`
+}
+
+type wireCallReply struct {
+	V       uint8       `json:"v"`
+	Ok      bool        `json:"ok"`
+	Reason  string      `json:"reason,omitempty"`
+	Outcome wireOutcome `json:"outcome"`
+}
+
+// wireStatus asks for a call's or a job's phase by key, waiting up to
+// WaitMs for a final one.
+type wireStatus struct {
+	V      uint8  `json:"v"`
+	Handle string `json:"handle"`
+	Key    string `json:"key"`
+	WaitMs uint32 `json:"wait_ms,omitempty"`
+}
+
+type wireCancel struct {
+	V      uint8  `json:"v"`
+	Handle string `json:"handle"`
+	Key    string `json:"key"`
+}
+
+type wireRead struct {
+	V      uint8  `json:"v"`
+	Handle string `json:"handle"`
+	Ref    string `json:"ref"`
+}
+
+type wireReadReply struct {
+	V         uint8  `json:"v"`
+	Ok        bool   `json:"ok"`
+	Reason    string `json:"reason,omitempty"`
+	MediaType string `json:"media_type,omitempty"`
+	Text      string `json:"text,omitempty"`
+	Path      string `json:"path,omitempty"`
+}
+
+type wireCapture struct {
+	V        uint8  `json:"v"`
+	Handle   string `json:"handle"`
+	Instance uint64 `json:"instance"`
+	Key      string `json:"key"`
+}
+
+type wireHandle struct {
+	V        uint8  `json:"v"`
+	Handle   string `json:"handle"`
+	Instance uint64 `json:"instance,omitempty"`
+}
+
+type wireInstance struct {
+	Instance uint64 `json:"instance"`
+	App      string `json:"app"`
+	Title    string `json:"title"`
+	Mode     string `json:"mode"`
+	Ops      bool   `json:"ops"`
+}
+
+type wireListReply struct {
+	V         uint8          `json:"v"`
+	Ok        bool           `json:"ok"`
+	Reason    string         `json:"reason,omitempty"`
+	Instances []wireInstance `json:"instances,omitempty"`
+}
+
+type wireAck struct {
+	V      uint8  `json:"v"`
+	Ok     bool   `json:"ok"`
+	Reason string `json:"reason,omitempty"`
+}

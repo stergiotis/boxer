@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -134,4 +135,197 @@ func (inst *Client) Describe(ctx context.Context, r DescribeRequest) (apps []App
 		apps = append(apps, out)
 	}
 	return
+}
+
+// GrantEntry names one instance a task may work in, its mode, and the
+// operations it may call there; none means every operation the app exposes
+// to agents.
+type GrantEntry struct {
+	Instance   uint64
+	Mode       ModeE
+	Operations []string
+}
+
+// GrantRequest asks for a task grant.
+type GrantRequest struct {
+	Plan         string
+	Entries      []GrantEntry
+	Destinations []string
+	// Calls is the call budget; zero is DefaultCallBudget.
+	Calls uint32
+	// Deadline is how long the task may run; zero is DefaultDeadline.
+	Deadline time.Duration
+}
+
+// Grant is what a caller holds: the task id for the record and the handle
+// it presents. The handle is honoured only from the requesting instance.
+type Grant struct {
+	Task   string
+	Handle string
+}
+
+// Request asks for a grant. Only test grants are issued without the
+// person, and only where the host enables them.
+func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err error) {
+	req := wireGrantRequest{V: wireVersion, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
+		DeadlineSecs: uint32(r.Deadline / time.Second)}
+	for _, e := range r.Entries {
+		req.Entries = append(req.Entries, wireGrantEntry{Instance: e.Instance, Mode: e.Mode.String(), Operations: e.Operations})
+	}
+	rep, err := request[wireGrantRequest, wireGrantReply](ctx, inst, SubjectRequest, req)
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	g = Grant{Task: rep.Task, Handle: rep.Handle}
+	return
+}
+
+// Outcome is where a call stands; Phase is one of the phase names of
+// ADR-0269 §SD4.
+type Outcome struct {
+	Phase     string
+	Reason    string
+	AsOf      uint64
+	Revisions map[string]uint64
+	// ResultRef names the call's result, to read with Read.
+	ResultRef string
+	// Job names a capture, to read with Read once completed.
+	Job string
+}
+
+// Final reports whether no later phase can follow.
+func (inst Outcome) Final() (final bool) {
+	for _, p := range opwire.AllPhases {
+		if p.String() == inst.Phase {
+			return p.Final()
+		}
+	}
+	return
+}
+
+// CallRequest is one command or query. Args is JSON in the operation's
+// argument schema; Expects are the revisions a command expects of what it
+// writes, defaulting to those the task last read.
+type CallRequest struct {
+	Handle    string
+	Instance  uint64
+	Operation string
+	Args      string
+	Expects   map[string]uint64
+	Key       string
+	Reason    string
+}
+
+func outcomeOfWire(w wireOutcome) (out Outcome) {
+	return Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job}
+}
+
+func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
+	if err != nil {
+		rerr = err
+		return
+	}
+	if !rep.Ok {
+		rerr = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	out = outcomeOfWire(rep.Outcome)
+	return
+}
+
+// Call calls one command or query.
+func (inst *Client) Call(ctx context.Context, r CallRequest) (out Outcome, err error) {
+	return callReply(request[wireCall, wireCallReply](ctx, inst, SubjectCall, wireCall{V: wireVersion, Handle: r.Handle,
+		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason}))
+}
+
+// Status reads a call's or a capture's phase by key, waiting up to wait
+// (at most MaxStatusWait) for a final one.
+func (inst *Client) Status(ctx context.Context, handle string, key string, wait time.Duration) (out Outcome, err error) {
+	sub := *inst
+	sub.Timeout = inst.wait(ctx) + wait
+	return callReply(request[wireStatus, wireCallReply](ctx, &sub, SubjectStatus,
+		wireStatus{V: wireVersion, Handle: handle, Key: key, WaitMs: uint32(wait / time.Millisecond)}))
+}
+
+// Cancel withdraws a queued call by key; a call past the queue keeps its
+// phase, which is returned.
+func (inst *Client) Cancel(ctx context.Context, handle string, key string) (out Outcome, err error) {
+	return callReply(request[wireCancel, wireCallReply](ctx, inst, SubjectCancel, wireCancel{V: wireVersion, Handle: handle, Key: key}))
+}
+
+// Capture captures an instance's window; the outcome's Job names it.
+func (inst *Client) Capture(ctx context.Context, handle string, instance uint64, key string) (out Outcome, err error) {
+	return callReply(request[wireCapture, wireCallReply](ctx, inst, SubjectCapture,
+		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: key}))
+}
+
+// ReadResult is a result as JSON, or an artifact by media type and path.
+type ReadResult struct {
+	MediaType string
+	Text      string
+	Path      string
+}
+
+// Read reads a result reference or a completed capture.
+func (inst *Client) Read(ctx context.Context, handle string, ref string) (res ReadResult, err error) {
+	rep, err := request[wireRead, wireReadReply](ctx, inst, SubjectRead, wireRead{V: wireVersion, Handle: handle, Ref: ref})
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	res = ReadResult{MediaType: rep.MediaType, Text: rep.Text, Path: rep.Path}
+	return
+}
+
+// Instance is one window of the task.
+type Instance struct {
+	Instance uint64
+	App      string
+	Title    string
+	Mode     string
+	Ops      bool
+}
+
+// List lists the task's open instances.
+func (inst *Client) List(ctx context.Context, handle string) (out []Instance, err error) {
+	rep, err := request[wireHandle, wireListReply](ctx, inst, SubjectList, wireHandle{V: wireVersion, Handle: handle})
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	for _, i := range rep.Instances {
+		out = append(out, Instance(i))
+	}
+	return
+}
+
+func ack(rep wireAck, err error) (rerr error) {
+	if err != nil {
+		return err
+	}
+	if !rep.Ok {
+		return &RefusedError{Reason: rep.Reason}
+	}
+	return
+}
+
+// Detach removes one instance from the task; its queued calls expire.
+func (inst *Client) Detach(ctx context.Context, handle string, instance uint64) (err error) {
+	return ack(request[wireHandle, wireAck](ctx, inst, SubjectDetach, wireHandle{V: wireVersion, Handle: handle, Instance: instance}))
+}
+
+// Stop ends the task.
+func (inst *Client) Stop(ctx context.Context, handle string) (err error) {
+	return ack(request[wireHandle, wireAck](ctx, inst, SubjectStop, wireHandle{V: wireVersion, Handle: handle}))
 }

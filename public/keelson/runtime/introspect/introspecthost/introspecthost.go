@@ -19,6 +19,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
@@ -130,6 +131,10 @@ type Deps struct {
 	// keelson.http_calls and keelson.http_destinations (ADR-0262 §SD5).
 	// Same typed-nil trap: assign only a service that started.
 	HTTPCalls httpegress.CallsI
+	// Agent is the app operations service as a read side, backing
+	// keelson.agent_grants and keelson.agent_actions (ADR-0269 §SD9). Same
+	// typed-nil trap: assign only a service that started.
+	Agent agent.RecordsI
 	// Log is the host logger.
 	Log zerolog.Logger
 }
@@ -232,6 +237,11 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// destination any app could name. Registered unconditionally.
 	if e := httpegress.RegisterIntrospect(reg, deps.HTTPCalls); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: http_calls provider registration failed")
+	}
+	// ADR-0269 §SD9: the task grants and the action record. Registered
+	// unconditionally.
+	if e := agent.RegisterIntrospect(reg, deps.Agent); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: agent tables registration failed")
 	}
 	// And what a model may be asked to do: every registered prompt
 	// document, joinable to llm_calls on purpose.

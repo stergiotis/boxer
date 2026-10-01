@@ -9,6 +9,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -19,6 +20,13 @@ type Config struct {
 	// Registry is the app registry whose catalogs are served; nil is
 	// app.DefaultRegistry.
 	Registry *app.Registry
+	// Host is the window host whose instances calls reach; nil leaves every
+	// service past describe refusing.
+	Host HostI
+	// TestGrants lets request issue a grant without the person's approval
+	// (ADR-0269 §SD6 "Test grants"). The host sets it only on the headless
+	// host and only when TestGrantsEnv asks for it.
+	TestGrants bool
 }
 
 // Service answers `runtime.agent.*` (ADR-0269 §SD3).
@@ -28,6 +36,15 @@ type Service struct {
 	unsub     func()
 	closeOnce sync.Once
 	log       zerolog.Logger
+
+	mu sync.Mutex
+	// tasks are keyed by grant handle.
+	tasks    map[string]*task
+	nextCall uint64
+
+	recMu   sync.Mutex
+	records []ActionRecord
+	recHead int
 }
 
 // NewService subscribes the service. The caller MUST invoke Close.
@@ -39,7 +56,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if cfg.Registry == nil {
 		cfg.Registry = app.DefaultRegistry
 	}
-	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger()}
+	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task)}
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
 	s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handleRequest)
 	if err != nil {
@@ -68,11 +85,42 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	if msg.Reply == "" {
 		return
 	}
+	// An in-process handler runs on its requester's goroutine; a request
+	// from the render goroutine would wait on the frame it blocks (ADR-0269
+	// §SD3).
+	if inst.cfg.Host != nil {
+		if rg := inst.cfg.Host.OpsRenderGoroutine(); rg != 0 && rg == opwire.GoroutineId() {
+			inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "requested from the render goroutine; call from a goroutine of your own"})
+			return
+		}
+	}
+	if msg.Subject != SubjectDescribe && msg.Subject != SubjectRequest && inst.cfg.Host == nil {
+		inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "no window host"})
+		return
+	}
 	switch msg.Subject {
 	case SubjectDescribe:
 		inst.reply(msg.Reply, inst.describe(msg))
+	case SubjectRequest:
+		inst.reply(msg.Reply, inst.grant(msg))
+	case SubjectCall:
+		inst.reply(msg.Reply, inst.call(msg))
+	case SubjectStatus:
+		inst.reply(msg.Reply, inst.status(msg))
+	case SubjectCancel:
+		inst.reply(msg.Reply, inst.cancel(msg))
+	case SubjectRead:
+		inst.reply(msg.Reply, inst.read(msg))
+	case SubjectCapture:
+		inst.reply(msg.Reply, inst.capture(msg))
+	case SubjectList:
+		inst.reply(msg.Reply, inst.list(msg))
+	case SubjectDetach:
+		inst.reply(msg.Reply, inst.detach(msg))
+	case SubjectStop:
+		inst.reply(msg.Reply, inst.stop(msg))
 	default:
-		inst.log.Debug().Str("subject", msg.Subject).Msg("agent: no such service")
+		inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "no such service"})
 	}
 }
 

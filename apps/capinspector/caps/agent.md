@@ -38,8 +38,14 @@ apps, err := agent.NewClient(ctx.Bus()).Describe(ctx, agent.DescribeRequest{Sear
 
 - **Subjects.** `runtime.agent.<service>`, request/reply. `describe` lists
   the operations agents may call, without schemas; naming one operation
-  returns it with the JSON Schemas of its arguments and result.
-- **Backends.** One service, under the id `runtime.agent`.
+  returns it with the JSON Schemas of its arguments and result. `request`,
+  `call`, `status`, `cancel`, `read`, `capture`, `list`, `detach` and `stop`
+  work under a task grant.
+- **Operation subjects.** `app.<alias>.<instance>.op.<name>`: the
+  dispatcher's call to one window. Only the host publishes and subscribes
+  there; registration refuses an app whose capability could reach them.
+- **Backends.** The dispatcher under the id `runtime.agent`; the window
+  host's side of the operation subjects under `runtime.windowhost.ops`.
 
 ## What guards it
 
@@ -52,6 +58,14 @@ apps, err := agent.NewClient(ctx.Bus()).Describe(ctx, agent.DescribeRequest{Sear
 - **The grant.** Every service past `describe` and `request` is checked
   against a task grant the person approved (ADR-0269 §SD6); the bus grant
   above is necessary and not sufficient.
+
+## Where it is read
+
+- `keelson('agent_grants')` — every task grant this process issued: the
+  actor, the instances and modes, the budget used, and how it ended.
+- `keelson('agent_actions')` — one row when the dispatcher decides a call
+  and one at its final phase: operation, effect, phase, reason, the budget
+  left.
 
 ## Where the catalog is read
 

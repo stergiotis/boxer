@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
@@ -189,6 +190,8 @@ func classify(subject string) (capId CapId) {
 		capId = CapHTTP
 	case strings.HasPrefix(subject, agent.SubjectPrefix):
 		capId = CapAgent
+	case isOperationSubject(subject):
+		capId = CapAgent
 	case strings.HasPrefix(subject, "task."):
 		capId = CapTask
 	case strings.HasPrefix(subject, "runtime.facts."):
@@ -200,5 +203,12 @@ func classify(subject string) (capId CapId) {
 		strings.HasPrefix(subject, "runtime.run"):
 		capId = CapRun
 	}
+	return
+}
+
+// isOperationSubject reports an app.{alias}.{instance}.op.{name} subject,
+// which only the host's dispatcher and window host use (ADR-0269 §SD3).
+func isOperationSubject(subject string) (ok bool) {
+	_, _, _, ok = opwire.ParseSubject(subject)
 	return
 }

@@ -4,12 +4,15 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -104,6 +107,14 @@ type window struct {
 	// handle of a window that has not rendered yet resolves to empty
 	// flags. Render-thread only.
 	focusHandle widgethandle.WidgetHandle
+
+	// ops serves the app's operations catalog for this window (ADR-0269);
+	// nil when the app declares none or the instance does not serve it.
+	// Created on the render goroutine after Mount; read by the operation
+	// service off it, hence the atomic.
+	ops atomic.Pointer[opengine.Engine]
+	// opsTried records that startOps ran. Render-thread only.
+	opsTried bool
 }
 
 // instMount is the Mount/Unmount lifecycle shared by every window pointing
@@ -232,6 +243,13 @@ type Inst struct {
 	// pane that says so, which is what the screenshot-tour path and the
 	// windowhost's own tests get.
 	launcher launcherI
+
+	// caps holds window captures the dispatcher asked for (ADR-0269
+	// §SD11).
+	caps captures
+	// renderGoroutine is the id of the goroutine running Frame, recorded
+	// each Frame so the dispatcher can refuse requests made on it.
+	renderGoroutine atomic.Uint64
 }
 
 // NewInst constructs a WindowHost backed by registry. logger is used
@@ -1005,6 +1023,7 @@ func emitStopped(facts factsstore.FactsStoreI, logger zerolog.Logger, runId stri
 // can at least see something on the desktop after launch.
 func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.frameTimes.beginLoop(time.Now())
+	inst.renderGoroutine.Store(opwire.GoroutineId())
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
 	// Snapshot the slice under lock; the iteration runs without the
@@ -1110,6 +1129,16 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// the ExportSvgWindow opcode. The SvgExportPlugin drains it in
 	// on_end_pass this same frame, so the captured shapes match what
 	// the user just saw.
+	{
+		open := make(map[WindowKeyT]bool, len(snapshot))
+		for _, w := range snapshot {
+			open[w.key] = !w.closeReq
+		}
+		inst.runCaptures(ids, open)
+	}
+	if opsBusy(snapshot) {
+		c.RequestRepaintAfter(opsRepaintIntervalSecs)
+	}
 	saveEv := inst.saveDialog(ids).Render()
 	switch act, paths := saveEv.Action, saveEv.Paths; act {
 	case filepicker.ActionSave:
@@ -1364,6 +1393,11 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 		c.Label("windowhost: mount failed: " + w.mount.mountErr.Error()).Send()
 		return
 	}
+	// ADR-0269 §SD4: the previous frame's write-back has landed, so the
+	// person's changes are in Go state; queued commands apply now, and the
+	// app's Frame draws their effects.
+	w.startOps(logger)
+	w.beginOps()
 	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
 		msgs := frameMessages()
 		start := time.Now()
@@ -1373,6 +1407,7 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 			c.Label("windowhost: frame error: " + fErr.Error()).Send()
 		}
 	}
+	w.endOps()
 }
 
 // RenderAppsMenu draws the shell's top-bar "Apps ▾" menu.

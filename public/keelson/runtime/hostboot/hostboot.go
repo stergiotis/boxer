@@ -728,14 +728,34 @@ func (rt *Runtime) bootAgent() {
 		return
 	}
 	logger := rt.opts.Log
-	svc, err := agent.NewService(rt.Bus, logger, agent.Config{})
+	cfg := agent.Config{TestGrants: agentTestGrants(agent.TestGrantsEnv.Get(), imzero2env.HeadlessListen.Get() != "")}
+	if agent.TestGrantsEnv.Get() && !cfg.TestGrants {
+		logger.Warn().Msg("agent: BOXER_AGENT_TEST_GRANTS is honoured only on the headless host; refused here")
+	}
+	if rt.Host != nil {
+		cfg.Host = rt.Host
+		ops, oErr := windowhost.NewOpsService(rt.Bus, rt.Host, logger)
+		if oErr != nil {
+			logger.Warn().Err(oErr).Msg("windowhost: ops service start failed; operation calls will go unanswered")
+		} else {
+			rt.cleanups = append(rt.cleanups, ops.Close)
+		}
+	}
+	svc, err := agent.NewService(rt.Bus, logger, cfg)
 	if err != nil {
 		logger.Warn().Err(err).Msg("agent: service start failed; runtime.agent.* will be unbound")
 		return
 	}
 	rt.Agent = svc
 	rt.cleanups = append(rt.cleanups, svc.Close)
-	logger.Info().Msg("agent: service listening on runtime.agent.*")
+	logger.Info().Bool("testGrants", cfg.TestGrants).Msg("agent: service listening on runtime.agent.*")
+}
+
+// agentTestGrants decides whether test grants are issued: only when asked
+// for, and only on the headless host (ADR-0269 §SD6) — the desktop host is
+// where a person's windows are, and a grant there needs the person.
+func agentTestGrants(requested bool, headless bool) (on bool) {
+	return requested && headless
 }
 
 // bootIntrospect starts the introspection HTTP host when the service is on;
@@ -780,6 +800,9 @@ func (rt *Runtime) bootIntrospect() {
 	}
 	if rt.HTTP != nil {
 		deps.HTTPCalls = rt.HTTP
+	}
+	if rt.Agent != nil {
+		deps.Agent = rt.Agent
 	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {
