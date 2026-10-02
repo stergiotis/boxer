@@ -110,7 +110,12 @@ type MapDriver struct {
 	// readoutSQL/readoutLabel are the render's hover figure as the last
 	// settle built the template; readout is the raster on screen's values,
 	// and hoverText what the pointer is over this frame.
-	readoutOn    bool // the readout checkbox; off, the query carries no extra columns
+	readoutOn bool // the readout checkbox; off, the query carries no extra columns
+	// deviceRes requests the raster at the display's pixels per point
+	// (dpr, read each frame) instead of at logical points; off by default,
+	// since a 2× display asks for four times the pixels.
+	deviceRes    bool
+	dpr          float64
 	readoutSQL   string
 	readoutLabel string
 	readout      mapReadout
@@ -214,6 +219,10 @@ var mapViewportSignals = func() (out []SignalID) {
 const (
 	mapDebounce        = 250 * time.Millisecond
 	mapMaxDim   uint32 = 1536 // bounds query cost + Arrow size per request (a 1024-px view plus the margin)
+	// mapMaxDimDevice caps a device-resolution request (deviceRes): the
+	// cap above scaled by the display, no further than a texture side every
+	// GPU takes.
+	mapMaxDimDevice uint32 = 4096
 
 	// mapOverscan is the margin requested around the view on every side, as
 	// a share of its span (ADR-0096 SD7, built 2026-10-02): a settled view
@@ -439,6 +448,7 @@ func parseWxH(s string) (w, h float64, ok bool) {
 func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	inst.syncProgress()
 	inst.renderControls()
+	inst.dpr = float64(c.CurrentApplicationState.StateManager.GetPixelsPerPoint())
 
 	// The map is created on first render, after the BOXER_PLAY_* seeds have
 	// been applied. It owns its view Go-side (ADR-0204), so the old binding's
@@ -654,6 +664,8 @@ func (inst *MapDriver) renderControls() {
 		// (ADR-0096 2026-10-02 readout Update).
 		c.Checkbox(inst.ids.PrepareStr("map-readout"), inst.readoutOn, "readout").
 			SendRespVal(&inst.readoutOn)
+		c.Checkbox(inst.ids.PrepareStr("map-device-res"), inst.deviceRes, "device resolution").
+			SendRespVal(&inst.deviceRes)
 		if inst.hasArea && c.Button(inst.ids.PrepareStr("map-clear-area"),
 			c.Atoms().Text("Clear area").Keep()).SendResp().HasPrimaryClicked() {
 			inst.clearAreaRequested = true
@@ -941,7 +953,10 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 	// The raster covers only the part of the view the bbox kept (one world
 	// copy, the poles clamped); size it to that part so its pixels stay
 	// screen-sized rather than stretched, then widen it by the margin.
-	b, w, h := inst.requestBox(b, float64(screenW)*fracX, float64(screenH)*latCoverage(minLat, maxLat))
+	// With device resolution on, a raster pixel is a display pixel rather
+	// than a logical point (ADR-0096 SD7, 2026-10-02).
+	dpr := inst.templateDPR()
+	b, w, h := inst.requestBox(b, float64(screenW)*fracX*dpr, float64(screenH)*latCoverage(minLat, maxLat)*dpr)
 	sampling := max(uint32(inst.sampling), 1)
 	r := builtinRenders[inst.renderIdx]
 	colorSQL := r.colorSQL
@@ -965,7 +980,7 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 	levels := mapLadderLevels(table, sampling, inst.refine, inst.ladder.missing)
 	// Keyed on the source, not on the levels: dropping a missing level must
 	// not read as a change.
-	inputs := fmt.Sprintf("%v|%d|%d|%s|%d|%t|%s|%s|%s|%s|%t", b, w, h, table, sampling, inst.refine, colorSQL, where, inst.windowFrom, inst.windowTo, inst.readoutOn)
+	inputs := fmt.Sprintf("%v|%d|%d|%s|%d|%t|%s|%s|%s|%s|%t|%g", b, w, h, table, sampling, inst.refine, colorSQL, where, inst.windowFrom, inst.windowTo, inst.readoutOn, dpr)
 	if inst.ladder.reset(inputs, levels) {
 		inst.ladder.noBudget = inst.refreshPending
 	}
@@ -987,7 +1002,7 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 // a custom colour block outside Grammar1 falls back to the reserved six, so
 // the viewport always resolves).
 func (inst *MapDriver) ensureTemplate(table string, sampling uint32, colorSQL, extraWhere string) {
-	tmpl := rasterTemplateSQLWith(table, sampling, colorSQL, extraWhere, inst.readoutOn, inst.readoutSQL)
+	tmpl := rasterTemplateSQLWith(table, sampling, colorSQL, extraWhere, inst.readoutOn, inst.readoutSQL, inst.templateDPR())
 	if tmpl == inst.template {
 		return
 	}
@@ -1230,7 +1245,7 @@ func (inst *MapDriver) statusLine() string {
 // The function form is the canonical shape and rides through untouched. Do not
 // "simplify" it back to the operator.
 func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere string) string {
-	return rasterTemplateSQLWith(table, sampling, colorSQL, extraWhere, false, "")
+	return rasterTemplateSQLWith(table, sampling, colorSQL, extraWhere, false, "", 1)
 }
 
 // rasterTemplateSQLWith is rasterTemplateSQL with the hover readout's columns
@@ -1238,7 +1253,16 @@ func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere strin
 // readout is not empty, readout rounded to an Int32 — the readout shows it
 // rounded, and an Int32 travels in fewer bytes than the Float64 it comes from
 // (play_map_readout.go).
-func rasterTemplateSQLWith(table string, sampling uint32, colorSQL, extraWhere string, withReadout bool, readout string) string {
+//
+// dpr is the display scale the raster is requested at. A raster dpr× finer
+// per side holds dpr² fewer rows per pixel while zoom_factor, from the pixel's
+// side, grows only by dpr, so the brightness normaliser divides by dpr once
+// more to keep a place as bright as it is at the logical size.
+func rasterTemplateSQLWith(table string, sampling uint32, colorSQL, extraWhere string, withReadout bool, readout string, dpr float64) string {
+	norm := ""
+	if dpr > 0 && dpr != 1 {
+		norm = " / " + strconv.FormatFloat(dpr, 'g', 6, 64)
+	}
 	extra := ""
 	if withReadout {
 		extra = ", toUInt32(total)"
@@ -1261,14 +1285,14 @@ func rasterTemplateSQLWith(table string, sampling uint32, colorSQL, extraWhere s
     (span_x / {vp_w:UInt32}) * (span_y / {vp_h:UInt32}) AS pixel_area,
     pow(2, 22) / sqrt(pixel_area) AS zoom_factor,
     count() AS total,
-    greatest(1000000. / %[2]d / zoom_factor, toFloat64(count())) AS max_total,
+    greatest(1000000. / %[2]d / zoom_factor%[7]s, toFloat64(count())) AS max_total,
     pow(total / max_total, 1/5) AS transparency,
     %[3]s%[5]s
 SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8%[6]s
 FROM %[1]s
 WHERE %[4]s
 GROUP BY pos`,
-		table, sampling, colorSQL, where, alphaClause(colorSQL), extra)
+		table, sampling, colorSQL, where, alphaClause(colorSQL), extra, norm)
 }
 
 // rasterAlphaRe finds a colour block's own alpha definition. Textual on
@@ -1455,8 +1479,8 @@ func (inst *MapDriver) requestBox(view mercBox, viewW, viewH float64) (b mercBox
 	}
 	b.minX, b.maxX = widen(view.minX, view.maxX)
 	b.minY, b.maxY = widen(view.minY, view.maxY)
-	w = clampDim(float32(float64(b.maxX-b.minX) / scaleX))
-	h = clampDim(float32(float64(b.maxY-b.minY) / scaleY))
+	w = clampDimTo(float32(float64(b.maxX-b.minX)/scaleX), inst.maxDim())
+	h = clampDimTo(float32(float64(b.maxY-b.minY)/scaleY), inst.maxDim())
 	inst.req, inst.reqW, inst.reqH, inst.reqScale, inst.reqValid = b, w, h, scaleX, true
 	return
 }
@@ -1467,15 +1491,35 @@ func (inst mercBox) contains(o mercBox) bool {
 	return o.minX >= inst.minX && o.maxX <= inst.maxX && o.minY >= inst.minY && o.maxY <= inst.maxY
 }
 
-func clampDim(px float32) uint32 {
+func clampDim(px float32) uint32 { return clampDimTo(px, mapMaxDim) }
+
+func clampDimTo(px float32, limit uint32) uint32 {
 	v := uint32(math.Round(float64(px)))
 	if v < 16 {
 		return 16
 	}
-	if v > mapMaxDim {
-		return mapMaxDim
+	if v > limit {
+		return limit
 	}
 	return v
+}
+
+// templateDPR is the display scale the raster is requested at: the
+// pixels-per-point of the last frame with device resolution on, else 1.
+func (inst *MapDriver) templateDPR() float64 {
+	if !inst.deviceRes || inst.dpr <= 0 {
+		return 1
+	}
+	return inst.dpr
+}
+
+// maxDim is the raster side the request may reach at templateDPR.
+func (inst *MapDriver) maxDim() uint32 {
+	d := inst.templateDPR()
+	if d <= 1 {
+		return mapMaxDim
+	}
+	return min(mapMaxDimDevice, uint32(math.Round(float64(mapMaxDim)*d)))
 }
 
 // sanitizeTable accepts a plain identifier OR a table-function source

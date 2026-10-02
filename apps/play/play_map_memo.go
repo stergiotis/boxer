@@ -129,7 +129,7 @@ func (inst *mapMemo) touch(key string) {
 func (inst *MapDriver) jumpToMemo(params map[string]string) {
 	for i := len(inst.ladder.levels) - 1; i > inst.ladder.level; i-- {
 		lv := inst.ladder.levels[i]
-		key := compiledNode{SQL: rasterTemplateSQLWith(lv.table, lv.sampling, inst.colorSQL, inst.extraWhere, inst.readoutOn, inst.readoutSQL), Params: params}.key()
+		key := compiledNode{SQL: rasterTemplateSQLWith(lv.table, lv.sampling, inst.colorSQL, inst.extraWhere, inst.readoutOn, inst.readoutSQL, inst.templateDPR()), Params: params}.key()
 		if inst.memo.has(key) {
 			inst.ladder.level = i
 			inst.rebuildLevelTemplate()

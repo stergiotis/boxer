@@ -954,12 +954,68 @@ func TestMapReadout(t *testing.T) {
 // then the render's figure rounded to an Int32.
 func TestRasterTemplateReadoutColumns(t *testing.T) {
 	r := builtinRenders[0]
-	plain := rasterTemplateSQLWith("planes_mercator", 1, r.colorSQL, "", false, r.readout)
+	plain := rasterTemplateSQLWith("planes_mercator", 1, r.colorSQL, "", false, r.readout, 1)
 	require.NotContains(t, plain, "toUInt32(total)")
-	with := rasterTemplateSQLWith("planes_mercator", 1, r.colorSQL, "", true, r.readout)
+	with := rasterTemplateSQLWith("planes_mercator", 1, r.colorSQL, "", true, r.readout, 1)
 	require.Contains(t, with, "round(alpha)::UInt8, toUInt32(total), toInt32(round(avg(altitude)))")
-	countOnly := rasterTemplateSQLWith("planes_mercator", 1, builtinRenders[1].colorSQL, "", true, builtinRenders[1].readout)
+	countOnly := rasterTemplateSQLWith("planes_mercator", 1, builtinRenders[1].colorSQL, "", true, builtinRenders[1].readout, 1)
 	require.Contains(t, countOnly, "round(alpha)::UInt8, toUInt32(total)\nFROM")
 	_, err := passes.CanonicalizeFull(100).Run(with)
 	require.NoError(t, err)
+}
+
+// Device resolution keeps brightness: the same uniform density drawn at the
+// logical size and at twice it per side gives the same transparency, because
+// the normaliser divides by the display scale once more (rasterTemplateSQLWith);
+// without that division the finer raster comes out dimmer.
+func TestDeviceResolutionKeepsBrightness(t *testing.T) {
+	bin, err := chlocalpool.LookupBinary()
+	if err != nil {
+		t.Skipf("clickhouse not installed: %v", err)
+	}
+	// One point every 125 mercator units over an 8000-unit square: 64 per
+	// pixel at 8×8, 16 per pixel at 16×16.
+	const setup = "CREATE TABLE planes_mercator (mercator_x UInt32, mercator_y UInt32) ENGINE = Memory;\n" +
+		"INSERT INTO planes_mercator SELECT 62 + (number % 64) * 125, 62 + intDiv(number, 64) * 125 FROM numbers(4096);\n"
+	mean := func(side uint32, dpr float64) float64 {
+		// Every pixel holds the same count, so any one pixel's transparency
+		// is the raster's.
+		tmpl := rasterTemplateSQLWith("planes_mercator", 1, builtinRenders[1].colorSQL, "", false, "", dpr)
+		tmpl = strings.Replace(tmpl, "SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8", "SELECT transparency AS t", 1)
+		out, err := exec.Command(bin, "local", "--output-format", "TSV",
+			"--param_vp_min_x=0", "--param_vp_max_x=8000", "--param_vp_min_y=0", "--param_vp_max_y=8000",
+			"--param_vp_w="+strconv.Itoa(int(side)), "--param_vp_h="+strconv.Itoa(int(side)),
+			"--query", setup+"SELECT any(t) FROM ("+tmpl+")").CombinedOutput()
+		require.NoError(t, err, string(out))
+		v, err := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
+		require.NoError(t, err, string(out))
+		return v
+	}
+	logical := mean(8, 1)
+	device := mean(16, 2)
+	require.InDelta(t, logical, device, 1e-3, "the same density, the same brightness")
+	require.Less(t, mean(16, 1), logical-0.01, "without the correction the finer raster is dimmer")
+}
+
+// With device resolution on, the request is sized in display pixels and the
+// cap scales with the display; off, the display scale changes nothing.
+func TestDeviceResolutionRequest(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	d := NewMapDriver(nil, nil)
+	defer d.lane.close()
+	d.dpr = 2
+	d.updateViewport(47, 48, 8, 9, 800, 400, graphEmitter{graph: g})
+	w, _ := g.signals().Get("vp_w")
+	require.Equal(t, "1200", w.Raw, "off: logical points plus the margin")
+	require.NotContains(t, d.template, "zoom_factor / 2")
+
+	d.deviceRes = true
+	d.updateViewport(47, 48, 8, 9, 800, 400, graphEmitter{graph: g})
+	w, _ = g.signals().Get("vp_w")
+	require.Equal(t, "2400", w.Raw, "on: display pixels plus the margin")
+	require.Contains(t, d.template, "zoom_factor / 2,")
+	require.EqualValues(t, 3072, d.maxDim())
+
+	d.dpr = 4
+	require.EqualValues(t, mapMaxDimDevice, d.maxDim())
 }
