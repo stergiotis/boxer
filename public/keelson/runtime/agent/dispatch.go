@@ -375,7 +375,6 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 	}
 	if len(req.Entries) == 0 && len(req.Launches) == 0 && req.Desktop == "" {
 		rep.Reason = "a grant names at least one instance, an app to open or the desktop"
-		inst.recordGrantRefusal(msg, req, rep.Reason)
 		inst.grantEvent(trail.GrantEventRefused, "host", rep.Reason, nil, asked(msg, req))
 		return
 	}
