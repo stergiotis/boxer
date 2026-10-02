@@ -2756,6 +2756,21 @@ GROUP BY toStartOfHour(time)
 ORDER BY _tl_time
 ```
 
+What a box on the **Map** holds: tick **select area**, drag a box, and Run.
+The box is published as `area_min_x` … `area_max_y` in mercator units (and
+`area_min_lat` … `area_max_lon` in degrees, for a table without mercator
+columns); with nothing selected they span the whole world.
+
+```sql
+SELECT t AS type, count() AS positions, uniqExact(icao) AS aircraft
+FROM planes_mercator
+WHERE mercator_x BETWEEN {area_min_x:UInt32} AND {area_max_x:UInt32}
+  AND mercator_y BETWEEN {area_min_y:UInt32} AND {area_max_y:UInt32}
+GROUP BY type
+ORDER BY positions DESC
+LIMIT 20
+```
+
 The Map tab's raster query as a snippet (ADR-0096 §SD6): it bins the visible
 points into a `W×H` grid and derives an RGBA value per pixel, so it returns one
 row per pixel — a `W*H`-row framebuffer, not a readable table (the **Map** tab

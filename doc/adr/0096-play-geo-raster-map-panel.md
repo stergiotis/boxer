@@ -730,6 +730,23 @@ large pans it cost about a fifth more server time and a third more bytes. One
 cost is new: a raster up to 1536 wide holds more non-empty pixels, so a dense
 view comes nearer the public ADS-B user's 1,048,576-row result cap.
 
+## Update — 2026-10-02: an area selection, published as signals
+
+With **select area** on, a drag on the Map draws a box instead of panning —
+portolan's `SetBoxSelect`, which reports the released box in
+`Events.Selected` rather than zooming to it — and the panel publishes it as
+play-wide signals: `area_min_x` … `area_max_y` (`UInt32`, mercator, folded
+onto the one world the columns cover) and `area_min_lat` … `area_max_lon`
+(`Float64`, degrees). They are seeded to the whole world, so a query reading
+them runs before anything is selected and keeps every row; **Clear area**
+returns them to it. The box stays outlined on the map and the status line
+names it. The editor's own query is the report on what the box holds, so
+SD10's hover→info deferral has its first half: an area, not a point.
+
+The same change fixes the raster memo's reach: it now serves only a key
+other than the one the lane itself last landed, so a fresh raster is no
+longer called a memory and keeps its run's accounting.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
