@@ -673,6 +673,19 @@ line names the window; with no window, or no column, the template carries no
 predicate, so a table without that column keeps working. This is SD6's
 human-owned predicate, filled from the Timeline rather than typed.
 
+## Update — 2026-10-02: tile addressing measured; SD1 stands
+
+The [map-tile-addressing](../trials/map-tile-addressing/README.md) trial
+re-costed O2 against SD1 as built, on the local demo slice; its §0 is the
+citable claim. Tiles drawn through a portolan pyramid cost the server about
+what one raster per settled view does over a pan/zoom path, spending more on
+views that show new ground and nothing on revisits, so they do not earn an ADR
+superseding SD1 on this evidence. A source where one view takes seconds —
+remote, or far larger — is where the answer could change; the trial's §6
+lists what such an ADR would have to decide. The smaller changes it points at
+instead are a multi-entry raster memo on the lane, starting the ladder lower
+on a fast source, and SD10's deferred overscan margin.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
