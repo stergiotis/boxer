@@ -228,7 +228,10 @@ func (inst *Service) readHelp(b help.BookI, docPath string, section string, rep 
 		rep.Reason = "no help document " + docPath + "; list the app's documents with app alone"
 		return
 	}
-	start, end, from, to := frontmatterEnd(src), len(src), 0, len(info.Sections)
+	// SliceSections bounds a section at its heading's line start, so a
+	// section opens with its own marker and does not carry the next one's.
+	spans := search.SliceSections(string(src), info.Sections)
+	start, end, from, to := spans[0].Start, len(src), 0, len(info.Sections)
 	if section != "" {
 		i := -1
 		for j, s := range info.Sections {
@@ -241,17 +244,13 @@ func (inst *Service) readHelp(b help.BookI, docPath string, section string, rep 
 			rep.Reason = "no section " + section + " in " + docPath + "; its sections are listed with app alone"
 			return
 		}
-		start, from, to = info.Sections[i].ByteOffset, i+1, len(info.Sections)
+		start, from, to = spans[i+1].Start, i+1, len(info.Sections)
 		for j := i + 1; j < len(info.Sections); j++ {
 			if info.Sections[j].Level <= info.Sections[i].Level {
-				end, to = info.Sections[j].ByteOffset, j
+				end, to = spans[j+1].Start, j
 				break
 			}
 		}
-	}
-	start, end = min(max(start, 0), len(src)), min(max(end, 0), len(src))
-	if end < start {
-		end = start
 	}
 	text := string(src[start:end])
 	if len(text) > HelpMaxBytes {
@@ -274,19 +273,6 @@ func helpSections(secs []help.SectionInfo, from int, to int, maxLevel uint8) (ou
 			continue
 		}
 		out = append(out, wireHelpSection{Slug: s.Slug, Heading: s.Text, Level: s.Level})
-	}
-	return
-}
-
-// frontmatterEnd is the offset after a leading `---` frontmatter block, or
-// zero.
-func frontmatterEnd(src []byte) (off int) {
-	s := string(src)
-	if !strings.HasPrefix(s, "---\n") {
-		return
-	}
-	if i := strings.Index(s[4:], "\n---\n"); i >= 0 {
-		off = 4 + i + len("\n---\n")
 	}
 	return
 }
