@@ -1,6 +1,7 @@
 package play
 
 import (
+	"github.com/apache/arrow-go/v18/arrow"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -14,7 +15,7 @@ import (
 func TestPlayCatalogRegisters(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	require.NoError(t, m.Operations.Validate())
-	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane} {
+	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane, opListPanes, opBindPane} {
 		spec, ok := m.Operations.Lookup(name)
 		require.True(t, ok, name)
 		assert.True(t, spec.Agents, name)
@@ -136,4 +137,100 @@ func TestTheAgentMarkReachesTheClient(t *testing.T) {
 	assert.Equal(t, obo, p.client.agentMark.Load())
 	assert.Nil(t, p.takeAgentForRun(false), "the person's Run")
 	assert.Nil(t, p.client.agentMark.Load(), "clears the mark before the run is sent")
+}
+
+// listPanes asks the window's snapshot for list_panes.
+func listPanes(t *testing.T, h app.OperationsHandlerI) (out PaneList) {
+	t.Helper()
+	raw, err := h.Snapshot().Query(opListPanes, nil)
+	require.NoError(t, err)
+	out, err = buscodec.Decode[PaneList](raw)
+	require.NoError(t, err)
+	return
+}
+
+func paneNamed(t *testing.T, l PaneList, name string) (ps PaneState) {
+	t.Helper()
+	for _, p := range l.Panes {
+		if p.Name == name {
+			return p
+		}
+	}
+	require.Failf(t, "no pane", "%s", name)
+	return
+}
+
+// ADR-0270 M3: list_panes reports the dock's panes with the strip's
+// verdict — unknown before anything has run — and bind_pane points a result
+// pane at a split node of the last run, or back.
+func TestListAndBindPanes(t *testing.T) {
+	l, h := opsLauncher(t)
+	p := l.inner
+	panes := listPanes(t, h)
+	require.NotEmpty(t, panes.Panes)
+	table := paneNamed(t, panes, "table")
+	assert.True(t, table.Bindable)
+	assert.Equal(t, PaneDrawUnknown, table.Draws, "nothing has run")
+	assert.Empty(t, panes.Nodes)
+
+	bind := func(pane, node string) error {
+		args, err := buscodec.Encode(BindPaneArgs{Pane: pane, Node: node})
+		require.NoError(t, err)
+		_, err = h.ApplyCommand(app.OperationCall{Writer: "task:t"}, opBindPane, args)
+		return err
+	}
+	assert.ErrorContains(t, bind("table", "edges"), "no split node edges", "before a run there is no split")
+	assert.ErrorContains(t, bind("nosuch", ""), "no pane nosuch")
+	for _, ps := range panes.Panes {
+		if !ps.Bindable {
+			assert.ErrorContains(t, bind(ps.Name, "edges"), "binds to no node", ps.Name)
+			break
+		}
+	}
+
+	p.currentSplit = splitResult{Nodes: []splitNode{{ID: "edges"}, {ID: "main"}}, Sink: "main"}
+	before := h.ResourceValue(opsResPanes)
+	require.NoError(t, bind("table", "edges"))
+	assert.Equal(t, NodeID("edges"), p.tabBindings["table"])
+	assert.NotEqual(t, before, h.ResourceValue(opsResPanes), "the binding moves the panes resource")
+	panes = listPanes(t, h)
+	assert.Equal(t, "edges", paneNamed(t, panes, "table").BoundTo)
+	assert.Equal(t, []string{"edges", "main"}, panes.Nodes)
+
+	require.NoError(t, bind("table", ""))
+	assert.NotContains(t, p.tabBindings, "table", "left out, the node unbinds")
+}
+
+// stubPanel needs one main-channel input and rejects a schema without the
+// column it wants.
+type stubPanel struct{ want string }
+
+func (inst stubPanel) ID() PanelID { return "stub" }
+func (inst stubPanel) Channels() []ChannelSpec {
+	return []ChannelSpec{{ID: chMain, Required: true}}
+}
+func (inst stubPanel) AcceptForChannel(_ ChannelID, schema *arrow.Schema, _ SignalEnvI) (claim ChannelClaim, reason string) {
+	if schema == nil {
+		return nil, "Run a query to see results."
+	}
+	if len(schema.FieldIndices(inst.want)) == 0 {
+		return nil, "needs a " + inst.want + " column"
+	}
+	return nil, ""
+}
+func (inst stubPanel) Render(map[ChannelID]ChannelResult, SignalEmitterI) {}
+
+// A pane draws when every required channel is offered a real schema and
+// none rejects it; it does not when one does, in the panel's own words; and
+// before anything has landed the answer is unknown.
+func TestPaneDraws(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{{Name: "id", Type: arrow.BinaryTypes.String}}, nil)
+	draws, _ := paneDraws(stubPanel{want: "id"}, tabVerdict{schema: schema})
+	assert.Equal(t, PaneDrawYes, draws)
+	draws, reason := paneDraws(stubPanel{want: "country"}, tabVerdict{schema: schema})
+	assert.Equal(t, PaneDrawNo, draws)
+	assert.Equal(t, "needs a country column", reason)
+	draws, reason = paneDraws(stubPanel{want: "id"}, tabVerdict{})
+	assert.Equal(t, PaneDrawUnknown, draws)
+	assert.Equal(t, "Run a query to see results.", reason)
 }

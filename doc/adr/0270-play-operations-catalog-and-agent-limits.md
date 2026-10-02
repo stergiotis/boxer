@@ -182,12 +182,17 @@ and runs carry it (ADR-0269 §SD7).
 
 - **M1.** SD1's queries and `set_sql`, `set_signal`, `show_pane`; SD4.
 - **M2.** `run` and `set_param` under SD2 and SD3.
-- **M3.** `list_panes`, `bind_pane`.
+- **M3.** `list_panes`, `bind_pane`. A pane's answer is the dock strip's
+  (ADR-0097's 2026-07-27 update): it draws when every required channel was
+  offered a real schema and none rejected it, it does not in the panel's own
+  words, and it is unknown before anything has landed. `bind_pane` takes a
+  node of the last run's split only; the person's toggle in the Graph view
+  may leave a binding dangling, an agent's may not.
 
 ## Status
 
 Proposed 2026-10-01 — awaiting review by the code owner. Built on ADR-0269,
-itself proposed.
+itself proposed. M1–M3 built by 2026-10-02.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

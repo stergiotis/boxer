@@ -17,7 +17,8 @@ scene:
 
 ADR-0270 on the headless host. The console opens play, takes a test grant
 whose only destination is `keelson:apps`, replaces play's buffer, runs it and
-describes the result. A second buffer reads `keelson('windows')`, which the
+describes the result; `list_panes` then reports the Table pane able to draw
+it, the dock strip's verdict (ADR-0270 M3). A second buffer reads `keelson('windows')`, which the
 grant does not list: the run fails with the agent limit before anything is
 sent.
 
@@ -57,24 +58,30 @@ sent.
 {"do":"capture","text":"agentconsole-play"}
 {"do":"focus","id":3557791720187110425}
 {"do":"key","text":"A","modifiers":16}
+{"do":"type","id":3557791720187110425,"text":"list_panes"}
+{"do":"click","name":"Call","role":"button","comment":"k5: the panes, with the dock strip's verdict"}
+{"do":"read","valueContains":"\"panes\"","role":"label","pattern":"\"name\":\"table\"[^}]*\"draws\":\"(?P<table>[a-z]+)\""}
+{"do":"expect","of":"table","is":"yes","comment":"the Table pane can draw the three rows"}
+{"do":"focus","id":3557791720187110425}
+{"do":"key","text":"A","modifiers":16}
 {"do":"type","id":3557791720187110425,"text":"set_sql"}
 {"do":"focus","id":13823422873042478622}
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":13823422873042478622,"text":"{\"sql\":\"SELECT * FROM keelson('windows')\"}"}
-{"do":"click","name":"Call","role":"button","comment":"k5: a table the grant does not list"}
-{"do":"wait","valueContains":"k5 · set_sql · rendered","role":"label"}
+{"do":"click","name":"Call","role":"button","comment":"k6: a table the grant does not list"}
+{"do":"wait","valueContains":"k6 · set_sql · rendered","role":"label"}
 {"do":"focus","id":3557791720187110425}
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":3557791720187110425,"text":"run"}
 {"do":"focus","id":13823422873042478622}
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":13823422873042478622,"text":"{}"}
-{"do":"click","name":"Call","role":"button","comment":"k6"}
-{"do":"wait","valueContains":"k6 · run · rendered","role":"label","settleMs":1500}
+{"do":"click","name":"Call","role":"button","comment":"k7"}
+{"do":"wait","valueContains":"k7 · run · rendered","role":"label","settleMs":1500}
 {"do":"focus","id":3557791720187110425}
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":3557791720187110425,"text":"describe_result"}
-{"do":"click","name":"Call","role":"button","comment":"k7"}
+{"do":"click","name":"Call","role":"button","comment":"k8"}
 {"do":"wait","valueContains":"\"error\":\"agent limit: the grant does not list keelson:windows","role":"label","comment":"the console's read of the result; play's own summary line says the same"}
 {"do":"capture","text":"agentconsole-play-limit"}
 ```

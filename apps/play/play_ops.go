@@ -128,6 +128,7 @@ type ShowPaneArgs struct {
 type opsSnap struct {
 	mounted bool
 	state   PlayState
+	panes   PaneList
 	graph   *queryGraph
 }
 
@@ -250,6 +251,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			return appops.None{}, nil
 		})
 	addRunOps(s)
+	addPaneOps(s)
 	return
 }()
 
@@ -285,10 +287,11 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	for _, r := range p.graph.signalRows() {
 		st.Signals = append(st.Signals, SignalState{Name: r.Name, Value: r.Raw, Writer: r.Writer})
 	}
-	rec, _, numRows, loading, _, _, executed, runErr, id := p.graph.MainSnapshot()
+	rec, schema, numRows, loading, _, _, executed, runErr, id := p.graph.MainSnapshot()
 	if rec != nil {
 		rec.Release()
 	}
+	sn.panes = paneList(p, schema)
 	st.Result = ResultState{Id: uint64(id), Phase: p.observeQueryState(loading, numRows, executed, runErr).String(), Rows: numRows}
 	if runErr != nil {
 		st.Result.Error = runErr.Error()
