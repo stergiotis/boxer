@@ -43,7 +43,8 @@ What the catalog has to account for, read from the tree on 2026-10-01:
 
 We will give play a first catalog of queries and commands over its buffer,
 parameters, signals, runs, results and panes; run every agent-caused
-statement under play's agent limits; and keep pinning, adjudication, endpoint
+statement under play's agent limits; route the person's gestures that do what
+a command does through that command; and keep pinning, adjudication, endpoint
 changes and turning Live on away from agents.
 
 ### SD1 — Resources and the first operations
@@ -121,9 +122,35 @@ and runs carry it (ADR-0269 §SD7).
   seam and its gate; then as consequential commands.
 - **Endpoint changes**: they move what every later run reaches.
 - **Turning Live on**: it is the person's (SD3).
-- **The person's gestures**: play's own widgets keep their direct paths;
-  their changes reach the revisions through the write-back and the end of
-  the frame. Routing them through the catalog is deferred.
+
+### SD6 — The person's gestures go through the catalog
+
+A play control that does what a command does calls that command's handler
+through the window host (ADR-0269 §SD8 "One path"). The change is logged
+with the person as writer, and a task that read the resource pauses.
+
+| Gesture | Command |
+|---|---|
+| Run, Run subquery, Ctrl+Enter, Ctrl+Shift+Enter, and the run Reset starts | `run` |
+| a buffer swapped whole: a loaded file, a history entry, a pane's `ReplaceSql` | `set_sql` |
+| the Signals section's set and add, and the signals a history entry seeds | `set_signal` |
+| the panes menu | `show_pane` |
+
+- `run` with the person as writer runs under play's own settings, not SD2's
+  limits, and makes the window's work the person's again (SD3).
+- `set_signal` with the person as writer stamps the signal with the surface
+  it came from, so the Live breaker counts it as a person's write.
+- A buffer swapped whole takes its prelude as the parameters' new defaults,
+  whoever swapped it.
+- Typing in the editor or in a parameter field changes a bound value, which
+  the write-back records as the person's (ADR-0269 §SD4).
+- Only play's own launcher installs the path. An app that embeds play serves
+  its own catalog, and play's gestures there apply directly.
+
+Outside it: the prelude rewrite that follows a parameter edit, which is
+logged as the app's because the edit itself is already the person's; a click
+on the dock's tab strip, which play does not see; and gestures no command
+covers, such as deleting a signal or resetting the parameters.
 
 ## Alternatives
 
@@ -134,6 +161,11 @@ and runs carry it (ADR-0269 §SD7).
 - **A side lane for an agent's queries**, leaving the person's result in
   place. Deferred: the run path, its history and its panes are what the
   person sees; a lane of its own would hide database activity in the window.
+- **Leaving the person's gestures on their direct paths**, recorded only by
+  the write-back and the end of the frame. Rejected: a change made inside
+  play's frame is then logged as the app's, and the app's changes never
+  pause a task (ADR-0269 §SD8), so the person pressing Run under a task
+  went unnoticed by it.
 - **Classifying on the render goroutine** with the diagnostics driver's
   memoised class. Rejected: it classifies the authored buffer before the
   client-side rewrites, and the residual is what the server receives.
@@ -155,7 +187,9 @@ and runs carry it (ADR-0269 §SD7).
 
 ### Neutral
 
-- The person's gestures in play stay outside the command log.
+- A loaded file and a restored history entry now reset what Reset restores
+  to, as a snippet's swap already did.
+- An embedder's window keeps play's gestures out of its command log.
 
 ## Migration — Tier 1
 
@@ -168,17 +202,23 @@ and runs carry it (ADR-0269 §SD7).
   what its resource reads; the agent-limit check refuses a mutating, an
   egress-reading and an unclassifiable statement, a `keelson()` table and an
   endpoint outside the grant, and passes a read the grant covers; an
-  agent-caused run sends `readonly = 2` with writes allowed.
+  agent-caused run sends `readonly = 2` with writes allowed. Each SD6
+  gesture, served by a host engine, is logged with the person as writer;
+  without one it applies directly; the person's `set_signal` keeps its
+  surface's signal writer.
 - **Lane: headless scene.** The agent console opens play under a test grant,
   replaces the buffer with a read of `keelson('apps')`, runs it, and reads
-  the result; a run naming a table outside the grant fails with the agent
-  limit.
+  the result; the person presses Run, and the task's next command is
+  refused as paused until a turn reports the person's run, and the task
+  reads again before writing; a run naming a
+  table outside the grant fails with the agent limit.
 
 ## Milestones
 
 - **M1.** SD1's queries and `set_sql`, `set_signal`, `show_pane`; SD4.
 - **M2.** `run` and `set_param` under SD2 and SD3.
 - **M3.** `list_panes`, `bind_pane`.
+- **M4.** SD6.
 
 ## Status
 
