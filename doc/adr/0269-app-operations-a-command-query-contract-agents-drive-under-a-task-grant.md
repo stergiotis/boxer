@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-30
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-02
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0269: App operations — a command/query contract apps declare and agents drive under a task grant
 
@@ -337,10 +335,10 @@ waits at most that long.
 
 A command to a resource whose widget has keyboard focus, or received the
 person's input in this frame, returns `conflict` with the reason that the
-person is editing. The first things M2 demonstrates are bumping the revisions
-of bound resources from what the write-back changed — the host compares bound
-values before and after it — and where a widget's programmatic path (ADR-0267
-W10) takes effect relative to the next write-back.
+person is editing. The host bumps the revisions of bound resources from what
+the write-back changed, by comparing each resource's value before and after
+it; a change the app makes inside its frame is attributed to the app, and a
+change made through a gesture's handler to the person.
 
 A call moves through three stages:
 
@@ -389,7 +387,7 @@ Every operation declares one effect:
 | view | changes what a window shows, not what it holds: a selection, a camera |
 | document | changes authored state: text, parameters, signals, pane bindings and options |
 | run | executes against a data source under the agent limits (SD6) and produces a result |
-| consequential | writes outside the app: pinning, publishing, adjudication, export |
+| consequential | writes outside the app: publishing, adjudication, export |
 
 Each grant entry — one task, one instance — carries a mode:
 
@@ -569,8 +567,10 @@ one.
   another task to one of them pauses the task on that instance until the
   coordinator's next `turn` (SD3), which returns every change by other
   writers since the previous one; commands expecting the old revision become
-  `conflict`. Changes that follow from the task's own commands — a Live rerun,
-  a derived result — carry the task as writer and do not pause it.
+  `conflict`. A turn lifts the pause and does not refresh what the task read,
+  so a task reads a changed resource again before it writes. Changes that
+  follow from the task's own commands — a Live rerun, a derived result —
+  carry the task as writer and do not pause it.
 - **Undo** is per call, from the call's card, in host chrome. It restores a
   field only while its value and revision are still the ones the call left;
   later work by anyone is never overwritten. A write outside the app is not
@@ -579,7 +579,8 @@ one.
   command calls the same handler, directly on the render goroutine; the
   person's edits to bound values are recorded when the write-back lands. Both
   enter the command log (SD9). View state outside the catalog — scroll, hover,
-  a drag in progress — stays direct.
+  a drag in progress — stays direct. Where no host serves the app's catalog,
+  as for an app embedded in another, the gesture applies directly.
 
 ### SD9 — Records
 
@@ -711,7 +712,7 @@ The QOC tables carry the main options. Further options weighed:
 - One contract for every participating app; another app costs its catalog and
   handlers.
 - A stale write is detected, every change is attributed, and the person's
-  change wins within a frame once M2 demonstrates SD4's revision bumping.
+  change wins within a frame.
 - The person is asked at three named moments; a task inside its grant asks
   only for consequential commands.
 - A model's reach is bounded by checks outside the model. Agent-caused runs
@@ -823,10 +824,11 @@ The QOC tables carry the main options. Further options weighed:
   changes), detach, stop and epochs, labels and data handles, `read`, taint
   and marking, pause and `turn`, the agent limits and the on-behalf-of
   context in host services.
-- **M4 — First participants.** Play's catalog under its own decision, after
-  its pinning and Series adjudication write through the endpoint seam and its
-  gate — until then they are not exposed to agents; and one table-shaped app
-  (appstate or watchbill), so the contract is not drawn around play alone.
+- **M4 — First participants.** Play's catalog under its own decision
+  ([ADR-0270](./0270-play-operations-catalog-and-agent-limits.md)), with
+  play's own writes behind the endpoint seam and a gate of their own; and one
+  table-shaped app (watchbill), so the contract is not drawn around play
+  alone.
 - **M5 — The coordinator.** ADR-0265 revised: the chat's tool loop over the
   host services, with schemas loaded on demand and its context's label
   declared on every model call.
@@ -835,8 +837,9 @@ The QOC tables carry the main options. Further options weighed:
 
 ## Status
 
-Proposed 2026-09-30 — awaiting review by the code owner. Play's catalog is a
-separate decision built on this one; ADR-0265 is revised in place for M5.
+Accepted 2026-10-02. Play's catalog is a separate decision built on this
+one, [ADR-0270](./0270-play-operations-catalog-and-agent-limits.md); ADR-0265
+is revised in place for M5.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
@@ -863,4 +866,5 @@ for the edit-policy tiers.
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) (proposed) — keeping conversations that hold confined content.
 - [ADR-0265](./0265-chat-app-over-retained-model-calls.md) (proposed) — the chat app that becomes the coordinator.
 - [ADR-0267](./0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md) — W10, writes to bound values.
+- [ADR-0270](./0270-play-operations-catalog-and-agent-limits.md) — play's catalog, the first participant.
 - [app-operations-prior-art](../adr-background-work/app-operations-prior-art.md) — play and the runtime read, surveys, the options weighed, probes, sources for every external claim above (Hardy, Meyer, Fowler, Dolt, AIP-216, TN2106, the OpenAI system card, CaMeL, FIDES, OpenTelemetry).
