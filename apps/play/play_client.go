@@ -21,7 +21,6 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
@@ -39,6 +38,9 @@ type ClientConfig struct {
 	// path sends readonly=2 so the server refuses any write or DDL that
 	// reaches it (ADR-0181 Update 2026-09-28).
 	AllowWrites bool
+	// AppWritesOff mirrors BOXER_PLAY_APP_WRITES=off: play does not write
+	// its own tables, pins and Series verdicts (ADR-0270 §SD7).
+	AppWritesOff bool
 }
 
 type Client struct {
@@ -536,7 +538,7 @@ func (inst *Client) engineFor(dec dispatchDecision) (eng *chserver.Engine, err e
 		// has DEMONSTRATED it can fetch from that plane. Derived from the
 		// target, never from the decision's own label, so the two gates
 		// cannot agree by construction.
-		ServesConfined: target == introspect.LocalQueryEndpoint() || inst.reach.isProven(target),
+		ServesConfined: inst.servesConfined(target),
 	})
 	return
 }

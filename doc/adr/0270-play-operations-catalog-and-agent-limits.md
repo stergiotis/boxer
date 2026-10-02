@@ -44,7 +44,8 @@ What the catalog has to account for, read from the tree on 2026-10-01:
 We will give play a first catalog of queries and commands over its buffer,
 parameters, signals, runs, results and panes; run every agent-caused
 statement under play's agent limits; route the person's gestures that do what
-a command does through that command; and keep pinning, adjudication, endpoint
+a command does through that command; put play's own writes behind the
+dispatch seam and a gate of their own; and keep adjudication, endpoint
 changes and turning Live on away from agents.
 
 ### SD1 — Resources and the first operations
@@ -123,8 +124,9 @@ and runs carry it (ADR-0269 §SD7).
 
 ### SD5 — Not exposed
 
-- **Pinning and Series adjudication**, until they write through the endpoint
-  seam and its gate; then as consequential commands.
+- **Series adjudication**: the detections it names live in the Series
+  pane's fold of the frame, and no query reads them, so an agent could not
+  say which one it judges. Pinning is a command (SD7).
 - **Endpoint changes**: they move what every later run reaches.
 - **Turning Live on**: it is the person's (SD3).
 
@@ -141,6 +143,7 @@ with the person as writer, and a task that read the resource pauses.
 | the Signals section's set and add, and the signals a history entry seeds | `set_signal` |
 | the panes menu | `show_pane` |
 | a node's fill tab toggles in the Graph pane, and its clear, one binding at a time | `bind_pane` |
+| Pin result, while the Table pane shows the main result | `pin_result` |
 
 - `run` with the person as writer runs under play's own settings, not SD2's
   limits, and makes the window's work the person's again (SD3).
@@ -158,6 +161,30 @@ logged as the app's because the edit itself is already the person's; a click
 on the dock's tab strip, which play does not see; and gestures no command
 covers, such as deleting a signal or resetting the parameters.
 
+### SD7 — Play's own writes
+
+A pin (`boxer.resultsets`, `boxer.pin_<fingerprint>`) and a Series
+verdict (`boxer.tslabels`) are play's bookkeeping, not a statement the
+person wrote. Each of their statements takes a dispatch decision as a run
+does, and passes a gate of its own before it is sent:
+
+- `BOXER_PLAY_APP_WRITES=off` stops them; they are on otherwise.
+  `BOXER_PLAY_ALLOW_WRITES` keeps governing the person's INSERT and DDL,
+  and `ExecuteWrite` checks it itself as well as the renderer.
+- Data from a confined result goes only to an endpoint that may see sealed
+  plaintext (ADR-0145 §SD5). A verdict carries the window's label, since it
+  names spans of the result.
+- An agent's write needs the endpoint in its grant, as `clickhouse:<host>`.
+
+`pin_result` freezes the main result, as a consequential command
+(ADR-0269 §SD5). A bound or observed node's result has no command; the
+Table pane's button pins it directly.
+
+The statements still travel on play's HTTP transport to the decided
+target, not through the engine's `Deliver`: a request there carries no
+insert body, and `chserver` refuses in-memory inputs. Moving them needs a
+body on `queryengine.Request`, which is deferred.
+
 ## Alternatives
 
 - **Range edits of the buffer** (`edit_buffer` with offsets) in place of
@@ -172,6 +199,12 @@ covers, such as deleting a signal or resetting the parameters.
   play's frame is then logged as the app's, and the app's changes never
   pause a task (ADR-0269 §SD8), so the person pressing Run under a task
   went unnoticed by it.
+- **Play's own writes behind `BOXER_PLAY_ALLOW_WRITES`.** Rejected: the
+  variable is off by default, so pinning would stop working by default on a
+  writable server, for writes the person did not author as SQL.
+- **Play's own writes through the seam with no gate.** Rejected: it leaves
+  the confined label unchecked on the one path that copies a result's rows
+  to an endpoint.
 - **Classifying on the render goroutine** with the diagnostics driver's
   memoised class. Rejected: it classifies the authored buffer before the
   client-side rewrites, and the residual is what the server receives.
@@ -195,6 +228,9 @@ covers, such as deleting a signal or resetting the parameters.
 
 - A loaded file and a restored history entry now reset what Reset restores
   to, as a snippet's swap already did.
+- Pins and verdicts follow the dispatch decision, and so does the pin
+  browser's read of them. Under a resolver that routes `boxer.*` away from
+  the base endpoint, all three move with it.
 - An embedder's window keeps play's gestures out of its command log.
 
 ## Migration — Tier 1
@@ -211,7 +247,12 @@ covers, such as deleting a signal or resetting the parameters.
   agent-caused run sends `readonly = 2` with writes allowed. Each SD6
   gesture, served by a host engine, is logged with the person as writer;
   without one it applies directly; the person's `set_signal` keeps its
-  surface's signal writer.
+  surface's signal writer. Play's own writes go to the decided target, are
+  refused with `BOXER_PLAY_APP_WRITES=off`, for confined data to an endpoint
+  that may not see it, and for an agent whose grant lacks the endpoint;
+  `ExecuteWrite` refuses with writes off.
+- **Lane: integration.** A pin round lands on a live server, a second round
+  finds it, and a verdict lands.
 - **Lane: headless scene.** The agent console opens play under a test grant,
   replaces the buffer with a read of `keelson('apps')`, runs it, and reads
   the result; the person presses Run, and the task's next command is
@@ -225,6 +266,7 @@ covers, such as deleting a signal or resetting the parameters.
 - **M2.** `run` and `set_param` under SD2 and SD3.
 - **M3.** `list_panes`, `bind_pane`.
 - **M4.** SD6.
+- **M5.** SD7.
 
 ## Status
 
@@ -242,3 +284,5 @@ for the edit-policy tiers.
 - [ADR-0141](./0141-play-endpoint-dispatch-seam.md) — the dispatch seam the run limits sit behind.
 - [ADR-0145](./0145-sealed-app-data.md) — the confined label.
 - [ADR-0181](./0181-leeway-dql-authoring-surface.md) — `readonly = 2` on play's read path.
+- [ADR-0115](./0115-query-observability-data-plane-strategy.md) — result pinning.
+- [ADR-0163](./0163-play-timeseries-workbench.md) — Series adjudication and `tslabels`.

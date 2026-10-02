@@ -114,7 +114,7 @@ func TestComposePinBrowserSql(t *testing.T) {
 
 func TestPinDriverNilClientAndSingleFlight(t *testing.T) {
 	d := newPinDriver(nil)
-	d.pin(nil, pinMetaRow{}) // must not panic
+	d.pin(nil, pinMetaRow{}, appWriteLabel{}) // must not panic
 	state, _, err := d.status()
 	require.Equal(t, pinIdle, state)
 	require.NoError(t, err)

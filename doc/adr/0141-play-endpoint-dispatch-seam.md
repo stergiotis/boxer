@@ -189,6 +189,17 @@ describes a query that will never run there. The hook lives on `ExecOptions`
 made "no decision" representable; a wire transform carries no placement and
 leaves the required-parameter seam intact.
 
+### 2026-10-02 — play's own writes take a decision
+
+[ADR-0270](./0270-play-operations-catalog-and-agent-limits.md) §SD7
+(proposed) reverses the Neutral note for two of its infrastructure
+requests: the pin round and the Series verdict write now take a decision
+like a run, so they land where the labels and the pin browser read them
+back, and pass the confined check of ADR-0145. They still travel on play's own HTTP
+transport to the decided target, because `queryengine.Request` carries no
+insert body. The `system.columns` probe and the run-history readback stay
+on the manual base.
+
 ## References
 
 - [doc/explanation/query-system-requirements.md](../explanation/query-system-requirements.md) — the requirements and the E-point catalog.

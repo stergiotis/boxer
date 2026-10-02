@@ -2,6 +2,8 @@ package play
 
 import (
 	"slices"
+
+	"github.com/apache/arrow-go/v18/arrow"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +34,7 @@ const (
 	opShowPane       = "show_pane"
 	opListPanes      = "list_panes"
 	opBindPane       = "bind_pane"
+	opPinResult      = "pin_result"
 )
 
 // Bounds on what sample_rows returns (ADR-0270 §SD1).
@@ -303,6 +306,26 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
 			}
 			return appops.None{}, p.bindPane(in.Pane, NodeID(in.Node))
+		})
+	appops.Command(s, app.OperationSpec{Name: opPinResult, Version: 1, Summary: "freeze the main result into a table on the endpoint",
+		Effect: app.OperationEffectConsequential, Reads: []string{opsResResult}, Agents: true,
+		Gesture: "Pin result on the Table pane, while it shows the main result",
+		Follows: []string{"the pin runs in the background and the Table pane shows its outcome; it writes boxer.resultsets and a boxer.pin_<fingerprint> table, and needs the endpoint in the grant"}},
+		func(inst *PlayLauncher, call app.OperationCall, in appops.None) (appops.None, error) {
+			p := inst.inner
+			if p == nil {
+				return appops.None{}, app.RefuseOperation("the window has not mounted")
+			}
+			if p.pins == nil || p.pins.client == nil {
+				return appops.None{}, app.RefuseOperation("the window has no endpoint to pin to")
+			}
+			rec, _, _, _, _, _, _, _, _ := p.graph.MainSnapshot()
+			if rec == nil {
+				return appops.None{}, app.RefuseOperation("no result is held")
+			}
+			defer rec.Release()
+			p.pinActiveResult(rec, "", call.OnBehalfOf)
+			return appops.None{}, nil
 		})
 	addRunOps(s)
 	return
@@ -670,4 +693,15 @@ func (inst *PlayApp) personClearBindings() {
 	for _, pane := range panes {
 		inst.personBindPane(pane, "")
 	}
+}
+
+// personPin is the Table pane's Pin result. While the pane shows the main
+// result it goes through pin_result; a bound or observed node's result has
+// no command, and the button pins it directly.
+func (inst *PlayApp) personPin(rec arrow.RecordBatch) {
+	if node := inst.resolvedTabNode("table"); node != "" && node != inst.currentSplit.Sink {
+		inst.pinActiveResult(rec, node, nil)
+		return
+	}
+	playGesture(inst, opPinResult, appops.None{}, func() { inst.pinActiveResult(rec, "", nil) })
 }

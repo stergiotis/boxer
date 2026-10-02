@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +15,7 @@ import (
 	"github.com/dustin/go-humanize"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -246,7 +244,7 @@ func (inst *pinDriver) status() (state pinStateE, fp uint64, err error) {
 
 // pin persists rec (retained here, released when the round ends).
 // Single-flight; a click while a pin is in flight is dropped.
-func (inst *pinDriver) pin(rec arrow.RecordBatch, meta pinMetaRow) {
+func (inst *pinDriver) pin(rec arrow.RecordBatch, meta pinMetaRow, label appWriteLabel) {
 	if inst.client == nil || rec == nil {
 		return
 	}
@@ -265,7 +263,7 @@ func (inst *pinDriver) pin(rec arrow.RecordBatch, meta pinMetaRow) {
 		defer rec.Release()
 		ctx, cancel := context.WithTimeout(context.Background(), pinTimeout)
 		defer cancel()
-		already, err := inst.doPin(ctx, rec, meta)
+		already, err := inst.doPin(ctx, rec, meta, label)
 		inst.mu.Lock()
 		switch {
 		case err != nil:
@@ -282,14 +280,14 @@ func (inst *pinDriver) pin(rec arrow.RecordBatch, meta pinMetaRow) {
 
 // doPin is one pin round: metadata DDL, content-address dedup check,
 // frozen-table DDL, the as-is Arrow insert, and the metadata row.
-func (inst *pinDriver) doPin(ctx context.Context, rec arrow.RecordBatch, meta pinMetaRow) (already bool, err error) {
+func (inst *pinDriver) doPin(ctx context.Context, rec arrow.RecordBatch, meta pinMetaRow, label appWriteLabel) (already bool, err error) {
 	cli := inst.client
-	if _, err = cli.rawTsvQuery(ctx, pinMetaDDL); err != nil {
+	if _, err = cli.appStatement(ctx, pinMetaDDL, nil, label); err != nil {
 		err = eh.Errorf("play: pin: metadata ddl: %w", err)
 		return
 	}
-	raw, err := cli.rawTsvQuery(ctx,
-		"SELECT count() FROM "+pinMetaTable+" WHERE fingerprint = "+strconv.FormatUint(meta.Fingerprint, 10)+" FORMAT TabSeparated")
+	raw, err := cli.appStatement(ctx,
+		"SELECT count() FROM "+pinMetaTable+" WHERE fingerprint = "+strconv.FormatUint(meta.Fingerprint, 10)+" FORMAT TabSeparated", nil, label)
 	if err != nil {
 		err = eh.Errorf("play: pin: dedup check: %w", err)
 		return
@@ -302,7 +300,7 @@ func (inst *pinDriver) doPin(ctx context.Context, rec arrow.RecordBatch, meta pi
 	if err != nil {
 		return
 	}
-	if _, err = cli.rawTsvQuery(ctx, ddl); err != nil {
+	if _, err = cli.appStatement(ctx, ddl, nil, label); err != nil {
 		err = eh.Errorf("play: pin: frozen-table ddl: %w", err)
 		return
 	}
@@ -322,7 +320,7 @@ func (inst *pinDriver) doPin(ctx context.Context, rec arrow.RecordBatch, meta pi
 		err = eh.Errorf("play: pin: ipc close: %w", err)
 		return
 	}
-	err = cli.rawInsertBody(ctx, pinDataInsertSQL(meta), buf)
+	_, err = cli.appStatement(ctx, pinDataInsertSQL(meta), buf, label)
 	if err != nil {
 		err = eh.Errorf("play: pin: data insert: %w", err)
 		return
@@ -332,48 +330,11 @@ func (inst *pinDriver) doPin(ctx context.Context, rec arrow.RecordBatch, meta pi
 		err = eh.Errorf("play: pin: metadata marshal: %w", err)
 		return
 	}
-	err = cli.rawInsertBody(ctx,
+	_, err = cli.appStatement(ctx,
 		"INSERT INTO "+pinMetaTable+" (fingerprint, data_table, query_id, run_id, app, lane, query, num_rows, num_cols) FORMAT JSONEachRow",
-		bytes.NewReader(metaJSON))
+		bytes.NewReader(metaJSON), label)
 	if err != nil {
 		err = eh.Errorf("play: pin: metadata insert: %w", err)
-		return
-	}
-	return
-}
-
-// rawInsertBody POSTs an INSERT whose statement rides the URL query
-// parameter and whose data rides the request body (the ClickHouse HTTP
-// convention for FORMAT Arrow / JSONEachRow payloads).
-func (inst *Client) rawInsertBody(ctx context.Context, insertSQL string, body io.Reader) (err error) {
-	reqURL := inst.URL()
-	sep := "?"
-	if strings.Contains(reqURL, "?") {
-		sep = "&"
-	}
-	reqURL += sep + "query=" + url.QueryEscape(insertSQL)
-	var req *http.Request
-	req, err = http.NewRequestWithContext(ctx, "POST", reqURL, body)
-	if err != nil {
-		err = eh.Errorf("unable to build insert request: %w", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/octet-stream")
-	if inst.cfg.User != "" {
-		req.Header.Set("X-ClickHouse-User", inst.cfg.User)
-	}
-	if inst.cfg.Password != "" {
-		req.Header.Set("X-ClickHouse-Key", inst.cfg.Password)
-	}
-	resp, err := inst.http.Do(req)
-	if err != nil {
-		err = eh.Errorf("insert request failed: %w", err)
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
-		err = eb.Build().Int("statusCode", resp.StatusCode).Str("body", strings.TrimSpace(string(raw))).Errorf("insert http")
 		return
 	}
 	return
@@ -476,7 +437,7 @@ func newPinsBrowserDriver(client *Client) (d *pinsBrowserDriver) {
 	d = &pinsBrowserDriver{}
 	if client != nil {
 		d.fetch = func(ctx context.Context) (rows []pinRow, err error) {
-			raw, err := client.rawTsvQuery(ctx, composePinBrowserSql(pinBrowserLimit))
+			raw, err := client.appRead(ctx, composePinBrowserSql(pinBrowserLimit))
 			if err != nil {
 				return
 			}
@@ -545,7 +506,7 @@ func (inst *PlayApp) renderPinControl(rec arrow.RecordBatch) {
 		for range c.Horizontal().KeepIter() {
 			if c.Button(ids.PrepareStr("pin"), c.Atoms().Text("Pin result").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.pinActiveResult(rec)
+				inst.personPin(rec)
 			}
 			state, fp, pinErr := inst.pins.status()
 			switch state {
@@ -569,7 +530,11 @@ func (inst *PlayApp) renderPinControl(rec arrow.RecordBatch) {
 // identity; query/lane provenance is best-effort — the `main` lane's
 // when the table observes the sink, empty otherwise (the pin stays
 // valid: it is content-addressed).
-func (inst *PlayApp) pinActiveResult(rec arrow.RecordBatch) {
+//
+// node is the split node rec comes from when it is not the main result's
+// (a bound or observed intermediate), empty otherwise; agent is the task
+// whose call pins it, nil for the person.
+func (inst *PlayApp) pinActiveResult(rec arrow.RecordBatch, node NodeID, agent *app.OnBehalfOf) {
 	fp := fingerprintRecord(rec)
 	// A pin is content-addressed and its provenance is run + app; the
 	// window (ADR-0191 §SD4) is discarded here because a pin outlives the
@@ -588,14 +553,14 @@ func (inst *PlayApp) pinActiveResult(rec arrow.RecordBatch) {
 	if inst.graph.mainLane != nil && inst.graph.mainLane.opts != nil {
 		meta.QueryId = inst.graph.mainLane.opts.QueryID
 	}
-	if node := inst.resolvedTabNode("table"); node != "" && node != inst.currentSplit.Sink {
+	if node != "" {
 		// A bound/observed intermediate: the main lane's provenance would
 		// be wrong — pin content-addressed with the lane named.
 		meta.Lane = string(node)
 		meta.Query = ""
 		meta.QueryId = ""
 	}
-	inst.pins.pin(rec, meta)
+	inst.pins.pin(rec, meta, appWriteLabel{confined: inst.graph.MainConfined(), agent: agent})
 	// A fresh pin invalidates the browser's fetched-once state.
 	if inst.pinsBrowser != nil {
 		inst.pinsBrowser.mu.Lock()
