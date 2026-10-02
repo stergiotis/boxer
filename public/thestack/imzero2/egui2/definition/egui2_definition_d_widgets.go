@@ -316,8 +316,15 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("frameWhenInactive").Arg("val", ctabb.B).EndMethod().
 				BeginMethod("rightText").Arg("text", ctabb.S).EndMethod().
 				BeginMethod("shortcut_text").Arg("text", ctabb.S).EndMethod().
+				// The IDS kind (ADR-0273). Unexported: Go wraps it as
+				// Kind(ButtonKindE) in the bindings.
+				BeginMethod("kind").Unexported().Arg("ki", ctabb.U8).
+				CodeClientRust(rustClientCode("ids_kind = ki;\n")).EndMethod().
 				Build()...).
-			WithConstructionCodeClientRust(rustClientCode("egui::Button::new(atoms);\n")).
+			WithConstructionCodeClientRust(rustClientCode("egui::Button::new(atoms);\nlet mut ids_kind: u8 = 0;\n")).
+			// Added through the design system's wrapper, which colours the
+			// button by its kind and adds the secondary kind unchanged.
+			WithApplyCodeClientRust(rustClientCode("self.apply_widget(imzero2_egui::style::button::IdsButton({{Instance}},ids_kind),{{EguiUiOptionalOuter}},{{FuncProcIdOuter}},Some({{Id}}));\n")).
 			WithSettingImmediate(true).
 			WithSettingRetained(true).
 			WithReturnType(structButton()).

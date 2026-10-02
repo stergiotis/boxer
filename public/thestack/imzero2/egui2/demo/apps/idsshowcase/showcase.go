@@ -52,11 +52,12 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 //  1. header — title + active density readout
 //  2. neutral spine — 10 swatches (bg.extreme → text.extreme)
 //  3. semantic palette — 6 roles × 3 emphasis grid
-//  4. type scale — IDS-bound TextStyle slots
-//  5. data encoding — qualitative / sequential / diverging palettes
-//  6. density spec — PX_TABLE column for the active preset
-//  7. rounding ladder — 4 swatches at corner radius 0/2/4/6
-//  8. stroke ladder — 3 framed rows at width 1.0/1.5/2.0
+//  4. button kinds — one button per ButtonKindE
+//  5. type scale — IDS-bound TextStyle slots
+//  6. data encoding — qualitative / sequential / diverging palettes
+//  7. density spec — PX_TABLE column for the active preset
+//  8. rounding ladder — 4 swatches at corner radius 0/2/4/6
+//  9. stroke ladder — 3 framed rows at width 1.0/1.5/2.0
 func (inst *App) render() {
 	c.Label("IDS token catalogue — ADR-0029 / 0031 / 0032").Send()
 	c.Label(fmt.Sprintf("active density: %s   (IMZERO2_DENSITY)", inst.density.String())).Send()
@@ -67,6 +68,10 @@ func (inst *App) render() {
 
 	c.Label("Semantic palette — 6 roles × 3 emphasis (ADR-0031 §SD2)").Send()
 	inst.renderSemanticPalette()
+	c.AddSpace(styletokens.GapSections(inst.density))
+
+	c.Label("Button kinds — semantic roles (ADR-0273)").Send()
+	inst.renderButtonKinds()
 	c.AddSpace(styletokens.GapSections(inst.density))
 
 	c.Label("Type scale — IDS-bound TextStyle slots (ADR-0030 §SD3)").Send()
@@ -511,6 +516,18 @@ func (inst *App) renderStrokeLadder() {
 				}
 			}
 			c.AddSpace(styletokens.GapItems(inst.density))
+		}
+	}
+}
+
+// renderButtonKinds shows one button per kind. Colours come from the
+// client's IdsButton, so this row is where to look under either theme.
+func (inst *App) renderButtonKinds() {
+	for range c.HorizontalTop().KeepIter() {
+		for _, k := range c.AllButtonKinds {
+			c.Button(inst.ids.PrepareStr("bk:"+k.String()), c.Atoms().Text(k.String()).Keep()).
+				Kind(k).
+				Send()
 		}
 	}
 }

@@ -3129,6 +3129,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 // construct
 
                 let mut w = egui::Button::new(atoms);
+                let mut ids_kind: u8 = 0;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(ButtonBuilderMethodId::from_repr)?;
@@ -3183,6 +3184,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                             let mut text = self.io.read_plain_s()?;
                             w = w.shortcut_text(text);
                         }
+                        ButtonBuilderMethodId::Kind => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ButtonBuilderMethodId::Kind");
+                            let mut ki = self.io.read_plain_u8()?;
+                            ids_kind = ki;
+                        }
                     }
                 }
                 if d == 0 {
@@ -3190,7 +3197,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 }
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                self.apply_widget(w, u, f, Some(i));
+                self.apply_widget(
+                    imzero2_egui::style::button::IdsButton(w, ids_kind),
+                    u,
+                    f,
+                    Some(i),
+                );
             }
             FuncProcId::CaptureAvailableSize => {
                 #[cfg(feature = "puffin")]

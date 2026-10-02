@@ -223,6 +223,7 @@ const (
 	ButtonMethodIdFrameWhenInactive ButtonMethodIdE = 6
 	ButtonMethodIdRightText         ButtonMethodIdE = 7
 	ButtonMethodIdShortcutText      ButtonMethodIdE = 8
+	ButtonMethodIdKind              ButtonMethodIdE = 9
 )
 
 const (

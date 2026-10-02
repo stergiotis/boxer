@@ -264,6 +264,14 @@ func (inst ButtonFluid) ShortcutText(text string) ButtonFluid {
 	return inst
 }
 
+func (inst ButtonFluid) kind(ki uint8) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdKind))
+	r.WriteUint8(ki)
+
+	return inst
+}
+
 func (inst ButtonFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(ButtonMethodIdBuild))

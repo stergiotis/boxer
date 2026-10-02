@@ -22,7 +22,7 @@ status: draft
 | AnimateBoolWithTime | Procedural | No | 3 | 0 | - | - |
 | AnimateValueWithTime | Procedural | No | 3 | 0 | - | - |
 | Atoms | BuilderFactory | No | 0 | 0 | 20 | Retained |
-| Button | BuilderFactory | Yes | 0 | 1 | 8 | Immediate, Retained |
+| Button | BuilderFactory | Yes | 0 | 1 | 9 | Immediate, Retained |
 | CaptureAvailableSize | Procedural | No | 0 | 0 | - | - |
 | CaptureUiAvailableRect | Procedural | No | 1 | 0 | - | - |
 | CaptureUiRect | Procedural | No | 1 | 0 | - | - |
@@ -296,6 +296,7 @@ Atoms
 - **FrameWhenInactive**(val: b)
 - **RightText**(text: s)
 - **ShortcutText**(text: s)
+- **Kind**(ki: u8)
 
 #### Return Type
 

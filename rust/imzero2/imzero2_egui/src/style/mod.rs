@@ -9,6 +9,7 @@
 //! behind the host chrome's Layout ▸ Density menu (ADR-0032 §SD1, Update
 //! 2026-08-23).
 
+pub mod button;
 pub mod data_encoding;
 pub mod fresh;
 pub mod slider;
@@ -92,4 +93,5 @@ pub fn apply_tour_neutral_overrides(ctx: &Context) {
         style.visuals.widgets.hovered.bg_stroke = inactive_stroke;
         style.visuals.widgets.active.bg_stroke = inactive_stroke;
     });
+    button::set_tour_neutral();
 }

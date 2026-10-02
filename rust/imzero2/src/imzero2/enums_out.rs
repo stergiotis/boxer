@@ -238,6 +238,7 @@ pub enum ButtonBuilderMethodId {
     FrameWhenInactive = 6,
     RightText = 7,
     ShortcutText = 8,
+    Kind = 9,
 }
 
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
