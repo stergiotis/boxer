@@ -30,6 +30,8 @@ const (
 	opSetSql         = "set_sql"
 	opSetSignal      = "set_signal"
 	opShowPane       = "show_pane"
+	opListPanes      = "list_panes"
+	opBindPane       = "bind_pane"
 )
 
 // Bounds on what sample_rows returns (ADR-0270 §SD1).
@@ -124,11 +126,40 @@ type ShowPaneArgs struct {
 	Pane string `desc:"the pane id, as list_panes and get_state name it"`
 }
 
+// PaneState is one pane as list_panes reports it.
+type PaneState struct {
+	Pane  string `desc:"the pane id, as show_pane and bind_pane take it"`
+	Title string `desc:"its title on the dock strip"`
+	// Panel says the pane draws a result; the others are tools.
+	Panel bool `desc:"true when the pane draws a result and can be bound to a node"`
+	// Node is the split node feeding the pane when it is not the active
+	// one: a binding, or the Detail pane following the selection.
+	Node string `desc:"the node feeding the pane when it is not the one the main result comes from"`
+	// Reason is the pane's own reason it cannot draw what it is fed.
+	Reason   string   `desc:"why the pane cannot draw its result; empty when it can, or when it is not a panel"`
+	Writes   []string `desc:"the signals the pane writes that the buffer reads"`
+	Unfilled []string `desc:"those of them nothing has filled yet; a run needs them"`
+}
+
+// PanesState is list_panes' result.
+type PanesState struct {
+	Panes []PaneState `desc:"the panes in dock-strip order"`
+	// Nodes are what bind_pane accepts.
+	Nodes []string `desc:"the split nodes of the buffer: its top-level CTEs and the statement"`
+}
+
+// BindPaneArgs is bind_pane's argument.
+type BindPaneArgs struct {
+	Pane string `desc:"the pane id, as list_panes names it; it must be a panel"`
+	Node string `json:",omitzero" desc:"the split node to feed the pane from, as list_panes names it; left out, the pane follows the main result again"`
+}
+
 // opsSnap is what queries read: copies taken after the command stage, and
 // the graph, whose main snapshot is safe to read from any goroutine.
 type opsSnap struct {
 	mounted bool
 	state   PlayState
+	panes   PanesState
 	graph   *queryGraph
 }
 
@@ -253,9 +284,56 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			return appops.None{}, nil
 		})
+	appops.Query(s, app.OperationSpec{Name: opListPanes, Version: 1,
+		Summary: "list the panes: whether each can draw what it is fed and why not, the node feeding it, the signals it writes",
+		Reads:   []string{opsResPanes, opsResResult, opsResSql}, Agents: true},
+		func(sn opsSnap, in appops.None) (PanesState, error) {
+			if !sn.mounted {
+				return PanesState{}, app.RefuseOperation("the window has not mounted")
+			}
+			return sn.panes, nil
+		})
+	appops.Command(s, app.OperationSpec{Name: opBindPane, Version: 1, Summary: "feed a panel from one split node, or from the main result again",
+		Effect: app.OperationEffectDocument, Writes: []string{opsResPanes}, Reads: []string{opsResSql}, Agents: true,
+		Gesture: "the fill tab buttons of a node in the Graph pane",
+		Follows: []string{"the pane draws the node's result once the node has run"}},
+		func(inst *PlayLauncher, call app.OperationCall, in BindPaneArgs) (appops.None, error) {
+			p := inst.inner
+			if p == nil {
+				return appops.None{}, app.RefuseOperation("the window has not mounted")
+			}
+			return appops.None{}, p.bindPane(in.Pane, NodeID(in.Node))
+		})
 	addRunOps(s)
 	return
 }()
+
+// bindPane binds a panel to a node of the current split, or unbinds it
+// when node is empty. Unlike BindTab, a node the split lacks is refused:
+// a binding that sits inert until the name returns is an embedder's tool,
+// and to a caller it reads as a change that did nothing.
+func (inst *PlayApp) bindPane(pane string, node NodeID) (err error) {
+	spec, ok := inst.tabs.specForSlug(pane)
+	if !ok {
+		return app.RefuseOperation("no pane " + pane)
+	}
+	if spec.Panel == nil {
+		return app.RefuseOperation("pane " + pane + " draws no result and cannot be bound")
+	}
+	if node == "" {
+		inst.unbindTab(pane)
+		return
+	}
+	if _, found := findSplitNode(inst.currentSplit, node); !found {
+		names := make([]string, 0, len(inst.currentSplit.Nodes))
+		for _, n := range inst.currentSplit.Nodes {
+			names = append(names, string(n.ID))
+		}
+		return app.ConflictOperation("no node " + string(node) + " in the buffer; it has " + strings.Join(names, ", "))
+	}
+	inst.bindTab(pane, node)
+	return
+}
 
 // Operations serves play's catalog for this window.
 func (inst *PlayLauncher) Operations() (h app.OperationsHandlerI) { return playOps.Bind(inst) }
@@ -298,6 +376,13 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 		st.Result.Error = runErr.Error()
 	}
 	sn.state = st
+	for _, row := range p.paneRows(p.frameSchema) {
+		sn.panes.Panes = append(sn.panes.Panes, PaneState{Pane: row.TabID, Title: row.Title, Panel: row.Panel,
+			Node: string(row.Node), Reason: row.Reject, Writes: row.Drives, Unfilled: row.Unfilled})
+	}
+	for _, n := range p.currentSplit.Nodes {
+		sn.panes.Nodes = append(sn.panes.Nodes, string(n.ID))
+	}
 	return
 }
 
@@ -557,4 +642,32 @@ func (inst *PlayApp) takeGestureSignalWriter() (writer string) {
 // personShowPane is the person raising a pane from play's own chrome.
 func (inst *PlayApp) personShowPane(pane string) {
 	playGesture(inst, opShowPane, ShowPaneArgs{Pane: pane}, func() { _ = inst.ActivateTab(pane) })
+}
+
+// personBindPane is the person's fill-tab toggle in the Graph pane.
+func (inst *PlayApp) personBindPane(pane string, node NodeID) {
+	playGesture(inst, opBindPane, BindPaneArgs{Pane: pane, Node: string(node)}, func() {
+		if node == "" {
+			inst.unbindTab(pane)
+			return
+		}
+		inst.bindTab(pane, node)
+	})
+}
+
+// personClearBindings is the Graph pane's clear: each binding undone
+// through bind_pane, so each is logged as the person's.
+func (inst *PlayApp) personClearBindings() {
+	if inst.gestureCtx == nil {
+		inst.clearBindings()
+		return
+	}
+	panes := make([]string, 0, len(inst.tabBindings))
+	for pane := range inst.tabBindings {
+		panes = append(panes, pane)
+	}
+	slices.Sort(panes)
+	for _, pane := range panes {
+		inst.personBindPane(pane, "")
+	}
 }

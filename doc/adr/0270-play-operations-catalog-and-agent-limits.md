@@ -70,6 +70,11 @@ changes and turning Live on away from agents.
 | `show_pane` | command · view | raise a pane |
 | `bind_pane` | command · document | bind a pane to a split node |
 
+`bind_pane` refuses a node the buffer's split does not have. Play's own
+`BindTab` keeps such a binding inert until the name comes back, which is
+an embedder's tool; to a caller it would read as a change that did
+nothing.
+
 `get_state` and `sample_rows` are marked untrusted: buffers and cells come
 from wherever the person or a dataset got them. A command to `sql` while the
 editor holds keyboard focus, or to `params` while a parameter field does, is a
@@ -135,6 +140,7 @@ with the person as writer, and a task that read the resource pauses.
 | a buffer swapped whole: a loaded file, a history entry, a pane's `ReplaceSql` | `set_sql` |
 | the Signals section's set and add, and the signals a history entry seeds | `set_signal` |
 | the panes menu | `show_pane` |
+| a node's fill tab toggles in the Graph pane, and its clear, one binding at a time | `bind_pane` |
 
 - `run` with the person as writer runs under play's own settings, not SD2's
   limits, and makes the window's work the person's again (SD3).

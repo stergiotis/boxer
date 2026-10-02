@@ -635,6 +635,17 @@ func (inst *TabRegistry) dockIDForSlug(id string) (dockID uint64, ok bool) {
 	return
 }
 
+// specForSlug returns the spec a tab's slug names; ok is false for an
+// unknown slug.
+func (inst *TabRegistry) specForSlug(id string) (spec TabSpec, ok bool) {
+	for i := range inst.specs {
+		if inst.specs[i].ID == id {
+			return inst.specs[i], true
+		}
+	}
+	return
+}
+
 // slugForDockID is dockIDForSlug's inverse — the workingset composer maps
 // the last tab play raised back to the slug a PlayLaunch names it by
 // (ADR-0148 §SD8). ok is false for 0 (nothing raised) and for a dock id no

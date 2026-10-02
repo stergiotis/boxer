@@ -14,7 +14,7 @@ import (
 func TestPlayCatalogRegisters(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	require.NoError(t, m.Operations.Validate())
-	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane} {
+	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane, opListPanes, opBindPane} {
 		spec, ok := m.Operations.Lookup(name)
 		require.True(t, ok, name)
 		assert.True(t, spec.Agents, name)

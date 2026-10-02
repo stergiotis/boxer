@@ -817,6 +817,9 @@ type PlayApp struct {
 	// signal writer of the person's set_signal in flight.
 	gestureCtx          app.FrameContextI
 	gestureSignalWriter string
+	// frameSchema is the active result's schema as the last frame drew it,
+	// which list_panes judges the panes against (ADR-0270 §SD1).
+	frameSchema *arrow.Schema
 
 	paramSlots        []paramSlot
 	paramDrafts       map[string]*string
@@ -1489,6 +1492,7 @@ func (inst *PlayApp) render() error {
 	if rec != nil {
 		defer rec.Release()
 	}
+	inst.frameSchema = schema
 	// Drive the bound nodes' lanes against this frame's snapshot (slice 6c)
 	// — one demand per distinct bound node; the views feed frameFor below.
 	// The pager/projector/schema syncs moved into their tabs, which since 6c

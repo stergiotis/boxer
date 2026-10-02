@@ -58,7 +58,7 @@ func (inst *PlayApp) renderGraphTab() {
 				}
 				if c.Button(ids.PrepareStr("bindClear"), c.Atoms().Text("clear").Keep()).
 					SendResp().HasPrimaryClicked() {
-					inst.clearBindings()
+					inst.personClearBindings()
 				}
 			}
 		}
@@ -134,9 +134,9 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 						Selected(bound).Small().
 						SendResp().HasPrimaryClicked() {
 						if bound {
-							inst.unbindTab(ts.ID)
+							inst.personBindPane(ts.ID, "")
 						} else {
-							inst.bindTab(ts.ID, n.ID)
+							inst.personBindPane(ts.ID, n.ID)
 						}
 					}
 				}
