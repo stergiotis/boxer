@@ -195,6 +195,38 @@ type InstanceInfo struct {
 	Ops bool
 	// Confined is the window's label as of its latest snapshot.
 	Confined bool
+	// Load is how far the window has come since it opened; Reason says why
+	// it failed.
+	Load   LoadE
+	Reason string
+}
+
+// LoadE is how far a window has come since it opened: a window is opening
+// until its app's Mount has returned, which happens in the first frame that
+// draws its body.
+type LoadE uint8
+
+const (
+	LoadUnspecified LoadE = 0
+	LoadOpening     LoadE = 1
+	LoadReady       LoadE = 2
+	LoadFailed      LoadE = 3
+)
+
+var AllLoads = []LoadE{LoadOpening, LoadReady, LoadFailed}
+
+func (inst LoadE) String() (s string) {
+	switch inst {
+	case LoadOpening:
+		s = "opening"
+	case LoadReady:
+		s = "ready"
+	case LoadFailed:
+		s = "failed"
+	default:
+		s = "unspecified"
+	}
+	return
 }
 
 // WriterTask names a task as a writer.

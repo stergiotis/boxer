@@ -116,6 +116,10 @@ type wireLaunchReply struct {
 	Ok       bool   `json:"ok"`
 	Reason   string `json:"reason,omitempty"`
 	Instance uint64 `json:"instance,omitempty"`
+	// Load is how far the opened window had come when the reply left:
+	// opening, ready or failed; LoadReason says why it failed.
+	Load       string `json:"load,omitempty"`
+	LoadReason string `json:"load_reason,omitempty"`
 }
 
 type wireGrantReply struct {
@@ -223,6 +227,9 @@ type wireInstance struct {
 	Mode     string `json:"mode"`
 	Ops      bool   `json:"ops"`
 	Confined bool   `json:"confined,omitempty"`
+	// Load is opening, ready or failed; LoadReason says why it failed.
+	Load       string `json:"load,omitempty"`
+	LoadReason string `json:"load_reason,omitempty"`
 }
 
 type wireListReply struct {

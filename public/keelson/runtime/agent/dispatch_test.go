@@ -84,14 +84,20 @@ type fakeHost struct {
 	engines map[uint64]*opengine.Engine
 	docs    map[uint64]*doc
 	render  atomic.Uint64
+	// openAs is how far a window OpsOpen opens has loaded, and why it
+	// failed; zero reports nothing, as a host that does not track it.
+	openAs     opwire.LoadE
+	openReason string
+	loads      map[uint64]opwire.InstanceInfo
 }
 
 func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for k, e := range inst.engines {
+		l := inst.loads[k]
 		out = append(out, opwire.InstanceInfo{App: docAppId, Alias: docAppId.SubjectAlias(), Key: k, Title: "Doc", Ops: true,
-			Confined: e.Confined()})
+			Confined: e.Confined(), Load: l.Load, Reason: l.Reason})
 	}
 	return
 }
@@ -130,6 +136,12 @@ func (inst *fakeHost) OpsOpen(appId app.AppIdT, kind string, cfg []byte) (uint64
 	d := &doc{text: "opened"}
 	inst.engines[key] = opengine.New(docOps.Catalog(), docOps.Bind(d))
 	inst.docs[key] = d
+	if inst.openAs != opwire.LoadUnspecified {
+		if inst.loads == nil {
+			inst.loads = map[uint64]opwire.InstanceInfo{}
+		}
+		inst.loads[key] = opwire.InstanceInfo{Load: inst.openAs, Reason: inst.openReason}
+	}
 	return key, nil
 }
 func (inst *fakeHost) OpsLogSince(k uint64, seq uint64) ([]opengine.LogEntry, uint64, bool) {

@@ -280,8 +280,8 @@ runs off the render goroutine, as the chat's turns do.
 | `describe` | no | an app's operations, or those matching a search, with schemas and effects; with a grant, one instance's availability |
 | `request` | no; a widening presents the grant handle | start a task or widen its grant: a plan, the operations per app, entries, destinations; returns a key and stays pending until the person decides |
 | `turn` | yes | start a model turn: the changes by the person and other tasks since the previous `turn`, labelled as reads are (SD7); lifts the task's pauses |
-| `list` | yes | the task's instances, their apps and titles, and which task holds each (titles are marked untrusted, and withheld for a confined window) |
-| `launch` | yes | open a window of an app the grant names, with a launch request ([ADR-0135](./0135-app-launch-requests.md)); returns the instance |
+| `list` | yes | the task's instances, their apps and titles, how far each has loaded, and which task holds each (titles and mount errors are marked untrusted; titles are withheld for a confined window) |
+| `launch` | yes | open a window of an app the grant names, with a launch request ([ADR-0135](./0135-app-launch-requests.md)); returns the instance and how far it has loaded |
 | `call` | yes | one command or query, with its key, expected revisions and a one-line reason |
 | `status` | yes; for a `request` key, no, and only the requesting instance may ask | a call's or a job's phase by key, optionally waiting a bounded time; for a request, the grant handle once approved, or `rejected` or `expired` |
 | `cancel` | yes | withdraw a queued call or a proposal by its key, or stop work a job handle names |
@@ -289,6 +289,17 @@ runs off the render goroutine, as the chat's turns do.
 | `capture` | yes | a visible pane or window, as an artifact handle (SD11) |
 | `detach` | yes | remove one instance from the task |
 | `stop` | yes | end the task |
+
+A window is *opening* until its app's `Mount` has returned — which happens
+in the first frame that draws its body — then *ready*, or *failed* with the
+mount error. `launch` waits a short bound for ready (and, for an app with a
+catalog, for its first snapshot) and then reports the window as it stands,
+so a caller never reports a window open that has not drawn, or that failed;
+a window still opening shows its load in `list`. The host keeps frames
+coming for a bounded time while a window is opening, so the window's first
+frame does not wait for the person to move the mouse; it cannot wake an
+idle render loop from off it, so the first frame after an open still needs
+one already running.
 
 `list`, `capture` and `read` need an entry for the instance they name, in any
 mode, observe included; `read` opens only references the task received.

@@ -347,6 +347,11 @@ type Instance struct {
 	Mode     string
 	Ops      bool
 	Confined bool
+	// Load is opening, ready or failed: a window is opening until its app
+	// has mounted, and only a ready window takes calls. LoadReason says
+	// why it failed.
+	Load       string
+	LoadReason string
 }
 
 // List lists the task's open instances.

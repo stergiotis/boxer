@@ -115,6 +115,34 @@ type window struct {
 	ops atomic.Pointer[opengine.Engine]
 	// opsTried records that startOps ran. Render-thread only.
 	opsTried bool
+	// loaded is set once the window's body has met a returned Mount — its
+	// own or the shared instance's — and says whether it failed; nil while
+	// the window is opening. Read by the operation service off the render
+	// goroutine, hence the atomic.
+	loaded atomic.Pointer[windowLoad]
+	// opened is when the window was opened; it bounds how long an opening
+	// window asks for frames.
+	opened time.Time
+}
+
+// windowLoad is how a window's open ended.
+type windowLoad struct {
+	failed bool
+	reason string
+}
+
+// loadState reports how far the window has come since it opened.
+func (w *window) loadState() (load opwire.LoadE, reason string) {
+	l := w.loaded.Load()
+	switch {
+	case l == nil:
+		load = opwire.LoadOpening
+	case l.failed:
+		load, reason = opwire.LoadFailed, l.reason
+	default:
+		load = opwire.LoadReady
+	}
+	return
 }
 
 // instMount is the Mount/Unmount lifecycle shared by every window pointing
@@ -606,6 +634,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		mount:       ms,
 		openFlag:    true,
 		stop:        stop,
+		opened:      time.Now(),
 	})
 	runId := inst.runId
 	facts := inst.facts
@@ -1407,6 +1436,9 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 		}
 	}
 	if w.mount.mountErr != nil {
+		if w.loaded.Load() == nil {
+			w.loaded.Store(&windowLoad{failed: true, reason: w.mount.mountErr.Error()})
+		}
 		c.Label("windowhost: mount failed: " + w.mount.mountErr.Error()).Send()
 		return
 	}
@@ -1414,6 +1446,11 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 	// person's changes are in Go state; queued commands apply now, and the
 	// app's Frame draws their effects.
 	w.startOps(logger, opsListener)
+	if w.loaded.Load() == nil {
+		// Ready only once the engine exists, so a reader seeing ready
+		// also sees whether the window serves a catalog.
+		w.loaded.Store(&windowLoad{})
+	}
 	w.beginOps()
 	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
 		msgs := frameMessages()
