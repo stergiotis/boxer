@@ -318,3 +318,25 @@ func TestDefaultHTTPClient_BoundsHeadersNotBody(t *testing.T) {
 	_, err = c.Get(slowHeaders.URL)
 	require.Error(t, err, "a server that never starts answering is still bounded")
 }
+
+// roundTripFunc is an http.RoundTripper that is not an *http.Transport.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// A process that replaced http.DefaultTransport with another RoundTripper —
+// the browser tab's host transport — gets that transport, not a panic.
+func TestDefaultClientUsesAReplacedDefaultTransport(t *testing.T) {
+	saved := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = saved })
+	var used bool
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		used = true
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("Ok.")), Request: r}, nil
+	})
+	c := newDefaultHTTPClient(time.Second)
+	resp, err := c.Get("http://ch.invalid/ping")
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.True(t, used)
+}

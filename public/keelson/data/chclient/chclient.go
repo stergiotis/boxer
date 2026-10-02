@@ -119,8 +119,17 @@ var sharedDefaultHTTPClient = sync.OnceValue(func() *http.Client {
 // newDefaultHTTPClient builds a client that bounds only the wait for response
 // headers. No http.Client.Timeout: that one also covers reading the body, so
 // it would fail a healthy stream whose consumer is slow.
+//
+// A process that replaced http.DefaultTransport with something other than an
+// *http.Transport — the browser tab's host transport (ADR-0263) — gets that
+// transport as is: it is the only way out of that process, and its own
+// timeouts are the host's to set.
 func newDefaultHTTPClient(headerTimeout time.Duration) *http.Client {
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{Transport: http.DefaultTransport}
+	}
+	tr := base.Clone()
 	tr.ResponseHeaderTimeout = headerTimeout
 	return &http.Client{Transport: tr}
 }
