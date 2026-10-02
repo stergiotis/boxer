@@ -811,6 +811,13 @@ type PlayApp struct {
 	agentFresh        bool
 	agentRunRequested bool
 	runAgent          *app.OnBehalfOf
+	// gestureCtx is the frame context the person's gestures route through
+	// (ADR-0270 §SD6); only PlayLauncher sets it, since an embedder's
+	// context serves the embedder's catalog. gestureSignalWriter is the
+	// signal writer of the person's set_signal in flight.
+	gestureCtx          app.FrameContextI
+	gestureSignalWriter string
+
 	paramSlots        []paramSlot
 	paramDrafts       map[string]*string
 	paramSyncedValues map[string]string
@@ -1028,7 +1035,7 @@ func (inst *PlayApp) consumePickedSql() {
 	inst.pickedSql = nil
 	inst.pickMu.Unlock()
 	if picked != nil {
-		inst.sql = *picked
+		inst.personSetSql(*picked)
 	}
 }
 
@@ -1734,7 +1741,7 @@ func (inst *PlayApp) claimRunChord(run, sub bool) {
 	if inst.graph.MainLoading() {
 		return
 	}
-	inst.applyRunShortcut(run, sub)
+	inst.personRun(sub)
 }
 
 // applyRunShortcut turns a press into a run request. Split from the poll above
@@ -2017,12 +2024,13 @@ func (inst *PlayApp) restoreHistoryEntry(entry HistoryEntry) {
 	// Buffer is set only when the run shipped less than the buffer — a
 	// multi-statement buffer under run-under-cursor (ADR-0130 L3). Restoring
 	// it puts the siblings back rather than silently discarding them.
-	inst.sql = entry.SQL
+	sql := entry.SQL
 	if entry.Buffer != "" {
-		inst.sql = entry.Buffer
+		sql = entry.Buffer
 	}
+	inst.personSetSql(sql)
 	for urlKey, raw := range entry.SigParams {
-		inst.graph.setSignalRawFrom(strings.TrimPrefix(urlKey, "param_"), raw, signalWriterHistory)
+		inst.personSetSignal(SignalID(strings.TrimPrefix(urlKey, "param_")), raw, signalWriterHistory)
 	}
 }
 
@@ -2138,7 +2146,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			for range c.HoverText("Ctrl+Enter runs this. Ctrl+Shift+Enter runs just the query the caret is in — a subquery, a CTE body, or one statement of several — with the enclosing WITH items carried along.").KeepIter() {
 				if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
 					SendResp().HasPrimaryClicked() {
-					inst.requestRun = true
+					inst.personRun(false)
 				}
 			}
 			// Run subquery: the mouse path for Ctrl+Shift+Enter, offered
@@ -2155,8 +2163,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				for range c.HoverText("Runs just the query the caret is in, with the WITH items and SET prelude it needs carried along — the tinted region in the editor. Same as Ctrl+Shift+Enter. With the caret at statement level there is nothing narrower, and this runs the whole query.").KeepIter() {
 					if c.Button(ids.PrepareStr("runSubquery"), c.Atoms().Text("Run subquery").Keep()).
 						SendResp().HasPrimaryClicked() {
-						inst.requestRun = true
-						inst.requestSubquery = true
+						inst.personRun(true)
 					}
 				}
 			}
@@ -2642,11 +2649,10 @@ func (inst *PlayApp) consumePendingSnippet() (insert string) {
 	inst.pendingSnippetInsert = ""
 	if replace := inst.pendingSnippetReplace; replace != "" {
 		inst.pendingSnippetReplace = ""
-		inst.sql = replace
 		// A whole-buffer swap is a new buffer, so its prelude is the new
-		// default Reset restores to. An insert is not: it edits the buffer the
-		// reader already has.
-		inst.captureParamDefaults(replace)
+		// default Reset restores to (swapSql). An insert is not: it edits
+		// the buffer the reader already has.
+		inst.personSetSql(replace)
 		insert = ""
 	}
 	return

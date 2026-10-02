@@ -534,7 +534,9 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	// The agent mark (ADR-0270 §SD3) is judged after the write-back and
 	// settled once the frame's own changes are in.
 	inst.inner.checkAgentMark()
+	inst.inner.gestureCtx = ctx
 	err = inst.inner.Frame(ctx)
+	inst.inner.gestureCtx = nil
 	inst.inner.settleAgentMark()
 	return
 }

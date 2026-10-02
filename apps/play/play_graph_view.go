@@ -193,7 +193,7 @@ func (inst *PlayApp) renderSignalsSection() {
 				if c.Button(ids.PrepareStr("sigAdd"), c.Atoms().Text("add signal").Keep()).
 					SendResp().HasPrimaryClicked() {
 					if name := strings.TrimSpace(inst.sigAddName); name != "" {
-						inst.graph.setSignalRawFrom(name, inst.sigAddValue, signalWriterEditor)
+						inst.personSetSignal(SignalID(name), inst.sigAddValue, signalWriterEditor)
 					}
 				}
 			}
@@ -227,7 +227,7 @@ func (inst *PlayApp) renderSignalRow(r signalChromeRow) {
 			SendRespVal(draft)
 		if c.Button(ids.PrepareStr("sigSet-"+r.Name), c.Atoms().Text("set").Keep()).
 			SendResp().HasPrimaryClicked() {
-			inst.graph.setSignalRawFrom(r.Name, *draft, signalWriterEditor)
+			inst.personSetSignal(r.Name, *draft, signalWriterEditor)
 		}
 		if r.Held {
 			if c.Button(ids.PrepareStr("sigClear-"+r.Name), c.Atoms().Text("×").Keep()).

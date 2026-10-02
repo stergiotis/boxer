@@ -136,7 +136,7 @@ func (inst *PlayApp) paneMenuButton(row *paneMenuRow, idPrefix string) {
 		SendResp().HasPrimaryClicked() {
 		// Activation only. A rejecting pane opens too: its body carries the
 		// contract help the reason line is a summary of.
-		_ = inst.ActivateTab(row.TabID)
+		inst.personShowPane(row.TabID)
 	}
 }
 

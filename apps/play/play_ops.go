@@ -8,6 +8,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 )
 
 // Play's operations catalog (ADR-0270): what an agent may read and do in a
@@ -216,7 +217,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			if inst.inner == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
 			}
-			inst.inner.setSqlFromAgent(in.Sql)
+			inst.inner.swapSql(in.Sql)
 			inst.inner.markAgent(call.OnBehalfOf)
 			return appops.None{}, nil
 		})
@@ -231,7 +232,10 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 				return appops.None{}, app.RefuseOperation("a signal needs a name")
 			}
 			writer := call.Writer
-			if writer == "" {
+			switch writer {
+			case opwire.WriterPerson:
+				writer = inst.inner.takeGestureSignalWriter()
+			case "":
 				writer = signalWriterApp
 			}
 			inst.inner.graph.setSignalRawFrom(SignalID(in.Name), in.Value, writer)
@@ -332,9 +336,11 @@ func (inst *PlayApp) paneDigest() (digest string) {
 	return b.String()
 }
 
-// setSqlFromAgent replaces the buffer before play draws, as a picked file
-// does (consumePickedSql), so every reader of the frame sees the new text.
-func (inst *PlayApp) setSqlFromAgent(sql string) {
+// swapSql replaces the buffer and takes its prelude as the new defaults,
+// as any whole-buffer swap does. An agent's call runs before play draws, so
+// every reader of the frame sees the new text; the person's swaps reach it
+// through set_sql (ADR-0270 §SD6).
+func (inst *PlayApp) swapSql(sql string) {
 	inst.sql = sql
 	inst.captureParamDefaults(sql)
 }
@@ -451,6 +457,13 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			if p == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
 			}
+			if call.Writer == opwire.WriterPerson {
+				// The person's Run (ADR-0270 §SD6): no agent limits, and the
+				// run path reports an empty buffer or an unfilled input in
+				// the status line, as it always has.
+				p.applyRunShortcut(true, in.Subquery)
+				return appops.None{}, nil
+			}
 			if call.OnBehalfOf == nil {
 				return appops.None{}, app.RefuseOperation("a run through the catalog is an agent's, and carries its context")
 			}
@@ -494,3 +507,54 @@ const (
 	opRun      = "run"
 	opSetParam = "set_param"
 )
+
+// playGesture routes one of the person's gestures through play's catalog
+// (ADR-0269 §SD8 "One path", ADR-0270 §SD6): the same handler an agent's
+// call runs, logged with the person as writer, so a task that read the
+// resource pauses. Where no host serves play's catalog — an embedder's
+// window, a test — direct applies the change instead.
+func playGesture[In any](inst *PlayApp, op string, in In, direct func()) {
+	if inst.gestureCtx == nil {
+		direct()
+		return
+	}
+	if _, err := appops.Gesture[In, appops.None](inst.gestureCtx, op, in); err != nil {
+		direct()
+	}
+}
+
+// personRun is the person's Run: the button, the Run subquery button,
+// Ctrl+Enter and Ctrl+Shift+Enter.
+func (inst *PlayApp) personRun(sub bool) {
+	playGesture(inst, opRun, RunArgs{Subquery: sub}, func() { inst.applyRunShortcut(true, sub) })
+}
+
+// personSetSql is the person swapping the whole buffer.
+func (inst *PlayApp) personSetSql(sql string) {
+	playGesture(inst, opSetSql, SetSqlArgs{Sql: sql}, func() { inst.swapSql(sql) })
+}
+
+// personSetSignal is the person writing a signal; writer is the signal
+// writer the store stamps, one of isHumanSignalWriter's.
+func (inst *PlayApp) personSetSignal(name SignalID, raw string, writer string) {
+	inst.gestureSignalWriter = writer
+	playGesture(inst, opSetSignal, SetSignalArgs{Name: string(name), Value: raw}, func() {
+		inst.graph.setSignalRawFrom(name, raw, writer)
+	})
+	inst.gestureSignalWriter = ""
+}
+
+// takeGestureSignalWriter is the signal writer of the person's set_signal
+// in flight: the surface personSetSignal named, else the Signals section.
+func (inst *PlayApp) takeGestureSignalWriter() (writer string) {
+	writer = inst.gestureSignalWriter
+	if writer == "" {
+		writer = signalWriterEditor
+	}
+	return
+}
+
+// personShowPane is the person raising a pane from play's own chrome.
+func (inst *PlayApp) personShowPane(pane string) {
+	playGesture(inst, opShowPane, ShowPaneArgs{Pane: pane}, func() { _ = inst.ActivateTab(pane) })
+}
