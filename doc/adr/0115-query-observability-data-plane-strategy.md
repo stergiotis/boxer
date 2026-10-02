@@ -479,6 +479,16 @@ part-typed and part-raw. The trigger for revisiting is carrier-channel
 [ADR-0103](./0103-leeway-marshall-dynamic-membership-tuples.md) deferral), not
 this ADR.
 
+## Update — 2026-10-02: Tier-1 result pinning removed from play
+
+Play's pin affordance, its pin browser and the writes behind them
+(`boxer.resultsets`, one `boxer.pin_<fingerprint>` table per pin) are
+removed. A rebuild is expected over ClickHouse's own primitives, such as
+the query result cache, rather than a table play creates and manages per
+pin. Tables an earlier build
+wrote stay on the endpoint; nothing in the tree reads them. The weave
+(Tier 2) and the other slices are unaffected.
+
 ## References
 
 - [doc/explanation/query-observability.md](../explanation/query-observability.md)

@@ -86,7 +86,7 @@ var (
 
 	AppWrites = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_APP_WRITES",
-		Description: "\"off\" stops play writing its own tables — pins (boxer.resultsets, boxer.pin_*) and Series verdicts (boxer.tslabels); unset or anything else lets it (ADR-0270 §SD7). BOXER_PLAY_ALLOW_WRITES does not govern them",
+		Description: "\"off\" stops play writing its own tables — the Series verdicts in boxer.tslabels; unset or anything else lets it (ADR-0270 §SD7). BOXER_PLAY_ALLOW_WRITES does not govern them",
 		Category:    env.CategoryE("boxer-play"),
 	})
 

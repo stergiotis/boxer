@@ -61,24 +61,24 @@ func TestAppStatementGate(t *testing.T) {
 	srv := ep.serve(t)
 
 	off := NewClient(ClientConfig{URL: srv.URL + "/", AppWritesOff: true}, nil)
-	_, err := off.appStatement(context.Background(), pinMetaDDL, nil, appWriteLabel{})
+	_, err := off.appStatement(context.Background(), tsLabelsDDL, nil, appWriteLabel{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "BOXER_PLAY_APP_WRITES")
 
 	cli := NewClient(ClientConfig{URL: srv.URL + "/"}, nil)
-	_, err = cli.appStatement(context.Background(), pinMetaDDL, nil, appWriteLabel{confined: true})
+	_, err = cli.appStatement(context.Background(), tsLabelsDDL, nil, appWriteLabel{confined: true})
 	require.Error(t, err, "confined data goes only where sealed plaintext may")
 	assert.Contains(t, err.Error(), "confined")
 
 	host := endpointHost(srv.URL)
-	_, err = cli.appStatement(context.Background(), pinMetaDDL, nil,
+	_, err = cli.appStatement(context.Background(), tsLabelsDDL, nil,
 		appWriteLabel{agent: &app.OnBehalfOf{Destinations: []string{"keelson:apps"}}})
 	var lim *AgentLimitError
 	require.True(t, errors.As(err, &lim))
 	assert.Contains(t, lim.Reason, DestinationClickHouse(host))
 	assert.Equal(t, 0, ep.count(), "a refused write sends nothing")
 
-	_, err = cli.appStatement(context.Background(), pinMetaDDL, nil,
+	_, err = cli.appStatement(context.Background(), tsLabelsDDL, nil,
 		appWriteLabel{agent: &app.OnBehalfOf{Destinations: []string{DestinationClickHouse(host)}}})
 	require.NoError(t, err)
 	assert.Equal(t, 1, ep.count())
@@ -92,16 +92,4 @@ func TestExecuteWriteHoldsItsOwnGate(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "BOXER_PLAY_ALLOW_WRITES")
 	assert.Equal(t, 0, ep.count())
-}
-
-func TestPinResultIsConsequentialAndNeedsAResult(t *testing.T) {
-	m := (&PlayLauncher{}).Manifest()
-	spec, ok := m.Operations.Lookup(opPinResult)
-	require.True(t, ok)
-	assert.Equal(t, app.OperationEffectConsequential, spec.Effect)
-	assert.True(t, spec.Agents)
-
-	_, h := opsLauncher(t)
-	_, err := h.ApplyCommand(app.OperationCall{Writer: "task:t"}, opPinResult, nil)
-	require.Error(t, err, "no endpoint, nothing to pin to")
 }

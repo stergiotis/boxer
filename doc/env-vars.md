@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-10-02T10:32:53Z
+generated-at: 2026-10-02T11:30:32Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -54,7 +54,7 @@ generated-at: 2026-10-02T10:32:53Z
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_PLAY_ALLOW_WRITES` | string | — | — |  | non-empty lets Run execute an INSERT … SELECT wrapper (ADR-0181 §SD8) and DDL; unset, Run refuses the write with a copy-out hint and every Arrow run is sent readonly=2. Governs every play-engined host, sqlapplet included |
-| `BOXER_PLAY_APP_WRITES` | string | — | — |  | "off" stops play writing its own tables — pins (boxer.resultsets, boxer.pin_*) and Series verdicts (boxer.tslabels); unset or anything else lets it (ADR-0270 §SD7). BOXER_PLAY_ALLOW_WRITES does not govern them |
+| `BOXER_PLAY_APP_WRITES` | string | — | — |  | "off" stops play writing its own tables — the Series verdicts in boxer.tslabels; unset or anything else lets it (ADR-0270 §SD7). BOXER_PLAY_ALLOW_WRITES does not govern them |
 | `BOXER_PLAY_AUTORUN` | string | — | — |  | non-empty enables auto-run of the initial SQL on mount |
 | `BOXER_PLAY_EXIT_ON_SHOT` | string | — | — |  | non-empty exits the play HMI after writing BOXER_PLAY_SCREENSHOT |
 | `BOXER_PLAY_EXPERIMENTS` | string | — | — |  | seed the Experiments pane with one vizeval candidate as JSON, {"source":"fixture\|result","sink":…,"options":{…}} (ADR-0266); a seed that does not resolve against the sink catalogue fails the mount |

@@ -175,12 +175,11 @@ The rows a run produced, identified by content fingerprint (play already
 fingerprints every lane result) and ref-tupled to their run:
 
 - **Tier 0 — ephemeral** (default): the lane memo. Today's behaviour; free.
-- **Tier 1 — pin** (shipped): persist the Arrow batch as-is, any query, no
-  classification required. A pin is a per-pin ClickHouse table carrying the
-  result's own schema (the batch bytes go in verbatim) plus one metadata row
-  in `boxer.resultsets` — so the "resultsets store" is ordinary queryable
-  tables on the user's endpoint, and opening a pin is plain SQL every panel
-  already renders.
+- **Tier 1 — pin** (removed 2026-10-02): play froze a result's Arrow batch
+  into a per-pin table plus a `boxer.resultsets` row. It was taken out of
+  play, to be rebuilt over ClickHouse's own primitives such as the query
+  result cache ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md),
+  Update 2026-10-02). Tables an earlier build wrote stay on the endpoint.
 - **Tier 2 — weave**: when shape analysis proves the result data-mart-shaped
   or lineage-carrying, rows land as typed leeway rows with ref-tuple lineage
   to source rows. A candidate first cut, to be decided at the S6 ADR: for
@@ -229,8 +228,8 @@ natural delivery vehicle for the interactive case.
 |---|---|---|---|
 | A — live | progress, cancel | in-band progress headers, read live by an incremental-header transport → lane state → status-bar and loading badges (shipped) | none (glass state) |
 | B — record | terminal run + profile + identity | ADR-0115 pipeline (`queryrunsd`) (shipped) | `boxer.facts` |
-| C — weave | results, tiered, lineage | Tier-1 pin affordance + browser (shipped: per-pin tables, `boxer.resultsets` metadata); weave = ref tuples + typed archival, at S6 | per-pin tables + metadata now; typed tables at S6 |
-| D — glass | history, run detail, per-def trends, resultset browser | play panels over plain SQL; "open as query" everywhere (shipped: History runs + detail + drill-downs, pin browser; open: per-definition trends) | reads B+C |
+| C — weave | results, tiered, lineage | weave = ref tuples + typed archival, at S6; Tier-1 pinning removed 2026-10-02 | typed tables at S6 |
+| D — glass | history, run detail, per-def trends | play panels over plain SQL; "open as query" everywhere (shipped: History runs + detail + drill-downs; open: per-definition trends) | reads B+C |
 | E — export | push to external consumers | NATS-core forwarding (ADR-0090 pattern) | at consumer trigger |
 
 ## Slices

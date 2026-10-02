@@ -284,11 +284,6 @@ type PlayApp struct {
 	// S2): captured KindQueryRun facts read back from the live endpoint,
 	// fetched manually and on first reveal (play_runs_history.go).
 	runsHist *runsHistoryDriver
-	// pins / pinsBrowser are Tier-1 result pinning (ADR-0115 S4): the
-	// Table tab's pin affordance and the History tab's pin browser
-	// (play_pin.go).
-	pins        *pinDriver
-	pinsBrowser *pinsBrowserDriver
 	// tabs is the instance's dock-tab set (ADR-0097 slice 6a): every tab a
 	// registered TabSpec, frozen at the first Render. Embedders customize
 	// it via Tabs() between construction and mounting (D4).
@@ -1236,8 +1231,6 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.docs = newDocsDriver(docsSource)
 	inst.docsPane = newDocsPaneState()
 	inst.runsHist = newRunsHistoryDriver(client)
-	inst.pins = newPinDriver(client)
-	inst.pinsBrowser = newPinsBrowserDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
 	inst.tabs = defaultTabs(inst)
@@ -3033,8 +3026,6 @@ func (inst *PlayApp) renderHistoryTab() {
 	}
 	// The durable half: captured runs from boxer.facts (ADR-0115 S2).
 	inst.renderRecordedRuns()
-	// Tier-1 pins: frozen resultsets on the endpoint (ADR-0115 S4).
-	inst.renderPinnedResults()
 }
 
 // renderTableTab is the Table dock tab body: pager strip atop the master
@@ -3087,9 +3078,6 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	pad := styletokens.PaddingTight(inst.density)
 	c.AddSpace(pad)
 	inst.pager.Render()
-	// Tier-1 pin affordance (ADR-0115 S4): freeze the rows this tab
-	// shows into a queryable table.
-	inst.renderPinControl(rec)
 	// ADR-0186 raw toggle: bypass every gloss for the session — the escape
 	// hatch a wrong rule needs. Offered only once a column is glossed.
 	inst.renderGlossControl(schema)
