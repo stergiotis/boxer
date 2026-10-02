@@ -38,7 +38,7 @@ func newExportCommand() *cli.Command {
 				Restart:   c.Bool("restart"),
 				Chunking:  jk.DefaultChunkingOptions(),
 			}
-			req.Selection.Filters, err = parseFilters(c.StringSlice("filter"))
+			req.Selection.Filters, err = parseFilters(filterValues(c))
 			if err != nil {
 				return
 			}
