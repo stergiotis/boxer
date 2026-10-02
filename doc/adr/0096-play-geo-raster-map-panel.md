@@ -686,6 +686,19 @@ lists what such an ADR would have to decide. The smaller changes it points at
 instead are a multi-entry raster memo on the lane, starting the ladder lower
 on a fast source, and SD10's deferred overscan margin.
 
+## Update — 2026-10-02: a raster memo for revisits
+
+The first of the map-tile-addressing trial's smaller changes: the panel keeps
+the rasters it recently drew, keyed by the node key (SQL and every param —
+table, ladder level, render, viewport and time window), in a byte-bounded
+LRU with a few minutes' expiry. When the ladder restarts on a view the memo
+already holds, it starts at the finest level held, draws it with no query,
+stops whatever the lane was still running for the view left behind, and
+climbs on from there if that was not the last level; the status line says
+"from memory". Refresh empties the memo. The lane's own one-entry memo, which
+every other pane shares, is unchanged. The mechanism is
+`apps/play/play_map_memo.go`.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
