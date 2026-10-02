@@ -195,7 +195,7 @@ status: draft
 | WarnIfDebugBuild | Procedural | No | 0 | 0 | - | - |
 | WidgetText | BuilderFactory | No | 0 | 0 | 1 | Retained |
 | WidgetsGlobalThemePreferenceButtons | Procedural | No | 0 | 0 | - | - |
-| Window | BuilderFactory | Yes | 0 | 1 | 15 | Immediate, BlockIterator |
+| Window | BuilderFactory | Yes | 0 | 1 | 17 | Immediate, BlockIterator |
 
 
 ## BuilderFactory Nodes
@@ -2617,6 +2617,8 @@ WidgetText
 - **MinHeight**(height: f32)
 - **AlwaysOnTop**(val: b)
 - **OpenBound**(bindingId: u64)
+- **DragFromTitleBar**(val: b)
+- **Maximized**(val: b)
 
 #### Return Type
 

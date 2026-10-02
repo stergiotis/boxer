@@ -1516,6 +1516,9 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // builder method writes here and the Window apply block drains it
     // with std::mem::take so each invocation starts from zero.
     scratch_open_binding_id: u64,
+    // Scratch slot for the Window arm's `maximized` method, drained the
+    // same way as scratch_open_binding_id.
+    scratch_window_maximized: bool,
 
     r11_color32: egui::Color32,
 
@@ -1837,6 +1840,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             r10_false_ids: Vec::with_capacity(1024),
             window_open_bindings: std::collections::HashMap::with_capacity(32),
             scratch_open_binding_id: 0,
+            scratch_window_maximized: false,
             debug_tools: DebugTools::new(),
             animation_freeze: false,
             message_offsets: vec![],
@@ -11257,6 +11261,21 @@ egui::Window::new(label).id(i);
                             let mut binding_id = self.io.read_plain_u64()?;
                             self.scratch_open_binding_id = binding_id;
                         }
+                        WindowBuilderMethodId::DragFromTitleBar => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match WindowBuilderMethodId::DragFromTitleBar");
+                            let mut val = self.io.read_plain_b()?;
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            if val {
+                                w = w.drag_area(egui::WindowDrag::TitleBar);
+                            }
+                        }
+                        WindowBuilderMethodId::Maximized => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match WindowBuilderMethodId::Maximized");
+                            let mut val = self.io.read_plain_b()?;
+                            self.scratch_window_maximized = val;
+                        }
                     }
                 }
                 if d == 0 {
@@ -11266,6 +11285,42 @@ egui::Window::new(label).id(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 let open_binding_id = std::mem::take(&mut self.scratch_open_binding_id);
+                // maximized: save the outer rect on the first maximized
+                // frame, pin to the free rect while the flag holds, and on
+                // the first frame without it re-seed position and size from
+                // the saved rect once (pinning for a single frame writes the
+                // Area and Resize state back; the next frame is movable and
+                // resizable again).
+                let maximized = std::mem::take(&mut self.scratch_window_maximized);
+                let restore_id = i.with("__imzero2_restore_rect");
+                if maximized {
+                    let free = u
+                        .as_ref()
+                        .map(|u| u.available_rect_before_wrap())
+                        .unwrap_or_else(|| c.content_rect());
+                    let saved = c.data(|d| d.get_temp::<egui::Rect>(restore_id)).is_some();
+                    if !saved {
+                        if let Some(r) = c.memory(|m| m.area_rect(i)) {
+                            c.data_mut(|d| d.insert_temp(restore_id, r));
+                        }
+                    }
+                    // fixed_rect makes the Area unmovable, and egui then
+                    // places no title-bar widget; the double-click that
+                    // restores the window is read off the pointer below.
+                    // (current_pos would keep it movable, but in title-drag
+                    // mode egui re-applies the stored pivot after
+                    // Area::begin and the position is lost.)
+                    w = w.fixed_rect(free);
+                } else if let Some(r) = c.data(|d| d.get_temp::<egui::Rect>(restore_id)) {
+                    c.data_mut(|d| d.remove::<egui::Rect>(restore_id));
+                    // fixed_pos rather than current_pos for the same
+                    // reason as above: only an unmovable Area keeps the
+                    // position it is given. Not constrained: the Area still
+                    // carries the maximized size this frame, and fitting
+                    // that to the screen would shove the window into the
+                    // corner. One frame, then movable again.
+                    w = w.fixed_pos(r.min).fixed_size(r.size()).constrain(false);
+                }
                 // window_open always defaults to true: Go re-emitting this
                 // opcode IS the "I want to be open" signal. egui itself
                 // doesn't persist window visibility across frames (only
@@ -11281,12 +11336,17 @@ egui::Window::new(label).id(i);
                 // silently returned None on every subsequent emit.
                 let mut window_open: bool = true;
                 let was_open = window_open;
+                // Top of the content area; the band above it is the title
+                // bar. NaN when the body did not run (collapsed).
+                let mut content_top = f32::NAN;
                 let retr = if open_binding_id != 0 {
                     w.open(&mut window_open).show(c, |ui| {
+                        content_top = ui.max_rect().top();
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     })
                 } else {
                     w.show(c, |ui| {
+                        content_top = ui.max_rect().top();
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
                     })
                 };
@@ -11315,6 +11375,32 @@ egui::Window::new(label).id(i);
                         m.areas().top_layer_id(egui::Order::Middle) == Some(inner.response.layer_id)
                     });
                     resp2.set(ResponseFlags::WINDOW_TOPMOST, topmost);
+                    // TITLE_DOUBLE_CLICKED: egui's own title-bar widget,
+                    // present when the window is collapsible or dragged by
+                    // its title bar (dragFromTitleBar) — on a collapsible
+                    // window egui has already toggled collapse on it. A
+                    // window egui made unmovable (fixed_rect, as while
+                    // maximized) has no such widget, so a primary
+                    // double-click in the band above the content, on this
+                    // window's layer, counts too.
+                    let wrect = inner.response.rect;
+                    let layer = inner.response.layer_id;
+                    let in_band = content_top.is_finite()
+                        && c.input(|i| {
+                            i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                                && i.pointer.interact_pos().is_some_and(|p| {
+                                    p.y >= wrect.top()
+                                        && p.y < content_top
+                                        && p.x >= wrect.left()
+                                        && p.x <= wrect.right()
+                                })
+                        })
+                        && c.input(|i| i.pointer.interact_pos()).and_then(|p| c.layer_id_at(p))
+                            == Some(layer);
+                    let title_dbl = in_band
+                        || c.read_response(i.with("__title_click"))
+                            .is_some_and(|r| r.double_clicked());
+                    resp2.set(ResponseFlags::TITLE_DOUBLE_CLICKED, title_dbl);
                     if inner.inner.is_none() {
                         // collapsed
                         resp2.insert(ResponseFlags::BLOCK_SKIPPED);

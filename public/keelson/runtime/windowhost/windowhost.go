@@ -108,6 +108,12 @@ type window struct {
 	// flags. Render-thread only.
 	focusHandle widgethandle.WidgetHandle
 
+	// maximized pins the window to the desktop rect left free by the
+	// shell's panels. A title-bar double-click toggles it, read off
+	// focusHandle one frame late; egui keeps the rect to restore to.
+	// Render-thread only.
+	maximized bool
+
 	// ops serves the app's operations catalog for this window (ADR-0269);
 	// nil when the app declares none or the instance does not serve it.
 	// Created on the render goroutine after Mount; read by the operation
@@ -1122,11 +1128,22 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		openBindingId := openBindingIdFor(w.key)
 		sm.AddR10Databinding(openBindingId, &w.openFlag)
 		ww, hh := windowDefaultSize(w.manifest.SurfaceHints)
+		if sm.GetResponse(w.focusHandle).HasTitleDoubleClicked() {
+			w.maximized = !w.maximized
+		}
+		// Not collapsible: egui collapses on a title-bar double-click,
+		// which here maximizes instead. Dragging by the title bar only
+		// gives egui's title widget (the double-click source) a place on a
+		// non-collapsible window, and keeps drags in app content from
+		// moving the window.
 		wf := c.Window(winId, c.WidgetText().Text(title).Keep()).
 			Resizable(true).
+			Collapsible(false).
 			TitleBar(true).
+			DragFromTitleBar(true).
 			DefaultOpen(true).
 			DefaultSize(ww, hh).
+			Maximized(w.maximized).
 			OpenBound(openBindingId)
 		// The handle feeds next frame's active-window decision; the
 		// focus stamp is this frame's answer, set before the app's

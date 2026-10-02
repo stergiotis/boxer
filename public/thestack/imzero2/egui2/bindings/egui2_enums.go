@@ -36,6 +36,11 @@ const (
 	// widget reports it clear. Read it off a WindowFluid.Handle() one frame
 	// later, like any r7-derived signal.
 	WindowTopmostResponseFlags ResponseFlagsE = 1 << 21
+	// TitleDoubleClickedResponseFlags: the window's title bar was
+	// double-clicked (fenums.rs TITLE_DOUBLE_CLICKED). Set only by the
+	// Window apply arm; needs a title-bar widget, i.e. a collapsible window
+	// or one built with DragFromTitleBar(true).
+	TitleDoubleClickedResponseFlags ResponseFlagsE = 1 << 22
 
 	// Bit 30 is free. It was NodelikeSelectedFlags, the egui_ltreeview
 	// binding's only read-back, retired with the binding in ADR-0176. Left as
@@ -68,6 +73,7 @@ var AllResponseFlags = []ResponseFlagsE{
 	ShouldCloseResponseFlags,
 	IsTooltipOpenResponseFlags,
 	WindowTopmostResponseFlags,
+	TitleDoubleClickedResponseFlags,
 	BlockSkippedFlags,
 }
 
@@ -168,6 +174,9 @@ func (inst ResponseFlagsE) HasIsTooltipOpen() bool {
 }
 func (inst ResponseFlagsE) HasWindowTopmost() bool {
 	return inst.Has(WindowTopmostResponseFlags)
+}
+func (inst ResponseFlagsE) HasTitleDoubleClicked() bool {
+	return inst.Has(TitleDoubleClickedResponseFlags)
 }
 func (inst ResponseFlagsE) HasBlockSkipped() bool {
 	return inst.Has(BlockSkippedFlags)

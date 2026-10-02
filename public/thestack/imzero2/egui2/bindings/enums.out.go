@@ -864,19 +864,21 @@ const (
 const (
 	WindowMethodIdBuild WindowMethodIdE = 0
 
-	WindowMethodIdDefaultOpen   WindowMethodIdE = 1
-	WindowMethodIdEnabled       WindowMethodIdE = 2
-	WindowMethodIdInteractable  WindowMethodIdE = 3
-	WindowMethodIdMovable       WindowMethodIdE = 4
-	WindowMethodIdResizable     WindowMethodIdE = 5
-	WindowMethodIdCollapsible   WindowMethodIdE = 6
-	WindowMethodIdTitleBar      WindowMethodIdE = 7
-	WindowMethodIdDefaultWidth  WindowMethodIdE = 8
-	WindowMethodIdDefaultHeight WindowMethodIdE = 9
-	WindowMethodIdDefaultSize   WindowMethodIdE = 10
-	WindowMethodIdDefaultPos    WindowMethodIdE = 11
-	WindowMethodIdMinWidth      WindowMethodIdE = 12
-	WindowMethodIdMinHeight     WindowMethodIdE = 13
-	WindowMethodIdAlwaysOnTop   WindowMethodIdE = 14
-	WindowMethodIdOpenBound     WindowMethodIdE = 15
+	WindowMethodIdDefaultOpen      WindowMethodIdE = 1
+	WindowMethodIdEnabled          WindowMethodIdE = 2
+	WindowMethodIdInteractable     WindowMethodIdE = 3
+	WindowMethodIdMovable          WindowMethodIdE = 4
+	WindowMethodIdResizable        WindowMethodIdE = 5
+	WindowMethodIdCollapsible      WindowMethodIdE = 6
+	WindowMethodIdTitleBar         WindowMethodIdE = 7
+	WindowMethodIdDefaultWidth     WindowMethodIdE = 8
+	WindowMethodIdDefaultHeight    WindowMethodIdE = 9
+	WindowMethodIdDefaultSize      WindowMethodIdE = 10
+	WindowMethodIdDefaultPos       WindowMethodIdE = 11
+	WindowMethodIdMinWidth         WindowMethodIdE = 12
+	WindowMethodIdMinHeight        WindowMethodIdE = 13
+	WindowMethodIdAlwaysOnTop      WindowMethodIdE = 14
+	WindowMethodIdOpenBound        WindowMethodIdE = 15
+	WindowMethodIdDragFromTitleBar WindowMethodIdE = 16
+	WindowMethodIdMaximized        WindowMethodIdE = 17
 )
