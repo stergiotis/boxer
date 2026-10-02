@@ -39,9 +39,12 @@ type Description struct {
 	Configured   bool
 	Model        string
 	EndpointHost string
-	// Local says the endpoint is loopback: the sensitivity wall (§SD3)
-	// admits confined content there and nowhere else.
+	// Local says the sensitivity wall (§SD3) admits confined content to the
+	// endpoint: it is loopback, or a host the deployment trusts.
 	Local bool
+	// Trusted says Local holds only because BOXER_LLM_TRUSTED_HOSTS lists
+	// the endpoint's host.
+	Trusted bool
 	// MaxTokens is the host's ceiling when a request names none.
 	MaxTokens int32
 	// Reason says why nothing is configured.
@@ -158,7 +161,8 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 	if err != nil {
 		return
 	}
-	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, MaxTokens: w.MaxTokens, Reason: w.Reason}
+	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, Trusted: w.Trusted,
+		MaxTokens: w.MaxTokens, Reason: w.Reason}
 	return
 }
 

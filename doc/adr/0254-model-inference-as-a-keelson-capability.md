@@ -384,6 +384,23 @@ call; the key is scoped to the sender, so one app cannot stop another's
 call. The verb falls under the existing `llm.*` grant. `Service.Close`
 cancels the calls in flight and waits for them.
 
+### 2026-10-02 — trusted hosts
+
+§SD3's locality exemption had one form, a loopback endpoint, so a model on
+another machine the deployment controls — a GPU box on the LAN — could take
+confined content only through an SSH tunnel to `localhost`.
+`BOXER_LLM_TRUSTED_HOSTS` lists endpoint hosts, by name or IP and without
+port, that the wall treats as it treats loopback. It is narrow by
+construction: a host matches by its exact name, never as a suffix; nothing
+else about the wall changes; and a provider whose host is not listed is
+refused as before, the refusal now saying "neither loopback nor a trusted
+host". It is visible: the service logs a warning at start, `llm.describe`
+reports `trusted` beside `local`, and the chat's model line says "trusted
+host". The agent service reads `local` (ADR-0269 §SD7), so a trusted host's
+model also reads confined results rather than handles. The list is the
+deployment's declaration that the host is its own; prefer an `https`
+endpoint, since the wall does not see the transport.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

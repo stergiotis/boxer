@@ -67,6 +67,7 @@ type wireDescribe struct {
 	Model        string `json:"model,omitempty"`
 	EndpointHost string `json:"endpoint_host,omitempty"`
 	Local        bool   `json:"local,omitempty"`
+	Trusted      bool   `json:"trusted,omitempty"`
 	MaxTokens    int32  `json:"max_tokens,omitempty"`
 	Reason       string `json:"reason,omitempty"`
 }

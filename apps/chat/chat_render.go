@@ -77,7 +77,12 @@ func (inst *App) renderBar() {
 		case !inst.answered:
 			c.Label("asking the host for a model…").Selectable(false).Send()
 		case inst.model.Configured:
-			c.Label("→ " + inst.model.Model + " · " + inst.model.EndpointHost).Selectable(false).Send()
+			label := "→ " + inst.model.Model + " · " + inst.model.EndpointHost
+			if inst.model.Trusted {
+				// Not loopback: the deployment trusts it with sealed data.
+				label += " · trusted host"
+			}
+			c.Label(label).Selectable(false).Send()
 		}
 	}
 	inst.renderApps()

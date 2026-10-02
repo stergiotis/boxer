@@ -36,6 +36,10 @@ type Config struct {
 	MaxTokens int32
 	// Timeout bounds one completion on the service side.
 	Timeout time.Duration
+	// TrustedHosts are endpoint hosts treated like loopback by the
+	// sensitivity wall; matched case-insensitively against the endpoint's
+	// host name, without port.
+	TrustedHosts []string
 	// Retain is the ceiling on keeping text (ADR-0264 §SD1): ring keeps
 	// prompt and completion on the in-process records, durable also keeps
 	// the messages of retained requests on boxer.facts. Empty is off.
@@ -59,6 +63,17 @@ func ConfigFromEnv() (cfg Config) {
 	cfg = Config{
 		Endpoint: Endpoint.Get(), Model: Model.Get(), ApiKey: ApiKey.Get(),
 		MaxTokens: int32(MaxTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
+		TrustedHosts: ParseTrustedHosts(TrustedHosts.Get()),
+	}
+	return
+}
+
+// ParseTrustedHosts splits TrustedHosts' value.
+func ParseTrustedHosts(s string) (hosts []string) {
+	for _, h := range strings.Split(s, ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			hosts = append(hosts, h)
+		}
 	}
 	return
 }
@@ -81,9 +96,11 @@ type Service struct {
 	client     openaichat.ClientI
 	host       string
 	local      bool
-	busClient  *inprocbus.Client
-	unsubs     []func()
-	log        zerolog.Logger
+	// trusted says local holds by TrustedHosts, not loopback.
+	trusted   bool
+	busClient *inprocbus.Client
+	unsubs    []func()
+	log       zerolog.Logger
 	// base parents every completion's context; Close cancels it, then
 	// waits on inflight before it releases the clients the calls use.
 	base       context.Context
@@ -130,6 +147,11 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if cfg.Configured() {
 		s.host = EndpointHost(cfg.Endpoint)
 		s.local = isLocalEndpoint(cfg.Endpoint)
+		if !s.local && isTrustedEndpoint(cfg.Endpoint, cfg.TrustedHosts) {
+			s.local, s.trusted = true, true
+			s.log.Warn().Str("host", s.host).
+				Msg("llm: the endpoint is not loopback but BOXER_LLM_TRUSTED_HOSTS lists it; confined content may be sent to it")
+		}
 		s.client = cfg.Client
 		if s.client == nil {
 			// No retry policy on purpose: this backs interactive gestures,
@@ -202,7 +224,8 @@ func (inst *Service) Describe() (d Description) {
 		d.Reason = "no model is configured on this host (BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL)"
 		return
 	}
-	d = Description{Configured: true, Model: inst.cfg.Model, EndpointHost: inst.host, Local: inst.local, MaxTokens: inst.cfg.MaxTokens}
+	d = Description{Configured: true, Model: inst.cfg.Model, EndpointHost: inst.host, Local: inst.local, Trusted: inst.trusted,
+		MaxTokens: inst.cfg.MaxTokens}
 	return
 }
 
@@ -218,7 +241,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	switch msg.Subject {
 	case SubjectDescribe:
 		d := inst.Describe()
-		inst.reply(msg.Reply, wireDescribe{Configured: d.Configured, Model: d.Model, EndpointHost: d.EndpointHost, Local: d.Local, MaxTokens: d.MaxTokens, Reason: d.Reason})
+		inst.reply(msg.Reply, wireDescribe{Configured: d.Configured, Model: d.Model, EndpointHost: d.EndpointHost, Local: d.Local,
+			Trusted: d.Trusted, MaxTokens: d.MaxTokens, Reason: d.Reason})
 	case SubjectComplete, SubjectRetainComplete:
 		inst.startComplete(msg, msg.Subject == SubjectRetainComplete)
 	default:
@@ -326,7 +350,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	// The sensitivity wall (ADR-0254 §SD3, the ADR-0145 rule): confined
 	// content leaves for a loopback provider and nowhere else.
 	if rec.Sensitivity == queryengine.SensitivityConfined && !inst.local {
-		inst.refuse(msg, "the content derives from sealed data that must not leave this box, and "+inst.host+" is not loopback", rec, t)
+		inst.refuse(msg, "the content derives from sealed data that must not leave this box, and "+inst.host+" is neither loopback nor a trusted host", rec, t)
 		return
 	}
 	maxTokens := req.MaxTokens
@@ -450,6 +474,22 @@ func isLocalEndpoint(endpoint string) (yes bool) {
 	}
 	if ip := net.ParseIP(h); ip != nil {
 		return ip.IsLoopback()
+	}
+	return false
+}
+
+// isTrustedEndpoint says the endpoint's host is one the deployment lists in
+// TrustedHosts.
+func isTrustedEndpoint(endpoint string, trusted []string) (yes bool) {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	h := u.Hostname()
+	for _, t := range trusted {
+		if strings.EqualFold(strings.Trim(t, "[]"), h) {
+			return true
+		}
 	}
 	return false
 }

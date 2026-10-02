@@ -50,6 +50,15 @@ var (
 		Category:    env.CategoryLLM,
 	})
 
+	// TrustedHosts are endpoint hosts the deployment declares under its own
+	// control: the sensitivity wall (ADR-0254 §SD3) treats them as it treats
+	// loopback, so confined content may reach them.
+	TrustedHosts = env.NewString(env.Spec{
+		Name:        "BOXER_LLM_TRUSTED_HOSTS",
+		Description: "comma-separated endpoint host names or IPs, without port, that the llm service treats like loopback: confined (sealed) content may be sent to them; list only machines under your own control, and prefer an https endpoint",
+		Category:    env.CategoryLLM,
+	})
+
 	// Retain is the deployment's ceiling on keeping message text (ADR-0264
 	// §SD1, replacing ADR-0254's BOXER_LLM_KEEP_MESSAGES): off keeps sizes
 	// and counts only; ring keeps prompt and completion text on this
