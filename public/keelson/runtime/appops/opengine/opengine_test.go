@@ -2,6 +2,7 @@ package opengine
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,8 @@ func newHarness(t *testing.T) *harness {
 	set := editorSet()
 	ed := &editor{text: "start"}
 	h := &harness{t: t, ed: ed, eng: New(set.Catalog(), set.Bind(ed))}
-	h.frame(nil) // the first frame records the starting values
+	h.eng.SetAttached(true) // a task works in the window, so each frame builds the view
+	h.frame(nil)            // the first frame records the starting values
 	return h
 }
 
@@ -181,6 +183,7 @@ func TestCancelAndExpireOnlyTouchQueuedCommands(t *testing.T) {
 	assert.Equal(t, opwire.PhaseExpired, st.Phase)
 	h.frame(nil)
 	assert.Equal(t, "start", h.ed.text)
+	h.eng.SetAttached(false)
 	assert.False(t, h.eng.Busy())
 }
 
@@ -205,10 +208,101 @@ func TestTheAppsOwnChangesAndGesturesAreAttributed(t *testing.T) {
 func TestQueryBeforeTheFirstSnapshotIsRefused(t *testing.T) {
 	set := editorSet()
 	eng := New(set.Catalog(), set.Bind(&editor{}))
+	eng.queryWait = 10 * time.Millisecond
 	out := eng.Submit("get_text", opwire.CallRequest{CallId: "q"})
 	assert.Equal(t, opwire.PhaseRefused, out.Phase)
 	out = eng.Submit("nope", opwire.CallRequest{CallId: "n"})
 	assert.Equal(t, opwire.PhaseRefused, out.Phase)
+}
+
+func TestNoViewIsBuiltWhileNoOneCanReadIt(t *testing.T) {
+	set := editorSet()
+	views := 0
+	ed := &editor{text: "start"}
+	eng := New(set.Catalog(), countingHandler{OperationsHandlerI: set.Bind(ed), views: &views})
+	for range 3 {
+		eng.BeginFrame()
+		eng.ApplyQueued()
+		eng.TakeSnapshot()
+		eng.EndFrame()
+	}
+	assert.Zero(t, views, "an instance no task works in builds no view")
+	_, asOf := eng.SnapshotRevisions()
+	assert.Equal(t, uint64(3), asOf, "the revisions are still taken each frame")
+	eng.SetAttached(true)
+	eng.BeginFrame()
+	eng.ApplyQueued()
+	eng.TakeSnapshot()
+	assert.Equal(t, 1, views)
+}
+
+// A task's first query can arrive before the frame that follows its
+// attachment; it waits for that frame instead of being refused.
+func TestAQueryWaitsForTheNextFrameToBuildAView(t *testing.T) {
+	set := editorSet()
+	ed := &editor{text: "start"}
+	eng := New(set.Catalog(), set.Bind(ed))
+	eng.BeginFrame()
+	eng.ApplyQueued()
+	eng.TakeSnapshot()
+	eng.EndFrame()
+	done := make(chan opwire.Outcome)
+	go func() { done <- eng.Submit("get_text", opwire.CallRequest{CallId: "q"}) }()
+	require.Eventually(t, eng.Busy, time.Second, time.Millisecond, "a waiting query asks for frames")
+	eng.BeginFrame()
+	eng.ApplyQueued()
+	eng.TakeSnapshot()
+	out := <-done
+	require.Equal(t, opwire.PhaseCompleted, out.Phase)
+	assert.Equal(t, uint64(2), out.AsOf)
+	res, err := buscodec.Decode[textResult](out.Result)
+	require.NoError(t, err)
+	assert.Equal(t, "start", res.Text)
+	assert.False(t, eng.Busy())
+}
+
+func TestAQueryThatNoFrameAnswersIsRefused(t *testing.T) {
+	set := editorSet()
+	eng := New(set.Catalog(), set.Bind(&editor{}))
+	eng.queryWait = 10 * time.Millisecond
+	eng.BeginFrame()
+	eng.ApplyQueued()
+	eng.TakeSnapshot()
+	out := eng.Submit("get_text", opwire.CallRequest{CallId: "q"})
+	assert.Equal(t, opwire.PhaseRefused, out.Phase)
+	assert.Equal(t, "the window has not drawn yet", out.Reason)
+	assert.False(t, eng.Busy())
+}
+
+// A command is checked for availability even when no view was built.
+func TestUnavailableCommandIsRefusedWithoutAView(t *testing.T) {
+	set := editorSet()
+	ed := &editor{text: "start", disabled: true}
+	eng := New(set.Catalog(), set.Bind(ed))
+	eng.BeginFrame()
+	eng.ApplyQueued()
+	eng.TakeSnapshot()
+	eng.EndFrame()
+	revs, _ := eng.SnapshotRevisions()
+	args, err := buscodec.Encode(setTextArgs{Text: "agent"})
+	require.NoError(t, err)
+	eng.Submit("set_text", opwire.CallRequest{CallId: "c", Args: args, Expects: map[string]uint64{"text": revs["text"]},
+		Writer: opwire.WriterTask("t1")})
+	eng.BeginFrame()
+	eng.ApplyQueued()
+	st, _ := eng.Status("c")
+	assert.Equal(t, opwire.PhaseRefused, st.Phase)
+	assert.Equal(t, "start", ed.text)
+}
+
+type countingHandler struct {
+	app.OperationsHandlerI
+	views *int
+}
+
+func (inst countingHandler) Snapshot() app.OperationsSnapshotI {
+	*inst.views++
+	return inst.OperationsHandlerI.Snapshot()
 }
 
 func TestSameComparesUncomparableValuesDeeply(t *testing.T) {
@@ -231,6 +325,7 @@ func TestUndoRestoresOnlyWhatStillHoldsTheCommandsValue(t *testing.T) {
 	})
 	ed := &editor{text: "start"}
 	h := &harness{t: t, ed: ed, eng: New(set.Catalog(), set.Bind(ed))}
+	h.eng.SetAttached(true)
 	h.frame(nil)
 	_, rev := h.read()
 	h.call("set_text", setTextArgs{Text: "agent"}, map[string]uint64{"text": rev})

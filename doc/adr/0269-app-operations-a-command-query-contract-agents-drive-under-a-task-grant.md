@@ -218,6 +218,11 @@ it.
 - The snapshot kept per instance is the latest; asking for an older `as_of`
   returns `expired`. A result lives while the task or the instance that
   produced it lives.
+- The app's query view is built only for a frame in which someone can read
+  it: a task is attached, or a query waits. A query that finds no view (the
+  first after an attachment) waits for the next frame, bounded above the
+  host's idle heartbeat, rather than being refused; an instance no task works
+  in pays for its revisions only.
 
 ### SD2 — The catalog is a property of the app
 

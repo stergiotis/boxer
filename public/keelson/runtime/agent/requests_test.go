@@ -207,7 +207,7 @@ func TestAProposalGoesStaleWhenItsResourceMoves(t *testing.T) {
 	r, g := approvedRig(t, ModeSuggest)
 	r.call(g, "q", "get_text", "{}")
 	r.call(g, "w", "set_text", `{"text":"suggested"}`)
-	r.host.docs[7].text = "the person moved on"
+	r.host.person(7, func(d *doc) { d.text = "the person moved on" })
 	r.host.frame(7)
 	r.decideProposal(true, false)
 	st, err := r.cli.Status(context.Background(), g.Handle, "w", 0)

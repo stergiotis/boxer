@@ -14,7 +14,7 @@ import (
 func TestConfinedContentStaysAHandleForARemoteModel(t *testing.T) {
 	r := newRig(t, true)
 	ctx := context.Background()
-	r.host.docs[7].confined = true
+	r.host.person(7, func(d *doc) { d.confined = true })
 	r.host.frame(7)
 	g := r.grant(ModeAct)
 	q := r.call(g, "q", "get_text", "{}")
@@ -37,7 +37,7 @@ func TestConfinedContentReachesALocalModel(t *testing.T) {
 		cfg.TestGrants = true
 		cfg.ModelLocal = func() bool { return true }
 	})
-	r.host.docs[7].confined = true
+	r.host.person(7, func(d *doc) { d.confined = true })
 	r.host.frame(7)
 	g := r.grant(ModeAct)
 	q := r.call(g, "q", "get_text", "{}")

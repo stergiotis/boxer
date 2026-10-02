@@ -15,7 +15,7 @@ func TestThePersonsChangePausesTheTaskUntilTurn(t *testing.T) {
 	ctx := context.Background()
 	g := r.grant(ModeAct)
 	r.call(g, "q1", "get_text", "{}")
-	r.host.docs[7].text = "the person's"
+	r.host.person(7, func(d *doc) { d.text = "the person's" })
 	r.host.frame(7)
 
 	out := r.call(g, "w1", "set_text", `{"text":"agent"}`)
@@ -43,7 +43,7 @@ func TestThePersonsChangePausesTheTaskUntilTurn(t *testing.T) {
 func TestAChangeTheTaskDidNotReadDoesNotPause(t *testing.T) {
 	r := newRig(t, true)
 	g := r.grant(ModeAct)
-	r.host.docs[7].text = "the person's"
+	r.host.person(7, func(d *doc) { d.text = "the person's" })
 	r.host.frame(7)
 	r.call(g, "q", "get_text", "{}")
 	assert.Equal(t, "accepted", r.call(g, "w", "set_text", `{"text":"agent"}`).Phase)
@@ -62,7 +62,7 @@ func TestEventsAnnounceChangesWithoutContent(t *testing.T) {
 	require.NoError(t, err)
 	defer unsub()
 	r.call(g, "q", "get_text", "{}")
-	r.host.docs[7].text = "the person's"
+	r.host.person(7, func(d *doc) { d.text = "the person's" })
 	r.host.frame(7)
 	require.Eventually(t, func() bool {
 		mu.Lock()
