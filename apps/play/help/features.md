@@ -458,8 +458,9 @@ it uses.
   `ps` and `qs`. Matching is on the column name, so alias your columns. A
   column that declares a gloss in its name matches on its label, so
   `body@text/markdown` is still Chat's `body` and `value@gloss/bytes` is still
-  Icicle's `value`. Kanban, Network, Graphview, Sankey and the Timeline's
-  reserved `_tl_*` slots match the bare name only.
+  Icicle's `value`. Two exceptions match the bare name only: the Timeline's
+  reserved `_tl_*` slots, and Kanban's `dot_<label>@<tone>` tallies, whose
+  `@` names a colour.
 - **Typed columns of the active result.** Series takes the first time-typed
   column as its axis and every numeric column as a lane, whatever they are
   called.
@@ -479,10 +480,9 @@ two panes show two CTEs of one query side by side.
 
 A pane whose required input does not match shows its reason in place of the
 picture, naming the columns it wanted and usually a `SELECT` that would satisfy
-it. An **optional** CTE that does not match, such as a `vertices` CTE without
-an `id`, is dropped and the pane draws without it. Series says so in its status
-line; the other panes drop it silently, so when a decoration seems to be
-ignored, check its column names first.
+it. An **optional** CTE that ran but does not match, such as a `vertices` CTE
+without an `id`, is left out and the pane draws without it, with one line above
+the picture naming the CTE and what it lacked.
 
 The tab titles carry one mark each: `-` when the pane cannot draw what the
 last Run would hand it, `*` when it writes a signal the buffer reads, and `!`
@@ -1000,8 +1000,8 @@ drawn as a min/max envelope, so a one-sample spike survives. Clicking writes
 Two optional CTEs overlay the plot. `scores` (a time column plus a numeric
 `score`, optional `warm_up`) adds a linked score plot underneath, and `spans`
 (`_tl_band_from`, `_tl_band_to`, `_tl_band_color`, optional `_tl_band_label`)
-shades ranges. When either CTE fails, is still running, or has columns the
-overlay cannot use, the status line names it and the reason.
+shades ranges. When either CTE fails or is still running, the status line
+says so.
 
 The `ts*` functions produce exactly those shapes. They run **in play**, not on
 the server: `tsSmooth(t, v, halfWidth)`, `tsProfile(t, v, window)`,

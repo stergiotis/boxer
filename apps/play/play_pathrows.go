@@ -133,6 +133,22 @@ func pathColumnLabel(name string) string {
 	return name
 }
 
+// fieldIndexByLabel is the column a contract or a selector names: the first
+// field whose name, or failing that whose gloss label, is name; -1 when none.
+// The exact name wins so a result carrying both `mass` and `mass@gloss/kg`
+// resolves to the one spelled as asked.
+func fieldIndexByLabel(schema *arrow.Schema, name string) int {
+	if ci := schema.FieldIndices(name); len(ci) > 0 {
+		return ci[0]
+	}
+	for ci, f := range schema.Fields() {
+		if pathColumnLabel(f.Name) == name {
+			return ci
+		}
+	}
+	return -1
+}
+
 // pathContractHint is the empty state, and it names the shortest query that
 // satisfies the contract rather than describing it in the abstract.
 const pathContractHint = "Run a query with a `path` column — `SELECT * FROM fs('<mount>')`, or any result naming one — to browse it as files."

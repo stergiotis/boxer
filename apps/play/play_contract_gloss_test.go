@@ -58,21 +58,109 @@ func TestSeriesScoresMatchesGlossLabel(t *testing.T) {
 	assert.Empty(t, reason)
 }
 
-// The overlay lanes used to fail without a word: the dispatcher drops an
-// optional channel's reject, and the lane's own error never left the demand.
+// The overlay lanes used to fail without a word: the lane's own error never
+// left the demand.
 func TestSeriesAuxNote(t *testing.T) {
-	bad := glossSchema(arrow.Field{Name: "n", Type: arrow.PrimitiveTypes.Int64})
-
-	notes := seriesAuxNote(seriesScoresNodeID, errors.New("UNKNOWN_TABLE\nmore"), false, nil, acceptSeriesScores)
+	notes := seriesAuxNote(seriesScoresNodeID, errors.New("UNKNOWN_TABLE\nmore"), false, nil)
 	assert.Equal(t, []string{"`scores` query failed: UNKNOWN_TABLE"}, notes, "an error outranks the rest, first line only")
 
-	notes = seriesAuxNote(seriesSpansNodeID, nil, true, nil, acceptSeriesSpans)
+	notes = seriesAuxNote(seriesSpansNodeID, nil, true, nil)
 	assert.Equal(t, []string{"`spans` …"}, notes)
 
-	notes = seriesAuxNote(seriesScoresNodeID, nil, false, bad, acceptSeriesScores)
-	require.Len(t, notes, 1)
-	assert.Contains(t, notes[0], "`scores` not drawn: A `scores` CTE needs")
-
-	assert.Empty(t, seriesAuxNote(seriesScoresNodeID, nil, false, nil, acceptSeriesScores),
+	served := glossSchema(arrow.Field{Name: "n", Type: arrow.PrimitiveTypes.Int64})
+	assert.Empty(t, seriesAuxNote(seriesScoresNodeID, nil, false, served),
+		"a served result the channel refuses is the dispatcher's to report")
+	assert.Empty(t, seriesAuxNote(seriesScoresNodeID, nil, false, nil),
 		"no split node, nothing served: no note")
+}
+
+// An optional channel offered a real result and refusing it is reported; one
+// offered nothing (no such CTE) is not, since that is the ordinary case.
+func TestNegotiateReportsRefusedOptionalChannel(t *testing.T) {
+	flows := glossSchema(
+		arrow.Field{Name: "source", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "target", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "value", Type: arrow.PrimitiveTypes.Float64},
+	)
+	noID := glossSchema(arrow.Field{Name: "label", Type: arrow.BinaryTypes.String})
+
+	filled, refused, reject := negotiateChannels(sankeyPanel{}, map[ChannelID]channelInput{
+		chFlows: {node: sankeyFlowsNodeID, schema: flows},
+		chNodes: {node: sankeyNodesNodeID, schema: noID},
+	})
+	require.Empty(t, reject)
+	assert.Contains(t, filled, chFlows)
+	assert.NotContains(t, filled, chNodes)
+	require.Len(t, refused, 1)
+	assert.Equal(t, "nodes", refused[0].Label)
+	assert.Contains(t, refused[0].String(), "`nodes` not used: ")
+
+	_, refused, reject = negotiateChannels(sankeyPanel{}, map[ChannelID]channelInput{
+		chFlows: {node: sankeyFlowsNodeID, schema: flows},
+	})
+	require.Empty(t, reject)
+	assert.Empty(t, refused, "no `nodes` CTE offered: nothing to report")
+
+	_, refused, reject = negotiateChannels(sankeyPanel{}, map[ChannelID]channelInput{
+		chNodes: {node: sankeyNodesNodeID, schema: noID},
+	})
+	assert.NotEmpty(t, reject, "the required channel's reason wins")
+	assert.Empty(t, refused)
+}
+
+func TestKanbanContractMatchesGlossLabel(t *testing.T) {
+	k, reason := resolveKanbanColumns(glossSchema(
+		arrow.Field{Name: "lane", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "title@text/markdown", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "dot_open@warning", Type: arrow.PrimitiveTypes.Uint64},
+	))
+	require.Empty(t, reason)
+	assert.Equal(t, 1, k.titleCol)
+	require.Len(t, k.dots, 1, "a dot's `@` is a tone, not a gloss: still a tally")
+	assert.Equal(t, "open", k.dots[0].label)
+}
+
+func TestNetworkContractMatchesGlossLabel(t *testing.T) {
+	ec, reason := resolveNetworkEdges(glossSchema(
+		arrow.Field{Name: "source", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "target", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "label@text/markdown", Type: arrow.BinaryTypes.String},
+	))
+	require.Empty(t, reason)
+	assert.Equal(t, 2, ec.labelCol)
+
+	vc, reason := resolveNetworkVertices(glossSchema(
+		arrow.Field{Name: "id", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "weight@gloss/bytes", Type: arrow.PrimitiveTypes.Float64},
+	))
+	require.Empty(t, reason)
+	assert.Equal(t, 1, vc.weightCol)
+}
+
+func TestSankeyContractMatchesGlossLabel(t *testing.T) {
+	fc, reason := resolveSankeyFlows(glossSchema(
+		arrow.Field{Name: "source", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "target", Type: arrow.BinaryTypes.String},
+		arrow.Field{Name: "value@gloss/bytes", Type: arrow.PrimitiveTypes.Float64},
+	))
+	require.Empty(t, reason)
+	assert.Equal(t, 2, fc.valCol)
+}
+
+// A Graphview selector names a vertices column by its label; the exact name
+// wins when a result carries both spellings.
+func TestFieldIndexByLabel(t *testing.T) {
+	s := glossSchema(
+		arrow.Field{Name: "mass@gloss/bytes", Type: arrow.PrimitiveTypes.Float64},
+		arrow.Field{Name: "id", Type: arrow.BinaryTypes.String},
+	)
+	assert.Equal(t, 0, fieldIndexByLabel(s, "mass"))
+	assert.Equal(t, 1, fieldIndexByLabel(s, "id"))
+	assert.Equal(t, -1, fieldIndexByLabel(s, "nope"))
+
+	both := glossSchema(
+		arrow.Field{Name: "mass@gloss/bytes", Type: arrow.PrimitiveTypes.Float64},
+		arrow.Field{Name: "mass", Type: arrow.PrimitiveTypes.Float64},
+	)
+	assert.Equal(t, 1, fieldIndexByLabel(both, "mass"))
 }

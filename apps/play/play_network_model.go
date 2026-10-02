@@ -333,7 +333,9 @@ func acceptGraphChannel(ch ChannelID, schema *arrow.Schema) (claim ChannelClaim,
 func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason string) {
 	ec = noEdgesClaim()
 	for ci, f := range schema.Fields() {
-		switch f.Name {
+		// Matched on the gloss label (pathColumnLabel), like every named-column
+		// contract: `label@text/markdown` is still the contract's `label`.
+		switch pathColumnLabel(f.Name) {
 		case networkSourceCol:
 			ec.srcCol = ci
 		case networkTargetCol:
@@ -399,7 +401,7 @@ func resolveNetworkEdges(schema *arrow.Schema) (ec networkEdgesClaim, reason str
 func resolveNetworkVertices(schema *arrow.Schema) (vc networkVerticesClaim, reason string) {
 	vc = noVerticesClaim()
 	for ci, f := range schema.Fields() {
-		switch f.Name {
+		switch pathColumnLabel(f.Name) { // the gloss label, as for edges
 		case networkIDCol:
 			vc.idCol = ci
 		case networkLabelCol:
@@ -881,18 +883,18 @@ func buildNetModelWith(edgesRec arrow.RecordBatch, ec networkEdgesClaim, vertRec
 	var extras []extraRef
 	if vertRec != nil && len(extra) > 0 {
 		for _, name := range extra {
-			ci := vertRec.Schema().FieldIndices(name)
-			if len(ci) == 0 {
+			col := fieldIndexByLabel(vertRec.Schema(), name)
+			if col < 0 {
 				continue
 			}
-			f := vertRec.Schema().Field(ci[0])
+			f := vertRec.Schema().Field(col)
 			switch {
 			case chrows.IsNumeric(f.Type):
-				extras = append(extras, extraRef{name: name, col: ci[0], kind: 1})
+				extras = append(extras, extraRef{name: name, col: col, kind: 1})
 			case chrows.IsStringLike(f.Type):
-				extras = append(extras, extraRef{name: name, col: ci[0], kind: 2})
+				extras = append(extras, extraRef{name: name, col: col, kind: 2})
 			case netIsStringList(f.Type):
-				extras = append(extras, extraRef{name: name, col: ci[0], kind: 3})
+				extras = append(extras, extraRef{name: name, col: col, kind: 3})
 			}
 		}
 	}

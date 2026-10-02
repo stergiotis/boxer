@@ -236,10 +236,9 @@ type SeriesDriver struct {
 	fixtureErr        error
 
 	// auxNotes are what the status line says about the optional `scores` /
-	// `spans` CTEs this frame: a query that failed or is still running, or a
-	// result the channel refused. The dispatcher drops an optional channel's
-	// reject silently, which for these two meant a buffer that names an
-	// overlay and gets none, with nothing on screen to say why.
+	// `spans` lanes this frame: a query that failed or is still running. A
+	// result the channel refuses is the dispatcher's to report, as for every
+	// pane's optional channels.
 	auxNotes []string
 
 	// adjudicate writes one verdict. Injected like `deliver`, so the driver
@@ -1044,13 +1043,13 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 	// the split has them, so a buffer without them reads as "no overlay"
 	// rather than as pending.
 	var notes []string
-	if r, s := inst.demandSeriesAux(seriesScoresNodeID, &inst.seriesScoresLane, acceptSeriesScores, &notes); r != nil || s != nil {
+	if r, s := inst.demandSeriesAux(seriesScoresNodeID, &inst.seriesScoresLane, &notes); r != nil || s != nil {
 		inputs[chScores] = channelInput{node: seriesScoresNodeID, rec: r, schema: s, sig: inst.frameSig}
 		if r != nil {
 			defer r.Release()
 		}
 	}
-	if r, s := inst.demandSeriesAux(seriesSpansNodeID, &inst.seriesSpansLane, acceptSeriesSpans, &notes); r != nil || s != nil {
+	if r, s := inst.demandSeriesAux(seriesSpansNodeID, &inst.seriesSpansLane, &notes); r != nil || s != nil {
 		inputs[chSpans] = channelInput{node: seriesSpansNodeID, rec: r, schema: s, sig: inst.frameSig}
 		if r != nil {
 			defer r.Release()
@@ -1150,11 +1149,9 @@ func (inst *PlayApp) forgetSeriesLanes() {
 }
 
 // demandSeriesAux drives one optional CTE on its own lane, the Sankey's
-// demandSankeyNodes shape with the node id as a parameter. What the reader
-// should know about the lane — a failed or running query, or a result accept
-// refuses — is appended to notes for the status line.
-func (inst *PlayApp) demandSeriesAux(nodeID NodeID, lane **nodeLane,
-	accept func(*arrow.Schema) (ChannelClaim, string), notes *[]string) (rec arrow.RecordBatch, schema *arrow.Schema) {
+// demandSankeyNodes shape with the node id as a parameter. A failed or still
+// running lane is appended to notes for the status line.
+func (inst *PlayApp) demandSeriesAux(nodeID NodeID, lane **nodeLane, notes *[]string) (rec arrow.RecordBatch, schema *arrow.Schema) {
 	node, ok := findSplitNode(inst.currentSplit, nodeID)
 	if !ok {
 		return
@@ -1170,25 +1167,19 @@ func (inst *PlayApp) demandSeriesAux(nodeID NodeID, lane **nodeLane,
 	// which is exactly what this did until M2 wired the overlays and the
 	// channels came back empty.
 	v := (*lane).demand(compileNodeFor(inst.currentSplit, node, inst.lastRunBound, inst.frameSig))
-	*notes = append(*notes, seriesAuxNote(nodeID, v.err, v.loading, v.schema, accept)...)
+	*notes = append(*notes, seriesAuxNote(nodeID, v.err, v.loading, v.schema)...)
 	return v.rec, v.schema
 }
 
 // seriesAuxNote is the status-line wording for one overlay lane. Pure, so the
-// three outcomes are testable without a lane: an error outranks everything, a
-// lane still loading with nothing served says so, and a served schema the
-// channel refuses is named with the channel's own reason.
-func seriesAuxNote(nodeID NodeID, err error, loading bool, schema *arrow.Schema,
-	accept func(*arrow.Schema) (ChannelClaim, string)) (out []string) {
+// outcomes are testable without a lane: an error outranks everything, and a
+// lane still loading with nothing served says so.
+func seriesAuxNote(nodeID NodeID, err error, loading bool, schema *arrow.Schema) (out []string) {
 	switch {
 	case err != nil:
 		out = append(out, "`"+string(nodeID)+"` query failed: "+firstLine(err.Error()))
 	case loading && schema == nil:
 		out = append(out, "`"+string(nodeID)+"` …")
-	case schema != nil:
-		if _, why := accept(schema); why != "" {
-			out = append(out, "`"+string(nodeID)+"` not drawn: "+why)
-		}
 	}
 	return
 }
