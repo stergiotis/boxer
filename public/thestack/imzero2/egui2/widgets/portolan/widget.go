@@ -136,6 +136,13 @@ type Map struct {
 	hoverOk   bool
 	clicked   LatLng
 	clickedOk bool
+	// boxSelect turns a plain drag into a box that is reported rather than
+	// zoomed to (SetBoxSelect); boxSelecting marks a box begun that way, and
+	// selected/selectedOk the box a finished one reported this frame.
+	boxSelect    bool
+	boxSelecting bool
+	selected     LatLngBounds
+	selectedOk   bool
 	// instrumentation
 	bytesShipped uint64
 	frames       uint64
@@ -229,6 +236,13 @@ func (m *Map) Handles() (canvas, area widgethandle.WidgetHandle) {
 // to, so set it every frame it should hold.
 func (m *Map) SetPointerVeto(on bool) { m.pointerVeto = on }
 
+// SetBoxSelect turns box selection on or off. On, a plain drag draws the
+// box-zoom rectangle and, when released, reports its bounds in
+// [Events.Selected] instead of zooming to it; panning by drag is off while it
+// holds, and the wheel, the pinch, the keys and Escape (which drops a box in
+// progress) work as before. The setting holds until changed.
+func (m *Map) SetBoxSelect(on bool) { m.boxSelect = on }
+
 // Source is the tile source in use.
 func (m *Map) Source() TileSource { return m.opts.Source }
 
@@ -280,6 +294,10 @@ type Events struct {
 	// was one.
 	Clicked   LatLng
 	ClickedOk bool
+	// Selected is the box a drag drew and released last frame while box
+	// selection was on (SetBoxSelect); SelectedOk says there was one.
+	Selected   LatLngBounds
+	SelectedOk bool
 }
 
 // ViewHash changes whenever the view does — centre, zoom or size — for
@@ -417,7 +435,9 @@ func (m *Map) RenderFill(fallbackW, fallbackH float32, overlay func(Projector)) 
 // the tiles and before the canvas is flushed, to paint on top with c.Paint*
 // in canvas coordinates through the Projector.
 func (m *Map) Render(w, h float32, overlay func(Projector)) (ev Events) {
-	defer func() { ev = Events{ViewEvents: m.events, Clicked: m.clicked, ClickedOk: m.clickedOk} }()
+	defer func() {
+		ev = Events{ViewEvents: m.events, Clicked: m.clicked, ClickedOk: m.clickedOk, Selected: m.selected, SelectedOk: m.selectedOk}
+	}()
 	for range c.IdScope(m.ids.PrepareStr(m.key)) {
 		// The key-capturing Frame around the body: while it has focus (a
 		// click on the map gives it), the arrows pan and Escape cancels a box
@@ -454,7 +474,7 @@ func (m *Map) frame(w, h float32, overlay func(Projector)) {
 	wheel := sm.GetCanvasWheel(canvasH)
 	ptr := sm.GetPointer()
 
-	m.hoverOk, m.clickedOk = false, false
+	m.hoverOk, m.clickedOk, m.selectedOk = false, false, false
 	if live && !isNaN32(cur.OriginX) && !isNaN32(cur.OriginY) {
 		m.originX, m.originY, m.originOk = cur.OriginX, cur.OriginY, true
 	}
@@ -593,8 +613,9 @@ func (m *Map) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c
 			shift = cur.Shift()
 		}
 		switch {
-		case !m.opts.NoBoxZoom && shift:
+		case m.boxSelect || (!m.opts.NoBoxZoom && shift):
 			m.box.begin(origin)
+			m.boxSelecting = m.boxSelect
 		case !m.opts.NoDragging:
 			m.drag.start(v, origin, now, m.hopts)
 		}
@@ -605,7 +626,12 @@ func (m *Map) handleInput(cur, areaCur c.CanvasCursorValue, areaOk bool, flags c
 			m.box.move(pos)
 		}
 		if flags.HasDragStopped() {
-			m.box.finish(v)
+			if m.boxSelecting {
+				m.selected, m.selectedOk = m.box.end(v)
+			} else {
+				m.box.finish(v)
+			}
+			m.boxSelecting = false
 			m.pressOriginOk = false
 		}
 	case m.drag.active:

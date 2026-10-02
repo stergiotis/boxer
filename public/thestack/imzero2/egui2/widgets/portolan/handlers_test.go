@@ -988,3 +988,28 @@ func TestHandlerOptions_PartialLiteralKeepsLeafletDefaults(t *testing.T) {
 	assert.Equal(t, 0.2, got.EaseLinearity)
 	assert.True(t, math.IsInf(got.InertiaMaxSpeed, 1))
 }
+
+// Box selection's release reports the box it drew and leaves the view alone;
+// a press without a move reports nothing.
+func TestBoxSelectEndReportsWithoutZooming(t *testing.T) {
+	v := specView()
+	v.SetZoomAnimation(false)
+	v.SetView(LL(0, 0), 3)
+	v.TakeEvents()
+
+	var b boxZoom
+	b.begin(Pt(100, 100))
+	b.move(Pt(200, 200))
+	bounds, ok := b.end(v)
+	require.True(t, ok)
+	want := LatLngBoundsOf(v.ContainerPointToLatLng(Pt(100, 100)), v.ContainerPointToLatLng(Pt(200, 200)))
+	assert.True(t, want.Equals(bounds), "got %v want %v", bounds, want)
+	_, drawing := b.rect()
+	assert.False(t, drawing, "the box is gone once released")
+	assert.Equal(t, 3.0, v.Zoom(), "no zoom")
+	assert.False(t, v.TakeEvents().Any())
+
+	b.begin(Pt(50, 50))
+	_, ok = b.end(v)
+	assert.False(t, ok, "a press that never moved selects nothing")
+}

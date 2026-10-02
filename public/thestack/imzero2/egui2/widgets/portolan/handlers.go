@@ -366,6 +366,19 @@ func (b *boxZoom) finish(v *View) {
 	_ = v.FitBoundsAnimated(bounds, FitOptions{}, AnimateOptions{})
 }
 
+// end ends the gesture and returns the box that moved, without fitting it —
+// box selection's release.
+func (b *boxZoom) end(v *View) (bounds LatLngBounds, ok bool) {
+	if !b.active {
+		return
+	}
+	b.active = false
+	if !b.moved {
+		return
+	}
+	return LatLngBoundsOf(v.ContainerPointToLatLng(b.start), v.ContainerPointToLatLng(b.point)), true
+}
+
 // cancel is the Escape key.
 func (b *boxZoom) cancel() { b.active, b.moved = false, false }
 
