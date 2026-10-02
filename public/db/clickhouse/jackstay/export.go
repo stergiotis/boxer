@@ -172,7 +172,7 @@ func beginExport(dir string, srcEp Endpoint, inv *Inventory, plan *Plan, req Exp
 	switch {
 	case lerr == nil && !req.Restart:
 		if why := resumable(&old, srcEp, inv, plan, req); why != "" {
-			err = eb.Build().Str("dir", dir).Errorf("the pack holds an export of %s; ask for the same, or restart the export", why)
+			err = eb.Build().Str("dir", dir).Errorf("the pack holds an export of %s; ask for the same, or restart the export", why) //boxer:lint disable=CS013 reason="shape 2: why is a fixed noun phrase naming what differs"
 			return
 		}
 		m, resumed = old, true
@@ -205,6 +205,7 @@ func beginExport(dir string, srcEp Endpoint, inv *Inventory, plan *Plan, req Exp
 		SampleNum:     req.SampleNum,
 		SampleDen:     req.SampleDen,
 		Compression:   req.Compression,
+		Chunking:      req.Chunking,
 	}
 	return
 }
@@ -221,6 +222,8 @@ func resumable(old *PackManifest, srcEp Endpoint, inv *Inventory, plan *Plan, re
 		why = "another sample"
 	case old.Compression != req.Compression:
 		why = "another compression"
+	case old.Chunking != req.Chunking:
+		why = "another chunk layout"
 	}
 	return
 }
