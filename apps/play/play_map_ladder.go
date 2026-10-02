@@ -28,6 +28,13 @@ import (
 // climbing on its own; Refresh climbs regardless.
 const mapLadderBudget = 3 * time.Second
 
+// mapLadderFast is how quickly a level must have answered last time for a
+// restarted ladder to start there, skipping the coarser levels below it: on
+// a source that fast, the coarse levels add their own cost before a picture
+// the full level would have drawn almost as soon (the map-tile-addressing
+// trial measured about 45 % on the demo slice).
+const mapLadderFast = 300 * time.Millisecond
+
 // mapLadderFactors are the sample factors the convention derives, coarsest
 // first.
 var mapLadderFactors = [...]uint32{100, 10}
@@ -109,6 +116,9 @@ type mapLadder struct {
 	// fresh marks a ladder just restarted, for the raster memo to move it to
 	// the finest level it already holds.
 	fresh bool
+	// lastElapsed is how long each level's table took the last time its
+	// result landed, which picks where a restarted ladder starts.
+	lastElapsed map[string]time.Duration
 }
 
 // reset starts the ladder over when the inputs changed, and reports whether
@@ -117,10 +127,23 @@ func (inst *mapLadder) reset(inputs string, levels []mapLevel) (changed bool) {
 	if inputs == inst.inputs {
 		return false
 	}
-	inst.inputs, inst.levels, inst.level = inputs, levels, 0
+	inst.inputs, inst.levels, inst.level = inputs, levels, inst.startLevel(levels)
 	inst.stopped, inst.stoppedAfter = false, 0
 	inst.fresh = true
 	return true
+}
+
+// startLevel is where a restarted ladder begins: the finest level whose
+// table last answered within mapLadderFast, or the coarsest when none has —
+// a level never run, or one that ran slow, is measured from the bottom
+// again.
+func (inst *mapLadder) startLevel(levels []mapLevel) int {
+	for i := len(levels) - 1; i > 0; i-- {
+		if d, ok := inst.lastElapsed[levels[i].table]; ok && d <= mapLadderFast {
+			return i
+		}
+	}
+	return 0
 }
 
 // current is the level being demanded.
@@ -130,6 +153,10 @@ func (inst *mapLadder) current() mapLevel { return inst.levels[inst.level] }
 // climb to the next level unless it was the last, or the level overran the
 // budget. It reports whether the level moved.
 func (inst *mapLadder) served(elapsed time.Duration) (moved bool) {
+	if inst.lastElapsed == nil {
+		inst.lastElapsed = make(map[string]time.Duration)
+	}
+	inst.lastElapsed[inst.current().table] = elapsed
 	if inst.level+1 >= len(inst.levels) || inst.stopped {
 		return false
 	}

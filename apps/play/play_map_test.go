@@ -678,6 +678,8 @@ func TestMapDriverClimbsTheLadder(t *testing.T) {
 	}
 	require.Len(t, exec.asked(), 3, "an unchanged settle neither restarts nor re-runs")
 
+	// Forget the timings, so the pan measures from the bottom again.
+	d.ladder.lastElapsed = nil
 	d.updateViewport(47, 48, 9, 10, 64, 64, graphEmitter{graph: g})
 	params = resolveSignalNames(d.templateReads, nil, g.signals())
 	require.Eventually(t, func() bool {
@@ -685,6 +687,34 @@ func TestMapDriverClimbsTheLadder(t *testing.T) {
 		return len(exec.asked()) == 5 && !d.loading
 	}, 2*time.Second, time.Millisecond)
 	require.Equal(t, []string{"planes_mercator_sample100", "planes_mercator"}, exec.asked()[3:], "a pan starts over, without the missing level")
+
+	// With the full table measured fast, the next pan starts there.
+	d.updateViewport(47, 48, 10, 11, 64, 64, graphEmitter{graph: g})
+	params = resolveSignalNames(d.templateReads, nil, g.signals())
+	require.Eventually(t, func() bool {
+		d.demandRaster(params)
+		return len(exec.asked()) == 6 && !d.loading
+	}, 2*time.Second, time.Millisecond)
+	require.Equal(t, "planes_mercator", exec.asked()[5], "a fast source skips the coarse levels")
+}
+
+// A restarted ladder starts at the finest level that answered within
+// mapLadderFast last time, and back at the bottom once that level ran slow.
+func TestMapLadderStartsAtTheFinestFastLevel(t *testing.T) {
+	levels := mapLadderLevels("t_sample100", 1, true, nil)
+	var l mapLadder
+	require.True(t, l.reset("a", levels))
+	require.Equal(t, 0, l.level, "nothing measured yet")
+	require.True(t, l.served(50*time.Millisecond))
+	require.True(t, l.served(80*time.Millisecond))
+	require.False(t, l.served(120*time.Millisecond))
+
+	require.True(t, l.reset("b", levels))
+	require.Equal(t, 2, l.level, "the full table answered fast")
+	require.False(t, l.served(time.Second), "and this time it did not")
+
+	require.True(t, l.reset("c", levels))
+	require.Equal(t, 1, l.level, "the finest level still fast is the 10 % sample")
 }
 
 // The sparse shape scatters (pos, r, g, b, a) rows into a zeroed buffer in
@@ -777,6 +807,7 @@ func TestMapDriverServesARevisitFromMemory(t *testing.T) {
 	defer d.lane.close()
 	g := newQueryGraph(nil, nil)
 	visit := func(lon float64) {
+		d.ladder.lastElapsed = nil // every view climbs all three levels
 		d.updateViewport(47, 48, lon, lon+1, 64, 64, graphEmitter{graph: g})
 		params := resolveSignalNames(d.templateReads, nil, g.signals())
 		require.Eventually(t, func() bool {
