@@ -119,17 +119,13 @@ var (
 	glyphExpanded  = icons.PhCaretDown
 )
 
-// Id sequence bases, one per widget kind, so two kinds cannot land on the same
-// id for the same node. The high half is the ADR number, which makes a stray
-// id recognisable in a checkId warning. Everything is derived under the tree's
-// own IdScope, so two trees in one frame do not collide.
-const (
-	seqRowBase      uint64 = 0x0176_0100_0000_0000
-	seqDiscSlotBase uint64 = 0x0176_0200_0000_0000
-	seqDiscBase     uint64 = 0x0176_0300_0000_0000
-	seqCellBase     uint64 = 0x0176_0400_0000_0000
-	seqHeaderBase   uint64 = 0x0176_0500_0000_0000
-)
+// Ids: each widget kind — header, row, cell — has a literal scope of its own
+// under the tree's IdScope, and the node (and, for a cell, the column) is one
+// ordinal inside it, so two kinds cannot land on the same id for the same node
+// and two trees in one frame do not collide (ADR-0267 W5). The disclosure
+// control nests in the outline cell and inherits its node from there. The
+// stack composes by XOR, so a path must never carry the same key twice, nor
+// two ordinals that can trade places — either cancels the node out.
 
 // Row chrome colours, from the design-system roles rather than literals
 // (ADR-0031). Selection takes the accent role; the stripe takes the faintest
@@ -536,12 +532,14 @@ func (in Input) renderHeaders(et c.EndETableFluid, density styletokens.DensityE)
 	pad := cellInset(density)
 	header := func(col uint32, text string) {
 		for range et.Headers(0, col) {
-			for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase+uint64(col))).
-				OuterMargin(0).
-				InnerMarginSides(pad, pad, 0, 0).
-				KeepIter() {
-				atoms := c.Atoms().BeginRichText(text).Strong().End().Keep()
-				c.LabelAtoms(atoms).Selectable(false).Send()
+			for range c.IdScope(in.Ids.PrepareStr("header")) {
+				for range c.Frame(in.Ids.PrepareSeq(uint64(col))).
+					OuterMargin(0).
+					InnerMarginSides(pad, pad, 0, 0).
+					KeepIter() {
+					atoms := c.Atoms().BeginRichText(text).Strong().End().Keep()
+					c.LabelAtoms(atoms).Selectable(false).Send()
+				}
 			}
 		}
 	}
@@ -599,16 +597,18 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, r Row, rowH float32, 
 	}
 	var fr c.FrameFluid
 	for range et.Rows(uint64(rowIdx)) {
-		fr = c.Frame(in.Ids.PrepareSeq(seqRowBase+uint64(r.Node))).
-			Fill(fill).
-			Stroke(strokeWidth, stroke).
-			OuterMargin(0).
-			InnerMargin(0).
-			SenseClick().
-			HoverCursorPointer()
-		for range fr.KeepIter() {
-			c.UiSetMinWidthAvailable()
-			c.UiSetMinHeight(rowH - 2*strokeWidth)
+		for range c.IdScope(in.Ids.PrepareStr("row")) {
+			fr = c.Frame(in.Ids.PrepareSeq(uint64(r.Node))).
+				Fill(fill).
+				Stroke(strokeWidth, stroke).
+				OuterMargin(0).
+				InnerMargin(0).
+				SenseClick().
+				HoverCursorPointer()
+			for range fr.KeepIter() {
+				c.UiSetMinWidthAvailable()
+				c.UiSetMinHeight(rowH - 2*strokeWidth)
+			}
 		}
 	}
 	return c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())
@@ -663,8 +663,21 @@ func (in Input) outlineCell(r Row, indent float32, density styletokens.DensityE)
 // disclose emits the row's disclosure control into a fixed-width slot and
 // reports a click on it. Both branches pin the slot to discloseWidth so a
 // leaf's label starts where an interior sibling's does.
+//
+// It runs inside paddedCell's frame, whose id already carries the node, so it
+// adds only its kind. A second node scope is not just redundant: the id stack
+// composes by XOR, so under a cell keyed Seq(node) it cancelled the node and
+// gave every row's disclosure the same ids.
 func (in Input) disclose(r Row) (clicked bool) {
-	for range c.Frame(in.Ids.PrepareSeq(seqDiscSlotBase + uint64(r.Node))).
+	for range c.IdScope(in.Ids.PrepareStr("disc")) {
+		clicked = in.discloseSlot(r)
+	}
+	return
+}
+
+// discloseSlot is disclose's body, under its disclosure scope.
+func (in Input) discloseSlot(r Row) (clicked bool) {
+	for range c.Frame(in.Ids.PrepareStr("slot")).
 		OuterMargin(0).
 		InnerMargin(0).
 		KeepIter() {
@@ -679,7 +692,7 @@ func (in Input) disclose(r Row) (clicked bool) {
 		// Frame(false) drops the button's own background so the row's fill
 		// shows through; it stays a Button, and therefore still wins the
 		// pointer over the row sense behind it.
-		clicked = c.Button(in.Ids.PrepareSeq(seqDiscBase+uint64(r.Node)),
+		clicked = c.Button(in.Ids.PrepareStr("button"),
 			c.Atoms().Text(glyph).Keep()).
 			Frame(false).
 			Small().
@@ -717,13 +730,18 @@ func (in Input) disclose(r Row) (clicked bool) {
 // fires. It does not make the row unbounded: see [Column.Cell] for the budget
 // a cell still has to live inside.
 func (in Input) paddedCell(r Row, col int, density styletokens.DensityE, body func(r Row)) {
-	ncols := uint64(1 + len(in.Columns))
 	pad := cellInset(density)
-	for range c.Frame(in.Ids.PrepareSeq(seqCellBase+uint64(r.Node)*ncols+uint64(col))).
-		OuterMargin(0).
-		InnerMarginSides(pad, pad, 0, 0).
-		KeepIter() {
-		body(r)
+	// One ordinal for the (node, column) pair, not a node scope with a column
+	// seq inside it: the id stack composes by XOR, which is symmetric, so
+	// Seq(node)^Seq(col) gives (a, b) and (b, a) one id and cancels outright
+	// when node == col.
+	for range c.IdScope(in.Ids.PrepareStr("cell")) {
+		for range c.Frame(in.Ids.PrepareSeq(uint64(uint32(r.Node))<<32|uint64(uint32(col)))).
+			OuterMargin(0).
+			InnerMarginSides(pad, pad, 0, 0).
+			KeepIter() {
+			body(r)
+		}
 	}
 }
 
