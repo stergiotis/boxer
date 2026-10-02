@@ -177,11 +177,9 @@ func (inst kanbanPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig
 	}
 	if ch == chLanes {
 		// The lanes node only has to name lanes; the claim is that column.
-		for ci, f := range schema.Fields() {
-			if pathColumnLabel(f.Name) == kanbanLaneCol {
-				claim = ci
-				return
-			}
+		if ci := fieldIndexByLabel(schema, kanbanLaneCol); ci >= 0 {
+			claim = ci
+			return
 		}
 		reason = "the `lanes` CTE needs a `lane` column"
 		return
