@@ -16,7 +16,7 @@ func externalReadOp[T any](t *testing.T, h app.OperationsHandlerI, call app.Oper
 	if args != nil {
 		raw = mustEncode(t, args)
 	}
-	res, err := h.Snapshot().ExternalRead(call, name, raw)
+	res, _, err := h.Snapshot().ExternalRead(call, name, raw)
 	require.NoError(t, err)
 	out, err = buscodec.Decode[T](res)
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestACatalogReadNeedsTheEndpointDestination(t *testing.T) {
 	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
 	call := app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1}}
 	for _, name := range []string{opListTables, opDescribeTable} {
-		_, err := h.Snapshot().ExternalRead(call, name, mustEncode(t, DescribeArgs{Table: "facts"}))
+		_, _, err := h.Snapshot().ExternalRead(call, name, mustEncode(t, DescribeArgs{Table: "facts"}))
 		var refusal *app.OperationRefusal
 		require.ErrorAs(t, err, &refusal, name)
 		assert.Equal(t, []string{"clickhouse:ch.example:8123"}, refusal.Destinations, name)
@@ -83,16 +83,16 @@ func TestValidateSqlChecksWithoutRunning(t *testing.T) {
 
 // trace_rewrite reports every step of the execute path in order, play's own
 // included, with the body that would ship and the parameters lifted out of
-// the prelude; it reaches the endpoint's catalog, so it needs the
-// destination.
+// the prelude; without the endpoint in the grant it is the rewrite without
+// the catalog steps.
 func TestTraceRewriteReportsEveryStep(t *testing.T) {
 	l, h := opsLauncher(t)
 	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
 	bare := app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1}}
-	_, err := h.Snapshot().ExternalRead(bare, opTraceRewrite, nil)
-	var refusal *app.OperationRefusal
-	require.ErrorAs(t, err, &refusal)
-	assert.Equal(t, []string{"clickhouse:ch.example:8123"}, refusal.Destinations)
+	offline := externalReadOp[RewriteTrace](t, h, bare, opTraceRewrite, nil)
+	assert.False(t, offline.Expanded, "without the endpoint the catalog steps are left out")
+	assert.Equal(t, []string{"clickhouse:ch.example:8123"}, offline.Needs)
+	assert.NotEmpty(t, offline.Body)
 
 	granted := app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1,
 		Destinations: []string{"clickhouse:ch.example:8123"}}}

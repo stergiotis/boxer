@@ -348,6 +348,34 @@ refuse with the destination as their remedy; `validate_sql` returns the
 grammar half without it and names the destination the rest needs. Table and
 column comments are marked untrusted.
 
+### 2026-10-02 — datasets by alias, and the rewrite without the endpoint
+
+Three gaps in the entry above:
+
+- **A grant named a bound dataset by a name the check never saw.** An
+  ad-hoc dataset's alias is rewritten to its ephemeral handle before the
+  passes run, and the limits read the residual, so `keelson:chat_turns` did
+  not cover `keelson('chat_turns')` and the refusal named the handle. The
+  limits now map a bound handle back to its alias: the alias is what a grant
+  lists and what a refusal asks for; the handle is still accepted.
+- **No operation named the window's datasets.** `list_datasets` lists each
+  bound alias with the destination a run needs and whether the grant lists
+  it, and the columns of those it lists that are not sealed, read by an
+  empty run of the dataset under the agent limits. Every ad-hoc dataset is
+  sealed (ADR-0240), and its columns are its content's shape, so they come
+  only when one dataset is asked for by alias, and that result is labelled
+  confined (ADR-0269, update of this date): a model that may not read
+  confined content gets a data handle in its place, and the listing stays
+  readable.
+- **Without the endpoint the rewrite was all or nothing.** Only the
+  late-bound steps read the endpoint's catalog — handles, `LW_GET` and
+  `LW_SEL`, `fs()`, the constructor target — and the selection-condition
+  rewrite. `validate_sql` and `trace_rewrite` now make the rewrite without
+  them (`Client.buildResidualOffline`), report them declined, and name the
+  endpoint as what the whole rewrite needs; `trace_rewrite` no longer
+  refuses. A statement dispatch sends to the introspection plane does not
+  ask for the endpoint at all.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

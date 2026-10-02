@@ -933,6 +933,16 @@ through its own `ExternalRead` method; the engine routes by class. It still
 runs off the render goroutine over the latest snapshot. Play's schema reads
 (ADR-0270, update of this date) are the first.
 
+### 2026-10-02 — an external read can label its result confined
+
+§SD7 labels an outcome by the window that answered it, and an external read
+can read confined content the window does not hold: the schema of a sealed
+dataset nobody has run yet. A result type implementing
+`app.ConfinedResultI` labels the outcome confined when it says so; the
+engine joins it with the window's label, and the dispatcher's wall treats it
+as any confined result. Play's `list_datasets` (ADR-0270, update of this
+date) is the first.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

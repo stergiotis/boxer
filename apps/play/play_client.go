@@ -640,6 +640,19 @@ func (inst *Client) buildResidual(sql string) (residual string, params map[strin
 // buildResidualObserved is buildResidual with the observer buildStatementObserved
 // documents. A nil observe is the plain path.
 func (inst *Client) buildResidualObserved(sql string, observe func(passreg.ApplyObservation)) (residual string, params map[string]string) {
+	return inst.buildResidualWith(sql, observe, true)
+}
+
+// buildResidualOffline is buildResidualObserved without the steps that read
+// the endpoint's catalog: the late-bound passes see no binding and decline,
+// and the selection-condition rewrite is reported declined rather than run.
+// It is the rewrite an agent's work may make without the endpoint among its
+// grant's destinations (ADR-0270 §SD2).
+func (inst *Client) buildResidualOffline(sql string, observe func(passreg.ApplyObservation)) (residual string, params map[string]string) {
+	return inst.buildResidualWith(sql, observe, false)
+}
+
+func (inst *Client) buildResidualWith(sql string, observe func(passreg.ApplyObservation), catalog bool) (residual string, params map[string]string) {
 	// Ad-hoc dataset alias→handle rewrite runs first, before the SET-param
 	// harvest and pre-execute passes, so keelson('<alias>') becomes
 	// keelson('<handle>') for every downstream consumer and the Preview
@@ -657,8 +670,30 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 	}
 	observeStep(observe, rewriteStepExtractParams, orderExtractParams, exErr, sql, residual, stepDur(started))
 	residual = inst.applyExprSplice(residual, observe)
+	if !catalog {
+		residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, nil, log.Logger, observe)
+		if observe != nil && inst.exposeConditions.Load() && inst.conditionsPass.Apply != nil {
+			observe(passreg.ApplyObservation{Name: rewriteStepExposeConditions, Order: orderExposeConditions, Outcome: passreg.ApplyOutcomeDeclined})
+		}
+		return
+	}
 	residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, inst.passBinding, log.Logger, observe)
 	residual = inst.applyExposeConditions(residual, observe)
+	return
+}
+
+// datasetAliasOf maps each bound dataset handle to its alias: the name a
+// grant lists, since the handle is ephemeral and the person never sees it.
+func (inst *Client) datasetAliasOf() (aliasOf map[string]string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if len(inst.datasetBindings) == 0 {
+		return
+	}
+	aliasOf = make(map[string]string, len(inst.datasetBindings))
+	for alias, handle := range inst.datasetBindings {
+		aliasOf[handle] = alias
+	}
 	return
 }
 
@@ -1009,7 +1044,7 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	}
 	if opts != nil && opts.Agent != nil {
 		residual, _ := inst.buildResidualObserved(sql, nil)
-		if err = checkAgentLimits(residual, dec, opts.Agent); err != nil {
+		if err = checkAgentLimits(residual, dec, opts.Agent, inst.datasetAliasOf()); err != nil {
 			return
 		}
 		req.Settings["readonly"] = "2"

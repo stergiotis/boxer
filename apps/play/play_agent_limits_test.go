@@ -35,7 +35,7 @@ func TestAgentLimits(t *testing.T) {
 		"a call to an AI provider": {"SELECT aiGenerate('x')", remote, grant, false},
 		"a state-changing call":    {"SELECT generateSerialID('s')", remote, grant, false},
 	} {
-		err := checkAgentLimits(tc.sql, tc.dec, tc.obo)
+		err := checkAgentLimits(tc.sql, tc.dec, tc.obo, nil)
 		if tc.pass {
 			assert.NoError(t, err, name)
 			continue

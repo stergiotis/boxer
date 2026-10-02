@@ -10,8 +10,8 @@ package play
 // The three are external reads (ADR-0269 §SD1): fixed probes of the
 // endpoint's own catalog, never a statement the caller writes. A probe an
 // agent causes needs the endpoint among the grant's destinations, as a run
-// does (ADR-0270 §SD2); validate_sql degrades instead of refusing, since its
-// grammar half reaches nothing.
+// does (ADR-0270 §SD2); validate_sql degrades instead of refusing, making
+// the rewrite without the steps that read the catalog.
 
 import (
 	"context"
@@ -63,17 +63,18 @@ type ValidateArgs struct {
 
 // ValidateResult is validate_sql's result.
 type ValidateResult struct {
-	Valid     bool   `desc:"true when the statement parses, canonicalizes and every client-side rewrite play applies succeeded"`
+	Valid     bool   `desc:"true when the statement parses, canonicalizes and every client-side rewrite play applied succeeded"`
 	Error     string `json:",omitzero" desc:"why it is not valid"`
 	Canonical string `json:",omitzero" desc:"the statement in the canonical dialect, as written (handles and macros unexpanded)"`
 	Kind      string `json:",omitzero" desc:"read, or the reason an agent's run would not count as a plain read"`
-	// Expanded is false when the client-side rewrites were not applied.
-	Expanded bool     `desc:"true when sent is play's rewrite of the statement; false when the grant does not list the endpoint, whose catalog the rewrite reads"`
-	Sent     string   `json:",omitzero" desc:"what play would send: handles, LW_GET and the other client-side macros expanded"`
+	// Expanded is false when the catalog-reading steps were left out.
+	Expanded bool     `desc:"true when sent is play's whole rewrite; false when the grant does not list the endpoint, so the steps that read its catalog were left out and declined names them"`
+	Sent     string   `json:",omitzero" desc:"what play would send: handles, LW_GET and the other client-side macros expanded, as far as expanded says"`
+	Declined []string `json:",omitzero" desc:"the steps left out without the endpoint: handles, LW_GET and LW_SEL, fs(), the constructor target; handles are then not checked"`
 	Rewrites []string `json:",omitzero" desc:"client-side rewrite steps that failed, each with its error; the statement then ships with that step skipped"`
 	Handles  []string `json:",omitzero" desc:"leeway handles that name no section or column of their table, each with candidates; they would ship unresolved"`
 	Run      string   `json:",omitzero" desc:"allowed when run would accept this statement under the grant, else the agent limit it would hit"`
-	Needs    []string `json:",omitzero" desc:"destinations request_access would have to add for a run"`
+	Needs    []string `json:",omitzero" desc:"destinations request_access would have to add: for a run, and the endpoint for the whole rewrite"`
 	Confined bool     `desc:"true when the statement reads confined data, which a run would carry into the window's label"`
 }
 
@@ -232,22 +233,28 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 		return
 	}
 	dest := endpointDestination(client)
-	if obo != nil && !slices.Contains(obo.Destinations, dest) {
-		// The rewrite resolves handles against the endpoint's catalog, so it
-		// is not made; the grammar half above reached nothing.
-		out.Valid = true
-		out.Needs = []string{dest}
-		out.Run = "the grant does not list " + dest
-		return
-	}
-	var failed []string
-	residual, _ := client.buildResidualObserved(stmt, func(o passreg.ApplyObservation) {
-		if o.Err != nil {
+	// The late-bound steps resolve handles and LW_GET against the endpoint's
+	// catalog, so without the endpoint in the grant the rewrite is made
+	// without them; the rest reaches nothing.
+	catalog := obo == nil || slices.Contains(obo.Destinations, dest)
+	var failed, declined []string
+	observe := func(o passreg.ApplyObservation) {
+		switch {
+		case o.Err != nil:
 			failed = append(failed, o.Name+": "+o.Err.Error())
+		case o.Outcome == passreg.ApplyOutcomeDeclined:
+			declined = append(declined, o.Name)
 		}
-	})
-	out.Expanded, out.Sent, out.Rewrites = true, residual, failed
-	out.Handles = unresolvedHandles(client, stmt)
+	}
+	var residual string
+	if catalog {
+		residual, _ = client.buildResidualObserved(stmt, observe)
+		out.Handles = unresolvedHandles(client, stmt)
+	} else {
+		residual, _ = client.buildResidualOffline(stmt, observe)
+		out.Declined = declined
+	}
+	out.Expanded, out.Sent, out.Rewrites = catalog, residual, failed
 	if _, perr := nanopass.Parse(residual); perr != nil {
 		out.Error = "play's rewrite of the statement does not parse: " + perr.Error()
 		return
@@ -262,14 +269,17 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 	}
 	dec := client.previewDispatch(residual, "")
 	out.Confined = dec.sensitivity == queryengine.SensitivityConfined
+	if !catalog && dec.class != dispatchClassIntrospection {
+		out.Needs = []string{dest}
+	}
 	if obo == nil {
 		return
 	}
 	out.Run = "allowed"
-	if lerr := checkAgentLimits(residual, dec, obo); lerr != nil {
+	if lerr := checkAgentLimits(residual, dec, obo, client.datasetAliasOf()); lerr != nil {
 		out.Run = lerr.Error()
-		if limit, ok := lerr.(*AgentLimitError); ok && limit.Destination != "" {
-			out.Needs = []string{limit.Destination}
+		if limit, ok := lerr.(*AgentLimitError); ok && limit.Destination != "" && !slices.Contains(out.Needs, limit.Destination) {
+			out.Needs = append(out.Needs, limit.Destination)
 		}
 	}
 	return

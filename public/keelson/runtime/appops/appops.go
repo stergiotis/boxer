@@ -36,7 +36,7 @@ var typeNone = reflect.TypeFor[None]()
 
 type commandFn[A any] func(inst A, call app.OperationCall, args []byte) (result []byte, err error)
 type queryFn[S any] func(snap S, mounted map[string]any, args []byte) (result []byte, err error)
-type readFn[S any] func(snap S, call app.OperationCall, args []byte) (result []byte, err error)
+type readFn[S any] func(snap S, call app.OperationCall, args []byte) (result []byte, confined bool, err error)
 
 // Set is an app's catalog with its handlers. A is the app instance type, S
 // the snapshot type queries read.
@@ -176,7 +176,8 @@ func Query[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSpec
 // probe outside the app that the app owns (ADR-0269 §SD1). It runs off the
 // render goroutine like a query, over the same snapshot, and receives the
 // call, since the probe is agent-caused work the app checks against its
-// agent limits. Effect defaults to none.
+// agent limits. Effect defaults to none. A result type implementing
+// [app.ConfinedResultI] labels the outcome confined when it says so.
 func ExternalRead[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSpec, fn func(snap S, call app.OperationCall, in In) (out Out, err error)) {
 	spec.Class = app.OperationClassExternalRead
 	if spec.Effect == app.OperationEffectUnspecified {
@@ -184,7 +185,7 @@ func ExternalRead[A any, S any, In any, Out any](set *Set[A, S], spec app.Operat
 	}
 	spec.Args, spec.Result = typeOrNil[In](), typeOrNil[Out]()
 	set.ops = append(set.ops, spec)
-	set.reads[spec.Name] = func(snap S, call app.OperationCall, args []byte) (result []byte, err error) {
+	set.reads[spec.Name] = func(snap S, call app.OperationCall, args []byte) (result []byte, confined bool, err error) {
 		var in In
 		in, err = decodeArgs[In](spec.Name, args)
 		if err != nil {
@@ -194,6 +195,9 @@ func ExternalRead[A any, S any, In any, Out any](set *Set[A, S], spec app.Operat
 		out, err = fn(snap, call, in)
 		if err != nil {
 			return
+		}
+		if c, ok := any(out).(app.ConfinedResultI); ok {
+			confined = c.ResultConfined()
 		}
 		result, err = encodeResult(spec.Name, out)
 		return
@@ -367,7 +371,7 @@ func (inst *snapshot[A, S]) Query(name string, args []byte) (result []byte, err 
 	return
 }
 
-func (inst *snapshot[A, S]) ExternalRead(call app.OperationCall, name string, args []byte) (result []byte, err error) {
+func (inst *snapshot[A, S]) ExternalRead(call app.OperationCall, name string, args []byte) (result []byte, confined bool, err error) {
 	fn, ok := inst.set.reads[name]
 	if !ok {
 		err = eb.Build().Str("operation", name).Errorf("appops: no such external read")
@@ -377,7 +381,7 @@ func (inst *snapshot[A, S]) ExternalRead(call app.OperationCall, name string, ar
 		err = app.RefuseOperation(reason)
 		return
 	}
-	result, err = fn(inst.snap, call, args)
+	result, confined, err = fn(inst.snap, call, args)
 	return
 }
 

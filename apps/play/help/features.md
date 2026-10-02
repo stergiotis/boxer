@@ -1571,7 +1571,9 @@ channels) and `validate_sql`, which checks a draft — grammar, play's rewrite
 of it, handles that do not resolve, and whether a run would be allowed —
 without running it. `trace_rewrite` shows the same rewrite as the Passes tab
 does: each pass in order with its outcome, time and error, and the statement
-exactly as it would be sent.
+exactly as it would be sent. `list_datasets` names the ad-hoc datasets this
+window has bound, which the model reads with `keelson('<alias>')`; a grant
+names one as `keelson:<alias>`.
 
 ### Experiments
 

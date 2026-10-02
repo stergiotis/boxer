@@ -8,7 +8,8 @@ package play
 //
 // An external read like the schema reads (ADR-0270, 2026-10-02): the
 // late-bound passes resolve handles and LW_GET against the endpoint's catalog,
-// so an agent needs the endpoint among the grant's destinations.
+// so without the endpoint among an agent's destinations they are left out and
+// the trace shows them declined.
 
 import (
 	"maps"
@@ -62,7 +63,7 @@ type TraceStep struct {
 	Order       int         `desc:"its position key; steps are listed in the order they ran"`
 	Kind        string      `desc:"play for play's own steps, registered for a registry pass, late-bound for one built against this window's binding (handles, LW_GET, fs())"`
 	Description string      `json:",omitzero" desc:"what the step does"`
-	Outcome     string      `desc:"applied, skipped (it failed; the statement went on without its rewrite) or declined (a late-bound pass this window cannot bind)"`
+	Outcome     string      `desc:"applied, skipped (it failed; the statement went on without its rewrite) or declined (a late-bound step left out: no binding, or no endpoint in the grant)"`
 	Changed     bool        `desc:"true when the step rewrote the statement"`
 	Micros      int64       `desc:"wall-clock microseconds"`
 	Error       string      `json:",omitzero" desc:"why a skipped step failed"`
@@ -79,6 +80,8 @@ type TraceParam struct {
 type RewriteTrace struct {
 	ParseError string       `json:",omitzero" desc:"the statement as written does not parse; every pass then fails on it"`
 	Steps      []TraceStep  `desc:"every step, in the order it ran"`
+	Expanded   bool         `desc:"true for play's whole rewrite; false when the grant does not list the endpoint, so the steps that read its catalog show as declined"`
+	Needs      []string     `json:",omitzero" desc:"the destination request_access would have to add for the whole rewrite"`
 	Micros     int64        `desc:"the steps' total wall-clock microseconds"`
 	Summary    string       `desc:"one line: how many applied, rewrote, were skipped or declined"`
 	Body       string       `desc:"the statement exactly as it would ship, FORMAT clause included"`
@@ -96,9 +99,14 @@ func addRewriteOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Reads:   []string{opsResSql}, Agents: true,
 		Follows: []string{"nothing runs and the buffer is unchanged; validate_sql is the short verdict"}},
 		func(sn opsSnap, call app.OperationCall, in TraceArgs) (RewriteTrace, error) {
-			if err := schemaReadable(sn, call.OnBehalfOf); err != nil {
-				return RewriteTrace{}, err
+			switch {
+			case !sn.mounted:
+				return RewriteTrace{}, app.RefuseOperation("the window has not mounted")
+			case sn.client == nil:
+				return RewriteTrace{}, app.RefuseOperation("the window has no endpoint")
 			}
+			obo := call.OnBehalfOf
+			catalog := obo == nil || slices.Contains(obo.Destinations, endpointDestination(sn.client))
 			stmt := in.Sql
 			if strings.TrimSpace(stmt) == "" {
 				stmt = sn.state.Sql
@@ -109,11 +117,11 @@ func addRewriteOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			if len(stmt) > schemaMaxStatement {
 				return RewriteTrace{}, app.RefuseOperation("the statement is longer than 16 KiB")
 			}
-			return traceRewrite(sn.client, stmt, in.Costs), nil
+			return traceRewrite(sn.client, stmt, in.Costs, catalog), nil
 		})
 }
 
-func traceRewrite(client *Client, stmt string, costs bool) (out RewriteTrace) {
+func traceRewrite(client *Client, stmt string, costs bool, catalog bool) (out RewriteTrace) {
 	if _, err := nanopass.Parse(stmt); err != nil {
 		out.ParseError = err.Error()
 	}
@@ -127,7 +135,16 @@ func traceRewrite(client *Client, stmt string, costs bool) (out RewriteTrace) {
 	}
 	var obs []passreg.ApplyObservation
 	observe := func(o passreg.ApplyObservation) { obs = append(obs, o) }
-	residual, params := client.buildResidualObserved(stmt, observe)
+	var residual string
+	var params map[string]string
+	if catalog {
+		residual, params = client.buildResidualObserved(stmt, observe)
+		out.Handles = unresolvedHandles(client, stmt)
+	} else {
+		residual, params = client.buildResidualOffline(stmt, observe)
+		out.Needs = []string{endpointDestination(client)}
+	}
+	out.Expanded = catalog
 	body := finishStatementObserved(residual, observe)
 	var total time.Duration
 	for _, o := range obs {
@@ -161,7 +178,6 @@ func traceRewrite(client *Client, stmt string, costs bool) (out RewriteTrace) {
 		// the placeholder's own name.
 		out.Params = append(out.Params, TraceParam{Name: strings.TrimPrefix(k, "param_"), Value: params[k]})
 	}
-	out.Handles = unresolvedHandles(client, stmt)
 	dec := client.previewDispatch(residual, "")
 	switch dec.class {
 	case dispatchClassIntrospection:

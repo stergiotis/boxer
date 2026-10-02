@@ -177,9 +177,10 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 		return
 	}
 	var result []byte
+	var confined bool
 	var err error
 	if spec.Class == app.OperationClassExternalRead {
-		result, err = s.view.ExternalRead(app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason,
+		result, confined, err = s.view.ExternalRead(app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason,
 			RefData: req.RefData, OnBehalfOf: req.OnBehalfOf}, spec.Name, req.Args)
 	} else {
 		result, err = s.view.Query(spec.Name, req.Args)
@@ -188,7 +189,7 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 	if out.Phase == opwire.PhaseUnspecified {
 		out = opwire.Outcome{Phase: opwire.PhaseCompleted, Result: result}
 	}
-	out.AsOf, out.Seq, out.Confined = s.asOf, s.logSeq, s.confined
+	out.AsOf, out.Seq, out.Confined = s.asOf, s.logSeq, s.confined || confined
 	out.Revisions = pick(s.revs, spec.Reads)
 	return
 }
