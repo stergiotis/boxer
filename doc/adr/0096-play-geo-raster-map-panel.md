@@ -765,6 +765,22 @@ once on 2026-10-02 on the local demo slice at 1024×600: the count alone added
 70–95 % (as a `Float64` the figure added more, which is why it travels
 rounded); server time did not move.
 
+## Update — 2026-10-02: device resolution, opt-in
+
+SD7's "screen px × DPR", which the 2026-10-01 Update found unbuilt, is now an
+option. A new fetcher, `fetchPixelsPerPoint`, reports the display's
+pixels per point; the StateManager caches it at frame end
+(`GetPixelsPerPoint`). With **device resolution** on, the Map requests its
+raster in display pixels — the view's logical size times that scale, plus
+the margin — with the cap scaled to match up to 4096 per side. A raster
+dpr× finer per side holds dpr² fewer rows per pixel while `zoom_factor`
+grows only by dpr, so the brightness normaliser divides by dpr once more;
+a clickhouse-local test pins that a uniform density reads the same at 1×
+and 2×, and dimmer at 2× without the division. Off by default: a 2× display
+asks for four times the pixels, and a dense view comes nearer the public
+ADS-B user's result-row cap. The browser tab reports a scale of 1 until it
+passes the page's devicePixelRatio through.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
