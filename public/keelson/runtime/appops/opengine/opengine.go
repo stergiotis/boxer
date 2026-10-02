@@ -176,7 +176,14 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 		out = opwire.Outcome{Phase: opwire.PhaseRefused, Reason: "the window has not drawn yet"}
 		return
 	}
-	result, err := s.view.Query(spec.Name, req.Args)
+	var result []byte
+	var err error
+	if spec.Class == app.OperationClassExternalRead {
+		result, err = s.view.ExternalRead(app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason,
+			RefData: req.RefData, OnBehalfOf: req.OnBehalfOf}, spec.Name, req.Args)
+	} else {
+		result, err = s.view.Query(spec.Name, req.Args)
+	}
 	out = outcomeOfError(err)
 	if out.Phase == opwire.PhaseUnspecified {
 		out = opwire.Outcome{Phase: opwire.PhaseCompleted, Result: result}

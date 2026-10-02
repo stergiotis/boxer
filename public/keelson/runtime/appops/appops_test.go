@@ -91,3 +91,35 @@ func TestCommandAndQueryThroughTheUntypedInterface(t *testing.T) {
 	_, err = h.ApplyCommand(app.OperationCall{}, "nope", nil)
 	require.Error(t, err)
 }
+
+// An external read runs over the snapshot like a query and receives the
+// call, so the app can check the on-behalf-of context against its agent
+// limits.
+func TestAnExternalReadReceivesTheCall(t *testing.T) {
+	s := testSet()
+	ExternalRead(s, app.OperationSpec{Name: "probe", Version: 1, Summary: "probe outside the app"},
+		func(sn docSnap, call app.OperationCall, in None) (textResult, error) {
+			if call.OnBehalfOf == nil {
+				return textResult{}, app.RefuseOperation("an agent's call")
+			}
+			return textResult{Text: sn.text + "@" + call.OnBehalfOf.Task}, nil
+		})
+	c := s.Catalog()
+	require.NoError(t, c.Validate())
+	spec, _ := c.Lookup("probe")
+	assert.Equal(t, app.OperationClassExternalRead, spec.Class)
+	assert.Equal(t, app.OperationEffectNone, spec.Effect)
+
+	snap := s.Bind(&doc{text: "a"}).Snapshot()
+	raw, err := snap.ExternalRead(app.OperationCall{OnBehalfOf: &app.OnBehalfOf{Task: "t"}}, "probe", nil)
+	require.NoError(t, err)
+	res, err := buscodec.Decode[textResult](raw)
+	require.NoError(t, err)
+	assert.Equal(t, "a@t", res.Text)
+
+	_, err = snap.ExternalRead(app.OperationCall{}, "probe", nil)
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+	_, err = snap.ExternalRead(app.OperationCall{}, "get_text", nil)
+	require.Error(t, err, "a query is not an external read")
+}

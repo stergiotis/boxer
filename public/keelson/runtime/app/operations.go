@@ -316,9 +316,13 @@ type OperationsHandlerI interface {
 type OperationsSnapshotI interface {
 	// Available reports whether an operation can run now, and why not.
 	Available(name string) (ok bool, reason string)
-	// Query answers a query or an external read. args and result are CBOR
-	// of the declared types.
+	// Query answers a query. args and result are CBOR of the declared
+	// types.
 	Query(name string, args []byte) (result []byte, err error)
+	// ExternalRead answers an external read. It takes the call because the
+	// probe it starts is agent-caused work and checks the on-behalf-of
+	// context against the app's agent limits (ADR-0269 §SD6).
+	ExternalRead(call OperationCall, name string, args []byte) (result []byte, err error)
 }
 
 // OperationsGestureI is the capability a frame context offers an app whose

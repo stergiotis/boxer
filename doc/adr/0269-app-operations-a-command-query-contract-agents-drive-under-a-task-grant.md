@@ -922,6 +922,17 @@ other services still deny a late task until then. The duration is
 tells a coordinator a task that ended or a handle it no longer knows from
 a late one, so it can ask for a new task instead.
 
+### 2026-10-02 — an external read receives the call
+
+§SD6 counts the work an external read starts as agent-caused, and the
+handler had no way to see whose call it was: an external read was answered
+through the snapshot's `Query`, which takes only the arguments.
+`appops.ExternalRead` declares one with a handler that receives the
+`OperationCall`, on-behalf-of context included, and the snapshot answers it
+through its own `ExternalRead` method; the engine routes by class. It still
+runs off the render goroutine over the latest snapshot. Play's schema reads
+(ADR-0270, update of this date) are the first.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

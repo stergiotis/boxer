@@ -36,6 +36,7 @@ var typeNone = reflect.TypeFor[None]()
 
 type commandFn[A any] func(inst A, call app.OperationCall, args []byte) (result []byte, err error)
 type queryFn[S any] func(snap S, mounted map[string]any, args []byte) (result []byte, err error)
+type readFn[S any] func(snap S, call app.OperationCall, args []byte) (result []byte, err error)
 
 // Set is an app's catalog with its handlers. A is the app instance type, S
 // the snapshot type queries read.
@@ -47,6 +48,7 @@ type Set[A any, S any] struct {
 	ops       []app.OperationSpec
 	commands  map[string]commandFn[A]
 	queries   map[string]queryFn[S]
+	reads     map[string]readFn[S]
 	avail     map[string]func(snap S) (ok bool, reason string)
 	snapshot  func(inst A) S
 	confined  func(inst A) bool
@@ -64,6 +66,7 @@ func NewSet[A any, S any](snapshot func(inst A) S) (s *Set[A, S]) {
 		restore:  make(map[string]func(A, any) bool),
 		commands: make(map[string]commandFn[A]),
 		queries:  make(map[string]queryFn[S]),
+		reads:    make(map[string]readFn[S]),
 		avail:    make(map[string]func(S) (bool, string)),
 		snapshot: snapshot,
 		mounts:   make(map[string]func(A) any),
@@ -161,6 +164,34 @@ func Query[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSpec
 		}
 		var out Out
 		out, err = fn(snap, in)
+		if err != nil {
+			return
+		}
+		result, err = encodeResult(spec.Name, out)
+		return
+	}
+}
+
+// ExternalRead declares an external read and its handler: a fixed, bounded
+// probe outside the app that the app owns (ADR-0269 §SD1). It runs off the
+// render goroutine like a query, over the same snapshot, and receives the
+// call, since the probe is agent-caused work the app checks against its
+// agent limits. Effect defaults to none.
+func ExternalRead[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSpec, fn func(snap S, call app.OperationCall, in In) (out Out, err error)) {
+	spec.Class = app.OperationClassExternalRead
+	if spec.Effect == app.OperationEffectUnspecified {
+		spec.Effect = app.OperationEffectNone
+	}
+	spec.Args, spec.Result = typeOrNil[In](), typeOrNil[Out]()
+	set.ops = append(set.ops, spec)
+	set.reads[spec.Name] = func(snap S, call app.OperationCall, args []byte) (result []byte, err error) {
+		var in In
+		in, err = decodeArgs[In](spec.Name, args)
+		if err != nil {
+			return
+		}
+		var out Out
+		out, err = fn(snap, call, in)
 		if err != nil {
 			return
 		}
@@ -333,6 +364,20 @@ func (inst *snapshot[A, S]) Query(name string, args []byte) (result []byte, err 
 		return
 	}
 	result, err = fn(inst.snap, inst.mounted, args)
+	return
+}
+
+func (inst *snapshot[A, S]) ExternalRead(call app.OperationCall, name string, args []byte) (result []byte, err error) {
+	fn, ok := inst.set.reads[name]
+	if !ok {
+		err = eb.Build().Str("operation", name).Errorf("appops: no such external read")
+		return
+	}
+	if avail, reason := inst.Available(name); !avail {
+		err = app.RefuseOperation(reason)
+		return
+	}
+	result, err = fn(inst.snap, call, args)
 	return
 }
 
