@@ -699,6 +699,19 @@ climbs on from there if that was not the last level; the status line says
 every other pane shares, is unchanged. The mechanism is
 `apps/play/play_map_memo.go`.
 
+## Update — 2026-10-02: the ladder starts where the source is fast
+
+The second of the trial's smaller changes. The ladder remembers how long each
+level's table took the last time its result landed, and a restarted ladder
+starts at the finest level that answered within `mapLadderFast` (300 ms)
+rather than at the coarsest: on a source that fast the coarse levels only add
+their own cost before the picture the full level draws almost as soon. A
+level never measured, or one that ran slower, starts the climb at the bottom
+again, so a slow view measured once puts the coarse levels back. On the
+public ADS-B instance, where the 1 % level of a world view takes seconds,
+nothing is skipped; on the local demo slice the first view climbs all three
+levels and the views after it go straight to the full table.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
