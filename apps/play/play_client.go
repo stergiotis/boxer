@@ -45,6 +45,13 @@ type Client struct {
 	cfg  ClientConfig
 	http *http.Client
 
+	// agentMark is the task whose input the window acts on (ADR-0270
+	// §SD3), nil while the work is the person's. Every lane of the window
+	// runs SQL derived from that input — a pane's CTE, the Map's raster —
+	// so every run without its own Agent is checked against it. Set on the
+	// render goroutine, read on the lanes' workers.
+	agentMark atomic.Pointer[app.OnBehalfOf]
+
 	// passes supplies the registered pre-execute rewrites (ADR-0108 §SD6),
 	// e.g. LW_ID_* macro expansion. Defaults to passreg.Default — the host
 	// fills that at wiring time via passreg/defaults; tests inject their own
@@ -141,6 +148,11 @@ func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 // Passes tab draws its catalog (ADR-0119 M3).
 func (inst *Client) PassRegistry() *passreg.Registry { return inst.passes }
 
+// SetAgentMark sets the task whose input the window acts on, or nil when
+// the work is the person's (ADR-0270 §SD3). The Diagnostics probe is not
+// checked against it: `EXPLAIN AST` parses and resolves nothing.
+func (inst *Client) SetAgentMark(obo *app.OnBehalfOf) { inst.agentMark.Store(obo) }
+
 // ExecOptions carries per-lane execution settings for ExecuteArrowStream.
 // QueryID is a stable per-lane ClickHouse query_id: combined with
 // ReplaceRunningQuery, a superseding run REPLACES its still-running
@@ -150,9 +162,11 @@ func (inst *Client) PassRegistry() *passreg.Registry { return inst.passes }
 // queries pile up on the server. Endpoints that don't know these params
 // ignore them (the keelson introspection /query reads only cols/query/param_*).
 type ExecOptions struct {
-	// Agent is set on a run an agent's work caused (ADR-0270 §SD2): the
-	// statement is checked against the grant before it is sent, and it
-	// goes with readonly = 2 whatever BOXER_PLAY_ALLOW_WRITES says.
+	// Agent is set on a main-lane run an agent's work caused (ADR-0270
+	// §SD2): the statement is checked against the grant before it is sent,
+	// and it goes with readonly = 2 whatever BOXER_PLAY_ALLOW_WRITES says.
+	// A run without it is checked against the window's mark instead
+	// (Client.SetAgentMark).
 	Agent               *app.OnBehalfOf
 	QueryID             string
 	ReplaceRunningQuery bool
@@ -997,9 +1011,13 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if !inst.cfg.AllowWrites {
 		req.Settings["readonly"] = "2"
 	}
+	agent := inst.agentMark.Load()
 	if opts != nil && opts.Agent != nil {
+		agent = opts.Agent
+	}
+	if agent != nil {
 		residual, _ := inst.buildResidualObserved(sql, nil)
-		if err = checkAgentLimits(residual, dec, opts.Agent); err != nil {
+		if err = checkAgentLimits(residual, dec, agent); err != nil {
 			return
 		}
 		req.Settings["readonly"] = "2"

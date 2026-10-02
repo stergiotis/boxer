@@ -1,7 +1,13 @@
 package play
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+
+	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,4 +49,32 @@ func TestAgentLimits(t *testing.T) {
 		require.Error(t, err, name)
 		assert.ErrorAs(t, err, &limit, name)
 	}
+}
+
+// ADR-0270 §SD2: a pane's lane runs SQL derived from the window's input, so
+// while a task's mark is on the window its runs are checked like the task's
+// own — refused before anything is sent — and once the mark is gone they
+// are the person's again.
+func TestAPaneLaneRunsUnderTheWindowsMark(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+	lane := clientExecutor{client: client, opts: newExecOptions("map")}
+	run := func() error {
+		_, _, _, err := lane.execute(context.Background(), compiledNode{SQL: "SELECT 1"}, memory.NewGoAllocator())
+		return err
+	}
+
+	client.SetAgentMark(&app.OnBehalfOf{Task: "t", Destinations: []string{DestinationKeelson("apps")}})
+	var limit *AgentLimitError
+	require.ErrorAs(t, run(), &limit, "the grant does not list the endpoint")
+	assert.Zero(t, hits.Load(), "refused before anything is sent")
+
+	client.SetAgentMark(nil)
+	require.Error(t, run(), "the stub answers 500")
+	assert.Equal(t, int32(1), hits.Load(), "the person's run is sent")
 }

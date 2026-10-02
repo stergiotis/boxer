@@ -400,7 +400,18 @@ func (inst *PlayApp) markAgent(obo *app.OnBehalfOf) {
 	if obo == nil {
 		return
 	}
-	inst.agentDriven, inst.agentFresh = obo, true
+	inst.setAgentDriven(obo)
+	inst.agentFresh = true
+}
+
+// setAgentDriven sets the mark and hands it to the window's client at once,
+// so a run started later in the same frame — the person's Run, which
+// clears it — is judged by the mark that started it.
+func (inst *PlayApp) setAgentDriven(obo *app.OnBehalfOf) {
+	inst.agentDriven = obo
+	if inst.client != nil {
+		inst.client.SetAgentMark(obo)
+	}
 }
 
 // settleAgentMark records, at the end of the frame an agent's command ran
@@ -420,7 +431,7 @@ func (inst *PlayApp) checkAgentMark() {
 		return
 	}
 	if inst.sql != inst.agentSql || inst.paramDigest() != inst.agentParams {
-		inst.agentDriven = nil
+		inst.setAgentDriven(nil)
 	}
 }
 
@@ -435,7 +446,7 @@ func (inst *PlayApp) takeAgentForRun(auto bool) (obo *app.OnBehalfOf) {
 	if auto {
 		return inst.agentDriven
 	}
-	inst.agentDriven = nil
+	inst.setAgentDriven(nil)
 	return
 }
 

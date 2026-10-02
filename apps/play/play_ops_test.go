@@ -124,3 +124,16 @@ func TestTheAgentMarkClearsWhenThePersonEdits(t *testing.T) {
 	p.checkAgentMark()
 	assert.Nil(t, p.takeAgentForRun(true), "after the person's edit the window's work is theirs")
 }
+
+// The mark reaches the window's client the moment it changes, so a pane's
+// lane started in the same frame is judged by it (ADR-0270 §SD2).
+func TestTheAgentMarkReachesTheClient(t *testing.T) {
+	l, _ := opsLauncher(t)
+	p := l.inner
+	p.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
+	obo := &app.OnBehalfOf{Task: "t", Epoch: 1}
+	p.markAgent(obo)
+	assert.Equal(t, obo, p.client.agentMark.Load())
+	assert.Nil(t, p.takeAgentForRun(false), "the person's Run")
+	assert.Nil(t, p.client.agentMark.Load(), "clears the mark before the run is sent")
+}

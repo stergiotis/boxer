@@ -78,7 +78,11 @@ conflict (ADR-0269 §SD4).
 
 A run is agent-caused when an agent's `run` starts it, or when Live reruns it
 because of an input a task wrote (SD3). The run carries the call's
-on-behalf-of context to the client, which checks, on the statement it is about
+on-behalf-of context to the client. Every other lane of the window — a pane's
+CTE, the Map's raster, an observed intermediate — runs SQL derived from the
+same input, so while the window carries a task's mark (SD3) the client checks
+those runs against it too. The Diagnostics probe is not checked: `EXPLAIN AST`
+parses and resolves nothing. The client checks, on the statement it is about
 to send and before sending:
 
 - the statement classifies as a read that names nothing outside the endpoint
