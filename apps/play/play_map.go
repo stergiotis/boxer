@@ -94,6 +94,14 @@ type MapDriver struct {
 	windowFrom string
 	windowTo   string
 
+	// memo keeps the rasters recently drawn (play_map_memo.go). memoShown is
+	// the key of the one on screen when it came from memory, and
+	// memoOnScreen says the raster on screen is a memo one, which a lane's
+	// stale last-good result must not repack over.
+	memo         mapMemo
+	memoShown    string
+	memoOnScreen bool
+
 	// renderIdx selects builtinRenders; customColorSQL is the colour expression
 	// used when the "Custom" render is active.
 	renderIdx      int
@@ -472,7 +480,15 @@ func (inst *MapDriver) demandRaster(params map[string]string) {
 	// every level afresh rather than reading what the cache holds.
 	inst.cacheUse.Store(inst.cache)
 	inst.cacheFresh.Store(inst.ladder.noBudget)
+	if inst.ladder.fresh {
+		inst.ladder.fresh = false
+		inst.jumpToMemo(params)
+	}
 	node := compiledNode{SQL: inst.template, Params: params}
+	if inst.serveFromMemo(node.key()) {
+		inst.memoOnScreen = true
+		return
+	}
 	view := inst.lane.demand(node)
 	inst.noteLane(view)
 	// The current level's own result, not a last-good one from the
@@ -484,15 +500,20 @@ func (inst *MapDriver) demandRaster(params map[string]string) {
 		inst.rebuildLevelTemplate()
 	}
 	if view.rec != nil {
-		if view.fingerprint != inst.lastPackedFP {
+		// A raster drawn from memory stays until this demand's own result
+		// lands: the lane's last-good one belongs to another view.
+		if view.fingerprint != inst.lastPackedFP && (landed || !inst.memoOnScreen) {
 			inst.repack(view.rec, view.params, view.fingerprint)
+			inst.memoOnScreen = false
 		}
 		view.rec.Release()
 	}
 	if landed && view.err == nil && view.rec != nil {
 		// Two levels can serve identical bytes, which repack skips; the
 		// level on screen is the one whose result landed either way.
+		inst.memoOnScreen = false
 		inst.packLevel = inst.ladder.current()
+		inst.remember(node.key(), view.elapsed)
 		if inst.ladder.served(view.elapsed) {
 			inst.rebuildLevelTemplate()
 		}
@@ -811,6 +832,7 @@ func (inst *MapDriver) requestRefresh() {
 	// Start the ladder over, and let it climb past its budget this time.
 	inst.ladder.inputs = ""
 	inst.refreshPending = true
+	inst.memo.clear() // nothing drawn from memory after an explicit Refresh
 }
 
 // rebuildLevelTemplate points the raster node at the ladder's current level,
@@ -1082,6 +1104,9 @@ func (inst *MapDriver) statusLine() string {
 		msg := fmt.Sprintf("%d×%d raster · %s", inst.packW, inst.packH, builtinRenders[inst.renderIdx].name)
 		if ls := inst.ladder.status(inst.packLevel, inst.loading); ls != "" {
 			msg += " · " + ls
+		}
+		if inst.memoOnScreen {
+			msg += " · from memory"
 		}
 		if ws := inst.windowStatus(); ws != "" {
 			msg += " · " + ws

@@ -106,6 +106,9 @@ type mapLadder struct {
 	// stoppedAfter is how long the level that stopped the climb took.
 	stoppedAfter time.Duration
 	missing      map[string]bool
+	// fresh marks a ladder just restarted, for the raster memo to move it to
+	// the finest level it already holds.
+	fresh bool
 }
 
 // reset starts the ladder over when the inputs changed, and reports whether
@@ -116,6 +119,7 @@ func (inst *mapLadder) reset(inputs string, levels []mapLevel) (changed bool) {
 	}
 	inst.inputs, inst.levels, inst.level = inputs, levels, 0
 	inst.stopped, inst.stoppedAfter = false, 0
+	inst.fresh = true
 	return true
 }
 

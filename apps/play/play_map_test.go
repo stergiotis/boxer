@@ -740,3 +740,62 @@ func TestMapCacheFollowsToggleAndRefresh(t *testing.T) {
 	settle(9)
 	require.False(t, d.cacheFresh.Load(), "a pan reads the cache again")
 }
+
+// The memo keeps the most recent rasters within its byte budget, forgets an
+// entry past its TTL, and a read makes an entry most recent.
+func TestMapMemoBudgetTTLAndRecency(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	m := mapMemo{budget: 3 * 4 * 10, now: func() time.Time { return now }}
+	entry := func() *mapMemoEntry { return &mapMemoEntry{pixels: make([]uint32, 10)} }
+	m.put("a", entry())
+	m.put("b", entry())
+	m.put("c", entry())
+	_, ok := m.get("a") // a becomes most recent
+	require.True(t, ok)
+	m.put("d", entry()) // evicts the least recent: b
+	require.False(t, m.has("b"))
+	require.True(t, m.has("a"))
+	require.True(t, m.has("c"))
+	require.True(t, m.has("d"))
+
+	m.put("big", &mapMemoEntry{pixels: make([]uint32, 100)})
+	require.False(t, m.has("big"), "an entry over the whole budget is not kept")
+
+	now = now.Add(mapMemoTTL)
+	_, ok = m.get("a")
+	require.False(t, ok, "expired")
+	require.False(t, m.has("c"))
+}
+
+// A pan back to a view the ladder already refined is drawn from memory with
+// no query, at the finest level held; Refresh empties the memo.
+func TestMapDriverServesARevisitFromMemory(t *testing.T) {
+	exec := &ladderExecutor{}
+	d := NewMapDriver(nil, nil)
+	d.lane.close()
+	d.lane = newNodeLane(exec, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+	g := newQueryGraph(nil, nil)
+	visit := func(lon float64) {
+		d.updateViewport(47, 48, lon, lon+1, 64, 64, graphEmitter{graph: g})
+		params := resolveSignalNames(d.templateReads, nil, g.signals())
+		require.Eventually(t, func() bool {
+			d.demandRaster(params)
+			return d.packLevel.table == "planes_mercator" && !d.loading
+		}, 2*time.Second, time.Millisecond)
+	}
+
+	visit(8)
+	visit(9)
+	require.Len(t, exec.asked(), 6, "two views, three levels each")
+	visit(8)
+	require.Len(t, exec.asked(), 6, "the pan back sends nothing")
+	require.True(t, d.memoOnScreen)
+	require.Contains(t, d.statusLine(), "full table · from memory")
+	require.False(t, d.stats.valid, "no run's accounting beside a raster from memory")
+
+	d.requestRefresh()
+	visit(8)
+	require.Len(t, exec.asked(), 9, "Refresh climbs the ladder again")
+	require.False(t, d.memoOnScreen)
+}
