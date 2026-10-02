@@ -3,6 +3,10 @@
 // that runs for seconds has posted a frame.
 //
 //   node cdp_shot.mjs <chromium command...> -- <url> <out.png> [waitMs] [WxH]
+//
+// CDP_SCALE sets the emulated devicePixelRatio (default 1);
+// CDP_AFTER_CLICK_MS how long the capture waits after the optional click
+// (default 1500).
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 
@@ -35,7 +39,7 @@ ws.onmessage = (e) => {
 const call = (method, params = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
 await call('Page.enable');
 await call('Runtime.enable');
-await call('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+await call('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: Number(process.env.CDP_SCALE || 1), mobile: false });
 await call('Page.navigate', { url });
 await new Promise((res) => setTimeout(res, waitMs));
 if (clickArg) {
@@ -45,7 +49,7 @@ if (clickArg) {
   await call('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
   await new Promise((res) => setTimeout(res, 80));
   await call('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
-  await new Promise((res) => setTimeout(res, 1500));
+  await new Promise((res) => setTimeout(res, Number(process.env.CDP_AFTER_CLICK_MS || 1500)));
 }
 const status = await call('Runtime.evaluate', { expression: 'document.getElementById("status") ? document.getElementById("status").textContent : ""', returnByValue: true });
 const shot = await call('Page.captureScreenshot', { format: 'png' });
