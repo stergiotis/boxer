@@ -17,6 +17,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 	"github.com/stretchr/testify/require"
 )
 
@@ -903,4 +904,62 @@ func TestMapAreaSignals(t *testing.T) {
 		require.Equal(t, seed, get(name), "cleared is the seed: %s", name)
 	}
 	require.Empty(t, d.areaStatus())
+}
+
+// The readout keeps each non-empty pixel's count and figure in pos order and
+// finds them under a geographic point, on any world copy; an empty pixel or
+// a point off the raster reads nothing. Counts at a sampled level scale by
+// its factor.
+func TestMapReadout(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	b := array.NewRecordBuilder(mem, arrow.NewSchema([]arrow.Field{
+		{Name: "pos", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "r", Type: arrow.PrimitiveTypes.Uint8}, {Name: "g", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "b", Type: arrow.PrimitiveTypes.Uint8}, {Name: "a", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "n", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "m", Type: arrow.PrimitiveTypes.Int32},
+	}, nil))
+	defer b.Release()
+	// A 2×2 raster: pixel 3 (south-east) and pixel 0 (north-west), out of order.
+	b.Field(0).(*array.Uint32Builder).AppendValues([]uint32{3, 0}, nil)
+	for i := 1; i <= 4; i++ {
+		b.Field(i).(*array.Uint8Builder).AppendValues([]uint8{1, 1}, nil)
+	}
+	b.Field(5).(*array.Uint32Builder).AppendValues([]uint32{12, 3}, nil)
+	b.Field(6).(*array.Int32Builder).AppendValues([]int32{35000, 1200}, nil)
+	rec := b.NewRecordBatch()
+	defer rec.Release()
+
+	ro, ok := readoutFromRecord(rec)
+	require.True(t, ok)
+	merc, ok := bboxFromLatLon(46, 48, 8, 10)
+	require.True(t, ok)
+	ro.merc, ro.w, ro.h, ro.label = merc, 2, 2, "ft mean altitude"
+
+	n, m, hasM, ok := ro.at(portolan.LL(46.5, 9.5)) // south-east quarter
+	require.True(t, ok)
+	require.EqualValues(t, 12, n)
+	require.True(t, hasM)
+	require.InDelta(t, 35000, m, 1e-9)
+	require.Equal(t, "under the pointer: 12 positions · 35,000 ft mean altitude", ro.text(portolan.LL(46.5, 9.5)))
+	require.Equal(t, "under the pointer: 3 positions · 1,200 ft mean altitude", ro.text(portolan.LL(47.5, 368.5)), "north-west, one world east")
+	require.Empty(t, ro.text(portolan.LL(47.5, 9.5)), "an empty pixel")
+	require.Empty(t, ro.text(portolan.LL(40, 9)), "off the raster")
+
+	ro.factor = 100
+	require.Equal(t, "under the pointer: ≈1,200 positions · 35,000 ft mean altitude", ro.text(portolan.LL(46.5, 9.5)))
+}
+
+// The readout's columns ride the query only with the readout on: the count,
+// then the render's figure rounded to an Int32.
+func TestRasterTemplateReadoutColumns(t *testing.T) {
+	r := builtinRenders[0]
+	plain := rasterTemplateSQLWith("planes_mercator", 1, r.colorSQL, "", false, r.readout)
+	require.NotContains(t, plain, "toUInt32(total)")
+	with := rasterTemplateSQLWith("planes_mercator", 1, r.colorSQL, "", true, r.readout)
+	require.Contains(t, with, "round(alpha)::UInt8, toUInt32(total), toInt32(round(avg(altitude)))")
+	countOnly := rasterTemplateSQLWith("planes_mercator", 1, builtinRenders[1].colorSQL, "", true, builtinRenders[1].readout)
+	require.Contains(t, countOnly, "round(alpha)::UInt8, toUInt32(total)\nFROM")
+	_, err := passes.CanonicalizeFull(100).Run(with)
+	require.NoError(t, err)
 }

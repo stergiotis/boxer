@@ -107,6 +107,15 @@ type MapDriver struct {
 	// selectArea turns box selection on (play_map_area.go); area is the box
 	// published, hasArea whether there is one, and clearAreaRequested the
 	// Clear button, applied where the frame's emitter is.
+	// readoutSQL/readoutLabel are the render's hover figure as the last
+	// settle built the template; readout is the raster on screen's values,
+	// and hoverText what the pointer is over this frame.
+	readoutOn    bool // the readout checkbox; off, the query carries no extra columns
+	readoutSQL   string
+	readoutLabel string
+	readout      mapReadout
+	hoverText    string
+
 	selectArea         bool
 	area               mapArea
 	hasArea            bool
@@ -253,6 +262,11 @@ type rasterRender struct {
 	where    string   // optional predicate ANDed with in_view; "" = none
 	needs    []string // columns beyond mercator_x/y assumed; nil = table-agnostic
 	custom   bool     // colorSQL comes from the panel's editable field
+	// readout is the one figure the hover readout shows beside a pixel's
+	// count (an aggregate, like colorSQL's), and readoutLabel its unit and
+	// name; "" shows the count alone (play_map_readout.go).
+	readout      string
+	readoutLabel string
 }
 
 // builtinRenders are the selectable colour modes; the first is the default.
@@ -261,9 +275,11 @@ type rasterRender struct {
 // red/green/blue expression, matching the playground's arbitrary-table freedom.
 var builtinRenders = []rasterRender{
 	{
-		name:     "Altitude & Speed",
-		needs:    []string{"altitude", "ground_speed"},
-		colorSQL: altitudeSpeedColorSQL,
+		name:         "Altitude & Speed",
+		needs:        []string{"altitude", "ground_speed"},
+		colorSQL:     altitudeSpeedColorSQL,
+		readout:      "avg(altitude)",
+		readoutLabel: "ft mean altitude",
 	},
 	{
 		name: "Density",
@@ -281,6 +297,8 @@ var builtinRenders = []rasterRender{
     transparency * (1 - s) * 255 AS red,
     transparency * 90 AS green,
     transparency * s * 255 AS blue`,
+		readout:      "avg(ground_speed)",
+		readoutLabel: "kt mean ground speed",
 	},
 	{
 		name:   "Custom",
@@ -503,6 +521,10 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 		ev = inst.pm.RenderFill(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
 	}
 	inst.onSelected(ev, emit)
+	inst.hoverText = ""
+	if ll, ok := inst.pm.Hover(); ok {
+		inst.hoverText = inst.readout.text(ll)
+	}
 	if inst.clearAreaRequested {
 		inst.clearAreaRequested = false
 		inst.setArea(mapArea{}, false, emit)
@@ -628,6 +650,10 @@ func (inst *MapDriver) renderControls() {
 		// is published as the area_* signals (play_map_area.go).
 		c.Checkbox(inst.ids.PrepareStr("map-select"), inst.selectArea, "select area").
 			SendRespVal(&inst.selectArea)
+		// Off by default: the readout's columns cost bytes on every query
+		// (ADR-0096 2026-10-02 readout Update).
+		c.Checkbox(inst.ids.PrepareStr("map-readout"), inst.readoutOn, "readout").
+			SendRespVal(&inst.readoutOn)
 		if inst.hasArea && c.Button(inst.ids.PrepareStr("map-clear-area"),
 			c.Atoms().Text("Clear area").Keep()).SendResp().HasPrimaryClicked() {
 			inst.clearAreaRequested = true
@@ -939,12 +965,13 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 	levels := mapLadderLevels(table, sampling, inst.refine, inst.ladder.missing)
 	// Keyed on the source, not on the levels: dropping a missing level must
 	// not read as a change.
-	inputs := fmt.Sprintf("%v|%d|%d|%s|%d|%t|%s|%s|%s|%s", b, w, h, table, sampling, inst.refine, colorSQL, where, inst.windowFrom, inst.windowTo)
+	inputs := fmt.Sprintf("%v|%d|%d|%s|%d|%t|%s|%s|%s|%s|%t", b, w, h, table, sampling, inst.refine, colorSQL, where, inst.windowFrom, inst.windowTo, inst.readoutOn)
 	if inst.ladder.reset(inputs, levels) {
 		inst.ladder.noBudget = inst.refreshPending
 	}
 	inst.refreshPending = false
 	inst.colorSQL, inst.extraWhere = colorSQL, where
+	inst.readoutSQL, inst.readoutLabel = r.readout, r.readoutLabel
 	inst.rebuildLevelTemplate()
 
 	emit.Emit("vp_min_x", uint64(b.minX))
@@ -960,7 +987,7 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 // a custom colour block outside Grammar1 falls back to the reserved six, so
 // the viewport always resolves).
 func (inst *MapDriver) ensureTemplate(table string, sampling uint32, colorSQL, extraWhere string) {
-	tmpl := rasterTemplateSQL(table, sampling, colorSQL, extraWhere)
+	tmpl := rasterTemplateSQLWith(table, sampling, colorSQL, extraWhere, inst.readoutOn, inst.readoutSQL)
 	if tmpl == inst.template {
 		return
 	}
@@ -1045,6 +1072,14 @@ func (inst *MapDriver) repack(rec arrow.RecordBatch, served map[string]string, f
 	inst.pixels = pixels
 	inst.packW = w
 	inst.packH = h
+	inst.readout = mapReadout{}
+	if ro, ok := readoutFromRecord(rec); ok {
+		ro.merc, ro.w, ro.h, ro.label = b, w, h, inst.readoutLabel
+		if len(inst.ladder.levels) > 1 {
+			ro.factor = inst.ladder.current().sampling
+		}
+		inst.readout = ro
+	}
 	// The y-flip mirrors bboxFromLatLon: min mercator y is the NORTH edge.
 	inst.packBounds = [4]float64{
 		mercYToLat(float64(b.maxY)), mercXToLon(float64(b.minX)),
@@ -1160,6 +1195,9 @@ func (inst *MapDriver) statusLine() string {
 		if as := inst.areaStatus(); as != "" {
 			msg += " · " + as
 		}
+		if inst.hoverText != "" {
+			msg += " · " + inst.hoverText
+		}
 		if ws := inst.windowStatus(); ws != "" {
 			msg += " · " + ws
 		}
@@ -1192,6 +1230,22 @@ func (inst *MapDriver) statusLine() string {
 // The function form is the canonical shape and rides through untouched. Do not
 // "simplify" it back to the operator.
 func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere string) string {
+	return rasterTemplateSQLWith(table, sampling, colorSQL, extraWhere, false, "")
+}
+
+// rasterTemplateSQLWith is rasterTemplateSQL with the hover readout's columns
+// when withReadout: every row also carries its pixel's count, and, when
+// readout is not empty, readout rounded to an Int32 — the readout shows it
+// rounded, and an Int32 travels in fewer bytes than the Float64 it comes from
+// (play_map_readout.go).
+func rasterTemplateSQLWith(table string, sampling uint32, colorSQL, extraWhere string, withReadout bool, readout string) string {
+	extra := ""
+	if withReadout {
+		extra = ", toUInt32(total)"
+		if strings.TrimSpace(readout) != "" {
+			extra += ", toInt32(round(" + readout + "))"
+		}
+	}
 	where := "in_view"
 	if strings.TrimSpace(extraWhere) != "" {
 		where = "in_view AND (" + extraWhere + ")"
@@ -1210,11 +1264,11 @@ func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere strin
     greatest(1000000. / %[2]d / zoom_factor, toFloat64(count())) AS max_total,
     pow(total / max_total, 1/5) AS transparency,
     %[3]s%[5]s
-SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
+SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8%[6]s
 FROM %[1]s
 WHERE %[4]s
 GROUP BY pos`,
-		table, sampling, colorSQL, where, alphaClause(colorSQL))
+		table, sampling, colorSQL, where, alphaClause(colorSQL), extra)
 }
 
 // rasterAlphaRe finds a colour block's own alpha definition. Textual on

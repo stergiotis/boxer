@@ -24,11 +24,12 @@ type mapMemoEntry struct {
 	w, h    uint32
 	bounds  [4]float64
 	level   mapLevel
+	readout mapReadout
 	elapsed time.Duration // the run's own, for the ladder's budget
 	at      time.Time
 }
 
-func (inst *mapMemoEntry) bytes() int { return 4 * len(inst.pixels) }
+func (inst *mapMemoEntry) bytes() int { return 4*len(inst.pixels) + inst.readout.bytes() }
 
 // mapMemo is a small LRU of landed rasters; render-thread only.
 type mapMemo struct {
@@ -128,7 +129,7 @@ func (inst *mapMemo) touch(key string) {
 func (inst *MapDriver) jumpToMemo(params map[string]string) {
 	for i := len(inst.ladder.levels) - 1; i > inst.ladder.level; i-- {
 		lv := inst.ladder.levels[i]
-		key := compiledNode{SQL: rasterTemplateSQL(lv.table, lv.sampling, inst.colorSQL, inst.extraWhere), Params: params}.key()
+		key := compiledNode{SQL: rasterTemplateSQLWith(lv.table, lv.sampling, inst.colorSQL, inst.extraWhere, inst.readoutOn, inst.readoutSQL), Params: params}.key()
 		if inst.memo.has(key) {
 			inst.ladder.level = i
 			inst.rebuildLevelTemplate()
@@ -150,6 +151,7 @@ func (inst *MapDriver) serveFromMemo(key string) (served bool) {
 	if inst.memoShown != key {
 		inst.lane.abort()
 		inst.pixels, inst.packW, inst.packH, inst.packBounds = e.pixels, e.w, e.h, e.bounds
+		inst.readout = e.readout
 		inst.version++
 		inst.memoShown = key
 	}
@@ -168,6 +170,6 @@ func (inst *MapDriver) serveFromMemo(key string) (served bool) {
 func (inst *MapDriver) remember(key string, elapsed time.Duration) {
 	inst.memo.put(key, &mapMemoEntry{
 		pixels: inst.pixels, w: inst.packW, h: inst.packH, bounds: inst.packBounds,
-		level: inst.ladder.current(), elapsed: elapsed,
+		level: inst.ladder.current(), readout: inst.readout, elapsed: elapsed,
 	})
 }
