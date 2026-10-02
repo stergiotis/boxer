@@ -747,6 +747,24 @@ The same change fixes the raster memo's reach: it now serves only a key
 other than the one the lane itself last landed, so a fresh raster is no
 longer called a memory and keeps its run's accounting.
 
+## Update — 2026-10-02: a hover readout, opt-in
+
+SD10's hover→info, without a second query. With the **readout** checkbox on,
+the raster query also returns each non-empty pixel's row count and one figure
+the render names (`rasterRender.readout` — mean altitude for "Altitude &
+Speed", mean ground speed for "Speed", none for "Density" and "Custom"),
+rounded to an `Int32`. The panel keeps them sorted by pixel beside the
+raster (and in the raster memo); under the pointer it finds the pixel, on
+any world copy, and the status line reads, for example, "under the pointer:
+261 positions · 2,027 ft mean altitude". At a sampled ladder level the count
+is scaled by the level's factor and marked "≈".
+
+It is off by default because the columns cost bytes on every query. Measured
+once on 2026-10-02 on the local demo slice at 1024×600: the count alone added
+22–45 % to the lz4-compressed Arrow result, and the count with the figure
+70–95 % (as a `Float64` the figure added more, which is why it travels
+rounded); server time did not move.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
