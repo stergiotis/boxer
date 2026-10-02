@@ -50,3 +50,23 @@ func TestTruncateRunesInvalidInput(t *testing.T) {
 		t.Errorf("result %q not valid UTF-8 — EnsureUTF8 should sanitise", got)
 	}
 }
+
+func TestTruncateBytesBacksOffToARuneBoundary(t *testing.T) {
+	cases := []struct {
+		s    string
+		max  int
+		want string
+	}{
+		{"hello", 10, "hello"},
+		{"hello", 3, "hel"},
+		{"aé", 2, "a"}, // é is two bytes; the cut lands inside it
+		{"aé", 3, "aé"},
+		{"é", 1, ""},
+	}
+	for _, tc := range cases {
+		got := truncateBytes(tc.s, tc.max)
+		if got != tc.want || !utf8.ValidString(got) {
+			t.Errorf("truncateBytes(%q, %d) = %q, want %q", tc.s, tc.max, got, tc.want)
+		}
+	}
+}

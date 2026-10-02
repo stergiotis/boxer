@@ -211,7 +211,7 @@ func readSnippet(libs []snippetLibrary, library string, section string) (out Sni
 		}
 		out = Snippet{Library: library, Section: section, Heading: heading[section], Sql: sqlBlocks(t), Text: t}
 		if len(out.Text) > refMaxText {
-			out.Text, out.Truncated = out.Text[:refMaxText], true
+			out.Text, out.Truncated = truncateBytes(out.Text, refMaxText), true
 		}
 		return
 	}
@@ -254,7 +254,7 @@ func listFunctions(r *sqlvocab.Registry, installed map[string]string, probed boo
 		f := FunctionInfo{Name: e.Name, Call: e.call(), Doc: e.Doc, Where: e.Where.String(), Family: e.Family,
 			Available: e.Available, Dependencies: slices.Clone(e.Dependencies)}
 		if len(f.Doc) > refMaxDoc {
-			f.Doc = f.Doc[:refMaxDoc]
+			f.Doc = truncateBytes(f.Doc, refMaxDoc)
 		}
 		if e.Where == sqlvocab.WhereServer {
 			switch {

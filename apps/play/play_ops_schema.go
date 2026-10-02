@@ -308,14 +308,6 @@ func statementKind(stmt string) (kind string) {
 	return class.String()
 }
 
-// cut bounds a comment.
-func cut(s string, n int) (out string) {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
-
 // jsonRows decodes a JSONEachRow body.
 func jsonRows[T any](raw []byte) (rows []T, err error) {
 	for line := range strings.SplitSeq(string(raw), "\n") {
@@ -366,7 +358,7 @@ func listTables(ctx context.Context, client *Client, in TablesArgs) (out TableLi
 			out.Truncated = true
 			break
 		}
-		out.Tables = append(out.Tables, TableInfo{Name: r.Name, Engine: r.Engine, Comment: cut(r.Comment, schemaMaxComment),
+		out.Tables = append(out.Tables, TableInfo{Name: r.Name, Engine: r.Engine, Comment: truncateBytes(r.Comment, schemaMaxComment),
 			Rows: r.Rows, Columns: r.Columns, Leeway: r.Encoded > 0 && r.Encoded*2 >= r.Columns})
 	}
 	if strings.TrimSpace(in.Database) == "" {
@@ -426,7 +418,7 @@ func describeTable(ctx context.Context, client *Client, table string) (out Table
 				out.Truncated = true
 				break
 			}
-			out.Columns = append(out.Columns, ColumnInfo{Name: r.Name, Type: r.Type, Comment: cut(r.Comment, schemaMaxComment)})
+			out.Columns = append(out.Columns, ColumnInfo{Name: r.Name, Type: r.Type, Comment: truncateBytes(r.Comment, schemaMaxComment)})
 		}
 		return
 	}
@@ -437,7 +429,7 @@ func describeTable(ctx context.Context, client *Client, table string) (out Table
 			out.Physical++
 			continue
 		}
-		out.Columns = append(out.Columns, ColumnInfo{Name: r.Name, Type: r.Type, Comment: cut(r.Comment, schemaMaxComment)})
+		out.Columns = append(out.Columns, ColumnInfo{Name: r.Name, Type: r.Type, Comment: truncateBytes(r.Comment, schemaMaxComment)})
 	}
 	out.Leeway, out.Reading = true, leewayReading
 	for _, s := range sections {
@@ -449,7 +441,7 @@ func describeTable(ctx context.Context, client *Client, table string) (out Table
 		for _, v := range lanes.Values {
 			p := byPhysical[v.Physical]
 			sec.Values = append(sec.Values, LeewayValue{Handle: lanes.Section + ":" + v.Name, Type: p.Type, List: v.Shape == lwextract.ShapeList,
-				Comment: cut(p.Comment, schemaMaxComment)})
+				Comment: truncateBytes(p.Comment, schemaMaxComment)})
 		}
 		for _, c := range lanes.Channels {
 			sec.Channels = append(sec.Channels, LeewayChannel{Name: c.Name, Verbatim: c.Verbatim, Single: c.SingleMembership, Mixed: c.Param != ""})
