@@ -1014,8 +1014,9 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 
 // ensureTemplate rebuilds the raster node's SQL when a panel control changed
 // and re-derives the slot names its compile resolves (parsed off the template;
-// a custom colour block outside Grammar1 falls back to the reserved six, so
-// the viewport always resolves).
+// a custom colour block outside Grammar1 falls back to the reserved six, plus
+// tl_from/tl_to while the brushed window's predicate is in, so the viewport
+// and the window always resolve).
 func (inst *MapDriver) ensureTemplate(table string, sampling uint32, colorSQL, extraWhere string) {
 	tmpl := rasterTemplateSQLWith(table, sampling, colorSQL, extraWhere, inst.readoutOn, inst.readoutSQL, inst.templateDPR())
 	if tmpl == inst.template {
@@ -1030,6 +1031,9 @@ func (inst *MapDriver) ensureTemplate(table string, sampling uint32, colorSQL, e
 	} else {
 		for _, s := range mapViewportSignals {
 			inst.templateReads = append(inst.templateReads, string(s))
+		}
+		if strings.Contains(extraWhere, "{"+string(signalTimelineFrom)+":") {
+			inst.templateReads = append(inst.templateReads, string(signalTimelineFrom), string(signalTimelineTo))
 		}
 	}
 }

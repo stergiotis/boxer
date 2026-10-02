@@ -76,3 +76,27 @@ func TestMapFiltersOnTheBrushedWindow(t *testing.T) {
 	settle()
 	require.Equal(t, "time column must be a plain column name", d.controlErr)
 }
+
+// A Custom colour block outside Grammar1 leaves the template unparsed; the
+// brushed window's slots still resolve, or the server rejects the raster.
+func TestMapWindowResolvesWithAnUnparsedTemplate(t *testing.T) {
+	d := NewMapDriver(nil, nil)
+	defer d.lane.close()
+	for i, r := range builtinRenders {
+		if r.custom {
+			d.renderIdx = i
+		}
+	}
+	d.customColorSQL = "toUInt32(count() DIV 2)"
+	g := newQueryGraph(nil, nil)
+	em := graphEmitter{graph: g}
+	em.Emit(signalTimelineFrom, "2026-09-30 10:00:00.000")
+	em.Emit(signalTimelineTo, "2026-09-30 12:30:00.000")
+	d.readWindow(g.signals())
+	d.updateViewport(47, 48, 8, 9, 64, 64, em)
+	_, _, err := extractSlotsAndParams(d.template)
+	require.Error(t, err, "the case under test is the unparsed template")
+	params := resolveSignalNamesWithDefaults(d.templateReads, nil, g.signals())
+	require.Equal(t, "2026-09-30 10:00:00.000", params["param_tl_from"])
+	require.Equal(t, "2026-09-30 12:30:00.000", params["param_tl_to"])
+}
