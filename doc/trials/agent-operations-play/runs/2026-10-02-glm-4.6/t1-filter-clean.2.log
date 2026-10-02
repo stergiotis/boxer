@@ -1,0 +1,28 @@
+fail  t1-filter-clean                          321.5s
+      Error: wait failed
+      │   at RunTrace (github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient/trace.go:415)
+      │   data: {_ "step": 6, "step_desc": "wait ~=\"2 rows \u00b7\" (label)"}
+      ├── cause: still not ready before the timeout
+      │   at waitFor (github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient/trace.go:559)
+      │   data: {_ "attempts": 1800, "timeout": "5m0s"}
+      └── cause: no node matches the locator
+          at Resolve (github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient/locate.go:113)
+          data: {_ "name": "", "nameContains": "", "role": "label", "id": 0, "nodes": 362}
+      host log: <repo>/tmp/scenes/logs/t1-filter-clean.host.log
+
+0 passed, 1 failed, 0 skipped → <repo>/tmp/scenes/index.md
+2026-10-02T10:06:03+02:00 ERR an error occurred
+  Error: scenes failed
+      at run (github.com/stergiotis/boxer/public/thestack/imzero2/scene/scenecmd/scenecmd.go:148)
+      data: {_ "failed": 1}
+  
+  Stack trace (most recent call last):
+    main                           runtime/proc.go:302
+    main                           github.com/stergiotis/boxer/public/thestack/cmd/imzero2/thestack_app.go:89
+    mainC                          github.com/stergiotis/boxer/public/thestack/cmd/imzero2/thestack_app.go:80
+    Run                            github.com/urfave/cli/v2@v2.27.7/app.go:307
+    RunContext                     github.com/urfave/cli/v2@v2.27.7/app.go:333
+    Run                            github.com/urfave/cli/v2@v2.27.7/command.go:269
+    Run                            github.com/urfave/cli/v2@v2.27.7/command.go:269
+    Run                            github.com/urfave/cli/v2@v2.27.7/command.go:276
+    run                            github.com/stergiotis/boxer/public/thestack/imzero2/scene/scenecmd/scenecmd.go:148 ◄ scenes failed
