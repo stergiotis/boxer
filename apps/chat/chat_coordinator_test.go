@@ -155,6 +155,8 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 		toolCall("c1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
 		toolCall("c2", "open_window", `{"app":"notes"}`),
 		toolCall("c3", "call_operation", `{"window":100,"operation":"get_note","args":{}}`),
+		toolCall("s1", "call_operation", `{"window":100,"operation":"set_note","text":"tidied"}`),
+		toolCall("s2", "call_operation", `{"window":100,"operation":"set_note","reason":"tidy it"}`),
 		toolCall("c4", "call_operation", `{"window":100,"operation":"set_note","args":{"text":"tidied"},"reason":"tidy it"}`),
 		{Content: "done", FinishReason: "stop"},
 	}}
@@ -196,16 +198,20 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "done", res.final.Content)
 	assert.Equal(t, "tidied", host.notes[100].text, "the write went through the host to the window")
-	require.Len(t, res.activity, 4)
+	require.Len(t, res.activity, 6)
 	assert.Contains(t, res.activity[1], "opened notes as window 100")
-	assert.Contains(t, res.activity[3], "set_note in window 100")
+	assert.Contains(t, res.activity[5], "set_note in window 100")
 
 	var readBack string
+	replies := map[string]string{}
 	for _, m := range res.messages {
-		if m.Role == openaichat.ChatRoleTool && m.ToolCallId == "c3" {
-			readBack = m.Content
+		if m.Role == openaichat.ChatRoleTool {
+			replies[m.ToolCallId] = m.Content
 		}
 	}
+	readBack = replies["c3"]
+	assert.Contains(t, replies["s1"], "put text under args", "a key beside window and operation is named, not dropped")
+	assert.Contains(t, replies["s2"], "you sent no args", "a refusal of missing args says where they go")
 	assert.True(t, strings.HasPrefix(readBack, untrustedOpen), "an untrusted result reaches the model delimited: %s", readBack)
 	assert.Contains(t, readBack, `"text":"first"`)
 	task, tainted, _ := coord.state()

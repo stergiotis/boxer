@@ -5,6 +5,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -266,8 +267,22 @@ func (inst *coordinator) call(ctx context.Context, key string, args map[string]a
 	window, _ := args["window"].(float64)
 	op, _ := args["operation"].(string)
 	reason, _ := args["reason"].(string)
+	var stray []string
+	for k := range args {
+		switch k {
+		case "window", "operation", "args", "reason":
+		default:
+			stray = append(stray, k)
+		}
+	}
+	if len(stray) > 0 {
+		slices.Sort(stray)
+		return "error: call_operation takes window, operation, args and reason; put " + strings.Join(stray, ", ") +
+			" under args", op + ": arguments outside args"
+	}
 	opArgs := "{}"
-	if a, ok := args["args"]; ok && a != nil {
+	a, hasArgs := args["args"]
+	if hasArgs && a != nil {
 		b, err := json.Marshal(a)
 		if err == nil {
 			opArgs = string(b)
@@ -290,6 +305,9 @@ func (inst *coordinator) call(ctx context.Context, key string, args map[string]a
 		}
 	}
 	co := callOutcome{Phase: out.Phase, Reason: out.Reason, Revisions: out.Revisions}
+	if out.Phase == "refused" && (!hasArgs || a == nil) {
+		co.Reason = strings.TrimSpace(co.Reason + "; you sent no args: the operation's arguments go under args")
+	}
 	untrustedSource := ""
 	if out.ResultRef != "" {
 		res, rerr := inst.cli.Read(ctx, h, out.ResultRef)
