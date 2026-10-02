@@ -311,6 +311,43 @@ the probe itself, since an agent's work reaches the endpoint only under the
 grant (§SD2). All three are the build's own text and are not marked
 untrusted.
 
+### 2026-10-02 — the endpoint's schema, and a check that runs nothing
+
+The agent-operations-play trial's models learned a schema by writing
+`SELECT … FROM system.columns` into the person's buffer and running it,
+which replaced the buffer and the main result on every probe; a draft was
+checked only by running it. Four external reads (ADR-0269 §SD1, update of
+this date) take that work off the buffer. They are the Model tab's tools
+(ADR-0139 §SD8), moved to where a coordinator reaches them:
+
+- `list_tables` — a database's tables with engine, row count, comment and
+  whether their column names carry leeway's encoding, and the endpoint's
+  other databases.
+- `describe_table` — a plain table's columns; for a leeway table, the
+  sections play's resolver reads off the physical names: each value
+  column's handle and type, whether it is list-valued, and each tagged
+  section's membership channels (verbatim or ref, single, mixed), with a
+  paragraph on reading them with handles and `LW_GET`. Physical names are
+  left out, since the model is to write handles.
+- `validate_sql` — the grammar and canonical form of a statement (or the
+  buffer), play's client-side rewrite of it as it would be sent, the handles
+  that do not resolve with their candidates, failed rewrite steps, and
+  whether `run` would accept it under the grant.
+- `trace_rewrite` — the same rewrite step by step: every unit of the
+  pre-execute stage and play's own steps around it, in the order they ran,
+  each with its kind (play, registered, late-bound), outcome (applied,
+  skipped, declined), whether it rewrote the statement, its time and its
+  error, optionally with the pass invocations inside it; then the body as
+  it would ship, the parameters lifted from the prelude, and where dispatch
+  would send it. It is `Client.RewriteTrace`, the trace the Passes tab and
+  the Diagnostics pane draw, so it describes the code path a run executes.
+
+The probes reach the pinned endpoint, so an agent's needs it among the
+grant's destinations, as a run does (§SD2): the catalog reads and the trace
+refuse with the destination as their remedy; `validate_sql` returns the
+grammar half without it and names the destination the rest needs. Table and
+column comments are marked untrusted.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

@@ -268,6 +268,14 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 // a re-derivation of it.
 func (inst *Client) buildStatementObserved(sql string, observe func(passreg.ApplyObservation)) (body string, params map[string]string) {
 	residual, params := inst.buildResidualObserved(sql, observe)
+	body = finishStatementObserved(residual, observe)
+	return
+}
+
+// finishStatementObserved is the last step of buildStatementObserved: the wire
+// format appended to a residual. Split out for a caller that needs the
+// residual and the body from one rewrite.
+func finishStatementObserved(residual string, observe func(passreg.ApplyObservation)) (body string) {
 	started := stepClock(observe)
 	// ADR-0181 §SD8 M3: an INSERT wrapper takes no FORMAT clause — a write
 	// answers with a summary, not a stream. (What keeps DDL and other

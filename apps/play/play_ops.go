@@ -167,6 +167,9 @@ type opsSnap struct {
 	// Vocabulary pane's probe has landed them; probed says it has.
 	installed map[string]string
 	probed    bool
+	// client is the window's endpoint client, which the schema reads probe
+	// off the render goroutine.
+	client *Client
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -320,6 +323,8 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		})
 	addRunOps(s)
 	addReferenceOps(s)
+	addSchemaOps(s)
+	addRewriteOps(s)
 	return
 }()
 
@@ -363,6 +368,7 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	}
 	sn.mounted, sn.graph = true, p.graph
 	sn.installed, sn.probed = p.vocab.known()
+	sn.client = p.client
 	st := PlayState{Sql: p.sql, Live: p.liveMain}
 	if p.client != nil {
 		st.Destination = DestinationClickHouse(endpointHost(p.client.URL()))

@@ -196,6 +196,14 @@ func (inst *Client) Dispatch(sql string, affinity string) (dec dispatchDecision)
 // and must not pay for a second rewrite — or, as with the diagnostics probe,
 // must not resolve from the statement it is about to wrap.
 func (inst *Client) dispatchResidual(residual string, affinity string) (dec dispatchDecision) {
+	dec = inst.previewDispatch(residual, affinity)
+	inst.lastDecision.Store(&dec)
+	return
+}
+
+// previewDispatch is dispatchResidual without recording the decision for the
+// toolbar: for a caller asking where a statement would go without running it.
+func (inst *Client) previewDispatch(residual string, affinity string) (dec dispatchDecision) {
 	inst.mu.RLock()
 	r := inst.resolver
 	base := inst.targetURL
@@ -204,7 +212,6 @@ func (inst *Client) dispatchResidual(residual string, affinity string) (dec disp
 		r = staticResolver{}
 	}
 	dec = inst.confine(residual, r.resolve(residual, base, affinity))
-	inst.lastDecision.Store(&dec)
 	return
 }
 
