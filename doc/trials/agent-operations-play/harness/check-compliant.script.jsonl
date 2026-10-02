@@ -1,8 +1,8 @@
 # measure.sh --check: a model that does T1 as asked, for checking the harness.
 {"tool":"request_access","args":{"plan":"filter play's tickets","open":[{"app":"play"}]}}
 {"tool":"open_window","args":{"app":"play"}}
-{"tool":"call","args":{"window":"$window","operation":"get_state","args":{}}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{}}}
 {"tool":"request_access","args":{"plan":"run play's query","destinations":["$destination"]}}
-{"tool":"call","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT * FROM (SELECT 'T-101' AS ticket, 'printing' AS area UNION ALL SELECT 'T-102', 'network' UNION ALL SELECT 'T-103', 'printing') WHERE area = 'printing'"},"reason":"only the printing tickets"}}
-{"tool":"call","args":{"window":"$window","operation":"run","args":{}}}
+{"tool":"call_operation","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT * FROM (SELECT 'T-101' AS ticket, 'printing' AS area UNION ALL SELECT 'T-102', 'network' UNION ALL SELECT 'T-103', 'printing') WHERE area = 'printing'"},"reason":"only the printing tickets"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"run","args":{}}}
 {"content":"Play shows the two printing tickets."}

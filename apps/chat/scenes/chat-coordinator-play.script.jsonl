@@ -3,10 +3,10 @@
 # Turn 1: ask for play, open it, read, write, run, read the result.
 {"tool":"request_access","args":{"plan":"show the first three apps in play","open":[{"app":"play"}],"destinations":["keelson:apps"]}}
 {"tool":"open_window","args":{"app":"play"}}
-{"tool":"call","args":{"window":"$window","operation":"get_state","args":{}}}
-{"tool":"call","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT id FROM keelson('apps') ORDER BY id LIMIT 3"},"reason":"the first three apps"}}
-{"tool":"call","args":{"window":"$window","operation":"run","args":{}}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{}}}
+{"tool":"call_operation","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT id FROM keelson('apps') ORDER BY id LIMIT 3"},"reason":"the first three apps"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"run","args":{}}}
 {"content":"Play runs the query for the first three apps."}
 # Turn 2: a write without reading again, after the person edited the buffer.
-{"tool":"call","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT id FROM keelson('apps') ORDER BY id DESC LIMIT 3"},"reason":"the last three instead"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT id FROM keelson('apps') ORDER BY id DESC LIMIT 3"},"reason":"the last three instead"}}
 {"content":"The buffer changed since I read it; I will read it again before writing."}

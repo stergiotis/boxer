@@ -154,7 +154,7 @@ through the host:
   (`BOXER_AGENT_COORDINATORS`); the manifest's `runtime.agent` grant alone
   lets it ask for nothing.
 - **Fixed tools.** `request_access`, `list_windows`, `describe_app`,
-  `call`, `open_window` and `stop_task`. Operation schemas load on demand
+  `call_operation`, `open_window` and `stop_task`. Operation schemas load on demand
   through `describe_app`; a call's key is the model's tool-call id.
 - **A turn.** Before the first model call the app asks the host for the
   changes others made since the previous turn (`runtime.agent.turn`) and

@@ -96,7 +96,7 @@ func (inst *coordinator) tools() (out []openaichat.Tool) {
 			Parameters: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "describe_app", Description: "With no arguments, list every app and the operations it offers you; with app, that app's; with app and operation, the operation's argument schema.",
 			Parameters: schema(`{"type":"object","properties":{"app":{"type":"string","description":"an app id as describe_app lists it"},"search":{"type":"string","description":"filter apps and operations by a word"},"operation":{"type":"string"}},"additionalProperties":false}`)},
-		{Name: "call", Description: "Call one operation in one window of your task.",
+		{Name: "call_operation", Description: "Call one operation in one window of your task; the operation's own arguments go under args.",
 			Parameters: schema(`{"type":"object","properties":{"window":{"type":"integer"},"operation":{"type":"string"},"args":{"type":"object"},"reason":{"type":"string","description":"one line, shown to the person"}},"required":["window","operation"],"additionalProperties":false}`)},
 		{Name: "open_window", Description: "Open a window of an app your task may open; it joins your task.",
 			Parameters: schema(`{"type":"object","properties":{"app":{"type":"string"}},"required":["app"],"additionalProperties":false}`)},
@@ -150,7 +150,7 @@ func (inst *coordinator) exec(ctx context.Context, call openaichat.ToolCall) (co
 		}
 		b, _ := json.Marshal(apps)
 		return string(b), "described " + strconv.Itoa(len(apps)) + " app(s)"
-	case "call":
+	case "call_operation":
 		return inst.call(ctx, call.Id, args)
 	case "open_window":
 		h := inst.handle()
@@ -261,7 +261,7 @@ type callOutcome struct {
 func (inst *coordinator) call(ctx context.Context, key string, args map[string]any) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
-		return "error: no task yet; call request_access first", "call: no task"
+		return "error: no task yet; call request_access first", "call_operation: no task"
 	}
 	window, _ := args["window"].(float64)
 	op, _ := args["operation"].(string)

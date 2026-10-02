@@ -154,8 +154,8 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 	model := &scriptedModel{replies: []openaichat.CompletionResponse{
 		toolCall("c1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
 		toolCall("c2", "open_window", `{"app":"notes"}`),
-		toolCall("c3", "call", `{"window":100,"operation":"get_note","args":{}}`),
-		toolCall("c4", "call", `{"window":100,"operation":"set_note","args":{"text":"tidied"},"reason":"tidy it"}`),
+		toolCall("c3", "call_operation", `{"window":100,"operation":"get_note","args":{}}`),
+		toolCall("c4", "call_operation", `{"window":100,"operation":"set_note","args":{"text":"tidied"},"reason":"tidy it"}`),
 		{Content: "done", FinishReason: "stop"},
 	}}
 	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
