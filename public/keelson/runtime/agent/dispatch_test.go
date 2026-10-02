@@ -216,7 +216,7 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 	t.Helper()
 	reg := app.NewRegistry()
 	require.NoError(t, reg.RegisterFactory(app.Manifest{Id: docAppId, Display: "Doc", Summary: "edit a doc",
-		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: docOps.Catalog()},
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: docOps.Catalog(), Help: docHelp},
 		func() (app.AppI, error) { return nil, nil }))
 	bus := inprocbus.NewInst(zerolog.Nop())
 	host := &fakeHost{engines: map[uint64]*opengine.Engine{}, docs: map[uint64]*doc{}}

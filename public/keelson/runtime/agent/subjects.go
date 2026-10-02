@@ -29,6 +29,8 @@ const (
 	// SubjectDescribe answers an app's operations, or those matching a
 	// search.
 	SubjectDescribe = SubjectPrefix + "describe"
+	// SubjectHelp reads the inline help apps ship.
+	SubjectHelp = SubjectPrefix + "help"
 	// SubjectRequest asks for a task grant.
 	SubjectRequest = SubjectPrefix + "request"
 	// SubjectList lists the task's instances.

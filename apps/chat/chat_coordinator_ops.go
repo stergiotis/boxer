@@ -81,9 +81,11 @@ type describedResource struct {
 }
 
 type describedApp struct {
-	App        string               `json:"app"`
-	Display    string               `json:"display"`
-	Summary    string               `json:"summary,omitempty"`
+	App     string `json:"app"`
+	Display string `json:"display"`
+	Summary string `json:"summary,omitempty"`
+	// Help says read_help has documentation for the app.
+	Help       bool                 `json:"help,omitempty"`
 	Resources  []describedResource  `json:"resources,omitempty"`
 	Operations []describedOperation `json:"operations"`
 }
@@ -93,7 +95,7 @@ type describedApp struct {
 func describeView(apps []agent.AppOperations) (out []describedApp) {
 	out = make([]describedApp, 0, len(apps))
 	for _, a := range apps {
-		d := describedApp{App: a.App, Display: a.Display, Summary: a.Summary, Operations: make([]describedOperation, 0, len(a.Operations))}
+		d := describedApp{App: a.App, Display: a.Display, Summary: a.Summary, Help: a.Help, Operations: make([]describedOperation, 0, len(a.Operations))}
 		for _, r := range a.Resources {
 			d.Resources = append(d.Resources, describedResource{Name: r.Name, Summary: r.Summary})
 		}
@@ -216,4 +218,79 @@ func withReason(argsSchema string) (v jsontext.Value) {
 		return schema(`{"type":"object"}`)
 	}
 	return jsontext.Value(b)
+}
+
+type helpSection struct {
+	Slug    string `json:"slug"`
+	Heading string `json:"heading"`
+	Level   uint8  `json:"level"`
+}
+
+type helpDoc struct {
+	App      string        `json:"app"`
+	Doc      string        `json:"doc"`
+	Title    string        `json:"title"`
+	Sections []helpSection `json:"sections,omitempty"`
+}
+
+type helpHit struct {
+	App     string `json:"app"`
+	Doc     string `json:"doc"`
+	Section string `json:"section,omitempty"`
+	Title   string `json:"title"`
+	Heading string `json:"heading,omitempty"`
+	Context string `json:"context,omitempty"`
+}
+
+type helpRead struct {
+	Docs      []helpDoc     `json:"docs,omitempty"`
+	Hits      []helpHit     `json:"hits,omitempty"`
+	Text      string        `json:"text,omitempty"`
+	Truncated bool          `json:"truncated,omitempty"`
+	Sections  []helpSection `json:"sections,omitempty"`
+	Then      string        `json:"then,omitempty"`
+}
+
+func helpSectionsOf(in []agent.HelpSection) (out []helpSection) {
+	for _, s := range in {
+		out = append(out, helpSection{Slug: s.Slug, Heading: s.Heading, Level: s.Level})
+	}
+	return
+}
+
+// readHelp is what the model reads of read_help. Help is the apps' own
+// documentation, so it is not delimited as untrusted.
+func (inst *coordinator) readHelp(ctx context.Context, r agent.HelpRequest) (content string, activity string) {
+	got, err := inst.cli.Help(ctx, r)
+	if err != nil {
+		inst.refuse(err.Error())
+		return "error: " + err.Error(), "help: " + err.Error()
+	}
+	out := helpRead{Text: got.Text, Truncated: got.Truncated, Sections: helpSectionsOf(got.Sections)}
+	for _, d := range got.Docs {
+		out.Docs = append(out.Docs, helpDoc{App: d.App, Doc: d.Doc, Title: d.Title, Sections: helpSectionsOf(d.Sections)})
+	}
+	for _, h := range got.Hits {
+		out.Hits = append(out.Hits, helpHit(h))
+	}
+	switch {
+	case got.Truncated:
+		out.Then = "the text was cut; read one of sections for the rest"
+	case len(out.Hits) > 0:
+		out.Then = "read a hit with read_help and its app, doc and section"
+	}
+	b, _ := json.Marshal(out)
+	content = string(b)
+	switch {
+	case len(got.Hits) > 0:
+		activity = "searched help: " + strconv.Itoa(len(got.Hits)) + " section(s)"
+	case len(got.Docs) > 0:
+		activity = "listed help: " + strconv.Itoa(len(got.Docs)) + " document(s)"
+	default:
+		activity = "read help " + r.Doc
+		if r.Section != "" {
+			activity += "#" + r.Section
+		}
+	}
+	return
 }

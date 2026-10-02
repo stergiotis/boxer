@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -72,6 +73,10 @@ type Service struct {
 	// that left it to the person.
 	leftBy map[uint64]string
 
+	// helpCache holds the help books served, by app.
+	helpMu    sync.Mutex
+	helpCache map[app.AppIdT]help.BookI
+
 	recMu   sync.Mutex
 	records []ActionRecord
 	recHead int
@@ -100,7 +105,8 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		cfg.Registry = app.DefaultRegistry
 	}
 	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task),
-		requests: make(map[string]*request), taints: make(map[string]bool), leftBy: make(map[uint64]string)}
+		requests: make(map[string]*request), taints: make(map[string]bool), leftBy: make(map[uint64]string),
+		helpCache: make(map[app.AppIdT]help.BookI)}
 	if cfg.Exec != nil {
 		s.facts = agentfacts.NewActionStore(cfg.Exec, nil, agentfacts.ActionStoreConfig{})
 		s.flushCh, s.stopFlush, s.flushDone = make(chan struct{}, 1), make(chan struct{}), make(chan struct{})
@@ -176,6 +182,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	switch msg.Subject {
 	case SubjectDescribe:
 		inst.reply(msg.Reply, inst.describe(msg))
+	case SubjectHelp:
+		inst.reply(msg.Reply, inst.help(msg))
 	case SubjectRequest:
 		inst.reply(msg.Reply, inst.requestGrant(msg))
 	case SubjectCall:
@@ -244,7 +252,7 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply) {
 			continue
 		}
 		appHit := search == "" || containsFold(string(m.Id), search) || containsFold(m.Display, search) || containsFold(m.Summary, search)
-		entry := wireApp{App: string(m.Id), Display: m.Display, Summary: m.Summary}
+		entry := wireApp{App: string(m.Id), Display: m.Display, Summary: m.Summary, Help: m.Help != nil}
 		for _, o := range m.Operations.Operations {
 			if !o.Agents {
 				continue

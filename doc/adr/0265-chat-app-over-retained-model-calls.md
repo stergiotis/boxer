@@ -272,6 +272,11 @@ grant lacked, a grant asking for nothing. The coordinator changed:
   operation of a window in the task is also a typed tool,
   `w<window>_<operation>`, beside the fixed tools. It is a trial arm, not a
   default: the tool list then changes from call to call.
+- **`read_help`** reads the apps' help over `runtime.agent.help`
+  (ADR-0269, update of this date): a search across the apps, an app's
+  documents, or one section; `describe_app` marks the apps that have help,
+  and the prompt says so. It is the apps' documentation, so it is not
+  delimited as untrusted and does not taint the conversation.
 
 ## References
 

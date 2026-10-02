@@ -42,9 +42,11 @@ type wireOperation struct {
 }
 
 type wireApp struct {
-	App        string          `json:"app"`
-	Display    string          `json:"display"`
-	Summary    string          `json:"summary,omitempty"`
+	App     string `json:"app"`
+	Display string `json:"display"`
+	Summary string `json:"summary,omitempty"`
+	// Help says the app ships inline help, read with SubjectHelp.
+	Help       bool            `json:"help,omitempty"`
 	Resources  []wireResource  `json:"resources,omitempty"`
 	Operations []wireOperation `json:"operations"`
 }

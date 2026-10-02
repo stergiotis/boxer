@@ -63,11 +63,13 @@ type Operation struct {
 	ResultSchema string
 }
 
-// AppOperations is one app's operations agents may call.
+// AppOperations is one app's operations agents may call. Help says the
+// app ships inline help, read with [Client.Help].
 type AppOperations struct {
 	App        string
 	Display    string
 	Summary    string
+	Help       bool
 	Resources  []Resource
 	Operations []Operation
 }
@@ -125,7 +127,7 @@ func (inst *Client) Describe(ctx context.Context, r DescribeRequest) (apps []App
 		return
 	}
 	for _, a := range rep.Apps {
-		out := AppOperations{App: a.App, Display: a.Display, Summary: a.Summary}
+		out := AppOperations{App: a.App, Display: a.Display, Summary: a.Summary, Help: a.Help}
 		for _, res := range a.Resources {
 			out.Resources = append(out.Resources, Resource(res))
 		}

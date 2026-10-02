@@ -863,6 +863,15 @@ each call's arguments as the model sent them, and a row for each refused
 grant request; neither reaches `boxer.facts`. A trial could otherwise see
 only an argument digest, and a refused grant left no trace.
 
+### 2026-10-02 — the apps' help, for the model
+
+`runtime.agent.help` serves the inline help apps ship (`app.Manifest.Help`)
+for the apps `describe` lists: a search over their sections, an app's
+documents with their top-level sections, or one document or section as
+markdown, cut at `HelpMaxBytes` with its subsections named. It needs no
+grant, like `describe`, and its text is the apps' own documentation, so it
+is not marked untrusted; `describe` says which apps have help.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

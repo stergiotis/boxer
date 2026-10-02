@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -187,7 +188,7 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 	assert.NotEmpty(t, task)
 	assert.True(t, tainted)
 	model.mu.Lock()
-	assert.Len(t, model.seen[0].Tools, 6, "every call offers the fixed tools")
+	assert.Len(t, model.seen[0].Tools, 7, "every call offers the fixed tools")
 	model.mu.Unlock()
 }
 
@@ -216,7 +217,8 @@ func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools b
 
 	reg := app.NewRegistry()
 	require.NoError(t, reg.RegisterFactory(app.Manifest{Id: notesId, Display: "Notes", Summary: "keep a note",
-		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: noteOps.Catalog()},
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: noteOps.Catalog(),
+		Help: fstest.MapFS{"overview.md": {Data: []byte("# Notes\n\nA note holds one text.\n\n## Tidying\n\nTidy a note by replacing its text with set_note.\n")}}},
 		func() (app.AppI, error) { return nil, nil }))
 	host = &noteHost{engines: map[uint64]*opengine.Engine{}, notes: map[uint64]*note{}}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -310,7 +312,7 @@ func TestOperationToolsCallAWindowsOperationDirectly(t *testing.T) {
 
 	model.mu.Lock()
 	defer model.mu.Unlock()
-	assert.Len(t, model.seen[0].Tools, 6, "no window, no operation tools")
+	assert.Len(t, model.seen[0].Tools, 7, "no window, no operation tools")
 	var names []string
 	for _, tl := range model.seen[len(model.seen)-1].Tools {
 		names = append(names, tl.Name)
@@ -327,4 +329,31 @@ func TestARemedyOfDestinationsAsksForThem(t *testing.T) {
 	assert.Equal(t, []string{"clickhouse:localhost:8123"}, n.Args["destinations"])
 	assert.Contains(t, n.Then, "run in window 2 again")
 	assert.Nil(t, coord.nextFor(2, "run", nil))
+}
+
+// The apps' help reaches the model: describe_app marks an app that has
+// some, and read_help searches it, lists it and reads a section.
+func TestReadHelpGivesTheModelTheAppsDocumentation(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("d1", "describe_app", `{}`),
+		toolCall("h1", "read_help", `{"search":"tidy"}`),
+		toolCall("h2", "read_help", `{"app":"notes"}`),
+		toolCall("h3", "read_help", `{"app":"notes","doc":"overview","section":"tidying"}`),
+		toolCall("h4", "read_help", `{"app":"notes","doc":"nope"}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	res, err := runTurn(ctx, cli, coord, req)
+	require.NoError(t, err)
+	replies := toolReplies(res.messages)
+
+	assert.Contains(t, replies["d1"], `"help":true`)
+	assert.Contains(t, replies["h1"], `"section":"tidying"`)
+	assert.Contains(t, replies["h2"], `"doc":"overview"`)
+	assert.Contains(t, replies["h3"], "replacing its text with set_note")
+	assert.False(t, strings.HasPrefix(replies["h3"], untrustedOpen), "an app's own help is not untrusted content")
+	assert.Contains(t, replies["h4"], "no help document")
+	_, tainted, _ := coord.state()
+	assert.False(t, tainted, "reading help taints nothing")
 }

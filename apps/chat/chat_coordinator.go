@@ -36,6 +36,7 @@ const coordinatorPrompt = `You can work in app windows the person shares with yo
 - Start with request_access and a one-line plan; the person decides which windows to share and how far you may act.
 - To see what you can work with, call describe_app with no arguments: it lists every app and its operations. Use the app id it returns wherever an app is named.
 - describe_app with an app lists that app's operations; name one operation as well to get its argument schema.
+- An app marked help has documentation of its concepts and workflows: read_help with a search finds sections across the apps, with an app lists its documents, and with an app, doc and section reads one.
 - To open windows of an app, list it under "open" in request_access; open_window works only for apps granted there.
 - A window you open may still be opening: it takes calls once list_windows shows it ready. Tell the person a window is open only when it is ready, and say so when it failed.
 - Read before you write: a write expects the revisions of what you last read, and a conflict means someone else changed it — read again.
@@ -119,6 +120,8 @@ func (inst *coordinator) fixedTools() (out []openaichat.Tool) {
 			Parameters: schema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "describe_app", Description: "With no arguments, list every app and the operations it offers you; with app, that app's; with app and operation, the operation's argument schema.",
 			Parameters: schema(`{"type":"object","properties":{"app":{"type":"string","description":"an app id as describe_app lists it"},"search":{"type":"string","description":"filter apps and operations by a word"},"operation":{"type":"string"}},"additionalProperties":false}`)},
+		{Name: "read_help", Description: "Read the documentation apps ship: with search, sections across the apps matching it; with app, that app's documents and their sections; with app and doc, the document, or with section as well, that section.",
+			Parameters: schema(`{"type":"object","properties":{"search":{"type":"string","description":"words to find in the apps' help"},"app":{"type":"string","description":"an app id as describe_app lists it"},"doc":{"type":"string","description":"a document as read_help lists it"},"section":{"type":"string","description":"a section slug as read_help lists it"}},"additionalProperties":false}`)},
 		{Name: "call_operation", Description: "Call one operation in one window of your task; the operation's own arguments go under args.",
 			Parameters: schema(`{"type":"object","properties":{"window":{"type":"integer"},"operation":{"type":"string"},"args":{"type":"object"},"reason":{"type":"string","description":"one line, shown to the person"}},"required":["window","operation"],"additionalProperties":false}`)},
 		{Name: "open_window", Description: "Open a window of an app your task may open; it joins your task.",
@@ -216,6 +219,8 @@ func (inst *coordinator) dispatch(ctx context.Context, call openaichat.ToolCall,
 		}
 		b, _ := json.Marshal(describeView(apps))
 		return string(b), "described " + strconv.Itoa(len(apps)) + " app(s)"
+	case "read_help":
+		return inst.readHelp(ctx, agent.HelpRequest{App: str("app"), Doc: str("doc"), Section: str("section"), Search: str("search")})
 	case "call_operation":
 		return inst.call(ctx, call.Id, args)
 	case "open_window":
