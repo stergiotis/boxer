@@ -21,6 +21,10 @@ type wireRequest struct {
 	// DeadlineUnixNanos carries the caller's ctx deadline, since the
 	// handler has no ctx of its own. 0 means none.
 	DeadlineUnixNanos int64 `json:"deadline_ns,omitempty"`
+	// OnBehalfTask and OnBehalfEpoch name the agent task whose work this
+	// fetch is (ADR-0269 §SD6); empty for the app's own.
+	OnBehalfTask  string `json:"obo_task,omitempty"`
+	OnBehalfEpoch uint64 `json:"obo_epoch,omitempty"`
 }
 
 // wireReply is the reply. Ok says the exchange completed, whatever its

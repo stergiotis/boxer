@@ -55,6 +55,11 @@ type Request struct {
 	// Purpose names why, for the audit row and the call table — the
 	// prompt slug, the pane, the transformation.
 	Purpose string
+	// OnBehalfOf is set when the completion is work an agent's call
+	// started: the service then refuses it unless the task's grant lists
+	// the model service (ADR-0269 §SD6). Carry OperationCall.OnBehalfOf
+	// here; a coordinator's own turns carry none.
+	OnBehalfOf *app.OnBehalfOf
 	// Sensitivity is what the content was composed from (ADR-0145 §SD3):
 	// SensitivityConfined when any of it derives from a sealed dataset.
 	// The caller's declaration; the service cannot see provenance.
@@ -173,6 +178,9 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		Messages: r.Messages, Temperature: r.Temperature, MaxTokens: r.MaxTokens, Seed: r.Seed, Stop: r.Stop,
 		EnableThinking: r.EnableThinking, Tools: r.Tools, ToolChoice: r.ToolChoice, ResponseFormat: r.ResponseFormat,
 		CancelKey: strconv.FormatUint(rand.Uint64(), 36),
+	}
+	if r.OnBehalfOf != nil {
+		req.OnBehalfTask, req.OnBehalfEpoch = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch
 	}
 	subject := SubjectComplete
 	if r.Retain {

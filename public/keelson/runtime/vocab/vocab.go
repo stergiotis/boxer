@@ -409,6 +409,27 @@ var (
 	// and the kept rows still continue the conversation.
 	MembLlmCallOmitFrom = NkRegistry.MustBegin("llmCallOmitFrom", 166).End()
 	MembLlmCallOmitTo   = NkRegistry.MustBegin("llmCallOmitTo", 167).End()
+	// The action record of the app operations contract (ADR-0269 §SD9):
+	// one row per dispatcher decision and one at a call's final phase.
+	MembKindAgentAction          = NkRegistry.MustBegin("runtimeKindAgentAction", 168).End()
+	MembAgentActionTask          = NkRegistry.MustBegin("agentActionTask", 169).End()
+	MembAgentActionConversation  = NkRegistry.MustBegin("agentActionConversation", 170).End()
+	MembAgentActionActor         = NkRegistry.MustBegin("agentActionActor", 171).End()
+	MembAgentActionActorInstance = NkRegistry.MustBegin("agentActionActorInstance", 172).End()
+	MembAgentActionToolCallId    = NkRegistry.MustBegin("agentActionToolCallId", 173).End()
+	MembAgentActionCallId        = NkRegistry.MustBegin("agentActionCallId", 174).End()
+	MembAgentActionInstance      = NkRegistry.MustBegin("agentActionInstance", 175).End()
+	MembAgentActionApp           = NkRegistry.MustBegin("agentActionApp", 176).End()
+	MembAgentActionOperation     = NkRegistry.MustBegin("agentActionOperation", 177).End()
+	MembAgentActionEffect        = NkRegistry.MustBegin("agentActionEffect", 178).End()
+	MembAgentActionArgsDigest    = NkRegistry.MustBegin("agentActionArgsDigest", 179).End()
+	MembAgentActionDecision      = NkRegistry.MustBegin("agentActionDecision", 180).End()
+	MembAgentActionPhase         = NkRegistry.MustBegin("agentActionPhase", 181).End()
+	MembAgentActionReason        = NkRegistry.MustBegin("agentActionReason", 182).End()
+	MembAgentActionBudgetLeft    = NkRegistry.MustBegin("agentActionBudgetLeft", 183).End()
+	MembAgentActionTest          = NkRegistry.MustBegin("agentActionTest", 184).End()
+	MembAgentActionTainted       = NkRegistry.MustBegin("agentActionTainted", 185).End()
+	MembAgentActionConfined      = NkRegistry.MustBegin("agentActionConfined", 186).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -447,6 +468,11 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembLlmMessageOrdinal, MembLlmMessageRole, MembLlmMessageContent, MembLlmMessageReasoning,
 	MembLlmMessageToolCallId, MembLlmMessageToolCalls, MembLlmMessageImages,
 	MembLlmCallOmitFrom, MembLlmCallOmitTo,
+	MembKindAgentAction, MembAgentActionTask, MembAgentActionConversation, MembAgentActionActor,
+	MembAgentActionActorInstance, MembAgentActionToolCallId, MembAgentActionCallId, MembAgentActionInstance,
+	MembAgentActionApp, MembAgentActionOperation, MembAgentActionEffect, MembAgentActionArgsDigest,
+	MembAgentActionDecision, MembAgentActionPhase, MembAgentActionReason, MembAgentActionBudgetLeft,
+	MembAgentActionTest, MembAgentActionTainted, MembAgentActionConfined,
 	MembKindVizevalScore, MembVizevalScenario, MembVizevalCandidateId, MembVizevalSink, MembVizevalCandidate,
 	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
 	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,

@@ -37,6 +37,9 @@ type entry struct {
 	manifest  Manifest
 	ctor      AppCtor
 	singleton bool
+	// opsDiagnostic says why the manifest's operations catalog was
+	// withdrawn at registration; empty when it was kept or absent.
+	opsDiagnostic string
 }
 
 // Registration is one registry row: a manifest plus how it was
@@ -49,6 +52,9 @@ type Registration struct {
 	// Singleton is true for Register (one AppI for every Open) and false
 	// for RegisterFactory (a fresh AppI per Open).
 	Singleton bool
+	// OperationsDiagnostic says why the operations catalog was withdrawn
+	// (ADR-0269 §SD2); empty when it was kept or none was declared.
+	OperationsDiagnostic string
 }
 
 // Registry is the canonical list of apps in this process. Apps register
@@ -157,6 +163,32 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 			Errorf("registry: Workingset requires factory registration (RegisterFactory), not Register")
 		return
 	}
+	// ADR-0269 §SD3: only the host publishes or subscribes on the operation
+	// subjects; an app whose capability could reach them is refused, since
+	// it could call another app's operations past the dispatcher.
+	for _, cap := range m.Caps {
+		if CapReachesOperationSubjects(cap.Pattern) {
+			err = eb.Build().Str("id", string(m.Id)).Str("pattern", cap.Pattern).
+				Errorf("registry: a capability reaches the operation subjects app.{id}.{instance}.op.{name}")
+			return
+		}
+	}
+	// ADR-0269 §SD2: a catalog is served per instance, so it needs one
+	// instance per window, as a workingset does. Unlike a workingset, a bad
+	// catalog costs only the catalog: the app registers without it.
+	var opsDiagnostic string
+	if m.Operations != nil {
+		if singleton {
+			opsDiagnostic = "operations require factory registration (RegisterFactory), not Register"
+		} else if vErr := m.Operations.Validate(); vErr != nil {
+			opsDiagnostic = vErr.Error()
+		}
+		if opsDiagnostic != "" {
+			log.Warn().Str("id", string(m.Id)).Str("diagnostic", opsDiagnostic).
+				Msg("app registry: withdrawing the operations catalog; the app still registers")
+			m.Operations = nil
+		}
+	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	_, exists := inst.byId[m.Id]
@@ -184,7 +216,7 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 	})
 	inst.entries = append(inst.entries, entry{})
 	copy(inst.entries[idx+1:], inst.entries[idx:])
-	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton}
+	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton, opsDiagnostic: opsDiagnostic}
 	for i := idx; i < len(inst.entries); i++ {
 		inst.byId[inst.entries[i].manifest.Id] = i
 	}
@@ -311,7 +343,19 @@ func (inst *Registry) Registrations() (regs []Registration) {
 	defer inst.mu.RUnlock()
 	regs = make([]Registration, len(inst.entries))
 	for i, e := range inst.entries {
-		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton}
+		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton, OperationsDiagnostic: e.opsDiagnostic}
+	}
+	return
+}
+
+// OperationsDiagnostic says why the operations catalog of id was withdrawn
+// at registration (ADR-0269 §SD2); empty when it was kept, none was
+// declared, or id is not registered.
+func (inst *Registry) OperationsDiagnostic(id AppIdT) (diagnostic string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if idx, ok := inst.byId[id]; ok {
+		diagnostic = inst.entries[idx].opsDiagnostic
 	}
 	return
 }

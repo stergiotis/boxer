@@ -3,8 +3,10 @@ package play
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -14,7 +16,9 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/worldmap"
 )
 
 // MapDriver is the ADR-0096 geo-raster map panel: a slippy map whose
@@ -34,9 +38,13 @@ import (
 // keepBuffer margin, the progressive sampling ladder, and hover→info queries —
 // SD10 deferrals in the ADR.
 type MapDriver struct {
-	ids    *c.WidgetIdStack
-	pm     *portolan.Map // the map widget, created on first Render
-	tiles  *basemap.Tiles
+	ids   *c.WidgetIdStack
+	pm    *portolan.Map // the map widget, created on first Render
+	tiles *basemap.Tiles
+	// land is the offline ground drawn under the raster when there is no
+	// basemap, as the Vector field pane does; a nil atlas draws nothing.
+	land   *landoverlay.Layer
+	atlas  *worldmap.Atlas
 	client *Client
 
 	// Controls + display. The map fills the tab body by default (FillAvailable
@@ -56,6 +64,35 @@ type MapDriver struct {
 	initLon      float64
 	initZoom     float64
 	forceRefresh bool
+
+	// refine turns the sampling ladder on (play_map_ladder.go); off, the one
+	// table named is read at the manual sampling. ladder is its state, and
+	// colorSQL/extraWhere the render the last settle built the template
+	// with, which a climb rebuilds it from. packLevel is the level whose
+	// raster is on screen. refreshPending marks the settle a Refresh asked
+	// for, which lets the ladder climb past its budget.
+	refine         bool
+	ladder         mapLadder
+	colorSQL       string
+	extraWhere     string
+	packLevel      mapLevel
+	refreshPending bool
+
+	// cache opts the raster runs into the server's query cache (off by
+	// default; ADR-0096 2026-10-01 cache Update). cacheUse/cacheFresh mirror
+	// it and the ladder's Refresh state for the lane's goroutine, which reads
+	// them through the lane's ExecOptions.QueryCache on every request.
+	cache      bool
+	cacheUse   atomic.Bool
+	cacheFresh atomic.Bool
+
+	// timeCol names the source's time column; while the Timeline has a
+	// window brushed (windowFrom/windowTo, read off the tl_from/tl_to
+	// signals each frame), the raster keeps only rows inside it. Empty, or
+	// no window, filters nothing.
+	timeCol    string
+	windowFrom string
+	windowTo   string
 
 	// renderIdx selects builtinRenders; customColorSQL is the colour expression
 	// used when the "Custom" render is active.
@@ -163,35 +200,32 @@ type mercBox struct{ minX, maxX, minY, maxY uint32 }
 
 // rasterRender is a swappable colour mode (ADR-0096 §SD6). The geometry + density
 // header of the raster query (span_*, in_view, px/py/pos, zoom_factor, total,
-// max_total, transparency, alpha) is render-agnostic; a render supplies only the
-// colour block and an optional extra WHERE. This is what lets the panel target
+// max_total, transparency) is render-agnostic; a render supplies only the
+// colour block (and, optionally, alpha) and an optional extra WHERE. This is what lets the panel target
 // any table with mercator_x/mercator_y, not just the ADS-B schema.
 type rasterRender struct {
 	name string // UI label + fetch-key component
-	// colorSQL is spliced into the WITH block after `255 AS alpha,`. In scope:
-	// total, max_total, transparency, alpha, plus any table column via aggregates
-	// (avg(col), …). It MUST define red, green, blue (Float64, 0..255) and end
-	// without a trailing comma. Ignored when custom (customColorSQL is used).
+	// colorSQL is spliced into the WITH block after the shared header. In
+	// scope: total, max_total, transparency, plus any table column via
+	// aggregates (avg(col), …). It MUST define red, green, blue (Float64,
+	// 0..255) and end without a trailing comma. It MAY define alpha; when it
+	// does not, the template appends `255 AS alpha` (rasterAlphaRe). Ignored
+	// when custom (customColorSQL is used).
 	colorSQL string
 	where    string   // optional predicate ANDed with in_view; "" = none
 	needs    []string // columns beyond mercator_x/y assumed; nil = table-agnostic
 	custom   bool     // colorSQL comes from the panel's editable field
 }
 
-// builtinRenders are the selectable colour modes. "Altitude & Velocity" is the
-// upstream adsb default (needs altitude+ground_speed); "Density" assumes only
+// builtinRenders are the selectable colour modes; the first is the default.
+// "Altitude & Speed" assumes the ADS-B columns; "Density" assumes only
 // mercator_x/y so it works on ANY geo-point table; "Custom" takes a user-typed
 // red/green/blue expression, matching the playground's arbitrary-table freedom.
 var builtinRenders = []rasterRender{
 	{
-		name:  "Altitude & Velocity",
-		needs: []string{"altitude", "ground_speed"},
-		colorSQL: `greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
-    greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
-    greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
-    (1 + transparency) / 2 * (1 - color3) * 255 AS red,
-    transparency * color1 * 255 AS green,
-    color2 * 255 AS blue`,
+		name:     "Altitude & Speed",
+		needs:    []string{"altitude", "ground_speed"},
+		colorSQL: altitudeSpeedColorSQL,
 	},
 	{
 		name: "Density",
@@ -203,7 +237,9 @@ var builtinRenders = []rasterRender{
 	{
 		name:  "Speed",
 		needs: []string{"ground_speed"},
-		colorSQL: `greatest(0, least(avg(ground_speed), 700)) / 700 AS s,
+		// 600 kt: the ground-speed ceiling of altitudeSpeedColorSQL, same
+		// reasoning.
+		colorSQL: `greatest(0, least(avg(ground_speed), 600)) / 600 AS s,
     transparency * (1 - s) * 255 AS red,
     transparency * 90 AS green,
     transparency * s * 255 AS blue`,
@@ -214,17 +250,65 @@ var builtinRenders = []rasterRender{
 	},
 }
 
+// altitudeSpeedColorSQL is the default render, in OKLCH so each channel of
+// the encoding moves one perceptual axis: hue ← mean altitude, chroma ← mean
+// ground speed, lightness ← density (transparency). It assumes the units ADS-B
+// reports: altitude in feet (barometric, may be negative near sea level),
+// ground_speed in knots.
+//
+// The constants come from aviation domain knowledge, not from the data:
+//   - 45,000 ft is the altitude ceiling: airliners cruise at FL290–FL410 and
+//     most business jets top out near FL450, so higher reports are rare and
+//     clamp to the top hue. Altitude enters as its square root so the busy
+//     band below ~10,000 ft (terminal areas, where the 250 kt limit applies)
+//     takes about half the hue range: ~30° red-orange on the ground, yellow
+//     on approach, green at 10,000 ft, cyan in the climb, sky blue at cruise.
+//   - 600 kt is the ground-speed ceiling: a jet near Mach 0.85 flies about
+//     480–500 kt true airspeed, and a strong jet-stream tailwind adds ~100 kt;
+//     faster reports saturate. Speed also enters as its square root, so the
+//     split that matters most — light aircraft and helicopters (60–160 kt)
+//     against jets (~250 kt under the terminal limit, 450+ at cruise) — gets
+//     the widest chroma step; light aircraft read pastel, cruising jets
+//     vivid. A chroma floor (a quarter of the maximum) keeps a stationary
+//     target's altitude hue readable instead of fading to grey.
+//   - Lightness spans 0.22..0.80 over transparency so a lone sample still
+//     shows on the dark no-basemap background and the densest
+//     pixels stay below white. Chroma shrinks with sqrt(lightness): dim
+//     pixels get less colour, as the sRGB gamut does, so they darken towards
+//     black rather than a muddy tint.
+//
+// colorOKLCHToSRGB needs ClickHouse 25.7+ (the adsb how-to verifies on 26.5);
+// it clips each channel to the sRGB gamut, and the outer clamp keeps 0..255
+// for any input regardless.
+const altitudeSpeedColorSQL = `greatest(0, least(avg(altitude), 45000)) / 45000 AS alt_t,
+    greatest(0, least(avg(ground_speed), 600)) / 600 AS spd_t,
+    0.22 + 0.58 * transparency AS lum,
+    0.19 * sqrt(lum / 0.8) * (0.25 + 0.75 * sqrt(spd_t)) AS chroma,
+    30 + 230 * sqrt(alt_t) AS hue,
+    colorOKLCHToSRGB(tuple(lum, chroma, hue)) AS rgb,
+    greatest(0, least(255, tupleElement(rgb, 1))) AS red,
+    greatest(0, least(255, tupleElement(rgb, 2))) AS green,
+    greatest(0, least(255, tupleElement(rgb, 3))) AS blue`
+
 func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
-	d := &MapDriver{
+	opts := newExecOptions("map")
+	var d *MapDriver
+	opts.QueryCache = func() (use bool, fresh bool) {
+		return d.cacheUse.Load(), d.cacheFresh.Load()
+	}
+	d = &MapDriver{
 		ids:        ids,
 		client:     client,
+		land:       &landoverlay.Layer{},
 		tableField: sqleditor.NewField(ids, "map-table"),
 		colorField: sqleditor.NewField(ids, "map-color"),
 		// The stable query_id + replace_running_query make a superseding
 		// pan/zoom fetch replace its predecessor server-side (SD5).
-		lane:      newNodeLane(clientExecutor{client: client, opts: newExecOptions("map")}, memory.NewGoAllocator(), mapFetchTimeout),
+		lane:      newNodeLane(clientExecutor{client: client, opts: opts}, memory.NewGoAllocator(), mapFetchTimeout),
 		table:     "planes_mercator_sample100",
 		sampling:  100,
+		refine:    true,
+		timeCol:   "time",
 		opacity:   0.9,
 		noTiles:   true,
 		live:      true,
@@ -233,8 +317,8 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 		initLat:   40.0,
 		initLon:   0.0,
 		initZoom:  4.0,
-		// renderIdx 0 = "Altitude & Velocity" (matches the demo table); Custom
-		// starts from an editable density expression.
+		// renderIdx 0 is the first builtinRenders entry; Custom starts from an
+		// editable density expression.
 		customColorSQL: "transparency * 255 AS red,\n    transparency * 200 AS green,\n    transparency * 120 AS blue",
 	}
 	// Scripted-screenshot overrides — the BOXER_PLAY_MAP_* knobs from the
@@ -258,6 +342,9 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	// the "no basemap" checkbox still toggles it. Unset keeps noTiles=true.
 	if basemap.Configured() {
 		d.noTiles = false
+	}
+	if a, err := worldmap.LoadAtlas(); err == nil {
+		d.atlas = a
 	}
 	return d
 }
@@ -321,6 +408,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 			inst.viewStableAt = time.Now()
 		}
 		settled := !inst.viewStableAt.IsZero() && time.Since(inst.viewStableAt) >= mapDebounce
+		inst.readWindow(sig)
 		if (inst.live && settled) || inst.forceRefresh {
 			inst.forceRefresh = false
 			b, sz := v.Bounds(), v.Size()
@@ -337,14 +425,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	if inst.template != "" {
 		params := resolveSignalNamesWithDefaults(inst.templateReads, nil, sig)
 		if hasViewportParams(params) {
-			view := inst.lane.demand(compiledNode{SQL: inst.template, Params: params})
-			inst.noteLane(view)
-			if view.rec != nil {
-				if view.fingerprint != inst.lastPackedFP {
-					inst.repack(view.rec, view.params, view.fingerprint)
-				}
-				view.rec.Release()
-			}
+			inst.demandRaster(params)
 		}
 	}
 
@@ -353,14 +434,22 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	// Projector.Image carries the send-once protocol the old raster opcode
 	// overlay had — pixels ship on a version bump or when the host reports
 	// the texture starved (a hidden tab's discarded upload, the idle LRU).
+	// The raster covers one world copy; rasterCopies places it on every copy
+	// the view shows, so it follows the reader across the antimeridian.
 	overlay := func(p portolan.Projector) {
+		vb := p.View().Bounds()
+		if inst.noTiles {
+			inst.land.Paint(p, inst.atlas, landoverlay.DefaultStyle())
+		}
 		if inst.packW > 0 && inst.packH > 0 {
-			p.Image("map-raster",
-				portolan.LatLngBoundsOf(
-					portolan.LL(inst.packBounds[0], inst.packBounds[1]),
-					portolan.LL(inst.packBounds[2], inst.packBounds[3])),
-				inst.packW, inst.packH, inst.version, inst.pixels,
-			).Opacity(float32(inst.opacity)).Send()
+			for i, shift := range rasterCopies(inst.packBounds[1], inst.packBounds[3], vb.GetWest(), vb.GetEast()) {
+				p.Image(mapRasterKeys[i],
+					portolan.LatLngBoundsOf(
+						portolan.LL(inst.packBounds[0], inst.packBounds[1]+shift),
+						portolan.LL(inst.packBounds[2], inst.packBounds[3]+shift)),
+					inst.packW, inst.packH, inst.version, inst.pixels,
+				).Opacity(float32(inst.opacity)).Send()
+			}
 		}
 	}
 
@@ -371,6 +460,42 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 		inst.pm.Render(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
 	} else {
 		inst.pm.RenderFill(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
+	}
+}
+
+// demandRaster demands the raster node for this frame's compiled params,
+// repacks a newly served result, and moves the sampling ladder: a derived
+// level the server lacks is skipped, and a level whose own result landed
+// hands over to the next (play_map_ladder.go).
+func (inst *MapDriver) demandRaster(params map[string]string) {
+	// Read by the run this demand may start: a Refresh's climb computes
+	// every level afresh rather than reading what the cache holds.
+	inst.cacheUse.Store(inst.cache)
+	inst.cacheFresh.Store(inst.ladder.noBudget)
+	node := compiledNode{SQL: inst.template, Params: params}
+	view := inst.lane.demand(node)
+	inst.noteLane(view)
+	// The current level's own result, not a last-good one from the
+	// level before it.
+	landed := view.key == node.key() && !view.loading
+	if landed && view.err != nil && isUnknownTable(view.err) && inst.ladder.dropMissing() {
+		// A derived level the server does not have: skip it.
+		inst.laneErr = nil
+		inst.rebuildLevelTemplate()
+	}
+	if view.rec != nil {
+		if view.fingerprint != inst.lastPackedFP {
+			inst.repack(view.rec, view.params, view.fingerprint)
+		}
+		view.rec.Release()
+	}
+	if landed && view.err == nil && view.rec != nil {
+		// Two levels can serve identical bytes, which repack skips; the
+		// level on screen is the one whose result landed either way.
+		inst.packLevel = inst.ladder.current()
+		if inst.ladder.served(view.elapsed) {
+			inst.rebuildLevelTemplate()
+		}
 	}
 }
 
@@ -416,8 +541,13 @@ func (inst *MapDriver) cancelFetch() {
 func (inst *MapDriver) renderControls() {
 	inst.renderTableEditor()
 	for range c.Horizontal().KeepIter() {
-		c.SliderF64(inst.ids.PrepareStr("map-sampling"), inst.sampling, 1, 100).
-			Text("sampling").SendRespVal(&inst.sampling)
+		// With refine on, each level brings its own sampling factor; the
+		// slider is the manual factor for a single table.
+		c.Checkbox(inst.ids.PrepareStr("map-refine"), inst.refine, "refine").SendRespVal(&inst.refine)
+		if !inst.refine {
+			c.SliderF64(inst.ids.PrepareStr("map-sampling"), inst.sampling, 1, 100).
+				Text("sampling").SendRespVal(&inst.sampling)
+		}
 		inst.renderModeCombo()
 	}
 	if builtinRenders[inst.renderIdx].custom {
@@ -429,6 +559,8 @@ func (inst *MapDriver) renderControls() {
 		c.Checkbox(inst.ids.PrepareStr("map-live"), inst.live, "live").SendRespVal(&inst.live)
 		c.Checkbox(inst.ids.PrepareStr("map-notiles"), inst.noTiles, "no basemap").
 			SendRespVal(&inst.noTiles)
+		c.Checkbox(inst.ids.PrepareStr("map-cache"), inst.cache, "server cache").
+			SendRespVal(&inst.cache)
 		if c.Button(inst.ids.PrepareStr("map-refresh"),
 			c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.requestRefresh()
@@ -507,7 +639,75 @@ func (inst *MapDriver) renderTableEditor() {
 				Width:     float32(math.Inf(1)),
 			})
 		}
+		for range c.Horizontal().KeepIter() {
+			c.Label("time column").Send()
+			c.TextEdit(inst.ids.PrepareStr("map-time-col"), inst.timeCol, false).
+				HintText("none").SendRespVal(&inst.timeCol)
+			for rt := range c.RichTextLabel("filtered by the Timeline's brushed window") {
+				rt.Small().Weak()
+			}
+		}
 	}
+}
+
+// readWindow takes the Timeline's brushed window off this frame's signals.
+// The unbounded values tl_from/tl_to carry with nothing brushed read as no
+// window.
+func (inst *MapDriver) readWindow(sig SignalEnvI) {
+	inst.windowFrom, inst.windowTo = "", ""
+	if sig == nil {
+		return
+	}
+	from, ok1 := sig.Get(signalTimelineFrom)
+	to, ok2 := sig.Get(signalTimelineTo)
+	if !ok1 || !ok2 || (from.Raw == timelineWindowFloor && to.Raw == timelineWindowCeil) {
+		return
+	}
+	inst.windowFrom, inst.windowTo = from.Raw, to.Raw
+}
+
+// windowStatus names the window the raster is filtered to, for the status
+// line; empty when it is not filtered.
+func (inst *MapDriver) windowStatus() string {
+	if ww, _ := inst.windowWhere(); ww == "" {
+		return ""
+	}
+	return fmt.Sprintf("window %s on %s", formatWindow(inst.windowFrom, inst.windowTo), strings.TrimSpace(inst.timeCol))
+}
+
+// formatWindow shortens a window's two raw bounds for reading: to the second,
+// and the date once when both fall on the same day.
+func formatWindow(from, to string) string {
+	trim := func(s string) string {
+		if i := strings.IndexByte(s, '.'); i >= 0 {
+			return s[:i]
+		}
+		return s
+	}
+	from, to = trim(from), trim(to)
+	if len(from) > 11 && len(to) > 11 && from[:11] == to[:11] {
+		to = to[11:]
+	}
+	return from + " – " + to + " UTC"
+}
+
+// mapTimeColRe admits a plain column name for the time column.
+var mapTimeColRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// windowWhere is the predicate the brushed window adds to the raster's WHERE,
+// read through the tl_from/tl_to slots so a new brush re-keys on params; empty
+// with no window or no time column.
+func (inst *MapDriver) windowWhere() (where string, err string) {
+	col := strings.TrimSpace(inst.timeCol)
+	if inst.windowFrom == "" || col == "" {
+		return
+	}
+	if !mapTimeColRe.MatchString(col) {
+		err = "time column must be a plain column name"
+		return
+	}
+	where = col + " BETWEEN {tl_from:DateTime64(3, 'UTC')} AND {tl_to:DateTime64(3, 'UTC')}"
+	return
 }
 
 // Geometry of the custom-colour editor's pane.
@@ -608,6 +808,17 @@ func (inst *MapDriver) renderModeCombo() {
 func (inst *MapDriver) requestRefresh() {
 	inst.forceRefresh = true // re-emit even if the camera is unchanged
 	inst.lane.forget()       // re-execute even for the identical (SQL, params)
+	// Start the ladder over, and let it climb past its budget this time.
+	inst.ladder.inputs = ""
+	inst.refreshPending = true
+}
+
+// rebuildLevelTemplate points the raster node at the ladder's current level,
+// with the render the last settle used; the vp_* signals are unchanged, so
+// the next demand re-keys on the SQL alone.
+func (inst *MapDriver) rebuildLevelTemplate() {
+	lv := inst.ladder.current()
+	inst.ensureTemplate(lv.table, lv.sampling, inst.colorSQL, inst.extraWhere)
 }
 
 // updateViewport publishes the settled viewport as the six reserved vp_*
@@ -624,19 +835,46 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 		return
 	}
 	inst.controlErr = ""
-	b, ok := bboxFromLatLon(minLat, maxLat, minLon, maxLon)
+	west, east, fracX := foldViewLon(minLon, maxLon)
+	b, ok := bboxFromLatLon(minLat, maxLat, west, east)
 	if !ok {
 		return
 	}
-	w := clampDim(screenW)
-	h := clampDim(screenH)
+	// The raster covers only the part of the view the bbox kept (one world
+	// copy, the poles clamped); size it to that part so its pixels stay
+	// screen-sized rather than stretched.
+	w := clampDim(screenW * float32(fracX))
+	h := clampDim(screenH * float32(latCoverage(minLat, maxLat)))
 	sampling := max(uint32(inst.sampling), 1)
 	r := builtinRenders[inst.renderIdx]
 	colorSQL := r.colorSQL
 	if r.custom {
 		colorSQL = inst.customColorSQL
 	}
-	inst.ensureTemplate(table, sampling, colorSQL, r.where)
+	where := r.where
+	ww, werr := inst.windowWhere()
+	if werr != "" {
+		inst.controlErr = werr
+		return
+	}
+	if ww != "" {
+		if where != "" {
+			where = "(" + where + ") AND "
+		}
+		where += ww
+	}
+	// The ladder restarts only when what it was built for changed: this runs
+	// on every settled frame, and a restart re-demands the coarsest level.
+	levels := mapLadderLevels(table, sampling, inst.refine, inst.ladder.missing)
+	// Keyed on the source, not on the levels: dropping a missing level must
+	// not read as a change.
+	inputs := fmt.Sprintf("%v|%d|%d|%s|%d|%t|%s|%s|%s|%s", b, w, h, table, sampling, inst.refine, colorSQL, where, inst.windowFrom, inst.windowTo)
+	if inst.ladder.reset(inputs, levels) {
+		inst.ladder.noBudget = inst.refreshPending
+	}
+	inst.refreshPending = false
+	inst.colorSQL, inst.extraWhere = colorSQL, where
+	inst.rebuildLevelTemplate()
 
 	emit.Emit("vp_min_x", uint64(b.minX))
 	emit.Emit("vp_max_x", uint64(b.maxX))
@@ -746,23 +984,33 @@ func (inst *MapDriver) repack(rec arrow.RecordBatch, served map[string]string, f
 	inst.packErr = nil
 }
 
-// packRaster packs a dense 4×UInt8 (r,g,b,a) raster record into a row-major
-// []uint32 of 0xRRGGBBAA. WITH FILL yields exactly w*h rows; the length is
-// padded/truncated defensively so the texture upload always matches.
+// packRaster packs a raster record into a row-major []uint32 of 0xRRGGBBAA,
+// w*h long. Two shapes are read, told apart by the first column's type:
+//
+//   - sparse — (pos UInt32, r, g, b, a UInt8), one row per non-empty pixel in
+//     any order, which the template emits: every other pixel stays 0, and a
+//     pos past w*h is dropped;
+//   - dense — (r, g, b, a UInt8), w*h rows in pixel order, the
+//     `ORDER BY pos WITH FILL` form of the snippet; the length is padded or
+//     truncated so the texture upload always matches.
+//
+// The sparse form replaced the dense one in the template (ADR-0096
+// 2026-10-01 sparse Update): WITH FILL was most of the server's time on the
+// demo slice, while lz4 makes the empty rows cheap on the wire, so the dense
+// form is smaller there above a few percent fill but slower to produce.
+// Columns past the raster's are ignored in either shape.
 func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error) {
+	if rec.NumCols() >= 5 {
+		if pos, ok := rec.Column(0).(*array.Uint32); ok {
+			return packSparseRaster(rec, pos, w, h)
+		}
+	}
 	if rec.NumCols() < 4 {
-		err = eb.Build().Int64("columns", rec.NumCols()).Errorf("raster query must SELECT 4 columns (r,g,b,a)")
+		err = eb.Build().Int64("columns", rec.NumCols()).Errorf("raster query must SELECT 4 columns (r,g,b,a), or (pos, r, g, b, a)")
 		return
 	}
-	ra, ok1 := rec.Column(0).(*array.Uint8)
-	ga, ok2 := rec.Column(1).(*array.Uint8)
-	ba, ok3 := rec.Column(2).(*array.Uint8)
-	aa, ok4 := rec.Column(3).(*array.Uint8)
-	if !ok1 || !ok2 || !ok3 || !ok4 {
-		err = eb.Build().
-			Stringer("column0", rec.Column(0).DataType()).Stringer("column1", rec.Column(1).DataType()).
-			Stringer("column2", rec.Column(2).DataType()).Stringer("column3", rec.Column(3).DataType()).
-			Errorf("raster columns must be UInt8")
+	ra, ga, ba, aa, err := rgbaColumns(rec, 0)
+	if err != nil {
 		return
 	}
 	n := int(w) * int(h)
@@ -776,6 +1024,41 @@ func packRaster(rec arrow.RecordBatch, w, h uint32) (pixels []uint32, err error)
 		pixels = append(pixels, make([]uint32, n-len(pixels))...)
 	} else if len(pixels) > n {
 		pixels = pixels[:n]
+	}
+	return
+}
+
+// packSparseRaster scatters (pos, r, g, b, a) rows into a zeroed w*h buffer.
+func packSparseRaster(rec arrow.RecordBatch, pos *array.Uint32, w, h uint32) (pixels []uint32, err error) {
+	ra, ga, ba, aa, err := rgbaColumns(rec, 1)
+	if err != nil {
+		return
+	}
+	n := int(w) * int(h)
+	pixels = make([]uint32, n)
+	for i := range int(rec.NumRows()) {
+		p := int(pos.Value(i))
+		if p >= n {
+			continue
+		}
+		pixels[p] = (uint32(ra.Value(i)) << 24) | (uint32(ga.Value(i)) << 16) |
+			(uint32(ba.Value(i)) << 8) | uint32(aa.Value(i))
+	}
+	return
+}
+
+// rgbaColumns reads the four UInt8 channel columns starting at column from.
+func rgbaColumns(rec arrow.RecordBatch, from int) (ra, ga, ba, aa *array.Uint8, err error) {
+	var ok [4]bool
+	ra, ok[0] = rec.Column(from).(*array.Uint8)
+	ga, ok[1] = rec.Column(from + 1).(*array.Uint8)
+	ba, ok[2] = rec.Column(from + 2).(*array.Uint8)
+	aa, ok[3] = rec.Column(from + 3).(*array.Uint8)
+	if !ok[0] || !ok[1] || !ok[2] || !ok[3] {
+		err = eb.Build().
+			Stringer("r", rec.Column(from).DataType()).Stringer("g", rec.Column(from+1).DataType()).
+			Stringer("b", rec.Column(from+2).DataType()).Stringer("a", rec.Column(from+3).DataType()).
+			Errorf("raster channel columns must be UInt8")
 	}
 	return
 }
@@ -796,7 +1079,14 @@ func (inst *MapDriver) statusLine() string {
 	case inst.cancelled:
 		return "fetch cancelled — pan, zoom, or Refresh to run again"
 	case inst.packW > 0:
-		return fmt.Sprintf("%d×%d raster · %s", inst.packW, inst.packH, builtinRenders[inst.renderIdx].name)
+		msg := fmt.Sprintf("%d×%d raster · %s", inst.packW, inst.packH, builtinRenders[inst.renderIdx].name)
+		if ls := inst.ladder.status(inst.packLevel, inst.loading); ls != "" {
+			msg += " · " + ls
+		}
+		if ws := inst.windowStatus(); ws != "" {
+			msg += " · " + ws
+		}
+		return msg
 	default:
 		msg := "pan/zoom over a ClickHouse table with mercator_x/mercator_y (e.g. planes_mercator)"
 		if needs := builtinRenders[inst.renderIdx].needs; len(needs) > 0 {
@@ -813,9 +1103,8 @@ func (inst *MapDriver) statusLine() string {
 // render's colour block spliced in and an optional extra WHERE. The viewport
 // is NOT in the text — it rides the param_* channel at execution (the values
 // come from the vp_* signals the panel emits), so a pan re-executes via the
-// lane's (SQL, params) key with the SQL unchanged. Server-verified: ClickHouse
-// substitutes the slots everywhere they appear, including the
-// `WITH FILL … TO` bound (the wiring check ADR-0096 called out). The header
+// lane's (SQL, params) key with the SQL unchanged. The result is sparse — one
+// (pos, r, g, b, a) row per non-empty pixel, see packRaster. The header
 // assumes only mercator_x/mercator_y; what other columns are needed depends
 // on colorSQL. table/sampling stay spliced panel controls.
 //
@@ -843,14 +1132,83 @@ func rasterTemplateSQL(table string, sampling uint32, colorSQL, extraWhere strin
     count() AS total,
     greatest(1000000. / %[2]d / zoom_factor, toFloat64(count())) AS max_total,
     pow(total / max_total, 1/5) AS transparency,
-    255 AS alpha,
-    %[3]s
-SELECT round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
+    %[3]s%[5]s
+SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
 FROM %[1]s
 WHERE %[4]s
-GROUP BY pos
-ORDER BY pos WITH FILL FROM 0 TO toUInt64({vp_w:UInt32}) * {vp_h:UInt32}`,
-		table, sampling, colorSQL, where)
+GROUP BY pos`,
+		table, sampling, colorSQL, where, alphaClause(colorSQL))
+}
+
+// rasterAlphaRe finds a colour block's own alpha definition. Textual on
+// purpose: a Custom block may sit outside Grammar1, and a false hit (the alias
+// in a comment) costs a visible "unknown identifier alpha" from the server,
+// never a silently wrong raster.
+var rasterAlphaRe = regexp.MustCompile(`(?i)\bAS\s+alpha\b`)
+
+// alphaClause is the opaque default a colour block gets unless it defines
+// alpha itself — a render may carry confidence or density in alpha (ADR-0096
+// 2026-10-01 Update). Pixels with no rows stay alpha 0 either way.
+func alphaClause(colorSQL string) string {
+	if rasterAlphaRe.MatchString(colorSQL) {
+		return ""
+	}
+	return ",\n    255 AS alpha"
+}
+
+// mapRasterKeys name the raster's draw slots, one per world copy it can
+// appear on at once; each slot keeps its own send-once texture.
+var mapRasterKeys = [...]string{"map-raster", "map-raster-1", "map-raster-2"}
+
+// foldViewLon folds a view's longitude span into the one world copy the
+// mercator columns cover, for the request (ADR-0096 SD4: mercator_x spans
+// lon −180..180 once). A span of a world or more asks for the whole world;
+// a narrower one is shifted by whole turns so its midpoint lies in
+// [−180, 180), and the part past ±180 is cut — that edge is drawn empty
+// rather than requested twice (the straddling case stays deferred). fracX is
+// the share of the view's width the folded span keeps.
+func foldViewLon(west, east float64) (w, e, fracX float64) {
+	span := east - west
+	if span <= 0 {
+		return west, east, 1
+	}
+	if span >= 360 {
+		return -180, 180, 360 / span
+	}
+	k := math.Floor(((west+east)/2 + 180) / 360)
+	w, e = west-360*k, east-360*k
+	kept := min(e, 180) - max(w, -180)
+	return max(w, -180), min(e, 180), kept / span
+}
+
+// latCoverage is the share of the view's mercator height that lies inside
+// the Web-Mercator latitude clamp — below 1 only when the view reaches past
+// a pole, at the lowest zooms.
+func latCoverage(minLat, maxLat float64) float64 {
+	raw := func(lat float64) float64 {
+		lat = max(min(lat, 89.999), -89.999)
+		return math.Asinh(math.Tan(lat / 180.0 * math.Pi))
+	}
+	full := raw(maxLat) - raw(minLat)
+	if full <= 0 {
+		return 1
+	}
+	kept := raw(clampLat(maxLat)) - raw(clampLat(minLat))
+	return min(kept/full, 1)
+}
+
+// rasterCopies returns the longitude shifts (whole turns) at which a raster
+// spanning [west, east] in lon −180..180 meets the view [viewWest, viewEast]
+// — the copy nearest the view first, then its neighbours when the view is
+// wide enough to show them, at most len(mapRasterKeys).
+func rasterCopies(west, east, viewWest, viewEast float64) (shifts []float64) {
+	near := 360 * math.Round(((viewWest+viewEast)/2-(west+east)/2)/360)
+	for _, s := range [...]float64{near, near - 360, near + 360} {
+		if east+s > viewWest && west+s < viewEast && len(shifts) < len(mapRasterKeys) {
+			shifts = append(shifts, s)
+		}
+	}
+	return
 }
 
 // bboxFromLatLon converts a lat/lon viewport to the mercator bbox the SQL bins

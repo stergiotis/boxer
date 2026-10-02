@@ -88,6 +88,7 @@ import (
 	// from this list is silently unchecked, which is why TestAppSetIsComplete
 	// asserts the list against the tree rather than trusting it.
 	_ "github.com/stergiotis/boxer/apps/adhocdemo"
+	_ "github.com/stergiotis/boxer/apps/agentconsole"
 	_ "github.com/stergiotis/boxer/apps/appstate"
 	_ "github.com/stergiotis/boxer/apps/capdemo"
 	_ "github.com/stergiotis/boxer/apps/capinspector"
@@ -97,6 +98,7 @@ import (
 	_ "github.com/stergiotis/boxer/apps/imztop"
 	_ "github.com/stergiotis/boxer/apps/jackstay"
 	_ "github.com/stergiotis/boxer/apps/mdedit"
+	_ "github.com/stergiotis/boxer/apps/opsdemo"
 	_ "github.com/stergiotis/boxer/apps/play"
 	_ "github.com/stergiotis/boxer/apps/splashscreen"
 	_ "github.com/stergiotis/boxer/apps/sqlappletcreator"

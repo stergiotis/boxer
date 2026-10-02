@@ -1,0 +1,5 @@
+query_cache.max_size_in_bytes	1073741824
+query_cache.max_entries	1024
+query_cache.max_entry_size_in_bytes	1048576
+query_cache.max_entry_size_in_rows	30000000
+query_cache_ttl	60

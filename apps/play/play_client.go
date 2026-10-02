@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -93,6 +94,10 @@ type Client struct {
 	// unlock sees a consistent set.
 	exprValues map[string]string
 
+	// readonly remembers each endpoint's server-reported readonly level for
+	// cfg.User (play_readonly.go).
+	readonly readonlyLevels
+
 	mu        sync.RWMutex
 	targetURL string
 	// resolver is the E2 seam. nil means staticResolver — every run goes to
@@ -145,12 +150,23 @@ func (inst *Client) PassRegistry() *passreg.Registry { return inst.passes }
 // queries pile up on the server. Endpoints that don't know these params
 // ignore them (the keelson introspection /query reads only cols/query/param_*).
 type ExecOptions struct {
+	// Agent is set on a run an agent's work caused (ADR-0270 §SD2): the
+	// statement is checked against the grant before it is sent, and it
+	// goes with readonly = 2 whatever BOXER_PLAY_ALLOW_WRITES says.
+	Agent               *app.OnBehalfOf
 	QueryID             string
 	ReplaceRunningQuery bool
 	// Label is the human lane name ("main", "map", "diagnostics", …) the
 	// QueryID embeds — carried separately so the SD7 log_comment stamp
 	// can record it without parsing it back out of the id.
 	Label string
+	// QueryCache, when set, is asked on each request whether the run may use
+	// the server's query cache (use_query_cache=1) and whether it must not
+	// read from it (fresh: the result is computed and the entry rewritten).
+	// A func rather than two fields so a lane's stable options follow a
+	// toggle the panel flips between runs; it is called on the run's
+	// goroutine and must be safe there.
+	QueryCache func() (use bool, fresh bool)
 	// OnProgress, when set, opts the request into ClickHouse's in-band
 	// progress headers (ADR-0115 plane A): the server streams
 	// X-ClickHouse-Progress lines inside the open response-header block,
@@ -386,6 +402,21 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 			settings["replace_running_query"] = "1"
 		}
 	}
+	// A server holding this user read-only refuses the stamp; what it
+	// refused before is not sent again (play_readonly.go).
+	target, _ := dec.target()
+	sentLevel := inst.knownReadonlyLevel(target)
+	degradeForReadonly(&req, sentLevel)
+	err = deliverVerdict(ctx, eng, req)
+	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, sentLevel, err); retry {
+		degradeForReadonly(&req, level)
+		err = deliverVerdict(ctx, eng, req)
+	}
+	return
+}
+
+// deliverVerdict sends req and reports only whether the server accepted it.
+func deliverVerdict(ctx context.Context, eng *chserver.Engine, req queryengine.Request) (err error) {
 	st, _, err := eng.Deliver(ctx, req)
 	if err != nil {
 		return
@@ -966,6 +997,13 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if !inst.cfg.AllowWrites {
 		req.Settings["readonly"] = "2"
 	}
+	if opts != nil && opts.Agent != nil {
+		residual, _ := inst.buildResidualObserved(sql, nil)
+		if err = checkAgentLimits(residual, dec, opts.Agent); err != nil {
+			return
+		}
+		req.Settings["readonly"] = "2"
+	}
 	if opts != nil {
 		if opts.QueryID != "" {
 			req.RunID = opts.QueryID
@@ -976,6 +1014,14 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 			}
 		}
 		req.OnProgress = opts.OnProgress
+		if opts.QueryCache != nil {
+			if use, fresh := opts.QueryCache(); use {
+				req.Settings["use_query_cache"] = "1"
+				if fresh {
+					req.Settings["enable_reads_from_query_cache"] = "0"
+				}
+			}
+		}
 	}
 	// SD7 identity stamp (ADR-0115): {run_id, app, lane, four
 	// fingerprints} as compact JSON, so the server's query_log row is
@@ -984,18 +1030,30 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if lc := inst.composeLogComment(sql, q, params, signals, opts); lc != "" {
 		req.Settings["log_comment"] = lc
 	}
-
-	st, res, err := eng.Deliver(ctx, req)
-	if err != nil {
-		return
-	}
-	summary = summaryFrom(res.Summary)
+	// A server holding this user read-only refuses some of the above; what
+	// it refused before is not sent again (play_readonly.go).
+	target, _ := dec.target()
+	sentLevel := inst.knownReadonlyLevel(target)
+	degradeForReadonly(&req, sentLevel)
 
 	// A run the server rejected ends before any bytes arrive, and opening
 	// the stream is what surfaces its diagnostic — handing an empty body to
 	// the Arrow decoder would replace "clickhouse http 400: <the actual
 	// problem>" with a complaint about a missing IPC header.
-	rs, err = openResultStream(st)
+	deliver := func() (dErr error) {
+		st, res, dErr := eng.Deliver(ctx, req)
+		if dErr != nil {
+			return
+		}
+		summary = summaryFrom(res.Summary)
+		rs, dErr = openResultStream(st)
+		return
+	}
+	err = deliver()
+	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, sentLevel, err); retry {
+		degradeForReadonly(&req, level)
+		err = deliver()
+	}
 	if err != nil {
 		return
 	}

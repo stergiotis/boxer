@@ -305,6 +305,13 @@ type Manifest struct {
 	// a reference to it (§SD1).
 	Workingset bool
 
+	// Operations is the optional catalog of commands and queries the app
+	// offers to callers on the bus, agents among them (ADR-0269 §SD2). It
+	// requires factory registration. A catalog that fails validation is
+	// withdrawn at registration with a diagnostic, and the app still
+	// registers; [Registry.OperationsDiagnostic] says why.
+	Operations *OperationsCatalog
+
 	// Help is the optional inline-help corpus for this app. When non-nil,
 	// the keelson/runtime/help package's DefaultLibrary will lazily index
 	// every `*.md` file under the fs.FS (any depth) on first access and

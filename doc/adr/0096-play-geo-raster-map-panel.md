@@ -19,7 +19,9 @@ pulls the result as Apache Arrow, and renders it through a dock of panels
 prelude in the editor buffer (`play_param_inject.go`).
 
 A known technique renders slippy-map tiles *inside the database*. ClickHouse's
-[`adsb.exposed`](https://github.com/ClickHouse/adsb.exposed) demo stores points
+`adsb.exposed` demo, as its
+[announcement post](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse)
+describes it, stores points
 in Web Mercator (`mercator_x/y` over the full `UInt32` world range, ordered by
 `mortonEncode(mercator_x, mercator_y)` so a viewport is a near-contiguous key
 range with minmax skip-index pruning), then a parameterized query bins the
@@ -147,10 +149,12 @@ The panel drives six reserved params; the rest of the query is the user's:
 | `table` | `Identifier` | human | table / sample |
 | `sampling` | `UInt32` | human | brightness sampling factor |
 
-The query is the `adsb.exposed` single-tile render generalized to an arbitrary
-viewport — three changes, everything else (the colour `WITH` block, `GROUP BY
-pos`, `WITH FILL`, the `round(…)::UInt8` projection, alpha-0 fill on empty
-pixels) verbatim:
+The query is the single-tile render published in ClickHouse's
+[`adsb.exposed` announcement](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse)
+generalized to an arbitrary viewport — three changes, the rest of the published
+skeleton (`GROUP BY pos`, `WITH FILL`, the `round(…)::UInt8` projection,
+alpha-0 fill on empty pixels) kept. The colour block below is boxer's own; see
+the 2026-10-01 Update:
 
 1. tile `z/x/y` bbox → the injected `vp_*` mercator bbox (still filters the
    morton-indexed `mercator_x/y`, so index pruning holds — SD4);
@@ -182,13 +186,12 @@ WITH
     count() AS total,
     greatest(1000000. / {sampling:UInt32} / zoom_factor, toFloat64(count())) AS max_total,
     pow(total / max_total, 1/5) AS transparency,
-    greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
-    greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
-    greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
     255 AS alpha,
-    (1 + transparency) / 2 * (1 - color3) * 255 AS red,
-    transparency * color1 * 255 AS green,
-    color2 * 255 AS blue
+    -- colour block: a render's red/green/blue expressions go here
+    -- (redacted 2026-10-01 — see the Update of that date)
+    transparency * 255 AS red,
+    transparency * 255 AS green,
+    transparency * 255 AS blue
 
 SELECT round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8
 FROM {table:Identifier}
@@ -205,7 +208,7 @@ viewport (inflated ~1.3× per SD7) → mercator via the `setup.sql` formula
 reads exactly `vp_w·vp_h` rows × 4 `UInt8` and emits them via `mapRaster`.
 
 The geometry header (`span_*`, `in_view`, `px/py/pos`, `zoom_factor`) is
-render-agnostic: the four upstream modes become snippet variants that share it
+render-agnostic: colour modes become snippet variants that share it
 and swap only the colour `WITH` block + `WHERE`. Two items to verify at wiring:
 `WITH FILL … TO` with a param expression (else substitute the literal product),
 and the panel guarding a non-degenerate bbox (`span_x`, `span_y` > 0).
@@ -331,7 +334,7 @@ Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXX
 
 ## Update — 2026-07-10: pluggable render (SD6 realized)
 
-The first cut hardcoded the adsb "Altitude & Velocity" colour block, so the panel
+The first cut hardcoded a single altitude-and-speed colour block, so the panel
 only worked on tables with `altitude`/`ground_speed`. SD6 anticipated the fix —
 the geometry + density header (`span_*`, `in_view`, `px/py/pos`, `zoom_factor`,
 `total`, `max_total`, `transparency`, `alpha`) is render-agnostic, and a render
@@ -339,8 +342,8 @@ swaps only the colour `WITH` block + optional `WHERE`. That split is now real.
 
 `apps/play/play_map.go` gains a `rasterRender` (name, `colorSQL` spliced after the
 shared header, optional `where`, `needs` columns for the status hint, `custom`
-flag) and a ComboBox render picker in the panel. Built-ins: **Altitude & Velocity**
-(default; the prior block, aviation), **Density** (table-agnostic — colour from
+flag) and a ComboBox render picker in the panel. Built-ins: an altitude-and-speed
+render (default; the prior block, aviation — replaced 2026-10-01, see that Update), **Density** (table-agnostic — colour from
 `count()` alone via `transparency`, assumes only `mercator_x/y`; the "any
 geo-point table" unlock), **Speed** (assumes `ground_speed`), and **Custom** (the
 user types the `red/green/blue` expression, matching the playground's existing
@@ -536,6 +539,153 @@ never plumbed a control for (`play_map.go`'s per-render `where`, ANDed with
 Nothing about the raster query changes here; this records what the forward path
 now costs, so the next reader does not re-derive it from a `Code: 60`.
 
+## Update — 2026-10-01: upstream colour block removed; published sources cited
+
+`adsb.exposed`'s repository is licensed CC BY-NC-SA 4.0. Its schema, the sampled
+tables and their materialized views, the tile-query skeleton and the brightness
+normaliser (`max_total` over `sampling` and `zoom_factor`, the fifth-root
+`transparency`) are all published in the 2024
+[announcement post](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse);
+this ADR, `apps/play/demo/adsb/setup.sql` and the Map panel now cite that post
+rather than the repository. The default "Altitude & Velocity" colour block was
+not found in any published material — only in the repository's source — so it
+was removed from `play_map.go`, from the Map snippet in
+`apps/play/help/snippets.md` and from §SD6's query above, and replaced by an
+altitude-and-speed render designed without reference to it (named in
+`builtinRenders`). Nothing else about the panel changes: the render split of
+the 2026-07-10 Update, the `vp_*` contract and SD1 stand.
+
+## Update — 2026-10-01: the panel as ADR-0204 rebuilt it; SD7 as built; antimeridian, alpha and offline land
+
+ADR-0204 replaced the `walkers` binding with the Go `portolan` map, and this
+ADR's body still describes the binding it replaced. What holds now:
+
+- **SD3 / the view.** The panel reads the view from `portolan.Map.View()` and
+  debounces on `ViewHash()`; the raster is drawn with `Projector.Image`, which
+  carries the send-once texture protocol `mapRaster` had. `fetchR15WalkersCamera`
+  and the `mapRaster` node are gone, and with them the Negative "one map per
+  frame": each pane owns its map.
+- **SD7 as built.** The raster is sized from `View.Size` in logical points, with
+  no device-pixel factor, and `clampDim` caps each side at `mapMaxDim` (1024),
+  not ~1536². No bbox inflation was built; the keepBuffer margin stays an SD10
+  deferral, as the Status section says. 1024² is also the public ADS-B
+  instance's result-row cap, so a larger dense raster would fail there.
+- **SD8.** Basemap tiles are painter images (ADR-0204 M4), so captures include
+  them, and they are fetched through the `basemap` egress destination
+  (ADR-0262); `BOXER_MAP_TILE_URL` both moves the source and turns the basemap
+  on by default. With no basemap the pane now paints the `landoverlay` atlas
+  under the raster, as the Vector field pane does, in its design-system style
+  over portolan's default background (`styletokens.NeutralBgPanel`).
+- **SD4 at the antimeridian.** The map wraps in longitude and `mercator_x`
+  covers one world. `foldViewLon` folds a settled view by whole turns onto that
+  world before the request (a view a world wide or more asks for the whole
+  world), sizes the raster to the share of the view it keeps, and
+  `rasterCopies` draws the served raster on every world copy the view shows.
+  Before, a view panned one world width projected to a degenerate bbox and the
+  pane went dark. A narrower view straddling ±180 still loses the part past
+  the edge; requesting both sides stays deferred. `landoverlay` paints world
+  copies the same way.
+- **SD6, alpha.** The header no longer fixes `255 AS alpha`: a colour block may
+  define `alpha`, and the template appends the opaque default only when it does
+  not (`alphaClause`). `WITH FILL` rows stay transparent either way.
+- The chserver engine sends the HTTP progress settings only with the transport
+  that reads them (ADR-0115 plane A), so an https endpoint or a wasm build
+  no longer asks for progress it cannot receive.
+
+Unchanged: SD1's bbox-per-view, the `vp_*` contract, and the remaining SD10
+deferrals.
+
+## Update — 2026-10-01: SD10's sampling ladder, under SD1
+
+The progressive ladder is taken up without giving up bbox-per-view. A settled
+view is demanded from the most-sampled table first and then one level at a
+time towards the full one, under the same `vp_*` params on the panel's one
+lane; each level supersedes the last by the lane's (SQL, params) key, and the
+last-good raster stays on screen while the next loads. Levels come from the
+source's name — `<base>_sample100`, `<base>_sample10`, `<base>`, starting at
+the table the source control names — and each level's `sampling` is its own
+factor, so the brightness normaliser keeps the levels alike. A derived level
+the server does not have (`UNKNOWN_TABLE`) is skipped and remembered; the
+named table is never skipped. A level slower than `mapLadderBudget` stops the
+climb and the status line says so; Refresh climbs regardless. A pan or a
+control change starts again at the coarsest level. A table function or
+subquery source, or the **refine** toggle off, reads the one source at the
+manual `sampling` as before. The mechanism is `apps/play/play_map_ladder.go`.
+
+Still open from SD10: a ladder per source chosen by row count rather than by
+name, hover→info, and the keepBuffer margin.
+
+## Update — 2026-10-01: a sparse raster result
+
+The template no longer fills the framebuffer server-side: it selects
+`(toUInt32(pos), r, g, b, a)` per non-empty pixel with no `ORDER BY … WITH
+FILL`, and `packRaster` scatters the rows into a zeroed `w×h` buffer. It
+still reads the dense four-column form, which the Map snippet keeps.
+
+Measured once on 2026-10-01 against the local demo slice at 1024×600, three
+views from 0.04 % to 52 % of pixels non-empty: the sparse query took about a
+third of the dense one's server time at every fill, `WITH FILL` being most of
+the latter, while after ClickHouse's default lz4 Arrow compression the dense
+result was up to about half the bytes once more than a few percent of pixels
+were non-empty, because empty rows compress and an unordered `pos` column
+does not (sorting it did not change that). Sparse was taken for the server
+time, for the rows it saves the browser tab's single-threaded decode, and
+because it takes the framebuffer size off the result-row count; a view that
+is both large and mostly full costs more bytes than it did.
+
+## Update — 2026-10-01: the server query cache, opt-in
+
+The panel has a **server cache** toggle, off by default. On, the raster runs
+carry `use_query_cache=1`; a Refresh computes every level of the climb it
+restarts afresh (`enable_reads_from_query_cache=0`, the entries rewritten)
+until the view changes. Parameter values are part of the cache key — the
+server keys on the statement with the `{vp_*}` values substituted — so a
+hit needs the same table, render and viewport again: under SD1 that is an
+exact revisit, a history restore, or a second window on the same view.
+
+It stays off by default because of what it can hold. On 2026-10-01, against
+a server with the default 1 MiB `query_cache.max_entry_size_in_bytes`, a
+1024×600 raster of the demo slice was cached when sparse (240 and 9,900
+non-empty pixels, answered again in 3–5 ms instead of 56–62 ms) and was not
+cached at 52 % fill (317,118 pixels, over the limit) — the expensive views
+are the ones the default limit refuses. A server with a larger limit, or
+tile addressing (O2), changes that.
+
+A `readonly=1` user is not asked to skip reading the cache (ClickHouse's
+public demo refuses that setting) but keeps `use_query_cache`, which that
+demo lets its user change; the ADR-0181 2026-10-01 degrade otherwise holds.
+
+## Update — 2026-10-01: a time window from the Timeline's brush
+
+play's Timeline turns on its range brush (ADR-0043 §SD16) and publishes the
+brushed window as two play-wide signals, `tl_from` and `tl_to`
+(`DateTime64(3, 'UTC')`, declared in `play_signal_decl.go`). With nothing
+brushed they span every instant `DateTime64` holds, and they are seeded that
+way, so any query can filter on them from the first frame and an unbrushed
+window keeps every row; ADR-0251's deferred "range as signals" could publish
+the same pair from the time strip.
+
+The Map takes a **time column** (default `time`, the ADS-B schema's). While
+a window is brushed, the raster template ANDs `<column> BETWEEN
+{tl_from:DateTime64(3, 'UTC')} AND {tl_to:DateTime64(3, 'UTC')}` onto its
+WHERE, so a new window re-keys on params, restarts the ladder, and the status
+line names the window; with no window, or no column, the template carries no
+predicate, so a table without that column keeps working. This is SD6's
+human-owned predicate, filled from the Timeline rather than typed.
+
+## Update — 2026-10-02: tile addressing measured; SD1 stands
+
+The [map-tile-addressing](../trials/map-tile-addressing/README.md) trial
+re-costed O2 against SD1 as built, on the local demo slice; its §0 is the
+citable claim. Tiles drawn through a portolan pyramid cost the server about
+what one raster per settled view does over a pan/zoom path, spending more on
+views that show new ground and nothing on revisits, so they do not earn an ADR
+superseding SD1 on this evidence. A source where one view takes seconds —
+remote, or far larger — is where the answer could change; the trial's §6
+lists what such an ADR would have to decide. The smaller changes it points at
+instead are a multi-entry raster memo on the lane, starting the ladder lower
+on a fast source, and SD10's deferred overscan margin.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
@@ -550,7 +700,10 @@ now costs, so the next reader does not re-derive it from a `Code: 60`.
 - `apps/play/play_param_inject.go`, `play_store.go`, `play_timeline_bands.go` —
   the param-injection seam, the single-flight store the panel avoids, and the
   panel-local async-lane precedent.
-- [`adsb.exposed`](https://github.com/ClickHouse/adsb.exposed) — the upstream
-  in-DB tile-rendering technique the bbox-variant query generalizes.
+- [Announcing adsb.exposed](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse)
+  (ClickHouse blog, 2024-04-24) — the published in-DB tile-rendering technique
+  the bbox-variant query generalizes; the
+  [repository](https://github.com/ClickHouse/adsb.exposed) is CC BY-NC-SA 4.0
+  and is not a source for this ADR's text or the panel's code.
 - [`walkers`](https://crates.io/crates/walkers) — slippy map widget; 0.53
   `with_layer` is the forward path for faithful tiles (O2/O3).

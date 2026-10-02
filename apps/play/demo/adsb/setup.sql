@@ -1,9 +1,10 @@
 -- ADS-B demo schema for the play Map panel (ADR-0096).
 --
--- Adopted from ClickHouse's adsb.exposed demo (its setup.sql):
---   https://github.com/ClickHouse/adsb.exposed
--- Only the planes tables are kept; the upstream `saved_queries` and `stats`
--- tables serve that project's own web UI, not the in-DB raster this demo loads.
+-- The schema, the sampled tables and their materialized views follow the ones
+-- published in ClickHouse's adsb.exposed announcement (2024-04-24):
+--   https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse
+-- The column list is the remote corpus's, which ingest.sql reads with
+-- SELECT *; the mercator columns are boxer's own (see below).
 --
 -- mercator_x / mercator_y are MATERIALIZED from lat/lon with the same formulas
 -- the Map panel mirrors in Go (apps/play/play_map.go lonToMercX / latToMercY,

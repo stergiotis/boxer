@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
@@ -111,10 +112,15 @@ type App struct {
 	applyGen uint32
 	// split is the list pane\'s width, kept and persisted by the window;
 	// storage is where it is kept, and splitWrite its pending write.
-	split       splitState
-	storage     app.StorageI
-	splitSeen   float32
-	kindDraft   string
+	split     splitState
+	storage   app.StorageI
+	splitSeen float32
+	kindDraft string
+	// kindH is the kind field's widget, for the catalog's editing check;
+	// frameCtx the frame's context, for routing the person's gestures
+	// through the catalog (ADR-0269).
+	kindH       widgethandle.WidgetHandle
+	frameCtx    app.FrameContextI
 	selectedID  string
 	shownEvent  int
 	autoRefresh bool
@@ -212,6 +218,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
 	inst.density = styletokens.ActiveDensity()
 	inst.ensureWidths(ctx)
 	inst.render()

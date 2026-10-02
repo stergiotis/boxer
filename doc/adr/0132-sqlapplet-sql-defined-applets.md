@@ -681,6 +681,59 @@ rather than demanding a slug, and a new case registers a library and asserts it
 is gone from an applet window under both `auto` and an explicit list — the
 failure stays silent otherwise, which is how it arrived.
 
+
+## Update (2026-10-02) — §SD5 reads arguments as the server does, and its vocabulary is the server's
+
+Three defects in the §SD5 classifier, found when ADR-0270's agent limits began
+refusing runs on its verdict:
+
+- **The class depended on spelling.** Grammar1 keeps every call in a table
+  function's argument list as a table-function node, and canonicalisation
+  turns `(…)` and `[…]` there into `tuple(…)` and `array(…)` calls. The
+  classifier took each such node for a table function off the allowlist, so
+  `values('a String, b String', ('x', 'y'))` was read as authored and
+  read-egress once canonical — and sqlapplet and Diagnostics classify the
+  authored buffer while the agent limits classify the canonical residual.
+  `merge(currentDatabase(), '^t')` was read-egress in both forms, and
+  `url(concat(…), …)` carried a `concat` witness.
+- **The vocabulary was recalled, not read.** The server's
+  `system.table_functions` lists `eval`, which runs a query its argument
+  builds at run time, and `filesystem`; both were off the allowlist by
+  omission rather than by decision. `system.functions` lists the `ai*`
+  scalars, which send their arguments to a configured AI provider, and
+  `catboostEvaluate`, which loads a model from the server's files: each
+  classified read, so `SELECT aiGenerate(note) FROM t` passed as a plain read.
+- **A state change passed as a read.** `generateSerialID` advances a counter
+  kept in Keeper from inside a SELECT.
+
+The classifier now reads a call in a table function's arguments as the server
+evaluates it — an expression, judged by the scalar lists — except a table
+function among the arguments of one that takes a table (`loop`,
+`viewIfPermitted`, `remote`, `cluster`, …), which is read as a table; under a
+local one an argument the vocabulary does not know is read as a table too, so
+that case fails closed. The table-function vocabulary is the server's own list
+(26.8), each name with how far it reaches — external storage or a service,
+other servers, the server's files or programs, a query built at run time — and
+an unlisted name is unknown and presumed to reach out, as before. The scalar
+side stays a denylist, now with the `ai*` functions and `catboostEvaluate`;
+`generateSerialID` witnesses mutating. A witness carries its reach, which
+Diagnostics, the parameter-ceiling refusal and the agent limits show.
+
+What keeps this true: a test classifies a corpus before and after
+`CanonicalizeFull` and requires the same class and witnesses; the integration
+lane reads the catalog from `clickhouse local` and fails on a table function
+the vocabulary does not classify, or on a scalar whose server description
+reads as reaching out — an AI or embedding provider, Keeper, a remote server,
+a file, an external model, a named collection — that no list names or
+reviews. That second check is a tripwire on the server's wording, not a
+proof. No applet of the committed corpus changed class.
+
+The honesty clause stands, with one sentence more: views, dictionaries,
+table engines and UDFs reach further than the text shows, and a scalar the
+vocabulary does not name is presumed pure. `view(SELECT …)` does not parse in
+grammar1, so a buffer using it classifies mutating through the caller
+contract.
+
 ## References
 
 Internal:

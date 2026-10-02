@@ -362,6 +362,16 @@ func (inst *Editor) Bind(f Frame) (res Result) {
 	return inst.result
 }
 
+// TextHandle is the editor's text field, as last bound: what a caller reads
+// response flags of, such as whether the person holds keyboard focus in it.
+// Zero before the first bind.
+func (inst *Editor) TextHandle() (h widgethandle.WidgetHandle) {
+	if inst.slotID == 0 {
+		return
+	}
+	return widgethandle.Make(inst.slotID)
+}
+
 // takeCapturedTab reads back the Tab [Frame.CaptureTab] consumed last frame.
 //
 // The read is by the editor's own widget id, which is the id the TextEdit

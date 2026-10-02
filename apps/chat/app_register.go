@@ -4,6 +4,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
@@ -27,9 +28,13 @@ var manifest = app.Manifest{
 	Kind:         app.KindApp,
 	Surface:      app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 760, PreferredHeight: 720},
-	Caps: append(
+	Caps: append(append(
 		llm.ClientCaps("chat: send the conversation to the host's model"),
-		llm.RetainCaps("chat: keep the conversation on boxer.facts where the host's BOXER_LLM_RETAIN allows (ADR-0264)")...,
+		llm.RetainCaps("chat: keep the conversation on boxer.facts where the host's BOXER_LLM_RETAIN allows (ADR-0264)")...),
+		// The coordinator (ADR-0269): the model works in windows the person
+		// shares, each call checked by the host's dispatcher. The person
+		// registers the app as a coordinator (BOXER_AGENT_COORDINATORS).
+		agent.ClientCaps("chat: work in windows the person shares with the model")...,
 	),
 }
 
@@ -39,6 +44,15 @@ var manifest = app.Manifest{
 var DraftSeed = env.NewString(env.Spec{
 	Name:        "BOXER_CHAT_DRAFT",
 	Description: "text in the chat app's composer when a window opens; for scenes and demos",
+	Category:    env.CategoryE("boxer-chat"),
+})
+
+// AppsSeed turns Apps on in a new window (ADR-0009 seed variable): the
+// model may then ask the person for windows to work in.
+var AppsSeed = env.NewBool(env.Spec{
+	Name:        "BOXER_CHAT_APPS",
+	Default:     "false",
+	Description: "turn on Apps in a new chat window: the model may ask the person for windows to work in (ADR-0269); for scenes and demos",
 	Category:    env.CategoryE("boxer-chat"),
 })
 

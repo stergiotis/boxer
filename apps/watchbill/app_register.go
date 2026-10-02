@@ -31,6 +31,7 @@ var manifest = app.Manifest{
 		PreferredHeight: 800,
 	},
 	LaunchKind: launchcfg.Kind,
+	Operations: ops.Catalog(),
 	// The split between the list and the detail, kept across the process
 	// (watchbill_split.go); the host injects the persist cap for it.
 	PersistedKeys: []string{splitKey},

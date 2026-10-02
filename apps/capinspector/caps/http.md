@@ -48,6 +48,10 @@ res, err := inst.web.Fetch(ctx, "basemap", httpegress.Request{URL: url, Purpose:
 - **The sensitivity wall.** A request composed from sealed data
   (ADR-0145) is refused unless every prefix of the destination is
   loopback. The label is the caller's declaration.
+- **An agent's work.** A fetch an agent's call started carries the task's
+  on-behalf-of context, and is refused unless the task is live and its
+  grant lists `http:<destination>` (ADR-0269 §SD6); `http_calls` names the
+  task.
 
 ## Where the calls are read
 

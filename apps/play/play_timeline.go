@@ -145,6 +145,7 @@ func NewTimelineDriver(ids *c.WidgetIdStack, client *Client, bandsSQLPtr *string
 	}
 	inst.tl = timeline.New(ids, "play-timeline", nil, timeline.Options{
 		BackgroundBands: inst.bandsProducer,
+		Brush:           true,
 	})
 	return
 }
@@ -207,6 +208,23 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 	if ev := inst.tl.Render(); ev.SelectionChanged {
 		inst.onSelect(ev.Selection)
 	}
+	inst.publishWindow(emit)
+}
+
+// publishWindow emits the brushed window as tl_from/tl_to, or the unbounded
+// window when nothing is brushed. Every frame, like the extent: the store
+// dedups a stable value, and a brush the widget kept across a rebuild is
+// still the window.
+func (inst *TimelineDriver) publishWindow(emit SignalEmitterI) {
+	if emit == nil {
+		return
+	}
+	from, to := timelineWindowFloor, timelineWindowCeil
+	if r, ok := inst.tl.Brush(); ok {
+		from, to = formatExtentParam(r.FromMS), formatExtentParam(r.ToMS)
+	}
+	emit.Emit(signalTimelineFrom, from)
+	emit.Emit(signalTimelineTo, to)
 }
 
 // RenderContractHelp emits a descriptive multi-line block listing the

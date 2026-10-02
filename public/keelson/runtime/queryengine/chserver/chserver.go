@@ -165,12 +165,15 @@ func (inst *Engine) Deliver(ctx context.Context, req queryengine.Request) (st qu
 		// ADR-0115 plane A: ask the server to stream progress inside the
 		// still-open response-header block, and swap in the transport that
 		// can surface those lines mid-run. An endpoint that cannot do it
-		// keeps the stock client and the run simply reports nothing until
-		// it finishes — progress is advisory, so degrading loses nothing
-		// the contract promised.
-		qs.Set("send_progress_in_http_headers", "1")
-		qs.Set("http_headers_progress_interval_ms", strconv.Itoa(progressIntervalMs))
+		// (https, or any endpoint under wasm) keeps the stock client and
+		// the run simply reports nothing until it finishes — progress is
+		// advisory, so degrading loses nothing the contract promised. The
+		// settings ride only with the transport that reads them: a stock
+		// client would never see the lines, and a readonly=1 user refuses
+		// the request outright for carrying them.
 		if pc := newProgressClient(inst.endpoint, req.OnProgress); pc != nil {
+			qs.Set("send_progress_in_http_headers", "1")
+			qs.Set("http_headers_progress_interval_ms", strconv.Itoa(progressIntervalMs))
 			httpClient = pc
 		}
 	}

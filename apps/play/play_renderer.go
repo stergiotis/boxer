@@ -801,6 +801,16 @@ type PlayApp struct {
 	// drift baseline (write only when the draft moved away from it) and the
 	// reseed guard (follow the store only when the store moved away from
 	// it), so a co-writing panel and the pane do not chase each other.
+	// The agent mark (ADR-0270 §SD3): the on-behalf-of context of the task
+	// whose input the window acts on, what the window held when it was
+	// last set, whether it was set this frame, and whether the task asked
+	// for the next run. runAgent is the context of the run executing now.
+	agentDriven       *app.OnBehalfOf
+	agentSql          string
+	agentParams       string
+	agentFresh        bool
+	agentRunRequested bool
+	runAgent          *app.OnBehalfOf
 	paramSlots        []paramSlot
 	paramDrafts       map[string]*string
 	paramSyncedValues map[string]string
@@ -1639,7 +1649,9 @@ func (inst *PlayApp) render() error {
 		inst.runIsAuto = false
 		sub := inst.requestSubquery
 		inst.requestSubquery = false
+		inst.runAgent = inst.takeAgentForRun(auto)
 		inst.executeRun(auto, sub)
+		inst.runAgent = nil
 	}
 
 	inst.frame++
@@ -1805,12 +1817,18 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	// the query summary line; the result panels keep the last read.
 	inst.writeGateNotice = ""
 	if runIsInsertWrapper(runSQL) {
+		if inst.runAgent != nil {
+			// An agent's work writes only as a confirmed consequential
+			// command, never as a run (ADR-0269 §SD6, ADR-0270 §SD2).
+			inst.runBlockedReason = "agent limit: an agent's run does not write"
+			return
+		}
 		if AllowWrites.Get() == "" {
 			inst.writeGateNotice = "the INSERT is gated — set BOXER_PLAY_ALLOW_WRITES=1 to execute writes from play, or copy Preview → As sent and run it via `clickhouse client`"
 			return
 		}
 		inst.executeWriteRun(runSQL, sigParams)
-		if !auto {
+		if !auto && inst.runAgent == nil {
 			inst.noteWorkingsetIntent()
 			inst.resumeLiveAfterHumanAction()
 		}
@@ -1880,8 +1898,11 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	if runSQL != sql {
 		sourceBuffer = sql
 	}
+	if inst.runAgent != nil {
+		inst.graph.mainLane.SetNextAgent(inst.runAgent)
+	}
 	inst.graph.RunMain(executable, sigParams, sourceBuffer)
-	if !auto {
+	if !auto && inst.runAgent == nil {
 		// A manual Run is intent by construction — "this is the query I
 		// want" — even when it re-runs an unchanged buffer, so it marks
 		// the workingset dirty (ADR-0148 §SD4). The host does the saving,
@@ -2430,8 +2451,14 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 	base := inst.client.URL()
 	label := fmt.Sprintf("%s  as %s", truncateRunes(base, 40), inst.client.cfg.User)
 	full := fmt.Sprintf("%s  as %s", base, inst.client.cfg.User)
+	// What the server said about this user's readonly level (play_readonly.go):
+	// a degraded run is visible here rather than only in query_log.
+	note := inst.client.ReadonlyNote(base)
 	if inst.autoEndpoint {
 		if dec, ok := inst.client.LastDecision(); ok {
+			if target, err := dec.target(); err == nil {
+				note = inst.client.ReadonlyNote(target)
+			}
 			// No arrow glyph: the host font has no →, and it renders as tofu.
 			label = "auto: " + truncateRunes(dec.describe(), 72)
 			full = "auto — last run went to " + dec.describe() +
@@ -2443,6 +2470,10 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 			full = "auto — nothing has run yet; a query naming no keelson " +
 				"table goes to the pinned base: " + base
 		}
+	}
+	if note != "" {
+		label += "  · " + note
+		full += "\n" + note
 	}
 	// The label is truncated twice over (runes here, pixels by Truncate), and
 	// a host:port that differs only in its tail is exactly the case where

@@ -1,9 +1,11 @@
 package chat
 
 import (
+	"context"
 	"strconv"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
@@ -78,6 +80,7 @@ func (inst *App) renderBar() {
 			c.Label("→ " + inst.model.Model + " · " + inst.model.EndpointHost).Selectable(false).Send()
 		}
 	}
+	inst.renderApps()
 	if conv.notKept != "" {
 		badge.New(inst.ids.PrepareStr("not-kept"), "not kept: "+conv.notKept).
 			Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
@@ -247,6 +250,11 @@ func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview
 		kinds = append(kinds, k)
 	}
 	for i, e := range conv.entries {
+		if e.speaker == speakerTool {
+			// The coordinator's activity: a tool call and how it ended.
+			add(e.atMs, -1, "⚙ "+e.text, chatview.FlagSystem, chatview.StatusNone, ordinalKind{entry: i})
+			continue
+		}
 		sender := int32(0)
 		if e.speaker == speakerModel {
 			sender = 1
@@ -269,4 +277,44 @@ func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview
 // elapsed is a wait as seconds.
 func elapsed(since time.Time) (s string) {
 	return strconv.Itoa(int(time.Since(since).Seconds())) + " s"
+}
+
+// renderApps is the coordinator's row (ADR-0269): whether the model may ask
+// for windows to work in, and the task it holds — with whether its
+// conversation read untrusted content and holds confined content.
+func (inst *App) renderApps() {
+	if inst.coord == nil {
+		return
+	}
+	for range c.HorizontalTop().KeepIter() {
+		if !inst.conv.started {
+			c.Checkbox(inst.ids.PrepareStr("apps"), inst.apps, "Apps: let the model ask to work in windows").SendRespVal(&inst.apps)
+		} else if inst.conv.apps {
+			c.Label("Apps on").Selectable(false).Send()
+		}
+		task, tainted, confined := inst.coord.state()
+		if task == "" {
+			continue
+		}
+		label := "task " + task
+		if tainted {
+			label += " · read untrusted content"
+		}
+		if confined {
+			label += " · holds confined content"
+		}
+		c.Label(label).Selectable(false).Send()
+		if c.Button(inst.ids.PrepareStr("stop-task"), c.Atoms().Text("Stop task").Keep()).SendResp().HasPrimaryClicked() {
+			coord, cli := inst.coord, inst.agentCli
+			h := coord.handle()
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), agent.DefaultTimeout)
+				defer cancel()
+				_ = cli.Stop(ctx, h)
+			}()
+			coord.mu.Lock()
+			coord.grant = agent.Grant{}
+			coord.mu.Unlock()
+		}
+	}
 }

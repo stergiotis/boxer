@@ -8,6 +8,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -194,4 +196,32 @@ func TestDeliverSurfacesInBandProgress(t *testing.T) {
 	require.NoError(t, cErr)
 	require.Equal(t, "done", string(body))
 	require.Equal(t, runstream.TerminalComplete, term.State)
+}
+
+// TestDeliverAsksForProgressOnlyWithItsTransport pins that the progress
+// settings ride only with the transport that reads them. Over https the
+// stock client is kept, so the request carries neither setting — a
+// readonly=1 user would otherwise refuse it for asking.
+func TestDeliverAsksForProgressOnlyWithItsTransport(t *testing.T) {
+	t.Parallel()
+	var got url.Values
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		_, _ = io.WriteString(w, "ok")
+	}))
+	t.Cleanup(srv.Close)
+	eng, err := New(Config{Endpoint: srv.URL, HTTPClient: srv.Client()})
+	require.NoError(t, err)
+
+	st, _, err := eng.Deliver(context.Background(), queryengine.Request{
+		SQL:        "SELECT 1",
+		OnProgress: func(runstream.Progress) {},
+	})
+	require.NoError(t, err)
+	defer func() { _ = st.Close() }()
+	_, _, err = queryengine.Collect(st)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.False(t, got.Has("send_progress_in_http_headers"))
+	require.False(t, got.Has("http_headers_progress_interval_ms"))
 }

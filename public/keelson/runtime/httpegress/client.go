@@ -41,6 +41,10 @@ type Request struct {
 	// SensitivityConfined when the URL derives from a sealed dataset. The
 	// caller's declaration; the service cannot see provenance.
 	Sensitivity queryengine.SensitivityE
+	// OnBehalfOf is set when the fetch is work an agent's call started: the
+	// service then refuses a destination the task's grant does not list
+	// (ADR-0269 §SD6). Carry OperationCall.OnBehalfOf here.
+	OnBehalfOf *app.OnBehalfOf
 }
 
 // Response is a completed exchange, whatever its status.
@@ -78,6 +82,9 @@ func (inst *Client) Fetch(ctx context.Context, destination string, r Request) (r
 		return res, eb.Build().Str("destination", destination).Errorf("httpegress: invalid destination name")
 	}
 	req := wireRequest{V: wireVersion, Method: r.Method, URL: r.URL, Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity)}
+	if r.OnBehalfOf != nil {
+		req.OnBehalfTask, req.OnBehalfEpoch = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch
+	}
 	if deadline, ok := ctx.Deadline(); ok {
 		req.DeadlineUnixNanos = deadline.UnixNano()
 	}

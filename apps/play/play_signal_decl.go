@@ -39,6 +39,11 @@ const (
 	// field is at, so a query filtering on it returns nothing until the
 	// pane has written the step on display (ADR-0250 §SD6).
 	seedEpoch
+	// seedTimeFloor / seedTimeCeil are the two ends of an unbounded time
+	// window: the first and last instants DateTime64 holds, so a filter
+	// between them keeps every row until a window is brushed.
+	seedTimeFloor
+	seedTimeCeil
 )
 
 // raw is the literal an unwritten signal with this seed resolves to, and
@@ -53,6 +58,10 @@ func (inst signalSeedE) raw() (raw string, ok bool) {
 		return "[]", true
 	case seedEpoch:
 		return "1970-01-01 00:00:00.000", true
+	case seedTimeFloor:
+		return timelineWindowFloor, true
+	case seedTimeCeil:
+		return timelineWindowCeil, true
 	}
 	return "", false
 }
@@ -84,6 +93,10 @@ var reservedSignals = []reservedSignal{
 	// The Timeline's extent (slice 5d), seeded by the panel on render.
 	{Name: signalTimelineMin, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "timeline"},
 	{Name: signalTimelineMax, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "timeline"},
+	// The Timeline's brushed window: seeded unbounded, so a query filtering on
+	// it runs before any brush and keeps every row until one is drawn.
+	{Name: signalTimelineFrom, Type: "DateTime64(3, 'UTC')", Seed: seedTimeFloor, Owner: "timeline"},
+	{Name: signalTimelineTo, Type: "DateTime64(3, 'UTC')", Seed: seedTimeCeil, Owner: "timeline"},
 
 	// The World's clicked country.
 	{Name: signalSelectionCountry, Type: "String", Seed: seedEmpty, Owner: "world"},

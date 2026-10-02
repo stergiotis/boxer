@@ -149,3 +149,16 @@ func bigStep(lngs []float64) int {
 	}
 	return -1
 }
+
+// A view inside the atlas's world paints it once; a view panned whole turns
+// paints the copy it is on; a view wider than a world paints every copy it
+// meets, bounded.
+func TestWorldShiftsFollowTheViewAcrossCopies(t *testing.T) {
+	require.Equal(t, []float64{0}, worldShifts(-10, 20))
+	require.Equal(t, []float64{360}, worldShifts(350, 380))
+	require.Equal(t, []float64{-360}, worldShifts(-370, -350))
+	require.Equal(t, []float64{0, 360}, worldShifts(170, 200), "a view across +180 meets both copies")
+	require.Equal(t, []float64{-360, 0, 360}, worldShifts(-300, 300))
+	require.Len(t, worldShifts(-2000, 2000), maxWorldCopies)
+	require.Empty(t, worldShifts(20, -10))
+}

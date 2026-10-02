@@ -28,6 +28,8 @@
 package landoverlay
 
 import (
+	"math"
+
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
@@ -72,7 +74,10 @@ func (l *Layer) Drawn() int { return l.drawn }
 // Paint paints every country that meets the current viewport: the outer rings
 // filled and stroked, the holes stroked only, since a filled polygon on the
 // painter lane carries a single outer ring and would fill an enclave shut.
-// A nil atlas draws nothing.
+// The map wraps in longitude, so a view panned past ±180 or wider than the
+// world shows further copies of it; each copy the view meets is painted, the
+// atlas's degrees shifted by whole turns (worldShifts). A nil atlas draws
+// nothing.
 func (l *Layer) Paint(p portolan.Projector, atlas *worldmap.Atlas, st Style) {
 	l.drawn = 0
 	if atlas == nil {
@@ -83,28 +88,55 @@ func (l *Layer) Paint(p portolan.Projector, atlas *worldmap.Atlas, st Style) {
 	}
 	b := p.View().Bounds()
 	south, west, north, east := b.GetSouth(), b.GetWest(), b.GetNorth(), b.GetEast()
-	for i := range atlas.Countries {
-		cy := &atlas.Countries[i]
-		if !meets(cy, south, west, north, east) {
-			continue
-		}
-		l.drawn++
-		for r := range cy.RingCount() {
-			l.lats, l.lngs = l.lats[:0], l.lngs[:0]
-			var hole bool
-			l.lats, l.lngs, hole = cy.Ring(r, l.lats, l.lngs)
-			if len(l.lats) < 3 {
+	for _, shift := range worldShifts(west, east) {
+		for i := range atlas.Countries {
+			cy := &atlas.Countries[i]
+			if !meets(cy, south, west-shift, north, east-shift) {
 				continue
 			}
-			if hole || st.NoFill {
-				// An enclave: its border, never the fill that would swallow
-				// it. NoFill takes every ring down the same path.
-				p.Polyline(l.lats, l.lngs, st.Border, st.BorderWidth)
-				continue
+			l.drawn++
+			for r := range cy.RingCount() {
+				l.lats, l.lngs = l.lats[:0], l.lngs[:0]
+				var hole bool
+				l.lats, l.lngs, hole = cy.Ring(r, l.lats, l.lngs)
+				if len(l.lats) < 3 {
+					continue
+				}
+				if shift != 0 {
+					for j := range l.lngs {
+						l.lngs[j] += shift
+					}
+				}
+				if hole || st.NoFill {
+					// An enclave: its border, never the fill that would swallow
+					// it. NoFill takes every ring down the same path.
+					p.Polyline(l.lats, l.lngs, st.Border, st.BorderWidth)
+					continue
+				}
+				p.Polygon(l.lats, l.lngs, st.Land, st.Border, st.BorderWidth)
 			}
-			p.Polygon(l.lats, l.lngs, st.Land, st.Border, st.BorderWidth)
 		}
 	}
+}
+
+// maxWorldCopies bounds the copies one frame paints: a view at zoom 0 in a
+// wide pane can span several worlds, and each copy costs a full pass over
+// the atlas.
+const maxWorldCopies = 4
+
+// worldShifts returns the whole-turn longitude shifts at which the atlas's
+// world, lon −180..180, meets the view [west, east] — 0 alone for a view
+// inside it — in west-to-east order, at most maxWorldCopies.
+func worldShifts(west, east float64) (shifts []float64) {
+	if east < west {
+		return
+	}
+	first := math.Floor((west + 180) / 360)
+	last := math.Floor((east + 180) / 360)
+	for k := first; k <= last && len(shifts) < maxWorldCopies; k++ {
+		shifts = append(shifts, 360*k)
+	}
+	return
 }
 
 // meets reports whether a country's extent overlaps the viewport box. It is

@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
 	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
@@ -129,6 +130,9 @@ type Services struct {
 	// (ADR-0262). A destination that failed to resolve is refused with the
 	// reason.
 	HTTP bool
+	// Agent is runtime.agent.*: the services through which a caller
+	// discovers and calls the operations apps declare (ADR-0269).
+	Agent bool
 }
 
 // AllServices is every service on — the carousel's configuration.
@@ -136,7 +140,7 @@ func AllServices() Services {
 	return Services{
 		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
-		AppState: true, LLM: true, HTTP: true,
+		AppState: true, LLM: true, HTTP: true, Agent: true,
 	}
 }
 
@@ -233,6 +237,9 @@ type Runtime struct {
 	// HTTP is the egress service (ADR-0262); nil when off or failed to
 	// start.
 	HTTP *httpegress.Service
+	// Agent is the app operations service (ADR-0269); nil when off or
+	// failed to start.
+	Agent *agent.Service
 	// State is where workingsets and column-width overrides live (ADR-0105
 	// Update 2026-08-15): the durable persist backend when ClickHouse is
 	// reachable, an in-memory twin otherwise. Never nil after Boot, and
@@ -387,6 +394,8 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		}
 	}
 
+	rt.bootAgent()
+
 	if opts.AfterHost != nil {
 		if err = opts.AfterHost(rt); err != nil {
 			err = eh.Errorf("hostboot: after-host hook: %w", err)
@@ -456,6 +465,20 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		// service's own record.
 		llmCfg := llm.ConfigFromEnv()
 		llmCfg.Exec = rt.PersistExec
+		if path := llm.ScriptEnv.Get(); path != "" {
+			// A scripted model, for scenes (ADR-0269 M6): on the headless
+			// host only, where no person reads its answers as a model's.
+			if headlessOnly(true, imzero2env.HeadlessListen.Get() != "") {
+				scripted, sErr := llm.LoadScript(path)
+				if sErr != nil {
+					logger.Warn().Err(sErr).Msg("llm: BOXER_LLM_SCRIPT does not load; no scripted model")
+				} else {
+					llmCfg.Client, llmCfg.Endpoint, llmCfg.Model = scripted, llm.ScriptedEndpoint, "scripted"
+				}
+			} else {
+				logger.Warn().Msg("llm: BOXER_LLM_SCRIPT is honoured only on the headless host; refused here")
+			}
+		}
 		llmSvc, lErr := llm.NewService(rt.Bus, logger, llmCfg)
 		if lErr != nil {
 			logger.Warn().Err(lErr).Msg("llm: service start failed; llm.* will be unbound")
@@ -712,6 +735,83 @@ func (rt *Runtime) bootSysmetrics() {
 	}
 }
 
+// bootAgent starts the app operations service (ADR-0269) once the window
+// host exists, since calls are served by the instances it holds.
+func (rt *Runtime) bootAgent() {
+	if !rt.opts.Services.Agent {
+		return
+	}
+	logger := rt.opts.Log
+	// Durable where the persist backend is the server holding boxer.facts
+	// (ADR-0269 §SD9), as for llm_calls.
+	headless := imzero2env.HeadlessListen.Get() != ""
+	cfg := agent.Config{TestGrants: headlessOnly(agent.TestGrantsEnv.Get(), headless),
+		Exec: rt.PersistExec, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get())}
+	if rt.LLM != nil {
+		// Confined content reaches a coordinator's model only where the host's
+		// endpoint is local (ADR-0254 §SD3, ADR-0269 §SD7).
+		llmSvc := rt.LLM
+		cfg.ModelLocal = func() bool { return llmSvc.Describe().Local }
+	}
+	if agent.TestGrantsEnv.Get() && !cfg.TestGrants {
+		logger.Warn().Msg("agent: BOXER_AGENT_TEST_GRANTS is honoured only on the headless host; refused here")
+	}
+	if path := agent.ActionsFileEnv.Get(); path != "" {
+		if headlessOnly(true, headless) {
+			f, fErr := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+			if fErr != nil {
+				logger.Warn().Err(fErr).Str("path", path).Msg("agent: BOXER_AGENT_ACTIONS_FILE does not open; no action file")
+			} else {
+				cfg.ActionsLog = f
+				rt.cleanups = append(rt.cleanups, func() { _ = f.Close() })
+			}
+		} else {
+			logger.Warn().Msg("agent: BOXER_AGENT_ACTIONS_FILE is honoured only on the headless host; refused here")
+		}
+	}
+	if rt.Host != nil {
+		cfg.Host = rt.Host
+		ops, oErr := windowhost.NewOpsService(rt.Bus, rt.Host, logger)
+		if oErr != nil {
+			logger.Warn().Err(oErr).Msg("windowhost: ops service start failed; operation calls will go unanswered")
+		} else {
+			rt.cleanups = append(rt.cleanups, ops.Close)
+		}
+	}
+	svc, err := agent.NewService(rt.Bus, logger, cfg)
+	if err != nil {
+		logger.Warn().Err(err).Msg("agent: service start failed; runtime.agent.* will be unbound")
+		return
+	}
+	rt.Agent = svc
+	rt.cleanups = append(rt.cleanups, svc.Close)
+	// Host services that reach outside check agent-caused work against the
+	// task's grant (ADR-0269 §SD6).
+	if rt.HTTP != nil {
+		rt.HTTP.SetDelegation(svc)
+	}
+	if rt.LLM != nil {
+		rt.LLM.SetDelegation(svc)
+	}
+	if rt.Host != nil {
+		// The person's side: the badge in each window a task works in and
+		// the dialog in which requests are decided (ADR-0269 §SD5).
+		rt.Host.SetAgentChrome(svc.Chrome())
+		rt.Host.SetOpsListener(svc.Listener())
+	}
+	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")
+}
+
+// headlessOnly decides whether a test-lane knob takes effect: only when
+// asked for, and only on the headless host. The desktop host is where a
+// person's windows are: a grant there needs the person (ADR-0269 §SD6), a
+// script's answers would read as a model's, and the action record has its
+// own home (§SD9). It gates BOXER_AGENT_TEST_GRANTS, BOXER_LLM_SCRIPT and
+// BOXER_AGENT_ACTIONS_FILE.
+func headlessOnly(requested bool, headless bool) (on bool) {
+	return requested && headless
+}
+
 // bootIntrospect starts the introspection HTTP host when the service is on;
 // the registry itself exists regardless so late registrations land.
 func (rt *Runtime) bootIntrospect() {
@@ -754,6 +854,9 @@ func (rt *Runtime) bootIntrospect() {
 	}
 	if rt.HTTP != nil {
 		deps.HTTPCalls = rt.HTTP
+	}
+	if rt.Agent != nil {
+		deps.Agent = rt.Agent
 	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {

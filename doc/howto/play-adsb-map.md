@@ -14,7 +14,7 @@ ClickHouse*, then drawn on a slippy map
 ([portolan](../adr/0204-leaflet-map-core-port.md)) that re-queries as you pan
 and zoom. This recipe reproduces the
 canonical case — aircraft density over London, the
-[adsb.exposed](https://github.com/ClickHouse/adsb.exposed) technique — end to
+[adsb.exposed](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse) technique — end to
 end.
 
 The panel code ships with boxer; what it needs is a **ClickHouse HTTP server**
@@ -59,6 +59,19 @@ Three things make a naive attempt fail:
    full corpus and times out. Query `remoteSecure(...)` directly, or ingest into
    a real local table. This recipe does the latter: the panel re-aggregates on
    every settled viewport, so a local table is what makes pan/zoom fast.
+
+### Alternative — point play at the public instance
+
+Play can also read the demo's HTTPS endpoint directly, with no local server:
+set `CLICKHOUSE_URL` to the endpoint and `CLICKHOUSE_USER=website`. That user
+is `readonly=1`; play learns this from the first refused run and sends its
+runs without the settings such a user refuses, and the endpoint label reads
+"read-only user, runs unstamped"
+([ADR-0181](../adr/0181-leeway-dql-authoring-surface.md) Update 2026-10-01).
+Checked once on 2026-10-01 with a world view of `planes_mercator_sample100`.
+Every settled view re-aggregates the remote table and items 1 and 2 above
+still apply, so keep to the sampled tables; the local table below is what
+makes pan and zoom fast.
 
 ## Step 1 — start a local ClickHouse server
 
@@ -147,25 +160,30 @@ Uncheck **"no basemap"** in the Map controls to draw the raster over OSM tiles
 (the default source), and lower **opacity** to about 0.5–0.7 so the map reads
 through. Two caveats:
 
-- It is **online** — tiles load from `tile.openstreetmap.org`, which breaks the
-  offline/airgap path (that is why `noTiles` is the default).
+- It is **online** — tiles come from `tile.openstreetmap.org` through the
+  `basemap` egress destination (ADR-0262), which breaks the offline/airgap
+  path; that is why `noTiles` is the default. With no basemap the pane draws
+  coarse country outlines under the raster instead.
 - The basemap shows in headless PNG captures (tiles are painter images since
   ADR-0204 M4), but whether the SVG export embeds them is still open (ADR-0204
   Q3) — check the export before relying on it. There is no env knob for the
   toggle.
 
-A custom XYZ tile server can be substituted, but the panel currently hardcodes
-the default source; passing a real `.TileUrl("https://.../{z}/{x}/{y}.png")`
-needs a small code change.
+A custom XYZ tile server is set with `BOXER_MAP_TILE_URL`
+([doc/env-vars.md](../env-vars.md)); setting it also turns the basemap on by
+default.
 
 ## Notes and limits
 
 - The panel is a first cut ([ADR-0096](../adr/0096-play-geo-raster-map-panel.md)
-  §SD10): one render mode ("Altitude & Velocity"), no hover→info query, no
-  progressive sample refinement, one map per frame.
-- The render SQL assumes the adsb schema. **Any** table with `mercator_x` /
-  `mercator_y` / `altitude` / `ground_speed` works — including a synthetic one,
-  if you only want to exercise the panel without the upstream corpus.
+  §SD10): no hover→info query. Renders are picked per panel (the 2026-07-10
+  Update). With **refine** on, a settled view is drawn from `_sample100`,
+  then `_sample10`, then the full table, by that naming convention; a level
+  slower than about 3 s stops the climb, and Refresh climbs regardless.
+- The default render needs `altitude` and `ground_speed`; the **Density**
+  render needs only `mercator_x` / `mercator_y`, so any geo-point table with
+  those columns works — including a synthetic one, if you only want to
+  exercise the panel without the upstream corpus.
 - Querying `remoteSecure(...)` directly in the table control also works (no local
   ingest), but each tile is a transatlantic round-trip (~20–40 s); the local
   table avoids that.
