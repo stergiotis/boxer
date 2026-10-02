@@ -165,6 +165,7 @@ func TestCompleteErrorSentinels(t *testing.T) {
 		{http.StatusTooManyRequests, ErrRateLimited},
 		{http.StatusUnauthorized, ErrAuth},
 		{http.StatusForbidden, ErrAuth},
+		{http.StatusPaymentRequired, ErrPaymentRequired},
 		{http.StatusNotFound, ErrModelNotFound},
 		{http.StatusBadRequest, ErrBadRequest},
 		{http.StatusUnprocessableEntity, ErrBadRequest},
@@ -300,4 +301,27 @@ func TestMaxResponseBytesUnlimited(t *testing.T) {
 	resp, err := c.Complete(context.Background(), userReq("m"))
 	require.NoError(t, err)
 	assert.Len(t, resp.Content, 5000)
+}
+
+// The provider's status and message are in the error's text, so they
+// survive a caller that passes the error on as a string.
+func TestAProvidersMessageIsInTheErrorText(t *testing.T) {
+	c := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = io.WriteString(w, `{"error":{"message":"This request requires more credits","code":402}}`)
+	})
+	_, err := c.Complete(context.Background(), userReq("m"))
+	require.ErrorIs(t, err, ErrPaymentRequired)
+	assert.Contains(t, err.Error(), "HTTP 402: This request requires more credits")
+	var he *HTTPError
+	require.ErrorAs(t, err, &he)
+	assert.Equal(t, http.StatusPaymentRequired, he.Status)
+
+	c = newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, `<html>upstream down</html>`)
+	})
+	_, err = c.Complete(context.Background(), userReq("m"))
+	require.ErrorIs(t, err, ErrServer)
+	assert.Contains(t, err.Error(), "HTTP 502: <html>upstream down</html>", "a body that is not JSON is quoted")
 }

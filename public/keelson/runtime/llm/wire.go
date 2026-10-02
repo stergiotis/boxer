@@ -105,6 +105,7 @@ const (
 	errKindAuth          = "auth"
 	errKindModelNotFound = "model_not_found"
 	errKindRateLimited   = "rate_limited"
+	errKindPayment       = "payment_required"
 	errKindBadRequest    = "bad_request"
 	errKindServer        = "server"
 	errKindTimeout       = "timeout"

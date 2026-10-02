@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -408,4 +409,18 @@ func TestCancelIsScopedToTheSender(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the owner could not stop its call")
 	}
+}
+
+// A provider failure crosses the bus with its kind and its reason: the
+// caller can branch on the sentinel and show the provider's message.
+func TestAProviderFailureKeepsItsKindAndItsReason(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+	p := &fakeProvider{err: &openaichat.HTTPError{Status: 402, Message: "This request requires more credits"}}
+	cli, _, _ := serve(t, localCfg(p))
+	_, err := cli.Complete(context.Background(), Request{Messages: msg})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP 402: This request requires more credits")
+	assert.Equal(t, errKindPayment, kindOf(fmt.Errorf("x: %w", openaichat.ErrPaymentRequired)))
+	assert.True(t, errors.Is(failureOf(wireReply{ErrorKind: errKindPayment, Reason: "HTTP 402: no credit"}), openaichat.ErrPaymentRequired))
+	assert.Contains(t, failureOf(wireReply{ErrorKind: errKindPayment, Reason: "HTTP 402: no credit"}).Error(), "no credit")
 }

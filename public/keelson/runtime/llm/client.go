@@ -272,6 +272,8 @@ func failureOf(w wireReply) (err error) {
 		sentinel = openaichat.ErrModelNotFound
 	case errKindRateLimited:
 		sentinel = openaichat.ErrRateLimited
+	case errKindPayment:
+		sentinel = openaichat.ErrPaymentRequired
 	case errKindBadRequest:
 		sentinel = openaichat.ErrBadRequest
 	case errKindServer:
@@ -283,7 +285,9 @@ func failureOf(w wireReply) (err error) {
 	default:
 		return errors.New("llm: " + w.Reason)
 	}
-	return eb.Build().Str("reason", w.Reason).Errorf("llm: %w", sentinel)
+	// The reason is the provider's own account — a status and its message —
+	// so it stays in the text, where a caller showing the error reads it.
+	return eb.Build().Str("reason", w.Reason).Errorf("llm: %s: %w", w.Reason, sentinel)
 }
 
 // kindOf is failureOf's inverse on the service side.
@@ -295,6 +299,8 @@ func kindOf(err error) (kind string) {
 		return errKindModelNotFound
 	case errors.Is(err, openaichat.ErrRateLimited):
 		return errKindRateLimited
+	case errors.Is(err, openaichat.ErrPaymentRequired):
+		return errKindPayment
 	case errors.Is(err, openaichat.ErrBadRequest):
 		return errKindBadRequest
 	case errors.Is(err, openaichat.ErrServer):

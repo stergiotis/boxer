@@ -212,6 +212,10 @@ var (
 	ErrRateLimited = errors.New("openaichat: rate limited")
 	// ErrAuth: HTTP 401 / 403.
 	ErrAuth = errors.New("openaichat: authentication failed")
+	// ErrPaymentRequired: HTTP 402 — the account is out of credit or quota.
+	// Not retried: the same request draws the same answer until it is
+	// topped up.
+	ErrPaymentRequired = errors.New("openaichat: payment required")
 	// ErrModelNotFound: HTTP 404 (typically a typo'd ModelId or wrong baseUrl).
 	ErrModelNotFound = errors.New("openaichat: model or endpoint not found")
 	// ErrBadRequest: HTTP 400 / 422 and other 4xx.
@@ -1009,6 +1013,8 @@ func sentinelForStatus(status int) (sentinel error) {
 		sentinel = ErrRateLimited
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		sentinel = ErrAuth
+	case status == http.StatusPaymentRequired:
+		sentinel = ErrPaymentRequired
 	case status == http.StatusNotFound:
 		sentinel = ErrModelNotFound
 	case status >= 500:
@@ -1041,15 +1047,34 @@ func (inst *Client) classifyHttpError(ctx context.Context, url string, status in
 	if unmarshalErr != nil {
 		err = bld.
 			Str("rawSnippet", snippet(string(rawBody), 256)).
-			Errorf("openaichat: non-2xx response: %w", sentinel)
+			Errorf("openaichat: non-2xx response: %w", &HTTPError{Status: status, Message: snippet(string(rawBody), 160), sentinel: sentinel})
 		return
 	}
 	err = bld.
 		Str("apiErrorType", env.Error.Type).
 		Str("apiErrorMessage", env.Error.Message).
-		Errorf("openaichat: non-2xx response with an API error: %w", sentinel)
+		Errorf("openaichat: non-2xx response with an API error: %w", &HTTPError{Status: status, Message: env.Error.Message, sentinel: sentinel})
 	return
 }
+
+// HTTPError is a provider's non-2xx answer: the status and the message it
+// gave, in the error's text so that it survives a trip as a string. It
+// unwraps to the sentinel for the status.
+type HTTPError struct {
+	Status   int
+	Message  string
+	sentinel error
+}
+
+func (inst *HTTPError) Error() (s string) {
+	s = "HTTP " + strconv.Itoa(inst.Status)
+	if inst.Message != "" {
+		s += ": " + inst.Message
+	}
+	return
+}
+
+func (inst *HTTPError) Unwrap() (err error) { return inst.sentinel }
 
 // namesUnknownModel says an error body reads as a model that is not
 // there — "model 'x' not found", "unknown model", "does not exist" — rather
