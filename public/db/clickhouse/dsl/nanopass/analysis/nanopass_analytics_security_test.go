@@ -87,6 +87,10 @@ func TestClassifyQuerySecurity(t *testing.T) {
 		{"loop_unknown", `SELECT * FROM loop(shinynew(1))`, QuerySecurityReadEgress, []string{"shinynew"}},
 		{"remote_args", `SELECT * FROM remote(concat('h', ':9000'), 'db', 't')`, QuerySecurityReadEgress, []string{"remote"}},
 
+		// view() takes a query; what the query reads is judged as anywhere.
+		{"view_local", `SELECT * FROM view(SELECT * FROM numbers(3))`, QuerySecurityRead, nil},
+		{"view_egress", `SELECT * FROM view(SELECT * FROM url('http://h/x', 'CSV'))`, QuerySecurityReadEgress, []string{"url"}},
+
 		// Witness order is source order; the class is the strongest witness.
 		{"multi_witness", `SET foo = 1; SELECT file('a') FROM url('http://h/x', 'CSV')`,
 			QuerySecurityMutating, []string{"foo", "file", "url"}},

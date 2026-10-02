@@ -50,6 +50,7 @@ func TestSecurityClassSurvivesCanonicalisation(t *testing.T) {
 		`SELECT aiGenerate(note) FROM t`,
 		`SELECT * FROM t WHERE id IN (SELECT id FROM s3('http://h/x', 'CSV'))`,
 		`SET param_a = 1; SELECT {a:UInt64} FROM numbers(3)`,
+		`SELECT * FROM view(SELECT (1, 'a') AS p FROM url('http://h/x', 'CSV'))`,
 	} {
 		canon, err := canonical.Run(sql)
 		require.NoError(t, err, sql)

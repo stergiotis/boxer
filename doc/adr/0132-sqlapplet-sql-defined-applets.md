@@ -734,6 +734,15 @@ vocabulary does not name is presumed pure. `view(SELECT …)` does not parse in
 grammar1, so a buffer using it classifies mutating through the caller
 contract.
 
+## Update (2026-10-02, later) — `view(SELECT …)` parses
+
+The entry above ends on `view(SELECT …)` failing grammar1, and so classifying
+mutating through the caller contract. Both grammars now admit a bare query as
+a table function's argument, last among the alternatives so every input that
+parsed before keeps its tree; its canonical form parses under grammar2. What
+the query reads is judged as in any subquery: `view(SELECT * FROM url(…))` is
+read-egress with `url` as witness.
+
 ## References
 
 Internal:

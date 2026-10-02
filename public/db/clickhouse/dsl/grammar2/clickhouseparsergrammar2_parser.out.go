@@ -105,7 +105,7 @@ func clickhouseparsergrammar2ParserInit() {
 	}
 	staticData.PredictionContextCache = antlr.NewPredictionContextCache()
 	staticData.serializedATN = []int32{
-		4, 1, 241, 933, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4, 7,
+		4, 1, 241, 934, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4, 7,
 		4, 2, 5, 7, 5, 2, 6, 7, 6, 2, 7, 7, 7, 2, 8, 7, 8, 2, 9, 7, 9, 2, 10, 7,
 		10, 2, 11, 7, 11, 2, 12, 7, 12, 2, 13, 7, 13, 2, 14, 7, 14, 2, 15, 7, 15,
 		2, 16, 7, 16, 2, 17, 7, 17, 2, 18, 7, 18, 2, 19, 7, 19, 2, 20, 7, 20, 2,
@@ -198,91 +198,91 @@ func clickhouseparsergrammar2ParserInit() {
 		58, 853, 8, 58, 10, 58, 12, 58, 856, 9, 58, 1, 59, 1, 59, 1, 59, 3, 59,
 		861, 8, 59, 1, 59, 1, 59, 1, 60, 1, 60, 1, 60, 3, 60, 868, 8, 60, 1, 60,
 		1, 60, 3, 60, 872, 8, 60, 1, 61, 1, 61, 1, 61, 5, 61, 877, 8, 61, 10, 61,
-		12, 61, 880, 9, 61, 1, 62, 1, 62, 1, 62, 3, 62, 885, 8, 62, 1, 63, 1, 63,
-		3, 63, 889, 8, 63, 1, 64, 1, 64, 1, 64, 1, 64, 1, 64, 1, 64, 1, 65, 1,
-		65, 1, 65, 1, 65, 1, 65, 1, 65, 3, 65, 903, 8, 65, 3, 65, 905, 8, 65, 1,
-		66, 3, 66, 908, 8, 66, 1, 66, 1, 66, 1, 66, 1, 66, 1, 66, 1, 66, 3, 66,
-		916, 8, 66, 1, 67, 1, 67, 1, 67, 1, 67, 1, 67, 3, 67, 923, 8, 67, 1, 68,
-		1, 68, 1, 69, 1, 69, 1, 70, 1, 70, 1, 70, 1, 70, 1, 70, 0, 3, 58, 104,
-		116, 71, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32,
-		34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68,
-		70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 102, 104,
-		106, 108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134,
-		136, 138, 140, 0, 20, 3, 0, 56, 56, 87, 87, 180, 180, 2, 0, 4, 4, 49, 49,
-		2, 0, 85, 85, 98, 98, 2, 0, 32, 32, 145, 145, 2, 0, 72, 72, 103, 103, 3,
-		0, 4, 4, 8, 8, 12, 12, 4, 0, 4, 4, 7, 8, 12, 12, 151, 151, 2, 0, 98, 98,
-		144, 144, 2, 0, 4, 4, 8, 8, 2, 0, 120, 120, 213, 213, 2, 0, 11, 11, 42,
-		43, 2, 0, 63, 63, 95, 95, 2, 0, 136, 136, 147, 147, 6, 0, 9, 9, 36, 36,
-		88, 88, 170, 170, 184, 184, 201, 201, 3, 0, 208, 208, 227, 227, 236, 236,
-		2, 0, 214, 215, 228, 228, 2, 0, 80, 80, 100, 100, 1, 0, 203, 204, 2, 0,
-		215, 215, 228, 228, 8, 0, 37, 37, 77, 77, 110, 110, 112, 112, 135, 135,
-		149, 149, 189, 189, 194, 194, 1023, 0, 153, 1, 0, 0, 0, 2, 158, 1, 0, 0,
-		0, 4, 166, 1, 0, 0, 0, 6, 181, 1, 0, 0, 0, 8, 194, 1, 0, 0, 0, 10, 196,
-		1, 0, 0, 0, 12, 208, 1, 0, 0, 0, 14, 217, 1, 0, 0, 0, 16, 229, 1, 0, 0,
-		0, 18, 238, 1, 0, 0, 0, 20, 252, 1, 0, 0, 0, 22, 254, 1, 0, 0, 0, 24, 291,
-		1, 0, 0, 0, 26, 302, 1, 0, 0, 0, 28, 314, 1, 0, 0, 0, 30, 316, 1, 0, 0,
-		0, 32, 321, 1, 0, 0, 0, 34, 327, 1, 0, 0, 0, 36, 331, 1, 0, 0, 0, 38, 337,
-		1, 0, 0, 0, 40, 344, 1, 0, 0, 0, 42, 347, 1, 0, 0, 0, 44, 350, 1, 0, 0,
-		0, 46, 353, 1, 0, 0, 0, 48, 371, 1, 0, 0, 0, 50, 374, 1, 0, 0, 0, 52, 378,
-		1, 0, 0, 0, 54, 383, 1, 0, 0, 0, 56, 389, 1, 0, 0, 0, 58, 404, 1, 0, 0,
-		0, 60, 438, 1, 0, 0, 0, 62, 441, 1, 0, 0, 0, 64, 453, 1, 0, 0, 0, 66, 455,
-		1, 0, 0, 0, 68, 461, 1, 0, 0, 0, 70, 466, 1, 0, 0, 0, 72, 474, 1, 0, 0,
-		0, 74, 486, 1, 0, 0, 0, 76, 491, 1, 0, 0, 0, 78, 499, 1, 0, 0, 0, 80, 545,
-		1, 0, 0, 0, 82, 548, 1, 0, 0, 0, 84, 556, 1, 0, 0, 0, 86, 560, 1, 0, 0,
-		0, 88, 564, 1, 0, 0, 0, 90, 573, 1, 0, 0, 0, 92, 587, 1, 0, 0, 0, 94, 589,
-		1, 0, 0, 0, 96, 640, 1, 0, 0, 0, 98, 642, 1, 0, 0, 0, 100, 644, 1, 0, 0,
-		0, 102, 663, 1, 0, 0, 0, 104, 729, 1, 0, 0, 0, 106, 790, 1, 0, 0, 0, 108,
-		800, 1, 0, 0, 0, 110, 820, 1, 0, 0, 0, 112, 828, 1, 0, 0, 0, 114, 832,
-		1, 0, 0, 0, 116, 844, 1, 0, 0, 0, 118, 857, 1, 0, 0, 0, 120, 867, 1, 0,
-		0, 0, 122, 873, 1, 0, 0, 0, 124, 884, 1, 0, 0, 0, 126, 888, 1, 0, 0, 0,
-		128, 890, 1, 0, 0, 0, 130, 904, 1, 0, 0, 0, 132, 907, 1, 0, 0, 0, 134,
-		922, 1, 0, 0, 0, 136, 924, 1, 0, 0, 0, 138, 926, 1, 0, 0, 0, 140, 928,
-		1, 0, 0, 0, 142, 145, 3, 2, 1, 0, 143, 144, 5, 67, 0, 0, 144, 146, 5, 201,
-		0, 0, 145, 143, 1, 0, 0, 0, 145, 146, 1, 0, 0, 0, 146, 148, 1, 0, 0, 0,
-		147, 149, 5, 235, 0, 0, 148, 147, 1, 0, 0, 0, 148, 149, 1, 0, 0, 0, 149,
-		150, 1, 0, 0, 0, 150, 151, 5, 0, 0, 1, 151, 154, 1, 0, 0, 0, 152, 154,
-		3, 4, 2, 0, 153, 142, 1, 0, 0, 0, 153, 152, 1, 0, 0, 0, 154, 1, 1, 0, 0,
-		0, 155, 157, 3, 94, 47, 0, 156, 155, 1, 0, 0, 0, 157, 160, 1, 0, 0, 0,
-		158, 156, 1, 0, 0, 0, 158, 159, 1, 0, 0, 0, 159, 161, 1, 0, 0, 0, 160,
-		158, 1, 0, 0, 0, 161, 162, 3, 16, 8, 0, 162, 3, 1, 0, 0, 0, 163, 165, 3,
-		94, 47, 0, 164, 163, 1, 0, 0, 0, 165, 168, 1, 0, 0, 0, 166, 164, 1, 0,
-		0, 0, 166, 167, 1, 0, 0, 0, 167, 169, 1, 0, 0, 0, 168, 166, 1, 0, 0, 0,
-		169, 170, 5, 86, 0, 0, 170, 171, 5, 89, 0, 0, 171, 173, 3, 120, 60, 0,
-		172, 174, 3, 6, 3, 0, 173, 172, 1, 0, 0, 0, 173, 174, 1, 0, 0, 0, 174,
-		175, 1, 0, 0, 0, 175, 177, 3, 16, 8, 0, 176, 178, 5, 235, 0, 0, 177, 176,
-		1, 0, 0, 0, 177, 178, 1, 0, 0, 0, 178, 179, 1, 0, 0, 0, 179, 180, 5, 0,
-		0, 1, 180, 5, 1, 0, 0, 0, 181, 182, 5, 224, 0, 0, 182, 187, 3, 114, 57,
-		0, 183, 184, 5, 213, 0, 0, 184, 186, 3, 114, 57, 0, 185, 183, 1, 0, 0,
-		0, 186, 189, 1, 0, 0, 0, 187, 185, 1, 0, 0, 0, 187, 188, 1, 0, 0, 0, 188,
-		190, 1, 0, 0, 0, 189, 187, 1, 0, 0, 0, 190, 191, 5, 234, 0, 0, 191, 7,
-		1, 0, 0, 0, 192, 195, 3, 12, 6, 0, 193, 195, 3, 102, 51, 0, 194, 192, 1,
-		0, 0, 0, 194, 193, 1, 0, 0, 0, 195, 9, 1, 0, 0, 0, 196, 198, 5, 193, 0,
-		0, 197, 199, 5, 137, 0, 0, 198, 197, 1, 0, 0, 0, 198, 199, 1, 0, 0, 0,
-		199, 200, 1, 0, 0, 0, 200, 205, 3, 8, 4, 0, 201, 202, 5, 213, 0, 0, 202,
-		204, 3, 8, 4, 0, 203, 201, 1, 0, 0, 0, 204, 207, 1, 0, 0, 0, 205, 203,
-		1, 0, 0, 0, 205, 206, 1, 0, 0, 0, 206, 11, 1, 0, 0, 0, 207, 205, 1, 0,
-		0, 0, 208, 210, 5, 201, 0, 0, 209, 211, 3, 14, 7, 0, 210, 209, 1, 0, 0,
-		0, 210, 211, 1, 0, 0, 0, 211, 212, 1, 0, 0, 0, 212, 213, 5, 10, 0, 0, 213,
-		214, 5, 224, 0, 0, 214, 215, 3, 2, 1, 0, 215, 216, 5, 234, 0, 0, 216, 13,
-		1, 0, 0, 0, 217, 218, 5, 224, 0, 0, 218, 223, 5, 201, 0, 0, 219, 220, 5,
-		213, 0, 0, 220, 222, 5, 201, 0, 0, 221, 219, 1, 0, 0, 0, 222, 225, 1, 0,
-		0, 0, 223, 221, 1, 0, 0, 0, 223, 224, 1, 0, 0, 0, 224, 226, 1, 0, 0, 0,
-		225, 223, 1, 0, 0, 0, 226, 227, 5, 234, 0, 0, 227, 15, 1, 0, 0, 0, 228,
-		230, 3, 10, 5, 0, 229, 228, 1, 0, 0, 0, 229, 230, 1, 0, 0, 0, 230, 231,
-		1, 0, 0, 0, 231, 235, 3, 20, 10, 0, 232, 234, 3, 18, 9, 0, 233, 232, 1,
-		0, 0, 0, 234, 237, 1, 0, 0, 0, 235, 233, 1, 0, 0, 0, 235, 236, 1, 0, 0,
-		0, 236, 17, 1, 0, 0, 0, 237, 235, 1, 0, 0, 0, 238, 240, 7, 0, 0, 0, 239,
-		241, 7, 1, 0, 0, 240, 239, 1, 0, 0, 0, 240, 241, 1, 0, 0, 0, 241, 243,
-		1, 0, 0, 0, 242, 244, 3, 10, 5, 0, 243, 242, 1, 0, 0, 0, 243, 244, 1, 0,
-		0, 0, 244, 245, 1, 0, 0, 0, 245, 246, 3, 20, 10, 0, 246, 19, 1, 0, 0, 0,
-		247, 253, 3, 22, 11, 0, 248, 249, 5, 224, 0, 0, 249, 250, 3, 16, 8, 0,
-		250, 251, 5, 234, 0, 0, 251, 253, 1, 0, 0, 0, 252, 247, 1, 0, 0, 0, 252,
-		248, 1, 0, 0, 0, 253, 21, 1, 0, 0, 0, 254, 256, 3, 24, 12, 0, 255, 257,
-		3, 34, 17, 0, 256, 255, 1, 0, 0, 0, 256, 257, 1, 0, 0, 0, 257, 259, 1,
-		0, 0, 0, 258, 260, 3, 36, 18, 0, 259, 258, 1, 0, 0, 0, 259, 260, 1, 0,
-		0, 0, 260, 262, 1, 0, 0, 0, 261, 263, 3, 38, 19, 0, 262, 261, 1, 0, 0,
-		0, 262, 263, 1, 0, 0, 0, 263, 265, 1, 0, 0, 0, 264, 266, 3, 40, 20, 0,
-		265, 264, 1, 0, 0, 0, 265, 266, 1, 0, 0, 0, 266, 268, 1, 0, 0, 0, 267,
+		12, 61, 880, 9, 61, 1, 62, 1, 62, 1, 62, 1, 62, 3, 62, 886, 8, 62, 1, 63,
+		1, 63, 3, 63, 890, 8, 63, 1, 64, 1, 64, 1, 64, 1, 64, 1, 64, 1, 64, 1,
+		65, 1, 65, 1, 65, 1, 65, 1, 65, 1, 65, 3, 65, 904, 8, 65, 3, 65, 906, 8,
+		65, 1, 66, 3, 66, 909, 8, 66, 1, 66, 1, 66, 1, 66, 1, 66, 1, 66, 1, 66,
+		3, 66, 917, 8, 66, 1, 67, 1, 67, 1, 67, 1, 67, 1, 67, 3, 67, 924, 8, 67,
+		1, 68, 1, 68, 1, 69, 1, 69, 1, 70, 1, 70, 1, 70, 1, 70, 1, 70, 0, 3, 58,
+		104, 116, 71, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30,
+		32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66,
+		68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 102,
+		104, 106, 108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132,
+		134, 136, 138, 140, 0, 20, 3, 0, 56, 56, 87, 87, 180, 180, 2, 0, 4, 4,
+		49, 49, 2, 0, 85, 85, 98, 98, 2, 0, 32, 32, 145, 145, 2, 0, 72, 72, 103,
+		103, 3, 0, 4, 4, 8, 8, 12, 12, 4, 0, 4, 4, 7, 8, 12, 12, 151, 151, 2, 0,
+		98, 98, 144, 144, 2, 0, 4, 4, 8, 8, 2, 0, 120, 120, 213, 213, 2, 0, 11,
+		11, 42, 43, 2, 0, 63, 63, 95, 95, 2, 0, 136, 136, 147, 147, 6, 0, 9, 9,
+		36, 36, 88, 88, 170, 170, 184, 184, 201, 201, 3, 0, 208, 208, 227, 227,
+		236, 236, 2, 0, 214, 215, 228, 228, 2, 0, 80, 80, 100, 100, 1, 0, 203,
+		204, 2, 0, 215, 215, 228, 228, 8, 0, 37, 37, 77, 77, 110, 110, 112, 112,
+		135, 135, 149, 149, 189, 189, 194, 194, 1025, 0, 153, 1, 0, 0, 0, 2, 158,
+		1, 0, 0, 0, 4, 166, 1, 0, 0, 0, 6, 181, 1, 0, 0, 0, 8, 194, 1, 0, 0, 0,
+		10, 196, 1, 0, 0, 0, 12, 208, 1, 0, 0, 0, 14, 217, 1, 0, 0, 0, 16, 229,
+		1, 0, 0, 0, 18, 238, 1, 0, 0, 0, 20, 252, 1, 0, 0, 0, 22, 254, 1, 0, 0,
+		0, 24, 291, 1, 0, 0, 0, 26, 302, 1, 0, 0, 0, 28, 314, 1, 0, 0, 0, 30, 316,
+		1, 0, 0, 0, 32, 321, 1, 0, 0, 0, 34, 327, 1, 0, 0, 0, 36, 331, 1, 0, 0,
+		0, 38, 337, 1, 0, 0, 0, 40, 344, 1, 0, 0, 0, 42, 347, 1, 0, 0, 0, 44, 350,
+		1, 0, 0, 0, 46, 353, 1, 0, 0, 0, 48, 371, 1, 0, 0, 0, 50, 374, 1, 0, 0,
+		0, 52, 378, 1, 0, 0, 0, 54, 383, 1, 0, 0, 0, 56, 389, 1, 0, 0, 0, 58, 404,
+		1, 0, 0, 0, 60, 438, 1, 0, 0, 0, 62, 441, 1, 0, 0, 0, 64, 453, 1, 0, 0,
+		0, 66, 455, 1, 0, 0, 0, 68, 461, 1, 0, 0, 0, 70, 466, 1, 0, 0, 0, 72, 474,
+		1, 0, 0, 0, 74, 486, 1, 0, 0, 0, 76, 491, 1, 0, 0, 0, 78, 499, 1, 0, 0,
+		0, 80, 545, 1, 0, 0, 0, 82, 548, 1, 0, 0, 0, 84, 556, 1, 0, 0, 0, 86, 560,
+		1, 0, 0, 0, 88, 564, 1, 0, 0, 0, 90, 573, 1, 0, 0, 0, 92, 587, 1, 0, 0,
+		0, 94, 589, 1, 0, 0, 0, 96, 640, 1, 0, 0, 0, 98, 642, 1, 0, 0, 0, 100,
+		644, 1, 0, 0, 0, 102, 663, 1, 0, 0, 0, 104, 729, 1, 0, 0, 0, 106, 790,
+		1, 0, 0, 0, 108, 800, 1, 0, 0, 0, 110, 820, 1, 0, 0, 0, 112, 828, 1, 0,
+		0, 0, 114, 832, 1, 0, 0, 0, 116, 844, 1, 0, 0, 0, 118, 857, 1, 0, 0, 0,
+		120, 867, 1, 0, 0, 0, 122, 873, 1, 0, 0, 0, 124, 885, 1, 0, 0, 0, 126,
+		889, 1, 0, 0, 0, 128, 891, 1, 0, 0, 0, 130, 905, 1, 0, 0, 0, 132, 908,
+		1, 0, 0, 0, 134, 923, 1, 0, 0, 0, 136, 925, 1, 0, 0, 0, 138, 927, 1, 0,
+		0, 0, 140, 929, 1, 0, 0, 0, 142, 145, 3, 2, 1, 0, 143, 144, 5, 67, 0, 0,
+		144, 146, 5, 201, 0, 0, 145, 143, 1, 0, 0, 0, 145, 146, 1, 0, 0, 0, 146,
+		148, 1, 0, 0, 0, 147, 149, 5, 235, 0, 0, 148, 147, 1, 0, 0, 0, 148, 149,
+		1, 0, 0, 0, 149, 150, 1, 0, 0, 0, 150, 151, 5, 0, 0, 1, 151, 154, 1, 0,
+		0, 0, 152, 154, 3, 4, 2, 0, 153, 142, 1, 0, 0, 0, 153, 152, 1, 0, 0, 0,
+		154, 1, 1, 0, 0, 0, 155, 157, 3, 94, 47, 0, 156, 155, 1, 0, 0, 0, 157,
+		160, 1, 0, 0, 0, 158, 156, 1, 0, 0, 0, 158, 159, 1, 0, 0, 0, 159, 161,
+		1, 0, 0, 0, 160, 158, 1, 0, 0, 0, 161, 162, 3, 16, 8, 0, 162, 3, 1, 0,
+		0, 0, 163, 165, 3, 94, 47, 0, 164, 163, 1, 0, 0, 0, 165, 168, 1, 0, 0,
+		0, 166, 164, 1, 0, 0, 0, 166, 167, 1, 0, 0, 0, 167, 169, 1, 0, 0, 0, 168,
+		166, 1, 0, 0, 0, 169, 170, 5, 86, 0, 0, 170, 171, 5, 89, 0, 0, 171, 173,
+		3, 120, 60, 0, 172, 174, 3, 6, 3, 0, 173, 172, 1, 0, 0, 0, 173, 174, 1,
+		0, 0, 0, 174, 175, 1, 0, 0, 0, 175, 177, 3, 16, 8, 0, 176, 178, 5, 235,
+		0, 0, 177, 176, 1, 0, 0, 0, 177, 178, 1, 0, 0, 0, 178, 179, 1, 0, 0, 0,
+		179, 180, 5, 0, 0, 1, 180, 5, 1, 0, 0, 0, 181, 182, 5, 224, 0, 0, 182,
+		187, 3, 114, 57, 0, 183, 184, 5, 213, 0, 0, 184, 186, 3, 114, 57, 0, 185,
+		183, 1, 0, 0, 0, 186, 189, 1, 0, 0, 0, 187, 185, 1, 0, 0, 0, 187, 188,
+		1, 0, 0, 0, 188, 190, 1, 0, 0, 0, 189, 187, 1, 0, 0, 0, 190, 191, 5, 234,
+		0, 0, 191, 7, 1, 0, 0, 0, 192, 195, 3, 12, 6, 0, 193, 195, 3, 102, 51,
+		0, 194, 192, 1, 0, 0, 0, 194, 193, 1, 0, 0, 0, 195, 9, 1, 0, 0, 0, 196,
+		198, 5, 193, 0, 0, 197, 199, 5, 137, 0, 0, 198, 197, 1, 0, 0, 0, 198, 199,
+		1, 0, 0, 0, 199, 200, 1, 0, 0, 0, 200, 205, 3, 8, 4, 0, 201, 202, 5, 213,
+		0, 0, 202, 204, 3, 8, 4, 0, 203, 201, 1, 0, 0, 0, 204, 207, 1, 0, 0, 0,
+		205, 203, 1, 0, 0, 0, 205, 206, 1, 0, 0, 0, 206, 11, 1, 0, 0, 0, 207, 205,
+		1, 0, 0, 0, 208, 210, 5, 201, 0, 0, 209, 211, 3, 14, 7, 0, 210, 209, 1,
+		0, 0, 0, 210, 211, 1, 0, 0, 0, 211, 212, 1, 0, 0, 0, 212, 213, 5, 10, 0,
+		0, 213, 214, 5, 224, 0, 0, 214, 215, 3, 2, 1, 0, 215, 216, 5, 234, 0, 0,
+		216, 13, 1, 0, 0, 0, 217, 218, 5, 224, 0, 0, 218, 223, 5, 201, 0, 0, 219,
+		220, 5, 213, 0, 0, 220, 222, 5, 201, 0, 0, 221, 219, 1, 0, 0, 0, 222, 225,
+		1, 0, 0, 0, 223, 221, 1, 0, 0, 0, 223, 224, 1, 0, 0, 0, 224, 226, 1, 0,
+		0, 0, 225, 223, 1, 0, 0, 0, 226, 227, 5, 234, 0, 0, 227, 15, 1, 0, 0, 0,
+		228, 230, 3, 10, 5, 0, 229, 228, 1, 0, 0, 0, 229, 230, 1, 0, 0, 0, 230,
+		231, 1, 0, 0, 0, 231, 235, 3, 20, 10, 0, 232, 234, 3, 18, 9, 0, 233, 232,
+		1, 0, 0, 0, 234, 237, 1, 0, 0, 0, 235, 233, 1, 0, 0, 0, 235, 236, 1, 0,
+		0, 0, 236, 17, 1, 0, 0, 0, 237, 235, 1, 0, 0, 0, 238, 240, 7, 0, 0, 0,
+		239, 241, 7, 1, 0, 0, 240, 239, 1, 0, 0, 0, 240, 241, 1, 0, 0, 0, 241,
+		243, 1, 0, 0, 0, 242, 244, 3, 10, 5, 0, 243, 242, 1, 0, 0, 0, 243, 244,
+		1, 0, 0, 0, 244, 245, 1, 0, 0, 0, 245, 246, 3, 20, 10, 0, 246, 19, 1, 0,
+		0, 0, 247, 253, 3, 22, 11, 0, 248, 249, 5, 224, 0, 0, 249, 250, 3, 16,
+		8, 0, 250, 251, 5, 234, 0, 0, 251, 253, 1, 0, 0, 0, 252, 247, 1, 0, 0,
+		0, 252, 248, 1, 0, 0, 0, 253, 21, 1, 0, 0, 0, 254, 256, 3, 24, 12, 0, 255,
+		257, 3, 34, 17, 0, 256, 255, 1, 0, 0, 0, 256, 257, 1, 0, 0, 0, 257, 259,
+		1, 0, 0, 0, 258, 260, 3, 36, 18, 0, 259, 258, 1, 0, 0, 0, 259, 260, 1,
+		0, 0, 0, 260, 262, 1, 0, 0, 0, 261, 263, 3, 38, 19, 0, 262, 261, 1, 0,
+		0, 0, 262, 263, 1, 0, 0, 0, 263, 265, 1, 0, 0, 0, 264, 266, 3, 40, 20,
+		0, 265, 264, 1, 0, 0, 0, 265, 266, 1, 0, 0, 0, 266, 268, 1, 0, 0, 0, 267,
 		269, 3, 42, 21, 0, 268, 267, 1, 0, 0, 0, 268, 269, 1, 0, 0, 0, 269, 271,
 		1, 0, 0, 0, 270, 272, 3, 44, 22, 0, 271, 270, 1, 0, 0, 0, 271, 272, 1,
 		0, 0, 0, 272, 274, 1, 0, 0, 0, 273, 275, 3, 46, 23, 0, 274, 273, 1, 0,
@@ -516,36 +516,36 @@ func clickhouseparsergrammar2ParserInit() {
 		121, 1, 0, 0, 0, 873, 878, 3, 124, 62, 0, 874, 875, 5, 213, 0, 0, 875,
 		877, 3, 124, 62, 0, 876, 874, 1, 0, 0, 0, 877, 880, 1, 0, 0, 0, 878, 876,
 		1, 0, 0, 0, 878, 879, 1, 0, 0, 0, 879, 123, 1, 0, 0, 0, 880, 878, 1, 0,
-		0, 0, 881, 885, 3, 114, 57, 0, 882, 885, 3, 118, 59, 0, 883, 885, 3, 134,
-		67, 0, 884, 881, 1, 0, 0, 0, 884, 882, 1, 0, 0, 0, 884, 883, 1, 0, 0, 0,
-		885, 125, 1, 0, 0, 0, 886, 889, 5, 201, 0, 0, 887, 889, 3, 128, 64, 0,
-		888, 886, 1, 0, 0, 0, 888, 887, 1, 0, 0, 0, 889, 127, 1, 0, 0, 0, 890,
-		891, 5, 221, 0, 0, 891, 892, 5, 201, 0, 0, 892, 893, 5, 211, 0, 0, 893,
-		894, 3, 96, 48, 0, 894, 895, 5, 232, 0, 0, 895, 129, 1, 0, 0, 0, 896, 905,
-		5, 202, 0, 0, 897, 898, 5, 216, 0, 0, 898, 905, 7, 17, 0, 0, 899, 900,
-		5, 204, 0, 0, 900, 902, 5, 216, 0, 0, 901, 903, 7, 17, 0, 0, 902, 901,
-		1, 0, 0, 0, 902, 903, 1, 0, 0, 0, 903, 905, 1, 0, 0, 0, 904, 896, 1, 0,
-		0, 0, 904, 897, 1, 0, 0, 0, 904, 899, 1, 0, 0, 0, 905, 131, 1, 0, 0, 0,
-		906, 908, 7, 18, 0, 0, 907, 906, 1, 0, 0, 0, 907, 908, 1, 0, 0, 0, 908,
-		915, 1, 0, 0, 0, 909, 916, 3, 130, 65, 0, 910, 916, 5, 203, 0, 0, 911,
-		916, 5, 204, 0, 0, 912, 916, 5, 205, 0, 0, 913, 916, 5, 83, 0, 0, 914,
-		916, 5, 115, 0, 0, 915, 909, 1, 0, 0, 0, 915, 910, 1, 0, 0, 0, 915, 911,
-		1, 0, 0, 0, 915, 912, 1, 0, 0, 0, 915, 913, 1, 0, 0, 0, 915, 914, 1, 0,
-		0, 0, 916, 133, 1, 0, 0, 0, 917, 923, 3, 132, 66, 0, 918, 923, 5, 206,
-		0, 0, 919, 923, 5, 118, 0, 0, 920, 923, 5, 200, 0, 0, 921, 923, 5, 199,
-		0, 0, 922, 917, 1, 0, 0, 0, 922, 918, 1, 0, 0, 0, 922, 919, 1, 0, 0, 0,
-		922, 920, 1, 0, 0, 0, 922, 921, 1, 0, 0, 0, 923, 135, 1, 0, 0, 0, 924,
-		925, 7, 19, 0, 0, 925, 137, 1, 0, 0, 0, 926, 927, 5, 201, 0, 0, 927, 139,
-		1, 0, 0, 0, 928, 929, 5, 206, 0, 0, 929, 930, 5, 218, 0, 0, 930, 931, 3,
-		132, 66, 0, 931, 141, 1, 0, 0, 0, 117, 145, 148, 153, 158, 166, 173, 177,
-		187, 194, 198, 205, 210, 223, 229, 235, 240, 243, 252, 256, 259, 262, 265,
-		268, 271, 274, 277, 280, 283, 286, 289, 293, 296, 300, 310, 314, 325, 331,
-		361, 365, 369, 387, 395, 398, 404, 412, 415, 421, 423, 427, 431, 435, 438,
-		441, 453, 459, 464, 471, 476, 480, 484, 489, 496, 512, 525, 540, 545, 548,
-		551, 554, 573, 587, 604, 616, 628, 636, 640, 649, 655, 663, 673, 685, 694,
-		697, 701, 704, 716, 729, 745, 748, 752, 755, 766, 776, 783, 785, 787, 795,
-		800, 808, 817, 820, 828, 835, 844, 850, 854, 860, 867, 871, 878, 884, 888,
-		902, 904, 907, 915, 922,
+		0, 0, 881, 886, 3, 114, 57, 0, 882, 886, 3, 118, 59, 0, 883, 886, 3, 134,
+		67, 0, 884, 886, 3, 16, 8, 0, 885, 881, 1, 0, 0, 0, 885, 882, 1, 0, 0,
+		0, 885, 883, 1, 0, 0, 0, 885, 884, 1, 0, 0, 0, 886, 125, 1, 0, 0, 0, 887,
+		890, 5, 201, 0, 0, 888, 890, 3, 128, 64, 0, 889, 887, 1, 0, 0, 0, 889,
+		888, 1, 0, 0, 0, 890, 127, 1, 0, 0, 0, 891, 892, 5, 221, 0, 0, 892, 893,
+		5, 201, 0, 0, 893, 894, 5, 211, 0, 0, 894, 895, 3, 96, 48, 0, 895, 896,
+		5, 232, 0, 0, 896, 129, 1, 0, 0, 0, 897, 906, 5, 202, 0, 0, 898, 899, 5,
+		216, 0, 0, 899, 906, 7, 17, 0, 0, 900, 901, 5, 204, 0, 0, 901, 903, 5,
+		216, 0, 0, 902, 904, 7, 17, 0, 0, 903, 902, 1, 0, 0, 0, 903, 904, 1, 0,
+		0, 0, 904, 906, 1, 0, 0, 0, 905, 897, 1, 0, 0, 0, 905, 898, 1, 0, 0, 0,
+		905, 900, 1, 0, 0, 0, 906, 131, 1, 0, 0, 0, 907, 909, 7, 18, 0, 0, 908,
+		907, 1, 0, 0, 0, 908, 909, 1, 0, 0, 0, 909, 916, 1, 0, 0, 0, 910, 917,
+		3, 130, 65, 0, 911, 917, 5, 203, 0, 0, 912, 917, 5, 204, 0, 0, 913, 917,
+		5, 205, 0, 0, 914, 917, 5, 83, 0, 0, 915, 917, 5, 115, 0, 0, 916, 910,
+		1, 0, 0, 0, 916, 911, 1, 0, 0, 0, 916, 912, 1, 0, 0, 0, 916, 913, 1, 0,
+		0, 0, 916, 914, 1, 0, 0, 0, 916, 915, 1, 0, 0, 0, 917, 133, 1, 0, 0, 0,
+		918, 924, 3, 132, 66, 0, 919, 924, 5, 206, 0, 0, 920, 924, 5, 118, 0, 0,
+		921, 924, 5, 200, 0, 0, 922, 924, 5, 199, 0, 0, 923, 918, 1, 0, 0, 0, 923,
+		919, 1, 0, 0, 0, 923, 920, 1, 0, 0, 0, 923, 921, 1, 0, 0, 0, 923, 922,
+		1, 0, 0, 0, 924, 135, 1, 0, 0, 0, 925, 926, 7, 19, 0, 0, 926, 137, 1, 0,
+		0, 0, 927, 928, 5, 201, 0, 0, 928, 139, 1, 0, 0, 0, 929, 930, 5, 206, 0,
+		0, 930, 931, 5, 218, 0, 0, 931, 932, 3, 132, 66, 0, 932, 141, 1, 0, 0,
+		0, 117, 145, 148, 153, 158, 166, 173, 177, 187, 194, 198, 205, 210, 223,
+		229, 235, 240, 243, 252, 256, 259, 262, 265, 268, 271, 274, 277, 280, 283,
+		286, 289, 293, 296, 300, 310, 314, 325, 331, 361, 365, 369, 387, 395, 398,
+		404, 412, 415, 421, 423, 427, 431, 435, 438, 441, 453, 459, 464, 471, 476,
+		480, 484, 489, 496, 512, 525, 540, 545, 548, 551, 554, 573, 587, 604, 616,
+		628, 636, 640, 649, 655, 663, 673, 685, 694, 697, 701, 704, 716, 729, 745,
+		748, 752, 755, 766, 776, 783, 785, 787, 795, 800, 808, 817, 820, 828, 835,
+		844, 850, 854, 860, 867, 871, 878, 885, 889, 903, 905, 908, 916, 923,
 	}
 	deserializer := antlr.NewATNDeserializer(nil)
 	staticData.atn = deserializer.Deserialize(staticData.serializedATN)
@@ -4002,7 +4002,7 @@ func (s *StaticColumnListContext) Accept(visitor antlr.ParseTreeVisitor) interfa
 func (p *ClickHouseParserGrammar2) StaticOrDynamicColumnSelection() (localctx IStaticOrDynamicColumnSelectionContext) {
 	localctx = NewStaticOrDynamicColumnSelectionContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 28, ClickHouseParserGrammar2RULE_staticOrDynamicColumnSelection)
-	var _la int
+	var _alt int
 
 	p.SetState(314)
 	p.GetErrorHandler().Sync(p)
@@ -4027,32 +4027,39 @@ func (p *ClickHouseParserGrammar2) StaticOrDynamicColumnSelection() (localctx IS
 		if p.HasError() {
 			goto errorExit
 		}
-		_la = p.GetTokenStream().LA(1)
-
-		for _la == ClickHouseParserGrammar2COMMA {
-			{
-				p.SetState(306)
-				p.Match(ClickHouseParserGrammar2COMMA)
-				if p.HasError() {
-					// Recognition error - abort rule
-					goto errorExit
+		_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 33, p.GetParserRuleContext())
+		if p.HasError() {
+			goto errorExit
+		}
+		for _alt != 2 && _alt != antlr.ATNInvalidAltNumber {
+			if _alt == 1 {
+				{
+					p.SetState(306)
+					p.Match(ClickHouseParserGrammar2COMMA)
+					if p.HasError() {
+						// Recognition error - abort rule
+						goto errorExit
+					}
 				}
-			}
-			{
-				p.SetState(307)
-				p.Match(ClickHouseParserGrammar2IDENTIFIER)
-				if p.HasError() {
-					// Recognition error - abort rule
-					goto errorExit
+				{
+					p.SetState(307)
+					p.Match(ClickHouseParserGrammar2IDENTIFIER)
+					if p.HasError() {
+						// Recognition error - abort rule
+						goto errorExit
+					}
 				}
-			}
 
+			}
 			p.SetState(312)
 			p.GetErrorHandler().Sync(p)
 			if p.HasError() {
 				goto errorExit
 			}
-			_la = p.GetTokenStream().LA(1)
+			_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 33, p.GetParserRuleContext())
+			if p.HasError() {
+				goto errorExit
+			}
 		}
 
 	case ClickHouseParserGrammar2COLUMNS:
@@ -7604,12 +7611,8 @@ func (p *ClickHouseParserGrammar2) LimitExpr() (localctx ILimitExprContext) {
 	}
 	p.SetState(464)
 	p.GetErrorHandler().Sync(p)
-	if p.HasError() {
-		goto errorExit
-	}
-	_la = p.GetTokenStream().LA(1)
 
-	if _la == ClickHouseParserGrammar2OFFSET || _la == ClickHouseParserGrammar2COMMA {
+	if p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 55, p.GetParserRuleContext()) == 1 {
 		{
 			p.SetState(462)
 			_la = p.GetTokenStream().LA(1)
@@ -7626,6 +7629,8 @@ func (p *ClickHouseParserGrammar2) LimitExpr() (localctx ILimitExprContext) {
 			p.columnExpr(0)
 		}
 
+	} else if p.HasError() { // JIM
+		goto errorExit
 	}
 
 errorExit:
@@ -7760,7 +7765,7 @@ func (s *OrderExprListContext) Accept(visitor antlr.ParseTreeVisitor) interface{
 func (p *ClickHouseParserGrammar2) OrderExprList() (localctx IOrderExprListContext) {
 	localctx = NewOrderExprListContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 70, ClickHouseParserGrammar2RULE_orderExprList)
-	var _la int
+	var _alt int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
@@ -7772,28 +7777,35 @@ func (p *ClickHouseParserGrammar2) OrderExprList() (localctx IOrderExprListConte
 	if p.HasError() {
 		goto errorExit
 	}
-	_la = p.GetTokenStream().LA(1)
-
-	for _la == ClickHouseParserGrammar2COMMA {
-		{
-			p.SetState(467)
-			p.Match(ClickHouseParserGrammar2COMMA)
-			if p.HasError() {
-				// Recognition error - abort rule
-				goto errorExit
+	_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 56, p.GetParserRuleContext())
+	if p.HasError() {
+		goto errorExit
+	}
+	for _alt != 2 && _alt != antlr.ATNInvalidAltNumber {
+		if _alt == 1 {
+			{
+				p.SetState(467)
+				p.Match(ClickHouseParserGrammar2COMMA)
+				if p.HasError() {
+					// Recognition error - abort rule
+					goto errorExit
+				}
 			}
-		}
-		{
-			p.SetState(468)
-			p.OrderExpr()
-		}
+			{
+				p.SetState(468)
+				p.OrderExpr()
+			}
 
+		}
 		p.SetState(473)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
 		}
-		_la = p.GetTokenStream().LA(1)
+		_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 56, p.GetParserRuleContext())
+		if p.HasError() {
+			goto errorExit
+		}
 	}
 
 errorExit:
@@ -8301,7 +8313,7 @@ func (s *SettingExprListContext) Accept(visitor antlr.ParseTreeVisitor) interfac
 func (p *ClickHouseParserGrammar2) SettingExprList() (localctx ISettingExprListContext) {
 	localctx = NewSettingExprListContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 76, ClickHouseParserGrammar2RULE_settingExprList)
-	var _la int
+	var _alt int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
@@ -8313,28 +8325,35 @@ func (p *ClickHouseParserGrammar2) SettingExprList() (localctx ISettingExprListC
 	if p.HasError() {
 		goto errorExit
 	}
-	_la = p.GetTokenStream().LA(1)
-
-	for _la == ClickHouseParserGrammar2COMMA {
-		{
-			p.SetState(492)
-			p.Match(ClickHouseParserGrammar2COMMA)
-			if p.HasError() {
-				// Recognition error - abort rule
-				goto errorExit
+	_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 61, p.GetParserRuleContext())
+	if p.HasError() {
+		goto errorExit
+	}
+	for _alt != 2 && _alt != antlr.ATNInvalidAltNumber {
+		if _alt == 1 {
+			{
+				p.SetState(492)
+				p.Match(ClickHouseParserGrammar2COMMA)
+				if p.HasError() {
+					// Recognition error - abort rule
+					goto errorExit
+				}
 			}
-		}
-		{
-			p.SetState(493)
-			p.SettingExpr()
-		}
+			{
+				p.SetState(493)
+				p.SettingExpr()
+			}
 
+		}
 		p.SetState(498)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
 		}
-		_la = p.GetTokenStream().LA(1)
+		_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 61, p.GetParserRuleContext())
+		if p.HasError() {
+			goto errorExit
+		}
 	}
 
 errorExit:
@@ -15319,7 +15338,7 @@ func (p *ClickHouseParserGrammar2) TableFunctionExpr() (localctx ITableFunctionE
 	}
 	_la = p.GetTokenStream().LA(1)
 
-	if ((int64((_la-83)) & ^0x3f) == 0 && ((int64(1)<<(_la-83))&38654705665) != 0) || ((int64((_la-199)) & ^0x3f) == 0 && ((int64(1)<<(_la-199))&537067775) != 0) {
+	if ((int64((_la-83)) & ^0x3f) == 0 && ((int64(1)<<(_la-83))&38654705665) != 0) || ((int64((_la-150)) & ^0x3f) == 0 && ((int64(1)<<(_la-150))&143561034215456769) != 0) || ((int64((_la-215)) & ^0x3f) == 0 && ((int64(1)<<(_la-215))&8707) != 0) {
 		{
 			p.SetState(859)
 			p.TableArgList()
@@ -15699,6 +15718,7 @@ type ITableArgExprContext interface {
 	NestedIdentifier() INestedIdentifierContext
 	TableFunctionExpr() ITableFunctionExprContext
 	Literal() ILiteralContext
+	SelectUnionStmt() ISelectUnionStmtContext
 
 	// IsTableArgExprContext differentiates from other interfaces.
 	IsTableArgExprContext()
@@ -15784,6 +15804,22 @@ func (s *TableArgExprContext) Literal() ILiteralContext {
 	return t.(ILiteralContext)
 }
 
+func (s *TableArgExprContext) SelectUnionStmt() ISelectUnionStmtContext {
+	var t antlr.RuleContext
+	for _, ctx := range s.GetChildren() {
+		if _, ok := ctx.(ISelectUnionStmtContext); ok {
+			t = ctx.(antlr.RuleContext)
+			break
+		}
+	}
+
+	if t == nil {
+		return nil
+	}
+
+	return t.(ISelectUnionStmtContext)
+}
+
 func (s *TableArgExprContext) GetRuleContext() antlr.RuleContext {
 	return s
 }
@@ -15805,7 +15841,7 @@ func (s *TableArgExprContext) Accept(visitor antlr.ParseTreeVisitor) interface{}
 func (p *ClickHouseParserGrammar2) TableArgExpr() (localctx ITableArgExprContext) {
 	localctx = NewTableArgExprContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 124, ClickHouseParserGrammar2RULE_tableArgExpr)
-	p.SetState(884)
+	p.SetState(885)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -15831,6 +15867,13 @@ func (p *ClickHouseParserGrammar2) TableArgExpr() (localctx ITableArgExprContext
 		{
 			p.SetState(883)
 			p.Literal()
+		}
+
+	case 4:
+		p.EnterOuterAlt(localctx, 4)
+		{
+			p.SetState(884)
+			p.SelectUnionStmt()
 		}
 
 	case antlr.ATNInvalidAltNumber:
@@ -15938,7 +15981,7 @@ func (s *DatabaseIdentifierContext) Accept(visitor antlr.ParseTreeVisitor) inter
 func (p *ClickHouseParserGrammar2) DatabaseIdentifier() (localctx IDatabaseIdentifierContext) {
 	localctx = NewDatabaseIdentifierContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 126, ClickHouseParserGrammar2RULE_databaseIdentifier)
-	p.SetState(888)
+	p.SetState(889)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -15948,7 +15991,7 @@ func (p *ClickHouseParserGrammar2) DatabaseIdentifier() (localctx IDatabaseIdent
 	case ClickHouseParserGrammar2IDENTIFIER:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(886)
+			p.SetState(887)
 			p.Match(ClickHouseParserGrammar2IDENTIFIER)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -15959,7 +16002,7 @@ func (p *ClickHouseParserGrammar2) DatabaseIdentifier() (localctx IDatabaseIdent
 	case ClickHouseParserGrammar2LBRACE:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(887)
+			p.SetState(888)
 			p.ParamSlot()
 		}
 
@@ -16086,7 +16129,7 @@ func (p *ClickHouseParserGrammar2) ParamSlot() (localctx IParamSlotContext) {
 	p.EnterRule(localctx, 128, ClickHouseParserGrammar2RULE_paramSlot)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(890)
+		p.SetState(891)
 		p.Match(ClickHouseParserGrammar2LBRACE)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -16094,7 +16137,7 @@ func (p *ClickHouseParserGrammar2) ParamSlot() (localctx IParamSlotContext) {
 		}
 	}
 	{
-		p.SetState(891)
+		p.SetState(892)
 		p.Match(ClickHouseParserGrammar2IDENTIFIER)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -16102,7 +16145,7 @@ func (p *ClickHouseParserGrammar2) ParamSlot() (localctx IParamSlotContext) {
 		}
 	}
 	{
-		p.SetState(892)
+		p.SetState(893)
 		p.Match(ClickHouseParserGrammar2COLON)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -16110,11 +16153,11 @@ func (p *ClickHouseParserGrammar2) ParamSlot() (localctx IParamSlotContext) {
 		}
 	}
 	{
-		p.SetState(893)
+		p.SetState(894)
 		p.ColumnTypeExpr()
 	}
 	{
-		p.SetState(894)
+		p.SetState(895)
 		p.Match(ClickHouseParserGrammar2RBRACE)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -16228,7 +16271,7 @@ func (p *ClickHouseParserGrammar2) FloatingLiteral() (localctx IFloatingLiteralC
 	p.EnterRule(localctx, 130, ClickHouseParserGrammar2RULE_floatingLiteral)
 	var _la int
 
-	p.SetState(904)
+	p.SetState(905)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -16238,7 +16281,7 @@ func (p *ClickHouseParserGrammar2) FloatingLiteral() (localctx IFloatingLiteralC
 	case ClickHouseParserGrammar2FLOATING_LITERAL:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(896)
+			p.SetState(897)
 			p.Match(ClickHouseParserGrammar2FLOATING_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16249,7 +16292,7 @@ func (p *ClickHouseParserGrammar2) FloatingLiteral() (localctx IFloatingLiteralC
 	case ClickHouseParserGrammar2DOT:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(897)
+			p.SetState(898)
 			p.Match(ClickHouseParserGrammar2DOT)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16257,7 +16300,7 @@ func (p *ClickHouseParserGrammar2) FloatingLiteral() (localctx IFloatingLiteralC
 			}
 		}
 		{
-			p.SetState(898)
+			p.SetState(899)
 			_la = p.GetTokenStream().LA(1)
 
 			if !(_la == ClickHouseParserGrammar2OCTAL_LITERAL || _la == ClickHouseParserGrammar2DECIMAL_LITERAL) {
@@ -16271,7 +16314,7 @@ func (p *ClickHouseParserGrammar2) FloatingLiteral() (localctx IFloatingLiteralC
 	case ClickHouseParserGrammar2DECIMAL_LITERAL:
 		p.EnterOuterAlt(localctx, 3)
 		{
-			p.SetState(899)
+			p.SetState(900)
 			p.Match(ClickHouseParserGrammar2DECIMAL_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16279,19 +16322,19 @@ func (p *ClickHouseParserGrammar2) FloatingLiteral() (localctx IFloatingLiteralC
 			}
 		}
 		{
-			p.SetState(900)
+			p.SetState(901)
 			p.Match(ClickHouseParserGrammar2DOT)
 			if p.HasError() {
 				// Recognition error - abort rule
 				goto errorExit
 			}
 		}
-		p.SetState(902)
+		p.SetState(903)
 		p.GetErrorHandler().Sync(p)
 
 		if p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 112, p.GetParserRuleContext()) == 1 {
 			{
-				p.SetState(901)
+				p.SetState(902)
 				_la = p.GetTokenStream().LA(1)
 
 				if !(_la == ClickHouseParserGrammar2OCTAL_LITERAL || _la == ClickHouseParserGrammar2DECIMAL_LITERAL) {
@@ -16445,7 +16488,7 @@ func (p *ClickHouseParserGrammar2) NumberLiteral() (localctx INumberLiteralConte
 	var _la int
 
 	p.EnterOuterAlt(localctx, 1)
-	p.SetState(907)
+	p.SetState(908)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -16454,7 +16497,7 @@ func (p *ClickHouseParserGrammar2) NumberLiteral() (localctx INumberLiteralConte
 
 	if _la == ClickHouseParserGrammar2DASH || _la == ClickHouseParserGrammar2PLUS {
 		{
-			p.SetState(906)
+			p.SetState(907)
 			_la = p.GetTokenStream().LA(1)
 
 			if !(_la == ClickHouseParserGrammar2DASH || _la == ClickHouseParserGrammar2PLUS) {
@@ -16466,7 +16509,7 @@ func (p *ClickHouseParserGrammar2) NumberLiteral() (localctx INumberLiteralConte
 		}
 
 	}
-	p.SetState(915)
+	p.SetState(916)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -16475,13 +16518,13 @@ func (p *ClickHouseParserGrammar2) NumberLiteral() (localctx INumberLiteralConte
 	switch p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 115, p.GetParserRuleContext()) {
 	case 1:
 		{
-			p.SetState(909)
+			p.SetState(910)
 			p.FloatingLiteral()
 		}
 
 	case 2:
 		{
-			p.SetState(910)
+			p.SetState(911)
 			p.Match(ClickHouseParserGrammar2OCTAL_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16491,7 +16534,7 @@ func (p *ClickHouseParserGrammar2) NumberLiteral() (localctx INumberLiteralConte
 
 	case 3:
 		{
-			p.SetState(911)
+			p.SetState(912)
 			p.Match(ClickHouseParserGrammar2DECIMAL_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16501,7 +16544,7 @@ func (p *ClickHouseParserGrammar2) NumberLiteral() (localctx INumberLiteralConte
 
 	case 4:
 		{
-			p.SetState(912)
+			p.SetState(913)
 			p.Match(ClickHouseParserGrammar2HEXADECIMAL_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16511,7 +16554,7 @@ func (p *ClickHouseParserGrammar2) NumberLiteral() (localctx INumberLiteralConte
 
 	case 5:
 		{
-			p.SetState(913)
+			p.SetState(914)
 			p.Match(ClickHouseParserGrammar2INF)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16521,7 +16564,7 @@ func (p *ClickHouseParserGrammar2) NumberLiteral() (localctx INumberLiteralConte
 
 	case 6:
 		{
-			p.SetState(914)
+			p.SetState(915)
 			p.Match(ClickHouseParserGrammar2NAN_SQL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16649,7 +16692,7 @@ func (s *LiteralContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
 func (p *ClickHouseParserGrammar2) Literal() (localctx ILiteralContext) {
 	localctx = NewLiteralContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 134, ClickHouseParserGrammar2RULE_literal)
-	p.SetState(922)
+	p.SetState(923)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -16659,14 +16702,14 @@ func (p *ClickHouseParserGrammar2) Literal() (localctx ILiteralContext) {
 	case ClickHouseParserGrammar2INF, ClickHouseParserGrammar2NAN_SQL, ClickHouseParserGrammar2FLOATING_LITERAL, ClickHouseParserGrammar2OCTAL_LITERAL, ClickHouseParserGrammar2DECIMAL_LITERAL, ClickHouseParserGrammar2HEXADECIMAL_LITERAL, ClickHouseParserGrammar2DASH, ClickHouseParserGrammar2DOT, ClickHouseParserGrammar2PLUS:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(917)
+			p.SetState(918)
 			p.NumberLiteral()
 		}
 
 	case ClickHouseParserGrammar2STRING_LITERAL:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(918)
+			p.SetState(919)
 			p.Match(ClickHouseParserGrammar2STRING_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16677,7 +16720,7 @@ func (p *ClickHouseParserGrammar2) Literal() (localctx ILiteralContext) {
 	case ClickHouseParserGrammar2NULL_SQL:
 		p.EnterOuterAlt(localctx, 3)
 		{
-			p.SetState(919)
+			p.SetState(920)
 			p.Match(ClickHouseParserGrammar2NULL_SQL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16688,7 +16731,7 @@ func (p *ClickHouseParserGrammar2) Literal() (localctx ILiteralContext) {
 	case ClickHouseParserGrammar2JSON_TRUE:
 		p.EnterOuterAlt(localctx, 4)
 		{
-			p.SetState(920)
+			p.SetState(921)
 			p.Match(ClickHouseParserGrammar2JSON_TRUE)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16699,7 +16742,7 @@ func (p *ClickHouseParserGrammar2) Literal() (localctx ILiteralContext) {
 	case ClickHouseParserGrammar2JSON_FALSE:
 		p.EnterOuterAlt(localctx, 5)
 		{
-			p.SetState(921)
+			p.SetState(922)
 			p.Match(ClickHouseParserGrammar2JSON_FALSE)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -16835,7 +16878,7 @@ func (p *ClickHouseParserGrammar2) Interval() (localctx IIntervalContext) {
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(924)
+		p.SetState(925)
 		_la = p.GetTokenStream().LA(1)
 
 		if !(_la == ClickHouseParserGrammar2DAY || ((int64((_la-77)) & ^0x3f) == 0 && ((int64(1)<<(_la-77))&288230419101384705) != 0) || ((int64((_la-149)) & ^0x3f) == 0 && ((int64(1)<<(_la-149))&36283883716609) != 0)) {
@@ -16932,7 +16975,7 @@ func (p *ClickHouseParserGrammar2) Alias() (localctx IAliasContext) {
 	p.EnterRule(localctx, 138, ClickHouseParserGrammar2RULE_alias)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(926)
+		p.SetState(927)
 		p.Match(ClickHouseParserGrammar2IDENTIFIER)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -17048,7 +17091,7 @@ func (p *ClickHouseParserGrammar2) EnumValue() (localctx IEnumValueContext) {
 	p.EnterRule(localctx, 140, ClickHouseParserGrammar2RULE_enumValue)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(928)
+		p.SetState(929)
 		p.Match(ClickHouseParserGrammar2STRING_LITERAL)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -17056,7 +17099,7 @@ func (p *ClickHouseParserGrammar2) EnumValue() (localctx IEnumValueContext) {
 		}
 	}
 	{
-		p.SetState(929)
+		p.SetState(930)
 		p.Match(ClickHouseParserGrammar2EQ_SINGLE)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -17064,7 +17107,7 @@ func (p *ClickHouseParserGrammar2) EnumValue() (localctx IEnumValueContext) {
 		}
 	}
 	{
-		p.SetState(930)
+		p.SetState(931)
 		p.NumberLiteral()
 	}
 

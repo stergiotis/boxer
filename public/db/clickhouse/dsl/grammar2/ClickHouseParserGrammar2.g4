@@ -298,10 +298,13 @@ tableFunctionExpr: IDENTIFIER LPAREN tableArgList? RPAREN;
 // normalised query parameterised on its database or table.
 tableIdentifier: (databaseIdentifier DOT)? (IDENTIFIER | paramSlot);
 tableArgList: tableArgExpr (COMMA tableArgExpr)*;
+// A bare query as the argument — `view(SELECT …)` — mirrors grammar1; the
+// canonical form keeps it as written.
 tableArgExpr
     : nestedIdentifier
     | tableFunctionExpr
     | literal
+    | selectUnionStmt
     ;
 
 // Databases
