@@ -109,6 +109,23 @@ func TestRunNeedsAnAgentsContext(t *testing.T) {
 	assert.Equal(t, obo, l.inner.takeAgentForRun(false), "the task asked for this run")
 }
 
+// A run the grant does not cover is refused when it is asked for, naming
+// the destination; a grant that lists it lets the run through.
+func TestAnUncoveredRunIsRefusedWithTheDestinationItNeeds(t *testing.T) {
+	l, h := opsLauncher(t)
+	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
+	_, err := h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1}}, opRun, nil)
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, []string{"clickhouse:ch.example:8123"}, refusal.Destinations)
+	assert.False(t, l.inner.requestRun, "a refused run is not requested")
+
+	obo := &app.OnBehalfOf{Task: "t", Epoch: 1, Destinations: []string{"clickhouse:ch.example:8123"}}
+	_, err = h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: obo}, opRun, nil)
+	require.NoError(t, err)
+	assert.True(t, l.inner.requestRun)
+}
+
 func TestTheAgentMarkClearsWhenThePersonEdits(t *testing.T) {
 	l, h := opsLauncher(t)
 	obo := &app.OnBehalfOf{Task: "t", Epoch: 1}

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json/v2"
 	"strings"
 	"sync"
 	"testing"
@@ -160,39 +161,7 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 		toolCall("c4", "call_operation", `{"window":100,"operation":"set_note","args":{"text":"tidied"},"reason":"tidy it"}`),
 		{Content: "done", FinishReason: "stop"},
 	}}
-	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
-	require.NoError(t, err)
-	t.Cleanup(svc.Close)
-
-	reg := app.NewRegistry()
-	require.NoError(t, reg.RegisterFactory(app.Manifest{Id: notesId, Display: "Notes", Summary: "keep a note",
-		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: noteOps.Catalog()},
-		func() (app.AppI, error) { return nil, nil }))
-	host := &noteHost{engines: map[uint64]*opengine.Engine{}, notes: map[uint64]*note{}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go host.frames(ctx)
-	hostClient := bus.NewClient(opwire.HostOpsAppId, []app.SubjectFilter{
-		{Pattern: opwire.Pattern, Direction: app.CapDirectionSub},
-		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub},
-	})
-	_, err = hostClient.Subscribe(opwire.Pattern, func(msg *app.Msg) {
-		_, key, op, _ := opwire.ParseSubject(msg.Subject)
-		req, _ := buscodec.Decode[opwire.CallRequest](msg.Payload)
-		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.eng(key).Submit(op, req)})
-	})
-	require.NoError(t, err)
-	asvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{Registry: reg, Host: host, TestGrants: true})
-	require.NoError(t, err)
-	t.Cleanup(asvc.Close)
-
-	chatBus := bus.NewClient(ManifestId, manifest.Caps)
-	cli := llm.NewClient(chatBus)
-	cli.Timeout = 10 * time.Second
-	conv := newConversation()
-	coord := newCoordinator(agent.NewClient(chatBus), conv.id)
-	req := conv.request("please tidy my note")
-	req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: coordinatorPrompt}}, req.Messages...)
+	host, coord, cli, req, ctx := coordRig(t, bus, model, false)
 
 	res, err := runTurn(ctx, cli, coord, req)
 	require.NoError(t, err)
@@ -235,4 +204,127 @@ func TestAStoppedTurnKeepsItsCallsShown(t *testing.T) {
 	assert.Contains(t, conv.entries[0].reason, "24 rounds")
 	assert.Equal(t, speakerTool, conv.entries[1].speaker)
 	assert.Empty(t, conv.history)
+}
+
+// coordRig wires a coordinator to a note host through the dispatcher under
+// test grants, with model answering; opTools turns operation tools on.
+func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools bool) (host *noteHost, coord *coordinator, cli *llm.Client, req llm.Request, ctx context.Context) {
+	t.Helper()
+	svc, err := llm.NewService(bus, zerolog.Nop(), llm.Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: model})
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+
+	reg := app.NewRegistry()
+	require.NoError(t, reg.RegisterFactory(app.Manifest{Id: notesId, Display: "Notes", Summary: "keep a note",
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: noteOps.Catalog()},
+		func() (app.AppI, error) { return nil, nil }))
+	host = &noteHost{engines: map[uint64]*opengine.Engine{}, notes: map[uint64]*note{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go host.frames(ctx)
+	hostClient := bus.NewClient(opwire.HostOpsAppId, []app.SubjectFilter{
+		{Pattern: opwire.Pattern, Direction: app.CapDirectionSub},
+		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub},
+	})
+	_, err = hostClient.Subscribe(opwire.Pattern, func(msg *app.Msg) {
+		_, key, op, _ := opwire.ParseSubject(msg.Subject)
+		req, _ := buscodec.Decode[opwire.CallRequest](msg.Payload)
+		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.eng(key).Submit(op, req)})
+	})
+	require.NoError(t, err)
+	asvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{Registry: reg, Host: host, TestGrants: true})
+	require.NoError(t, err)
+	t.Cleanup(asvc.Close)
+
+	chatBus := bus.NewClient(ManifestId, manifest.Caps)
+	cli = llm.NewClient(chatBus)
+	cli.Timeout = 10 * time.Second
+	conv := newConversation()
+	coord = newCoordinator(agent.NewClient(chatBus), conv.id)
+	req = conv.request("please tidy my note")
+	req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: coordinatorPrompt}}, req.Messages...)
+	coord.opTools = opTools
+	return
+}
+
+func toolReplies(msgs []openaichat.Message) (replies map[string]string) {
+	replies = map[string]string{}
+	for _, m := range msgs {
+		if m.Role == openaichat.ChatRoleTool {
+			replies[m.ToolCallId] = m.Content
+		}
+	}
+	return
+}
+
+// A refusal says what to do next; the same refused call is not made again
+// until something else went through; describe_app gives schemas as objects.
+func TestRefusalsSayWhatToDoNextAndARepeatIsNotMade(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"tidy the note"}`),
+		toolCall("r2", "request_access", `{"plan":"tidy the note"}`),
+		toolCall("r3", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
+		toolCall("o1", "open_window", `{"app":"notes"}`),
+		toolCall("s1", "call_operation", `{"window":100,"operation":"set_note","args":{}}`),
+		toolCall("s2", "call_operation", `{"window":100,"operation":"set_note","args":{}}`),
+		toolCall("d1", "describe_app", `{"app":"notes","operation":"set_note"}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	res, err := runTurn(ctx, cli, coord, req)
+	require.NoError(t, err)
+	replies := toolReplies(res.messages)
+
+	assert.Contains(t, replies["r1"], `next: {"tool":"request_access"`, "a grant with nothing to open says to name the app")
+	assert.Contains(t, replies["r2"], "same call that was just refused")
+	assert.Contains(t, replies["r3"], "access granted")
+	var s1 callOutcome
+	require.NoError(t, json.Unmarshal([]byte(replies["s1"]), &s1))
+	assert.Equal(t, "refused", s1.Phase)
+	require.NotNil(t, s1.Next)
+	assert.Equal(t, "call_operation", s1.Next.Tool)
+	assert.Contains(t, string(s1.Next.ArgsSchema), `"properties"`, "a schema refusal carries the schema")
+	assert.Contains(t, replies["s2"], "same call that was just refused")
+	assert.Contains(t, replies["d1"], `"args_schema":{`, "schemas are JSON objects, not text")
+}
+
+// With operation tools on, a window's operations are typed tools of their
+// own, and calling one goes through the dispatcher like call_operation.
+func TestOperationToolsCallAWindowsOperationDirectly(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
+		toolCall("o1", "open_window", `{"app":"notes"}`),
+		toolCall("g1", "w100_get_note", `{}`),
+		toolCall("t1", "w100_set_note", `{"text":"typed","reason":"tidy it"}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	host, coord, cli, req, ctx := coordRig(t, bus, model, true)
+	res, err := runTurn(ctx, cli, coord, req)
+	require.NoError(t, err)
+	assert.Equal(t, "done", res.final.Content)
+	host.mu.Lock()
+	assert.Equal(t, "typed", host.notes[100].text)
+	host.mu.Unlock()
+
+	model.mu.Lock()
+	defer model.mu.Unlock()
+	assert.Len(t, model.seen[0].Tools, 6, "no window, no operation tools")
+	var names []string
+	for _, tl := range model.seen[len(model.seen)-1].Tools {
+		names = append(names, tl.Name)
+	}
+	assert.Contains(t, names, "w100_set_note")
+	assert.Contains(t, names, "call_operation", "the fixed tools stay")
+}
+
+func TestARemedyOfDestinationsAsksForThem(t *testing.T) {
+	coord := newCoordinator(nil, "c")
+	n := coord.nextFor(2, "run", &agent.Remedy{Destinations: []string{"clickhouse:localhost:8123"}})
+	require.NotNil(t, n)
+	assert.Equal(t, "request_access", n.Tool)
+	assert.Equal(t, []string{"clickhouse:localhost:8123"}, n.Args["destinations"])
+	assert.Contains(t, n.Then, "run in window 2 again")
+	assert.Nil(t, coord.nextFor(2, "run", nil))
 }

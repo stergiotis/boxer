@@ -536,7 +536,8 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 	appops.Command(playOps, app.OperationSpec{Name: opRun, Version: 1, Summary: "run the buffer, under the agent limits",
 		Effect: app.OperationEffectRun, Reads: []string{opsResSql, opsResParams, opsResSignals}, Writes: []string{opsResResult},
 		Agents: true, Gesture: "the Run button",
-		Follows: []string{"the result replaces the main result; describe_result reads it, and fails with an agent limit when the grant does not cover the statement"}},
+		Follows: []string{"the result replaces the main result; describe_result reads it",
+			"a run the grant does not cover is refused, naming the destination the grant would have to list"}},
 		func(inst *PlayLauncher, call app.OperationCall, in RunArgs) (appops.None, error) {
 			p := inst.inner
 			if p == nil {
@@ -557,6 +558,11 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			if names := p.unfilledInputs(); len(names) > 0 {
 				return appops.None{}, app.RefuseOperation("parameters need a value first: " + strings.Join(names, ", "))
+			}
+			if !in.Subquery {
+				if err := p.refuseAgentRun(call.OnBehalfOf); err != nil {
+					return appops.None{}, err
+				}
 			}
 			p.markAgent(call.OnBehalfOf)
 			p.agentRunRequested = true

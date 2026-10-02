@@ -52,14 +52,26 @@ type coordinator struct {
 	cli          *agent.Client
 	conversation string
 
+	// opTools offers each operation of the task's windows as a typed tool.
+	opTools bool
+
 	mu       sync.Mutex
 	grant    agent.Grant
 	tainted  bool
 	confined bool
+	// refused holds the calls refused since the last call that was not, by
+	// tool and arguments; refusal is the current call's, set while it runs.
+	refused map[string]string
+	refusal string
+	// typed names the operation tools of the latest model call; opCache
+	// holds each app's operations with their schemas.
+	typed   map[string]typedOp
+	opCache map[string][]agent.Operation
 }
 
 func newCoordinator(cli *agent.Client, conversation string) (inst *coordinator) {
-	return &coordinator{cli: cli, conversation: conversation}
+	return &coordinator{cli: cli, conversation: conversation, opTools: OperationToolsSeed.Get(),
+		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation)}
 }
 
 // state is what the bar shows.
@@ -88,9 +100,18 @@ func (inst *coordinator) sensitivity() (s queryengine.SensitivityE) {
 
 func schema(s string) (v jsontext.Value) { return jsontext.Value(s) }
 
-// tools are the fixed tools the model is given; operation schemas load on
-// demand through describe_app (ADR-0269 §SD3).
-func (inst *coordinator) tools() (out []openaichat.Tool) {
+// tools are the fixed tools the model is given, and with operation tools on
+// a typed tool per operation of the task's windows; otherwise operation
+// schemas load on demand through describe_app (ADR-0269 §SD3).
+func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
+	out = inst.fixedTools()
+	if inst.opTools {
+		out = append(out, inst.operationTools(ctx)...)
+	}
+	return
+}
+
+func (inst *coordinator) fixedTools() (out []openaichat.Tool) {
 	return []openaichat.Tool{
 		{Name: "request_access", Description: "Ask the person to share windows with you for a task, and optionally to let you open windows of apps. Waits for the person's decision.",
 			Parameters: schema(`{"type":"object","properties":{"plan":{"type":"string","description":"one line: what you intend to do"},"open":{"type":"array","description":"apps you want to open windows of","items":{"type":"object","properties":{"app":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":4}},"required":["app"],"additionalProperties":false}},"destinations":{"type":"array","description":"what your runs may reach, e.g. keelson:apps or clickhouse:host:port","items":{"type":"string"}}},"required":["plan"],"additionalProperties":false}`)},
@@ -131,7 +152,8 @@ func (inst *coordinator) changesNote(ctx context.Context) (note string) {
 }
 
 // exec runs one tool call; it returns what the model reads and a line for
-// the transcript.
+// the transcript. A call identical to one refused since the last call that
+// was not is answered without being made again.
 func (inst *coordinator) exec(ctx context.Context, call openaichat.ToolCall) (content string, activity string) {
 	var args map[string]any
 	if call.Arguments != "" {
@@ -139,7 +161,49 @@ func (inst *coordinator) exec(ctx context.Context, call openaichat.ToolCall) (co
 			return "error: the arguments are not a JSON object", call.Name + ": arguments not understood"
 		}
 	}
+	canon, _ := json.Marshal(args, json.Deterministic(true))
+	sig := call.Name + " " + string(canon)
+	inst.mu.Lock()
+	prev, repeated := inst.refused[sig]
+	inst.refusal = ""
+	inst.mu.Unlock()
+	if repeated {
+		return "error: this is the same call that was just refused, and nothing has changed since; change it as the refusal says. The refusal was: " + prev,
+			call.Name + ": repeated a refused call"
+	}
+	content, activity = inst.dispatch(ctx, call, args)
+	inst.mu.Lock()
+	if inst.refusal != "" || strings.HasPrefix(content, "error:") {
+		inst.refused[sig] = content
+	} else {
+		clear(inst.refused)
+	}
+	inst.mu.Unlock()
+	return
+}
+
+// refuse marks the running call as refused.
+func (inst *coordinator) refuse(reason string) {
+	inst.mu.Lock()
+	inst.refusal = reason
+	inst.mu.Unlock()
+}
+
+func (inst *coordinator) dispatch(ctx context.Context, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 	str := func(k string) (s string) { s, _ = args[k].(string); return }
+	inst.mu.Lock()
+	t, isTyped := inst.typed[call.Name]
+	inst.mu.Unlock()
+	if isTyped {
+		reason, _ := args["reason"].(string)
+		opArgs := make(map[string]any, len(args))
+		for k, v := range args {
+			if k != "reason" {
+				opArgs[k] = v
+			}
+		}
+		return inst.call(ctx, call.Id, map[string]any{"window": float64(t.window), "operation": t.op, "args": opArgs, "reason": reason})
+	}
 	switch call.Name {
 	case "request_access":
 		return inst.requestAccess(ctx, str("plan"), args)
@@ -150,7 +214,7 @@ func (inst *coordinator) exec(ctx context.Context, call openaichat.ToolCall) (co
 		if err != nil {
 			return "error: " + err.Error(), "describe: " + err.Error()
 		}
-		b, _ := json.Marshal(apps)
+		b, _ := json.Marshal(describeView(apps))
 		return string(b), "described " + strconv.Itoa(len(apps)) + " app(s)"
 	case "call_operation":
 		return inst.call(ctx, call.Id, args)
@@ -228,7 +292,16 @@ func (inst *coordinator) requestAccess(ctx context.Context, plan string, args ma
 	}
 	g, err := inst.cli.Request(ctx, req)
 	if err != nil {
-		return "the person did not grant access: " + err.Error(), "access not granted: " + err.Error()
+		inst.refuse(err.Error())
+		content = "the person did not grant access: " + err.Error()
+		if inst.handle() == "" && len(req.Launches) == 0 {
+			// Nothing is shared until asked for; name the app to open.
+			n, _ := json.Marshal(nextStep{Tool: "request_access",
+				Args: map[string]any{"plan": plan, "open": []map[string]any{{"app": "<an app id from describe_app>"}}},
+				Then: "no window is shared with you yet: ask to open the app you need"})
+			content += "\nnext: " + string(n)
+		}
+		return content, "access not granted: " + err.Error()
 	}
 	inst.mu.Lock()
 	if g.Task != "" {
@@ -281,6 +354,8 @@ type callOutcome struct {
 	// DataHandle stands in for confined content the model may pass and
 	// not read.
 	DataHandle string `json:"data_handle,omitempty"`
+	// Next, on a refusal, is what would let the call through.
+	Next *nextStep `json:"next,omitempty"`
 }
 
 func (inst *coordinator) call(ctx context.Context, key string, args map[string]any) (content string, activity string) {
@@ -328,7 +403,11 @@ func (inst *coordinator) call(ctx context.Context, key string, args map[string]a
 			return "error: " + err.Error(), where + ": " + err.Error()
 		}
 	}
-	co := callOutcome{Phase: out.Phase, Reason: out.Reason, Revisions: out.Revisions}
+	co := callOutcome{Phase: out.Phase, Reason: out.Reason, Revisions: out.Revisions, Next: inst.nextFor(instance, op, out.Remedy)}
+	switch out.Phase {
+	case "refused", "denied", "conflict":
+		inst.refuse(out.Reason)
+	}
 	if out.Phase == "refused" && (!hasArgs || a == nil) {
 		co.Reason = strings.TrimSpace(co.Reason + "; you sent no args: the operation's arguments go under args")
 	}
@@ -392,7 +471,7 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 	parent := req.ParentCallId
 	for round := 0; round < maxRounds; round++ {
 		r := req
-		r.Messages, r.Tools, r.Sensitivity, r.ParentCallId = msgs, coord.tools(), coord.sensitivity(), parent
+		r.Messages, r.Tools, r.Sensitivity, r.ParentCallId = msgs, coord.tools(ctx), coord.sensitivity(), parent
 		var res llm.Response
 		res, err = cli.Complete(ctx, r)
 		if err != nil {

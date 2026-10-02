@@ -151,6 +151,16 @@ type Outcome struct {
 	// Confined is the label of what the outcome carries: the window's
 	// label as of the snapshot or the command (ADR-0269 §SD7).
 	Confined bool `json:"confined,omitempty"`
+	// Remedy, on a refusal, is what would let the call through.
+	Remedy *Remedy `json:"remedy,omitempty"`
+}
+
+// Remedy is what the caller can change for a refused call to go through.
+type Remedy struct {
+	// Destinations are what the task's grant would have to list.
+	Destinations []string `json:"destinations,omitempty"`
+	// ArgsSchema is the JSON Schema the arguments have to fit.
+	ArgsSchema string `json:"args_schema,omitempty"`
 }
 
 // wireVersion versions [CallRequest] and [CallReply].

@@ -235,6 +235,15 @@ type Outcome struct {
 	// Task and Handle answer an approved request's key.
 	Task   string
 	Handle string
+	// Remedy, on a refusal, is what would let the call through.
+	Remedy *Remedy
+}
+
+// Remedy is what the caller can change for a refused call to go through:
+// destinations to add to the grant, or arguments of the given schema.
+type Remedy struct {
+	Destinations []string
+	ArgsSchema   string
 }
 
 // Final reports whether no later phase can follow.
@@ -264,8 +273,12 @@ type CallRequest struct {
 }
 
 func outcomeOfWire(w wireOutcome) (out Outcome) {
-	return Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job,
+	out = Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job,
 		Held: w.Held, Confined: w.Confined, Task: w.Task, Handle: w.Handle}
+	if w.Remedy != nil {
+		out.Remedy = &Remedy{Destinations: w.Remedy.Destinations, ArgsSchema: w.Remedy.ArgsSchema}
+	}
+	return
 }
 
 func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {

@@ -58,7 +58,7 @@ func (inst *Client) appStatement(ctx context.Context, sql string, body io.Reader
 	}
 	if label.agent != nil && dec.class != dispatchClassIntrospection {
 		if dest := DestinationClickHouse(endpointHost(target)); !slices.Contains(label.agent.Destinations, dest) {
-			err = &AgentLimitError{Reason: "the grant does not list " + dest}
+			err = &AgentLimitError{Reason: "the grant does not list " + dest, Destination: dest}
 			return
 		}
 	}

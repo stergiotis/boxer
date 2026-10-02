@@ -159,6 +159,13 @@ type wireOutcome struct {
 	// Task and Handle answer an approved request's key.
 	Task   string `json:"task,omitempty"`
 	Handle string `json:"handle,omitempty"`
+	// Remedy, on a refusal, is what would let the call through.
+	Remedy *wireRemedy `json:"remedy,omitempty"`
+}
+
+type wireRemedy struct {
+	Destinations []string `json:"destinations,omitempty"`
+	ArgsSchema   string   `json:"args_schema,omitempty"`
 }
 
 type wireCallReply struct {

@@ -373,10 +373,12 @@ type DelegationI interface {
 
 // OperationRefusal is an error a handler returns to decline a call without
 // failing it. Conflict marks a refusal the caller can resolve by reading
-// again: the person is editing, or the state moved.
+// again: the person is editing, or the state moved. Destinations, when set,
+// are what a grant would have to list for the call to go through.
 type OperationRefusal struct {
-	Conflict bool
-	Reason   string
+	Conflict     bool
+	Reason       string
+	Destinations []string
 }
 
 func (inst *OperationRefusal) Error() string {
@@ -389,6 +391,12 @@ func (inst *OperationRefusal) Error() string {
 // RefuseOperation declines a call: unavailable, or a precondition failed.
 func RefuseOperation(reason string) (err error) {
 	return &OperationRefusal{Reason: reason}
+}
+
+// RefuseForDestinations declines a call whose task's grant does not list
+// the destinations it would reach.
+func RefuseForDestinations(reason string, destinations ...string) (err error) {
+	return &OperationRefusal{Reason: reason, Destinations: destinations}
 }
 
 // ConflictOperation declines a call the caller can retry after reading

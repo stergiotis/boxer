@@ -223,6 +223,9 @@ func outcomeOfError(err error) (out opwire.Outcome) {
 		if refusal.Conflict {
 			out.Phase = opwire.PhaseConflict
 		}
+		if len(refusal.Destinations) > 0 {
+			out.Remedy = &opwire.Remedy{Destinations: slices.Clone(refusal.Destinations)}
+		}
 		return
 	}
 	out = opwire.Outcome{Phase: opwire.PhaseFailed, Reason: err.Error()}

@@ -128,6 +128,9 @@ type callRec struct {
 	ref        string
 	finalNoted bool
 	argsDigest string
+	// args is the model's JSON, kept only under a test grant, for the
+	// actions file.
+	args string
 	// heldBy is the widening a call outside the grant waits on.
 	heldBy *request
 	// req and entry are what route sent, with the expectations it sent, so
@@ -251,6 +254,7 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 	}
 	if len(req.Entries) == 0 && len(req.Launches) == 0 {
 		rep.Reason = "a grant names at least one instance or an app to open"
+		inst.recordGrantRefusal(msg, req, rep.Reason)
 		return
 	}
 	t := inst.newTask(msg.Sender, msg.SenderInstance, req.Conversation, req.Plan, req.Destinations, req.Calls,
@@ -310,6 +314,9 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		return
 	}
 	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args), created: time.Now()}
+	if t.test {
+		rec.args = req.Args
+	}
 	t.keys[req.Key] = rec
 	out, spec, e, need, mode := inst.check(t, req)
 	rec.spec = spec
@@ -321,7 +328,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	}
 	if out.Phase == opwire.PhaseProposed {
 		if _, aerr := encodeArgs(spec, req.Args); aerr != nil {
-			out = phaseOutcome(opwire.PhaseRefused, "the arguments do not fit the schema: "+aerr.Error())
+			out = schemaRefusal(spec, aerr)
 		} else {
 			t.callsUsed++
 			rec.req, rec.entry = req, e
@@ -374,7 +381,7 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 
 	args, err := encodeArgs(spec, req.Args)
 	if err != nil {
-		out := phaseOutcome(opwire.PhaseRefused, "the arguments do not fit the schema: "+err.Error())
+		out := schemaRefusal(spec, err)
 		inst.settle(t, rec, out, false)
 		inst.record(t, rec, "dispatch", out)
 		return
@@ -480,6 +487,16 @@ func encodeArgs(spec app.OperationSpec, js string) (args []byte, err error) {
 	return
 }
 
+// schemaRefusal refuses arguments that do not fit the operation's type, with
+// the schema they have to fit.
+func schemaRefusal(spec app.OperationSpec, err error) (out opwire.Outcome) {
+	out = phaseOutcome(opwire.PhaseRefused, "the arguments do not fit the schema: "+err.Error())
+	if s, serr := opjson.Schema(spec.Args); serr == nil {
+		out.Remedy = &opwire.Remedy{ArgsSchema: string(s)}
+	}
+	return
+}
+
 // settle records what the instance answered: read revisions for a query,
 // a result reference for a result.
 func (inst *Service) settle(t *task, rec *callRec, out opwire.Outcome, routed bool) {
@@ -568,6 +585,9 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 
 func wireOutcomeOf(out opwire.Outcome, ref string, job string) (w wireOutcome) {
 	w.Phase, w.Reason, w.AsOf, w.Revisions, w.ResultRef, w.Job = out.Phase.String(), out.Reason, out.AsOf, out.Revisions, ref, job
+	if out.Remedy != nil {
+		w.Remedy = &wireRemedy{Destinations: out.Remedy.Destinations, ArgsSchema: out.Remedy.ArgsSchema}
+	}
 	return
 }
 
