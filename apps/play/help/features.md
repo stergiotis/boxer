@@ -16,11 +16,13 @@ ready-to-run fragments see **Snippets**. This page describes each feature in tur
 The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 (Run, Load, connection) and a status bar (the query-state inspector). They fall
 into three groups: the **editor** (Editor, History), the **tool panes** beside
-it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Experiments — each reads
-the buffer, or something derived from it, while you type), and the **result
-panes** below (Table, Projection, Timeline, Map, Vector field, World, Kanban, Chat, Cards, Network,
-Graphview, Sankey, Distribution, Icicle, Files, Graph, Schema, and Detail
-alongside them). Drag a tab to
+it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Model, Vocabulary,
+Completion, Glosses, Experiments — each reads the buffer, or something derived
+from it, while you type), and the **result panes** below (Table, Projection,
+Timeline, Map, Vector field, World, Kanban, Chat, Cards, Network, Graphview,
+Sankey, Distribution, Icicle, Series, Treemap, Chart, Files, Graph, Schema, and
+Detail alongside them). What each result pane needs from the SQL is under
+[How a pane reads the query](#how-a-pane-reads-the-query). Drag a tab to
 re-dock or split it; the layout holds for the session and starts fresh next
 launch.
 
@@ -317,14 +319,33 @@ query body. Toggle it off to hand-edit the `SET` lines directly.
 ## Signals (live parameters)
 
 A placeholder *without* a `SET` line is a **signal**: a live value shared by
-name across every query and panel. Panels write them as you interact —
-clicking a row (Table), a node (Projection), an event (Timeline), or a
-country (World) writes `selection`; the Map's settled viewport writes the
-`vp_*` set; the Timeline publishes the events extent as `tl_min`/`tl_max`; the
-Vector field pane publishes its display time and view as `vf_*` —
-and any query referencing the name picks the value up on its next run. The
+name across every query and panel. Panels write them as you interact, and
+any query referencing the name picks the value up on its next run. The
 parameter widgets above the editor write the same values, so a signal has a
 typed control as well as a raw one.
+
+The names the panes write are reserved, with fixed types:
+
+| Name | Type | Written by |
+| --- | --- | --- |
+| `selection` | `Int64` | a click on a row: Table, Projection, Timeline, World, Kanban, Chat, Cards, Distribution, Series, Chart, Files |
+| `selection_node` | `String` | stamped with every `selection`: the query node the row belongs to |
+| `selection_id` | `UInt64` | stamped with `selection` when the result has a leeway id column |
+| `selection_key` | `String` | stamped with `selection` when the result has a column named `key`; written directly by Network, Graphview and Sankey (a vertex id), Icicle (a frame label), Treemap (a leaf name) and Files (a path) |
+| `selection_country` | `String` | World: the clicked country |
+| `vp_min_x`, `vp_max_x`, `vp_min_y`, `vp_max_y`, `vp_w`, `vp_h` | `UInt32` | Map: the settled viewport in packed mercator, and its pixel size |
+| `tl_min`, `tl_max` | `DateTime64(3, 'UTC')` | Timeline: the extent of the events drawn |
+| `tl_from`, `tl_to` | `DateTime64(3, 'UTC')` | Timeline: the brushed window |
+| `vf_t`, `vf_min_lat` … `vf_max_lon` | `DateTime64(3, 'UTC')`, `Float64` | Vector field: display time and view |
+| `gv_*` | various | Graphview: selection, hover, camera and gestures (see [Graphview](#graphview)) |
+
+Some of these **block** until a pane writes them, because no stand-in value is
+honest: `selection`, `selection_id`, the `vp_*` viewport and `tl_min` / `tl_max`.
+The rest are **seeded**, so a query reading them runs from the start: the
+string names empty, `tl_from` / `tl_to` an unbounded window that keeps every
+row, `vf_*` a time and box that select nothing, and the `gv_*` names empty or
+zero. A query written against a seeded name should treat the seed as "nothing
+chosen yet", as in `if({gv_focus:String} = '', 'default', {gv_focus:String})`.
 
 The **signals** section at the top of the Graph tab lists them — value,
 declared type(s), and who last wrote it (`param-widget` for the parameter
@@ -335,8 +356,9 @@ different queries gets a conflict warning. `selection_id` is marked when it
 lags the cursor: it follows the last row that carried a leeway id, so clicking
 a row without one leaves it pointing at the previous match.
 
-A referenced name that nothing fills blocks Run with a hint (instead of the
-server's "substitution not set" error); the widget for that name carries the
+A referenced name that nothing fills (a name of your own, or a reserved name
+that blocks) stops Run with a hint (instead of the server's "substitution not
+set" error); the widget for that name carries the
 matching **needs a value** mark. The **Live** checkbox (top bar, shown when
 the query has a signal input) re-runs the query automatically when a
 referenced signal moves — edits to the SQL itself still wait for Run.
@@ -364,8 +386,14 @@ so you can tune the patterns without leaving the panel.
   **Signals**); nothing is sent, since the server could only reject it.
 - **Load .sql…** (shown when the host wired the file capability) opens a file picker
   and replaces the buffer with the chosen file's contents.
-- Results land in the **Table** tab and feed the **Detail**, **Projection**, and
-  **Timeline** views; the **status bar** names the outcome.
+- Results land in the **Table** tab and feed every result pane whose contract
+  they meet (see [How a pane reads the query](#how-a-pane-reads-the-query)); the
+  **status bar** names the outcome.
+- **Conditions** (top bar, off by default; ADR-0121) rewrites the statement so
+  that each OR-free part of its `WHERE` comes back as a named result column,
+  so every row says which part of the query admitted it. It applies to
+  retrieval queries over a known schema and is offered only where the
+  endpoint's schema probe makes the rewrite possible.
 
 ## Query state (the status bar)
 
@@ -419,11 +447,68 @@ anything not plain `http://`) show the spinner alone.
 Results render across several dock tabs. Pagination applies to the Table tab only;
 the Projection and Timeline views work over the whole result set.
 
+### How a pane reads the query
+
+Every result pane has a **contract**: what it needs from the SQL before it will
+draw. The contracts come in three kinds, and a pane's section below says which
+it uses.
+
+- **Named columns of the active result.** Kanban needs `lane` and `title`,
+  Chart reads `x` / `y` / `z` / `series`, Distribution reads `series`, `n`,
+  `ps` and `qs`. Matching is on the column name, so alias your columns. A
+  column that declares a gloss in its name matches on its label, so
+  `body@text/markdown` is still Chat's `body` and `value@gloss/bytes` is still
+  Icicle's `value`. Kanban, Network, Graphview, Sankey and the Timeline's
+  reserved `_tl_*` slots match the bare name only.
+- **Typed columns of the active result.** Series takes the first time-typed
+  column as its axis and every numeric column as a lane, whatever they are
+  called.
+- **Named CTEs.** Network and Graphview read a CTE called `edges`, Sankey
+  one called `flows`, Vector field one called `vector_field`, and several
+  panes take optional decoration CTEs (`lanes`, `vertices`, `nodes`,
+  `graph_opts`, `scores`, `spans`, `reactions`, `participants`). These panes
+  ignore the final `SELECT` altogether. The CTE is found by name in the last
+  Run, including one that nothing in the statement references. Each CTE runs on
+  its own query with its dependencies folded in. It re-runs on its own when a
+  signal it reads moves, without **Live**, which governs the final `SELECT`
+  only. Editing the CTE's SQL still needs a Run.
+
+The **active result** is the final `SELECT`, the node observed from the
+**Graph** tab, or, for a tab bound to a node there, that node. Binding is how
+two panes show two CTEs of one query side by side.
+
+A pane whose required input does not match shows its reason in place of the
+picture, naming the columns it wanted and usually a `SELECT` that would satisfy
+it. An **optional** CTE that does not match, such as a `vertices` CTE without
+an `id`, is dropped and the pane draws without it. Series says so in its status
+line; the other panes drop it silently, so when a decoration seems to be
+ignored, check its column names first.
+
+The tab titles carry one mark each: `-` when the pane cannot draw what the
+last Run would hand it, `*` when it writes a signal the buffer reads, and `!`
+when it writes a name the buffer reads that nothing has filled yet (or, on a
+tool pane, when it has something to report). A pane is never marked merely
+because nothing has run.
+
+Clicks publish signals (see [Signals](#signals-live-parameters)). The panes
+whose marks are result rows (Table, Projection, Timeline, World, Kanban, Chat,
+Cards, Distribution, Series, Chart, and Files for a file a row names) write
+`selection`, the row cursor. Every
+`selection` write also stamps `selection_node` (the node that row belongs to),
+`selection_id` (when the result has a leeway id column) and `selection_key`
+(when the result has a column named `key`). The panes whose marks are not rows
+write a **value** to `selection_key` instead: Network, Graphview and Sankey a
+vertex id, Icicle a frame label, Treemap a leaf name, Files a path.
+Unselecting writes the empty string.
+
 ### Table
 
 The result grid, in a leading-`#` selectable form. Click anywhere on a row to select
 it — the selection is absolute (it survives paging), is published as the
-`selection` signal, and drives the **Detail** view.
+`selection` signal, and drives the **Detail** view. A result with a column named
+`key` also publishes that row's `key` as `selection_key`, and one with a leeway id
+column publishes the id as `selection_id`, so a second query can follow the click
+by value rather than by row number.
 Above the grid, the pager pages through large results and lets you pick the page size
 (50 to 10000 rows); a `rows A–B of N` label shows the current window. Column widths
 are sized from a sample of the first rows and are drag-resizable.
@@ -511,8 +596,10 @@ plotted. A row with no datetime attribute shows no timeline.
 
 Before a query it reads *Run a query, then select a row to see its detail.* When a
 result lands the first row is selected automatically, so the card populates straight
-away; click another row in **Table** (or a node in **Projection** / an event in
-**Timeline**) to retarget it.
+away; click another row in **Table**, or a mark in any pane that writes
+`selection` (a Projection node, a Timeline event, a Kanban card, a Chart point,
+…), to retarget it. The card follows the node the click came from, so a pane
+bound to a CTE drives Detail with that CTE's rows.
 
 ### Files
 
@@ -533,8 +620,8 @@ and no row of their own, and what a click publishes follows that split:
 **Table** follow — only when a result row named the entry. Detail is the
 preview: a row is metadata rather than bytes, so activating a file moves the
 cursor rather than opening anything. The status line says what the interning
-made of the result, including rows dropped at the cap or carrying no usable
-path.
+made of the result, including rows dropped at the 100,000-row cap or carrying
+no usable path.
 
 ### Projection
 
@@ -630,6 +717,13 @@ overlays shaded ranges: write a small `SELECT` returning `_tl_band_from` /
 `{tl_min:…}` / `{tl_max:…}` parameters — the Timeline publishes the events' time
 extent under those names as signals after each render.
 
+Clicking an event writes `selection`. Dragging on the strip under the axis
+brushes a window, published as `tl_from` / `tl_to`
+(`DateTime64(3, 'UTC')`). With nothing brushed they hold an unbounded window, so
+a query filtering on `t BETWEEN {tl_from:DateTime64(3, 'UTC')} AND
+{tl_to:DateTime64(3, 'UTC')}` runs, and keeps every row, before any brush. The
+**Map** reads the same window.
+
 ### World
 
 A schematic world choropleth (ADR-0114) over the active result: it claims a result
@@ -637,8 +731,11 @@ whose string column resolves to countries (ISO 3166 alpha-2/alpha-3 codes or
 country names), fills each country by the value column picked in the toolbar
 (**auto** = first numeric; no numeric column falls back to presence-only fill), and
 counts unmatched and duplicate rows in its status line (duplicates: last row wins —
-the pane never aggregates for you). Hover reads `name · value`; clicking a country
-selects its row, driving the Detail tab. The **Snippets** library carries a
+the pane never aggregates for you). The country column is the first string column,
+preferring one whose name hints at a country, in which at least half of the
+sampled distinct values resolve. Hover reads `name · value`; clicking a country
+selects its row, driving the Detail tab, and publishes the country as
+`selection_country`. The **Snippets** library carries a
 ready-to-run example ("World choropleth (countries)").
 
 ### Chat
@@ -704,6 +801,238 @@ recording. With nothing to draw the pane offers **publish sample
 cards**: an ordinary ad-hoc dataset, `keelson('fixture_cards')`, of images and
 recordings chosen to be awkward, and the query that reads it.
 
+### Kanban
+
+The result as cards in lanes (ADR-0122). One row is one card. The board needs a
+`lane` and a `title` column, of any type. An optional `subtitle` adds a second
+line. Up to three `dot_<label>` integer columns add tallies drawn as coloured
+dots, and `countIf(…)` produces one. A dot column named `` `dot_open@warning` ``
+picks its colour from the tone vocabulary (`success`, `warning`, `error`,
+`info`, `accent`, `neutral`, `disabled`). Without a tone, the dots take
+success, warning and grey in column order. A tally of zero draws no dot. The
+board refuses a fourth dot column, a non-integer tally (`Float64`, `Decimal`)
+and an unknown tone by name.
+
+Lanes appear in the order rows first name them, so `ORDER BY` sets it. An
+optional `lanes` CTE with a `lane` column declares them instead, in its own
+row order, empty lanes included. A lane the rows use but the CTE leaves out is
+added at the end rather than dropped. An empty lane value is titled `(none)`.
+
+The board is read-only and caps at 2000 cards. The status line counts what it
+left out. Clicking a card writes `selection`, driving Detail and Table. The
+**Snippets** library has two boards: "Kanban board" and "ADR board".
+
+### Network
+
+A node-link graph laid out in ranks by Graphviz (ADR-0129), top-down or
+left-right. It reads **named CTEs, not the final `SELECT`**:
+
+- `edges` (required) has `source` and `target` of any type, and optionally
+  `label`, `tone` and a numeric `weight`. Rows with an empty endpoint are
+  dropped, and parallel edges between the same pair collapse to the first.
+- `vertices` (optional, decoration) has an `id`, and optionally `label`,
+  `group`, `shape` (`ellipse` / `oval`, `circle`, otherwise a box), `tone`,
+  `weight`, `opacity` and `selected`. An endpoint with no `vertices` row is
+  drawn anyway, undecorated. Tone wins over group colour. The tone vocabulary
+  is Kanban's without `disabled`.
+
+The final `SELECT` is free for whatever the Table should show, often
+`SELECT * FROM edges`. The pane caps at 400 nodes and 1000 edges and says so.
+Clicking a node writes its id to `selection_key`, and clicking it again
+clears it. It does not move the row cursor, because a node is not a row of the
+result. The **Snippets** library shows the contract on two corpora ("Tables
+that share a schema", "Decision graph").
+
+### Graphview
+
+The same `edges` / `vertices` contract laid out live (ADR-0227, widened by
+ADR-0231): a force simulation, a tree, or rings around chosen centres, which
+you can drag, zoom and pin. It honours more of the contract than Network:
+
+- **Size, colour, opacity, aura.** `weight` sizes nodes and thickens edges, and
+  `radius` overrides it. `group` is drawn as a translucent aura once
+  **auras by group** is ticked; a `groups` string-array column gives a node
+  several. `donut`, `donut_total` and `donut_tones` draw a ring. `shape` is
+  ignored, since every node is a circle.
+- **Placement.** `pin_x` / `pin_y` fix a node. `start_x` / `start_y` seed one
+  that is new to the picture. `pull_x` / `pull_y` / `pull_strength` draw it
+  towards a point. `center` marks the centres of the radial layout. `lat` /
+  `lon` place the graph on a map, over a basemap or offline country outlines,
+  and a pin on the same row wins over them.
+- **Interaction.** `pick` and `selected` preselect a node. `fit` names the nodes
+  the camera frames. `label_always` keeps a label drawn past the 48-node
+  label threshold. On edges, `id` distinguishes parallel edges, and `opacity`,
+  `length` and `strength` tune the spring.
+
+An optional one-row **`graph_opts`** CTE carries settings: `layout` (`force`,
+`force_gravity`, `hierarchical`, `radial`, `random`), `orientation`,
+`force_model`, the spacings (`ring_dist`, `row_dist`, `col_dist`, `k_scale`,
+`gravity`, `exaggeration`), `hide_edges`, `undirected`, `pin_on_drag`, and
+the encodings `size_by`, `tone_by`, `opacity_by` and `aura_by`. An encoding
+names a column of `vertices` or a graph metric: `degree`, `in_degree`,
+`out_degree`, `pagerank`, `betweenness`, `kcore`, `triangles`, `clustering`,
+`clique`, `component`, `scc`, `component_size`, `distance`, `distance_in`,
+`distance_out`, `relevance`. A leading `-` inverts the scale. `component` and
+`scc` are categories, so they can colour or group but not size. The distance
+metrics measure from the selection, or from the hover with
+`distance_from = 'hover'`. A setting the pane cannot use is named in the status
+line rather than guessed at. A control you move in the toolbar outranks
+`graph_opts`, which outranks the default.
+
+The pane publishes more than any other, all under `gv_*`, and all seeded so a
+query reading them runs from the start. Selection and hover are **state**:
+`gv_selection` (`Array(String)`), `selection_key`, `gv_hover` (after a short
+dwell) and `gv_aura_hidden`. The camera is also state, written when a pan or
+zoom settles: `gv_min_x` … `gv_max_y`, `gv_zoom`, and `gv_min_lat` …
+`gv_max_lon` when located. Gestures are **moments** that keep their last
+value: `gv_focus` (double-click), `gv_context` (secondary click),
+`gv_edge_source` / `gv_edge_target` / `gv_edge_id` (edge click), `gv_pin_id`
+/ `gv_pin_x` / `gv_pin_y` (and `_lat` / `_lon`) at the end of a drag, and
+`gv_bg_x` / `gv_bg_y` (background click).
+
+Because the graph CTEs re-run when a signal they read moves, a graph can grow
+by query. An `edges` CTE that reads `{gv_focus:String}` re-centres on the node
+you double-click, and a `vertices` CTE that feeds `gv_pin_*` back into `pin_x`
+/ `pin_y` makes a drop stick. When only Graphview's own `gv_*` signals moved,
+the rebuild keeps the camera and the surviving nodes' positions. A Run, an edit,
+or another pane's signal reframes. The caps are 2000 nodes and 6000 edges.
+The **Snippets** section "The graph contract, widened" walks through all of
+this.
+
+### Sankey
+
+A flow-quantity diagram (ADR-0159) over **named CTEs**:
+
+- `flows` (required) has `source`, `target` and a positive `value`, plus an
+  optional `label` and `tone`. Rows repeating a pair are **summed**, unlike
+  Network. Rows with an empty endpoint, a value that is not a positive finite
+  number, or a self-flow are dropped and counted.
+- `nodes` (optional) has an `id`, plus `label`, `stage` (a column index ≥ 0),
+  `order` (the position within a stage), `group` and `tone`.
+
+When **every** node, including those named only by `flows`, has a `stage`, the
+diagram is an **alluvial**: fixed columns, ordered within each column. Otherwise
+it is a Sankey laid out from the flows, and a cycle cannot be laid out. The
+**mode** control forces one or the other, and an alluvial without stages says
+which node lacks one. **fill** chooses polygons or columns (with an optional
+gradient), and **hide labels** clears the bars. The caps are 300 nodes and 1500
+flows. Hover reads a bar's in and out or a ribbon's share of the total, and a
+click pins it. A pinned bar writes its node id to `selection_key`, and a pinned
+ribbon or no pin writes the empty string. The **Snippets** library has three
+diagrams ("Flow diagram", "Where the disk went", "Query outcomes").
+
+### Distribution
+
+Distribution summaries side by side (ADR-0161): one row per series, in the
+contract the `descriptiveStatistics(…)` macro emits, so most queries start
+there. By exact name:
+
+- `series` (any type), `n` (an integer count), and `ps` / `qs` (arrays of
+  `Float64` or `Float32`). These are the quantile levels and their values, at
+  least two of each, with `ps` strictly increasing inside (0, 1) and `qs`
+  non-decreasing.
+- Optional: `n_null`, `x_min` / `x_max` (the extremes, for the boxen view),
+  `estimator` (`exact-hf7` drops the "excludes sketch error" caveat), and the
+  histogram triple `hist_lo` / `hist_hi` / `hist_w`, which must come all three
+  together or not at all.
+
+One row that breaks the grid rules rejects the whole result, naming the row.
+The views are **ECDF**, **Shift** (when two or more series share one `ps`
+grid), **Boxen**, and **Histogram** (when every series carries the histogram
+columns, which the macro does not emit). The pane draws 32 series and
+confidence bands on up to three, then only on the selected one. Clicking a
+series chip writes `selection`, whose row is the series, and the selection is
+the baseline the shift function compares against. A Table click selects it too.
+The **Snippets** library has four ("Distribution summary", "Same mean and sd,
+four different shapes", "Two treatments and the shift function", "A real
+corpus").
+
+### Icicle
+
+A hierarchy as an icicle plot or a flamegraph (ADR-0160). It accepts either of
+two contracts, by exact name:
+
+- **Paths**: a `stack` array (any element type, read as text) and a `value`,
+  one row per root-to-leaf path. Rows sharing a path are summed and interior
+  frames are created. A path in a string column becomes an array with
+  `splitByChar('/', path) AS stack`.
+- **Nodes**: one row per node with `id`, `parent` and `value`, and an optional
+  `label`. An empty or `NULL` parent is a root. An unknown parent or a
+  self-reference becomes a root and is counted, and a repeated id keeps its
+  first row.
+
+`value` is the node's **own** amount, not its subtree's. It must be a finite
+number ≥ 0, and a numeric string works too. An optional `unit` labels it. The
+toolbar sets orientation (icicle or flame), sibling order (value, name,
+input), colour (branch, label, depth), a prune threshold, and labels. The caps
+are 20,000 frames and depth 256. Clicking a frame pins it and writes its label
+to `selection_key`. The **Snippets** library has "Where the bytes went in a
+leeway table", "The same disk, as an icicle" and "One row per node".
+
+### Treemap
+
+The same hierarchy as nested areas (ADR-0166), over Icicle's contracts, plus a
+second measure. An optional **`color`** column colours the cells. A numeric
+`color` is a scale, which `color_min` / `color_max` / `color_unit` can pin;
+parents take their children's value-weighted mean. A string `color` is a
+category; parents take it only when all their children agree, and categories
+past seven reuse hues. A forest is gathered under a root named `all`. The
+toolbar sets the colour reading (value or category, or depth) and how deep to
+show (drill, three, four, all). Drilling is a place in the view and is not
+published. Clicking a **leaf** pins it and writes its name to `selection_key`.
+The **Snippets** library has "The same hierarchy as area, and a second measure"
+and "Rolling the tail up into its parent".
+
+### Series
+
+Numbers against a time axis (ADR-0163). The one result pane that claims by
+**type**, not by name: the first `DateTime64`, `Date` or `Date32` column is
+the axis, and every integer or float column is a lane, up to twelve. A plain
+`DateTime` arrives as a bare `UInt32` and becomes a lane rather than an axis,
+so wrap it in `toDateTime64(…, 3)`. The pane says so when it is missing. It
+draws gaps and `NULL`s as breaks and fills nothing in. The toolbar classifies
+the grid (regular, regular with gaps, irregular, unordered, too short) and
+offers to write the missing `ORDER BY`, `WITH FILL` or `GROUP BY
+toStartOfInterval` into the editor. Above a few points per pixel the line is
+drawn as a min/max envelope, so a one-sample spike survives. Clicking writes
+`selection`, the nearest row.
+
+Two optional CTEs overlay the plot. `scores` (a time column plus a numeric
+`score`, optional `warm_up`) adds a linked score plot underneath, and `spans`
+(`_tl_band_from`, `_tl_band_to`, `_tl_band_color`, optional `_tl_band_label`)
+shades ranges. When either CTE fails, is still running, or has columns the
+overlay cannot use, the status line names it and the reason.
+
+The `ts*` functions produce exactly those shapes. They run **in play**, not on
+the server: `tsSmooth(t, v, halfWidth)`, `tsProfile(t, v, window)`,
+`tsAnomalyScores(t, v, window)` and `tsAnomalySpans(t, v, window, k)`. Each
+must be the only select item of a top-level CTE, reading another CTE of the
+same query with no other clauses:
+`scores AS (SELECT tsAnomalyScores(t, v, 60) FROM base)`. What reaches
+ClickHouse is `base`, and the transform runs over its rows. Integer arguments
+may be `{name:Type}` slots, so a signal can drive the window. Nothing in the
+statement may read a client-computed CTE; bind a pane to it instead. With a
+`scores` node over the charted lane, the score plot gains a baseline and
+confirm / false-alarm buttons per flagged span, which append to
+`boxer.tslabels`. The **Snippets** library covers this from "A number against
+time" through "Reading a client node".
+
+### Chart
+
+The plain chart the specialised panes leave uncovered (ADR-0172), by exact
+name. With a **`z`** column the result is a heatmap: `x` and `y` are the grid
+keys and are required, `z` the numeric cell value, one row per cell. Duplicate
+cells and grids past 40,000 cells are refused with the `GROUP BY` that fixes
+them. Otherwise every integer or float column other than `x` is a **lane**,
+including one named `y`. `x` is optional (rows number themselves without it),
+and a `series` column splits the rows into groups. A key's axis follows its
+type: time-typed keys are shown in UTC, numbers are sorted, and anything else is
+a category in first-seen order, never sorted. The mark chips choose bars, lines
+or points (bars by default for a categorical `x`), and **log** appears when
+every value is positive. The pane reads 100,000 rows and draws 24 lanes,
+counting the rest. Clicking writes `selection`. The **Snippets** section "Bars,
+lines and a heatmap" has six examples.
+
 ### Map
 
 An in-database-rendered geo raster over a pannable map (ADR-0096), for tables with
@@ -711,9 +1040,25 @@ An in-database-rendered geo raster over a pannable map (ADR-0096), for tables wi
 `planes_mercator`): the visible viewport is rendered to pixels by a ClickHouse
 query on each pan/zoom settle. Table, sampling, colour mode and opacity are panel
 controls — this tab queries on its own, independent of the editor's result. The
-settled viewport is published as the `vp_*` signals (packed-mercator bounds plus
-output dimensions), so any query can reference `{vp_min_x:UInt32}` … to
-cross-filter against the visible extent.
+table field takes a table or a table function. With **refine** on, a settled view
+is drawn first from the most-sampled table and then refined towards the full one,
+by the naming convention `<base>_sample100` → `<base>_sample10` → `<base>`; a
+level the server does not have is skipped.
+
+The colour modes are **Altitude & Speed** (needs `altitude` and `ground_speed`),
+**Density** (any table with the two mercator columns), **Speed** (needs
+`ground_speed`) and **Custom**. A custom expression is spliced into the raster
+query: it must define `red`, `green` and `blue` (0–255), may define `alpha`, and
+can read `total`, `max_total`, `transparency` and aggregates of any column.
+
+A **time column** names the source's timestamp. While the Timeline has a window
+brushed, the raster keeps only rows inside `tl_from` / `tl_to`, so the map follows
+the brush.
+
+The settled viewport is published as `vp_min_x`, `vp_max_x`, `vp_min_y`,
+`vp_max_y` (packed-mercator bounds) and `vp_w`, `vp_h` (output pixels), all
+`UInt32`, so any query can reference `{vp_min_x:UInt32}` … to cross-filter
+against the visible extent. They block until the map has settled once.
 
 ### Vector field
 
@@ -894,6 +1239,33 @@ A leeway `TableDesc` inspector over the active result's Arrow schema — column
 types and inferred structure in a master-detail view (ad-hoc results show plain
 opaque columns; tagged sections aren't recoverable from an arbitrary result).
 
+### Docs
+
+The server's own documentation for whatever the caret is on: a function, a data
+type, a table engine, a format or a setting. When the caret rests (a quarter
+second), the pane looks up the name under it and then the calls around it, so
+inside `toHour(|)` it shows `toHour`. **Follow caret** turns that off, and the
+**look up** field takes a name directly and wins over the caret.
+
+The source is a query against the endpoint, run like any other (routing, auth,
+rewrites):
+
+```sql
+SELECT name, toString(type) AS type, description, source
+FROM system.documentation
+WHERE lower(name) = lower({n:String})
+```
+
+That query is joined to the server's SQL user-defined functions
+(`system.functions WHERE origin = 'SQLUserDefined'`), whose page is the
+function's `CREATE` statement, so the leeway `LW_*` surface documents itself.
+`system.documentation` arrived in ClickHouse 26.x, and on an older server the
+pane says so. A name with several kinds (`Array`, `JSON`, …) gets a kind picker.
+Code blocks on a page carry Insert / Replace, and links to other ClickHouse
+pages open in the pane. To search all the documentation at once, including
+play's help and the ADRs, use `docsearch('…')` in a query (see the **Snippets**
+page). An embedder can replace the source (the `play-pluggable-docs` how-to).
+
 ### Preview
 
 The editor's SQL re-rendered in its canonical, syntax-highlighted form (comments
@@ -913,14 +1285,43 @@ it is what would actually be sent.
 ### Diagnostics
 
 The single home of the playground's error texts — the other tabs only point here.
-Three sections: **Statement** is the parse status of the (debounced) editor buffer;
+Seven sections, in order. **Statement** is the parse status of the (debounced) editor buffer;
 when boxer's built-in grammar rejects it, an `EXPLAIN AST` probe against the live
 endpoint tells you whether that is just a boxer grammar gap (ClickHouse parses it —
 the statement will run, with the canonical preview, parameter widgets, query-graph
 split and pre-execute rewrites unavailable) or genuinely broken SQL (ClickHouse's
-own diagnostic is shown, with positions matching the editor). **Query graph** is
-the split status of the last Run. **Last run** carries the full execution error —
-the status bar shows only its first line — or the usual result summary.
+own diagnostic is shown, with positions matching the editor). **Pre-execute
+rewrites** lists any rewrite that failed and was skipped, with its full error;
+the statement ships without it (see [Passes](#passes)). **Column resolution**
+names each leeway column handle in the buffer that does not resolve, with
+suggestions, before anything reaches the server. **Security context** gives the
+buffer's security class (read, read-egress or mutating), the construct that
+raised it, and the tables the statement returns 1:1. **Query graph** is the
+split status of the last Run. **Signal emits** reports panel signal writes the
+store dropped. **Last run** carries the full execution error — the status bar
+shows only its first line — or the usual result summary.
+
+### Passes
+
+The pre-execute rewrite pipeline (ADR-0108, ADR-0119) over the statement Run
+would ship, drawn as a spine of passes in the order they apply. It is the same
+catalog a query can read as `keelson('sql_passes')`. Most of the client macros
+the Vocabulary lists are here: `descriptiveStatistics`, `docsearch`, the
+`LW_ID_*`, `LW_COMPONENT*`, `LW_GET*` and constructor families, `gloss()`, the
+lading snapshot functions, and leeway column-name resolution. Passes bound late
+to this client are drawn recessed.
+
+Each pass is coloured by what it did to **this buffer**: rewrote it, left it
+alone, failed and was **skipped** (the statement ships without that rewrite,
+and Run is not blocked), or **declined** because the client's binding does not
+support it. A pass that took over 100 ms is amber. The line under the canvas
+counts each outcome and names every skipped or declined pass with the first line
+of its error, and Diagnostics has the full text. Clicking a pass shows its
+description, properties, provenance and outcome on this buffer. A **rewrite
+cost** section breaks the last Run into compile, server and transfer time and
+the rewrite into its passes. Play's own steps (parameter extraction, SQL-valued
+parameter splicing, the **Conditions** rewrite, appending `FORMAT`) appear in
+the outcomes but have no box on the spine.
 
 ### History
 
@@ -957,7 +1358,9 @@ where a name is actually evaluated — which is what decides how it fails:
 - **Client** — macros play rewrites into ordinary SQL before the statement leaves,
   so they work against any endpoint, including one carrying no UDFs at all:
   `descriptiveStatistics(...)`, `docsearch('...')`, `keelson('...')`, the leeway
-  extraction and constructor families (`LW_GET*`, `LW_PLAIN` / `LW_TV*` —
+  extraction and constructor families (`LW_GET*`, `LW_PLAIN` / `LW_TV*`,
+  `LW_COMPONENT` / `LW_COMPONENT_FILTER`, the lading snapshot functions `fs`,
+  `fsdata` and `fssnap` —
   though what `LW_GET*` expands *into* calls the server-side read-back
   helpers, and the panel marks that dependency), `gloss(...)` (an alias
   declaring how a column renders — see [Glosses](#glosses)), and `LW_ID_*`
@@ -1139,6 +1542,44 @@ parameters, a sample rendering, its affinities, and two Insert buttons —
 matched but lost: a later directive behind an earlier one, an affinity behind
 a directive, any rule behind an alias. **Raw cells** on the Table toolbar
 bypasses every gloss for the session.
+
+### Model
+
+A prompt book over the buffer (ADR-0254), which asks a language model the host
+provides. The host needs `BOXER_LLM_ENDPOINT` and `BOXER_LLM_MODEL` set. Without
+them, or in a window with no host to ask, the pane says why and offers nothing.
+Three prompts:
+
+- **Explain this query** sends the buffer and returns prose.
+- **Fix this error** sends the buffer and the last Run's error, and returns a
+  corrected query. With no error, it runs over the buffer alone.
+- **Ask** takes a question and returns a query. It is told play's column
+  conventions (`lane`, `title`, `label@mime`, `{name:Type}`) and to write a
+  single `SELECT`.
+
+Fix and Ask are grounded in the endpoint's schema
+(`system.columns` of the current database, capped) and may call tools: list
+tables, describe a table, check a statement against boxer's grammar, and read
+`keelson('sql_passes')`. They retry up to three times on a statement that does
+not validate. **Nothing runs on its own**: a returned query is text with
+**Insert** (at the caret) and **Replace** (the whole buffer), and Run is still
+yours. The header shows the model, elapsed time, attempts and tokens, and marks
+an answer cut short by `BOXER_LLM_MAXTOKENS`.
+
+### Experiments
+
+Drives one leeway batch through a chosen rendering **sink** and shows what it
+draws, which is the same catalogue the vizeval harness scores (the
+`vizeval-score-renderings` how-to). **source** picks the batch: `fixture`, a small
+built-in batch with plain sections, a co-section group and a repeated tagged
+section, or `result`, the active result. The `result` source must be
+leeway-shaped (`id:…` / `tv:…` columns, as from `SELECT * FROM anchor.facts`), or
+the pane says it has no section structure to drive. **sink** picks the rendering
+(`card`, `topology`, `json`, `unicode`, `topo`, `braille`, `treemap`, `chart`,
+`graph`, `hierarchy`, `lens`), and the controls under it are that sink's own
+options. Each sink takes the first rows up to its own cap, from 16 to 128, and the
+pane says when it cut. `BOXER_PLAY_EXPERIMENTS` seeds the source, sink and options
+as JSON for a scripted capture.
 
 ## Configuration
 

@@ -189,10 +189,14 @@ was cycling. Human writers (the pane, the Signals editor, a history restore)
 never count towards it, which is what separates a feedback loop from someone
 dragging a control.
 
-Selection is three signals, not one. A row click writes the ordinal cursor
-(`selection`), the node it indexes (`selection_node`), and — when the
-clicked result carries a leeway `id:id:…` column — the row's id *value*
-(`selection_id`). The dispatcher stamps all three; panels are unaware. Reads
+Selection is four signals, not one. A row click writes the ordinal cursor
+(`selection`), the node it indexes (`selection_node`), — when the clicked
+result carries a leeway `id:id:…` column — the row's id *value*
+(`selection_id`), and — when it carries a column named `key` — that value as
+`selection_key`. The dispatcher stamps them; panels are unaware. Panels whose
+marks are not result rows (the graph, flow and hierarchy panes, the file
+browser) skip the cursor and publish a value to `selection_key` directly
+(ADR-0129 §SD4). Reads
 are node-scoped (a panel sees the cursor only when it indexes that panel's
 node), the Detail tab follows `selection_node` by default, and
 `{selection_id:UInt64}` cross-filters correctly regardless of node or
@@ -200,6 +204,11 @@ ordering because it is a key, not a position. Because it tracks the last
 *leeway* selection, a click on an id-less result leaves it behind the cursor;
 the Signals section marks the row when that has happened rather than leaving
 a value that looks stale unexplained.
+
+The reserved names — each with a fixed type, an owning pane, and either a seed
+or a block-until-written rule — are declared in one table
+(`reservedSignals`, `apps/play/play_signal_decl.go`). The play help's
+*Features* page lists them for users, beside each pane's input contract.
 
 The Graph tab renders this whole picture live — a layered drawing
 (constants and signals → query nodes → panel tabs, with the provenance
@@ -216,7 +225,7 @@ Graph, Diagnostics, and the Map register as chrome with no PanelI (SD7 as
 structure; the Map is a driver over its own panel-authored node). The tab
 set is instance-scoped and frozen at first render: an embedder customizes
 it between construction and mounting via `Tabs().Add/Replace/Remove`, with
-dock ids frozen so persisted layouts survive (built-ins 1..13, embedders
+dock ids frozen so persisted layouts survive (built-ins below 64, embedders
 ≥64). Two extension granularities stay deliberately distinct (D5): the
 registry works at tab level; body-level hooks such as `SetDetailContent`
 remain panel-owned seams.
