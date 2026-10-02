@@ -382,13 +382,14 @@ func TestUpdateViewportEmitsSignalsAndTemplate(t *testing.T) {
 
 	d.updateViewport(51.3, 51.7, -0.6, 0.3, 800, 600, graphEmitter{graph: g})
 
-	b, ok := bboxFromLatLon(51.3, 51.7, -0.6, 0.3)
+	view, ok := bboxFromLatLon(51.3, 51.7, -0.6, 0.3)
 	require.True(t, ok)
+	b, bw, bh := (&MapDriver{}).requestBox(view, 800, 600) // the view plus SD7's margin
 	sig := g.signals()
 	for name, want := range map[SignalID]uint32{
 		"vp_min_x": b.minX, "vp_max_x": b.maxX,
 		"vp_min_y": b.minY, "vp_max_y": b.maxY,
-		"vp_w": 800, "vp_h": 600,
+		"vp_w": bw, "vp_h": bh,
 	} {
 		p, found := sig.Get(name)
 		require.True(t, found, "signal %s must be emitted", name)
@@ -401,7 +402,7 @@ func TestUpdateViewportEmitsSignalsAndTemplate(t *testing.T) {
 
 	// The template is viewport-free: a pan changes only the params.
 	d.updateViewport(48.0, 48.4, 2.0, 2.9, 800, 600, graphEmitter{graph: g})
-	require.Equal(t, params["param_vp_w"], "800")
+	require.Equal(t, params["param_vp_w"], "1200")
 	tmplAfterPan := d.template
 	d.updateViewport(51.3, 51.7, -0.6, 0.3, 800, 600, graphEmitter{graph: g})
 	require.Equal(t, tmplAfterPan, d.template, "pan/zoom never changes the SQL text")
@@ -829,4 +830,43 @@ func TestMapDriverServesARevisitFromMemory(t *testing.T) {
 	visit(8)
 	require.Len(t, exec.asked(), 9, "Refresh climbs the ladder again")
 	require.False(t, d.memoOnScreen)
+}
+
+// SD7's margin: a settled view is widened by mapOverscan on every side at its
+// own pixel scale; a small pan inside that box emits the same request, and a
+// pan out of it, or a zoom, asks again.
+func TestRequestBoxOverscan(t *testing.T) {
+	var d MapDriver
+	view, ok := bboxFromLatLon(47, 48, 8, 9)
+	require.True(t, ok)
+	b, w, h := d.requestBox(view, 800, 400)
+	require.EqualValues(t, 1200, w)
+	require.EqualValues(t, 600, h)
+	require.True(t, b.contains(view))
+	spanX := float64(view.maxX - view.minX)
+	require.InDelta(t, spanX*0.25, float64(view.minX-b.minX), 1)
+
+	shift := func(v mercBox, frac float64) mercBox {
+		d := uint32(spanX * frac)
+		return mercBox{minX: v.minX + d, maxX: v.maxX + d, minY: v.minY, maxY: v.maxY}
+	}
+	b2, w2, h2 := d.requestBox(shift(view, 0.2), 800, 400)
+	require.Equal(t, b, b2, "a pan inside the margin asks for the same box")
+	require.Equal(t, w, w2)
+	require.Equal(t, h, h2)
+
+	b3, _, _ := d.requestBox(shift(view, 0.3), 800, 400)
+	require.NotEqual(t, b, b3, "a pan past the margin asks again")
+
+	zoomed, ok := bboxFromLatLon(47.4, 47.6, 8.4, 8.6)
+	require.True(t, ok)
+	b4, _, _ := d.requestBox(zoomed, 800, 400)
+	require.NotEqual(t, b3, b4, "a zoom inside the box still asks again, at the new scale")
+	require.True(t, b4.contains(zoomed))
+
+	world, ok := bboxFromLatLon(-80, 80, -180, 180)
+	require.True(t, ok)
+	b5, _, _ := d.requestBox(world, 800, 400)
+	require.EqualValues(t, 0, b5.minX, "clamped to the world")
+	require.EqualValues(t, mercUnitMax, b5.maxX)
 }

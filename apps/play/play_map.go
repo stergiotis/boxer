@@ -102,6 +102,14 @@ type MapDriver struct {
 	memoShown    string
 	memoOnScreen bool
 
+	// req is the box last requested, with its raster size and the view's
+	// mercator units per pixel then (requestBox).
+	req      mercBox
+	reqW     uint32
+	reqH     uint32
+	reqScale float64
+	reqValid bool
+
 	// renderIdx selects builtinRenders; customColorSQL is the colour expression
 	// used when the "Custom" render is active.
 	renderIdx      int
@@ -179,7 +187,12 @@ var mapViewportSignals = signalsWrittenBy("map")
 
 const (
 	mapDebounce        = 250 * time.Millisecond
-	mapMaxDim   uint32 = 1024 // bounds query cost + Arrow size per view
+	mapMaxDim   uint32 = 1536 // bounds query cost + Arrow size per request (a 1024-px view plus the margin)
+
+	// mapOverscan is the margin requested around the view on every side, as
+	// a share of its span (ADR-0096 SD7, built 2026-10-02): a settled view
+	// still inside the box last requested at the same scale sends nothing.
+	mapOverscan = 0.25
 
 	// mercWorld is the Web-Mercator world SPAN: the projection maps the globe
 	// onto [0, mercWorld). It is 2^32 — the full-UInt32 mercator space that
@@ -864,9 +877,8 @@ func (inst *MapDriver) updateViewport(minLat, maxLat, minLon, maxLon float64, sc
 	}
 	// The raster covers only the part of the view the bbox kept (one world
 	// copy, the poles clamped); size it to that part so its pixels stay
-	// screen-sized rather than stretched.
-	w := clampDim(screenW * float32(fracX))
-	h := clampDim(screenH * float32(latCoverage(minLat, maxLat)))
+	// screen-sized rather than stretched, then widen it by the margin.
+	b, w, h := inst.requestBox(b, float64(screenW)*fracX, float64(screenH)*latCoverage(minLat, maxLat))
 	sampling := max(uint32(inst.sampling), 1)
 	r := builtinRenders[inst.renderIdx]
 	colorSQL := r.colorSQL
@@ -1327,6 +1339,38 @@ func clampMerc(v float64) uint32 {
 		return mercUnitMax
 	}
 	return uint32(v)
+}
+
+// requestBox is what a settled view asks for (SD7's margin): the box last
+// requested, while it still covers the view at the same scale, so a small pan
+// emits unchanged vp_* values and sends nothing; otherwise the view widened by
+// mapOverscan of its span on every side, clamped to the world, sized at the
+// view's own pixels per mercator unit.
+func (inst *MapDriver) requestBox(view mercBox, viewW, viewH float64) (b mercBox, w, h uint32) {
+	if viewW < 1 || viewH < 1 {
+		return view, clampDim(float32(viewW)), clampDim(float32(viewH))
+	}
+	scaleX := float64(view.maxX-view.minX) / viewW
+	scaleY := float64(view.maxY-view.minY) / viewH
+	if inst.reqValid && sameScale(scaleX, inst.reqScale) && inst.req.contains(view) {
+		return inst.req, inst.reqW, inst.reqH
+	}
+	widen := func(lo, hi uint32) (uint32, uint32) {
+		d := math.Round(float64(hi-lo) * mapOverscan)
+		return uint32(max(float64(lo)-d, 0)), uint32(min(float64(hi)+d, mercUnitMax))
+	}
+	b.minX, b.maxX = widen(view.minX, view.maxX)
+	b.minY, b.maxY = widen(view.minY, view.maxY)
+	w = clampDim(float32(float64(b.maxX-b.minX) / scaleX))
+	h = clampDim(float32(float64(b.maxY-b.minY) / scaleY))
+	inst.req, inst.reqW, inst.reqH, inst.reqScale, inst.reqValid = b, w, h, scaleX, true
+	return
+}
+
+func sameScale(a, b float64) bool { return math.Abs(a-b) <= 1e-9*max(a, b) }
+
+func (inst mercBox) contains(o mercBox) bool {
+	return o.minX >= inst.minX && o.maxX <= inst.maxX && o.minY >= inst.minY && o.maxY <= inst.maxY
 }
 
 func clampDim(px float32) uint32 {

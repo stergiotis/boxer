@@ -382,17 +382,19 @@ func TestMapViewportSeamEndToEnd(t *testing.T) {
 	firstSQL := d.template
 	demandSettled(1)
 	qs := got()
-	b1, _ := bboxFromLatLon(51.3, 51.7, -0.6, 0.3)
+	v1, _ := bboxFromLatLon(51.3, 51.7, -0.6, 0.3)
+	b1, w1, _ := (&MapDriver{}).requestBox(v1, 320, 240) // the view plus SD7's margin
 	require.Equal(t, strconv.FormatUint(uint64(b1.minX), 10), qs[0].Get("param_vp_min_x"),
 		"the viewport rides the param_* URL channel")
-	require.Equal(t, "320", qs[0].Get("param_vp_w"))
+	require.Equal(t, strconv.FormatUint(uint64(w1), 10), qs[0].Get("param_vp_w"))
 
 	// Pan to Paris: the SQL text must be unchanged; only the params move.
 	d.updateViewport(48.6, 49.1, 1.9, 2.9, 320, 240, graphEmitter{graph: g})
 	require.Equal(t, firstSQL, d.template, "a pan never changes the SQL text")
 	demandSettled(2)
 	qs = got()
-	b2, _ := bboxFromLatLon(48.6, 49.1, 1.9, 2.9)
+	v2, _ := bboxFromLatLon(48.6, 49.1, 1.9, 2.9)
+	b2, _, _ := (&MapDriver{}).requestBox(v2, 320, 240)
 	require.Equal(t, strconv.FormatUint(uint64(b2.minX), 10), qs[1].Get("param_vp_min_x"),
 		"the pan re-executed with the new viewport params")
 }
