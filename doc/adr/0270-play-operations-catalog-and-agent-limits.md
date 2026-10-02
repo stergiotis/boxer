@@ -285,6 +285,17 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Updates
+
+### 2026-10-02 — an uncovered run is refused when asked for
+
+`run` checks the buffer against the agent limits before the command is
+accepted, the way the run itself will: a run the grant does not cover is
+refused with the destination it needs (ADR-0269's remedy, update of this
+date) instead of being applied and failing in the status line, where the
+trial's models never looked. The run path keeps its own check, for a
+subquery run and for a buffer that changes before the run starts.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

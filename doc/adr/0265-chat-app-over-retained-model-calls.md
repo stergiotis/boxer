@@ -247,13 +247,31 @@ to the text above:
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-02 — refusals the model can act on, and typed operation tools
+
+The agent-operations-play trial (GLM-4.6 and GPT-6.1 Sol, two tasks in
+play) found every examined failure at a refusal that said what was wrong
+but not what to do: a `call` with no `args`, a run whose destination the
+grant lacked, a grant asking for nothing. The coordinator changed:
+
+- **`call` is `call_operation`,** and it refuses keys beside `window` and
+  `operation` by name instead of dropping them; a refusal of a call with no
+  `args` says where arguments go.
+- **A refusal carries `next`:** the tool to call and its arguments —
+  `request_access` with the destinations a run needs, or the operation's
+  argument schema. A grant request naming nothing to open says to name the
+  app.
+- **A call identical to one refused since the last call that was not** is
+  answered without being made again; GLM-4.6 had repeated one refused call
+  eighteen times.
+- **`describe_app` returns schemas as JSON objects,** not text holding
+  JSON.
+- **Operation tools** (`BOXER_CHAT_OPERATION_TOOLS`, off by default): each
+  operation of a window in the task is also a typed tool,
+  `w<window>_<operation>`, beside the fixed tools. It is a trial arm, not a
+  default: the tool list then changes from call to call.
 
 ## References
 

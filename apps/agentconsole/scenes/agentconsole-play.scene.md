@@ -18,8 +18,8 @@ scene:
 ADR-0270 on the headless host. The console opens play, takes a test grant
 whose only destination is `keelson:apps`, replaces play's buffer, runs it and
 describes the result. A second buffer reads `keelson('windows')`, which the
-grant does not list: the run fails with the agent limit before anything is
-sent.
+grant does not list: the run is refused when it is asked for, naming the
+destination the grant would have to list, and nothing is sent.
 
 Between the two, the person presses play's Run. The button goes through the
 same `run` handler as the agent's call (ADR-0270 §SD6), so the change is
@@ -95,11 +95,7 @@ turn does not refresh what the task read, so it reads again before writing.
 {"do":"key","text":"A","modifiers":16}
 {"do":"type","id":13823422873042478622,"text":"{}"}
 {"do":"click","name":"Call","role":"button","comment":"k8"}
-{"do":"wait","valueContains":"k8 · run · rendered","role":"label","settleMs":1500}
-{"do":"focus","id":3557791720187110425}
-{"do":"key","text":"A","modifiers":16}
-{"do":"type","id":3557791720187110425,"text":"describe_result"}
-{"do":"click","name":"Call","role":"button","comment":"k9"}
-{"do":"wait","valueContains":"\"error\":\"agent limit: the grant does not list keelson:windows","role":"label","comment":"the console's read of the result; play's own summary line says the same"}
+{"do":"wait","valueContains":"k8 · run · refused","role":"label","settleMs":1500,"comment":"refused when asked for, before anything is sent"}
+{"do":"wait","valueContains":"agent limit: the grant does not list keelson:windows","role":"label","nth":0,"comment":"the refusal names the destination"}
 {"do":"capture","text":"agentconsole-play-limit"}
 ```

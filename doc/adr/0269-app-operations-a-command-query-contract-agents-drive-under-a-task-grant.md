@@ -845,6 +845,24 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Updates
+
+### 2026-10-02 — a refusal names its remedy
+
+A refused outcome carries a **remedy** (`opwire.Remedy`): the destinations
+the task's grant would have to list, or the JSON Schema the arguments have
+to fit. An app declines with `app.RefuseForDestinations`; the dispatcher
+attaches the operation's schema when arguments do not fit it. The remedy
+reaches the coordinator on the outcome, which turns it into the model's
+next step (ADR-0265, update of this date); nothing is widened on the
+model's behalf, and under a real grant `request_access` still asks the
+person.
+
+Under a test grant the actions file (`BOXER_AGENT_ACTIONS_FILE`) also holds
+each call's arguments as the model sent them, and a row for each refused
+grant request; neither reaches `boxer.facts`. A trial could otherwise see
+only an argument digest, and a refused grant left no trace.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.
