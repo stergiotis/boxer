@@ -58,6 +58,7 @@ status: draft
 | FetchGraphEvents | Fetcher | No | 0 | 0 | - | - |
 | FetchGraphMetrics | Fetcher | No | 0 | 0 | - | - |
 | FetchGraphSelection | Fetcher | No | 0 | 0 | - | - |
+| FetchPixelsPerPoint | Fetcher | No | 0 | 0 | - | - |
 | FetchR10 | Fetcher | No | 0 | 0 | - | - |
 | FetchR16ScrollDelta | Fetcher | No | 0 | 0 | - | - |
 | FetchR17Modifiers | Fetcher | No | 0 | 0 | - | - |
@@ -3242,6 +3243,18 @@ Block
 | kinds | u32h |
 | keyA | u64h |
 | keyB | u64h |
+
+---
+
+### FetchPixelsPerPoint
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| pixelsPerPoint | f32 |
 
 ---
 

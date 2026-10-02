@@ -114,6 +114,18 @@ func (inst *Fetcher) CollectFetchGraphSelection() (graphIds []uint64, kinds []ui
 	keyB = inst.iterateU64h()
 	return
 }
+func (inst *Fetcher) FetchPixelsPerPoint() (pixelsPerPoint float32) {
+	inst.invoke(FuncProcIdFetchPixelsPerPoint)
+	pixelsPerPoint = inst.readF32()
+	return
+}
+func (inst *Fetcher) IssueFetchPixelsPerPoint() {
+	inst.invoke(FuncProcIdFetchPixelsPerPoint)
+}
+func (inst *Fetcher) CollectFetchPixelsPerPoint() (pixelsPerPoint float32) {
+	pixelsPerPoint = inst.readF32()
+	return
+}
 func (inst *Fetcher) FetchR10() (idsTrue []uint64, idsFalse iter.Seq[uint64]) {
 	inst.invoke(FuncProcIdFetchR10)
 	idsTrue = inst.readU64h()

@@ -198,6 +198,9 @@ type GraphSelectionValue []GraphSelectedItem
 type GraphMetricsValue []GraphMetrics
 
 type StateManager struct {
+	// pixelsPerPoint is fetchPixelsPerPoint's last answer (GetPixelsPerPoint).
+	pixelsPerPoint float32
+
 	responseFlags        *containers.BinarySearchGrowingKV[uint64, ResponseFlagsE]
 	r10Databinds         *containers.BinarySearchGrowingKV[uint64, *bool]
 	r9F64Databinds       *containers.BinarySearchGrowingKV[uint64, *float64]
@@ -734,6 +737,7 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchGraphSelection()
 	fetcher.IssueFetchGraphMetrics()
 	fetcher.IssueFetchFrameMetrics()
+	fetcher.IssueFetchPixelsPerPoint()
 
 	ids, resps := fetcher.CollectFetchR7()
 	d := inst.responseFlags
@@ -990,6 +994,18 @@ func (inst *StateManager) Sync() {
 	// call whose elapsed it would otherwise need to peek at.
 	interpretUs, passNr := inst.fetcher.CollectFetchFrameMetrics()
 	metrics.Current.RecordRust(interpretUs, passNr)
+
+	// Collected in the position it was issued, after the frame metrics.
+	inst.pixelsPerPoint = inst.fetcher.CollectFetchPixelsPerPoint()
+}
+
+// GetPixelsPerPoint is the display's physical pixels per logical point as of
+// the last frame; 1 before the first Sync has read it.
+func (inst *StateManager) GetPixelsPerPoint() float32 {
+	if inst.pixelsPerPoint <= 0 {
+		return 1
+	}
+	return inst.pixelsPerPoint
 }
 
 // ResponseFlagsAny reports whether any widget the host answered for in the

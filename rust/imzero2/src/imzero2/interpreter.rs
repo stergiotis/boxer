@@ -5321,6 +5321,18 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_u64h(len, self.graph_selection_key_b.drain(..))?;
                 self.io.flush()?;
             }
+            FuncProcId::FetchPixelsPerPoint => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchPixelsPerPoint");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                self.io.write_plain_f32(c.pixels_per_point())?;
+                self.io.flush()?;
+            }
             FuncProcId::FetchR10 => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::FetchR10");

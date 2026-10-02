@@ -488,5 +488,16 @@ self.io.write_plain_b(shift)?;
 		AddReturnValue("shiftPressed", ctabb.B).
 		Build())
 
+	// The display's physical pixels per logical point this frame — what a
+	// widget that draws its own raster multiplies its logical size by to
+	// match the screen (play's Map, ADR-0096 SD7's device resolution).
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchPixelsPerPoint").
+		WithApplyCodeClientRust(rustClientCode(`
+self.io.write_plain_f32({{EguiContext}}.pixels_per_point())?;
+{{SendMessage}}
+`)).
+		AddReturnValue("pixelsPerPoint", ctabb.F32).
+		Build())
+
 	return
 }
