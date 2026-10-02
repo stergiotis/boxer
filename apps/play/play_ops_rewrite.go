@@ -105,23 +105,18 @@ func addRewriteOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			case sn.client == nil:
 				return RewriteTrace{}, app.RefuseOperation("the window has no endpoint")
 			}
-			obo := call.OnBehalfOf
-			catalog := obo == nil || slices.Contains(obo.Destinations, endpointDestination(sn.client))
 			stmt := in.Sql
 			if strings.TrimSpace(stmt) == "" {
 				stmt = sn.state.Sql
 			}
-			if strings.TrimSpace(stmt) == "" {
-				return RewriteTrace{}, app.RefuseOperation("the buffer is empty; pass sql")
+			if err := statementBounds(stmt); err != nil {
+				return RewriteTrace{}, err
 			}
-			if len(stmt) > schemaMaxStatement {
-				return RewriteTrace{}, app.RefuseOperation("the statement is longer than 16 KiB")
-			}
-			return traceRewrite(sn.client, stmt, in.Costs, catalog), nil
+			return traceRewrite(sn.client, call.OnBehalfOf, stmt, in.Costs), nil
 		})
 }
 
-func traceRewrite(client *Client, stmt string, costs bool, catalog bool) (out RewriteTrace) {
+func traceRewrite(client *Client, obo *app.OnBehalfOf, stmt string, costs bool) (out RewriteTrace) {
 	if _, err := nanopass.Parse(stmt); err != nil {
 		out.ParseError = err.Error()
 	}
@@ -135,14 +130,9 @@ func traceRewrite(client *Client, stmt string, costs bool, catalog bool) (out Re
 	}
 	var obs []passreg.ApplyObservation
 	observe := func(o passreg.ApplyObservation) { obs = append(obs, o) }
-	var residual string
-	var params map[string]string
+	residual, params, catalog := client.rewriteFor(obo, stmt, observe)
 	if catalog {
-		residual, params = client.buildResidualObserved(stmt, observe)
 		out.Handles = unresolvedHandles(client, stmt)
-	} else {
-		residual, params = client.buildResidualOffline(stmt, observe)
-		out.Needs = []string{endpointDestination(client)}
 	}
 	out.Expanded = catalog
 	body := finishStatementObserved(residual, observe)
@@ -188,6 +178,11 @@ func traceRewrite(client *Client, stmt string, costs bool, catalog bool) (out Re
 		out.Target = endpointHost(dec.targetURL)
 	}
 	out.Confined = dec.sensitivity == queryengine.SensitivityConfined
+	// As validate_sql: a statement dispatch sends to the introspection plane
+	// does not ask for the endpoint.
+	if !catalog && dec.class != dispatchClassIntrospection {
+		out.Needs = []string{endpointDestination(client)}
+	}
 	return
 }
 

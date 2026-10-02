@@ -1,7 +1,11 @@
 package play
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -64,7 +68,7 @@ func TestTheRewriteWithoutTheEndpointLeavesOutOnlyTheCatalogSteps(t *testing.T) 
 	assert.Contains(t, v.Declined, "ResolveColumnNames")
 	assert.Equal(t, []string{"clickhouse:ch.example:8123"}, v.Needs)
 
-	tr := traceRewrite(c, stmt, false, false)
+	tr := traceRewrite(c, obo, stmt, false)
 	assert.False(t, tr.Expanded)
 	assert.Equal(t, []string{"clickhouse:ch.example:8123"}, tr.Needs)
 	outcomes := map[string]string{}
@@ -80,6 +84,40 @@ func TestTheRewriteWithoutTheEndpointLeavesOutOnlyTheCatalogSteps(t *testing.T) 
 	k, err := validateStatement(c, obo, "SELECT name FROM keelson('env')")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"keelson:env"}, k.Needs)
+	kt := traceRewrite(c, obo, "SELECT name FROM keelson('env')", false)
+	assert.Equal(t, "introspection", kt.Target)
+	assert.Empty(t, kt.Needs, "trace_rewrite asks for what validate_sql asks for")
+}
+
+// An agent's run whose grant does not list the endpoint is refused for the
+// endpoint before any catalog probe is sent to it: the refusal check and the
+// run both make the rewrite without the catalog steps.
+func TestAnAgentRunSendsNoProbeToAnUngrantedEndpoint(t *testing.T) {
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		http.Error(w, "no", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	reg := passreg.NewRegistry()
+	require.NoError(t, passregdefaults.RegisterStandard(reg))
+	c := NewClient(ClientConfig{URL: srv.URL + "/"}, nil)
+	c.passes = reg
+	installLeewayNameResolution(c)
+	obo := &app.OnBehalfOf{Task: "t", Epoch: 1, Destinations: []string{"keelson:apps"}}
+	stmt := "SELECT LW_GET('symbol', 22) FROM anchor.facts"
+
+	p := &PlayApp{client: c, sql: stmt}
+	err := p.refuseAgentRun(obo)
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Contains(t, err.Error(), DestinationClickHouse(endpointHost(srv.URL)))
+
+	_, _, _, err = c.ExecuteArrowStream(context.Background(), stmt, memory.NewGoAllocator(), &ExecOptions{Agent: obo}, nil, c.dispatchFor(obo, stmt, ""))
+	var limit *AgentLimitError
+	require.ErrorAs(t, err, &limit)
+	assert.Equal(t, DestinationClickHouse(endpointHost(srv.URL)), limit.Destination)
+	assert.Zero(t, hits.Load(), "no request reached the ungranted endpoint")
 }
 
 // list_datasets over the real plane: the alias, the destination, and — for

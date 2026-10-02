@@ -216,11 +216,8 @@ func schemaReadable(sn opsSnap, obo *app.OnBehalfOf) (err error) {
 }
 
 func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out ValidateResult, err error) {
-	if strings.TrimSpace(stmt) == "" {
-		return out, app.RefuseOperation("the buffer is empty; pass sql")
-	}
-	if len(stmt) > schemaMaxStatement {
-		return out, app.RefuseOperation("the statement is longer than 16 KiB")
+	if err = statementBounds(stmt); err != nil {
+		return
 	}
 	out.Canonical, err = orchestrator.Validate(stmt)
 	if err != nil {
@@ -232,11 +229,6 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 		out.Valid = true
 		return
 	}
-	dest := endpointDestination(client)
-	// The late-bound steps resolve handles and LW_GET against the endpoint's
-	// catalog, so without the endpoint in the grant the rewrite is made
-	// without them; the rest reaches nothing.
-	catalog := obo == nil || slices.Contains(obo.Destinations, dest)
 	var failed, declined []string
 	observe := func(o passreg.ApplyObservation) {
 		switch {
@@ -246,12 +238,10 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 			declined = append(declined, o.Name)
 		}
 	}
-	var residual string
+	residual, _, catalog := client.rewriteFor(obo, stmt, observe)
 	if catalog {
-		residual, _ = client.buildResidualObserved(stmt, observe)
 		out.Handles = unresolvedHandles(client, stmt)
 	} else {
-		residual, _ = client.buildResidualOffline(stmt, observe)
 		out.Declined = declined
 	}
 	out.Expanded, out.Sent, out.Rewrites = catalog, residual, failed
@@ -270,7 +260,7 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 	dec := client.previewDispatch(residual, "")
 	out.Confined = dec.sensitivity == queryengine.SensitivityConfined
 	if !catalog && dec.class != dispatchClassIntrospection {
-		out.Needs = []string{dest}
+		out.Needs = []string{endpointDestination(client)}
 	}
 	if obo == nil {
 		return
