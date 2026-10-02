@@ -8,13 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 )
 
 func TestPlayCatalogRegisters(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	require.NoError(t, m.Operations.Validate())
-	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane, opListPanes, opBindPane} {
+	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane, opListPanes, opBindPane, "query_state", "query_machine"} {
 		spec, ok := m.Operations.Lookup(name)
 		require.True(t, ok, name)
 		assert.True(t, spec.Agents, name)
@@ -124,6 +125,24 @@ func TestAnUncoveredRunIsRefusedWithTheDestinationItNeeds(t *testing.T) {
 	_, err = h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: obo}, opRun, nil)
 	require.NoError(t, err)
 	assert.True(t, l.inner.requestRun)
+}
+
+// The result's lifecycle is mounted: query_machine is the chip's graph,
+// query_state the current state and what moves it.
+func TestTheQueryMachineIsMounted(t *testing.T) {
+	_, h := opsLauncher(t)
+	raw, err := h.Snapshot().Query("query_machine", nil)
+	require.NoError(t, err)
+	m, err := buscodec.Decode[opfsm.Machine](raw)
+	require.NoError(t, err)
+	assert.Contains(t, m.States, "rows (stale)")
+	raw, err = h.Snapshot().Query("query_state", nil)
+	require.NoError(t, err)
+	st, err := buscodec.Decode[opfsm.State](raw)
+	require.NoError(t, err)
+	assert.Equal(t, "idle", st.Current)
+	require.Len(t, st.Next, 1)
+	assert.Equal(t, opfsm.Edge{From: "idle", To: "running", Label: "Run"}, st.Next[0])
 }
 
 func TestTheAgentMarkClearsWhenThePersonEdits(t *testing.T) {

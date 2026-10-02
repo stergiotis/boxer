@@ -19,7 +19,8 @@ ADR-0270 on the headless host. The console opens play, takes a test grant
 whose only destination is `keelson:apps`, replaces play's buffer, runs it and
 describes the result. A second buffer reads `keelson('windows')`, which the
 grant does not list: the run is refused when it is asked for, naming the
-destination the grant would have to list, and nothing is sent.
+destination the grant would have to list, and nothing is sent. The
+mounted query machine then reports the shown result as stale.
 
 Between the two, the person presses play's Run. The button goes through the
 same `run` handler as the agent's call (ADR-0270 §SD6), so the change is
@@ -97,5 +98,11 @@ turn does not refresh what the task read, so it reads again before writing.
 {"do":"click","name":"Call","role":"button","comment":"k8"}
 {"do":"wait","valueContains":"k8 · run · refused","role":"label","settleMs":1500,"comment":"refused when asked for, before anything is sent"}
 {"do":"wait","valueContains":"agent limit: the grant does not list keelson:windows","role":"label","nth":0,"comment":"the refusal names the destination"}
+{"do":"focus","id":3557791720187110425}
+{"do":"key","text":"A","modifiers":16}
+{"do":"type","id":3557791720187110425,"text":"query_state"}
+{"do":"click","name":"Call","role":"button","comment":"k9: the result's lifecycle, as the mounted machine reports it"}
+{"do":"wait","valueContains":"k9 · query_state · completed","role":"label"}
+{"do":"wait","valueContains":"\"current\":\"rows (stale)\"","role":"label","nth":0,"comment":"the buffer moved since the run"}
 {"do":"capture","text":"agentconsole-play-limit"}
 ```

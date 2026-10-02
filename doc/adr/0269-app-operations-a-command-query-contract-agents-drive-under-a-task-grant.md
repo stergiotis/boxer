@@ -872,6 +872,40 @@ markdown, cut at `HelpMaxBytes` with its subsections named. It needs no
 grant, like `describe`, and its text is the apps' own documentation, so it
 is not marked untrusted; `describe` says which apps have help.
 
+### 2026-10-02 — components mount their operations
+
+A component several apps hold — first the state machine `fsmview` draws —
+declares its operations once, and an app **mounts** it into its catalog
+under a name, so every app offers an agent the same operations for it
+rather than each inventing a format (play described its result's lifecycle
+as a phase string; watchbill described its job machine not at all).
+
+- **The hook is generic.** `appops.Set.Mount(key, capture)` takes, with
+  each snapshot, the value a mounted component's queries read, and
+  `appops.MountedQuery` declares a query over it. Queries keep reading only
+  the frame-latched snapshot (§SD4); the capture runs only when a snapshot
+  is built for a reader.
+- **The vocabulary is plain data.** `appops/opfsm` holds the types — a
+  machine's states, its labelled edges, its steps — and `SourceI`, which
+  `fsmview.Machine` implements. It has no dependencies, so the widget does
+  not import the operations runtime, and the runtime imports no UI.
+- **The mount is the component's.** `appops/fsmops.Mount(set, name, …)`
+  declares a resource `name_state` holding the current state, so a move has
+  a revision and reaches the turn's changes note (§SD8); a query
+  `name_state`, the current state with the transitions allowed from it and
+  the latest steps; and a query `name_machine`, every state and edge. A
+  machine whose steps do not belong together — watchbill's mirrors whichever
+  job is selected — mounts without history.
+- **Play and watchbill mount theirs:** `query_state`/`query_machine` for
+  play's result lifecycle, `job_state`/`job_machine` for watchbill's
+  selected job. Their schemas are identical, so with operation tools on
+  (ADR-0265) the model meets the same tool shape in both.
+
+Not mounted: a blocking wait for a state. Queries answer at once by design;
+if waiting costs a model rounds, the remedy is the dispatcher's, not the
+component's. Play's result (`describe_result`, `sample_rows`) and help are
+the next candidates for the same pattern.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/apps/watchbill/launchcfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryrequest"
@@ -375,4 +376,27 @@ func TestSetFiltersThroughTheCatalog(t *testing.T) {
 	require.NoError(t, err)
 	_, err = h.ApplyCommand(app.OperationCall{}, opSetFilter, bad)
 	require.Error(t, err)
+}
+
+// The job machine is mounted: job_state reports nothing until a job is
+// selected, then that job's state and where it can go.
+func TestTheSelectedJobsMachineIsMounted(t *testing.T) {
+	inst := newApp()
+	h := ops.Bind(inst)
+	read := func() opfsm.State {
+		raw, err := h.Snapshot().Query("job_state", nil)
+		require.NoError(t, err)
+		st, err := buscodec.Decode[opfsm.State](raw)
+		require.NoError(t, err)
+		return st
+	}
+	assert.Empty(t, read().Current, "no job selected")
+	inst.select_("j1")
+	inst.machine.Mirror(watchbillstore.StateFailed)
+	st := read()
+	assert.Equal(t, watchbillstore.StateFailed, st.Current)
+	require.Len(t, st.Next, 1)
+	assert.Equal(t, opfsm.Edge{From: watchbillstore.StateFailed, To: watchbillstore.StateQueued, Label: "policy"}, st.Next[0])
+	assert.Empty(t, st.History, "the machine mirrors whichever job is selected, so its steps are left out")
+	assert.Equal(t, watchbillstore.StateFailed, h.ResourceValue("job_state"))
 }

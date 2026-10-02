@@ -8,6 +8,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 )
 
@@ -59,7 +61,7 @@ type SignalState struct {
 // ResultState is the main result as get_state reports it.
 type ResultState struct {
 	Id    uint64 `desc:"the result id; 0 before any run"`
-	Phase string `desc:"idle, running, rows, empty or failed, with -stale when the buffer or a signal moved since the run"`
+	Phase string `desc:"idle, running, rows, empty or failed, or rows (stale), empty (stale) or failed (stale) when the buffer or a signal moved since the run; query_state has the transitions"`
 	Rows  int64  `desc:"its row count"`
 	Error string `desc:"the error of a failed run"`
 }
@@ -202,6 +204,14 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		return inst.inner != nil && inst.inner.editor != nil && appops.WidgetEditing(inst.inner.editor.TextHandle())
 	})
 	s.Confined(func(inst *PlayLauncher) bool { return inst.inner != nil && inst.inner.graph.MainConfined() })
+	// The result's lifecycle, as the state chip draws it: query_state and
+	// query_machine, the operations every app's mounted machine offers.
+	fsmops.Mount(s, "query", "the main result's lifecycle", func(inst *PlayLauncher) opfsm.SourceI {
+		if inst.inner == nil || inst.inner.queryFSM == nil {
+			return nil
+		}
+		return inst.inner.queryFSM
+	}, fsmops.Options{History: 16})
 
 	appops.Query(s, app.OperationSpec{Name: opGetState, Version: 1,
 		Summary: "read the buffer, the parameters, the signals, Live and the main result's phase",
