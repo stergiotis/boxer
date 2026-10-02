@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json/v2"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -164,11 +165,12 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 	}}
 	host, coord, cli, req, ctx := coordRig(t, bus, model, false)
 
-	res, err := runTurn(ctx, cli, coord, req)
+	res, err := runTurn(ctx, cli, coord, req, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "done", res.final.Content)
 	assert.Equal(t, "tidied", host.notes[100].text, "the write went through the host to the window")
 	require.Len(t, res.activity, 6)
+	assert.Len(t, res.calls, 7, "every model call of the turn is recorded, the answering one included")
 	assert.Contains(t, res.activity[1], "opened notes as window 100")
 	assert.Contains(t, res.activity[5], "set_note in window 100")
 
@@ -274,7 +276,7 @@ func TestRefusalsSayWhatToDoNextAndARepeatIsNotMade(t *testing.T) {
 		{Content: "done", FinishReason: "stop"},
 	}}
 	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
-	res, err := runTurn(ctx, cli, coord, req)
+	res, err := runTurn(ctx, cli, coord, req, nil)
 	require.NoError(t, err)
 	replies := toolReplies(res.messages)
 
@@ -303,7 +305,7 @@ func TestOperationToolsCallAWindowsOperationDirectly(t *testing.T) {
 		{Content: "done", FinishReason: "stop"},
 	}}
 	host, coord, cli, req, ctx := coordRig(t, bus, model, true)
-	res, err := runTurn(ctx, cli, coord, req)
+	res, err := runTurn(ctx, cli, coord, req, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "done", res.final.Content)
 	host.mu.Lock()
@@ -344,7 +346,7 @@ func TestReadHelpGivesTheModelTheAppsDocumentation(t *testing.T) {
 		{Content: "done", FinishReason: "stop"},
 	}}
 	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
-	res, err := runTurn(ctx, cli, coord, req)
+	res, err := runTurn(ctx, cli, coord, req, nil)
 	require.NoError(t, err)
 	replies := toolReplies(res.messages)
 
@@ -356,4 +358,114 @@ func TestReadHelpGivesTheModelTheAppsDocumentation(t *testing.T) {
 	assert.Contains(t, replies["h4"], "no help document")
 	_, tainted, _ := coord.state()
 	assert.False(t, tainted, "reading help taints nothing")
+}
+
+// A model that would call tools forever is asked, on the last round, to
+// answer without them; the turn ends with that answer, and the note asking
+// for it stays out of the history.
+func TestTheLastRoundAsksForAnAnswer(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	var replies []openaichat.CompletionResponse
+	for i := 0; i < maxRounds-1; i++ {
+		replies = append(replies, toolCall("l"+strconv.Itoa(i), "list_windows", `{}`))
+	}
+	replies = append(replies, openaichat.CompletionResponse{Content: "Here is what I found.", FinishReason: "stop"})
+	model := &scriptedModel{replies: replies}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	var rounds []int
+	res, err := runTurn(ctx, cli, coord, req, func(round int, doing string) {
+		if len(rounds) == 0 || rounds[len(rounds)-1] != round {
+			rounds = append(rounds, round)
+		}
+	})
+	require.NoError(t, err)
+	assert.Empty(t, res.stopped)
+	assert.Equal(t, "Here is what I found.", res.final.Content)
+	assert.Len(t, rounds, maxRounds, "every round is reported")
+
+	model.mu.Lock()
+	defer model.mu.Unlock()
+	require.Len(t, model.seen, maxRounds)
+	last := model.seen[maxRounds-1]
+	assert.Equal(t, "none", last.ToolChoice)
+	assert.Equal(t, lastRoundNote, last.Messages[len(last.Messages)-1].Content)
+	assert.Empty(t, model.seen[0].ToolChoice, "earlier rounds leave the choice to the model")
+	for _, m := range res.messages {
+		assert.NotEqual(t, lastRoundNote, m.Content, "the note is not resent next turn")
+	}
+}
+
+// A call's title is the person's: shown while it runs and in the
+// transcript, never dispatched, and no part of what makes a call the same.
+func TestATitleIsShownAndNotDispatched(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}],"title":"Asking for the notes"}`),
+		toolCall("o1", "open_window", `{"app":"notes","title":"Opening notes"}`),
+		toolCall("g1", "call_operation", `{"window":100,"operation":"get_note","args":{},"title":"Reading the note\nnow"}`),
+		toolCall("s1", "call_operation", `{"window":100,"operation":"set_note","args":{},"title":"Writing it"}`),
+		toolCall("s2", "call_operation", `{"window":100,"operation":"set_note","args":{},"title":"Writing it, again"}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	var doing []string
+	res, err := runTurn(ctx, cli, coord, req, func(round int, d string) {
+		if d != "" {
+			doing = append(doing, d)
+		}
+	})
+	require.NoError(t, err)
+	replies := toolReplies(res.messages)
+	assert.Contains(t, res.activity[2], "Reading the note now · get_note in window 100", "one line, before the call's own line")
+	assert.NotContains(t, replies["g1"], "error", "the title is no stray key")
+	assert.Contains(t, replies["s2"], "same call that was just refused", "a new title does not make a new call")
+	assert.Equal(t, []string{"Asking for the notes", "Opening notes", "Reading the note now", "Writing it", "Writing it, again"}, doing)
+
+	model.mu.Lock()
+	defer model.mu.Unlock()
+	for _, tl := range model.seen[0].Tools {
+		assert.Contains(t, string(tl.Parameters), `"title"`, tl.Name)
+	}
+}
+
+func TestAnOperationsOwnTitleArgumentStaysItsOwn(t *testing.T) {
+	_, titled := withReason(`{"type":"object","properties":{"title":{"type":"string"}},"required":["title"]}`)
+	assert.False(t, titled)
+	v, titled := withReason(`{"type":"object","properties":{"text":{"type":"string"}}}`)
+	assert.True(t, titled)
+	assert.Contains(t, string(v), `"reason"`)
+	assert.Equal(t, strings.Repeat("x", maxTitleRunes-1)+"…", cleanTitle(strings.Repeat("x", 100)))
+}
+
+// A task that is gone does not strand the conversation: the call says so,
+// the grant is forgotten, and the next request_access starts a new task.
+func TestAnEndedTaskIsReplacedByTheNextRequest(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
+		{Content: "asked", FinishReason: "stop"},
+		toolCall("g1", "list_windows", `{}`),
+		toolCall("r2", "request_access", `{"plan":"tidy the note again","open":[{"app":"notes"}]}`),
+		toolCall("o1", "open_window", `{"app":"notes"}`),
+		toolCall("g2", "call_operation", `{"window":100,"operation":"get_note","args":{}}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	_, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	first, _, _ := coord.state()
+	require.NotEmpty(t, first)
+	coord.mu.Lock()
+	coord.grant.Handle = "no-such-handle" // the task is gone
+	coord.mu.Unlock()
+
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	replies := toolReplies(res.messages)
+	assert.Contains(t, replies["g1"], "request_access starts a new one")
+	assert.Contains(t, replies["r2"], "access granted")
+	assert.NotContains(t, replies["g2"], "denied")
+	second, _, _ := coord.state()
+	assert.NotEmpty(t, second)
+	assert.NotEqual(t, first, second, "a new task")
 }

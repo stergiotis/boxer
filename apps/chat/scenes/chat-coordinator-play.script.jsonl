@@ -3,7 +3,7 @@
 # Turn 1: ask for play, open it, read, write, run, read the result.
 {"tool":"request_access","args":{"plan":"show the first three apps in play","open":[{"app":"play"}],"destinations":["keelson:apps"]}}
 {"tool":"open_window","args":{"app":"play"}}
-{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{}}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{},"title":"Reading play's buffer"}}
 {"tool":"call_operation","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT id FROM keelson('apps') ORDER BY id LIMIT 3"},"reason":"the first three apps"}}
 {"tool":"call_operation","args":{"window":"$window","operation":"run","args":{}}}
 {"content":"Play runs the query for the first three apps."}

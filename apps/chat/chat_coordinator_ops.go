@@ -113,6 +113,9 @@ func describeView(apps []agent.AppOperations) (out []describedApp) {
 type typedOp struct {
 	window uint64
 	op     string
+	// titled says the tool takes a title: false when the operation has an
+	// argument of that name, which it keeps.
+	titled bool
 }
 
 var toolNameUnsafe = regexp.MustCompile(`[^A-Za-z0-9_-]`)
@@ -158,9 +161,10 @@ func (inst *coordinator) operationTools(ctx context.Context) (out []openaichat.T
 		}
 		for _, o := range inst.operationsOf(ctx, w.App) {
 			name := operationToolName(w.Instance, o.Name)
-			typed[name] = typedOp{window: w.Instance, op: o.Name}
+			params, titled := withReason(o.ArgsSchema)
+			typed[name] = typedOp{window: w.Instance, op: o.Name, titled: titled}
 			out = append(out, openaichat.Tool{Name: name, Description: "Window " + strconv.FormatUint(w.Instance, 10) + ": " + o.Summary + ".",
-				Parameters: withReason(o.ArgsSchema)})
+				Parameters: params})
 		}
 	}
 	inst.mu.Lock()
@@ -195,8 +199,16 @@ func (inst *coordinator) operationsOf(ctx context.Context, appId string) (ops []
 }
 
 // withReason is an operation's argument schema with the one-line reason
-// every call may carry.
-func withReason(argsSchema string) (v jsontext.Value) {
+// and the title every call may carry; titled is false when the operation
+// has a title argument of its own, which then stays the operation's.
+func withReason(argsSchema string) (v jsontext.Value, titled bool) {
+	return withProperties(argsSchema, map[string]any{"reason": map[string]any{"type": "string", "description": "one line, shown to the person"},
+		"title": titleProperty})
+}
+
+// withProperties adds properties to an object schema, never over one the
+// schema has; added says whether title was among those added.
+func withProperties(argsSchema string, add map[string]any) (v jsontext.Value, titled bool) {
 	s := map[string]any{}
 	if argsSchema != "" {
 		_ = json.Unmarshal([]byte(argsSchema), &s)
@@ -211,13 +223,21 @@ func withReason(argsSchema string) (v jsontext.Value) {
 			s["additionalProperties"] = false
 		}
 	}
-	props["reason"] = map[string]any{"type": "string", "description": "one line, shown to the person"}
+	for k, p := range add {
+		if _, has := props[k]; has {
+			continue
+		}
+		props[k] = p
+		if k == "title" {
+			titled = true
+		}
+	}
 	s["properties"] = props
 	b, err := json.Marshal(s, json.Deterministic(true))
 	if err != nil {
-		return schema(`{"type":"object"}`)
+		return schema(`{"type":"object"}`), false
 	}
-	return jsontext.Value(b)
+	return jsontext.Value(b), titled
 }
 
 type helpSection struct {

@@ -43,6 +43,7 @@ the second, and an id is a function of the window and the widget's path.
 {"do":"click","contains":"Send","role":"button","comment":"turn 1, the seeded draft"}
 {"do":"wait","valueContains":"Play runs the query","role":"label","settleMs":1500}
 {"do":"wait","valueContains":"⚙ opened play as window 2","role":"label"}
+{"do":"wait","valueContains":"⚙ Reading play's buffer · get_state in window 2 · completed","role":"label","comment":"the call's title, before its own line"}
 {"do":"wait","valueContains":"⚙ set_sql in window 2 · rendered","role":"label"}
 {"do":"wait","valueContains":"⚙ run in window 2 · rendered","role":"label"}
 {"do":"wait","valueContains":"3 rows ·","role":"label","comment":"play's own summary of the agent's run"}

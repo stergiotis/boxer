@@ -4,18 +4,21 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
 // ManifestId is this app's identity — its Go import path (ADR-0026 id rule).
 const ManifestId app.AppIdT = "github.com/stergiotis/boxer/apps/chat"
 
-// manifest declares the two grants and nothing else (ADR-0265 §SD1): the
+// manifest declares the grants the chat uses (ADR-0265 §SD1): the
 // app sends text to the host's model and may ask for its conversations to
-// be kept; it reads nothing back.
+// be kept; it reads nothing back. With Apps on it works in shared windows,
+// and on request it publishes its statistics and opens play on them.
 var manifest = app.Manifest{
 	Id:           ManifestId,
 	Version:      "0.1.0",
@@ -34,7 +37,11 @@ var manifest = app.Manifest{
 		// The coordinator (ADR-0269): the model works in windows the person
 		// shares, each call checked by the host's dispatcher. The person
 		// registers the app as a coordinator (BOXER_AGENT_COORDINATORS).
-		agent.ClientCaps("chat: work in windows the person shares with the model")...,
+		append(agent.ClientCaps("chat: work in windows the person shares with the model"),
+			app.SubjectFilter{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,
+				Reason: "chat: publish the window's token and answer statistics as ad-hoc datasets for Open in play (ADR-0240)"},
+			app.SubjectFilter{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
+				Reason: "chat: Open in play — a play window on the statistics (ADR-0135)"})...,
 	),
 }
 

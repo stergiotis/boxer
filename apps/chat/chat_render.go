@@ -46,6 +46,7 @@ func (inst *App) render() {
 	for range c.PanelBottomInside(inst.ids.PrepareStr("composer")).Resizable(false).KeepIter() {
 		inst.renderComposer()
 	}
+	inst.renderStatsPanel()
 	for range c.PanelCentralInside().KeepIter() {
 		inst.renderTranscript()
 	}
@@ -60,6 +61,7 @@ func (inst *App) renderBar() {
 			inst.newConversation()
 			conv = inst.conv
 		}
+		inst.renderStatsToggle()
 		for range c.HoverText(tipKeep).KeepIter() {
 			if conv.started {
 				label, tone := keepBadge(conv)
@@ -146,7 +148,12 @@ func (inst *App) renderComposer() {
 				inst.turn.Cancel()
 			}
 			c.Spinner().Send()
-			c.Label("waiting for the model · " + elapsed(inst.pending.started)).Selectable(false).Send()
+			line := "waiting for the model · "
+			if note := inst.turn.Snapshot().Note; note != "" {
+				// The tool loop's round, so a long turn reads as working.
+				line += note + " · "
+			}
+			c.Label(line + elapsed(inst.pending.started)).Selectable(false).Send()
 			c.RequestRepaint()
 		}
 	}

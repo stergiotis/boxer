@@ -278,6 +278,55 @@ grant lacked, a grant asking for nothing. The coordinator changed:
   and the prompt says so. It is the apps' documentation, so it is not
   delimited as untrusted and does not taint the conversation.
 
+### 2026-10-02 — statistics, and their handover to play
+
+A **Statistics** panel beside the transcript shows the window's token and
+answer statistics across its conversations: the turns, how many were
+answered, the model calls and their tokens, and empirical distributions —
+the `ecdf` widget, with its confidence band once it is computed — of the
+answer time per turn and the input and output tokens per call. A
+distribution needs two values with some spread; until then the panel says
+so. Records live as long as the window and are kept on the render thread.
+
+**Open in play** publishes them on demand as two ad-hoc datasets
+(ADR-0240), `chat_turns` (one row per turn: outcome, rounds, tool calls,
+tokens, wall time) and `chat_calls` (one row per model call), and opens a
+play window on the turns. Every chat window publishes under those two
+aliases, and a play window follows the newest. `BOXER_CHAT_ADVANCED=false`
+hides the panel and the button; the manifest still declares the publish
+and open grants, which are then unused.
+
+### 2026-10-02 — a turn ends with an answer; play's reference in the prompt
+
+A turn that used every round ended with no answer and a failure line: in
+one observed turn 24 rounds of tool calls, 98k input tokens and 268 seconds
+left nothing to read. The last round now offers no tools (`tool_choice`
+`none`) and the host asks for the answer with what was found and what is
+open; the note goes to that call only and is not resent. The prompt names
+the bound, and the waiting line shows the round, "round 7 of 24", so a long
+turn reads as working.
+
+The prompt also carries the reference an agent needs before it writes SQL
+in play: `keelson('<table>')` reads the host's own tables, with
+`keelson('tables')` and `keelson('columns')` to discover them, and which
+destination a run needs; and that play's `list_snippets`, `read_snippet`
+and `list_functions` (ADR-0270, update of this date) hold worked queries and
+the functions a query may call.
+
+### 2026-10-02 — titled calls, and a task that ended
+
+Every tool takes an optional `title`, a few words the person reads while
+the call runs ("round 3 of 24 · Reading play's buffer") and in the
+transcript after it. The coordinator strips it before dispatching, so it
+reaches no app and does not make two calls differ for the repeat check; an
+operation with a `title` argument of its own keeps it and its calls go
+untitled.
+
+A conversation outlives its task: when a call answers that the task ended
+or its handle is unknown (ADR-0269 `TaskGone`), the coordinator forgets the
+grant and the next `request_access` asks for a new task; a late task is
+extended by `request_access` instead (ADR-0269, update of this date).
+
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.

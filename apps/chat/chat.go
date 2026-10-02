@@ -11,6 +11,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
 )
 
 // App is one chat window.
@@ -62,6 +64,18 @@ type App struct {
 	focused bool
 	// pastNoted hides the "past conversations are in play" line once read.
 	pastNoted bool
+
+	// advanced shows the Statistics panel (AdvancedSeed); stats are the
+	// window's records, across its conversations, and showStats whether
+	// the panel is open. handover publishes them and opens play.
+	advanced     bool
+	showStats    bool
+	stats        chatStats
+	bus          app.BusI
+	pubs         statsPublishers
+	handover     bgjob.Runner[string]
+	handoverNote string
+	bandKeys     [3]ecdf.BandJobKey
 }
 
 // pendingTurn is a turn in flight.
@@ -73,7 +87,8 @@ type pendingTurn struct {
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get()}
+	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get(),
+		advanced: AdvancedSeed.Get(), pubs: newStatsPublishers()}
 	return
 }
 
@@ -89,7 +104,10 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		return
 	}
 	cli := llm.NewClient(bus)
-	inst.cli = cli
+	inst.cli, inst.bus = cli, bus
+	for i := range inst.bandKeys {
+		inst.bandKeys[i] = ecdf.BandJobKey(inst.ids.ProbeSeq("chat-stats-band-" + strconv.Itoa(i)))
+	}
 	inst.agentCli = agent.NewClient(bus)
 	inst.coord = newCoordinator(inst.agentCli, inst.conv.id)
 	inst.describe.Start(nil, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
@@ -109,6 +127,10 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.turn.Cancel()
 	inst.describe.Cancel()
+	inst.handover.Cancel()
+	for _, k := range inst.bandKeys {
+		ecdf.CancelBandJob(k)
+	}
 	return
 }
 
@@ -125,6 +147,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 // drain lands the background jobs' results on the render thread.
 func (inst *App) drain() {
+	inst.drainHandover()
 	if d, _, ok := inst.describe.TakeResult(); ok {
 		inst.model, inst.answered = *d, true
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {
@@ -141,6 +164,7 @@ func (inst *App) drain() {
 	}
 	now := time.Now().UnixMilli()
 	if res, _, ok := inst.turn.TakeResult(); ok {
+		inst.stats.addTurn(inst.conv.id, p.started, now, res, nil)
 		inst.conv.landTurn(p.req, res, nil, now)
 		inst.pending = nil
 		return
@@ -152,11 +176,13 @@ func (inst *App) drain() {
 		if err == nil {
 			err = errors.New("the turn failed")
 		}
+		inst.stats.addTurn(inst.conv.id, p.started, now, nil, err)
 		inst.conv.land(p.req, nil, err, now)
 		inst.pending = nil
 	case bgjob.StateIdle:
 		// A cancelled run resets to idle without a result or an error
 		// (bgjob's contract), so idle with a turn pending is the cancel.
+		inst.stats.addTurn(inst.conv.id, p.started, now, nil, context.Canceled)
 		inst.conv.land(p.req, nil, context.Canceled, now)
 		inst.pending = nil
 	}
@@ -191,15 +217,21 @@ func (inst *App) startTurn(text string) (started bool) {
 		}
 	}
 	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
-		func(ctx context.Context, _ bgjob.Reporter) (res *turnResult, err error) {
+		func(ctx context.Context, report bgjob.Reporter) (res *turnResult, err error) {
 			if coord != nil {
-				return runTurn(ctx, cli, coord, req)
+				return runTurn(ctx, cli, coord, req, func(round int, doing string) {
+					note := "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(maxRounds)
+					if doing != "" {
+						note += " · " + doing
+					}
+					report(uint64(round+1), maxRounds, note)
+				})
 			}
 			got, err := cli.Complete(ctx, req)
 			if err != nil {
 				return
 			}
-			res = &turnResult{final: got, messages: append(append([]openaichat.Message(nil), req.Messages...),
+			res = &turnResult{final: got, calls: []callStat{callStatOf(0, got)}, messages: append(append([]openaichat.Message(nil), req.Messages...),
 				openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: got.Content, ToolCalls: got.ToolCalls})}
 			return
 		})
