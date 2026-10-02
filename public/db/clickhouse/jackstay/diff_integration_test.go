@@ -96,7 +96,7 @@ func TestDiff_LiveServer(t *testing.T) {
 		pt := tables[name]
 		require.NotNil(t, pt, name)
 		require.True(t, pt.IsDiffable(), "%s: %s %v", name, pt.Verdict, pt.Reasons)
-		require.NoError(t, DiffPlanTable(ctx, client, client, pt, final, chunkOpts, opts, time.Now()))
+		require.NoError(t, DiffPlanTable(ctx, ServerSource(client), client, pt, final, chunkOpts, opts, time.Now()))
 		return pt.Diff
 	}
 

@@ -51,6 +51,8 @@ func Restate(ops *common.TableOperations, plan *Plan, src *Inventory, dst *Inven
 			stale = append(stale, ft.Source.String()+": verdict "+ot.Verdict.String()+" is now "+ft.Verdict.String())
 		case !isSubset(ft.DDL, ot.DDL):
 			stale = append(stale, ft.Source.String()+": DDL differs")
+		case ot.Filter != ft.Filter:
+			stale = append(stale, ft.Source.String()+": filter differs from the selection's")
 		}
 		delete(old, ft.Source)
 	}

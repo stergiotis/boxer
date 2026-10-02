@@ -346,6 +346,11 @@ func readLeafSet(ctx context.Context, q QueryI, spec *DigestSpec) (ls leafSet, e
 	if err != nil {
 		return
 	}
+	ls = leafSetOf(chunks)
+	return
+}
+
+func leafSetOf(chunks map[string]*chunkDigests) (ls leafSet) {
 	ls = make(leafSet, 16)
 	for _, c := range chunks {
 		for l, d := range c.leaves {
@@ -374,7 +379,7 @@ func (inst *countingReader) Read(p []byte) (n int, err error) {
 // dst, undecoded and, when the source compressed them, still compressed. It
 // returns the bytes that crossed and the rows it counted into opts.Rows, so a
 // caller whose verification fails can wind them back.
-func relay(ctx context.Context, src ClientI, dst ClientI, srcSpec *DigestSpec, dstSpec *DigestSpec, opts *SyncOptions, expectedRows uint64) (bytes uint64, counted int64, err error) {
+func relay(ctx context.Context, src SourceI, dst ClientI, srcSpec *DigestSpec, dstSpec *DigestSpec, opts *SyncOptions, expectedRows uint64) (bytes uint64, counted int64, err error) {
 	var queryId string
 	queryId, err = gonanoid.New()
 	if err != nil {
@@ -384,7 +389,7 @@ func relay(ctx context.Context, src ClientI, dst ClientI, srcSpec *DigestSpec, d
 	queryId = "jackstay-" + queryId
 	var body io.ReadCloser
 	var encoding string
-	body, encoding, err = src.QueryStream(ctx, srcSpec.SelectNative(), chclient.StreamOptions{AcceptEncoding: opts.Compression})
+	body, encoding, err = src.stream(ctx, srcSpec, opts.Compression)
 	if err != nil {
 		err = eh.Errorf("unable to read source rows: %w", err)
 		return
@@ -421,22 +426,36 @@ func (inst *tableSyncer) unwind(counted int64) {
 	}
 }
 
+// checkStart refuses to resume a table under settings other than those the
+// run began it under: the mode, the existing-rows policy and the row filter.
+func checkStart(e JournalEntry, pt *PlanTable) (err error) {
+	if e.Mode != pt.Sync.Mode.String() || e.Existing != pt.Sync.Existing.String() {
+		return eb.Build().Str("table", pt.Source.String()).Str("begun", e.Mode+"/"+e.Existing).Str("now", pt.Sync.Mode.String()+"/"+pt.Sync.Existing.String()).
+			Errorf("the run began this table under other settings; keep them, or restart the run")
+	}
+	if e.Filter != pt.Filter {
+		return eb.Build().Str("table", pt.Source.String()).Str("begun", e.Filter).Str("now", pt.Filter).
+			Errorf("the run began this table under another row filter; keep it, or restart the run")
+	}
+	return
+}
+
 func isMergeTreeEngine(engine string) (ok bool) {
 	return strings.HasSuffix(engine, "MergeTree")
 }
 
 // tableSyncer carries one table's sync state across its chunks.
 type tableSyncer struct {
-	src, dst     ClientI
-	pt           *PlanTable
-	srcSpec      DigestSpec
-	dstSpec      DigestSpec
-	sameKey      bool
-	owned        bool
-	journal      *Journal
-	opts         SyncOptions
-	now          func() time.Time
-	sampleFilter string
+	src     SourceI
+	dst     ClientI
+	pt      *PlanTable
+	srcSpec DigestSpec
+	dstSpec DigestSpec
+	sameKey bool
+	owned   bool
+	journal *Journal
+	opts    SyncOptions
+	now     func() time.Time
 }
 
 // SyncTable copies one plan table per its [TableSync] (ADR-0259 §SD5). Each
@@ -447,7 +466,10 @@ type tableSyncer struct {
 // The table must be diffable (its DDL applied), have a chunk layout, and, for
 // repair, a diff: repair touches only the leaves that diff showed, and only
 // while the target still holds what it showed.
-func SyncTable(ctx context.Context, src ClientI, dst ClientI, pt *PlanTable, j *Journal, opts SyncOptions, now func() time.Time) (rep TableSyncReport, err error) {
+//
+// A table with a row filter is synced as its slice (ADR-0271 §SD1): every
+// read, count and clear on either side is restricted to the filter's rows.
+func SyncTable(ctx context.Context, src SourceI, dst ClientI, pt *PlanTable, j *Journal, opts SyncOptions, now func() time.Time) (rep TableSyncReport, err error) {
 	switch {
 	case pt.Sync == nil:
 		err = eb.Build().Str("table", pt.Source.String()).Errorf("table has no sync settings")
@@ -459,6 +481,8 @@ func SyncTable(ctx context.Context, src ClientI, dst ClientI, pt *PlanTable, j *
 		err = eb.Build().Str("table", pt.Source.String()).Errorf("repair needs a diff; run diff first")
 	case pt.Sync.Mode == SyncModeSample && (pt.Sync.SampleDen == 0 || pt.Sync.SampleNum == 0 || pt.Sync.SampleNum > pt.Sync.SampleDen):
 		err = eb.Build().Str("table", pt.Source.String()).Errorf("invalid sample fraction")
+	case pt.Sync.Mode != SyncModeFull && src.limits().noSubsets:
+		err = eb.Build().Str("table", pt.Source.String()).Str("mode", pt.Sync.Mode.String()).Errorf("%s holds whole chunks only; sync it in full", src.limits().what)
 	}
 	if err != nil {
 		return
@@ -469,16 +493,11 @@ func SyncTable(ctx context.Context, src ClientI, dst ClientI, pt *PlanTable, j *
 	ts := &tableSyncer{src: src, dst: dst, pt: pt, journal: j, opts: opts, now: now,
 		sameKey: pt.Chunking.Kind == ChunkingPartition && normalizeExpr(pt.PartitionKey) == normalizeExpr(pt.TargetPartitionKey)}
 	ts.srcSpec, ts.dstSpec, _ = pt.DigestSpecs(false)
-	if pt.Sync.Mode == SyncModeSample {
-		ts.sampleFilter = ts.srcSpec.SamplePredicate(pt.Sync.SampleNum, pt.Sync.SampleDen)
-	}
 	table := pt.Source.String()
 	rep.RunId = j.run
 
 	if e, started := j.Started(table); started {
-		if e.Mode != pt.Sync.Mode.String() || e.Existing != pt.Sync.Existing.String() {
-			err = eb.Build().Str("table", table).Str("begun", e.Mode+"/"+e.Existing).Str("now", pt.Sync.Mode.String()+"/"+pt.Sync.Existing.String()).
-				Errorf("the run began this table under other settings; keep them, or restart the run")
+		if err = checkStart(e, pt); err != nil {
 			return
 		}
 		ts.owned = e.Owned
@@ -487,7 +506,7 @@ func SyncTable(ctx context.Context, src ClientI, dst ClientI, pt *PlanTable, j *
 		if err != nil {
 			return
 		}
-		err = j.RecordStart(table, ts.owned, *pt.Sync, now())
+		err = j.RecordStart(table, ts.owned, *pt.Sync, pt.Filter, now())
 		if err != nil {
 			return
 		}
@@ -501,7 +520,7 @@ func SyncTable(ctx context.Context, src ClientI, dst ClientI, pt *PlanTable, j *
 		}
 	} else {
 		var srcChunks []chunkListRow
-		srcChunks, err = queryRows[chunkListRow](ctx, src, ts.srcSpec.ChunkListQuery())
+		srcChunks, err = src.chunkList(ctx, &ts.srcSpec)
 		if err != nil {
 			err = eb.Build().Str("table", table).Errorf("unable to list source chunks: %w", err)
 			return
@@ -560,8 +579,14 @@ func (inst *tableSyncer) claim(ctx context.Context) (owned bool, err error) {
 	if inst.pt.Sync.Mode == SyncModeRepair {
 		return false, nil
 	}
+	// Under a row filter the run owns the target's slice, and only the
+	// slice is counted (ADR-0271 §SD1).
+	where := ""
+	if inst.dstSpec.Filter != "" {
+		where = " WHERE " + inst.dstSpec.Filter
+	}
 	var rows []countRow
-	rows, err = queryRows[countRow](ctx, inst.dst, "SELECT count() AS n FROM "+QuoteRef(inst.pt.Target)+jsonSettings)
+	rows, err = queryRows[countRow](ctx, inst.dst, "SELECT count() AS n FROM "+QuoteRef(inst.pt.Target)+where+jsonSettings)
 	if err != nil {
 		err = eb.Build().Str("table", inst.pt.Target.String()).Errorf("unable to count target rows: %w", err)
 		return
@@ -620,7 +645,7 @@ func (inst *tableSyncer) clearChunk(ctx context.Context, c chunkListRow) (r Chun
 		r.Status, r.Note = ChunkStatusDone, "target-only chunk cleared earlier"
 		return
 	}
-	dstSpec := inst.dstSpec.With(inst.pt.Chunking.ChunkPredicate(c.Chunk, inst.targetPid(c.Pid)))
+	dstSpec := inst.dstSpec.ForChunk(c.Chunk, inst.targetPid(c.Pid))
 	before, err := readLeafSet(ctx, inst.dst, &dstSpec)
 	if err != nil {
 		r.Status, r.Note = ChunkStatusFailed, err.Error()
@@ -644,26 +669,41 @@ func (inst *tableSyncer) clearChunk(ctx context.Context, c chunkListRow) (r Chun
 // clear removes rows of a target chunk: all of it (leaves nil) or the given
 // leaves. A whole partition chunk whose partition key matches the source's is
 // dropped as a partition; anything else is a lightweight DELETE, and a table
-// outside the MergeTree family can only be truncated whole.
+// outside the MergeTree family can only be truncated whole. Under a row
+// filter only the slice may go, so the clear is always a DELETE restricted
+// by the filter (ADR-0271 §SD1).
 func (inst *tableSyncer) clear(ctx context.Context, chunk string, pid string, leaves []uint32) (err error) {
 	target := QuoteRef(inst.pt.Target)
+	filtered := inst.dstSpec.Filter != ""
 	if !isMergeTreeEngine(inst.pt.TargetEngine) {
-		if leaves != nil || inst.pt.Chunking.Kind != ChunkingSingle {
+		if filtered || leaves != nil || inst.pt.Chunking.Kind != ChunkingSingle {
 			return eb.Build().Str("engine", inst.pt.TargetEngine).Errorf("target engine cannot delete a subset of rows")
 		}
 		return inst.dst.Exec(ctx, "TRUNCATE TABLE "+target)
 	}
-	if leaves == nil && inst.pt.Chunking.Kind == ChunkingPartition && inst.sameKey && pid != "" {
+	if !filtered && leaves == nil && inst.pt.Chunking.Kind == ChunkingPartition && inst.sameKey && pid != "" {
 		return inst.dst.Exec(ctx, "ALTER TABLE "+target+" DROP PARTITION ID "+QuoteString(pid))
 	}
-	if leaves == nil && inst.pt.Chunking.Kind == ChunkingSingle {
+	if !filtered && leaves == nil && inst.pt.Chunking.Kind == ChunkingSingle {
 		return inst.dst.Exec(ctx, "TRUNCATE TABLE "+target)
 	}
-	where := inst.pt.Chunking.ChunkPredicate(chunk, "")
+	return inst.dst.Exec(ctx, "DELETE FROM "+target+" WHERE "+clearPredicate(&inst.dstSpec, chunk, leaves)+" SETTINGS lightweight_deletes_sync = 2")
+}
+
+// clearPredicate selects the target rows a DELETE of a chunk (or of its
+// leaves) removes: within the row filter, always.
+func clearPredicate(dstSpec *DigestSpec, chunk string, leaves []uint32) (sql string) {
+	s := *dstSpec
+	s.Where = ""
+	s = s.with(s.Chunking.ChunkPredicate(chunk, ""))
 	if leaves != nil {
-		where = "(" + where + ") AND " + inst.dstSpec.LeafPredicate(leaves)
+		s = s.with(s.LeafPredicate(leaves))
 	}
-	return inst.dst.Exec(ctx, "DELETE FROM "+target+" WHERE "+where+" SETTINGS lightweight_deletes_sync = 2")
+	sql = s.SlicePredicate()
+	if sql == "" {
+		sql = "1"
+	}
+	return
 }
 
 // verify compares a target chunk with its expected digest. A merge-semantics
@@ -683,13 +723,17 @@ func (inst *tableSyncer) verify(ctx context.Context, srcSpec *DigestSpec, dstSpe
 	if !exclusive || !(IsMergeEngine(inst.pt.Engine) || IsMergeEngine(inst.pt.TargetEngine)) {
 		return
 	}
+	if inst.src.limits().noFinal {
+		note += "; " + inst.src.limits().what + " cannot be read with FINAL to check merged rows"
+		return
+	}
 	sf, df := *srcSpec, *dstSpec
 	sf.Final = IsMergeEngine(inst.pt.Engine)
 	df.Final = IsMergeEngine(inst.pt.TargetEngine)
 	var s, d leafSet
 	s, d, err = both(ctx, func(ctx context.Context, side int) (leafSet, error) {
 		if side == 0 {
-			return readLeafSet(ctx, inst.src, &sf)
+			return sourceLeafSet(ctx, inst.src, &sf)
 		}
 		return readLeafSet(ctx, inst.dst, &df)
 	})
@@ -708,10 +752,13 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 	if r.Display == "" {
 		r.Display = inst.pt.Chunking.RangeDisplay(c.Chunk)
 	}
-	srcSpec := inst.srcSpec.With(inst.pt.Chunking.ChunkPredicate(c.Chunk, c.Pid)).With(inst.sampleFilter)
-	dstSpec := inst.dstSpec.With(inst.pt.Chunking.ChunkPredicate(c.Chunk, inst.targetPid(c.Pid)))
+	srcSpec := inst.srcSpec.ForChunk(c.Chunk, c.Pid)
+	if inst.pt.Sync.Mode == SyncModeSample {
+		srcSpec = srcSpec.ForSample(inst.pt.Sync.SampleNum, inst.pt.Sync.SampleDen)
+	}
+	dstSpec := inst.dstSpec.ForChunk(c.Chunk, inst.targetPid(c.Pid))
 
-	srcSet, err := readLeafSet(ctx, inst.src, &srcSpec)
+	srcSet, err := sourceLeafSet(ctx, inst.src, &srcSpec)
 	if err != nil {
 		r.Status, r.Note = ChunkStatusFailed, err.Error()
 		return
@@ -731,13 +778,17 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 		r.Status, r.Note = ChunkStatusFailed, "an earlier attempt may have left rows in this chunk, and the run does not own the target's rows"
 		return
 	}
+	if err = inst.src.precheck(ctx, &srcSpec); err != nil {
+		r.Status, r.Note = ChunkStatusFailed, err.Error()
+		return
+	}
 	for attempt := 1; attempt <= inst.opts.MaxAttempts; attempt++ {
 		r.Attempts = attempt
 		if attempt > 1 {
 			// The source may have moved since the digest the last attempt
 			// verified against; a copy is verified against the source it
 			// read from.
-			srcSet, err = readLeafSet(ctx, inst.src, &srcSpec)
+			srcSet, err = sourceLeafSet(ctx, inst.src, &srcSpec)
 			if err != nil {
 				r.Status, r.Note = ChunkStatusFailed, err.Error()
 				return
@@ -817,7 +868,7 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r ChunkResult) {
 	table := inst.pt.Source.String()
 	r = ChunkResult{Table: table, Chunk: cd.Id, Display: cd.Display}
-	srcSpec := inst.srcSpec.With(inst.pt.Chunking.ChunkPredicate(cd.Id, cd.SrcPid))
+	srcSpec := inst.srcSpec.ForChunk(cd.Id, cd.SrcPid)
 	// A target partition id names the same rows as the source's chunk only
 	// when both tables partition by the same key.
 	dstPid := ""
@@ -827,11 +878,11 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 			dstPid = cd.SrcPid
 		}
 	}
-	dstSpec := inst.dstSpec.With(inst.pt.Chunking.ChunkPredicate(cd.Id, dstPid))
+	dstSpec := inst.dstSpec.ForChunk(cd.Id, dstPid)
 
 	s, d, err := both(ctx, func(ctx context.Context, side int) (leafSet, error) {
 		if side == 0 {
-			return readLeafSet(ctx, inst.src, &srcSpec)
+			return sourceLeafSet(ctx, inst.src, &srcSpec)
 		}
 		return readLeafSet(ctx, inst.dst, &dstSpec)
 	})
@@ -888,7 +939,7 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 		if copied > 0 {
 			leafSpec := srcSpec
 			if !coversAll(leaves, s, d) {
-				leafSpec = srcSpec.With(inst.srcSpec.LeafPredicate(leaves))
+				leafSpec = srcSpec.ForLeaves(leaves)
 			}
 			var bytes uint64
 			bytes, counted, err = relay(ctx, inst.src, inst.dst, &leafSpec, &inst.dstSpec, &inst.opts, copied)

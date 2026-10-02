@@ -22,19 +22,19 @@ func TestPrepareSync(t *testing.T) {
 	}}
 	ctx := context.Background()
 
-	chosen, skipped, err := PrepareSync(ctx, nil, &plan, TableSync{Mode: SyncModeFull}, nil, DefaultChunkingOptions())
+	chosen, skipped, err := PrepareSync(ctx, ServerSource(nil), &plan, TableSync{Mode: SyncModeFull}, nil, DefaultChunkingOptions())
 	require.NoError(t, err)
 	require.Len(t, chosen, 3)
 	assert.Equal(t, []string{"a.pending: verdict create (apply the DDL first)"}, skipped, "unsupported tables are not worth a line")
 	assert.Equal(t, SyncModeFull, chosen[0].Sync.Mode)
 
-	chosen, skipped, err = PrepareSync(ctx, nil, &plan, TableSync{Mode: SyncModeRepair}, nil, DefaultChunkingOptions())
+	chosen, skipped, err = PrepareSync(ctx, ServerSource(nil), &plan, TableSync{Mode: SyncModeRepair}, nil, DefaultChunkingOptions())
 	require.NoError(t, err)
 	require.Len(t, chosen, 1, "repair skips identical diffs and needs one")
 	assert.Equal(t, ref("a", "differs"), chosen[0].Source)
 	assert.Contains(t, skipped, "a.undiffed: repair needs a diff (run the diff first)")
 
-	chosen, _, err = PrepareSync(ctx, nil, &plan, TableSync{Mode: SyncModeSample, SampleNum: 1, SampleDen: 4}, nil, DefaultChunkingOptions())
+	chosen, _, err = PrepareSync(ctx, ServerSource(nil), &plan, TableSync{Mode: SyncModeSample, SampleNum: 1, SampleDen: 4}, nil, DefaultChunkingOptions())
 	require.NoError(t, err)
 	assert.Equal(t, int64(3*(10/4)), ExpectedRows(chosen), "each table rounds down")
 }
@@ -88,19 +88,19 @@ func TestDiscoverBoth_NamesTheFailingServer(t *testing.T) {
 	unreachable := errors.New("connection refused")
 	ctx := context.Background()
 
-	_, _, err := DiscoverBoth(ctx, blockingQuery{}, failingQuery{unreachable})
+	_, _, err := DiscoverBoth(ctx, ServerSource(blockingQuery{}), failingQuery{unreachable})
 	require.ErrorIs(t, err, unreachable)
 	assert.Contains(t, err.Error(), "the target")
 	assert.NotContains(t, err.Error(), "the source")
 	assert.NotErrorIs(t, err, context.Canceled)
 
-	_, _, err = DiscoverBoth(ctx, failingQuery{unreachable}, blockingQuery{})
+	_, _, err = DiscoverBoth(ctx, ServerSource(failingQuery{unreachable}), blockingQuery{})
 	require.ErrorIs(t, err, unreachable)
 	assert.Contains(t, err.Error(), "the source")
 	assert.NotContains(t, err.Error(), "the target")
 
 	other := errors.New("authentication failed")
-	_, _, err = DiscoverBoth(ctx, failingQuery{unreachable}, failingQuery{other})
+	_, _, err = DiscoverBoth(ctx, ServerSource(failingQuery{unreachable}), failingQuery{other})
 	require.ErrorIs(t, err, unreachable, "two independent failures are both reported")
 	require.ErrorIs(t, err, other)
 }

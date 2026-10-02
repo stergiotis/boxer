@@ -3,7 +3,7 @@
 // writes its findings into one [Plan] document. The CLI and the imzero2 wizard
 // are two editors of that document (§SD1).
 //
-// This package covers §M1 to §M4:
+// This package covers ADR-0259 §M1 to §M4, and ADR-0271:
 //
 //   - discovery of what a server holds, from its system tables only ([Discover], §SD2);
 //   - a structure verdict per table, with the DDL that would bring the target
@@ -18,7 +18,12 @@
 //   - the monitor: rows landed from the target's system.processes, a
 //     compressed relay, the target's disks and footprints ([ReadDisks]), the
 //     pre-flight ([Preflight]) and the free-space floor ([FreeFloor], §SD6);
-//   - the workflow both front ends call, one function per step (§SD7).
+//   - the workflow both front ends call, one function per step (§SD7);
+//   - per-table row filters, applied to both sides ([ValidateFilter],
+//     ADR-0271 §SD1);
+//   - packs: [Export] writes the selected tables into a directory, and
+//     [OpenPack] reads one back as the source of a later plan, behind the
+//     [SourceI] every step reads the source through (ADR-0271 §SD2, §SD3).
 //
 // Credentials never enter a plan. An [Endpoint] names a server by URL and user,
 // and the password is read from the environment registry by role when a
@@ -71,6 +76,19 @@ var ErrNoTarget = eh.Errorf("no target endpoint configured")
 type Endpoint struct {
 	URL  string `json:"url"`
 	User string `json:"user"`
+	// Pack, set in place of URL on a source, names a pack directory
+	// (ADR-0271 §SD3); Export is the export the pack held when the plan
+	// was made, so a pack exported again is not mistaken for it.
+	Pack   string `json:"pack,omitempty"`
+	Export string `json:"export,omitempty"`
+}
+
+// Label names the endpoint for an operator: the URL, or the pack.
+func (inst Endpoint) Label() (s string) {
+	if inst.Pack != "" {
+		return "pack " + inst.Pack
+	}
+	return inst.URL
 }
 
 // NormalizeEndpointURL accepts either a URL or a bare host:port and returns an

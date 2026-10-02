@@ -26,6 +26,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -234,6 +235,10 @@ type App struct {
 	dbTarget   map[string]*string
 	leewayOnly bool
 
+	// Structure: the row filter typed for each source table, by
+	// "database.name" (ADR-0271 §SD1).
+	filters map[string]*string
+
 	// The plan and its file. planRev counts plan replacements, so a page
 	// can tell a new plan from the one it last read. planName is the file in
 	// the data area; planLocation is its host path, for display only.
@@ -298,6 +303,7 @@ func newApp() (inst *App) {
 		dstUser:     dst.User,
 		dbPick:      make(map[string]*bool, 16),
 		dbTarget:    make(map[string]*string, 16),
+		filters:     make(map[string]*string, 16),
 		sampleText:  "1/100",
 		compression: "zstd",
 	}
@@ -577,6 +583,11 @@ func (inst *App) storeRecent() {
 // area, so the frame drops its recent row.
 var errPlanGone = errors.New("the plan file is gone")
 
+// errPackPlan refuses a plan whose source is a pack: the window streams no
+// files through its data area, so a pack is read by the CLI only
+// (ADR-0271 §SD4).
+var errPackPlan = errors.New("this plan's source is a pack; run it with `boxer jackstay` on the command line")
+
 // startOpen loads a plan from the data area and lands on the step it was left
 // at. seed is the start-up open of [PlanEnv], for which a missing file is
 // the plan still to be written, not an error.
@@ -592,6 +603,8 @@ func (inst *App) startOpen(name string, seed bool) {
 				return &fileResult{op: fileOpOpen, saved: planSaved{name: name, err: errPlanGone}}, nil
 			case err != nil:
 				return nil, err
+			case p.Source.Pack != "":
+				return nil, errPackPlan
 			}
 			return &fileResult{op: fileOpOpen, plan: p, saved: statPlan(files, name)}, nil
 		})
@@ -627,6 +640,9 @@ func (inst *App) startImport() {
 					return nil, errors.New(r.Reason)
 				}
 				return nil, perr
+			}
+			if p.Source.Pack != "" {
+				return nil, errPackPlan
 			}
 			taken, err := files.List()
 			if err != nil {
@@ -959,7 +975,7 @@ func (inst *App) startDiscover() {
 	inst.discoverJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.discover", Title: "discover servers"},
 		func(ctx context.Context, report bgjob.Reporter) (*discovered, error) {
 			report(0, 0, "reading system tables on both servers")
-			s, d, err := jk.DiscoverBoth(ctx, src, dst)
+			s, d, err := jk.DiscoverBoth(ctx, jk.ServerSource(src), dst)
 			if err != nil {
 				return nil, err
 			}
@@ -979,6 +995,28 @@ func (inst *App) selection() (sel jk.Selection) {
 				sel.DatabaseMap[db] = t
 			}
 		}
+	}
+	for ref, f := range inst.filters {
+		db, _, _ := strings.Cut(ref, ".")
+		if fs := strings.TrimSpace(*f); fs != "" && slices.Contains(sel.Databases, db) {
+			if sel.Filters == nil {
+				sel.Filters = make(map[string]string, 4)
+			}
+			sel.Filters[ref] = fs
+		}
+	}
+	return
+}
+
+// filterText is the bound text of a table's row filter, seeded from the
+// plan's filter the first time the table is shown.
+func (inst *App) filterText(pt *jk.PlanTable) (text *string) {
+	key := pt.Source.String()
+	text = inst.filters[key]
+	if text == nil {
+		f := pt.Filter
+		text = &f
+		inst.filters[key] = text
 	}
 	return
 }
@@ -1012,7 +1050,7 @@ func (inst *App) startStructure() {
 	inst.structureJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.structure", Title: "plan the structure"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "judging every selected table")
-			p, err := jk.PlanStructure(ctx, src, dst, srcEp, dstEp, sel, old, time.Now())
+			p, err := jk.PlanStructure(ctx, jk.ServerSource(src), dst, srcEp, dstEp, sel, old, time.Now())
 			if err != nil {
 				return nil, err
 			}
@@ -1038,7 +1076,7 @@ func (inst *App) startApply() {
 				return nil, err
 			}
 			ddl := chclient.New(jk.DDLClientConfig(dstCfg, guards), nil)
-			applied, after, stale, err := jk.ApplyDDLStep(ctx, src, dst, ddl, &p, time.Now())
+			applied, after, stale, err := jk.ApplyDDLStep(ctx, jk.ServerSource(src), dst, ddl, &p, time.Now())
 			if err != nil {
 				return nil, err
 			}
@@ -1069,7 +1107,7 @@ func (inst *App) startDiff() {
 					}
 					report(uint64(i), uint64(n), note)
 				}}
-			fresh, skipped, stale, err := jk.DiffStep(ctx, scanS, scanD, &p, opts, time.Now)
+			fresh, skipped, stale, err := jk.DiffStep(ctx, jk.ServerSource(scanS), scanD, &p, opts, time.Now)
 			if err != nil || len(stale) > 0 {
 				return &stepResult{stale: stale}, err
 			}
@@ -1108,7 +1146,7 @@ func (inst *App) startPreview() {
 	inst.previewJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.preflight", Title: "pre-flight"},
 		func(ctx context.Context, report bgjob.Reporter) (*preflightResult, error) {
 			report(0, 0, "rechecking the plan, reading the target's disks")
-			prep, err := jk.PrepareSyncStep(ctx, src, dst, &p, req)
+			prep, err := jk.PrepareSyncStep(ctx, jk.ServerSource(src), dst, &p, req)
 			if err != nil {
 				return nil, err
 			}
@@ -1146,7 +1184,7 @@ func (inst *App) startSync() {
 	inst.syncJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.sync", Title: "sync"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
-			prep, err := jk.PrepareSyncStep(ctx, scanS, scanD, &p, req)
+			prep, err := jk.PrepareSyncStep(ctx, jk.ServerSource(scanS), scanD, &p, req)
 			if err != nil || len(prep.Stale) > 0 {
 				return &stepResult{stale: prep.Stale}, err
 			}
@@ -1195,7 +1233,7 @@ func (inst *App) startSync() {
 				s := pt.Source.String()
 				current.Store(&s)
 			}
-			out, err := jk.RunSyncIn(ctx, scanS, scanD, &prep, files, planName, req.Restart, opts, time.Now)
+			out, err := jk.RunSyncIn(ctx, jk.ServerSource(scanS), scanD, &prep, files, planName, req.Restart, opts, time.Now)
 			if err != nil {
 				return nil, err
 			}

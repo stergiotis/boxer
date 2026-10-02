@@ -186,12 +186,18 @@ var errOtherSideFailed = errors.New("the other server failed")
 // side for the differing leaves small enough to compare row by row. Final is
 // set when either spec reads with FINAL; [DiffPlanTable] overwrites it with
 // the operator's request.
-func DiffTable(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestSpec, dstSpec *DigestSpec, opts DiffOptions, now time.Time) (d TableDiff, err error) {
+//
+// A source that serves no row pairs (a pack) leaves every differing leaf that
+// both sides hold unresolved.
+func DiffTable(ctx context.Context, src SourceI, dst QueryI, srcSpec *DigestSpec, dstSpec *DigestSpec, opts DiffOptions, now time.Time) (d TableDiff, err error) {
 	d = TableDiff{ComputedAt: now.UTC(), Final: srcSpec.Final || dstSpec.Final}
+	if src.limits().noPairs {
+		opts.PairBudget = 0
+	}
 	var sc, dc map[string]*chunkDigests
 	sc, dc, err = both(ctx, func(ctx context.Context, side int) (map[string]*chunkDigests, error) {
 		if side == 0 {
-			return readDigests(ctx, src, srcSpec)
+			return src.digests(ctx, srcSpec)
 		}
 		return readDigests(ctx, dst, dstSpec)
 	})
@@ -247,7 +253,7 @@ func DiffTable(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestSpec,
 					ld.Resolved, ld.Missing = true, ld.SrcRows
 				case ld.SrcRows == 0:
 					ld.Resolved, ld.Extra = true, ld.DstRows
-				case max(ld.SrcRows, ld.DstRows) <= opts.PairThreshold && budget+max(ld.SrcRows, ld.DstRows) <= opts.PairBudget:
+				case opts.PairBudget > 0 && max(ld.SrcRows, ld.DstRows) <= opts.PairThreshold && budget+max(ld.SrcRows, ld.DstRows) <= opts.PairBudget:
 					budget += max(ld.SrcRows, ld.DstRows)
 					toResolve = append(toResolve, ChunkLeaf{Chunk: id, Leaf: ld.Leaf})
 				}
@@ -351,11 +357,11 @@ func readPairs(ctx context.Context, q QueryI, spec *DigestSpec, leaves []ChunkLe
 // are missing or extra. Duplicate rows are counted, not collapsed. A leaf for
 // which neither side returned a row (the table moved between the scans) is
 // left unresolved rather than reported as zero differences.
-func resolveLeaves(ctx context.Context, src QueryI, dst QueryI, srcSpec *DigestSpec, dstSpec *DigestSpec, leaves []ChunkLeaf, opts DiffOptions, d *TableDiff) (err error) {
+func resolveLeaves(ctx context.Context, src SourceI, dst QueryI, srcSpec *DigestSpec, dstSpec *DigestSpec, leaves []ChunkLeaf, opts DiffOptions, d *TableDiff) (err error) {
 	var sp, dp map[pairKey]*pairSide
 	sp, dp, err = both(ctx, func(ctx context.Context, side int) (map[pairKey]*pairSide, error) {
 		if side == 0 {
-			return readPairs(ctx, src, srcSpec, leaves)
+			return src.pairs(ctx, srcSpec, leaves)
 		}
 		return readPairs(ctx, dst, dstSpec, leaves)
 	})
@@ -472,8 +478,8 @@ func (inst *PlanTable) DigestSpecs(final bool) (src DigestSpec, dst DigestSpec, 
 	if inst.Chunking != nil {
 		c = *inst.Chunking
 	}
-	src = DigestSpec{Ref: inst.Source, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.Engine)}
-	dst = DigestSpec{Ref: inst.Target, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.TargetEngine)}
+	src = DigestSpec{Ref: inst.Source, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.Engine), Filter: inst.Filter}
+	dst = DigestSpec{Ref: inst.Target, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.TargetEngine), Filter: inst.Filter}
 	maybeSpurious = (IsMergeEngine(inst.Engine) && !src.Final) || (IsMergeEngine(inst.TargetEngine) && !dst.Final)
 	return
 }
@@ -481,14 +487,18 @@ func (inst *PlanTable) DigestSpecs(final bool) (src DigestSpec, dst DigestSpec, 
 // DiffPlanTable runs the content diff of one plan table and stores it in the
 // table: the chunk layout is derived from the source first when the plan has
 // none. The table must be diffable ([PlanTable.IsDiffable]).
-func DiffPlanTable(ctx context.Context, src QueryI, dst QueryI, pt *PlanTable, final bool, chunkOpts ChunkingOptions, diffOpts DiffOptions, now time.Time) (err error) {
+func DiffPlanTable(ctx context.Context, src SourceI, dst QueryI, pt *PlanTable, final bool, chunkOpts ChunkingOptions, diffOpts DiffOptions, now time.Time) (err error) {
 	if !pt.IsDiffable() {
 		err = eb.Build().Str("table", pt.Source.String()).Str("verdict", pt.Verdict.String()).Errorf("table is not diffable")
 		return
 	}
+	if final && src.limits().noFinal {
+		err = eb.Build().Str("table", pt.Source.String()).Errorf("%s cannot be read with FINAL", src.limits().what)
+		return
+	}
 	if pt.Chunking == nil {
 		var c Chunking
-		c, err = DeriveChunking(ctx, src, pt.Source, pt.SortingKey, pt.PartitionKey, pt.Rows, chunkOpts)
+		c, err = src.deriveChunking(ctx, pt, chunkOpts)
 		if err != nil {
 			return
 		}

@@ -20,10 +20,10 @@ import (
 // and decides where the plan is saved.
 
 // DiscoverBoth reads both inventories at once.
-func DiscoverBoth(ctx context.Context, src QueryI, dst QueryI) (s Inventory, d Inventory, err error) {
+func DiscoverBoth(ctx context.Context, src SourceI, dst QueryI) (s Inventory, d Inventory, err error) {
 	s, d, err = both(ctx, func(ctx context.Context, side int) (Inventory, error) {
 		if side == 0 {
-			inv, e := Discover(ctx, src)
+			inv, e := src.discover(ctx)
 			if e != nil {
 				return inv, eh.Errorf("unable to discover the source: %w", e)
 			}
@@ -49,7 +49,7 @@ func newTableOps() (ops *common.TableOperations, err error) {
 // PlanStructure is the Structure step: discover both servers and judge every
 // selected table. old, when it names the same servers, lends the new plan its
 // chunk layouts (§SD4).
-func PlanStructure(ctx context.Context, src QueryI, dst QueryI, srcEp Endpoint, dstEp Endpoint, sel Selection, old *Plan, now time.Time) (plan Plan, err error) {
+func PlanStructure(ctx context.Context, src SourceI, dst QueryI, srcEp Endpoint, dstEp Endpoint, sel Selection, old *Plan, now time.Time) (plan Plan, err error) {
 	var s, d Inventory
 	s, d, err = DiscoverBoth(ctx, src, dst)
 	if err != nil {
@@ -74,7 +74,7 @@ func PlanStructure(ctx context.Context, src QueryI, dst QueryI, srcEp Endpoint, 
 // the plan as the servers now call for it, carrying plan's chunk layouts,
 // diffs and sync state; stale lists what moved. A caller must not act on a
 // plan whose stale list is not empty.
-func Recheck(ctx context.Context, src QueryI, dst QueryI, plan *Plan, now time.Time) (fresh Plan, stale []string, err error) {
+func Recheck(ctx context.Context, src SourceI, dst QueryI, plan *Plan, now time.Time) (fresh Plan, stale []string, err error) {
 	var s, d Inventory
 	s, d, err = DiscoverBoth(ctx, src, dst)
 	if err != nil {
@@ -101,7 +101,7 @@ var ErrStale = eh.Errorf("the plan no longer matches the servers")
 // pending DDL through ddl (a client carrying [DDLClientConfig]), and judge
 // again. It returns the statements that ran and the plan afterwards; a stale
 // plan runs nothing.
-func ApplyDDLStep(ctx context.Context, src QueryI, dst QueryI, ddl ExecI, plan *Plan, now time.Time) (applied []string, after Plan, stale []string, err error) {
+func ApplyDDLStep(ctx context.Context, src SourceI, dst QueryI, ddl ExecI, plan *Plan, now time.Time) (applied []string, after Plan, stale []string, err error) {
 	var pending Plan
 	pending, stale, err = Recheck(ctx, src, dst, plan, now)
 	if err != nil || len(stale) > 0 {
@@ -143,7 +143,7 @@ func notDiffable(pt *PlanTable) (reason string) {
 // DiffStep is the Differences step: recheck the plan, then diff every
 // diffable table in scope in place (§SD4). fresh is the plan to save; a
 // stale plan is not diffed.
-func DiffStep(ctx context.Context, src QueryI, dst QueryI, plan *Plan, opts DiffOptionsAll, now func() time.Time) (fresh Plan, skipped []string, stale []string, err error) {
+func DiffStep(ctx context.Context, src SourceI, dst QueryI, plan *Plan, opts DiffOptionsAll, now func() time.Time) (fresh Plan, skipped []string, stale []string, err error) {
 	fresh, stale, err = Recheck(ctx, src, dst, plan, now())
 	if err != nil || len(stale) > 0 {
 		return
@@ -209,7 +209,7 @@ type SyncPrepared struct {
 // PrepareSyncStep rechecks the plan, chooses the tables req can take, derives
 // the chunk layout of any that lacks one, and reads the target's disks for
 // the pre-flight (§SD5, §SD6). Nothing is written to either server.
-func PrepareSyncStep(ctx context.Context, src QueryI, dst QueryI, plan *Plan, req SyncRequest) (prep SyncPrepared, err error) {
+func PrepareSyncStep(ctx context.Context, src SourceI, dst QueryI, plan *Plan, req SyncRequest) (prep SyncPrepared, err error) {
 	prep.Plan, prep.Stale, err = Recheck(ctx, src, dst, plan, time.Now())
 	if err != nil || len(prep.Stale) > 0 {
 		return
@@ -239,7 +239,7 @@ func PrepareSyncStep(ctx context.Context, src QueryI, dst QueryI, plan *Plan, re
 // PrepareSync chooses the tables in scope that can take ts, with a chunk
 // layout and ts set on each. A table that cannot is listed in skipped with the
 // reason; a repair has nothing to do on a table whose diff is identical.
-func PrepareSync(ctx context.Context, src QueryI, plan *Plan, ts TableSync, only []datacatalog.TableRef, chunkOpts ChunkingOptions) (chosen []*PlanTable, skipped []string, err error) {
+func PrepareSync(ctx context.Context, src SourceI, plan *Plan, ts TableSync, only []datacatalog.TableRef, chunkOpts ChunkingOptions) (chosen []*PlanTable, skipped []string, err error) {
 	chosen = make([]*PlanTable, 0, len(plan.Tables))
 	for i := range plan.Tables {
 		pt := &plan.Tables[i]
@@ -257,10 +257,13 @@ func PrepareSync(ctx context.Context, src QueryI, plan *Plan, ts TableSync, only
 			continue
 		case ts.Mode == SyncModeRepair && pt.Diff.IsIdentical():
 			continue
+		case ts.Mode != SyncModeFull && src.limits().noSubsets:
+			skipped = append(skipped, pt.Source.String()+": "+src.limits().what+" holds whole chunks only, so "+ts.Mode.String()+" is not possible (sync in full)")
+			continue
 		}
 		if pt.Chunking == nil {
 			var c Chunking
-			c, err = DeriveChunking(ctx, src, pt.Source, pt.SortingKey, pt.PartitionKey, pt.Rows, chunkOpts)
+			c, err = src.deriveChunking(ctx, pt, chunkOpts)
 			if err != nil {
 				return
 			}
@@ -313,13 +316,13 @@ type SyncOutcome struct {
 // stopped part-way resumes from what it recorded. Chunk failures are in the
 // tables' reports; err is a table-level failure, after which the plan is
 // still saved.
-func RunSync(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, planPath string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
+func RunSync(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared, planPath string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
 	return RunSyncIn(ctx, src, dst, prep, OsFiles{}, planPath, restart, opts, now)
 }
 
 // RunSyncIn is [RunSync] with the plan and its journal kept in files under
 // planName.
-func RunSyncIn(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared, files FilesI, planName string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
+func RunSyncIn(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared, files FilesI, planName string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
 	if len(prep.Stale) > 0 {
 		err = eb.Build().Int("stale", len(prep.Stale)).Errorf("plan is stale: %w", ErrStale)
 		return
@@ -341,10 +344,10 @@ func RunSyncIn(ctx context.Context, src ClientI, dst ClientI, prep *SyncPrepared
 	// A resumed run keeps the settings it began under. Refused before the
 	// plan is saved, so a refused request leaves no trace in it.
 	for _, pt := range prep.Chosen {
-		if e, started := j.Started(pt.Source.String()); started && (e.Mode != pt.Sync.Mode.String() || e.Existing != pt.Sync.Existing.String()) {
-			err = eb.Build().Str("table", pt.Source.String()).Str("begun", e.Mode+"/"+e.Existing).Str("now", pt.Sync.Mode.String()+"/"+pt.Sync.Existing.String()).
-				Errorf("the run began this table under other settings; keep them, or restart the run")
-			return
+		if e, started := j.Started(pt.Source.String()); started {
+			if err = checkStart(e, pt); err != nil {
+				return
+			}
 		}
 	}
 	if err = plan.SaveIn(files, planName); err != nil {

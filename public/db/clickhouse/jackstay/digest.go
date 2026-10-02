@@ -1,6 +1,7 @@
 package jackstay
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,9 +32,29 @@ type DigestSpec struct {
 	// Final reads the table with FINAL, so merge-semantics engines are
 	// compared on their merged rows.
 	Final bool
-	// Where restricts every query to a subset of rows (a chunk, a sample);
-	// empty reads the whole table.
+	// Filter is the table's row filter (ADR-0271 §SD1): every query reads
+	// only the slice it selects, on either side. Empty reads every row.
+	Filter string
+	// Where restricts every query to a subset of the slice (a chunk, a
+	// sample); empty reads the whole slice.
 	Where string
+	// sel records what Where was built from, for a source that cannot run
+	// SQL (a pack, [OpenPack]): only the builders below set it.
+	sel specSel
+}
+
+// specSel is the structured form of a spec's Where.
+type specSel struct {
+	// chunked is set when the spec selects one chunk.
+	chunked bool
+	chunk   string
+	// leaves, when not nil, restricts the chunk to these leaves.
+	leaves []uint32
+	// sampled is set when a sample predicate restricts the rows.
+	sampled bool
+	// opaque is set when [DigestSpec.With] added a predicate of unknown
+	// shape.
+	opaque bool
 }
 
 // RowHashExpr hashes the copied columns' RowBinary bytes. The list is
@@ -64,15 +85,59 @@ func (inst *DigestSpec) from() (sql string) {
 	if inst.Final {
 		sql += " FINAL"
 	}
-	if inst.Where != "" {
-		sql += " WHERE " + inst.Where
+	if w := andPredicates(inst.Filter, inst.Where); w != "" {
+		sql += " WHERE " + w
 	}
 	return
 }
 
+// SlicePredicate is the predicate a target-side DELETE restricts itself
+// with: the row filter and the spec's own restriction.
+func (inst *DigestSpec) SlicePredicate() (sql string) {
+	return andPredicates(inst.Filter, inst.Where)
+}
+
 // With returns a copy of the spec restricted by an additional predicate.
+// A source that cannot run SQL refuses a spec built this way; the
+// structured builders ([DigestSpec.ForChunk], [DigestSpec.ForLeaves],
+// [DigestSpec.ForSample]) are what it can serve.
 func (inst DigestSpec) With(pred string) (out DigestSpec) {
+	out = inst.with(pred)
+	if pred != "" && pred != "1" {
+		out.sel.opaque = true
+	}
+	return
+}
+
+// ForChunk restricts the spec to one chunk. pid, when known, is the chunk's
+// partition id on the side the spec reads.
+func (inst DigestSpec) ForChunk(id string, pid string) (out DigestSpec) {
+	out = inst.with(inst.Chunking.ChunkPredicate(id, pid))
+	out.sel.chunked, out.sel.chunk = true, id
+	return
+}
+
+// ForLeaves restricts the spec to the given leaves.
+func (inst DigestSpec) ForLeaves(leaves []uint32) (out DigestSpec) {
+	out = inst.with(inst.LeafPredicate(leaves))
+	out.sel.leaves = slices.Clone(leaves)
+	return
+}
+
+// ForSample restricts the spec to num of every den keys; a zero den is no
+// restriction.
+func (inst DigestSpec) ForSample(num uint32, den uint32) (out DigestSpec) {
+	if den == 0 {
+		return inst
+	}
+	out = inst.with(inst.SamplePredicate(num, den))
+	out.sel.sampled = true
+	return
+}
+
+func (inst DigestSpec) with(pred string) (out DigestSpec) {
 	out = inst
+	out.sel.leaves = slices.Clone(inst.sel.leaves)
 	switch {
 	case pred == "" || pred == "1":
 	case out.Where == "":

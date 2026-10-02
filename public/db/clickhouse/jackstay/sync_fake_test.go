@@ -132,7 +132,7 @@ func TestCopyChunk_SourceMovedBetweenAttempts(t *testing.T) {
 		return "", nil
 	}}
 	j := openTestJournal(t, "r")
-	rep, err := SyncTable(context.Background(), src, dst, pt, j, DefaultSyncOptions(), time.Now)
+	rep, err := SyncTable(context.Background(), ServerSource(src), dst, pt, j, DefaultSyncOptions(), time.Now)
 	require.NoError(t, err)
 	assert.Equal(t, 1, rep.Copied)
 	assert.Equal(t, 0, rep.Failed, rep.Problems)
@@ -160,7 +160,7 @@ func TestRepairChunk_RelayErrorIsReported(t *testing.T) {
 	j := openTestJournal(t, "r")
 	opts := DefaultSyncOptions()
 	opts.MaxAttempts = 2
-	rep, err := SyncTable(context.Background(), src, dst, pt, j, opts, time.Now)
+	rep, err := SyncTable(context.Background(), ServerSource(src), dst, pt, j, opts, time.Now)
 	require.NoError(t, err)
 	assert.Equal(t, 1, rep.Failed)
 	assert.Equal(t, uint64(0), rep.Rows)
@@ -175,9 +175,9 @@ func TestSyncTable_ResumeSettingsMismatch(t *testing.T) {
 	pt := singleChunkTable("t", "t")
 	pt.Sync = &TableSync{Mode: SyncModeFull, Existing: ExistingPolicyReplace}
 	j := openTestJournal(t, "r")
-	require.NoError(t, j.RecordStart("s.t", false, TableSync{Mode: SyncModeFull, Existing: ExistingPolicyAppend}, time.Now()))
+	require.NoError(t, j.RecordStart("s.t", false, TableSync{Mode: SyncModeFull, Existing: ExistingPolicyAppend}, "", time.Now()))
 	quiet := &fakeClient{answer: func(sql string) (string, error) { return "", nil }}
-	_, err := SyncTable(context.Background(), quiet, quiet, pt, j, DefaultSyncOptions(), time.Now)
+	_, err := SyncTable(context.Background(), ServerSource(quiet), quiet, pt, j, DefaultSyncOptions(), time.Now)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "other settings")
 	assert.Empty(t, quiet.execs)
@@ -219,7 +219,7 @@ func TestSyncTable_ReplaceClearsTargetOnlyChunks(t *testing.T) {
 		return "", nil
 	}}
 	j := openTestJournal(t, "r")
-	rep, err := SyncTable(context.Background(), src, dst, pt, j, DefaultSyncOptions(), time.Now)
+	rep, err := SyncTable(context.Background(), ServerSource(src), dst, pt, j, DefaultSyncOptions(), time.Now)
 	require.NoError(t, err)
 	assert.Equal(t, 2, rep.Copied)
 	assert.Equal(t, 0, rep.Failed, rep.Problems)
@@ -232,7 +232,7 @@ func TestSyncTable_ReplaceClearsTargetOnlyChunks(t *testing.T) {
 
 	// Resumed while the source still lacks the chunk: nothing is cleared again.
 	dst.execs = nil
-	rep, err = SyncTable(context.Background(), src, dst, pt, j, DefaultSyncOptions(), time.Now)
+	rep, err = SyncTable(context.Background(), ServerSource(src), dst, pt, j, DefaultSyncOptions(), time.Now)
 	require.NoError(t, err)
 	assert.Equal(t, 2, rep.Done)
 	assert.Empty(t, dst.execs)
@@ -246,13 +246,13 @@ func TestRunSync_RefusesMismatchBeforeSaving(t *testing.T) {
 	planPath := filepath.Join(t.TempDir(), "plan.json")
 	j, err := OpenJournal(JournalPath(planPath), "run")
 	require.NoError(t, err)
-	require.NoError(t, j.RecordStart("s.t", false, TableSync{Mode: SyncModeRepair}, time.Now()))
+	require.NoError(t, j.RecordStart("s.t", false, TableSync{Mode: SyncModeRepair}, "", time.Now()))
 	require.NoError(t, j.Close())
 	prep := SyncPrepared{Plan: Plan{FormatVersion: PlanFormatVersion, Source: Endpoint{URL: "http://s/"}, Target: Endpoint{URL: "http://d/"},
 		Tables: []PlanTable{*pt}, SyncRun: &SyncRun{RunId: "run"}}}
 	prep.Chosen = []*PlanTable{&prep.Plan.Tables[0]}
 	quiet := &fakeClient{answer: func(sql string) (string, error) { return "", nil }}
-	_, err = RunSync(context.Background(), quiet, quiet, &prep, planPath, false, DefaultSyncOptions(), time.Now)
+	_, err = RunSync(context.Background(), ServerSource(quiet), quiet, &prep, planPath, false, DefaultSyncOptions(), time.Now)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "other settings")
 	_, serr := LoadPlan(planPath)

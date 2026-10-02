@@ -812,6 +812,9 @@ func (inst *App) renderSelectedStructure() {
 				small(plural(n, "column") + " copied and hashed, in source order; hover for the list")
 			}
 		}
+		if pt.Verdict.IsSyncable() {
+			inst.renderFilter(pt)
+		}
 		if len(pt.DDL) > 0 {
 			space()
 			heading("DDL that would run on the target")
@@ -823,6 +826,29 @@ func (inst *App) renderSelectedStructure() {
 		}
 		return true
 	})
+}
+
+// renderFilter edits a table's row filter. A filter changes which rows every
+// later step reads on both servers, so it takes effect by planning the
+// structure again, which also checks it (ADR-0271 §SD1).
+func (inst *App) renderFilter(pt *jk.PlanTable) {
+	space()
+	heading("Row filter")
+	note("Only the rows this expression selects are compared and synced, on both servers; target rows outside it are left alone. Empty means every row.")
+	text := inst.filterText(pt)
+	c.TextEdit(inst.ids.PrepareStr("filter"), *text, false).HintText("tenant = 'a' AND ts >= toDateTime('2026-01-01', 'UTC')").
+		DesiredWidth(480).SendRespVal(text)
+	changed := strings.TrimSpace(*text) != pt.Filter
+	switch {
+	case inst.disc == nil:
+		if changed {
+			small("connect to the servers to plan with this filter")
+		}
+	case changed:
+		if inst.actionButton("apply-filter", "Plan with this filter", inst.structureJob.Running()) {
+			inst.startStructure()
+		}
+	}
 }
 
 func fmtWhen(t time.Time) (s string) {

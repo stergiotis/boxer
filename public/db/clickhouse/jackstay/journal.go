@@ -33,6 +33,9 @@ type JournalEntry struct {
 	// begun under. A resumed run must be given the same ones, or restart.
 	Mode     string `json:"mode,omitempty"`
 	Existing string `json:"existing,omitempty"`
+	// Filter (start): the row filter the table was begun under
+	// (ADR-0271 §SD1).
+	Filter string `json:"filter,omitempty"`
 	// N, Kd, Rd (chunk): the source chunk's digest totals when copied.
 	N  uint64 `json:"n,omitempty"`
 	Kd uint64 `json:"kd,omitempty"`
@@ -169,10 +172,10 @@ func (inst *Journal) Started(table string) (e JournalEntry, started bool) {
 	return
 }
 
-// RecordStart records that the run begins table under ts, owning the target's
-// rows or not.
-func (inst *Journal) RecordStart(table string, owned bool, ts TableSync, now time.Time) (err error) {
-	e := JournalEntry{Table: table, Event: "start", Owned: owned, Mode: ts.Mode.String(), Existing: ts.Existing.String(), At: now.UTC()}
+// RecordStart records that the run begins table under ts and the row filter,
+// owning the target's rows (its slice, under a filter) or not.
+func (inst *Journal) RecordStart(table string, owned bool, ts TableSync, filter string, now time.Time) (err error) {
+	e := JournalEntry{Table: table, Event: "start", Owned: owned, Mode: ts.Mode.String(), Existing: ts.Existing.String(), Filter: filter, At: now.UTC()}
 	err = inst.write(e)
 	if err == nil {
 		inst.start[table] = e

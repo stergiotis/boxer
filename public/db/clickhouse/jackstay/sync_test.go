@@ -30,7 +30,7 @@ func TestJournal_ReopenAndRuns(t *testing.T) {
 	j, err := OpenJournal(path, "r1")
 	require.NoError(t, err)
 	now := time.Unix(1, 0)
-	require.NoError(t, j.RecordStart("a.t", true, TableSync{Mode: SyncModeFull, Existing: ExistingPolicyReplace}, now))
+	require.NoError(t, j.RecordStart("a.t", true, TableSync{Mode: SyncModeFull, Existing: ExistingPolicyReplace}, "", now))
 	require.NoError(t, j.RecordChunk("a.t", "0", SyncModeFull, leafDigest{n: 3, kd: 4, rd: 5}, now))
 	require.NoError(t, j.RecordAttempt("a.u", "1", now))
 	require.NoError(t, j.Close())

@@ -68,6 +68,9 @@ type TableInfo struct {
 	TotalBytes   uint64
 	CreateQuery  string
 	Columns      []ColumnInfo
+	// Filter is set on a pack's inventory only: the row filter the table was
+	// exported under, which is all the pack holds of it (ADR-0271 §SD3).
+	Filter string
 }
 
 func (inst *TableInfo) ColumnNames() (names []string) {
