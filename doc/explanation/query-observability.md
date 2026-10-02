@@ -43,7 +43,7 @@ why the requirements outlived them. Restated:
 | R2 | Result batches to the glass as they arrive | 0050 | inline Arrow on the response shipped; incremental rendering open |
 | R3 | Terminal run accounting (profile events, peak memory, exceptions) | 0050 | shipped — the `queryrunsd` pipeline ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md), plane B) captures every terminal `query_log` event as a KindQueryRun fact: counters and peak memory as typed attributes, ProfileEvents fanned out per counter, exceptions with code and text, identity lifted from the SD7 stamp |
 | R4 | A facts substrate absorbing operational records | 0050 | shipped — `boxer.facts` (ADR-0026 §SD6), recordstore, DimensionStore in flight |
-| R5 | Result archival routed by shape, with provenance to source rows | 0050+0051 | Tier 1 shipped — a pin freezes the batch as-is into a per-pin ClickHouse table with the result's own schema plus a metadata row (content fingerprint, query/run/lane anchors); opening a pin is plain SQL. Ref-tuple lineage and Tier-2 weaving stay open (S6) |
+| R5 | Result archival routed by shape, with provenance to source rows | 0050+0051 | open — the Tier-1 pin was removed 2026-10-02, to be rebuilt over the query result cache (ADR-0115, Update 2026-10-02). Ref-tuple lineage and Tier-2 weaving stay open (S6) |
 | R6 | Auditable query categorization; governed ingestion for data products | 0051 | open — rescoped from gate to affordance (below) |
 | R7 | Machine-consumable export without re-implementing the CH protocol | 0050 | facts + `url()` cover pull; NATS-core forwarding decided as the push leg, built at consumer trigger (plane E) |
 
@@ -254,7 +254,10 @@ natural delivery vehicle for the interactive case.
    backfills history instead of starting blind).
 2. **S2** — History tab + run-detail panel over facts.
 3. **S3** — progress headers into lane badges (plane A).
-4. **S4** — Tier-1 pin + resultset browser.
+4. **S4** — Tier-1 pin + resultset browser (removed 2026-10-02; to be
+   rebuilt over the query result cache —
+   [ADR-0115](../adr/0115-query-observability-data-plane-strategy.md),
+   Update 2026-10-02).
 5. **S5** — QueryDef/TransformChain/ParamEnv interning (after ADR-0112) +
    per-definition trend view.
 6. **S6** — Tier-2 weave: catalog-aware shape analysis as affordance, typed
