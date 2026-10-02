@@ -53,7 +53,8 @@ type Config struct {
 	// (ADR-0280 §SD6); zero is DefaultPace (PaceEnv).
 	Pace time.Duration
 	// ActionsLog, when set, receives every action record as one JSON line,
-	// for a trial's scorer (ActionsFileEnv); the headless host sets it.
+	// for scoring a run after the host exits (ActionsFileEnv); the headless
+	// host sets it.
 	ActionsLog io.Writer
 }
 
