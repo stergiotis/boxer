@@ -95,12 +95,13 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 	s.Editing(resFilters, func(inst *App) bool { return appops.WidgetEditing(inst.kindH) })
 	// The selected job's state machine, as the state chip draws it:
 	// job_state and job_machine. The machine mirrors whichever job is
-	// selected, so its steps would mix jobs and are left out.
+	// selected, so its steps would mix jobs and are left out; until a frame
+	// mirrors the selected job, it reports none.
 	fsmops.Mount(s, "job", "the selected job", func(inst *App) opfsm.SourceI {
 		inst.mu.Lock()
 		selected := inst.selectedID
 		inst.mu.Unlock()
-		if selected == "" || inst.machine == nil {
+		if selected == "" || inst.machine == nil || inst.mirrored != selected {
 			return nil
 		}
 		return inst.machine

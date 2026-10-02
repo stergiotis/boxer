@@ -124,7 +124,7 @@ func (inst *App) renderDetail(snap snapshot, jobs []watchbillstore.Job) {
 		c.Label("Job " + short(inst.selectedID) + " is not in the listed rows; widen the filter or wait for the list.").Send()
 		return
 	}
-	inst.machine.Mirror(job.State)
+	inst.mirror(job)
 	for range c.Horizontal().KeepIter() {
 		c.LabelAtoms(c.Atoms().BeginRichText(job.ID).Monospace().Heading().End().Keep()).Send()
 		inst.chip.Render()
@@ -294,4 +294,10 @@ func when(t time.Time) (s string) {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339)
+}
+
+// mirror sets the job machine to job's state.
+func (inst *App) mirror(job watchbillstore.Job) {
+	inst.machine.Mirror(job.State)
+	inst.mirrored = job.ID
 }
