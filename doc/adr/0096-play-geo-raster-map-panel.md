@@ -712,6 +712,24 @@ public ADS-B instance, where the 1 % level of a world view takes seconds,
 nothing is skipped; on the local demo slice the first view climbs all three
 levels and the views after it go straight to the full table.
 
+## Update — 2026-10-02: SD7's margin, built
+
+SD7 as first written — the requested box inflated beyond the view, capped
+near 1536² — is now what the panel does. A settled view is widened by 25 % of
+its span on every side, clamped to the world, and sized at the view's own
+pixel scale; `mapMaxDim` rises to 1536 so a 1024-point view keeps its
+resolution. While a settled view stays inside the box last requested at the
+same scale, the panel emits that box again, so a small pan sends nothing; a
+change of table, render or window re-queries the same box, and a zoom or a
+pan past the margin asks again. `vp_*` therefore describe the requested box,
+as SD6 and SD7 always said, not the view itself.
+
+The map-tile-addressing trial's §7 measured the choice: on a path of small
+pans a 25 % margin halved queries and server time, and on a path of zooms and
+large pans it cost about a fifth more server time and a third more bytes. One
+cost is new: a raster up to 1536 wide holds more non-empty pixels, so a dense
+view comes nearer the public ADS-B user's 1,048,576-row result cap.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding

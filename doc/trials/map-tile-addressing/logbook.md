@@ -91,3 +91,16 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory, which
     0.85 of their transparency.
 - **Run dirs:** [./runs/2026-10-02-first-run/](./runs/2026-10-02-first-run/),
   [./runs/2026-10-02-repeat/](./runs/2026-10-02-repeat/)
+
+## 2026-10-02 — overscan — a margin halves the cost of nudging and adds a fifth to zooming
+
+- Added `harness/overscan_test.go` and `MTA_TESTS` to `measure.sh`; run
+  `runs/2026-10-02-overscan/`, load average 0.8–1.7.
+- The arms model the pane after the first runs' follow-ups (memo, fast
+  ladder start). The `now-m0` arm sends 10 queries on the §2 path where
+  `bbox-sd1` sent 33; most of that is the memo and the fast start, not
+  overscan.
+- Margins 15/25/40 %: nudges 6/5/3 queries against 10; the §2 path 10/10/9
+  queries at 18–27 % more server time. Three repetitions agreed within a few
+  percent except one 684 ms outlier.
+- Decision with the owner: 25 % with the cap at 1536.

@@ -13,6 +13,7 @@
 #   CLICKHOUSE_URL   http://127.0.0.1:8123/   the server holding planes_mercator
 #                    and its _sample10/_sample100 companions
 #   MTA_REPS         cost 3, first-pixels 7   repetitions (one value for both)
+#   MTA_TESTS        every test                which harness tests to run (a go test -run pattern)
 #   GOTMPDIR/TMPDIR  where go builds, when /tmp is small
 set -euo pipefail
 
@@ -41,7 +42,7 @@ q() { curl -sS "$ch" --data-binary "$1"; }
 
 cd "$root"
 MTA_RUN_DIR="$out" go test -count=1 -timeout 30m -tags="$(cat ./tags) integration" \
-	-run 'TestSequenceCounts|TestServerCost|TestQueryCache|TestFirstPixels|TestResultShape|TestBrightness' \
+	-run "${MTA_TESTS:-TestSequenceCounts|TestServerCost|TestQueryCache|TestFirstPixels|TestResultShape|TestBrightness|TestOverscan}" \
 	./doc/trials/map-tile-addressing/harness/
 
 echo "- Load average after the run: $(cut -d' ' -f1-3 /proc/loadavg)" >>"$out/environment.md"

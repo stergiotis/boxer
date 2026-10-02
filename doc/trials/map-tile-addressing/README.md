@@ -48,6 +48,16 @@ the server cache pays only across sessions or viewers within its 60 s TTL.
 | Server time on the other 6 steps, run 1 | 1.11 s | 0 | 0 |
 | Server-cache hits, path run twice within the TTL, 2nd pass | 25 of 33 | 37 of 42 | 106 of 108 |
 
+**A follow-up (§7) measured SD7's overscan margin on the pane as built after
+the first runs (multi-entry memo, fast ladder start): on a path of eight
+10–15 % nudges a 25 % margin per side halved the queries and the server time
+(5 against 10 queries; 326 against 587 ms, median of three), and a 40 %
+margin cut them to 3 and 162 ms; on the eleven-step path above the same
+margins cost 18 to 27 % more server time and 35 to 58 % more wire bytes,
+because zooms and large pans leave any margin.** One run, load average under
+2; the margin arms request full resolution, (1 + 2·margin)× the view's
+pixels per side.
+
 **What this trial does not say.**
 
 - **Not "tiles halve the server cost."** The rows-read row (0.60 times) is
@@ -79,8 +89,9 @@ the server cache pays only across sessions or viewers within its 60 s TTL.
   2.2) held in both runs.
 
 **If you need a number**, take it from a run's TSVs —
-[the first run](./runs/2026-10-02-first-run/) and
-[the repeat](./runs/2026-10-02-repeat/) — which hold one row per query with
+[the first run](./runs/2026-10-02-first-run/),
+[the repeat](./runs/2026-10-02-repeat/) and, for §7,
+[the overscan run](./runs/2026-10-02-overscan/) — which hold one row per query with
 raw microseconds, rows and bytes. **No figure from this trial travels without
 the pair of arms it compares and the path it was measured on.**
 
@@ -289,3 +300,34 @@ would need.
    reused while the view stays inside it, is what absorbed the small pans
    for the tile arms. It was not measured; it would carry the same
    overfetch the tiles did.
+
+## 7 Follow-up: the overscan margin
+
+The first runs left SD7's margin unmeasured. `harness/overscan_test.go`
+(`TestOverscan`, run with `MTA_TESTS=TestOverscan measure.sh <slug>`) models
+the pane as built after them: the multi-entry raster memo, and a ladder that
+starts at the full table once that answered fast (here from the second view
+on). Each arm adds a margin of 0, 15, 25 or 40 % of the view's span on every
+side; a settled view inside the box last requested at the same zoom sends
+nothing. Two paths: the eleven steps of §2, and `nudges`, eight views of
+10–15 % pans around Zürich at zoom 9.
+
+| path | margin | queries | server time, median of 3 | wire bytes |
+| --- | --- | --- | --- | --- |
+| nudges | 0 | 10 | 587 ms | 10.0 MB |
+| nudges | 15 % | 6 | 387 ms | 7.5 MB |
+| nudges | 25 % | 5 | 326 ms | 7.1 MB |
+| nudges | 40 % | 3 | 162 ms | 3.5 MB |
+| §2 path | 0 | 10 | 664 ms | 11.4 MB |
+| §2 path | 15 % | 10 | 786 ms | 15.3 MB |
+| §2 path | 25 % | 10 | 842 ms | 17.7 MB |
+| §2 path | 40 % | 9 | 805 ms | 18.0 MB |
+
+The margin pays where the reader nudges and costs where the reader zooms or
+pans far, in proportion to the area it adds. The arms request full
+resolution; the pane's 1024 cap would otherwise trade the margin for
+blur at a 1024-point view. Not compared with the first runs' `bbox-sd1`
+figures, which were taken on a busier machine.
+
+The pane took a 25 % margin with its cap raised to 1536, the shape ADR-0096's
+SD7 first described (ADR-0096 Update 2026-10-02).
