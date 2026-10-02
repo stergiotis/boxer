@@ -781,6 +781,14 @@ asks for four times the pixels, and a dense view comes nearer the public
 ADS-B user's result-row cap. The browser tab reports a scale of 1 until it
 passes the page's devicePixelRatio through.
 
+## Update — 2026-10-02: the time window needs its column
+
+The 2026-10-01 time-window Update said a table without the time column keeps
+working. That holds only while nothing is brushed. The field is seeded
+`time` for any table, and a brush, even one over unrelated data, adds the
+predicate, so the raster of a table with no `time` column fails on an
+unknown identifier until the field is emptied by hand.
+
 ## References
 
 - [ADR-0056](0056-walkers-map-h3-binding.md) — the `walkers` slippy-map binding
