@@ -54,7 +54,7 @@ type tableFunctionInfo struct {
 }
 
 // tableFunctionSpellings is every table function of the server's
-// `system.table_functions` (26.8), plus boxer's macros, by how far it
+// `system.table_functions` (26.9), plus boxer's macros, by how far it
 // reaches. A name the server lists and this table does not fails the
 // catalog check of the integration lane, so an upgrade that adds a table
 // function is classified before it is trusted; meanwhile an unlisted name is
@@ -77,7 +77,7 @@ var tableFunctionSpellings = map[string]tableFunctionInfo{
 	"loop":            {takesTable: true},
 	"mergeTreeIndex":  {}, "mergeTreeProjection": {}, "mergeTreeTextIndex": {},
 	"mergeTreeCodecBlockCounts": {}, "mergeTreeAnalyzeIndexes": {}, "mergeTreeAnalyzeIndexesUUID": {},
-	"timeSeriesData": {}, "timeSeriesMetrics": {}, "timeSeriesSamples": {},
+	"timeSeriesData": {}, "timeSeriesMetrics": {}, "timeSeriesMetricFamilies": {}, "timeSeriesSamples": {},
 	"timeSeriesSelector": {}, "timeSeriesTags": {},
 	"prometheusQuery": {}, "prometheusQueryRange": {},
 
@@ -130,7 +130,7 @@ var tableFunctionSpellings = map[string]tableFunctionInfo{
 	"eval": {reach: SecurityReachRunTime},
 }
 
-// egressScalarFunctions are the scalar calls that reach beyond the query's
+// egressScalarSpellings are the scalar calls that reach beyond the query's
 // own data, by how far. The scalar vocabulary is too large to allowlist, so
 // an unlisted scalar is presumed pure — the asymmetry ADR-0132 records. The
 // catalog check of the integration lane flags a server function whose
@@ -145,7 +145,7 @@ var egressScalarSpellings = map[string]SecurityReachE{
 	"aiSimilarity": SecurityReachExternal, "aiTranslate": SecurityReachExternal,
 }
 
-// stateChangingScalarFunctions change persistent server state from inside a
+// stateChangingScalarSpellings change persistent server state from inside a
 // SELECT: generateSerialID advances a counter kept in Keeper.
 var stateChangingScalarSpellings = map[string]struct{}{
 	"generateSerialID": {},
