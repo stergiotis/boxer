@@ -123,7 +123,7 @@ func TestAppsTableRendersLaunchAndWorkingset(t *testing.T) {
 	for _, r := range rs {
 		require.NoError(t, r.Manifest.Validate(), "the fixtures must be manifests the registry would accept")
 	}
-	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
+	rec := appsTable(app.NewRegistry(), rs).Build(introspect.AllColumns(), len(rs))
 	defer rec.Release()
 	require.EqualValues(t, 2, rec.NumRows())
 
@@ -157,7 +157,7 @@ func TestAppsTableRendersRegistrationMode(t *testing.T) {
 			LaunchKind: "testLaunch", Workingset: true,
 		}, Singleton: true},
 	}
-	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
+	rec := appsTable(app.NewRegistry(), rs).Build(introspect.AllColumns(), len(rs))
 	defer rec.Release()
 
 	idx := rec.Schema().FieldIndices("registration")
@@ -183,7 +183,7 @@ func TestAppsTableRendersClassification(t *testing.T) {
 	for _, r := range rs {
 		require.NoError(t, r.Manifest.Validate(), "the fixtures must be manifests the registry would accept")
 	}
-	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
+	rec := appsTable(app.NewRegistry(), rs).Build(introspect.AllColumns(), len(rs))
 	defer rec.Release()
 	require.EqualValues(t, 1, rec.NumRows())
 

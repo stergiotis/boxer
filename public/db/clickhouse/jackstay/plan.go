@@ -28,6 +28,10 @@ type Selection struct {
 	// entry keeps its name.
 	DatabaseMap map[string]string `json:"databaseMap,omitempty"`
 	LeewayOnly  bool              `json:"leewayOnly"`
+	// Filters are row filters by source table ("database.name"): each is a
+	// boolean expression over the copied columns, and the table is planned,
+	// diffed and synced as the slice it selects (ADR-0271 §SD1).
+	Filters map[string]string `json:"filters,omitempty"`
 }
 
 func (inst *Selection) TargetDatabase(source string) (target string) {
@@ -50,7 +54,10 @@ type PlanTable struct {
 	TargetPartitionKey string `json:"targetPartitionKey,omitempty"`
 	Rows               uint64 `json:"rows"`
 	Bytes              uint64 `json:"bytes"`
-	TableVerdict       `json:",inline"`
+	// Filter is the row filter the table was planned with: the operator's
+	// from [Selection.Filters], or the one a pack source was exported under.
+	Filter       string `json:"filter,omitempty"`
+	TableVerdict `json:",inline"`
 	// Chunking is set by the first diff and carried over by later plans of
 	// the same table (see [Plan.CarryOver]).
 	Chunking *Chunking `json:"chunking,omitempty"`
@@ -161,6 +168,11 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 		if sel.LeewayOnly && !v.Leeway {
 			continue
 		}
+		var filter string
+		filter, err = tableFilter(st, sel, &v)
+		if err != nil {
+			return
+		}
 		if other, taken := targets[target]; taken {
 			err = eb.Build().Str("table", st.Ref.String()).Str("other", other.String()).Str("target", target.String()).
 				Errorf("two source tables map onto one target table")
@@ -180,12 +192,56 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 			PartitionKey:       st.PartitionKey,
 			Rows:               st.TotalRows,
 			Bytes:              st.TotalBytes,
+			Filter:             filter,
 			TableVerdict:       v,
 		})
 	}
 	for _, db := range needDatabase {
 		plan.DatabaseDDL = append(plan.DatabaseDDL, CreateDatabaseDDL(db))
 	}
+	for ref := range sel.Filters {
+		found := false
+		for i := range plan.Tables {
+			if plan.Tables[i].Source.String() == ref {
+				found = true
+				break
+			}
+		}
+		if !found {
+			err = eb.Build().Str("table", ref).Errorf("a filter names a table the plan does not hold")
+			return
+		}
+	}
+	return
+}
+
+// tableFilter is the row filter a table is planned with. A pack source holds
+// only the slice it was exported under ([TableInfo.Filter]); the operator may
+// repeat that filter but not choose another. The filter is validated against
+// the copy column list when the table can be synced at all, and its notes
+// join the verdict's.
+func tableFilter(st *TableInfo, sel Selection, v *TableVerdict) (filter string, err error) {
+	filter = strings.TrimSpace(sel.Filters[st.Ref.String()])
+	if st.Filter != "" {
+		if filter != "" && filter != st.Filter {
+			err = eb.Build().Str("table", st.Ref.String()).Str("filter", filter).Str("exported", st.Filter).
+				Errorf("the pack holds only the rows of the filter it was exported under")
+			return
+		}
+		filter = st.Filter
+		v.Notes = append(v.Notes, "rows as exported under the filter "+filter)
+		return
+	}
+	if filter == "" || !v.Verdict.IsSyncable() {
+		return
+	}
+	var notes []string
+	notes, err = ValidateFilter(filter, v.CopyColumns)
+	if err != nil {
+		err = eb.Build().Str("table", st.Ref.String()).Errorf("invalid filter: %w", err)
+		return
+	}
+	v.Notes = append(v.Notes, notes...)
 	return
 }
 
@@ -193,6 +249,9 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 // or the same serverUUID() behind two URLs (localhost and 127.0.0.1, say).
 func IsSameServer(srcEp Endpoint, dstEp Endpoint, src ServerInfo, dst ServerInfo) (same bool) {
 	const nilUUID = "00000000-0000-0000-0000-000000000000"
+	if srcEp.Pack != "" || dstEp.Pack != "" {
+		return false
+	}
 	if srcEp.URL == dstEp.URL {
 		return true
 	}
@@ -220,11 +279,14 @@ func (inst *Plan) CarryOver(old *Plan, withDiffs bool) {
 		if o == nil || o.Chunking == nil || o.SortingKey != t.SortingKey || o.PartitionKey != t.PartitionKey {
 			continue
 		}
+		// Range bounds sampled over the whole table stay correct for any
+		// slice of it, so the layout survives a filter change; the digests
+		// below do not.
 		c := *o.Chunking
 		c.Bounds = slices.Clone(o.Chunking.Bounds)
 		c.Exprs = slices.Clone(o.Chunking.Exprs)
 		t.Chunking = &c
-		if !withDiffs || !slices.Equal(o.CopyColumns, t.CopyColumns) {
+		if !withDiffs || !slices.Equal(o.CopyColumns, t.CopyColumns) || o.Filter != t.Filter {
 			continue
 		}
 		if o.Diff != nil {
@@ -248,6 +310,20 @@ func (inst *Plan) CarryOver(old *Plan, withDiffs bool) {
 
 func resolveSelection(src *Inventory, sel Selection) (out Selection, err error) {
 	out = Selection{LeewayOnly: sel.LeewayOnly}
+	for ref, f := range sel.Filters {
+		if strings.TrimSpace(f) == "" {
+			continue
+		}
+		db, _, _ := strings.Cut(ref, ".")
+		if len(sel.Databases) > 0 && !slices.Contains(sel.Databases, db) {
+			err = eb.Build().Str("table", ref).Errorf("a filter names a table outside the selected databases")
+			return
+		}
+		if out.Filters == nil {
+			out.Filters = make(map[string]string, len(sel.Filters))
+		}
+		out.Filters[ref] = strings.TrimSpace(f)
+	}
 	if len(sel.Databases) == 0 {
 		out.Databases = src.UserDatabases()
 	} else {
@@ -375,8 +451,8 @@ func (inst *Plan) Validate() (err error) {
 		return eb.Build().Uint64("formatVersion", uint64(inst.FormatVersion)).Uint64("supported", uint64(PlanFormatVersion)).
 			Errorf("unsupported plan format version")
 	}
-	if inst.Source.URL == "" || inst.Target.URL == "" {
-		return eh.Errorf("plan names no source or no target server")
+	if (inst.Source.URL == "") == (inst.Source.Pack == "") || inst.Target.URL == "" {
+		return eh.Errorf("plan names no source (a server or a pack) or no target server")
 	}
 	for i := range inst.Tables {
 		t := &inst.Tables[i]
@@ -387,6 +463,9 @@ func (inst *Plan) Validate() (err error) {
 			if e := c.validate(); e != nil {
 				return eb.Build().Str("table", t.Source.String()).Errorf("invalid chunk layout: %w", e)
 			}
+		}
+		if f := inst.Selection.Filters[t.Source.String()]; f != "" && f != t.Filter {
+			return eb.Build().Str("table", t.Source.String()).Errorf("table's filter differs from the selection's")
 		}
 		if t.Sync != nil && t.Sync.Mode == SyncModeSample && (t.Sync.SampleDen == 0 || t.Sync.SampleNum == 0 || t.Sync.SampleNum > t.Sync.SampleDen) {
 			return eb.Build().Str("table", t.Source.String()).Errorf("invalid sample fraction")

@@ -1,0 +1,4 @@
+# The scripted model of chat-statistics.scene.md: one turn of two model
+# calls — a tool call, then the answer — so the token plots have two values.
+{"tool":"list_windows","args":{}}
+{"content":"Hello there, a short answer."}

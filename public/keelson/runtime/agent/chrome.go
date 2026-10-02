@@ -394,6 +394,8 @@ func needText(h *held) (s string) {
 		s = "Window " + key + " is in observe mode for this task. Approving raises it to act."
 	case needBudget:
 		s = "The task has spent its call budget. Approving adds " + strconv.Itoa(DefaultCallBudget/4) + " calls."
+	case needDeadline:
+		s = "The task's deadline has passed. Approving gives it another " + h.extra + "."
 	}
 	return
 }

@@ -177,7 +177,7 @@ func TestDiffTable_Canned(t *testing.T) {
 `,
 	}
 	spec := DigestSpec{CopyColumns: []string{"k", "v"}, KeyExprs: []string{"k"}, Chunking: Chunking{Kind: ChunkingPartition, Exprs: []string{"p"}, Leaves: 2}}
-	d, err := DiffTable(context.Background(), src, dst, &spec, &spec, DefaultDiffOptions(), time.Unix(0, 0))
+	d, err := DiffTable(context.Background(), ServerSource(src), dst, &spec, &spec, DefaultDiffOptions(), time.Unix(0, 0))
 	require.NoError(t, err)
 	assert.Equal(t, uint64(3), d.Chunks)
 	assert.Equal(t, uint64(0), d.IdenticalChunks)
@@ -197,7 +197,7 @@ func TestDiffTable_Canned(t *testing.T) {
 	src.seen, dst.seen = nil, nil
 	opts := DefaultDiffOptions()
 	opts.PairThreshold = 1
-	d, err = DiffTable(context.Background(), src, dst, &spec, &spec, opts, time.Unix(0, 0))
+	d, err = DiffTable(context.Background(), ServerSource(src), dst, &spec, &spec, opts, time.Unix(0, 0))
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), d.UnresolvedLeaves)
 	assert.Zero(t, d.Changed)
@@ -207,7 +207,7 @@ func TestDiffTable_Canned(t *testing.T) {
 	// moved between the scans) stays unresolved rather than reading as equal.
 	src = &fakeQuery{leaves: `{"chunk":"a","display":"(1)","leaf":0,"n":2,"kd":10,"rd":20}` + "\n"}
 	dst = &fakeQuery{leaves: `{"chunk":"a","display":"(1)","leaf":0,"n":2,"kd":10,"rd":21}` + "\n"}
-	d, err = DiffTable(context.Background(), src, dst, &spec, &spec, DefaultDiffOptions(), time.Unix(0, 0))
+	d, err = DiffTable(context.Background(), ServerSource(src), dst, &spec, &spec, DefaultDiffOptions(), time.Unix(0, 0))
 	require.NoError(t, err)
 	assert.Len(t, src.seen, 2, "the pair query ran")
 	assert.Equal(t, uint64(1), d.UnresolvedLeaves)
@@ -231,7 +231,7 @@ func TestDigestSpecs_Final(t *testing.T) {
 	// The diff records that FINAL was asked for, even when only one side's
 	// engine took it.
 	empty := &fakeQuery{}
-	td, err := DiffTable(context.Background(), empty, empty, &s, &d, DefaultDiffOptions(), time.Unix(0, 0))
+	td, err := DiffTable(context.Background(), ServerSource(empty), empty, &s, &d, DefaultDiffOptions(), time.Unix(0, 0))
 	require.NoError(t, err)
 	assert.True(t, td.Final)
 }

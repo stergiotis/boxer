@@ -4,17 +4,19 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 )
 
 func TestConfinedContentStaysAHandleForARemoteModel(t *testing.T) {
 	r := newRig(t, true)
 	ctx := context.Background()
-	r.host.docs[7].confined = true
+	r.host.person(7, func(d *doc) { d.confined = true })
 	r.host.frame(7)
 	g := r.grant(ModeAct)
 	q := r.call(g, "q", "get_text", "{}")
@@ -37,7 +39,7 @@ func TestConfinedContentReachesALocalModel(t *testing.T) {
 		cfg.TestGrants = true
 		cfg.ModelLocal = func() bool { return true }
 	})
-	r.host.docs[7].confined = true
+	r.host.person(7, func(d *doc) { d.confined = true })
 	r.host.frame(7)
 	g := r.grant(ModeAct)
 	q := r.call(g, "q", "get_text", "{}")
@@ -100,13 +102,51 @@ func TestTheCallCarriesTheOnBehalfOfContext(t *testing.T) {
 	assert.Contains(t, why, "ended")
 }
 
+// Launch says how far the window had loaded rather than reporting it
+// opened: a Mount that failed, or one that had not returned within the
+// bound, reaches the caller and the window list (ADR-0269 §SD3).
+func TestLaunchReportsAWindowThatFailedOrIsStillOpening(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	g, err := r.cli.Request(ctx, GrantRequest{Launches: []GrantLaunch{{App: "doc", Mode: ModeAct, Count: 2}}})
+	require.NoError(t, err)
+
+	r.host.mu.Lock()
+	r.host.openAs, r.host.openReason = opwire.LoadFailed, "no database"
+	r.host.mu.Unlock()
+	got, err := r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	require.NoError(t, err, "the window exists: it shows the person the failure")
+	assert.Equal(t, "failed", got.Load)
+	assert.Equal(t, "no database", got.LoadReason)
+
+	r.host.mu.Lock()
+	r.host.openAs, r.host.openReason = opwire.LoadOpening, ""
+	r.host.mu.Unlock()
+	start := time.Now()
+	got2, err := r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "opening", got2.Load)
+	assert.GreaterOrEqual(t, time.Since(start), launchSettle, "launch waited its bound")
+
+	insts, err := r.cli.List(ctx, g.Handle)
+	require.NoError(t, err)
+	loads := map[uint64]string{}
+	for _, i := range insts {
+		loads[i.Instance] = i.Load
+	}
+	assert.Equal(t, "failed", loads[got.Instance])
+	assert.Equal(t, "opening", loads[got2.Instance])
+}
+
 func TestATaskOpensTheWindowsItsGrantAllows(t *testing.T) {
 	r := newRig(t, true)
 	ctx := context.Background()
 	g, err := r.cli.Request(ctx, GrantRequest{Launches: []GrantLaunch{{App: "doc", Mode: ModeAct, Count: 1}}})
 	require.NoError(t, err)
-	key, err := r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	got, err := r.cli.Launch(ctx, g.Handle, "doc", "", nil)
 	require.NoError(t, err)
+	key := got.Instance
+	assert.Equal(t, "ready", got.Load, "a host that does not track loading reports its windows ready")
 	r.host.frame(key)
 	out, err := r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: key, Operation: "get_text", Args: "{}", Key: "q"})
 	require.NoError(t, err)

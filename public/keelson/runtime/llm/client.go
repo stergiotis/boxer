@@ -39,9 +39,12 @@ type Description struct {
 	Configured   bool
 	Model        string
 	EndpointHost string
-	// Local says the endpoint is loopback: the sensitivity wall (§SD3)
-	// admits confined content there and nowhere else.
+	// Local says the sensitivity wall (§SD3) admits confined content to the
+	// endpoint: it is loopback, or a host the deployment trusts.
 	Local bool
+	// Trusted says Local holds only because BOXER_LLM_TRUSTED_HOSTS lists
+	// the endpoint's host.
+	Trusted bool
 	// MaxTokens is the host's ceiling when a request names none.
 	MaxTokens int32
 	// Reason says why nothing is configured.
@@ -158,7 +161,8 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 	if err != nil {
 		return
 	}
-	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, MaxTokens: w.MaxTokens, Reason: w.Reason}
+	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, Trusted: w.Trusted,
+		MaxTokens: w.MaxTokens, Reason: w.Reason}
 	return
 }
 
@@ -268,6 +272,8 @@ func failureOf(w wireReply) (err error) {
 		sentinel = openaichat.ErrModelNotFound
 	case errKindRateLimited:
 		sentinel = openaichat.ErrRateLimited
+	case errKindPayment:
+		sentinel = openaichat.ErrPaymentRequired
 	case errKindBadRequest:
 		sentinel = openaichat.ErrBadRequest
 	case errKindServer:
@@ -279,7 +285,9 @@ func failureOf(w wireReply) (err error) {
 	default:
 		return errors.New("llm: " + w.Reason)
 	}
-	return eb.Build().Str("reason", w.Reason).Errorf("llm: %w", sentinel)
+	// The reason is the provider's own account — a status and its message —
+	// so it stays in the text, where a caller showing the error reads it.
+	return eb.Build().Str("reason", w.Reason).Errorf("llm: %s: %w", w.Reason, sentinel)
 }
 
 // kindOf is failureOf's inverse on the service side.
@@ -291,6 +299,8 @@ func kindOf(err error) (kind string) {
 		return errKindModelNotFound
 	case errors.Is(err, openaichat.ErrRateLimited):
 		return errKindRateLimited
+	case errors.Is(err, openaichat.ErrPaymentRequired):
+		return errKindPayment
 	case errors.Is(err, openaichat.ErrBadRequest):
 		return errKindBadRequest
 	case errors.Is(err, openaichat.ErrServer):

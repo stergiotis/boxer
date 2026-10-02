@@ -9,7 +9,9 @@
 //	               in frame N are now rendered
 //	ApplyQueued    queued commands, in order, each re-checked: expected
 //	               revisions, the person editing, availability
-//	TakeSnapshot   what queries read until the next frame (as_of N+1)
+//	TakeSnapshot   what queries read until the next frame (as_of N+1);
+//	               the app's view is built only while a task is attached
+//	               or a query waits for one
 //	  … the app's Frame runs; gestures it routes through its catalog are
 //	    applied with the person as writer …
 //	EndFrame       changes the app's own frame logic made are bumped with
@@ -27,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
@@ -38,6 +41,10 @@ const DefaultKeepCalls = 4096
 
 // DefaultKeepLog bounds the command log.
 const DefaultKeepLog = 1024
+
+// QueryWait bounds how long a query waits for a frame to build the view it
+// reads; above the host's one-second idle heartbeat.
+const QueryWait = 2 * time.Second
 
 // LogEntry is one change in the command log: a command, a gesture, or a
 // change the engine observed (a write-back, the app's frame logic).
@@ -71,7 +78,8 @@ type call struct {
 }
 
 type snapshot struct {
-	asOf     uint64
+	asOf uint64
+	// view is nil when no one could read it as the frame began.
 	view     app.OperationsSnapshotI
 	revs     map[string]uint64
 	logSeq   uint64
@@ -93,6 +101,11 @@ type Engine struct {
 	logHead  int
 	logSeq   uint64
 	listener func(e LogEntry)
+	// waiting counts queries waiting for a view; viewed is closed, and
+	// replaced, when a snapshot with one is taken.
+	waiting   int
+	viewed    chan struct{}
+	queryWait time.Duration
 
 	snap atomic.Pointer[snapshot]
 
@@ -114,6 +127,7 @@ func New(catalog *app.OperationsCatalog, h app.OperationsHandlerI) (inst *Engine
 		values:  make(map[string]any),
 		revs:    make(map[string]uint64),
 		writers: make(map[string]string),
+		viewed:  make(chan struct{}), queryWait: QueryWait,
 	}
 	for _, r := range catalog.Resources {
 		inst.resourceSet = append(inst.resourceSet, r.Name)
@@ -155,17 +169,52 @@ func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcom
 
 func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out opwire.Outcome) {
 	s := inst.snap.Load()
-	if s == nil {
+	if s == nil || s.view == nil {
+		s = inst.awaitView(inst.queryWait)
+	}
+	if s == nil || s.view == nil {
 		out = opwire.Outcome{Phase: opwire.PhaseRefused, Reason: "the window has not drawn yet"}
 		return
 	}
-	result, err := s.view.Query(spec.Name, req.Args)
+	var result []byte
+	var confined bool
+	var err error
+	if spec.Class == app.OperationClassExternalRead {
+		result, confined, err = s.view.ExternalRead(app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason,
+			RefData: req.RefData, OnBehalfOf: req.OnBehalfOf}, spec.Name, req.Args)
+	} else {
+		result, err = s.view.Query(spec.Name, req.Args)
+	}
 	out = outcomeOfError(err)
 	if out.Phase == opwire.PhaseUnspecified {
 		out = opwire.Outcome{Phase: opwire.PhaseCompleted, Result: result}
 	}
-	out.AsOf, out.Seq, out.Confined = s.asOf, s.logSeq, s.confined
+	out.AsOf, out.Seq, out.Confined = s.asOf, s.logSeq, s.confined || confined
 	out.Revisions = pick(s.revs, spec.Reads)
+	return
+}
+
+// awaitView waits up to wait for a snapshot that carries a view, and
+// returns the latest snapshot.
+func (inst *Engine) awaitView(wait time.Duration) (s *snapshot) {
+	inst.mu.Lock()
+	if s = inst.snap.Load(); s != nil && s.view != nil {
+		inst.mu.Unlock()
+		return
+	}
+	inst.waiting++
+	viewed := inst.viewed
+	inst.mu.Unlock()
+	timer := time.NewTimer(wait)
+	select {
+	case <-viewed:
+	case <-timer.C:
+	}
+	timer.Stop()
+	inst.mu.Lock()
+	inst.waiting--
+	inst.mu.Unlock()
+	s = inst.snap.Load()
 	return
 }
 
@@ -181,6 +230,9 @@ func outcomeOfError(err error) (out opwire.Outcome) {
 		out.Phase = opwire.PhaseRefused
 		if refusal.Conflict {
 			out.Phase = opwire.PhaseConflict
+		}
+		if len(refusal.Destinations) > 0 {
+			out.Remedy = &opwire.Remedy{Destinations: slices.Clone(refusal.Destinations)}
 		}
 		return
 	}
@@ -272,11 +324,19 @@ func (inst *Engine) SetAttached(attached bool) {
 }
 
 // Busy reports whether the instance needs frames soon: a task is attached,
-// or a command or an undo is queued.
+// a command or an undo is queued, or a query waits for a view.
 func (inst *Engine) Busy() (busy bool) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	busy = inst.attached > 0 || len(inst.queue) > 0 || len(inst.undos) > 0
+	busy = inst.attached > 0 || len(inst.queue) > 0 || len(inst.undos) > 0 || inst.waiting > 0
+	return
+}
+
+// Waiting reports whether a query waits for a frame to build its view.
+func (inst *Engine) Waiting() (waiting bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	waiting = inst.waiting > 0
 	return
 }
 
@@ -353,10 +413,12 @@ func (inst *Engine) apply(c *call) (out opwire.Outcome) {
 				Revisions: pick(inst.revs, c.spec.Writes)}
 		}
 	}
-	if s := inst.snap.Load(); s != nil {
-		if ok, reason := s.view.Available(c.spec.Name); !ok {
-			return opwire.Outcome{Phase: opwire.PhaseRefused, Reason: reason}
-		}
+	view := inst.h.Snapshot
+	if s := inst.snap.Load(); s != nil && s.view != nil {
+		view = func() app.OperationsSnapshotI { return s.view }
+	}
+	if ok, reason := view().Available(c.spec.Name); !ok {
+		return opwire.Outcome{Phase: opwire.PhaseRefused, Reason: reason}
 	}
 	before := make(map[string]any, len(c.spec.Writes))
 	for _, r := range c.spec.Writes {
@@ -457,10 +519,24 @@ func (inst *Engine) SnapshotRevisions() (revs map[string]uint64, asOf uint64) {
 	return
 }
 
-// TakeSnapshot captures what queries read until the next frame.
+// TakeSnapshot captures what queries read until the next frame. The app's
+// view is built only when someone could read it: a task is attached or a
+// query waits.
 func (inst *Engine) TakeSnapshot() {
-	inst.snap.Store(&snapshot{asOf: inst.frame, view: inst.h.Snapshot(), revs: maps.Clone(inst.revs), logSeq: inst.LogSeq(),
-		confined: inst.h.Confined()})
+	s := &snapshot{asOf: inst.frame, revs: maps.Clone(inst.revs), logSeq: inst.LogSeq(), confined: inst.h.Confined()}
+	inst.mu.Lock()
+	wanted := inst.attached > 0 || inst.waiting > 0
+	inst.mu.Unlock()
+	if wanted {
+		s.view = inst.h.Snapshot()
+	}
+	inst.mu.Lock()
+	inst.snap.Store(s)
+	if s.view != nil {
+		close(inst.viewed)
+		inst.viewed = make(chan struct{})
+	}
+	inst.mu.Unlock()
 }
 
 // Gesture applies a command the person asked for through the app's own UI,

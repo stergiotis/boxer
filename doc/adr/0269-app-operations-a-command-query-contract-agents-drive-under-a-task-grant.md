@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-30
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-02
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0269: App operations — a command/query contract apps declare and agents drive under a task grant
 
@@ -218,6 +216,11 @@ it.
 - The snapshot kept per instance is the latest; asking for an older `as_of`
   returns `expired`. A result lives while the task or the instance that
   produced it lives.
+- The app's query view is built only for a frame in which someone can read
+  it: a task is attached, or a query waits. A query that finds no view (the
+  first after an attachment) waits for the next frame, bounded above the
+  host's idle heartbeat, rather than being refused; an instance no task works
+  in pays for its revisions only.
 
 ### SD2 — The catalog is a property of the app
 
@@ -275,8 +278,8 @@ runs off the render goroutine, as the chat's turns do.
 | `describe` | no | an app's operations, or those matching a search, with schemas and effects; with a grant, one instance's availability |
 | `request` | no; a widening presents the grant handle | start a task or widen its grant: a plan, the operations per app, entries, destinations; returns a key and stays pending until the person decides |
 | `turn` | yes | start a model turn: the changes by the person and other tasks since the previous `turn`, labelled as reads are (SD7); lifts the task's pauses |
-| `list` | yes | the task's instances, their apps and titles, and which task holds each (titles are marked untrusted, and withheld for a confined window) |
-| `launch` | yes | open a window of an app the grant names, with a launch request ([ADR-0135](./0135-app-launch-requests.md)); returns the instance |
+| `list` | yes | the task's instances, their apps and titles, how far each has loaded, and which task holds each (titles and mount errors are marked untrusted; titles are withheld for a confined window) |
+| `launch` | yes | open a window of an app the grant names, with a launch request ([ADR-0135](./0135-app-launch-requests.md)); returns the instance and how far it has loaded |
 | `call` | yes | one command or query, with its key, expected revisions and a one-line reason |
 | `status` | yes; for a `request` key, no, and only the requesting instance may ask | a call's or a job's phase by key, optionally waiting a bounded time; for a request, the grant handle once approved, or `rejected` or `expired` |
 | `cancel` | yes | withdraw a queued call or a proposal by its key, or stop work a job handle names |
@@ -284,6 +287,17 @@ runs off the render goroutine, as the chat's turns do.
 | `capture` | yes | a visible pane or window, as an artifact handle (SD11) |
 | `detach` | yes | remove one instance from the task |
 | `stop` | yes | end the task |
+
+A window is *opening* until its app's `Mount` has returned — which happens
+in the first frame that draws its body — then *ready*, or *failed* with the
+mount error. `launch` waits a short bound for ready (and, for an app with a
+catalog, for its first snapshot) and then reports the window as it stands,
+so a caller never reports a window open that has not drawn, or that failed;
+a window still opening shows its load in `list`. The host keeps frames
+coming for a bounded time while a window is opening, so the window's first
+frame does not wait for the person to move the mouse; it cannot wake an
+idle render loop from off it, so the first frame after an open still needs
+one already running.
 
 `list`, `capture` and `read` need an entry for the instance they name, in any
 mode, observe included; `read` opens only references the task received.
@@ -321,10 +335,10 @@ waits at most that long.
 
 A command to a resource whose widget has keyboard focus, or received the
 person's input in this frame, returns `conflict` with the reason that the
-person is editing. The first things M2 demonstrates are bumping the revisions
-of bound resources from what the write-back changed — the host compares bound
-values before and after it — and where a widget's programmatic path (ADR-0267
-W10) takes effect relative to the next write-back.
+person is editing. The host bumps the revisions of bound resources from what
+the write-back changed, by comparing each resource's value before and after
+it; a change the app makes inside its frame is attributed to the app, and a
+change made through a gesture's handler to the person.
 
 A call moves through three stages:
 
@@ -373,7 +387,7 @@ Every operation declares one effect:
 | view | changes what a window shows, not what it holds: a selection, a camera |
 | document | changes authored state: text, parameters, signals, pane bindings and options |
 | run | executes against a data source under the agent limits (SD6) and produces a result |
-| consequential | writes outside the app: pinning, publishing, adjudication, export |
+| consequential | writes outside the app: publishing, adjudication, export |
 
 Each grant entry — one task, one instance — carries a mode:
 
@@ -553,8 +567,10 @@ one.
   another task to one of them pauses the task on that instance until the
   coordinator's next `turn` (SD3), which returns every change by other
   writers since the previous one; commands expecting the old revision become
-  `conflict`. Changes that follow from the task's own commands — a Live rerun,
-  a derived result — carry the task as writer and do not pause it.
+  `conflict`. A turn lifts the pause and does not refresh what the task read,
+  so a task reads a changed resource again before it writes. Changes that
+  follow from the task's own commands — a Live rerun, a derived result —
+  carry the task as writer and do not pause it.
 - **Undo** is per call, from the call's card, in host chrome. It restores a
   field only while its value and revision are still the ones the call left;
   later work by anyone is never overwritten. A write outside the app is not
@@ -563,7 +579,8 @@ one.
   command calls the same handler, directly on the render goroutine; the
   person's edits to bound values are recorded when the write-back lands. Both
   enter the command log (SD9). View state outside the catalog — scroll, hover,
-  a drag in progress — stays direct.
+  a drag in progress — stays direct. Where no host serves the app's catalog,
+  as for an app embedded in another, the gesture applies directly.
 
 ### SD9 — Records
 
@@ -695,7 +712,7 @@ The QOC tables carry the main options. Further options weighed:
 - One contract for every participating app; another app costs its catalog and
   handlers.
 - A stale write is detected, every change is attributed, and the person's
-  change wins within a frame once M2 demonstrates SD4's revision bumping.
+  change wins within a frame.
 - The person is asked at three named moments; a task inside its grant asks
   only for consequential commands.
 - A model's reach is bounded by checks outside the model. Agent-caused runs
@@ -807,10 +824,11 @@ The QOC tables carry the main options. Further options weighed:
   changes), detach, stop and epochs, labels and data handles, `read`, taint
   and marking, pause and `turn`, the agent limits and the on-behalf-of
   context in host services.
-- **M4 — First participants.** Play's catalog under its own decision, after
-  its pinning and Series adjudication write through the endpoint seam and its
-  gate — until then they are not exposed to agents; and one table-shaped app
-  (appstate or watchbill), so the contract is not drawn around play alone.
+- **M4 — First participants.** Play's catalog under its own decision
+  ([ADR-0270](./0270-play-operations-catalog-and-agent-limits.md)), with
+  play's own writes behind the endpoint seam and a gate of their own; and one
+  table-shaped app (watchbill), so the contract is not drawn around play
+  alone.
 - **M5 — The coordinator.** ADR-0265 revised: the chat's tool loop over the
   host services, with schemas loaded on demand and its context's label
   declared on every model call.
@@ -819,12 +837,111 @@ The QOC tables carry the main options. Further options weighed:
 
 ## Status
 
-Proposed 2026-09-30 — awaiting review by the code owner. Play's catalog is a
-separate decision built on this one; ADR-0265 is revised in place for M5.
+Accepted 2026-10-02. Play's catalog is a separate decision built on this
+one, [ADR-0270](./0270-play-operations-catalog-and-agent-limits.md); ADR-0265
+is revised in place for M5.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
+
+## Updates
+
+### 2026-10-02 — a refusal names its remedy
+
+A refused outcome carries a **remedy** (`opwire.Remedy`): the destinations
+the task's grant would have to list, or the JSON Schema the arguments have
+to fit. An app declines with `app.RefuseForDestinations`; the dispatcher
+attaches the operation's schema when arguments do not fit it. The remedy
+reaches the coordinator on the outcome, which turns it into the model's
+next step (ADR-0265, update of this date); nothing is widened on the
+model's behalf, and under a real grant `request_access` still asks the
+person.
+
+Under a test grant the actions file (`BOXER_AGENT_ACTIONS_FILE`) also holds
+each call's arguments as the model sent them, and a row for each refused
+grant request; neither reaches `boxer.facts`. A trial could otherwise see
+only an argument digest, and a refused grant left no trace.
+
+### 2026-10-02 — the apps' help, for the model
+
+`runtime.agent.help` serves the inline help apps ship (`app.Manifest.Help`)
+for the apps `describe` lists: a search over their sections, an app's
+documents with their top-level sections, or one document or section as
+markdown, cut at `HelpMaxBytes` with its subsections named. It needs no
+grant, like `describe`, and its text is the apps' own documentation, so it
+is not marked untrusted; `describe` says which apps have help.
+
+### 2026-10-02 — components mount their operations
+
+A component several apps hold — first the state machine `fsmview` draws —
+declares its operations once, and an app **mounts** it into its catalog
+under a name, so every app offers an agent the same operations for it
+rather than each inventing a format (play described its result's lifecycle
+as a phase string; watchbill described its job machine not at all).
+
+- **The hook is generic.** `appops.Set.Mount(key, capture)` takes, with
+  each snapshot, the value a mounted component's queries read, and
+  `appops.MountedQuery` declares a query over it. Queries keep reading only
+  the frame-latched snapshot (§SD4); the capture runs only when a snapshot
+  is built for a reader.
+- **The vocabulary is plain data.** `appops/opfsm` holds the types — a
+  machine's states, its labelled edges, its steps — and `SourceI`, which
+  `fsmview.Machine` implements. It has no dependencies, so the widget does
+  not import the operations runtime, and the runtime imports no UI.
+- **The mount is the component's.** `appops/fsmops.Mount(set, name, …)`
+  declares a resource `name_state` holding the current state, so a move has
+  a revision and reaches the turn's changes note (§SD8); a query
+  `name_state`, the current state with the transitions allowed from it and
+  the latest steps; and a query `name_machine`, every state and edge. A
+  machine whose steps do not belong together — watchbill's mirrors whichever
+  job is selected — mounts without history.
+- **Play and watchbill mount theirs:** `query_state`/`query_machine` for
+  play's result lifecycle, `job_state`/`job_machine` for watchbill's
+  selected job. Their schemas are identical, so with operation tools on
+  (ADR-0265) the model meets the same tool shape in both.
+
+Not mounted: a blocking wait for a state. Queries answer at once by design;
+if waiting costs a model rounds, the remedy is the dispatcher's, not the
+component's. Play's result (`describe_result`, `sample_rows`) and help are
+the next candidates for the same pattern.
+
+### 2026-10-02 — a late task gets more time
+
+A task's deadline was final: past it every call was denied, nothing could
+extend it, and a coordinator whose conversation outlived its task could
+only start over. A late task is now a widening rather than an end. A call
+to it is held, as a call past the budget is, and the person's dialog says
+"The task's deadline has passed. Approving gives it another 30m0s"; under a
+test grant, which nobody answers, the call says that `request_access`
+extends it. A request on a late task's handle is accepted, and any approved
+widening of a late task moves its deadline on by the task duration. The
+other services still deny a late task until then. The duration is
+`Config.Deadline`, which the host takes from `BOXER_AGENT_DEADLINE`
+(default 30m), for a new task and for each extension alike. `TaskGone`
+tells a coordinator a task that ended or a handle it no longer knows from
+a late one, so it can ask for a new task instead.
+
+### 2026-10-02 — an external read receives the call
+
+§SD6 counts the work an external read starts as agent-caused, and the
+handler had no way to see whose call it was: an external read was answered
+through the snapshot's `Query`, which takes only the arguments.
+`appops.ExternalRead` declares one with a handler that receives the
+`OperationCall`, on-behalf-of context included, and the snapshot answers it
+through its own `ExternalRead` method; the engine routes by class. It still
+runs off the render goroutine over the latest snapshot. Play's schema reads
+(ADR-0270, update of this date) are the first.
+
+### 2026-10-02 — an external read can label its result confined
+
+§SD7 labels an outcome by the window that answered it, and an external read
+can read confined content the window does not hold: the schema of a sealed
+dataset nobody has run yet. A result type implementing
+`app.ConfinedResultI` labels the outcome confined when it says so; the
+engine joins it with the window's label, and the dispatcher's wall treats it
+as any confined result. Play's `list_datasets` (ADR-0270, update of this
+date) is the first.
 
 ## References
 
@@ -847,4 +964,5 @@ for the edit-policy tiers.
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) (proposed) — keeping conversations that hold confined content.
 - [ADR-0265](./0265-chat-app-over-retained-model-calls.md) (proposed) — the chat app that becomes the coordinator.
 - [ADR-0267](./0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md) — W10, writes to bound values.
+- [ADR-0270](./0270-play-operations-catalog-and-agent-limits.md) — play's catalog, the first participant.
 - [app-operations-prior-art](../adr-background-work/app-operations-prior-art.md) — play and the runtime read, surveys, the options weighed, probes, sources for every external claim above (Hardy, Meyer, Fowler, Dolt, AIP-216, TN2106, the OpenAI system card, CaMeL, FIDES, OpenTelemetry).

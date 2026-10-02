@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"strings"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -163,7 +164,26 @@ func failureReason(err error) (s string) {
 		return refused.Reason
 	case errors.Is(err, context.DeadlineExceeded):
 		return "no answer before the timeout"
+	case errors.Is(err, openaichat.ErrPaymentRequired):
+		// The provider's own message says how much is left and where to
+		// top up.
+		return "the model provider is out of credit or quota for this account (" + providerAnswer(err) + ")"
+	case strings.Contains(err.Error(), "HTTP "):
+		return "the model provider answered " + providerAnswer(err)
 	default:
 		return err.Error()
 	}
+}
+
+// providerAnswer is the provider's part of a failure — its status and
+// message — without the layers it passed through.
+func providerAnswer(err error) (s string) {
+	s = err.Error()
+	if i := strings.Index(s, "HTTP "); i >= 0 {
+		s = s[i:]
+	}
+	if i := strings.LastIndex(s, ": openaichat: "); i >= 0 {
+		s = s[:i]
+	}
+	return
 }

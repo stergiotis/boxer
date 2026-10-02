@@ -84,6 +84,12 @@ var (
 		Category:    env.CategoryE("boxer-play"),
 	})
 
+	AppWrites = env.NewString(env.Spec{
+		Name:        "BOXER_PLAY_APP_WRITES",
+		Description: "\"off\" stops play writing its own tables — the Series verdicts in boxer.tslabels; unset or anything else lets it (ADR-0270 §SD7). BOXER_PLAY_ALLOW_WRITES does not govern them",
+		Category:    env.CategoryE("boxer-play"),
+	})
+
 	ExperimentsSeed = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_EXPERIMENTS",
 		Description: "seed the Experiments pane with one vizeval candidate as JSON, {\"source\":\"fixture|result\",\"sink\":…,\"options\":{…}} (ADR-0266); a seed that does not resolve against the sink catalogue fails the mount",
@@ -369,10 +375,11 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		initSQL = "SELECT * FROM boxer.facts"
 	}
 	cfg := ClientConfig{
-		URL:         clickhouseenv.URL.Get(),
-		User:        clickhouseenv.User.Get(),
-		Password:    clickhouseenv.Password.Get(),
-		AllowWrites: AllowWrites.Get() != "",
+		URL:          clickhouseenv.URL.Get(),
+		User:         clickhouseenv.User.Get(),
+		Password:     clickhouseenv.Password.Get(),
+		AllowWrites:  AllowWrites.Get() != "",
+		AppWritesOff: AppWrites.Get() == "off",
 	}
 	// Reconcile leeway's SQL read surface (ADR-0171 §SD2) against the env
 	// endpoint, once per process and off the open path — before the
@@ -534,7 +541,9 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	// The agent mark (ADR-0270 §SD3) is judged after the write-back and
 	// settled once the frame's own changes are in.
 	inst.inner.checkAgentMark()
+	inst.inner.gestureCtx = ctx
 	err = inst.inner.Frame(ctx)
+	inst.inner.gestureCtx = nil
 	inst.inner.settleAgentMark()
 	return
 }

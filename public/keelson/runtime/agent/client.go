@@ -63,11 +63,13 @@ type Operation struct {
 	ResultSchema string
 }
 
-// AppOperations is one app's operations agents may call.
+// AppOperations is one app's operations agents may call. Help says the
+// app ships inline help, read with [Client.Help].
 type AppOperations struct {
 	App        string
 	Display    string
 	Summary    string
+	Help       bool
 	Resources  []Resource
 	Operations []Operation
 }
@@ -125,7 +127,7 @@ func (inst *Client) Describe(ctx context.Context, r DescribeRequest) (apps []App
 		return
 	}
 	for _, a := range rep.Apps {
-		out := AppOperations{App: a.App, Display: a.Display, Summary: a.Summary}
+		out := AppOperations{App: a.App, Display: a.Display, Summary: a.Summary, Help: a.Help}
 		for _, res := range a.Resources {
 			out.Resources = append(out.Resources, Resource(res))
 		}
@@ -235,6 +237,15 @@ type Outcome struct {
 	// Task and Handle answer an approved request's key.
 	Task   string
 	Handle string
+	// Remedy, on a refusal, is what would let the call through.
+	Remedy *Remedy
+}
+
+// Remedy is what the caller can change for a refused call to go through:
+// destinations to add to the grant, or arguments of the given schema.
+type Remedy struct {
+	Destinations []string
+	ArgsSchema   string
 }
 
 // Final reports whether no later phase can follow.
@@ -264,8 +275,12 @@ type CallRequest struct {
 }
 
 func outcomeOfWire(w wireOutcome) (out Outcome) {
-	return Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job,
+	out = Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job,
 		Held: w.Held, Confined: w.Confined, Task: w.Task, Handle: w.Handle}
+	if w.Remedy != nil {
+		out.Remedy = &Remedy{Destinations: w.Remedy.Destinations, ArgsSchema: w.Remedy.ArgsSchema}
+	}
+	return
 }
 
 func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
@@ -347,6 +362,11 @@ type Instance struct {
 	Mode     string
 	Ops      bool
 	Confined bool
+	// Load is opening, ready or failed: a window is opening until its app
+	// has mounted, and only a ready window takes calls. LoadReason says
+	// why it failed.
+	Load       string
+	LoadReason string
 }
 
 // List lists the task's open instances.

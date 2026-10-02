@@ -42,9 +42,11 @@ type wireOperation struct {
 }
 
 type wireApp struct {
-	App        string          `json:"app"`
-	Display    string          `json:"display"`
-	Summary    string          `json:"summary,omitempty"`
+	App     string `json:"app"`
+	Display string `json:"display"`
+	Summary string `json:"summary,omitempty"`
+	// Help says the app ships inline help, read with SubjectHelp.
+	Help       bool            `json:"help,omitempty"`
 	Resources  []wireResource  `json:"resources,omitempty"`
 	Operations []wireOperation `json:"operations"`
 }
@@ -116,6 +118,10 @@ type wireLaunchReply struct {
 	Ok       bool   `json:"ok"`
 	Reason   string `json:"reason,omitempty"`
 	Instance uint64 `json:"instance,omitempty"`
+	// Load is how far the opened window had come when the reply left:
+	// opening, ready or failed; LoadReason says why it failed.
+	Load       string `json:"load,omitempty"`
+	LoadReason string `json:"load_reason,omitempty"`
 }
 
 type wireGrantReply struct {
@@ -155,6 +161,13 @@ type wireOutcome struct {
 	// Task and Handle answer an approved request's key.
 	Task   string `json:"task,omitempty"`
 	Handle string `json:"handle,omitempty"`
+	// Remedy, on a refusal, is what would let the call through.
+	Remedy *wireRemedy `json:"remedy,omitempty"`
+}
+
+type wireRemedy struct {
+	Destinations []string `json:"destinations,omitempty"`
+	ArgsSchema   string   `json:"args_schema,omitempty"`
 }
 
 type wireCallReply struct {
@@ -223,6 +236,9 @@ type wireInstance struct {
 	Mode     string `json:"mode"`
 	Ops      bool   `json:"ops"`
 	Confined bool   `json:"confined,omitempty"`
+	// Load is opening, ready or failed; LoadReason says why it failed.
+	Load       string `json:"load,omitempty"`
+	LoadReason string `json:"load_reason,omitempty"`
 }
 
 type wireListReply struct {

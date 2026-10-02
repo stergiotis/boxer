@@ -8,6 +8,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 )
 
 // Play's operations catalog (ADR-0270): what an agent may read and do in a
@@ -29,6 +32,8 @@ const (
 	opSetSql         = "set_sql"
 	opSetSignal      = "set_signal"
 	opShowPane       = "show_pane"
+	opListPanes      = "list_panes"
+	opBindPane       = "bind_pane"
 )
 
 // Bounds on what sample_rows returns (ADR-0270 §SD1).
@@ -56,7 +61,7 @@ type SignalState struct {
 // ResultState is the main result as get_state reports it.
 type ResultState struct {
 	Id    uint64 `desc:"the result id; 0 before any run"`
-	Phase string `desc:"idle, running, rows, empty or failed, with -stale when the buffer or a signal moved since the run"`
+	Phase string `desc:"idle, running, rows, empty or failed, or rows (stale), empty (stale) or failed (stale) when the buffer or a signal moved since the run; query_state has the transitions"`
 	Rows  int64  `desc:"its row count"`
 	Error string `desc:"the error of a failed run"`
 }
@@ -123,13 +128,56 @@ type ShowPaneArgs struct {
 	Pane string `desc:"the pane id, as list_panes and get_state name it"`
 }
 
+// PaneState is one pane as list_panes reports it.
+type PaneState struct {
+	Pane  string `desc:"the pane id, as show_pane and bind_pane take it"`
+	Title string `desc:"its title on the dock strip"`
+	// Panel says the pane draws a result; the others are tools.
+	Panel bool `desc:"true when the pane draws a result and can be bound to a node"`
+	// Node is the split node feeding the pane when it is not the active
+	// one: a binding, or the Detail pane following the selection.
+	Node string `desc:"the node feeding the pane when it is not the one the main result comes from"`
+	// Reason is the pane's own reason it cannot draw what it is fed.
+	Reason   string   `desc:"why the pane cannot draw its result; empty when it can, or when it is not a panel"`
+	Writes   []string `desc:"the signals the pane writes that the buffer reads"`
+	Unfilled []string `desc:"those of them nothing has filled yet; a run needs them"`
+	// Draws separates "can draw" from "nothing to judge yet", which an
+	// empty Reason leaves open.
+	Draws PaneDrawE `desc:"whether the pane can draw what it is fed: unknown before anything has landed, yes, or no (Reason says why)"`
+	// Raised is the pane play last brought to the front.
+	Raised bool `desc:"whether the pane is the one play last raised"`
+	// Publishes is every signal the pane writes when the person uses it,
+	// whether or not the buffer reads it yet.
+	Publishes []string `desc:"every signal the pane publishes when used; Writes is the part the buffer reads"`
+}
+
+// PanesState is list_panes' result.
+type PanesState struct {
+	Panes []PaneState `desc:"the panes in dock-strip order"`
+	// Nodes are what bind_pane accepts.
+	Nodes []string `desc:"the split nodes of the buffer: its top-level CTEs and the statement"`
+}
+
+// BindPaneArgs is bind_pane's argument.
+type BindPaneArgs struct {
+	Pane string `desc:"the pane id, as list_panes names it; it must be a panel"`
+	Node string `json:",omitzero" desc:"the split node to feed the pane from, as list_panes names it; left out, the pane follows the main result again"`
+}
+
 // opsSnap is what queries read: copies taken after the command stage, and
 // the graph, whose main snapshot is safe to read from any goroutine.
 type opsSnap struct {
 	mounted bool
 	state   PlayState
-	panes   PaneList
+	panes   PanesState
 	graph   *queryGraph
+	// installed is the endpoint's user-defined functions, when the
+	// Vocabulary pane's probe has landed them; probed says it has.
+	installed map[string]string
+	probed    bool
+	// client is the window's endpoint client, which the schema reads probe
+	// off the render goroutine.
+	client *Client
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -171,6 +219,14 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		return inst.inner != nil && inst.inner.editor != nil && appops.WidgetEditing(inst.inner.editor.TextHandle())
 	})
 	s.Confined(func(inst *PlayLauncher) bool { return inst.inner != nil && inst.inner.graph.MainConfined() })
+	// The result's lifecycle, as the state chip draws it: query_state and
+	// query_machine, the operations every app's mounted machine offers.
+	fsmops.Mount(s, "query", "the main result's lifecycle", func(inst *PlayLauncher) opfsm.SourceI {
+		if inst.inner == nil || inst.inner.queryFSM == nil {
+			return nil
+		}
+		return inst.inner.queryFSM
+	}, fsmops.Options{History: 16})
 
 	appops.Query(s, app.OperationSpec{Name: opGetState, Version: 1,
 		Summary: "read the buffer, the parameters, the signals, Live and the main result's phase",
@@ -217,7 +273,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			if inst.inner == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
 			}
-			inst.inner.setSqlFromAgent(in.Sql)
+			inst.inner.swapSql(in.Sql)
 			inst.inner.markAgent(call.OnBehalfOf)
 			return appops.None{}, nil
 		})
@@ -232,7 +288,10 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 				return appops.None{}, app.RefuseOperation("a signal needs a name")
 			}
 			writer := call.Writer
-			if writer == "" {
+			switch writer {
+			case opwire.WriterPerson:
+				writer = inst.inner.takeGestureSignalWriter()
+			case "":
 				writer = signalWriterApp
 			}
 			inst.inner.graph.setSignalRawFrom(SignalID(in.Name), in.Value, writer)
@@ -250,10 +309,60 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			return appops.None{}, nil
 		})
+	appops.Query(s, app.OperationSpec{Name: opListPanes, Version: 1,
+		Summary: "list the panes: whether each can draw what it is fed and why not, the node feeding it, the signals it writes",
+		Reads:   []string{opsResPanes, opsResResult, opsResSql}, Agents: true},
+		func(sn opsSnap, in appops.None) (PanesState, error) {
+			if !sn.mounted {
+				return PanesState{}, app.RefuseOperation("the window has not mounted")
+			}
+			return sn.panes, nil
+		})
+	appops.Command(s, app.OperationSpec{Name: opBindPane, Version: 1, Summary: "feed a panel from one split node, or from the main result again",
+		Effect: app.OperationEffectDocument, Writes: []string{opsResPanes}, Reads: []string{opsResSql}, Agents: true,
+		Gesture: "the fill tab buttons of a node in the Graph pane",
+		Follows: []string{"the pane draws the node's result once the node has run"}},
+		func(inst *PlayLauncher, call app.OperationCall, in BindPaneArgs) (appops.None, error) {
+			p := inst.inner
+			if p == nil {
+				return appops.None{}, app.RefuseOperation("the window has not mounted")
+			}
+			return appops.None{}, p.bindPane(in.Pane, NodeID(in.Node))
+		})
 	addRunOps(s)
-	addPaneOps(s)
+	addReferenceOps(s)
+	addSchemaOps(s)
+	addRewriteOps(s)
+	addDatasetOps(s)
 	return
 }()
+
+// bindPane binds a panel to a node of the current split, or unbinds it
+// when node is empty. Unlike BindTab, a node the split lacks is refused:
+// a binding that sits inert until the name returns is an embedder's tool,
+// and to a caller it reads as a change that did nothing.
+func (inst *PlayApp) bindPane(pane string, node NodeID) (err error) {
+	spec, ok := inst.tabs.specForSlug(pane)
+	if !ok {
+		return app.RefuseOperation("no pane " + pane)
+	}
+	if spec.Panel == nil {
+		return app.RefuseOperation("pane " + pane + " draws no result and cannot be bound")
+	}
+	if node == "" {
+		inst.unbindTab(pane)
+		return
+	}
+	if _, found := findSplitNode(inst.currentSplit, node); !found {
+		names := make([]string, 0, len(inst.currentSplit.Nodes))
+		for _, n := range inst.currentSplit.Nodes {
+			names = append(names, string(n.ID))
+		}
+		return app.ConflictOperation("no node " + string(node) + " in the buffer; it has " + strings.Join(names, ", "))
+	}
+	inst.bindTab(pane, node)
+	return
+}
 
 // Operations serves play's catalog for this window.
 func (inst *PlayLauncher) Operations() (h app.OperationsHandlerI) { return playOps.Bind(inst) }
@@ -267,6 +376,8 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 		return
 	}
 	sn.mounted, sn.graph = true, p.graph
+	sn.installed, sn.probed = p.vocab.known()
+	sn.client = p.client
 	st := PlayState{Sql: p.sql, Live: p.liveMain}
 	if p.client != nil {
 		st.Destination = DestinationClickHouse(endpointHost(p.client.URL()))
@@ -287,16 +398,24 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	for _, r := range p.graph.signalRows() {
 		st.Signals = append(st.Signals, SignalState{Name: r.Name, Value: r.Raw, Writer: r.Writer})
 	}
-	rec, schema, numRows, loading, _, _, executed, runErr, id := p.graph.MainSnapshot()
+	rec, _, numRows, loading, _, _, executed, runErr, id := p.graph.MainSnapshot()
 	if rec != nil {
 		rec.Release()
 	}
-	sn.panes = paneList(p, schema)
 	st.Result = ResultState{Id: uint64(id), Phase: p.observeQueryState(loading, numRows, executed, runErr).String(), Rows: numRows}
 	if runErr != nil {
 		st.Result.Error = runErr.Error()
 	}
 	sn.state = st
+	raised, _ := p.tabs.slugForDockID(p.raisedTab)
+	for _, row := range p.paneRows(p.frameSchema) {
+		sn.panes.Panes = append(sn.panes.Panes, PaneState{Pane: row.TabID, Title: row.Title, Panel: row.Panel,
+			Node: string(row.Node), Reason: row.Reject, Writes: row.Drives, Unfilled: row.Unfilled,
+			Draws: row.Draws, Raised: row.TabID == raised, Publishes: row.Publishes})
+	}
+	for _, n := range p.currentSplit.Nodes {
+		sn.panes.Nodes = append(sn.panes.Nodes, string(n.ID))
+	}
 	return
 }
 
@@ -335,9 +454,11 @@ func (inst *PlayApp) paneDigest() (digest string) {
 	return b.String()
 }
 
-// setSqlFromAgent replaces the buffer before play draws, as a picked file
-// does (consumePickedSql), so every reader of the frame sees the new text.
-func (inst *PlayApp) setSqlFromAgent(sql string) {
+// swapSql replaces the buffer and takes its prelude as the new defaults,
+// as any whole-buffer swap does. An agent's call runs before play draws, so
+// every reader of the frame sees the new text; the person's swaps reach it
+// through set_sql (ADR-0270 §SD6).
+func (inst *PlayApp) swapSql(sql string) {
 	inst.sql = sql
 	inst.captureParamDefaults(sql)
 }
@@ -459,11 +580,19 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 	appops.Command(playOps, app.OperationSpec{Name: opRun, Version: 1, Summary: "run the buffer, under the agent limits",
 		Effect: app.OperationEffectRun, Reads: []string{opsResSql, opsResParams, opsResSignals}, Writes: []string{opsResResult},
 		Agents: true, Gesture: "the Run button",
-		Follows: []string{"the result replaces the main result; describe_result reads it, and fails with an agent limit when the grant does not cover the statement"}},
+		Follows: []string{"the result replaces the main result; describe_result reads it",
+			"a run the grant does not cover is refused, naming the destination the grant would have to list"}},
 		func(inst *PlayLauncher, call app.OperationCall, in RunArgs) (appops.None, error) {
 			p := inst.inner
 			if p == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
+			}
+			if call.Writer == opwire.WriterPerson {
+				// The person's Run (ADR-0270 §SD6): no agent limits, and the
+				// run path reports an empty buffer or an unfilled input in
+				// the status line, as it always has.
+				p.applyRunShortcut(true, in.Subquery)
+				return appops.None{}, nil
 			}
 			if call.OnBehalfOf == nil {
 				return appops.None{}, app.RefuseOperation("a run through the catalog is an agent's, and carries its context")
@@ -473,6 +602,11 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			if names := p.unfilledInputs(); len(names) > 0 {
 				return appops.None{}, app.RefuseOperation("parameters need a value first: " + strings.Join(names, ", "))
+			}
+			if !in.Subquery {
+				if err := p.refuseAgentRun(call.OnBehalfOf); err != nil {
+					return appops.None{}, err
+				}
 			}
 			p.markAgent(call.OnBehalfOf)
 			p.agentRunRequested = true
@@ -508,3 +642,82 @@ const (
 	opRun      = "run"
 	opSetParam = "set_param"
 )
+
+// playGesture routes one of the person's gestures through play's catalog
+// (ADR-0269 §SD8 "One path", ADR-0270 §SD6): the same handler an agent's
+// call runs, logged with the person as writer, so a task that read the
+// resource pauses. Where no host serves play's catalog — an embedder's
+// window, a test — direct applies the change instead.
+func playGesture[In any](inst *PlayApp, op string, in In, direct func()) {
+	if inst.gestureCtx == nil {
+		direct()
+		return
+	}
+	if _, err := appops.Gesture[In, appops.None](inst.gestureCtx, op, in); err != nil {
+		direct()
+	}
+}
+
+// personRun is the person's Run: the button, the Run subquery button,
+// Ctrl+Enter and Ctrl+Shift+Enter.
+func (inst *PlayApp) personRun(sub bool) {
+	playGesture(inst, opRun, RunArgs{Subquery: sub}, func() { inst.applyRunShortcut(true, sub) })
+}
+
+// personSetSql is the person swapping the whole buffer.
+func (inst *PlayApp) personSetSql(sql string) {
+	playGesture(inst, opSetSql, SetSqlArgs{Sql: sql}, func() { inst.swapSql(sql) })
+}
+
+// personSetSignal is the person writing a signal; writer is the signal
+// writer the store stamps, one of isHumanSignalWriter's.
+func (inst *PlayApp) personSetSignal(name SignalID, raw string, writer string) {
+	inst.gestureSignalWriter = writer
+	playGesture(inst, opSetSignal, SetSignalArgs{Name: string(name), Value: raw}, func() {
+		inst.graph.setSignalRawFrom(name, raw, writer)
+	})
+	inst.gestureSignalWriter = ""
+}
+
+// takeGestureSignalWriter is the signal writer of the person's set_signal
+// in flight: the surface personSetSignal named, else the Signals section.
+func (inst *PlayApp) takeGestureSignalWriter() (writer string) {
+	writer = inst.gestureSignalWriter
+	if writer == "" {
+		writer = signalWriterEditor
+	}
+	return
+}
+
+// personShowPane is the person raising a pane from play's own chrome.
+func (inst *PlayApp) personShowPane(pane string) {
+	playGesture(inst, opShowPane, ShowPaneArgs{Pane: pane}, func() { _ = inst.ActivateTab(pane) })
+}
+
+// personBindPane is the person's fill-tab toggle in the Graph pane.
+func (inst *PlayApp) personBindPane(pane string, node NodeID) {
+	playGesture(inst, opBindPane, BindPaneArgs{Pane: pane, Node: string(node)}, func() {
+		if node == "" {
+			inst.unbindTab(pane)
+			return
+		}
+		inst.bindTab(pane, node)
+	})
+}
+
+// personClearBindings is the Graph pane's clear: each binding undone
+// through bind_pane, so each is logged as the person's.
+func (inst *PlayApp) personClearBindings() {
+	if inst.gestureCtx == nil {
+		inst.clearBindings()
+		return
+	}
+	panes := make([]string, 0, len(inst.tabBindings))
+	for pane := range inst.tabBindings {
+		panes = append(panes, pane)
+	}
+	slices.Sort(panes)
+	for _, pane := range panes {
+		inst.personBindPane(pane, "")
+	}
+}

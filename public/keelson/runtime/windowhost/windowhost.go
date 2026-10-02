@@ -108,6 +108,12 @@ type window struct {
 	// flags. Render-thread only.
 	focusHandle widgethandle.WidgetHandle
 
+	// maximized pins the window to the desktop rect left free by the
+	// shell's panels. A title-bar double-click toggles it, read off
+	// focusHandle one frame late; egui keeps the rect to restore to.
+	// Render-thread only.
+	maximized bool
+
 	// ops serves the app's operations catalog for this window (ADR-0269);
 	// nil when the app declares none or the instance does not serve it.
 	// Created on the render goroutine after Mount; read by the operation
@@ -115,6 +121,34 @@ type window struct {
 	ops atomic.Pointer[opengine.Engine]
 	// opsTried records that startOps ran. Render-thread only.
 	opsTried bool
+	// loaded is set once the window's body has met a returned Mount — its
+	// own or the shared instance's — and says whether it failed; nil while
+	// the window is opening. Read by the operation service off the render
+	// goroutine, hence the atomic.
+	loaded atomic.Pointer[windowLoad]
+	// opened is when the window was opened; it bounds how long an opening
+	// window asks for frames.
+	opened time.Time
+}
+
+// windowLoad is how a window's open ended.
+type windowLoad struct {
+	failed bool
+	reason string
+}
+
+// loadState reports how far the window has come since it opened.
+func (w *window) loadState() (load opwire.LoadE, reason string) {
+	l := w.loaded.Load()
+	switch {
+	case l == nil:
+		load = opwire.LoadOpening
+	case l.failed:
+		load, reason = opwire.LoadFailed, l.reason
+	default:
+		load = opwire.LoadReady
+	}
+	return
 }
 
 // instMount is the Mount/Unmount lifecycle shared by every window pointing
@@ -443,6 +477,13 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered")
 		return
 	}
+	// Every open passes here — launcher, launch request, agent, seed — so
+	// this is where the launch limit holds (ADR-0272 §SD3).
+	if !inst.registry.Launchable(appId) {
+		err = eb.Build().Str("id", string(appId)).
+			Errorf("windowhost: app is not launchable in this process (KEELSON_LAUNCHABLE_APPS_WHERE)")
+		return
+	}
 	if kind == "" && len(cfg) > 0 {
 		err = eb.Build().Str("id", string(appId)).Int("len", len(cfg)).
 			Errorf("windowhost: launch config bytes without a config kind")
@@ -606,6 +647,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		mount:       ms,
 		openFlag:    true,
 		stop:        stop,
+		opened:      time.Now(),
 	})
 	runId := inst.runId
 	facts := inst.facts
@@ -1093,11 +1135,22 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		openBindingId := openBindingIdFor(w.key)
 		sm.AddR10Databinding(openBindingId, &w.openFlag)
 		ww, hh := windowDefaultSize(w.manifest.SurfaceHints)
+		if sm.GetResponse(w.focusHandle).HasTitleDoubleClicked() {
+			w.maximized = !w.maximized
+		}
+		// Not collapsible: egui collapses on a title-bar double-click,
+		// which here maximizes instead. Dragging by the title bar only
+		// gives egui's title widget (the double-click source) a place on a
+		// non-collapsible window, and keeps drags in app content from
+		// moving the window.
 		wf := c.Window(winId, c.WidgetText().Text(title).Keep()).
 			Resizable(true).
+			Collapsible(false).
 			TitleBar(true).
+			DragFromTitleBar(true).
 			DefaultOpen(true).
 			DefaultSize(ww, hh).
+			Maximized(w.maximized).
 			OpenBound(openBindingId)
 		// The handle feeds next frame's active-window decision; the
 		// focus stamp is this frame's answer, set before the app's
@@ -1407,6 +1460,9 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 		}
 	}
 	if w.mount.mountErr != nil {
+		if w.loaded.Load() == nil {
+			w.loaded.Store(&windowLoad{failed: true, reason: w.mount.mountErr.Error()})
+		}
 		c.Label("windowhost: mount failed: " + w.mount.mountErr.Error()).Send()
 		return
 	}
@@ -1414,6 +1470,11 @@ func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frame
 	// person's changes are in Go state; queued commands apply now, and the
 	// app's Frame draws their effects.
 	w.startOps(logger, opsListener)
+	if w.loaded.Load() == nil {
+		// Ready only once the engine exists, so a reader seeing ready
+		// also sees whether the window serves a catalog.
+		w.loaded.Store(&windowLoad{})
+	}
 	w.beginOps()
 	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
 		msgs := frameMessages()

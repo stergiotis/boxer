@@ -1186,8 +1186,9 @@ drawing rather than of one row (ADR-0231): one row, and every column optional.
 `hide_edges` / `undirected` / `pin_on_drag`, and the encoding selectors
 `size_by`, `tone_by`, `opacity_by` and `aura_by`. A selector names either a
 column of `vertices` or a metric the graph engine computes — `degree`,
-`pagerank`, `betweenness`, `kcore`, `triangles`, `clustering`, `clique`,
-`component`, `component_size`, `distance`, `relevance` — so
+`in_degree`, `out_degree`, `pagerank`, `betweenness`, `kcore`, `triangles`,
+`clustering`, `clique`, `component`, `scc`, `component_size`, `distance`,
+`distance_in`, `distance_out`, `relevance` — so
 `size_by = 'pagerank'` sizes each node by its rank without the query computing
 one. A leading `-` inverts an ordinal ramp. `component` and `scc` are labels
 rather than quantities, so they colour and group but cannot size.
@@ -1280,13 +1281,16 @@ and `vertices` say what a node or edge *is*: identity, category, magnitude,
 and — as the columns land — placement and emphasis. **Signals** named `gv_*`
 say what the reader *did* to the picture: hover, selection, a double-click, a
 right-click, an edge click, a dropped node, a background click, the camera,
-the legend. A query reads them as `{gv_focus:String}` like any signal, and
-with **Live** checked it re-runs when they move. **Encoding selectors** spend a
+the legend. A query reads them as `{gv_focus:String}` like any signal. A
+graph CTE (`edges`, `vertices`, `graph_opts`) re-runs on its own when a signal
+it reads moves; the final `SELECT` follows only with **Live** checked. **Encoding selectors** spend a
 computed metric on a channel: the *size by* control of the Graphview tab
 offers `weight` and every ordinal metric of the analytics engine (ADR-0229) —
-`degree`, `pagerank`, `betweenness`, `kcore`, `triangles`, `clustering`,
-`clique`, `component_size`, and the seeded `distance`, `distance_in`,
-`distance_out` and `relevance`, which measure from the selected node.
+`degree`, `in_degree`, `out_degree`, `pagerank`, `betweenness`, `kcore`,
+`triangles`, `clustering`, `clique`, `component_size`, and the seeded
+`distance`, `distance_in`, `distance_out` and `relevance`, which measure from
+the selected node, or from the hovered one with `distance_from = 'hover'` in
+`graph_opts`.
 
 One rule makes every block below safe to run today: a column the current build
 does not claim stays an ordinary result column — the **Table** tab shows it and
@@ -1352,9 +1356,10 @@ The graph is a window onto a larger one and the database is the universe. The
 and falls back to a starting decision while nothing has. The picture is that
 decision, everything within one citation of it, and everything within two;
 `hop` becomes the `group`, so the rings blob separately with auras on, and
-`3 - hop` is the `weight`, so the centre is the largest node. Check **Live**,
-double-click a node on the rim, and the query re-runs around it: the nodes
-that survive keep their places and the new rim arrives beside them. Nothing
+`3 - hop` is the `weight`, so the centre is the largest node. Double-click a
+node on the rim and the graph CTEs re-run around it: the nodes that survive
+keep their places and the new rim arrives beside them. Check **Live** as well
+if the Table should follow, since the final `SELECT` re-runs only then. Nothing
 in the widget knows what an ADR is; the expansion is the query's.
 
 ```sql
@@ -1409,16 +1414,18 @@ Three of the seam's signals in one query. `{gv_selection:Array(String)}` is
 the selected set — one id today, since a click replaces the selection, but the
 type is a set because the seam is — and `main` turns it into the selected
 decisions' rows with their source, so **Detail** renders the decision you
-clicked. `selection_key` carries the last selected id as a scalar; it is the
-value the Table and Network panes also write, so a query written against it
-follows a click in any of them. `{gv_hover:String}` moves after the pointer
+clicked. `selection_key` carries the last selected id as a scalar; Network,
+Sankey, Icicle, Treemap and Files write it too, and so does a row click in any
+pane over a result with a `key` column, so a query written against it follows a
+click in any of them. `{gv_hover:String}` moves after the pointer
 has rested on a node for a moment, not on every crossing, which is what keeps a
 Live query from re-running once per node under a sweep. The camera publishes
 its world-unit bounds and zoom once a pan or a wheel has settled, and a
 background click publishes where it landed; every row of the result carries
 them, so the result is empty until a node is selected. Read these in `main`,
-as here: a graph CTE that read the camera would rebuild the picture on every
-settle, and a rebuild re-frames the camera.
+as here. A graph CTE may read them, and a rebuild caused only by Graphview's own
+`gv_*` signals keeps the camera where it is, but every settle then costs a
+re-run of the graph's queries.
 
 ```sql
 WITH
@@ -2140,13 +2147,19 @@ ships `lttb`, which returns real samples (never interpolated ones), at the cost
 of non-uniform spacing:
 
 ```sql
-SELECT arrayJoin(lttb(2000)(t, v)) AS point
+SELECT tupleElement(p, 1) AS t, tupleElement(p, 2) AS v
 FROM (
-    SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t, count() AS v
-    FROM system.query_log
-    GROUP BY t
+    SELECT arrayJoin(lttb(2000)(t, v)) AS p
+    FROM (
+        SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t, count() AS v
+        FROM system.query_log
+        GROUP BY t
+    )
 )
 ```
+
+`lttb` returns an array of `(t, v)` tuples, and Series needs the time column at
+the top level, so the outer `SELECT` unpacks each tuple again.
 
 Its output is deliberately not on a grid, so it is a way to *look* at a long
 range — not an input to analysis, which needs the spacing `WITH FILL` or

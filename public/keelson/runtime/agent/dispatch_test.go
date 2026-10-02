@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -78,17 +80,24 @@ var docOps = func() *appops.Set[*doc, docSnap] {
 // the operation subjects, with frames run by the test.
 type fakeHost struct {
 	mu      sync.Mutex
+	frameMu sync.Mutex
 	engines map[uint64]*opengine.Engine
 	docs    map[uint64]*doc
 	render  atomic.Uint64
+	// openAs is how far a window OpsOpen opens has loaded, and why it
+	// failed; zero reports nothing, as a host that does not track it.
+	openAs     opwire.LoadE
+	openReason string
+	loads      map[uint64]opwire.InstanceInfo
 }
 
 func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for k, e := range inst.engines {
+		l := inst.loads[k]
 		out = append(out, opwire.InstanceInfo{App: docAppId, Alias: docAppId.SubjectAlias(), Key: k, Title: "Doc", Ops: true,
-			Confined: e.Confined()})
+			Confined: e.Confined(), Load: l.Load, Reason: l.Reason})
 	}
 	return
 }
@@ -127,6 +136,12 @@ func (inst *fakeHost) OpsOpen(appId app.AppIdT, kind string, cfg []byte) (uint64
 	d := &doc{text: "opened"}
 	inst.engines[key] = opengine.New(docOps.Catalog(), docOps.Bind(d))
 	inst.docs[key] = d
+	if inst.openAs != opwire.LoadUnspecified {
+		if inst.loads == nil {
+			inst.loads = map[uint64]opwire.InstanceInfo{}
+		}
+		inst.loads[key] = opwire.InstanceInfo{Load: inst.openAs, Reason: inst.openReason}
+	}
 	return key, nil
 }
 func (inst *fakeHost) OpsLogSince(k uint64, seq uint64) ([]opengine.LogEntry, uint64, bool) {
@@ -143,11 +158,44 @@ func (inst *fakeHost) OpsCaptureStatus(job string) (opwire.CaptureStatus, bool) 
 // frame runs one frame of instance k; person runs where the write-back
 // would land.
 func (inst *fakeHost) frame(k uint64) {
+	inst.frameMu.Lock()
+	defer inst.frameMu.Unlock()
 	e := inst.eng(k)
 	e.BeginFrame()
 	e.ApplyQueued()
 	e.TakeSnapshot()
 	e.EndFrame()
+}
+
+// person changes instance k's doc between frames, where the person's
+// write-back would land.
+func (inst *fakeHost) person(k uint64, fn func(d *doc)) {
+	inst.frameMu.Lock()
+	defer inst.frameMu.Unlock()
+	inst.mu.Lock()
+	d := inst.docs[k]
+	inst.mu.Unlock()
+	fn(d)
+}
+
+// answerWaitingQueries draws a frame for an instance a query waits on, as
+// the window host's repaint does.
+func (inst *fakeHost) answerWaitingQueries(stop <-chan struct{}) {
+	for {
+		select {
+		case <-stop:
+			return
+		case <-time.After(time.Millisecond):
+		}
+		inst.mu.Lock()
+		keys := slices.Collect(maps.Keys(inst.engines))
+		inst.mu.Unlock()
+		for _, k := range keys {
+			if inst.eng(k).Waiting() {
+				inst.frame(k)
+			}
+		}
+	}
 }
 
 type rig struct {
@@ -168,7 +216,7 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 	t.Helper()
 	reg := app.NewRegistry()
 	require.NoError(t, reg.RegisterFactory(app.Manifest{Id: docAppId, Display: "Doc", Summary: "edit a doc",
-		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: docOps.Catalog()},
+		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}, Operations: docOps.Catalog(), Help: docHelp},
 		func() (app.AppI, error) { return nil, nil }))
 	bus := inprocbus.NewInst(zerolog.Nop())
 	host := &fakeHost{engines: map[uint64]*opengine.Engine{}, docs: map[uint64]*doc{}}
@@ -176,6 +224,9 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 	host.engines[7] = opengine.New(docOps.Catalog(), docOps.Bind(d))
 	host.docs[7] = d
 	host.frame(7)
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
+	go host.answerWaitingQueries(stop)
 	// The window host's side of the operation subjects.
 	hostClient := bus.NewClient(opwire.HostOpsAppId, []app.SubjectFilter{
 		{Pattern: opwire.Pattern, Direction: app.CapDirectionSub},
@@ -257,7 +308,7 @@ func TestPersonWinsATie(t *testing.T) {
 	g := r.grant(ModeAct)
 	r.call(g, "read", "get_text", "{}")
 	r.call(g, "write", "set_text", `{"text":"agent"}`)
-	r.host.docs[7].text = "person" // the write-back of the frame the call was queued in
+	r.host.person(7, func(d *doc) { d.text = "person" }) // the write-back of the frame the call was queued in
 	r.host.frame(7)
 	st, err := r.cli.Status(context.Background(), g.Handle, "write", 0)
 	require.NoError(t, err)
@@ -337,7 +388,7 @@ func TestEditingConflicts(t *testing.T) {
 	r := newRig(t, true)
 	g := r.grant(ModeAct)
 	r.call(g, "r", "get_text", "{}")
-	r.host.docs[7].editing = true
+	r.host.person(7, func(d *doc) { d.editing = true })
 	r.call(g, "w", "set_text", `{"text":"x"}`)
 	r.host.frame(7)
 	st, _ := r.cli.Status(context.Background(), g.Handle, "w", 0)

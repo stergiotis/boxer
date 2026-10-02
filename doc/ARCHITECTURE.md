@@ -511,7 +511,7 @@ where the viewer cannot do WebGL2 or the link needs a constant rate.
  └─────┼───────────────────────────────────────────────────────────────────────────┘
        ▼
    ClickHouse server — everything durable: boxer.facts · boxer.persiststate ·
-   boxer.fsmeta / fsdata / fssnap · boxer.resultsets + pin_* · boxer.mv_queryruns · boxer.tables_*
+   boxer.fsmeta / fsdata / fssnap · boxer.mv_queryruns · boxer.tables_*
 ```
 
 **chlocal** ([ADR-0028](./adr/0028-chlocal-low-latency-sql-cap.md), 2026-05-14,
@@ -557,7 +557,6 @@ and nearly all of it in one *shape*: the leeway facts table.
 | `boxer.facts` | the shared append-only fact trail: grants, audit, logs, runs and heartbeats, app lifecycle, launches, query runs, the sysmetrics tee, the lading mount policy | hand-rolled [`public/keelson/runtime/factsstore/chstore`](../public/keelson/runtime/factsstore/chstore) (Arrow IPC), facts-bound generated stores, a refreshable MV | facts-shaped, 21 sections / 185 physical columns; `MergeTree ORDER BY ts`; no TTL unless the operator sets one | [ADR-0026 §SD6](./adr/0026-app-runtime-and-capability-subjects.md), [ADR-0184](./adr/0184-sysmetrics-persistence-tee.md), [ADR-0115](./adr/0115-query-observability-data-plane-strategy.md) |
 | `boxer.persiststate` | app durable state of every kind — persist values, workingsets, column-width overrides: one row per write, entity keyed `<kind>/<app>/…`, newest wins, a tombstone is a delete | the generated store [`public/keelson/runtime/persist/persiststore`](../public/keelson/runtime/persist/persiststore), behind `persist.StoreBackend` | own `TableDesc` with a `u8` lifecycle, which is what lets the generator emit a state view; a small typed section set the kinds share as components; `ORDER BY (id, ts)` | [ADR-0105 §D3a and its Update of 2026-08-15](./adr/0105-keelson-adopts-generated-record-stores.md) |
 | `boxer.fsmeta` / `boxer.fsdata` / `boxer.fssnap` | the filesystem snapshot store (§3.6) | generated stores under [`public/fs/lading`](../public/fs/lading) | facts-shaped on store-owned tables; `ORDER BY (mount, snapshot, path)`; `PARTITION BY` expiry day; `TTL` | [ADR-0198](./adr/0198-fs-snapshot-store.md) |
-| `boxer.resultsets` + `boxer.pin_<fp>` | pinned query results: one metadata row, one content-addressed table per pin carrying the result's own Arrow schema | play | plain columns | [ADR-0115](./adr/0115-query-observability-data-plane-strategy.md) |
 | `boxer.mv_queryruns` | the refreshable materialized view that pulls `queryrunsd`'s `/pull` into `boxer.facts` every 5 s — ClickHouse owns the insert | [`public/keelson/runtime/queryrunsvc`](../public/keelson/runtime/queryrunsvc) reconciles it at boot | MV over `url(…, 'ArrowStream')` | ADR-0115 |
 | `boxer.tables_*` | the data catalog: every discovered table classified opaque / leeway, restoration payloads, pairwise compatibility — rebuilt whole per run | the catalog command | plain columns | [ADR-0170](./adr/0170-data-catalog-competence.md) |
 

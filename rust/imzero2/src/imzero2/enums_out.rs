@@ -1238,4 +1238,6 @@ pub enum WindowBuilderMethodId {
     MinHeight = 13,
     AlwaysOnTop = 14,
     OpenBound = 15,
+    DragFromTitleBar = 16,
+    Maximized = 17,
 }

@@ -101,16 +101,30 @@ func envTable(specs []env.Spec) *introspect.Table {
 
 // --- apps (runtime app registry) ---------------------------------------------
 
-// appsProvider exposes the registered app manifests as keelson.apps.
-type appsProvider struct{}
+// appsProvider exposes the registered app manifests as keelson.apps. A nil
+// reg is app.DefaultRegistry.
+type appsProvider struct {
+	reg *app.Registry
+}
 
-func (appsProvider) Name() string                         { return "apps" }
-func (appsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
-func (appsProvider) Schema() *arrow.Schema                { return appsTable(nil).Schema() }
+// NewAppsProvider is keelson.apps over reg, for a caller that queries a
+// registry other than the default one (the launch limit, ADR-0272).
+func NewAppsProvider(reg *app.Registry) introspect.Provider { return appsProvider{reg: reg} }
 
-func (appsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
-	rs := app.AllRegistrations() // sorted by Id
-	return appsTable(rs).Build(proj, len(rs)), nil
+func (appsProvider) Name() string { return "apps" }
+
+// Freshness is Live: the table is static but for `launchable`, which a launch
+// limit set after the first snapshot changes.
+func (appsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (appsProvider) Schema() *arrow.Schema                { return appsTable(nil, nil).Schema() }
+
+func (inst appsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	reg := inst.reg
+	if reg == nil {
+		reg = app.DefaultRegistry
+	}
+	rs := reg.Registrations() // sorted by Id
+	return appsTable(reg, rs).Build(proj, len(rs)), nil
 }
 
 // topicStrings renders a manifest's topics for the Arrow list column. The
@@ -127,7 +141,7 @@ func topicStrings(ts []app.TopicT) (out []string) {
 // appsTable renders registrations rather than bare manifests: how an app
 // was registered decides whether two windows of it are independent, and
 // the manifest cannot say.
-func appsTable(rs []app.Registration) *introspect.Table {
+func appsTable(reg *app.Registry, rs []app.Registration) *introspect.Table {
 	m := func(i int) app.Manifest { return rs[i].Manifest }
 	caps := func(i int) (out []string) {
 		out = make([]string, 0, len(m(i).Caps))
@@ -181,7 +195,13 @@ func appsTable(rs []app.Registration) *introspect.Table {
 		// instance, so a singleton app with a window open can consume
 		// neither. `workingset AND registration = 'singleton'` is a
 		// misdeclaration the host can otherwise only report at first close.
-		String("registration", registration)
+		String("registration", registration).
+		// The host's own chrome opens it (the launcher, help). A label, not
+		// an exemption: the launch limit (ADR-0272) treats it like any app.
+		Bool("shell", func(i int) bool { return m(i).Shell }).
+		// Whether a window may be opened under the launch limit
+		// (KEELSON_LAUNCHABLE_APPS_WHERE, ADR-0272); true when none is set.
+		Bool("launchable", func(i int) bool { return reg.Launchable(m(i).Id) })
 }
 
 // --- build (runinfo + vcs) ---------------------------------------------------

@@ -384,6 +384,41 @@ call; the key is scoped to the sender, so one app cannot stop another's
 call. The verb falls under the existing `llm.*` grant. `Service.Close`
 cancels the calls in flight and waits for them.
 
+### 2026-10-02 — trusted hosts
+
+§SD3's locality exemption had one form, a loopback endpoint, so a model on
+another machine the deployment controls — a GPU box on the LAN — could take
+confined content only through an SSH tunnel to `localhost`.
+`BOXER_LLM_TRUSTED_HOSTS` lists endpoint hosts, by name or IP and without
+port, that the wall treats as it treats loopback. It is narrow by
+construction: a host matches by its exact name, never as a suffix; nothing
+else about the wall changes; and a provider whose host is not listed is
+refused as before, the refusal now saying "neither loopback nor a trusted
+host". It is visible: the service logs a warning at start, `llm.describe`
+reports `trusted` beside `local`, and the chat's model line says "trusted
+host". The agent service reads `local` (ADR-0269 §SD7), so a trusted host's
+model also reads confined results rather than handles. The list is the
+deployment's declaration that the host is its own; prefer an `https`
+endpoint, since the wall does not see the transport.
+
+### 2026-10-02 — a question to a query is the coordinator's
+
+§SD6 gave play's Model tab three prompts. `ask` is withdrawn from the book:
+the chat app of [ADR-0265](./0265-chat-app-over-retained-model-calls.md),
+driving a shared play window under ADR-0269, covers what it did and what
+ADR-0120 deferred — several turns, a model that sees the result it asked
+for — and the two paths would otherwise each need the grounding of
+ADR-0139. What the coordinator lacked was what M4 had given the tab: schema
+reads and a validate that run nothing. Those are now play operations
+(ADR-0270, update of this date), with leeway sections and handles added, so
+a coordinator explores without writing into the person's buffer.
+
+The trade is recorded rather than hidden. The tab's `ask` never ran
+generated SQL; a coordinator's `run` does, bounded by the task grant and
+play's agent limits rather than by a preview. `explain` and `fix this
+error` stay, as one-click transformations over the buffer, with the M4 tool
+loop behind `fix`.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

@@ -81,9 +81,18 @@ func (w *window) endOps() {
 	}
 }
 
-// opsBusy reports whether any window's engine wants frames soon.
+// openingFrames bounds how long a window that has not drawn its body asks
+// for frames: a collapsed window never draws it.
+const openingFrames = 5 * time.Second
+
+// opsBusy reports whether any window wants frames soon: its engine does, or
+// it is still opening and an agent's launch may be waiting on the frame that
+// draws its body (ADR-0269 §SD3).
 func opsBusy(windows []*window) (busy bool) {
 	for _, w := range windows {
+		if w.loaded.Load() == nil && time.Since(w.opened) < openingFrames {
+			return true
+		}
 		if eng := w.ops.Load(); eng != nil && eng.Busy() {
 			return true
 		}
@@ -117,9 +126,11 @@ func (inst *Inst) OpsInstances() (out []opwire.InstanceInfo) {
 			continue
 		}
 		eng := w.ops.Load()
+		load, reason := w.loadState()
 		out = append(out, opwire.InstanceInfo{
 			App: w.manifest.Id, Alias: w.manifest.Id.SubjectAlias(), Key: uint64(w.key),
 			Title: w.manifest.WindowTitle(), Ops: eng != nil, Confined: eng != nil && eng.Confined(),
+			Load: load, Reason: reason,
 		})
 	}
 	return

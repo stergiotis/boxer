@@ -37,6 +37,7 @@ var manifest = app.Manifest{
 	Icon:     icons.PhBookOpen,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"help", "docs", "documentation", "manual", "book"},
+	Shell:    true,
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceApp.W,

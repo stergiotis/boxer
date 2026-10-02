@@ -178,7 +178,7 @@ func (inst kanbanPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema, sig
 	if ch == chLanes {
 		// The lanes node only has to name lanes; the claim is that column.
 		for ci, f := range schema.Fields() {
-			if f.Name == kanbanLaneCol {
+			if pathColumnLabel(f.Name) == kanbanLaneCol {
 				claim = ci
 				return
 			}
@@ -241,15 +241,20 @@ func resolveKanbanColumns(schema *arrow.Schema) (k kanbanClaim, reason string) {
 	k = kanbanClaim{laneCol: -1, titleCol: -1, subCol: -1, selRow: -1}
 	var dotCols []int
 	for ci, f := range schema.Fields() {
-		switch {
-		case f.Name == kanbanLaneCol:
-			k.laneCol = ci
-		case f.Name == kanbanTitleCol:
-			k.titleCol = ci
-		case f.Name == kanbanSubtitleCol:
-			k.subCol = ci
-		case strings.HasPrefix(f.Name, kanbanDotPrefix):
+		// The dot prefix is tested on the RAW name and first: its `@` is a
+		// tone (`dot_open@warning`), not a gloss. Every other slot matches on
+		// the gloss label, so `title@text/markdown` is still the title.
+		if strings.HasPrefix(f.Name, kanbanDotPrefix) {
 			dotCols = append(dotCols, ci)
+			continue
+		}
+		switch pathColumnLabel(f.Name) {
+		case kanbanLaneCol:
+			k.laneCol = ci
+		case kanbanTitleCol:
+			k.titleCol = ci
+		case kanbanSubtitleCol:
+			k.subCol = ci
 		}
 	}
 	if k.laneCol < 0 || k.titleCol < 0 {

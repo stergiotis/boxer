@@ -284,11 +284,6 @@ type PlayApp struct {
 	// S2): captured KindQueryRun facts read back from the live endpoint,
 	// fetched manually and on first reveal (play_runs_history.go).
 	runsHist *runsHistoryDriver
-	// pins / pinsBrowser are Tier-1 result pinning (ADR-0115 S4): the
-	// Table tab's pin affordance and the History tab's pin browser
-	// (play_pin.go).
-	pins        *pinDriver
-	pinsBrowser *pinsBrowserDriver
 	// tabs is the instance's dock-tab set (ADR-0097 slice 6a): every tab a
 	// registered TabSpec, frozen at the first Render. Embedders customize
 	// it via Tabs() between construction and mounting (D4).
@@ -811,6 +806,16 @@ type PlayApp struct {
 	agentFresh        bool
 	agentRunRequested bool
 	runAgent          *app.OnBehalfOf
+	// gestureCtx is the frame context the person's gestures route through
+	// (ADR-0270 §SD6); only PlayLauncher sets it, since an embedder's
+	// context serves the embedder's catalog. gestureSignalWriter is the
+	// signal writer of the person's set_signal in flight.
+	gestureCtx          app.FrameContextI
+	gestureSignalWriter string
+	// frameSchema is the active result's schema as the last frame drew it,
+	// which list_panes judges the panes against (ADR-0270 §SD1).
+	frameSchema *arrow.Schema
+
 	paramSlots        []paramSlot
 	paramDrafts       map[string]*string
 	paramSyncedValues map[string]string
@@ -1028,7 +1033,7 @@ func (inst *PlayApp) consumePickedSql() {
 	inst.pickedSql = nil
 	inst.pickMu.Unlock()
 	if picked != nil {
-		inst.sql = *picked
+		inst.personSetSql(*picked)
 	}
 }
 
@@ -1196,6 +1201,9 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.tsCollisions = newTsCollisionProbe(client)
 	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
+	if graph != nil {
+		inst.seriesLabels.confined = graph.MainConfined
+	}
 	inst.fixtures = newFixtureState()
 	inst.cardFixtures = newCardgridFixtureState()
 	inst.projPublish = newProjectionPublishState()
@@ -1223,8 +1231,6 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.docs = newDocsDriver(docsSource)
 	inst.docsPane = newDocsPaneState()
 	inst.runsHist = newRunsHistoryDriver(client)
-	inst.pins = newPinDriver(client)
-	inst.pinsBrowser = newPinsBrowserDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
 	inst.tabs = defaultTabs(inst)
@@ -1482,6 +1488,7 @@ func (inst *PlayApp) render() error {
 	if rec != nil {
 		defer rec.Release()
 	}
+	inst.frameSchema = schema
 	// Drive the bound nodes' lanes against this frame's snapshot (slice 6c)
 	// — one demand per distinct bound node; the views feed frameFor below.
 	// The pager/projector/schema syncs moved into their tabs, which since 6c
@@ -1734,7 +1741,7 @@ func (inst *PlayApp) claimRunChord(run, sub bool) {
 	if inst.graph.MainLoading() {
 		return
 	}
-	inst.applyRunShortcut(run, sub)
+	inst.personRun(sub)
 }
 
 // applyRunShortcut turns a press into a run request. Split from the poll above
@@ -2017,12 +2024,13 @@ func (inst *PlayApp) restoreHistoryEntry(entry HistoryEntry) {
 	// Buffer is set only when the run shipped less than the buffer — a
 	// multi-statement buffer under run-under-cursor (ADR-0130 L3). Restoring
 	// it puts the siblings back rather than silently discarding them.
-	inst.sql = entry.SQL
+	sql := entry.SQL
 	if entry.Buffer != "" {
-		inst.sql = entry.Buffer
+		sql = entry.Buffer
 	}
+	inst.personSetSql(sql)
 	for urlKey, raw := range entry.SigParams {
-		inst.graph.setSignalRawFrom(strings.TrimPrefix(urlKey, "param_"), raw, signalWriterHistory)
+		inst.personSetSignal(SignalID(strings.TrimPrefix(urlKey, "param_")), raw, signalWriterHistory)
 	}
 }
 
@@ -2138,7 +2146,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			for range c.HoverText("Ctrl+Enter runs this. Ctrl+Shift+Enter runs just the query the caret is in — a subquery, a CTE body, or one statement of several — with the enclosing WITH items carried along.").KeepIter() {
 				if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
 					SendResp().HasPrimaryClicked() {
-					inst.requestRun = true
+					inst.personRun(false)
 				}
 			}
 			// Run subquery: the mouse path for Ctrl+Shift+Enter, offered
@@ -2155,8 +2163,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				for range c.HoverText("Runs just the query the caret is in, with the WITH items and SET prelude it needs carried along — the tinted region in the editor. Same as Ctrl+Shift+Enter. With the caret at statement level there is nothing narrower, and this runs the whole query.").KeepIter() {
 					if c.Button(ids.PrepareStr("runSubquery"), c.Atoms().Text("Run subquery").Keep()).
 						SendResp().HasPrimaryClicked() {
-						inst.requestRun = true
-						inst.requestSubquery = true
+						inst.personRun(true)
 					}
 				}
 			}
@@ -2642,11 +2649,10 @@ func (inst *PlayApp) consumePendingSnippet() (insert string) {
 	inst.pendingSnippetInsert = ""
 	if replace := inst.pendingSnippetReplace; replace != "" {
 		inst.pendingSnippetReplace = ""
-		inst.sql = replace
 		// A whole-buffer swap is a new buffer, so its prelude is the new
-		// default Reset restores to. An insert is not: it edits the buffer the
-		// reader already has.
-		inst.captureParamDefaults(replace)
+		// default Reset restores to (swapSql). An insert is not: it edits
+		// the buffer the reader already has.
+		inst.personSetSql(replace)
 		insert = ""
 	}
 	return
@@ -3020,8 +3026,6 @@ func (inst *PlayApp) renderHistoryTab() {
 	}
 	// The durable half: captured runs from boxer.facts (ADR-0115 S2).
 	inst.renderRecordedRuns()
-	// Tier-1 pins: frozen resultsets on the endpoint (ADR-0115 S4).
-	inst.renderPinnedResults()
 }
 
 // renderTableTab is the Table dock tab body: pager strip atop the master
@@ -3074,9 +3078,6 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	pad := styletokens.PaddingTight(inst.density)
 	c.AddSpace(pad)
 	inst.pager.Render()
-	// Tier-1 pin affordance (ADR-0115 S4): freeze the rows this tab
-	// shows into a queryable table.
-	inst.renderPinControl(rec)
 	// ADR-0186 raw toggle: bypass every gloss for the session — the escape
 	// hatch a wrong rule needs. Offered only once a column is glossed.
 	inst.renderGlossControl(schema)

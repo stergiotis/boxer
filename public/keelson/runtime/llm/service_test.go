@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -161,6 +162,44 @@ func TestNoGrantIsAPermissionError(t *testing.T) {
 	cli.Timeout = time.Second
 	_, err = cli.Describe(context.Background())
 	require.Error(t, err)
+}
+
+// A host the deployment trusts is treated as loopback by the wall, and
+// says so in describe; any other remote host is still refused.
+func TestATrustedHostReceivesConfinedContent(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "secret"}}
+	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}
+	cli, _, _ := serve(t, Config{Endpoint: "http://AmpereOne.lan:8080/v1", Model: "m", Client: p,
+		TrustedHosts: []string{"ampereone.lan"}})
+	d, err := cli.Describe(context.Background())
+	require.NoError(t, err)
+	assert.True(t, d.Local)
+	assert.True(t, d.Trusted, "describe tells a trusted host from loopback")
+	_, err = cli.Complete(context.Background(), Request{Sensitivity: queryengine.SensitivityConfined, Messages: msg})
+	require.NoError(t, err)
+	assert.Len(t, p.seen.Messages, 1)
+
+	other := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}
+	cli, _, _ = serve(t, Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: other,
+		TrustedHosts: []string{"ampereone.lan"}})
+	d, err = cli.Describe(context.Background())
+	require.NoError(t, err)
+	assert.False(t, d.Local)
+	assert.False(t, d.Trusted)
+	_, err = cli.Complete(context.Background(), Request{Sensitivity: queryengine.SensitivityConfined, Messages: msg})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "%v", err)
+	assert.Contains(t, refused.Reason, "neither loopback nor a trusted host")
+	assert.Empty(t, other.seen.Messages)
+}
+
+func TestTrustedHostsParse(t *testing.T) {
+	assert.Equal(t, []string{"a.lan", "10.0.0.5", "[fd00::1]"}, ParseTrustedHosts(" a.lan,,10.0.0.5 , [fd00::1]"))
+	assert.Empty(t, ParseTrustedHosts(""))
+	assert.True(t, isTrustedEndpoint("http://[fd00::1]:8080/v1", []string{"[fd00::1]"}))
+	assert.True(t, isTrustedEndpoint("http://10.0.0.5:8080/v1", []string{"10.0.0.5"}))
+	assert.False(t, isTrustedEndpoint("http://10.0.0.6:8080/v1", []string{"10.0.0.5"}))
+	assert.False(t, isTrustedEndpoint("http://evil.a.lan/v1", []string{"a.lan"}), "a name, not a suffix")
 }
 
 func TestLocalEndpoint(t *testing.T) {
@@ -370,4 +409,18 @@ func TestCancelIsScopedToTheSender(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the owner could not stop its call")
 	}
+}
+
+// A provider failure crosses the bus with its kind and its reason: the
+// caller can branch on the sentinel and show the provider's message.
+func TestAProviderFailureKeepsItsKindAndItsReason(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+	p := &fakeProvider{err: &openaichat.HTTPError{Status: 402, Message: "This request requires more credits"}}
+	cli, _, _ := serve(t, localCfg(p))
+	_, err := cli.Complete(context.Background(), Request{Messages: msg})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP 402: This request requires more credits")
+	assert.Equal(t, errKindPayment, kindOf(fmt.Errorf("x: %w", openaichat.ErrPaymentRequired)))
+	assert.True(t, errors.Is(failureOf(wireReply{ErrorKind: errKindPayment, Reason: "HTTP 402: no credit"}), openaichat.ErrPaymentRequired))
+	assert.Contains(t, failureOf(wireReply{ErrorKind: errKindPayment, Reason: "HTTP 402: no credit"}).Error(), "no credit")
 }

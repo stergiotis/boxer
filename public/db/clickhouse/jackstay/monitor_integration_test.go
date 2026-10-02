@@ -81,7 +81,7 @@ func TestMonitor_LiveServer(t *testing.T) {
 		opts.PollPeriod = 100 * time.Millisecond
 		calls := 0
 		opts.BeforeChunk = func(context.Context, *PlanTable) error { calls++; return nil }
-		sr, serr := SyncTable(ctx, client, client, pt, j, opts, time.Now)
+		sr, serr := SyncTable(ctx, ServerSource(client), client, pt, j, opts, time.Now)
 		require.NoError(t, serr, compression)
 		require.NoError(t, j.Close())
 		assert.Equal(t, 3, sr.Copied, compression)

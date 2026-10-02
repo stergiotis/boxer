@@ -481,7 +481,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ### M5 — The jackstay app wizard and its scene ✓
 
-### M6 — Pack-file target (`export` / `import`)
+### M6 — Pack-file target (`export` / `import`) — superseded by ADR-0271
 
 Deferred:
 
@@ -608,6 +608,17 @@ by file name, and the manifest declares `fs.appdata.>`.
   `LoadPlanIn`, `OpenJournalIn`, `RunSyncIn`); the CLI keeps the path forms
   over `OsFiles`. The journal appends one durable line per record as before.
 - Saves run in the step's worker rather than on the frame.
+
+### 2026-10-02 — Row filters, and M6 replaced by packs (ADR-0271)
+
+[ADR-0271](./0271-jackstay-row-filters-and-packs.md) adds a per-table row
+filter, which every step applies on both sides, and replaces the M6 sketch
+under Status. M6's "tar holding a manifest and one `Native` stream per chunk"
+becomes a directory pack. `export` writes it from the source, and a plan
+names the pack as its source in place of a server. The sync's relay and
+§SD5's verification are unchanged; the source side of every step now goes
+through one interface. Under a filter, §SD5's clearing never drops a
+partition or truncates a table.
 
 ## References
 

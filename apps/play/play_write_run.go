@@ -104,7 +104,15 @@ func (inst *PlayApp) executeWriteRun(runSQL string, sigParams map[string]string)
 // failure after the status line and a write path that stops at the header
 // would report such a run as OK (the documented chclient.Exec gap; this
 // path must not inherit it).
+//
+// The gate is checked here as well as by the renderer, which refuses
+// with the copy-out hint first: the write path does not rely on its
+// caller to hold it (ADR-0270 §SD7).
 func (inst *Client) ExecuteWrite(ctx context.Context, sql string, signals map[string]string) (summary Summary, err error) {
+	if !inst.cfg.AllowWrites {
+		err = eh.Errorf("play: the write is gated; set BOXER_PLAY_ALLOW_WRITES=1 to execute writes from play")
+		return
+	}
 	dec := inst.Dispatch(sql, "")
 	eng, err := inst.engineFor(dec)
 	if err != nil {

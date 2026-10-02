@@ -89,12 +89,35 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 		inst.recHead = (inst.recHead + 1) % keepRecords
 	}
 	if inst.cfg.ActionsLog != nil {
-		if line, err := json.Marshal(r); err == nil {
+		if line, err := json.Marshal(actionLine{ActionRecord: r, Args: rec.args}); err == nil {
 			_, _ = inst.cfg.ActionsLog.Write(append(line, '\n'))
 		}
 	}
 	inst.recMu.Unlock()
 	inst.persist(r)
+}
+
+// actionLine is a row of the actions file: the record, and under a test
+// grant the call's arguments as the model sent them.
+type actionLine struct {
+	ActionRecord `json:",inline"`
+	Args         string `json:",omitempty"`
+}
+
+// recordGrantRefusal writes a refused test grant to the actions file, with
+// the request as the model's coordinator sent it.
+func (inst *Service) recordGrantRefusal(msg *app.Msg, req wireGrantRequest, reason string) {
+	if inst.cfg.ActionsLog == nil {
+		return
+	}
+	args, _ := json.Marshal(req)
+	r := ActionRecord{At: time.Now(), Actor: msg.Sender, ActorInstance: msg.SenderInstance, Operation: "grant",
+		Decision: "grant", Phase: opwire.PhaseRefused.String(), Reason: reason, Test: true}
+	inst.recMu.Lock()
+	defer inst.recMu.Unlock()
+	if line, err := json.Marshal(actionLine{ActionRecord: r, Args: string(args)}); err == nil {
+		_, _ = inst.cfg.ActionsLog.Write(append(line, '\n'))
+	}
 }
 
 // persist buffers the row for boxer.facts and wakes the flusher. A failed

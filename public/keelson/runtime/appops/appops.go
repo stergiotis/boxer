@@ -35,7 +35,8 @@ type None struct{}
 var typeNone = reflect.TypeFor[None]()
 
 type commandFn[A any] func(inst A, call app.OperationCall, args []byte) (result []byte, err error)
-type queryFn[S any] func(snap S, args []byte) (result []byte, err error)
+type queryFn[S any] func(snap S, mounted map[string]any, args []byte) (result []byte, err error)
+type readFn[S any] func(snap S, call app.OperationCall, args []byte) (result []byte, confined bool, err error)
 
 // Set is an app's catalog with its handlers. A is the app instance type, S
 // the snapshot type queries read.
@@ -47,9 +48,12 @@ type Set[A any, S any] struct {
 	ops       []app.OperationSpec
 	commands  map[string]commandFn[A]
 	queries   map[string]queryFn[S]
+	reads     map[string]readFn[S]
 	avail     map[string]func(snap S) (ok bool, reason string)
 	snapshot  func(inst A) S
 	confined  func(inst A) bool
+	// mounts capture, per mounted component, the value its queries read.
+	mounts map[string]func(inst A) any
 }
 
 // NewSet starts a catalog. snapshot captures what queries read; it runs on
@@ -62,8 +66,10 @@ func NewSet[A any, S any](snapshot func(inst A) S) (s *Set[A, S]) {
 		restore:  make(map[string]func(A, any) bool),
 		commands: make(map[string]commandFn[A]),
 		queries:  make(map[string]queryFn[S]),
+		reads:    make(map[string]readFn[S]),
 		avail:    make(map[string]func(S) (bool, string)),
 		snapshot: snapshot,
+		mounts:   make(map[string]func(A) any),
 	}
 	return
 }
@@ -150,7 +156,7 @@ func Query[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSpec
 	}
 	spec.Args, spec.Result = typeOrNil[In](), typeOrNil[Out]()
 	set.ops = append(set.ops, spec)
-	set.queries[spec.Name] = func(snap S, args []byte) (result []byte, err error) {
+	set.queries[spec.Name] = func(snap S, _ map[string]any, args []byte) (result []byte, err error) {
 		var in In
 		in, err = decodeArgs[In](spec.Name, args)
 		if err != nil {
@@ -158,6 +164,76 @@ func Query[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSpec
 		}
 		var out Out
 		out, err = fn(snap, in)
+		if err != nil {
+			return
+		}
+		result, err = encodeResult(spec.Name, out)
+		return
+	}
+}
+
+// ExternalRead declares an external read and its handler: a fixed, bounded
+// probe outside the app that the app owns (ADR-0269 §SD1). It runs off the
+// render goroutine like a query, over the same snapshot, and receives the
+// call, since the probe is agent-caused work the app checks against its
+// agent limits. Effect defaults to none. A result type implementing
+// [app.ConfinedResultI] labels the outcome confined when it says so.
+func ExternalRead[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSpec, fn func(snap S, call app.OperationCall, in In) (out Out, err error)) {
+	spec.Class = app.OperationClassExternalRead
+	if spec.Effect == app.OperationEffectUnspecified {
+		spec.Effect = app.OperationEffectNone
+	}
+	spec.Args, spec.Result = typeOrNil[In](), typeOrNil[Out]()
+	set.ops = append(set.ops, spec)
+	set.reads[spec.Name] = func(snap S, call app.OperationCall, args []byte) (result []byte, confined bool, err error) {
+		var in In
+		in, err = decodeArgs[In](spec.Name, args)
+		if err != nil {
+			return
+		}
+		var out Out
+		out, err = fn(snap, call, in)
+		if err != nil {
+			return
+		}
+		if c, ok := any(out).(app.ConfinedResultI); ok {
+			confined = c.ResultConfined()
+		}
+		result, err = encodeResult(spec.Name, out)
+		return
+	}
+}
+
+// Mount declares a component mounted into the catalog under key: capture
+// takes, with each snapshot, the value the component's queries read. It
+// runs on the render goroutine and must return a value safe to read from
+// any goroutine. A component declares its operations with [MountedQuery]
+// and its resources with [Set.Resource], so every app mounting it offers
+// the same operations.
+func (inst *Set[A, S]) Mount(key string, capture func(inst A) any) *Set[A, S] {
+	inst.mounts[key] = capture
+	return inst
+}
+
+// MountedQuery declares a query over the value a mounted component
+// captured under key. Class defaults to query and Effect to none.
+func MountedQuery[A any, S any, In any, Out any](set *Set[A, S], key string, spec app.OperationSpec, fn func(v any, in In) (out Out, err error)) {
+	if spec.Class == app.OperationClassUnspecified {
+		spec.Class = app.OperationClassQuery
+	}
+	if spec.Effect == app.OperationEffectUnspecified {
+		spec.Effect = app.OperationEffectNone
+	}
+	spec.Args, spec.Result = typeOrNil[In](), typeOrNil[Out]()
+	set.ops = append(set.ops, spec)
+	set.queries[spec.Name] = func(_ S, mounted map[string]any, args []byte) (result []byte, err error) {
+		var in In
+		in, err = decodeArgs[In](spec.Name, args)
+		if err != nil {
+			return
+		}
+		var out Out
+		out, err = fn(mounted[key], in)
 		if err != nil {
 			return
 		}
@@ -254,13 +330,21 @@ func (inst *bound[A, S]) ApplyCommand(call app.OperationCall, name string, args 
 }
 
 func (inst *bound[A, S]) Snapshot() (s app.OperationsSnapshotI) {
-	s = &snapshot[A, S]{set: inst.set, snap: inst.set.snapshot(inst.inst)}
+	sn := &snapshot[A, S]{set: inst.set, snap: inst.set.snapshot(inst.inst)}
+	if len(inst.set.mounts) > 0 {
+		sn.mounted = make(map[string]any, len(inst.set.mounts))
+		for k, capture := range inst.set.mounts {
+			sn.mounted[k] = capture(inst.inst)
+		}
+	}
+	s = sn
 	return
 }
 
 type snapshot[A any, S any] struct {
-	set  *Set[A, S]
-	snap S
+	set     *Set[A, S]
+	snap    S
+	mounted map[string]any
 }
 
 func (inst *snapshot[A, S]) Available(name string) (ok bool, reason string) {
@@ -283,7 +367,21 @@ func (inst *snapshot[A, S]) Query(name string, args []byte) (result []byte, err 
 		err = app.RefuseOperation(reason)
 		return
 	}
-	result, err = fn(inst.snap, args)
+	result, err = fn(inst.snap, inst.mounted, args)
+	return
+}
+
+func (inst *snapshot[A, S]) ExternalRead(call app.OperationCall, name string, args []byte) (result []byte, confined bool, err error) {
+	fn, ok := inst.set.reads[name]
+	if !ok {
+		err = eb.Build().Str("operation", name).Errorf("appops: no such external read")
+		return
+	}
+	if avail, reason := inst.Available(name); !avail {
+		err = app.RefuseOperation(reason)
+		return
+	}
+	result, confined, err = fn(inst.snap, call, args)
 	return
 }
 

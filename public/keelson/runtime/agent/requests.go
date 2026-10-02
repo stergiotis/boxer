@@ -70,6 +70,8 @@ const (
 	needOperation
 	needMode
 	needBudget
+	// needDeadline is a call to a task whose deadline passed.
+	needDeadline
 )
 
 // held is a call waiting on a widening.
@@ -78,6 +80,8 @@ type held struct {
 	req  wireCall
 	need needE
 	mode ModeE
+	// extra says, for a deadline, how much time approving adds.
+	extra string
 }
 
 // request is one decision the person owes: a new grant, or the widening of
@@ -133,7 +137,8 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		inst.mu.Lock()
 		var out opwire.Outcome
 		var ok bool
-		t, out, ok = inst.resolve(req.Handle, msg)
+		// A widening of a task past its deadline is how it gets more time.
+		t, out, ok, _ = inst.resolveLate(req.Handle, msg, true)
 		inst.mu.Unlock()
 		if !ok {
 			rep.Reason = out.Reason
@@ -208,7 +213,7 @@ func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need n
 		plan: req.Reason, wanted: map[uint64]ModeE{req.Instance: mode}, wantedOps: map[uint64][]string{},
 		created: time.Now(), share: map[uint64]bool{req.Instance: true}, shareFlag: make(map[uint64]*bool),
 		mode: map[uint64]ModeE{req.Instance: mode},
-		held: &held{rec: rec, req: req, need: need, mode: mode}}
+		held: &held{rec: rec, req: req, need: need, mode: mode, extra: inst.deadline().String()}}
 	if need == needOperation {
 		r.wantedOps[req.Instance] = []string{req.Operation}
 	}
@@ -293,6 +298,9 @@ func (inst *Service) approve(r *request) (route *held) {
 				}
 			}
 		}
+	}
+	if time.Now().After(t.deadline) || (r.held != nil && r.held.need == needDeadline) {
+		t.deadline = time.Now().Add(inst.deadline())
 	}
 	if r.held != nil && r.held.need == needBudget {
 		t.callsBudget += DefaultCallBudget / 4

@@ -40,6 +40,9 @@ bitflags::bitflags! {
         // by the Window apply arm (it is a fact about the window's layer,
         // not about a response), so populate() below does not touch it.
         const WINDOW_TOPMOST = 1u32 << 21;
+        // TITLE_DOUBLE_CLICKED: the window's title bar was double-clicked
+        // this frame. Set only by the Window apply arm, like WINDOW_TOPMOST.
+        const TITLE_DOUBLE_CLICKED = 1u32 << 22;
 
         // Bit 30 is FREE. It was NODELIKE_SELECTED, the egui_ltreeview
         // binding's only read-back, retired with the binding in ADR-0176.

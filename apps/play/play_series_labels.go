@@ -132,6 +132,9 @@ func tsInputHash(c compiledNode) (hash string) {
 // and a person cannot meaningfully mean two things at once.
 type tsLabelsWriter struct {
 	client *Client
+	// confined reports the window's label, which the verdicts carry: they
+	// name spans of a confined result as much as the result does.
+	confined func() bool
 
 	mu      sync.Mutex
 	writing bool
@@ -171,7 +174,11 @@ func (inst *tsLabelsWriter) write(row tsLabelRow) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), tsLabelsTimeout)
 		defer cancel()
-		err := inst.doWrite(ctx, row)
+		label := appWriteLabel{}
+		if inst.confined != nil {
+			label.confined = inst.confined()
+		}
+		err := inst.doWrite(ctx, row, label)
 		inst.mu.Lock()
 		inst.writing = false
 		inst.err = err
@@ -182,18 +189,18 @@ func (inst *tsLabelsWriter) write(row tsLabelRow) {
 	}()
 }
 
-func (inst *tsLabelsWriter) doWrite(ctx context.Context, row tsLabelRow) (err error) {
-	if _, err = inst.client.rawTsvQuery(ctx, tsLabelsDDL); err != nil {
+func (inst *tsLabelsWriter) doWrite(ctx context.Context, row tsLabelRow, label appWriteLabel) (err error) {
+	if _, err = inst.client.appStatement(ctx, tsLabelsDDL, nil, label); err != nil {
 		return eh.Errorf("play: tslabels: ddl: %w", err)
 	}
 	payload, mErr := json.Marshal(row)
 	if mErr != nil {
 		return eh.Errorf("play: tslabels: marshal: %w", mErr)
 	}
-	err = inst.client.rawInsertBody(ctx,
+	_, err = inst.client.appStatement(ctx,
 		"INSERT INTO "+tsLabelsTable+
 			" (input_hash, span_from, span_to, verdict, detector, window, note) FORMAT JSONEachRow",
-		bytes.NewReader(payload))
+		bytes.NewReader(payload), label)
 	if err != nil {
 		return eh.Errorf("play: tslabels: insert: %w", err)
 	}

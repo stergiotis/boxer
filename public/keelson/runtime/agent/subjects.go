@@ -29,6 +29,8 @@ const (
 	// SubjectDescribe answers an app's operations, or those matching a
 	// search.
 	SubjectDescribe = SubjectPrefix + "describe"
+	// SubjectHelp reads the inline help apps ship.
+	SubjectHelp = SubjectPrefix + "help"
 	// SubjectRequest asks for a task grant.
 	SubjectRequest = SubjectPrefix + "request"
 	// SubjectList lists the task's instances.
@@ -79,6 +81,15 @@ const TableOperations = "app_operations"
 var ActionsFileEnv = env.NewString(env.Spec{
 	Name:        "BOXER_AGENT_ACTIONS_FILE",
 	Description: "file the headless host appends every runtime.agent action record to, as JSON lines, for trials (ADR-0269); honoured only on the headless host",
+	Category:    env.CategoryDev,
+})
+
+// DeadlineEnv is how long a task runs before the person is asked for more
+// time.
+var DeadlineEnv = env.NewDuration(env.Spec{
+	Name:        "BOXER_AGENT_DEADLINE",
+	Default:     "30m",
+	Description: "how long a runtime.agent task runs before its calls wait for the person to give it more time, and how much more an approval gives",
 	Category:    env.CategoryDev,
 })
 

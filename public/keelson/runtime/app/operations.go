@@ -316,9 +316,22 @@ type OperationsHandlerI interface {
 type OperationsSnapshotI interface {
 	// Available reports whether an operation can run now, and why not.
 	Available(name string) (ok bool, reason string)
-	// Query answers a query or an external read. args and result are CBOR
-	// of the declared types.
+	// Query answers a query. args and result are CBOR of the declared
+	// types.
 	Query(name string, args []byte) (result []byte, err error)
+	// ExternalRead answers an external read. It takes the call because the
+	// probe it starts is agent-caused work and checks the on-behalf-of
+	// context against the app's agent limits (ADR-0269 §SD6). confined is
+	// set when what the probe read is confined although the window is not.
+	ExternalRead(call OperationCall, name string, args []byte) (result []byte, confined bool, err error)
+}
+
+// ConfinedResultI is implemented by an external read's result type whose
+// value may carry confined content (ADR-0145) the window's own label does
+// not cover: the schema of a sealed dataset it has not read, say. The host
+// labels the outcome confined when it reports true (ADR-0269 §SD7).
+type ConfinedResultI interface {
+	ResultConfined() (confined bool)
 }
 
 // OperationsGestureI is the capability a frame context offers an app whose
@@ -373,10 +386,12 @@ type DelegationI interface {
 
 // OperationRefusal is an error a handler returns to decline a call without
 // failing it. Conflict marks a refusal the caller can resolve by reading
-// again: the person is editing, or the state moved.
+// again: the person is editing, or the state moved. Destinations, when set,
+// are what a grant would have to list for the call to go through.
 type OperationRefusal struct {
-	Conflict bool
-	Reason   string
+	Conflict     bool
+	Reason       string
+	Destinations []string
 }
 
 func (inst *OperationRefusal) Error() string {
@@ -389,6 +404,12 @@ func (inst *OperationRefusal) Error() string {
 // RefuseOperation declines a call: unavailable, or a precondition failed.
 func RefuseOperation(reason string) (err error) {
 	return &OperationRefusal{Reason: reason}
+}
+
+// RefuseForDestinations declines a call whose task's grant does not list
+// the destinations it would reach.
+func RefuseForDestinations(reason string, destinations ...string) (err error) {
+	return &OperationRefusal{Reason: reason, Destinations: destinations}
 }
 
 // ConflictOperation declines a call the caller can retry after reading

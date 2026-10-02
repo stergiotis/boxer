@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -259,4 +260,11 @@ func TestKeepBadge(t *testing.T) {
 	conv.notKept = "ring"
 	label, _ = keepBadge(conv)
 	assert.Equal(t, "not kept", label, "a decline wins over an earlier keep")
+}
+
+func TestAnOutOfCreditFailureSaysSo(t *testing.T) {
+	err := fmt.Errorf("llm: HTTP 402: This request requires more credits: %w", openaichat.ErrPaymentRequired)
+	assert.Equal(t, "the model provider is out of credit or quota for this account (HTTP 402: This request requires more credits)", failureReason(err))
+	err = fmt.Errorf("llm: openaichat: non-2xx response: HTTP 503: overloaded: %w", openaichat.ErrServer)
+	assert.Equal(t, "the model provider answered HTTP 503: overloaded", failureReason(err))
 }

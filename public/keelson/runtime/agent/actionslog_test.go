@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json/v2"
 	"sync"
 	"testing"
@@ -53,4 +54,51 @@ func TestTheActionsLogGetsEveryRecord(t *testing.T) {
 	assert.Equal(t, "k1", last.Key)
 	assert.Equal(t, g.Task, last.Task)
 	assert.True(t, last.Test)
+}
+
+func (inst *lockedBuffer) actionLines() (out []actionLine) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	sc := bufio.NewScanner(bytes.NewReader(inst.buf.Bytes()))
+	for sc.Scan() {
+		var r actionLine
+		if json.Unmarshal(sc.Bytes(), &r) == nil {
+			out = append(out, r)
+		}
+	}
+	return
+}
+
+// Under a test grant the actions file keeps what the model sent, and a
+// refused argument shape comes back with the schema it has to fit.
+func TestATestGrantsActionsKeepTheArgumentsAndASchemaRefusalNamesItsSchema(t *testing.T) {
+	log := &lockedBuffer{}
+	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants, cfg.ActionsLog = true, log })
+	g := r.grant(ModeAct)
+	r.call(g, "k0", "get_text", "{}")
+	out := r.call(g, "k1", "set_text", "{}")
+	require.Equal(t, "refused", out.Phase)
+	require.NotNil(t, out.Remedy)
+	assert.Contains(t, out.Remedy.ArgsSchema, `"properties"`)
+
+	var sent string
+	for _, l := range log.actionLines() {
+		if l.Key == "k1" {
+			sent = l.Args
+		}
+	}
+	assert.Equal(t, "{}", sent)
+}
+
+// A refused test grant is a row of the actions file, with the request as sent.
+func TestARefusedTestGrantLandsInTheActionsFile(t *testing.T) {
+	log := &lockedBuffer{}
+	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants, cfg.ActionsLog = true, log })
+	_, err := r.cli.Request(context.Background(), GrantRequest{Plan: "look around"})
+	require.Error(t, err)
+	rows := log.actionLines()
+	require.Len(t, rows, 1)
+	assert.Equal(t, "grant", rows[0].Decision)
+	assert.Equal(t, "refused", rows[0].Phase)
+	assert.Contains(t, rows[0].Args, "look around")
 }

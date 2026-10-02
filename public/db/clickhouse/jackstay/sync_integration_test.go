@@ -91,7 +91,7 @@ func TestSync_LiveServer(t *testing.T) {
 		return pt
 	}
 	diffOf := func(pt *PlanTable) *TableDiff {
-		require.NoError(t, DiffPlanTable(ctx, client, client, pt, false, chunkOpts, diffOpts, time.Now()))
+		require.NoError(t, DiffPlanTable(ctx, ServerSource(client), client, pt, false, chunkOpts, diffOpts, time.Now()))
 		return pt.Diff
 	}
 	count := func(table string) uint64 {
@@ -112,13 +112,13 @@ func TestSync_LiveServer(t *testing.T) {
 				cancel()
 			}
 		}
-		_, err := SyncTable(cctx, client, client, pt, j, opts, time.Now)
+		_, err := SyncTable(cctx, ServerSource(client), client, pt, j, opts, time.Now)
 		assert.ErrorIs(t, err, context.Canceled)
 		cancel()
 		require.NoError(t, j.Close())
 
 		j = openJournal("run-full")
-		rep, err := SyncTable(ctx, client, client, pt, j, DefaultSyncOptions(), time.Now)
+		rep, err := SyncTable(ctx, ServerSource(client), client, pt, j, DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		assert.Equal(t, 2, rep.Done, "two chunks were verified before the interruption")
 		assert.Equal(t, 2, rep.Copied)
@@ -127,11 +127,11 @@ func TestSync_LiveServer(t *testing.T) {
 	})
 	t.Run("non-empty target: refuse, then replace", func(t *testing.T) {
 		pt := prepare("part", TableSync{Mode: SyncModeFull})
-		_, err := SyncTable(ctx, client, client, pt, openJournal("run-refuse"), DefaultSyncOptions(), time.Now)
+		_, err := SyncTable(ctx, ServerSource(client), client, pt, openJournal("run-refuse"), DefaultSyncOptions(), time.Now)
 		assert.Error(t, err)
 		exec("ALTER TABLE " + d + "part UPDATE s = 'drifted' WHERE k % 100 = 7 SETTINGS mutations_sync = 2")
 		pt.Sync = &TableSync{Mode: SyncModeFull, Existing: ExistingPolicyReplace}
-		rep, err := SyncTable(ctx, client, client, pt, openJournal("run-replace"), DefaultSyncOptions(), time.Now)
+		rep, err := SyncTable(ctx, ServerSource(client), client, pt, openJournal("run-replace"), DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		assert.Equal(t, 4, rep.Copied)
 		assert.Equal(t, uint64(20000), rep.Cleared)
@@ -148,7 +148,7 @@ func TestSync_LiveServer(t *testing.T) {
 		require.False(t, dd.IsIdentical())
 		// A change the diff did not see, in a chunk it listed.
 		exec("INSERT INTO " + d + "part VALUES (900005, 'unseen')")
-		rep, err := SyncTable(ctx, client, client, pt, openJournal("run-repair-stale"), DefaultSyncOptions(), time.Now)
+		rep, err := SyncTable(ctx, ServerSource(client), client, pt, openJournal("run-repair-stale"), DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		assert.Positive(t, rep.Stale, "%+v", rep)
 		// 900001 and 900005 both land in partition k % 4 = 1: that chunk is
@@ -158,7 +158,7 @@ func TestSync_LiveServer(t *testing.T) {
 		assert.Equal(t, uint64(15000), count(d+"part WHERE k % 4 != 1"))
 
 		dd = diffOf(pt)
-		rep, err = SyncTable(ctx, client, client, pt, openJournal("run-repair"), DefaultSyncOptions(), time.Now)
+		rep, err = SyncTable(ctx, ServerSource(client), client, pt, openJournal("run-repair"), DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		assert.Zero(t, rep.Stale+rep.Failed, "%v", rep.Problems)
 		assert.True(t, diffOf(pt).IsIdentical())
@@ -167,7 +167,7 @@ func TestSync_LiveServer(t *testing.T) {
 	t.Run("range chunks, sample", func(t *testing.T) {
 		pt := prepare("rng", TableSync{Mode: SyncModeSample, SampleNum: 1, SampleDen: 10})
 		require.Equal(t, ChunkingRange, pt.Chunking.Kind)
-		rep, err := SyncTable(ctx, client, client, pt, openJournal("run-sample"), DefaultSyncOptions(), time.Now)
+		rep, err := SyncTable(ctx, ServerSource(client), client, pt, openJournal("run-sample"), DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		assert.Zero(t, rep.Failed, "%v", rep.Problems)
 		spec, _, _ := pt.DigestSpecs(false)
@@ -178,9 +178,9 @@ func TestSync_LiveServer(t *testing.T) {
 	t.Run("log engine, leftover rows cleared", func(t *testing.T) {
 		pt := prepare("logt", TableSync{Mode: SyncModeFull})
 		j := openJournal("run-log")
-		require.NoError(t, j.RecordStart(pt.Source.String(), true, *pt.Sync, time.Now()))
+		require.NoError(t, j.RecordStart(pt.Source.String(), true, *pt.Sync, pt.Filter, time.Now()))
 		exec("INSERT INTO " + d + "logt VALUES (1), (2)") // a half-finished earlier attempt
-		rep, err := SyncTable(ctx, client, client, pt, j, DefaultSyncOptions(), time.Now)
+		rep, err := SyncTable(ctx, ServerSource(client), client, pt, j, DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		assert.Equal(t, 1, rep.Copied)
 		assert.Equal(t, uint64(2), rep.Cleared)
@@ -188,7 +188,7 @@ func TestSync_LiveServer(t *testing.T) {
 	})
 	t.Run("append beside foreign rows", func(t *testing.T) {
 		pt := prepare("app", TableSync{Mode: SyncModeFull, Existing: ExistingPolicyAppend})
-		rep, err := SyncTable(ctx, client, client, pt, openJournal("run-append"), DefaultSyncOptions(), time.Now)
+		rep, err := SyncTable(ctx, ServerSource(client), client, pt, openJournal("run-append"), DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		assert.Equal(t, 1, rep.Copied)
 		assert.Equal(t, uint64(1010), count(d+"app"))

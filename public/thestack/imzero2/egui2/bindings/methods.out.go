@@ -4521,6 +4521,22 @@ func (inst WindowFluid) OpenBound(bindingId uint64) WindowFluid {
 	return inst
 }
 
+func (inst WindowFluid) DragFromTitleBar(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdDragFromTitleBar))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) Maximized(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdMaximized))
+	r.WriteBool(val)
+
+	return inst
+}
+
 func (inst WindowFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(WindowMethodIdBuild))

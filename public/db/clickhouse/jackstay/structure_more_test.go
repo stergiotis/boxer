@@ -225,7 +225,7 @@ func TestRecheck_CarriesAndDrops(t *testing.T) {
 	src := &fakeClient{answer: discoveryAnswers("s", []TableInfo{srcT})}
 	dst := &fakeClient{answer: discoveryAnswers("d", []TableInfo{dstT})}
 	sel := Selection{Databases: []string{"app"}, DatabaseMap: map[string]string{"app": "copy"}}
-	plan, err := PlanStructure(ctx, src, dst, Endpoint{URL: "http://s/"}, Endpoint{URL: "http://d/"}, sel, nil, now)
+	plan, err := PlanStructure(ctx, ServerSource(src), dst, Endpoint{URL: "http://s/"}, Endpoint{URL: "http://d/"}, sel, nil, now)
 	require.NoError(t, err)
 	require.Len(t, plan.Tables, 1)
 	require.Equal(t, VerdictIdentical, plan.Tables[0].Verdict)
@@ -233,7 +233,7 @@ func TestRecheck_CarriesAndDrops(t *testing.T) {
 	plan.Tables[0].Diff = &TableDiff{Chunks: 1, IdenticalChunks: 1}
 	plan.SyncRun = &SyncRun{RunId: "run"}
 
-	fresh, stale, err := Recheck(ctx, src, dst, &plan, now)
+	fresh, stale, err := Recheck(ctx, ServerSource(src), dst, &plan, now)
 	require.NoError(t, err)
 	assert.Empty(t, stale)
 	require.NotNil(t, fresh.Tables[0].Chunking)
@@ -248,7 +248,7 @@ func TestRecheck_CarriesAndDrops(t *testing.T) {
 	dstT2 := mergeTree(ref("copy", "t"), "k", col("k", "UInt64"), col("v", "String"))
 	src.answer = discoveryAnswers("s", []TableInfo{srcT2})
 	dst.answer = discoveryAnswers("d", []TableInfo{dstT2})
-	fresh, stale, err = Recheck(ctx, src, dst, &plan, now)
+	fresh, stale, err = Recheck(ctx, ServerSource(src), dst, &plan, now)
 	require.NoError(t, err)
 	assert.Empty(t, stale)
 	require.NotNil(t, fresh.Tables[0].Chunking, "the keys are unchanged, so the layout stays")
@@ -260,7 +260,7 @@ func TestPrepareSync_SkipWording(t *testing.T) {
 		{Source: ref("a", "v"), TableVerdict: TableVerdict{Verdict: VerdictUnsupported, Reasons: []string{"engine View holds no rows a sync can copy"}}},
 		{Source: ref("a", "pending"), TableVerdict: TableVerdict{Verdict: VerdictCreate}},
 	}}
-	_, skipped, err := PrepareSync(context.Background(), nil, &plan, TableSync{Mode: SyncModeFull}, []datacatalog.TableRef{plan.Tables[0].Source, plan.Tables[1].Source}, DefaultChunkingOptions())
+	_, skipped, err := PrepareSync(context.Background(), ServerSource(nil), &plan, TableSync{Mode: SyncModeFull}, []datacatalog.TableRef{plan.Tables[0].Source, plan.Tables[1].Source}, DefaultChunkingOptions())
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"a.v: verdict unsupported (engine View holds no rows a sync can copy)",

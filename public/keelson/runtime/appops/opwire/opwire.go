@@ -151,6 +151,16 @@ type Outcome struct {
 	// Confined is the label of what the outcome carries: the window's
 	// label as of the snapshot or the command (ADR-0269 §SD7).
 	Confined bool `json:"confined,omitempty"`
+	// Remedy, on a refusal, is what would let the call through.
+	Remedy *Remedy `json:"remedy,omitempty"`
+}
+
+// Remedy is what the caller can change for a refused call to go through.
+type Remedy struct {
+	// Destinations are what the task's grant would have to list.
+	Destinations []string `json:"destinations,omitempty"`
+	// ArgsSchema is the JSON Schema the arguments have to fit.
+	ArgsSchema string `json:"args_schema,omitempty"`
 }
 
 // wireVersion versions [CallRequest] and [CallReply].
@@ -195,6 +205,38 @@ type InstanceInfo struct {
 	Ops bool
 	// Confined is the window's label as of its latest snapshot.
 	Confined bool
+	// Load is how far the window has come since it opened; Reason says why
+	// it failed.
+	Load   LoadE
+	Reason string
+}
+
+// LoadE is how far a window has come since it opened: a window is opening
+// until its app's Mount has returned, which happens in the first frame that
+// draws its body.
+type LoadE uint8
+
+const (
+	LoadUnspecified LoadE = 0
+	LoadOpening     LoadE = 1
+	LoadReady       LoadE = 2
+	LoadFailed      LoadE = 3
+)
+
+var AllLoads = []LoadE{LoadOpening, LoadReady, LoadFailed}
+
+func (inst LoadE) String() (s string) {
+	switch inst {
+	case LoadOpening:
+		s = "opening"
+	case LoadReady:
+		s = "ready"
+	case LoadFailed:
+		s = "failed"
+	default:
+		s = "unspecified"
+	}
+	return
 }
 
 // WriterTask names a task as a writer.

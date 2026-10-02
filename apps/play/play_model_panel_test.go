@@ -30,7 +30,7 @@ func TestModelPromptCorpus(t *testing.T) {
 	}
 	assert.Equal(t, promptbook.ScopeBuffer, scopes["explain"])
 	assert.Equal(t, promptbook.ScopeBufferAndError, scopes["fix-error"])
-	assert.Equal(t, promptbook.ScopeQuestion, scopes["ask"])
+	assert.NotContains(t, scopes, "ask", "a question is the coordinator's (ADR-0254, 2026-10-02)")
 }
 
 // The schema block groups columns under their table, carries comments,

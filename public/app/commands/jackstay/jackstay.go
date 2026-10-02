@@ -3,7 +3,9 @@
 // (§SD7), all through the engine's workflow functions:
 //
 //	boxer jackstay discover  --source host:8123 --target other:8123
-//	boxer jackstay structure --source … --target … --plan plan.json [--database db] [--map db=newdb]
+//	boxer jackstay structure --source … --target … --plan plan.json [--database db] [--map db=newdb] [--filter db.t='expr']
+//	boxer jackstay export    --source … --pack DIR [--database db] [--filter db.t='expr'] [--sample 1/100]
+//	boxer jackstay structure --pack DIR --target … --plan plan.json
 //	boxer jackstay apply-ddl --plan plan.json [--confirm]
 //	boxer jackstay diff      --plan plan.json [--table db.t] [--final]
 //	boxer jackstay sync      --plan plan.json --mode full|repair|sample [--sample 1/100] [--existing refuse|append|replace] [--dry-run]
@@ -14,6 +16,12 @@
 // beside the plan, and resumes from that journal when run again; it shows a
 // pre-flight of the target's free space, a live bar of rows landed, and waits
 // at a free-space floor between chunks.
+//
+// A --filter restricts a table to the slice of rows it selects, on both
+// servers (ADR-0271 §SD1). export writes the selected tables into a pack
+// directory, and a structure step given --pack in place of --source makes the
+// pack the plan's source, so the later steps run on a host that cannot reach
+// the source server (§SD2, §SD3).
 //
 // Passwords come from the environment only (CLICKHOUSE_PASSWORD for the
 // source, BOXER_JACKSTAY_TARGET_PASSWORD for the target) and are never written
@@ -55,6 +63,7 @@ func NewCliCommand() *cli.Command {
 		Subcommands: []*cli.Command{
 			newDiscoverCommand(),
 			newStructureCommand(),
+			newExportCommand(),
 			newApplyDDLCommand(),
 			newDiffCommand(),
 			newSyncCommand(),
@@ -158,6 +167,8 @@ func newStructureCommand() *cli.Command {
 			&cli.StringSliceFlag{Name: "database", Usage: "source database to include (repeatable); default: every non-system database"},
 			&cli.StringSliceFlag{Name: "map", Usage: "rename a database on the target, as source=target (repeatable)"},
 			&cli.BoolFlag{Name: "leeway-only", Usage: "plan only the tables that classify as leeway (ADR-0170)"},
+			filterFlag(),
+			&cli.PathFlag{Name: "pack", Usage: "read the source from this pack directory (written by export) instead of a server"},
 		),
 		Action: func(c *cli.Context) (err error) {
 			ctx := c.Context
@@ -166,7 +177,20 @@ func newStructureCommand() *cli.Command {
 			if err != nil {
 				return
 			}
+			sel.Filters, err = parseFilters(c.StringSlice("filter"))
+			if err != nil {
+				return
+			}
 			srcEp := jk.SourceEndpoint()
+			src := jk.ServerSource(metaClient(jk.SourceClientConfig(srcEp)))
+			if dir := c.Path("pack"); dir != "" {
+				var p *jk.Pack
+				p, err = jk.OpenPack(dir)
+				if err != nil {
+					return
+				}
+				src, srcEp = p, p.Endpoint()
+			}
 			dstEp, ok := jk.TargetEndpoint()
 			if !ok {
 				return eh.Errorf("--target is required: %w", jk.ErrNoTarget)
@@ -181,7 +205,7 @@ func newStructureCommand() *cli.Command {
 				return loadErr
 			}
 			var plan jk.Plan
-			plan, err = jk.PlanStructure(ctx, metaClient(jk.SourceClientConfig(srcEp)), metaClient(jk.TargetClientConfig(dstEp)), srcEp, dstEp, sel, old, time.Now())
+			plan, err = jk.PlanStructure(ctx, src, metaClient(jk.TargetClientConfig(dstEp)), srcEp, dstEp, sel, old, time.Now())
 			if err != nil {
 				return
 			}
@@ -201,6 +225,50 @@ func newStructureCommand() *cli.Command {
 
 func metaClient(cfg chclient.Config) (q *chclient.Client) {
 	return chclient.New(cfg, nil)
+}
+
+// openSource is the source a plan names: its pack, or its server through a
+// metadata or a scan client.
+func openSource(ep jk.Endpoint, scan bool) (src jk.SourceI, err error) {
+	if ep.Pack != "" {
+		var p *jk.Pack
+		p, err = jk.OpenPackFor(ep)
+		if err != nil {
+			return
+		}
+		return p, nil
+	}
+	if scan {
+		return jk.ServerSource(scanClient(jk.SourceClientConfig(ep))), nil
+	}
+	return jk.ServerSource(metaClient(jk.SourceClientConfig(ep))), nil
+}
+
+func filterFlag() cli.Flag {
+	return &cli.StringSliceFlag{Name: "filter", Usage: "sync only the rows of a table that satisfy a ClickHouse boolean expression over its columns, as database.table=expr (repeatable)"}
+}
+
+// parseFilters reads database.table=expr entries; the first '=' separates,
+// since an expression may hold more.
+func parseFilters(entries []string) (m map[string]string, err error) {
+	if len(entries) == 0 {
+		return
+	}
+	m = make(map[string]string, len(entries))
+	for _, e := range entries {
+		ref, expr, found := strings.Cut(e, "=")
+		ref, expr = strings.TrimSpace(ref), strings.TrimSpace(expr)
+		if !found || !strings.Contains(ref, ".") || expr == "" {
+			err = eb.Build().Str("filter", e).Errorf("expected database.table=expr")
+			return
+		}
+		if _, dup := m[ref]; dup {
+			err = eb.Build().Str("table", ref).Errorf("a table takes one filter; combine them with AND")
+			return
+		}
+		m[ref] = expr
+	}
+	return
 }
 
 // scanClient is for queries that read whole tables: no client timeout, the
@@ -249,7 +317,7 @@ func parseMap(entries []string) (m map[string]string, err error) {
 
 func printPlan(w io.Writer, plan *jk.Plan) {
 	_, _ = fmt.Fprintf(w, "source %s (ClickHouse %s) → target %s (ClickHouse %s)\n",
-		plan.Source.URL, plan.SourceServer.Version, plan.Target.URL, plan.TargetServer.Version)
+		plan.Source.Label(), plan.SourceServer.Version, plan.Target.URL, plan.TargetServer.Version)
 	for _, n := range plan.Notes {
 		_, _ = fmt.Fprintf(w, "note: %s\n", n)
 	}
@@ -274,10 +342,13 @@ func printPlan(w io.Writer, plan *jk.Plan) {
 
 	var detail strings.Builder
 	for _, t := range plan.Tables {
-		if len(t.Reasons) == 0 && len(t.Notes) == 0 {
+		if len(t.Reasons) == 0 && len(t.Notes) == 0 && t.Filter == "" {
 			continue
 		}
 		detail.WriteString("  " + t.Source.String() + "\n")
+		if t.Filter != "" {
+			detail.WriteString("    filter: " + t.Filter + "\n")
+		}
 		for _, r := range t.Reasons {
 			detail.WriteString("    ✗ " + r + "\n")
 		}
@@ -332,7 +403,11 @@ func newApplyDDLCommand() *cli.Command {
 			if err != nil {
 				return
 			}
-			srcQ := metaClient(jk.SourceClientConfig(plan.Source))
+			var srcQ jk.SourceI
+			srcQ, err = openSource(plan.Source, false)
+			if err != nil {
+				return
+			}
 			dstCfg := jk.TargetClientConfig(plan.Target)
 			dstQ := metaClient(dstCfg)
 			if !c.Bool("confirm") {
@@ -415,7 +490,11 @@ func newDiffCommand() *cli.Command {
 			if err != nil {
 				return
 			}
-			srcCfg := jk.SourceClientConfig(plan.Source)
+			var src jk.SourceI
+			src, err = openSource(plan.Source, true)
+			if err != nil {
+				return
+			}
 			dstCfg := jk.TargetClientConfig(plan.Target)
 			var prev *jk.PlanTable
 			var started time.Time
@@ -435,7 +514,7 @@ func newDiffCommand() *cli.Command {
 			// for metadata. Cancellation comes from the context.
 			var fresh jk.Plan
 			var skipped, stale []string
-			fresh, skipped, stale, err = jk.DiffStep(ctx, scanClient(srcCfg), scanClient(dstCfg), &plan, opts, time.Now)
+			fresh, skipped, stale, err = jk.DiffStep(ctx, src, scanClient(dstCfg), &plan, opts, time.Now)
 			for _, s := range skipped {
 				_, _ = fmt.Fprintf(w, "skip %s\n", s)
 			}
@@ -555,7 +634,11 @@ func newSyncCommand() *cli.Command {
 			// Digest scans and the relay read whole tables; the default
 			// client timeout is for metadata. Cancellation comes from the
 			// context.
-			srcC := scanClient(jk.SourceClientConfig(plan.Source))
+			var srcC jk.SourceI
+			srcC, err = openSource(plan.Source, true)
+			if err != nil {
+				return
+			}
 			dstC := scanClient(jk.TargetClientConfig(plan.Target))
 			var prep jk.SyncPrepared
 			prep, err = jk.PrepareSyncStep(ctx, srcC, dstC, &plan, req)
@@ -852,7 +935,7 @@ func newStatusCommand() *cli.Command {
 			}
 			_, _ = fmt.Fprintf(w, "plan %s, written %s\n", path, plan.CreatedAt.Format(time.RFC3339))
 			_, _ = fmt.Fprintf(w, "source %s (ClickHouse %s) → target %s (ClickHouse %s)\n",
-				plan.Source.URL, plan.SourceServer.Version, plan.Target.URL, plan.TargetServer.Version)
+				plan.Source.Label(), plan.SourceServer.Version, plan.Target.URL, plan.TargetServer.Version)
 			var j *jk.Journal
 			if plan.SyncRun != nil {
 				_, _ = fmt.Fprintf(w, "sync run %s, begun %s\n", plan.SyncRun.RunId, plan.SyncRun.StartedAt.Format(time.RFC3339))

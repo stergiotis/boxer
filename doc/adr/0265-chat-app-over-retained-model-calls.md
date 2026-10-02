@@ -154,7 +154,7 @@ through the host:
   (`BOXER_AGENT_COORDINATORS`); the manifest's `runtime.agent` grant alone
   lets it ask for nothing.
 - **Fixed tools.** `request_access`, `list_windows`, `describe_app`,
-  `call`, `open_window` and `stop_task`. Operation schemas load on demand
+  `call_operation`, `open_window` and `stop_task`. Operation schemas load on demand
   through `describe_app`; a call's key is the model's tool-call id.
 - **A turn.** Before the first model call the app asks the host for the
   changes others made since the previous turn (`runtime.agent.turn`) and
@@ -247,13 +247,85 @@ to the text above:
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-02 — refusals the model can act on, and typed operation tools
+
+The agent-operations-play trial (GLM-4.6 and GPT-6.1 Sol, two tasks in
+play) found every examined failure at a refusal that said what was wrong
+but not what to do: a `call` with no `args`, a run whose destination the
+grant lacked, a grant asking for nothing. The coordinator changed:
+
+- **`call` is `call_operation`,** and it refuses keys beside `window` and
+  `operation` by name instead of dropping them; a refusal of a call with no
+  `args` says where arguments go.
+- **A refusal carries `next`:** the tool to call and its arguments —
+  `request_access` with the destinations a run needs, or the operation's
+  argument schema. A grant request naming nothing to open says to name the
+  app.
+- **A call identical to one refused since the last call that was not** is
+  answered without being made again; GLM-4.6 had repeated one refused call
+  eighteen times.
+- **`describe_app` returns schemas as JSON objects,** not text holding
+  JSON.
+- **Operation tools** (`BOXER_CHAT_OPERATION_TOOLS`, off by default): each
+  operation of a window in the task is also a typed tool,
+  `w<window>_<operation>`, beside the fixed tools. It is a trial arm, not a
+  default: the tool list then changes from call to call.
+- **`read_help`** reads the apps' help over `runtime.agent.help`
+  (ADR-0269, update of this date): a search across the apps, an app's
+  documents, or one section; `describe_app` marks the apps that have help,
+  and the prompt says so. It is the apps' documentation, so it is not
+  delimited as untrusted and does not taint the conversation.
+
+### 2026-10-02 — statistics, and their handover to play
+
+A **Statistics** panel beside the transcript shows the window's token and
+answer statistics across its conversations: the turns, how many were
+answered, the model calls and their tokens, and empirical distributions —
+the `ecdf` widget, with its confidence band once it is computed — of the
+answer time per turn and the input and output tokens per call. A
+distribution needs two values with some spread; until then the panel says
+so. Records live as long as the window and are kept on the render thread.
+
+**Open in play** publishes them on demand as two ad-hoc datasets
+(ADR-0240), `chat_turns` (one row per turn: outcome, rounds, tool calls,
+tokens, wall time) and `chat_calls` (one row per model call), and opens a
+play window on the turns. Every chat window publishes under those two
+aliases, and a play window follows the newest. `BOXER_CHAT_ADVANCED=false`
+hides the panel and the button; the manifest still declares the publish
+and open grants, which are then unused.
+
+### 2026-10-02 — a turn ends with an answer; play's reference in the prompt
+
+A turn that used every round ended with no answer and a failure line: in
+one observed turn 24 rounds of tool calls, 98k input tokens and 268 seconds
+left nothing to read. The last round now offers no tools (`tool_choice`
+`none`) and the host asks for the answer with what was found and what is
+open; the note goes to that call only and is not resent. The prompt names
+the bound, and the waiting line shows the round, "round 7 of 24", so a long
+turn reads as working.
+
+The prompt also carries the reference an agent needs before it writes SQL
+in play: `keelson('<table>')` reads the host's own tables, with
+`keelson('tables')` and `keelson('columns')` to discover them, and which
+destination a run needs; and that play's `list_snippets`, `read_snippet`
+and `list_functions` (ADR-0270, update of this date) hold worked queries and
+the functions a query may call.
+
+### 2026-10-02 — titled calls, and a task that ended
+
+Every tool takes an optional `title`, a few words the person reads while
+the call runs ("round 3 of 24 · Reading play's buffer") and in the
+transcript after it. The coordinator strips it before dispatching, so it
+reaches no app and does not make two calls differ for the repeat check; an
+operation with a `title` argument of its own keeps it and its calls go
+untitled.
+
+A conversation outlives its task: when a call answers that the task ended
+or its handle is unknown (ADR-0269 `TaskGone`), the coordinator forgets the
+grant and the next `request_access` asks for a new task; a late task is
+extended by `request_access` instead (ADR-0269, update of this date).
 
 ## References
 

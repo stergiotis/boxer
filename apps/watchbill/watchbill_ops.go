@@ -7,6 +7,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 )
 
@@ -91,6 +93,18 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 		return inst.selectedID
 	})
 	s.Editing(resFilters, func(inst *App) bool { return appops.WidgetEditing(inst.kindH) })
+	// The selected job's state machine, as the state chip draws it:
+	// job_state and job_machine. The machine mirrors whichever job is
+	// selected, so its steps would mix jobs and are left out.
+	fsmops.Mount(s, "job", "the selected job", func(inst *App) opfsm.SourceI {
+		inst.mu.Lock()
+		selected := inst.selectedID
+		inst.mu.Unlock()
+		if selected == "" || inst.machine == nil {
+			return nil
+		}
+		return inst.machine
+	}, fsmops.Options{})
 
 	appops.Query(s, app.OperationSpec{Name: opListJobs, Version: 1, Summary: "list the jobs the filters show",
 		Reads: []string{resFilters, resSelection}, Agents: true, Untrusted: true},

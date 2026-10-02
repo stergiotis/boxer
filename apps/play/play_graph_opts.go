@@ -96,7 +96,7 @@ func resolveGraphOpts(schema *arrow.Schema) (gc networkGraphOptsClaim) {
 	}
 	for ci, f := range schema.Fields() {
 		numeric := chrows.IsNumeric(f.Type)
-		switch f.Name {
+		switch pathColumnLabel(f.Name) { // the gloss label, as for every named-column contract
 		case graphOptLayoutCol:
 			gc.layoutCol = ci
 		case graphOptOrientationCol:
