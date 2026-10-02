@@ -39,7 +39,7 @@ const lastRoundNote = "You have used every round of tool calls this turn allows.
 const callWait = 10 * time.Second
 
 // coordinatorPrompt is the system message of a conversation with Apps on.
-const coordinatorPrompt = `You can work in app windows the person shares with you, through tools.
+var coordinatorPrompt = `You can work in app windows the person shares with you, through tools.
 - Start with request_access and a one-line plan; the person decides which windows to share and how far you may act.
 - To see what you can work with, call describe_app with no arguments: it lists every app and its operations. Use the app id it returns wherever an app is named.
 - describe_app with an app lists that app's operations; name one operation as well to get its argument schema.
@@ -55,7 +55,7 @@ const coordinatorPrompt = `You can work in app windows the person shares with yo
 - Before writing SQL in play, look for a worked query: list_snippets finds them by words and read_snippet gives the SQL; list_functions says which functions a query may call and where each runs.
 - A task runs for a limited time. When a call says its deadline passed, request_access asks the person for more time; when it says the task ended, request_access starts a new one.
 - keelson('windows') lists every open window — its key, app, title, rect (x, y, w, h), stacking rank, whether it is active or maximized, and the tasks holding it — and keelson('desktop') the work area windows are laid out in; query_windows reads either with a SELECT. arrange_windows lays windows out (cascade, tile, columns, rows, gather), all of them or the ones you name, and needs request_access with desktop true; raise_window and place_window act on a window of your task shared in act mode. A move takes a frame or more: query again to see where windows ended.
-- A turn has at most 24 rounds of tool calls. Answer as soon as you know enough; when you cannot finish, say what you found and what is left.`
+- A turn has at most ` + strconv.Itoa(maxRounds) + ` rounds of tool calls. Answer as soon as you know enough; when you cannot finish, say what you found and what is left.`
 
 const (
 	untrustedOpen  = "<<untrusted source=\""
@@ -425,7 +425,13 @@ func (inst *coordinator) exec(ctx context.Context, o toolOrigin, call openaichat
 			call.Name + ": repeated a refused call"
 	}
 	content, activity = inst.dispatch(ctx, o, call, args)
-	if call.Name != "request_access" && agent.TaskGone(content) && inst.dropGrant() {
+	inst.mu.Lock()
+	refusal := inst.refusal
+	inst.mu.Unlock()
+	// Only the host's own words can say the task is gone: a result's text is
+	// the app's, and an app could write "the task ended" into it.
+	gone := agent.TaskGone(refusal) || (strings.HasPrefix(content, "error:") && agent.TaskGone(content))
+	if call.Name != "request_access" && gone && inst.dropGrant() {
 		// The task is gone; the conversation is not. The next request_access
 		// starts a new one instead of presenting the dead handle again.
 		content += "\nnext: the task ended; request_access starts a new one"
@@ -902,6 +908,12 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		if len(res.ToolCalls) == 0 {
 			break
 		}
+		if round == maxRounds-1 {
+			// Only a model that ignores tool_choice gets here. It was told
+			// no tool can be called, so the calls it asks for are not made.
+			out.stopped = "the model kept calling tools past " + strconv.Itoa(maxRounds) + " rounds"
+			return
+		}
 		for i, tc := range res.ToolCalls {
 			if progress != nil {
 				progress(round, coord.peekTitle(tc))
@@ -910,11 +922,6 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			content, activity := coord.exec(ctx, toolOrigin{turn: req.Turn, modelCall: res.CallId, index: i}, tc)
 			out.activity = append(out.activity, activity)
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})
-		}
-		if round == maxRounds-1 {
-			// Only a model that ignores tool_choice gets here.
-			out.stopped = "the model kept calling tools past " + strconv.Itoa(maxRounds) + " rounds"
-			return
 		}
 	}
 	out.messages = msgs

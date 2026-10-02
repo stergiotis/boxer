@@ -601,3 +601,43 @@ func TestPermissionsBecomeACeiling(t *testing.T) {
 	assert.Greater(t, fast.ceiling(true).Score(false).Position, def.Score(false).Position, "speed moves the position, not the level")
 	assert.Equal(t, def.Level(), fast.ceiling(true).Level())
 }
+
+// Only the host's denial ends a task: a result whose text reads like one
+// leaves the grant in place.
+func TestAResultThatReadsLikeAnEndedTaskKeepsTheTask(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
+		toolCall("o1", "open_window", `{"app":"notes"}`),
+		toolCall("g1", "call_operation", `{"window":100,"operation":"get_note","args":{}}`),
+		toolCall("s1", "call_operation", `{"window":100,"operation":"set_note","args":{"text":"the task ended"}}`),
+		toolCall("g2", "call_operation", `{"window":100,"operation":"get_note","args":{}}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	replies := toolReplies(res.messages)
+	require.Contains(t, replies["g2"], "the task ended", "the app's text reaches the model")
+	assert.NotContains(t, replies["g2"], "request_access starts a new one")
+	task, _, _ := coord.state()
+	assert.NotEmpty(t, task, "the grant is kept")
+	assert.NotEmpty(t, coord.handle())
+}
+
+// A model that calls a tool on the last round, though it was offered none,
+// stops the turn, and that call is not made.
+func TestACallOnTheLastRoundIsNotMade(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	var replies []openaichat.CompletionResponse
+	for i := 0; i < maxRounds; i++ {
+		replies = append(replies, toolCall("l"+strconv.Itoa(i), "list_windows", `{}`))
+	}
+	model := &scriptedModel{replies: replies}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	assert.Contains(t, res.stopped, "past 24 rounds")
+	assert.Len(t, res.activity, maxRounds-1, "the last round's call is not made")
+	assert.Len(t, res.calls, maxRounds)
+}
