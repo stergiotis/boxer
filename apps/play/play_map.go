@@ -101,6 +101,16 @@ type MapDriver struct {
 	memo         mapMemo
 	memoShown    string
 	memoOnScreen bool
+	// laneDrawnKey is the key of the last result the lane itself landed.
+	laneDrawnKey string
+
+	// selectArea turns box selection on (play_map_area.go); area is the box
+	// published, hasArea whether there is one, and clearAreaRequested the
+	// Clear button, applied where the frame's emitter is.
+	selectArea         bool
+	area               mapArea
+	hasArea            bool
+	clearAreaRequested bool
 
 	// req is the box last requested, with its raster size and the view's
 	// mercator units per pixel then (requestBox).
@@ -183,7 +193,14 @@ type MapDriver struct {
 // Read off the signal declaration (ADR-0232 §SD9) rather than spelled again
 // here: the emit order below is the declaration's order, which is the order
 // the bbox reads.
-var mapViewportSignals = signalsWrittenBy("map")
+var mapViewportSignals = func() (out []SignalID) {
+	for _, s := range signalsWrittenBy("map") {
+		if strings.HasPrefix(string(s), "vp_") {
+			out = append(out, s)
+		}
+	}
+	return
+}()
 
 const (
 	mapDebounce        = 250 * time.Millisecond
@@ -472,15 +489,23 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 				).Opacity(float32(inst.opacity)).Send()
 			}
 		}
+		inst.paintArea(p)
 	}
 
 	// Sizing: fill the (no-scroll, bounded) tab body so the whole map is
 	// always visible; a BOXER_PLAY_MAP_SIZE override pins fixed dims instead,
 	// keeping scripted captures deterministic across hosts.
+	inst.pm.SetBoxSelect(inst.selectArea)
+	var ev portolan.Events
 	if inst.fixedSize {
-		inst.pm.Render(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
+		ev = inst.pm.Render(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
 	} else {
-		inst.pm.RenderFill(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
+		ev = inst.pm.RenderFill(float32(inst.mapWidth), float32(inst.mapHeight), overlay)
+	}
+	inst.onSelected(ev, emit)
+	if inst.clearAreaRequested {
+		inst.clearAreaRequested = false
+		inst.setArea(mapArea{}, false, emit)
 	}
 }
 
@@ -498,7 +523,10 @@ func (inst *MapDriver) demandRaster(params map[string]string) {
 		inst.jumpToMemo(params)
 	}
 	node := compiledNode{SQL: inst.template, Params: params}
-	if inst.serveFromMemo(node.key()) {
+	// The memo serves a revisit, not the result the lane itself just drew:
+	// that one is remembered as it lands, and serving it back from memory
+	// would call a fresh raster a memory and drop its run's accounting.
+	if key := node.key(); key != inst.laneDrawnKey && inst.serveFromMemo(key) {
 		inst.memoOnScreen = true
 		return
 	}
@@ -527,6 +555,7 @@ func (inst *MapDriver) demandRaster(params map[string]string) {
 		inst.memoOnScreen = false
 		inst.packLevel = inst.ladder.current()
 		inst.remember(node.key(), view.elapsed)
+		inst.laneDrawnKey = node.key()
 		if inst.ladder.served(view.elapsed) {
 			inst.rebuildLevelTemplate()
 		}
@@ -595,6 +624,14 @@ func (inst *MapDriver) renderControls() {
 			SendRespVal(&inst.noTiles)
 		c.Checkbox(inst.ids.PrepareStr("map-cache"), inst.cache, "server cache").
 			SendRespVal(&inst.cache)
+		// A drag draws a box instead of panning while this holds; the box
+		// is published as the area_* signals (play_map_area.go).
+		c.Checkbox(inst.ids.PrepareStr("map-select"), inst.selectArea, "select area").
+			SendRespVal(&inst.selectArea)
+		if inst.hasArea && c.Button(inst.ids.PrepareStr("map-clear-area"),
+			c.Atoms().Text("Clear area").Keep()).SendResp().HasPrimaryClicked() {
+			inst.clearAreaRequested = true
+		}
 		if c.Button(inst.ids.PrepareStr("map-refresh"),
 			c.Atoms().Text("Refresh").Keep()).SendResp().HasPrimaryClicked() {
 			inst.requestRefresh()
@@ -1119,6 +1156,9 @@ func (inst *MapDriver) statusLine() string {
 		}
 		if inst.memoOnScreen {
 			msg += " · from memory"
+		}
+		if as := inst.areaStatus(); as != "" {
+			msg += " · " + as
 		}
 		if ws := inst.windowStatus(); ws != "" {
 			msg += " · " + ws

@@ -204,7 +204,8 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 		"chart": true, "files": true}, shape)
 
 	require.Contains(t, writes, "map", "the Map publishes its viewport without being a PanelI")
-	assert.Len(t, writes["map"], len(mapViewportSignals))
+	assert.Len(t, writes["map"], len(mapViewportSignals)+8, "the viewport and the selected area")
+	assert.Contains(t, writes["map"], signalAreaMinX)
 	assert.Contains(t, writes["world"], signalSelectionCountry)
 	assert.Contains(t, writes["timeline"], signalTimelineMin)
 	// The brushed window is a Timeline write too: a query reading

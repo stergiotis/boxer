@@ -820,6 +820,9 @@ func TestMapDriverServesARevisitFromMemory(t *testing.T) {
 	visit(8)
 	visit(9)
 	require.Len(t, exec.asked(), 6, "two views, three levels each")
+	d.demandRaster(resolveSignalNames(d.templateReads, nil, g.signals()))
+	require.False(t, d.memoOnScreen, "a raster the lane just drew is not a memory")
+	require.True(t, d.stats.valid, "and keeps its run's accounting")
 	visit(8)
 	require.Len(t, exec.asked(), 6, "the pan back sends nothing")
 	require.True(t, d.memoOnScreen)
@@ -869,4 +872,35 @@ func TestRequestBoxOverscan(t *testing.T) {
 	b5, _, _ := d.requestBox(world, 800, 400)
 	require.EqualValues(t, 0, b5.minX, "clamped to the world")
 	require.EqualValues(t, mercUnitMax, b5.maxX)
+}
+
+// A selected box publishes its mercator and degree bounds, folded onto the
+// one world the mercator columns cover; cleared, the area is the whole
+// world again — the declaration's seeds.
+func TestMapAreaSignals(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	em := graphEmitter{graph: g}
+	d := NewMapDriver(nil, nil)
+	defer d.lane.close()
+
+	get := func(name SignalID) string {
+		p, ok := g.signals().Get(name)
+		require.True(t, ok, name)
+		return p.Raw
+	}
+	// Drawn on the world copy one turn east.
+	d.setArea(mapArea{south: 47, west: 368, north: 48, east: 369}, true, em)
+	require.Equal(t, "8", get(signalAreaMinLon))
+	require.Equal(t, "9", get(signalAreaMaxLon))
+	require.Equal(t, strconv.FormatUint(uint64(lonToMercX(8)), 10), get(signalAreaMinX))
+	require.Equal(t, strconv.FormatUint(uint64(latToMercY(48)), 10), get(signalAreaMinY), "north is the smaller y")
+	require.Contains(t, d.areaStatus(), "47.000…48.000 N, 8.000…9.000 E")
+
+	d.setArea(mapArea{}, false, em)
+	for _, name := range []SignalID{signalAreaMinX, signalAreaMaxX, signalAreaMinLat, signalAreaMaxLon} {
+		seed, ok := signalSeedRaw(string(name))
+		require.True(t, ok)
+		require.Equal(t, seed, get(name), "cleared is the seed: %s", name)
+	}
+	require.Empty(t, d.areaStatus())
 }
