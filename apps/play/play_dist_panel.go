@@ -188,29 +188,32 @@ func resolveDistColumns(schema *arrow.Schema) (k distClaim, reason string) {
 	scalars := map[string]*int{distsql.ColXMin: &k.xMinCol, distsql.ColXMax: &k.xMaxCol,
 		distsql.ColMean: &k.meanCol, distsql.ColSd: &k.sdCol, distsql.ColSkew: &k.skewCol, distsql.ColKurt: &k.kurtCol}
 	for ci, f := range schema.Fields() {
+		// Matched on the gloss label (pathColumnLabel), so a glossed column —
+		// `qs@gloss/bytes` — is still the contract's `qs`.
+		name := pathColumnLabel(f.Name)
 		switch {
-		case f.Name == distsql.ColSeries:
+		case name == distsql.ColSeries:
 			k.seriesCol = ci
-		case f.Name == distsql.ColN:
+		case name == distsql.ColN:
 			if !isKanbanCountType(f.Type) {
 				return k, fmt.Sprintf("Column `%s` must be an integer count; it is %s. count(col) yields one.", distsql.ColN, f.Type)
 			}
 			k.nCol = ci
-		case f.Name == distsql.ColNNull:
+		case name == distsql.ColNNull:
 			if isKanbanCountType(f.Type) {
 				k.nNullCol = ci
 			}
-		case f.Name == distsql.ColEstimator:
+		case name == distsql.ColEstimator:
 			k.estimatorCol = ci
 		default:
-			if dst, isGrid := grids[f.Name]; isGrid {
+			if dst, isGrid := grids[name]; isGrid {
 				if !isFloatListType(f.Type) {
-					return k, fmt.Sprintf("Column `%s` must be Array(Float64); it is %s.", f.Name, f.Type)
+					return k, fmt.Sprintf("Column `%s` must be Array(Float64); it is %s.", name, f.Type)
 				}
 				*dst = ci
 				continue
 			}
-			if dst, isScalar := scalars[f.Name]; isScalar {
+			if dst, isScalar := scalars[name]; isScalar {
 				*dst = ci
 			}
 		}
@@ -245,7 +248,7 @@ func distContractHint(k distClaim) string {
 	}
 	return fmt.Sprintf("Distributions need %s columns (ADR-0161): one row per series, "+
 		"e.g. SELECT 'latency' AS series, count(x) AS n, [0.25,0.5,0.75] AS ps, quantilesTDigest(0.25,0.5,0.75)(x) AS qs FROM t "+
-		"— or write descriptiveStatistics(x) once the macro lands.",
+		"— or let SELECT descriptiveStatistics(x) FROM t write them.",
 		strings.Join(missing, ", "))
 }
 

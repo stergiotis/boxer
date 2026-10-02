@@ -185,8 +185,10 @@ func splitHasNode(split splitResult, node NodeID) bool {
 }
 
 // splitFedChannel maps a channel to the split node that fills it BY NAME — the
-// Network's two CTEs and the Kanban's lane inventory. Their verdict is
-// structural because asking the lane would execute the query (SD2).
+// Network's two CTEs, the Sankey's two, the Kanban's lane inventory and the
+// Vector field's relation. Their verdict is structural because asking the lane
+// would execute the query (SD2). A required channel missing here falls through
+// to offerPending, which is silence: the tab never gets its `-` mark.
 //
 // The Timeline's bands channel is deliberately absent: it is panel-authored
 // (the bands editor's own SQL, not a node of the user's split) and optional,
@@ -197,6 +199,10 @@ func splitFedChannel(ch ChannelID) (node NodeID, ok bool) {
 		return networkEdgesNodeID, true
 	case chVertices:
 		return networkVerticesNodeID, true
+	case chFlows:
+		return sankeyFlowsNodeID, true
+	case chNodes:
+		return sankeyNodesNodeID, true
 	case chLanes:
 		return kanbanLanesNodeID, true
 	case chVectorField:

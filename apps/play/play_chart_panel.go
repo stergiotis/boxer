@@ -328,7 +328,9 @@ func (inst chartPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmi
 func resolveChartColumns(schema *arrow.Schema) (k chartClaim, reason string) {
 	k = chartClaim{xCol: -1, yCol: -1, zCol: -1, seriesCol: -1, selRow: -1}
 	for ci, f := range schema.Fields() {
-		switch f.Name {
+		// Matched on the gloss label (pathColumnLabel), so `z@gloss/bytes` is
+		// still the grid's cell value.
+		switch pathColumnLabel(f.Name) {
 		case chartColX:
 			k.xCol = ci
 		case chartColY:
@@ -949,7 +951,7 @@ func (inst *ChartDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	// there is no such column to look for in the result.
 	switch {
 	case k.xCol >= 0:
-		inst.xName = schema.Field(k.xCol).Name
+		inst.xName = pathColumnLabel(schema.Field(k.xCol).Name)
 	case inst.xPerSeries:
 		inst.xName = "row in series"
 	default:
@@ -1006,7 +1008,7 @@ func (inst *ChartDriver) foldLanes(rec arrow.RecordBatch, schema *arrow.Schema, 
 	inst.lanes = make([]chartLane, len(slots))
 	slotsOfGroup := make([][]int, len(groups))
 	for si, s := range slots {
-		name := schema.Field(s.col).Name
+		name := pathColumnLabel(schema.Field(s.col).Name)
 		label := name
 		switch {
 		case k.seriesCol < 0:
@@ -1161,8 +1163,8 @@ func (inst *ChartDriver) applyBarOffsets() {
 // Heatmap takes, row 0 at the TOP. A repeated cell rejects the whole result:
 // last-write-wins would fabricate a matrix the query never asked for.
 func (inst *ChartDriver) foldGrid(rec arrow.RecordBatch, schema *arrow.Schema, k chartClaim, rows int64) {
-	inst.yName = schema.Field(k.yCol).Name
-	inst.zName = schema.Field(k.zCol).Name
+	inst.yName = pathColumnLabel(schema.Field(k.yCol).Name)
+	inst.zName = pathColumnLabel(schema.Field(k.zCol).Name)
 	xk, yk := newChartKeyer(k.xAxis), newChartKeyer(k.yAxis)
 	provX := make([]int, rows)
 	provY := make([]int, rows)

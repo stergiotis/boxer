@@ -380,7 +380,7 @@ var builtinTabDefs = []builtinTabDef{
 	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true,
 		writes: []SignalID{signalSelection}},
 	{id: "timeline", dockID: dockTabTimeline, title: "Timeline", lazy: true, shapeContract: true,
-		writes: []SignalID{signalSelection, signalTimelineMin, signalTimelineMax}},
+		writes: append([]SignalID{signalSelection}, signalsWrittenBy("timeline")...)},
 	// NoScroll: the map reads wheel/zoom input globally (no
 	// consumption), so the dock's default body ScrollArea would scroll the
 	// panel in the same gesture that pans/zooms the map.
