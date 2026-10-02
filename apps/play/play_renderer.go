@@ -2145,6 +2145,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			// button they duplicate is where anyone would look for them.
 			for range c.HoverText("Ctrl+Enter runs this. Ctrl+Shift+Enter runs just the query the caret is in — a subquery, a CTE body, or one statement of several — with the enclosing WITH items carried along.").KeepIter() {
 				if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
+					Kind(c.ButtonKindPrimary).
 					SendResp().HasPrimaryClicked() {
 					inst.personRun(false)
 				}
@@ -2162,6 +2163,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			if inst.subqueryMode {
 				for range c.HoverText("Runs just the query the caret is in, with the WITH items and SET prelude it needs carried along — the tinted region in the editor. Same as Ctrl+Shift+Enter. With the caret at statement level there is nothing narrower, and this runs the whole query.").KeepIter() {
 					if c.Button(ids.PrepareStr("runSubquery"), c.Atoms().Text("Run subquery").Keep()).
+						Kind(c.ButtonKindTertiary).
 						SendResp().HasPrimaryClicked() {
 						inst.personRun(true)
 					}

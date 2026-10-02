@@ -302,7 +302,7 @@ func (inst *Chrome) renderConfirmation(p proposalRef, waiting int, ids *c.Widget
 		}
 		c.Separator().Send()
 		for range c.HorizontalTop().KeepIter() {
-			confirm = c.Button(ids.PrepareStr("agent-confirm-yes-"+rec.key), c.Atoms().Text("Confirm").Keep()).SendResp().HasPrimaryClicked()
+			confirm = c.Button(ids.PrepareStr("agent-confirm-yes-"+rec.key), c.Atoms().Text("Confirm").Keep()).Kind(c.ButtonKindDanger).SendResp().HasPrimaryClicked()
 			decline = c.Button(ids.PrepareStr("agent-confirm-no-"+rec.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
 		}
 	}
@@ -377,7 +377,7 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 	}
 	c.Separator().Send()
 	for range c.HorizontalTop().KeepIter() {
-		approve = c.Button(ids.PrepareStr("agent-approve-"+r.key), c.Atoms().Text("Approve").Keep()).SendResp().HasPrimaryClicked()
+		approve = c.Button(ids.PrepareStr("agent-approve-"+r.key), c.Atoms().Text("Approve").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked()
 		decline = c.Button(ids.PrepareStr("agent-decline-"+r.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
 	}
 	return

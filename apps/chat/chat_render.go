@@ -142,7 +142,7 @@ func (inst *App) renderComposer() {
 	send := false
 	for range c.HorizontalTop().KeepIter() {
 		if !busy {
-			send = c.Button(inst.ids.PrepareStr("send"), atomsSend).SendResp().HasPrimaryClicked()
+			send = c.Button(inst.ids.PrepareStr("send"), atomsSend).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked()
 		} else {
 			if c.Button(inst.ids.PrepareStr("cancel"), atomsCancel).SendResp().HasPrimaryClicked() {
 				inst.turn.Cancel()

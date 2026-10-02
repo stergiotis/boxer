@@ -874,6 +874,7 @@ func (inst *Dialog) renderFooter(ids *c.WidgetIdStack) (action ActionE, paths []
 			primaryAtoms := c.Atoms().Text(primaryLabel).Keep()
 			for range c.EnabledUi(canCommit).KeepIter() {
 				if c.Button(ids.PrepareStr("primary"), primaryAtoms).
+					Kind(c.ButtonKindPrimary).
 					SendResp().HasPrimaryClicked() {
 					action = primaryAction
 					paths = inst.commitPaths()

@@ -74,7 +74,7 @@ func (inst *App) renderConfirm() {
 		badge.New(inst.ids.PrepareStr("confirm-msg"),
 			fmt.Sprintf("Forget all %d entries %s keeps? It starts from its defaults at its next open.", armed.entries, shortApp(armed.appId))).
 			Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
-		if c.Button(inst.ids.PrepareStr("confirm-forget"), c.Atoms().Text(fmt.Sprintf("Forget %d entries", armed.entries)).Keep()).SendResp().HasPrimaryClicked() {
+		if c.Button(inst.ids.PrepareStr("confirm-forget"), c.Atoms().Text(fmt.Sprintf("Forget %d entries", armed.entries)).Keep()).Kind(c.ButtonKindDanger).SendResp().HasPrimaryClicked() {
 			inst.confirmForget()
 		}
 		if c.Button(inst.ids.PrepareStr("confirm-cancel"), c.Atoms().Text("Cancel").Keep()).SendResp().HasPrimaryClicked() {
