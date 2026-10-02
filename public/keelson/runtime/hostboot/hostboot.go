@@ -764,7 +764,7 @@ func (rt *Runtime) bootAgent() {
 	// (ADR-0269 §SD9), as for llm_calls.
 	headless := imzero2env.HeadlessListen.Get() != ""
 	cfg := agent.Config{TestGrants: headlessOnly(agent.TestGrantsEnv.Get(), headless),
-		Exec: rt.PersistExec, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get())}
+		Exec: rt.PersistExec, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get()), Deadline: agent.DeadlineEnv.Get()}
 	if rt.LLM != nil {
 		// Confined content reaches a coordinator's model only where the host's
 		// endpoint is local (ADR-0254 §SD3, ADR-0269 §SD7).

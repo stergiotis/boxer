@@ -84,6 +84,15 @@ var ActionsFileEnv = env.NewString(env.Spec{
 	Category:    env.CategoryDev,
 })
 
+// DeadlineEnv is how long a task runs before the person is asked for more
+// time.
+var DeadlineEnv = env.NewDuration(env.Spec{
+	Name:        "BOXER_AGENT_DEADLINE",
+	Default:     "30m",
+	Description: "how long a runtime.agent task runs before its calls wait for the person to give it more time, and how much more an approval gives",
+	Category:    env.CategoryDev,
+})
+
 var TestGrantsEnv = env.NewBool(env.Spec{
 	Name:        "BOXER_AGENT_TEST_GRANTS",
 	Default:     "false",

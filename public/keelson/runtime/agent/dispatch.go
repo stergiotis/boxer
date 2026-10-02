@@ -205,21 +205,55 @@ func phaseOutcome(p opwire.PhaseE, reason string) (out opwire.Outcome) {
 	return opwire.Outcome{Phase: p, Reason: reason}
 }
 
+// Denial reasons a coordinator reads: [TaskGone] tells them apart.
+const (
+	reasonHandleInvalid = "the grant handle is not valid"
+	reasonTaskEnded     = "the task ended"
+	reasonDeadline      = "the task's deadline passed"
+)
+
+// TaskGone says a denial's reason means the task no longer exists for the
+// coordinator — the handle is unknown or the task ended — so it should ask
+// for a new one. A passed deadline is not that: request extends the task.
+func TaskGone(reason string) (gone bool) {
+	return strings.Contains(reason, reasonHandleInvalid) || strings.Contains(reason, reasonTaskEnded)
+}
+
 // resolve finds the task a handle names, for the sender presenting it. The
 // caller holds mu.
 func (inst *Service) resolve(handle string, msg *app.Msg) (t *task, out opwire.Outcome, ok bool) {
+	t, out, ok, _ = inst.resolveLate(handle, msg, false)
+	return
+}
+
+// resolveLate is resolve that, with lateOk, also accepts a task whose
+// deadline passed and says so: a call to it is held for more time, and a
+// request may extend it.
+func (inst *Service) resolveLate(handle string, msg *app.Msg, lateOk bool) (t *task, out opwire.Outcome, ok bool, late bool) {
 	t = inst.tasks[handle]
 	switch {
 	case t == nil:
-		out = phaseOutcome(opwire.PhaseDenied, "the grant handle is not valid")
+		out = phaseOutcome(opwire.PhaseDenied, reasonHandleInvalid)
 	case t.actor != msg.Sender || t.actorInstance != msg.SenderInstance:
 		out = phaseOutcome(opwire.PhaseDenied, "the grant handle belongs to another instance")
 	case t.revoked != "":
-		out = phaseOutcome(opwire.PhaseDenied, "the task ended: "+t.revoked)
+		out = phaseOutcome(opwire.PhaseDenied, reasonTaskEnded+": "+t.revoked)
 	case time.Now().After(t.deadline):
-		out = phaseOutcome(opwire.PhaseDenied, "the task's deadline passed")
+		late = true
+		ok = lateOk
+		if !ok {
+			out = phaseOutcome(opwire.PhaseDenied, reasonDeadline+"; request_access extends it")
+		}
 	default:
 		ok = true
+	}
+	return
+}
+
+// deadline is a new task's, or a widening's added, time.
+func (inst *Service) deadline() (d time.Duration) {
+	if d = inst.cfg.Deadline; d <= 0 {
+		d = DefaultDeadline
 	}
 	return
 }
@@ -230,7 +264,7 @@ func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, conversatio
 	t = &task{
 		id: "task-" + randomHex(6), handle: randomHex(16), actor: actor, actorInstance: actorInstance, conversation: conversation,
 		plan: plan, entries: make(map[uint64]*entry), destinations: destinations,
-		callsBudget: int(calls), deadline: time.Now().Add(DefaultDeadline), epoch: 1, created: time.Now(), test: test,
+		callsBudget: int(calls), deadline: time.Now().Add(inst.deadline()), epoch: 1, created: time.Now(), test: test,
 		keys: make(map[string]*callRec), lastRead: make(map[uint64]map[string]uint64), refs: make(map[string]*resultRef),
 		turnSeq: make(map[uint64]uint64), readSinceTurn: make(map[uint64]map[string]uint64),
 		launches: make(map[app.AppIdT]*launchEntry), launched: make(map[uint64]bool),
@@ -301,7 +335,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		return
 	}
 	inst.mu.Lock()
-	t, out, ok := inst.resolve(req.Handle, msg)
+	t, out, ok, late := inst.resolveLate(req.Handle, msg, true)
 	if !ok {
 		inst.mu.Unlock()
 		inst.record(nil, &callRec{key: req.Key, instance: req.Instance}, "dispatch", out)
@@ -318,7 +352,24 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		rec.args = req.Args
 	}
 	t.keys[req.Key] = rec
-	out, spec, e, need, mode := inst.check(t, req)
+	var spec app.OperationSpec
+	var e *entry
+	var need needE
+	var mode ModeE
+	if late {
+		// Past its deadline, a call waits for the person to give the task
+		// more time, as a spent budget waits for more calls.
+		e, mode, need = t.entries[req.Instance], ModeObserve, needDeadline
+		if e != nil {
+			mode = e.mode
+		}
+		out = phaseOutcome(opwire.PhaseInputRequired, reasonDeadline+"; the person is asked for more time")
+		if t.test {
+			out.Reason = reasonDeadline + "; request_access extends it"
+		}
+	} else {
+		out, spec, e, need, mode = inst.check(t, req)
+	}
 	rec.spec = spec
 	if e != nil {
 		rec.app = e.app

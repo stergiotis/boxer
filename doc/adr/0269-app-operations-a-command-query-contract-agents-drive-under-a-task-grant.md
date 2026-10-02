@@ -906,6 +906,22 @@ if waiting costs a model rounds, the remedy is the dispatcher's, not the
 component's. Play's result (`describe_result`, `sample_rows`) and help are
 the next candidates for the same pattern.
 
+### 2026-10-02 — a late task gets more time
+
+A task's deadline was final: past it every call was denied, nothing could
+extend it, and a coordinator whose conversation outlived its task could
+only start over. A late task is now a widening rather than an end. A call
+to it is held, as a call past the budget is, and the person's dialog says
+"The task's deadline has passed. Approving gives it another 30m0s"; under a
+test grant, which nobody answers, the call says that `request_access`
+extends it. A request on a late task's handle is accepted, and any approved
+widening of a late task moves its deadline on by the task duration. The
+other services still deny a late task until then. The duration is
+`Config.Deadline`, which the host takes from `BOXER_AGENT_DEADLINE`
+(default 30m), for a new task and for each extension alike. `TaskGone`
+tells a coordinator a task that ended or a handle it no longer knows from
+a late one, so it can ask for a new task instead.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

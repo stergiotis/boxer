@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -44,6 +45,9 @@ type Config struct {
 	// action record is also kept there (§SD9). nil keeps only the
 	// in-process record.
 	Exec recordstore.ExecutorI
+	// Deadline is how long a task runs, and how much more time an approved
+	// widening of a late task gives; zero is DefaultDeadline (DeadlineEnv).
+	Deadline time.Duration
 	// ActionsLog, when set, receives every action record as one JSON line,
 	// for a trial's scorer (ActionsFileEnv); the headless host sets it.
 	ActionsLog io.Writer
