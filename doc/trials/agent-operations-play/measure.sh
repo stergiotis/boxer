@@ -20,6 +20,7 @@
 #   BOXER_LLM_ENDPOINT, BOXER_LLM_MODEL, BOXER_LLM_APIKEY   the model (a run)
 #   REPS            5       runs per scene
 #   SCENE_TIMEOUT   300s    bound on each wait, and so on a turn
+#   SCENES          *       glob of the scene names a run takes, e.g. t2-*
 #   CLICKHOUSE_URL          the server play's endpoint and the scenes use
 set -euo pipefail
 
@@ -125,11 +126,11 @@ esac
 	echo "cpu: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //'), $(nproc) threads"
 	echo "memory: $(awk '/MemTotal/ { printf "%.0f GiB", $2 / 1048576 }' /proc/meminfo)"
 	echo "os: $(uname -sr)"
-	echo "reps: $reps, wait bound: $timeout"
+	echo "reps: $reps, wait bound: $timeout, scenes: ${SCENES:-*}"
 } >"$dir/env.txt"
 header "$dir"
 for rep in $(seq 1 "$reps"); do
-	for scene in "$here"/scenes/*.scene.md; do
+	for scene in "$here"/scenes/${SCENES:-*}.scene.md; do
 		run_scene "$scene" "$dir" "$rep"
 	done
 done

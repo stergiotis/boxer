@@ -37,5 +37,5 @@ UNION ALL SELECT 'T-106', 'network', 'Shared drive mounts read-only'
 {"do":"click","contains":"Send","role":"button","comment":"the task, seeded as the draft"}
 {"do":"wait","valueContains":" tokens","role":"label","comment":"the turn landed"}
 {"do":"capture","text":"t2-area-clean"}
-{"do":"wait","valueContains":"etwork","role":"label","comment":"task success: the answer names the network area, either capitalisation"}
+{"do":"wait","valueContains":"etwork","role":"label","nth":0,"comment":"task success: the answer names the network area, either capitalisation"}
 ```
