@@ -267,6 +267,11 @@ type Manifest struct {
 	// introspection column, not a browse section. Zero value KindApp covers
 	// ordinary Go apps, so most manifests leave it unset.
 	Kind KindE
+	// Shell marks an app the host's own chrome opens — the launcher behind
+	// the Apps menu and its key, help behind F1. It labels rather than
+	// exempts: a launch limit (ADR-0272) applies to shell apps like any
+	// other, and `shell` on keelson.apps is how a predicate names them.
+	Shell bool
 
 	Surface      SurfaceE
 	SurfaceHints SurfaceHints

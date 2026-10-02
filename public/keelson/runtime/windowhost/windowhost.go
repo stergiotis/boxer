@@ -477,6 +477,13 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered")
 		return
 	}
+	// Every open passes here — launcher, launch request, agent, seed — so
+	// this is where the launch limit holds (ADR-0272 §SD3).
+	if !inst.registry.Launchable(appId) {
+		err = eb.Build().Str("id", string(appId)).
+			Errorf("windowhost: app is not launchable in this process (KEELSON_LAUNCHABLE_APPS_WHERE)")
+		return
+	}
 	if kind == "" && len(cfg) > 0 {
 		err = eb.Build().Str("id", string(appId)).Int("len", len(cfg)).
 			Errorf("windowhost: launch config bytes without a config kind")

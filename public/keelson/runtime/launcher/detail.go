@@ -108,7 +108,7 @@ func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 				inst.openNew(m.Id)
 			}
 		}
-		if inst.helpAppId != "" && inst.hasHelp(m) {
+		if inst.helpAppId != "" && inst.hasHelp(m) && inst.registry.Launchable(inst.helpAppId) {
 			if c.Button(ids.PrepareStr("detail-help"), c.Atoms().Text(icons.PhBookOpen+" Help").Keep()).
 				SendResp().HasPrimaryClicked() {
 				// The Help center reads its own selection from the library, so

@@ -37,6 +37,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
+	"github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
@@ -378,10 +379,26 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		screenshotDir = imzero2env.ScreenshotDir.Get()
 	}
 	rt.ScreenshotMode = screenshotDir != ""
+	// The launch limit (ADR-0272) is in force before the first window, seeded
+	// or toured, opens. Unset, it costs nothing and touches no chlocal.
+	reg := opts.Registry
+	if reg == nil {
+		reg = app.DefaultRegistry
+	}
+	if err = launchlimit.Apply(ctx, rt.Bus, reg, rt.ChLocal != nil, logger); err != nil {
+		err = eh.Errorf("hostboot: %w", err)
+		return
+	}
 	if rt.ScreenshotMode {
 		if len(opts.LaunchApps) == 0 {
 			err = eh.Errorf("--launch must match at least one app in screenshot mode (IMZERO2_SCREENSHOT_DIR set)")
 			return
+		}
+		for _, a := range opts.LaunchApps {
+			if id := a.Manifest().Id; !reg.Launchable(id) {
+				err = eb.Build().Str("id", string(id)).Errorf("hostboot: screenshot mode: app is not launchable under %s", launchlimit.Where.Spec().Name)
+				return
+			}
 		}
 		for _, a := range opts.LaunchApps {
 			logger.Info().Str("id", string(a.Manifest().Id)).Msg("screenshot mode: adding tour renderer")
@@ -585,7 +602,8 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	// The detail pane's Inspect (ADR-0260 §SD1): the app center, opened on
 	// the app the pane shows. Wired only where the registry holds it, so a
 	// host built over a narrower registry shows no dead action.
-	if _, ok := reg.LookupManifest(appcenter.AppId); ok {
+	// Nor where the launch limit (ADR-0272) refuses the app center.
+	if _, ok := reg.LookupManifest(appcenter.AppId); ok && reg.Launchable(appcenter.AppId) {
 		lchr.SetInspect(func(target app.AppIdT) (err error) {
 			cfg, err := buscodec.Encode(appcenterlaunch.AppCenterLaunch{At: time.Now().UTC(), AppId: string(target)})
 			if err != nil {

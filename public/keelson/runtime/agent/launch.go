@@ -14,11 +14,23 @@ import (
 // the task; when the task ends it passes to the person, badged as left by
 // the task.
 
-// resolveApp finds a registered app by id or subject alias.
+// resolveApp finds a launchable app by id or subject alias. An app the
+// launch limit refuses (ADR-0272) is not found, so no grant can name it.
 func (inst *Service) resolveApp(name string) (id app.AppIdT, ok bool) {
+	for _, m := range inst.cfg.Registry.LaunchableManifests() {
+		if matchesApp(m, name) {
+			return m.Id, true
+		}
+	}
+	return
+}
+
+// refusedByLimit reports whether name is a registered app the launch limit
+// refuses, so a refusal can say so rather than that no such app exists.
+func (inst *Service) refusedByLimit(name string) (refused bool) {
 	for _, r := range inst.cfg.Registry.Registrations() {
 		if matchesApp(r.Manifest, name) {
-			return r.Manifest.Id, true
+			return !inst.cfg.Registry.Launchable(r.Manifest.Id)
 		}
 	}
 	return
@@ -65,6 +77,8 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	id, known := inst.resolveApp(req.App)
 	le := t.launches[id]
 	switch {
+	case !known && inst.refusedByLimit(req.App):
+		rep.Reason = "this host does not open windows of " + req.App + " (launch limit)"
 	case !known:
 		rep.Reason = "no app by that name"
 	case le == nil:

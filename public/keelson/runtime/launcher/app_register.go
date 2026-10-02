@@ -49,6 +49,7 @@ var manifest = app.Manifest{
 	Icon:     icons.PhSquaresFour,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"launcher", "apps", "open", "start", "run", "find", "search", "palette", "menu"},
+	Shell:    true,
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceApp.W,

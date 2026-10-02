@@ -235,7 +235,9 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply) {
 	search := strings.ToLower(strings.TrimSpace(req.Search))
 	for _, r := range inst.cfg.Registry.Registrations() {
 		m := r.Manifest
-		if m.Operations == nil {
+		// An app the launch limit refuses (ADR-0272) has no window to
+		// operate and none can be opened, so describing it would mislead.
+		if m.Operations == nil || !inst.cfg.Registry.Launchable(m.Id) {
 			continue
 		}
 		if req.App != "" && !matchesApp(m, req.App) {

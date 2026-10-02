@@ -74,6 +74,11 @@ type Registry struct {
 	// register builds a new one rather than appending, so a slice handed out
 	// by Manifests stays what it was.
 	manifests []Manifest
+	// unlaunchable is the set a launch limit refused (ADR-0272); nil means
+	// no limit is in force. launchable is manifests without that set, rebuilt
+	// with it, so the surfaces that read it every frame do not filter.
+	unlaunchable map[AppIdT]struct{}
+	launchable   []Manifest
 }
 
 // NewRegistry returns an empty Registry. Tests use this for isolation;
@@ -225,7 +230,24 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 		manifests[i] = e.manifest
 	}
 	inst.manifests = manifests
+	inst.rebuildLaunchable()
 	return
+}
+
+// rebuildLaunchable recomputes the launchable snapshot. The caller holds mu
+// for writing.
+func (inst *Registry) rebuildLaunchable() {
+	if len(inst.unlaunchable) == 0 {
+		inst.launchable = inst.manifests
+		return
+	}
+	launchable := make([]Manifest, 0, len(inst.manifests))
+	for _, m := range inst.manifests {
+		if _, refused := inst.unlaunchable[m.Id]; !refused {
+			launchable = append(launchable, m)
+		}
+	}
+	inst.launchable = launchable
 }
 
 // Open invokes the registered ctor for id and returns the resulting AppI
@@ -412,5 +434,45 @@ func (inst *Registry) Len() (n int) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	n = len(inst.entries)
+	return
+}
+
+// LimitLaunches makes every app registered now and absent from allowed
+// unlaunchable (ADR-0272 §SD2). An app registered later is launchable: the
+// limit names the apps the process booted with, not a rule re-applied to
+// each new registration. A second call replaces the first.
+func (inst *Registry) LimitLaunches(allowed []AppIdT) {
+	keep := make(map[AppIdT]struct{}, len(allowed))
+	for _, id := range allowed {
+		keep[id] = struct{}{}
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.unlaunchable = make(map[AppIdT]struct{})
+	for _, e := range inst.entries {
+		if _, ok := keep[e.manifest.Id]; !ok {
+			inst.unlaunchable[e.manifest.Id] = struct{}{}
+		}
+	}
+	inst.rebuildLaunchable()
+}
+
+// Launchable reports whether a window of id may be opened under the launch
+// limit. It does not say whether id is registered.
+func (inst *Registry) Launchable(id AppIdT) (ok bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	_, refused := inst.unlaunchable[id]
+	ok = !refused
+	return
+}
+
+// LaunchableManifests is Manifests without the apps the launch limit
+// refused, for the surfaces that offer apps to open. The same sharing rules
+// as Manifests apply.
+func (inst *Registry) LaunchableManifests() (manifests []Manifest) {
+	inst.mu.RLock()
+	manifests = inst.launchable
+	inst.mu.RUnlock()
 	return
 }

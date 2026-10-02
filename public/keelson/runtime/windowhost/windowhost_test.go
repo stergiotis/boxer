@@ -537,3 +537,19 @@ func TestSetAudit_NilFactsStoreIsNoOp(t *testing.T) {
 	h.reapClosed()
 	h.ReapAll("shutdown")
 }
+
+// ADR-0272 §SD3: every open path ends in OpenWithConfig, which refuses an
+// app the launch limit left out.
+func TestInst_Open_RefusesUnlaunchable(t *testing.T) {
+	reg, apps := mkRegistryWithSingleton(t, "test.a", "test.b")
+	reg.LimitLaunches([]app.AppIdT{"test.b"})
+	h := NewInst(reg, zerolog.Nop())
+
+	_, err := h.Open("test.a")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not launchable")
+	_, err = h.Open("test.b")
+	require.NoError(t, err)
+	assert.Equal(t, 1, h.Len())
+	assert.Equal(t, 0, apps["test.a"].mountCalls)
+}

@@ -71,6 +71,9 @@ import (
 	// this its BOXER_LAUNCHER_* spec would be invisible to `boxer env list`
 	// and absent from doc/env-vars.md.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/launcher"
+	// KEELSON_LAUNCHABLE_APPS_WHERE (ADR-0272); read by hostboot, which this
+	// binary does not link.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	_ "github.com/stergiotis/boxer/public/llm/openaichat"
 	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 )

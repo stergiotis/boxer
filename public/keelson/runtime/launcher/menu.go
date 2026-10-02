@@ -45,6 +45,11 @@ func (inst *Inst) RenderMenu(ids *c.WidgetIdStack) {
 		if len(recents) > 0 {
 			c.Separator().Horizontal().Send()
 		}
+		if !inst.registry.Launchable(ManifestId) {
+			// The launch limit (ADR-0272) refuses the launcher's own window;
+			// the empty-state pane still shows it with no window open.
+			return
+		}
 		if c.Button(ids.PrepareStr("menu-browse-all"),
 			c.Atoms().Text(icons.PhMagnifyingGlass+" Browse all apps…").Keep()).
 			SendResp().HasPrimaryClicked() {
@@ -60,8 +65,8 @@ func (inst *Inst) RenderMenu(ids *c.WidgetIdStack) {
 }
 
 // recentManifests resolves the history provider's app ids to manifests,
-// dropping ids the registry no longer holds (an applet the store replaced)
-// and the launcher itself — an entry that reopens the window you are
+// dropping ids the registry no longer holds (an applet the store replaced),
+// ids the launch limit refuses (ADR-0272), and the launcher itself — an entry that reopens the window you are
 // clicking from is noise.
 //
 // Empty until a history source is wired, which is also the state of a run
@@ -81,7 +86,7 @@ func (inst *Inst) recentManifests() (out []app.Manifest) {
 			continue
 		}
 		m, ok := inst.registry.LookupManifest(id)
-		if !ok {
+		if !ok || !inst.registry.Launchable(id) {
 			continue
 		}
 		out = append(out, m)
