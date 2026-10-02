@@ -1548,23 +1548,30 @@ bypasses every gloss for the session.
 A prompt book over the buffer (ADR-0254), which asks a language model the host
 provides. The host needs `BOXER_LLM_ENDPOINT` and `BOXER_LLM_MODEL` set. Without
 them, or in a window with no host to ask, the pane says why and offers nothing.
-Three prompts:
+Two prompts:
 
 - **Explain this query** sends the buffer and returns prose.
 - **Fix this error** sends the buffer and the last Run's error, and returns a
   corrected query. With no error, it runs over the buffer alone.
-- **Ask** takes a question and returns a query. It is told play's column
-  conventions (`lane`, `title`, `label@mime`, `{name:Type}`) and to write a
-  single `SELECT`.
 
-Fix and Ask are grounded in the endpoint's schema
-(`system.columns` of the current database, capped) and may call tools: list
-tables, describe a table, check a statement against boxer's grammar, and read
-`keelson('sql_passes')`. They retry up to three times on a statement that does
-not validate. **Nothing runs on its own**: a returned query is text with
-**Insert** (at the caret) and **Replace** (the whole buffer), and Run is still
-yours. The header shows the model, elapsed time, attempts and tokens, and marks
-an answer cut short by `BOXER_LLM_MAXTOKENS`.
+Fix is grounded in the endpoint's schema (`system.columns` of the current
+database, capped) and may call tools: list tables, describe a table, check a
+statement against boxer's grammar, and read `keelson('sql_passes')`. It
+retries up to three times on a statement that does not validate. **Nothing
+runs on its own**: a returned query is text with **Insert** (at the caret) and
+**Replace** (the whole buffer), and Run is still yours. The header shows the
+model, elapsed time, attempts and tokens, and marks an answer cut short by
+`BOXER_LLM_MAXTOKENS`.
+
+Turning a question into a query is the chat app's, which works in a play
+window you share with it. Its model reads the endpoint through play's
+operations without touching the buffer: `list_tables`, `describe_table` (for
+a leeway table, its sections, the handles to write and the membership
+channels) and `validate_sql`, which checks a draft — grammar, play's rewrite
+of it, handles that do not resolve, and whether a run would be allowed —
+without running it. `trace_rewrite` shows the same rewrite as the Passes tab
+does: each pass in order with its outcome, time and error, and the statement
+exactly as it would be sent.
 
 ### Experiments
 
