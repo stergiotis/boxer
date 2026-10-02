@@ -152,8 +152,7 @@ func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcom
 		return
 	}
 	c := &call{id: req.CallId, spec: spec, args: req.Args, expects: req.Expects,
-		call: app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason, RefData: req.RefData,
-			OnBehalfOf: req.OnBehalfOf},
+		call:    callOf(req),
 		outcome: opwire.Outcome{Phase: opwire.PhaseAccepted}}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -164,6 +163,13 @@ func (inst *Engine) Submit(op string, req opwire.CallRequest) (out opwire.Outcom
 	inst.queue = append(inst.queue, c)
 	inst.remember(c)
 	out = c.outcome
+	return
+}
+
+// callOf is the call context req carries to a command or an external read.
+func callOf(req opwire.CallRequest) (oc app.OperationCall) {
+	oc = app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason, RefData: req.RefData,
+		OnBehalfOf: req.OnBehalfOf}
 	return
 }
 
@@ -180,8 +186,7 @@ func (inst *Engine) query(spec app.OperationSpec, req opwire.CallRequest) (out o
 	var confined bool
 	var err error
 	if spec.Class == app.OperationClassExternalRead {
-		result, confined, err = s.view.ExternalRead(app.OperationCall{Writer: req.Writer, Key: req.Key, Reason: req.Reason,
-			RefData: req.RefData, OnBehalfOf: req.OnBehalfOf}, spec.Name, req.Args)
+		result, confined, err = s.view.ExternalRead(callOf(req), spec.Name, req.Args)
 	} else {
 		result, err = s.view.Query(spec.Name, req.Args)
 	}
