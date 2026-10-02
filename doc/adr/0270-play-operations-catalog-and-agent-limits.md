@@ -296,6 +296,21 @@ date) instead of being applied and failing in the status line, where the
 trial's models never looked. The run path keeps its own check, for a
 subquery run and for a buffer that changes before the run starts.
 
+### 2026-10-02 — the snippets and the vocabulary, for an agent
+
+Play's catalog gains three queries over what the build carries rather than
+what the window holds. `list_snippets` lists the worked queries of every
+snippet library — play's own and each one a repository contributes
+(`RegisterSnippetLibraryE`) — or finds them through the Snippets pane's
+search; `read_snippet` returns one section's text and its SQL blocks, each
+ready for `set_sql`. `list_functions` is the Vocabulary pane's corpus: each
+function's call template, doc, where it runs (server, client or host),
+family and dependencies. Whether the endpoint has a server function is
+reported only once the pane's probe has landed it — the query never sends
+the probe itself, since an agent's work reaches the endpoint only under the
+grant (§SD2). All three are the build's own text and are not marked
+untrusted.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

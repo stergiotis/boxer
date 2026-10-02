@@ -163,6 +163,10 @@ type opsSnap struct {
 	state   PlayState
 	panes   PanesState
 	graph   *queryGraph
+	// installed is the endpoint's user-defined functions, when the
+	// Vocabulary pane's probe has landed them; probed says it has.
+	installed map[string]string
+	probed    bool
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -315,6 +319,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			return appops.None{}, p.bindPane(in.Pane, NodeID(in.Node))
 		})
 	addRunOps(s)
+	addReferenceOps(s)
 	return
 }()
 
@@ -357,6 +362,7 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 		return
 	}
 	sn.mounted, sn.graph = true, p.graph
+	sn.installed, sn.probed = p.vocab.known()
 	st := PlayState{Sql: p.sql, Live: p.liveMain}
 	if p.client != nil {
 		st.Destination = DestinationClickHouse(endpointHost(p.client.URL()))

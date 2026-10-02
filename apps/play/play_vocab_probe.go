@@ -107,6 +107,15 @@ func newVocabProbe(client *Client) (inst *vocabProbe) {
 	}
 }
 
+// known returns the endpoint's user-defined function set when a demand has
+// already landed it, and asks the endpoint nothing.
+func (inst *vocabProbe) known() (installed map[string]string, ready bool) {
+	if inst == nil || inst.installed == nil {
+		return nil, false
+	}
+	return inst.userDefined, true
+}
+
 // demand returns the endpoint's USER-DEFINED function set, requesting the
 // listing on first ask. ready=false means the answer has not landed yet.
 //

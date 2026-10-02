@@ -58,8 +58,11 @@ func sqlBlockActionable(_ string, lang string) bool {
 // nil when the doc is absent or fails to parse, which the pane degrades to a
 // short notice.
 type snippetSource struct {
-	appId    app.AppIdT
-	docName  string
+	appId   app.AppIdT
+	docName string
+	// text is the doc's markdown source, which the catalog's snippet reads
+	// slice by section.
+	text     string
 	doc      *markdown.Doc
 	sections []help.SectionInfo
 	index    *search.Index
@@ -72,6 +75,9 @@ func newSnippetSource(appId app.AppIdT, fsys fs.FS, docName string) (src *snippe
 		return
 	}
 	if doc, info, ok := book.Doc(docName); ok {
+		if raw, found := book.Source(docName); found {
+			src.text = string(raw)
+		}
 		src.doc = doc
 		src.sections = info.Sections
 		src.index = search.NewIndexBooks(book)

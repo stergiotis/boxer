@@ -1,12 +1,14 @@
 package play
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
@@ -15,7 +17,7 @@ import (
 func TestPlayCatalogRegisters(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	require.NoError(t, m.Operations.Validate())
-	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane, opListPanes, opBindPane, "query_state", "query_machine"} {
+	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane, opListPanes, opBindPane, "query_state", "query_machine", opListSnippets, opReadSnippet, opListFunctions} {
 		spec, ok := m.Operations.Lookup(name)
 		require.True(t, ok, name)
 		assert.True(t, spec.Agents, name)
@@ -159,4 +161,83 @@ func TestTheAgentMarkClearsWhenThePersonEdits(t *testing.T) {
 	p.sql = "SELECT 3 -- the person's edit"
 	p.checkAgentMark()
 	assert.Nil(t, p.takeAgentForRun(true), "after the person's edit the window's work is theirs")
+}
+
+func queryOp[T any](t *testing.T, h app.OperationsHandlerI, op string, args any) (out T) {
+	t.Helper()
+	var raw []byte
+	if args != nil {
+		var err error
+		raw, err = buscodec.Encode(args)
+		require.NoError(t, err)
+	}
+	res, err := h.Snapshot().Query(op, raw)
+	require.NoError(t, err)
+	out, err = buscodec.Decode[T](res)
+	require.NoError(t, err)
+	return
+}
+
+// The snippet libraries reach an agent: listed, found by words, and read
+// with their SQL ready for set_sql.
+func TestTheSnippetsAreInTheCatalog(t *testing.T) {
+	_, h := opsLauncher(t)
+	all := queryOp[SnippetList](t, h, opListSnippets, nil)
+	require.NotEmpty(t, all.Snippets)
+	assert.Equal(t, builtinSnippetsKey, all.Snippets[0].Library)
+
+	found := queryOp[SnippetList](t, h, opListSnippets, SnippetSearchArgs{Search: "memberships"})
+	require.NotEmpty(t, found.Snippets)
+	assert.Less(t, len(found.Snippets), len(all.Snippets), "a search narrows the list")
+
+	sn := queryOp[Snippet](t, h, opReadSnippet, SnippetArgs{Library: found.Snippets[0].Library, Section: found.Snippets[0].Section})
+	require.NotEmpty(t, sn.Sql)
+	assert.Contains(t, strings.ToUpper(sn.Sql[0]), "SELECT")
+	assert.NotContains(t, sn.Sql[0], "```")
+
+	_, err := h.Snapshot().Query(opReadSnippet, mustEncode(t, SnippetArgs{Library: builtinSnippetsKey, Section: "no-such-section"}))
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+}
+
+// The vocabulary reaches an agent with where each function runs; whether
+// the endpoint has a server function stays unknown until the pane probed.
+func TestTheVocabularyIsInTheCatalog(t *testing.T) {
+	_, h := opsLauncher(t)
+	queryOp[FunctionList](t, h, opListFunctions, nil) // the host's registry: empty until its wiring runs
+	_, err := h.Snapshot().Query(opListFunctions, mustEncode(t, FunctionArgs{Where: "moon"}))
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+
+	r := sqlvocab.NewRegistry()
+	require.NoError(t, RegisterVocabulary(r))
+	all, err := listFunctions(r, nil, false, "", "")
+	require.NoError(t, err)
+	require.NotEmpty(t, all.Functions)
+	assert.False(t, all.Probed)
+	client, err := listFunctions(r, nil, false, "", "client")
+	require.NoError(t, err)
+	require.NotEmpty(t, client.Functions)
+	for _, f := range client.Functions {
+		assert.Equal(t, "client", f.Where)
+		assert.Empty(t, f.Installed, "installed is a server function's question")
+		assert.Contains(t, f.Call, f.Name+"(")
+	}
+	server, err := listFunctions(r, nil, false, "", "server")
+	require.NoError(t, err)
+	require.NotEmpty(t, server.Functions)
+	assert.Equal(t, "unknown", server.Functions[0].Installed)
+	probed, err := listFunctions(r, map[string]string{server.Functions[0].Name: ""}, true, "", "server")
+	require.NoError(t, err)
+	assert.Equal(t, "yes", probed.Functions[0].Installed)
+	if len(probed.Functions) > 1 {
+		assert.Equal(t, "no", probed.Functions[1].Installed)
+	}
+}
+
+func mustEncode(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := buscodec.Encode(v)
+	require.NoError(t, err)
+	return b
 }

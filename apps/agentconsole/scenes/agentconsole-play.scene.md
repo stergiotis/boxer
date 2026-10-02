@@ -20,7 +20,9 @@ whose only destination is `keelson:apps`, replaces play's buffer, runs it and
 describes the result. A second buffer reads `keelson('windows')`, which the
 grant does not list: the run is refused when it is asked for, naming the
 destination the grant would have to list, and nothing is sent. The
-mounted query machine then reports the shown result as stale.
+mounted query machine then reports the shown result as stale, and the
+reference queries list the vocabulary's client functions and the snippets
+about memberships.
 
 Between the two, the person presses play's Run. The button goes through the
 same `run` handler as the agent's call (ADR-0270 §SD6), so the change is
@@ -104,5 +106,23 @@ turn does not refresh what the task read, so it reads again before writing.
 {"do":"click","name":"Call","role":"button","comment":"k9: the result's lifecycle, as the mounted machine reports it"}
 {"do":"wait","valueContains":"k9 · query_state · completed","role":"label"}
 {"do":"wait","valueContains":"\"current\":\"rows (stale)\"","role":"label","nth":0,"comment":"the buffer moved since the run"}
+{"do":"focus","id":3557791720187110425}
+{"do":"key","text":"A","modifiers":16}
+{"do":"type","id":3557791720187110425,"text":"list_functions"}
+{"do":"focus","id":13823422873042478622}
+{"do":"key","text":"A","modifiers":16}
+{"do":"type","id":13823422873042478622,"text":"{\"where\":\"client\"}"}
+{"do":"click","name":"Call","role":"button","comment":"k10: the vocabulary the host wired"}
+{"do":"wait","valueContains":"k10 · list_functions · completed","role":"label"}
+{"do":"wait","valueContains":"\"where\":\"client\"","role":"label","nth":0}
+{"do":"focus","id":3557791720187110425}
+{"do":"key","text":"A","modifiers":16}
+{"do":"type","id":3557791720187110425,"text":"list_snippets"}
+{"do":"focus","id":13823422873042478622}
+{"do":"key","text":"A","modifiers":16}
+{"do":"type","id":13823422873042478622,"text":"{\"search\":\"memberships\"}"}
+{"do":"click","name":"Call","role":"button","comment":"k11: snippets found by words"}
+{"do":"wait","valueContains":"k11 · list_snippets · completed","role":"label"}
+{"do":"wait","valueContains":"\"library\":\"snippets\"","role":"label","nth":0}
 {"do":"capture","text":"agentconsole-play-limit"}
 ```
