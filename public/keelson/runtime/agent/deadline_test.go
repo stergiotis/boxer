@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 )
 
 // expire moves a task's deadline into the past.
@@ -77,4 +79,38 @@ func TestTaskGoneTellsAnEndedTaskFromALateOne(t *testing.T) {
 	assert.True(t, TaskGone("agent: refused: the task ended: stopped"))
 	assert.True(t, TaskGone(reasonHandleInvalid))
 	assert.False(t, TaskGone(reasonDeadline+"; request_access extends it"))
+}
+
+// A late call is checked as any other first: a refusal stands, and a call
+// outside the grant asks for that widening, never for more time alone, so
+// approving "more time" cannot share a window the dialog did not show.
+func TestALateCallIsCheckedBeforeItWaitsForTime(t *testing.T) {
+	r := coordinatorRig(t)
+	ctx := context.Background()
+	d := &doc{text: "other"}
+	r.host.mu.Lock()
+	r.host.engines[9] = opengine.New(docOps.Catalog(), docOps.Bind(d))
+	r.host.docs[9] = d
+	r.host.mu.Unlock()
+	got := make(chan Grant, 1)
+	go func() {
+		g, _ := r.cli.Request(ctx, GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
+		got <- g
+	}()
+	r.person(true, nil)
+	g := <-got
+	r.expire(g)
+
+	denied := r.call(g, "w", "wipe", "{}")
+	assert.Equal(t, "denied", denied.Phase, "an operation not exposed to agents is denied, late or not")
+
+	other, err := r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: 9, Operation: "get_text", Args: "{}", Key: "o"})
+	require.NoError(t, err)
+	require.Equal(t, "input_required", other.Phase)
+	assert.True(t, other.Held)
+	r.svc.mu.Lock()
+	open := r.svc.pending()
+	require.Len(t, open, 1)
+	assert.Equal(t, needInstance, open[0].held.need, "the person is asked to share window 9")
+	r.svc.mu.Unlock()
 }

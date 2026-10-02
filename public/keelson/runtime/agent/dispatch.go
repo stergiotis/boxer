@@ -459,19 +459,17 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	var e *entry
 	var need needE
 	var mode ModeE
-	if late {
-		// Past its deadline, a call waits for the person to give the task
-		// more time, as a spent budget waits for more calls.
-		e, mode, need = t.entries[req.Instance], ModeObserve, needDeadline
-		if e != nil {
-			mode = e.mode
-		}
+	out, spec, e, need, mode = inst.check(t, req)
+	if late && (out.Phase == opwire.PhaseUnspecified || out.Phase == opwire.PhaseProposed) {
+		// Past its deadline, a call the grant would let through waits for
+		// the person to give the task more time, as a spent budget waits
+		// for more calls. A refusal stands, and a widening the call needs
+		// is asked for as it is: approving one also moves the deadline on.
+		mode, need = e.mode, needDeadline
 		out = phaseOutcome(opwire.PhaseInputRequired, reasonDeadline+"; the person is asked for more time")
 		if t.test {
 			out.Reason = reasonDeadline + "; request_access extends it"
 		}
-	} else {
-		out, spec, e, need, mode = inst.check(t, req)
 	}
 	rec.spec = spec
 	if e != nil {
