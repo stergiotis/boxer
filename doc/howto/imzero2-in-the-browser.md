@@ -77,13 +77,24 @@ trial, not this page.
    `BOXER_PLAY_AUTORUN`, the `BOXER_PLAY_FOCUS_*` family,
    [doc/env-vars.md](../env-vars.md)) go through `env=`.
 
+   A remote server works the same way: `--chURL` points `/ch/` at it and
+   `env=CLICKHOUSE_USER=<user>` names the user. Checked on 2026-10-03 against
+   ClickHouse's public ADS-B instance (`--chURL` its HTTPS endpoint,
+   `env=CLICKHOUSE_USER=website`): play ran in the tab, learned that the user
+   is read-only ([ADR-0181](../adr/0181-leeway-dql-authoring-surface.md)
+   Update 2026-10-01) and drew the Map's world raster. That endpoint refused a
+   connection now and then; a refused run shows its error in the pane and the
+   last good raster stays.
+
 ## Verification
 
-The page's status line reads `connected — WxH @ppp 1 — N frames painted
+The page's status line reads `connected — WxH @ppp P — N frames painted
 (mesh lane)` and `cadence: reactive`; the frame count grows while
 something animates and stops when nothing does. With play open, a query
 returns rows into the Table pane; with `log=1` in the worker's query the
-module's own log lines appear in the server's output. A headless capture follows the same URL:
+module's own log lines appear in the server's output. `P` is the page's devicePixelRatio, which reaches egui's pixels per point.
+A headless capture follows the same URL; `CDP_SCALE=2` emulates a 2× display
+and `CDP_AFTER_CLICK_MS` lengthens the wait after the optional click:
 
 ```bash
 node doc/trials/keelson-wasm-frame-cost/harness/cdp_shot.mjs \
