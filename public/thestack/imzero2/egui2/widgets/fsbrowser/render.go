@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/breadcrumbs"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
@@ -116,8 +117,8 @@ func Render(in Input) (res Result) {
 	return
 }
 
-// renderBreadcrumb draws the up button, the root and one button per path
-// segment; reports true when it navigated.
+// renderBreadcrumb draws the up button and the path as a breadcrumbs trail;
+// reports true when it navigated.
 func (in Input) renderBreadcrumb(st *State, density styletokens.DensityE) (navigated bool) {
 	root := in.RootLabel
 	if root == "" {
@@ -130,34 +131,25 @@ func (in Input) renderBreadcrumb(st *State, density styletokens.DensityE) (navig
 			navigated = true
 		}
 		c.AddSpace(styletokens.GapInline(density))
-		if c.Button(in.Ids.PrepareSeq(seqCrumbBase+1), c.Atoms().BeginRichText(root).Strong().End().Keep()).
-			Frame(false).Small().SendResp().HasPrimaryClicked() {
-			if st.Dir() != "." {
-				st.SetDir(".")
-				navigated = true
-			}
+		// The trail: the root, then one item per path segment. The current
+		// directory is the last item, the trail's default, so State.dir
+		// stays the only authority on where the browser is.
+		m := &st.crumbs
+		m.Labels = append(m.Labels[:0], root)
+		dir := st.Dir()
+		if dir != "." {
+			m.Labels = append(m.Labels, strings.Split(dir, "/")...)
 		}
-		if st.Dir() != "." {
-			segs := strings.Split(st.Dir(), "/")
-			prefix := ""
-			for i, seg := range segs {
-				if prefix == "" {
-					prefix = seg
-				} else {
-					prefix += "/" + seg
-				}
-				c.Label("›").Selectable(false).Send()
-				last := i == len(segs)-1
-				atoms := c.Atoms().Text(seg).Keep()
-				if last {
-					atoms = c.Atoms().BeginRichText(seg).Strong().End().Keep()
-				}
-				if c.Button(in.Ids.PrepareSeq(seqCrumbBase+2+uint64(i)), atoms).
-					Frame(false).Small().SendResp().HasPrimaryClicked() && !last {
-					st.SetDir(prefix)
-					navigated = true
-				}
+		st.crumbsState.SetCurrent(-1)
+		res := breadcrumbs.Render(breadcrumbs.Input{Ids: in.Ids, ScopeKey: "crumbs", Model: m, State: &st.crumbsState, Small: true})
+		if res.Clicked >= 0 {
+			// Item i is the root followed by i segments.
+			to := "."
+			if res.Clicked > 0 {
+				to = strings.Join(m.Labels[1:res.Clicked+1], "/")
 			}
+			st.SetDir(to)
+			navigated = true
 		}
 	}
 	return
