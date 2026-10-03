@@ -648,6 +648,22 @@ func (inst *MapDriver) renderControls() {
 	if builtinRenders[inst.renderIdx].custom {
 		inst.renderColorEditor()
 	}
+	// The row is wider than a narrow pane, and its tail changes with the run
+	// (the progress widgets while loading, the run's numbers after). Left to
+	// overflow it widened the pane's content, and with it the map: a new map
+	// width re-keyed the raster, the new run changed the tail, and the map
+	// re-queried in a loop until the pane was resized. In a horizontal scroll
+	// area the row clips at the pane's edge instead and the map's width
+	// depends on the pane alone.
+	for range c.ScrollArea().Hscroll(true).Vscroll(false).AutoShrink(false, true).KeepIter() {
+		inst.renderControlsRow()
+	}
+	c.Label(inst.statusLine()).Send()
+}
+
+// renderControlsRow is the opacity … Refresh row with the run's progress or
+// numbers at its tail.
+func (inst *MapDriver) renderControlsRow() {
 	for range c.Horizontal().KeepIter() {
 		c.SliderF64(inst.ids.PrepareStr("map-opacity"), inst.opacity, 0.1, 1.0).
 			Text("opacity").SendRespVal(&inst.opacity)
@@ -699,7 +715,6 @@ func (inst *MapDriver) renderControls() {
 			diagWeak(formatLaneStats(inst.stats))
 		}
 	}
-	c.Label(inst.statusLine()).Send()
 }
 
 // mapTablePaneH caps the table-source editor. Six rows, against the colour
