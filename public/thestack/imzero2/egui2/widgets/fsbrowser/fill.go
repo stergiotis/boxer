@@ -18,6 +18,15 @@ package fsbrowser
 // the edge follows the pointer, and the total does not change. The last
 // column's right edge is the pane's and is not dragged. Only a resize of the
 // pane moves the name column on its own.
+//
+// The table does not always take the width it is given. A column whose
+// content will not fit narrower — the outline column's indent, disclosure
+// and icon — is laid out at its content's width whatever it was sent, and
+// reported so every frame. Read as a drag whose giver is at its floor, that
+// report would be put back by a re-apply forever, and every re-apply undoes
+// whatever the reader is dragging. A refusal the table repeats is therefore
+// taken as that column's floor: the column keeps what it was laid out at and
+// the others make room.
 
 // fillSettleFrames is how many reports are ignored after the layout moved on
 // its own: the one already in flight, and the one the re-apply produces.
@@ -44,6 +53,63 @@ type fillT struct {
 	baseEpoch uint32
 	epoch     uint32
 	paneW     float32
+	// minW is a floor per column that the table imposed by refusing to lay
+	// the column out narrower; 0 leaves the column at the shared floor.
+	minW []float32
+	// refused is the column (plus one) whose width was last put back by a
+	// re-apply and refusedAt the width it was reported at; a second report
+	// at that width means the table holds it there.
+	refused   int
+	refusedAt float32
+	// refit asks the next plan to lay the columns out again after a floor
+	// was learned.
+	refit bool
+}
+
+// floorOf is column i's floor: the shared one, or what the table imposed.
+func (inst *fillT) floorOf(i int, floor float32) float32 {
+	if i < len(inst.minW) {
+		return max(floor, inst.minW[i])
+	}
+	return floor
+}
+
+// fit lays the columns out across the pane: the name column takes what the
+// others leave, and when that is less than its floor the others give, each in
+// proportion to what it holds above its own floor. Only when every column is
+// at its floor does the table overflow the pane and scroll. Reports whether
+// a width moved.
+func (inst *fillT) fit(paneW, floor float32) (moved bool) {
+	target := paneW - fillSlack
+	rest := float32(0)
+	for _, w := range inst.w[1:] {
+		rest += w
+	}
+	nameFloor := inst.floorOf(0, floor)
+	if over := rest + nameFloor - target; over > fillStep {
+		room := float32(0)
+		for i := 1; i < len(inst.w); i++ {
+			room += max(inst.w[i]-inst.floorOf(i, floor), 0)
+		}
+		if room > 0 {
+			share := min(over/room, 1)
+			rest = 0
+			for i := 1; i < len(inst.w); i++ {
+				give := max(inst.w[i]-inst.floorOf(i, floor), 0) * share
+				if give > fillStep {
+					inst.w[i] -= give
+					moved = true
+				}
+				rest += inst.w[i]
+			}
+		}
+	}
+	name := max(target-rest, nameFloor)
+	if d := name - inst.w[0]; d > fillStep || d < -fillStep {
+		inst.w[0] = name
+		moved = true
+	}
+	return
 }
 
 // plan brings the layout in line with what was resolved and with the pane.
@@ -60,10 +126,13 @@ func (inst *fillT) plan(resolved []float64, baseEpoch uint32, paneW, floor float
 		inst.sent = append(inst.sent[:0], inst.w...)
 	}()
 	retake := len(inst.w) != len(resolved) || inst.baseEpoch != baseEpoch
+	if len(inst.minW) != len(resolved) {
+		inst.minW = make([]float32, len(resolved))
+	}
 	if retake {
 		inst.w = inst.w[:0]
-		for _, w := range resolved {
-			inst.w = append(inst.w, max(float32(w), floor))
+		for i, w := range resolved {
+			inst.w = append(inst.w, max(float32(w), inst.floorOf(i, floor)))
 		}
 		inst.baseEpoch = baseEpoch
 	}
@@ -74,15 +143,10 @@ func (inst *fillT) plan(resolved []float64, baseEpoch uint32, paneW, floor float
 		}
 		return
 	}
-	if retake || paneW != inst.paneW {
+	if retake || inst.refit || paneW != inst.paneW {
 		inst.paneW = paneW
-		rest := float32(0)
-		for _, w := range inst.w[1:] {
-			rest += w
-		}
-		name := max(paneW-rest-fillSlack, floor)
-		if retake || name != inst.w[0] {
-			inst.w[0] = name
+		inst.refit = false
+		if inst.fit(paneW, floor) || retake {
 			inst.epoch++
 			inst.settle = fillSettleFrames
 		}
@@ -120,13 +184,29 @@ func (inst *fillT) dragged(fetched []float32, floor float32) (changed bool) {
 		if i == last {
 			giver = 0
 		}
+		// A column the table let narrower than a floor it imposed has no
+		// such floor.
+		if i < len(inst.minW) && got < inst.minW[i] {
+			inst.minW[i] = got
+		}
 		// The giver keeps its floor; what it cannot give, the column does
-		// not get, and a re-apply puts the column back.
-		d := min(want, inst.w[giver]-floor)
+		// not get, and a re-apply puts the column back — once. Reported at
+		// the same width again, the column is held there by the table: it
+		// keeps that width as its floor and the layout is fitted around it.
+		d := min(want, inst.w[giver]-inst.floorOf(giver, floor))
 		if d <= fillStep && d >= -fillStep {
+			if inst.refused == i+1 && got-inst.refusedAt <= fillStep && inst.refusedAt-got <= fillStep {
+				inst.minW[i] = got
+				inst.w[i] = got
+				inst.refused = 0
+				inst.refit = true
+				return true
+			}
+			inst.refused, inst.refusedAt = i+1, got
 			inst.epoch++
 			return true
 		}
+		inst.refused = 0
 		inst.w[i] += d
 		inst.w[giver] -= d
 		inst.epoch++
