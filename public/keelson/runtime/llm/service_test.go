@@ -70,6 +70,28 @@ func TestUnconfiguredHostSaysSo(t *testing.T) {
 	require.True(t, errors.As(err, &refused), "%v", err)
 }
 
+// An answer the provider ended early with no text says how it ended, what
+// it spent against the ceiling, and that the model was reasoning.
+func TestAnAnswerCutOffWithoutTextSaysWhy(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+	p := &fakeProvider{resp: openaichat.CompletionResponse{FinishReason: "length", OutputTokens: 64, Reasoning: "thinking"},
+		err: openaichat.ErrIncompleteCompletion}
+	cfg := localCfg(p)
+	cfg.MaxTokens = 64
+	cli, svc, _ := serve(t, cfg)
+	_, err := cli.Complete(context.Background(), Request{Messages: msg})
+	var failed *CallError
+	require.True(t, errors.As(err, &failed), "%v", err)
+	assert.Equal(t, errKindIncomplete, failed.Kind)
+	assert.True(t, errors.Is(err, openaichat.ErrIncompleteCompletion))
+	assert.Contains(t, failed.Reason, `finish_reason "length"`)
+	assert.Contains(t, failed.Reason, "64 output tokens of the call's ceiling of 64")
+	assert.Contains(t, failed.Reason, "spent them reasoning")
+	assert.Equal(t, "thinking", failed.Reasoning, "the reasoning comes back for inspection")
+	require.Len(t, svc.Calls(), 1)
+	assert.Equal(t, failed.Reason, svc.Calls()[0].Error, "the call record says the same")
+}
+
 // A failure names its row in the call record, so a caller can show where
 // to read it; a refusal does as well.
 func TestAFailureNamesItsCallRecord(t *testing.T) {

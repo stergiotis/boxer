@@ -359,3 +359,10 @@ func TestAnOutOfCreditFailureSaysSo(t *testing.T) {
 	err = fmt.Errorf("llm: openaichat: non-2xx response: HTTP 503: overloaded: %w", openaichat.ErrServer)
 	assert.Equal(t, "the model provider answered HTTP 503: overloaded", failureReason(err))
 }
+
+// An answer cut off before any text says so in its own words, not the
+// client's generic sentence.
+func TestACutOffAnswerSaysWhy(t *testing.T) {
+	err := &llm.CallError{Kind: "incomplete", Reason: "the provider ended the answer early (finish_reason \"length\") after 4096 output tokens"}
+	assert.Contains(t, failureReason(fmt.Errorf("wrapped: %w", err)), "after 4096 output tokens")
+}

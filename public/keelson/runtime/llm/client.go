@@ -163,11 +163,14 @@ func (inst *RefusedError) Error() string { return "llm: refused: " + inst.Reason
 // the provider took. It unwraps to the openaichat sentinel of its kind, so
 // errors.Is classifies it as before.
 type CallError struct {
-	Kind     string
-	Reason   string
-	CallId   string
-	Elapsed  time.Duration
-	sentinel error
+	Kind    string
+	Reason  string
+	CallId  string
+	Elapsed time.Duration
+	// Reasoning is what the model reasoned before the call failed — on an
+	// answer cut off at the ceiling, where its budget went.
+	Reasoning string
+	sentinel  error
 }
 
 func (inst *CallError) Error() string {
@@ -331,10 +334,12 @@ func failureOf(w wireReply) (err error) {
 		sentinel = context.DeadlineExceeded
 	case errKindCancelled:
 		sentinel = context.Canceled
+	case errKindIncomplete:
+		sentinel = openaichat.ErrIncompleteCompletion
 	}
 	// The reason is the provider's own account — a status and its message —
 	// so it stays in the text, where a caller showing the error reads it.
-	return &CallError{Kind: w.ErrorKind, Reason: w.Reason, CallId: w.CallId, Elapsed: time.Duration(w.ElapsedNs), sentinel: sentinel}
+	return &CallError{Kind: w.ErrorKind, Reason: w.Reason, CallId: w.CallId, Elapsed: time.Duration(w.ElapsedNs), Reasoning: w.Reasoning, sentinel: sentinel}
 }
 
 // kindOf is failureOf's inverse on the service side.
@@ -356,6 +361,8 @@ func kindOf(err error) (kind string) {
 		return errKindTimeout
 	case errors.Is(err, context.Canceled):
 		return errKindCancelled
+	case errors.Is(err, openaichat.ErrIncompleteCompletion):
+		return errKindIncomplete
 	default:
 		return errKindOther
 	}

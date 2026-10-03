@@ -444,6 +444,20 @@ is skipped when the service's client replaces the endpoint, as the scripted
 model and tests do. A chat uses the size to say how full its conversation
 is (ADR-0265 §SD4); the service itself enforces nothing with it.
 
+### 2026-10-03 — an answer cut off before any text says why
+
+An answer the provider ends early with no text — `finish_reason` `length` or
+`content_filter` — came back as the generic "completion did not finish
+normally", classed `other`. A reasoning model that spends the whole ceiling
+thinking produced exactly that on a one-line question. Such a failure is now
+the kind `incomplete`, unwrapping to `openaichat.ErrIncompleteCompletion`,
+and its reason — on the reply and on the call record — says how the answer
+ended, the output tokens it spent against the call's ceiling
+(`BOXER_LLM_MAXTOKENS` when the request names none), and whether the model
+spent them reasoning. The reasoning text returns on `CallError.Reasoning`
+for inspection. An early end that does carry text is still an answer marked
+`Incomplete`, as before.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

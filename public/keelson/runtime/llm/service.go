@@ -421,7 +421,10 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 			rep.Incomplete, rec.Incomplete = true, true
 		} else {
 			rep.Ok, rep.Reason, rep.ErrorKind = false, cerr.Error(), kindOf(cerr)
-			rec.Error = cerr.Error()
+			if errors.Is(cerr, openaichat.ErrIncompleteCompletion) {
+				rep.Reason = incompleteReason(resp, maxTokens)
+			}
+			rec.Error = rep.Reason
 		}
 	}
 	if t != nil && rep.Ok {
@@ -545,3 +548,20 @@ const DelegationDestination = "llm"
 // dispatcher (ADR-0269 §SD6). Until it is set, such completions are
 // refused.
 func (inst *Service) SetDelegation(d app.DelegationI) { inst.delegation.Store(&delegationRef{d: d}) }
+
+// incompleteReason says why an answer the provider ended early has no text:
+// how it ended, what it spent against the ceiling the call had, and whether
+// the model spent it reasoning — what a person needs to tell a reasoning
+// model's budget from a filter.
+func incompleteReason(resp openaichat.CompletionResponse, maxTokens int32) (s string) {
+	s = "the provider ended the answer early (finish_reason " + strconv.Quote(resp.FinishReason) + ") after " +
+		strconv.FormatInt(int64(resp.OutputTokens), 10) + " output tokens"
+	if maxTokens > 0 {
+		s += " of the call's ceiling of " + strconv.FormatInt(int64(maxTokens), 10) + " (BOXER_LLM_MAXTOKENS when the request names none)"
+	}
+	s += ", with no answer text"
+	if resp.Reasoning != "" {
+		s += "; the model spent them reasoning (" + strconv.Itoa(len(resp.Reasoning)) + " bytes of reasoning)"
+	}
+	return
+}

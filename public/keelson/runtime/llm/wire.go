@@ -114,7 +114,10 @@ const (
 	errKindServer        = "server"
 	errKindTimeout       = "timeout"
 	errKindCancelled     = "cancelled"
-	errKindOther         = "other"
+	// errKindIncomplete is an answer the provider ended early — the token
+	// ceiling, a content filter — with no text to hand over.
+	errKindIncomplete = "incomplete"
+	errKindOther      = "other"
 )
 
 func encode[T any](v T) (b []byte, err error) {

@@ -648,6 +648,7 @@ func failureLines(e *entry) (lines []string) {
 	if f.detail == "" {
 		add("error", e.reason)
 	}
+	add("reasoning, its end", f.reasoning)
 	return
 }
 

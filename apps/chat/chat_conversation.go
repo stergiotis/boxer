@@ -52,7 +52,14 @@ type failure struct {
 	detail  string
 	callId  string
 	elapsed time.Duration
+	// reasoning is the end of what the model reasoned before the call
+	// failed, bounded.
+	reasoning string
 }
+
+// maxFailureReasoning bounds the reasoning a failure keeps: its end, where
+// the budget ran out.
+const maxFailureReasoning = 1500
 
 // failureOf is the inspectable side of err.
 func failureOf(err error) (f failure) {
@@ -65,6 +72,11 @@ func failureOf(err error) (f failure) {
 		f.kind = "refused"
 	case errors.As(err, &failed):
 		f.kind, f.elapsed = failed.Kind, failed.Elapsed
+		if r := []rune(failed.Reasoning); len(r) > maxFailureReasoning {
+			f.reasoning = "…" + string(r[len(r)-maxFailureReasoning:])
+		} else {
+			f.reasoning = failed.Reasoning
+		}
 	case errors.Is(err, context.Canceled):
 		f.kind = "cancelled"
 	case errors.Is(err, context.DeadlineExceeded):
@@ -311,6 +323,14 @@ func failureReason(err error) (s string) {
 		return refused.Reason
 	case errors.Is(err, context.DeadlineExceeded):
 		return "no answer before the timeout"
+	case errors.Is(err, openaichat.ErrIncompleteCompletion):
+		// The service says how it ended and what it spent (ADR-0254,
+		// update of 2026-10-03).
+		var failed *llm.CallError
+		if errors.As(err, &failed) && failed.Reason != "" {
+			return failed.Reason
+		}
+		return "the provider ended the answer early, with no answer text"
 	case errors.Is(err, openaichat.ErrPaymentRequired):
 		// The provider's own message says how much is left and where to
 		// top up.
