@@ -44,6 +44,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/breadcrumbs"
 )
 
 type stepE uint8
@@ -222,6 +223,10 @@ type App struct {
 	files *fsbroker.AppDataClient
 
 	step stepE
+	// The breadcrumb's model, refilled every frame, and its state, onto
+	// which step is projected before each render.
+	crumbs      breadcrumbs.Model
+	crumbsState breadcrumbs.State
 
 	// Connect: bound to text inputs, so fields, never frame locals.
 	srcURL, srcUser string

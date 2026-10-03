@@ -15,6 +15,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/breadcrumbs"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 )
 
@@ -73,51 +74,23 @@ func (inst *App) goTo(st stepE) {
 
 // --- the breadcrumb: the steps in order, where we are -----------------------------
 
-// renderBreadcrumb draws the six steps as a trail. A done step is ticked, the
-// current one is emphasised, a locked one is dimmed with its reason on hover.
-// Each is a frameless button, so a done step can be revisited by clicking it.
+// renderBreadcrumb draws the six steps as a trail (widgets/breadcrumbs). A
+// done step is ticked, the current one is emphasised, a locked one is dimmed
+// with its reason on hover. A done or open step can be revisited by
+// clicking it.
 func (inst *App) renderBreadcrumb() {
-	for range c.HorizontalTop().KeepIter() {
-		for i, st := range allSteps {
-			if i > 0 {
-				weak(icons.PhCaretRight)
-			}
-			for range c.IdScope(inst.ids.PrepareStr("crumb-" + st.String())) {
-				locked := inst.stepLocked(st)
-				if inst.step == st {
-					locked = ""
-				}
-				done, _ := inst.stepDone(st)
-				// The button's text is the step's name alone, so a driver
-				// finds a step by the same name whether it is done or not.
-				text := c.Atoms().Text(st.String()).Keep()
-				switch {
-				case inst.step == st:
-					text = c.Atoms().BeginRichText(st.String()).Strong().End().Keep()
-				case locked != "":
-					text = c.Atoms().BeginRichText(st.String()).Weak().End().Keep()
-				}
-				for range c.HorizontalTop().KeepIter() {
-					if done && inst.step != st {
-						weak(icons.PhCheck)
-					}
-					if locked != "" {
-						c.UiDisable()
-					}
-					clicked := false
-					if locked != "" {
-						for range c.HoverText(locked).KeepIter() {
-							clicked = c.Button(inst.ids.PrepareStr("step"), text).Frame(false).SendResp().HasPrimaryClicked()
-						}
-					} else {
-						clicked = c.Button(inst.ids.PrepareStr("step"), text).Frame(false).SendResp().HasPrimaryClicked()
-					}
-					if clicked && locked == "" {
-						inst.step = st
-					}
-				}
-			}
-		}
+	m := &inst.crumbs
+	m.Labels, m.Done, m.Locked = m.Labels[:0], m.Done[:0], m.Locked[:0]
+	for _, st := range allSteps {
+		done, _ := inst.stepDone(st)
+		m.Labels = append(m.Labels, st.String())
+		m.Done = append(m.Done, done)
+		m.Locked = append(m.Locked, inst.stepLocked(st))
+	}
+	inst.crumbsState.SetCurrent(int32(inst.step))
+	res := breadcrumbs.Render(breadcrumbs.Input{Ids: inst.ids, ScopeKey: "crumbs", Model: m, State: &inst.crumbsState})
+	if res.Clicked >= 0 {
+		inst.goTo(allSteps[res.Clicked])
 	}
 }
 
