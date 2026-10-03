@@ -1,0 +1,4 @@
+# The scripted model of chat-message-actions.scene.md: one answer with a
+# fenced SQL block, long enough that the transcript scrolls. Regenerate
+# resends the same position, so it gets the same answer.
+{"content":"Here is a way to read the last hour of calls, grouped by model.\n\n```sql\nSELECT model, count() AS calls, sum(input_tokens) AS tin\nFROM keelson('llm_calls')\nWHERE at > now() - INTERVAL 1 HOUR\nGROUP BY model\nORDER BY calls DESC\n```\n\nThings to check:\n\n1. the endpoint is reachable;\n2. the retain ceiling is `durable`;\n3. the conversation id is stable across turns.\n\nA longer answer continues with prose, so that the transcript has to scroll and the answer is shown from its start when it lands.\n\nThe end of the answer."}

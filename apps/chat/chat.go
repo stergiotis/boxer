@@ -62,8 +62,22 @@ type App struct {
 	// focused is whether this window is the shell's active one, which
 	// gates the process-wide Ctrl+Enter chord (play's claimRunChord).
 	focused bool
+	// draftId is the composer's widget id: the Escape it captures while a
+	// turn runs cancels the turn.
+	draftId uint64
 	// pastNoted hides the "past conversations are in play" line once read.
 	pastNoted bool
+
+	// editing is the turn Edit took back, while it can be put back;
+	// editedNext marks the next send as an edit. action runs a copy or an
+	// open, and note is the status line its outcome lands on.
+	editing    *rewound
+	editedNext bool
+	action     bgjob.Runner[string]
+	note       status
+	// later holds the actions clicked while the transcript draws, run
+	// once it is drawn.
+	later []func()
 
 	// advanced shows the Statistics panel (AdvancedSeed); stats are the
 	// window's records, across its conversations, and showStats whether
@@ -128,6 +142,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.turn.Cancel()
 	inst.describe.Cancel()
 	inst.handover.Cancel()
+	inst.action.Cancel()
 	for _, k := range inst.bandKeys {
 		ecdf.CancelBandJob(k)
 	}
@@ -148,6 +163,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 // drain lands the background jobs' results on the render thread.
 func (inst *App) drain() {
 	inst.drainHandover()
+	inst.drainAction()
 	if d, _, ok := inst.describe.TakeResult(); ok {
 		inst.model, inst.answered = *d, true
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {
@@ -163,12 +179,21 @@ func (inst *App) drain() {
 		return
 	}
 	now := time.Now().UnixMilli()
+	// A landed turn is read from its start: the question at the top of the
+	// view, then the answer — a long answer is not entered at its end.
+	asked := int32(inst.conv.lastUser())
 	if res, _, ok := inst.turn.TakeResult(); ok {
 		inst.stats.addTurn(inst.conv.id, p.started, now, res, nil)
 		inst.conv.landTurn(p.req, res, nil, now)
 		inst.pending = nil
+		inst.view.ScrollToStart(asked)
 		return
 	}
+	defer func() {
+		if inst.pending == nil {
+			inst.view.ScrollToStart(asked)
+		}
+	}()
 	switch snap := inst.turn.Snapshot(); snap.State {
 	case bgjob.StateFailed:
 		inst.turn.Invalidate()
@@ -238,8 +263,11 @@ func (inst *App) startTurn(text string) (started bool) {
 	if !ok {
 		return false
 	}
-	conv.begin(text, time.Now().UnixMilli())
+	conv.begin(text, time.Now().UnixMilli(), inst.editedNext)
 	inst.pending = &pendingTurn{req: req, started: time.Now()}
+	inst.editing, inst.editedNext = nil, false
+	// The waiting bubble is at the end: follow it.
+	inst.view.SetFollow(true)
 	return true
 }
 
@@ -260,6 +288,7 @@ func (inst *App) newConversation() {
 		}
 	}
 	inst.conv = newConversation()
+	inst.editing, inst.editedNext = nil, false
 	if inst.agentCli != nil {
 		inst.coord = newCoordinator(inst.agentCli, inst.conv.id)
 	}

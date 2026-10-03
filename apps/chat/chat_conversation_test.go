@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 )
 
 // fakeModel answers "a<n>" to the n-th call and records what it saw.
@@ -60,7 +61,7 @@ func keeping() (conv *conversation) {
 func turn(t *testing.T, cli *llm.Client, conv *conversation, text string) (res llm.Response) {
 	t.Helper()
 	req := conv.request(text)
-	conv.begin(text, time.Now().UnixMilli())
+	conv.begin(text, time.Now().UnixMilli(), false)
 	res, err := cli.Complete(context.Background(), req)
 	if err != nil {
 		conv.land(req, nil, err, time.Now().UnixMilli())
@@ -98,11 +99,11 @@ func TestSecondTurnContinuesTheFirst(t *testing.T) {
 func TestFailedTurnIsNotAParent(t *testing.T) {
 	conv := keeping()
 	req := conv.request("q1")
-	conv.begin("q1", 1)
+	conv.begin("q1", 1, false)
 	conv.land(req, &llm.Response{Content: "a1", CallId: "call-1"}, nil, 2)
 
 	req = conv.request("q2")
-	conv.begin("q2", 3)
+	conv.begin("q2", 3, false)
 	conv.land(req, nil, errors.New("boom"), 4)
 	require.Len(t, conv.entries, 3)
 	assert.True(t, conv.entries[2].failed)
@@ -133,23 +134,113 @@ func TestNewConversationMintsAFreshId(t *testing.T) {
 	assert.True(t, strings.HasPrefix(a.id, "chat-"))
 }
 
-// The transcript model validates, marks a failure and shows the pending
-// bubble last.
+// The transcript model validates, marks a failure on its own bubble and
+// shows the waiting bubble last; ordinal i is entry i.
 func TestTranscriptModel(t *testing.T) {
 	conv := keeping()
 	conv.entries = []entry{
 		{speaker: speakerUser, text: "q1", atMs: 10},
 		{speaker: speakerModel, text: "a1", atMs: 5},
-		{speaker: speakerUser, text: "q2", atMs: 20, failed: true, reason: "boom"},
+		{speaker: speakerUser, text: "q2", atMs: 20, failed: true, reason: "boom", edited: true},
 	}
 	m, kinds := transcriptModel(conv, true, 30)
 	require.NoError(t, m.Validate(), "times are kept ascending")
-	require.Equal(t, 5, m.Len())
+	require.Equal(t, 4, m.Len())
 	assert.EqualValues(t, 1, m.Sender[1])
-	assert.Equal(t, "not answered: boom", m.Body[3])
-	assert.EqualValues(t, -1, m.Sender[3])
-	assert.True(t, kinds[4].pending)
-	assert.Equal(t, -1, kinds[3].entry)
+	assert.Equal(t, chatview.StatusFailed, m.Status[2])
+	assert.NotZero(t, m.Flags[2]&chatview.FlagEdited)
+	assert.Equal(t, 2, kinds[2].entry)
+	assert.True(t, kinds[3].pending)
+	before := m.Body[2]
+	conv.entries[2].failed = false
+	m, _ = transcriptModel(conv, false, 30)
+	assert.NotEqual(t, before, m.Body[2], "a bubble whose actions change is measured again")
+}
+
+// Regenerate and Edit take the last answered turn back: the next request
+// is the one that turn sent, from the same parent — a branch.
+func TestTheLastTurnCanBeTakenBack(t *testing.T) {
+	cli, _, _ := host(t, llm.Config{Retain: llm.RetainRing})
+	conv := keeping()
+	r1 := turn(t, cli, conv, "q1")
+	want := conv.request("q2")
+	turn(t, cli, conv, "q2")
+	require.Len(t, conv.entries, 4)
+	require.True(t, conv.canRewind())
+
+	text, undo, ok := conv.rewind()
+	require.True(t, ok)
+	assert.Equal(t, "q2", text)
+	assert.Len(t, conv.entries, 2)
+	assert.False(t, conv.canRewind(), "one turn back, not two")
+	again := conv.request(text)
+	assert.Equal(t, r1.CallId, again.ParentCallId)
+	assert.Equal(t, want.Messages, again.Messages)
+
+	require.True(t, conv.restore(undo))
+	assert.Len(t, conv.entries, 4)
+	assert.True(t, conv.canRewind())
+	assert.Equal(t, "a2", conv.entries[3].text)
+
+	_, undo, _ = conv.rewind()
+	turn(t, cli, conv, "q2 edited")
+	assert.False(t, conv.restore(undo), "a turn sent since leaves nothing to put back")
+}
+
+// A failed turn is taken back from the transcript alone; it is no
+// answered turn to rewind.
+func TestAFailedTurnIsDroppedNotRewound(t *testing.T) {
+	conv := keeping()
+	req := conv.request("q1")
+	conv.begin("q1", 1, false)
+	conv.land(req, &llm.Response{Content: "a1", CallId: "call-1"}, nil, 2)
+	req = conv.request("q2")
+	conv.begin("q2", 3, false)
+	conv.land(req, nil, &llm.CallError{Kind: "server", Reason: "HTTP 503: overloaded", CallId: "call-2"}, 4)
+	assert.False(t, conv.canRewind(), "a failure after a turn leaves it in place")
+	f := conv.entries[2].fail
+	assert.Equal(t, "server", f.kind)
+	assert.Equal(t, "call-2", f.callId)
+	assert.Contains(t, f.detail, "HTTP 503")
+
+	text, ok := conv.dropFailed()
+	require.True(t, ok)
+	assert.Equal(t, "q2", text)
+	assert.Len(t, conv.entries, 2)
+	_, ok = conv.dropFailed()
+	assert.False(t, ok, "the answered turn is not dropped")
+}
+
+// Retry sends the failed turn again; Edit puts an answered one in the
+// composer and marks the resend edited.
+func TestRetryAndEditOnTheApp(t *testing.T) {
+	inst := appOn(t, &fakeModel{})
+	inst.conv.begin("q0", 1, false)
+	inst.conv.land(inst.conv.request("q0"), nil, errors.New("boom"), 2)
+	inst.retry()
+	drainUntil(t, inst)
+	require.Len(t, inst.conv.entries, 2)
+	assert.False(t, inst.conv.entries[0].failed)
+	assert.Equal(t, "q0", inst.conv.entries[0].text)
+
+	inst.edit()
+	assert.Equal(t, "q0", inst.draft)
+	require.NotNil(t, inst.editing)
+	assert.Empty(t, inst.conv.entries)
+	require.True(t, inst.startTurn("q0 edited"))
+	drainUntil(t, inst)
+	assert.True(t, inst.conv.entries[0].edited)
+	assert.Nil(t, inst.editing)
+
+	require.True(t, inst.startTurn("q1"))
+	inst.regenerate()
+	assert.Contains(t, inst.note.text, "a turn is running", "an action during a turn says why it did nothing")
+	drainUntil(t, inst)
+}
+
+// A failure's call opens in play on its row.
+func TestCallRecordSql(t *testing.T) {
+	assert.Equal(t, "SELECT *\nFROM keelson('llm_calls')\nWHERE call_id = 'run-1\\'x'", callRecordSql("run-1'x"))
 }
 
 // Over clickhouse-local with the host's ceiling durable: the second turn

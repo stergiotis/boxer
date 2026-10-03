@@ -200,7 +200,7 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 func TestAStoppedTurnKeepsItsCallsShown(t *testing.T) {
 	conv := newConversation()
 	req := conv.request("go")
-	conv.begin("go", 1)
+	conv.begin("go", 1, false)
 	conv.landTurn(req, &turnResult{activity: []string{"get_note in window 100 · completed"}, stopped: "the model kept calling tools past 24 rounds"}, nil, 2)
 	require.Len(t, conv.entries, 2)
 	assert.True(t, conv.entries[0].failed)

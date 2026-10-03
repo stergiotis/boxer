@@ -3,8 +3,8 @@ package chat
 import (
 	"context"
 	"errors"
-	"strings"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -32,11 +32,69 @@ type entry struct {
 	speaker speakerE
 	text    string
 	atMs    int64
-	// failed marks a user message whose turn got no answer; reason says why.
+	// failed marks a user message whose turn got no answer; reason says why
+	// in a line, fail what there is to inspect.
 	failed bool
 	reason string
+	fail   failure
+	// edited marks a message sent again after Edit, in place of the turn it
+	// replaced.
+	edited bool
 	// doc is the reply parsed as markdown, built on first draw.
 	doc *markdown.Doc
+}
+
+// failure is what a failed turn leaves to inspect: the error's whole text,
+// its class, how long the call took, and the call's row in the host's call
+// record when it reached one (keelson('llm_calls')).
+type failure struct {
+	kind    string
+	detail  string
+	callId  string
+	elapsed time.Duration
+}
+
+// failureOf is the inspectable side of err.
+func failureOf(err error) (f failure) {
+	var refused *llm.RefusedError
+	var failed *llm.CallError
+	switch {
+	case err == nil:
+		return
+	case errors.As(err, &refused):
+		f.kind = "refused"
+	case errors.As(err, &failed):
+		f.kind, f.elapsed = failed.Kind, failed.Elapsed
+	case errors.Is(err, context.Canceled):
+		f.kind = "cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		f.kind = "timeout"
+	default:
+		f.kind = "error"
+	}
+	f.detail, f.callId = err.Error(), llm.CallIdOf(err)
+	return
+}
+
+// turnMark is how the conversation stood before its last answered turn,
+// so the turn can be taken back — to answer it again, or to send it
+// edited. A taken-back turn stays on boxer.facts when it was kept; the
+// next one names the same parent, a branch the service keeps (ADR-0264).
+type turnMark struct {
+	// user is the index of the turn's user entry; everything from it on
+	// is the turn.
+	user    int
+	history []openaichat.Message
+	parent  string
+	lastIn  int32
+	lastOut int32
+}
+
+// rewound is a turn taken back for an edit, kept so the edit can be
+// abandoned and the turn put back as it was.
+type rewound struct {
+	mark    turnMark
+	entries []entry
 }
 
 // conversation is the app's state for one conversation (ADR-0265 §SD2):
@@ -62,11 +120,16 @@ type conversation struct {
 	history []openaichat.Message
 	// parent is the call id of the last reply, the next turn's parent.
 	parent string
-	// notKept is the first reason a turn was not kept, shown once.
-	notKept string
+	// notKept is the first reason a turn was not kept, shown until
+	// notKeptNoted.
+	notKept      string
+	notKeptNoted bool
 	// lastIn and lastOut are the last answered call's tokens.
 	lastIn  int32
 	lastOut int32
+	// mark is the last answered turn's, nil when there is none or a turn
+	// failed after it.
+	mark *turnMark
 }
 
 // minted salts conversation ids minted in this process.
@@ -93,23 +156,79 @@ func (inst *conversation) request(text string) (r llm.Request) {
 	return
 }
 
-// begin shows the user's message as sent.
-func (inst *conversation) begin(text string, atMs int64) {
+// begin shows the user's message as sent; edited marks it as an edit of
+// a turn taken back.
+func (inst *conversation) begin(text string, atMs int64, edited bool) {
 	inst.started = true
-	inst.entries = append(inst.entries, entry{speaker: speakerUser, text: text, atMs: atMs})
+	inst.entries = append(inst.entries, entry{speaker: speakerUser, text: text, atMs: atMs, edited: edited})
+}
+
+// lastUser is the index of the last user entry, -1 for none.
+func (inst *conversation) lastUser() (i int) {
+	for i = len(inst.entries) - 1; i >= 0; i-- {
+		if inst.entries[i].speaker == speakerUser {
+			return
+		}
+	}
+	return -1
+}
+
+// canRewind says the last turn was answered and can be taken back.
+func (inst *conversation) canRewind() bool {
+	return inst.mark != nil && inst.mark.user == inst.lastUser()
+}
+
+// rewind takes the last answered turn back: the transcript, the history
+// and the parent stand as they did before it. It returns the turn's text
+// and what an abandoned edit puts back.
+func (inst *conversation) rewind() (text string, undo *rewound, ok bool) {
+	if !inst.canRewind() {
+		return "", nil, false
+	}
+	m := *inst.mark
+	text = inst.entries[m.user].text
+	undo = &rewound{mark: turnMark{user: m.user, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut},
+		entries: append([]entry(nil), inst.entries[m.user:]...)}
+	inst.entries = inst.entries[:m.user:m.user]
+	inst.history, inst.parent, inst.lastIn, inst.lastOut = m.history, m.parent, m.lastIn, m.lastOut
+	inst.mark = nil
+	return text, undo, true
+}
+
+// restore puts back a turn rewind took, when nothing was sent since.
+func (inst *conversation) restore(undo *rewound) (ok bool) {
+	if undo == nil || len(inst.entries) != undo.mark.user {
+		return false
+	}
+	before := turnMark{user: undo.mark.user, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut}
+	inst.entries = append(inst.entries, undo.entries...)
+	inst.history, inst.parent, inst.lastIn, inst.lastOut = undo.mark.history, undo.mark.parent, undo.mark.lastIn, undo.mark.lastOut
+	inst.mark = &before
+	return true
+}
+
+// dropFailed takes back the last turn when it failed: a failed turn never
+// reached the history, so only the transcript changes. It returns the
+// turn's text, to send again or edit.
+func (inst *conversation) dropFailed() (text string, ok bool) {
+	i := inst.lastUser()
+	if i < 0 || !inst.entries[i].failed {
+		return "", false
+	}
+	text = inst.entries[i].text
+	inst.entries = inst.entries[:i:i]
+	return text, true
 }
 
 // land applies a finished turn: req is what was sent, res the answer or
 // err the failure. The user's entry is the last one begin added.
 func (inst *conversation) land(req llm.Request, res *llm.Response, err error, atMs int64) {
-	last := len(inst.entries) - 1
+	asked := inst.lastUser()
 	if err != nil || res == nil {
-		if last >= 0 {
-			inst.entries[last].failed = true
-			inst.entries[last].reason = failureReason(err)
-		}
+		inst.fail(asked, failureReason(err), failureOf(err))
 		return
 	}
+	inst.mark = &turnMark{user: asked, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut}
 	reply := openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls}
 	inst.history = append(append(inst.history[:0:0], req.Messages...), reply)
 	inst.parent = res.CallId
@@ -136,19 +255,32 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 		inst.land(req, nil, err, atMs)
 		return
 	}
-	asked := len(inst.entries) - 1
+	asked := inst.lastUser()
 	for _, a := range res.activity {
 		inst.entries = append(inst.entries, entry{speaker: speakerTool, text: a, atMs: atMs})
 	}
 	if res.stopped != "" {
 		// Not answered, so not resent (§SD3); the calls it made stay shown.
-		if asked >= 0 {
-			inst.entries[asked].failed, inst.entries[asked].reason = true, res.stopped
+		f := failureOf(res.stoppedErr)
+		if res.stoppedErr == nil {
+			f = failure{kind: "stopped", detail: res.stopped}
 		}
+		inst.fail(asked, res.stopped, f)
 		return
 	}
 	inst.land(req, &res.final, nil, atMs)
 	inst.history = append(inst.history[:0:0], res.messages...)
+}
+
+// fail marks the user entry i as not answered. A failed turn after an
+// answered one leaves nothing to take back but itself.
+func (inst *conversation) fail(i int, reason string, f failure) {
+	inst.mark = nil
+	if i < 0 {
+		return
+	}
+	e := &inst.entries[i]
+	e.failed, e.reason, e.fail = true, reason, f
 }
 
 // failureReason is the line a failed bubble shows.

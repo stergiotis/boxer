@@ -543,6 +543,9 @@ type turnResult struct {
 	final    llm.Response
 	activity []string
 	stopped  string
+	// stoppedErr is the model call's error behind stopped, nil when the
+	// rounds ran out.
+	stoppedErr error
 }
 
 // runTurn is one turn with Apps on: the changes note, then model calls and
@@ -575,7 +578,7 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		res, err = cli.Complete(ctx, r)
 		if err != nil {
 			if len(out.activity) > 0 && !errors.Is(err, context.Canceled) {
-				out.stopped, err = failureReason(err), nil
+				out.stopped, out.stoppedErr, err = failureReason(err), err, nil
 			}
 			return
 		}
