@@ -160,8 +160,11 @@ type State struct {
 	unfollow bool
 	window   int
 	jump     int32 // ordinal+1; 0 none
-	paneW    float32
-	shown    bool
+	// jumpTop brings the jump's message to the top of the view rather
+	// than its middle (ScrollToStart).
+	jumpTop bool
+	paneW   float32
+	shown   bool
 	// fits holds the measured width of the viewer's host-drawn bubbles, by
 	// ordinal (see blockFit).
 	fits map[int]blockFit
@@ -215,7 +218,17 @@ func (inst *State) JumpTo(ordinal int32) {
 		return
 	}
 	inst.jump = ordinal + 1
+	inst.jumpTop = false
 	inst.unfollow = true
+}
+
+// ScrollToStart asks the next Render to scroll so that a message's first line
+// is at the top of the view — where a reader starts a long answer that
+// just arrived — and releases the tail. A message shorter than what is
+// below it in the view ends up where following would have put it.
+func (inst *State) ScrollToStart(ordinal int32) {
+	inst.JumpTo(ordinal)
+	inst.jumpTop = ordinal >= 0
 }
 
 // Block is a host-drawn message body: Render runs at draw time inside the
@@ -253,6 +266,12 @@ type Input struct {
 	// BubbleFraction is the bubble's maximum width as a fraction of the
 	// pane's; 0 is the default.
 	BubbleFraction float32
+	// InteractiveBlocks gives a Block's own widgets the pointer: the
+	// bubbles sense no click, so nothing is selected and Result.Clicked
+	// stays -1, and a button, a code block's action row or selectable
+	// text drawn by a Block takes its clicks. A click-sensed frame wins
+	// the pointer over everything inside it.
+	InteractiveBlocks bool
 }
 
 // Result is what the frame's input did.

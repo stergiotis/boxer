@@ -351,8 +351,17 @@ func renderTable(s *segment, rc *renderCtx) {
 // 0-based index of the clicked button, reported in [Result.Actions]. text/lang/idx are passed rather than read off rc so
 // the call site stays adjacent to the CodeView it labels.
 func renderCodeActionButtons(rc *renderCtx, text, lang string, idx int) {
+	mask := ^uint64(0)
+	if rc.actionMask != nil {
+		if mask = rc.actionMask(text, lang); mask == 0 {
+			return
+		}
+	}
 	for range c.Horizontal().KeepIter() {
 		for btn, label := range rc.actionLabels {
+			if btn < 64 && mask&(1<<uint(btn)) == 0 {
+				continue
+			}
 			if c.Button(rc.ids.PrepareSeq(uint64(btn)), c.Atoms().Text(label).Keep()).
 				Small().SendResp().HasPrimaryClicked() {
 				rc.codeActions = append(rc.codeActions,

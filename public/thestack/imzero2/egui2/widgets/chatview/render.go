@@ -40,8 +40,9 @@ const (
 	// fitSlack keeps a measured body from wrapping its widest line again at
 	// exactly its own width.
 	fitSlack float32 = 1
-	// scrollAlignCenter / scrollAlignBottom are ScrollToCursor's alignment
-	// codes (0 top, 1 centre, 2 bottom).
+	// scrollAlignTop / scrollAlignCenter / scrollAlignBottom are
+	// ScrollToCursor's alignment codes (0 top, 1 centre, 2 bottom).
+	scrollAlignTop    uint8 = 0
 	scrollAlignCenter uint8 = 1
 	scrollAlignBottom uint8 = 2
 )
@@ -90,8 +91,11 @@ func Render(in Input) (res Result) {
 		// A jump is consumed at the start of the frame: a quote strip
 		// requests one mid-loop, after the quoted (earlier) row has been
 		// drawn, so it must survive to the next frame's loop.
-		jump := st.jump
-		st.jump = 0
+		jump, jumpAlign := st.jump, scrollAlignCenter
+		if st.jumpTop {
+			jumpAlign = scrollAlignTop
+		}
+		st.jump, st.jumpTop = 0, false
 		n := m.Len()
 		first := max(0, n-st.Window())
 		if jump > 0 {
@@ -121,7 +125,7 @@ func Render(in Input) (res Result) {
 			}
 			for _, r := range rows {
 				if jump > 0 && r.kind != rowDay && r.msg == jump-1 {
-					c.ScrollToCursor(scrollAlignCenter)
+					c.ScrollToCursor(jumpAlign)
 				}
 				renderRow(in, m, st, r, layout, bubbleW, dens, loc, &res)
 			}
@@ -346,8 +350,10 @@ func renderBubble(in Input, m *Model, st *State, i int, r row, layout LayoutE, m
 		Fill(fill).
 		CornerRadiusSides(nw, ne, sw, se).
 		Stroke(strokeW, stroke).
-		InnerMargin(styletokens.PaddingDefault(dens)).
-		SenseClick()
+		InnerMargin(styletokens.PaddingDefault(dens))
+	if !in.InteractiveBlocks {
+		frame = frame.SenseClick()
+	}
 	fid := frame.Id()
 	for range frame.KeepIter() {
 		// The frame's content inherits the column's layout (see
@@ -378,7 +384,7 @@ func renderBubble(in Input, m *Model, st *State, i int, r row, layout LayoutE, m
 		}
 		renderFooter(m, i, mine, loc)
 	}
-	if c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fid).HasPrimaryClicked() {
+	if !in.InteractiveBlocks && c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fid).HasPrimaryClicked() {
 		st.SetSelected(int32(i))
 		res.Clicked = int32(i)
 	}
