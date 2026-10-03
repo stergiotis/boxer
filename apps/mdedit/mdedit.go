@@ -33,8 +33,10 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -472,10 +474,38 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	// shape): the host is asked once whether it offers a model, off the
 	// frame, and the surface renders only once it said yes.
 	inst.startTransformDescribe()
+	if inst.handOver(ctx.LaunchConfig()) {
+		return
+	}
 	if inst.store != nil {
 		go inst.restore()
 	}
 	return
+}
+
+// handOver opens a document another app handed over (launchcfg,
+// ADR-0178's update of 2026-10-03) as a document of its own: the window
+// neither restores nor autosaves the one document mdedit keeps, so the
+// person's own draft is never overwritten, and the handed text stays
+// unsaved until it is saved to a file or copied out. It reports whether
+// the window was opened with one.
+func (inst *App) handOver(raw []byte) (handed bool) {
+	if len(raw) == 0 {
+		return false
+	}
+	l, err := buscodec.Decode[launchcfg.MdeditLaunch](raw)
+	if err != nil {
+		inst.logger.Warn().Err(err).Msg("mdedit: the launch config does not decode; opening as usual")
+		return false
+	}
+	inst.store = nil
+	inst.src = l.Text
+	name := l.Name
+	if name == "" {
+		name = "a handed-over document"
+	}
+	inst.status = "opened " + name + " — not autosaved: Save to keep it"
+	return true
 }
 
 // Unmount persists the buffer one last time, synchronously. Every other
