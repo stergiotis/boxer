@@ -262,6 +262,19 @@ type Projector struct {
 	// idSeed keeps two live PlayApps' pane probes apart, as the graph
 	// panels' does.
 	idSeed uint64
+	// shapeSchema and shapeWhy cache shapeReason's verdict per result.
+	shapeSchema *arrow.Schema
+	shapeWhy    string
+	// computeRequested is a Compute asked for by compute_projection (or
+	// the button through it); the pane's next draw starts the run over the
+	// result it draws.
+	computeRequested bool
+	// posX, posY are the layout as get_projection last copied it, for the
+	// run of posVersion; posSettled says it was copied settled.
+	posX, posY []float32
+	posVersion uint64
+	posAt      time.Time
+	posSettled bool
 }
 
 // NewProjector binds the Projector to the play app's CardDriver. The Projector
@@ -326,6 +339,11 @@ func (inst *Projector) Invalidate(schema *arrow.Schema, executed time.Time) (mat
 // to restart). The caller must have called Invalidate(schema, executed)
 // earlier this frame so the cache key is set.
 func (inst *Projector) Start(rec arrow.RecordBatch) {
+	// The run reads the card driver's, which the Table, Detail and Schema
+	// panes otherwise build for their own result: build it for this one.
+	if inst.cards != nil {
+		inst.cards.EnsureFor(rec.Schema())
+	}
 	inst.mu.Lock()
 	if inst.cancel != nil {
 		inst.mu.Unlock()
@@ -812,7 +830,16 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 			if c.Button(ids.PrepareStr("projectionCompute"),
 				c.Atoms().Text(label).Keep()).
 				SendResp().HasPrimaryClicked() {
-				p.Start(rec)
+				// The person's Compute goes through the catalog, as an
+				// agent's does (ADR-0270 §SD6).
+				args := ComputeProjectionArgs{Neighbours: int32(math.Round(p.kKnob)), MinCluster: int32(math.Round(p.mcsKnob)), Features: p.params.FeatureSet.String()}
+				playGesture(inst, opComputeProjection, args, func() { p.computeRequested = true })
+			}
+			if p.computeRequested {
+				p.computeRequested = false
+				if nRows >= projectionMinRows {
+					p.Start(rec)
+				}
 			}
 		}
 		c.Separator().Vertical().Send()

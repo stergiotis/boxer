@@ -625,7 +625,12 @@ no usable path.
 
 ### Projection
 
-A neighbour embedding of the result's feature columns, drawn as a live graph.
+A neighbour embedding of the result's entities, drawn as a live graph. The
+features are read off each row's leeway card, so the result must be
+**leeway-shaped** — the rows of a leeway table such as `boxer.facts`, its columns as
+stored (`SELECT * FROM boxer.facts LIMIT 3000`, or a column subset that keeps the
+table's shape); an aggregate, a join or hand-picked columns are not, and the tab
+says so instead of offering Compute.
 Click **Compute projection** to run it (needs at least three rows): the rows' features
 become a k-nearest-neighbour graph, HDBSCAN clusters it, and the graph is laid out
 under the neighbour-embedding force model. The button becomes **Cancel** while it
@@ -699,6 +704,16 @@ SQL, its precision, recall and coverage. A copied feature rule runs as written
 against the rows dataset, and the attribute contrasts are an `arrayJoin(items)`
 with a `GROUP BY cluster`. Publishing again republishes onto the same handles;
 another play window reads them by the same names; they live for the session only.
+
+**For an agent.** `compute_projection` runs the tab with optional neighbours,
+min cluster and feature set, and raises it — the layout moves only while the tab is
+drawn. `get_projection` reports the run: its status and error, the clusters with
+their sizes and the noise, the status line, whether the layout has settled, and a
+page of points with their row, cluster, probability and position.
+`explain_clusters` returns "why these clusters", by features (at a rule depth, one
+tree per cluster or the one partition) or by attributes: per cluster the SQL rule,
+its fit and what sets the cluster apart — the same text the section shows.
+`list_panes` says up front when a result is not leeway-shaped.
 
 ### Timeline
 

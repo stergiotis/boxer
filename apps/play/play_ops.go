@@ -178,6 +178,8 @@ type opsSnap struct {
 	// client is the window's endpoint client, which the schema reads probe
 	// off the render goroutine.
 	client *Client
+	// projection is the Projection pane's run (play_ops_projection.go).
+	projection projectionOpsSnap
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -334,6 +336,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addSchemaOps(s)
 	addRewriteOps(s)
 	addDatasetOps(s)
+	addProjectionOps(s)
 	return
 }()
 
@@ -416,6 +419,7 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	for _, n := range p.currentSplit.Nodes {
 		sn.panes.Nodes = append(sn.panes.Nodes, string(n.ID))
 	}
+	sn.projection = snapshotProjection(p, sn.panes)
 	return
 }
 

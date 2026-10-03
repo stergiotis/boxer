@@ -462,10 +462,13 @@ type PlayApp struct {
 	// clock — tests and scripted scenes.
 	// rowGlossSt is the row-value gloss resolution of the result on screen
 	// (ADR-0245 §SD2), shared by the grids, Detail and Chat.
-	rowGlossSt    rowGlossState
-	audio         *audioSession
-	frameResult   ResultID
-	audioNoDevice bool
+	rowGlossSt  rowGlossState
+	audio       *audioSession
+	frameResult ResultID
+	// projFrameDigest is the projection's run as this frame saw it
+	// (play_ops_projection.go).
+	projFrameDigest string
+	audioNoDevice   bool
 
 	// netSource is the pair of lanes the graph contract is fed from — the
 	// `edges` and `vertices` CTEs of the user's query — SHARED by the two graph
@@ -1588,6 +1591,9 @@ func (inst *PlayApp) render() error {
 			// the same per-frame view. First Render freezes the set (D4).
 			inst.tabs.freeze()
 			inst.audioFollowResult(resultID)
+			// The projection's run lands on its own goroutine; its revision
+			// moves here, inside a frame, where the change is the app's.
+			inst.projFrameDigest = inst.projectionDigest()
 			frame := TabFrame{
 				Rec: rec, Schema: schema, NumRows: numRows,
 				Loading: loading, Elapsed: elapsed, Summary: summary,
