@@ -2,6 +2,8 @@ package basemap
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -155,4 +157,33 @@ func TestDestinationTrimsCAFile(t *testing.T) {
 func TestTilesUnboundFails(t *testing.T) {
 	_, err := NewTiles(nil, "test").Get(context.Background(), "https://tile.openstreetmap.org/1/1/1.png")
 	require.ErrorIs(t, err, errUnbound)
+}
+
+// fetchDirect returns a tile's bytes, refuses a non-200 answer, and refuses
+// a body past the loader's own cap.
+func TestFetchDirect(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/0/0.png":
+			_, _ = w.Write([]byte("png"))
+		case "/big.png":
+			_, _ = w.Write(make([]byte, maxDirectTileBytes+1))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	data, err := fetchDirect(context.Background(), srv.URL+"/1/0/0.png")
+	require.NoError(t, err)
+	require.Equal(t, "png", string(data))
+	_, err = fetchDirect(context.Background(), srv.URL+"/9/9/9.png")
+	require.ErrorContains(t, err, "tile fetch")
+	_, err = fetchDirect(context.Background(), srv.URL+"/big.png")
+	require.ErrorContains(t, err, "too large")
+}
+
+// Outside the browser tab a map shows a basemap by default only when a tile
+// server was configured; the tab turns it on (direct_wasip1.go).
+func TestDefaultOnFollowsConfiguredOutsideTheTab(t *testing.T) {
+	require.Equal(t, Configured(), DefaultOn())
 }

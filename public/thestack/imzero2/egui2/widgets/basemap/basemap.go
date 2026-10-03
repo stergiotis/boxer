@@ -32,12 +32,16 @@ package basemap
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
 	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -124,6 +128,12 @@ func Configured() bool {
 	raw, set := TileURL.Lookup()
 	return set && strings.TrimSpace(raw) != ""
 }
+
+// DefaultOn reports whether a map that defaults to "no basemap" should show
+// one: a tile server was configured, or this is the browser tab, where the
+// country outlines that stand in for a basemap cost more per frame than the
+// tiles do (ADR-0262 Update 2026-10-03).
+func DefaultOn() bool { return Configured() || fetchesDirect }
 
 // clampMaxZoom maps the BOXER_MAP_TILE_MAX_ZOOM int64 into the widget's uint8
 // tileMaxZoom argument. A value <=0 is "unset" (set=false → keep the widget's
@@ -234,11 +244,47 @@ var errUnbound = errors.New("basemap: no bus bound — the map is not hosted")
 
 // Get fetches one tile.
 func (inst *Tiles) Get(ctx context.Context, url string) (data []byte, err error) {
+	if fetchesDirect {
+		return fetchDirect(ctx, url)
+	}
 	g := inst.getter.Load()
 	if g == nil {
 		return nil, errUnbound
 	}
 	return g.Get(ctx, url)
+}
+
+// maxDirectTileBytes bounds a tile fetched directly, like the loader's own cap.
+const maxDirectTileBytes = 4 << 20
+
+// fetchDirect fetches one tile over the process's own HTTP transport — the
+// browser tab's host transport, where there is no egress service to ask.
+func fetchDirect(ctx context.Context, url string) (data []byte, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		err = eh.Errorf("basemap: tile request: %w", err)
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		err = eh.Errorf("basemap: tile fetch: %w", err)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		err = eb.Build().Int("status", resp.StatusCode).Str("url", url).Errorf("basemap: tile fetch")
+		return
+	}
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxDirectTileBytes+1))
+	if err != nil {
+		err = eh.Errorf("basemap: tile read: %w", err)
+		return
+	}
+	if len(data) > maxDirectTileBytes {
+		err = eb.Build().Int("limit", maxDirectTileBytes).Str("url", url).Errorf("basemap: tile too large")
+		data = nil
+	}
+	return
 }
 
 // PortolanLoader is the loader options for a map whose tiles come through
