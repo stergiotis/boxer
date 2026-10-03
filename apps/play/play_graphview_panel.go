@@ -1106,7 +1106,7 @@ func (inst *GraphviewDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %s", r)
 	}
 	if inst.hosted() {
-		if basemap.Configured() {
+		if basemap.DefaultOn() {
 			b.WriteString(" · located: over a basemap")
 		} else {
 			b.WriteString(" · located: over country outlines (no tile server configured)")
@@ -1778,7 +1778,7 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 			Loader:  basemap.PortolanLoader(inst.tiles),
 			Center:  portolan.LL(lat0, lon0),
 			Zoom:    netWebMercatorZoom,
-			NoTiles: !basemap.Configured(),
+			NoTiles: !basemap.DefaultOn(),
 		})
 		inst.land = &landoverlay.Layer{}
 		if a, err := worldmap.LoadAtlas(); err == nil {
@@ -1803,7 +1803,7 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 	inst.pm.SetPointerVeto(claim.Pointer)
 
 	inst.pm.Render(w, h, func(p portolan.Projector) {
-		if !basemap.Configured() && inst.atlas != nil {
+		if !basemap.DefaultOn() && inst.atlas != nil {
 			inst.land.Paint(p, inst.atlas, landoverlay.DefaultStyle())
 		}
 		// The map's handlers ran at the top of this Render, so the paint

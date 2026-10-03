@@ -405,7 +405,7 @@ func NewMapDriver(ids *c.WidgetIdStack, client *Client) *MapDriver {
 	// A configured shared tile server (BOXER_MAP_TILE_URL) signals the operator
 	// wants basemaps, so show one by default rather than the offline default;
 	// the "no basemap" checkbox still toggles it. Unset keeps noTiles=true.
-	if basemap.Configured() {
+	if basemap.DefaultOn() {
 		d.noTiles = false
 	}
 	if a, err := worldmap.LoadAtlas(); err == nil {

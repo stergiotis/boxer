@@ -363,7 +363,7 @@ func NewVectorFieldDriver(ids *c.WidgetIdStack, client *Client, openQuery func(s
 		showSites:   true,
 		land:        &landoverlay.Layer{},
 		scrubber:    timescrubber.New(ids, "vf-time", timescrubber.Options{ValueName: "mean speed in view"}),
-		noTiles:     !basemap.Configured(),
+		noTiles:     !basemap.DefaultOn(),
 		density:     5,
 		opacity:     0.9,
 		emittedStep: -1,
