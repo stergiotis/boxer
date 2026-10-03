@@ -203,7 +203,12 @@ through the host:
 
 - **Registration.** The person registers the app as a coordinator
   (`BOXER_AGENT_COORDINATORS`); the manifest's `runtime.agent` grant alone
-  lets it ask for nothing.
+  lets it ask for nothing. A window of a registered chat starts with Apps
+  on, since the registration is the intent Apps serves; the person can
+  untick it before the first send. A conversation started without Apps is
+  marked "no apps" in the bar — its model has no tools and says so when
+  asked to open a window — and the empty window says the same before the
+  first send.
 - **Fixed tools.** `request_access`, `list_windows`, `describe_app`,
   `call_operation`, `open_window` and `stop_task`. Operation schemas load on demand
   through `describe_app`; a call's key is the model's tool-call id.

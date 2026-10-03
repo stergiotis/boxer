@@ -109,7 +109,7 @@ type pendingTurn struct {
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get(),
+	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
 		advanced: AdvancedSeed.Get(), pubs: newStatsPublishers()}
 	return
 }

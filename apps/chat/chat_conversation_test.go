@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -365,4 +366,15 @@ func TestAnOutOfCreditFailureSaysSo(t *testing.T) {
 func TestACutOffAnswerSaysWhy(t *testing.T) {
 	err := &llm.CallError{Kind: "incomplete", Reason: "the provider ended the answer early (finish_reason \"length\") after 4096 output tokens"}
 	assert.Contains(t, failureReason(fmt.Errorf("wrapped: %w", err)), "after 4096 output tokens")
+}
+
+// A chat the person registered as a coordinator starts with Apps on: the
+// registration is the intent Apps serves.
+func TestARegisteredCoordinatorStartsWithAppsOn(t *testing.T) {
+	agent.CoordinatorsEnv.SetForTest(t, "")
+	assert.False(t, newApp().apps)
+	agent.CoordinatorsEnv.SetForTest(t, "other, chat")
+	assert.True(t, newApp().apps)
+	agent.CoordinatorsEnv.SetForTest(t, string(ManifestId))
+	assert.True(t, newApp().apps)
 }

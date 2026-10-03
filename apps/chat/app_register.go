@@ -60,13 +60,26 @@ var DraftSeed = env.NewString(env.Spec{
 })
 
 // AppsSeed turns Apps on in a new window (ADR-0009 seed variable): the
-// model may then ask the person for windows to work in.
+// model may then ask the person for windows to work in. A chat the person
+// registered as a coordinator starts with Apps on without it.
 var AppsSeed = env.NewBool(env.Spec{
 	Name:        "BOXER_CHAT_APPS",
 	Default:     "false",
-	Description: "turn on Apps in a new chat window: the model may ask the person for windows to work in (ADR-0269); for scenes and demos",
+	Description: "turn on Apps in a new chat window: the model may ask the person for windows to work in (ADR-0269); a chat listed in BOXER_AGENT_COORDINATORS starts with Apps on anyway",
 	Category:    env.CategoryE("boxer-chat"),
 })
+
+// registeredCoordinator says the person registered the chat as a
+// coordinator (BOXER_AGENT_COORDINATORS) — the intent Apps serves, so a new
+// window starts with it on.
+func registeredCoordinator() (yes bool) {
+	for _, n := range agent.ParseCoordinators(agent.CoordinatorsEnv.Get()) {
+		if n == string(ManifestId) || n == ManifestId.SubjectAlias() {
+			return true
+		}
+	}
+	return
+}
 
 func init() {
 	err := app.DefaultRegistry.RegisterFactory(manifest, func() (a app.AppI, ctorErr error) {
