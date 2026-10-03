@@ -98,6 +98,9 @@ type TableVerdict struct {
 	// the source, inserts on the target, and hashes on both sides (§SD4). It
 	// is in source column order.
 	CopyColumns []string `json:"copyColumns,omitempty"`
+	// HashAsText are the copy columns of a JSON type, which the row hash
+	// reads through toJSONString ([DigestSpec.RowHashExpr]).
+	HashAsText []string `json:"hashAsText,omitempty"`
 	// Leeway is true when the source table classifies as leeway (ADR-0170).
 	Leeway bool `json:"leeway"`
 	// LeewayRelation reads "the source is a … of the target", from

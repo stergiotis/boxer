@@ -131,7 +131,13 @@ func (inst *Inventory) UserDatabases() (names []string) {
 
 // jsonSettings makes 64-bit integers plain JSON numbers rather than quoted
 // strings, so they decode into uint64 fields.
-const jsonSettings = " SETTINGS output_format_json_quote_64bit_integers = 0 FORMAT JSONEachRow"
+// jsonSettings close every query whose rows are read as JSON.
+// prefer_column_name_to_alias makes a table's column win over an alias of
+// the same name in the same SELECT: the queries alias their outputs (chunk,
+// pid, kh, rh, sample, type, …), and a table may have a column of that name,
+// which the hashes, the chunk expression and the filter must read as the
+// column (ADR-0259 §SD5).
+const jsonSettings = " SETTINGS output_format_json_quote_64bit_integers = 0, prefer_column_name_to_alias = 1 FORMAT JSONEachRow"
 
 func systemExclusion(column string) (clause string) {
 	quoted := make([]string, 0, len(datacatalog.SystemDatabases))

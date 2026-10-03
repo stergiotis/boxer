@@ -68,3 +68,11 @@ func TestDigestSpecs_TargetWithoutPartitionIds(t *testing.T) {
 	_, dst, _ = pt.DigestSpecs(false)
 	assert.False(t, dst.NoPartitionIds)
 }
+
+// The row hash reads a JSON column as text, so no session setting moves it.
+func TestRowHashExprReadsJSONAsText(t *testing.T) {
+	spec := DigestSpec{CopyColumns: []string{"n", "j"}, HashAsText: []string{"j"}}
+	assert.Equal(t, "cityHash64(formatRowNoNewline('RowBinary', `n`, toJSONString(`j`)))", spec.RowHashExpr())
+	spec.HashAsText = nil
+	assert.Equal(t, "cityHash64(formatRowNoNewline('RowBinary', `n`, `j`))", spec.RowHashExpr())
+}

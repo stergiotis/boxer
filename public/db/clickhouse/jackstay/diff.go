@@ -490,8 +490,8 @@ func (inst *PlanTable) DigestSpecs(final bool) (src DigestSpec, dst DigestSpec, 
 	if inst.Chunking != nil {
 		c = *inst.Chunking
 	}
-	src = DigestSpec{Ref: inst.Source, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.Engine), Filter: inst.Filter}
-	dst = DigestSpec{Ref: inst.Target, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.TargetEngine), Filter: inst.Filter,
+	src = DigestSpec{Ref: inst.Source, KeyExprs: keys, CopyColumns: inst.CopyColumns, HashAsText: inst.HashAsText, Chunking: c, Final: final && IsMergeEngine(inst.Engine), Filter: inst.Filter}
+	dst = DigestSpec{Ref: inst.Target, KeyExprs: keys, CopyColumns: inst.CopyColumns, HashAsText: inst.HashAsText, Chunking: c, Final: final && IsMergeEngine(inst.TargetEngine), Filter: inst.Filter,
 		NoPartitionIds: !isMergeTreeEngine(inst.TargetEngine)}
 	maybeSpurious = (IsMergeEngine(inst.Engine) && !src.Final) || (IsMergeEngine(inst.TargetEngine) && !dst.Final)
 	return

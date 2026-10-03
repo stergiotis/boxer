@@ -3,6 +3,7 @@ package jackstay
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -167,6 +168,7 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 			err = eb.Build().Str("table", st.Ref.String()).Errorf("unable to judge table: %w", err)
 			return
 		}
+		v.HashAsText = jsonColumns(st, v.CopyColumns)
 		if sel.LeewayOnly && !v.Leeway {
 			continue
 		}
@@ -569,6 +571,20 @@ func (inst *Plan) Clone() (out Plan, err error) {
 	err = json.Unmarshal(data, &out)
 	if err != nil {
 		err = eh.Errorf("unable to copy plan: %w", err)
+	}
+	return
+}
+
+// jsonType matches a column type that is or holds a JSON value.
+var jsonType = regexp.MustCompile(`\bJSON\b|\bObject\(`)
+
+// jsonColumns are the copy columns whose type is or holds JSON
+// ([TableVerdict.HashAsText]).
+func jsonColumns(src *TableInfo, copyColumns []string) (cols []string) {
+	for _, name := range copyColumns {
+		if c, has := src.Column(name); has && jsonType.MatchString(c.Type) {
+			cols = append(cols, name)
+		}
 	}
 	return
 }

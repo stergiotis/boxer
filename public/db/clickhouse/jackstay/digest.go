@@ -22,7 +22,7 @@ const rowBinarySettings = "output_format_binary_encode_types_in_binary_format = 
 // digestSettings close every query that evaluates [Chunking.ChunkExpr] or a
 // row hash, [DigestSpec.ChunkListQuery] included, so chunk ids and digests
 // from any two such queries are comparable by construction.
-const digestSettings = " SETTINGS output_format_json_quote_64bit_integers = 0, " + rowBinarySettings + " FORMAT JSONEachRow"
+const digestSettings = " SETTINGS output_format_json_quote_64bit_integers = 0, prefer_column_name_to_alias = 1, " + rowBinarySettings + " FORMAT JSONEachRow"
 
 // DigestSpec is what one side's digest queries read: the table, its key, the
 // columns the row digest covers and the chunk layout. Source and target specs
@@ -31,7 +31,9 @@ type DigestSpec struct {
 	Ref         datacatalog.TableRef
 	KeyExprs    []string
 	CopyColumns []string
-	Chunking    Chunking
+	// HashAsText are the copy columns the row hash reads as JSON text.
+	HashAsText []string
+	Chunking   Chunking
 	// Final reads the table with FINAL, so merge-semantics engines are
 	// compared on their merged rows.
 	Final bool
@@ -66,8 +68,23 @@ type specSel struct {
 
 // RowHashExpr hashes the copied columns' RowBinary bytes. The list is
 // explicit and in plan order, never `*`.
+//
+// A JSON column's RowBinary depends on output_format_binary_write_json_as_string,
+// which a SELECT can pin but a DELETE's mutation does not take: it evaluates
+// its WHERE under the server's defaults. So the hash reads a JSON column
+// ([DigestSpec.HashAsText]) as toJSONString, which is the bytes the pinned
+// setting writes and depends on no setting, so the repair's DELETE removes
+// the rows the diff's leaves named.
 func (inst *DigestSpec) RowHashExpr() (sql string) {
-	return "cityHash64(formatRowNoNewline('RowBinary', " + inst.columnList() + "))"
+	cols := make([]string, 0, len(inst.CopyColumns))
+	for _, c := range inst.CopyColumns {
+		if slices.Contains(inst.HashAsText, c) {
+			cols = append(cols, "toJSONString("+QuoteIdent(c)+")")
+			continue
+		}
+		cols = append(cols, QuoteIdent(c))
+	}
+	return "cityHash64(formatRowNoNewline('RowBinary', " + strings.Join(cols, ", ") + "))"
 }
 
 // identity is what names a row: the sorting key, or, for a table with none

@@ -683,6 +683,29 @@ Deferred: the wizard's windows do not take the run lock. The fs broker that
 holds their plans offers no exclusive create, so two windows, or a window and
 the CLI on the window's data area, can still run one plan at once.
 
+### 2026-10-03 — What the live server showed
+
+Two of the fixes above rested on server behaviour, and a live server
+contradicted one and exposed a second fault:
+
+- **A DELETE does not take the settings it carries into its WHERE.** A
+  lightweight `DELETE` and an `ALTER TABLE … DELETE` alike evaluate the
+  predicate under the server's defaults. A JSON column's RowBinary depends on
+  `output_format_binary_write_json_as_string`, so a keyless table's leaf
+  predicate selected other rows in the repair's DELETE than in the diff. The
+  row hash now reads a JSON column through `toJSONString`, whose bytes equal
+  the pinned form, so digests already taken stay valid and no setting moves
+  the predicate. The plan records those columns (`hashAsText`).
+- **An alias could stand in for a column.** The digest queries alias their
+  outputs (`chunk`, `pid`, `kh`, `rh`, …) in the SELECT that reads the table,
+  and ClickHouse resolves a name to the alias first. A table with a column
+  named `kh` was hashed without that column's values, so a difference in it
+  went unseen by the diff and by the sync's verification. Every query the
+  engine reads as JSON now sets `prefer_column_name_to_alias = 1`.
+
+The Replicated refusal is not yet run against a server: the test lane's
+server has no Keeper, and its test skips.
+
 ## References
 
 - [ADR-0170](./0170-data-catalog-competence.md) — the data catalog: classification, restoration, shape relation.
