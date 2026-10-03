@@ -85,20 +85,23 @@ func (inst *Inst) renderDetailHead(ids *c.WidgetIdStack, m app.Manifest) {
 // window appears only while a window exists, since Open already opens one
 // otherwise.
 //
-// Open draws itself selected while the row list holds focus, because that is
-// exactly when Space and Enter perform it (keys.go). It is a readout of an
-// armed action rather than a state of the app — "Raise" already says whether
-// a window exists — and it is what makes the keyboard contract visible to
-// someone who arrived by clicking a row rather than by reading an ADR.
+// Open is the pane's primary button (ADR-0273). While the row list holds
+// focus, Space and Enter perform it (keys.go), and a weak hint at the end of
+// the row says so: it is what makes the keyboard contract visible to someone
+// who arrived by clicking a row rather than by reading an ADR. The hint
+// replaces drawing Open selected, which swapped the primary fill for the
+// selection colours exactly while the button was armed.
 func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 	_, isOpen := inst.openAppSet()[m.Id]
 	label := icons.PhArrowSquareOut + " Open"
+	hint := "Enter opens"
 	if isOpen {
 		label = icons.PhArrowSquareOut + " Raise"
+		hint = "Enter raises"
 	}
 	for range c.Horizontal().KeepIter() {
 		if c.Button(ids.PrepareStr("detail-open"), c.Atoms().Text(label).Keep()).
-			Selected(inst.listHasFocus()).
+			Kind(c.ButtonKindPrimary).
 			SendResp().HasPrimaryClicked() {
 			inst.open(m.Id)
 		}
@@ -122,6 +125,11 @@ func (inst *Inst) renderDetailActions(ids *c.WidgetIdStack, m app.Manifest) {
 			if c.Button(ids.PrepareStr("detail-inspect"), c.Atoms().Text(icons.PhMagnifyingGlass+" Inspect").Keep()).
 				SendResp().HasPrimaryClicked() {
 				inst.inspectApp(m.Id)
+			}
+		}
+		if inst.listHasFocus() {
+			for rt := range c.RichTextLabel(hint) {
+				rt.Small().Weak()
 			}
 		}
 	}
