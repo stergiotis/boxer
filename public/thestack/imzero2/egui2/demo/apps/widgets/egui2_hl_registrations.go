@@ -254,6 +254,19 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
+		Name: "landbench", Category: "Maps & geo", Title: icons.IconGlobe + " land bench (portolan land trial harness)",
+		Stage:       [2]float32{1024, 760},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagSkipInTour | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindDX,
+		Description: "The measurement harness of the land frame-cost trial (doc/trials/portolan-land-frame-cost): one map, the landoverlay, a view and a paint arm — filled as shipped, outlines only, or no layer — and a window of frames summarised into a label and a log line. Not a showcase; the trial's run script drives it.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newLandBenchState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoLandBench(ids, state.(*landBenchState))
+		},
+	})
+	registry.Register(registry.Demo{
 		Name: "mapraster", Category: "Maps & geo", Title: icons.IconGlobe + " mapRaster (in-DB geo raster)",
 		Stage:       [2]float32{760, 600},
 		Flags:       registry.DemoFlagNeedsLargeArea,
