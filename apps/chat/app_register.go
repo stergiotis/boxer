@@ -20,8 +20,8 @@ const ManifestId app.AppIdT = "github.com/stergiotis/boxer/apps/chat"
 // app sends text to the host's model and may ask for its conversations to
 // be kept; it reads nothing back. With Apps on it works in shared windows,
 // and on request it publishes its statistics and opens play on them, on a
-// code block's SQL, or on a failed call's record; it copies a message to
-// the clipboard.
+// code block's SQL, or on a failed call's record, opens mdedit on the
+// conversation, and copies a message to the clipboard.
 var manifest = app.Manifest{
 	Id:           ManifestId,
 	Version:      "0.1.0",
@@ -44,7 +44,7 @@ var manifest = app.Manifest{
 			app.SubjectFilter{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,
 				Reason: "chat: publish the window's token and answer statistics as ad-hoc datasets for Open in play (ADR-0240)"},
 			app.SubjectFilter{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
-				Reason: "chat: Open in play — a play window on the statistics, a reply's SQL or a failed call's record (ADR-0135)"},
+				Reason: "chat: Open in play — a play window on the statistics, a reply's SQL or a failed call's record — and Open in mdedit on the conversation (ADR-0135)"},
 			app.SubjectFilter{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
 				Reason: "chat: copy a message, a code block or a failure's details to the clipboard"})...,
 	),

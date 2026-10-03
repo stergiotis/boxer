@@ -130,6 +130,15 @@ type conversation struct {
 	// mark is the last answered turn's, nil when there is none or a turn
 	// failed after it.
 	mark *turnMark
+	// title is what the conversation is called, titleSource where that
+	// came from (chat_title.go); titleAsked says the model was asked once,
+	// titleNote why its answer did not land.
+	title       string
+	titleSource titleSourceE
+	titleAsked  bool
+	titleNote   string
+	// startedAt is the first send, for the transcript's header.
+	startedAt int64
 }
 
 // minted salts conversation ids minted in this process.
@@ -159,6 +168,12 @@ func (inst *conversation) request(text string) (r llm.Request) {
 // begin shows the user's message as sent; edited marks it as an edit of
 // a turn taken back.
 func (inst *conversation) begin(text string, atMs int64, edited bool) {
+	if !inst.started {
+		inst.startedAt = atMs
+	}
+	if inst.titleSource == titleNone {
+		inst.title, inst.titleSource = firstLineTitle(text), titleFirstLine
+	}
 	inst.started = true
 	inst.entries = append(inst.entries, entry{speaker: speakerUser, text: text, atMs: atMs, edited: edited})
 }

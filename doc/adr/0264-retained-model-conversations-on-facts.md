@@ -206,7 +206,9 @@ too.
   Whether confined text may be kept on a non-local store is open (Q1).
 - **Conversation titles and non-call events** (rename, delete-from-list).
   No model call carries them; a small write verb, or a title as the first
-  turn's purpose, is the next decision.
+  turn's purpose, is the next decision. The chat app titles a
+  conversation for its window session (ADR-0265 §SD4); keeping the title
+  is decided with resume.
 - **Streaming** stays deferred (ADR-0254 §SD7); a streamed turn would be
   kept once, when it completes.
 - **Summaries in a window.** A message that stands in for an omitted

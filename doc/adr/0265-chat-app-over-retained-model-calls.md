@@ -144,10 +144,24 @@ its own (SD5).
   the counts are recorded — the one "nothing kept" choice a user has,
   the temporary chat of the products surveyed. It is fixed at the first
   send, so a conversation is kept whole or not at all.
-- **The context used**: the last call's input and output tokens, the
-  only warning before a conversation outgrows the model (SD3). It is a
-  count without a ceiling: `llm.describe` reports the completion limit,
-  not the model's context size.
+- **The context used**: the last call's input and output tokens against
+  the model's context size, which `llm.describe` reports when the host
+  knows it (ADR-0254, 2026-10-03 update) — a meter, and from 80 % a line
+  above the composer that says the next answer may not fit and New
+  conversation is the way on (SD3). Without a size it is a count.
+- **The title.** A conversation is called by the first line of its first
+  message until the first answer lands; the app then asks the model once
+  for a title of a few words — on `llm.complete`, never kept, under the
+  sensitivity the conversation holds — and a person's rename wins over
+  both. The title lives with the window, like the conversation; keeping
+  it is decided with resume (SD5). Its hover says where it came from, and
+  why the model's did not land when it did not.
+- **Open in mdedit** hands the conversation to a new mdedit window as a
+  markdown document (ADR-0178, 2026-10-03 update): the title, the model,
+  when it started, whether it was kept, its id, then every message under a
+  heading of its own, the tool calls as a list and a failure as a callout
+  with its details. It is the branch the window shows. mdedit holds it
+  unsaved, apart from the document it keeps.
 - **New conversation** clears the transcript and mints a new id.
 - **Where past conversations are.** The app says, once, that a closed
   conversation is read in play, since a user expects history to survive
@@ -162,7 +176,8 @@ its own (SD5).
   and scoped to the caller — the `app_logs` shape.
 - **Tools beyond the coordinator's** (SD6): a capture the model views as
   an image, the operations of apps that serve no catalog.
-- **Streaming** and **titles** (ADR-0264 §SD7).
+- **Streaming** (ADR-0264 §SD7), and **keeping a title** — decided with
+  resume, which is what would read it.
 - **Edit and regenerate of an earlier turn**, and **the branches side by
   side** — a regenerated answer's earlier versions, an edited message's
   earlier text. SD3 takes back the last turn only, and shows one branch.
@@ -255,7 +270,9 @@ through the host:
   scripted model (`BOXER_LLM_SCRIPT`, ADR-0269 M6): a turn sent, its SQL
   opened in play, the answer regenerated, the turn edited and put back;
   and, against an endpoint that refuses the connection, a failure's
-  details copied and its call record opened in play.
+  details copied and its call record opened in play; the model's title
+  replacing the first line, a stated context of two tokens filled, and
+  the conversation opened in mdedit.
 - **What would fail.** A reply appended differently from how it came
   back makes every turn keep its whole history; the fake-provider test
   pins it by checking `RetainedFrom` on the second call.
@@ -266,7 +283,8 @@ Proposed — awaiting review by the code owner. Revised in place on
 2026-10-01 for ADR-0269's M5: the coordinator of SD6, built and tested
 against a scripted model over the host's services. Revised in place on 2026-10-03: the last turn
 taken back (SD3), message actions, inspectable failures and the layout of
-SD4, built and scene-run.
+SD4, built and scene-run; and the title, the context meter and Open in
+mdedit of SD4.
 
 Built 2026-09-27, in the working tree, as the chat app beside the other
 apps. The default lane passes: the turn loop against the llm service over

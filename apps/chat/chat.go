@@ -79,6 +79,14 @@ type App struct {
 	// once it is drawn.
 	later []func()
 
+	// titleJob asks the model for the conversation's title
+	// (chat_title.go); renaming is the title's inline editor, renameDraft
+	// its text and renameId its widget, whose Enter and Escape it captures.
+	titleJob    bgjob.Runner[titled]
+	renaming    bool
+	renameDraft string
+	renameId    uint64
+
 	// advanced shows the Statistics panel (AdvancedSeed); stats are the
 	// window's records, across its conversations, and showStats whether
 	// the panel is open. handover publishes them and opens play.
@@ -143,6 +151,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.describe.Cancel()
 	inst.handover.Cancel()
 	inst.action.Cancel()
+	inst.titleJob.Cancel()
 	for _, k := range inst.bandKeys {
 		ecdf.CancelBandJob(k)
 	}
@@ -164,6 +173,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 func (inst *App) drain() {
 	inst.drainHandover()
 	inst.drainAction()
+	inst.drainTitle()
 	if d, _, ok := inst.describe.TakeResult(); ok {
 		inst.model, inst.answered = *d, true
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {
@@ -187,6 +197,7 @@ func (inst *App) drain() {
 		inst.conv.landTurn(p.req, res, nil, now)
 		inst.pending = nil
 		inst.view.ScrollToStart(asked)
+		inst.maybeTitle()
 		return
 	}
 	defer func() {
@@ -275,7 +286,9 @@ func (inst *App) startTurn(text string) (started bool) {
 // its answer — and starts over.
 func (inst *App) newConversation() {
 	inst.turn.Invalidate()
+	inst.titleJob.Invalidate()
 	inst.pending = nil
+	inst.renaming = false
 	if inst.coord != nil {
 		if h := inst.coord.handle(); h != "" {
 			// A task belongs to one conversation (ADR-0269 §SD6).

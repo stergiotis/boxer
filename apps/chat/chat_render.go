@@ -51,6 +51,12 @@ const (
 	tipRegenerate = "Answer the last message again; this answer is replaced. A kept conversation keeps both."
 	tipCopyError  = "Copy the failure's details"
 	tipOpenCall   = "Open the call's row of keelson('llm_calls') in play"
+	tipMdedit     = "Open this conversation as a markdown document in mdedit — a document of its own, not autosaved: save it there to keep it"
+
+	// contextBarW is the context meter's width; contextWarnFrac how full
+	// the context is when the meter turns and the composer warns.
+	contextBarW     float32 = 180
+	contextWarnFrac float32 = 0.8
 )
 
 var (
@@ -65,7 +71,13 @@ var (
 	atomsCopyError  = c.Atoms().Text(icons.PhCopy + " Copy details").Keep()
 	atomsOpenCall   = c.Atoms().Text(icons.PhTable + " Open call in play").Keep()
 	atomsCancelEdit = c.Atoms().Text("Cancel edit").Keep()
+	atomsMdedit     = c.Atoms().Text(icons.PhMarkdownLogo + " Open in mdedit").Keep()
+	atomsRenameOk   = c.Atoms().Text(icons.PhCheck).Keep()
 )
+
+// renameKeyMask is what the title's editor captures: Enter keeps the
+// title, Escape leaves it.
+var renameKeyMask = keycodes.MaskOf(keycodes.Enter, keycodes.Escape)
 
 // codeLabels are the buttons above a reply's code block: Copy on every
 // block, Open in play on SQL (codeMask).
@@ -110,6 +122,9 @@ func (inst *App) render() {
 // is on, then at most one notice.
 func (inst *App) renderBar() {
 	conv := inst.conv
+	if conv.started {
+		inst.renderTitle()
+	}
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(inst.ids.PrepareStr("new"), atomsNew).SendResp().HasPrimaryClicked() {
 			inst.newConversation()
@@ -136,11 +151,7 @@ func (inst *App) renderBar() {
 				}
 			}
 		}
-		if used := int64(conv.lastIn) + int64(conv.lastOut); used > 0 {
-			for range c.HoverText(tipContext).KeepIter() {
-				c.Label("context " + strconv.FormatInt(used, 10) + " tokens").Selectable(false).Send()
-			}
-		}
+		inst.renderContext()
 		switch {
 		case !inst.answered:
 			c.Label("asking the host for a model…").Selectable(false).Send()
@@ -182,6 +193,118 @@ func (inst *App) renderBar() {
 				inst.pastNoted = true
 			}
 		}
+	}
+}
+
+// renderTitle is the conversation's title — click to rename — and Open in
+// mdedit.
+func (inst *App) renderTitle() {
+	conv := inst.conv
+	for range c.HorizontalTop().KeepIter() {
+		if inst.renaming {
+			inst.renderRename()
+		} else {
+			title := conv.title
+			if title == "" {
+				title = "Untitled"
+			}
+			for range c.HoverText(titleTip(conv)).KeepIter() {
+				if c.Button(inst.ids.PrepareStr("title"), c.Atoms().BeginRichText(title).Strong().End().Keep()).Frame(false).SendResp().HasPrimaryClicked() {
+					inst.renaming, inst.renameDraft = true, conv.title
+					c.CurrentApplicationState.StateManager.OverrideDatabindingSPtr(&inst.renameDraft)
+				}
+			}
+			if conv.titleAsked && conv.titleSource == titleFirstLine && conv.titleNote == "" {
+				c.Spinner().Send()
+			}
+		}
+		for range c.HoverText(tipMdedit).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("open-mdedit"), atomsMdedit).Small().SendResp().HasPrimaryClicked() {
+				inst.openInMdedit()
+			}
+		}
+	}
+}
+
+// renderRename is the title's inline editor: Enter or the check keeps the
+// text, Escape leaves the title as it was, and an empty title goes back
+// to the first line.
+func (inst *App) renderRename() {
+	commit, cancel := false, false
+	if inst.renameId != 0 {
+		for _, k := range c.CurrentApplicationState.StateManager.GetCapturedKeys(widgethandle.Make(inst.renameId)) {
+			commit = commit || k.Code == keycodes.Enter
+			cancel = cancel || k.Code == keycodes.Escape
+		}
+	}
+	te := c.TextEdit(inst.ids.PrepareStr("rename"), inst.renameDraft, false).
+		DesiredWidth(320).HintText("a title — empty goes back to the first line").CaptureKeys(uint64(renameKeyMask))
+	inst.renameId = te.Id()
+	te.SendRespVal(&inst.renameDraft)
+	if c.Button(inst.ids.PrepareStr("rename-ok"), atomsRenameOk).Small().SendResp().HasPrimaryClicked() {
+		commit = true
+	}
+	if c.Button(inst.ids.PrepareStr("rename-cancel"), atomsGotIt).Frame(false).Small().SendResp().HasPrimaryClicked() {
+		cancel = true
+	}
+	switch {
+	case cancel:
+		inst.renaming = false
+	case commit:
+		inst.conv.rename(inst.renameDraft)
+		inst.renaming = false
+	}
+}
+
+// renderContext is how full the model's context is: the last answered
+// call's prompt and answer against the size llm.describe reports, a bar
+// once the size is known, and a count without it.
+func (inst *App) renderContext() {
+	conv := inst.conv
+	used := int64(conv.lastIn) + int64(conv.lastOut)
+	if used <= 0 {
+		return
+	}
+	limit := int64(inst.model.ContextTokens)
+	if limit <= 0 {
+		for range c.HoverText(tipContext + " The host does not know the model's context size; BOXER_LLM_CONTEXT_TOKENS states it.").KeepIter() {
+			c.Label("context " + tokens(used)).Selectable(false).Send()
+		}
+		return
+	}
+	frac := float32(used) / float32(limit)
+	tip := tipContext + " The size is " + strconv.FormatInt(limit, 10) + " tokens, from " + inst.model.ContextSource + "."
+	for range c.HoverText(tip).KeepIter() {
+		bar := c.ProgressBar(min(frac, 1)).DesiredWidth(contextBarW).Text("context " + tokens(used) + " / " + tokens(limit))
+		if frac >= contextWarnFrac {
+			bar = bar.Fill(color.Hex(styletokens.WarningDefault.AsHex()))
+		}
+		bar.Send()
+	}
+}
+
+// contextWarning is the line above the composer once the conversation
+// nears the model's context size.
+func (inst *App) contextWarning() (line string, ok bool) {
+	conv := inst.conv
+	limit := int64(inst.model.ContextTokens)
+	used := int64(conv.lastIn) + int64(conv.lastOut)
+	if limit <= 0 || float32(used) < contextWarnFrac*float32(limit) {
+		return "", false
+	}
+	pct := strconv.FormatInt(used*100/limit, 10)
+	return "This conversation fills " + pct + " % of the model's context, and every turn resends it: the next answer may not fit. New conversation starts over.", true
+}
+
+// tokens is a token count as shown: 950, 12.3k, 131k.
+func tokens(n int64) (s string) {
+	switch {
+	case n < 1000:
+		return strconv.FormatInt(n, 10)
+	case n < 100000:
+		return strconv.FormatFloat(float64(n)/1000, 'f', 1, 64) + "k"
+	default:
+		return strconv.FormatInt(n/1000, 10) + "k"
 	}
 }
 
@@ -243,6 +366,14 @@ func (inst *App) renderComposer() {
 			}
 		}
 		c.RequestRepaint()
+	}
+	if line, ok := inst.contextWarning(); ok {
+		for range c.HorizontalTop().KeepIter() {
+			for rt := range c.RichTextLabelColored(color.Hex(styletokens.WarningDefault.AsHex()), color.Transparent, icons.PhWarning) {
+				rt.Small()
+			}
+			c.LabelAtoms(c.Atoms().BeginRichText(line).Small().End().Keep()).Wrap().Selectable(true).Send()
+		}
 	}
 	if inst.editing != nil {
 		for range c.HorizontalTop().KeepIter() {
