@@ -112,15 +112,6 @@ func structContextMenuDummy() ir.ConcreteType {
 func structDockAreaDummy() ir.ConcreteType {
 	return ir.NewConcreteType("dockAreaDummy")
 }
-func structGraphNode() ir.ConcreteType {
-	return ir.NewConcreteType("graphNode")
-}
-func structGraphEdge() ir.ConcreteType {
-	return ir.NewConcreteType("graphEdge")
-}
-func structGraphDrain() ir.ConcreteType {
-	return ir.NewConcreteType("graphDrain")
-}
 
 func structImage() ir.ConcreteType {
 	return ir.NewConcreteType("image", traitWidget())

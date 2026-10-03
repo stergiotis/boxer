@@ -35,14 +35,12 @@ if [ -z "$sysroot" ] || [ ! -d "$sysroot/lib/rustlib/wasm32-unknown-unknown" ]; 
     exit 0
 fi
 # The same flags build_rust_browser.sh composes: the repro environment's
-# RUSTFLAGS plus the getrandom backend cfg (see that script for why a cargo
-# config cannot carry it). A check, not a build: codegen for the whole
-# egui graph is the bundle script's business.
+# RUSTFLAGS. A check, not a build: codegen for the whole egui graph is the
+# bundle script's business.
 (
     cd rust/imzero2
     # shellcheck source=/dev/null
     source ../../scripts/dev/rust-repro-env.sh
-    export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--cfg getrandom_backend=\"custom\""
     cargo check --locked --quiet -p imzero2_browser --target wasm32-unknown-unknown --target-dir target/browser
 )
 echo "tab_build: imzero2_browser checks for wasm32-unknown-unknown"

@@ -119,8 +119,8 @@ func (inst *Machine[T]) AddRule(from T, to ...T) *Machine[T] {
 }
 
 // EdgeLabel attaches a display label to one transition. Used by the level-2
-// graph view (egui_graphs edge labels) and the table view (transition
-// triggers column). Empty label clears.
+// graph view (edge labels) and the table view (transition triggers
+// column). Empty label clears.
 func (inst *Machine[T]) EdgeLabel(from, to T, label string) *Machine[T] {
 	k := EdgeKey[T]{From: from, To: to}
 	if label == "" {
@@ -274,7 +274,7 @@ func (inst *Machine[T]) Edges() iter.Seq2[EdgeKey[T], string] {
 	}
 }
 
-// NodeId returns a stable u64 id for a state, suitable for c.GraphNode.
+// NodeId returns a stable u64 id for a state, suitable as a widget id salt.
 // Uses FNV-1a over the state's fmt.Sprint representation so two states with
 // the same label collide — but that's also true on the visualization side
 // (same label looks like the same state to the user). For domain states

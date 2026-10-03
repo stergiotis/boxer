@@ -1296,15 +1296,15 @@ All coordinates are canvas-relative (translated to screen coords at render time 
 
 ## 15. Binding an External egui Widget Library
 
-Distilled from `egui_dock`, `egui_table`, `egui_plot` (whose bridge has since been retired in favor of the implot port, ADR-0149), and `egui_graphs`. When the widget you're wrapping isn't just a leaf painter but brings its own state (layout positions, selection, scroll, drag offsets) or its own callback-driven API, these patterns recur.
+Distilled from `egui_dock`, `egui_table`, `egui_plot` (whose bridge has since been retired in favor of the implot port, ADR-0149), and `egui_graphs` (whose `c.Graph` binding has since been removed in favor of the pure-Go `widgets/graphview`, ADR-0224 — the `egui_graphs` snippets below quote that former binding to show the shapes, and name nothing in the tree any more). When the widget you're wrapping isn't just a leaf painter but brings its own state (layout positions, selection, scroll, drag offsets) or its own callback-driven API, these patterns recur.
 
 ### 15.1 State location — pick the right bucket
 
 | Bucket | When | Examples |
 |---|---|---|
-| **Per-frame register** — `Vec<FooData>` on the interpreter, cleared in `prepare_next_frame()` | Pure accumulators. The drain widget consumes all of it and the buffer is empty at frame end. | `plot_lines`, `table_cells`, `graph_pending_nodes` |
-| **Retained HashMap keyed by widget id** — `HashMap<u64, State>` on the interpreter, *not* cleared per-frame | Library owns state that must survive frames (positions, selection, collapse, scroll) | `dock_states` (egui_dock layout), `graph_states` (egui_graphs graph + node/edge index maps) |
-| **Local scope in apply code** — `RefCell`, channel, `&mut Vec`, closure captures | Only needed for the duration of this frame's `ui.add_sized(…)` call | FR event-sink `frame_events`, `EtPrefetchInfo` visible-range probes |
+| **Per-frame register** — `Vec<FooData>` on the interpreter, cleared in `prepare_next_frame()` | Pure accumulators. The drain widget consumes all of it and the buffer is empty at frame end. | `table_cells`, `paint_cmds` |
+| **Retained HashMap keyed by widget id** — `HashMap<u64, State>` on the interpreter, *not* cleared per-frame | Library owns state that must survive frames (positions, selection, collapse, scroll) | `dock_states` (egui_dock layout) |
+| **Local scope in apply code** — `RefCell`, channel, `&mut Vec`, closure captures | Only needed for the duration of this frame's `ui.add_sized(…)` call | an event-sink `frame_events` (§15.5), `EtPrefetchInfo` visible-range probes |
 
 The retained-HashMap pattern is **the** way to bind a stateful library. Go is authoritative about which entities *exist*; the library is authoritative about each entity's layout / position / selection. Every frame Go re-declares the topology, the apply code reconciles (remove-missing + add-new + update-in-place), and the library continues with the same state slot untouched by the reconciliation.
 
@@ -1691,11 +1691,10 @@ the readbacks (one frame behind, like every canvas register).
 ## 20. graphview — the live graph widget
 
 The force-directed / hierarchical graph is a Go widget on the painter lane
-(ADR-0224; package [`widgets/graphview`](../../../public/thestack/imzero2/egui2/widgets/graphview/)),
-the sibling of the `egui_graphs`-backed `c.Graph` binding it is meant to
-replace once its downstream consumers have moved. New graph work targets
-graphview; `c.GraphNode` / `c.GraphEdge` / `c.Graph` and the three
-`FetchGraph*` fetchers stay until then.
+(ADR-0224; package [`widgets/graphview`](../../../public/thestack/imzero2/egui2/widgets/graphview/)).
+It replaced the `egui_graphs`-backed `c.Graph` binding, which has been
+removed: `c.GraphNode` / `c.GraphEdge` / `c.Graph` and the three
+`FetchGraph*` fetchers do not exist any more.
 
 ```go
 gv := graphview.New(ids, "deps", graphview.Options{
@@ -1907,10 +1906,10 @@ What to know before using it:
 
 The gallery registers six graphview demos from `egui2_hl_graphview_demo.go`
 — ring, force-directed, hierarchical, soft pins, exploration, styling and
-weights — so the screenshot tour captures each one whole; the ring and force
-ones mirror the `graphs` demo so the two can be compared while both exist.
+weights — so the screenshot tour captures each one whole.
 
-Migrating from the `c.Graph` binding, beyond the type renames: the binding's
+Where graphview departs from the removed `c.Graph` binding, for code ported
+from it: the binding's
 `zoomSpeed` was a fixed step per wheel event, graphview follows the host's
 zoom factor and `Opts.ZoomSpeed` is an exponent on it; `fitPadding` is a
 fraction of the canvas per side here, not a scale on the graph's diagonal,

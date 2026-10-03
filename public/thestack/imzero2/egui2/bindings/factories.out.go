@@ -485,48 +485,6 @@ func Frame(i WidgetIdCreatorI) (inst FrameFluid) {
 	return
 }
 
-func Graph(i WidgetIdCreatorI) (inst GraphFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdGraph))
-	v := i.Derive()
-	r.WriteWidgetId(checkId(v))
-
-	inst = GraphFluid{
-		r: r,
-	}
-
-	inst.id = v
-	inst.idGen = i
-
-	return
-}
-
-func GraphEdge(fromId uint64, toId uint64) (inst GraphEdgeFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdGraphEdge))
-	r.WriteUint64(fromId)
-	r.WriteUint64(toId)
-
-	inst = GraphEdgeFluid{
-		r: r,
-	}
-
-	return
-}
-
-func GraphNode(nodeId uint64, label string) (inst GraphNodeFluid) {
-	r := typed.NewRetainedFffiBuilder()
-	r.WriteOpCode(uint32(FuncProcIdGraphNode))
-	r.WriteUint64(nodeId)
-	r.WriteString(label)
-
-	inst = GraphNodeFluid{
-		r: r,
-	}
-
-	return
-}
-
 func Grid(i WidgetIdCreatorI) (inst GridFluid) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteOpCode(uint32(FuncProcIdGrid))

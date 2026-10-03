@@ -146,7 +146,7 @@ x11 = ["eframe?/x11"]
 
 [dependencies]
 # Pinned to the 0.35 line, and pinned deliberately: every widget crate below
-# (egui_extras, egui_table, egui_dock, egui_graphs) links egui itself,
+# (egui_extras, egui_table, egui_dock) links egui itself,
 # so the whole ring has to sit on one egui version or the same type appears
 # twice in the graph and nothing typechecks across the seam.
 #
@@ -157,10 +157,11 @@ x11 = ["eframe?/x11"]
 # found egui::Ui`. A caret requirement makes the next such move a visible
 # manifest change instead.
 #
-# The ring can go to 0.36 once egui_graphs releases against it — egui_extras
-# 0.36.1, egui_table 0.10 and egui_dock 0.21.1 are all out already, but
-# egui_graphs 0.31.0 (its newest, and its master branch) still asks for egui
-# 0.35. Move all of them, and the wgpu/egui-wgpu pins below, in one commit.
+# Nothing blocks the ring from going to 0.36: egui_extras 0.36.1, egui_table
+# 0.10 and egui_dock 0.21.1 are all out. The last holdout, egui_graphs (whose
+# newest release asked for egui 0.35), left the tree with the `Graph` binding
+# (2026-10-03); widgets/graphview replaced it. Move all of them, and the
+# wgpu/egui-wgpu pins below, in one commit.
 egui = "0.35"
 eframe = { version = "0.35", optional = true, default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
@@ -225,8 +226,6 @@ jiff = { version = "0.2", default-features = false, features = ["std"] }
 # crate's own 0.35 `Ui` as unrelated types.
 egui_table = "0.9.0"
 egui_dock = "0.20"
-egui_graphs = { version = "0.31", features = ["events"] }
-petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
 png = "0.18"
 # Used by imzero2::svgexport to read the TTF `name` table at font-load time,
 # so SVG export can emit the real family name (e.g. "Noto Sans") instead of
@@ -276,17 +275,6 @@ bytemuck = { version = "1.25", optional = true, default-features = false }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 memmap2 = "0.9.9"
 rand = "0.10.2"
-
-# egui_graphs pulls rand 0.8 and 0.9, hence getrandom 0.2 and 0.3, which
-# refuse wasm32-unknown-unknown unless told where randomness comes from. The
-# browser host has no wasm-bindgen glue, so both get the crate's own
-# generator (browser.rs): 0.2 through its `custom` feature, 0.3 through the
-# `--cfg getrandom_backend="custom"` rustflag build_rust_browser.sh sets (a
-# cargo config cannot: the repro environment's RUSTFLAGS would replace it).
-# The only consumer is graph layout seeding.
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom02 = { package = "getrandom", version = "0.2", features = ["custom"] }
-getrandom = "0.3"
 
 [profile.release]
 opt-level = 2

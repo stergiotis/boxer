@@ -58,62 +58,6 @@ func (inst *Fetcher) CollectFetchFrameMetrics() (interpretUs uint64, passNr uint
 	passNr = inst.readU64()
 	return
 }
-func (inst *Fetcher) FetchGraphEvents() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	inst.invoke(FuncProcIdFetchGraphEvents)
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
-	return
-}
-func (inst *Fetcher) IssueFetchGraphEvents() {
-	inst.invoke(FuncProcIdFetchGraphEvents)
-}
-func (inst *Fetcher) CollectFetchGraphEvents() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
-	return
-}
-func (inst *Fetcher) FetchGraphMetrics() (graphIds []uint64, nodeCount []uint32, edgeCount []uint32, frSteps []uint64, frLastDisp iter.Seq[float32]) {
-	inst.invoke(FuncProcIdFetchGraphMetrics)
-	graphIds = inst.readU64h()
-	nodeCount = inst.readU32h()
-	edgeCount = inst.readU32h()
-	frSteps = inst.readU64h()
-	frLastDisp = inst.iterateF32h()
-	return
-}
-func (inst *Fetcher) IssueFetchGraphMetrics() {
-	inst.invoke(FuncProcIdFetchGraphMetrics)
-}
-func (inst *Fetcher) CollectFetchGraphMetrics() (graphIds []uint64, nodeCount []uint32, edgeCount []uint32, frSteps []uint64, frLastDisp iter.Seq[float32]) {
-	graphIds = inst.readU64h()
-	nodeCount = inst.readU32h()
-	edgeCount = inst.readU32h()
-	frSteps = inst.readU64h()
-	frLastDisp = inst.iterateF32h()
-	return
-}
-func (inst *Fetcher) FetchGraphSelection() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	inst.invoke(FuncProcIdFetchGraphSelection)
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
-	return
-}
-func (inst *Fetcher) IssueFetchGraphSelection() {
-	inst.invoke(FuncProcIdFetchGraphSelection)
-}
-func (inst *Fetcher) CollectFetchGraphSelection() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
-	return
-}
 func (inst *Fetcher) FetchPixelsPerPoint() (pixelsPerPoint float32) {
 	inst.invoke(FuncProcIdFetchPixelsPerPoint)
 	pixelsPerPoint = inst.readF32()

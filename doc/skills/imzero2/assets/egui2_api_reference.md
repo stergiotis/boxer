@@ -55,9 +55,6 @@ status: draft
 | FetchF1KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchF2KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchFrameMetrics | Fetcher | No | 0 | 0 | - | - |
-| FetchGraphEvents | Fetcher | No | 0 | 0 | - | - |
-| FetchGraphMetrics | Fetcher | No | 0 | 0 | - | - |
-| FetchGraphSelection | Fetcher | No | 0 | 0 | - | - |
 | FetchPixelsPerPoint | Fetcher | No | 0 | 0 | - | - |
 | FetchR10 | Fetcher | No | 0 | 0 | - | - |
 | FetchR16ScrollDelta | Fetcher | No | 0 | 0 | - | - |
@@ -80,9 +77,6 @@ status: draft
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
 | Frame | BuilderFactory | Yes | 0 | 0 | 23 | Immediate, Retained, BlockIterator |
-| Graph | BuilderFactory | Yes | 0 | 0 | 31 | Immediate, Retained |
-| GraphEdge | BuilderFactory | No | 2 | 0 | 2 | Immediate |
-| GraphNode | BuilderFactory | No | 2 | 0 | 1 | Immediate |
 | Grid | BuilderFactory | Yes | 0 | 0 | 6 | Immediate, BlockIterator |
 | Group | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | GuiZoomZoomMenuButtons | Procedural | No | 0 | 0 | - | - |
@@ -819,99 +813,6 @@ EtHeaderText
 #### Return Type
 
 Block
-
----
-
-### Graph
-
-- **Type:** BuilderFactory
-- **Identity:** Yes
-- **Features:** Immediate, Retained
-
-#### Builder Methods
-
-- **Width**(wi: f32)
-- **Height**(he: f32)
-- **DraggingEnabled**(vl: b)
-- **HoverEnabled**(vl: b)
-- **NodeClickingEnabled**(vl: b)
-- **NodeSelectionEnabled**(vl: b)
-- **NodeSelectionMultiEnabled**(vl: b)
-- **EdgeClickingEnabled**(vl: b)
-- **EdgeSelectionEnabled**(vl: b)
-- **EdgeSelectionMultiEnabled**(vl: b)
-- **FitToScreen**(vl: b)
-- **FitNow**()
-- **ZoomAndPan**(vl: b)
-- **FitPadding**(pd: f32)
-- **ZoomSpeed**(sp: f32)
-- **LabelsAlways**(vl: b)
-- **Layout**(kind: u8)
-- **ResetLayout**()
-- **FastForwardSteps**(st: u32)
-- **LayoutDt**(dt: f32)
-- **LayoutDamping**(dp: f32)
-- **LayoutEpsilon**(ep: f32)
-- **LayoutMaxStep**(ms: f32)
-- **LayoutKScale**(ks: f32)
-- **LayoutCAttract**(ca: f32)
-- **LayoutCRepulse**(cr: f32)
-- **LayoutRunning**(vl: b)
-- **LayoutRowDist**(rd: f32)
-- **LayoutColDist**(cd: f32)
-- **LayoutCenterParent**(vl: b)
-- **LayoutOrientation**(or: u8)
-
-#### Return Type
-
-GraphDrain
-
----
-
-### GraphEdge
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| fromId | plain | u64 |
-| toId | plain | u64 |
-
-#### Builder Methods
-
-- **Color**(col: u32)
-- **Label**(text: s)
-
-#### Return Type
-
-GraphEdge
-
----
-
-### GraphNode
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| nodeId | plain | u64 |
-| label | plain | s |
-
-#### Builder Methods
-
-- **Color**(col: u32)
-
-#### Return Type
-
-GraphNode
 
 ---
 
@@ -3197,52 +3098,6 @@ Block
 |------|------|
 | interpretUs | u64 |
 | passNr | u64 |
-
----
-
-### FetchGraphEvents
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| graphIds | u64h |
-| kinds | u32h |
-| keyA | u64h |
-| keyB | u64h |
-
----
-
-### FetchGraphMetrics
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| graphIds | u64h |
-| nodeCount | u32h |
-| edgeCount | u32h |
-| frSteps | u64h |
-| frLastDisp | f32h |
-
----
-
-### FetchGraphSelection
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| graphIds | u64h |
-| kinds | u32h |
-| keyA | u64h |
-| keyB | u64h |
 
 ---
 

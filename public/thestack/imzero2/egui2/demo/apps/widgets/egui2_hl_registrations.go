@@ -93,32 +93,6 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
-		Name: "graphs", Category: "Charts & plots", Title: icons.IconChartBar + " graphs",
-		Stage: [2]float32{1024, 700}, Flags: registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic, // dynamic-tree demo grows by time.Since(start)
-		Kind:        registry.DemoKindUX,
-		Description: "Force-directed, hierarchical and ring graph layouts sharing one set of navigation controls and a live event log.",
-		Init: func(_ *c.WidgetIdStack) (state any) {
-			state = newGraphsDemoState()
-			return
-		},
-		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			st := state.(*graphsDemoState)
-			for range c.CollapsingHeader(ids.PrepareStr("graph-nav-demo"), c.WidgetText().Text("navigation controls").Keep()).KeepIter() {
-				demoGraphGlobalNavControls(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-basic-demo"), c.WidgetText().Text("ring (random layout)").Keep()).DefaultOpen(true).KeepIter() {
-				demoGraphBasic(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-dynamic-demo"), c.WidgetText().Text("tree (force-directed)").Keep()).KeepIter() {
-				demoGraphDynamic(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-hierarchical-demo"), c.WidgetText().Text("tree (hierarchical, 10 nodes)").Keep()).KeepIter() {
-				demoGraphHierarchical(ids, st)
-			}
-			demoGraphEventLog(ids, st)
-		},
-	})
-	registry.Register(registry.Demo{
 		Name: "graphview-ring", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — ring",
 		Stage:       [2]float32{1024, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea,

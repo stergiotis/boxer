@@ -83,9 +83,6 @@ The current cache surface (extend it when adding a new fetcher):
 |---------------------------------------|--------------------------------|-------------------|
 | `GetCanvasCursor(handle) (CanvasCursorValue, bool)` | `FetchR24CanvasPointers` | that `PaintCanvas`'s pointer row |
 | `GetWalkersCamera(handle) (WalkersCameraValue, bool)` | `FetchR15WalkersCameras` | that `WalkersMap`'s last camera |
-| `GetGraphEvents() []GraphEvent`         | `FetchGraphEvents`            | drained queue from egui_graphs |
-| `GetGraphSelection() []GraphSelectedItem` | `FetchGraphSelection`       | snapshot of all selections |
-| `GetGraphMetrics() []GraphMetrics`      | `FetchGraphMetrics`           | per-graph counters |
 
 Plus the broader-purpose families that `Sync` was already managing:
 response flags (`FetchR7`), databindings (`FetchR9*`, `FetchR10`),

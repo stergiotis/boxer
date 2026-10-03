@@ -187,16 +187,6 @@ type UiRectValue struct {
 	MaxY float32
 }
 
-// GraphEventsValue / GraphSelectionValue / GraphMetricsValue cache the
-// three egui_graphs fetcher outputs at frame-end.
-//
-// Stored as slices on StateManager (rather than emitted to consumers
-// via callback) so multiple consumers in the same frame can read
-// independently.
-type GraphEventsValue []GraphEvent
-type GraphSelectionValue []GraphSelectedItem
-type GraphMetricsValue []GraphMetrics
-
 type StateManager struct {
 	// pixelsPerPoint is fetchPixelsPerPoint's last answer (GetPixelsPerPoint).
 	pixelsPerPoint float32
@@ -265,9 +255,6 @@ type StateManager struct {
 	// contract.
 	commandEnter      bool
 	commandEnterShift bool
-	graphEvents       GraphEventsValue
-	graphSelection    GraphSelectionValue
-	graphMetrics      GraphMetricsValue
 }
 
 func NewStateManager() *StateManager {
@@ -464,20 +451,6 @@ func (inst *StateManager) GetCapturedKeys(h widgethandle.WidgetHandle) []Capture
 // will reflect the position the click landed on (one-frame lag).
 func (inst *StateManager) GetPointer() PointerValue {
 	return inst.r20Pointer
-}
-
-// GetGraphEvents / GetGraphSelection / GetGraphMetrics return last
-// frame's egui_graphs cached state. The returned slice is owned by the
-// StateManager and reused next frame; callers that need to retain
-// entries past this frame must copy.
-func (inst *StateManager) GetGraphEvents() GraphEventsValue {
-	return inst.graphEvents
-}
-func (inst *StateManager) GetGraphSelection() GraphSelectionValue {
-	return inst.graphSelection
-}
-func (inst *StateManager) GetGraphMetrics() GraphMetricsValue {
-	return inst.graphMetrics
 }
 
 // GetEtPrefetch returns the previous frame's visible (row, col) ranges for
@@ -733,9 +706,6 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchR24CanvasPointers()
 	fetcher.IssueFetchR26KeyCaptures()
 	fetcher.IssueFetchR22StarvedTextures()
-	fetcher.IssueFetchGraphEvents()
-	fetcher.IssueFetchGraphSelection()
-	fetcher.IssueFetchGraphMetrics()
 	fetcher.IssueFetchFrameMetrics()
 	fetcher.IssueFetchPixelsPerPoint()
 
@@ -931,61 +901,6 @@ func (inst *StateManager) Sync() {
 		for id := range ids {
 			inst.r22StarvedTextures[id] = struct{}{}
 		}
-	}
-	{
-		graphIds, kinds, keyA, keyBSeq := fetcher.CollectFetchGraphEvents()
-		out := inst.graphEvents[:0]
-		i := 0
-		for kb := range keyBSeq {
-			if i >= len(graphIds) {
-				break
-			}
-			out = append(out, GraphEvent{
-				GraphId: graphIds[i],
-				Kind:    GraphEventKindE(kinds[i]),
-				KeyA:    keyA[i],
-				KeyB:    kb,
-			})
-			i++
-		}
-		inst.graphEvents = out
-	}
-	{
-		graphIds, kinds, keyA, keyBSeq := fetcher.CollectFetchGraphSelection()
-		out := inst.graphSelection[:0]
-		i := 0
-		for kb := range keyBSeq {
-			if i >= len(graphIds) {
-				break
-			}
-			out = append(out, GraphSelectedItem{
-				GraphId: graphIds[i],
-				IsNode:  kinds[i] == 0,
-				KeyA:    keyA[i],
-				KeyB:    kb,
-			})
-			i++
-		}
-		inst.graphSelection = out
-	}
-	{
-		graphIds, nodeCount, edgeCount, frSteps, frLastSeq := fetcher.CollectFetchGraphMetrics()
-		out := inst.graphMetrics[:0]
-		i := 0
-		for last := range frLastSeq {
-			if i >= len(graphIds) {
-				break
-			}
-			out = append(out, GraphMetrics{
-				GraphId:            graphIds[i],
-				NodeCount:          nodeCount[i],
-				EdgeCount:          edgeCount[i],
-				FrSteps:            frSteps[i],
-				FrLastDisplacement: last,
-			})
-			i++
-		}
-		inst.graphMetrics = out
 	}
 
 	// Drain the per-frame Rust-side timing one extra round-trip per Sync.
