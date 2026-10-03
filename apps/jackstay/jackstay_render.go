@@ -193,14 +193,30 @@ func (inst *App) renderStatus() {
 	case inst.note != "":
 		badge.New(inst.ids.PrepareStr("note"), inst.note).Tone(badge.ToneSuccess).Variant(badge.VariantSoft).Send()
 	}
-	for i, s := range inst.stale {
-		for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
-			c.Label("  moved: " + s).Send()
-		}
+	inst.statusList("stale", "moved", "moved: ", inst.stale)
+	inst.statusList("skipped", "skipped", "skipped ", inst.skipped)
+}
+
+// statusListMaxHeight bounds an open status list. The top panel does not
+// scroll, so one line per table would push the page out of the window.
+const statusListMaxHeight = 120
+
+// statusList is one line in the top panel naming how many tables a list
+// holds; the lines themselves open below it, scrolled within a bounded height.
+func (inst *App) statusList(key string, verb string, prefix string, items []string) {
+	if len(items) == 0 {
+		return
 	}
-	for i, s := range inst.skipped {
-		for range c.IdScope(inst.ids.PrepareSeq(uint64(1000 + i))) {
-			small("skipped " + s)
+	for range c.IdScope(inst.ids.PrepareStr("status-" + key)) {
+		title := plural(len(items), "table") + " " + verb
+		for range c.CollapsingHeader(inst.ids.PrepareStr("hdr"), c.WidgetText().Text(title).Keep()).KeepIter() {
+			for range c.ScrollArea().Vscroll(true).MaxHeight(statusListMaxHeight).AutoShrink(false, true).KeepIter() {
+				for i, s := range items {
+					for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+						small(prefix + s)
+					}
+				}
+			}
 		}
 	}
 }
