@@ -620,6 +620,14 @@ names the pack as its source in place of a server. The sync's relay and
 through one interface. Under a filter, §SD5's clearing never drops a
 partition or truncates a table.
 
+### 2026-10-03 — The page's action leaves the wizard bar
+
+The bar of the 2026-09-26 entry held Back, the page's own action and Next in
+one row, so the button that writes to a server sat beside the ones that only
+move between pages. The bar now holds Back at its left edge and Next at its
+right. The page's action, with its confirmation, sits at the foot of the
+page, above the bar, and stays there while the page scrolls.
+
 ## References
 
 - [ADR-0170](./0170-data-catalog-competence.md) — the data catalog: classification, restoration, shape relation.
