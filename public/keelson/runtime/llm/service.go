@@ -34,6 +34,10 @@ type Config struct {
 	ApiKey string
 	// MaxTokens is the ceiling when a request names none.
 	MaxTokens int32
+	// ContextTokens is the model's context size as the deployment states
+	// it; zero asks the endpoint's model list once (ProbeContextTokens),
+	// unless Client replaces the endpoint.
+	ContextTokens int32
 	// Timeout bounds one completion on the service side.
 	Timeout time.Duration
 	// TrustedHosts are endpoint hosts treated like loopback by the
@@ -62,7 +66,7 @@ type Config struct {
 func ConfigFromEnv() (cfg Config) {
 	cfg = Config{
 		Endpoint: Endpoint.Get(), Model: Model.Get(), ApiKey: ApiKey.Get(),
-		MaxTokens: int32(MaxTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
+		MaxTokens: int32(MaxTokens.Get()), ContextTokens: int32(ContextTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
 		TrustedHosts: ParseTrustedHosts(TrustedHosts.Get()),
 	}
 	return
@@ -97,7 +101,10 @@ type Service struct {
 	host       string
 	local      bool
 	// trusted says local holds by TrustedHosts, not loopback.
-	trusted   bool
+	trusted bool
+	// context is the model's context size and where it came from, set
+	// once from the config or by the probe.
+	context   atomic.Pointer[contextSize]
 	busClient *inprocbus.Client
 	unsubs    []func()
 	log       zerolog.Logger
@@ -163,6 +170,14 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 			}
 		}
 	}
+	if cfg.Configured() {
+		switch {
+		case cfg.ContextTokens > 0:
+			s.context.Store(&contextSize{tokens: cfg.ContextTokens, source: "BOXER_LLM_CONTEXT_TOKENS"})
+		case cfg.Client == nil:
+			go s.probeContext()
+		}
+	}
 	if cfg.Exec != nil {
 		s.facts = llmfacts.NewCallStore(cfg.Exec, nil, llmfacts.CallStoreConfig{})
 	}
@@ -226,6 +241,9 @@ func (inst *Service) Describe() (d Description) {
 	}
 	d = Description{Configured: true, Model: inst.cfg.Model, EndpointHost: inst.host, Local: inst.local, Trusted: inst.trusted,
 		MaxTokens: inst.cfg.MaxTokens}
+	if cs := inst.context.Load(); cs != nil {
+		d.ContextTokens, d.ContextSource = cs.tokens, cs.source
+	}
 	return
 }
 
@@ -242,7 +260,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	case SubjectDescribe:
 		d := inst.Describe()
 		inst.reply(msg.Reply, wireDescribe{Configured: d.Configured, Model: d.Model, EndpointHost: d.EndpointHost, Local: d.Local,
-			Trusted: d.Trusted, MaxTokens: d.MaxTokens, Reason: d.Reason})
+			Trusted: d.Trusted, MaxTokens: d.MaxTokens, ContextTokens: d.ContextTokens, ContextSource: d.ContextSource, Reason: d.Reason})
 	case SubjectComplete, SubjectRetainComplete:
 		inst.startComplete(msg, msg.Subject == SubjectRetainComplete)
 	default:

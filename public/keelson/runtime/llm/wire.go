@@ -69,7 +69,11 @@ type wireDescribe struct {
 	Local        bool   `json:"local,omitempty"`
 	Trusted      bool   `json:"trusted,omitempty"`
 	MaxTokens    int32  `json:"max_tokens,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	// ContextTokens is the model's context size, 0 unknown; ContextSource
+	// says where it came from.
+	ContextTokens int32  `json:"context_tokens,omitempty"`
+	ContextSource string `json:"context_source,omitempty"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 // wireReply is the reply on llm.complete. Ok false carries the reason and

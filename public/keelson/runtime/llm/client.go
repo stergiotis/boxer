@@ -47,6 +47,13 @@ type Description struct {
 	Trusted bool
 	// MaxTokens is the host's ceiling when a request names none.
 	MaxTokens int32
+	// ContextTokens is the model's context size — what a whole request,
+	// prompt and answer, has to fit — and 0 when the host does not know
+	// it. ContextSource says where it came from: BOXER_LLM_CONTEXT_TOKENS,
+	// or "endpoint: <field>" for the field of the endpoint's model list it
+	// was read from.
+	ContextTokens int32
+	ContextSource string
 	// Reason says why nothing is configured.
 	Reason string
 }
@@ -204,7 +211,7 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 		return
 	}
 	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, Trusted: w.Trusted,
-		MaxTokens: w.MaxTokens, Reason: w.Reason}
+		MaxTokens: w.MaxTokens, ContextTokens: w.ContextTokens, ContextSource: w.ContextSource, Reason: w.Reason}
 	return
 }
 

@@ -59,6 +59,15 @@ var (
 		Category:    env.CategoryLLM,
 	})
 
+	// ContextTokens is the model's context size as the deployment states
+	// it; unset, the service asks the endpoint's model list once.
+	ContextTokens = env.NewInt(env.Spec{
+		Name:        "BOXER_LLM_CONTEXT_TOKENS",
+		Default:     "0",
+		Description: "the model's context size in tokens, reported by llm.describe so a chat can say how full its conversation is; 0 asks the endpoint's model list once at start (context_length, max_model_len and the like), and a server that reports none leaves it unknown",
+		Category:    env.CategoryLLM,
+	})
+
 	// Retain is the deployment's ceiling on keeping message text (ADR-0264
 	// §SD1, replacing ADR-0254's BOXER_LLM_KEEP_MESSAGES): off keeps sizes
 	// and counts only; ring keeps prompt and completion text on this

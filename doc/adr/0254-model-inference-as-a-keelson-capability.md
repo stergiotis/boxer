@@ -431,6 +431,19 @@ either. A caller can show where a failure is recorded and open it, as the
 chat app does (ADR-0265 §SD4). A failure that never reached the service — a
 bus timeout, a cancel before the reply — has no call id.
 
+### 2026-10-03 — `llm.describe` reports the context size
+
+`llm.describe` reports the model's context size — what a whole request,
+prompt and answer, has to fit — and where the figure came from:
+`BOXER_LLM_CONTEXT_TOKENS` when the deployment states it, otherwise one
+request for the endpoint's model list at service start, read from the field
+the server reports it in (`loaded_context_length`, `max_model_len`,
+`context_length` and the like; `ProbeContextTokens`). The model list of
+the OpenAI API names none, and the size then stays unknown (0). The probe
+is skipped when the service's client replaces the endpoint, as the scripted
+model and tests do. A chat uses the size to say how full its conversation
+is (ADR-0265 §SD4); the service itself enforces nothing with it.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.
