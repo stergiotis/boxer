@@ -69,6 +69,10 @@ func Export(ctx context.Context, src ClientI, srcEp Endpoint, dir string, req Ex
 		err = eh.Errorf("invalid sample fraction")
 		return
 	}
+	req.Compression, err = ParseCompression(req.Compression)
+	if err != nil {
+		return
+	}
 	if req.MaxAttempts < 1 {
 		req.MaxAttempts = 3
 	}
@@ -154,23 +158,20 @@ func exportPlan(srcEp Endpoint, inv *Inventory, sel Selection, now time.Time) (p
 }
 
 // beginExport loads the manifest an earlier export left, when it was asked for
-// the same, or begins a new one.
+// the same, or begins a new one. An earlier manifest is saved as incomplete
+// before the export removes any file it lists, so a pack whose export stops
+// part-way is never read as complete with files missing.
 func beginExport(dir string, srcEp Endpoint, inv *Inventory, plan *Plan, req ExportRequest, now time.Time) (m PackManifest, resumed bool, err error) {
 	old, lerr := LoadPackManifest(dir)
+	if lerr == nil && old.Complete && (req.Restart || resumable(&old, srcEp, inv, plan, req) == "") {
+		old.Complete, old.UpdatedAt = false, now.UTC()
+		if err = old.SaveIn(dir); err != nil {
+			return
+		}
+	}
 	switch {
 	case lerr == nil && !req.Restart:
-		why := ""
-		switch {
-		case old.Source.URL != srcEp.URL || old.Server.UUID != inv.Server.UUID:
-			why = "another source server"
-		case !sameSelection(old.Selection, plan.Selection):
-			why = "another selection or filter"
-		case old.SampleNum != req.SampleNum || old.SampleDen != req.SampleDen:
-			why = "another sample"
-		case old.Compression != req.Compression:
-			why = "another compression"
-		}
-		if why != "" {
+		if why := resumable(&old, srcEp, inv, plan, req); why != "" {
 			err = eb.Build().Str("dir", dir).Errorf("the pack holds an export of %s; ask for the same, or restart the export", why)
 			return
 		}
@@ -204,6 +205,22 @@ func beginExport(dir string, srcEp Endpoint, inv *Inventory, plan *Plan, req Exp
 		SampleNum:     req.SampleNum,
 		SampleDen:     req.SampleDen,
 		Compression:   req.Compression,
+	}
+	return
+}
+
+// resumable says why the export in old cannot be resumed for req, or nothing
+// when it can.
+func resumable(old *PackManifest, srcEp Endpoint, inv *Inventory, plan *Plan, req ExportRequest) (why string) {
+	switch {
+	case old.Source.URL != srcEp.URL || old.Server.UUID != inv.Server.UUID:
+		why = "another source server"
+	case !sameSelection(old.Selection, plan.Selection):
+		why = "another selection or filter"
+	case old.SampleNum != req.SampleNum || old.SampleDen != req.SampleDen:
+		why = "another sample"
+	case old.Compression != req.Compression:
+		why = "another compression"
 	}
 	return
 }
@@ -301,7 +318,6 @@ func (inst *exporter) exportTable(ctx context.Context, t *PackTable) (failed int
 		return true
 	})
 	inst.removeFiles(gone)
-	t.Done = false
 	for _, c := range list {
 		if err = ctx.Err(); err != nil {
 			return
@@ -314,8 +330,7 @@ func (inst *exporter) exportTable(ctx context.Context, t *PackTable) (failed int
 			inst.req.Progress(r)
 		}
 	}
-	slices.SortFunc(t.Chunks, func(a, b PackChunk) int { return compareChunkIds(a.Id, b.Id) })
-	t.Done = failed == 0
+	slices.SortFunc(t.Chunks, func(a, b PackChunk) int { return t.Chunking.compareChunkIds(a.Id, b.Id) })
 	err = inst.save()
 	return
 }
@@ -424,7 +439,7 @@ func (inst *exporter) writeChunk(ctx context.Context, spec *DigestSpec, file str
 		err = eb.Build().Str("file", path).Errorf("unable to write chunk file: %w", err)
 		return
 	}
-	pc = PackChunk{Bytes: uint64(cr.n), Sha256: hex.EncodeToString(h.Sum(nil)), Encoding: encoding}
+	pc = PackChunk{Bytes: uint64(cr.n.Load()), Sha256: hex.EncodeToString(h.Sum(nil)), Encoding: encoding}
 	return
 }
 

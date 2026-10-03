@@ -116,7 +116,53 @@ func IsCopyableEngine(engine string) (ok bool) {
 	case "Log", "TinyLog", "StripeLog", "Memory":
 		return true
 	}
+	return isMergeTreeEngine(engine)
+}
+
+// isMergeTreeEngine recognises the MergeTree family, plain or Replicated.
+func isMergeTreeEngine(engine string) (ok bool) {
 	return strings.HasSuffix(engine, "MergeTree")
+}
+
+// IsMergeEngine reports whether an engine collapses rows during merges, so
+// that two tables with the same logical content can hold different rows until
+// both are fully merged.
+func IsMergeEngine(engine string) (ok bool) {
+	if !strings.HasSuffix(engine, "MergeTree") {
+		return false
+	}
+	for _, p := range []string{"Replacing", "Collapsing", "Summing", "Aggregating", "Graphite", "Coalescing"} {
+		if strings.Contains(engine, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// isReplicatedEngine recognises the Replicated variants of the MergeTree
+// family, whose CREATE names a Keeper path.
+func isReplicatedEngine(engine string) (ok bool) {
+	return strings.HasPrefix(engine, "Replicated") && isMergeTreeEngine(engine)
+}
+
+// mergeParameters are the engine arguments that decide how a merge collapses
+// rows (a version, a sign, the summed columns), with a Replicated engine's
+// Keeper path and replica name dropped. ok is false when the create query's
+// ENGINE clause cannot be read.
+func mergeParameters(t *TableInfo) (params string, ok bool) {
+	var args []string
+	args, ok = engineArgs(t.CreateQuery, t.Engine)
+	if !ok {
+		return
+	}
+	if isReplicatedEngine(t.Engine) && len(args) >= 2 && strings.HasPrefix(args[0], "'") {
+		args = args[2:]
+	}
+	for i := range args {
+		args[i] = normalizeExpr(args[i])
+	}
+	params = strings.Join(args, ", ")
+	return
 }
 
 // isInnerTable recognises the storage table of a materialized view. It is
@@ -158,7 +204,14 @@ func Judge(ops *common.TableOperations, src *TableInfo, dst *TableInfo, target d
 		v.Reasons = append(v.Reasons, "engine "+src.Engine+" holds no rows a sync can copy")
 		return
 	}
-	if strings.HasPrefix(src.Engine, "Replicated") {
+	if len(src.Columns) == 0 {
+		// Discovery is two queries; the table was replaced or dropped
+		// between them.
+		v.Verdict = VerdictIncompatible
+		v.Reasons = append(v.Reasons, "no columns were discovered on the source; the table changed during discovery, discover again")
+		return
+	}
+	if isReplicatedEngine(src.Engine) {
 		v.Notes = append(v.Notes, "replicated engine: the table's DDL names a Keeper path the target must be able to use")
 	}
 
@@ -170,6 +223,19 @@ func Judge(ops *common.TableOperations, src *TableInfo, dst *TableInfo, target d
 		v.Verdict = VerdictUnsupported
 		v.Reasons = append(v.Reasons, "target name is taken by a "+dst.Engine+" table")
 		return
+	}
+	if len(dst.Columns) == 0 {
+		v.Verdict = VerdictIncompatible
+		v.Reasons = append(v.Reasons, "no columns were discovered on the target; the table changed during discovery, discover again")
+		return
+	}
+	if len(dst.Dependents) > 0 {
+		names := make([]string, 0, len(dst.Dependents))
+		for _, d := range dst.Dependents {
+			names = append(names, d.String())
+		}
+		v.Notes = append(v.Notes, "on the target, "+strings.Join(names, ", ")+" read from this table as it is written: "+
+			"rows a sync inserts reach them, and a clear does not take back what they derived")
 	}
 	judgeExisting(src, dst, target, &v)
 
@@ -200,6 +266,11 @@ func judgeCreate(src *TableInfo, target datacatalog.TableRef, v *TableVerdict) {
 		v.Reasons = append(v.Reasons, "create DDL could not be derived: "+err.Error())
 		return
 	}
+	if reason := sharedKeeperPath(src); reason != "" {
+		v.Verdict = VerdictIncompatible
+		v.Reasons = append(v.Reasons, reason)
+		return
+	}
 	v.Verdict = VerdictCreate
 	v.DDL = []string{ddl}
 	if target.Database != src.Ref.Database && bodyNamesDatabase(ddl, src.Ref.Database) {
@@ -218,12 +289,49 @@ func judgeCreate(src *TableInfo, target datacatalog.TableRef, v *TableVerdict) {
 	}
 }
 
+// sharedKeeperPath says why a Replicated table's CREATE cannot be run on the
+// target as it stands; empty when it can. The server stores the Keeper path
+// with {database} and {table} already expanded, so the retargeted CREATE
+// would name the source's path, and on a server sharing the source's Keeper
+// the new table would join the source's replication group: rows a sync
+// inserts or deletes would reach the source. A path built on {uuid} is the
+// target's own, because the target mints a new UUID; so is the server's
+// default path, used when the engine has no arguments. Any other path is
+// refused rather than rewritten.
+func sharedKeeperPath(src *TableInfo) (reason string) {
+	if !isReplicatedEngine(src.Engine) {
+		return
+	}
+	args, ok := engineArgs(src.CreateQuery, src.Engine)
+	switch {
+	case !ok:
+		return "the Keeper path of the replicated engine could not be read; create the table on the target, then plan again"
+	case len(args) == 0:
+		return
+	case strings.Contains(args[0], "{uuid}"):
+		return
+	}
+	return "the replicated engine's Keeper path " + args[0] + " is the source's; created as it stands, the table could join the source's " +
+		"replication group. Create the table on the target with a path of its own, then plan again"
+}
+
 func judgeExisting(src *TableInfo, dst *TableInfo, target datacatalog.TableRef, v *TableVerdict) {
 	if normalizeExpr(src.SortingKey) != normalizeExpr(dst.SortingKey) {
 		v.Reasons = append(v.Reasons, "sorting keys differ: source ("+src.SortingKey+"), target ("+dst.SortingKey+")")
 	}
 	if src.Engine != dst.Engine {
 		v.Notes = append(v.Notes, "engines differ: source "+src.Engine+", target "+dst.Engine)
+	}
+	if IsMergeEngine(src.Engine) && strings.TrimPrefix(src.Engine, "Replicated") == strings.TrimPrefix(dst.Engine, "Replicated") {
+		sp, sok := mergeParameters(src)
+		dp, dok := mergeParameters(dst)
+		switch {
+		case !sok || !dok:
+			v.Notes = append(v.Notes, "the engine parameters could not be read; a diff with FINAL assumes both sides collapse rows alike")
+		case sp != dp:
+			v.Notes = append(v.Notes, "merge parameters differ: source ("+sp+"), target ("+dp+"); "+
+				"each side collapses rows by its own, so a diff with FINAL compares unlike results")
+		}
 	}
 	if normalizeExpr(src.PartitionKey) != normalizeExpr(dst.PartitionKey) {
 		v.Notes = append(v.Notes, "partition keys differ: source ("+src.PartitionKey+"), target ("+dst.PartitionKey+")")
@@ -235,6 +343,10 @@ func judgeExisting(src *TableInfo, dst *TableInfo, target datacatalog.TableRef, 
 		dc, has := dst.Column(sc.Name)
 		if !has {
 			ddl = append(ddl, AddColumnDDL(target, sc, prev))
+			if dropped := droppedColumnClauses(src.CreateQuery, sc.Name); len(dropped) > 0 {
+				v.Notes = append(v.Notes, "column "+sc.Name+" declares "+strings.Join(dropped, ", ")+
+					" on the source; ADD COLUMN carries none of it")
+			}
 			if sc.IsInsertable() {
 				v.CopyColumns = append(v.CopyColumns, sc.Name)
 			}
@@ -253,9 +365,6 @@ func judgeExisting(src *TableInfo, dst *TableInfo, target datacatalog.TableRef, 
 			}
 			extras = append(extras, label)
 		}
-	}
-	if len(ddl) > 0 && strings.Contains(src.CreateQuery, " TTL ") {
-		v.Notes = append(v.Notes, "the source declares TTL; ADD COLUMN carries no column TTL")
 	}
 
 	switch {

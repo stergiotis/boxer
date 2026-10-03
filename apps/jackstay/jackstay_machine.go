@@ -6,7 +6,6 @@ import (
 
 	"github.com/stergiotis/boxer/public/hmi/progressest"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -29,8 +28,9 @@ type phaseE uint8
 
 const (
 	phaseIdle        phaseE = iota // no servers discovered, no plan opened
-	phaseDiscovering               // reading both servers' system tables
+	phaseDiscovering               // reading both servers' system tables, no plan open
 	phaseDiscovered                // servers known, no plan yet
+	phaseOpening                   // a plan is read from the data area, or imported
 	phasePlanning                  // judging the tables, or running their DDL on the target
 	phaseDDLPending                // a plan whose target needs DDL before a diff or a sync
 	phasePlanned                   // a plan whose target structure is in line
@@ -44,7 +44,7 @@ const (
 )
 
 var allPhases = []phaseE{
-	phaseIdle, phaseDiscovering, phaseDiscovered, phasePlanning, phaseDDLPending, phasePlanned,
+	phaseIdle, phaseDiscovering, phaseDiscovered, phaseOpening, phasePlanning, phaseDDLPending, phasePlanned,
 	phaseComparing, phaseDiffers, phaseIdentical, phaseSyncing, phaseSynced, phaseIncomplete, phaseStale,
 }
 
@@ -56,6 +56,8 @@ func (inst phaseE) String() (s string) {
 		return "discovering"
 	case phaseDiscovered:
 		return "discovered"
+	case phaseOpening:
+		return "opening"
 	case phasePlanning:
 		return "planning"
 	case phaseDDLPending:
@@ -81,9 +83,11 @@ func (inst phaseE) String() (s string) {
 }
 
 // observePhase derives the phase from this frame's jobs and plan, with no
-// memory of its own. A running job outranks what the plan holds; a plan the
-// servers moved under outranks its sections. Between a diff and a sync the
-// later one speaks: a sync drops the diffs of the tables it copied, but a
+// memory of its own beyond whether the latest sync stopped. A running job
+// outranks what the plan holds; a plan the servers moved under outranks its
+// sections. Discovering the servers again while a plan is open does not move
+// the plan, so it shows only before there is one. Between a diff and a sync
+// the later one speaks: a sync drops the diffs of the tables it copied, but a
 // comparison after a sync leaves the reports in place.
 func (inst *App) observePhase() (ph phaseE) {
 	switch {
@@ -93,7 +97,9 @@ func (inst *App) observePhase() (ph phaseE) {
 		return phaseComparing
 	case inst.structureJob.Running():
 		return phasePlanning
-	case inst.discoverJob.Running():
+	case inst.isOpening():
+		return phaseOpening
+	case inst.discoverJob.Running() && inst.plan == nil:
 		return phaseDiscovering
 	case len(inst.stale) > 0:
 		return phaseStale
@@ -120,7 +126,7 @@ func (inst *App) observePhase() (ph phaseE) {
 	}
 	// A sync that stopped may have finished no table, so its report-less
 	// end counts as the sync's time.
-	stopped := inst.syncJob.Snapshot().State == bgjob.StateFailed
+	stopped := inst.syncStopped
 	if stopped && inst.syncFinished.After(syncAt) {
 		syncAt = inst.syncFinished
 	}
@@ -139,6 +145,12 @@ func (inst *App) observePhase() (ph phaseE) {
 		return phaseDDLPending
 	}
 	return phasePlanned
+}
+
+// isOpening reports whether a plan is being opened or imported; an export
+// leaves the plan where it is.
+func (inst *App) isOpening() (opening bool) {
+	return inst.fileJob.Running() && inst.fileOp != fileOpExport
 }
 
 // mirrorPhase moves the machine to the phase this frame observed. A frame
@@ -163,33 +175,37 @@ func (inst *App) mirrorPhase() {
 
 // newPhaseMachine declares the plan's lifecycle: discover, plan the
 // structure, apply its DDL, compare, sync. Every settled phase with a plan
-// can be planned again, and a stale plan only by planning again. A failed
+// can be planned again or give way to another plan opened, and a stale plan
+// only so; Compare and Start stay disabled while it is stale. A sync that
+// finds nothing to copy leaves the plan where it was. A failed or cancelled
 // step returns to the phase it started from, so failure needs no state of
-// its own; the step's page says why.
+// its own; the step's page says why, and the graph reaches that phase along
+// declared edges (CanReach), which mirrorPhase logs at debug.
 func newPhaseMachine() (m *fsmview.Machine[phaseE]) {
 	m = fsmview.NewMachine(phaseIdle, 64, fsmview.MachineOptions[phaseE]{
 		Label:      func(ph phaseE) string { return ph.String() },
 		StateOrder: allPhases,
 		StateColor: phaseColor,
 	})
-	m.AddRule(phaseIdle, phaseDiscovering, phasePlanned, phaseDDLPending).
+	m.AddRule(phaseIdle, phaseDiscovering, phaseOpening).
 		AddRule(phaseDiscovering, phaseDiscovered).
-		AddRule(phaseDiscovered, phaseDiscovering, phasePlanning).
+		AddRule(phaseDiscovered, phaseDiscovering, phasePlanning, phaseOpening).
+		AddRule(phaseOpening, phaseIdle, phaseDDLPending, phasePlanned, phaseDiffers, phaseIdentical, phaseSynced, phaseIncomplete).
 		AddRule(phasePlanning, phaseDDLPending, phasePlanned, phaseStale).
-		AddRule(phaseDDLPending, phasePlanning, phaseDiscovering).
-		AddRule(phasePlanned, phaseComparing, phaseSyncing, phasePlanning, phaseDiscovering).
+		AddRule(phaseDDLPending, phasePlanning, phaseComparing, phaseSyncing, phaseOpening).
+		AddRule(phasePlanned, phasePlanning, phaseComparing, phaseSyncing, phaseOpening).
 		AddRule(phaseComparing, phaseDiffers, phaseIdentical, phaseStale).
-		AddRule(phaseDiffers, phaseComparing, phaseSyncing, phasePlanning).
-		AddRule(phaseIdentical, phaseComparing, phaseSyncing, phasePlanning).
-		AddRule(phaseSyncing, phaseSynced, phaseIncomplete, phaseStale).
-		AddRule(phaseSynced, phaseComparing, phaseSyncing, phasePlanning).
-		AddRule(phaseIncomplete, phaseSyncing, phaseComparing, phasePlanning).
-		AddRule(phaseStale, phasePlanning, phaseDiscovering).
+		AddRule(phaseDiffers, phaseComparing, phaseSyncing, phasePlanning, phaseOpening).
+		AddRule(phaseIdentical, phaseComparing, phaseSyncing, phasePlanning, phaseOpening).
+		AddRule(phaseSyncing, phaseSynced, phaseIncomplete, phaseStale, phaseDDLPending, phasePlanned, phaseDiffers, phaseIdentical).
+		AddRule(phaseSynced, phaseComparing, phaseSyncing, phasePlanning, phaseOpening).
+		AddRule(phaseIncomplete, phaseSyncing, phaseComparing, phasePlanning, phaseOpening).
+		AddRule(phaseStale, phasePlanning, phaseOpening).
 		EdgeLabel(phaseIdle, phaseDiscovering, "Discover").
-		EdgeLabel(phaseIdle, phasePlanned, "open a plan").
-		EdgeLabel(phaseIdle, phaseDDLPending, "open a plan").
+		EdgeLabel(phaseIdle, phaseOpening, "open a plan").
 		EdgeLabel(phaseDiscovering, phaseDiscovered, "inventories").
 		EdgeLabel(phaseDiscovered, phasePlanning, "Plan the structure").
+		EdgeLabel(phaseOpening, phaseIdle, "nothing opened").
 		EdgeLabel(phasePlanning, phaseDDLPending, "DDL needed").
 		EdgeLabel(phasePlanning, phasePlanned, "in line").
 		EdgeLabel(phasePlanning, phaseStale, "servers moved").
@@ -207,6 +223,9 @@ func newPhaseMachine() (m *fsmview.Machine[phaseE]) {
 		EdgeLabel(phaseSynced, phaseComparing, "Compare content again").
 		EdgeLabel(phaseIncomplete, phaseSyncing, "resume").
 		EdgeLabel(phaseStale, phasePlanning, "Plan the structure")
+	for _, ph := range []phaseE{phaseDDLPending, phasePlanned, phaseDiffers, phaseIdentical} {
+		m.EdgeLabel(phaseSyncing, ph, "nothing to sync")
+	}
 	return
 }
 
@@ -214,7 +233,7 @@ func newPhaseMachine() (m *fsmview.Machine[phaseE]) {
 // outcomes by severity, the rest muted.
 func phaseColor(ph phaseE, _ bool) styletokens.RGBA8 {
 	switch ph {
-	case phaseDiscovering, phasePlanning, phaseComparing, phaseSyncing:
+	case phaseDiscovering, phaseOpening, phasePlanning, phaseComparing, phaseSyncing:
 		return styletokens.AccentDefault
 	case phaseSynced, phaseIdentical:
 		return styletokens.SuccessDefault
@@ -231,7 +250,7 @@ func phaseColor(ph phaseE, _ bool) styletokens.RGBA8 {
 // phaseTone is phaseColor for the chip's badge.
 func phaseTone(ph phaseE) badge.ToneE {
 	switch ph {
-	case phaseDiscovering, phasePlanning, phaseComparing, phaseSyncing:
+	case phaseDiscovering, phaseOpening, phasePlanning, phaseComparing, phaseSyncing:
 		return badge.TonePrimary
 	case phaseSynced, phaseIdentical:
 		return badge.ToneSuccess
@@ -271,6 +290,8 @@ func (inst *App) phaseLine() (s string) {
 		return "reading both servers' system tables…"
 	case phaseDiscovered:
 		return hostLabel(inst.disc.srcEp.URL) + " → " + hostLabel(inst.disc.dstEp.URL) + "; choose the databases"
+	case phaseOpening:
+		return "reading the plan…"
 	case phasePlanning:
 		return "judging the tables, or running their DDL on the target…"
 	case phaseDDLPending:
@@ -299,7 +320,7 @@ func (inst *App) phaseLine() (s string) {
 		s = plural(int(rows), "row") + " copied"
 		if unsynced > 0 {
 			s += ", " + plural(unsynced, "chunk") + " not synced"
-		} else if inst.syncJob.Snapshot().State == bgjob.StateFailed {
+		} else if inst.syncStopped {
 			s += ", the sync stopped"
 		}
 		return

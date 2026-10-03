@@ -2,6 +2,7 @@ package jackstay
 
 import (
 	"context"
+	"errors"
 	"io"
 	"math"
 	"strings"
@@ -82,9 +83,10 @@ func TestBoundType(t *testing.T) {
 
 func TestPickBounds(t *testing.T) {
 	sample := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
-	assert.Equal(t, []string{"c", "e", "g"}, pickBounds(sample, 4))
-	assert.Nil(t, pickBounds(sample, 1))
-	assert.Equal(t, []string{"x"}, pickBounds([]string{"x", "x", "x", "x"}, 4), "repeats collapse")
+	assert.Equal(t, []string{"c", "e", "g"}, pickBounds(sample, 4, boundOrderBytes))
+	assert.Nil(t, pickBounds(sample, 1, boundOrderBytes))
+	assert.Equal(t, []string{"x"}, pickBounds([]string{"x", "x", "x", "x"}, 4, boundOrderBytes), "repeats collapse")
+	assert.Equal(t, []string{"-0", "1"}, pickBounds([]string{"-1", "-0", "0", "1"}, 4, boundOrderFloat), "repeats are judged in the type's order")
 }
 
 func TestChunkingExprs(t *testing.T) {
@@ -118,10 +120,11 @@ func TestChunkingExprs(t *testing.T) {
 }
 
 func TestCompareChunkIds(t *testing.T) {
-	assert.Negative(t, compareChunkIds("9", "10"))
-	assert.Positive(t, compareChunkIds("b", "a"))
-	assert.Zero(t, compareChunkIds("10", "10"))
-	assert.Negative(t, compareChunkIds("10", "9x"), "a non-index falls back to string order")
+	compare := (&Chunking{Kind: ChunkingRange}).compareChunkIds
+	assert.Negative(t, compare("9", "10"))
+	assert.Positive(t, compare("b", "a"))
+	assert.Zero(t, compare("10", "10"))
+	assert.Negative(t, compare("10", "9x"), "a non-index falls back to string order")
 }
 
 func TestChunkListQuery_PinsRowBinary(t *testing.T) {
@@ -251,4 +254,54 @@ func TestPlan_CarryOver(t *testing.T) {
 	assert.Equal(t, *c, *fresh.Tables[0].Chunking)
 	assert.Nil(t, fresh.Tables[0].Diff, "diffs are not carried")
 	assert.Nil(t, fresh.Tables[1].Chunking, "a changed key drops the layout")
+}
+
+func TestBoth(t *testing.T) {
+	errSrc, errDst := errors.New("source failed"), errors.New("target failed")
+	waitCancel := func(ctx context.Context) (int, error) {
+		<-ctx.Done()
+		return 0, ctx.Err()
+	}
+
+	s, d, err := both(context.Background(), func(_ context.Context, side int) (int, error) { return side + 10, nil })
+	require.NoError(t, err)
+	assert.Equal(t, 10, s)
+	assert.Equal(t, 11, d)
+
+	// The target fails; the source, cancelled by that failure, is not blamed.
+	_, _, err = both(context.Background(), func(ctx context.Context, side int) (int, error) {
+		if side == 1 {
+			return 0, errDst
+		}
+		return waitCancel(ctx)
+	})
+	assert.Equal(t, errDst, err)
+
+	// The same the other way round.
+	_, _, err = both(context.Background(), func(ctx context.Context, side int) (int, error) {
+		if side == 0 {
+			return 0, errSrc
+		}
+		return waitCancel(ctx)
+	})
+	assert.Equal(t, errSrc, err)
+
+	// A second failure of its own is kept, after the first side's.
+	_, _, err = both(context.Background(), func(ctx context.Context, side int) (int, error) {
+		if side == 0 {
+			return 0, errSrc
+		}
+		<-ctx.Done()
+		return 0, errDst
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errSrc)
+	assert.ErrorIs(t, err, errDst)
+	assert.True(t, strings.HasPrefix(err.Error(), errSrc.Error()), err.Error())
+
+	// A cancelled caller is not the other side failing.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err = both(ctx, func(ctx context.Context, _ int) (int, error) { return waitCancel(ctx) })
+	assert.ErrorIs(t, err, context.Canceled)
 }

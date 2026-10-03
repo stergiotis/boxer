@@ -31,8 +31,9 @@ func TestValidateFilter(t *testing.T) {
 		"ts > now() - 3600": "depends on when or where",
 		"rand() % 2 = 0":    "depends on when or where",
 		"k IN (SELECT 1)":   "without a subquery",
-		"k > (":             "does not parse",
-		"1) UNION ALL SELECT 1 FROM other WHERE (1": "subquery",
+		"k > (":             "one expression",
+		"k > 1 AND":         "does not parse",
+		"1) UNION ALL SELECT 1 FROM other WHERE (1": "one expression",
 		"dictGet('d', 'a', k) = 1":                  "depends on when or where",
 	} {
 		_, err := ValidateFilter(f, cols)
@@ -43,9 +44,133 @@ func TestValidateFilter(t *testing.T) {
 	notes, err := ValidateFilter("ts >= '2026-01-01 00:00:00'", cols)
 	require.NoError(t, err)
 	assert.Len(t, notes, 1)
-	notes, err = ValidateFilter("toDate(ts) >= '2026-01-01'", cols)
+	notes, err = ValidateFilter("toDate(ts, 'UTC') >= '2026-01-01'", cols)
 	require.NoError(t, err)
-	assert.Empty(t, notes, "a Date literal is read the same in any zone")
+	assert.Empty(t, notes, "a Date literal is read the same in any zone, and the zone is named")
+}
+
+// A filter is joined to other predicates as text, so a fragment that closes
+// the probe's parentheses and opens new ones must not pass: joined to a chunk
+// predicate it would select every row, and reach the target's DELETE.
+func TestValidateFilter_OneExpression(t *testing.T) {
+	cols := []string{"a", "s"}
+	for _, f := range []string{
+		"1) OR (1",
+		"a = 1) OR (a > 0",
+		"a = 1)) OR ((a > 0",
+		"(a = 1",
+		"a = 1)",
+		"a = 1 -- )",
+		"a = 1 /* ) */",
+		"a = 1 # )",
+		"s = ')",
+	} {
+		_, err := ValidateFilter(f, cols)
+		if assert.Error(t, err, f) {
+			assert.Contains(t, err.Error(), "one expression", f)
+		}
+	}
+	for _, f := range []string{
+		"s = ')'",
+		"s = '('",
+		"s = ') OR (1'",
+		"s IN ('(', ')') AND (a > 1 OR a < 0)",
+		"`a` > 0",
+		`s = 'it\'s )'`,
+		"s = 'it''s )'",
+		"a - 1 > 0",
+	} {
+		_, err := ValidateFilter(f, cols)
+		assert.NoError(t, err, f)
+	}
+	assert.Equal(t, "(s = ')') AND (k > 1)", andPredicates("s = ')'", "k > 1"))
+}
+
+// A lambda's parameter is a name in its body only.
+func TestValidateFilter_LambdaScope(t *testing.T) {
+	cols := []string{"a", "b"}
+	_, err := ValidateFilter("arrayExists(x -> x > 0, b)", cols)
+	require.NoError(t, err)
+	_, err = ValidateFilter("arrayExists((x, y) -> x > y, b, b)", cols)
+	require.NoError(t, err)
+	_, err = ValidateFilter("x > 0 AND arrayExists(x -> x > 0, b)", cols)
+	assert.ErrorContains(t, err, "not copied")
+	_, err = ValidateFilter("arrayExists(x -> arrayExists(y -> y > x, b), b)", cols)
+	assert.NoError(t, err, "an outer lambda's parameter is in scope in an inner body")
+	_, err = ValidateFilter("arrayExists(x -> arrayExists(y -> y > 0, b), b) AND y > 0", cols)
+	assert.ErrorContains(t, err, "not copied")
+}
+
+// Functions that read the server, the clock or the block, or multiply rows,
+// select different rows on each side.
+func TestValidateFilter_VolatileFunctions(t *testing.T) {
+	cols := []string{"k", "arr"}
+	for _, f := range []string{
+		"arrayJoin(arr) > 1",
+		"k = getServerPort('tcp_port')",
+		"k = tcpPort()",
+		"buildId() = ''",
+		"displayName() = 'x'",
+		"hostName() = 'x'",
+		"fqdn() = 'x'",
+		"k = shardNum()",
+		"joinGetOrNull('j', 'v', k) = 1",
+		"k < filesystemAvailable()",
+		"k > toUnixTimestamp(current_timestamp())",
+	} {
+		_, err := ValidateFilter(f, cols)
+		if assert.Error(t, err, f) {
+			assert.Contains(t, err.Error(), "depends on when or where", f)
+		}
+	}
+}
+
+// A date function that names no timezone reads a DateTime in the server's.
+func TestValidateFilter_ZoneNotes(t *testing.T) {
+	cols := []string{"ts"}
+	for f, noted := range map[string]bool{
+		"toDate(ts) >= '2026-01-01'":                        true,
+		"toDate(ts, 'UTC') >= '2026-01-01'":                 false,
+		"toStartOfDay(ts) = toStartOfDay(ts)":               true,
+		"toStartOfDay(ts, 'UTC') > '2026-01-01'":            false,
+		"toStartOfInterval(ts, INTERVAL 1 HOUR) > 0":        true,
+		"toStartOfInterval(ts, INTERVAL 1 HOUR, 'UTC') > 0": false,
+		"formatDateTime(ts, '%Y') = '2026'":                 true,
+		"toYYYYMM(ts) = 202609":                             true,
+		"toUInt64(ts) > 0":                                  false,
+	} {
+		notes, err := ValidateFilter(f, cols)
+		require.NoError(t, err, f)
+		if noted {
+			assert.Len(t, notes, 1, f)
+		} else {
+			assert.Empty(t, notes, f)
+		}
+	}
+	notes, err := ValidateFilter("toDate(ts) = toDate(ts)", cols)
+	require.NoError(t, err)
+	assert.Len(t, notes, 1, "one note per function")
+}
+
+// A dotted name is a subcolumn or tuple element of a copied column, or a
+// column whose own name holds the dot (Nested); a qualifier that is no
+// copied column, or two qualifiers, are refused.
+func TestValidateFilter_DottedNames(t *testing.T) {
+	cols := []string{"tup", "n.x"}
+	for _, f := range []string{"tup.a = 1", "n.x > 0", "`n.x` > 0", "tup.1 = 1"} {
+		_, err := ValidateFilter(f, cols)
+		assert.NoError(t, err, f)
+	}
+	for f, why := range map[string]string{
+		"n.y > 0":                          "a dotted name must start with a copied column",
+		"jackstay_filter_probe.tup = 1":    "a dotted name must start with a copied column",
+		"db.jackstay_filter_probe.tup = 1": "unqualified",
+	} {
+		_, err := ValidateFilter(f, cols)
+		if assert.Error(t, err, f) {
+			assert.Contains(t, err.Error(), why, f)
+		}
+	}
 }
 
 func TestBuildPlan_Filter(t *testing.T) {

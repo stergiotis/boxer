@@ -43,17 +43,14 @@ func newExportCommand() *cli.Command {
 				return
 			}
 			if s := c.String("sample"); s != "" {
-				req.SampleNum, req.SampleDen, err = parseFraction(s)
+				req.SampleNum, req.SampleDen, err = jk.ParseFraction(s)
 				if err != nil {
 					return
 				}
 			}
-			switch req.Compression = c.String("compression"); req.Compression {
-			case "zstd", "gzip":
-			case "none":
-				req.Compression = ""
-			default:
-				return eb.Build().Str("compression", req.Compression).Errorf("expected zstd, gzip or none")
+			req.Compression, err = jk.ParseCompression(c.String("compression"))
+			if err != nil {
+				return
 			}
 			req.BeforeTable = func(t *jk.PackTable) {
 				_, _ = fmt.Fprintf(w, "%s (%s chunking)\n", t.Source, t.Chunking.Kind)

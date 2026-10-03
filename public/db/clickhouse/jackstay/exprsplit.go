@@ -43,3 +43,34 @@ func SplitKeyExprs(key string) (exprs []string) {
 	exprs = append(exprs, strings.TrimSpace(key[start:]))
 	return
 }
+
+// closingParen returns the index of the parenthesis that closes the one at
+// s[open], skipping quoted text, or -1 when it is not closed.
+func closingParen(s string, open int) (end int) {
+	depth := 0
+	var quote byte
+	for i := open; i < len(s); i++ {
+		ch := s[i]
+		if quote != 0 {
+			switch ch {
+			case '\\':
+				i++
+			case quote:
+				quote = 0
+			}
+			continue
+		}
+		switch ch {
+		case '\'', '"', '`':
+			quote = ch
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}

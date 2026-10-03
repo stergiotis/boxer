@@ -66,16 +66,28 @@ What this implies for ADR-0259 §SD5:
 
 **Validation.** A filter is parsed with the nanopass parser and refused when:
 
-- it is not a single expression;
+- it is not a single expression on its own text. Every query wraps the
+  filter in parentheses and joins it to a chunk or leaf predicate with
+  `AND`, so a filter whose parentheses close early (`1) OR (1`) would lift
+  that predicate off the target's `DELETE`. Parentheses must balance outside
+  literals, the parsed expression must span the whole text, and comments are
+  refused;
 - it references a column outside the copy column list (the target must be
-  able to evaluate it);
+  able to evaluate it). A lambda's parameters count as names only inside
+  its body;
 - it calls a function whose value depends on when or where it runs
-  (`now`, `today`, `rand*`, `generateUUID*`, …);
+  (`now`, `today`, `rand*`, `generateUUID*`, server and connection
+  identity, …) or that changes the row count (`arrayJoin`);
 - it reads a table.
 
-A filter that compares against a date or time literal gets a note: a
-literal without a zone is read in each server's timezone, and the two
-servers may differ.
+A filter that compares against a date or time literal, or calls a date
+function without a timezone argument, gets a note: either is read in each
+server's timezone, and the two servers may differ.
+
+The same validation runs on a filter a plan file carries and on one a pack
+manifest carries, so neither reaches a server unchecked. A pack's filter may
+also name the sorting key's columns, stored or MATERIALIZED, since a sampled
+export's predicate hashes the key.
 
 ### SD2 — A pack is a directory: a manifest and one compressed Native file per chunk
 

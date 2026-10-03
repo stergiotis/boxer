@@ -252,7 +252,7 @@ func TestRunSync_RefusesMismatchBeforeSaving(t *testing.T) {
 		Tables: []PlanTable{*pt}, SyncRun: &SyncRun{RunId: "run"}}}
 	prep.Chosen = []*PlanTable{&prep.Plan.Tables[0]}
 	quiet := &fakeClient{answer: func(sql string) (string, error) { return "", nil }}
-	_, err = RunSync(context.Background(), ServerSource(quiet), quiet, &prep, planPath, false, DefaultSyncOptions(), time.Now)
+	_, err = RunSync(context.Background(), ServerSource(quiet), quiet, &prep, planPath, DefaultSyncOptions(), time.Now)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "other settings")
 	_, serr := LoadPlan(planPath)

@@ -214,7 +214,7 @@ func DiffTable(ctx context.Context, src SourceI, dst QueryI, srcSpec *DigestSpec
 			ids = append(ids, id)
 		}
 	}
-	slices.SortFunc(ids, compareChunkIds)
+	slices.SortFunc(ids, srcSpec.Chunking.compareChunkIds)
 	d.Chunks = uint64(len(ids))
 
 	var toResolve []ChunkLeaf
@@ -289,13 +289,23 @@ func DiffTable(ctx context.Context, src SourceI, dst QueryI, srcSpec *DigestSpec
 	return
 }
 
-// compareChunkIds orders range chunk ids (decimal indexes) numerically and
-// everything else as strings.
-func compareChunkIds(a string, b string) (r int) {
-	ia, oka := rangeIndex(a)
-	ib, okb := rangeIndex(b)
-	if oka && okb {
-		return cmp.Compare(ia, ib)
+// compareChunkIds orders chunk ids of a layout: range chunk ids (decimal
+// indexes) numerically, with any id that is not an index after them, and
+// partition chunk ids (hex) as strings. Telling the kinds apart by the layout,
+// not by an id's shape, keeps the order transitive: a hex id such as "1000"
+// also reads as an index.
+func (inst *Chunking) compareChunkIds(a string, b string) (r int) {
+	if inst.Kind == ChunkingRange {
+		ia, oka := rangeIndex(a)
+		ib, okb := rangeIndex(b)
+		switch {
+		case oka && okb:
+			return cmp.Compare(ia, ib)
+		case oka:
+			return -1
+		case okb:
+			return 1
+		}
 	}
 	return cmp.Compare(a, b)
 }
@@ -392,7 +402,7 @@ func resolveLeaves(ctx context.Context, src SourceI, dst QueryI, srcSpec *Digest
 		}
 	}
 	slices.SortFunc(keys, func(a pairKey, b pairKey) int {
-		if r := compareChunkIds(a.cl.Chunk, b.cl.Chunk); r != 0 {
+		if r := srcSpec.Chunking.compareChunkIds(a.cl.Chunk, b.cl.Chunk); r != 0 {
 			return r
 		}
 		if r := cmp.Compare(a.cl.Leaf, b.cl.Leaf); r != 0 {
@@ -471,7 +481,9 @@ func unmatched(a []uint64, b []uint64) (ua uint64, ub uint64) {
 
 // DigestSpecs builds the two sides' digest specs of a plan table. FINAL is
 // applied to a side only when final is asked for and that side's engine
-// collapses rows; maybeSpurious reports a merge engine read without it.
+// collapses rows; maybeSpurious reports a merge engine read without it. A
+// target outside the MergeTree family has no partition ids, so its partition
+// chunks are read by the chunk expression.
 func (inst *PlanTable) DigestSpecs(final bool) (src DigestSpec, dst DigestSpec, maybeSpurious bool) {
 	keys := SplitKeyExprs(inst.SortingKey)
 	var c Chunking
@@ -479,7 +491,8 @@ func (inst *PlanTable) DigestSpecs(final bool) (src DigestSpec, dst DigestSpec, 
 		c = *inst.Chunking
 	}
 	src = DigestSpec{Ref: inst.Source, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.Engine), Filter: inst.Filter}
-	dst = DigestSpec{Ref: inst.Target, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.TargetEngine), Filter: inst.Filter}
+	dst = DigestSpec{Ref: inst.Target, KeyExprs: keys, CopyColumns: inst.CopyColumns, Chunking: c, Final: final && IsMergeEngine(inst.TargetEngine), Filter: inst.Filter,
+		NoPartitionIds: !isMergeTreeEngine(inst.TargetEngine)}
 	maybeSpurious = (IsMergeEngine(inst.Engine) && !src.Final) || (IsMergeEngine(inst.TargetEngine) && !dst.Final)
 	return
 }

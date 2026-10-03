@@ -115,7 +115,11 @@ func (inst *App) renderDifferences() {
 		}
 	}
 	inst.renderSelectedDiff()
-	inst.cliHint("diff --plan {plan} [--final]")
+	cmd := "diff --plan {plan}"
+	if inst.final {
+		cmd += " --final"
+	}
+	inst.cliHint(cmd)
 }
 
 func (inst *App) renderSelectedDiff() {
@@ -264,29 +268,38 @@ func (inst *App) renderSync() {
 	}
 	inst.renderPreflight()
 	inst.failedNote("sync-failed", &inst.syncJob)
-	cmd := "sync --plan {plan} --mode " + inst.syncMode.String()
+	inst.cliHint(inst.syncCommand())
+}
+
+// syncCommand is the CLI spelling of the Sync page's choices: what Start
+// would run.
+func (inst *App) syncCommand() (cmd string) {
+	cmd = "sync --plan {plan} --mode " + inst.syncMode.String()
 	if inst.syncMode == jk.SyncModeSample {
-		cmd += " --sample " + inst.sampleText
-	} else if inst.syncMode == jk.SyncModeFull {
+		cmd += " --sample " + shellQuote(strings.TrimSpace(inst.sampleText))
+	}
+	if inst.syncMode != jk.SyncModeRepair {
 		cmd += " --existing " + inst.existing.String()
+	}
+	switch inst.compression {
+	case "zstd":
+	case "":
+		cmd += " --compression none"
+	default:
+		cmd += " --compression " + inst.compression
 	}
 	if inst.restart {
 		cmd += " --restart"
 	}
-	inst.cliHint(cmd)
+	return
 }
 
-// renderPreflight runs the pre-flight whenever the choices change, and shows
-// what the sync would move and whether the target's disks have room.
+// renderPreflight shows what the sync would move and whether the target's
+// disks have room; the frame runs it once the choices settle
+// (schedulePreflight).
 func (inst *App) renderPreflight() {
-	key := inst.settingsKey()
-	if key != inst.preflightKey && !inst.previewJob.Running() && !inst.syncJob.Running() {
-		inst.preflightKey = key
-		inst.preflight = nil
-		inst.startPreview()
-	}
 	space()
-	if inst.jobRow(&inst.previewJob, "measuring what would move", "", "") {
+	if inst.jobRow(&inst.previewJob, "measuring what would move", "cancel-preflight", "") {
 		return
 	}
 	inst.failedNote("preflight-failed", &inst.previewJob)
@@ -344,25 +357,19 @@ func (inst *App) renderStartControls() {
 	if inst.plan == nil {
 		return
 	}
-	busy := inst.syncJob.Running() || inst.diffJob.Running() || inst.structureJob.Running() || inst.previewJob.Running() ||
+	busy := inst.planBusy() || inst.previewJob.Running() || len(inst.stale) > 0 || inst.diffableCount() == 0 ||
 		(inst.preflight != nil && inst.preflight.tables == 0)
-	if !inst.syncArmed {
-		if inst.actionButton("arm-sync", "Start the sync…", busy) {
-			inst.syncArmed = true
-		}
-		return
-	}
 	what := inst.syncMode.String() + " sync"
 	if pf := inst.preflight; pf != nil && pf.tables > 0 {
 		what = fmt.Sprintf("%s of %d rows", what, pf.rows)
 	}
-	badge.New(inst.ids.PrepareStr("armed"), "Start the "+what+" to "+hostLabel(inst.plan.Target.URL)+"?").
-		Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
-	if inst.actionButton("sync", "Start", busy) {
+	wasArmed := inst.syncArmed
+	question := "Start the " + what + " to " + hostLabel(inst.plan.Target.URL) + "?"
+	if inst.confirmControls("sync", &inst.syncArmed, "Start the sync…", question, "Start", busy) {
 		inst.startSync()
 	}
-	if c.Button(inst.ids.PrepareStr("disarm-sync"), c.Atoms().Text("Cancel").Keep()).SendResp().HasPrimaryClicked() {
-		inst.syncArmed = false
+	if inst.syncArmed && !wasArmed {
+		inst.syncArmedKey = inst.armKey()
 	}
 }
 
@@ -447,11 +454,16 @@ func (inst *App) renderRunHeadline() {
 			}
 		}
 	}
+	inst.failedNote("reload-failed", &inst.reloadJob)
 	inst.card("outcome")(func() bool {
 		switch {
-		case snap.State == bgjob.StateFailed && snap.Err != nil:
+		case inst.syncStopped:
 			badge.New(inst.ids.PrepareStr("o"), "the sync stopped").Tone(badge.ToneError).Variant(badge.VariantSoft).Send()
-			c.Label(snap.Err.Error()).Wrap().Send()
+			if snap.State == bgjob.StateFailed && snap.Err != nil {
+				c.Label(snap.Err.Error()).Wrap().Send()
+			} else {
+				c.Label("cancelled").Send()
+			}
 			note("Start it again from the Sync step: the journal resumes it where it stopped.")
 		case reported == 0:
 			note("No sync has run for this plan. Choose what to copy on the Sync step.")
