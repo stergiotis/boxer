@@ -8,6 +8,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 )
 
 // The host chrome of the contract (ADR-0269 §SD5): a badge in every window a
@@ -301,7 +303,9 @@ func (inst *Chrome) renderConfirmation(p proposalRef, waiting int, ids *c.Widget
 			c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
 		}
 		c.Separator().Send()
-		for range c.HorizontalTop().KeepIter() {
+		// Right-aligned, the decision at the edge: a right-to-left row
+		// places its first child rightmost.
+		for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
 			confirm = c.Button(ids.PrepareStr("agent-confirm-yes-"+rec.key), c.Atoms().Text("Confirm").Keep()).Kind(c.ButtonKindDanger).SendResp().HasPrimaryClicked()
 			decline = c.Button(ids.PrepareStr("agent-confirm-no-"+rec.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
 		}
@@ -342,11 +346,16 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 	if r.held == nil || r.held.need == needInstance {
 		c.Separator().Send()
 		c.Label("Share these windows, in the mode you pick:").Send()
-		for _, w := range windows {
-			inst.renderShareRow(r, w, ids)
-		}
 		if len(windows) == 0 {
 			c.Label("no other window is open").Send()
+		}
+		// One row per window: whether it is shared, the mode, and what the
+		// mode lets the task do — the columns aligned across windows.
+		for range c.Grid(ids.PrepareStr("agent-share-grid-" + r.key)).NumColumns(3).KeepIter() {
+			for _, w := range windows {
+				inst.renderShareRow(r, w, ids)
+				c.EndRow()
+			}
 		}
 	}
 	for _, l := range r.launches {
@@ -376,11 +385,28 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
 	}
 	c.Separator().Send()
-	for range c.HorizontalTop().KeepIter() {
+	// Right-aligned, Approve at the edge: a right-to-left row places its
+	// first child rightmost.
+	for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
 		approve = c.Button(ids.PrepareStr("agent-approve-"+r.key), c.Atoms().Text("Approve").Keep()).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked()
 		decline = c.Button(ids.PrepareStr("agent-decline-"+r.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
 	}
 	return
+}
+
+// modeLook is how the dialog shows a mode: its glyph, what it lets the
+// task do — once as the option's hover, once as the badge beside the
+// choice — and the badge's tone, which rises with what the task may
+// change.
+func modeLook(m ModeE) (glyph string, tip string, effect string, tone badge.ToneE) {
+	switch m {
+	case ModeObserve:
+		return icons.PhEye, "The task reads the window's state and changes nothing.", "reads only", badge.ToneNeutral
+	case ModeSuggest:
+		return icons.PhLightbulb, "Each change the task makes waits in the window as a proposal you accept or reject.", "you accept each change", badge.ToneInfo
+	default:
+		return icons.PhLightning, "The task changes the window directly; each change can be undone there, and a change outside the app still asks you.", "changes the window", badge.ToneWarning
+	}
 }
 
 func needText(h *held) (s string) {
@@ -415,23 +441,41 @@ func (inst *Chrome) renderShareRow(r *request, w windowRow, ids *c.WidgetIdStack
 		mode = ModeObserve
 	}
 	busy := svc.holder(w.key, r.task) != nil
+	if busy && mode >= ModeSuggest {
+		// Observe is all a busy window offers; what is approved is what
+		// the dialog shows.
+		mode = ModeObserve
+		r.mode[w.key] = mode
+	}
 	svc.mu.Unlock()
-	for range c.HorizontalTop().KeepIter() {
-		c.Checkbox(ids.PrepareStr("agent-share-"+r.key+"-"+k), *share, w.title+" (window "+k+")").SendRespVal(share)
+	// Three grid cells: the window, its mode, and what the mode allows. A
+	// window not shared offers no mode; a window another task acts in
+	// offers observe alone.
+	c.Checkbox(ids.PrepareStr("agent-share-"+r.key+"-"+k), *share, w.title+" (window "+k+")").SendRespVal(share)
+	if !*share {
+		for rt := range c.RichTextLabel("not shared") {
+			rt.Weak()
+		}
+		c.Label("").Send()
+	} else {
+		bar := selector.Segmented(ids, "agent-share-mode-"+r.key+"-"+k, &mode)
 		for _, m := range AllModes {
 			if busy && m >= ModeSuggest {
 				continue
 			}
-			if c.SelectableLabel(ids.PrepareStr("agent-share-mode-"+r.key+"-"+k+"-"+m.String()), mode == m, m.String()).
-				SendResp().HasPrimaryClicked() {
-				svc.mu.Lock()
-				r.mode[w.key] = m
-				svc.mu.Unlock()
-			}
+			glyph, tip, _, _ := modeLook(m)
+			bar = bar.OptionIcon(m, glyph, m.String(), tip)
 		}
+		if bar.SendResp() {
+			svc.mu.Lock()
+			r.mode[w.key] = mode
+			svc.mu.Unlock()
+		}
+		_, _, effect, tone := modeLook(mode)
 		if busy {
-			c.Label("busy: another task acts here").Send()
+			effect, tone = "busy: another task acts here", badge.ToneNeutral
 		}
+		badge.New(ids.PrepareStr("agent-share-effect-"+r.key+"-"+k), effect).Tone(tone).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
 	}
 	svc.mu.Lock()
 	r.share[w.key] = *share
