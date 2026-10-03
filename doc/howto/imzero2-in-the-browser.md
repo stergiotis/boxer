@@ -126,6 +126,11 @@ tab is which apps a build links; a tab for one app should link that app.
   to persist, appstate, fsbroker, adhocdata or the clipboard broker gets
   the bus's timeout. An app that needs one of them at mount does not
   mount.
+- **The HTTP egress service** (ADR-0262). Map basemap tiles are fetched by
+  the tab itself instead, straight from the tile server (OpenStreetMap
+  unless `BOXER_MAP_TILE_URL` names another), and the map panes start with
+  the basemap on — so a tab with a map reaches that server from every
+  viewer's browser (ADR-0262 Update 2026-10-03).
 - **Live query progress.** The transport that reads ClickHouse's progress
   headers as they stream speaks HTTP over a raw socket; under wasm the
   stock client is used and a run reports when it completes.

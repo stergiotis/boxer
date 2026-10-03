@@ -255,6 +255,22 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
 
+## Update — 2026-10-03: the browser tab fetches its basemap tiles itself
+
+The browser tab (ADR-0263) has no runtime services, so no
+`net.http.fetch.basemap` service answers there and every tile waited out the
+bus's timeout. In tab builds (`GOOS=wasip1`) `basemap.Tiles` now fetches a
+tile itself, over the tab's host transport, and the map panes start with
+the basemap on (`basemap.DefaultOn`). That is a deliberate exception to this
+ADR's rule that tiles leave only through the egress service: in the tab each
+viewer's browser asks the tile server directly, the request carries no
+sensitivity label and is not recorded, and the tile server sees the
+viewer's own address. It was chosen over a same-origin tile proxy in the tab
+server because it needs no server, and over the country-outline stand-in
+because the outlines, re-sent as vectors every frame, cost the tab about
+180 KB of draw commands per frame at a world view against about 13 KB with
+tiles (measured once on 2026-10-03). Native builds are unchanged.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy, §SD10 capslock and the `net.` prefix.
