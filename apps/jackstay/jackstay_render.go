@@ -201,7 +201,6 @@ func (inst *App) renderPlanRow() {
 }
 
 func (inst *App) renderStatus() {
-	inst.renderPhase()
 	switch {
 	case inst.lastError != "":
 		badge.New(inst.ids.PrepareStr("err"), inst.lastError).Tone(badge.ToneError).Variant(badge.VariantSoft).Send()
@@ -284,33 +283,37 @@ func (inst *App) stepAction(st stepE) (action func()) {
 	return nil
 }
 
-// renderFooter is the classic wizard bar: Back at the left edge, Next at the
-// right. Next is drawn in a right-to-left layout so it lands on the edge.
+// renderFooter is the wizard bar: the plan's phase at the left edge, as a
+// status bar carries it, and Back and Next together at the right. The right
+// side is laid out right to left, so Next is drawn first.
 func (inst *App) renderFooter(ft footer) {
 	for range c.HorizontalTop().KeepIter() {
-		if inst.step > stepConnect {
-			prev := inst.step - 1
-			if c.Button(inst.ids.PrepareStr("back"), c.Atoms().Text(icons.PhArrowLeft+" "+prev.short()).Keep()).SendResp().HasPrimaryClicked() {
-				inst.goTo(prev)
-			}
-		}
-		if ft.hasNext {
-			for range c.UiWithLayout().MainDirRightToLeft().KeepIter() {
+		inst.renderPhase()
+		for range c.UiWithLayout().MainDirRightToLeft().KeepIter() {
+			if ft.hasNext {
 				locked := inst.stepLocked(ft.next)
-				if locked != "" {
-					c.UiDisable()
-				}
-				label := "Next: " + ft.next.short() + " " + icons.PhArrowRight
-				clicked := false
-				if locked != "" {
-					for range c.HoverText(locked).KeepIter() {
+				for range c.HorizontalTop().KeepIter() {
+					if locked != "" {
+						c.UiDisable()
+					}
+					label := "Next: " + ft.next.short() + " " + icons.PhArrowRight
+					clicked := false
+					if locked != "" {
+						for range c.HoverText(locked).KeepIter() {
+							clicked = c.Button(inst.ids.PrepareStr("next"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked()
+						}
+					} else {
 						clicked = c.Button(inst.ids.PrepareStr("next"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked()
 					}
-				} else {
-					clicked = c.Button(inst.ids.PrepareStr("next"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked()
+					if clicked && locked == "" {
+						inst.step = ft.next
+					}
 				}
-				if clicked && locked == "" {
-					inst.step = ft.next
+			}
+			if inst.step > stepConnect {
+				prev := inst.step - 1
+				if c.Button(inst.ids.PrepareStr("back"), c.Atoms().Text(icons.PhArrowLeft+" "+prev.short()).Keep()).SendResp().HasPrimaryClicked() {
+					inst.goTo(prev)
 				}
 			}
 		}

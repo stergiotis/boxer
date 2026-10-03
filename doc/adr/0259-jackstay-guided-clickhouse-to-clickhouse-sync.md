@@ -628,6 +628,14 @@ move between pages. The bar now holds Back at its left edge and Next at its
 right. The page's action, with its confirmation, sits at the foot of the
 page, above the bar, and stays there while the page scrolls.
 
+### 2026-10-03 — The plan's phase in the bar
+
+The plan's phase — discovered, planned, compared, synced and their running
+and failed forms — is a state machine the window mirrors from its jobs and
+the plan, drawn as a chip with a one-line summary and offered to agents as
+`plan_state` and `plan_machine`. The chip takes the left edge of the bar, as
+a status bar carries it; Back and Next move together to the right edge.
+
 ## References
 
 - [ADR-0170](./0170-data-catalog-competence.md) — the data catalog: classification, restoration, shape relation.
