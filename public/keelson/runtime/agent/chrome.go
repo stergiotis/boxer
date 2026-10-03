@@ -359,7 +359,7 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		}
 	}
 	for _, l := range r.launches {
-		c.Label("the task may " + launchText(l)).Wrap().Send()
+		c.Label("the task may " + launchText(l, svc.display(app.AppIdT(l.App)))).Wrap().Send()
 	}
 	if len(r.destinations) > 0 {
 		c.Label("destinations: " + joinComma(r.destinations)).Wrap().Send()

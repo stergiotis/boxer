@@ -60,12 +60,14 @@ func serve(t *testing.T) *Client {
 	return cli
 }
 
-func TestDescribeListsOnlyAgentOperationsWithoutSchemas(t *testing.T) {
+func TestDescribeListsAgentOperationsWithoutSchemas(t *testing.T) {
 	cli := serve(t)
 	apps, err := cli.Describe(context.Background(), DescribeRequest{})
 	require.NoError(t, err)
-	require.Len(t, apps, 1, "an app without a catalog is not listed")
+	require.Len(t, apps, 2, "an app without a catalog is listed too: it can be opened")
 	assert.Equal(t, "Notes", apps[0].Display)
+	assert.Equal(t, "Plain", apps[1].Display)
+	assert.Empty(t, apps[1].Operations, "it has nothing to operate")
 	require.Len(t, apps[0].Operations, 1, "debug_dump is not exposed to agents")
 	op := apps[0].Operations[0]
 	assert.Equal(t, "set_note", op.Name)

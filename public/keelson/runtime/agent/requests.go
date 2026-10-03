@@ -129,6 +129,14 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		rep.Reason = err.Error()
 		return
 	}
+	if len(req.Launches) > 0 {
+		var reason string
+		if req.Launches, reason = inst.resolveLaunches(req.Launches); reason != "" {
+			rep.Reason = reason
+			inst.recordGrantRefusal(msg, req, reason)
+			return
+		}
+	}
 	if inst.cfg.TestGrants && req.Handle == "" {
 		return inst.testGrant(msg, req)
 	}
