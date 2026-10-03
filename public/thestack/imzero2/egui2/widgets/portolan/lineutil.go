@@ -2,6 +2,7 @@ package portolan
 
 import (
 	"math"
+	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -14,8 +15,25 @@ func Simplify(points []Point, tolerance float64) []Point {
 	if tolerance == 0 || len(points) == 0 {
 		return append([]Point(nil), points...)
 	}
+	var buf simplifyScratch
+	return buf.simplify(nil, points, tolerance)
+}
+
+// simplifyScratch is Simplify's working storage, for a caller that simplifies
+// many lines and keeps it: the radially reduced points and Douglas–Peucker's
+// keep markers.
+type simplifyScratch struct {
+	reduced []Point
+	markers []bool
+}
+
+// simplify appends the simplified points to dst. A non-zero tolerance and a
+// non-empty input are the caller's to check.
+func (inst *simplifyScratch) simplify(dst []Point, points []Point, tolerance float64) []Point {
 	sq := tolerance * tolerance
-	return simplifyDP(reducePoints(points, sq), sq)
+	inst.reduced = reducePoints(inst.reduced[:0], points, sq)
+	dst, inst.markers = simplifyDP(dst, inst.markers, inst.reduced, sq)
+	return dst
 }
 
 // PointToSegmentDistance is the distance from p to the segment p1–p2.
@@ -30,18 +48,21 @@ func ClosestPointOnSegment(p, p1, p2 Point) Point {
 	return q
 }
 
-func simplifyDP(points []Point, sqTolerance float64) []Point {
+// simplifyDP appends the points Douglas–Peucker keeps to dst, marking them in
+// markers, which it grows as needed and returns for reuse.
+func simplifyDP(dst []Point, markers []bool, points []Point, sqTolerance float64) ([]Point, []bool) {
 	n := len(points)
-	markers := make([]bool, n)
+	markers = slices.Grow(markers[:0], n)[:n]
+	clear(markers)
 	markers[0], markers[n-1] = true, true
 	simplifyDPStep(points, markers, sqTolerance, 0, n-1)
-	out := make([]Point, 0, n)
+	dst = slices.Grow(dst, n)
 	for i, keep := range markers {
 		if keep {
-			out = append(out, points[i])
+			dst = append(dst, points[i])
 		}
 	}
-	return out
+	return dst, markers
 }
 
 func simplifyDPStep(points []Point, markers []bool, sqTolerance float64, first, last int) {
@@ -59,8 +80,9 @@ func simplifyDPStep(points []Point, markers []bool, sqTolerance float64, first, 
 	}
 }
 
-func reducePoints(points []Point, sqTolerance float64) []Point {
-	reduced := []Point{points[0]}
+// reducePoints appends to reduced the points of the radial-distance pass.
+func reducePoints(reduced []Point, points []Point, sqTolerance float64) []Point {
+	reduced = append(reduced, points[0])
 	prev := 0
 	for i := 1; i < len(points); i++ {
 		if sqDist(points[i], points[prev]) > sqTolerance {

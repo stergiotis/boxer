@@ -93,6 +93,9 @@ type Map struct {
 	tracker *c.ImageVersionTracker[TileCoords]
 	// overlayTracker is the send-once record of Projector.Image rasters.
 	overlayTracker *c.ImageVersionTracker[string]
+	// scratch is the vector overlays' working storage, reused across rings
+	// and frames.
+	scratch overlayScratch
 	// pixels holds decoded tiles by WRAPPED coords, shared by the unwrapped
 	// tiles that show the same source tile; holders counts them so pixels go
 	// when the last holder is pruned.
