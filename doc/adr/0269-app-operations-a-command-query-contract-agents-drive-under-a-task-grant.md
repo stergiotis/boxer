@@ -961,7 +961,9 @@ of objects dropped bare strings the same way. Now:
   display name.
 - `describe` lists a windowed app without operations for agents too, with
   none, when its own fields match and no operation is asked for — the id a
-  model opens it by.
+  model opens it by. An SQL applet (ADR-0132) is listed so only when named
+  or searched for — a build mints dozens, and the unfiltered list is a
+  model's first call; a search also matches an app's keywords.
 - The chat's coordinator takes `open` items as strings or objects, names
   an item that is neither instead of dropping it, says after a grant what
   `open_window` may open, and gives a refused `open_window` a `next`.

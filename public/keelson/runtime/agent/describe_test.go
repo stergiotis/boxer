@@ -46,6 +46,9 @@ func registry(t *testing.T) *app.Registry {
 	plain := app.Manifest{Id: "github.com/x/apps/plain", Display: "Plain", Summary: "no catalog",
 		Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
 	require.NoError(t, r.RegisterFactory(plain, func() (app.AppI, error) { return nil, nil }))
+	applet := app.Manifest{Id: "github.com/x/apps/sqlapplet/slow-queries", Display: "Slow queries", Summary: "the slowest queries of the hour",
+		Kind: app.KindApplet, Keywords: []string{"latency"}, Surface: app.SurfaceWindowed, Topics: []app.TopicT{app.AllTopics[0]}}
+	require.NoError(t, r.RegisterFactory(applet, func() (app.AppI, error) { return nil, nil }))
 	return r
 }
 
@@ -68,6 +71,16 @@ func TestDescribeListsAgentOperationsWithoutSchemas(t *testing.T) {
 	assert.Equal(t, "Notes", apps[0].Display)
 	assert.Equal(t, "Plain", apps[1].Display)
 	assert.Empty(t, apps[1].Operations, "it has nothing to operate")
+
+	// An applet is listed only when searched for or named: a build mints
+	// dozens, and the whole list is the model's first call.
+	found, err := cli.Describe(context.Background(), DescribeRequest{Search: "latency"})
+	require.NoError(t, err)
+	require.Len(t, found, 1, "a keyword finds it")
+	assert.Equal(t, "Slow queries", found[0].Display)
+	found, err = cli.Describe(context.Background(), DescribeRequest{App: "github.com/x/apps/sqlapplet/slow-queries"})
+	require.NoError(t, err)
+	require.Len(t, found, 1, "naming it finds it")
 	require.Len(t, apps[0].Operations, 1, "debug_dump is not exposed to agents")
 	op := apps[0].Operations[0]
 	assert.Equal(t, "set_note", op.Name)
