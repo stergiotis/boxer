@@ -19,11 +19,12 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 )
 
-// footer is what a page puts in the bottom bar: the page's own action in the
-// middle, Back and Next at the ends. Next is enabled once the step it leads
-// to is unlocked; nextNote says why it is not.
+// footer is what a page puts in the bottom bar besides Back: the step Next
+// leads to. Next is enabled once that step is unlocked; its hover says why it
+// is not. The page's own action is not in the bar but at the foot of the
+// page (stepAction), so moving through the wizard and acting on a server are
+// never one row of buttons.
 type footer struct {
-	primary func()
 	next    stepE
 	hasNext bool
 }
@@ -41,22 +42,35 @@ func (inst *App) render() {
 		inst.renderBrief()
 	}
 	for range c.PanelCentralInside().KeepIter() {
-		for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
-			for range c.IdScope(inst.ids.PrepareStr("page-" + inst.step.String())) {
-				for range c.Frame(inst.ids.PrepareStr("pad")).InnerMarginSides(12, 12, 8, 8).KeepIter() {
-					switch inst.step {
-					case stepConnect:
-						inst.renderConnect()
-					case stepDatabases:
-						inst.renderDatabases()
-					case stepStructure:
-						inst.renderStructure()
-					case stepDifferences:
-						inst.renderDifferences()
-					case stepSync:
-						inst.renderSync()
-					case stepRun:
-						inst.renderRun()
+		// The step's action stays at the foot of the page, above the bottom
+		// bar, while the page scrolls above it.
+		if action := inst.stepAction(inst.step); action != nil {
+			for range c.PanelBottomInside(inst.ids.PrepareStr("actions")).Resizable(false).KeepIter() {
+				for range c.Frame(inst.ids.PrepareStr("actions-pad")).InnerMarginSides(12, 12, 6, 6).KeepIter() {
+					for range c.HorizontalWrapped().KeepIter() {
+						action()
+					}
+				}
+			}
+		}
+		for range c.PanelCentralInside().KeepIter() {
+			for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
+				for range c.IdScope(inst.ids.PrepareStr("page-" + inst.step.String())) {
+					for range c.Frame(inst.ids.PrepareStr("pad")).InnerMarginSides(12, 12, 8, 8).KeepIter() {
+						switch inst.step {
+						case stepConnect:
+							inst.renderConnect()
+						case stepDatabases:
+							inst.renderDatabases()
+						case stepStructure:
+							inst.renderStructure()
+						case stepDifferences:
+							inst.renderDifferences()
+						case stepSync:
+							inst.renderSync()
+						case stepRun:
+							inst.renderRun()
+						}
 					}
 				}
 			}
@@ -166,96 +180,114 @@ func (inst *App) renderStatus() {
 	case inst.note != "":
 		badge.New(inst.ids.PrepareStr("note"), inst.note).Tone(badge.ToneSuccess).Variant(badge.VariantSoft).Send()
 	}
-	for i, s := range inst.stale {
-		for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
-			c.Label("  moved: " + s).Send()
-		}
+	inst.statusList("stale", "moved", "moved: ", inst.stale)
+	inst.statusList("skipped", "skipped", "skipped ", inst.skipped)
+}
+
+// statusListMaxHeight bounds an open status list. The top panel does not
+// scroll, so one line per table would push the page out of the window.
+const statusListMaxHeight = 120
+
+// statusList is one line in the top panel naming how many tables a list
+// holds; the lines themselves open below it, scrolled within a bounded height.
+func (inst *App) statusList(key string, verb string, prefix string, items []string) {
+	if len(items) == 0 {
+		return
 	}
-	for i, s := range inst.skipped {
-		for range c.IdScope(inst.ids.PrepareSeq(uint64(1000 + i))) {
-			small("skipped " + s)
+	for range c.IdScope(inst.ids.PrepareStr("status-" + key)) {
+		title := plural(len(items), "table") + " " + verb
+		for range c.CollapsingHeader(inst.ids.PrepareStr("hdr"), c.WidgetText().Text(title).Keep()).KeepIter() {
+			for range c.ScrollArea().Vscroll(true).MaxHeight(statusListMaxHeight).AutoShrink(false, true).KeepIter() {
+				for i, s := range items {
+					for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+						small(prefix + s)
+					}
+				}
+			}
 		}
 	}
 }
 
 // --- the bottom bar -------------------------------------------------------------
 
-// footerFor is each page's bottom bar.
+// footerFor is each page's bottom bar: where Next leads.
 func (inst *App) footerFor(st stepE) (ft footer) {
+	if st < stepRun {
+		ft.next, ft.hasNext = st+1, true
+	}
+	return
+}
+
+// stepAction is the page's own action, the one that reads or writes a
+// server: drawn at the foot of the page, apart from Back and Next.
+func (inst *App) stepAction(st stepE) (action func()) {
 	switch st {
 	case stepConnect:
-		ft.primary = func() {
+		return func() {
 			if inst.actionButton("discover", "Discover the servers", inst.discoverJob.Running()) {
 				inst.startDiscover()
 			}
 		}
-		ft.next, ft.hasNext = stepDatabases, true
 	case stepDatabases:
-		ft.primary = func() {
+		return func() {
 			busy := inst.structureJob.Running() || inst.disc == nil
 			if inst.actionButton("plan-structure", "Plan the structure", busy) {
 				inst.startStructure()
 			}
 		}
-		ft.next, ft.hasNext = stepStructure, true
 	case stepStructure:
-		ft.primary = inst.renderApplyControls
-		ft.next, ft.hasNext = stepDifferences, true
+		return inst.renderApplyControls
 	case stepDifferences:
-		ft.primary = func() {
+		return func() {
 			if inst.actionButton("diff", "Compare content", inst.plan == nil || inst.diffJob.Running() || inst.syncJob.Running()) {
 				inst.startDiff()
 			}
 		}
-		ft.next, ft.hasNext = stepSync, true
 	case stepSync:
-		ft.primary = inst.renderStartControls
-		ft.next, ft.hasNext = stepRun, true
+		return inst.renderStartControls
 	case stepRun:
-		ft.primary = func() {
+		return func() {
 			if inst.actionButton("compare-again", "Compare content again", inst.plan == nil || inst.syncJob.Running() || inst.diffJob.Running()) {
 				inst.step = stepDifferences
 				inst.startDiff()
 			}
 		}
 	}
-	return
+	return nil
 }
 
-// renderFooter is the classic wizard bar: Back, the page's action and Next
-// at the right edge. The row is laid out right to left, so Next is drawn
-// first.
+// renderFooter is the wizard bar: the plan's phase at the left edge, as a
+// status bar carries it, and Back and Next together at the right. The right
+// side is laid out right to left, so Next is drawn first.
 func (inst *App) renderFooter(ft footer) {
-	for range c.UiWithLayout().MainDirRightToLeft().KeepIter() {
-		if ft.hasNext {
-			locked := inst.stepLocked(ft.next)
-			for range c.HorizontalTop().KeepIter() {
-				if locked != "" {
-					c.UiDisable()
-				}
-				label := "Next: " + ft.next.short() + " " + icons.PhArrowRight
-				clicked := false
-				if locked != "" {
-					for range c.HoverText(locked).KeepIter() {
+	for range c.HorizontalTop().KeepIter() {
+		inst.renderPhase()
+		for range c.UiWithLayout().MainDirRightToLeft().KeepIter() {
+			if ft.hasNext {
+				locked := inst.stepLocked(ft.next)
+				for range c.HorizontalTop().KeepIter() {
+					if locked != "" {
+						c.UiDisable()
+					}
+					label := "Next: " + ft.next.short() + " " + icons.PhArrowRight
+					clicked := false
+					if locked != "" {
+						for range c.HoverText(locked).KeepIter() {
+							clicked = c.Button(inst.ids.PrepareStr("next"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked()
+						}
+					} else {
 						clicked = c.Button(inst.ids.PrepareStr("next"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked()
 					}
-				} else {
-					clicked = c.Button(inst.ids.PrepareStr("next"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked()
-				}
-				if clicked && locked == "" {
-					inst.step = ft.next
+					if clicked && locked == "" {
+						inst.step = ft.next
+					}
 				}
 			}
-		}
-		if ft.primary != nil {
-			for range c.UiWithLayout().MainDirRightToLeft().KeepIter() {
-				ft.primary()
-			}
-		}
-		if inst.step > stepConnect {
-			prev := inst.step - 1
-			if c.Button(inst.ids.PrepareStr("back"), c.Atoms().Text(icons.PhArrowLeft+" "+prev.short()).Keep()).SendResp().HasPrimaryClicked() {
-				inst.goTo(prev)
+			if inst.step > stepConnect {
+				prev := inst.step - 1
+				if c.Button(inst.ids.PrepareStr("back"), c.Atoms().Text(icons.PhArrowLeft+" "+prev.short()).Keep()).SendResp().HasPrimaryClicked() {
+					inst.goTo(prev)
+				}
 			}
 		}
 	}
@@ -717,7 +749,7 @@ func (inst *App) pendingStatements() (n int) {
 	return
 }
 
-// renderApplyControls is the Structure page's footer action: apply the DDL,
+// renderApplyControls is the Structure page's action: apply the DDL,
 // behind a second click that names the target.
 func (inst *App) renderApplyControls() {
 	if inst.plan == nil {

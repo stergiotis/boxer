@@ -143,6 +143,10 @@ type View[T comparable] struct {
 	// graphViewState carries interactive pan/zoom for the Graph tab across
 	// frames (view.Render reads drag/zoom over the canvas and updates it).
 	graphViewState view.ViewState
+	// graphCanvasW/H hold the last space the window left for the graph, so a
+	// frame whose probe has not landed draws at the last good size rather
+	// than flashing at the fallback.
+	graphCanvasW, graphCanvasH float32
 
 	density styletokens.DensityE
 
@@ -450,6 +454,7 @@ func (inst *View[T]) renderPopup() {
 		DefaultOpen(true).
 		Resizable(true).
 		Collapsible(false).
+		DefaultSize(fsmPopupDefaultW, fsmPopupDefaultH).
 		MinWidth(360).
 		MinHeight(240)
 	if inst.Opts.Tethered {
@@ -569,11 +574,12 @@ func (inst *View[T]) renderGraph() {
 	nextEdgeColor := color.Hex(styletokens.AccentSubtle.AsHex())
 	restEdgeColor := color.Hex(styletokens.NeutralBorderFaint.AsHex())
 
+	canvasW, canvasH := inst.graphCanvasSize()
 	// The layered view takes a raw id base; a scope-derived id keeps two
 	// views' canvases apart (W5).
 	res := view.Render(inst.ids.PrepareStr("graph").Derive(), inst.graphLayout, view.RenderOpts{
-		CanvasW: fsmGraphCanvasW,
-		CanvasH: fsmGraphCanvasH,
+		CanvasW: canvasW,
+		CanvasH: canvasH,
 		State:   &inst.graphViewState,
 		NodeFill: func(id string) (color.Color, bool) {
 			if s, ok := idToState[id]; ok {
@@ -661,13 +667,37 @@ func (inst *View[T]) buildIDToState() map[string]T {
 	return m
 }
 
-// fsmGraphCanvas{W,H} size the painter canvas the layered graph is drawn into
-// inside the level-2 popup. Fixed for v1 (the height matches the prior graph's
-// 320px); the layout is fit-to-view into this rect. Responsive width tracking
-// is a follow-up.
+// graphCanvasSize is the space the popup leaves for the graph: the window's
+// remaining rect, as last frame measured it, less the padding the popup adds
+// below the body. The canvas filling it is what lets the window be resized:
+// a fixed-size body holds egui's window to that size. The probe runs before
+// the canvas, so the canvas never sizes itself against its own output.
+func (inst *View[T]) graphCanvasSize() (w, h float32) {
+	aw, ah, ok := c.CapturePaneSize(inst.ids.PrepareStr("graph-canvas").Derive())
+	if ok && aw > 0 && ah > 0 {
+		inst.graphCanvasW = max(aw, fsmGraphCanvasMinW)
+		inst.graphCanvasH = max(ah-styletokens.PaddingInner(inst.density)-fsmGraphCanvasSlack, fsmGraphCanvasMinH)
+	}
+	if inst.graphCanvasW <= 0 || inst.graphCanvasH <= 0 {
+		return fsmGraphCanvasFallbackW, fsmGraphCanvasFallbackH
+	}
+	return inst.graphCanvasW, inst.graphCanvasH
+}
+
+// fsmPopup* and fsmGraphCanvas* size the level-2 popup and the graph inside
+// it. The popup opens large enough for a graph of a dozen states to read;
+// the graph then fills whatever the window leaves it, and the layout is
+// fit-to-view into that rect. The fallback is the first frame's, before the
+// probe has landed. The slack keeps the canvas a few pixels short of the
+// window's bottom so rounding cannot make the window grow by itself.
 const (
-	fsmGraphCanvasW float32 = 380
-	fsmGraphCanvasH float32 = 280
+	fsmPopupDefaultW        float32 = 720
+	fsmPopupDefaultH        float32 = 560
+	fsmGraphCanvasFallbackW float32 = 380
+	fsmGraphCanvasFallbackH float32 = 280
+	fsmGraphCanvasMinW      float32 = 200
+	fsmGraphCanvasMinH      float32 = 160
+	fsmGraphCanvasSlack     float32 = 4
 )
 
 // fsmHistCol* size the History tab's columns. The always-emitted five sum to

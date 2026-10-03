@@ -45,6 +45,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/breadcrumbs"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 )
 
 type stepE uint8
@@ -293,6 +294,11 @@ type App struct {
 	// the tables the last diff or sync left out, with the reason.
 	note, lastError string
 	stale, skipped  []string
+
+	// The plan's phase, mirrored each frame from the jobs and the plan,
+	// and the state chip that draws it.
+	phaseMachine *fsmview.Machine[phaseE]
+	phaseChip    *fsmview.View[phaseE]
 }
 
 var _ app.AppI = (*App)(nil)
@@ -312,6 +318,7 @@ func newApp() (inst *App) {
 		sampleText:  "1/100",
 		compression: "zstd",
 	}
+	inst.phaseMachine = newPhaseMachine()
 	// With no target configured, the target is the source server: copying
 	// between two databases of one server is a sync too, and the Databases
 	// step then suggests renamed targets.
@@ -329,6 +336,12 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.logger = ctx.Log()
+	inst.phaseChip = fsmview.New(inst.ids, "plan-phase", inst.phaseMachine, fsmview.Options[phaseE]{
+		Title:      "Plan phase",
+		Tethered:   true,
+		BadgeTone:  phaseTone,
+		AutoAnchor: true,
+	})
 	inst.store = ctx.Storage()
 	inst.bus = ctx.Bus()
 	inst.files = fsbroker.NewAppDataClient(inst.bus)
@@ -361,6 +374,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.takeResults()
+	inst.mirrorPhase()
 	inst.render()
 	if inst.anyRunning() {
 		c.RequestRepaint()

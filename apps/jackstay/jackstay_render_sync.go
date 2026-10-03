@@ -338,7 +338,7 @@ func (inst *App) renderPreflight() {
 	})
 }
 
-// renderStartControls is the Sync page's footer action: start, behind a
+// renderStartControls is the Sync page's action: start, behind a
 // second click that names what moves where.
 func (inst *App) renderStartControls() {
 	if inst.plan == nil {
