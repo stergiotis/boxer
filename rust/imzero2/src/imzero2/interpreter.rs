@@ -577,6 +577,15 @@ impl<R: std::io::BufRead, W: std::io::Write> egui_table::TableDelegate
     }
 }
 
+/// One row of the fetchR27Windows drain: a window's outer rect as egui
+/// laid it out this frame, and whether its body was collapsed.
+#[derive(Clone, Copy, Debug)]
+pub struct WindowGeomRow {
+    pub id: u64,
+    pub rect: egui::Rect,
+    pub collapsed: bool,
+}
+
 pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub(crate) io: ImZeroFffiIo<R, W>,
 
@@ -684,6 +693,18 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // Scratch slot for the Window arm's `maximized` method, drained the
     // same way as scratch_open_binding_id.
     scratch_window_maximized: bool,
+    // One-frame window placements queued by the windowPlace procedural op,
+    // keyed by window id; the Window apply block consumes its entry (as a
+    // fixed rect for that frame), and prepare_next_frame drops any left
+    // over from a window that was not emitted.
+    pending_window_place: std::collections::HashMap<u64, egui::Rect>,
+    // Window geometry reported to Go (fetchR27Windows): one row per
+    // egui::Window shown this frame, plus the desktop rect the shell's
+    // panels left free (NaN until a window has been shown). Z-order is
+    // read at fetch time, after every window of the frame has run.
+    pub r27_windows: Vec<WindowGeomRow>,
+    pub r27_work_rect: egui::Rect,
+
     r11_color32: egui::Color32,
 
     debug_tools: DebugTools,
@@ -978,6 +999,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             window_open_bindings: std::collections::HashMap::with_capacity(32),
             scratch_open_binding_id: 0,
             scratch_window_maximized: false,
+            pending_window_place: std::collections::HashMap::with_capacity(8),
+            r27_windows: Vec::with_capacity(16),
+            r27_work_rect: egui::Rect::NAN,
             debug_tools: DebugTools::new(),
             animation_freeze: false,
             message_offsets: vec![],
@@ -1142,6 +1166,8 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.new_table_row_heights.clear();
         self.paint_cmds.clear();
         self.r21_ui_rect_seqs.clear();
+        self.r27_windows.clear();
+        self.pending_window_place.clear();
         self.r21_ui_rect_min_x.clear();
         self.r21_ui_rect_min_y.clear();
         self.r21_ui_rect_max_x.clear();
@@ -4572,6 +4598,40 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
                 self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
                 self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
+                self.io.flush()?;
+            }
+            FuncProcId::FetchR27Windows => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR27Windows");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let len = self.r27_windows.len();
+                let order: Vec<egui::Id> = c.memory(|m| m.layer_ids().map(|l| l.id).collect());
+                let z: Vec<u32> = self
+                    .r27_windows
+                    .iter()
+                    .map(|r| {
+                        order.iter().rposition(|id| id.value() == r.id).map_or(0, |p| p as u32 + 1)
+                    })
+                    .collect();
+                self.io.write_plain_u64h(len, self.r27_windows.iter().map(|r| r.id))?;
+                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.x))?;
+                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.y))?;
+                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.x))?;
+                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.y))?;
+                self.io.write_plain_u32h(len, z)?;
+                self.io
+                    .write_plain_u8h(len, self.r27_windows.iter().map(|r| u8::from(r.collapsed)))?;
+                self.r27_windows.clear();
+                let w = self.r27_work_rect;
+                self.io.write_plain_f32(w.min.x)?;
+                self.io.write_plain_f32(w.min.y)?;
+                self.io.write_plain_f32(w.max.x)?;
+                self.io.write_plain_f32(w.max.y)?;
                 self.io.flush()?;
             }
             FuncProcId::FetchR7 => {
@@ -9839,11 +9899,20 @@ egui::Window::new(label).id(i);
                 // resizable again).
                 let maximized = std::mem::take(&mut self.scratch_window_maximized);
                 let restore_id = i.with("__imzero2_restore_rect");
-                if maximized {
-                    let free = u
-                        .as_ref()
-                        .map(|u| u.available_rect_before_wrap())
-                        .unwrap_or_else(|| c.content_rect());
+                // The rect left free by the shell's panels — what maximized
+                // fills, and the work area reported to Go (fetchR27Windows).
+                let free = u
+                    .as_ref()
+                    .map(|u| u.available_rect_before_wrap())
+                    .unwrap_or_else(|| c.content_rect());
+                self.r27_work_rect = free;
+                // windowPlace: a one-frame placement from Go wins over the
+                // maximized pin and over a pending restore, whose saved rect
+                // it supersedes. Pinned the same way as the restore below.
+                if let Some(r) = self.pending_window_place.remove(&i.value()) {
+                    c.data_mut(|d| d.remove::<egui::Rect>(restore_id));
+                    w = w.fixed_pos(r.min).fixed_size(r.size()).constrain(false);
+                } else if maximized {
                     let saved = c.data(|d| d.get_temp::<egui::Rect>(restore_id)).is_some();
                     if !saved {
                         if let Some(r) = c.memory(|m| m.area_rect(i)) {
@@ -9947,6 +10016,11 @@ egui::Window::new(label).id(i);
                         || c.read_response(i.with("__title_click"))
                             .is_some_and(|r| r.double_clicked());
                     resp2.set(ResponseFlags::TITLE_DOUBLE_CLICKED, title_dbl);
+                    self.r27_windows.push(WindowGeomRow {
+                        id: i.value(),
+                        rect: wrect,
+                        collapsed: inner.inner.is_none(),
+                    });
                     if inner.inner.is_none() {
                         // collapsed
                         resp2.insert(ResponseFlags::BLOCK_SKIPPED);
@@ -9956,6 +10030,26 @@ egui::Window::new(label).id(i);
                     }
                 }
                 self.r7_push(i.value(), resp2);
+            }
+            FuncProcId::WindowPlace => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::WindowPlace");
+                // arguments
+                let i = self.read_id()?;
+                let mut pos_x = self.io.read_plain_f32()?;
+                let mut pos_y = self.io.read_plain_f32()?;
+                let mut width = self.io.read_plain_f32()?;
+                let mut height = self.io.read_plain_f32()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                self.pending_window_place.insert(
+                    i.value(),
+                    egui::Rect::from_min_size(egui::pos2(pos_x, pos_y), egui::vec2(width, height)),
+                );
             }
 
             #[allow(unreachable_patterns)]

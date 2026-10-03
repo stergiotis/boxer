@@ -230,6 +230,50 @@ self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
 		AddReturnValue("maxY", ctabb.F32h).
 		Build())
 
+	// Drains the per-frame window geometry: one row per egui::Window shown
+	// this frame — id, outer rect, stacking rank and collapsed flag — plus
+	// the desktop rect the shell's panels left free. The rank is the
+	// window layer's index in egui's back-to-front layer order, read here
+	// after every window of the frame ran, plus one; larger is further
+	// front, 0 when the layer is unknown. The work rect is NaN on a frame that showed no
+	// window.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchR27Windows").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.r27_windows.len();
+let order: Vec<egui::Id> = {{EguiContext}}.memory(|m| m.layer_ids().map(|l| l.id).collect());
+let z: Vec<u32> = self
+    .r27_windows
+    .iter()
+    .map(|r| order.iter().rposition(|id| id.value() == r.id).map_or(0, |p| p as u32 + 1))
+    .collect();
+self.io.write_plain_u64h(len, self.r27_windows.iter().map(|r| r.id))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.x))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.y))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.x))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.y))?;
+self.io.write_plain_u32h(len, z)?;
+self.io.write_plain_u8h(len, self.r27_windows.iter().map(|r| u8::from(r.collapsed)))?;
+self.r27_windows.clear();
+let w = self.r27_work_rect;
+self.io.write_plain_f32(w.min.x)?;
+self.io.write_plain_f32(w.min.y)?;
+self.io.write_plain_f32(w.max.x)?;
+self.io.write_plain_f32(w.max.y)?;
+{{SendMessage}}
+`)).
+		AddReturnValue("ids", ctabb.U64h).
+		AddReturnValue("minX", ctabb.F32h).
+		AddReturnValue("minY", ctabb.F32h).
+		AddReturnValue("maxX", ctabb.F32h).
+		AddReturnValue("maxY", ctabb.F32h).
+		AddReturnValue("z", ctabb.U32h).
+		AddReturnValue("collapsed", ctabb.U8h).
+		AddReturnValue("workMinX", ctabb.F32).
+		AddReturnValue("workMinY", ctabb.F32).
+		AddReturnValue("workMaxX", ctabb.F32).
+		AddReturnValue("workMaxY", ctabb.F32).
+		Build())
+
 	// Drains the per-frame batch of texture ids that were interpreted this
 	// frame while STARVED: no usable cache entry AND no pixels in the
 	// payload to (re)build one. This is the state a send-once uploader

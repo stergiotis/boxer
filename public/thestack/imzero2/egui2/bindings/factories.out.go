@@ -1956,3 +1956,15 @@ func Window(i WidgetIdCreatorI, label typed.RetainedFffiHolderTyped[WidgetTextS]
 
 	return
 }
+
+func WindowPlace(h widgethandle.WidgetHandle, posX float32, posY float32, width float32, height float32) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdWindowPlace))
+	r.WriteWidgetId(h.Resolve())
+	r.WriteFloat32(posX)
+	r.WriteFloat32(posY)
+	r.WriteFloat32(width)
+	r.WriteFloat32(height)
+
+	r.SendIntermediate()
+}

@@ -175,9 +175,21 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 					}
 				}
 				for range c.MenuButton(c.Atoms().Text("Layout").Keep()).KeepIter() {
-					if c.Button(ids.PrepareStr("arrangeWindows"), c.Atoms().Text("Arrange Windows").Keep()).SendResp().HasPrimaryClicked() {
+					// Whole-desktop arrangements over the windowhost's windows,
+					// computed in Go from the geometry the host reports.
+					if cc.Host != nil {
+						for _, cmd := range windowhost.ArrangeCommands {
+							if c.Button(ids.PrepareStr("arrange-"+cmd.String()), c.Atoms().Text(cmd.String()).Keep()).SendResp().HasPrimaryClicked() {
+								cc.Host.Arrange(cmd)
+							}
+						}
+					}
+					// Forgets every window's position and size; egui then
+					// re-places each one from its defaults.
+					if c.Button(ids.PrepareStr("arrangeWindows"), c.Atoms().Text("Reset window positions").Keep()).SendResp().HasPrimaryClicked() {
 						c.MemoryResetAreas()
 					}
+					c.Separator().Horizontal().Send()
 					c.GuiZoomZoomMenuButtons()
 					// IDS density preset (ADR-0032 §SD1). The switch has to
 					// land on both sides of the FFFI boundary: the Go token

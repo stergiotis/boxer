@@ -263,6 +263,24 @@ if {{EguiUiOptionalOuter}}.is_some() {
 			WithApplyCodeClientRust(rustClientCode(`
 			{{EguiContext}}.move_to_top(egui::LayerId::new(egui::Order::Middle, {{Id}}));
 `)).Build())
+	// windowPlace sets a window's outer rect for the next time it is shown
+	// this frame: position and size are pinned for that one frame (like
+	// the window's restore from maximized) and the window is movable and
+	// resizable again on the next. Emit it before the window it places.
+	// Coordinates are egui logical points, viewport top-left origin. A
+	// placement for a window not shown this frame is dropped at frame end.
+	specials = append(specials,
+		idl.NewProceduralNode("windowPlace").
+			WithIdentityIdReference().
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("posX", ctabb.F32).
+				PlainArg("posY", ctabb.F32).
+				PlainArg("width", ctabb.F32).
+				PlainArg("height", ctabb.F32).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode(`
+			self.pending_window_place.insert({{Id}}.value(), egui::Rect::from_min_size(egui::pos2(pos_x, pos_y), egui::vec2(width, height)));
+`)).Build())
 	specials = append(specials,
 		idl.NewProceduralNode("setWindowCollapsed").
 			WithIdentityIdReference().

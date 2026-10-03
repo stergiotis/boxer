@@ -187,6 +187,16 @@ type UiRectValue struct {
 	MaxY float32
 }
 
+// WindowGeomValue is one row of the R27 window drain: an egui::Window's
+// outer rect as laid out last frame, in logical points with a viewport
+// top-left origin, its stacking rank (larger is further front, 0 unknown)
+// and whether its body was collapsed.
+type WindowGeomValue struct {
+	MinX, MinY, MaxX, MaxY float32
+	Z                      uint32
+	Collapsed              bool
+}
+
 type StateManager struct {
 	// pixelsPerPoint is fetchPixelsPerPoint's last answer (GetPixelsPerPoint).
 	pixelsPerPoint float32
@@ -213,6 +223,8 @@ type StateManager struct {
 	r19ZoomDelta     ZoomDeltaValue
 	r20Pointer       PointerValue
 	r21UiRects       map[uint64]UiRectValue
+	r27Windows       map[uint64]WindowGeomValue
+	r27WorkArea      UiRectValue
 	// r23CanvasWheel holds LAST frame's per-canvas wheel captures (ADR-0140),
 	// keyed by canvas widget id. Rebuilt each Sync; read via GetCanvasWheel.
 	r23CanvasWheel map[uint64]CanvasWheelValue
@@ -269,6 +281,7 @@ func NewStateManager() *StateManager {
 		overriddenBindingIds: containers.NewHashSet[uint64](128),
 		fetcher:              NewFetcher(),
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
+		r27Windows:           make(map[uint64]WindowGeomValue, 8),
 		r23CanvasWheel:       make(map[uint64]CanvasWheelValue, 8),
 		r24CanvasPointers:    make(map[uint64]CanvasCursorValue, 8),
 		r26KeyCaptures:       make(map[uint64][]CapturedKey, 4),
@@ -375,6 +388,23 @@ func (inst *StateManager) GetF2KeyPressed() (pressed bool) {
 // through its return_key, which requires no modifiers.
 func (inst *StateManager) GetCommandEnterPressed() (pressed bool, shiftPressed bool) {
 	return inst.commandEnter, inst.commandEnterShift
+}
+
+// GetWindowGeom returns last frame's R27 geometry for the egui::Window
+// identified by the given handle. ok is false for a window that was not
+// shown last frame (closed, or opened this frame).
+func (inst *StateManager) GetWindowGeom(h widgethandle.WidgetHandle) (v WindowGeomValue, ok bool) {
+	v, ok = inst.r27Windows[h.Resolve()]
+	return
+}
+
+// GetWindowWorkArea returns the desktop rect the shell's panels left free
+// last frame — the rect a maximized window fills and window arrangements
+// lay out into. ok is false on a frame that showed no egui::Window.
+func (inst *StateManager) GetWindowWorkArea() (v UiRectValue, ok bool) {
+	v = inst.r27WorkArea
+	ok = !math.IsNaN(float64(v.MinX)) && v.MaxX > v.MinX && v.MaxY > v.MinY
+	return
 }
 
 // GetUiRect returns last frame's R21 captured ui.min_rect for the given
@@ -702,6 +732,7 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchF2KeyPressed()
 	fetcher.IssueFetchCommandEnterPressed()
 	fetcher.IssueFetchR21UiRects()
+	fetcher.IssueFetchR27Windows()
 	fetcher.IssueFetchR23CanvasWheel()
 	fetcher.IssueFetchR24CanvasPointers()
 	fetcher.IssueFetchR26KeyCaptures()
@@ -827,6 +858,17 @@ func (inst *StateManager) Sync() {
 			}
 			i++
 		}
+	}
+	{
+		ids, minX, minY, maxX, maxY, z, collapsed, wMinX, wMinY, wMaxX, wMaxY := fetcher.CollectFetchR27Windows()
+		clear(inst.r27Windows)
+		for i, id := range ids {
+			inst.r27Windows[id] = WindowGeomValue{
+				MinX: minX[i], MinY: minY[i], MaxX: maxX[i], MaxY: maxY[i],
+				Z: z[i], Collapsed: collapsed[i] != 0,
+			}
+		}
+		inst.r27WorkArea = UiRectValue{MinX: wMinX, MinY: wMinY, MaxX: wMaxX, MaxY: wMaxY}
 	}
 	{
 		ids, scrollXs, scrollYs, zooms, hoverXs, hoverYSeq := fetcher.CollectFetchR23CanvasWheel()

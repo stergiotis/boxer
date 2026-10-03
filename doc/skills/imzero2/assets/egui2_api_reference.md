@@ -68,6 +68,7 @@ status: draft
 | FetchR24CanvasPointers | Fetcher | No | 0 | 0 | - | - |
 | FetchR25EtColWidths | Fetcher | No | 0 | 0 | - | - |
 | FetchR26KeyCaptures | Fetcher | No | 0 | 0 | - | - |
+| FetchR27Windows | Fetcher | No | 0 | 0 | - | - |
 | FetchR7 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9EtPrefetch | Fetcher | No | 0 | 0 | - | - |
 | FetchR9F64 | Fetcher | No | 0 | 0 | - | - |
@@ -191,6 +192,7 @@ status: draft
 | WidgetText | BuilderFactory | No | 0 | 0 | 1 | Retained |
 | WidgetsGlobalThemePreferenceButtons | Procedural | No | 0 | 0 | - | - |
 | Window | BuilderFactory | Yes | 0 | 1 | 17 | Immediate, BlockIterator |
+| WindowPlace | Procedural | Yes | 4 | 0 | - | - |
 
 
 ## BuilderFactory Nodes
@@ -3049,6 +3051,22 @@ Block
 
 ---
 
+### WindowPlace
+
+- **Type:** Procedural
+- **Identity:** Yes
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| posX | plain | f32 |
+| posY | plain | f32 |
+| width | plain | f32 |
+| height | plain | f32 |
+
+---
+
 ## Fetcher Nodes
 
 ### FetchCommandEnterPressed
@@ -3281,6 +3299,28 @@ Block
 | ids | u64h |
 | codes | u8h |
 | mods | u8h |
+
+---
+
+### FetchR27Windows
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+| minX | f32h |
+| minY | f32h |
+| maxX | f32h |
+| maxY | f32h |
+| z | u32h |
+| collapsed | u8h |
+| workMinX | f32 |
+| workMinY | f32 |
+| workMaxX | f32 |
+| workMaxY | f32 |
 
 ---
 

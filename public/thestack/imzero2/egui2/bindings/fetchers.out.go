@@ -268,6 +268,38 @@ func (inst *Fetcher) CollectFetchR26KeyCaptures() (ids []uint64, codes []uint8, 
 	mods = inst.iterateU8h()
 	return
 }
+func (inst *Fetcher) FetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
+	inst.invoke(FuncProcIdFetchR27Windows)
+	ids = inst.readU64h()
+	minX = inst.readF32h()
+	minY = inst.readF32h()
+	maxX = inst.readF32h()
+	maxY = inst.readF32h()
+	z = inst.readU32h()
+	collapsed = inst.readU8h()
+	workMinX = inst.readF32()
+	workMinY = inst.readF32()
+	workMaxX = inst.readF32()
+	workMaxY = inst.readF32()
+	return
+}
+func (inst *Fetcher) IssueFetchR27Windows() {
+	inst.invoke(FuncProcIdFetchR27Windows)
+}
+func (inst *Fetcher) CollectFetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
+	ids = inst.readU64h()
+	minX = inst.readF32h()
+	minY = inst.readF32h()
+	maxX = inst.readF32h()
+	maxY = inst.readF32h()
+	z = inst.readU32h()
+	collapsed = inst.readU8h()
+	workMinX = inst.readF32()
+	workMinY = inst.readF32()
+	workMaxX = inst.readF32()
+	workMaxY = inst.readF32()
+	return
+}
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchR7)
 	ids = inst.readU64h()
