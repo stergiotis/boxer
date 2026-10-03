@@ -29,7 +29,10 @@ scratch (the Go-only fix that followed) took the Go side of `fill` from
 9.1 to 2.2 ms at `world-z0` and 3.7 to 0.6 ms at `europe-z2.6`, medians of
 five interleaved benchmark rounds, with a byte-identical paint stream**
 (`TestPlanePathPaintsWhatTheDegreePathPaints`). The host's triangulation is
-untouched by it.
+untouched by it, and in the host that is what a filled frame then waits on:
+at `world-z0/fill` the frame's interpret time stayed at about 14.7 ms while
+`world-z0/nofill`, which the Go side bounds, fell from 9.6 to 3.6 ms (one
+launch per cell after the fix, cpu host — see the logbook).
 
 **What this trial does not say.**
 

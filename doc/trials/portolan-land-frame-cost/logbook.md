@@ -86,3 +86,33 @@ evidence lives in its own `./runs/<YYYY-MM-DD-slug>/` directory.
   the line; replacing the world copy's offset with zero fails it.
 - **Outcome:** §0's second claim. The in-host matrix after the fix is the
   next entry.
+
+## 2026-10-03 — the plane cache in the host, partial — a filled frame is now bound by the host's triangulation
+
+- **Build under test:** a worktree at `48c860787` with the fix's files and
+  this trial's, which is `4ba2b1036`'s code; clients as before.
+- **Environment:** as above; load average 5–14.
+- **Attempted:** the matrix with `REPEATS=2`. **Stopped after six cells**,
+  all on the cpu host: `/tmp`, a tmpfs shared with other sessions, filled up
+  and the seventh cell's scene runner could not write. The run directory
+  holds the six cells and the failed one's message.
+- **Results (cpu host, medians, ms; before = the repeats run, after = one
+  launch):** Go draw at `world-z0/fill` 6.85 → 4.81, `europe-z2.6/fill`
+  3.04 → 1.66, `alps-z5/fill` 0.53 → 0.21, `swiss-z8/fill` 0.29 → 0.14;
+  interpret at `world-z0/fill` 14.80 → 14.66, `europe-z2.6/fill` 5.76 →
+  5.38; interpret at `world-z0/nofill` 9.61 → 3.63, `europe-z2.6/nofill`
+  4.70 → 1.63. Bytes per frame unchanged in every cell.
+- **Reading:** where the Go side bounded the frame (`nofill`) the frame got
+  about 2.6 to 2.9 times faster in the host. Where the host's own work does
+  (`fill` at continent and world zoom), the frame did not move: the ear clip
+  of the concave rings is what it waits on now. The Go draw in the host is
+  about twice the benchmark's after the fix; one launch under load, not yet
+  separated from noise.
+- **Findings:**
+  - **[pain boxer-toolbelt → proposed:imzero2-scene-runner / reliability.fault-tolerance / S3]**
+    a full `/tmp` fails a cell with "No space left on device" and the script
+    goes on to the next; the run degrades to a partial matrix without
+    stopping
+- **Outcome:** §0's second claim, qualified. The next step for a filled map
+  is the host's triangulation, which is not a Go-side change. Repeat the
+  matrix with room on `/tmp`.
