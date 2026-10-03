@@ -504,11 +504,13 @@ func (inst *App) renderTranscript() {
 					e.doc = markdown.Parse([]byte(e.text))
 				}
 				i := k.entry
+				// chatview draws the bubble inside its row's
+				// PrepareSeq(ordinal) scope already; a second scope on the
+				// same ordinal would cancel it — the id stack is an XOR —
+				// and give every message's widgets the same ids.
 				return chatview.Block{Render: func() {
 					for range c.IdScope(inst.ids.PrepareStr("entry")) {
-						for range c.IdScope(inst.ids.PrepareSeq(uint64(ord))) {
-							inst.renderEntry(i, e)
-						}
+						inst.renderEntry(i, e)
 					}
 				}}, true
 			}

@@ -232,7 +232,11 @@ func (inst *State) ScrollToStart(ordinal int32) {
 }
 
 // Block is a host-drawn message body: Render runs at draw time inside the
-// bubble and must scope its own widget ids. The body is laid out
+// bubble and must scope its own widget ids. The bubble is already inside
+// its row's IdScope(PrepareSeq(ordinal)), so the ids a body draws are the
+// message's own; a host scope must not repeat that push — the id stack
+// combines by XOR, and the same id pushed twice on one path cancels,
+// giving every message's widgets the same ids. The body is laid out
 // left-aligned on either side, and a viewer's bubble is fitted to it. Height is the height the host
 // expects the body to take, advisory in this cut — the scroll area lays the
 // body out itself — and the contract the etable path would read.
