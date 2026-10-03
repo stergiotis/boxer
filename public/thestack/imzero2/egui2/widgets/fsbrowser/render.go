@@ -445,30 +445,37 @@ func (in Input) pushColumns(plan widthPlan, density styletokens.DensityE) {
 	}
 }
 
+// widthMenu is a header's reset gesture when widths persist: a context menu
+// that returns this column, or every column, to its default (ADR-0151's clear
+// affordance).
+func (in Input) widthMenu(plan widthPlan, col uint32) {
+	if !plan.on || int(col) >= len(plan.cols) {
+		return
+	}
+	if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x200+uint64(col)), c.Atoms().Text("Reset column width").Keep()).
+		SendResp().HasPrimaryClicked() {
+		_ = in.Widths.Clear(plan.tag, plan.cols[col])
+	}
+	if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x300+uint64(col)), c.Atoms().Text("Reset all column widths").Keep()).
+		SendResp().HasPrimaryClicked() {
+		_ = in.Widths.ClearAll(plan.tag, plan.cols)
+	}
+}
+
 // renderHeaders draws the three sortable headers and the host's. A header is
 // a frameless button; its glyph says which column orders the listing, and
 // which way.
 func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletokens.DensityE, plan widthPlan) {
 	pad := cellInset(density)
-	// withWidthMenu wraps a header in the reset gesture when widths persist:
-	// a context menu that returns this column, or every column, to its
-	// default (ADR-0151's clear affordance). ContextMenu senses hover only,
-	// so the sort click underneath keeps working.
+	// withWidthMenu wraps a header in the reset gesture when widths persist.
+	// ContextMenu senses hover only, so the sort click underneath keeps
+	// working.
 	withWidthMenu := func(col uint32, body func()) {
 		if !plan.on || int(col) >= len(plan.cols) {
 			body()
 			return
 		}
-		c.ContextMenu().Render(func() {
-			if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x200+uint64(col)), c.Atoms().Text("Reset column width").Keep()).
-				SendResp().HasPrimaryClicked() {
-				_ = in.Widths.Clear(plan.tag, plan.cols[col])
-			}
-			if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x300+uint64(col)), c.Atoms().Text("Reset all column widths").Keep()).
-				SendResp().HasPrimaryClicked() {
-				_ = in.Widths.ClearAll(plan.tag, plan.cols)
-			}
-		}, body)
+		c.ContextMenu().Render(func() { in.widthMenu(plan, col) }, body)
 	}
 	sortable := func(col uint32, text string, by SortByE) {
 		for range et.Headers(0, col) {
@@ -650,6 +657,9 @@ func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Resu
 		Striped:   in.Striped,
 		// The epoch is the resolver's, or the seed when there is none.
 		WidthEpoch: plan.epoch,
+	}
+	if plan.on {
+		treeIn.HeaderMenu = func(col uint32) { in.widthMenu(plan, col) }
 	}
 	// The tree takes a column's Width as its drag floor. That is right for
 	// the defaults, and wrong for a width that is the column's own last

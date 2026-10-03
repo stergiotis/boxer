@@ -253,6 +253,10 @@ type Input struct {
 	// column cannot be dragged below what will come back on the next load.
 	MinColumnWidth float32
 	MaxColumnWidth float32
+	// HeaderMenu, when set, is the body of a context menu on every header,
+	// called with the header's column: 0 for the outline column, i+1 for
+	// Columns[i]. The menu senses hover only, so the header stays clickable.
+	HeaderMenu func(col uint32)
 }
 
 // Result reports what this frame's pointer interaction did. Every node field
@@ -533,13 +537,20 @@ func (in Input) renderHeaders(et c.EndETableFluid, density styletokens.DensityE)
 	header := func(col uint32, text string) {
 		for range et.Headers(0, col) {
 			for range c.IdScope(in.Ids.PrepareStr("header")) {
-				for range c.Frame(in.Ids.PrepareSeq(uint64(col))).
-					OuterMargin(0).
-					InnerMarginSides(pad, pad, 0, 0).
-					KeepIter() {
-					atoms := c.Atoms().BeginRichText(text).Strong().End().Keep()
-					c.LabelAtoms(atoms).Selectable(false).Send()
+				body := func() {
+					for range c.Frame(in.Ids.PrepareSeq(uint64(col))).
+						OuterMargin(0).
+						InnerMarginSides(pad, pad, 0, 0).
+						KeepIter() {
+						atoms := c.Atoms().BeginRichText(text).Strong().End().Keep()
+						c.LabelAtoms(atoms).Selectable(false).Send()
+					}
 				}
+				if in.HeaderMenu == nil {
+					body()
+					continue
+				}
+				c.ContextMenu().Render(func() { in.HeaderMenu(col) }, body)
 			}
 		}
 	}
