@@ -435,7 +435,7 @@ func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord, t *turn
 	}
 	inst.record(rec, t)
 	inst.log.Warn().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("reason", reason).Msg("llm: refused")
-	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason})
+	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason, CallId: rec.CallId})
 }
 
 func (inst *Service) reply(inbox string, v any) {

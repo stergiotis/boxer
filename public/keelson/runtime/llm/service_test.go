@@ -70,6 +70,28 @@ func TestUnconfiguredHostSaysSo(t *testing.T) {
 	require.True(t, errors.As(err, &refused), "%v", err)
 }
 
+// A failure names its row in the call record, so a caller can show where
+// to read it; a refusal does as well.
+func TestAFailureNamesItsCallRecord(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+	p := &fakeProvider{err: openaichat.ErrServer}
+	cli, svc, _ := serve(t, localCfg(p))
+	_, err := cli.Complete(context.Background(), Request{Messages: msg})
+	var failed *CallError
+	require.True(t, errors.As(err, &failed), "%v", err)
+	assert.Equal(t, errKindServer, failed.Kind)
+	require.Len(t, svc.Calls(), 1)
+	assert.Equal(t, svc.Calls()[0].CallId, CallIdOf(err))
+	assert.True(t, errors.Is(err, openaichat.ErrServer))
+
+	cli, svc, _ = serve(t, Config{})
+	_, err = cli.Complete(context.Background(), Request{Messages: msg})
+	require.Len(t, svc.Calls(), 1)
+	assert.NotEmpty(t, CallIdOf(err))
+	assert.Equal(t, svc.Calls()[0].CallId, CallIdOf(err))
+	assert.Empty(t, CallIdOf(context.Canceled))
+}
+
 // A completion goes through with the host's model and ceiling, the reply
 // carries the answer and the counts, the bus audits the app as sender, and
 // the call table shows the row.

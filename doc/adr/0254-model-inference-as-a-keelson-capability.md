@@ -419,6 +419,18 @@ play's agent limits rather than by a preview. `explain` and `fix this
 error` stay, as one-click transformations over the buffer, with the M4 tool
 loop behind `fix`.
 
+### 2026-10-03 — a failure names its call
+
+A failed or refused completion now says which row of the call record it
+is: a refusal's reply carries the call id, and the client returns a
+provider failure as `llm.CallError` — the failure kind, the provider's
+reason, the call id and the elapsed time — which unwraps to the
+`openaichat` sentinel it was, so classification by `errors.Is` is
+unchanged. `RefusedError` gained the call id; `llm.CallIdOf` reads it from
+either. A caller can show where a failure is recorded and open it, as the
+chat app does (ADR-0265 §SD4). A failure that never reached the service — a
+bus timeout, a cancel before the reply — has no call id.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

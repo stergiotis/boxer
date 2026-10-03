@@ -141,9 +141,51 @@ const (
 // keeps working.
 type RefusedError struct {
 	Reason string
+	// CallId names the refusal's row in the call record
+	// (keelson('llm_calls')); empty for a request the service could not
+	// read.
+	CallId string
 }
 
 func (inst *RefusedError) Error() string { return "llm: refused: " + inst.Reason }
+
+// CallError is a provider failure: the call reached the endpoint and did
+// not come back answered. Kind is the failure class as the service named
+// it ("auth", "rate_limited", "server", …), Reason the provider's own
+// account, CallId the call's row in the call record and Elapsed how long
+// the provider took. It unwraps to the openaichat sentinel of its kind, so
+// errors.Is classifies it as before.
+type CallError struct {
+	Kind     string
+	Reason   string
+	CallId   string
+	Elapsed  time.Duration
+	sentinel error
+}
+
+func (inst *CallError) Error() string {
+	if inst.sentinel == nil {
+		return "llm: " + inst.Reason
+	}
+	return "llm: " + inst.Reason + ": " + inst.sentinel.Error()
+}
+
+func (inst *CallError) Unwrap() error { return inst.sentinel }
+
+// CallIdOf is the call id a failed Complete carries, "" when the failure
+// never reached the service's call record (a bus timeout, a cancel before
+// the reply).
+func CallIdOf(err error) (id string) {
+	var refused *RefusedError
+	if errors.As(err, &refused) {
+		return refused.CallId
+	}
+	var failed *CallError
+	if errors.As(err, &failed) {
+		return failed.CallId
+	}
+	return
+}
 
 // Describe asks what the host offers.
 func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
@@ -265,7 +307,7 @@ func failureOf(w wireReply) (err error) {
 	var sentinel error
 	switch w.ErrorKind {
 	case errKindRefused, "":
-		return &RefusedError{Reason: w.Reason}
+		return &RefusedError{Reason: w.Reason, CallId: w.CallId}
 	case errKindAuth:
 		sentinel = openaichat.ErrAuth
 	case errKindModelNotFound:
@@ -282,12 +324,10 @@ func failureOf(w wireReply) (err error) {
 		sentinel = context.DeadlineExceeded
 	case errKindCancelled:
 		sentinel = context.Canceled
-	default:
-		return errors.New("llm: " + w.Reason)
 	}
 	// The reason is the provider's own account — a status and its message —
 	// so it stays in the text, where a caller showing the error reads it.
-	return eb.Build().Str("reason", w.Reason).Errorf("llm: %s: %w", w.Reason, sentinel)
+	return &CallError{Kind: w.ErrorKind, Reason: w.Reason, CallId: w.CallId, Elapsed: time.Duration(w.ElapsedNs), sentinel: sentinel}
 }
 
 // kindOf is failureOf's inverse on the service side.
