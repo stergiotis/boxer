@@ -297,6 +297,13 @@ export function makeWasi(queue, stderr, argv, env = []) {
   // synchronous XMLHttpRequest, which a worker may issue; a host without
   // one (Node) answers status 0.
   let httpReply = null;
+  // The asynchronous path (ADR-0263 Update 2026-10-03): http_start begins a
+  // fetch() and returns a handle at once; the reply waits in `pending` until
+  // the module collects it, and onSettled (the worker's wake) earns the
+  // module a frame to notice. Frames keep coming while a request is out.
+  const pending = new Map();
+  let nextHandle = 1;
+  let onSettled = () => {};
   const u32 = (b, o) => new DataView(b.buffer, b.byteOffset).getUint32(o, true);
   const field = (b, o) => { const n = u32(b, o); return [b.subarray(o + 4, o + 4 + n), o + 4 + n]; };
   const frame = (status, headers, body) => {
@@ -339,8 +346,54 @@ export function makeWasi(queue, stderr, argv, env = []) {
       httpReply = null;
       return n;
     },
+    http_start(reqPtr, n) {
+      if (typeof fetch === 'undefined') return 0;
+      const req = u8().slice(reqPtr, reqPtr + n);
+      let o = 0, method, url, headers, body;
+      [method, o] = field(req, o); [url, o] = field(req, o); [headers, o] = field(req, o); [body, o] = field(req, o);
+      const dec = new TextDecoder();
+      const h = nextHandle++;
+      const ctl = new AbortController();
+      const entry = { ctl, reply: null };
+      pending.set(h, entry);
+      const hdrs = new Headers();
+      for (const line of dec.decode(headers).split('\n')) {
+        const i = line.indexOf(':'); if (i < 0) continue;
+        const k = line.slice(0, i).trim();
+        if (/^(host|content-length|connection|accept-encoding|user-agent)$/i.test(k)) continue; // the browser owns these
+        try { hdrs.append(k, line.slice(i + 1).trim()); } catch (_) { /* forbidden header name */ }
+      }
+      const m = dec.decode(method);
+      fetch(dec.decode(url), { method: m, headers: hdrs, body: body.length && m !== 'GET' && m !== 'HEAD' ? body : undefined, signal: ctl.signal })
+        .then(async (r) => {
+          const b = new Uint8Array(await r.arrayBuffer());
+          const hs = []; r.headers.forEach((v, k) => hs.push(k + ': ' + v));
+          return frame(r.status, hs.join('\n'), b);
+        })
+        .catch((e) => frame(0, String(e && e.message || e), new Uint8Array()))
+        .then((reply) => { if (pending.get(h) === entry) { entry.reply = reply; onSettled(); } });
+      return h;
+    },
+    http_ready(h) {
+      const e = pending.get(h);
+      return e && e.reply ? e.reply.length : 0;
+    },
+    http_collect(h, dst, cap) {
+      const e = pending.get(h);
+      if (!e || !e.reply) return 0;
+      const n = Math.min(cap, e.reply.length);
+      u8().set(e.reply.subarray(0, n), dst);
+      pending.delete(h);
+      return n;
+    },
+    http_abort(h) {
+      const e = pending.get(h);
+      if (!e) return;
+      pending.delete(h);
+      e.ctl.abort();
+    },
   };
-  return { imports: stubbed, env: env_imports, setMemory(m) { mem = m; }, names: (mod) => WebAssembly.Module.imports(mod).map((i) => i.name) };
+  return { imports: stubbed, env: env_imports, setMemory(m) { mem = m; }, onHttpSettled(fn) { onSettled = fn; }, httpPending: () => pending.size, names: (mod) => WebAssembly.Module.imports(mod).map((i) => i.name) };
 }
 
 // Builds a complete import object for a module from the shim, one entry per
@@ -423,6 +476,9 @@ export async function startReactor({ goBytes, stub, argv, log, env }) {
   if (ready !== 0) throw new Error('reactor: setup did not leave a frame loop (' + ready + ')');
   return {
     frame() { try { return instance.exports.frame(); } catch (e) { if (e && e.wasiExit !== undefined) return 1; throw e; } },
+    // A request the module started asynchronously settled: the worker
+    // answers with a frame, in which the waiting goroutine collects it.
+    onHttpSettled(fn) { wasi.onHttpSettled(fn); },
     lines,
     stats: () => ({ stub: stub.stats(), bridge: queue.stats() }),
   };

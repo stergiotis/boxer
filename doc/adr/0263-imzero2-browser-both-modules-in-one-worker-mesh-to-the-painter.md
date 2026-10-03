@@ -283,6 +283,36 @@ the host skips a pass whose mesh equals the last one posted, as the
 carrier does. What the tab still lacks is unchanged: the runtime services
 on the bus, live query progress, sealed files.
 
+### 2026-10-03 — the tab's HTTP no longer stops the tab
+
+Every outbound request — a ClickHouse query through `/ch/`, a basemap tile,
+anything on `http.DefaultTransport` — crossed to the worker through the
+`http_fetch` host import, which the worker answered with a synchronous
+`XMLHttpRequest`. Go runs on the worker's one thread, so for the whole of a
+request nothing else ran: a query that took 5 s froze the tab for 5.8 s
+(frames painted stood still under hover input; measured once against a local
+server with `sleepEachRow`), and the public ADS-B instance's 8–10 s world
+views froze it each time the view settled somewhere new.
+
+The transport now has an asynchronous path. `http_start` begins a `fetch()`
+and returns a handle; the requesting goroutine sleeps between `http_ready`
+polls, so the frames in between run; the worker wakes the module when a
+request settles, and `http_collect` hands the reply over (`http_abort` drops
+one whose context ended). Against the same local query the tab painted
+throughout (about 280 frames during the 5 s); against the public instance it
+painted throughout a 25 s query. A request made on the goroutine running the
+current export — `setup`, or a call inside a frame — cannot wait that way,
+because the browser finishes a fetch only once the export returns, so it keeps
+the synchronous `http_fetch`; so does a host without `fetch`. As a backstop,
+a waiting request whose export has run past 250 ms reads that export
+goroutine's state from a stack dump and, only when it is parked (a channel, a
+lock — waiting, with near certainty, for the very request in flight), redoes
+the request synchronously and logs every goroutine's stack the first time,
+which names the site to fix. A long export whose goroutine is merely busy
+(results decoding inside the frame's yields) leaves the wait alone. The
+mechanism is in `browserhost/transport_wasip1.go` and the worker's
+`bridge.mjs`.
+
 ## References
 
 - [ADR-0077](./0077-keelson-browser-wasm-execution.md) — the two-module decision, SD1 amended and O3's kill reason partly reversed here.
