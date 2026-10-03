@@ -187,6 +187,7 @@ func (inst *App) renderPlanRow() {
 }
 
 func (inst *App) renderStatus() {
+	inst.renderPhase()
 	switch {
 	case inst.lastError != "":
 		badge.New(inst.ids.PrepareStr("err"), inst.lastError).Tone(badge.ToneError).Variant(badge.VariantSoft).Send()

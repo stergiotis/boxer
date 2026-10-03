@@ -49,6 +49,7 @@ var manifest = app.Manifest{
 	},
 	// The plans this window used, for the first page's resume list.
 	PersistedKeys: []string{recentKey},
+	Operations:    ops.Catalog(),
 }
 
 func init() {
