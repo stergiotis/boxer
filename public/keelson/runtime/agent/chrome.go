@@ -236,10 +236,27 @@ func (inst *Service) setMode(t *task, key uint64, m ModeE) {
 const (
 	requestWidth float32 = 520
 	confirmWidth float32 = 480
-	// shareListHeight bounds the list of windows to share: a modal is sized
-	// by its body, so a long list would push the decision off screen.
-	shareListHeight float32 = 240
+	// A modal is sized by its body, so every part of a decision whose length
+	// the model or the desktop decides scrolls under a ceiling of its own;
+	// otherwise a long list would push the decision off screen.
+	// shareListHeight bounds the windows to share, launchListHeight the apps
+	// the task may open, and modelTextHeight what the model wrote — its
+	// plan or reason — and the destinations it named.
+	shareListHeight  float32 = 240
+	launchListHeight float32 = 160
+	modelTextHeight  float32 = 120
 )
+
+// bounded draws body in a vertical scroll area no taller than maxH. The
+// area is pushed under an id of its own: two scroll areas in one modal
+// would otherwise share egui's default scroll id, and with it the offset.
+func bounded(id c.WidgetIdCreatorI, maxH float32, body func()) {
+	for range c.PushId(id).KeepIter() {
+		for range c.ScrollArea().Vscroll(true).MaxHeight(maxH).KeepIter() {
+			body()
+		}
+	}
+}
 
 // dialogHeading starts a decision's modal: a fixed width, since a modal is
 // sized by its body, and the title a window would carry as a heading.
@@ -316,9 +333,11 @@ func (inst *Chrome) renderConfirmation(p proposalRef, waiting int, ids *c.Widget
 			strconv.FormatUint(rec.instance, 10) + ".").Wrap().Send()
 		c.Label("This writes outside the app and cannot be undone from here.").Wrap().Send()
 		if rec.req.Reason != "" {
-			for rt := range c.RichTextLabel("its reason, as the model wrote it: " + rec.req.Reason) {
-				rt.Weak()
-			}
+			bounded(ids.PrepareStr("agent-confirm-reason-"+rec.key), modelTextHeight, func() {
+				for rt := range c.RichTextLabel("its reason, as the model wrote it: " + rec.req.Reason) {
+					rt.Weak()
+				}
+			})
 		}
 		if waiting > 1 {
 			c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
@@ -372,17 +391,21 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		}
 		// One row per window: whether it is shared, the mode, and what the
 		// mode lets the task do — the columns aligned across windows.
-		for range c.ScrollArea().Vscroll(true).MaxHeight(shareListHeight).KeepIter() {
+		bounded(ids.PrepareStr("agent-share-list-"+r.key), shareListHeight, func() {
 			for range c.Grid(ids.PrepareStr("agent-share-grid-" + r.key)).NumColumns(3).KeepIter() {
 				for _, w := range windows {
 					inst.renderShareRow(r, w, ids)
 					c.EndRow()
 				}
 			}
-		}
+		})
 	}
-	for _, l := range r.launches {
-		c.Label("the task may " + launchText(l, svc.display(app.AppIdT(l.App)))).Wrap().Send()
+	if len(r.launches) > 0 {
+		bounded(ids.PrepareStr("agent-launch-list-"+r.key), launchListHeight, func() {
+			for _, l := range r.launches {
+				c.Label("the task may " + launchText(l, svc.display(app.AppIdT(l.App)))).Wrap().Send()
+			}
+		})
 	}
 	if r.desktop == ModeAct {
 		// The desktop as a whole (ADR-0276 §SD4): arranging moves every
@@ -400,7 +423,9 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		svc.mu.Unlock()
 	}
 	if len(r.destinations) > 0 {
-		c.Label("destinations: " + joinComma(r.destinations)).Wrap().Send()
+		bounded(ids.PrepareStr("agent-destinations-"+r.key), modelTextHeight, func() {
+			c.Label("destinations: " + joinComma(r.destinations)).Wrap().Send()
+		})
 	}
 	if r.task == nil {
 		calls := r.calls
@@ -410,14 +435,18 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		c.Label("budget: " + strconv.FormatUint(uint64(calls), 10) + " calls").Send()
 	}
 	if r.held != nil && r.held.req.Reason != "" {
-		for rt := range c.RichTextLabel("its reason, as the model wrote it: " + r.held.req.Reason) {
-			rt.Weak()
-		}
+		bounded(ids.PrepareStr("agent-reason-"+r.key), modelTextHeight, func() {
+			for rt := range c.RichTextLabel("its reason, as the model wrote it: " + r.held.req.Reason) {
+				rt.Weak()
+			}
+		})
 	}
 	if r.plan != "" && r.held == nil {
-		for rt := range c.RichTextLabel("its plan, as the model wrote it: " + r.plan) {
-			rt.Weak()
-		}
+		bounded(ids.PrepareStr("agent-plan-"+r.key), modelTextHeight, func() {
+			for rt := range c.RichTextLabel("its plan, as the model wrote it: " + r.plan) {
+				rt.Weak()
+			}
+		})
 	}
 	if waiting > 1 {
 		c.Label(strconv.Itoa(waiting-1) + " more waiting").Send()
