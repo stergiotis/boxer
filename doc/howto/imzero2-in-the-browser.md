@@ -53,7 +53,10 @@ trial, not this page.
 2. **Serve it.** The same binary, built natively, serves the directory and
    proxies `/ch/` to ClickHouse, so the data plane stays same-origin;
    `--chURL` points it elsewhere and `--listen` moves it. It is a
-   development server: no auth, no TLS.
+   development server: no auth, no TLS. The page, worker and shim are
+   embedded in the binary and served from there when the directory lacks
+   them; a file in the directory wins, which is how a harness brings its
+   own page.
 
    ```bash
    go run ./public/thestack/cmd/imzero2tab serve --dir /tmp/tab --listen 127.0.0.1:8765

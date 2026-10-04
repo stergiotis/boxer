@@ -1,6 +1,7 @@
 package browserhost
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,6 +41,10 @@ type ServeConfig struct {
 	// OnListen, when set, is told the bound address before the first
 	// request is served (tests; a caller that asked for port 0).
 	OnListen func(addr net.Addr)
+	// Assets are files served by name when Dir lacks them — the page,
+	// worker and shim a binary embeds (ADR-0278 SD3, proposed). A file in
+	// Dir wins, so a harness that brings its own page keeps it.
+	Assets map[string][]byte
 }
 
 // Serve serves a tab bundle: the directory's files with no caching, `/ch/`
@@ -114,6 +120,10 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 		case ".mjs", ".js":
 			w.Header().Set("Content-Type", "text/javascript")
 		}
+		if name, b, ok := assetFor(cfg, r.URL.Path); ok {
+			http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(b))
+			return
+		}
 		files.ServeHTTP(w, r)
 	})
 
@@ -135,6 +145,22 @@ func Serve(ctx context.Context, cfg ServeConfig, logger zerolog.Logger) (err err
 	_ = srv.Shutdown(shutdownCtx)
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
+	}
+	return
+}
+
+// assetFor returns the embedded asset a request names when the bundle
+// directory has no file of that name; "/" names the page.
+func assetFor(cfg ServeConfig, urlPath string) (name string, b []byte, ok bool) {
+	name = strings.TrimPrefix(path.Clean("/"+urlPath), "/")
+	if name == "" {
+		name = "index.html"
+	}
+	if b, ok = cfg.Assets[name]; !ok {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(cfg.Dir, filepath.FromSlash(name))); err == nil {
+		return "", nil, false
 	}
 	return
 }

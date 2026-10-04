@@ -20,6 +20,12 @@ import (
 // returns.
 func startServe(t *testing.T, exitOnReport bool) (base string, chSeen *[]string, done <-chan error) {
 	t.Helper()
+	return startServeWith(t, exitOnReport, nil)
+}
+
+// startServeWith is startServe with embedded assets beside the bundle.
+func startServeWith(t *testing.T, exitOnReport bool, assets map[string][]byte) (base string, chSeen *[]string, done <-chan error) {
+	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><title>tab</title>"), 0o644); err != nil {
 		t.Fatal(err)
@@ -45,6 +51,7 @@ func startServe(t *testing.T, exitOnReport bool) (base string, chSeen *[]string,
 			ChURL:        ch.URL + "/",
 			ExitOnReport: exitOnReport,
 			OnListen:     func(a net.Addr) { addrCh <- a },
+			Assets:       assets,
 		}, zerolog.Nop())
 	}()
 	select {
@@ -82,6 +89,27 @@ func TestServeFilesAndTypes(t *testing.T) {
 	status, _, _ = get(t, base+"/missing.mjs")
 	if status != http.StatusNotFound {
 		t.Fatalf("missing: %d", status)
+	}
+}
+
+// An embedded asset fills in a file the bundle lacks, with the type its name
+// implies; a file the bundle has wins over the asset of the same name.
+func TestServeAssetsFillInWhatTheBundleLacks(t *testing.T) {
+	base, _, _ := startServeWith(t, false, map[string][]byte{
+		"worker.mjs": []byte("// embedded worker"),
+		"index.html": []byte("<!doctype html><title>embedded</title>"),
+	})
+	status, ctype, body := get(t, base+"/worker.mjs?app=x")
+	if status != http.StatusOK || ctype != "text/javascript" || body != "// embedded worker" {
+		t.Fatalf("worker: %d %q %q", status, ctype, body)
+	}
+	_, _, body = get(t, base+"/index.html?worker=x")
+	if !strings.Contains(body, "<title>tab</title>") {
+		t.Fatalf("the bundle's page should win over the embedded one: %q", body)
+	}
+	status, _, _ = get(t, base+"/bridge.mjs")
+	if status != http.StatusNotFound {
+		t.Fatalf("neither bundle nor assets have it: %d", status)
 	}
 }
 
