@@ -157,7 +157,7 @@ const (
 	tipChanges  = "Ask first: every change waits as a proposal you accept or reject in the window. Apply directly: changes land as the model makes them."
 	tipLaunch   = "Let the model ask to open windows of apps. You still decide which, in the host's dialog."
 	tipDesktop  = "Let the model ask to arrange every window on the desktop."
-	tipReach    = "How far the model's work may reach beyond the windows: this host's own tables, the data endpoints the apps query, or the network."
+	tipReach    = "How far the model's work may reach beyond the windows: this host's own tables and git repositories, the data endpoints the apps query, or the network."
 	tipPace     = "At a pace I can follow: the host spaces the model's changes — an edit, a run, a window opened or moved — so you can see each one and stop the task. As fast as it can: they land as the model makes them, faster than you can read or intervene."
 	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact panel. At most and Changes above decide whether it may write and whether each change waits for you."
 	tipTyped    = "Offer each operation of the task's windows to the model as a tool of its own, instead of one call_operation tool. More tools in every request; some models call them more reliably."
