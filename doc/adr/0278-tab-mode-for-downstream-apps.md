@@ -156,9 +156,11 @@ the file on GitHub Pages as `tabhost/<sha256>.wasm` with `tabhost/index.txt`
 listing every published digest. Nothing published is removed, since a consumer
 pinned to an older commit needs an older digest: each deployment is assembled
 from everything the live site lists plus the new file, and a run that cannot
-read back the whole of it fails instead of deploying a smaller site. A two-path
-build of one commit on one machine gave the same digest when this was built;
-the workflow is what checks it across machines.
+read back the whole of it fails instead of deploying a smaller site. When this was
+built, one commit gave the same digest from two checkouts on one machine and
+from the workflow's runner; the workflow's first run failed on a digest
+recorded before a Rust change from another session landed, which is the check
+working as meant, and AGENTS.md now carries the refresh rule.
 
 `bundle` obtains the host per `--hostFrom`: `auto`, the default, builds from
 source when the module being bundled is boxer itself — a developer changing the
@@ -210,8 +212,8 @@ commands come with the module pin.
   no behaviour change.
 - **M2 — `bundle` and the opcode handshake.** ✓ SD4 with a source build of the
   host, SD6; the shell script reduced to a call.
-- **M3 — The content-addressed host.** SD5: digest file, CI workflow, fetch and
-  cache.
+- **M3 — The content-addressed host.** ✓ SD5: digest file, CI workflow, fetch
+  and cache.
 - **M4 — Gates.** SD7.
 - **M5 — Adoption text.** SD8, verified against a consumer repository.
 
