@@ -344,10 +344,23 @@ func (inst *Client) Cancel(ctx context.Context, handle string, key string) (out 
 	return callReply(roundTrip[wireCancel, wireCallReply](ctx, inst, SubjectCancel, wireCancel{V: wireVersion, Handle: handle, Key: key}))
 }
 
-// Capture captures an instance's window; the outcome's Job names it.
+// Capture captures an instance's window as SVG; the outcome's Job names it.
 func (inst *Client) Capture(ctx context.Context, handle string, instance uint64, key string) (out Outcome, err error) {
+	return inst.CaptureAs(ctx, handle, instance, key, CaptureFormatSvg)
+}
+
+// Capture formats: the window's shapes as SVG, or its pixels as PNG
+// (ADR-0281).
+const (
+	CaptureFormatSvg = "svg"
+	CaptureFormatPng = "png"
+)
+
+// CaptureAs captures an instance's window in a format; the outcome's Job
+// names it.
+func (inst *Client) CaptureAs(ctx context.Context, handle string, instance uint64, key string, format string) (out Outcome, err error) {
 	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture,
-		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: key}))
+		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: key, Format: format}))
 }
 
 // Arrange arranges windows with an ADR-0275 arrangement named by its ident

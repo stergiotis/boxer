@@ -242,6 +242,8 @@ type wireCapture struct {
 	Handle   string `json:"handle"`
 	Instance uint64 `json:"instance"`
 	Key      string `json:"key"`
+	// Format is "svg" or "png"; empty is "svg" (ADR-0281).
+	Format string `json:"format,omitempty"`
 }
 
 // wireWindowAct is arrange, raise or place (ADR-0276 §SD3). Command and

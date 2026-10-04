@@ -260,6 +260,8 @@ type captureJob struct {
 	requested time.Time
 	exported  bool
 	status    opwire.CaptureStatus
+	// pixel is set for a pixel capture (ADR-0281); nil for an SVG export.
+	pixel *pixelJob
 }
 
 type captures struct {
@@ -268,6 +270,25 @@ type captures struct {
 	jobs map[string]*captureJob
 	// pending are jobs whose export the next Frame queues.
 	pending []*captureJob
+	// pixelQueue are pixel captures waiting their turn; pixelActive is the
+	// one in flight, one at a time.
+	pixelQueue    []*captureJob
+	pixelActive   *captureJob
+	nextRequestId uint64
+}
+
+// ensureDirLocked makes the capture directory on first use.
+func (inst *captures) ensureDirLocked() (err error) {
+	if inst.dir != "" {
+		return
+	}
+	inst.dir, err = os.MkdirTemp("", "boxer-agent-captures-")
+	if err != nil {
+		err = eh.Errorf("windowhost: capture directory: %w", err)
+		return
+	}
+	inst.jobs = make(map[string]*captureJob)
+	return
 }
 
 // OpsCapture queues a capture of a window's content as SVG; the export runs
@@ -280,13 +301,8 @@ func (inst *Inst) OpsCapture(key uint64) (job string, err error) {
 	}
 	inst.caps.mu.Lock()
 	defer inst.caps.mu.Unlock()
-	if inst.caps.dir == "" {
-		inst.caps.dir, err = os.MkdirTemp("", "boxer-agent-captures-")
-		if err != nil {
-			err = eh.Errorf("windowhost: capture directory: %w", err)
-			return
-		}
-		inst.caps.jobs = make(map[string]*captureJob)
+	if err = inst.caps.ensureDirLocked(); err != nil {
+		return
 	}
 	var b [8]byte
 	_, _ = rand.Read(b[:])
@@ -305,6 +321,9 @@ func (inst *Inst) OpsCaptureStatus(job string) (st opwire.CaptureStatus, ok bool
 	j, ok := inst.caps.jobs[job]
 	if !ok {
 		return
+	}
+	if j.pixel != nil && j.status.Phase == opwire.PhaseRunning && time.Since(j.requested) > 4*captureTimeout {
+		j.status = opwire.CaptureStatus{Phase: opwire.PhaseFailed, Reason: "the capture did not complete in time"}
 	}
 	if j.status.Phase == opwire.PhaseRunning && j.exported {
 		if fi, err := os.Stat(j.path); err == nil && fi.Size() > 0 {

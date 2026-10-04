@@ -935,6 +935,11 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         std::io::stdin().lock(),
         std::io::stdout().lock(),
     );
+    // ADR-0281 §SD5: captures rasterize on the CPU, apart from the live frame.
+    #[cfg(feature = "headless_soft")]
+    fffi.set_capture_raster(Box::new(
+        crate::imzero2::softraster::SoftCaptureRaster::default(),
+    ));
     let mut cadence = if reactive {
         Cadence::Reactive
     } else {

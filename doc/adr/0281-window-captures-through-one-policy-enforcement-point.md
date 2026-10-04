@@ -178,11 +178,13 @@ labelled artifact handle, recording the whole on the audit trail.
 
 ### SD4 — Coverage: only the granted windows' spans are drawn
 
-- **Spans.** While a capture is pending, the window host records the next
-  frame's outgoing stream below the writer's buffering, and marks where each
-  window's emission begins and ends — the window's opcode through its end,
-  together with the placement and raise opcodes the host sends for it. Spans
-  lie on message boundaries.
+- **Spans.** While a capture is pending, the FFFI2 runtime keeps a copy of
+  the next frame's outgoing messages, framed as the client reads them, and
+  the window host marks where each window's emission begins and ends — the
+  window's opcode through its end, together with the placement and raise
+  opcodes the host sends for it. Messages are recorded whole as they leave
+  for the pipe, so a span lies on message boundaries, and spans of whole
+  messages concatenate into one stream the client can read.
 - **The `scope` obligation** carries the windows and the crop. Its handler
   keeps the granted windows' spans and drops everything else: other windows,
   the shell's chrome, the desktop. Whatever a granted window emits — its
@@ -280,7 +282,7 @@ labelled artifact handle, recording the whole on the audit trail.
 | --- | --- | --- |
 | `runtime/capture` (new, under `public/keelson/runtime`) | added: the service (PEP), `PolicyI` (PDP), the obligation registry | the agent service's `capture` handler, which calls it |
 | `runtime.agent.capture` wire (`buscodec`) | added fields: format, instances, crop; the existing single instance still accepted, SVG the default | the agent client; the chat coordinator's tests |
-| FFFI2 runtime (Go writer) | added: recording a frame's outgoing bytes below the buffered writer, with span marks | the window host's `Frame` |
+| FFFI2 runtime (`Fffi2`) | added: recording the messages sent to the pipe, with positions on message boundaries | the window host's `Frame` |
 | egui2 IDL | added: a capture-replay opcode taking spans and returning pixels or SVG as a fetch; an effect mark on opcodes, with a generator check | `app egui2gen generate`; both sides of the FFFI boundary rebuilt |
 | Interpreter (Rust) | added: capture-replay mode — writes refused, registers cleared, caches read-only, marked opcodes skipped | the image and scrolling-texture caches |
 | Mesh-only `headless` Rust build | added: the software rasterizer, for capture | the cargo features of the headless builds; the license gate's crate tree |
@@ -373,8 +375,10 @@ Milestones:
 
 - **M1 — Replay in the interpreter**: the capture context, isolation, the
   effect marks. Built 2026-10-04, uncommitted.
-- **M2 — Spans**: recording below the writer, span marks in the window host,
-  the replay opcode and its fetch.
+- **M2 — Spans**: recording in the FFFI2 runtime, span marks in the window
+  host, the replay opcode and its fetch; the wire's `format` field, so an
+  agent can ask for `png` before the PEP exists. Built 2026-10-04,
+  uncommitted.
 - **M3 — The PEP, PDP and `scope` handler**; SVG moved behind it (SD1–SD4).
 - **M4 — Records and labels** (SD6), and the wire fields.
 - **M5 — The mesh-only and desktop hosts.**

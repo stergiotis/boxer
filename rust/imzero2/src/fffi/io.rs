@@ -278,6 +278,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         }
         Ok(())
     }
+    /// Writes a byte slice as `write_plain_u8h` does — a u32 length, then
+    /// the bytes — in one write.
+    pub fn write_plain_u8_slice(&mut self, v: &[u8]) -> Result<(), FffiError> {
+        self.write_plain_u32(v.len() as u32)?;
+        self.write_all(v)
+    }
     pub fn write_plain_u8h(
         &mut self,
         len: usize,
@@ -512,10 +518,8 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     }
     pub fn read_plain_u8h(&mut self) -> FffiResult<Vec<u8>> {
         let len = self.read_slice_len()?;
-        let mut v = Vec::with_capacity(len);
-        for _ in 0..len {
-            v.push(self.read_plain_u8()?);
-        }
+        let mut v = vec![0u8; len];
+        self.read_exact_active(&mut v)?;
         Ok(v)
     }
     pub fn read_plain_sh(&mut self) -> FffiResult<Vec<String>> {

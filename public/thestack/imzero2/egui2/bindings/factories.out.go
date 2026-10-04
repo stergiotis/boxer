@@ -110,6 +110,15 @@ func CaptureAvailableSize() {
 	r.SendIntermediate()
 }
 
+func CaptureReplay(requestId uint64, stream []uint8) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteUint32(uint32(FuncProcIdCaptureReplay))
+	r.WriteUint64(requestId)
+	runtime.PutUint8SliceArg(r, stream)
+
+	r.SendIntermediate()
+}
+
 func CaptureUiAvailableRect(seq uint64) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdCaptureUiAvailableRect))

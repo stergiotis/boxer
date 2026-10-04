@@ -28,7 +28,7 @@ func TestHostEffectNodes(t *testing.T) {
 		}
 	}
 	assert.ElementsMatch(t, []string{
-		"contextSendViewPortCommandClose", "copyTextToClipboard", "exportSvg", "exportSvgWindow",
+		"captureReplay", "contextSendViewPortCommandClose", "copyTextToClipboard", "exportSvg", "exportSvgWindow",
 		"prepareNextFrame", "requestScreenshot", "requestScreenshotRect", "setAnimationFreeze",
 		"setVideoPipeline", "windowPlace",
 	}, host)

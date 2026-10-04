@@ -621,6 +621,9 @@ impl TexturePixelCache {
     pub fn remove(&mut self, id: egui::TextureId) {
         self.textures.remove(&id);
     }
+    pub fn iter(&self) -> impl Iterator<Item = (&egui::TextureId, &CachedTexture)> {
+        self.textures.iter()
+    }
 }
 
 pub type TexturePixelCacheHandle = Arc<Mutex<TexturePixelCache>>;

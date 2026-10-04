@@ -241,6 +241,11 @@ type StateManager struct {
 	r21UiRects       map[uint64]UiRectValue
 	r27Windows       map[uint64]WindowGeomValue
 	r27WorkArea      UiRectValue
+	// captureWanted issues fetchCaptureResult at the next Sync; the reply
+	// waits in captureResult for TakeCaptureResult (ADR-0281 §SD5).
+	captureWanted   bool
+	captureResult   CaptureResultValue
+	captureResultOk bool
 	// r23CanvasWheel holds LAST frame's per-canvas wheel captures (ADR-0140),
 	// keyed by canvas widget id. Rebuilt each Sync; read via GetCanvasWheel.
 	r23CanvasWheel map[uint64]CanvasWheelValue
@@ -755,6 +760,11 @@ func (inst *StateManager) Sync() {
 	fetcher.IssueFetchR22StarvedTextures()
 	fetcher.IssueFetchFrameMetrics()
 	fetcher.IssueFetchPixelsPerPoint()
+	captureWanted := inst.captureWanted
+	inst.captureWanted = false
+	if captureWanted {
+		fetcher.IssueFetchCaptureResult()
+	}
 
 	ids, resps := fetcher.CollectFetchR7()
 	d := inst.responseFlags
@@ -972,6 +982,50 @@ func (inst *StateManager) Sync() {
 
 	// Collected in the position it was issued, after the frame metrics.
 	inst.pixelsPerPoint = inst.fetcher.CollectFetchPixelsPerPoint()
+	if captureWanted {
+		var r CaptureResultValue
+		var status uint8
+		r.RequestId, status, r.Width, r.Height, r.Reason, r.Rgba, r.RefusedUploads, r.UnknownTextures = inst.fetcher.CollectFetchCaptureResult()
+		r.Status = CaptureStatusE(status)
+		inst.captureResult, inst.captureResultOk = r, r.Status != CaptureStatusNone
+	}
+}
+
+// CaptureStatusE is a capture replay's outcome as the client reports it.
+type CaptureStatusE uint8
+
+const (
+	CaptureStatusNone        CaptureStatusE = 0
+	CaptureStatusCompleted   CaptureStatusE = 1
+	CaptureStatusFailed      CaptureStatusE = 2
+	CaptureStatusUnsupported CaptureStatusE = 3
+)
+
+// CaptureResultValue is one fetchCaptureResult reply: the pixels of a
+// captureReplay, RGBA, Width × Height, top-left origin.
+type CaptureResultValue struct {
+	RequestId       uint64
+	Status          CaptureStatusE
+	Width           uint32
+	Height          uint32
+	Reason          string
+	Rgba            []byte
+	RefusedUploads  uint64
+	UnknownTextures uint64
+}
+
+// WantCaptureResult asks the next Sync to fetch the client's capture result.
+// Call it in the frame that emits CaptureReplay; the reply is read in that
+// frame's Sync, after the replay ran.
+func (inst *StateManager) WantCaptureResult() {
+	inst.captureWanted = true
+}
+
+// TakeCaptureResult returns the capture result the last Sync fetched, once.
+func (inst *StateManager) TakeCaptureResult() (r CaptureResultValue, ok bool) {
+	r, ok = inst.captureResult, inst.captureResultOk
+	inst.captureResult, inst.captureResultOk = CaptureResultValue{}, false
+	return
 }
 
 // GetPixelsPerPoint is the display's physical pixels per logical point as of

@@ -36,6 +36,23 @@ self.io.write_plain_u64h(len, self.video_stream_info.drain(..))?;
 `)).
 		AddReturnValue("info", ctabb.U64h).
 		Build())
+	// ADR-0281 §SD5: the last captureReplay's outcome — status 0 when none
+	// is held; 1 completed, 2 failed, 3 unsupported on this host. rgba is
+	// width × height tightly packed, top-left origin.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchCaptureResult").
+		WithApplyCodeClientRust(rustClientCode(`
+self.write_capture_result()?;
+{{SendMessage}}
+`)).
+		AddReturnValue("requestId", ctabb.U64).
+		AddReturnValue("status", ctabb.U8).
+		AddReturnValue("width", ctabb.U32).
+		AddReturnValue("height", ctabb.U32).
+		AddReturnValue("reason", ctabb.S).
+		AddReturnValue("rgba", ctabb.U8h).
+		AddReturnValue("refusedUploads", ctabb.U64).
+		AddReturnValue("unknownTextures", ctabb.U64).
+		Build())
 	fetchers = append(fetchers, idl.NewFetcherNode("fetchR7").
 		WithApplyCodeClientRust(rustClientCode(`
 let len = self.r7_ids.len();

@@ -222,6 +222,20 @@ if {{EguiUiOptionalOuter}}.is_some() {
 				bg,
 			});
 `)).Build())
+	// Capture replay (ADR-0281 §SD5): `stream` is whole messages of a
+	// recorded frame — the granted windows' spans. The client replays them
+	// into a separate, input-less context built from the live one and keeps
+	// the pixels for fetchCaptureResult. Host-effect: a replay must never
+	// start another.
+	specials = append(specials,
+		idl.NewProceduralNode("captureReplay").WithEffect(ir.EffectHost).
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("requestId", ctabb.U64).
+				PlainArg("stream", ctabb.U8h).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode(`
+			self.capture_render({{EguiContext}}, request_id, &stream);
+`)).Build())
 	// Cropped-region screenshot. The rect is in logical points (pre-DPI); the
 	// handler multiplies by pixels_per_point before slicing the ColorImage.
 	// Used by the deterministic TestDriver to capture each demo's fixed stage

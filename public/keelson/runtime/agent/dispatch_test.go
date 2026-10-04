@@ -125,7 +125,8 @@ func (inst *fakeHost) OpsAttach(k uint64, a bool) bool {
 	}
 	return false
 }
-func (inst *fakeHost) OpsCapture(k uint64) (string, error) { return "cap-1", nil }
+func (inst *fakeHost) OpsCapture(k uint64) (string, error)         { return "cap-1", nil }
+func (inst *fakeHost) OpsCapturePixels(k []uint64) (string, error) { return "cap-2", nil }
 func (inst *fakeHost) OpsArrange(command string, keys []uint64) error {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

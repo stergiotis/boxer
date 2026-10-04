@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // The dispatcher (ADR-0269 §SD6): every call is checked against the task's
@@ -34,6 +35,7 @@ type HostI interface {
 	OpsExpire(key uint64, ids []string, reason string)
 	OpsAttach(key uint64, attached bool) (ok bool)
 	OpsCapture(key uint64) (job string, err error)
+	OpsCapturePixels(keys []uint64) (job string, err error)
 	OpsCaptureStatus(job string) (st opwire.CaptureStatus, ok bool)
 	OpsRevisions(key uint64) (revs map[string]uint64, ok bool)
 	OpsUndo(key uint64, callId string) (ok bool)
@@ -879,7 +881,15 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 		return
 	}
 	rec.app = e.app
-	job, err := inst.cfg.Host.OpsCapture(req.Instance)
+	var job string
+	switch req.Format {
+	case "", CaptureFormatSvg:
+		job, err = inst.cfg.Host.OpsCapture(req.Instance)
+	case CaptureFormatPng:
+		job, err = inst.cfg.Host.OpsCapturePixels([]uint64{req.Instance})
+	default:
+		err = eh.Errorf("a capture is svg or png, not %q", req.Format)
+	}
 	if err != nil {
 		out = phaseOutcome(opwire.PhaseRefused, err.Error())
 		inst.settle(t, rec, out, false)
