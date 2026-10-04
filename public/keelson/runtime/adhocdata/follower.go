@@ -212,6 +212,32 @@ func NewFollower(cfg FollowerConfig) (f *Follower, bindings map[string]string) {
 	if len(cfg.Aliases) == 0 || cfg.Bus == nil {
 		return
 	}
+	f = subscribedFollower(cfg)
+	bindings, unresolved := resolveAliases(cfg.Bus, cfg.Log, cfg.Aliases)
+	f.seed(bindings, unresolved)
+	return
+}
+
+// NewDeferredFollower builds a follower that asks the service nothing on
+// the caller's thread: the declared aliases, and those [Follower.Follow]
+// adds later, resolve on the worker round the next Sync starts. It is for a
+// consumer that starts following from its render thread, where a blocking
+// resolve must not run; it may declare no alias at all. nil when there is
+// no bus to bind against.
+func NewDeferredFollower(cfg FollowerConfig) (f *Follower) {
+	if cfg.Bus == nil {
+		return
+	}
+	f = subscribedFollower(cfg)
+	for _, alias := range cfg.Aliases {
+		f.Follow(alias)
+	}
+	return
+}
+
+// subscribedFollower builds a follower over cfg's bus and subscribes it to
+// dataset events; where it cannot, the tick polls instead.
+func subscribedFollower(cfg FollowerConfig) (f *Follower) {
 	f = newFollowerWith(busResolver{bus: cfg.Bus}, cfg.Log)
 	if cfg.Reconcile > 0 {
 		f.interval = cfg.Reconcile
@@ -239,9 +265,25 @@ func NewFollower(cfg FollowerConfig) (f *Follower, bindings map[string]string) {
 		cfg.Log.Debug().Err(subErr).Msg("adhocdata: dataset events unavailable; polling for declared aliases")
 		f.interval = poll
 	}
-	bindings, unresolved := resolveAliases(cfg.Bus, cfg.Log, cfg.Aliases)
-	f.seed(bindings, unresolved)
 	return
+}
+
+// Follow adds an alias to keep bound, on the caller's thread: it is pending
+// until the worker round the next Sync starts answers it, and bound from
+// then on like a declared one. It reports false for an alias already
+// followed, bound or pending.
+func (f *Follower) Follow(alias string) (added bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, isBound := f.bound[alias]
+	_, waiting := f.pending[alias]
+	if isBound || waiting {
+		return false
+	}
+	f.pending[alias] = struct{}{}
+	f.dirty[alias] = struct{}{}
+	f.pendingDirty = true
+	return true
 }
 
 // newFollowerWith builds a follower over an explicit resolver with no

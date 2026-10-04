@@ -148,6 +148,47 @@ func TestNewFollowerAbsent(t *testing.T) {
 	assert.Nil(t, bindings)
 }
 
+// TestFollowerFollowsAnAddedAlias: an alias added after construction is
+// pending, resolves on the round the next Sync starts — never on the
+// caller's thread — and binds; adding it again is a no-op.
+func TestFollowerFollowsAnAddedAlias(t *testing.T) {
+	r := newFakeResolver()
+	f := newFollowerWith(r, zerolog.Nop())
+	f.seed(nil, nil)
+	target := newRecordingTarget()
+
+	require.True(t, f.Follow("items"))
+	assert.False(t, f.Follow("items"), "already pending")
+	assert.Equal(t, []string{"items"}, f.Pending())
+	assert.Zero(t, r.questions(), "Follow asks nothing on the caller's thread")
+
+	_, changed := settle(t, f, target)
+	assert.True(t, changed, "the new pending alias is reported")
+	assert.Equal(t, 1, r.questions(), "the next Sync asks for it at once, without waiting for the tick")
+	assert.Empty(t, target.bound, "nothing is live under it yet")
+
+	r.publish("items", "adhoc_h1000000000000000")
+	f.onEvent(Event{Op: EventOpPublished, Alias: "items", Handle: "adhoc_h1000000000000000", Revision: 1})
+	bound, _ := settle(t, f, target)
+	assert.True(t, bound)
+	assert.Equal(t, map[string]string{"items": "adhoc_h1000000000000000"}, target.bound)
+	assert.False(t, f.Follow("items"), "already bound")
+}
+
+// TestNewDeferredFollower: no bus builds nothing; with one, the follower
+// exists with no alias declared, and a declared alias waits for the first
+// Sync instead of resolving at construction.
+func TestNewDeferredFollower(t *testing.T) {
+	assert.Nil(t, NewDeferredFollower(FollowerConfig{Log: zerolog.Nop(), Aliases: []string{"items"}}))
+	f := NewDeferredFollower(FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop()})
+	require.NotNil(t, f)
+	assert.Empty(t, f.Pending())
+	f = NewDeferredFollower(FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop(), Aliases: []string{"items"}})
+	require.NotNil(t, f)
+	assert.Equal(t, []string{"items"}, f.Pending())
+	f.Close()
+}
+
 // TestFollowerNoopBusFallsBackToPolling: a bus that can neither resolve nor
 // subscribe (NoopBus) leaves every alias pending, at the poll interval, with
 // the pending set reported once and not again, and no second round stacked

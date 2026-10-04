@@ -13,19 +13,46 @@ package play
 // result is labelled confined (ADR-0269 §SD7): a model that may not read
 // confined content gets a data handle in its place, and the listing itself
 // stays readable.
+//
+// bind_dataset: an agent's way to bind an alias another window published,
+// in a window whose launch config did not declare it (ADR-0240 §SD7). The
+// window follows the alias as it follows a declared one — resolving it off
+// the frame, binding the newest live dataset, tracking republish and
+// retract — except that binding it runs nothing: a run is the task's to ask
+// for, under its limits.
 
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 )
 
-const opListDatasets = "list_datasets"
+const (
+	opListDatasets = "list_datasets"
+	opBindDataset  = "bind_dataset"
+
+	opsResDatasets = "datasets"
+)
+
+// BindDatasetArgs is bind_dataset's argument.
+type BindDatasetArgs struct {
+	Alias string `desc:"the alias the dataset was published under, as its publisher names it; never a handle"`
+}
+
+// BindDatasetResult is bind_dataset's result.
+type BindDatasetResult struct {
+	Alias       string `desc:"the alias"`
+	Bound       bool   `desc:"true when a live dataset is bound under it already; else the window binds the newest one as soon as it resolves, or once one is published"`
+	ReadWith    string `desc:"the table expression that reads it"`
+	Destination string `desc:"what the grant must list for a run reading it"`
+}
 
 // datasetMaxListed bounds how many datasets list_datasets describes.
 const datasetMaxListed = 20
@@ -60,6 +87,19 @@ func (inst DatasetList) ResultConfined() (confined bool) { return inst.sealedSho
 var _ app.ConfinedResultI = DatasetList{}
 
 func addDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
+	s.Resource(opsResDatasets, "the dataset aliases bound and those waiting for a dataset", func(inst *PlayLauncher) any {
+		return inst.datasetDigest()
+	})
+	appops.Command(s, app.OperationSpec{Name: opBindDataset, Version: 1,
+		Summary: "bind an ad-hoc dataset alias in this window, so the buffer reads the dataset with keelson('<alias>')",
+		Effect:  app.OperationEffectDocument, Writes: []string{opsResDatasets}, Agents: true,
+		Follows: []string{"the window resolves the alias off the frame and binds the newest live dataset under it; list_datasets lists it once bound",
+			"until a dataset is live under the alias the window says it waits for it, and binds one when it is published",
+			"the binding follows republishes and retracts for the life of the window; binding runs nothing",
+			"a run reading it needs keelson:<alias> in the grant"}},
+		func(inst *PlayLauncher, call app.OperationCall, in BindDatasetArgs) (out BindDatasetResult, err error) {
+			return inst.bindDatasetAlias(in.Alias)
+		})
 	appops.ExternalRead(s, app.OperationSpec{Name: opListDatasets, Version: 1,
 		Summary: "list the ad-hoc datasets bound in this window: the alias to read with keelson('<alias>'), the destination a run needs, and their columns",
 		Agents:  true, Untrusted: true,
@@ -119,6 +159,49 @@ func datasetColumns(client *Client, stmt string, dec dispatchDecision, obo *app.
 			break
 		}
 		cols = append(cols, ColumnInfo{Name: f.Name, Type: f.Type.String()})
+	}
+	return
+}
+
+// bindDatasetAlias follows alias in this window, building the follower when
+// the launch config declared none. It runs on the render goroutine and
+// resolves nothing there: the follower asks on its next Sync's worker round.
+func (inst *PlayLauncher) bindDatasetAlias(alias string) (out BindDatasetResult, err error) {
+	p := inst.inner
+	switch {
+	case p == nil:
+		return out, app.RefuseOperation("the window has not mounted")
+	case p.client == nil:
+		return out, app.RefuseOperation("the window has no endpoint")
+	case !validDatasetIdentifier(alias):
+		return out, app.RefuseOperation("an alias is a bare identifier: letters, digits and _, at most 64 bytes")
+	case strings.HasPrefix(alias, "adhoc_"):
+		return out, app.RefuseOperation("that is a dataset handle; bind the alias its publisher names")
+	}
+	out = BindDatasetResult{Alias: alias, ReadWith: "keelson('" + alias + "')", Destination: DestinationKeelson(alias)}
+	if slices.Contains(p.client.DatasetAliases(), alias) {
+		out.Bound = true
+		return
+	}
+	if inst.follower == nil {
+		inst.follower = adhocdata.NewDeferredFollower(adhocdata.FollowerConfig{Bus: inst.bus, Log: inst.log})
+		if inst.follower == nil {
+			return out, app.RefuseOperation("the window has no bus to resolve datasets over")
+		}
+	}
+	inst.follower.Follow(alias)
+	return
+}
+
+// datasetDigest is the bound aliases and the pending ones, compared across
+// frames; the follower binds on the render goroutine, inside a frame.
+func (inst *PlayLauncher) datasetDigest() (digest string) {
+	if inst.inner == nil || inst.inner.client == nil {
+		return ""
+	}
+	digest = strings.Join(inst.inner.client.DatasetAliases(), ",")
+	if inst.follower != nil {
+		digest += "|" + strings.Join(inst.follower.Pending(), ",")
 	}
 	return
 }
