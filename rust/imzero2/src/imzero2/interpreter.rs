@@ -5853,6 +5853,28 @@ egui::Grid::new(i);
                     self.interpret_outer(c, &mut None)?;
                 }
             }
+            FuncProcId::Modal => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::Modal");
+                // arguments
+                let i = self.read_id()?;
+                // construct
+
+                let mut w = // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+egui::Modal::new(i);
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let shown = w.show(c, |ui| {
+                    let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                });
+                let mut resp = ResponseFlags::empty();
+                resp.populate(&shown.response);
+                self.r7_push(i.value(), resp);
+            }
             FuncProcId::MoveWindowToTop => {
                 #[cfg(feature = "puffin")]
                 puffin::profile_scope!("match FuncProcId::MoveWindowToTop");

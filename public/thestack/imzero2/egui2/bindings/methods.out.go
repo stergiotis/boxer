@@ -1984,6 +1984,27 @@ func (inst MenuButtonFluid) KeepIter() iter.Seq[functional.NilIteratorValueType]
 
 	}
 }
+func (inst ModalFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst ModalFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		inst.idGen.PushIdToStack(inst.id)
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
 func (inst NewTableFluid) Striped(val bool) NewTableFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(NewTableMethodIdStriped))

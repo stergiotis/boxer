@@ -100,6 +100,7 @@ status: draft
 | MemoryResetAreas | Procedural | No | 0 | 0 | - | - |
 | MenuBar | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | MenuButton | BuilderFactory | No | 0 | 1 | 0 | BlockIterator |
+| Modal | BuilderFactory | Yes | 0 | 0 | 0 | Immediate, BlockIterator |
 | MoveWindowToTop | Procedural | Yes | 0 | 0 | - | - |
 | NewTable | BuilderFactory | Yes | 0 | 0 | 8 | Immediate, Retained |
 | NewTableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
@@ -1120,6 +1121,18 @@ Block
 | Name | Kind | Type |
 |------|------|------|
 | atoms | evaluated | Atoms (concrete) |
+
+#### Return Type
+
+Block
+
+---
+
+### Modal
+
+- **Type:** BuilderFactory
+- **Identity:** Yes
+- **Features:** Immediate, BlockIterator
 
 #### Return Type
 

@@ -760,6 +760,22 @@ func MenuButton(atoms typed.RetainedFffiHolderTyped[AtomsS]) (inst MenuButtonFlu
 	return
 }
 
+func Modal(i WidgetIdCreatorI) (inst ModalFluid) {
+	r := typed.NewRetainedFffiBuilder()
+	r.WriteOpCode(uint32(FuncProcIdModal))
+	v := i.Derive()
+	r.WriteWidgetId(checkId(v))
+
+	inst = ModalFluid{
+		r: r,
+	}
+
+	inst.id = v
+	inst.idGen = i
+
+	return
+}
+
 func MoveWindowToTop(h widgethandle.WidgetHandle) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdMoveWindowToTop))

@@ -253,6 +253,13 @@ type MenuButtonFluid struct {
 }
 type MenuButtonMethodIdE uint32
 
+type ModalFluid struct {
+	r     *typed.RetainedFffiBuilder
+	id    uint64
+	idGen WidgetIdCreatorI
+}
+type ModalMethodIdE uint32
+
 type NewTableFluid struct {
 	r               *typed.RetainedFffiBuilder
 	id              uint64
