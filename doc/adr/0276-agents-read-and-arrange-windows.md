@@ -110,5 +110,5 @@ Proposed 2026-10-04.
 - **M1 — The keelson tables (SD1).** ✓ Without `agent_tasks`, which needs the agent service and comes with M3. The viewport size is not in `keelson('desktop')`: no host report carries it, and the work area is what arrangements use.
 - **M2 — The windowhost API (SD5).**
 - **M3 — The agent verbs and desktop mode (SD3, SD4), and `agent_tasks`.** ✓ `keelson('agent_grants')` gains a `desktop` column.
-- **M4 — The chat's `query_windows` tool and grants (SD2).**
+- **M4 — The chat's `query_windows` tool and grants (SD2).** ✓ With `arrange_windows`, `raise_window`, `place_window`, and `desktop` on `request_access`.
 - **M5 — The scripted chat scene.**

@@ -106,12 +106,15 @@ func demosTable(ds []demoreg.Demo) *introspect.Table {
 
 // --- windows (window host) ---------------------------------------------------
 
+// TableWindows is the table's name, keelson('windows').
+const TableWindows = "windows"
+
 type windowsProvider struct {
 	host    *windowhost.Inst
 	tasksOf TasksOfI
 }
 
-func (windowsProvider) Name() string                         { return "windows" }
+func (windowsProvider) Name() string                         { return TableWindows }
 func (windowsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
 func (p windowsProvider) Schema() *arrow.Schema              { return windowsTable(nil, nil).Schema() }
 

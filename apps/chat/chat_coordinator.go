@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -52,6 +53,7 @@ const coordinatorPrompt = `You can work in app windows the person shares with yo
 - When a run in play fails or a statement will not parse, get_diagnostics reads play's Diagnostics pane: ClickHouse's own error with its position, skipped rewrites, leeway handles that do not resolve with candidates, and the security class an agent's run needs to be read.
 - Before writing SQL in play, look for a worked query: list_snippets finds them by words and read_snippet gives the SQL; list_functions says which functions a query may call and where each runs.
 - A task runs for a limited time. When a call says its deadline passed, request_access asks the person for more time; when it says the task ended, request_access starts a new one.
+- keelson('windows') lists every open window — its key, app, title, rect (x, y, w, h), stacking rank, whether it is active or maximized, and the tasks holding it — and keelson('desktop') the work area windows are laid out in; query_windows reads either with a SELECT. arrange_windows lays windows out (cascade, tile, columns, rows, gather), all of them or the ones you name, and needs request_access with desktop true; raise_window and place_window act on a window of your task shared in act mode. A move takes a frame or more: query again to see where windows ended.
 - A turn has at most 24 rounds of tool calls. Answer as soon as you know enough; when you cannot finish, say what you found and what is left.`
 
 const (
@@ -61,7 +63,10 @@ const (
 
 // coordinator is one conversation's side of the contract.
 type coordinator struct {
-	cli          *agent.Client
+	cli *agent.Client
+	// kq reads keelson('windows') and keelson('desktop') (ADR-0276 §SD2);
+	// nil leaves query_windows unanswered.
+	kq           *keelsonquery.Client
 	conversation string
 
 	// opTools offers each operation of the task's windows as a typed tool.
@@ -81,8 +86,8 @@ type coordinator struct {
 	opCache map[string][]agent.Operation
 }
 
-func newCoordinator(cli *agent.Client, conversation string) (inst *coordinator) {
-	return &coordinator{cli: cli, conversation: conversation, opTools: OperationToolsSeed.Get(),
+func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
+	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation)}
 }
 
@@ -172,7 +177,7 @@ func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
 func (inst *coordinator) fixedTools() (out []openaichat.Tool) {
 	return []openaichat.Tool{
 		{Name: "request_access", Description: "Ask the person to share windows with you for a task, and optionally to let you open windows of apps. Waits for the person's decision.",
-			Parameters: toolSchema(`{"type":"object","properties":{"plan":{"type":"string","description":"one line: what you intend to do"},"open":{"type":"array","description":"apps you want to open windows of","items":{"type":"object","properties":{"app":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":4}},"required":["app"],"additionalProperties":false}},"destinations":{"type":"array","description":"what your runs may reach, e.g. keelson:apps or clickhouse:host:port","items":{"type":"string"}}},"required":["plan"],"additionalProperties":false}`)},
+			Parameters: toolSchema(`{"type":"object","properties":{"plan":{"type":"string","description":"one line: what you intend to do"},"open":{"type":"array","description":"apps you want to open windows of","items":{"type":"object","properties":{"app":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":4}},"required":["app"],"additionalProperties":false}},"destinations":{"type":"array","description":"what your runs may reach, e.g. keelson:apps or clickhouse:host:port","items":{"type":"string"}},"desktop":{"type":"boolean","description":"ask to arrange every window on the desktop, the person's own included"}},"required":["plan"],"additionalProperties":false}`)},
 		{Name: "list_windows", Description: "List the windows of your task, with their app, mode and load (opening, ready or failed).",
 			Parameters: toolSchema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		{Name: "describe_app", Description: "With no arguments, list every app and the operations it offers you; with app, that app's; with app and operation, the operation's argument schema.",
@@ -183,6 +188,14 @@ func (inst *coordinator) fixedTools() (out []openaichat.Tool) {
 			Parameters: toolSchema(`{"type":"object","properties":{"window":{"type":"integer"},"operation":{"type":"string"},"args":{"type":"object"},"reason":{"type":"string","description":"one line, shown to the person"}},"required":["window","operation"],"additionalProperties":false}`)},
 		{Name: "open_window", Description: "Open a window of an app your task may open; it joins your task.",
 			Parameters: toolSchema(`{"type":"object","properties":{"app":{"type":"string"}},"required":["app"],"additionalProperties":false}`)},
+		{Name: "query_windows", Description: "Run a SELECT over keelson('windows') — every open window: key, app_id, display, title, x, y, w, h, need_w, need_h, stack, active, maximized, collapsed, shown, agent_tasks — or over keelson('desktop'), the work area (work_x, work_y, work_w, work_h), the active window's key and the arrangement in progress. Rows come back as JSON lines.",
+			Parameters: toolSchema(`{"type":"object","properties":{"table":{"type":"string","enum":["windows","desktop"]},"sql":{"type":"string","description":"a SELECT naming keelson('<table>'), without FORMAT"}},"required":["table","sql"],"additionalProperties":false}`)},
+		{Name: "arrange_windows", Description: "Lay windows out on the desktop: cascade, tile, columns (side by side), rows (stacked), or gather (bring windows back into view). Without windows it arranges every window; with them, only those, leaving the rest where they are. Needs the desktop granted (request_access with desktop true).",
+			Parameters: toolSchema(`{"type":"object","properties":{"command":{"type":"string","enum":["cascade","tile","columns","rows","gather"]},"windows":{"type":"array","items":{"type":"integer"},"description":"window keys from query_windows; empty is every window"}},"required":["command"],"additionalProperties":false}`)},
+		{Name: "raise_window", Description: "Bring a window of your task, shared in act mode, to the front.",
+			Parameters: toolSchema(`{"type":"object","properties":{"window":{"type":"integer"}},"required":["window"],"additionalProperties":false}`)},
+		{Name: "place_window", Description: "Move and size a window of your task, shared in act mode: x, y is the top-left corner and w, h the outer size, in the coordinates query_windows reports. A window whose content does not fill the height or width keeps its content's size there.",
+			Parameters: toolSchema(`{"type":"object","properties":{"window":{"type":"integer"},"x":{"type":"number"},"y":{"type":"number"},"w":{"type":"number"},"h":{"type":"number"}},"required":["window","x","y","w","h"],"additionalProperties":false}`)},
 		{Name: "stop_task", Description: "End your task; the windows you opened pass to the person.",
 			Parameters: toolSchema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}
@@ -332,6 +345,10 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 			return "error: " + err.Error() + openNext(str("app"), err.Error()), "open " + str("app") + ": " + err.Error()
 		}
 		return inst.launched(str("app"), got)
+	case "query_windows":
+		return inst.queryWindows(ctx, str("table"), str("sql"))
+	case "arrange_windows", "raise_window", "place_window":
+		return inst.windowVerb(ctx, o, call.Name, args)
 	case "stop_task":
 		h := inst.handle()
 		if h == "" {
@@ -399,6 +416,9 @@ func (inst *coordinator) requestAccess(ctx context.Context, plan string, args ma
 	}
 	for _, l := range launches {
 		req.Launches = append(req.Launches, agent.GrantLaunch{App: l.app, Mode: agent.ModeAct, Count: l.count})
+	}
+	if desktop, _ := args["desktop"].(bool); desktop {
+		req.Desktop = agent.ModeAct
 	}
 	if dests, ok := args["destinations"].([]any); ok {
 		for _, d := range dests {

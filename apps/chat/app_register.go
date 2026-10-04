@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"slices"
+
 	"github.com/rs/zerolog/log"
 
 	"github.com/stergiotis/boxer/public/config/env"
@@ -9,6 +11,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
@@ -34,19 +38,24 @@ var manifest = app.Manifest{
 	Kind:         app.KindApp,
 	Surface:      app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 760, PreferredHeight: 720},
-	Caps: append(append(
+	Caps: slices.Concat(
 		llm.ClientCaps("chat: send the conversation to the host's model"),
-		llm.RetainCaps("chat: keep the conversation on boxer.facts where the host's BOXER_LLM_RETAIN allows (ADR-0264)")...),
+		llm.RetainCaps("chat: keep the conversation on boxer.facts where the host's BOXER_LLM_RETAIN allows (ADR-0264)"),
 		// The coordinator (ADR-0269): the model works in windows the person
 		// shares, each call checked by the host's dispatcher. The person
 		// registers the app as a coordinator (BOXER_AGENT_COORDINATORS).
-		append(agent.ClientCaps("chat: work in windows the person shares with the model"),
-			app.SubjectFilter{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,
+		agent.ClientCaps("chat: work in windows the person shares with the model"),
+		// The desktop as data (ADR-0276 §SD2): every window's state and the
+		// work area, for the coordinator's query_windows.
+		keelsonquery.ClientCaps(providersgui.TableWindows, providersgui.TableDesktop),
+		[]app.SubjectFilter{
+			{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,
 				Reason: "chat: publish the window's token and answer statistics as ad-hoc datasets for Open in play (ADR-0240)"},
-			app.SubjectFilter{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
+			{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
 				Reason: "chat: Open in play — a play window on the statistics, a reply's SQL or a failed call's record — and Open in mdedit on the conversation (ADR-0135)"},
-			app.SubjectFilter{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
-				Reason: "chat: copy a message, a code block or a failure's details to the clipboard"})...,
+			{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,
+				Reason: "chat: copy a message, a code block or a failure's details to the clipboard"},
+		},
 	),
 }
 

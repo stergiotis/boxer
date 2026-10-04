@@ -193,7 +193,7 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 	assert.NotEmpty(t, task)
 	assert.True(t, tainted)
 	model.mu.Lock()
-	assert.Len(t, model.seen[0].Tools, 7, "every call offers the fixed tools")
+	assert.Len(t, model.seen[0].Tools, len((&coordinator{}).fixedTools()), "every call offers the fixed tools")
 	model.mu.Unlock()
 }
 
@@ -247,7 +247,7 @@ func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools b
 	cli = llm.NewClient(chatBus)
 	cli.Timeout = 10 * time.Second
 	conv := newConversation()
-	coord = newCoordinator(agent.NewClient(chatBus), conv.id)
+	coord = newCoordinator(agent.NewClient(chatBus), nil, conv.id)
 	req = conv.request("please tidy my note")
 	req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: coordinatorPrompt}}, req.Messages...)
 	coord.opTools = opTools
@@ -317,7 +317,7 @@ func TestOperationToolsCallAWindowsOperationDirectly(t *testing.T) {
 
 	model.mu.Lock()
 	defer model.mu.Unlock()
-	assert.Len(t, model.seen[0].Tools, 7, "no window, no operation tools")
+	assert.Len(t, model.seen[0].Tools, len((&coordinator{}).fixedTools()), "no window, no operation tools")
 	var names []string
 	for _, tl := range model.seen[len(model.seen)-1].Tools {
 		names = append(names, tl.Name)
@@ -327,7 +327,7 @@ func TestOperationToolsCallAWindowsOperationDirectly(t *testing.T) {
 }
 
 func TestARemedyOfDestinationsAsksForThem(t *testing.T) {
-	coord := newCoordinator(nil, "c")
+	coord := newCoordinator(nil, nil, "c")
 	n := coord.nextFor(2, "run", &agent.Remedy{Destinations: []string{"clickhouse:localhost:8123"}})
 	require.NotNil(t, n)
 	assert.Equal(t, "request_access", n.Tool)
@@ -521,4 +521,27 @@ func TestARefusedOpenSaysWhatToDoNext(t *testing.T) {
 	assert.Contains(t, r["c2"], `no app named "notepad"`)
 	assert.Contains(t, r["c2"], `next: {"tool":"describe_app"`)
 	assert.Contains(t, openNext("notes", "the grant does not let the task open windows of x"), `"tool":"request_access"`)
+}
+
+// arrange_windows needs the desktop: refused with the request_access that
+// asks for it, and completed once that is granted (ADR-0276 §SD4).
+func TestArrangeWindowsAsksForTheDesktop(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"tidy the desktop","open":["notes"]}`),
+		toolCall("a1", "arrange_windows", `{"command":"tile"}`),
+		toolCall("r2", "request_access", `{"plan":"tidy the desktop","desktop":true}`),
+		toolCall("a2", "arrange_windows", `{"command":"columns","windows":[100]}`),
+		toolCall("x1", "raise_window", `{"window":7}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	replies := toolReplies(res.messages)
+	assert.Contains(t, replies["a1"], "input_required")
+	assert.Contains(t, replies["a1"], `"desktop":true`, "the refusal names the request that lifts it")
+	assert.Contains(t, replies["r2"], "access granted")
+	assert.Contains(t, replies["a2"], "completed")
+	assert.Contains(t, replies["x1"], "does not cover", "a window outside the task is not raised")
 }

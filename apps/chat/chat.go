@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -47,7 +48,9 @@ type App struct {
 	// conversation's side of it, renewed with the conversation.
 	apps     bool
 	agentCli *agent.Client
-	coord    *coordinator
+	// kq reads the window tables the coordinator queries (ADR-0276 §SD2).
+	kq    *keelsonquery.Client
+	coord *coordinator
 
 	conv *conversation
 	// keep is the Keep toggle; a conversation takes it at its first send.
@@ -131,7 +134,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		inst.bandKeys[i] = ecdf.BandJobKey(inst.ids.ProbeSeq("chat-stats-band-" + strconv.Itoa(i)))
 	}
 	inst.agentCli = agent.NewClient(bus)
-	inst.coord = newCoordinator(inst.agentCli, inst.conv.id)
+	inst.kq = keelsonquery.NewClient(bus)
+	inst.coord = newCoordinator(inst.agentCli, inst.kq, inst.conv.id)
 	inst.describe.Start(nil, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
 		func(ctx context.Context) (d *llm.Description, err error) {
 			got, err := cli.Describe(ctx)
@@ -303,7 +307,7 @@ func (inst *App) newConversation() {
 	inst.conv = newConversation()
 	inst.editing, inst.editedNext = nil, false
 	if inst.agentCli != nil {
-		inst.coord = newCoordinator(inst.agentCli, inst.conv.id)
+		inst.coord = newCoordinator(inst.agentCli, inst.kq, inst.conv.id)
 	}
 	inst.view = chatview.State{}
 }
