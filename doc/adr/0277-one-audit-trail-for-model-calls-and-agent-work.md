@@ -378,7 +378,46 @@ reader); log rows name no task or call (SD10).
 
 ## Updates
 
-None.
+### 2026-10-04 — what a real-provider session left out
+
+A chat session against a real provider, read back from `boxer.facts`
+alone, could not answer four questions the trail exists for. Each is now
+a row or a field:
+
+- **Which model call asked for a read.** `describe`, `help` and `list`
+  wrote no action row, and the desktop verbs and captures wrote rows
+  without a turn or a `Cause`. Each now carries both when the request
+  names a model call; the coordinator's own reads name none and stay
+  unrecorded. A grant's `requested` event carries the `Cause` of the
+  request — the model's `request_access`, or the call held for widening.
+- **Who ended a task.** The stop request carries `by` (`person` or
+  `coordinator`), a reason and a `Cause`; the chat's Stop button and a new
+  conversation say `person`, the model's `stop_task` says `coordinator`.
+  A `person` that arrives through the coordinator is the coordinator's
+  claim, weighed as §SD1 weighs `Cause`.
+- **When the person intervened.** A change that pauses a task in a window
+  writes a `paused` grant event (decided by `person` or another task, the
+  window and resources in the reason) on the transition only; the turn that
+  lifts it writes `resumed`.
+- **What the model said each call was for.** `AgentAction` gains the call's
+  title and the model's reason, bounded (60 and 200 runes, one line), on
+  the dispatch row, in every retention mode. They are what the person was
+  shown when the call acted, which is why `AgentGrant.Plan` is kept
+  regardless of `BOXER_LLM_RETAIN`; this extends that reasoning to the call.
+  Message text otherwise stays under §SD4.
+
+§SD5's title call now names the conversation's first turn, and it is kept
+with the conversation when the conversation is kept (ADR-0264).
+
+A turn that runs out of rounds sends its last call a note the history does
+not keep, so the next turn's request no longer continued its parent and
+the whole conversation was written again — under `durable`, its text
+twice. The next request now declares the note's slot left out (ADR-0264
+§SD3's omission range), and only what is new is written.
+
+Query runs reach the trail only while `queryrunsd` runs (ADR-0115). Play's
+history pane reports whether the capture view is refreshing, and its
+reader returns the task, call, epoch and window a run carries.
 
 ## References
 

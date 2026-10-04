@@ -208,11 +208,12 @@ too.
 - **Locality of the store.** §SD3 sends confined content only to a local
   model, but the server holding `boxer.facts` may itself be remote.
   Whether confined text may be kept on a non-local store is open (Q1).
-- **Conversation titles and non-call events** (rename, delete-from-list).
-  No model call carries them; a small write verb, or a title as the first
-  turn's purpose, is the next decision. The chat app titles a
-  conversation for its window session (ADR-0265 §SD4); keeping the title
-  is decided with resume.
+- **Non-call conversation events** (rename, delete-from-list). No model
+  call carries them; a small write verb is the next decision. A title the
+  model wrote is a model call: the chat sends it on the retained subject
+  when the conversation is kept, naming the first turn, so the title is
+  the reply body of that call (purpose `chat/title`). A title the person
+  typed is still kept nowhere.
 - **Streaming** stays deferred (ADR-0254 §SD7); a streamed turn would be
   kept once, when it completes.
 - **Summaries in a window.** A message that stands in for an omitted
