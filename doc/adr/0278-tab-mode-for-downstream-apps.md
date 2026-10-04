@@ -323,6 +323,30 @@ without them, and a fresh module pinning a pushed boxer commit, which bundled
 from the module cache with the host fetched from GitHub Pages; an app of each
 ran in a browser tab.
 
+## Updates
+
+### 2026-10-04 — a demo on the same Pages site
+
+The site that publishes the browser host also carries a demo under `demo/`:
+the `imzero2tabdemo` tab binary, bundled with the host of the commit it is
+built from, and a landing page linking to its apps. Three choices, each the
+owner's:
+
+- **Apps that need no data and no host service** — splashscreen and fibscope.
+  A published page reaches only the site it is served from; play over a public
+  ClickHouse instance was considered and not taken, since a demo on boxer's
+  domain would send that instance traffic it did not ask for, and its map
+  would draw tiles from every visitor's browser.
+- **Built on manual dispatch only.** A push publishes hosts as before and
+  carries the published demo over unchanged.
+- **Fonts are egui's built-in faces and the vendored icon font**, with its
+  licence, rather than whatever the runner's font set resolves to.
+
+The demo needs nothing the tab mode did not already provide: no cross-origin
+isolation (without `SharedArrayBuffer` the shim spins instead of waiting),
+and Pages compresses the modules on the wire. The gate checks the demo binary
+alongside `imzero2tab`.
+
 ## References
 
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — the tab this makes reusable.

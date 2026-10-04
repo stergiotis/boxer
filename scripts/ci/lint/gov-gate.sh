@@ -46,6 +46,7 @@ if out=$(./boxer.sh gov gate \
         --naming-baseline scripts/ci/naming-baseline.txt \
         --exclude 'prompts/' \
         --tab-pkg ./public/thestack/cmd/imzero2tab \
+        --tab-pkg ./public/thestack/cmd/imzero2tabdemo \
         2>"$gate_err"); then
     rm -f "$gate_err"
     printf '%s\n' "$out"
