@@ -39,16 +39,24 @@ trial, not this page.
 
 ## Steps
 
-1. **Build the bundle.** The script builds the Go tab host as a wasip1
-   reactor (`public/thestack/cmd/imzero2tab`), the Rust browser host as a
-   wasm32 cdylib (`rust/imzero2/browser`), and copies the worker, the WASI
-   shim, the viewer page and the fonts beside them. Fonts
-   follow `rust/imzero2/font-resolve.sh`; set `MAIN_FONT` and friends to
-   pin faces. A slot with no file is left to egui's default face.
+1. **Build the bundle.** The script runs the tab binary's `bundle`
+   subcommand, which builds the Go tab host as a wasip1 reactor
+   (`public/thestack/cmd/imzero2tab`) and the Rust browser host as a wasm32
+   cdylib (`rust/imzero2/browser`), and writes the fonts, the worker, the
+   WASI shim and the viewer page beside them. Fonts follow
+   `rust/imzero2/font-resolve.sh`; set `MAIN_FONT` and friends to pin faces,
+   or pass `--fonts <dir>` to `bundle`. A slot with no file is left to egui's
+   default face. Building the Rust host needs cargo and the
+   `wasm32-unknown-unknown` target; `bundle --host <file>` takes a prebuilt
+   one instead.
 
    ```bash
    scripts/dev/build_tab_bundle.sh /tmp/tab
    ```
+
+   The worker refuses a Go module and a browser host generated from
+   different versions of the bindings, and says so in the page's status
+   line; rebuild both from one tree.
 
 2. **Serve it.** The same binary, built natively, serves the directory and
    proxies `/ch/` to ClickHouse, so the data plane stays same-origin;
