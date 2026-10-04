@@ -4,9 +4,11 @@ import (
 	"embed"
 	"fmt"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"slices"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
@@ -184,9 +186,15 @@ func NewLivePlayApp(client *Client, initialSQL string, maxHistory int, rules *gl
 // can't be captured cleanly at init time before the cli flag parser has run.
 type PlayLauncher struct {
 	inner *PlayApp
-	// follower keeps the launch config's dataset aliases bound for the life
-	// of the window (ADR-0240 §SD7); nil when the config declared none.
-	follower *adhocdata.Follower
+	// follower keeps the window's dataset aliases bound for its life
+	// (ADR-0240 §SD7): those its launch config declared and those bind_dataset
+	// added; nil while there are none. launchAliases are the declared ones,
+	// whose binding re-runs the buffer; bus and log build a follower for
+	// bind_dataset on a window whose config declared none.
+	follower      *adhocdata.Follower
+	launchAliases []string
+	bus           app.BusI
+	log           zerolog.Logger
 	// Rules is the gloss rule repository every window this launcher opens is
 	// built over (ADR-0186); nil takes DefaultRepository. The factory
 	// registered in init leaves it nil, so a deployment that links play
@@ -503,7 +511,9 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// bind, and keep the bindings in step with the service from then on.
 	// A miss binds nothing — the notice says what the window waits for —
 	// and the follower picks the dataset up when it is published.
+	inst.bus, inst.log = ctx.Bus(), ctx.Log()
 	if launch != nil && len(launch.Datasets) > 0 {
+		inst.launchAliases = launch.Datasets
 		follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
 			Bus: ctx.Bus(), Log: ctx.Log(), Aliases: launch.Datasets,
 		})
@@ -525,13 +535,16 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 		return
 	}
 	if inst.follower != nil {
+		before := inst.boundLaunchAliases()
 		bound, pendingChanged := inst.follower.Sync(inst.inner)
 		if pendingChanged {
 			inst.inner.SetDatasetNotice(launchDatasetNotice(inst.follower.Pending()))
 		}
-		if bound {
+		if bound && inst.boundLaunchAliases() > before {
 			// AutoRun already fired against the unbound buffer at open, so
-			// a newly bound alias needs its own run to become visible.
+			// a newly bound alias of the launch config needs its own run to
+			// become visible. An alias bind_dataset added runs when the
+			// task asks for it, under its limits.
 			inst.inner.RequestRun()
 		}
 	}
@@ -545,6 +558,19 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	err = inst.inner.Frame(ctx)
 	inst.inner.gestureCtx = nil
 	inst.inner.settleAgentMark()
+	return
+}
+
+// boundLaunchAliases counts the launch config's aliases bound now.
+func (inst *PlayLauncher) boundLaunchAliases() (n int) {
+	if len(inst.launchAliases) == 0 || inst.inner == nil || inst.inner.client == nil {
+		return
+	}
+	for _, alias := range inst.inner.client.DatasetAliases() {
+		if slices.Contains(inst.launchAliases, alias) {
+			n++
+		}
+	}
 	return
 }
 

@@ -431,6 +431,23 @@ reports it only once one has measured this buffer, and says so;
 untrusted: server diagnostics quote the statement and its data.
 
 
+### 2026-10-04 — an agent binds a dataset by its alias
+
+A window binds an ad-hoc dataset only through its launch config (ADR-0240
+§SD7), and a coordinator's `open_window` carries no config, so a model could
+publish a dataset in one window and not read it in the play window it
+opened. `bind_dataset` (command, document effect) follows an alias in this
+window as a declared one is followed: resolved off the frame on the
+follower's next round — `adhocdata.NewDeferredFollower` and `Follower.Follow`,
+since a command runs on the render goroutine — bound to the newest live
+dataset, kept in step with republish and retract, and named in the
+waiting notice until one is published. A handle is refused; the grant names
+the alias. Binding runs nothing: a launch config's alias still reruns the
+buffer when it binds, an added one does not, since that run would be the
+task's work started without its call. The catalog gains the resource
+`datasets`, the bound and the waiting aliases.
+
+
 ### 2026-10-04 — the documentation lookup is not bound by the mark
 
 SD2 checks every lane of a window that carries a task's mark, because
