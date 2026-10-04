@@ -133,6 +133,10 @@ its own (SD5).
   is read for the whole process and acted on only by the instance whose
   window is focused (`app.WindowFocusI`), so two open chats do not both
   send. A focused text input does not compete for the chord.
+- **The conversation's id**, in the bar and in the Settings panel, to
+  read and to copy: the key the host's records carry for what the chat
+  did ([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) §SD1), so a
+  person can go from the window to its rows.
 - **The model and the host** from `llm.describe`, in the bar, as
   ADR-0254 §SD1 asks; with no model configured the transcript gives the
   reason and there is no composer.

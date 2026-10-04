@@ -342,6 +342,10 @@ func (inst *App) renderMaySection() {
 func (inst *App) renderConversationSection() {
 	section("Conversation")
 	conv := inst.conv
+	for range c.HorizontalTop().KeepIter() {
+		c.Label("Id").Selectable(false).Send()
+		inst.renderConvId("conv-id-settings")
+	}
 	if conv.started {
 		label, _ := keepBadge(conv)
 		for range c.HoverText(tipKeep).KeepIter() {

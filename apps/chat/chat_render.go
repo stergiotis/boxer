@@ -47,6 +47,8 @@ const (
 
 	tipQuestions = "The model may ask you questions with options, drawn as a form in the conversation; the turn waits for your answer. Needs a model that calls tools. Fixed at the first send."
 
+	tipConvId     = "This conversation's id. The host's records name it — keelson('llm_calls') and keelson('agent_actions') in their conversation column, and the audit trail on boxer.facts — so it is what to search for to find what this chat did. New conversation starts a new one."
+	tipCopyConvId = "Copy the conversation's id"
 	tipCopy       = "Copy this message's markdown"
 	tipRetry      = "Send this message again"
 	tipEditFailed = "Put this message back in the composer to change it"
@@ -142,6 +144,7 @@ func (inst *App) renderBar() {
 	// A row of its own for what the conversation is: the controls above
 	// already fill a narrow window.
 	for range c.HorizontalTop().KeepIter() {
+		inst.renderConvId("conv-id-bar")
 		if conv.started {
 			label, tone := keepBadge(conv)
 			tip := tipKeep
@@ -198,6 +201,25 @@ func (inst *App) renderBar() {
 			}
 			if c.Button(inst.ids.PrepareStr("past-ok"), atomsGotIt).Frame(false).Small().SendResp().HasPrimaryClicked() {
 				inst.pastNoted = true
+			}
+		}
+	}
+}
+
+// renderConvId shows the conversation's id, to read and to copy: the key the
+// host's records carry for everything this chat does (ADR-0277 §SD1). scope
+// keeps the widget ids of its two places apart.
+func (inst *App) renderConvId(scope string) {
+	id := inst.conv.id
+	for range c.IdScope(inst.ids.PrepareStr(scope)) {
+		for range c.HoverText(tipConvId).KeepIter() {
+			for rt := range c.RichTextLabel(id) {
+				rt.Small().Monospace()
+			}
+		}
+		for range c.HoverText(tipCopyConvId).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("copy"), atomsCopy).Frame(false).Small().SendResp().HasPrimaryClicked() {
+				inst.copyText("the conversation's id", id)
 			}
 		}
 	}
