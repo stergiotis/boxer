@@ -482,6 +482,11 @@ var (
 	MembHttpFetchError       = NkRegistry.MustBegin("httpFetchError", 227).End()
 	// The build a run executed: a digest of the running executable (§SD8).
 	MembRunBuildId = NkRegistry.MustBegin("runtimeRunBuildId", 228).End()
+	// What the person was shown of an agent's call: the model's one-line
+	// title and its stated reason, bounded, kept in every retention mode as
+	// the grant's plan is.
+	MembAgentActionCallTitle  = NkRegistry.MustBegin("agentActionCallTitle", 229).End()
+	MembAgentActionCallReason = NkRegistry.MustBegin("agentActionCallReason", 230).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -541,4 +546,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindHttpFetch, MembHttpFetchDestination, MembHttpFetchPurpose, MembHttpFetchSensitivity, MembHttpFetchMethod,
 	MembHttpFetchUrl, MembHttpFetchStatus, MembHttpFetchBytes, MembHttpFetchElapsedMs, MembHttpFetchRefused, MembHttpFetchError,
 	MembRunBuildId,
+	MembAgentActionCallTitle, MembAgentActionCallReason,
 }

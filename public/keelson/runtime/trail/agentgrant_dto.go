@@ -26,8 +26,11 @@ type AgentGrant struct {
 	// Unix milliseconds, as they stood after the event.
 	CallsBudget uint32 `lw:"agentGrantCallsBudget,u32Array,unit"`
 	DeadlineMs  int64  `lw:"agentGrantDeadlineMs,i64Array,unit"`
-	// DecidedBy is who decided: "person", "host" (a test grant, a deadline)
-	// or "coordinator" (a request, a stop).
+	// DecidedBy is who decided: "person", "host" (a test grant, a deadline),
+	// "coordinator" (a request, a stop the model asked for, a lifted pause)
+	// or "another task" (a pause another task's write caused). A "person"
+	// arriving through the coordinator — its Stop button — is the
+	// coordinator's claim, as [Cause] is; the dispatcher does not check it.
 	DecidedBy string `lw:"agentGrantDecidedBy,symbol"`
 	// Reason is the event's reason: one element when there is one.
 	Reason []string `lw:"agentGrantReason,stringArray"`
@@ -54,4 +57,11 @@ const (
 	GrantEventCeiling = "ceiling"
 	// GrantEventEnded is a task's end: stopped, closed or revoked.
 	GrantEventEnded = "ended"
+	// GrantEventPaused is a window the task had read changing under it: the
+	// task's writes there wait for the coordinator's next turn (ADR-0269).
+	// Written once per pause, not per change; Reason names the window.
+	GrantEventPaused = "paused"
+	// GrantEventResumed is the coordinator's turn lifting a pause in a
+	// window, having listed the changes to the model.
+	GrantEventResumed = "resumed"
 )

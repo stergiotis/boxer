@@ -814,7 +814,7 @@ func (inst *App) renderTask() {
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), agent.DefaultTimeout)
 				defer cancel()
-				_ = cli.Stop(ctx, h)
+				_ = cli.StopWith(ctx, h, agent.StopRequest{ByPerson: true, Reason: "the person stopped it in the chat"})
 			}()
 			coord.mu.Lock()
 			coord.grant = agent.Grant{}

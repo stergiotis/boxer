@@ -37,6 +37,27 @@ type DescribeRequest struct {
 	App       string
 	Search    string
 	Operation string
+	// Asked names the model's tool call, when one asked: the describe then
+	// leaves an action row. A coordinator's own reads leave it zero.
+	Asked Asked
+}
+
+// Asked names the model's tool call behind a request (ADR-0277 §SD1, §SD6),
+// as the coordinator states it: its key for the call, the conversation and
+// turn, the model call whose reply asked, the provider's id for the tool
+// call and its index in that reply. The zero value is a request no model
+// call made.
+type Asked struct {
+	Key          string
+	Conversation string
+	Turn         string
+	ModelCall    string
+	ToolCall     string
+	ToolIndex    uint32
+}
+
+func (inst Asked) wire() (w wireCause) {
+	return wireCause{Turn: inst.Turn, ModelCall: inst.ModelCall, ToolCall: inst.ToolCall, ToolIndex: inst.ToolIndex}
 }
 
 // Resource is a resource an operation reads or writes.
@@ -118,7 +139,8 @@ func roundTrip[Req any, Rep any](ctx context.Context, inst *Client, subject stri
 // Describe lists operations agents may call; it needs no grant.
 func (inst *Client) Describe(ctx context.Context, r DescribeRequest) (apps []AppOperations, err error) {
 	rep, err := roundTrip[wireDescribeRequest, wireDescribeReply](ctx, inst, SubjectDescribe,
-		wireDescribeRequest{V: wireVersion, App: r.App, Search: r.Search, Operation: r.Operation})
+		wireDescribeRequest{V: wireVersion, App: r.App, Search: r.Search, Operation: r.Operation,
+			Key: r.Asked.Key, Conversation: r.Asked.Conversation, wireCause: r.Asked.wire()})
 	if err != nil {
 		return
 	}
@@ -173,6 +195,9 @@ type GrantRequest struct {
 	// person is asked, and every later call, launch and destination above
 	// it. Nil sets none.
 	Ceiling *Ceiling
+	// Asked names the model's tool call that asked for the grant; the
+	// request's events carry it.
+	Asked Asked
 }
 
 // GrantLaunch lets a task open up to Count windows of App (an id or a
@@ -209,7 +234,7 @@ func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err e
 // grant comes back at once as g.
 func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string, g Grant, err error) {
 	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Conversation: r.Conversation, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
-		DeadlineSecs: uint32(r.Deadline / time.Second)}
+		DeadlineSecs: uint32(r.Deadline / time.Second), wireCause: r.Asked.wire()}
 	if r.Ceiling != nil {
 		w := wireOfCeiling(*r.Ceiling)
 		req.Ceiling = &w
@@ -291,6 +316,9 @@ type CallRequest struct {
 	// trail.ToolKey, never with the provider's id (ADR-0277 §SD6).
 	Key    string
 	Reason string
+	// Title is the model's one-line title for the call, as the person is
+	// shown it: the action row keeps it, the app never sees it.
+	Title string
 	// Turn is the conversation's turn the call belongs to; ModelCall,
 	// ToolCall and ToolIndex the model call whose reply asked for it, the
 	// provider's id for the tool call and its index in that reply.
@@ -325,7 +353,7 @@ func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
 // Call calls one command or query.
 func (inst *Client) Call(ctx context.Context, r CallRequest) (out Outcome, err error) {
 	return callReply(roundTrip[wireCall, wireCallReply](ctx, inst, SubjectCall, wireCall{V: wireVersion, Handle: r.Handle,
-		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason,
+		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason, Title: r.Title,
 		Turn: r.Turn, ModelCall: r.ModelCall, ToolCall: r.ToolCall, ToolIndex: r.ToolIndex}))
 }
 
@@ -345,31 +373,33 @@ func (inst *Client) Cancel(ctx context.Context, handle string, key string) (out 
 }
 
 // Capture captures an instance's window; the outcome's Job names it.
-func (inst *Client) Capture(ctx context.Context, handle string, instance uint64, key string) (out Outcome, err error) {
+// asked.Key is the call's key.
+func (inst *Client) Capture(ctx context.Context, handle string, instance uint64, asked Asked) (out Outcome, err error) {
 	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture,
-		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: key}))
+		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: asked.Key, wireCause: asked.wire()}))
 }
 
 // Arrange arranges windows with an ADR-0275 arrangement named by its ident
 // ("cascade", "tile", "columns", "rows", "gather"): instances, or every
 // window when instances is empty. It needs the grant's desktop mode act.
-func (inst *Client) Arrange(ctx context.Context, handle string, key string, command string, instances []uint64) (out Outcome, err error) {
+// asked.Key is the call's key, as for the other window verbs.
+func (inst *Client) Arrange(ctx context.Context, handle string, asked Asked, command string, instances []uint64) (out Outcome, err error) {
 	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectArrange,
-		wireWindowAct{V: wireVersion, Handle: handle, Key: key, Command: command, Instances: instances}))
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Command: command, Instances: instances, wireCause: asked.wire()}))
 }
 
 // Raise brings one of the task's windows to the front. It needs act mode on
 // the window.
-func (inst *Client) Raise(ctx context.Context, handle string, key string, instance uint64) (out Outcome, err error) {
+func (inst *Client) Raise(ctx context.Context, handle string, asked Asked, instance uint64) (out Outcome, err error) {
 	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectRaise,
-		wireWindowAct{V: wireVersion, Handle: handle, Key: key, Instance: instance}))
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, wireCause: asked.wire()}))
 }
 
 // Place sets the outer rect of one of the task's windows, in logical
 // points. It needs act mode on the window.
-func (inst *Client) Place(ctx context.Context, handle string, key string, instance uint64, x, y, w, h float32) (out Outcome, err error) {
+func (inst *Client) Place(ctx context.Context, handle string, asked Asked, instance uint64, x, y, w, h float32) (out Outcome, err error) {
 	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectPlace,
-		wireWindowAct{V: wireVersion, Handle: handle, Key: key, Instance: instance, X: x, Y: y, W: w, H: h}))
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, X: x, Y: y, W: w, H: h, wireCause: asked.wire()}))
 }
 
 // ReadResult is a result as JSON, or an artifact by media type and path.
@@ -420,7 +450,14 @@ type Instance struct {
 
 // List lists the task's open instances.
 func (inst *Client) List(ctx context.Context, handle string) (out []Instance, err error) {
-	rep, err := roundTrip[wireHandle, wireListReply](ctx, inst, SubjectList, wireHandle{V: wireVersion, Handle: handle})
+	return inst.ListAsked(ctx, handle, Asked{})
+}
+
+// ListAsked is List for the model's tool call asked names; it leaves an
+// action row.
+func (inst *Client) ListAsked(ctx context.Context, handle string, asked Asked) (out []Instance, err error) {
+	rep, err := roundTrip[wireHandle, wireListReply](ctx, inst, SubjectList, wireHandle{V: wireVersion, Handle: handle, Key: asked.Key,
+		wireCause: asked.wire()})
 	if err != nil {
 		return
 	}
@@ -449,9 +486,28 @@ func (inst *Client) Detach(ctx context.Context, handle string, instance uint64) 
 	return ack(roundTrip[wireHandle, wireAck](ctx, inst, SubjectDetach, wireHandle{V: wireVersion, Handle: handle, Instance: instance}))
 }
 
-// Stop ends the task.
+// Stop ends the task, as the coordinator's own decision.
 func (inst *Client) Stop(ctx context.Context, handle string) (err error) {
-	return ack(roundTrip[wireHandle, wireAck](ctx, inst, SubjectStop, wireHandle{V: wireVersion, Handle: handle}))
+	return inst.StopWith(ctx, handle, StopRequest{})
+}
+
+// StopRequest says who stops a task and why: ByPerson for the person's
+// press in the coordinator, otherwise the coordinator; Asked names the
+// model's tool call when the model asked.
+type StopRequest struct {
+	ByPerson bool
+	Reason   string
+	Asked    Asked
+}
+
+// StopWith ends the task; the grant's record names who stopped it, as the
+// coordinator says.
+func (inst *Client) StopWith(ctx context.Context, handle string, r StopRequest) (err error) {
+	w := wireHandle{V: wireVersion, Handle: handle, Key: r.Asked.Key, wireCause: r.Asked.wire(), Reason: r.Reason}
+	if r.ByPerson {
+		w.By = "person"
+	}
+	return ack(roundTrip[wireHandle, wireAck](ctx, inst, SubjectStop, w))
 }
 
 // Change is one change by another writer since the task's previous turn:
@@ -470,7 +526,13 @@ type Change struct {
 // Turn starts a model turn: it returns the changes by other writers since
 // the previous one and lifts the task's pauses (ADR-0269 §SD3, §SD8).
 func (inst *Client) Turn(ctx context.Context, handle string) (changes []Change, err error) {
-	rep, err := roundTrip[wireHandle, wireTurnReply](ctx, inst, SubjectTurn, wireHandle{V: wireVersion, Handle: handle})
+	return inst.TurnAsked(ctx, handle, Asked{})
+}
+
+// TurnAsked is Turn naming the conversation's turn and the model call the
+// turn starts with; a lifted pause's record carries them.
+func (inst *Client) TurnAsked(ctx context.Context, handle string, asked Asked) (changes []Change, err error) {
+	rep, err := roundTrip[wireHandle, wireTurnReply](ctx, inst, SubjectTurn, wireHandle{V: wireVersion, Handle: handle, wireCause: asked.wire()})
 	if err != nil {
 		return
 	}

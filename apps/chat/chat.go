@@ -347,7 +347,7 @@ func (inst *App) newConversation() {
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), agent.DefaultTimeout)
 				defer cancel()
-				_ = cli.Stop(ctx, h)
+				_ = cli.StopWith(ctx, h, agent.StopRequest{ByPerson: true, Reason: "a new conversation"})
 			}()
 		}
 	}

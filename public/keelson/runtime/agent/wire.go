@@ -18,6 +18,23 @@ type wireDescribeRequest struct {
 	App       string `json:"app,omitempty"`
 	Search    string `json:"search,omitempty"`
 	Operation string `json:"operation,omitempty"`
+	// Key, Conversation and the cause name the model's tool call, when one
+	// asked: the describe then leaves an action row. The coordinator's own
+	// reads of the catalog name none and leave none.
+	Key          string `json:"key,omitempty"`
+	Conversation string `json:"conversation,omitempty"`
+	wireCause
+}
+
+// wireCause is the turn a request belongs to and the model call whose
+// reply asked for it, the provider's id for the tool call and its index in
+// that reply (ADR-0277 §SD1), as the coordinator states them. Embedded, its
+// fields travel as the request's own.
+type wireCause struct {
+	Turn      string `json:"turn,omitempty"`
+	ModelCall string `json:"model_call,omitempty"`
+	ToolCall  string `json:"tool_call,omitempty"`
+	ToolIndex uint32 `json:"tool_index,omitempty"`
 }
 
 type wireResource struct {
@@ -102,6 +119,8 @@ type wireGrantRequest struct {
 	// (ADR-0280); absent, the task has none. A request above it is refused
 	// before the person is asked.
 	Ceiling *wireCeiling `json:"ceiling,omitempty"`
+	// The model call that asked for the grant; its rows carry it.
+	wireCause
 }
 
 // wireLaunchEntry names an app the task may open windows of.
@@ -160,6 +179,9 @@ type wireCall struct {
 	Expects   map[string]uint64 `json:"expects,omitempty"`
 	Key       string            `json:"key"`
 	Reason    string            `json:"reason,omitempty"`
+	// Title is the model's one-line title for the call, as the person is
+	// shown it: recorded, never routed to the app.
+	Title string `json:"title,omitempty"`
 	// Turn is the conversation's turn the call belongs to; ModelCall,
 	// ToolCall and ToolIndex name the model call whose reply asked for it,
 	// the provider's id for the tool call and its index in that reply
@@ -242,6 +264,7 @@ type wireCapture struct {
 	Handle   string `json:"handle"`
 	Instance uint64 `json:"instance"`
 	Key      string `json:"key"`
+	wireCause
 }
 
 // wireWindowAct is arrange, raise or place (ADR-0276 §SD3). Command and
@@ -258,12 +281,21 @@ type wireWindowAct struct {
 	Y         float32  `json:"y,omitempty"`
 	W         float32  `json:"w,omitempty"`
 	H         float32  `json:"h,omitempty"`
+	wireCause
 }
 
 type wireHandle struct {
 	V        uint8  `json:"v"`
 	Handle   string `json:"handle"`
 	Instance uint64 `json:"instance,omitempty"`
+	// Key and the cause name the model's tool call behind a list, a stop or
+	// a turn, when one asked; a list then leaves an action row.
+	Key string `json:"key,omitempty"`
+	wireCause
+	// By is who stops a task, "person" or "coordinator" (the default), and
+	// Reason why; stop's only. "person" is the coordinator's claim.
+	By     string `json:"by,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type wireInstance struct {

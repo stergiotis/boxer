@@ -192,10 +192,16 @@ func (inst *Recorder) AgentAction(at time.Time, c Context, cause option.Option[C
 	})
 }
 
-// AgentGrant buffers one grant event.
-func (inst *Recorder) AgentGrant(at time.Time, c Context, row AgentGrant) (err error) {
+// AgentGrant buffers one grant event; cause names the model call that asked
+// for it, when one did.
+func (inst *Recorder) AgentGrant(at time.Time, c Context, cause option.Option[Cause], row AgentGrant) (err error) {
 	key := "grant|" + c.Delegation.Val.Task + "|" + row.Event + "|" + inst.unique(at)
 	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+		if cause.Has {
+			v := cause.Val
+			v.Id = id
+			b.AddCause(v)
+		}
 		row.Id, row.Kind = id, "agentGrant"
 		b.AddAgentGrant(row)
 	})

@@ -50,7 +50,8 @@ func (inst *Service) windowAct(msg *app.Msg) (rep wireCallReply) {
 		inst.mu.Unlock()
 		return
 	}
-	rec := &callRec{key: req.Key, instance: req.Instance, spec: app.OperationSpec{Name: verb, Effect: app.OperationEffectView}}
+	rec := &callRec{key: req.Key, instance: req.Instance, spec: app.OperationSpec{Name: verb, Effect: app.OperationEffectView},
+		turn: req.Turn, cause: req.cause()}
 	t.keys[req.Key] = rec
 	if e := t.entries[req.Instance]; e != nil {
 		rec.app = e.app

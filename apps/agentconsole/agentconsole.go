@@ -390,7 +390,7 @@ func (inst *App) capture() {
 	}
 	r := inst.newRow("capture")
 	inst.spawn(func(ctx context.Context) {
-		out, err := inst.cli.Capture(ctx, handle, key, r.key)
+		out, err := inst.cli.Capture(ctx, handle, key, agent.Asked{Key: r.key})
 		if err != nil {
 			inst.update(r, agent.Outcome{Phase: "error", Reason: err.Error()})
 			return

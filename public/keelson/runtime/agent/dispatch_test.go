@@ -445,7 +445,7 @@ func TestCaptureAndRecords(t *testing.T) {
 	r := newRig(t, true)
 	ctx := context.Background()
 	g := r.grant(ModeObserve)
-	out, err := r.cli.Capture(ctx, g.Handle, 7, "cap")
+	out, err := r.cli.Capture(ctx, g.Handle, 7, Asked{Key: "cap"})
 	require.NoError(t, err)
 	assert.Equal(t, "completed", out.Phase)
 	res, err := r.cli.Read(ctx, g.Handle, out.Job)
