@@ -105,6 +105,14 @@ pub extern "C" fn host_ppp() -> f32 {
     HOST.with(|h| h.borrow().as_ref().map(|h| h.geometry().2).unwrap_or(1.0))
 }
 
+/// The IDL the interpreter was generated from; the worker compares it with the
+/// Go module's before setup and refuses a pair from different generations
+/// (ADR-0278 SD6, proposed).
+#[unsafe(no_mangle)]
+pub extern "C" fn host_idl_fingerprint() -> u64 {
+    imzero2::imzero2::enums_out::IDL_FINGERPRINT
+}
+
 /// Milliseconds after the last pass at which egui asked to run again: 0
 /// means right away (an animation, a repaint request), a large value means
 /// nothing is pending. A worker that ticks on demand reads this after each

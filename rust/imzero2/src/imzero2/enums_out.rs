@@ -186,6 +186,11 @@ pub enum FuncProcId {
     Window = fenums::FUNC_PROC_ID_OFFSET + 177,
     WindowPlace = fenums::FUNC_PROC_ID_OFFSET + 178,
 }
+
+/// The IDL this client was generated from, as ir.Fingerprint digests it; the
+/// Go server's generated enums carry the same value from the same generation
+/// (ADR-0278 SD6, proposed).
+pub const IDL_FINGERPRINT: u64 = 0x31acc7079aba9d9b;
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum AccessibleRegionBuilderMethodId {
