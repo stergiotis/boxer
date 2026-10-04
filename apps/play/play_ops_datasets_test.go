@@ -103,7 +103,7 @@ func TestListDatasetsEndToEnd(t *testing.T) {
 	c.bindDataset(fixtureSeriesAlias, pub.Handle)
 
 	bare := &app.OnBehalfOf{Task: "t", Epoch: 1}
-	all, err := listDatasets(c, bare, "")
+	all, err := listDatasets(c, bare, "", nil)
 	require.NoError(t, err)
 	require.Len(t, all.Datasets, 1)
 	d := all.Datasets[0]
@@ -114,7 +114,7 @@ func TestListDatasetsEndToEnd(t *testing.T) {
 	assert.False(t, all.ResultConfined())
 
 	granted := &app.OnBehalfOf{Task: "t", Epoch: 1, Destinations: []string{d.Destination}}
-	one, err := listDatasets(c, granted, fixtureSeriesAlias)
+	one, err := listDatasets(c, granted, fixtureSeriesAlias, nil)
 	require.NoError(t, err)
 	require.Len(t, one.Datasets, 1)
 	got := one.Datasets[0]
@@ -131,7 +131,7 @@ func TestListDatasetsEndToEnd(t *testing.T) {
 	assert.True(t, d.Confined)
 	assert.Empty(t, d.Columns, "the listing never carries a sealed dataset's columns")
 
-	_, err = listDatasets(c, granted, "nope")
+	_, err = listDatasets(c, granted, "nope", nil)
 	var refusal *app.OperationRefusal
 	require.ErrorAs(t, err, &refusal)
 }

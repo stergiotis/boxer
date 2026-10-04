@@ -448,6 +448,20 @@ task's work started without its call. The catalog gains the resource
 `datasets`, the bound and the waiting aliases.
 
 
+### 2026-10-04 — a bind that waits says so, and binds do not conflict
+
+A chat session bound aliases that never bound and could not tell: the
+call's outcome was "accepted", `bind_dataset` answered `Bound: false`, and
+`list_datasets` listed bound aliases only, so a waiting alias looked like
+no alias at all. The follower now keeps, per waiting alias, why it waits —
+not asked yet, nothing live under it, its dataset withdrawn, or the service
+not answering (`Follower.Waiting`) — and `bind_dataset` and `list_datasets`
+report it. `bind_dataset` declared that it writes `datasets`, whose
+revision a bind moves a frame later, so a second bind in a row was a
+conflict; it now writes `followed_datasets`, the aliases followed, which only
+the command changes. Why those binds never bound is not settled.
+
+
 ### 2026-10-04 — the documentation lookup is not bound by the mark
 
 SD2 checks every lane of a window that carries a task's mark, because

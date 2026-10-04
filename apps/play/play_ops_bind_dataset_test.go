@@ -92,7 +92,7 @@ func TestBindDatasetBindsAPublishedAlias(t *testing.T) {
 	out, err := bindDataset(t, h, "gitpulse_change_facts")
 	require.NoError(t, err)
 	assert.Equal(t, BindDatasetResult{Alias: "gitpulse_change_facts", ReadWith: "keelson('gitpulse_change_facts')",
-		Destination: "keelson:gitpulse_change_facts"}, out)
+		Destination: "keelson:gitpulse_change_facts", Waiting: adhocdata.WaitNotAsked}, out)
 	require.NotNil(t, l.follower)
 	assert.Empty(t, l.inner.client.DatasetAliases(), "nothing resolves on the render goroutine")
 
@@ -113,9 +113,18 @@ func TestBindDatasetWaitsForAPublish(t *testing.T) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		l.follower.Sync(l.inner)
-		l.follower.Sync(l.inner)
-		return h.ResourceValue(opsResDatasets) == "|later"
+		return l.follower.Waiting()["later"] == adhocdata.WaitNoLive
 	}, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, "|later", h.ResourceValue(opsResDatasets))
+
+	// list_datasets names the waiting alias and why, rather than nothing.
+	list, err := listDatasets(l.inner.client, nil, "", l.follower.Waiting())
+	require.NoError(t, err)
+	require.Len(t, list.Datasets, 1)
+	assert.Equal(t, DatasetInfo{Alias: "later", Destination: "keelson:later", Granted: true, Waiting: adhocdata.WaitNoLive}, list.Datasets[0])
+	list, err = listDatasets(l.inner.client, nil, "later", l.follower.Waiting())
+	require.NoError(t, err)
+	assert.Equal(t, adhocdata.WaitNoLive, list.Datasets[0].Waiting)
 
 	publishInts(t, publisher, "later")
 	waitBound(t, l, "later")
@@ -127,6 +136,23 @@ func TestBindDatasetRefusesAHandleAndANonIdentifier(t *testing.T) {
 	assert.ErrorContains(t, err, "dataset handle")
 	_, err = bindDataset(t, h, "not an alias")
 	assert.ErrorContains(t, err, "bare identifier")
+}
+
+// Binding several aliases in a row is never a conflict: what bind_dataset
+// writes, the followed set, does not move when a bind lands later.
+func TestBindDatasetWritesOnlyTheFollowedSet(t *testing.T) {
+	spec, ok := (&PlayLauncher{}).Manifest().Operations.Lookup(opBindDataset)
+	require.True(t, ok)
+	assert.Equal(t, []string{opsResFollowed}, spec.Writes)
+
+	l, h, publisher := bindLauncher(t)
+	publishInts(t, publisher, "a")
+	_, err := bindDataset(t, h, "a")
+	require.NoError(t, err)
+	followed := h.ResourceValue(opsResFollowed)
+	assert.Equal(t, "a", followed)
+	waitBound(t, l, "a")
+	assert.Equal(t, followed, h.ResourceValue(opsResFollowed), "the bind landing leaves the followed set as it was")
 }
 
 // A launch config's alias binding re-runs the buffer, as it always has; the

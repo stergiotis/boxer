@@ -182,6 +182,9 @@ type opsSnap struct {
 	projection projectionOpsSnap
 	// diagnostics is the Diagnostics pane's sections (play_ops_diagnostics.go).
 	diagnostics DiagnosticsState
+	// waiting is the aliases bind_dataset or the launch config follows that
+	// are not bound yet, with why (play_ops_datasets.go).
+	waiting map[string]string
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -424,6 +427,9 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	}
 	sn.projection = snapshotProjection(p, sn.panes)
 	sn.diagnostics = snapshotDiagnostics(p)
+	if inst.follower != nil {
+		sn.waiting = inst.follower.Waiting()
+	}
 	return
 }
 
