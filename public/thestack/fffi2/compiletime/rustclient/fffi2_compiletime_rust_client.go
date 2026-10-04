@@ -45,6 +45,7 @@ var BuilderFactoryCodeGenExprs = ir.BuilderFactoryCodeGenExprs{
 	EguiUiOptionalOuter:        "u",
 	InterpreterDepth:           "d",
 	EndConsumeFrameIfNecessary: "if d == 0 {\nself.end_consume_message()?;\n}\n",
+	HostEffectsSuppressed:      "self.capture_replay",
 
 	InvokeInterpreterInner: `if u2.is_some() {
 	self.interpret_inner(c,u2,&f2,d+1)?;
@@ -260,8 +261,13 @@ let mut %s = `, BuilderFactoryCodeGenExprs.Instance)
 		tracker.MergeError(err)
 		c := factory.ApplyCode.CodeClientRust
 		if c != nil && !c.UseDefaultCode() {
-			_, err = fmt.Fprint(w, c.GetVerbatimCode())
-			tracker.MergeError(err)
+			// A factory with deferred block maps reads them from the stream in
+			// its apply code, so that code cannot be skipped without desyncing
+			// the stream; such a factory cannot declare host effects.
+			if factory.Effect == ir.EffectHost && hasDeferred {
+				tracker.MergeError(eb.Build().Stringer("factory", factory.Name).Errorf("a factory with deferred block maps cannot declare host effects"))
+			}
+			writeApplyCode(w, c.GetVerbatimCode(), factory.Effect == ir.EffectHost && !hasDeferred, tracker)
 		}
 	}
 
@@ -273,6 +279,19 @@ let mut %s = `, BuilderFactoryCodeGenExprs.Instance)
 	_, err = fmt.Fprint(w, `
 }
 `)
+	tracker.MergeError(err)
+}
+
+// writeApplyCode emits a node's client apply code; host-effect code is
+// guarded so a capture replay reads the node's arguments but does not run it
+// (ADR-0281 §SD5).
+func writeApplyCode(w io.Writer, code string, hostEffect bool, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
+	var err error
+	if hostEffect {
+		_, err = fmt.Fprintf(w, "if !%s {\n%s\n}\n", BuilderFactoryCodeGenExprs.HostEffectsSuppressed, code)
+	} else {
+		_, err = fmt.Fprint(w, code)
+	}
 	tracker.MergeError(err)
 }
 func generateProcedureInterpreterDispatchCode(w io.Writer, procedural *ir.ProceduralNode, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
@@ -301,8 +320,7 @@ func generateProcedureInterpreterDispatchCode(w io.Writer, procedural *ir.Proced
 		tracker.MergeError(err)
 		c := procedural.ApplyCode.CodeClientRust
 		if c != nil && !c.UseDefaultCode() {
-			_, err = fmt.Fprint(w, c.GetVerbatimCode())
-			tracker.MergeError(err)
+			writeApplyCode(w, c.GetVerbatimCode(), procedural.Effect == ir.EffectHost, tracker)
 		}
 	}
 
@@ -323,8 +341,8 @@ func generateFetcherInterpreterDispatchCode(w io.Writer, fetcher *ir.FetcherNode
 		tracker.MergeError(err)
 		c := fetcher.ApplyCode.CodeClientRust
 		if c != nil && !c.UseDefaultCode() {
-			_, err = fmt.Fprint(w, c.GetVerbatimCode())
-			tracker.MergeError(err)
+			// A fetcher answers the server: host-effect by its kind.
+			writeApplyCode(w, c.GetVerbatimCode(), true, tracker)
 		}
 	}
 

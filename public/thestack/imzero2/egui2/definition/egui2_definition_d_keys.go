@@ -238,7 +238,7 @@ func definitionsKeys() (nodes []*ir.ProceduralNode) {
 	// the same class of failure as SD7's id mismatch: nothing logs, focus
 	// simply never moves. The Context parameter is never optional, so this form
 	// cannot be skipped.
-	nodes = append(nodes, idl.NewProceduralNode("requestFocus").
+	nodes = append(nodes, idl.NewProceduralNode("requestFocus").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("id", ctabb.U64).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					{{EguiContext}}.memory_mut(|m| m.request_focus(`+focusIdExpr("id")+`));
@@ -249,7 +249,7 @@ func definitionsKeys() (nodes []*ir.ProceduralNode) {
 	// because without it a widget that takes focus on click has no way to give
 	// it back on Escape, and the alternative a caller would reach for (request
 	// focus on some other id) needs an id it may not have.
-	nodes = append(nodes, idl.NewProceduralNode("surrenderFocus").
+	nodes = append(nodes, idl.NewProceduralNode("surrenderFocus").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("id", ctabb.U64).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					{{EguiContext}}.memory_mut(|m| m.surrender_focus(`+focusIdExpr("id")+`));

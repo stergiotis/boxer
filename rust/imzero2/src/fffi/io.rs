@@ -94,6 +94,9 @@ pub struct ImZeroFffiIo<R: std::io::BufRead, W: std::io::Write> {
     /// Stack of saved `read_bytes_count` values, one per active replay level.
     /// Restored in `end_replay()` so replay reads don't inflate pipe accounting.
     replay_saved_read_bytes_counts: Vec<usize>,
+    /// Set while a capture replay runs (ADR-0281 §SD5): every write and
+    /// flush toward the server fails.
+    pub capture_replay: bool,
 }
 impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     pub fn new(r: R, w: W) -> Self {
@@ -106,6 +109,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
             replay_readers: Vec::new(),
             replay_depth: 0,
             replay_saved_read_bytes_counts: Vec::new(),
+            capture_replay: false,
         }
     }
     pub fn reset_counts(&mut self) {
@@ -144,6 +148,17 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
             self.replay_readers.push(reader);
         }
         self.replay_depth += 1;
+    }
+
+    /// Bytes left in the innermost replay reader; 0 when not replaying.
+    pub fn replay_remaining(&self) -> usize {
+        match self.replay_depth {
+            0 => 0,
+            d => {
+                let r = &self.replay_readers[d - 1];
+                r.buf.len() - r.pos
+            }
+        }
     }
 
     /// Pop the top overlay reader, restoring the previous replay level (or pipe).
@@ -193,11 +208,17 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     // =========================================================================
 
     pub fn flush(&mut self) -> Result<(), FffiError> {
+        if self.capture_replay {
+            return Err(FffiError::WriteDuringCaptureReplay(0));
+        }
         self.flush_count += 1;
         self.w.flush()?;
         Ok(())
     }
     pub fn write_all(&mut self, buf: &[u8]) -> Result<(), FffiError> {
+        if self.capture_replay {
+            return Err(FffiError::WriteDuringCaptureReplay(buf.len()));
+        }
         self.w.write_all(buf)?;
         self.written_bytes_count += buf.len();
         Ok(())

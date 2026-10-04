@@ -139,6 +139,11 @@ pub struct ScrollingTextureCache {
     entries: HashMap<u64, Entry>,
     frame: u64,
     texture_cache: Option<crate::imzero2::svgexport::TexturePixelCacheHandle>,
+    /// Set while a capture replay runs (ADR-0281 §SD5): nothing is uploaded
+    /// into the capture context and no live entry changes; a texture the
+    /// live context does not hold is not drawn, and counted here.
+    pub read_only: bool,
+    pub refused_uploads: u64,
 }
 
 impl ScrollingTextureCache {
@@ -330,11 +335,30 @@ impl ScrollingTextureCache {
             );
         }
 
-        let fresh_texture = self.ensure_entry(ctx, id, width_slots, height_slots, filter_opts);
+        let read_only = self.read_only;
+        let fresh_texture = if read_only {
+            // A capture replay draws the ring as the live frame left it: the
+            // columns were pushed then, and pushing them again would write
+            // into the live texture.
+            let held = self
+                .entries
+                .get(&id)
+                .is_some_and(|e| e.width_slots == width_slots && e.height_slots == height_slots);
+            if !held {
+                self.refused_uploads += 1;
+                return ScrollingTextureResponse::none();
+            }
+            false
+        } else {
+            self.ensure_entry(ctx, id, width_slots, height_slots, filter_opts)
+        };
+        let frame = self.frame;
         let entry = self.entries.get_mut(&id).expect("entry just ensured above");
-        entry.last_touched_frame = self.frame;
+        if !read_only {
+            entry.last_touched_frame = frame;
+        }
 
-        if payload_valid && new_count > 0 {
+        if !read_only && payload_valid && new_count > 0 {
             let h = height_slots as usize;
             let w = width_slots as usize;
             for i in 0..(new_count as usize) {

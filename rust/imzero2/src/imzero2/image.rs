@@ -48,6 +48,11 @@ pub struct ImageCache {
     /// non-exporting callers and unit tests; production wires it up in
     /// `ImZeroFffi::new` via `attach_texture_cache`.
     texture_cache: Option<crate::imzero2::svgexport::TexturePixelCacheHandle>,
+    /// Set while a capture replay runs (ADR-0281 §SD5): nothing is uploaded
+    /// into the capture context and no live entry changes; a texture the
+    /// live context does not hold is not drawn, and counted here.
+    pub read_only: bool,
+    pub refused_uploads: u64,
 }
 
 impl ImageCache {
@@ -129,6 +134,10 @@ impl ImageCache {
         filter_opts: TextureOptions,
         pixels: &[u32],
     ) {
+        if self.read_only {
+            self.refused_uploads += 1;
+            return;
+        }
         let color_pixels: Vec<Color32> = pixels.iter().map(|v| color32_from_rgba_u32(*v)).collect();
         let img = ColorImage::new([w as usize, h as usize], color_pixels.clone());
         let tex = ctx.load_texture(format!("image:{id}"), img, filter_opts);
