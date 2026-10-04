@@ -19,12 +19,15 @@ import (
 // of the test, when a failed read only means the client hung up.
 func fakeCarrier(t *testing.T, server net.Conn, snap *TreeSnapshot) {
 	t.Helper()
-	reply, err := proto.Marshal(&SessionControl{
-		Control: &SessionControl_TreeSnapshot{TreeSnapshot: snap},
-	})
-	require.NoError(t, err)
-	reply = append([]byte{prefixSession}, reply...)
+	fakeCarrierSeq(t, server, func(int) *TreeSnapshot { return snap })
+}
+
+// fakeCarrierSeq answers the n-th tree request (from 1) with snaps(n), for a
+// scene that changes between reads.
+func fakeCarrierSeq(t *testing.T, server net.Conn, snaps func(n int) *TreeSnapshot) {
+	t.Helper()
 	go func() {
+		served := 0
 		br := bufio.NewReader(server)
 		for {
 			payload, e := readMaskedFrame(br)
@@ -41,6 +44,14 @@ func fakeCarrier(t *testing.T, server net.Conn, snap *TreeSnapshot) {
 			if _, ok := ctl.GetControl().(*SessionControl_TreeRequest); !ok {
 				continue
 			}
+			served++
+			reply, e := proto.Marshal(&SessionControl{
+				Control: &SessionControl_TreeSnapshot{TreeSnapshot: snaps(served)},
+			})
+			if e != nil {
+				return
+			}
+			reply = append([]byte{prefixSession}, reply...)
 			head := []byte{0x80 | opBinary}
 			if n := len(reply); n <= 125 {
 				head = append(head, byte(n))
@@ -120,4 +131,40 @@ func TestRunTraceDryRunSkipsWait(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Less(t, time.Since(start), 500*time.Millisecond)
+}
+
+func TestRunTraceTypeFailsWhenFocusDoesNotMove(t *testing.T) {
+	// The host never reports the composer focused: the text would go to
+	// whatever holds focus, so the step fails instead of typing blind.
+	ws, server := pipeConn(t)
+	fakeCarrier(t, server, &TreeSnapshot{Nodes: []*TreeNode{{Id: 7, Role: "multiline_text_input"}}})
+	c := &Client{ws: ws, log: zerolog.Nop()}
+	err := RunTrace(c, []Step{{Do: "type", ID: 7, Text: "hello"}}, RunOptions{Timeout: 500 * time.Millisecond, Logger: zerolog.Nop()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "focus did not move")
+}
+
+func TestRunTraceTypeWaitsForFocusThenForTheText(t *testing.T) {
+	ws, server := pipeConn(t)
+	fakeCarrierSeq(t, server, func(n int) *TreeSnapshot {
+		node := &TreeNode{Id: 7, Role: "multiline_text_input"}
+		if n >= 2 {
+			node.Flags = FlagFocused
+		}
+		if n >= 3 {
+			node.Value = "hello"
+		}
+		return &TreeSnapshot{Nodes: []*TreeNode{node}}
+	})
+	c := &Client{ws: ws, log: zerolog.Nop()}
+	require.NoError(t, RunTrace(c, []Step{{Do: "type", ID: 7, Text: "hello"}}, RunOptions{Timeout: 2 * time.Second, Logger: zerolog.Nop()}))
+}
+
+func TestRunTraceTypeFailsWhenTheTextDoesNotLand(t *testing.T) {
+	ws, server := pipeConn(t)
+	fakeCarrier(t, server, &TreeSnapshot{Nodes: []*TreeNode{{Id: 7, Role: "text_input", Flags: FlagFocused}}})
+	c := &Client{ws: ws, log: zerolog.Nop()}
+	err := RunTrace(c, []Step{{Do: "type", ID: 7, Text: "hello"}}, RunOptions{Timeout: 500 * time.Millisecond, Logger: zerolog.Nop()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "did not reach the node")
 }

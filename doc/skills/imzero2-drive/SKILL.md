@@ -60,7 +60,8 @@ nesting among the printed nodes.
 Filters, all optional: `--treeText` (name or value contains, case ignored),
 `--treeRole`, `--treeUnder <id>` (that node and below), `--treeLimit`,
 `--treeHidden`. Unnamed containers and `text_run` duplicates of a label are left
-out. The header says `nodes=200 of 640` when the limit cut the list — narrow
+out; an empty text input is not, though it has neither name nor value (its
+hint text does not reach the tree). The header says `nodes=200 of 640` when the limit cut the list — narrow
 the filter rather than reading a partial scene as the whole one.
 
 A script that parses the dump wants `--treeFormat jsonl` instead: one JSON
@@ -151,7 +152,10 @@ step, or before it for `capture` and `tree`. `modifiers` is a bitmask: 1 alt,
   a person's press is blocked. To check that a modal blocks, press with
   `"pointer":true`.
 - **Typing into the wrong widget.** `key` goes to whatever holds focus. `type`
-  focuses its anchor first; `key` after a `click` elsewhere does not.
+  focuses its anchor, waits until the host reports it focused, and on a text
+  input waits until the value changed — it fails with `focus did not move` or
+  `the text did not reach the node` rather than typing nowhere. `key` after a
+  `click` elsewhere does not focus anything.
 - **A stale headless client.** If the host log shows `unable to convert from
   representation`, the Rust client predates the last codegen; rebuild it before
   suspecting the app.
