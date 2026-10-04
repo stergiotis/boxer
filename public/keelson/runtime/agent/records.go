@@ -61,14 +61,16 @@ type GrantRow struct {
 	ActorInstance uint64
 	Plan          string
 	Entries       []string
-	Destinations  []string
-	CallsUsed     int32
-	CallsBudget   int32
-	Deadline      time.Time
-	Epoch         uint64
-	Revoked       string
-	Created       time.Time
-	Test          bool
+	// Launches are the apps the task may open, "app:mode:count" each.
+	Launches     []string
+	Destinations []string
+	CallsUsed    int32
+	CallsBudget  int32
+	Deadline     time.Time
+	Epoch        uint64
+	Revoked      string
+	Created      time.Time
+	Test         bool
 	// Desktop is the task's mode over the desktop as a whole, empty when
 	// the grant does not name it (ADR-0276 §SD4).
 	Desktop string
@@ -308,6 +310,7 @@ func (inst *Service) Grants() (rows []GrantRow) {
 			Destinations: t.destinations, CallsUsed: int32(t.callsUsed), CallsBudget: int32(t.callsBudget),
 			Deadline: t.deadline, Epoch: t.epoch, Revoked: t.revoked, Created: t.created, Test: t.test}
 		g.Entries = t.entryStrings()
+		g.Launches = t.launchStrings()
 		for k := range t.entries {
 			g.Instances = append(g.Instances, k)
 		}
@@ -365,6 +368,8 @@ func grantsTable(rows []GrantRow) *introspect.Table {
 		String("plan", func(i int) string { return r(i).Plan }).
 		// "instance:app:mode[:operations]" per entry.
 		StringList("entries", func(i int) []string { return r(i).Entries }).
+		// "app:mode:count" per app the task may open (ADR-0283 §SD2).
+		StringList("launches", func(i int) []string { return r(i).Launches }).
 		StringList("destinations", func(i int) []string { return r(i).Destinations }).
 		Int32("calls_used", func(i int) int32 { return r(i).CallsUsed }).
 		Int32("calls_budget", func(i int) int32 { return r(i).CallsBudget }).
