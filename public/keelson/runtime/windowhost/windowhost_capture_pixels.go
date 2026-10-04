@@ -6,6 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"lukechampine.com/blake3"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -40,6 +42,8 @@ type pixelJob struct {
 	// spans are offsets into the frame's recording, per granted window.
 	spans  [][2]int
 	stream []byte
+	// spansDigest names the stream replayed (ADR-0281 §SD4).
+	spansDigest string
 }
 
 // RenderPixels queues a render of the windows' pixels for the capture
@@ -181,7 +185,8 @@ func (inst *Inst) pixelFrameEnd() {
 	for _, s := range p.spans {
 		stream = append(stream, rec[s[0]:s[1]]...)
 	}
-	p.stream, p.spans = stream, nil
+	sum := blake3.Sum256(stream)
+	p.stream, p.spans, p.spansDigest = stream, nil, hex.EncodeToString(sum[:])
 	p.phase = pixelPhaseReplayPending
 }
 
@@ -204,7 +209,8 @@ func (inst *Inst) finishPixelJobLocked(j *captureJob, r c.CaptureResultValue, pp
 		inst.logger.Warn().Uint64("unknownTextures", r.UnknownTextures).Uint64("refusedUploads", r.RefusedUploads).
 			Str("job", j.id).Msg("windowhost: a pixel capture has textures it could not draw")
 	}
-	j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Rgba: r.Rgba, Width: int(r.Width), Height: int(r.Height), PixelsPerPoint: ppp}
+	j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Rgba: r.Rgba, Width: int(r.Width), Height: int(r.Height),
+		PixelsPerPoint: ppp, SpansDigest: j.pixel.spansDigest}
 	j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted}
 }
 

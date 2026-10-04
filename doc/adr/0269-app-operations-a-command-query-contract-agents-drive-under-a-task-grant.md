@@ -1031,6 +1031,23 @@ egui turns an AccessKit click into a click without consulting the modal
 layer, so the headless driver's default `click` reaches widgets behind a
 modal, and a check that a modal blocks clicks uses `"pointer":true`.
 
+### 2026-10-04 — captures through one policy enforcement point
+
+§SD11's capture now goes through the capture service of
+[ADR-0281](./0281-window-captures-through-one-policy-enforcement-point.md)
+(proposed), SVG and PNG alike. `capture` takes a format, several windows
+and a crop. A PNG is drawn from a replay of the windows' own messages, so
+it holds those windows and their popups and nothing else; it is not what
+the person saw.
+
+- **§SD7's label of a capture** is the highest label of the windows the
+  capture draws, no longer of every window intersecting the captured area:
+  the windows it does not draw are never rendered.
+- **Each capture is an `agentCapture` row** on the trail beside its call's
+  action rows: the decision and the policy that took it, the obligations
+  applied, the format and windows, and digests of the replayed stream and
+  of the bytes handed out.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

@@ -201,6 +201,15 @@ func (inst *Recorder) AgentGrant(at time.Time, c Context, row AgentGrant) (err e
 	})
 }
 
+// AgentCapture buffers one capture's row.
+func (inst *Recorder) AgentCapture(at time.Time, c Context, row AgentCapture) (err error) {
+	key := "capture|" + inst.unique(at)
+	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+		row.Id, row.Kind = id, "agentCapture"
+		b.AddAgentCapture(row)
+	})
+}
+
 // HttpFetch buffers one egress fetch's row.
 func (inst *Recorder) HttpFetch(at time.Time, c Context, row HttpFetch) (err error) {
 	key := "fetch|" + inst.unique(at)

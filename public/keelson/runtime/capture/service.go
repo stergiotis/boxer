@@ -38,6 +38,8 @@ type SourceResult struct {
 	PixelsPerPoint float32
 	// A completed SVG render: the exported file.
 	SvgPath string
+	// SpansDigest names the stream a pixel render replayed.
+	SpansDigest string
 }
 
 // Info is what the record of a capture names (ADR-0281 §SD6).
@@ -45,8 +47,13 @@ type Info struct {
 	Request     Request
 	Decision    Decision
 	Obligations []string
-	// Digest is the BLAKE3-256 of the bytes handed out, after every obligation.
-	Digest string
+	// Digest is the BLAKE3-256 of the bytes handed out, after every
+	// obligation; SpansDigest that of the stream a pixel capture replayed.
+	Digest      string
+	SpansDigest string
+	// Windows are the windows drawn: the scope's.
+	Windows []uint64
+	Bytes   int64
 }
 
 // Service is the policy enforcement point. It never decides: it asks the
@@ -127,7 +134,7 @@ func (inst *Service) Capture(req Request, facts Facts, recheck func() bool) (id 
 	_, _ = rand.Read(b[:])
 	id = "cap-" + hex.EncodeToString(b[:])
 	inst.mu.Lock()
-	inst.jobs[id] = &job{info: Info{Request: req, Decision: d}, sourceJob: sourceJob,
+	inst.jobs[id] = &job{info: Info{Request: req, Decision: d, Windows: slices.Clone(scope.Windows)}, sourceJob: sourceJob,
 		status: opwire.CaptureStatus{Phase: opwire.PhaseRunning}}
 	inst.mu.Unlock()
 	return
@@ -228,6 +235,8 @@ func (inst *Service) finishLocked(id string, j *job, r SourceResult) {
 	}
 	sum := blake3.Sum256(out)
 	j.info.Digest = hex.EncodeToString(sum[:])
+	j.info.SpansDigest = r.SpansDigest
+	j.info.Bytes = int64(len(out))
 	j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted, Path: path, MediaType: mediaType, Bytes: int64(len(out))}
 }
 

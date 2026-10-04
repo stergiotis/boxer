@@ -134,3 +134,57 @@ func TestToolKeysDifferAcrossReplies(t *testing.T) {
 	}
 	assert.Equal(t, []string{"llm-1#0", "llm-2#0"}, keys, "the same provider id, two dispatches")
 }
+
+// Over clickhouse-local: a capture leaves one agentCapture row (ADR-0281
+// §SD6) — a permitted one with its decision, obligations and digests, a
+// denied one with the reason — joined to the task like an action.
+func TestTheCaptureRecordLandsOnTheTrail(t *testing.T) {
+	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx := context.Background()
+	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for stmt := range strings.SplitSeq(setup, ";") {
+		if stmt = strings.TrimSpace(stmt); stmt != "" {
+			require.NoError(t, exec.Exec(ctx, stmt))
+		}
+	}
+	rec := trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	defer rec.Close()
+	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants, cfg.Trail = true, rec })
+	g := r.grant(ModeObserve)
+	out, err := r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7}, Format: CaptureFormatPng, Key: "png"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	out, err = r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7}, Format: "gif", Key: "gif"})
+	require.NoError(t, err)
+	require.Equal(t, "refused", out.Phase)
+	r.svc.Close()
+
+	rows, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAgentCapture(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	byFormat := map[string]trail.AgentCapture{}
+	for _, ent := range rows {
+		byFormat[ent.AgentCapture.Val.Format] = ent.AgentCapture.Val
+		require.True(t, ent.Delegation.Has)
+		assert.Equal(t, g.Task, ent.Delegation.Val.Task)
+	}
+	png := byFormat["png"]
+	assert.Equal(t, "permit", png.Decision)
+	assert.Equal(t, "grant", png.Policy)
+	assert.Equal(t, []string{"scope@1"}, png.Obligations)
+	assert.Equal(t, []uint64{7}, png.Windows)
+	assert.Equal(t, "completed", png.Phase)
+	assert.Len(t, png.Digest, 64)
+	assert.Positive(t, png.Bytes)
+	gif := byFormat["gif"]
+	assert.Equal(t, "deny", gif.Decision)
+	assert.Equal(t, "refused", gif.Phase)
+	require.Len(t, gif.Reason, 1)
+	assert.Contains(t, gif.Reason[0], "svg or png")
+}

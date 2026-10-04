@@ -244,6 +244,18 @@ type wireCapture struct {
 	Key      string `json:"key"`
 	// Format is "svg" or "png"; empty is "svg" (ADR-0281).
 	Format string `json:"format,omitempty"`
+	// Instances, when set, are the windows captured together, and Instance
+	// is ignored; Crop keeps a part of the frame, in logical points.
+	Instances []uint64  `json:"instances,omitempty"`
+	Crop      *wireRect `json:"crop,omitempty"`
+}
+
+// wireRect is a rectangle in logical points.
+type wireRect struct {
+	X float32 `json:"x"`
+	Y float32 `json:"y"`
+	W float32 `json:"w"`
+	H float32 `json:"h"`
 }
 
 // wireWindowAct is arrange, raise or place (ADR-0276 §SD3). Command and

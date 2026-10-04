@@ -349,12 +349,39 @@ func (inst *Client) Capture(ctx context.Context, handle string, instance uint64,
 	return inst.CaptureAs(ctx, handle, instance, key, CaptureFormatSvg)
 }
 
-// Capture formats: the window's shapes as SVG, or its pixels as PNG
-// (ADR-0281).
+// The capture formats (ADR-0281).
 const (
+	// CaptureFormatSvg is the window's shapes as SVG.
 	CaptureFormatSvg = "svg"
+	// CaptureFormatPng is the windows' pixels as PNG.
 	CaptureFormatPng = "png"
 )
+
+// CaptureRequest is a capture of one or more windows (ADR-0281).
+type CaptureRequest struct {
+	Handle string
+	// Instances are the windows captured together; a PNG draws them all,
+	// an SVG is of one.
+	Instances []uint64
+	Format    string
+	// Crop keeps x, y, w, h of the frame, in logical points; nil keeps it
+	// all.
+	Crop *[4]float32
+	Key  string
+}
+
+// CaptureWith captures windows as a CaptureRequest says; the outcome's Job
+// names the capture.
+func (inst *Client) CaptureWith(ctx context.Context, r CaptureRequest) (out Outcome, err error) {
+	w := wireCapture{V: wireVersion, Handle: r.Handle, Instances: r.Instances, Key: r.Key, Format: r.Format}
+	if len(r.Instances) > 0 {
+		w.Instance = r.Instances[0]
+	}
+	if c := r.Crop; c != nil {
+		w.Crop = &wireRect{X: c[0], Y: c[1], W: c[2], H: c[3]}
+	}
+	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture, w))
+}
 
 // CaptureAs captures an instance's window in a format; the outcome's Job
 // names it.

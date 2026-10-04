@@ -384,7 +384,9 @@ Milestones:
   source, the agent's capture, status and read through it. Open from SD1:
   the host does not yet refuse the `RequestScreenshot*` opcodes without a
   development flag.
-- **M4 — Records and labels** (SD6), and the wire fields.
+- **M4 — Records and labels** (SD6), and the wire fields. Built 2026-10-04,
+  uncommitted: the `agentCapture` trail kind, the label over the windows
+  drawn, `capture`'s `instances` and `crop`.
 - **M5 — The mesh-only and desktop hosts.**
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.

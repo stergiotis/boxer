@@ -42,6 +42,7 @@ func TestOnlyTheBodyBindsTheTextSection(t *testing.T) {
 		"Origin": factsScanOriginFilter, "Conversation": factsScanConversationFilter, "Delegation": factsScanDelegationFilter,
 		"Cause": factsScanCauseFilter, "LlmCall": factsScanLlmCallFilter, "LlmMessage": factsScanLlmMessageFilter,
 		"AgentAction": factsScanAgentActionFilter, "AgentGrant": factsScanAgentGrantFilter, "HttpFetch": factsScanHttpFetchFilter,
+		"AgentCapture": factsScanAgentCaptureFilter,
 	} {
 		assert.NotContains(t, sql, "tv:textArray", comp+" binds no slot on the text section")
 	}
@@ -56,6 +57,15 @@ func TestOriginUsesTheSharedMemberships(t *testing.T) {
 	assert.Equal(t, vocab.MembRuntimeRun.GetId().Value(), ids["runtimeRun"])
 	assert.Equal(t, vocab.MembRuntimeApp.GetId().Value(), ids["runtimeApp"])
 	assert.Equal(t, vocab.MembLifecycleTileKey.GetId().Value(), ids["runtimeLifecycleTileKey"])
+}
+
+// The capture record's memberships come from the runtime vocabulary, so a
+// scan filters on the ids its rows carry (ADR-0281 §SD6).
+func TestTheCaptureRecordUsesTheVocabulary(t *testing.T) {
+	ids := TrailMembershipIds["AgentCapture"]
+	assert.Equal(t, vocab.MembKindAgentCapture.GetId().Value(), ids["runtimeKindAgentCapture"])
+	assert.Equal(t, vocab.MembAgentCaptureDigest.GetId().Value(), ids["agentCaptureDigest"])
+	assert.Equal(t, vocab.MembAgentCaptureObligations.GetId().Value(), ids["agentCaptureObligations"])
 }
 
 // A nil recorder and one without a backend record nothing, say so, and
