@@ -2,9 +2,9 @@ package chat
 
 // A conversation's title (ADR-0265 §SD4): the first line of its first
 // message until the model names it after the first answer — one small
-// call on llm.complete, never kept — or the person renames it. The title
-// lives with the window, like the conversation (keeping it is decided
-// with resume, ADR-0264 §SD7).
+// call under the first turn's id, on the retained subject when the
+// conversation is kept, so its text is kept with the turns it names — or
+// the person renames it. A rename is not recorded (ADR-0264 §SD7).
 
 import (
 	"context"
@@ -76,11 +76,11 @@ func modelTitle(content string) (t string) {
 // titleRequest is the title call for a conversation's first exchange. It
 // declares the sensitivity the conversation holds, so a confined one is
 // titled only where its content may go.
-func titleRequest(conversation string, question string, answer string, sensitivity queryengine.SensitivityE) (r llm.Request) {
+func titleRequest(conversation string, turn string, keep bool, question string, answer string, sensitivity queryengine.SensitivityE) (r llm.Request) {
 	if a := []rune(answer); len(a) > titleExcerptRunes {
 		answer = string(a[:titleExcerptRunes]) + "…"
 	}
-	return llm.Request{Purpose: titlePurpose, Conversation: conversation, Sensitivity: sensitivity, Messages: []openaichat.Message{
+	return llm.Request{Purpose: titlePurpose, Conversation: conversation, Turn: turn, Retain: keep, Sensitivity: sensitivity, Messages: []openaichat.Message{
 		{Role: openaichat.ChatRoleSystem, Content: titlePrompt},
 		{Role: openaichat.ChatRoleUser, Content: "The person asked:\n" + question + "\n\nThe answer began:\n" + answer},
 	}}
@@ -120,7 +120,7 @@ func (inst *App) maybeTitle() {
 		sensitivity = inst.coord.sensitivity()
 	}
 	conv.titleAsked = true
-	req, cli, id := titleRequest(conv.id, question, answer, sensitivity), inst.cli, conv.id
+	req, cli, id := titleRequest(conv.id, conv.firstTurn, conv.keep, question, answer, sensitivity), inst.cli, conv.id
 	inst.titleJob.Start(nil, bgjob.Spec{Kind: "chat-title", Title: "title the conversation"},
 		func(ctx context.Context) (out *titled, err error) {
 			res, err := cli.Complete(ctx, req)

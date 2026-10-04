@@ -176,9 +176,13 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	}
 	switch msg.Subject {
 	case SubjectDescribe:
-		inst.reply(msg.Reply, inst.describe(msg))
+		rep, req := inst.describe(msg)
+		inst.reply(msg.Reply, rep)
+		inst.recordAsked(msg, nil, "describe", req.Key, req.Conversation, req.wireCause, req.App, rep.Ok, rep.Reason)
 	case SubjectHelp:
-		inst.reply(msg.Reply, inst.help(msg))
+		rep, req := inst.help(msg)
+		inst.reply(msg.Reply, rep)
+		inst.recordAsked(msg, nil, "help", req.Key, req.Conversation, req.wireCause, req.App, rep.Ok, rep.Reason)
 	case SubjectRequest:
 		inst.reply(msg.Reply, inst.requestGrant(msg))
 	case SubjectCall:
@@ -228,9 +232,10 @@ func containsFold(haystack string, needle string) (ok bool) {
 // describe lists the operations agents may call, without schemas; naming
 // one operation returns it with its schemas, which is how a coordinator
 // loads a schema when its model asks for one (ADR-0269 §SD3).
-func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply) {
+func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply, req wireDescribeRequest) {
 	rep.V = wireVersion
-	req, err := decode[wireDescribeRequest](msg.Payload)
+	var err error
+	req, err = decode[wireDescribeRequest](msg.Payload)
 	if err != nil {
 		rep.Reason = err.Error()
 		return

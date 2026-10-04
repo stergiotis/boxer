@@ -44,9 +44,13 @@ type ActionRecord struct {
 	ArgsDigest string
 	// Decision is "dispatch" for the dispatcher's row and "final" for the
 	// row written at the final phase.
-	Decision   string
-	Phase      string
-	Reason     string
+	Decision string
+	Phase    string
+	Reason   string
+	// CallTitle and CallReason are the model's title for the call and the
+	// reason it gave, bounded, on the dispatch row.
+	CallTitle  string
+	CallReason string
 	BudgetLeft int32
 	Test       bool
 	// Tainted says the conversation had read untrusted content by then;
@@ -91,7 +95,10 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 		At: time.Now(), Key: rec.key, CallId: rec.callId, Instance: rec.instance, App: rec.app,
 		Operation: rec.spec.Name, Effect: rec.spec.Effect.String(), ArgsDigest: rec.argsDigest,
 		Decision: decision, Phase: out.Phase.String(), Reason: out.Reason, Confined: out.Confined,
-		Turn: rec.turn, Actor: rec.actor, ActorInstance: rec.actorInstance,
+		Turn: rec.turn, Actor: rec.actor, ActorInstance: rec.actorInstance, Conversation: rec.conversation,
+	}
+	if decision == "dispatch" {
+		r.CallTitle, r.CallReason = rec.title, rec.why
 	}
 	if c := rec.cause; c.Has {
 		r.ModelCall, r.ToolCallId, r.ToolIndex = c.Val.ModelCall, c.Val.ToolCall.Val, c.Val.ToolIndex
@@ -237,6 +244,12 @@ func TrailRowOf(rec *trail.Recorder, r ActionRecord) (c trail.Context, cause opt
 	if r.Reason != "" {
 		row.Reason = []string{r.Reason}
 	}
+	if r.CallTitle != "" {
+		row.CallTitle = []string{r.CallTitle}
+	}
+	if r.CallReason != "" {
+		row.CallReason = []string{r.CallReason}
+	}
 	return
 }
 
@@ -246,6 +259,16 @@ func TrailRowOf(rec *trail.Recorder, r ActionRecord) (c trail.Context, cause opt
 // names what was asked for; without one the row carries the grant as it
 // stands. The caller holds mu when t is set.
 func (inst *Service) grantEvent(event string, decidedBy string, reason string, t *task, r *request) {
+	var asked wireCause
+	if r != nil {
+		asked = r.asked
+	}
+	inst.grantEventAsked(event, decidedBy, reason, t, r, asked)
+}
+
+// grantEventAsked is grantEvent with the turn and the model call that asked
+// for the event, when one did (ADR-0277 §SD1).
+func (inst *Service) grantEventAsked(event string, decidedBy string, reason string, t *task, r *request, asked wireCause) {
 	if !inst.cfg.Trail.Durable() {
 		return
 	}
@@ -277,13 +300,17 @@ func (inst *Service) grantEvent(event string, decidedBy string, reason string, t
 		}
 	}
 	if conversation != "" {
-		c.Conversation = option.Some(trail.Conversation{Conversation: conversation})
+		conv := trail.Conversation{Conversation: conversation}
+		if asked.Turn != "" {
+			conv.Turn = option.Some(asked.Turn)
+		}
+		c.Conversation = option.Some(conv)
 	}
 	row.PlanDigest = trail.ContentDigest(row.Plan)
 	if reason != "" {
 		row.Reason = []string{reason}
 	}
-	if err := inst.cfg.Trail.AgentGrant(time.Now(), c, row); err != nil {
+	if err := inst.cfg.Trail.AgentGrant(time.Now(), c, asked.cause(), row); err != nil {
 		inst.log.Warn().Err(err).Str("event", event).Msg("agent: buffer grant event")
 		return
 	}
@@ -464,6 +491,10 @@ func actionsTable(rows []ActionRecord) *introspect.Table {
 		String("decision", func(i int) string { return r(i).Decision }).
 		String("phase", func(i int) string { return r(i).Phase }).
 		String("reason", func(i int) string { return r(i).Reason }).
+		// The model's title for the call and the reason it gave, on the
+		// dispatch row.
+		String("call_title", func(i int) string { return r(i).CallTitle }).
+		String("call_reason", func(i int) string { return r(i).CallReason }).
 		Int32("budget_left", func(i int) int32 { return r(i).BudgetLeft }).
 		Bool("test", func(i int) bool { return r(i).Test }).
 		Bool("tainted", func(i int) bool { return r(i).Tainted }).

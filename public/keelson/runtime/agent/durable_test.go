@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"iter"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,11 +18,10 @@ import (
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )
 
-// Over clickhouse-local: every decision and every final phase lands as an
-// agentAction row on the trail (ADR-0269 §SD9), flushed off the call's
-// path and at shutdown, each with the context components that join it to
-// the rest (ADR-0277 §SD1); and the grant leaves its events.
-func TestActionRecordLandsOnTheTrail(t *testing.T) {
+// trailOnLocal is a trail recorder over a fresh boxer.facts on
+// clickhouse-local; the test is skipped where there is no clickhouse.
+func trailOnLocal(t *testing.T) (rec *trail.Recorder) {
+	t.Helper()
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
 		t.Skipf("clickhouse unavailable: %v", err)
@@ -34,8 +34,18 @@ func TestActionRecordLandsOnTheTrail(t *testing.T) {
 			require.NoError(t, exec.Exec(ctx, stmt))
 		}
 	}
-	rec := trail.NewRecorder(exec, "run-test", zerolog.Nop())
-	defer rec.Close()
+	rec = trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	t.Cleanup(rec.Close)
+	return
+}
+
+// Over clickhouse-local: every decision and every final phase lands as an
+// agentAction row on the trail (ADR-0269 §SD9), flushed off the call's
+// path and at shutdown, each with the context components that join it to
+// the rest (ADR-0277 §SD1); and the grant leaves its events.
+func TestActionRecordLandsOnTheTrail(t *testing.T) {
+	ctx := context.Background()
+	rec := trailOnLocal(t)
 	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants, cfg.Trail = true, rec })
 	require.True(t, r.svc.Durable())
 	g, err := r.cli.Request(ctx, GrantRequest{Plan: "edit the doc", Conversation: "chat-1",
@@ -133,6 +143,105 @@ func TestToolKeysDifferAcrossReplies(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{"llm-1#0", "llm-2#0"}, keys, "the same provider id, two dispatches")
+}
+
+// Over clickhouse-local: what the model asked for outside a window — a
+// describe, a help read, a grant — names the model call that asked; a
+// call's title and reason ride its dispatch row; the person's change
+// pauses the task once and the next turn resumes it; a stop from the
+// coordinator's button is the person's (ADR-0277 §SD1).
+func TestTheTrailNamesWhatAskedAndWhoDecided(t *testing.T) {
+	ctx := context.Background()
+	rec := trailOnLocal(t)
+	r := newRigWith(t, func(cfg *Config) { cfg.Coordinators, cfg.Trail = []string{"test.coordinator"}, rec })
+	ask := func(i int) Asked {
+		return Asked{Key: trail.ToolKey("llm-1", i), Conversation: "chat-1", Turn: "turn-1", ModelCall: "llm-1",
+			ToolCall: "call_" + strconv.Itoa(i), ToolIndex: uint32(i)}
+	}
+	_, err := r.cli.Describe(ctx, DescribeRequest{Asked: ask(0)})
+	require.NoError(t, err)
+	_, err = r.cli.Describe(ctx, DescribeRequest{})
+	require.NoError(t, err, "the coordinator's own read")
+	_, err = r.cli.Help(ctx, HelpRequest{App: string(docAppId), Asked: ask(1)})
+	require.NoError(t, err)
+	got := make(chan Grant, 1)
+	go func() {
+		g, gerr := r.cli.Request(ctx, GrantRequest{Plan: "edit the doc", Conversation: "chat-1",
+			Entries: []GrantEntry{{Instance: r.docKey, Mode: ModeAct}}, Asked: ask(2)})
+		assert.NoError(t, gerr)
+		got <- g
+	}()
+	r.person(true, nil)
+	g := <-got
+	a := ask(3)
+	_, err = r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: r.docKey, Operation: "get_text", Args: "{}", Key: a.Key,
+		Title: "Reading\nthe doc", Reason: "to see what is there", Turn: a.Turn, ModelCall: a.ModelCall, ToolCall: a.ToolCall, ToolIndex: a.ToolIndex})
+	require.NoError(t, err)
+	r.host.person(r.docKey, func(d *doc) { d.text = "the person's" })
+	r.host.frame(r.docKey)
+	r.host.person(r.docKey, func(d *doc) { d.text = "the person's again" })
+	r.host.frame(r.docKey)
+	_, err = r.cli.TurnAsked(ctx, g.Handle, Asked{Conversation: "chat-1", Turn: "turn-2"})
+	require.NoError(t, err)
+	require.NoError(t, r.cli.StopWith(ctx, g.Handle, StopRequest{ByPerson: true, Reason: "the person stopped it in the chat"}))
+	r.svc.Close()
+
+	actions, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAgentAction(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	byOp := map[string][]*trail.TrailEntity{}
+	for _, ent := range actions {
+		byOp[ent.AgentAction.Val.Operation] = append(byOp[ent.AgentAction.Val.Operation], ent)
+	}
+	for i, op := range []string{"describe", "help"} {
+		require.Len(t, byOp[op], 1, "%s: one row, and none for the coordinator's own read", op)
+		ent := byOp[op][0]
+		assert.Equal(t, "final", ent.AgentAction.Val.Decision)
+		assert.Equal(t, "completed", ent.AgentAction.Val.Phase)
+		require.True(t, ent.Cause.Has)
+		assert.Equal(t, "llm-1", ent.Cause.Val.ModelCall)
+		assert.Equal(t, uint32(i), ent.Cause.Val.ToolIndex)
+		require.True(t, ent.Conversation.Has)
+		assert.Equal(t, "chat-1", ent.Conversation.Val.Conversation)
+		assert.Equal(t, "turn-1", ent.Conversation.Val.Turn.Val)
+		assert.False(t, ent.Delegation.Has, "no task held it")
+	}
+	for _, ent := range byOp["get_text"] {
+		row := ent.AgentAction.Val
+		if row.Decision == "dispatch" {
+			assert.Equal(t, []string{"Reading the doc"}, row.CallTitle, "one line")
+			assert.Equal(t, []string{"to see what is there"}, row.CallReason)
+		} else {
+			assert.Empty(t, row.CallTitle, "the final row does not repeat it")
+		}
+	}
+
+	grants, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAgentGrant(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	byEvent := map[string][]*trail.TrailEntity{}
+	for _, ent := range grants {
+		byEvent[ent.AgentGrant.Val.Event] = append(byEvent[ent.AgentGrant.Val.Event], ent)
+	}
+	require.Len(t, byEvent[trail.GrantEventRequested], 1)
+	req := byEvent[trail.GrantEventRequested][0]
+	require.True(t, req.Cause.Has, "the request names the model call that asked")
+	assert.Equal(t, uint32(2), req.Cause.Val.ToolIndex)
+	assert.Equal(t, "turn-1", req.Conversation.Val.Turn.Val)
+	require.Len(t, byEvent[trail.GrantEventPaused], 1, "two changes, one pause")
+	paused := byEvent[trail.GrantEventPaused][0].AgentGrant.Val
+	assert.Equal(t, "person", paused.DecidedBy)
+	assert.Contains(t, paused.Reason[0], "window "+strconv.FormatUint(r.docKey, 10))
+	require.Len(t, byEvent[trail.GrantEventResumed], 1)
+	resumed := byEvent[trail.GrantEventResumed][0]
+	assert.Equal(t, "coordinator", resumed.AgentGrant.Val.DecidedBy)
+	assert.Equal(t, "turn-2", resumed.Conversation.Val.Turn.Val)
+	require.Len(t, byEvent[trail.GrantEventEnded], 1)
+	ended := byEvent[trail.GrantEventEnded][0].AgentGrant.Val
+	assert.Equal(t, "person", ended.DecidedBy)
+	assert.Equal(t, []string{"the person stopped it in the chat"}, ended.Reason)
 }
 
 // Over clickhouse-local: a capture leaves one agentCapture row (ADR-0281

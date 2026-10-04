@@ -353,12 +353,12 @@ func (inst *coordinator) fixedTools() (out []openaichat.Tool) {
 
 // changesNote is the host's account of what others changed since the
 // previous turn, for the model; empty when nothing did or there is no task.
-func (inst *coordinator) changesNote(ctx context.Context) (note string) {
+func (inst *coordinator) changesNote(ctx context.Context, turn string) (note string) {
 	h := inst.handle()
 	if h == "" {
 		return
 	}
-	changes, err := inst.cli.Turn(ctx, h)
+	changes, err := inst.cli.TurnAsked(ctx, h, agent.Asked{Conversation: inst.conversation, Turn: turn})
 	if err != nil || len(changes) == 0 {
 		return
 	}
@@ -391,6 +391,13 @@ func (inst toolOrigin) key() (k string) {
 		return "call-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
 	return trail.ToolKey(inst.modelCall, inst.index)
+}
+
+// asked is the tool call as the dispatcher records it: its key, the
+// conversation and turn, and the model call that asked (ADR-0277 §SD1).
+func (inst *coordinator) asked(o toolOrigin, toolCall string) (a agent.Asked) {
+	return agent.Asked{Key: o.key(), Conversation: inst.conversation, Turn: o.turn, ModelCall: o.modelCall,
+		ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0))}
 }
 
 // exec runs one tool call; it returns what the model reads and a line for
@@ -483,18 +490,20 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 	}
 	switch call.Name {
 	case "request_access":
-		return inst.requestAccess(ctx, str("plan"), args)
+		return inst.requestAccess(ctx, inst.asked(o, call.Id), str("plan"), args)
 	case "list_windows":
-		return inst.listWindows(ctx)
+		return inst.listWindows(ctx, inst.asked(o, call.Id))
 	case "describe_app":
-		apps, err := inst.cli.Describe(ctx, agent.DescribeRequest{App: str("app"), Search: str("search"), Operation: str("operation")})
+		apps, err := inst.cli.Describe(ctx, agent.DescribeRequest{App: str("app"), Search: str("search"), Operation: str("operation"),
+			Asked: inst.asked(o, call.Id)})
 		if err != nil {
 			return "error: " + err.Error(), "describe: " + err.Error()
 		}
 		b, _ := json.Marshal(describeView(apps))
 		return string(b), "described " + strconv.Itoa(len(apps)) + " app(s)"
 	case "read_help":
-		return inst.readHelp(ctx, agent.HelpRequest{App: str("app"), Doc: str("doc"), Section: str("section"), Search: str("search")})
+		return inst.readHelp(ctx, agent.HelpRequest{App: str("app"), Doc: str("doc"), Section: str("section"), Search: str("search"),
+			Asked: inst.asked(o, call.Id)})
 	case "call_operation":
 		return inst.call(ctx, o, call.Id, args)
 	case "open_window":
@@ -512,13 +521,13 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 	case "query_windows":
 		return inst.queryWindows(ctx, str("table"), str("sql"))
 	case "arrange_windows", "raise_window", "place_window":
-		return inst.windowVerb(ctx, o, call.Name, args)
+		return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
 	case "stop_task":
 		h := inst.handle()
 		if h == "" {
 			return "no task to stop", "stop: no task"
 		}
-		err := inst.cli.Stop(ctx, h)
+		err := inst.cli.StopWith(ctx, h, agent.StopRequest{Reason: "the model stopped it", Asked: inst.asked(o, call.Id)})
 		inst.mu.Lock()
 		inst.grant = agent.Grant{}
 		inst.mu.Unlock()
@@ -570,9 +579,9 @@ func (inst *coordinator) launched(appName string, got agent.Launched) (content s
 	return
 }
 
-func (inst *coordinator) requestAccess(ctx context.Context, plan string, args map[string]any) (content string, activity string) {
+func (inst *coordinator) requestAccess(ctx context.Context, asked agent.Asked, plan string, args map[string]any) (content string, activity string) {
 	ceiling := inst.ceilingNow()
-	req := agent.GrantRequest{Plan: plan, Conversation: inst.conversation, Handle: inst.handle(), Ceiling: &ceiling}
+	req := agent.GrantRequest{Plan: plan, Conversation: inst.conversation, Handle: inst.handle(), Ceiling: &ceiling, Asked: asked}
 	launches, bad := openArg(args["open"])
 	if bad != "" {
 		// Nothing is asked of the person for a request it cannot read.
@@ -623,7 +632,8 @@ func (inst *coordinator) requestAccess(ctx context.Context, plan string, args ma
 		}
 	}
 	inst.mu.Unlock()
-	listing, _ := inst.listWindows(ctx)
+	// Part of the request's answer, not a call the model made: no row of its own.
+	listing, _ := inst.listWindows(ctx, agent.Asked{})
 	content = "access granted.\n"
 	if len(launches) > 0 {
 		names := make([]string, 0, len(launches))
@@ -679,12 +689,12 @@ func (inst *coordinator) grantTask() (t string) {
 	return inst.grant.Task
 }
 
-func (inst *coordinator) listWindows(ctx context.Context) (content string, activity string) {
+func (inst *coordinator) listWindows(ctx context.Context, asked agent.Asked) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
 		return "no task yet; call request_access first", "list: no task"
 	}
-	insts, err := inst.cli.List(ctx, h)
+	insts, err := inst.cli.ListAsked(ctx, h, asked)
 	if err != nil {
 		return "error: " + err.Error(), "list: " + err.Error()
 	}
@@ -750,8 +760,11 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	}
 	key := o.key()
 	instance := uint64(window)
+	inst.mu.Lock()
+	title := inst.curTitle
+	inst.mu.Unlock()
 	out, err := inst.cli.Call(ctx, agent.CallRequest{Handle: h, Instance: instance, Operation: op, Args: opArgs, Key: key, Reason: reason,
-		Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0))})
+		Title: title, Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0))})
 	where := op + " in window " + strconv.FormatUint(instance, 10)
 	if err != nil {
 		return "error: " + err.Error(), where + ": " + err.Error()
@@ -823,6 +836,9 @@ type turnResult struct {
 	// calls are the turn's model calls, for the statistics.
 	calls    []callStat
 	messages []openaichat.Message
+	// omitTo is one past where the last call carried lastRoundNote, which
+	// messages leave out; 0 when it carried none.
+	omitTo   int
 	final    llm.Response
 	activity []string
 	stopped  string
@@ -848,7 +864,7 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		last := msgs[len(msgs)-1]
 		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
 	}
-	if note := coord.changesNote(ctx); note != "" {
+	if note := coord.changesNote(ctx, req.Turn); note != "" {
 		// The host's account goes before the person's message.
 		last := msgs[len(msgs)-1]
 		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
@@ -866,6 +882,9 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			// the next turn resends.
 			r.Messages = append(slices.Clip(msgs), openaichat.Message{Role: openaichat.ChatRoleSystem, Content: lastRoundNote})
 			r.ToolChoice = "none"
+			// The host saw it, so the next turn declares it left out
+			// (ADR-0264 §SD3) and the host still keeps only what is new.
+			out.omitTo = len(msgs) + 1
 		}
 		coord.setStage(stageModel)
 		var res llm.Response

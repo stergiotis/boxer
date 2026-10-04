@@ -393,7 +393,7 @@ func (inst *App) capture(format string) {
 	}
 	r := inst.newRow("capture " + format)
 	inst.spawn(func(ctx context.Context) {
-		out, err := inst.cli.CaptureAs(ctx, handle, key, r.key, format)
+		out, err := inst.cli.CaptureAs(ctx, handle, key, agent.Asked{Key: r.key}, format)
 		if err != nil {
 			inst.update(r, agent.Outcome{Phase: "error", Reason: err.Error()})
 			return

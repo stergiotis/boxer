@@ -496,6 +496,11 @@ var (
 	MembAgentCapturePhase       = NkRegistry.MustBegin("agentCapturePhase", 238).End()
 	MembAgentCaptureReason      = NkRegistry.MustBegin("agentCaptureReason", 239).End()
 	MembAgentCaptureConfined    = NkRegistry.MustBegin("agentCaptureConfined", 240).End()
+	// What the person was shown of an agent's call: the model's one-line
+	// title and its stated reason, bounded, kept in every retention mode as
+	// the grant's plan is.
+	MembAgentActionCallTitle  = NkRegistry.MustBegin("agentActionCallTitle", 241).End()
+	MembAgentActionCallReason = NkRegistry.MustBegin("agentActionCallReason", 242).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -558,4 +563,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindAgentCapture, MembAgentCaptureFormat, MembAgentCaptureWindows, MembAgentCaptureDecision,
 	MembAgentCapturePolicy, MembAgentCaptureObligations, MembAgentCaptureSpansDigest, MembAgentCaptureDigest,
 	MembAgentCaptureBytes, MembAgentCapturePhase, MembAgentCaptureReason, MembAgentCaptureConfined,
+	MembAgentActionCallTitle, MembAgentActionCallReason,
 }

@@ -23,6 +23,8 @@ const (
 	kindAgentActionDecision    uint64 = 9223372049739677876
 	kindAgentActionPhase       uint64 = 9223372049739677877
 	kindAgentActionReason      uint64 = 9223372049739677878
+	kindAgentActionCallTitle   uint64 = 9223372049739677937
+	kindAgentActionCallReason  uint64 = 9223372049739677938
 	kindAgentActionBudgetLeft  uint64 = 9223372049739677879
 	kindAgentActionTest        uint64 = 9223372049739677880
 	kindAgentActionTainted     uint64 = 9223372049739677881
@@ -185,6 +187,22 @@ func agentActionEmitSectionStringArray[
 		}
 		stringArraySecAttr_Reason.AddMembershipLowCardRefP(kindAgentActionReason)
 		stringArraySecAttr_Reason.EndAttributeP()
+	}
+	if len(row.CallTitle) > 0 {
+		stringArraySecAttr_CallTitle := stringArraySec.BeginAttribute()
+		for _, v := range row.CallTitle {
+			stringArraySecAttr_CallTitle.AddToContainerP(v)
+		}
+		stringArraySecAttr_CallTitle.AddMembershipLowCardRefP(kindAgentActionCallTitle)
+		stringArraySecAttr_CallTitle.EndAttributeP()
+	}
+	if len(row.CallReason) > 0 {
+		stringArraySecAttr_CallReason := stringArraySec.BeginAttribute()
+		for _, v := range row.CallReason {
+			stringArraySecAttr_CallReason.AddToContainerP(v)
+		}
+		stringArraySecAttr_CallReason.AddMembershipLowCardRefP(kindAgentActionCallReason)
+		stringArraySecAttr_CallReason.EndAttributeP()
 	}
 	return
 }
@@ -516,6 +534,12 @@ func agentActionReadRow[
 	var stringArrayReasonSlice []string
 	var stringArrayReasonCount int
 	var stringArrayReasonLastAttr int64
+	var stringArrayCallTitleSlice []string
+	var stringArrayCallTitleCount int
+	var stringArrayCallTitleLastAttr int64
+	var stringArrayCallReasonSlice []string
+	var stringArrayCallReasonCount int
+	var stringArrayCallReasonLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -550,6 +574,22 @@ func agentActionReadRow[
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayReasonSlice = append(stringArrayReasonSlice, v)
 				}
+			case kindAgentActionCallTitle:
+				if stringArrayCallTitleLastAttr != attrJ+1 {
+					stringArrayCallTitleLastAttr = attrJ + 1
+					stringArrayCallTitleCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayCallTitleSlice = append(stringArrayCallTitleSlice, v)
+				}
+			case kindAgentActionCallReason:
+				if stringArrayCallReasonLastAttr != attrJ+1 {
+					stringArrayCallReasonLastAttr = attrJ + 1
+					stringArrayCallReasonCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayCallReasonSlice = append(stringArrayCallReasonSlice, v)
+				}
 			}
 		}
 	}
@@ -575,6 +615,22 @@ func agentActionReadRow[
 	}
 	if stringArrayReasonSlice != nil {
 		row.Reason = stringArrayReasonSlice
+		present = true
+	}
+	if stringArrayCallTitleCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentActionCallTitle").Int("got", stringArrayCallTitleCount).Errorf("slot stringArray@agentActionCallTitle (field CallTitle) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayCallTitleCount)
+		return
+	}
+	if stringArrayCallTitleSlice != nil {
+		row.CallTitle = stringArrayCallTitleSlice
+		present = true
+	}
+	if stringArrayCallReasonCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentActionCallReason").Int("got", stringArrayCallReasonCount).Errorf("slot stringArray@agentActionCallReason (field CallReason) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayCallReasonCount)
+		return
+	}
+	if stringArrayCallReasonSlice != nil {
+		row.CallReason = stringArrayCallReasonSlice
 		present = true
 	}
 	// --- u64Array. ---

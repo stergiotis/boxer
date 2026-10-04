@@ -128,9 +128,15 @@ type callRec struct {
 	instance uint64
 	app      app.AppIdT
 	// turn and cause are what the coordinator said the call belongs to and
-	// was asked for by (ADR-0277 §SD1).
-	turn  string
-	cause option.Option[trail.Cause]
+	// was asked for by (ADR-0277 §SD1); conversation is its conversation
+	// when no task names one.
+	turn         string
+	cause        option.Option[trail.Cause]
+	conversation string
+	// title and why are the model's title for the call and the reason it
+	// gave, bounded, for the dispatch row.
+	title string
+	why   string
 	// actor and actorInstance are the caller of a call that resolved to no
 	// task, which has no other record of who asked.
 	actor         app.AppIdT
@@ -196,6 +202,10 @@ type task struct {
 	// readSinceTurn what it read since (ADR-0269 §SD8).
 	turnSeq       map[uint64]uint64
 	readSinceTurn map[uint64]map[string]uint64
+	// pausedAt is, per window, the log sequence of the change that paused
+	// the task there, until a turn lifts it: the trail records a pause once
+	// and its lift once, not every change between.
+	pausedAt map[uint64]uint64
 	// launches are the apps the task may open windows of; launched the
 	// windows it opened, which pass to the person when it ends.
 	launches map[app.AppIdT]*launchEntry
@@ -225,14 +235,52 @@ func randomHex(n int) (s string) {
 
 // causeOf is the cause a call states, none when it names no model call.
 func causeOf(req wireCall) (cause option.Option[trail.Cause]) {
-	if req.ModelCall == "" {
+	return wireCause{Turn: req.Turn, ModelCall: req.ModelCall, ToolCall: req.ToolCall, ToolIndex: req.ToolIndex}.cause()
+}
+
+// cause is the cause a request states, none when it names no model call.
+func (inst wireCause) cause() (cause option.Option[trail.Cause]) {
+	if inst.ModelCall == "" {
 		return
 	}
-	c := trail.Cause{ModelCall: req.ModelCall, ToolIndex: req.ToolIndex}
-	if req.ToolCall != "" {
-		c.ToolCall = option.Some(req.ToolCall)
+	c := trail.Cause{ModelCall: inst.ModelCall, ToolIndex: inst.ToolIndex}
+	if inst.ToolCall != "" {
+		c.ToolCall = option.Some(inst.ToolCall)
 	}
 	return option.Some(c)
+}
+
+// maxCallTitleRunes and maxCallReasonRunes bound the model's title and
+// reason for a call on its row: the coordinator states them, and the row
+// keeps them in every retention mode.
+const (
+	maxCallTitleRunes  = 60
+	maxCallReasonRunes = 200
+)
+
+// boundLabel is s on one line, at most n runes, cut with an ellipsis.
+func boundLabel(s string, n int) (out string) {
+	out = strings.Join(strings.Fields(s), " ")
+	if r := []rune(out); len(r) > n {
+		out = string(r[:n-1]) + "…"
+	}
+	return
+}
+
+// recordAsked writes the action row of a request the model's tool call
+// made outside a window — describe, help or list — as one final row. A
+// request the coordinator made on its own names no model call and leaves
+// none. t is the task a list ran under, nil otherwise.
+func (inst *Service) recordAsked(msg *app.Msg, t *task, operation string, key string, conversation string, asked wireCause, appName string, ok bool, reason string) {
+	if asked.ModelCall == "" {
+		return
+	}
+	out := phaseOutcome(opwire.PhaseCompleted, "")
+	if !ok {
+		out = phaseOutcome(opwire.PhaseRefused, reason)
+	}
+	inst.record(t, &callRec{key: key, app: app.AppIdT(appName), turn: asked.Turn, cause: asked.cause(), conversation: conversation,
+		actor: msg.Sender, actorInstance: msg.SenderInstance, spec: app.OperationSpec{Name: operation, Effect: app.OperationEffectNone}}, "final", out)
 }
 
 func digest(s string) (d string) {
@@ -391,6 +439,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	if !ok {
 		inst.mu.Unlock()
 		inst.record(nil, &callRec{key: req.Key, instance: req.Instance, turn: req.Turn, cause: causeOf(req),
+			title: boundLabel(req.Title, maxCallTitleRunes), why: boundLabel(req.Reason, maxCallReasonRunes),
 			actor: msg.Sender, actorInstance: msg.SenderInstance}, "dispatch", out)
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
@@ -401,7 +450,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		return
 	}
 	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args), created: time.Now(),
-		turn: req.Turn, cause: causeOf(req)}
+		turn: req.Turn, cause: causeOf(req), title: boundLabel(req.Title, maxCallTitleRunes), why: boundLabel(req.Reason, maxCallReasonRunes)}
 	if t.test {
 		rec.args = req.Args
 	}
@@ -885,7 +934,7 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 	if len(windows) == 0 {
 		windows = []uint64{req.Instance}
 	}
-	rec := &callRec{key: req.Key, instance: windows[0], spec: app.OperationSpec{Name: "capture"}}
+	rec := &callRec{key: req.Key, instance: windows[0], spec: app.OperationSpec{Name: "capture"}, turn: req.Turn, cause: req.cause()}
 	t.keys[req.Key] = rec
 	var uncovered []string
 	for _, w := range windows {
@@ -982,6 +1031,7 @@ func (inst *Service) list(msg *app.Msg) (rep wireListReply) {
 	inst.mu.Unlock()
 	if !ok {
 		rep.Reason = out.Reason
+		inst.recordAsked(msg, nil, "list", req.Key, "", req.wireCause, "", false, out.Reason)
 		return
 	}
 	tainted := false
@@ -1005,6 +1055,7 @@ func (inst *Service) list(msg *app.Msg) (rep wireListReply) {
 		inst.taint(t)
 	}
 	rep.Ok = true
+	inst.recordAsked(msg, t, "list", req.Key, "", req.wireCause, "", true, "")
 	return
 }
 
@@ -1049,7 +1100,16 @@ func (inst *Service) stop(msg *app.Msg) (rep wireAck) {
 		rep.Reason = out.Reason
 		return
 	}
-	inst.endTask(t, "stopped", "coordinator")
+	// Who stopped it is the coordinator's word: its Stop button is the
+	// person's, its model's stop_task its own.
+	by, why := "coordinator", "stopped"
+	if req.By == "person" {
+		by = "person"
+	}
+	if r := boundLabel(req.Reason, maxCallReasonRunes); r != "" {
+		why = r
+	}
+	inst.endTaskAsked(t, why, by, req.wireCause)
 	rep.Ok = true
 	return
 }

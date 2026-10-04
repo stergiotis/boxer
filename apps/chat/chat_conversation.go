@@ -101,6 +101,7 @@ type turnMark struct {
 	user    int
 	history []openaichat.Message
 	parent  string
+	omitTo  int
 	lastIn  int32
 	lastOut int32
 	// artRev is the artefact's revision before the turn (ADR-0282 §SD1).
@@ -126,6 +127,9 @@ type conversation struct {
 	id string
 	// keep sends the turns on llm.retain.complete; set at the first send.
 	keep bool
+	// firstTurn is the id of the conversation's first turn, which the
+	// title call names (ADR-0277 §SD5).
+	firstTurn string
 	// apps runs the turns as the coordinator's tool loop (ADR-0265 §SD6);
 	// set at the first send, since the coordinator's system prompt is the
 	// conversation's first message.
@@ -149,6 +153,9 @@ type conversation struct {
 	history []openaichat.Message
 	// parent is the call id of the last reply, the next turn's parent.
 	parent string
+	// omitTo is one past the message parent carried that history leaves
+	// out — the last-round note; 0 when history resends parent whole.
+	omitTo int
 	// notKept is the first reason a turn was not kept, shown until
 	// notKeptNoted.
 	notKept      string
@@ -197,6 +204,12 @@ func (inst *conversation) request(text string) (r llm.Request) {
 	msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleUser, Content: text})
 	r = llm.Request{Purpose: purpose, Messages: msgs, Retain: inst.keep,
 		Conversation: inst.id, Turn: newTurn(), ParentCallId: inst.parent}
+	if inst.omitTo > 0 {
+		r.OmitFrom, r.OmitTo = inst.omitTo-1, inst.omitTo
+	}
+	if inst.firstTurn == "" {
+		inst.firstTurn = r.Turn
+	}
 	return
 }
 
@@ -238,12 +251,12 @@ func (inst *conversation) rewind() (text string, undo *rewound, ok bool) {
 	}
 	m := *inst.mark
 	text = inst.entries[m.user].text
-	undo = &rewound{mark: turnMark{user: m.user, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut},
+	undo = &rewound{mark: turnMark{user: m.user, history: inst.history, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut},
 		entries: append([]entry(nil), inst.entries[m.user:]...)}
 	// The turn's artefact revisions go with it.
 	undo.artDropped, undo.artAt = inst.art.truncate(m.artRev), m.artRev
 	inst.entries = inst.entries[:m.user:m.user]
-	inst.history, inst.parent, inst.lastIn, inst.lastOut = m.history, m.parent, m.lastIn, m.lastOut
+	inst.history, inst.parent, inst.omitTo, inst.lastIn, inst.lastOut = m.history, m.parent, m.omitTo, m.lastIn, m.lastOut
 	inst.mark = nil
 	return text, undo, true
 }
@@ -258,9 +271,9 @@ func (inst *conversation) restore(undo *rewound) (ok bool) {
 		// revisions cannot go back on top of it.
 		return false
 	}
-	before := turnMark{user: undo.mark.user, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: undo.artAt}
+	before := turnMark{user: undo.mark.user, history: inst.history, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: undo.artAt}
 	inst.entries = append(inst.entries, undo.entries...)
-	inst.history, inst.parent, inst.lastIn, inst.lastOut = undo.mark.history, undo.mark.parent, undo.mark.lastIn, undo.mark.lastOut
+	inst.history, inst.parent, inst.omitTo, inst.lastIn, inst.lastOut = undo.mark.history, undo.mark.parent, undo.mark.omitTo, undo.mark.lastIn, undo.mark.lastOut
 	inst.mark = &before
 	return true
 }
@@ -286,10 +299,10 @@ func (inst *conversation) land(req llm.Request, res *llm.Response, err error, at
 		inst.fail(asked, failureReason(err), failureOf(err))
 		return
 	}
-	inst.mark = &turnMark{user: asked, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: inst.artBefore}
+	inst.mark = &turnMark{user: asked, history: inst.history, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: inst.artBefore}
 	reply := openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls}
 	inst.history = append(append(inst.history[:0:0], req.Messages...), reply)
-	inst.parent = res.CallId
+	inst.parent, inst.omitTo = res.CallId, 0
 	inst.lastIn, inst.lastOut = res.InputTokens, res.OutputTokens
 	inst.entries = append(inst.entries, entry{speaker: speakerModel, text: res.Content, atMs: atMs})
 	switch res.Retention {
@@ -330,7 +343,7 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 		return
 	}
 	inst.land(req, &res.final, nil, atMs)
-	inst.history = append(inst.history[:0:0], res.messages...)
+	inst.history, inst.omitTo = append(inst.history[:0:0], res.messages...), res.omitTo
 }
 
 // fail marks the user entry i as not answered. A failed turn after an

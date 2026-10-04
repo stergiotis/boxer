@@ -65,6 +65,22 @@ type TreeView struct {
 	Pass uint64
 }
 
+// editableRoles are the AccessKit roles of widgets that take typed text, in
+// [normaliseRole]'s spelling.
+var editableRoles = map[string]bool{
+	"textinput": true, "multilinetextinput": true, "passwordinput": true,
+	"searchinput": true, "emailinput": true, "numberinput": true,
+	"phonenumberinput": true, "urlinput": true, "dateinput": true,
+	"datetimeinput": true, "weekinput": true, "monthinput": true,
+	"timeinput": true, "spinbutton": true,
+}
+
+// IsEditableRole reports whether a role, in any of its spellings
+// ("text_input", "TextInput"), is a widget that takes typed text.
+func IsEditableRole(role string) bool {
+	return editableRoles[normaliseRole(role)]
+}
+
 func normaliseRole(role string) string {
 	return strings.ToLower(strings.ReplaceAll(role, "_", ""))
 }
@@ -73,12 +89,15 @@ func (inst TreeFilter) matches(n *TreeNode) bool {
 	if !inst.Hidden && n.GetFlags()&FlagHidden != 0 {
 		return false
 	}
+	role := normaliseRole(n.GetRole())
 	// Unnamed, valueless nodes are layout containers; a locator cannot
-	// address them and listing them buries the ones it can.
-	if n.GetName() == "" && n.GetValue() == "" {
+	// address them and listing them buries the ones it can. An empty text
+	// input is the exception: egui gives it no label, and its value is the
+	// text, so a composer that was just sent from has neither and would
+	// vanish from the list while it is still there to type into.
+	if n.GetName() == "" && n.GetValue() == "" && !IsEditableRole(role) {
 		return false
 	}
-	role := normaliseRole(n.GetRole())
 	want := normaliseRole(inst.Role)
 	// egui hangs a `text_run` under most labels, carrying the label's own text
 	// again. It is no use as an anchor — see [Locator] on the ambiguity it

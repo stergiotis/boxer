@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -287,6 +288,50 @@ func TestKeptTurnsStoreOnlyWhatIsNew(t *testing.T) {
 	assert.Equal(t, conv.id, calls[1].Conversation)
 	assert.NotEmpty(t, calls[1].Turn)
 	assert.NotEqual(t, calls[0].Turn, calls[1].Turn, "each message the person sends is a turn of its own")
+}
+
+// A turn that ran out of rounds sent lastRoundNote on its last call only,
+// so the history the next turn resends lacks a message the host saw: the
+// next request declares it left out, and the host still keeps only what is
+// new instead of the whole conversation again (ADR-0264 §SD3).
+func TestTheLastRoundNoteIsDeclaredLeftOut(t *testing.T) {
+	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx := context.Background()
+	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for stmt := range strings.SplitSeq(setup, ";") {
+		if stmt = strings.TrimSpace(stmt); stmt != "" {
+			require.NoError(t, exec.Exec(ctx, stmt))
+		}
+	}
+	rec := trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	t.Cleanup(rec.Close)
+	cli, svc, _ := host(t, llm.Config{Retain: llm.RetainDurable, Trail: rec})
+	conv := keeping()
+
+	// The turn's last call, as runTurn sends it on the last round.
+	req := conv.request("q1")
+	conv.begin("q1", time.Now().UnixMilli(), false)
+	history := req.Messages
+	last := req
+	last.Messages = append(slices.Clip(history), openaichat.Message{Role: openaichat.ChatRoleSystem, Content: lastRoundNote})
+	res, err := cli.Complete(ctx, last)
+	require.NoError(t, err)
+	reply := openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls}
+	conv.landTurn(req, &turnResult{final: res, messages: append(slices.Clip(history), reply), omitTo: len(history) + 1}, nil, time.Now().UnixMilli())
+
+	next := conv.request("q2")
+	assert.Equal(t, len(history), next.OmitFrom)
+	assert.Equal(t, len(history)+1, next.OmitTo)
+	_, err = cli.Complete(ctx, next)
+	require.NoError(t, err)
+
+	calls := svc.Calls()
+	require.Len(t, calls, 2)
+	assert.Equal(t, len(history)+2, calls[1].MessagesFrom, "q1, the note and a1 were written by the first call; only q2 is new")
 }
 
 // appOn is the app mounted on a host whose model is fm, without a frame:

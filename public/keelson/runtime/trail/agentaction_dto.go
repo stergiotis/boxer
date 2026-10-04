@@ -27,6 +27,13 @@ type AgentAction struct {
 	Phase    string `lw:"agentActionPhase,symbol"`
 	// Reason is the phase's reason: one element when there is one.
 	Reason []string `lw:"agentActionReason,stringArray"`
+	// CallTitle and CallReason are the model's one-line title for the call
+	// and the reason it gave, bounded, as the person was shown them: one
+	// element each when given, on the dispatch row. They are kept whatever
+	// BOXER_LLM_RETAIN says, as the grant's plan is; the coordinator states
+	// them.
+	CallTitle  []string `lw:"agentActionCallTitle,stringArray"`
+	CallReason []string `lw:"agentActionCallReason,stringArray"`
 	// BudgetLeft is the task's call budget after the call.
 	BudgetLeft uint32 `lw:"agentActionBudgetLeft,u32Array,unit"`
 	// Test marks a row of a test grant.

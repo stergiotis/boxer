@@ -117,6 +117,9 @@ type request struct {
 	desktop      ModeE
 	desktopShare bool
 	desktopFlag  *bool
+	// asked is the turn and the model call that asked for the request, as
+	// the coordinator states them; its grant events carry them.
+	asked wireCause
 }
 
 func (inst *Service) isCoordinator(id app.AppIdT) (ok bool) {
@@ -195,7 +198,7 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		destinations: req.Destinations, calls: req.Calls, deadline: time.Duration(req.DeadlineSecs) * time.Second,
 		launches: req.Launches, ceiling: ceiling,
 		created: time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE),
-		desktop: ParseMode(req.Desktop)}
+		desktop: ParseMode(req.Desktop), asked: req.wireCause}
 	r.desktopShare = r.desktop != ModeUnspecified
 	for _, e := range req.Entries {
 		m := ParseMode(e.Mode)
@@ -260,8 +263,9 @@ func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need n
 	r := &request{key: "req-" + randomHex(8), actor: t.actor, actorInstance: t.actorInstance, task: t,
 		plan: req.Reason, wanted: map[uint64]ModeE{req.Instance: mode}, wantedOps: map[uint64][]string{},
 		created: time.Now(), share: map[uint64]bool{req.Instance: true}, shareFlag: make(map[uint64]*bool),
-		mode: map[uint64]ModeE{req.Instance: mode},
-		held: &held{rec: rec, req: req, need: need, mode: mode, extra: inst.deadline().String()}}
+		mode:  map[uint64]ModeE{req.Instance: mode},
+		held:  &held{rec: rec, req: req, need: need, mode: mode, extra: inst.deadline().String()},
+		asked: wireCause{Turn: req.Turn, ModelCall: req.ModelCall, ToolCall: req.ToolCall, ToolIndex: req.ToolIndex}}
 	if need == needOperation {
 		r.wantedOps[req.Instance] = []string{req.Operation}
 	}
@@ -458,13 +462,19 @@ func (inst *Service) holder(key uint64, t *task) (other *task) {
 // windows detach. Instances are told after mu is released. by is who ended
 // it — "person", "coordinator" or "host" — for the grant's record.
 func (inst *Service) endTask(t *task, why string, by string) {
+	inst.endTaskAsked(t, why, by, wireCause{})
+}
+
+// endTaskAsked is endTask with the model call that asked for the end, when
+// one did.
+func (inst *Service) endTaskAsked(t *task, why string, by string, asked wireCause) {
 	inst.mu.Lock()
 	if t.revoked != "" {
 		inst.mu.Unlock()
 		return
 	}
 	t.revoked = why
-	inst.grantEvent(trail.GrantEventEnded, by, why, t, nil)
+	inst.grantEventAsked(trail.GrantEventEnded, by, why, t, nil, asked)
 	// The task's captures go with it: each sealed artifact's key is dropped
 	// once its last reader leaves (ADR-0281 §SD6).
 	if inst.captures != nil {
@@ -574,7 +584,8 @@ func (inst *Client) AwaitGrant(ctx context.Context, key string) (g Grant, err er
 // host refuses before it becomes one the person sees.
 func asked(msg *app.Msg, req wireGrantRequest) (r *request) {
 	r = &request{actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, plan: req.Plan,
-		destinations: req.Destinations, launches: req.Launches, wanted: make(map[uint64]ModeE), desktop: ParseMode(req.Desktop)}
+		destinations: req.Destinations, launches: req.Launches, wanted: make(map[uint64]ModeE), desktop: ParseMode(req.Desktop),
+		asked: req.wireCause}
 	for _, e := range req.Entries {
 		r.wanted[e.Instance] = ParseMode(e.Mode)
 	}

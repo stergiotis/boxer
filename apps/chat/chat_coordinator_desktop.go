@@ -51,7 +51,7 @@ func (inst *coordinator) queryWindows(ctx context.Context, table string, sql str
 }
 
 // windowVerb runs arrange_windows, raise_window or place_window.
-func (inst *coordinator) windowVerb(ctx context.Context, o toolOrigin, name string, args map[string]any) (content string, activity string) {
+func (inst *coordinator) windowVerb(ctx context.Context, asked agent.Asked, name string, args map[string]any) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
 		return "error: no task yet; call request_access first", name + ": no task"
@@ -71,13 +71,13 @@ func (inst *coordinator) windowVerb(ctx context.Context, o toolOrigin, name stri
 				}
 			}
 		}
-		out, err = inst.cli.Arrange(ctx, h, o.key(), command, keys)
+		out, err = inst.cli.Arrange(ctx, h, asked, command, keys)
 		activity = command + " " + windowsText(keys)
 	case "raise_window":
-		out, err = inst.cli.Raise(ctx, h, o.key(), window)
+		out, err = inst.cli.Raise(ctx, h, asked, window)
 		activity = "raise window " + strconv.FormatUint(window, 10)
 	case "place_window":
-		out, err = inst.cli.Place(ctx, h, o.key(), window, float32(num("x")), float32(num("y")), float32(num("w")), float32(num("h")))
+		out, err = inst.cli.Place(ctx, h, asked, window, float32(num("x")), float32(num("y")), float32(num("w")), float32(num("h")))
 		activity = "place window " + strconv.FormatUint(window, 10)
 	}
 	if err != nil {

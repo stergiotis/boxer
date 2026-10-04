@@ -85,7 +85,7 @@ func TestRecorderWithoutABackend(t *testing.T) {
 	rec := NewRecorder(nil, "run-1", zerolog.Nop())
 	defer rec.Close()
 	assert.Equal(t, "run-1", rec.OriginOf("a", 3).Run, "the recorder stamps its run")
-	assert.NoError(t, rec.AgentGrant(time.Now(), Context{Delegation: option.Some(Delegation{Task: "t"})}, AgentGrant{Event: GrantEventEnded}))
+	assert.NoError(t, rec.AgentGrant(time.Now(), Context{Delegation: option.Some(Delegation{Task: "t"})}, option.None[Cause](), AgentGrant{Event: GrantEventEnded}))
 	assert.Error(t, rec.Admit())
 	_, refuse = rec.WriteAhead(context.Background())
 	require.Error(t, refuse)

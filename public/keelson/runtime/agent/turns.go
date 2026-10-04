@@ -9,6 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
 // Intervention (ADR-0269 §SD8): a task depends on what it read since its
@@ -181,6 +182,11 @@ func (inst *Service) turn(msg *app.Msg) (rep wireTurnReply) {
 			rep.Changes = append(rep.Changes, wireChange{Instance: k, Seq: e.Seq, Writer: writerKind(e.Writer, t.id),
 				Op: e.Op, Phase: e.Phase.String(), Reason: e.Reason, Resources: e.Resources, Revisions: e.Revisions})
 		}
+		if _, paused := t.pausedAt[k]; paused {
+			delete(t.pausedAt, k)
+			inst.grantEventAsked(trail.GrantEventResumed, "coordinator",
+				"window "+strconv.FormatUint(k, 10)+": the turn listed the changes", t, nil, req.wireCause)
+		}
 		t.turnSeq[k] = latest
 		t.readSinceTurn[k] = nil
 	}
@@ -197,9 +203,18 @@ func (inst *Service) hear(key uint64, e opengine.LogEntry) {
 		if t.revoked != "" || t.entries[key] == nil {
 			continue
 		}
+		pauses := inst.pausesTask(t, key, e)
 		evs = append(evs, wireEvent{V: wireVersion, Task: t.id, Instance: key, Seq: e.Seq,
 			Writer: writerKind(e.Writer, t.id), Op: e.Op, Phase: e.Phase.String(), Resource: e.Resources,
-			Pauses: inst.pausesTask(t, key, e)})
+			Pauses: pauses})
+		if _, already := t.pausedAt[key]; pauses && !already {
+			if t.pausedAt == nil {
+				t.pausedAt = make(map[uint64]uint64)
+			}
+			t.pausedAt[key] = e.Seq
+			inst.grantEvent(trail.GrantEventPaused, writerKind(e.Writer, t.id), "window "+strconv.FormatUint(key, 10)+": "+
+				strings.Join(e.Resources, ", ")+" changed (change "+strconv.FormatUint(e.Seq, 10)+")", t, nil)
+		}
 	}
 	inst.mu.Unlock()
 	for _, ev := range evs {

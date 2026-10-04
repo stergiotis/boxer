@@ -26,6 +26,11 @@ type wireHelpRequest struct {
 	Doc     string `json:"doc,omitempty"`
 	Section string `json:"section,omitempty"`
 	Search  string `json:"search,omitempty"`
+	// Key, Conversation and the cause name the model's tool call, when one
+	// asked: the read then leaves an action row (wireDescribeRequest).
+	Key          string `json:"key,omitempty"`
+	Conversation string `json:"conversation,omitempty"`
+	wireCause
 }
 
 type wireHelpSection struct {
@@ -72,6 +77,9 @@ type HelpRequest struct {
 	Doc     string
 	Section string
 	Search  string
+	// Asked names the model's tool call, when one asked: the read then
+	// leaves an action row.
+	Asked Asked
 }
 
 // HelpSection is one heading of a help document.
@@ -112,7 +120,8 @@ type HelpReply struct {
 // Help reads the apps' inline help.
 func (inst *Client) Help(ctx context.Context, r HelpRequest) (out HelpReply, err error) {
 	rep, err := roundTrip[wireHelpRequest, wireHelpReply](ctx, inst, SubjectHelp,
-		wireHelpRequest{V: wireVersion, App: r.App, Doc: r.Doc, Section: r.Section, Search: r.Search})
+		wireHelpRequest{V: wireVersion, App: r.App, Doc: r.Doc, Section: r.Section, Search: r.Search,
+			Key: r.Asked.Key, Conversation: r.Asked.Conversation, wireCause: r.Asked.wire()})
 	if err != nil {
 		return
 	}
@@ -163,9 +172,10 @@ func (inst *Service) helpBooks(appName string) (books []help.BookI) {
 	return
 }
 
-func (inst *Service) help(msg *app.Msg) (rep wireHelpReply) {
+func (inst *Service) help(msg *app.Msg) (rep wireHelpReply, req wireHelpRequest) {
 	rep.V = wireVersion
-	req, err := decode[wireHelpRequest](msg.Payload)
+	var err error
+	req, err = decode[wireHelpRequest](msg.Payload)
 	if err != nil {
 		rep.Reason = err.Error()
 		return

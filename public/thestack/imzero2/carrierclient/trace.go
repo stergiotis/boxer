@@ -564,6 +564,76 @@ func waitFor(c *Client, st Step, opts RunOptions) (err error) {
 	}
 }
 
+// typeInto focuses node, waits until the host reports it focused, sends the
+// text and, on a text input, waits until the value changed.
+//
+// Focus first: text goes to whatever egui thinks is focused, which without
+// this is whatever the previous step left. And wait for it: sent in the same
+// pass as the text, an AccessKit focus request lands after egui's TextEdit
+// has already passed over that pass's text events — an empty one handles them
+// before it registers for focus — so the text went nowhere and nothing said
+// so. Both checks turn that silent miss into an error.
+func typeInto(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
+	id := node.GetId()
+	if node.GetFlags()&FlagFocused == 0 {
+		if err = c.FocusNode(id); err != nil {
+			return err
+		}
+		if _, err = pollNode(c, id, opts.Timeout, func(n *TreeNode, snap *TreeSnapshot) bool {
+			return n.GetFlags()&FlagFocused != 0 || snap.GetFocus() == id
+		}); err != nil {
+			return eb.Build().Uint64("node", id).Stringer("timeout", opts.Timeout).
+				Errorf("focus did not move to the node: %w", err)
+		}
+	}
+	before := node.GetValue()
+	if err = c.TypeText(st.Text); err != nil {
+		return err
+	}
+	if st.Text == "" || !IsEditableRole(node.GetRole()) {
+		return nil
+	}
+	last, err := pollNode(c, id, opts.Timeout, func(n *TreeNode, _ *TreeSnapshot) bool {
+		return n.GetValue() != before
+	})
+	if err != nil {
+		return eb.Build().Uint64("node", id).Str("read", last.GetValue()).Str("typed", st.Text).
+			Errorf("the text did not reach the node: %w", err)
+	}
+	return nil
+}
+
+// pollNode fetches the tree until the node with id satisfies ok or timeout
+// passes, at least once after one pass. It returns the node as last read.
+func pollNode(c *Client, id uint64, timeout time.Duration, ok func(n *TreeNode, snap *TreeSnapshot) bool) (last *TreeNode, err error) {
+	deadline := time.Now().Add(timeout)
+	for attempt := 0; ; attempt++ {
+		if err = c.Idle(100 * time.Millisecond); err != nil {
+			return last, err
+		}
+		var snap *TreeSnapshot
+		if snap, err = c.Tree(timeout); err != nil {
+			return last, err
+		}
+		last = nil
+		for _, n := range snap.GetNodes() {
+			if n.GetId() == id {
+				last = n
+				break
+			}
+		}
+		if last != nil && ok(last, snap) {
+			return last, nil
+		}
+		if time.Now().After(deadline) {
+			if last == nil {
+				return nil, eb.Build().Int("attempts", attempt+1).Errorf("the node left the tree")
+			}
+			return last, eb.Build().Int("attempts", attempt+1).Errorf("still not so before the timeout")
+		}
+	}
+}
+
 // readInto polls the tree until the step's anchor resolves and its pattern
 // matches, then binds the pattern's named groups.
 func readInto(c *Client, st Step, opts RunOptions) (err error) {
@@ -694,12 +764,7 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		}
 		return c.MoveMouse(x, y)
 	case "type":
-		// Focus first: text goes to whatever egui thinks is focused, which
-		// without this is whatever the previous step left.
-		if err = c.FocusNode(node.GetId()); err != nil {
-			return err
-		}
-		return c.TypeText(st.Text)
+		return typeInto(c, st, node, opts)
 	case "set_value":
 		return c.SetNodeValue(node.GetId(), st.Text)
 	case "focus":
