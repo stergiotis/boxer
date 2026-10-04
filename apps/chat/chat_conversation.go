@@ -40,6 +40,9 @@ type entry struct {
 	// edited marks a message sent again after Edit, in place of the turn it
 	// replaced.
 	edited bool
+	// stopped marks a user message whose turn called tools and then ended
+	// without an answer: its calls happened, unlike a failed turn's.
+	stopped bool
 	// doc is the reply parsed as markdown, built on first draw.
 	doc *markdown.Doc
 }
@@ -302,6 +305,9 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 			f = failure{kind: "stopped", detail: res.stopped}
 		}
 		inst.fail(asked, res.stopped, f)
+		if asked >= 0 {
+			inst.entries[asked].stopped = true
+		}
 		return
 	}
 	inst.land(req, &res.final, nil, atMs)

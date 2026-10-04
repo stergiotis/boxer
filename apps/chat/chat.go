@@ -11,6 +11,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"github.com/rs/zerolog"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 )
 
 // App is one chat window.
@@ -56,6 +58,13 @@ type App struct {
 	questions bool
 
 	conv *conversation
+	// turnMachine is where the turn stands, observed and mirrored each
+	// frame (chat_turnstate.go); turnChip draws it in the bar.
+	turnMachine *fsmview.Machine[turnStateE]
+	turnChip    *fsmview.View[turnStateE]
+	// turnOffGraph counts the moves the declared graph could not reach.
+	turnOffGraph int
+	log          zerolog.Logger
 	// keep is the Keep toggle; a conversation takes it at its first send.
 	keep bool
 	// showSettings opens the Settings panel (chat_settings.go). perms are
@@ -125,7 +134,7 @@ type pendingTurn struct {
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
+	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
 		questions: QuestionsSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(),
 		opTools: OperationToolsSeed.Get()}
 	return
@@ -137,6 +146,8 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // a model is offered.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
+	inst.log = ctx.Log()
+	inst.turnChip = inst.newTurnChip()
 	bus := ctx.Bus()
 	if bus == nil {
 		inst.model, inst.answered = llm.Description{Reason: "this host gives the app no bus"}, true
@@ -194,6 +205,9 @@ func (inst *App) drain() {
 	inst.drainAction()
 	inst.drainTitle()
 	inst.syncAuthority()
+	// Mirrored at the end, whatever path drain leaves by: the state is what
+	// this frame's landing made of the turn.
+	defer inst.mirrorTurn()
 	if d, _, ok := inst.describe.TakeResult(); ok {
 		inst.model, inst.answered = *d, true
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {

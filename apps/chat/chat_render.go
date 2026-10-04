@@ -140,6 +140,7 @@ func (inst *App) renderBar() {
 		}
 		inst.renderSettingsToggle()
 		inst.renderStatsToggle()
+		inst.renderTurnState()
 	}
 	// A row of its own for what the conversation is: the controls above
 	// already fill a narrow window.

@@ -267,6 +267,40 @@ and Skip. The shape follows the question tool of Claude Code.
   question by its header and what was chosen, with the notes. The
   questions and answers are tool messages in the history like any other.
 
+### SD8 — The turn is a declared machine
+
+Where a turn stands was implied by several things at once — the pending
+turn, the job running it, the edit in progress, the question form — and
+"busy" looked the same whether the model was thinking or a dialog waited on
+the person. Two defects came from that: a cancelled turn that left the
+window busy for good, because a job back at idle with a turn still pending
+was a state nobody had named, and an action taken while the transcript was
+drawing.
+
+The turn's states are named: idle; the model, a tool, and "your turn" while
+a turn runs; answered, stopped, failed and cancelled for how the last one
+ended; editing while the last turn is taken back. The window does not drive
+the machine. Each frame observes the state from the pending turn, from what
+the coordinator's loop reports it is waiting on, and from the transcript,
+and mirrors it — the way play does for its query result. An observation the
+declared edges cannot reach is logged as a contradiction of the model.
+
+- **The person** reads it as a chip in the bar, which opens the graph and
+  the history of steps. "Your turn" covers a request for access, a question
+  form and a call waiting on a confirmation.
+- **An agent** that shares the window reads it through the app's operations
+  catalog ([ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) §SD2):
+  the state, and the machine. The catalog offers nothing that sends a
+  message or changes a setting.
+- **A scene** waits on the state instead of on a line of the transcript.
+
+Keep, Apps and Questions being fixed at the first message is data about a
+conversation, not a state of its turn, and the task's grant has the
+dispatcher's phases; neither is in this machine. A record of each turn's
+outcome on the trail
+([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) §SD10) is still deferred;
+the machine's steps are those events.
+
 ## Alternatives
 
 - **A question that ends the turn** (SD7), its answer starting the next.

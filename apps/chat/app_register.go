@@ -38,6 +38,8 @@ var manifest = app.Manifest{
 	Kind:         app.KindApp,
 	Surface:      app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 760, PreferredHeight: 720},
+	// The turn's state, for an agent that shares this window (ADR-0269).
+	Operations: ops.Catalog(),
 	Caps: slices.Concat(
 		llm.ClientCaps("chat: send the conversation to the host's model"),
 		llm.RetainCaps("chat: keep the conversation on boxer.facts where the host's BOXER_LLM_RETAIN allows (ADR-0264)"),

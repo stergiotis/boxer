@@ -80,6 +80,11 @@ type coordinator struct {
 	toldOnce bool
 	// ask carries ask_user's questions to the form and the answers back.
 	ask *asker
+	// stage is what the running tool loop is doing, and waiting how many of
+	// its calls wait on the person; the window reads both for the turn's
+	// state (chat_turnstate.go).
+	stage   stageE
+	waiting int
 
 	mu sync.Mutex
 	// apps and questions are what the conversation offers the model, fixed
@@ -150,6 +155,39 @@ func (inst *coordinator) stateOrNone() (task string, tainted bool, confined bool
 		return
 	}
 	return inst.state()
+}
+
+// setStage notes what the tool loop is doing.
+func (inst *coordinator) setStage(s stageE) {
+	inst.mu.Lock()
+	inst.stage = s
+	inst.mu.Unlock()
+}
+
+// awaitPerson marks a call as waiting on the person until done is called.
+func (inst *coordinator) awaitPerson() (done func()) {
+	inst.mu.Lock()
+	inst.waiting++
+	inst.mu.Unlock()
+	return func() {
+		inst.mu.Lock()
+		inst.waiting--
+		inst.mu.Unlock()
+	}
+}
+
+// stageNow is what the tool loop waits on: the person while a question form
+// is open or a call waits on their decision, else the stage it reported.
+func (inst *coordinator) stageNow() (s stageE) {
+	if inst.ask != nil && inst.ask.current() != nil {
+		return stagePerson
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.waiting > 0 {
+		return stagePerson
+	}
+	return inst.stage
 }
 
 // state is what the bar shows.
@@ -522,6 +560,9 @@ func (inst *coordinator) requestAccess(ctx context.Context, plan string, args ma
 			}
 		}
 	}
+	// The request waits for the person's decision in the host's dialog.
+	done := inst.awaitPerson()
+	defer done()
 	g, err := inst.cli.Request(ctx, req)
 	if err != nil && req.Handle != "" && agent.TaskGone(err.Error()) && inst.dropGrant() {
 		// A widening of a task that ended asks for a new task instead.
@@ -679,7 +720,15 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 		return "error: " + err.Error(), where + ": " + err.Error()
 	}
 	deadline := time.Now().Add(callWait)
+	personDone := func() {}
+	defer func() { personDone() }()
 	for !out.Final() && time.Now().Before(deadline) && ctx.Err() == nil {
+		if out.Held || out.Phase == "proposed" {
+			// The call waits on the person: a widening to decide, or a
+			// proposal to accept.
+			personDone()
+			personDone = inst.awaitPerson()
+		}
 		out, err = inst.cli.Status(ctx, h, key, agent.MaxStatusWait)
 		if err != nil {
 			return "error: " + err.Error(), where + ": " + err.Error()
@@ -776,6 +825,7 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			r.Messages = append(slices.Clip(msgs), openaichat.Message{Role: openaichat.ChatRoleSystem, Content: lastRoundNote})
 			r.ToolChoice = "none"
 		}
+		coord.setStage(stageModel)
 		var res llm.Response
 		res, err = cli.Complete(ctx, r)
 		if err != nil {
@@ -795,6 +845,7 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			if progress != nil {
 				progress(round, coord.peekTitle(tc))
 			}
+			coord.setStage(stageTool)
 			content, activity := coord.exec(ctx, toolOrigin{turn: req.Turn, modelCall: res.CallId, index: i}, tc)
 			out.activity = append(out.activity, activity)
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})
