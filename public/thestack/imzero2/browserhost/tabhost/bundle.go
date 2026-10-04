@@ -83,7 +83,7 @@ func bundle(ctx *cli.Context) (err error) {
 	if err != nil {
 		return
 	}
-	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm")); err != nil {
+	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm"), true); err != nil {
 		return
 	}
 	if err = placeHost(ctx.String("host"), ctx.String("hostFrom"), boxerDir, mainDir, filepath.Join(out, "imzero2_browser.wasm")); err != nil {
@@ -128,9 +128,9 @@ func goListDir(subject string, args ...string) (dir string, err error) {
 }
 
 // buildGoModule builds pkg as a wasip1 reactor with the shipped-binary flags,
-// the module's own tags and its go.mod toolchain, and shrinks it with
-// wasm-opt when that is installed.
-func buildGoModule(mainDir string, pkg string, dst string) (err error) {
+// the module's own tags and its go.mod toolchain, and, with optimize, shrinks
+// it with wasm-opt when that is installed.
+func buildGoModule(mainDir string, pkg string, dst string, optimize bool) (err error) {
 	args := append([]string{"build"}, goBuildFlags...)
 	args = append(args, "-buildmode=c-shared", "-ldflags=-s -w", "-tags", readTags(mainDir), "-o", dst, pkg)
 	env := append(append(os.Environ(), goBuildEnv...), "GOOS=wasip1", "GOARCH=wasm") //boxer:lint disable=CS011 reason="forwards the ambient process environment into the go build of the tab module"
@@ -148,7 +148,7 @@ func buildGoModule(mainDir string, pkg string, dst string) (err error) {
 	if err = cmd.Run(); err != nil {
 		return eb.Build().Str("pkg", pkg).Errorf("bundle: go build: %w", err)
 	}
-	if _, available := extbin.WasmOpt.Resolve(); available {
+	if _, available := extbin.WasmOpt.Resolve(); optimize && available {
 		opt := dst + ".opt"
 		if woErr := extbin.WasmOpt.Run(context.Background(), extbin.Opts{}, "-Oz", "--enable-bulk-memory", "--enable-sign-ext", "--enable-mutable-globals", "--enable-nontrapping-float-to-int", dst, "-o", opt); woErr != nil {
 			log.Warn().Err(woErr).Msg("bundle: wasm-opt failed; the unoptimised module stands")

@@ -98,7 +98,7 @@ scripts/ci/lint.sh
 ```
 
 `gofmt` and `go vet` run first, from the wrapper — they have to work on a tree
-too broken to build the binary the gate lives in. Then five steps from the
+too broken to build the binary the gate lives in. Then six steps from the
 pinned boxer:
 
 ```
@@ -107,7 +107,12 @@ doclint       pass     0.01s
 entry-points  pass     0.11s
 file-naming   pass     0.00s
 codelint      pass     0.11s
+tab           skip     0.00s
 ```
+
+`tab` checks a repository's browser-tab binaries
+([ADR-0278](../adr/0278-tab-mode-for-downstream-apps.md)) and is skipped until
+the gate is given one with `--tab-pkg`.
 
 ## 4. Accept the adoption ADR
 

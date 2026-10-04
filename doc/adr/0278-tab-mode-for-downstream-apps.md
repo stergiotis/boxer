@@ -192,12 +192,22 @@ call does but not what crosses, need not.
 
 ### SD7 — A consumer can see what its apps get in a tab
 
-Two checks, both runnable by a consumer through `gov`:
+Two checks, both run by the gate's `tab` step for each package named with
+`--tab-pkg` (a repository without a tab binary gets a skip):
 
-- **compile gate** — every app package a tab binary links builds for wasip1;
+- **compile gate** — the tab binary builds for wasip1 as `bundle` builds it,
+  which compiles exactly the apps it links, those it reaches transitively
+  included;
 - **tab report** — for each linked app, the bus subjects its manifest declares
-  that the tab's configured services do not serve. The report is information,
-  not a failure: an app may degrade by design.
+  that the tab's configured services do not serve, with the manifest's reason.
+  Apps register at initialisation, so only the binary knows what it links: it
+  carries a `tabreport` subcommand and the step runs it. A subject the tab
+  makes unnecessary rather than serves — the basemap fetching its own tiles —
+  is listed as answered in the tab. The report is information, not a failure:
+  an app may degrade by design.
+
+Adding the step changes the gate's published step list (ADR-0179); it skips
+unless configured, so a consumer without a tab sees one more `skip` line.
 
 ### SD8 — Adoption is documented, not generated
 
@@ -214,7 +224,7 @@ commands come with the module pin.
   host, SD6; the shell script reduced to a call.
 - **M3 — The content-addressed host.** ✓ SD5: digest file, CI workflow, fetch
   and cache.
-- **M4 — Gates.** SD7.
+- **M4 — Gates.** ✓ SD7.
 - **M5 — Adoption text.** SD8, verified against a consumer repository.
 
 ## Surfaces — Tier 1
@@ -237,7 +247,8 @@ commands come with the module pin.
   per SD4.
 - `.github/workflows` — a workflow that builds and publishes the browser host
   (SD5).
-- `gov` — the compile gate and the tab report (SD7).
+- `gov gate` — a `tab` step and its `--tab-pkg` option (SD7); boxer's own lint
+  runs it on `imzero2tab`.
 
 ## Alternatives
 

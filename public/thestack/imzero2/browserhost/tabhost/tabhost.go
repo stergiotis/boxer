@@ -2,7 +2,8 @@
 // proposed): the program that mounts one registered keelson app on an
 // in-process bus, runs it as a wasip1 reactor inside the page's worker
 // (ADR-0263), runs the same app natively against a client binary over the
-// pipe, builds a bundle and serves one. A tab binary is a `package main`
+// pipe, builds a bundle and serves one, and reports what its apps declare
+// that a tab does not serve. A tab binary is a `package main`
 // that imports the apps it may open and hands its cli.App to [New]:
 //
 //	var tab = tabhost.New(tabhost.Options{DefaultApp: "example.com/acme/apps/dashboard"},
@@ -87,7 +88,7 @@ func New(opts Options, cliApp *cli.App) (inst *Program) {
 			&cli.BoolFlag{Name: "exitOnReport", Usage: "end after the first POST /report (the trial's browser arms)"},
 		},
 		Action: serve,
-	}, bundleCommand(), hostDigestCommand())
+	}, bundleCommand(), hostDigestCommand(), reportCommand(inst))
 	registerReactor(inst)
 	return
 }

@@ -153,8 +153,17 @@ func TestValidateStepNamesE(t *testing.T) {
 // consumers from copying; a change to it is a change to the contract.
 func TestDefaultStepsIsThePublishedList(t *testing.T) {
 	assert.Equal(t,
-		[]string{"buildtags", "doclint", "entry-points", "file-naming", "codelint"},
+		[]string{"buildtags", "doclint", "entry-points", "file-naming", "codelint", "tab"},
 		stepNames(DefaultSteps()))
+}
+
+// A repository with no tab binary configured is not asked to have one.
+func TestStepTabSkipsWithoutPackages(t *testing.T) {
+	var b strings.Builder
+	status, err := NewStepTab().Run(context.Background(), Config{}, &b)
+	require.NoError(t, err)
+	assert.Equal(t, StatusSkip, status)
+	assert.Contains(t, b.String(), "--tab-pkg")
 }
 
 func TestStepBuildTagsReportsAMissingManifest(t *testing.T) {
