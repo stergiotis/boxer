@@ -458,6 +458,18 @@ spent them reasoning. The reasoning text returns on `CallError.Reasoning`
 for inspection. An early end that does carry text is still an answer marked
 `Incomplete`, as before.
 
+### 2026-10-04 — the call record is a trail row
+
+The `llmCall` row of §SD4 is written through the audit trail's recorder
+([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md)): who asked is the row's `Origin` component — run, app and
+window — and the conversation, turn and round a request names are recorded on
+either subject. Each call also writes a row per new message, without text,
+before the request is sent to the provider; `BOXER_TRAIL_REQUIRED` decides
+whether a call proceeds when that write fails. The row gains the provider's
+completion id and reported model, a digest of the tools offered, and the token
+ceiling. `keelson('llm_calls')` shows the same, and whether a call's rows are
+durable. `llm/llmfacts` is gone; the store is `runtime/trail`.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

@@ -140,8 +140,10 @@ its own (SD5).
   below `durable` is visible rather than silent; the Keep badge's hover
   keeps it after.
 - **Keep this conversation**, a toggle beside New conversation, on by
-  default. Off, the conversation's turns go on `llm.complete` and only
-  the counts are recorded — the one "nothing kept" choice a user has,
+  default. Off, the conversation's turns go on `llm.complete` and no
+  text is recorded: the audit rows of [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — counts, sizes,
+  digests, the conversation and turn ids — are written either way. It is
+  the one "no text kept" choice a user has,
   the temporary chat of the products surveyed. It is fixed at the first
   send, so a conversation is kept whole or not at all.
 - **The context used**: the last call's input and output tokens against
@@ -280,7 +282,7 @@ through the host:
   the conversation opened in mdedit.
 - **What would fail.** A reply appended differently from how it came
   back makes every turn keep its whole history; the fake-provider test
-  pins it by checking `RetainedFrom` on the second call.
+  pins it by checking `MessagesFrom` on the second call.
 
 ## Status
 

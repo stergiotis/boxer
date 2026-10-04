@@ -397,6 +397,24 @@ Accepted 2026-08-27.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-10-04 — the generated kinds, and the plain channel
+
+[ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) extends §SD1 to the kinds written by generated stores — model
+calls and their messages, agent actions, grant events, egress fetches — which
+had grown app and instance memberships of their own and carried no run. They
+now carry `(run, app, instance)` as the `Origin` component, on the
+memberships §SD1 names.
+
+It also moves `runtimeRun`, `runtimeApp` and `runtimeLaunchCaller` from the
+mixed channel to the plain low-card-ref channel in the hand-written writers
+(§SD3) and their readers, as §SD5 already had them on `boxer.persiststate`.
+The parameter lane held the same bytes as the value and kept those rows from
+being read as a component. Rows written before the move are not found by the
+moved readers; ADR-0277's Migration says what a deployment does about them.
+The runtime-start row gains a build id.
+
 ## References
 
 - [ADR-0026 — app runtime and capability subjects](0026-app-runtime-and-capability-subjects.md) — §SD6 defines the facts vocabulary this extends, §SD4 the NATS swap the deferral waits on.

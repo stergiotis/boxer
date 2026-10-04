@@ -968,6 +968,29 @@ of objects dropped bare strings the same way. Now:
   an item that is neither instead of dropping it, says after a grant what
   `open_window` may open, and gives a refused `open_window` a `next`.
 
+### 2026-10-04 — the action record on the trail, and grant events
+
+§SD9's action record is written through the audit trail's recorder
+([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md)). A row now carries what §SD9 said it would and the first
+build left out: the conversation and turn, and the model call whose reply
+asked for the call, as the `Conversation` and `Cause` components; task, epoch
+and the dispatcher's call id are its `Delegation`, and the coordinator window
+its `Origin`. The act chain and the rule stay unrecorded.
+
+- **Keys.** A coordinator keys a model's tool call by the model call id and
+  the tool call's index, not by the provider's id (§SD1's "a repeat returns
+  the first outcome" then cannot merge two calls whose provider ids collide).
+- **Grants.** Requests, approvals, refusals, widenings, confirmations of
+  proposals, mode changes and a task's end are `agentGrant` rows; §SD6's
+  grant table stays the current run's view.
+- **On behalf of.** The context a callee receives gains the dispatcher's call
+  id; play stamps task, epoch and call on the queries an agent's input runs,
+  and the model and egress services record them.
+- **Launches.** A window a task opens, or is refused, leaves an action row
+  (`open_window`) naming the window.
+
+`agent/agentfacts` is gone; the store is `runtime/trail`.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

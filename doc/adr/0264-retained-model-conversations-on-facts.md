@@ -117,10 +117,14 @@ Nothing is updated in place.
 
 ### SD3 — One row per message, only what is new
 
-A new kind, `llmMessage`, one row per message, written by the service
-beside the `llmCall` row: call id, conversation, app, sensitivity, its
-position in the conversation, role, content, tool-call id, the reply's
-tool calls and reasoning. Images are kept as hash and size, not bytes.
+The text is a component, `LlmMessageBody` — content, reasoning, the
+reply's tool calls with their arguments — added to a message's audit row.
+That row, `llmMessage`, is written for every call whether or not anything
+is kept ([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) §SD2): call id, position in the conversation, role,
+size, digest, sensitivity, tool-call ids. Keeping a conversation adds the
+body to the same row; it writes no row of its own. App and conversation are
+the row's `Origin` and `Conversation` components. Images are kept as hash
+and size, not bytes.
 Shapes stay within the generated lane
 ([facts-bound record stores](../explanation/facts-bound-record-stores.md)):
 scalars, `unit`, string arrays; content in a text section, the
@@ -181,11 +185,11 @@ the kept rows are not its state.
 
 Keeping the read outside the capability is what makes one property
 checkable: an app does not rely on the full messages. Because the text
-sits on its own kind, apart from the `llmCall` counts, it can be
-ditched with one statement — a lightweight delete of the `llmMessage`
-rows, all of them or one app's — and the app run again. If it behaves
-the same, it did not rely on them; the counts, the audit and every
-other kind are untouched. The ditch is a verification device, not a
+is the only component of a message row on the text section, it can be
+ditched with one statement — a mutation that empties that section on
+message rows, all of them or one app's — and the app run again. If it
+behaves the same, it did not rely on it; the message rows keep their
+audit columns, and the counts and every other kind are untouched. The ditch is a verification device, not a
 purge: it makes no claim about sensitivity or retention (SD7).
 
 An app that does read the record back — a chat resuming a conversation

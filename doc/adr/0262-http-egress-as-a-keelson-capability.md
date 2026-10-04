@@ -149,10 +149,12 @@ The service keeps a bounded in-process record of calls — app, instance,
 destination, purpose, method, URL without its query (a tile server's
 key rides there), status, bytes, latency, sensitivity, the refusal or
 error — served as `keelson('http_calls')`. The bus audits
-the request as well. A durable kind on `boxer.facts` is deferred: a
-screenful of tiles is dozens of rows, and whether the durable shape is a
-row per call or a per-destination rollup is a decision for the first
-reader who needs it.
+the request as well. Each call also lands on `boxer.facts` as an
+`httpFetch` row of the audit trail ([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) §SD2), with the window
+that asked and, for agent-caused work, the task and the dispatcher's call.
+A screenful of tiles is dozens of rows, so they are flushed behind the
+fetches rather than ahead of them; a per-destination rollup is a reader's
+query over those rows.
 
 ### SD6 — portolan fetches through the bus
 
