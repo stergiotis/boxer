@@ -1122,6 +1122,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.pendingPlaces = nil
 	inst.mu.Unlock()
 
+	sm := c.CurrentApplicationState.StateManager
+	inst.pixelFrameBegin(sm)
+	defer inst.pixelFrameEnd()
 	if len(snapshot) == 0 {
 		// renderEmptyState needs a ui scope — egui's interpret_outer
 		// starts each frame with `u = &mut None`; after the carousel's
@@ -1141,7 +1144,6 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// c.Window is a top-level egui::Window; it does not need a parent
 	// ui scope (it uses egui::Context directly), so no PanelCentral
 	// wrap here.
-	sm := c.CurrentApplicationState.StateManager
 	// Decide the shell's active window from last frame's stacking
 	// reports, then stamp every window's frame context below so each
 	// app's Frame can gate process-global input (app.WindowFocusI) on
@@ -1161,6 +1163,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	inst.applyPlaces(places, snapshot)
 	inst.snapshotGeometry(snapshot)
 	for _, w := range snapshot {
+		// A pixel capture replays a window's emission, from its placement to
+		// its body's end (ADR-0281 §SD4).
+		spanBegin := inst.pixelRecordingPosition()
 		title := w.manifest.WindowTitle()
 		if title == "" {
 			title = string(w.manifest.Id)
@@ -1234,6 +1239,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 			}
 			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes, inst.opsListener)
 		}
+		inst.pixelWindowSpan(w.key, spanBegin, inst.pixelRecordingPosition())
 	}
 	// Render the SVG-save picker once per Frame. It draws its own
 	// egui::Window so it sits at top level; Render returns
@@ -1243,13 +1249,6 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// the ExportSvgWindow opcode. The SvgExportPlugin drains it in
 	// on_end_pass this same frame, so the captured shapes match what
 	// the user just saw.
-	{
-		open := make(map[WindowKeyT]bool, len(snapshot))
-		for _, w := range snapshot {
-			open[w.key] = !w.closeReq
-		}
-		inst.runCaptures(ids, open)
-	}
 	if opsBusy(snapshot) {
 		c.RequestRepaintAfter(opsRepaintIntervalSecs)
 	}

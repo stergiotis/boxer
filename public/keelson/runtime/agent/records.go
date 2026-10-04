@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
@@ -156,6 +157,51 @@ func (inst *Service) persist(r ActionRecord) {
 	c, cause, row := TrailRowOf(inst.cfg.Trail, r)
 	if err := inst.cfg.Trail.AgentAction(r.At, c, cause, row); err != nil {
 		inst.log.Warn().Err(err).Str("task", r.Task).Str("key", r.Key).Msg("agent: buffer action row")
+		return
+	}
+	inst.cfg.Trail.FlushSoon()
+}
+
+// captureReleaseCeiling bounds how long a reader still mid-read keeps an
+// ended task's capture open.
+const captureReleaseCeiling = 30 * time.Second
+
+// captureRec is what a capture's record names beyond its call.
+type captureRec struct {
+	format   capture.FormatE
+	windows  []uint64
+	recorded bool
+}
+
+// recordCapture writes a capture's row on the trail (ADR-0281 §SD6), once:
+// when the capture service denies it, or when it reaches its final phase.
+func (inst *Service) recordCapture(t *task, rec *callRec, d capture.Decision, info capture.Info, phase opwire.PhaseE,
+	reason string, confined bool) {
+	if rec.capture == nil || rec.capture.recorded {
+		return
+	}
+	rec.capture.recorded = true
+	r := ActionRecord{At: time.Now(), Key: rec.key, CallId: rec.callId, Instance: rec.instance, App: rec.app,
+		Turn: rec.turn, Actor: rec.actor, ActorInstance: rec.actorInstance}
+	if t != nil {
+		// The caller holds mu.
+		r.Task, r.Actor, r.ActorInstance, r.Epoch, r.Conversation = t.id, t.actor, t.actorInstance, t.epoch, t.conversation
+	}
+	c, _, _ := TrailRowOf(inst.cfg.Trail, r)
+	decision := "deny"
+	if d.Effect == capture.EffectPermit {
+		decision = "permit"
+	}
+	row := trail.AgentCapture{
+		Format: string(rec.capture.format), Windows: rec.capture.windows, Decision: decision, Policy: d.Policy,
+		Obligations: info.Obligations, SpansDigest: info.SpansDigest, Digest: info.Digest, Bytes: uint64(max(info.Bytes, 0)),
+		Phase: phase.String(), Confined: confined,
+	}
+	if reason != "" {
+		row.Reason = []string{reason}
+	}
+	if err := inst.cfg.Trail.AgentCapture(r.At, c, row); err != nil {
+		inst.log.Warn().Err(err).Str("task", r.Task).Str("key", r.Key).Msg("agent: buffer capture row")
 		return
 	}
 	inst.cfg.Trail.FlushSoon()

@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-10-04T18:58:02Z
+generated-at: 2026-10-04T20:01:00Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -255,7 +255,7 @@ generated-at: 2026-10-04T18:58:02Z
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
-| `BOXER_ADHOC_DIR` | string | — | — |  | directory whose filesystem holds the unnamed sealed files of ad-hoc datasets and staged recordings (ADR-0240 §SD1); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs) |
+| `BOXER_ADHOC_DIR` | string | — | — |  | directory whose filesystem holds the unnamed sealed files of ad-hoc datasets, staged recordings and window captures (ADR-0240 §SD1, ADR-0281); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs) |
 | `BOXER_AGENT_COORDINATORS` | string | — | — |  | comma-separated app ids or subject aliases allowed to ask the person for an agent task grant (ADR-0269), e.g. chat,agentconsole; empty allows none |
 | `BOXER_AUDIO_PEAKS_CACHE_DIR` | path | — | — |  | directory holding cached audio peaks pyramids (ADR-0208 §SD4); empty uses <user cache dir>/boxer/audio-peaks |
 | `BOXER_COMPONENT` | string | — | — |  | component identity mark, injected by the supervisor (unit Environment= line, launcher script) and inherited by children; read by the topology layer (ADR-0126); empty = unmarked |

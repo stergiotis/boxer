@@ -270,7 +270,8 @@ pub fn init_common_with_fonts<'a, R: std::io::BufRead, W: std::io::Write>(
     // `cx.data_mut(...)` survives the discarded pass, so subsequent FFFI
     // frames render correctly without needing multipass at all.
     ctx.options_mut(|o| o.max_passes = std::num::NonZeroUsize::new(1).expect("1 is non-zero"));
-    let fffi = imzero2::interpreter::ImZeroFffi::new(r, w);
+    let mut fffi = imzero2::interpreter::ImZeroFffi::new(r, w);
+    fffi.set_capture_fonts(font_resolver.clone());
     // SVG export plugin — registered once at host init. Drains
     // ImZeroFffi::export_state during each on_end_pass; cheap when no
     // export is pending. See imzero2::svgexport for the visitor.

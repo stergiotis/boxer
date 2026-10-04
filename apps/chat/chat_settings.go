@@ -153,13 +153,22 @@ const (
 
 	tipSettings = "This chat's options, and what its model may do in your windows"
 	tipScale    = "What the model may do. The hollow pointer is the most these settings let it ask for; the filled one is what the running task was granted. Settings has the detail."
-	tipAllow    = "The most powerful thing the model may do in a window you share. The host refuses anything above it, whatever a task was granted."
-	tipChanges  = "Ask first: every change waits as a proposal you accept or reject in the window. Apply directly: changes land as the model makes them."
-	tipLaunch   = "Let the model ask to open windows of apps. You still decide which, in the host's dialog."
-	tipDesktop  = "Let the model ask to arrange every window on the desktop."
-	tipReach    = "How far the model's work may reach beyond the windows: this host's own tables and git repositories, the data endpoints the apps query, or the network."
+	tipAllow    = "The most the model may do in a window you share. The host refuses anything above it, whatever a task was granted.\n" +
+		"Read: read what windows hold and show.\n" +
+		"View: also change what a window shows — a selection, a camera.\n" +
+		"Edit: also change what it holds — text, parameters — and write the artefact.\n" +
+		"Run: also run against a data source.\n" +
+		"Outside: also act outside the app — publish, export — confirmed by you each time."
+	tipChanges = "Ask first: every change waits as a proposal you accept or reject — in the window it changes, or in the Artefact panel. Apply directly: changes land as the model makes them. Reads never wait, and a change outside the app is confirmed each time either way."
+	tipLaunch  = "Let the model ask to open windows of apps. You still decide which, in the host's dialog."
+	tipDesktop = "Let the model ask to arrange every window on the desktop."
+	tipReach   = "How far the model's work may reach beyond the windows. The task's grant names each place, and you approve the list.\n" +
+		"This host: reads of this host's keelson() tables, one table at a time — apps, windows, desktop, app_state and the like, and datasets the apps publish — and its local git repositories.\n" +
+		"Data endpoints: also the ClickHouse servers the apps query; At most decides whether the work only reads them.\n" +
+		"Network: also HTTP fetches to the destinations this host declares, and calls to a model service. Anything the host does not recognise counts as network."
 	tipPace     = "At a pace I can follow: the host spaces the model's changes — an edit, a run, a window opened or moved — so you can see each one and stop the task. As fast as it can: they land as the model makes them, faster than you can read or intervene."
 	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact panel. At most and Changes above decide whether it may write and whether each change waits for you."
+	tipScore    = "may is what these settings allow, now what the running task was granted, each 0–100: the level picks the band, and what else is allowed — listed below — moves it within the band."
 	tipTyped    = "Offer each operation of the task's windows to the model as a tool of its own, instead of one call_operation tool. More tools in every request; some models call them more reliably."
 )
 
@@ -324,8 +333,10 @@ func (inst *App) renderMaySection() {
 	may, now := inst.scores()
 	bandscale.Render(bandscale.Input{Ids: inst.ids, ScopeKey: "scale", Bands: ladder, Markers: markers(may, now),
 		Width: settingsPanelW - 36})
-	c.Label("may " + strconv.Itoa(may.Value()) + " · " + may.Level.String() + "   now " + strconv.Itoa(now.Value()) + " · " + now.Level.String()).
-		Selectable(false).Send()
+	for range c.HoverText(tipScore).KeepIter() {
+		c.Label("may " + strconv.Itoa(may.Value()) + " · " + may.Level.String() + "   now " + strconv.Itoa(now.Value()) + " · " + now.Level.String()).
+			Selectable(false).Send()
+	}
 	if len(may.Factors) > 0 {
 		weak("may, within its level: " + strings.Join(may.Factors, " · "))
 	}

@@ -475,6 +475,15 @@ func (inst *Service) endTaskAsked(t *task, why string, by string, asked wireCaus
 	}
 	t.revoked = why
 	inst.grantEventAsked(trail.GrantEventEnded, by, why, t, nil, asked)
+	// The task's captures go with it: each sealed artifact's key is dropped
+	// once its last reader leaves (ADR-0281 §SD6).
+	if inst.captures != nil {
+		for _, rec := range t.keys {
+			if rec.job != "" {
+				inst.captures.Release(rec.job, captureReleaseCeiling)
+			}
+		}
+	}
 	t.epoch++
 	queued := make(map[uint64][]string)
 	for k := range t.entries {

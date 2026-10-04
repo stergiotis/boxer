@@ -170,7 +170,10 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 			inst.describe()
 		}
 		if c.Button(inst.ids.PrepareStr("capture"), c.Atoms().Text("Capture").Keep()).SendResp().HasPrimaryClicked() {
-			inst.capture()
+			inst.capture(agent.CaptureFormatSvg)
+		}
+		if c.Button(inst.ids.PrepareStr("capture-png"), c.Atoms().Text("Capture PNG").Keep()).SendResp().HasPrimaryClicked() {
+			inst.capture(agent.CaptureFormatPng)
 		}
 		if c.Button(inst.ids.PrepareStr("turn"), c.Atoms().Text("Turn").Keep()).SendResp().HasPrimaryClicked() {
 			inst.turn()
@@ -379,7 +382,7 @@ func (inst *App) call() {
 	})
 }
 
-func (inst *App) capture() {
+func (inst *App) capture(format string) {
 	inst.mu.Lock()
 	handle := inst.grant.Handle
 	inst.mu.Unlock()
@@ -388,9 +391,9 @@ func (inst *App) capture() {
 		inst.setNote("a capture needs a grant and a window key")
 		return
 	}
-	r := inst.newRow("capture")
+	r := inst.newRow("capture " + format)
 	inst.spawn(func(ctx context.Context) {
-		out, err := inst.cli.Capture(ctx, handle, key, agent.Asked{Key: r.key})
+		out, err := inst.cli.CaptureAs(ctx, handle, key, agent.Asked{Key: r.key}, format)
 		if err != nil {
 			inst.update(r, agent.Outcome{Phase: "error", Reason: err.Error()})
 			return
@@ -434,5 +437,8 @@ func (inst *App) follow(ctx context.Context, handle string, r *row, out agent.Ou
 		r.result = res.Text
 	default:
 		r.result = res.MediaType + " " + res.Path
+		if len(res.Data) > 0 {
+			r.result = res.MediaType + " · " + strconv.Itoa(len(res.Data)) + " bytes, sealed"
+		}
 	}
 }

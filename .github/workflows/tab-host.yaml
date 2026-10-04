@@ -8,8 +8,19 @@ name: tab-host
 # rebuilt from what is already published plus the new file, and a run that
 # cannot read back everything already published fails instead of deploying a
 # smaller site.
+#
+# A manual run can also build the demo (ADR-0278 Update 2026-10-04): the
+# imzero2tabdemo tab binary — apps that need no data and no host service, so
+# the published page reaches no third-party endpoint — bundled with this
+# commit's host and published under demo/. A run that does not build it
+# carries the published demo over unchanged, as it does the hosts.
 on:
   workflow_dispatch:
+    inputs:
+      demo:
+        description: 'Also build and publish the demo under demo/'
+        type: boolean
+        default: true
   push:
     branches:
       - main
@@ -27,6 +38,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  ROOT: https://stergiotis.github.io/boxer
   SITE: https://stergiotis.github.io/boxer/tabhost
   SUM: public/thestack/imzero2/browserhost/tabhost/browserhost.sum
   HOST: rust/imzero2/target/browser/wasm32-unknown-unknown/release/imzero2_browser.wasm
@@ -59,6 +71,24 @@ jobs:
             echo "::error file=$SUM::the browser host this tree builds ($got) is not the one browserhost.sum records ($want). A commit changed rust/imzero2 (or regenerated the bindings) without refreshing the file; the build is reproducible, so this is the tree moving, not CI. Run 'go run ./public/thestack/cmd/imzero2tab hostdigest --write' on the commit being pushed and commit the file (AGENTS.md, Browser host digest)."
             exit 1
           fi
+      - name: Set up Go
+        if: inputs.demo == true
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache-dependency-path: 'go.sum'
+      - name: Build the demo
+        if: inputs.demo == true
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends binaryen
+          # egui's built-in faces plus the vendored icon font: no system fonts
+          # whose set and licences depend on the runner.
+          mkdir -p demo-fonts
+          cp rust/imzero2/assets/fonts/phosphor/Phosphor.ttf demo-fonts/phosphor.ttf
+          go run ./public/thestack/cmd/imzero2tabdemo bundle --out demo --host "$HOST" --fonts demo-fonts --withAssets
+          cp rust/imzero2/assets/fonts/phosphor/LICENSE demo/fonts/phosphor-LICENSE.txt
       - name: Assemble the site
         id: site
         run: |
@@ -71,8 +101,12 @@ jobs:
             404) : > site/tabhost/index.txt; echo "nothing published yet" ;;
             *) echo "::error::reading $SITE/index.txt answered $code; not deploying a site that could drop published hosts"; exit 1 ;;
           esac
+          published=false
           if grep -qx "$got" site/tabhost/index.txt; then
             echo "$got is published already"
+            published=true
+          fi
+          if [ "$published" = true ] && [ ! -d demo ]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -84,14 +118,42 @@ jobs:
           cp "$HOST" "site/tabhost/$got.wasm"
           { cat site/tabhost/index.txt; echo "$got"; } | grep -v '^$' | sort -u > site/tabhost/index.new
           mv site/tabhost/index.new site/tabhost/index.txt
-          cat > site/index.html <<'HTML'
-          <!doctype html>
-          <meta charset="utf-8">
-          <title>boxer build artifacts</title>
-          <p>Build artifacts of <a href="https://github.com/stergiotis/boxer">boxer</a>, addressed by content.
-          <code>tabhost/&lt;sha256&gt;.wasm</code> is the Rust browser host a browser tab runs (ADR-0278);
-          <a href="tabhost/index.txt">tabhost/index.txt</a> lists the published digests.</p>
-          HTML
+          # The demo: this run's build, or the published one carried over.
+          if [ -d demo ]; then
+            cp -r demo site/demo
+          else
+            code=$(curl -sS -o demo-files.txt -w '%{http_code}' "$ROOT/demo/files.txt" || true)
+            case "$code" in
+              200)
+                while read -r f; do
+                  [ -n "$f" ] || continue
+                  mkdir -p "site/demo/$(dirname "$f")"
+                  curl -fsS -o "site/demo/$f" "$ROOT/demo/$f"
+                done < demo-files.txt ;;
+              404) echo "no demo published" ;;
+              *) echo "::error::reading $ROOT/demo/files.txt answered $code; not deploying a site that could drop the demo"; exit 1 ;;
+            esac
+          fi
+          if [ -d site/demo ]; then
+            (cd site/demo && find . -type f ! -name files.txt | sed 's|^\./||' | sort > files.txt)
+          fi
+          python3 - <<'PY'
+          import os
+          from urllib.parse import quote
+          def link(app):
+              return "demo/index.html?worker=" + quote("worker.mjs?app=github.com/stergiotis/boxer/apps/" + app, safe="")
+          demo = ""
+          if os.path.isdir("site/demo"):
+              demo = ("<h2>Demo</h2><p>Two boxer apps running in this tab as WebAssembly, beside the Rust browser host "
+                      "(ADR-0263). The first visit downloads about 10 MB. "
+                      f'<a href="{link("splashscreen")}">splashscreen</a> (build, version, licence notices) · '
+                      f'<a href="{link("fibscope")}">fibscope</a> (fibonacci-tagged identifiers).</p>')
+          open("site/index.html", "w").write(
+              '<!doctype html><meta charset="utf-8"><title>boxer</title>'
+              '<p>Build artifacts of <a href="https://github.com/stergiotis/boxer">boxer</a>, addressed by content. '
+              "<code>tabhost/&lt;sha256&gt;.wasm</code> is the Rust browser host a browser tab runs (ADR-0278); "
+              '<a href="tabhost/index.txt">tabhost/index.txt</a> lists the published digests.</p>' + demo)
+          PY
           echo "publish=true" >> "$GITHUB_OUTPUT"
       - name: Upload the site
         if: steps.site.outputs.publish == 'true'

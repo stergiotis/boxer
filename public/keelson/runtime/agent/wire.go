@@ -249,6 +249,9 @@ type wireReadReply struct {
 	MediaType string `json:"media_type,omitempty"`
 	Text      string `json:"text,omitempty"`
 	Path      string `json:"path,omitempty"`
+	// Data is a capture's bytes: a capture is kept sealed and has no path
+	// (ADR-0281 §SD6).
+	Data []byte `json:"data,omitempty"`
 	// Untrusted marks content an attacker could influence; Source
 	// attributes it to its window and operation (ADR-0269 §SD7).
 	Untrusted bool   `json:"untrusted,omitempty"`
@@ -264,7 +267,21 @@ type wireCapture struct {
 	Handle   string `json:"handle"`
 	Instance uint64 `json:"instance"`
 	Key      string `json:"key"`
+	// Format is "svg" or "png"; empty is "svg" (ADR-0281).
+	Format string `json:"format,omitempty"`
+	// Instances, when set, are the windows captured together, and Instance
+	// is ignored; Crop keeps a part of the frame, in logical points.
+	Instances []uint64  `json:"instances,omitempty"`
+	Crop      *wireRect `json:"crop,omitempty"`
 	wireCause
+}
+
+// wireRect is a rectangle in logical points.
+type wireRect struct {
+	X float32 `json:"x"`
+	Y float32 `json:"y"`
+	W float32 `json:"w"`
+	H float32 `json:"h"`
 }
 
 // wireWindowAct is arrange, raise or place (ADR-0276 §SD3). Command and

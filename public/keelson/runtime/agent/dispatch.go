@@ -3,6 +3,8 @@ package agent
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"image"
+	"math"
 	"reflect"
 	"slices"
 	"strconv"
@@ -17,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
@@ -33,8 +36,8 @@ type HostI interface {
 	OpsCancel(key uint64, callId string) (out opwire.Outcome, ok bool)
 	OpsExpire(key uint64, ids []string, reason string)
 	OpsAttach(key uint64, attached bool) (ok bool)
-	OpsCapture(key uint64) (job string, err error)
-	OpsCaptureStatus(job string) (st opwire.CaptureStatus, ok bool)
+	// The host renders captures for the capture service (ADR-0281).
+	capture.SourceI
 	OpsRevisions(key uint64) (revs map[string]uint64, ok bool)
 	OpsUndo(key uint64, callId string) (ok bool)
 	OpsUndoStatus(key uint64, callId string) (status string, ok bool)
@@ -143,8 +146,9 @@ type callRec struct {
 	// when the dispatcher decided it, outcome is all there is.
 	routed  bool
 	outcome opwire.Outcome
-	// job is a capture's job id.
-	job string
+	// job is a capture's job id; capture what the capture record needs.
+	job     string
+	capture *captureRec
 	// ref is the result reference minted for the call's result.
 	ref        string
 	finalNoted bool
@@ -717,10 +721,14 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 	deadline := time.Now().Add(wait)
 	for {
 		if rec.job != "" && rec.outcome.Phase == opwire.PhaseRunning && inst.cfg.Host != nil {
-			if st, ok := inst.cfg.Host.OpsCaptureStatus(rec.job); ok {
+			if st, ok := inst.captures.Status(rec.job); ok {
 				confined := rec.outcome.Confined
 				rec.outcome = phaseOutcome(st.Phase, st.Reason)
 				rec.outcome.Confined = confined
+				if st.Phase.Final() {
+					info, _ := inst.captures.Info(rec.job)
+					inst.recordCapture(t, rec, info.Decision, info, st.Phase, st.Reason, confined)
+				}
 			}
 		} else if rec.routed && !rec.outcome.Phase.Final() && inst.cfg.Host != nil {
 			if out, ok := inst.cfg.Host.OpsStatus(rec.instance, rec.callId); ok {
@@ -873,7 +881,7 @@ func (inst *Service) read(msg *app.Msg) (rep wireReadReply) {
 			inst.taint(t)
 		}
 	case job != nil && inst.cfg.Host != nil:
-		st, found := inst.cfg.Host.OpsCaptureStatus(job.job)
+		st, found := inst.captures.Status(job.job)
 		if !found || st.Phase != opwire.PhaseCompleted {
 			rep.Reason = "the capture is not complete"
 			return
@@ -882,8 +890,13 @@ func (inst *Service) read(msg *app.Msg) (rep wireReadReply) {
 			rep.Reason = "a confined capture stays an artifact handle"
 			return
 		}
+		data, media, err := inst.captures.Bytes(job.job)
+		if err != nil {
+			rep.Reason = "the capture: " + err.Error()
+			return
+		}
 		// Every capture is untrusted: it shows whatever the window holds.
-		rep.Ok, rep.MediaType, rep.Path, rep.Confined = true, st.MediaType, st.Path, job.outcome.Confined
+		rep.Ok, rep.MediaType, rep.Data, rep.Confined = true, media, data, job.outcome.Confined
 		rep.Untrusted, rep.Source = true, "window "+strconv.FormatUint(job.instance, 10)+" · capture"
 		inst.taint(t)
 	default:
@@ -917,29 +930,89 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 		inst.mu.Unlock()
 		return
 	}
-	rec := &callRec{key: req.Key, instance: req.Instance, spec: app.OperationSpec{Name: "capture"}, turn: req.Turn, cause: req.cause()}
+	windows := req.Instances
+	if len(windows) == 0 {
+		windows = []uint64{req.Instance}
+	}
+	rec := &callRec{key: req.Key, instance: windows[0], spec: app.OperationSpec{Name: "capture"}, turn: req.Turn, cause: req.cause()}
 	t.keys[req.Key] = rec
-	e := t.entries[req.Instance]
+	var uncovered []string
+	for _, w := range windows {
+		if t.entries[w] == nil {
+			uncovered = append(uncovered, strconv.FormatUint(w, 10))
+		}
+	}
+	e := t.entries[windows[0]]
 	inst.mu.Unlock()
-	if e == nil {
-		out = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this instance")
+	if len(uncovered) > 0 {
+		out = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover window "+strings.Join(uncovered, ", "))
 		inst.settle(t, rec, out, false)
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
 	}
 	rec.app = e.app
-	job, err := inst.cfg.Host.OpsCapture(req.Instance)
+	if inst.captures == nil {
+		out = phaseOutcome(opwire.PhaseRefused, "no window host renders captures")
+		inst.settle(t, rec, out, false)
+		rep.Outcome = wireOutcomeOf(out, "", "")
+		return
+	}
+	// The capture service decides and enforces (ADR-0281): the windows
+	// must still be in the task when their spans are chosen, a frame later.
+	format := capture.FormatE(req.Format)
+	if format == "" {
+		format = capture.FormatSvg
+	}
+	creq := capture.Request{Windows: windows, Format: format}
+	if c := req.Crop; c != nil {
+		r := image.Rect(int(math.Floor(float64(c.X))), int(math.Floor(float64(c.Y))),
+			int(math.Ceil(float64(c.X+c.W))), int(math.Ceil(float64(c.Y+c.H))))
+		creq.Crop = &r
+	}
+	inst.mu.Lock()
+	epoch := t.epoch
+	inst.mu.Unlock()
+	covered := func(w uint64) bool {
+		inst.mu.Lock()
+		defer inst.mu.Unlock()
+		return t.revoked == "" && t.epoch == epoch && t.entries[w] != nil
+	}
+	job, decision, err := inst.captures.Capture(creq, capture.Facts{Covered: covered}, func() bool {
+		for _, w := range windows {
+			if !covered(w) {
+				return false
+			}
+		}
+		return true
+	})
+	// A capture's label is the highest of the windows it draws (ADR-0281
+	// §SD6).
+	confined := false
+	for _, w := range windows {
+		if info, ok := inst.openInstance(w); ok && info.Confined {
+			confined = true
+		}
+	}
+	rec.capture = &captureRec{format: format, windows: windows}
+	if err == nil && decision.Effect != capture.EffectPermit {
+		inst.mu.Lock()
+		inst.recordCapture(t, rec, decision, capture.Info{}, opwire.PhaseRefused, decision.Reason, confined)
+		inst.mu.Unlock()
+		out = phaseOutcome(opwire.PhaseRefused, decision.Reason)
+		inst.settle(t, rec, out, false)
+		rep.Outcome = wireOutcomeOf(out, "", "")
+		return
+	}
 	if err != nil {
 		out = phaseOutcome(opwire.PhaseRefused, err.Error())
 		inst.settle(t, rec, out, false)
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
 	}
-	info, _ := inst.openInstance(req.Instance)
 	inst.mu.Lock()
 	rec.job = job
 	rec.outcome = phaseOutcome(opwire.PhaseRunning, "")
-	rec.outcome.Confined = info.Confined
+	rec.outcome.Confined = confined
 	rep.Outcome = inst.outcomeOf(t, rec, 0)
 	inst.mu.Unlock()
 	inst.record(t, rec, "dispatch", rec.outcome)

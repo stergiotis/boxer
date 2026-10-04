@@ -396,6 +396,219 @@ impl<'a, R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'a, R, W> {
     }
 }
 
+/// Rasterizes a capture's tessellated shapes into tightly packed RGBA. A
+/// host installs one with [`ImZeroFffi::set_capture_raster`]; without one, a
+/// capture is answered as unsupported (ADR-0281 §SD5).
+pub trait CaptureRasterI {
+    fn rasterize(
+        &mut self,
+        clipped: &[egui::ClippedPrimitive],
+        textures: &egui::TexturesDelta,
+        width_px: u32,
+        height_px: u32,
+        pixels_per_point: f32,
+    ) -> Result<Vec<u8>, String>;
+}
+
+/// `captureReplay`'s formats.
+pub const CAPTURE_FORMAT_PNG: u8 = 0;
+pub const CAPTURE_FORMAT_SVG: u8 = 1;
+
+/// `CaptureResult::status` values, as `fetchCaptureResult` reports them.
+pub const CAPTURE_COMPLETED: u8 = 1;
+pub const CAPTURE_FAILED: u8 = 2;
+pub const CAPTURE_UNSUPPORTED: u8 = 3;
+
+/// The outcome of one `captureReplay`, held until `fetchCaptureResult`.
+#[derive(Debug, Default)]
+pub struct CaptureResult {
+    pub request_id: u64,
+    pub status: u8,
+    pub width: u32,
+    pub height: u32,
+    pub reason: String,
+    /// A pixel capture's tightly packed RGBA, `width` × `height`, top-left
+    /// origin; an SVG capture's document.
+    pub data: Vec<u8>,
+    pub refused_uploads: u64,
+    /// Meshes whose texture neither the live mirror nor the capture context
+    /// held; the rasterizer skips them, so each is a hole.
+    pub unknown_textures: u64,
+}
+
+impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
+    /// Keeps the fonts an SVG capture embeds.
+    pub fn set_capture_fonts(
+        &mut self,
+        fonts: std::sync::Arc<crate::imzero2::svgexport::FontResolver>,
+    ) {
+        self.capture_fonts = Some(fonts);
+    }
+
+    /// Installs the host's rasterizer for captures.
+    pub fn set_capture_raster(&mut self, raster: Box<dyn CaptureRasterI>) {
+        self.capture_raster = Some(raster);
+    }
+
+    /// Replays `stream` — whole messages of a recorded frame, the granted
+    /// windows' spans — into a capture context built from `live`, and keeps
+    /// the pixels for `fetchCaptureResult`. Runs inside the live pass.
+    pub fn capture_render(
+        &mut self,
+        live: &egui::Context,
+        request_id: u64,
+        format: u8,
+        stream: &[u8],
+    ) {
+        let mut r = self.capture_render_inner(live, format, stream);
+        r.request_id = request_id;
+        self.capture_result = Some(r);
+    }
+
+    fn capture_render_inner(
+        &mut self,
+        live: &egui::Context,
+        format: u8,
+        stream: &[u8],
+    ) -> CaptureResult {
+        let failed = |status: u8, reason: String| CaptureResult {
+            status,
+            reason,
+            ..Default::default()
+        };
+        if format == CAPTURE_FORMAT_PNG && self.capture_raster.is_none() {
+            return failed(
+                CAPTURE_UNSUPPORTED,
+                "this host has no rasterizer for captures".into(),
+            );
+        }
+        if format != CAPTURE_FORMAT_PNG && format != CAPTURE_FORMAT_SVG {
+            return failed(CAPTURE_FAILED, format!("unknown capture format {format}"));
+        }
+        let ppp = live.pixels_per_point();
+        let screen = live.viewport_rect();
+        let width_px = (screen.width() * ppp).round().max(1.0) as u32;
+        let height_px = (screen.height() * ppp).round().max(1.0) as u32;
+        let mut raw = egui::RawInput {
+            screen_rect: Some(screen),
+            max_texture_side: Some(live.input(|i| i.max_texture_side)),
+            time: Some(live.input(|i| i.time)),
+            predicted_dt: live.input(|i| i.predicted_dt),
+            focused: false,
+            ..Default::default()
+        };
+        raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point =
+            Some(ppp);
+
+        let ctx = capture_context(live);
+        let mut replay = None;
+        let mut svg = None;
+        let out = ctx.run_ui(raw, |ui| {
+            let r = self.replay_for_capture(ui.ctx(), &[stream]);
+            if format == CAPTURE_FORMAT_SVG && r.0.is_ok() {
+                // Inside the pass, while the capture context's graphics
+                // still hold what the replay drew: the exporter reads them
+                // there, with the live images from the mirror. Nothing is
+                // written to a file (ADR-0281 §SD5).
+                let fonts = self.capture_fonts.as_deref().cloned().unwrap_or_default();
+                let links = std::sync::Arc::new(std::sync::Mutex::new(r.1.link_zones.clone()));
+                svg = Some(crate::imzero2::svgexport::render_svg_from_context(
+                    ui.ctx(),
+                    &fonts,
+                    &self.texture_cache,
+                    &links,
+                    true,
+                    Some(egui::Color32::BLACK),
+                ));
+            }
+            replay = Some(r);
+        });
+        let Some((result, report)) = replay else {
+            return failed(CAPTURE_FAILED, "the capture pass did not run".into());
+        };
+        if let Err(e) = result {
+            return failed(CAPTURE_FAILED, format!("replay: {e}"));
+        }
+        if let Some(svg) = svg {
+            return CaptureResult {
+                status: CAPTURE_COMPLETED,
+                width: width_px,
+                height: height_px,
+                data: svg.into_bytes(),
+                refused_uploads: report.refused_uploads,
+                ..Default::default()
+            };
+        }
+        let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
+
+        // The capture context's own textures — its font atlas — and the live
+        // context's images from the CPU mirror. The caches upload nothing
+        // during a replay, so the two sets do not overlap.
+        self.scrolling_texture.sync_export_mirror();
+        let mut textures = egui::TexturesDelta::default();
+        let mut known: std::collections::HashSet<egui::TextureId> =
+            out.textures_delta.set.iter().map(|(id, _)| *id).collect();
+        if let Ok(mirror) = self.texture_cache.lock() {
+            for (id, t) in mirror.iter() {
+                if known.contains(id) {
+                    continue;
+                }
+                let image = egui::ColorImage::from_rgba_unmultiplied(
+                    [t.width as usize, t.height as usize],
+                    &t.rgba,
+                );
+                let options = if t.nearest {
+                    egui::TextureOptions::NEAREST
+                } else {
+                    egui::TextureOptions::LINEAR
+                };
+                textures.set.push((*id, egui::epaint::ImageDelta::full(image, options)));
+                known.insert(*id);
+            }
+        }
+        textures.set.extend(out.textures_delta.set);
+        let unknown_textures = clipped
+            .iter()
+            .filter(|p| matches!(&p.primitive, egui::epaint::Primitive::Mesh(m) if !known.contains(&m.texture_id)))
+            .count() as u64;
+
+        let raster = self.capture_raster.as_mut().expect("checked above");
+        match raster.rasterize(
+            &clipped,
+            &textures,
+            width_px,
+            height_px,
+            out.pixels_per_point,
+        ) {
+            Ok(rgba) => CaptureResult {
+                status: CAPTURE_COMPLETED,
+                width: width_px,
+                height: height_px,
+                data: rgba,
+                refused_uploads: report.refused_uploads,
+                unknown_textures,
+                ..Default::default()
+            },
+            Err(e) => failed(CAPTURE_FAILED, format!("raster: {e}")),
+        }
+    }
+
+    /// Answers `fetchCaptureResult`: the held result, or status 0 when there
+    /// is none. The result is taken.
+    pub fn write_capture_result(&mut self) -> crate::fffi::common::FffiResult<()> {
+        let r = self.capture_result.take().unwrap_or_default();
+        self.io.write_plain_u64(r.request_id)?;
+        self.io.write_plain_u8(r.status)?;
+        self.io.write_plain_u32(r.width)?;
+        self.io.write_plain_u32(r.height)?;
+        self.io.write_plain_s(r.reason)?;
+        self.io.write_plain_u8_slice(&r.data)?;
+        self.io.write_plain_u64(r.refused_uploads)?;
+        self.io.write_plain_u64(r.unknown_textures)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

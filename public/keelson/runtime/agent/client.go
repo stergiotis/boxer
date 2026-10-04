@@ -372,11 +372,53 @@ func (inst *Client) Cancel(ctx context.Context, handle string, key string) (out 
 	return callReply(roundTrip[wireCancel, wireCallReply](ctx, inst, SubjectCancel, wireCancel{V: wireVersion, Handle: handle, Key: key}))
 }
 
-// Capture captures an instance's window; the outcome's Job names it.
+// Capture captures an instance's window as SVG; the outcome's Job names it.
 // asked.Key is the call's key.
 func (inst *Client) Capture(ctx context.Context, handle string, instance uint64, asked Asked) (out Outcome, err error) {
+	return inst.CaptureAs(ctx, handle, instance, asked, CaptureFormatSvg)
+}
+
+// The capture formats (ADR-0281).
+const (
+	// CaptureFormatSvg is the window's shapes as SVG.
+	CaptureFormatSvg = "svg"
+	// CaptureFormatPng is the windows' pixels as PNG.
+	CaptureFormatPng = "png"
+)
+
+// CaptureRequest is a capture of one or more windows (ADR-0281).
+type CaptureRequest struct {
+	Handle string
+	// Instances are the windows captured together; a PNG draws them all,
+	// an SVG is of one.
+	Instances []uint64
+	Format    string
+	// Crop keeps x, y, w, h of the frame, in logical points; nil keeps it
+	// all.
+	Crop *[4]float32
+	Key  string
+	// Asked names what asked for the capture; its Key is not used.
+	Asked Asked
+}
+
+// CaptureWith captures windows as a CaptureRequest says; the outcome's Job
+// names the capture.
+func (inst *Client) CaptureWith(ctx context.Context, r CaptureRequest) (out Outcome, err error) {
+	w := wireCapture{V: wireVersion, Handle: r.Handle, Instances: r.Instances, Key: r.Key, Format: r.Format, wireCause: r.Asked.wire()}
+	if len(r.Instances) > 0 {
+		w.Instance = r.Instances[0]
+	}
+	if c := r.Crop; c != nil {
+		w.Crop = &wireRect{X: c[0], Y: c[1], W: c[2], H: c[3]}
+	}
+	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture, w))
+}
+
+// CaptureAs captures an instance's window in a format; the outcome's Job
+// names it. asked.Key is the call's key.
+func (inst *Client) CaptureAs(ctx context.Context, handle string, instance uint64, asked Asked, format string) (out Outcome, err error) {
 	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture,
-		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: asked.Key, wireCause: asked.wire()}))
+		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: asked.Key, Format: format, wireCause: asked.wire()}))
 }
 
 // Arrange arranges windows with an ADR-0275 arrangement named by its ident
@@ -408,9 +450,11 @@ func (inst *Client) Place(ctx context.Context, handle string, asked Asked, insta
 // content the model may not see comes back as a DataHandle in place of
 // Text.
 type ReadResult struct {
-	MediaType  string
-	Text       string
-	Path       string
+	MediaType string
+	Text      string
+	Path      string
+	// Data is a capture's bytes (ADR-0281 §SD6).
+	Data       []byte
 	Untrusted  bool
 	Source     string
 	DataHandle string
@@ -427,7 +471,7 @@ func (inst *Client) Read(ctx context.Context, handle string, ref string) (res Re
 		err = &RefusedError{Reason: rep.Reason}
 		return
 	}
-	res = ReadResult{MediaType: rep.MediaType, Text: rep.Text, Path: rep.Path, Untrusted: rep.Untrusted, Source: rep.Source,
+	res = ReadResult{MediaType: rep.MediaType, Text: rep.Text, Path: rep.Path, Data: rep.Data, Untrusted: rep.Untrusted, Source: rep.Source,
 		DataHandle: rep.DataHandle, Confined: rep.Confined}
 	return
 }

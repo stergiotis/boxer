@@ -38,12 +38,14 @@ const (
 	// buttonProbeSalt is the probe that measures Send (or Cancel).
 	buttonProbeSalt uint64 = 0x636861742d62746e
 
-	tipKeep    = "Keep this conversation on boxer.facts, where the host's BOXER_LLM_RETAIN is durable. Fixed at the first send."
-	tipContext = "Tokens the last answered call used, prompt and answer. The whole conversation is resent each turn, so this grows until the model's context is full, and then the turn fails."
-	tipPast    = "This window holds one conversation for as long as it is open. A kept conversation is read afterwards in play, over SQL on the llmMessage kind."
-	tipApps    = "The model may ask you to share windows with it and work in them through their operations (ADR-0269). Fixed at the first send. The host answers only a chat listed in BOXER_AGENT_COORDINATORS."
-	tipNoApps  = "This conversation was started without Apps: its model has no tools and cannot open, read or drive windows, and will say so if asked. Apps is chosen before the first message — New conversation, turn Apps on in Settings, and ask again."
-	hintDraft  = "Message the model — Ctrl+Enter sends"
+	tipKeep     = "Keep this conversation's messages on boxer.facts, to read later in play. The host keeps them only when its BOXER_LLM_RETAIN is durable: the badge reads keep asked until the first answer says, then kept or not kept. Fixed at the first send."
+	tipContext  = "Tokens the last answered call used, prompt and answer. The whole conversation is resent each turn, so this grows until the model's context is full, and then the turn fails."
+	tipPast     = "This window holds one conversation for as long as it is open. A kept conversation is read afterwards in play, over SQL on boxer.facts: the llmMessage rows, whose text is their llmMessageBody."
+	tipApps     = "The model may ask you to share windows with it and work in them through their operations. Fixed at the first send. The host answers only a chat listed in BOXER_AGENT_COORDINATORS."
+	tipNoApps   = "This conversation was started without Apps: its model has no tools and cannot open, read or drive windows, and will say so if asked. Apps is chosen before the first message — New conversation, turn Apps on in Settings, and ask again."
+	tipTainted  = "Text from outside your messages — a window's title, an app's content or error — reached the model, and may have steered what it wrote since. Grant dialogs say so, and every action records it, for as long as the conversation lasts."
+	tipConfined = "A result derived from sealed data. Every later model call of this conversation is labelled confined, and the host sends it only to a loopback or trusted endpoint; elsewhere the call is refused."
+	hintDraft   = "Message the model — Ctrl+Enter sends"
 
 	tipQuestions = "The model may ask you questions with options, drawn as a form in the conversation; the turn waits for your answer. Needs a model that calls tools. Fixed at the first send."
 
@@ -803,10 +805,10 @@ func (inst *App) renderTask() {
 			c.Label("task " + strings.TrimPrefix(task, "task-")).Selectable(false).Send()
 		}
 		if tainted {
-			badge.New(inst.ids.PrepareStr("tainted"), "read untrusted content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+			badge.New(inst.ids.PrepareStr("tainted"), "read untrusted content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipTainted).Send()
 		}
 		if confined {
-			badge.New(inst.ids.PrepareStr("confined"), "holds confined content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+			badge.New(inst.ids.PrepareStr("confined"), "holds confined content").Tone(badge.ToneWarning).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipConfined).Send()
 		}
 		if c.Button(inst.ids.PrepareStr("stop-task"), c.Atoms().Text("Stop task").Keep()).SendResp().HasPrimaryClicked() {
 			coord, cli := inst.coord, inst.agentCli

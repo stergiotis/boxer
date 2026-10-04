@@ -482,11 +482,25 @@ var (
 	MembHttpFetchError       = NkRegistry.MustBegin("httpFetchError", 227).End()
 	// The build a run executed: a digest of the running executable (§SD8).
 	MembRunBuildId = NkRegistry.MustBegin("runtimeRunBuildId", 228).End()
+	// The capture record (ADR-0281 §SD6): one row per window capture, the
+	// policy enforcement point's decision and what it handed out.
+	MembKindAgentCapture        = NkRegistry.MustBegin("runtimeKindAgentCapture", 229).End()
+	MembAgentCaptureFormat      = NkRegistry.MustBegin("agentCaptureFormat", 230).End()
+	MembAgentCaptureWindows     = NkRegistry.MustBegin("agentCaptureWindows", 231).End()
+	MembAgentCaptureDecision    = NkRegistry.MustBegin("agentCaptureDecision", 232).End()
+	MembAgentCapturePolicy      = NkRegistry.MustBegin("agentCapturePolicy", 233).End()
+	MembAgentCaptureObligations = NkRegistry.MustBegin("agentCaptureObligations", 234).End()
+	MembAgentCaptureSpansDigest = NkRegistry.MustBegin("agentCaptureSpansDigest", 235).End()
+	MembAgentCaptureDigest      = NkRegistry.MustBegin("agentCaptureDigest", 236).End()
+	MembAgentCaptureBytes       = NkRegistry.MustBegin("agentCaptureBytes", 237).End()
+	MembAgentCapturePhase       = NkRegistry.MustBegin("agentCapturePhase", 238).End()
+	MembAgentCaptureReason      = NkRegistry.MustBegin("agentCaptureReason", 239).End()
+	MembAgentCaptureConfined    = NkRegistry.MustBegin("agentCaptureConfined", 240).End()
 	// What the person was shown of an agent's call: the model's one-line
 	// title and its stated reason, bounded, kept in every retention mode as
 	// the grant's plan is.
-	MembAgentActionCallTitle  = NkRegistry.MustBegin("agentActionCallTitle", 229).End()
-	MembAgentActionCallReason = NkRegistry.MustBegin("agentActionCallReason", 230).End()
+	MembAgentActionCallTitle  = NkRegistry.MustBegin("agentActionCallTitle", 241).End()
+	MembAgentActionCallReason = NkRegistry.MustBegin("agentActionCallReason", 242).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -546,5 +560,8 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindHttpFetch, MembHttpFetchDestination, MembHttpFetchPurpose, MembHttpFetchSensitivity, MembHttpFetchMethod,
 	MembHttpFetchUrl, MembHttpFetchStatus, MembHttpFetchBytes, MembHttpFetchElapsedMs, MembHttpFetchRefused, MembHttpFetchError,
 	MembRunBuildId,
+	MembKindAgentCapture, MembAgentCaptureFormat, MembAgentCaptureWindows, MembAgentCaptureDecision,
+	MembAgentCapturePolicy, MembAgentCaptureObligations, MembAgentCaptureSpansDigest, MembAgentCaptureDigest,
+	MembAgentCaptureBytes, MembAgentCapturePhase, MembAgentCaptureReason, MembAgentCaptureConfined,
 	MembAgentActionCallTitle, MembAgentActionCallReason,
 }

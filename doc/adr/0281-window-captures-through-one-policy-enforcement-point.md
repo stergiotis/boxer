@@ -178,11 +178,13 @@ labelled artifact handle, recording the whole on the audit trail.
 
 ### SD4 — Coverage: only the granted windows' spans are drawn
 
-- **Spans.** While a capture is pending, the window host records the next
-  frame's outgoing stream below the writer's buffering, and marks where each
-  window's emission begins and ends — the window's opcode through its end,
-  together with the placement and raise opcodes the host sends for it. Spans
-  lie on message boundaries.
+- **Spans.** While a capture is pending, the FFFI2 runtime keeps a copy of
+  the next frame's outgoing messages, framed as the client reads them, and
+  the window host marks where each window's emission begins and ends — the
+  window's opcode through its end, together with the placement and raise
+  opcodes the host sends for it. Messages are recorded whole as they leave
+  for the pipe, so a span lies on message boundaries, and spans of whole
+  messages concatenate into one stream the client can read.
 - **The `scope` obligation** carries the windows and the crop. Its handler
   keeps the granted windows' spans and drops everything else: other windows,
   the shell's chrome, the desktop. Whatever a granted window emits — its
@@ -228,8 +230,14 @@ labelled artifact handle, recording the whole on the audit trail.
   textures; text from the capture context's own font atlas. A mesh whose
   texture is unknown is counted, since the rasterizer skips it silently.
 - **Per host.** Every native host replays and rasterizes the same way: the
-  desktop host, both headless pixel hosts, and the mesh-only host, which links
-  the software rasterizer for capture. The browser tab refuses (SD7).
+  desktop host, both headless pixel hosts, and the mesh-only host. The
+  software rasterizer is a Cargo feature of its own, `capture_raster`, which
+  the desktop and headless features enable; captures take its uncached,
+  single-threaded path, apart from what paints the live frame. The browser
+  tab does not take it and refuses a pixel capture (SD7).
+- **SVG from the same replay.** An SVG capture is exported from the capture
+  context inside its pass, in memory, so it holds the window's popups as a
+  pixel capture does; the export opcodes that write a file are not used.
 - **Fidelity measured by the spike** (`headless_soft`, 2026-10-04).
   Replaying a whole frame against the live frame of the same pass differed
   by at most 3 of 255 per channel, in 0–744 of 1 260 000 pixels across four
@@ -242,6 +250,14 @@ labelled artifact handle, recording the whole on the audit trail.
 
 ### SD6 — Labels, taint and records
 
+- **Artifacts are sealed.** What the PEP hands out is written once into a
+  `sealed.File` — the machinery of ADR-0240's ad-hoc datasets: an unnamed
+  inode (`O_TMPFILE`, no directory entry, freed by the kernel on last close)
+  holding an AES-256-GCM STREAM under a key that exists only in that
+  process's memory. Nothing of a capture reaches a file in plaintext: the
+  pixels and the SVG come from the client as bytes, and the PEP seals them.
+  `read` returns the bytes; there is no path. A task's captures are released
+  when the task ends, which drops the key once the last reader leaves.
 - A capture's label is the highest label of the windows it replayed. A
   confined capture stays an artifact handle `read` does not open for a model
   the locality rule refuses. This replaces ADR-0269 §SD7's "any window
@@ -280,11 +296,13 @@ labelled artifact handle, recording the whole on the audit trail.
 | --- | --- | --- |
 | `runtime/capture` (new, under `public/keelson/runtime`) | added: the service (PEP), `PolicyI` (PDP), the obligation registry | the agent service's `capture` handler, which calls it |
 | `runtime.agent.capture` wire (`buscodec`) | added fields: format, instances, crop; the existing single instance still accepted, SVG the default | the agent client; the chat coordinator's tests |
-| FFFI2 runtime (Go writer) | added: recording a frame's outgoing bytes below the buffered writer, with span marks | the window host's `Frame` |
+| `runtime.agent.read` reply | added: `data`, a capture's bytes; a capture has no `path` | the agent client's `ReadResult`; agentconsole |
+| `sealed` (ADR-0240) | a third client, the capture service; its base directory's description says so | `doc/env-vars.md` |
+| FFFI2 runtime (`Fffi2`) | added: recording the messages sent to the pipe, with positions on message boundaries | the window host's `Frame` |
 | egui2 IDL | added: a capture-replay opcode taking spans and returning pixels or SVG as a fetch; an effect mark on opcodes, with a generator check | `app egui2gen generate`; both sides of the FFFI boundary rebuilt |
 | Interpreter (Rust) | added: capture-replay mode — writes refused, registers cleared, caches read-only, marked opcodes skipped | the image and scrolling-texture caches |
-| Mesh-only `headless` Rust build | added: the software rasterizer, for capture | the cargo features of the headless builds; the license gate's crate tree |
-| `windowhost.Inst.OpsCapture` | reshaped: span marking and the source for the PEP, no longer the policy | the agent dispatcher's host interface and its fakes |
+| Native Rust builds (`desktop`, `headless`) | added: the `capture_raster` feature, the software rasterizer for captures; the mesh-only build gains it and nothing GPU | the license gate's crate tree; `browserhost.sum` |
+| `windowhost.Inst.OpsCapture` | replaced: the window host implements `capture.SourceI` (`RenderSvg`, `RenderPixels`, `SourceStatus`) — span marking and rendering, no longer the policy or the encoding | the agent dispatcher's host interface and its fakes |
 | `RequestScreenshot*` opcodes | narrowed: refused without a development flag | the screenshot tour, play's capture knobs |
 | Trail kinds (`boxer.facts`) | added: the capture record | the runtime vocabulary cohort and its golden |
 | ADR-0269 §SD7, §SD11 | amended: the capture label is the replayed windows'; capture goes through this ADR's PEP | dated Updates on ADR-0269 |
@@ -373,11 +391,20 @@ Milestones:
 
 - **M1 — Replay in the interpreter**: the capture context, isolation, the
   effect marks. Built 2026-10-04, uncommitted.
-- **M2 — Spans**: recording below the writer, span marks in the window host,
-  the replay opcode and its fetch.
+- **M2 — Spans**: recording in the FFFI2 runtime, span marks in the window
+  host, the replay opcode and its fetch; the wire's `format` field, so an
+  agent can ask for `png` before the PEP exists. Built 2026-10-04,
+  uncommitted.
 - **M3 — The PEP, PDP and `scope` handler**; SVG moved behind it (SD1–SD4).
-- **M4 — Records and labels** (SD6), and the wire fields.
-- **M5 — The mesh-only and desktop hosts.**
+  Built 2026-10-04, uncommitted: `runtime/capture`, the window host as its
+  source, the agent's capture, status and read through it. Open from SD1:
+  the host does not yet refuse the `RequestScreenshot*` opcodes without a
+  development flag.
+- **M4 — Records and labels** (SD6), and the wire fields. Built 2026-10-04,
+  uncommitted: the `agentCapture` trail kind, the label over the windows
+  drawn, `capture`'s `instances` and `crop`.
+- **M5 — The mesh-only and desktop hosts.** Built 2026-10-04, uncommitted,
+  with the sealed artifacts and SVG from the replay.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

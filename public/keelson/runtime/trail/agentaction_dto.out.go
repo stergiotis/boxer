@@ -23,8 +23,8 @@ const (
 	kindAgentActionDecision    uint64 = 9223372049739677876
 	kindAgentActionPhase       uint64 = 9223372049739677877
 	kindAgentActionReason      uint64 = 9223372049739677878
-	kindAgentActionCallTitle   uint64 = 9223372049739677925
-	kindAgentActionCallReason  uint64 = 9223372049739677926
+	kindAgentActionCallTitle   uint64 = 9223372049739677937
+	kindAgentActionCallReason  uint64 = 9223372049739677938
 	kindAgentActionBudgetLeft  uint64 = 9223372049739677879
 	kindAgentActionTest        uint64 = 9223372049739677880
 	kindAgentActionTainted     uint64 = 9223372049739677881

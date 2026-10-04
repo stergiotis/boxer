@@ -881,6 +881,13 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     /// Set while a capture replay runs (ADR-0281 §SD5); the generated apply
     /// code of host-effect nodes and fetchers is skipped then.
     pub(crate) capture_replay: bool,
+    /// The host's rasterizer for captures; `None` on a host without one,
+    /// which answers a capture as unsupported (ADR-0281 §SD5).
+    pub(crate) capture_raster: Option<Box<dyn capture_replay::CaptureRasterI>>,
+    /// The last capture's result, until `fetchCaptureResult` takes it.
+    pub(crate) capture_result: Option<capture_replay::CaptureResult>,
+    /// The fonts an SVG capture embeds: the export plugin's resolver.
+    pub(crate) capture_fonts: Option<std::sync::Arc<crate::imzero2::svgexport::FontResolver>>,
     pub last_pass_nr: u64,
 
     // Nanoseconds this pass spent BLOCKED waiting for Go to emit the next
@@ -1076,6 +1083,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             paint_image_cache: ImageCache::new(),
             last_interpret_us: 0,
             capture_replay: false,
+            capture_raster: None,
+            capture_result: None,
+            capture_fonts: None,
             last_pass_nr: 0,
             read_blocked_ns: 0,
             export_state: std::sync::Arc::new(std::sync::Mutex::new(ExportState::default())),
@@ -2363,6 +2373,23 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 } else {
                     self.r18_avail_w = f32::NAN;
                     self.r18_avail_h = f32::NAN;
+                }
+            }
+            FuncProcId::CaptureReplay => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::CaptureReplay");
+                // arguments
+                let mut request_id = self.io.read_plain_u64()?;
+                let mut format = self.io.read_plain_u8()?;
+                let mut stream = self.io.read_plain_u8h()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    self.capture_render(c, request_id, format, &stream);
                 }
             }
             FuncProcId::CaptureUiAvailableRect => {
@@ -4346,6 +4373,20 @@ self.apply_widget(w,u,f,Some(i));
                             },
                             bg,
                         });
+                }
+            }
+            FuncProcId::FetchCaptureResult => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchCaptureResult");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    self.write_capture_result()?;
+                    self.io.flush()?;
                 }
             }
             FuncProcId::FetchCommandEnterPressed => {

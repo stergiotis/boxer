@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-04
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0278: Tab mode as a library feature — `tabhost`, embedded assets, a content-addressed browser host
 
@@ -197,7 +195,8 @@ Two checks, both run by the gate's `tab` step for each package named with
 
 - **compile gate** — the tab binary builds for wasip1 as `bundle` builds it,
   which compiles exactly the apps it links, those it reaches transitively
-  included;
+  included; a failure names the packages the compiler reported, most often a
+  dependency of one app rather than the app;
 - **tab report** — for each linked app, the bus subjects its manifest declares
   that the tab's configured services do not serve, with the manifest's reason.
   Apps register at initialisation, so only the binary knows what it links: it
@@ -225,7 +224,7 @@ commands come with the module pin.
 - **M3 — The content-addressed host.** ✓ SD5: digest file, CI workflow, fetch
   and cache.
 - **M4 — Gates.** ✓ SD7.
-- **M5 — Adoption text.** SD8, verified against a consumer repository.
+- **M5 — Adoption text.** ✓ SD8, verified against a consumer repository.
 
 ## Surfaces — Tier 1
 
@@ -316,7 +315,37 @@ their layout is unchanged.
 
 ## Status
 
-Proposed 2026-10-04. Awaiting owner review.
+Accepted 2026-10-04. M1–M5 were built the same day.
+Two consumer shapes were exercised when M5 was: a repository consuming boxer
+through a Go workspace, whose tab binary the gate refused for two apps (an
+embedded key-value store that maps memory, an in-memory audio file) and passed
+without them, and a fresh module pinning a pushed boxer commit, which bundled
+from the module cache with the host fetched from GitHub Pages; an app of each
+ran in a browser tab.
+
+## Updates
+
+### 2026-10-04 — a demo on the same Pages site
+
+The site that publishes the browser host also carries a demo under `demo/`:
+the `imzero2tabdemo` tab binary, bundled with the host of the commit it is
+built from, and a landing page linking to its apps. Three choices, each the
+owner's:
+
+- **Apps that need no data and no host service** — splashscreen and fibscope.
+  A published page reaches only the site it is served from; play over a public
+  ClickHouse instance was considered and not taken, since a demo on boxer's
+  domain would send that instance traffic it did not ask for, and its map
+  would draw tiles from every visitor's browser.
+- **Built on manual dispatch only.** A push publishes hosts as before and
+  carries the published demo over unchanged.
+- **Fonts are egui's built-in faces and the vendored icon font**, with its
+  licence, rather than whatever the runner's font set resolves to.
+
+The demo needs nothing the tab mode did not already provide: no cross-origin
+isolation (without `SharedArrayBuffer` the shim spins instead of waiting),
+and Pages compresses the modules on the wire. The gate checks the demo binary
+alongside `imzero2tab`.
 
 ## References
 

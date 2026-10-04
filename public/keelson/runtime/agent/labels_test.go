@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image/png"
 	"testing"
 	"time"
 
@@ -158,4 +160,40 @@ func TestATaskOpensTheWindowsItsGrantAllows(t *testing.T) {
 
 	require.NoError(t, r.cli.Stop(ctx, g.Handle))
 	assert.Equal(t, g.Task, r.svc.leftByTask(key), "the window passes to the person")
+}
+
+// A capture of several windows names each one the grant lacks; a crop
+// reaches the capture service; and a capture is labelled by the most
+// sensitive window it draws, so a confined one stays a handle for a remote
+// model (ADR-0281 §SD6).
+func TestACaptureIsScopedAndLabelledByItsWindows(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	g := r.grant(ModeObserve)
+	out, err := r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7, 99}, Format: CaptureFormatPng, Key: "two"})
+	require.NoError(t, err)
+	assert.Equal(t, "input_required", out.Phase)
+	assert.Contains(t, out.Reason, "window 99")
+
+	crop := [4]float32{0, 0, 1, 1}
+	out, err = r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7}, Format: CaptureFormatPng, Crop: &crop, Key: "crop"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	res, err := r.cli.Read(ctx, g.Handle, out.Job)
+	require.NoError(t, err)
+	b := res.Data
+	img, err := png.Decode(bytes.NewReader(b))
+	require.NoError(t, err)
+	assert.Equal(t, 1, img.Bounds().Dx(), "the crop, one point at one pixel per point")
+
+	r.host.person(7, func(d *doc) { d.confined = true })
+	r.host.frame(7)
+	out, err = r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7}, Format: CaptureFormatPng, Key: "confined"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	assert.True(t, out.Confined)
+	_, err = r.cli.Read(ctx, g.Handle, out.Job)
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused))
+	assert.Contains(t, refused.Reason, "confined capture")
 }

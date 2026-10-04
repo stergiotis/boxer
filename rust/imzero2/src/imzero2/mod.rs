@@ -41,6 +41,8 @@ pub mod nutreader;
 pub mod scrolling_texture;
 #[cfg(feature = "headless_soft")]
 pub mod softraster;
+#[cfg(feature = "capture_raster")]
+pub mod captureraster;
 pub mod svgexport;
 pub mod text_edit_highlight;
 pub mod time_range_picker;

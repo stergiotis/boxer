@@ -1,12 +1,15 @@
 package tabhost
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/urfave/cli/v2"
@@ -124,18 +127,30 @@ func reportCommand(inst *Program) (cmd *cli.Command) {
 }
 
 // CheckCompiles builds the tab binary package pkg for wasip1 as bundle does,
-// into a scratch directory, and reports why it does not compile.
-func CheckCompiles(pkg string) (err error) {
+// into a scratch directory. When it does not compile, failing names the
+// packages the compiler reported (its `# <package>` lines) and output is what
+// the go command printed.
+func CheckCompiles(pkg string) (failing []string, output string, err error) {
 	mainDir, err := packageModuleDir(pkg)
 	if err != nil {
 		return
 	}
 	dir, err := os.MkdirTemp("", "tabcheck-")
 	if err != nil {
-		return eh.Errorf("tabcheck: scratch directory: %w", err)
+		return nil, "", eh.Errorf("tabcheck: scratch directory: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	return buildGoModule(mainDir, pkg, filepath.Join(dir, "tab.wasm"), false)
+	var b bytes.Buffer
+	err = buildGoModule(mainDir, pkg, filepath.Join(dir, "tab.wasm"), false, &b)
+	output = b.String()
+	if err != nil {
+		for _, line := range strings.Split(output, "\n") {
+			if p, ok := strings.CutPrefix(line, "# "); ok && !slices.Contains(failing, p) {
+				failing = append(failing, p)
+			}
+		}
+	}
+	return
 }
 
 // ReportOf runs the tab binary package pkg natively and returns its report.

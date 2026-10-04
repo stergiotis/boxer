@@ -1,11 +1,6 @@
 package windowhost
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"os"
-	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
@@ -15,8 +10,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -32,7 +27,7 @@ import (
 // while a task is attached or a command is queued (ADR-0269 §SD4).
 const opsRepaintIntervalSecs = 0.1
 
-// captureTimeout bounds how long a capture waits for its file.
+// captureTimeout bounds how long a capture waits for the client.
 const captureTimeout = 5 * time.Second
 
 // startOps creates the window's engine after Mount, when the registered
@@ -253,99 +248,45 @@ func (inst *Inst) OpsLog(key uint64) (entries []opengine.LogEntry, ok bool) {
 
 // --- capture -------------------------------------------------------------
 
+// A capture job: one replay of granted windows for the capture service
+// (ADR-0281). Nothing of it reaches a file here; the service seals what it
+// hands out.
 type captureJob struct {
 	id        string
-	key       WindowKeyT
-	path      string
 	requested time.Time
-	exported  bool
 	status    opwire.CaptureStatus
+	pixel     *pixelJob
+	// result is a completed render.
+	result capture.SourceResult
 }
 
 type captures struct {
 	mu   sync.Mutex
-	dir  string
 	jobs map[string]*captureJob
-	// pending are jobs whose export the next Frame queues.
-	pending []*captureJob
+	// pixelQueue are captures waiting their turn; pixelActive is the one in
+	// flight, one at a time.
+	pixelQueue    []*captureJob
+	pixelActive   *captureJob
+	nextRequestId uint64
 }
 
-// OpsCapture queues a capture of a window's content as SVG; the export runs
-// in the next frame and Status follows the file. Only an open window can be
-// captured (ADR-0269 §SD11).
-func (inst *Inst) OpsCapture(key uint64) (job string, err error) {
-	if _, w := inst.engineOf("", key); w == nil {
-		err = eh.Errorf("windowhost: no open window by that key")
-		return
-	}
-	inst.caps.mu.Lock()
-	defer inst.caps.mu.Unlock()
-	if inst.caps.dir == "" {
-		inst.caps.dir, err = os.MkdirTemp("", "boxer-agent-captures-")
-		if err != nil {
-			err = eh.Errorf("windowhost: capture directory: %w", err)
-			return
-		}
-		inst.caps.jobs = make(map[string]*captureJob)
-	}
-	var b [8]byte
-	_, _ = rand.Read(b[:])
-	job = "cap-" + hex.EncodeToString(b[:])
-	j := &captureJob{id: job, key: WindowKeyT(key), path: filepath.Join(inst.caps.dir, job+".svg"), requested: time.Now(),
-		status: opwire.CaptureStatus{Phase: opwire.PhaseRunning, MediaType: "image/svg+xml"}}
-	inst.caps.jobs[job] = j
-	inst.caps.pending = append(inst.caps.pending, j)
-	return
-}
-
-// OpsCaptureStatus reports a capture by job id.
-func (inst *Inst) OpsCaptureStatus(job string) (st opwire.CaptureStatus, ok bool) {
+// SourceStatus reports a render to the capture service.
+func (inst *Inst) SourceStatus(job string) (r capture.SourceResult, ok bool) {
 	inst.caps.mu.Lock()
 	defer inst.caps.mu.Unlock()
 	j, ok := inst.caps.jobs[job]
 	if !ok {
 		return
 	}
-	if j.status.Phase == opwire.PhaseRunning && j.exported {
-		if fi, err := os.Stat(j.path); err == nil && fi.Size() > 0 {
-			j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted, Path: j.path, MediaType: "image/svg+xml", Bytes: fi.Size()}
-		} else if time.Since(j.requested) > captureTimeout {
-			j.status = opwire.CaptureStatus{Phase: opwire.PhaseFailed, Reason: "the export did not arrive in time"}
-		}
+	if j.status.Phase == opwire.PhaseRunning && time.Since(j.requested) > 4*captureTimeout {
+		j.status = opwire.CaptureStatus{Phase: opwire.PhaseFailed, Reason: "the capture did not complete in time"}
 	}
-	st = j.status
+	if j.status.Phase == opwire.PhaseCompleted {
+		r = j.result
+	} else {
+		r = capture.SourceResult{Phase: j.status.Phase, Reason: j.status.Reason}
+	}
 	return
-}
-
-// runCaptures queues the pending exports on the render goroutine, after
-// the windows drew, so the export captures what the person sees. ids is the
-// host's stack, at the state the windows were emitted under.
-func (inst *Inst) runCaptures(ids *c.WidgetIdStack, open map[WindowKeyT]bool) {
-	inst.caps.mu.Lock()
-	pending := inst.caps.pending
-	inst.caps.pending = nil
-	inst.caps.mu.Unlock()
-	for i, j := range pending {
-		if !open[j.key] {
-			inst.caps.mu.Lock()
-			j.status = opwire.CaptureStatus{Phase: opwire.PhaseRefused, Reason: "the window is not open"}
-			inst.caps.mu.Unlock()
-			continue
-		}
-		if i > 0 {
-			// The export slot holds one request per pass; the rest wait.
-			inst.caps.mu.Lock()
-			inst.caps.pending = append(inst.caps.pending, pending[i:]...)
-			inst.caps.mu.Unlock()
-			return
-		}
-		ids.PrepareStr("window-" + strconv.FormatUint(uint64(j.key), 10))
-		h := widgethandle.Make(ids.Derive())
-		c.ExportSvgWindow(h, j.path, false, 0, 0x1e1e1eff)
-		inst.caps.mu.Lock()
-		j.exported = true
-		inst.caps.mu.Unlock()
-	}
 }
 
 // --- the operation subjects ------------------------------------------------

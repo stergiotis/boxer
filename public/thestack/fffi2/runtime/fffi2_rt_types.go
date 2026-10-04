@@ -40,6 +40,11 @@ type Fffi2[U UnmarshallReaderI] struct {
 	// msgs counts the messages SendIntermediate took, captured or sent;
 	// see Messages.
 	msgs uint64
+	// recording holds every message sent to the pipe since BeginRecording,
+	// framed as on the wire; recordingOn says whether one is open
+	// (ADR-0281 §SD4).
+	recording   []byte
+	recordingOn bool
 }
 
 type MarshallWriterI interface {

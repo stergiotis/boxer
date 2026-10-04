@@ -28,7 +28,7 @@ func TestGenerateTrailStore(t *testing.T) {
 		ComponentPaths: []string{
 			"./origin_dto.go", "./conversation_dto.go", "./delegation_dto.go", "./cause_dto.go",
 			"./llmcall_dto.go", "./llmmessage_dto.go", "./llmmessagebody_dto.go",
-			"./agentaction_dto.go", "./agentgrant_dto.go", "./httpfetch_dto.go",
+			"./agentaction_dto.go", "./agentgrant_dto.go", "./httpfetch_dto.go", "./agentcapture_dto.go",
 		},
 		OutDir:     ".",
 		ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/trail",
