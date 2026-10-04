@@ -9,8 +9,8 @@ import (
 )
 
 // LayoutE selects the node-placement algorithm. The first four values
-// mirror the `Graph` binding's GraphLayoutE so a consumer can cast across;
-// LayoutRadial is graphview's own (ADR-0225 §SD6).
+// keep the numbering of the retired egui_graphs `Graph` binding's layout
+// enum; LayoutRadial is graphview's own (ADR-0225 §SD6).
 type LayoutE uint8
 
 const (

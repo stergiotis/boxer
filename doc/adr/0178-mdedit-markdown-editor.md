@@ -831,6 +831,17 @@ date has the reasons), and the mount listing waits behind the standard job
 row with Cancel. `storeConn` stays a trimmed copy. mdedit declares no task
 caps, so its lanes are not tasks on the bus.
 
+### 2026-10-03 — a document handed over by another app
+
+mdedit takes a launch config (ADR-0135), `mdeditLaunch` in
+`apps/mdedit/launchcfg`: a document's markdown and a name. A window opened
+with one holds the text as a document of its own — it neither restores nor
+autosaves the one document mdedit keeps, so the person's own draft is never
+overwritten — and says so on its status line; the text stays unsaved until
+it is saved to a file or copied out. The chat app's Open in mdedit is the
+first caller (ADR-0265 §SD4). The vocabulary is `mdeditLaunchText` and
+`mdeditLaunchName` in vdd.
+
 ## References
 
 - [ADR-0176](./0176-native-tree-widget.md) — the tree widget the outline

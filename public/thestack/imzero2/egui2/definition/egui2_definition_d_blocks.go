@@ -107,11 +107,20 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 				// resizable again).
 				let maximized = std::mem::take(&mut self.scratch_window_maximized);
 				let restore_id = {{Id}}.with("__imzero2_restore_rect");
-				if maximized {
-					let free = {{EguiUiOptionalOuter}}
-						.as_ref()
-						.map(|u| u.available_rect_before_wrap())
-						.unwrap_or_else(|| {{EguiContext}}.content_rect());
+				// The rect left free by the shell's panels — what maximized
+				// fills, and the work area reported to Go (fetchR27Windows).
+				let free = {{EguiUiOptionalOuter}}
+					.as_ref()
+					.map(|u| u.available_rect_before_wrap())
+					.unwrap_or_else(|| {{EguiContext}}.content_rect());
+				self.r27_work_rect = free;
+				// windowPlace: a one-frame placement from Go wins over the
+				// maximized pin and over a pending restore, whose saved rect
+				// it supersedes. Pinned the same way as the restore below.
+				if let Some(r) = self.pending_window_place.remove(&{{Id}}.value()) {
+					{{EguiContext}}.data_mut(|d| d.remove::<egui::Rect>(restore_id));
+					{{Instance}} = {{Instance}}.fixed_pos(r.min).fixed_size(r.size()).constrain(false);
+				} else if maximized {
 					let saved = {{EguiContext}}.data(|d| d.get_temp::<egui::Rect>(restore_id)).is_some();
 					if !saved {
 						if let Some(r) = {{EguiContext}}.memory(|m| m.area_rect({{Id}})) {
@@ -219,6 +228,11 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
                             .read_response({{Id}}.with("__title_click"))
                             .is_some_and(|r| r.double_clicked());
                     resp2.set(ResponseFlags::TITLE_DOUBLE_CLICKED, title_dbl);
+                    self.r27_windows.push(WindowGeomRow {
+                        id: {{Id}}.value(),
+                        rect: wrect,
+                        collapsed: inner.inner.is_none(),
+                    });
                     if inner.inner.is_none() {
                         // collapsed
                         resp2.insert(ResponseFlags::BLOCK_SKIPPED);

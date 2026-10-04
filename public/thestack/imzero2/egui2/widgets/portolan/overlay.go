@@ -1,6 +1,8 @@
 package portolan
 
 import (
+	"slices"
+
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -43,16 +45,31 @@ func (p Projector) Label(ll LatLng, dx, dy float32, anchorH, anchorV uint8, text
 // clipped to the padded viewport segment by segment (Cohen–Sutherland, which
 // can split the line into parts) and each part simplified at smoothFactor.
 func (p Projector) Polyline(lats, lngs []float64, col color.Color, width float32) {
-	pts := p.project(lats, lngs)
+	p.polyline(p.project(lats, lngs), col, width)
+}
+
+// PlanePolyline is Polyline for points already in the CRS's plane
+// ([CRSI.Project]), shifted by dx plane units along x: a caller that draws
+// the same geometry every frame projects it once and the frame applies only
+// the zoom's affine step. dx places a copy of the geometry one or more world
+// widths away, for a map that wraps. The canvas points are those Polyline
+// computes for the same geometry, to the bit when dx is zero.
+func (p Projector) PlanePolyline(plane []Point, dx float64, col color.Color, width float32) {
+	p.polyline(p.fromPlane(plane, dx), col, width)
+}
+
+func (p Projector) polyline(pts []Point, col color.Color, width float32) {
 	if len(pts) < 2 {
 		return
 	}
 	bounds := p.clipBounds()
 	var clipper SegmentClipper
-	var part []Point
+	part := p.m.scratch.part[:0]
 	flush := func() {
 		if len(part) >= 2 {
-			paintPolyline(Simplify(part, smoothFactor), col, width)
+			sc := &p.m.scratch
+			sc.simplified = sc.simplifier.simplify(sc.simplified[:0], part, smoothFactor)
+			p.paintPolyline(sc.simplified, col, width)
 		}
 		part = part[:0]
 	}
@@ -69,6 +86,7 @@ func (p Projector) Polyline(lats, lngs []float64, col color.Color, width float32
 		}
 	}
 	flush()
+	p.m.scratch.part = part
 }
 
 // Polygon fills and strokes a ring of geographic points (parallel slices; a
@@ -79,7 +97,7 @@ func (p Projector) Polyline(lats, lngs []float64, col color.Color, width float32
 // concave ring renders right; strokeWidth 0 draws the fill alone. Holes are
 // not filled — stroke them as Polylines.
 func (p Projector) Polygon(lats, lngs []float64, fill, stroke color.Color, strokeWidth float32) {
-	p.polygon(lats, lngs, fill, stroke, strokeWidth, false)
+	p.polygon(p.project(lats, lngs), fill, stroke, strokeWidth, false)
 }
 
 // ConvexPolygon is Polygon for a ring known to be convex — an H3 cell, a
@@ -87,11 +105,24 @@ func (p Projector) Polygon(lats, lngs []float64, fill, stroke color.Color, strok
 // antialiased where the ear-clipped mesh is not. A concave ring here renders
 // artifacts; use Polygon.
 func (p Projector) ConvexPolygon(lats, lngs []float64, fill, stroke color.Color, strokeWidth float32) {
-	p.polygon(lats, lngs, fill, stroke, strokeWidth, true)
+	p.polygon(p.project(lats, lngs), fill, stroke, strokeWidth, true)
 }
 
-func (p Projector) polygon(lats, lngs []float64, fill, stroke color.Color, strokeWidth float32, convex bool) {
-	pts := dropRepeats(p.project(lats, lngs))
+// PlanePolygon is Polygon for a ring already in the CRS's plane
+// ([CRSI.Project]), shifted by dx plane units along x — PlanePolyline's
+// contract, for a filled ring.
+func (p Projector) PlanePolygon(plane []Point, dx float64, fill, stroke color.Color, strokeWidth float32) {
+	p.polygon(p.fromPlane(plane, dx), fill, stroke, strokeWidth, false)
+}
+
+// PlaneToCanvas is ToCanvas for a point already in the CRS's plane.
+func (p Projector) PlaneToCanvas(q Point) Point {
+	return p.view.crs.Transformation().Transform(q, p.view.crs.Scale(p.view.zoom)).Round().Subtract(p.view.pixelOrigin)
+}
+
+// polygon fills a ring given as canvas points, compacting pts in place.
+func (p Projector) polygon(pts []Point, fill, stroke color.Color, strokeWidth float32, convex bool) {
+	pts = dropRepeats(pts)
 	if len(pts) < 3 {
 		return
 	}
@@ -107,7 +138,9 @@ func (p Projector) polygon(lats, lngs []float64, fill, stroke color.Color, strok
 	if convex {
 		// Douglas–Peucker keeps a convex ring convex, so the vertex saving
 		// is free there.
-		clipped = Simplify(clipped, smoothFactor)
+		sc := &p.m.scratch
+		sc.simplified = sc.simplifier.simplify(sc.simplified[:0], clipped, smoothFactor)
+		clipped = sc.simplified
 	}
 	clipped = dropRepeats(clipped)
 	if len(clipped) < 3 {
@@ -119,7 +152,7 @@ func (p Projector) polygon(lats, lngs []float64, fill, stroke color.Color, strok
 	if !convex && absF(ringArea2(clipped)) < 2*minConcaveAreaPx {
 		convex = true
 	}
-	xs, ys := toF32(clipped)
+	xs, ys := p.toF32(clipped)
 	f := c.PaintPolygonFilled(xs, ys, fill)
 	if !convex {
 		f = f.Concave()
@@ -250,29 +283,64 @@ func (p Projector) clipBounds() Bounds {
 	return BoundsOf(lo, lo.Add(size.MultiplyBy(1+2*overlayPadding)).Round())
 }
 
+// overlayScratch is the working storage of the vector overlays: canvas
+// points, a polyline's current part and its simplification, and the float32
+// coordinates handed to the painter. Each is reused from ring to ring and
+// frame to frame, so a layer drawing thousands of rings a frame allocates for
+// none of them. A slice a helper returns from here is valid until the next
+// call of the same helper; the painter copies the coordinates when the opcode
+// is built, so none of it outlives the call that sends it. It belongs to the
+// Map and so to the frame goroutine.
+type overlayScratch struct {
+	pts        []Point
+	part       []Point
+	simplified []Point
+	simplifier simplifyScratch
+	xs, ys     []float32
+}
+
 // project turns parallel lat/lng slices into canvas points.
 func (p Projector) project(lats, lngs []float64) []Point {
 	n := min(len(lats), len(lngs))
-	pts := make([]Point, n)
-	for i := 0; i < n; i++ {
+	pts := slices.Grow(p.m.scratch.pts[:0], n)[:n]
+	for i := range n {
 		pts[i] = p.ToCanvas(LL(lats[i], lngs[i]))
 	}
+	p.m.scratch.pts = pts
 	return pts
 }
 
-func toF32(pts []Point) (xs, ys []float32) {
-	xs = make([]float32, len(pts))
-	ys = make([]float32, len(pts))
+// fromPlane turns plane points, shifted by dx along x, into canvas points:
+// ToCanvas with the projection already done. The steps are the CRS's, in
+// its order, so a point projected once and a point projected per frame
+// round to the same pixel.
+func (p Projector) fromPlane(plane []Point, dx float64) []Point {
+	n := len(plane)
+	pts := slices.Grow(p.m.scratch.pts[:0], n)[:n]
+	t, scale, origin := p.view.crs.Transformation(), p.view.crs.Scale(p.view.zoom), p.view.pixelOrigin
+	for i, q := range plane {
+		q.X += dx
+		pts[i] = t.Transform(q, scale).Round().Subtract(origin)
+	}
+	p.m.scratch.pts = pts
+	return pts
+}
+
+func (p Projector) toF32(pts []Point) (xs, ys []float32) {
+	n := len(pts)
+	xs = slices.Grow(p.m.scratch.xs[:0], n)[:n]
+	ys = slices.Grow(p.m.scratch.ys[:0], n)[:n]
 	for i, pt := range pts {
 		xs[i], ys[i] = float32(pt.X), float32(pt.Y)
 	}
+	p.m.scratch.xs, p.m.scratch.ys = xs, ys
 	return
 }
 
-func paintPolyline(pts []Point, col color.Color, width float32) {
+func (p Projector) paintPolyline(pts []Point, col color.Color, width float32) {
 	if len(pts) < 2 {
 		return
 	}
-	xs, ys := toF32(pts)
+	xs, ys := p.toF32(pts)
 	c.PaintPolyline(xs, ys, col, width).Send()
 }

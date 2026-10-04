@@ -34,6 +34,10 @@ type Config struct {
 	ApiKey string
 	// MaxTokens is the ceiling when a request names none.
 	MaxTokens int32
+	// ContextTokens is the model's context size as the deployment states
+	// it; zero asks the endpoint's model list once (ProbeContextTokens),
+	// unless Client replaces the endpoint.
+	ContextTokens int32
 	// Timeout bounds one completion on the service side.
 	Timeout time.Duration
 	// TrustedHosts are endpoint hosts treated like loopback by the
@@ -62,7 +66,7 @@ type Config struct {
 func ConfigFromEnv() (cfg Config) {
 	cfg = Config{
 		Endpoint: Endpoint.Get(), Model: Model.Get(), ApiKey: ApiKey.Get(),
-		MaxTokens: int32(MaxTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
+		MaxTokens: int32(MaxTokens.Get()), ContextTokens: int32(ContextTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
 		TrustedHosts: ParseTrustedHosts(TrustedHosts.Get()),
 	}
 	return
@@ -97,7 +101,10 @@ type Service struct {
 	host       string
 	local      bool
 	// trusted says local holds by TrustedHosts, not loopback.
-	trusted   bool
+	trusted bool
+	// context is the model's context size and where it came from, set
+	// once from the config or by the probe.
+	context   atomic.Pointer[contextSize]
 	busClient *inprocbus.Client
 	unsubs    []func()
 	log       zerolog.Logger
@@ -163,6 +170,14 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 			}
 		}
 	}
+	if cfg.Configured() {
+		switch {
+		case cfg.ContextTokens > 0:
+			s.context.Store(&contextSize{tokens: cfg.ContextTokens, source: "BOXER_LLM_CONTEXT_TOKENS"})
+		case cfg.Client == nil:
+			go s.probeContext()
+		}
+	}
 	if cfg.Exec != nil {
 		s.facts = llmfacts.NewCallStore(cfg.Exec, nil, llmfacts.CallStoreConfig{})
 	}
@@ -226,6 +241,9 @@ func (inst *Service) Describe() (d Description) {
 	}
 	d = Description{Configured: true, Model: inst.cfg.Model, EndpointHost: inst.host, Local: inst.local, Trusted: inst.trusted,
 		MaxTokens: inst.cfg.MaxTokens}
+	if cs := inst.context.Load(); cs != nil {
+		d.ContextTokens, d.ContextSource = cs.tokens, cs.source
+	}
 	return
 }
 
@@ -242,7 +260,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	case SubjectDescribe:
 		d := inst.Describe()
 		inst.reply(msg.Reply, wireDescribe{Configured: d.Configured, Model: d.Model, EndpointHost: d.EndpointHost, Local: d.Local,
-			Trusted: d.Trusted, MaxTokens: d.MaxTokens, Reason: d.Reason})
+			Trusted: d.Trusted, MaxTokens: d.MaxTokens, ContextTokens: d.ContextTokens, ContextSource: d.ContextSource, Reason: d.Reason})
 	case SubjectComplete, SubjectRetainComplete:
 		inst.startComplete(msg, msg.Subject == SubjectRetainComplete)
 	default:
@@ -403,7 +421,10 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 			rep.Incomplete, rec.Incomplete = true, true
 		} else {
 			rep.Ok, rep.Reason, rep.ErrorKind = false, cerr.Error(), kindOf(cerr)
-			rec.Error = cerr.Error()
+			if errors.Is(cerr, openaichat.ErrIncompleteCompletion) {
+				rep.Reason = incompleteReason(resp, maxTokens)
+			}
+			rec.Error = rep.Reason
 		}
 	}
 	if t != nil && rep.Ok {
@@ -435,7 +456,7 @@ func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord, t *turn
 	}
 	inst.record(rec, t)
 	inst.log.Warn().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("reason", reason).Msg("llm: refused")
-	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason})
+	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason, CallId: rec.CallId})
 }
 
 func (inst *Service) reply(inbox string, v any) {
@@ -527,3 +548,20 @@ const DelegationDestination = "llm"
 // dispatcher (ADR-0269 §SD6). Until it is set, such completions are
 // refused.
 func (inst *Service) SetDelegation(d app.DelegationI) { inst.delegation.Store(&delegationRef{d: d}) }
+
+// incompleteReason says why an answer the provider ended early has no text:
+// how it ended, what it spent against the ceiling the call had, and whether
+// the model spent it reasoning — what a person needs to tell a reasoning
+// model's budget from a filter.
+func incompleteReason(resp openaichat.CompletionResponse, maxTokens int32) (s string) {
+	s = "the provider ended the answer early (finish_reason " + strconv.Quote(resp.FinishReason) + ") after " +
+		strconv.FormatInt(int64(resp.OutputTokens), 10) + " output tokens"
+	if maxTokens > 0 {
+		s += " of the call's ceiling of " + strconv.FormatInt(int64(maxTokens), 10) + " (BOXER_LLM_MAXTOKENS when the request names none)"
+	}
+	s += ", with no answer text"
+	if resp.Reasoning != "" {
+		s += "; the model spent them reasoning (" + strconv.Itoa(len(resp.Reasoning)) + " bytes of reasoning)"
+	}
+	return
+}

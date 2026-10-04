@@ -1,9 +1,9 @@
 // Package graphview is the live node-and-edge graph widget of ADR-0224:
 // random, force-directed (Fruchterman–Reingold, optionally with
 // centre gravity) and hierarchical layouts, drawn on the imzero2 painter lane
-// with no IDL, Rust or fetcher of its own. It is the Go sibling of the
-// egui_graphs-backed `Graph` binding and carries that binding's feature set
-// and parameter semantics, so a consumer moves over by renaming types.
+// with no IDL, Rust or fetcher of its own. It replaced the egui_graphs-backed
+// `Graph` binding, since removed, and carries that binding's feature set and
+// parameter semantics.
 //
 // The caller declares the full node and edge set every frame (ADR-0224 §SD1);
 // the widget retains positions, selection and the camera across frames and

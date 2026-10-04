@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -14,13 +15,60 @@ import (
 // the task; when the task ends it passes to the person, badged as left by
 // the task.
 
-// resolveApp finds a launchable app by id or subject alias. An app the
-// launch limit refuses (ADR-0272) is not found, so no grant can name it.
+// resolveApp finds a launchable app by its id or subject alias, or else by
+// a name that matches one launchable app's id, alias or display name,
+// ignoring case — what a model writes when it names the app it read in
+// describe_app ("Play", "SQL Playground"). A name two apps answer to finds
+// neither. An app the launch limit refuses (ADR-0272) is not found, so no
+// grant can name it.
 func (inst *Service) resolveApp(name string) (id app.AppIdT, ok bool) {
-	for _, m := range inst.cfg.Registry.LaunchableManifests() {
+	name = strings.TrimSpace(name)
+	ms := inst.cfg.Registry.LaunchableManifests()
+	for _, m := range ms {
 		if matchesApp(m, name) {
 			return m.Id, true
 		}
+	}
+	n := 0
+	for _, m := range ms {
+		if strings.EqualFold(string(m.Id), name) || strings.EqualFold(m.Id.SubjectAlias(), name) || strings.EqualFold(m.Display, name) {
+			id, n = m.Id, n+1
+		}
+	}
+	if n == 1 {
+		return id, true
+	}
+	return "", false
+}
+
+// unknownAppReason says why name opens no window.
+func (inst *Service) unknownAppReason(name string) (reason string) {
+	if inst.refusedByLimit(name) {
+		return "this host does not open windows of " + name + " (launch limit)"
+	}
+	return "no app named " + strconv.Quote(name) + "; describe_app lists the apps by id"
+}
+
+// resolveLaunches checks a request's launches as it arrives: every name
+// must find an app, so a grant never comes back without a launch the
+// caller asked for. Each name becomes the app's id, which the person's
+// dialog shows, and a count of zero becomes one.
+func (inst *Service) resolveLaunches(ls []wireLaunchEntry) (out []wireLaunchEntry, reason string) {
+	var bad []string
+	for _, l := range ls {
+		id, ok := inst.resolveApp(l.App)
+		if !ok {
+			bad = append(bad, inst.unknownAppReason(l.App))
+			continue
+		}
+		l.App = string(id)
+		if l.Count == 0 {
+			l.Count = 1
+		}
+		out = append(out, l)
+	}
+	if len(bad) > 0 {
+		return nil, "cannot open: " + strings.Join(bad, "; ")
 	}
 	return
 }
@@ -77,10 +125,8 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	id, known := inst.resolveApp(req.App)
 	le := t.launches[id]
 	switch {
-	case !known && inst.refusedByLimit(req.App):
-		rep.Reason = "this host does not open windows of " + req.App + " (launch limit)"
 	case !known:
-		rep.Reason = "no app by that name"
+		rep.Reason = inst.unknownAppReason(req.App)
 	case le == nil:
 		rep.Reason = "the grant does not let the task open windows of " + string(id)
 	case le.used >= le.count:
@@ -204,6 +250,10 @@ func (inst *Client) Launch(ctx context.Context, handle string, appName string, k
 	return
 }
 
-func launchText(l wireLaunchEntry) (s string) {
-	return "open up to " + strconv.FormatUint(uint64(l.Count), 10) + " window(s) of " + l.App + " in " + l.Mode + " mode"
+func launchText(l wireLaunchEntry, display string) (s string) {
+	mode := l.Mode
+	if mode == "" || ParseMode(mode) == ModeUnspecified {
+		mode = ModeAct.String()
+	}
+	return "open up to " + strconv.FormatUint(uint64(l.Count), 10) + " window(s) of " + display + " in " + mode + " mode"
 }

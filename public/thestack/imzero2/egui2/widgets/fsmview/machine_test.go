@@ -233,8 +233,8 @@ func TestHistoryReverse(t *testing.T) {
 }
 
 // TestNodeId_stable confirms that the FNV-derived node id is stable per
-// state across repeated calls — load-bearing for egui_graphs to retain
-// layout positions across frames.
+// state across repeated calls — load-bearing for the views that key widget
+// state on it across frames.
 func TestNodeId_stable(t *testing.T) {
 	m := NewMachine("red", 4, MachineOptions[string]{})
 	first := m.NodeId("red")

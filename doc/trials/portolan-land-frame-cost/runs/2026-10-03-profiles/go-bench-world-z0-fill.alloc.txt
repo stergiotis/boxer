@@ -1,0 +1,23 @@
+File: landoverlay.test
+Build ID: 8e7a18e8e495eeb00d7ab1c67757f9d4fbc0be81
+Type: alloc_space
+Time: 2026-10-03 19:45:49 CEST
+Showing nodes accounting for 377.13MB, 97.44% of 387.05MB total
+Dropped 62 nodes (cum <= 1.94MB)
+Showing top 15 nodes out of 49
+      flat  flat%   sum%        cum   cum%
+  273.57MB 70.68% 70.68%   273.57MB 70.68%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.Projector.project
+   89.04MB 23.00% 93.68%    89.04MB 23.00%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.toF32
+       7MB  1.81% 95.49%        7MB  1.81%  github.com/stergiotis/boxer/public/thestack/fffi2/typed.newRetainedFffiBuilderPooled
+    5.52MB  1.42% 96.92%     5.52MB  1.42%  encoding/json/jsontext.(*objectNamespace).insert
+       2MB  0.52% 97.44%        2MB  0.52%  bytes.growSlice
+         0     0% 97.44%        2MB  0.52%  bytes.(*Buffer).Write
+         0     0% 97.44%        2MB  0.52%  bytes.(*Buffer).grow
+         0     0% 97.44%     2.76MB  0.71%  encoding/json/jsontext.(*Decoder).ReadToken
+         0     0% 97.44%     2.76MB  0.71%  encoding/json/jsontext.(*decoderState).ReadToken
+         0     0% 97.44%     2.76MB  0.71%  encoding/json/jsontext.(*decoderState).consumeWhitespace
+         0     0% 97.44%     2.76MB  0.71%  encoding/json/jsontext.(*decoderState).fetch
+         0     0% 97.44%     5.52MB  1.42%  encoding/json/jsontext.(*objectNamespace).InsertUnquoted
+         0     0% 97.44%     8.27MB  2.14%  encoding/json/v2.UnmarshalRead
+         0     0% 97.44%     6.02MB  1.55%  encoding/json/v2.makeSliceArshaler.func3
+         0     0% 97.44%     8.27MB  2.14%  encoding/json/v2.makeStructArshaler.func3

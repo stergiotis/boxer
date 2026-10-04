@@ -511,6 +511,19 @@ other side's bubbles start at the left edge and fit their content already.
 The pane probe and the new width probe are now folded through the host's id
 stack, so two transcripts in two windows no longer share one probe slot.
 
+### 2026-10-03 — a host body that takes clicks, and a jump to a message's start
+
+A bubble is a click-sensed frame, and a click-sensed frame wins the pointer
+over everything inside it, so a button a host body drew — the chat app's
+Retry, a markdown code block's Copy — never received a click.
+`Input.InteractiveBlocks` drops the bubble's click sense: nothing is
+selected and `Result.Clicked` stays −1, and the body's own widgets take
+the pointer. A transcript that selects messages leaves it off.
+
+`State.ScrollToStart` is `JumpTo` with the message's first line at the top
+of the view instead of the middle: where a reader starts a long answer that
+just arrived, rather than at its end where following leaves them.
+
 ## References
 
 - [ADR-0186](./0186-play-gloss-catalog.md) — the gloss catalog, faces and the

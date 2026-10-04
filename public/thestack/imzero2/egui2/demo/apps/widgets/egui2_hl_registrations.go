@@ -93,32 +93,6 @@ func init() {
 		},
 	})
 	registry.Register(registry.Demo{
-		Name: "graphs", Category: "Charts & plots", Title: icons.IconChartBar + " graphs",
-		Stage: [2]float32{1024, 700}, Flags: registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic, // dynamic-tree demo grows by time.Since(start)
-		Kind:        registry.DemoKindUX,
-		Description: "Force-directed, hierarchical and ring graph layouts sharing one set of navigation controls and a live event log.",
-		Init: func(_ *c.WidgetIdStack) (state any) {
-			state = newGraphsDemoState()
-			return
-		},
-		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			st := state.(*graphsDemoState)
-			for range c.CollapsingHeader(ids.PrepareStr("graph-nav-demo"), c.WidgetText().Text("navigation controls").Keep()).KeepIter() {
-				demoGraphGlobalNavControls(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-basic-demo"), c.WidgetText().Text("ring (random layout)").Keep()).DefaultOpen(true).KeepIter() {
-				demoGraphBasic(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-dynamic-demo"), c.WidgetText().Text("tree (force-directed)").Keep()).KeepIter() {
-				demoGraphDynamic(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-hierarchical-demo"), c.WidgetText().Text("tree (hierarchical, 10 nodes)").Keep()).KeepIter() {
-				demoGraphHierarchical(ids, st)
-			}
-			demoGraphEventLog(ids, st)
-		},
-	})
-	registry.Register(registry.Demo{
 		Name: "graphview-ring", Category: "Charts & plots", Title: icons.IconTreeStructure + " graphview (Go) — ring",
 		Stage:       [2]float32{1024, 760},
 		Flags:       registry.DemoFlagNeedsLargeArea,
@@ -251,6 +225,19 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			demoFlowBench(ids, state.(*flowBenchState))
+		},
+	})
+	registry.Register(registry.Demo{
+		Name: "landbench", Category: "Maps & geo", Title: icons.IconGlobe + " land bench (portolan land trial harness)",
+		Stage:       [2]float32{1024, 760},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagSkipInTour | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindDX,
+		Description: "The measurement harness of the land frame-cost trial (doc/trials/portolan-land-frame-cost): one map, the landoverlay, a view and a paint arm — filled as shipped, outlines only, or no layer — and a window of frames summarised into a label and a log line. Not a showcase; the trial's run script drives it.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newLandBenchState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoLandBench(ids, state.(*landBenchState))
 		},
 	})
 	registry.Register(registry.Demo{

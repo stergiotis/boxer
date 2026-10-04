@@ -419,6 +419,45 @@ play's agent limits rather than by a preview. `explain` and `fix this
 error` stay, as one-click transformations over the buffer, with the M4 tool
 loop behind `fix`.
 
+### 2026-10-03 — a failure names its call
+
+A failed or refused completion now says which row of the call record it
+is: a refusal's reply carries the call id, and the client returns a
+provider failure as `llm.CallError` — the failure kind, the provider's
+reason, the call id and the elapsed time — which unwraps to the
+`openaichat` sentinel it was, so classification by `errors.Is` is
+unchanged. `RefusedError` gained the call id; `llm.CallIdOf` reads it from
+either. A caller can show where a failure is recorded and open it, as the
+chat app does (ADR-0265 §SD4). A failure that never reached the service — a
+bus timeout, a cancel before the reply — has no call id.
+
+### 2026-10-03 — `llm.describe` reports the context size
+
+`llm.describe` reports the model's context size — what a whole request,
+prompt and answer, has to fit — and where the figure came from:
+`BOXER_LLM_CONTEXT_TOKENS` when the deployment states it, otherwise one
+request for the endpoint's model list at service start, read from the field
+the server reports it in (`loaded_context_length`, `max_model_len`,
+`context_length` and the like; `ProbeContextTokens`). The model list of
+the OpenAI API names none, and the size then stays unknown (0). The probe
+is skipped when the service's client replaces the endpoint, as the scripted
+model and tests do. A chat uses the size to say how full its conversation
+is (ADR-0265 §SD4); the service itself enforces nothing with it.
+
+### 2026-10-03 — an answer cut off before any text says why
+
+An answer the provider ends early with no text — `finish_reason` `length` or
+`content_filter` — came back as the generic "completion did not finish
+normally", classed `other`. A reasoning model that spends the whole ceiling
+thinking produced exactly that on a one-line question. Such a failure is now
+the kind `incomplete`, unwrapping to `openaichat.ErrIncompleteCompletion`,
+and its reason — on the reply and on the call record — says how the answer
+ended, the output tokens it spent against the call's ceiling
+(`BOXER_LLM_MAXTOKENS` when the request names none), and whether the model
+spent them reasoning. The reasoning text returns on `CallError.Reasoning`
+for inspection. An early end that does carry text is still an answer marked
+`Incomplete`, as before.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

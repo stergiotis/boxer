@@ -200,7 +200,7 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 func TestAStoppedTurnKeepsItsCallsShown(t *testing.T) {
 	conv := newConversation()
 	req := conv.request("go")
-	conv.begin("go", 1)
+	conv.begin("go", 1, false)
 	conv.landTurn(req, &turnResult{activity: []string{"get_note in window 100 · completed"}, stopped: "the model kept calling tools past 24 rounds"}, nil, 2)
 	require.Len(t, conv.entries, 2)
 	assert.True(t, conv.entries[0].failed)
@@ -469,4 +469,54 @@ func TestAnEndedTaskIsReplacedByTheNextRequest(t *testing.T) {
 	second, _, _ := coord.state()
 	assert.NotEmpty(t, second)
 	assert.NotEqual(t, first, second, "a new task")
+}
+
+// A model names the apps to open as it likes — a bare string, the display
+// name — and the window opens; the grant's reply says what open_window may
+// open. An item naming no app is refused by name, and nothing is asked.
+func TestOpenTakesTheShapesModelsWrite(t *testing.T) {
+	for _, open := range []string{`["notes"]`, `[{"app":"Notes"}]`, `"notes"`} {
+		bus := inprocbus.NewInst(zerolog.Nop())
+		model := &scriptedModel{replies: []openaichat.CompletionResponse{
+			toolCall("c1", "request_access", `{"plan":"p","open":`+open+`}`),
+			toolCall("c2", "open_window", `{"app":"notes"}`),
+			{Content: "done", FinishReason: "stop"},
+		}}
+		_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+		res, err := runTurn(ctx, cli, coord, req, nil)
+		require.NoError(t, err)
+		r := toolReplies(res.messages)
+		assert.Contains(t, r["c1"], "open_window may now open:", open)
+		assert.Contains(t, r["c2"], `"window":100`, open)
+	}
+
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("c1", "request_access", `{"plan":"p","open":[{"name":"notes"}]}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	assert.Contains(t, toolReplies(res.messages)["c1"], "this item names no app")
+	task, _, _ := coord.state()
+	assert.Empty(t, task, "nothing was asked")
+}
+
+// A refused open_window says what to do: ask for the app when the grant
+// does not name it, look it up when no app answers to the name.
+func TestARefusedOpenSaysWhatToDoNext(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("c1", "request_access", `{"plan":"p","open":["notes"]}`),
+		toolCall("c2", "open_window", `{"app":"notepad"}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	r := toolReplies(res.messages)
+	assert.Contains(t, r["c2"], `no app named "notepad"`)
+	assert.Contains(t, r["c2"], `next: {"tool":"describe_app"`)
+	assert.Contains(t, openNext("notes", "the grant does not let the task open windows of x"), `"tool":"request_access"`)
 }

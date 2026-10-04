@@ -55,6 +55,8 @@ func setup(n int32) int32 {
 	if mainFn == nil {
 		return 2
 	}
+	beginExport()
+	defer endExport()
 	var args []string
 	if n > 0 {
 		args = strings.Split(string(argBuf[:n]), "\x00")
@@ -76,5 +78,7 @@ func frame() int32 {
 	if stepFn == nil {
 		return -1
 	}
+	beginExport()
+	defer endExport()
 	return stepFn()
 }

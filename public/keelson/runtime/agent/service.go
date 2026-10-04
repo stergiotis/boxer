@@ -249,15 +249,20 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply) {
 		m := r.Manifest
 		// An app the launch limit refuses (ADR-0272) has no window to
 		// operate and none can be opened, so describing it would mislead.
-		if m.Operations == nil || !inst.cfg.Registry.Launchable(m.Id) {
+		if !inst.cfg.Registry.Launchable(m.Id) {
 			continue
 		}
 		if req.App != "" && !matchesApp(m, req.App) {
 			continue
 		}
-		appHit := search == "" || containsFold(string(m.Id), search) || containsFold(m.Display, search) || containsFold(m.Summary, search)
+		appHit := search == "" || containsFold(string(m.Id), search) || containsFold(m.Display, search) || containsFold(m.Summary, search) ||
+			slices.ContainsFunc(m.Keywords, func(k string) bool { return containsFold(k, search) })
 		entry := wireApp{App: string(m.Id), Display: m.Display, Summary: m.Summary, Help: m.Help != nil}
-		for _, o := range m.Operations.Operations {
+		var ops []app.OperationSpec
+		if m.Operations != nil {
+			ops = m.Operations.Operations
+		}
+		for _, o := range ops {
 			if !o.Agents {
 				continue
 			}
@@ -270,6 +275,19 @@ func (inst *Service) describe(msg *app.Msg) (rep wireDescribeReply) {
 			entry.Operations = append(entry.Operations, wireOperationOf(m, o, req.Operation != ""))
 		}
 		if len(entry.Operations) == 0 {
+			// An app with no operation for agents can still be opened: it is
+			// listed, with none, when its own fields match and no operation
+			// was asked for — so a model learns the id it opens it by. An
+			// applet only when named or searched for: a build mints dozens,
+			// and the whole list is the model's first call.
+			if req.Operation != "" || !appHit || m.Surface != app.SurfaceWindowed {
+				continue
+			}
+			if m.Kind == app.KindApplet && req.App == "" && search == "" {
+				continue
+			}
+			entry.Operations = []wireOperation{}
+			rep.Apps = append(rep.Apps, entry)
 			continue
 		}
 		for _, res := range m.Operations.Resources {

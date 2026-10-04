@@ -95,6 +95,7 @@ try {
     schedule(continuous ? minMs : Math.min(Math.max(stub.repaintDelayMs(), minMs), idleMs));
   };
   wake = () => { if (!exited) schedule(0); };
+  r.onHttpSettled(() => wake());
   tick();
 } catch (err) {
   log('worker error: ' + (err && err.stack || err));

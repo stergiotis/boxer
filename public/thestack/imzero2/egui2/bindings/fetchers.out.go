@@ -58,62 +58,6 @@ func (inst *Fetcher) CollectFetchFrameMetrics() (interpretUs uint64, passNr uint
 	passNr = inst.readU64()
 	return
 }
-func (inst *Fetcher) FetchGraphEvents() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	inst.invoke(FuncProcIdFetchGraphEvents)
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
-	return
-}
-func (inst *Fetcher) IssueFetchGraphEvents() {
-	inst.invoke(FuncProcIdFetchGraphEvents)
-}
-func (inst *Fetcher) CollectFetchGraphEvents() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
-	return
-}
-func (inst *Fetcher) FetchGraphMetrics() (graphIds []uint64, nodeCount []uint32, edgeCount []uint32, frSteps []uint64, frLastDisp iter.Seq[float32]) {
-	inst.invoke(FuncProcIdFetchGraphMetrics)
-	graphIds = inst.readU64h()
-	nodeCount = inst.readU32h()
-	edgeCount = inst.readU32h()
-	frSteps = inst.readU64h()
-	frLastDisp = inst.iterateF32h()
-	return
-}
-func (inst *Fetcher) IssueFetchGraphMetrics() {
-	inst.invoke(FuncProcIdFetchGraphMetrics)
-}
-func (inst *Fetcher) CollectFetchGraphMetrics() (graphIds []uint64, nodeCount []uint32, edgeCount []uint32, frSteps []uint64, frLastDisp iter.Seq[float32]) {
-	graphIds = inst.readU64h()
-	nodeCount = inst.readU32h()
-	edgeCount = inst.readU32h()
-	frSteps = inst.readU64h()
-	frLastDisp = inst.iterateF32h()
-	return
-}
-func (inst *Fetcher) FetchGraphSelection() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	inst.invoke(FuncProcIdFetchGraphSelection)
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
-	return
-}
-func (inst *Fetcher) IssueFetchGraphSelection() {
-	inst.invoke(FuncProcIdFetchGraphSelection)
-}
-func (inst *Fetcher) CollectFetchGraphSelection() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
-	return
-}
 func (inst *Fetcher) FetchPixelsPerPoint() (pixelsPerPoint float32) {
 	inst.invoke(FuncProcIdFetchPixelsPerPoint)
 	pixelsPerPoint = inst.readF32()
@@ -322,6 +266,38 @@ func (inst *Fetcher) CollectFetchR26KeyCaptures() (ids []uint64, codes []uint8, 
 	ids = inst.readU64h()
 	codes = inst.readU8h()
 	mods = inst.iterateU8h()
+	return
+}
+func (inst *Fetcher) FetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
+	inst.invoke(FuncProcIdFetchR27Windows)
+	ids = inst.readU64h()
+	minX = inst.readF32h()
+	minY = inst.readF32h()
+	maxX = inst.readF32h()
+	maxY = inst.readF32h()
+	z = inst.readU32h()
+	collapsed = inst.readU8h()
+	workMinX = inst.readF32()
+	workMinY = inst.readF32()
+	workMaxX = inst.readF32()
+	workMaxY = inst.readF32()
+	return
+}
+func (inst *Fetcher) IssueFetchR27Windows() {
+	inst.invoke(FuncProcIdFetchR27Windows)
+}
+func (inst *Fetcher) CollectFetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
+	ids = inst.readU64h()
+	minX = inst.readF32h()
+	minY = inst.readF32h()
+	maxX = inst.readF32h()
+	maxY = inst.readF32h()
+	z = inst.readU32h()
+	collapsed = inst.readU8h()
+	workMinX = inst.readF32()
+	workMinY = inst.readF32()
+	workMaxX = inst.readF32()
+	workMaxY = inst.readF32()
 	return
 }
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {

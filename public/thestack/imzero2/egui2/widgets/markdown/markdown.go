@@ -182,6 +182,11 @@ type Input struct {
 	// block; nil accepts every block. Withholding the buttons here is the
 	// only way to avoid showing an affordance the host cannot act on.
 	CodeActionFilter func(text string, lang string) bool
+	// CodeActionMask picks which of ActionLabels a block carries: bit i
+	// shows label i, and a block with no bit set carries no row. It runs
+	// after CodeActionFilter, under the same purity rule; nil shows every
+	// label. A clicked button keeps its index into ActionLabels.
+	CodeActionMask func(text string, lang string) uint64
 
 	// LinkClaims lets the host take ownership of the links it recognises:
 	// true makes a link an in-document link — visually a link, but a widget
@@ -273,6 +278,7 @@ func (inst *Doc) render(in Input) (res Result) {
 		actionLabels:   in.ActionLabels,
 		linkClaims:     in.LinkClaims,
 		actionAccept:   in.CodeActionFilter,
+		actionMask:     in.CodeActionMask,
 	}
 	var visible []bool
 	if in.SectionFilter != nil {
@@ -366,6 +372,8 @@ type renderCtx struct {
 	// actionAccept gates the per-block action buttons ([Input.CodeActionFilter]).
 	// Nil accepts every block.
 	actionAccept func(text string, lang string) bool
+	// actionMask picks the labels per block ([Input.CodeActionMask]).
+	actionMask func(text string, lang string) uint64
 }
 
 // ParseOptions configures [ParseWith]; its zero value is [Parse]'s

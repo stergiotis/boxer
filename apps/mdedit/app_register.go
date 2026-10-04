@@ -3,6 +3,7 @@ package mdedit
 import (
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
@@ -46,6 +47,8 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicCode},
 	Keywords: []string{"markdown", "editor", "notes", "preview", "obsidian", "writing"},
 	Surface:  app.SurfaceWindowed,
+	// LaunchKind takes a document another app hands over (launchcfg).
+	LaunchKind: launchcfg.Kind,
 	SurfaceHints: app.SurfaceHints{
 		// Wide enough that the source and the preview both read comfortably
 		// at the default split, tall enough for a screenful of either.

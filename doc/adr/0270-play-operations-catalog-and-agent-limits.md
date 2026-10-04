@@ -380,6 +380,39 @@ Three gaps in the entry above:
   refuses. A statement dispatch sends to the introspection plane does not
   ask for the endpoint at all.
 
+
+### 2026-10-03 — the Projection pane, for an agent
+
+A chat model asked to cluster a result in play rewrote and reran its query
+some thirty times without a picture: nothing it could call started the
+Projection pane, read what it drew, or said why it drew nothing. The catalog
+gains a resource, `projection`, and three operations:
+
+- `compute_projection` (command, view effect) sets the run's neighbours,
+  minimum cluster size and feature set and raises the pane; the pane's next
+  draw starts the run over the result it draws, as the Compute button does —
+  which now goes through the command (SD6). It refuses while the pane cannot
+  draw, while a run is in flight, and below three rows.
+- `get_projection` (query) reports the run: status and error, the clusters
+  with their sizes and the noise, the pane's status line, whether the layout
+  has settled, and a page of points with row, cluster, membership
+  probability and position. The layout lives in the widget and moves only
+  while the pane is drawn; the snapshot copies it when a run lands, every
+  quarter second while it moves, and once more settled.
+- `explain_clusters` (query) returns the pane's "why these clusters" (ADR-0235,
+  ADR-0238): by features at a rule depth, one tree per cluster or the one
+  partition, or by attributes — per cluster the SQL rule, its fit, and what
+  sets the cluster apart, the same text the section shows.
+
+The resource's revision moves inside a frame, as the result's does: a run
+lands on its own goroutine, and a change seen between frames would be
+credited to the person and pause the task. Both queries are marked
+untrusted: rules and contrasts quote the data. The
+pane's accept step now refuses a result that is not leeway-shaped — the
+features come off the leeway card — so `list_panes` says so before a run
+would fail, and a run builds the card driver for its own result instead of
+relying on the Table or Detail pane to have built it.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

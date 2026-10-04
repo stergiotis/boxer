@@ -108,6 +108,12 @@ type window struct {
 	// flags. Render-thread only.
 	focusHandle widgethandle.WidgetHandle
 
+	// place is a one-frame placement computed by an arrangement; placePending
+	// emits it as c.WindowPlace before the window's next c.Window.
+	// Render-thread only.
+	place        Rect
+	placePending bool
+
 	// maximized pins the window to the desktop rect left free by the
 	// shell's panels. A title-bar double-click toggles it, read off
 	// focusHandle one frame late; egui keeps the rect to restore to.
@@ -229,6 +235,10 @@ type Inst struct {
 	// whose window closed in between matches nothing and the raise is
 	// dropped, which is the right answer. Zero = nothing pending.
 	pendingRaise WindowKeyT
+
+	// pendingArrange queues one whole-desktop arrangement (Arrange) for the
+	// next Frame. Written under mu, consumed by Frame like pendingRaise.
+	pendingArrange ArrangeE
 
 	// mountState shares Mount/Unmount lifecycle across windows that point at
 	// the same AppI instance (singleton-registered apps). Keyed by the AppI
@@ -1085,6 +1095,8 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	copy(snapshot, inst.windows)
 	raiseKey := inst.pendingRaise
 	inst.pendingRaise = 0
+	arrangeCmd := inst.pendingArrange
+	inst.pendingArrange = ArrangeNone
 	inst.mu.Unlock()
 
 	if len(snapshot) == 0 {
@@ -1119,10 +1131,19 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		}
 		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
 	}
+	if arrangeCmd != ArrangeNone {
+		inst.planArrange(arrangeCmd, snapshot)
+	}
 	for _, w := range snapshot {
 		title := w.manifest.WindowTitle()
 		if title == "" {
 			title = string(w.manifest.Id)
+		}
+		if w.placePending {
+			// Emitted before the window it places, with last frame's
+			// handle: the id is stable for the window's lifetime.
+			w.placePending = false
+			c.WindowPlace(w.focusHandle, w.place.MinX, w.place.MinY, w.place.W(), w.place.H())
 		}
 		winId := ids.PrepareStr("window-" + strconv.FormatUint(uint64(w.key), 10))
 		// Register the r10 databinding for the title-bar X. Re-registers

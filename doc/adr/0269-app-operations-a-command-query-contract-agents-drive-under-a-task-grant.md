@@ -943,6 +943,31 @@ engine joins it with the window's label, and the dispatcher's wall treats it
 as any confined result. Play's `list_datasets` (ADR-0270, update of this
 date) is the first.
 
+
+### 2026-10-03 — a launch is asked for by the name a model writes
+
+Models asked to open apps and got nothing, without being told why. A name
+that was not the exact id or subject alias — the display name, another case
+— was dropped when the person approved, so the task came back without the
+launch and `launch` then refused; a coordinator that read `open` as a list
+of objects dropped bare strings the same way. Now:
+
+- `launch` and a request's launches resolve a name by id or alias, then by
+  a case-insensitive id, alias or display name that one launchable app
+  answers to.
+- A request naming an app none answers to is refused as it arrives, by
+  name, saying that `describe` lists the ids; a grant never comes back
+  without a launch it was asked for. The person's dialog shows the app's
+  display name.
+- `describe` lists a windowed app without operations for agents too, with
+  none, when its own fields match and no operation is asked for — the id a
+  model opens it by. An SQL applet (ADR-0132) is listed so only when named
+  or searched for — a build mints dozens, and the unfiltered list is a
+  model's first call; a search also matches an app's keywords.
+- The chat's coordinator takes `open` items as strings or objects, names
+  an item that is neither instead of dropping it, says after a grant what
+  `open_window` may open, and gives a refused `open_window` a `next`.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

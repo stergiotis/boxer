@@ -69,12 +69,27 @@ history with the conversation id and the previous reply's call id as
 parent, as a background job. Its reply is appended as the assistant
 message the next turn echoes, so the service's prefix check (ADR-0264
 §SD3) holds and each turn keeps only what is new. One turn runs at a
-time; the composer is disabled while it does. Cancel ends the wait and
+time; the composer stays editable while it does, so the next message can
+be written, and sends once the answer is in. Cancel — or Escape in the
+composer — ends the wait and
 stops the provider call (`llm.cancel`, ADR-0254's 2026-09-27 update); a
 kept turn keeps its messages with the call's error, as a refused one
 does (ADR-0264 §SD4). A failed, refused or cancelled turn stays in the
 transcript as a failed bubble with the reason, and the next turn
 continues from the last successful reply.
+
+**The last turn can be taken back.** Retry sends a failed last turn
+again; a failed turn never reached the history, so only the transcript
+changes. Regenerate and Edit take back the last *answered* turn: the
+history and the parent return to what they were before it, so the next
+request is the one that turn sent, naming the same parent — a branch,
+which the service keeps beside the first (ADR-0264 §SD3). Regenerate
+sends the message again at once; Edit puts it in the composer and marks
+the resend edited, and Cancel edit puts the turn back while nothing was
+sent since. Only the last turn: an earlier one is in the history every
+later turn resent, and taking it back would drop those turns from the
+transcript. The transcript shows the branch it is on and no other; a
+kept conversation holds both in its rows.
 
 The whole answer arrives at once. Streaming is deferred with ADR-0254
 §SD7; until it exists a pending turn is a placeholder bubble with a
@@ -92,33 +107,67 @@ its own (SD5).
 
 - **The transcript** is chatview over the in-memory history, every
   message body — the user's as well as the model's — rendered as
-  markdown.
+  markdown, with the message's actions under it: Copy on every message,
+  Retry and Edit on a failed last turn, Edit on an answered one, and
+  Regenerate on the last answer (SD3). A reply's code blocks carry Copy,
+  and an `sql` block Open in play, which opens a play window with the
+  SQL in its editor, not run: the SQL is the model's, and the person runs
+  it. A turn that lands is shown from its start — the question at the
+  top of the view, then the answer — rather than at the end of a long
+  answer. Before the first send the transcript says what the window talks
+  to, whether it keeps, and how to send.
+- **A failure is inspectable.** Under the reason, Details shows the
+  failure's class, the call's id in the host's call record, when, how
+  long the call took, and the error's whole text, selectable; Copy
+  details puts them on the clipboard, and Open call in play opens the
+  call's row of `keelson('llm_calls')` (ADR-0254, 2026-10-03 update). A
+  failure that never reached the service has no call id and no row.
+- **What an action did.** Copy and Open run off the render thread; the
+  line above the composer says what each did, and a failed one says why
+  and stays until dismissed.
 - **The composer** is a multi-line text input highlighted as markdown
   with mdedit's lexer (which colours the text's own bytes, where the
-  canonicalising highlighter would colour a rewrite), and a Send button;
+  canonicalising highlighter would colour a rewrite), and a Send button
+  beside it;
   Ctrl+Enter sends, gated the way play's SQL editor gates Run: the chord
   is read for the whole process and acted on only by the instance whose
   window is focused (`app.WindowFocusI`), so two open chats do not both
   send. A focused text input does not compete for the chord.
-- **The model and the host** from `llm.describe`, beside the composer,
-  as ADR-0254 §SD1 asks; with no model configured the composer is
-  replaced by the reason.
+- **The model and the host** from `llm.describe`, in the bar, as
+  ADR-0254 §SD1 asks; with no model configured the transcript gives the
+  reason and there is no composer.
 - **Whether a turn was kept.** A reply whose verdict is not kept shows
-  the reason once per conversation, so a deployment below `durable` is
-  visible rather than silent.
+  the reason until dismissed, once per conversation, so a deployment
+  below `durable` is visible rather than silent; the Keep badge's hover
+  keeps it after.
 - **Keep this conversation**, a toggle beside New conversation, on by
   default. Off, the conversation's turns go on `llm.complete` and only
   the counts are recorded — the one "nothing kept" choice a user has,
   the temporary chat of the products surveyed. It is fixed at the first
   send, so a conversation is kept whole or not at all.
-- **The context used**: the last call's input and output tokens, the
-  only warning before a conversation outgrows the model (SD3). It is a
-  count without a ceiling: `llm.describe` reports the completion limit,
-  not the model's context size.
+- **The context used**: the last call's input and output tokens against
+  the model's context size, which `llm.describe` reports when the host
+  knows it (ADR-0254, 2026-10-03 update) — a meter, and from 80 % a line
+  above the composer that says the next answer may not fit and New
+  conversation is the way on (SD3). Without a size it is a count.
+- **The title.** A conversation is called by the first line of its first
+  message until the first answer lands; the app then asks the model once
+  for a title of a few words — on `llm.complete`, never kept, under the
+  sensitivity the conversation holds — and a person's rename wins over
+  both. The title lives with the window, like the conversation; keeping
+  it is decided with resume (SD5). Its hover says where it came from, and
+  why the model's did not land when it did not.
+- **Open in mdedit** hands the conversation to a new mdedit window as a
+  markdown document (ADR-0178, 2026-10-03 update): the title, the model,
+  when it started, whether it was kept, its id, then every message under a
+  heading of its own, the tool calls as a list and a failure as a callout
+  with its details. It is the branch the window shows. mdedit holds it
+  unsaved, apart from the document it keeps.
 - **New conversation** clears the transcript and mints a new id.
 - **Where past conversations are.** The app says, once, that a closed
   conversation is read in play, since a user expects history to survive
-  the window and this one does not.
+  the window and this one does not — only for a conversation that is
+  being kept.
 
 ### SD5 — Deferred, recorded
 
@@ -128,9 +177,11 @@ its own (SD5).
   and scoped to the caller — the `app_logs` shape.
 - **Tools beyond the coordinator's** (SD6): a capture the model views as
   an image, the operations of apps that serve no catalog.
-- **Streaming**, **titles** (ADR-0264 §SD7), **edit-and-resend** and
-  **regenerate** as branches — a call with an earlier parent, which the
-  service already keeps.
+- **Streaming** (ADR-0264 §SD7), and **keeping a title** — decided with
+  resume, which is what would read it.
+- **Edit and regenerate of an earlier turn**, and **the branches side by
+  side** — a regenerated answer's earlier versions, an edited message's
+  earlier text. SD3 takes back the last turn only, and shows one branch.
 - **A context window** (SD3): what to drop when the conversation
   outgrows the model, sent as a declared omission.
 - **A system prompt** of the person's. The only one is the coordinator's
@@ -153,7 +204,12 @@ through the host:
 
 - **Registration.** The person registers the app as a coordinator
   (`BOXER_AGENT_COORDINATORS`); the manifest's `runtime.agent` grant alone
-  lets it ask for nothing.
+  lets it ask for nothing. A window of a registered chat starts with Apps
+  on, since the registration is the intent Apps serves; the person can
+  untick it before the first send. A conversation started without Apps is
+  marked "no apps" in the bar — its model has no tools and says so when
+  asked to open a window — and the empty window says the same before the
+  first send.
 - **Fixed tools.** `request_access`, `list_windows`, `describe_app`,
   `call_operation`, `open_window` and `stop_task`. Operation schemas load on demand
   through `describe_app`; a call's key is the model's tool-call id.
@@ -251,10 +307,16 @@ and Skip. The shape follows the question tool of Claude Code.
   over a fake provider and an in-process bus: a second turn names the
   first reply's call id as parent and resends it verbatim; a failed
   turn is not a parent; New conversation mints a new id; a conversation
-  with Keep off sends nothing on `llm.retain.*`.
-- **Lane: scene.** A headless scene that types, sends and captures the
-  transcript needs a model endpoint. None exists where this was written;
-  a local model or a stub OpenAI-compatible server is the prerequisite.
+  with Keep off sends nothing on `llm.retain.*`. A taken-back turn's
+  next request is the one it sent, from the same parent; Cancel edit puts
+  it back; a failure carries its kind and call id.
+- **Lane: scene.** The scenes under `apps/chat/scenes` answer from the
+  scripted model (`BOXER_LLM_SCRIPT`, ADR-0269 M6): a turn sent, its SQL
+  opened in play, the answer regenerated, the turn edited and put back;
+  and, against an endpoint that refuses the connection, a failure's
+  details copied and its call record opened in play; the model's title
+  replacing the first line, a stated context of two tokens filled, and
+  the conversation opened in mdedit.
 - **What would fail.** A reply appended differently from how it came
   back makes every turn keep its whole history; the fake-provider test
   pins it by checking `RetainedFrom` on the second call.
@@ -263,7 +325,10 @@ and Skip. The shape follows the question tool of Claude Code.
 
 Proposed — awaiting review by the code owner. Revised in place on
 2026-10-01 for ADR-0269's M5: the coordinator of SD6, built and tested
-against a scripted model over the host's services.
+against a scripted model over the host's services. Revised in place on 2026-10-03: the last turn
+taken back (SD3), message actions, inspectable failures and the layout of
+SD4, built and scene-run; and the title, the context meter and Open in
+mdedit of SD4.
 
 Built 2026-09-27, in the working tree, as the chat app beside the other
 apps. The default lane passes: the turn loop against the llm service over

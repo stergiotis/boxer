@@ -1,0 +1,2 @@
+
+0 passed, 1 failed, 0 skipped → $WORK/out/index.md

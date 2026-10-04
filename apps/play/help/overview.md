@@ -67,7 +67,7 @@ query* on the Features page):
 - **Table** — the result grid. Select a row here to drive the Detail tab.
 - **Detail** — beside the others: the per-row card for the selected row,
   whichever pane selected it.
-- **Projection** — the neighbour graph of the result's numeric columns, laid out as a graph.
+- **Projection** — a leeway-shaped result's entities as a neighbour graph, clustered, laid out as a graph, with why the clusters are what they are.
 - **Timeline** — events on a time axis, from `_tl_time` and friends.
 - **Map** — an in-database-rendered geo raster over a pannable map, for tables
   with mercator columns (queries on its own, independent of the editor).

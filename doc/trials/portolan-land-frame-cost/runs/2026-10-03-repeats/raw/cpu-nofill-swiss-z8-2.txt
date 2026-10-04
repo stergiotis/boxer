@@ -1,0 +1,4 @@
+label ="bench done arm=nofill view=swiss-z8 countries=6 frames=300"
+label ="bench go draw_p50_us=316 draw_p95_us=417"
+label ="bench host interpret_p50_us=741 interpret_p95_us=927 written_p50_bytes=6196"
+raster stats (per frame: rasterize, then tessellate separately) backend="cpu" frames=540 width_px=1100 height_px=900 mean_us=1971 p50_us=2681 p90_us=3172 p99_us=5822 min_us=221 max_us=7842 tess_mean_us=109 tess_p50_us=105 prims=11 tris=3598

@@ -24,8 +24,6 @@ func Definitions() []ir.NodeI {
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsEtRegistered(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsNewTableBlock(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsNewTableRegistered(), nil),
-		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsGraphRegistered(), nil),
-		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsGraphBlock(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsPainterRegistered(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsPainterBlock(), nil),
 		slices2.CopySliceInterfaceCastable[*ir.BuilderFactoryNode, ir.NodeI](definitionsScrollingTexture(), nil),

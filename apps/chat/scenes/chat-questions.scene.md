@@ -33,7 +33,6 @@ default-lane test `TestAskUserWaitsForTheFormInsideTheTurn` covers both.
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
 {"do":"wait","valueContains":"Which sections should","role":"label"}
-{"do":"wait","valueContains":"waiting for your answer above","role":"label","comment":"the turn waits on the form"}
 {"do":"capture","text":"chat-questions-open"}
 {"do":"click","contains":"Answer","role":"button","comment":"nothing chosen yet"}
 {"do":"wait","valueContains":"Each question needs a choice","role":"label"}

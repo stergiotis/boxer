@@ -134,6 +134,11 @@ tab is which apps a build links; a tab for one app should link that app.
 - **Live query progress.** The transport that reads ClickHouse's progress
   headers as they stream speaks HTTP over a raw socket; under wasm the
   stock client is used and a run reports when it completes.
+- **A non-blocking request on the render goroutine.** Requests from query
+  lanes, tile loaders and other goroutines go out asynchronously and the tab
+  keeps painting; one made on the goroutine running `setup` or a frame is
+  performed synchronously and stops the tab until it returns (ADR-0263
+  Update 2026-10-03).
 - **Sealed files and layered graph layouts**, which need `O_TMPFILE` and an
   embedded Graphviz runtime respectively; both fall back as their callers
   expect.
