@@ -126,6 +126,9 @@ type conversation struct {
 	id string
 	// keep sends the turns on llm.retain.complete; set at the first send.
 	keep bool
+	// firstTurn is the id of the conversation's first turn, which the
+	// title call names (ADR-0277 §SD5).
+	firstTurn string
 	// apps runs the turns as the coordinator's tool loop (ADR-0265 §SD6);
 	// set at the first send, since the coordinator's system prompt is the
 	// conversation's first message.
@@ -197,6 +200,9 @@ func (inst *conversation) request(text string) (r llm.Request) {
 	msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleUser, Content: text})
 	r = llm.Request{Purpose: purpose, Messages: msgs, Retain: inst.keep,
 		Conversation: inst.id, Turn: newTurn(), ParentCallId: inst.parent}
+	if inst.firstTurn == "" {
+		inst.firstTurn = r.Turn
+	}
 	return
 }
 
