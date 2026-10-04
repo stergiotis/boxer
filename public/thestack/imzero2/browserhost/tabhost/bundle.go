@@ -57,6 +57,7 @@ func bundleCommand() (cmd *cli.Command) {
 			&cli.StringFlag{Name: "hostFrom", Value: hostFromAuto, Usage: "auto: build from source inside boxer, fetch by the recorded digest from any other module (building when the fetch fails); fetch; source (needs cargo and the wasm32-unknown-unknown target)"},
 			&cli.StringFlag{Name: "fonts", Usage: "a directory holding main.ttf, mono.ttf, phosphor.ttf and fallback.ttf (each optional); empty resolves them as boxer's launchers do"},
 			&cli.BoolFlag{Name: "withAssets", Usage: "also write the page, worker and shim, for serving the bundle with something other than this binary"},
+			&cli.BoolFlag{Name: "wasmOpt", Usage: "shrink the Go module with wasm-opt -Oz (binaryen); off by default — on a module of tens of megabytes it can need more memory than a CI runner has"},
 		},
 		Action: bundle,
 	}
@@ -83,7 +84,7 @@ func bundle(ctx *cli.Context) (err error) {
 	if err != nil {
 		return
 	}
-	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm"), true, os.Stderr); err != nil {
+	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm"), ctx.Bool("wasmOpt"), os.Stderr); err != nil {
 		return
 	}
 	if err = placeHost(ctx.String("host"), ctx.String("hostFrom"), boxerDir, mainDir, filepath.Join(out, "imzero2_browser.wasm")); err != nil {
@@ -129,8 +130,11 @@ func goListDir(subject string, args ...string) (dir string, err error) {
 
 // buildGoModule builds pkg as a wasip1 reactor with the shipped-binary flags,
 // the module's own tags and its go.mod toolchain, and, with optimize, shrinks
-// it with wasm-opt when that is installed. The go command's output goes to
-// diag.
+// it with wasm-opt. Optimising is asked for, never implied by binaryen being
+// installed: on a 50 MB demo module wasm-opt -Oz (binaryen 108) got a CI job
+// killed, and locally ran out of memory past 3 GB within two minutes, while
+// the build took seconds.
+// The go command's output goes to diag.
 func buildGoModule(mainDir string, pkg string, dst string, optimize bool, diag io.Writer) (err error) {
 	args := append([]string{"build"}, goBuildFlags...)
 	args = append(args, "-buildmode=c-shared", "-ldflags=-s -w", "-tags", readTags(mainDir), "-o", dst, pkg)
@@ -149,14 +153,19 @@ func buildGoModule(mainDir string, pkg string, dst string, optimize bool, diag i
 	if err = cmd.Run(); err != nil {
 		return eb.Build().Str("pkg", pkg).Errorf("bundle: go build: %w", err)
 	}
-	if _, available := extbin.WasmOpt.Resolve(); optimize && available {
-		opt := dst + ".opt"
-		if woErr := extbin.WasmOpt.Run(context.Background(), extbin.Opts{}, "-Oz", "--enable-bulk-memory", "--enable-sign-ext", "--enable-mutable-globals", "--enable-nontrapping-float-to-int", dst, "-o", opt); woErr != nil {
-			log.Warn().Err(woErr).Msg("bundle: wasm-opt failed; the unoptimised module stands")
-			_ = os.Remove(opt)
-		} else if err = os.Rename(opt, dst); err != nil {
-			return eh.Errorf("bundle: wasm-opt output: %w", err)
-		}
+	if !optimize {
+		return
+	}
+	if _, available := extbin.WasmOpt.Resolve(); !available {
+		log.Warn().Msg("bundle: --wasmOpt asked for, but wasm-opt is not installed; the unoptimised module stands")
+		return
+	}
+	opt := dst + ".opt"
+	if woErr := extbin.WasmOpt.Run(context.Background(), extbin.Opts{}, "-Oz", "--enable-bulk-memory", "--enable-sign-ext", "--enable-mutable-globals", "--enable-nontrapping-float-to-int", dst, "-o", opt); woErr != nil {
+		log.Warn().Err(woErr).Msg("bundle: wasm-opt failed; the unoptimised module stands")
+		_ = os.Remove(opt)
+	} else if err = os.Rename(opt, dst); err != nil {
+		return eh.Errorf("bundle: wasm-opt output: %w", err)
 	}
 	return
 }

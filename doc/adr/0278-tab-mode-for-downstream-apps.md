@@ -129,7 +129,8 @@ the page into the Go tree instead would have pointed the carrier's
   shipped binary. The shell file stays their source for shell builds, the Go
   side holds them as values, and a test fails when the two differ; the tags
   and the toolchain pin are read from the module being built, not from boxer;
-- it runs `wasm-opt` when installed, as the script did;
+- it runs `wasm-opt` when asked to (`--wasmOpt`), not merely because it is
+  installed — see the 2026-10-04 demo Update;
 - it obtains the browser host per SD5;
 - it writes the fonts, from a flag naming a directory or from boxer's font
   resolver, run from boxer's module directory;
@@ -346,6 +347,13 @@ The demo needs nothing the tab mode did not already provide: no cross-origin
 isolation (without `SharedArrayBuffer` the shim spins instead of waiting),
 and Pages compresses the modules on the wire. The gate checks the demo binary
 alongside `imzero2tab`.
+
+The first demo run was killed: `bundle` ran `wasm-opt -Oz` because binaryen was
+installed, and on the 50 MB module (binaryen 108) the job was killed two and
+a half minutes in; locally the same command ran out of memory past 3 GB within
+about two minutes, against a five-second Go build. Optimising is now asked for
+(`--wasmOpt`) rather than implied, and the demo is published unoptimised; the
+module crosses the wire gzip-compressed at about 10 MB.
 
 ## References
 
