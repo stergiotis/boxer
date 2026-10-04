@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-04
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0278: Tab mode as a library feature — `tabhost`, embedded assets, a content-addressed browser host
 
@@ -317,7 +315,7 @@ their layout is unchanged.
 
 ## Status
 
-Proposed 2026-10-04. Awaiting owner review. M1–M5 were built the same day.
+Accepted 2026-10-04. M1–M5 were built the same day.
 Two consumer shapes were exercised when M5 was: a repository consuming boxer
 through a Go workspace, whose tab binary the gate refused for two apps (an
 embedded key-value store that maps memory, an in-memory audio file) and passed
