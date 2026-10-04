@@ -76,6 +76,9 @@ import (
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	_ "github.com/stergiotis/boxer/public/llm/openaichat"
 	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	// IMZERO2_BROWSER_TARGET_DIR (ADR-0278, proposed); read by a tab binary's
+	// `bundle`, which this binary is not.
+	_ "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
 )
 
 func mainC() (exitCode int) {

@@ -2,8 +2,8 @@
 // proposed): the program that mounts one registered keelson app on an
 // in-process bus, runs it as a wasip1 reactor inside the page's worker
 // (ADR-0263), runs the same app natively against a client binary over the
-// pipe, and serves a bundle. A tab binary is a `package main` that imports
-// the apps it may open and hands its cli.App to [New]:
+// pipe, builds a bundle and serves one. A tab binary is a `package main`
+// that imports the apps it may open and hands its cli.App to [New]:
 //
 //	var tab = tabhost.New(tabhost.Options{DefaultApp: "example.com/acme/apps/dashboard"},
 //		&cli.App{Name: "acmetab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
@@ -59,6 +59,7 @@ type Program struct {
 	opts Options
 	app  *cli.App
 	step func() int32
+	err  error
 }
 
 // New builds the program around cliApp, which carries the binary's name,
@@ -86,22 +87,25 @@ func New(opts Options, cliApp *cli.App) (inst *Program) {
 			&cli.BoolFlag{Name: "exitOnReport", Usage: "end after the first POST /report (the trial's browser arms)"},
 		},
 		Action: serve,
-	})
+	}, bundleCommand())
 	registerReactor(inst)
 	return
 }
 
-// Main runs the program on the process arguments. Under wasip1 a reactor
-// never calls it; the worker's setup runs the program instead.
+// Main runs the program on the process arguments and exits non-zero when it
+// failed. Under wasip1 a reactor never calls it; the worker's setup runs the
+// program instead.
 func (inst *Program) Main() {
-	inst.run(os.Args[1:])
+	if inst.run(os.Args[1:]); inst.err != nil {
+		os.Exit(1)
+	}
 }
 
 // run is the program on args; it returns the per-tick step when the action
-// left one (the reactor), nil otherwise.
+// left one (the reactor), nil otherwise, and keeps the error for Main.
 func (inst *Program) run(args []string) (step func() int32) {
-	if err := inst.app.Run(append([]string{inst.app.Name}, args...)); err != nil {
-		log.Error().Err(err).Str("binary", inst.app.Name).Msg("tabhost")
+	if inst.err = inst.app.Run(append([]string{inst.app.Name}, args...)); inst.err != nil {
+		log.Error().Err(inst.err).Str("binary", inst.app.Name).Msg("tabhost")
 	}
 	return inst.step
 }

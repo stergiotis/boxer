@@ -125,17 +125,21 @@ the page into the Go tree instead would have pointed the carrier's
 
 `tabhost`'s `bundle` subcommand builds a servable directory from any module:
 
-- it builds the named package of the calling module for wasip1 as a c-shared
-  reactor, with the flags `scripts/dev/go-build-env.sh` sets, held in Go so the
-  shell file and the command read one definition (the shell file is reduced to
-  printing them, or kept as the single source the Go side parses; either way,
-  one place);
-- it runs `wasm-opt` when installed, as the script does;
+- it builds a main package of the calling module — by default the binary's own,
+  read from its build information — for wasip1 as a c-shared reactor;
+- the build flags are the ones `scripts/dev/go-build-env.sh` sets for every
+  shipped binary. The shell file stays their source for shell builds, the Go
+  side holds them as values, and a test fails when the two differ; the tags
+  and the toolchain pin are read from the module being built, not from boxer;
+- it runs `wasm-opt` when installed, as the script did;
 - it obtains the browser host per SD5;
-- it writes the embedded assets (SD3) and the fonts, from a flag naming a
-  directory or from the existing font resolver.
+- it writes the fonts, from a flag naming a directory or from boxer's font
+  resolver, run from boxer's module directory;
+- it writes the page, worker and shim only when asked, for a bundle served by
+  something other than the tab binary; `serve` has them embedded (SD3).
 
-`scripts/dev/build_tab_bundle.sh` becomes one invocation of it.
+`scripts/dev/build_tab_bundle.sh` becomes one invocation of it, asking for the
+assets so that its output stays servable by any static host.
 
 ### SD5 — The browser host is content-addressed
 
@@ -150,10 +154,20 @@ path but the first is checked against the digest, and a mismatch is an error.
 
 ### SD6 — The two halves prove they match
 
-Both modules expose a hash of the opcode table the IDL generator emits, the Go
-module through a reactor export and the Rust host through its C ABI. The
-worker compares them before the first frame and refuses to start on a
-mismatch, naming both. This holds even for a bundle assembled by hand.
+The FFFI2 code generator digests the IR it generates from — the top-level nodes
+in opcode order, each factory's methods in method-id order, and the names and
+types of everything that crosses the wire — into a 64-bit fingerprint
+(`ir.Fingerprint`), and writes it into both halves' generated enums. The Go
+module exports it from the reactor and the Rust host from its C ABI. The
+worker compares the two before `setup` and refuses to start on a mismatch,
+naming both values; a pair in which only one module has the export is a mixed
+pair and refused too, while two modules that both predate it are let through.
+This holds for a bundle assembled by hand.
+
+A fingerprint rather than a hash of the generated files: the two halves'
+generated code differs by language, and a reordering or a changed reply shape
+must change the value while a change to a code template, which alters what a
+call does but not what crosses, need not.
 
 ### SD7 — A consumer can see what its apps get in a tab
 
@@ -175,7 +189,7 @@ commands come with the module pin.
 
 - **M1 — `tabhost` and embedded assets.** ✓ SD1, SD3; `cmd/imzero2tab` on them;
   no behaviour change.
-- **M2 — `bundle` and the opcode handshake.** SD4 with a source build of the
+- **M2 — `bundle` and the opcode handshake.** ✓ SD4 with a source build of the
   host, SD6; the shell script reduced to a call.
 - **M3 — The content-addressed host.** SD5: digest file, CI workflow, fetch and
   cache.
@@ -190,8 +204,14 @@ commands come with the module pin.
   `tabhost`.
 - `rust/imzero2/src/imzero2/viewer` — gains a one-file Go package embedding the
   viewer page (SD3).
-- The FFFI2 IDL generator — emits the opcode-table hash on both sides (SD6).
-- `rust/imzero2/browser` — exports the hash.
+- The FFFI2 IR and both code generators — `ir.Fingerprint`, emitted as
+  `IdlFingerprint` and `IDL_FINGERPRINT` into the generated enums (SD6).
+- `rust/imzero2/browser` and the wasip1 reactor — export the fingerprint; the
+  worker's shim compares them.
+- `public/extbin` — declares `wasm-opt`; `bundle` runs go, bash and wasm-opt
+  through it.
+- `IMZERO2_BROWSER_TARGET_DIR` — a registered variable, read by `bundle` and by
+  `build_rust_browser.sh`.
 - `scripts/dev/build_tab_bundle.sh`, `scripts/dev/go-build-env.sh` — reduced
   per SD4.
 - `.github/workflows` — a workflow that builds and publishes the browser host
@@ -243,10 +263,11 @@ their layout is unchanged.
 
 ## Verification plan — Tier 1
 
-- **Handshake** — a test in the browser host's native lane and one in the Go
-  reactor's assert both sides compute the same hash for the generated table;
-  the worker's refusal is exercised by the existing trial harness with a
-  deliberately mismatched pair.
+- **Handshake** — a bindings test reads the Rust client's generated
+  `IDL_FINGERPRINT` and fails when it differs from the Go side's, which is the
+  shape of regenerating only one side; an `ir` test pins that the fingerprint
+  follows opcode order, method order and reply shapes. The worker's refusal of
+  a mixed pair was observed in a browser when M2 was built.
 - **Reproducibility** — the SD5 workflow rebuilds the host and fails when the
   digest it computes differs from the committed one.
 - **Consumer path** — an integration test builds a minimal tab binary from a

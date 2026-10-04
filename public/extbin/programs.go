@@ -150,11 +150,19 @@ var (
 		InstallHint: "install the Rust toolchain (https://rustup.rs)",
 	})
 
-	// Bash runs shell build steps in the deploy showcase.
+	// Bash runs shell build steps in the deploy showcase and the tab bundler.
 	Bash = Declare(Program{
 		Name:        "bash",
 		Kind:        Host,
 		InstallHint: "install bash",
+	})
+
+	// WasmOpt shrinks the tab's Go module when installed; a bundle without it
+	// keeps the unoptimised module (ADR-0278 SD4, proposed).
+	WasmOpt = Declare(Program{
+		Name:        "wasm-opt",
+		Kind:        Host,
+		InstallHint: "install binaryen",
 	})
 )
 

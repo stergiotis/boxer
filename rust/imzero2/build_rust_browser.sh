@@ -9,10 +9,13 @@
 # RUSTFLAGS replaces every `rustflags` a config would set.
 #
 # Separate --target-dir so it doesn't thrash the native hosts' caches.
-# Module lands at target/browser/wasm32-unknown-unknown/release/imzero2_browser.wasm.
+# Module lands at target/browser/wasm32-unknown-unknown/release/imzero2_browser.wasm,
+# or under IMZERO2_BROWSER_TARGET_DIR when set: a consumer's `bundle` builds
+# from boxer's module directory, which the Go module cache keeps read-only
+# (ADR-0278 SD4, proposed).
 set -ev
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
 # shellcheck source=/dev/null
 source "$here/../../scripts/dev/rust-repro-env.sh"
-cargo build --release --locked -p imzero2_browser --target wasm32-unknown-unknown --target-dir target/browser
+cargo build --release --locked -p imzero2_browser --target wasm32-unknown-unknown --target-dir "${IMZERO2_BROWSER_TARGET_DIR:-target/browser}"
