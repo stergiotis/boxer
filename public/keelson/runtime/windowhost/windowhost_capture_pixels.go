@@ -36,6 +36,7 @@ const (
 // pixelJob is the state a pixel capture carries between frames.
 type pixelJob struct {
 	keys      []WindowKeyT
+	format    uint8
 	recheck   func() bool
 	phase     pixelPhaseE
 	requestId uint64
@@ -46,11 +47,27 @@ type pixelJob struct {
 	spansDigest string
 }
 
+// The client's capture formats (captureReplay).
+const (
+	replayFormatPng uint8 = 0
+	replayFormatSvg uint8 = 1
+)
+
 // RenderPixels queues a render of the windows' pixels for the capture
 // service (ADR-0281). Only the windows named are drawn, and only open ones;
 // recheck is asked when the spans are chosen, and false fails the render.
 // SourceStatus follows the job.
 func (inst *Inst) RenderPixels(keys []uint64, recheck func() bool) (job string, err error) {
+	return inst.renderReplay(keys, replayFormatPng, recheck)
+}
+
+// RenderSvg queues an SVG of one window, drawn from the same replay as a
+// pixel capture, so the window's popups are in it.
+func (inst *Inst) RenderSvg(key uint64, recheck func() bool) (job string, err error) {
+	return inst.renderReplay([]uint64{key}, replayFormatSvg, recheck)
+}
+
+func (inst *Inst) renderReplay(keys []uint64, format uint8, recheck func() bool) (job string, err error) {
 	if len(keys) == 0 {
 		err = eh.Errorf("windowhost: a pixel capture names at least one window")
 		return
@@ -65,15 +82,15 @@ func (inst *Inst) RenderPixels(keys []uint64, recheck func() bool) (job string, 
 	}
 	inst.caps.mu.Lock()
 	defer inst.caps.mu.Unlock()
-	if err = inst.caps.ensureDirLocked(); err != nil {
-		return
+	if inst.caps.jobs == nil {
+		inst.caps.jobs = make(map[string]*captureJob)
 	}
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	job = "cap-" + hex.EncodeToString(b[:])
-	j := &captureJob{id: job, key: wk[0], requested: time.Now(),
+	j := &captureJob{id: job, requested: time.Now(),
 		status: opwire.CaptureStatus{Phase: opwire.PhaseRunning},
-		pixel:  &pixelJob{keys: wk, recheck: recheck}}
+		pixel:  &pixelJob{keys: wk, format: format, recheck: recheck}}
 	inst.caps.jobs[job] = j
 	inst.caps.pixelQueue = append(inst.caps.pixelQueue, j)
 	return
@@ -97,7 +114,7 @@ func (inst *Inst) pixelFrameBegin(sm *c.StateManager) {
 				j = nil
 			}
 		case pixelPhaseReplayPending:
-			c.CaptureReplay(p.requestId, p.stream)
+			c.CaptureReplay(p.requestId, p.format, p.stream)
 			sm.WantCaptureResult()
 			p.phase = pixelPhaseAwaitingResult
 			p.stream = nil
@@ -201,7 +218,12 @@ func (inst *Inst) finishPixelJobLocked(j *captureJob, r c.CaptureResultValue, pp
 		j.status = opwire.CaptureStatus{Phase: opwire.PhaseFailed, Reason: r.Reason}
 		return
 	}
-	if want := int(r.Width) * int(r.Height) * 4; want == 0 || len(r.Rgba) != want {
+	if j.pixel.format == replayFormatSvg {
+		j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Svg: r.Data, SpansDigest: j.pixel.spansDigest}
+		j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted}
+		return
+	}
+	if want := int(r.Width) * int(r.Height) * 4; want == 0 || len(r.Data) != want {
 		j.status = opwire.CaptureStatus{Phase: opwire.PhaseFailed, Reason: "the capture's pixels do not match its size"}
 		return
 	}
@@ -209,7 +231,7 @@ func (inst *Inst) finishPixelJobLocked(j *captureJob, r c.CaptureResultValue, pp
 		inst.logger.Warn().Uint64("unknownTextures", r.UnknownTextures).Uint64("refusedUploads", r.RefusedUploads).
 			Str("job", j.id).Msg("windowhost: a pixel capture has textures it could not draw")
 	}
-	j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Rgba: r.Rgba, Width: int(r.Width), Height: int(r.Height),
+	j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Rgba: r.Data, Width: int(r.Width), Height: int(r.Height),
 		PixelsPerPoint: ppp, SpansDigest: j.pixel.spansDigest}
 	j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted}
 }

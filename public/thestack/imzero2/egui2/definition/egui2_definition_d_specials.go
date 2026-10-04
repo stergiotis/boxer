@@ -225,16 +225,18 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// Capture replay (ADR-0281 §SD5): `stream` is whole messages of a
 	// recorded frame — the granted windows' spans. The client replays them
 	// into a separate, input-less context built from the live one and keeps
-	// the pixels for fetchCaptureResult. Host-effect: a replay must never
-	// start another.
+	// the result for fetchCaptureResult: format 0 rasterizes to pixels,
+	// 1 exports SVG, both in memory. Host-effect: a replay must never start
+	// another.
 	specials = append(specials,
 		idl.NewProceduralNode("captureReplay").WithEffect(ir.EffectHost).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("requestId", ctabb.U64).
+				PlainArg("format", ctabb.U8).
 				PlainArg("stream", ctabb.U8h).
 				Build()).
 			WithApplyCodeClientRust(rustClientCode(`
-			self.capture_render({{EguiContext}}, request_id, &stream);
+			self.capture_render({{EguiContext}}, request_id, format, &stream);
 `)).Build())
 	// Cropped-region screenshot. The rect is in logical points (pre-DPI); the
 	// handler multiplies by pixels_per_point before slicing the ColorImage.

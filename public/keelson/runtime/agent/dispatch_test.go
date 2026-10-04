@@ -6,7 +6,6 @@ import (
 	"errors"
 	"image/png"
 	"maps"
-	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -129,7 +128,9 @@ func (inst *fakeHost) OpsAttach(k uint64, a bool) bool {
 	}
 	return false
 }
-func (inst *fakeHost) RenderSvg(k uint64) (string, error) { return "cap-1", nil }
+func (inst *fakeHost) RenderSvg(k uint64, recheck func() bool) (string, error) {
+	return "cap-1", nil
+}
 func (inst *fakeHost) RenderPixels(k []uint64, recheck func() bool) (string, error) {
 	return "cap-2", nil
 }
@@ -182,7 +183,7 @@ func (inst *fakeHost) SourceStatus(job string) (capture.SourceResult, bool) {
 	if job == "cap-2" {
 		return capture.SourceResult{Phase: opwire.PhaseCompleted, Rgba: make([]byte, 2*2*4), Width: 2, Height: 2, PixelsPerPoint: 1}, true
 	}
-	return capture.SourceResult{Phase: opwire.PhaseCompleted, SvgPath: "/dev/null"}, true
+	return capture.SourceResult{Phase: opwire.PhaseCompleted, Svg: []byte("<svg/>")}, true
 }
 
 // frame runs one frame of instance k; person runs where the write-back
@@ -276,6 +277,9 @@ func newRigWith(t *testing.T, configure func(cfg *Config)) *rig {
 	svc, err := NewService(bus, zerolog.Nop(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
+	if svc.captures != nil {
+		svc.captures.SetSealedDir(t.TempDir())
+	}
 	host.engines[7].SetListener(func(e opengine.LogEntry) { svc.Listener()(7, e) })
 	cli := NewClient(bus.NewClient("test.coordinator", ClientCaps("test: drive apps")))
 	return &rig{t: t, host: host, svc: svc, cli: cli, bus: bus, docKey: 7}
@@ -463,8 +467,7 @@ func TestAPngCaptureIsEncodedByTheCaptureService(t *testing.T) {
 	res, err := r.cli.Read(ctx, g.Handle, out.Job)
 	require.NoError(t, err)
 	assert.Equal(t, "image/png", res.MediaType)
-	b, err := os.ReadFile(res.Path)
-	require.NoError(t, err)
+	b := res.Data
 	img, err := png.Decode(bytes.NewReader(b))
 	require.NoError(t, err)
 	assert.Equal(t, 2, img.Bounds().Dx())

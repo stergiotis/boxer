@@ -410,6 +410,10 @@ pub trait CaptureRasterI {
     ) -> Result<Vec<u8>, String>;
 }
 
+/// `captureReplay`'s formats.
+pub const CAPTURE_FORMAT_PNG: u8 = 0;
+pub const CAPTURE_FORMAT_SVG: u8 = 1;
+
 /// `CaptureResult::status` values, as `fetchCaptureResult` reports them.
 pub const CAPTURE_COMPLETED: u8 = 1;
 pub const CAPTURE_FAILED: u8 = 2;
@@ -423,8 +427,9 @@ pub struct CaptureResult {
     pub width: u32,
     pub height: u32,
     pub reason: String,
-    /// Tightly packed RGBA, `width` × `height`, top-left origin.
-    pub rgba: Vec<u8>,
+    /// A pixel capture's tightly packed RGBA, `width` × `height`, top-left
+    /// origin; an SVG capture's document.
+    pub data: Vec<u8>,
     pub refused_uploads: u64,
     /// Meshes whose texture neither the live mirror nor the capture context
     /// held; the rasterizer skips them, so each is a hole.
@@ -432,6 +437,14 @@ pub struct CaptureResult {
 }
 
 impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
+    /// Keeps the fonts an SVG capture embeds.
+    pub fn set_capture_fonts(
+        &mut self,
+        fonts: std::sync::Arc<crate::imzero2::svgexport::FontResolver>,
+    ) {
+        self.capture_fonts = Some(fonts);
+    }
+
     /// Installs the host's rasterizer for captures.
     pub fn set_capture_raster(&mut self, raster: Box<dyn CaptureRasterI>) {
         self.capture_raster = Some(raster);
@@ -440,23 +453,37 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
     /// Replays `stream` — whole messages of a recorded frame, the granted
     /// windows' spans — into a capture context built from `live`, and keeps
     /// the pixels for `fetchCaptureResult`. Runs inside the live pass.
-    pub fn capture_render(&mut self, live: &egui::Context, request_id: u64, stream: &[u8]) {
-        let mut r = self.capture_render_inner(live, stream);
+    pub fn capture_render(
+        &mut self,
+        live: &egui::Context,
+        request_id: u64,
+        format: u8,
+        stream: &[u8],
+    ) {
+        let mut r = self.capture_render_inner(live, format, stream);
         r.request_id = request_id;
         self.capture_result = Some(r);
     }
 
-    fn capture_render_inner(&mut self, live: &egui::Context, stream: &[u8]) -> CaptureResult {
+    fn capture_render_inner(
+        &mut self,
+        live: &egui::Context,
+        format: u8,
+        stream: &[u8],
+    ) -> CaptureResult {
         let failed = |status: u8, reason: String| CaptureResult {
             status,
             reason,
             ..Default::default()
         };
-        if self.capture_raster.is_none() {
+        if format == CAPTURE_FORMAT_PNG && self.capture_raster.is_none() {
             return failed(
                 CAPTURE_UNSUPPORTED,
                 "this host has no rasterizer for captures".into(),
             );
+        }
+        if format != CAPTURE_FORMAT_PNG && format != CAPTURE_FORMAT_SVG {
+            return failed(CAPTURE_FAILED, format!("unknown capture format {format}"));
         }
         let ppp = live.pixels_per_point();
         let screen = live.viewport_rect();
@@ -475,14 +502,42 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
 
         let ctx = capture_context(live);
         let mut replay = None;
+        let mut svg = None;
         let out = ctx.run_ui(raw, |ui| {
-            replay = Some(self.replay_for_capture(ui.ctx(), &[stream]));
+            let r = self.replay_for_capture(ui.ctx(), &[stream]);
+            if format == CAPTURE_FORMAT_SVG && r.0.is_ok() {
+                // Inside the pass, while the capture context's graphics
+                // still hold what the replay drew: the exporter reads them
+                // there, with the live images from the mirror. Nothing is
+                // written to a file (ADR-0281 §SD5).
+                let fonts = self.capture_fonts.as_deref().cloned().unwrap_or_default();
+                let links = std::sync::Arc::new(std::sync::Mutex::new(r.1.link_zones.clone()));
+                svg = Some(crate::imzero2::svgexport::render_svg_from_context(
+                    ui.ctx(),
+                    &fonts,
+                    &self.texture_cache,
+                    &links,
+                    true,
+                    Some(egui::Color32::BLACK),
+                ));
+            }
+            replay = Some(r);
         });
         let Some((result, report)) = replay else {
             return failed(CAPTURE_FAILED, "the capture pass did not run".into());
         };
         if let Err(e) = result {
             return failed(CAPTURE_FAILED, format!("replay: {e}"));
+        }
+        if let Some(svg) = svg {
+            return CaptureResult {
+                status: CAPTURE_COMPLETED,
+                width: width_px,
+                height: height_px,
+                data: svg.into_bytes(),
+                refused_uploads: report.refused_uploads,
+                ..Default::default()
+            };
         }
         let clipped = ctx.tessellate(out.shapes, out.pixels_per_point);
 
@@ -529,7 +584,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 status: CAPTURE_COMPLETED,
                 width: width_px,
                 height: height_px,
-                rgba,
+                data: rgba,
                 refused_uploads: report.refused_uploads,
                 unknown_textures,
                 ..Default::default()
@@ -547,7 +602,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.io.write_plain_u32(r.width)?;
         self.io.write_plain_u32(r.height)?;
         self.io.write_plain_s(r.reason)?;
-        self.io.write_plain_u8_slice(&r.rgba)?;
+        self.io.write_plain_u8_slice(&r.data)?;
         self.io.write_plain_u64(r.refused_uploads)?;
         self.io.write_plain_u64(r.unknown_textures)?;
         Ok(())

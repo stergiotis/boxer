@@ -21,7 +21,7 @@ import (
 var BaseDir = env.NewString(env.Spec{
 	Name:        "BOXER_ADHOC_DIR",
 	Default:     "",
-	Description: "directory whose filesystem holds the unnamed sealed files of ad-hoc datasets and staged recordings (ADR-0240 §SD1); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs)",
+	Description: "directory whose filesystem holds the unnamed sealed files of ad-hoc datasets, staged recordings and window captures (ADR-0240 §SD1, ADR-0281); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs)",
 	Category:    env.CategorySystem,
 })
 

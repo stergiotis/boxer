@@ -437,5 +437,8 @@ func (inst *App) follow(ctx context.Context, handle string, r *row, out agent.Ou
 		r.result = res.Text
 	default:
 		r.result = res.MediaType + " " + res.Path
+		if len(res.Data) > 0 {
+			r.result = res.MediaType + " · " + strconv.Itoa(len(res.Data)) + " bytes, sealed"
+		}
 	}
 }

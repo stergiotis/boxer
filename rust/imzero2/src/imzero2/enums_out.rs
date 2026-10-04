@@ -192,7 +192,7 @@ pub enum FuncProcId {
 /// The IDL this client was generated from, as ir.Fingerprint digests it; the
 /// Go server's generated enums carry the same value from the same generation
 /// (ADR-0278 SD6, proposed).
-pub const IDL_FINGERPRINT: u64 = 0x75a5ca1643ace4f2;
+pub const IDL_FINGERPRINT: u64 = 0xfe3c28de78eff82a;
 #[derive(strum::FromRepr, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum AccessibleRegionBuilderMethodId {

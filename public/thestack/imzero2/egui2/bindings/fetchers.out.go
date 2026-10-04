@@ -6,14 +6,14 @@ import (
 	"iter"
 )
 
-func (inst *Fetcher) FetchCaptureResult() (requestId uint64, status uint8, width uint32, height uint32, reason string, rgba []uint8, refusedUploads uint64, unknownTextures uint64) {
+func (inst *Fetcher) FetchCaptureResult() (requestId uint64, status uint8, width uint32, height uint32, reason string, data []uint8, refusedUploads uint64, unknownTextures uint64) {
 	inst.invoke(FuncProcIdFetchCaptureResult)
 	requestId = inst.readU64()
 	status = inst.readU8()
 	width = inst.readU32()
 	height = inst.readU32()
 	reason = inst.readS()
-	rgba = inst.readU8h()
+	data = inst.readU8h()
 	refusedUploads = inst.readU64()
 	unknownTextures = inst.readU64()
 	return
@@ -21,13 +21,13 @@ func (inst *Fetcher) FetchCaptureResult() (requestId uint64, status uint8, width
 func (inst *Fetcher) IssueFetchCaptureResult() {
 	inst.invoke(FuncProcIdFetchCaptureResult)
 }
-func (inst *Fetcher) CollectFetchCaptureResult() (requestId uint64, status uint8, width uint32, height uint32, reason string, rgba []uint8, refusedUploads uint64, unknownTextures uint64) {
+func (inst *Fetcher) CollectFetchCaptureResult() (requestId uint64, status uint8, width uint32, height uint32, reason string, data []uint8, refusedUploads uint64, unknownTextures uint64) {
 	requestId = inst.readU64()
 	status = inst.readU8()
 	width = inst.readU32()
 	height = inst.readU32()
 	reason = inst.readS()
-	rgba = inst.readU8h()
+	data = inst.readU8h()
 	refusedUploads = inst.readU64()
 	unknownTextures = inst.readU64()
 	return

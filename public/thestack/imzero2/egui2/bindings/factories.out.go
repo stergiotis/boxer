@@ -110,10 +110,11 @@ func CaptureAvailableSize() {
 	r.SendIntermediate()
 }
 
-func CaptureReplay(requestId uint64, stream []uint8) {
+func CaptureReplay(requestId uint64, format uint8, stream []uint8) {
 	r := typed.NewRetainedFffiBuilder()
 	r.WriteUint32(uint32(FuncProcIdCaptureReplay))
 	r.WriteUint64(requestId)
+	r.WriteUint8(format)
 	runtime.PutUint8SliceArg(r, stream)
 
 	r.SendIntermediate()

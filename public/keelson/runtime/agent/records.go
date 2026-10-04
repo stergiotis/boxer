@@ -155,6 +155,10 @@ func (inst *Service) persist(r ActionRecord) {
 	inst.cfg.Trail.FlushSoon()
 }
 
+// captureReleaseCeiling bounds how long a reader still mid-read keeps an
+// ended task's capture open.
+const captureReleaseCeiling = 30 * time.Second
+
 // captureRec is what a capture's record names beyond its call.
 type captureRec struct {
 	format   capture.FormatE

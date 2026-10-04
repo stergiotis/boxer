@@ -4,8 +4,9 @@
 // acquire one, and is freed by the kernel on last close, crash included —
 // whose contents are chunk-encrypted under a key that exists only inside
 // the File. Whoever holds the *File can read it; nobody can look a key up,
-// because no such operation exists. The two clients in tree are the ad-hoc
-// dataset capability and tally's recording stage.
+// because no such operation exists. The clients in tree are the ad-hoc
+// dataset capability, tally's recording stage and the window capture
+// service (ADR-0281).
 //
 // This file carries the on-disk format, a segmented AEAD stream in the
 // STREAM construction: it authenticates incrementally at constant memory

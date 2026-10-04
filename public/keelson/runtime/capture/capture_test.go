@@ -20,7 +20,7 @@ type fakeSource struct {
 	result   SourceResult
 }
 
-func (inst *fakeSource) RenderSvg(w uint64) (string, error) {
+func (inst *fakeSource) RenderSvg(w uint64, recheck func() bool) (string, error) {
 	inst.rendered = append(inst.rendered, []uint64{w})
 	return "src-1", nil
 }
@@ -115,6 +115,8 @@ func TestAnSvgCaptureIsOfOneWindowUncropped(t *testing.T) {
 func TestAPngCaptureIsScopedCroppedEncodedAndDigested(t *testing.T) {
 	src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Rgba: rgba(8, 6), Width: 8, Height: 6, PixelsPerPoint: 2}}
 	s := NewService(GrantPolicy{}, NewRegistry(), src)
+	dir := t.TempDir()
+	s.SetSealedDir(dir)
 	crop := image.Rect(1, 1, 3, 2) // points; ×2 → 4 × 2 pixels
 	id, d, err := s.Capture(Request{Windows: []uint64{7}, Format: FormatPng, Crop: &crop}, covers(7), func() bool { return true })
 	require.NoError(t, err)
@@ -125,8 +127,13 @@ func TestAPngCaptureIsScopedCroppedEncodedAndDigested(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, opwire.PhaseCompleted, st.Phase, st.Reason)
 	assert.Equal(t, "image/png", st.MediaType)
-	b, err := os.ReadFile(st.Path)
+	assert.Empty(t, st.Path, "a capture has no path")
+	b, media, err := s.Bytes(id)
 	require.NoError(t, err)
+	assert.Equal(t, "image/png", media)
+	listed, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, listed, "the sealed artifact has no directory entry")
 	img, err := png.Decode(bytes.NewReader(b))
 	require.NoError(t, err)
 	assert.Equal(t, image.Rect(0, 0, 4, 2), img.Bounds())
@@ -136,6 +143,25 @@ func TestAPngCaptureIsScopedCroppedEncodedAndDigested(t *testing.T) {
 	sum := blake3.Sum256(b)
 	assert.Equal(t, hex.EncodeToString(sum[:]), info.Digest)
 	assert.Equal(t, []string{"scope@1"}, info.Obligations)
+
+	s.Release(id, 0)
+	_, _, err = s.Bytes(id)
+	assert.Error(t, err, "a released capture is gone with its key")
+}
+
+func TestAnSvgCaptureIsSealedFromTheRendersBytes(t *testing.T) {
+	src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Svg: []byte("<svg/>")}}
+	s := NewService(GrantPolicy{}, NewRegistry(), src)
+	s.SetSealedDir(t.TempDir())
+	id, d, err := s.Capture(Request{Windows: []uint64{1}, Format: FormatSvg}, covers(1), nil)
+	require.NoError(t, err)
+	require.Equal(t, EffectPermit, d.Effect)
+	st, _ := s.Status(id)
+	require.Equal(t, opwire.PhaseCompleted, st.Phase, st.Reason)
+	b, media, err := s.Bytes(id)
+	require.NoError(t, err)
+	assert.Equal(t, "image/svg+xml", media)
+	assert.Equal(t, "<svg/>", string(b))
 }
 
 func TestAFailedRenderFailsTheCapture(t *testing.T) {

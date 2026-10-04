@@ -227,6 +227,9 @@ type wireReadReply struct {
 	MediaType string `json:"media_type,omitempty"`
 	Text      string `json:"text,omitempty"`
 	Path      string `json:"path,omitempty"`
+	// Data is a capture's bytes: a capture is kept sealed and has no path
+	// (ADR-0281 §SD6).
+	Data []byte `json:"data,omitempty"`
 	// Untrusted marks content an attacker could influence; Source
 	// attributes it to its window and operation (ADR-0269 §SD7).
 	Untrusted bool   `json:"untrusted,omitempty"`

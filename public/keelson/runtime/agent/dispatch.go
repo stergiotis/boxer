@@ -21,7 +21,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
-	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
 // The dispatcher (ADR-0269 §SD6): every call is checked against the task's
@@ -842,8 +841,13 @@ func (inst *Service) read(msg *app.Msg) (rep wireReadReply) {
 			rep.Reason = "a confined capture stays an artifact handle"
 			return
 		}
+		data, media, err := inst.captures.Bytes(job.job)
+		if err != nil {
+			rep.Reason = "the capture: " + err.Error()
+			return
+		}
 		// Every capture is untrusted: it shows whatever the window holds.
-		rep.Ok, rep.MediaType, rep.Path, rep.Confined = true, st.MediaType, st.Path, job.outcome.Confined
+		rep.Ok, rep.MediaType, rep.Data, rep.Confined = true, media, data, job.outcome.Confined
 		rep.Untrusted, rep.Source = true, "window "+strconv.FormatUint(job.instance, 10)+" · capture"
 		inst.taint(t)
 	default:
@@ -945,7 +949,10 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 		inst.mu.Lock()
 		inst.recordCapture(t, rec, decision, capture.Info{}, opwire.PhaseRefused, decision.Reason, confined)
 		inst.mu.Unlock()
-		err = eh.Errorf("%s", decision.Reason)
+		out = phaseOutcome(opwire.PhaseRefused, decision.Reason)
+		inst.settle(t, rec, out, false)
+		rep.Outcome = wireOutcomeOf(out, "", "")
+		return
 	}
 	if err != nil {
 		out = phaseOutcome(opwire.PhaseRefused, err.Error())

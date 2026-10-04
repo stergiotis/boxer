@@ -6,21 +6,24 @@ import (
 	"encoding/hex"
 	"image"
 	"image/png"
-	"os"
-	"path/filepath"
+	"io"
 	"slices"
 	"sync"
+	"time"
 
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // SourceI renders captures: the window host. It draws exactly the windows
 // it is given.
 type SourceI interface {
-	// RenderSvg exports one window's shapes.
-	RenderSvg(window uint64) (job string, err error)
+	// RenderSvg exports one window's shapes, from the same replay as a
+	// pixel render; recheck as for RenderPixels.
+	RenderSvg(window uint64, recheck func() bool) (job string, err error)
 	// RenderPixels replays the windows' spans of one frame and rasterizes
 	// them. recheck is called when the spans are chosen, a frame after the
 	// decision; false fails the render (ADR-0281 §SD4).
@@ -36,8 +39,8 @@ type SourceResult struct {
 	Rgba           []byte
 	Width, Height  int
 	PixelsPerPoint float32
-	// A completed SVG render: the exported file.
-	SvgPath string
+	// A completed SVG render: the document, held in memory.
+	Svg []byte
 	// SpansDigest names the stream a pixel render replayed.
 	SpansDigest string
 }
@@ -64,7 +67,8 @@ type Service struct {
 	registry *Registry
 	source   SourceI
 
-	mu   sync.Mutex
+	mu sync.Mutex
+	// dir holds the sealed artifacts' inodes; empty is sealed.BaseDirPath.
 	dir  string
 	jobs map[string]*job
 }
@@ -73,6 +77,55 @@ type job struct {
 	info      Info
 	sourceJob string
 	status    opwire.CaptureStatus
+	// file is the artifact, sealed under a key only it holds (ADR-0281
+	// §SD6): an unnamed inode, freed on Release or when the process ends.
+	file *sealed.File
+}
+
+// SetSealedDir sets the directory whose filesystem holds the artifacts'
+// unnamed inodes; it must support O_TMPFILE. Empty is sealed's default.
+func (inst *Service) SetSealedDir(dir string) {
+	inst.mu.Lock()
+	inst.dir = dir
+	inst.mu.Unlock()
+}
+
+// Open returns a reader over a completed capture's bytes, and their media
+// type. The caller closes the reader.
+func (inst *Service) Open(id string) (r io.ReadCloser, mediaType string, err error) {
+	inst.mu.Lock()
+	j, ok := inst.jobs[id]
+	inst.mu.Unlock()
+	if !ok || j.file == nil {
+		err = eb.Build().Str("capture", id).Errorf("capture: no completed capture by that id")
+		return
+	}
+	r, err = j.file.Open()
+	mediaType = j.status.MediaType
+	return
+}
+
+// Bytes reads a completed capture whole.
+func (inst *Service) Bytes(id string) (b []byte, mediaType string, err error) {
+	r, mediaType, err := inst.Open(id)
+	if err != nil {
+		return
+	}
+	defer func() { _ = r.Close() }()
+	b, err = io.ReadAll(r)
+	return
+}
+
+// Release forgets a capture and retires its artifact: the key goes once the
+// last reader leaves, or after ceiling.
+func (inst *Service) Release(id string, ceiling time.Duration) {
+	inst.mu.Lock()
+	j, ok := inst.jobs[id]
+	delete(inst.jobs, id)
+	inst.mu.Unlock()
+	if ok && j.file != nil {
+		j.file.Retire(ceiling)
+	}
 }
 
 // NewService returns a PEP over a policy, a handler registry and a source.
@@ -125,7 +178,7 @@ func (inst *Service) Capture(req Request, facts Facts, recheck func() bool) (id 
 	case FormatPng:
 		sourceJob, err = inst.source.RenderPixels(slices.Clone(scope.Windows), recheck)
 	case FormatSvg:
-		sourceJob, err = inst.source.RenderSvg(scope.Windows[0])
+		sourceJob, err = inst.source.RenderSvg(scope.Windows[0], recheck)
 	}
 	if err != nil {
 		return
@@ -183,7 +236,7 @@ func (inst *Service) finishLocked(id string, j *job, r SourceResult) {
 	}
 	obligations := sortedByPhase(j.info.Decision.Obligations, j.info.Request.Format, inst.registry)
 	var out []byte
-	var mediaType, ext string
+	var mediaType string
 	switch j.info.Request.Format {
 	case FormatPng:
 		if r.Width <= 0 || r.Height <= 0 || len(r.Rgba) != r.Width*r.Height*4 {
@@ -204,13 +257,14 @@ func (inst *Service) finishLocked(id string, j *job, r SourceResult) {
 			fail("png: " + e.Error())
 			return
 		}
-		out, mediaType, ext = buf.Bytes(), "image/png", ".png"
+		out, mediaType = buf.Bytes(), "image/png"
 	case FormatSvg:
-		svg, e := os.ReadFile(r.SvgPath)
-		if e != nil {
-			fail("the exported SVG: " + e.Error())
+		svg := r.Svg
+		if len(svg) == 0 {
+			fail("the render holds no SVG")
 			return
 		}
+		var e error
 		for _, o := range obligations {
 			if svg, e = inst.registry.svg[o.Name].Apply(svg, o); e != nil {
 				fail(o.Name + ": " + e.Error())
@@ -218,26 +272,43 @@ func (inst *Service) finishLocked(id string, j *job, r SourceResult) {
 			}
 			j.info.Obligations = append(j.info.Obligations, o.String())
 		}
-		out, mediaType, ext = svg, "image/svg+xml", ".svg"
+		out, mediaType = svg, "image/svg+xml"
 	}
-	if inst.dir == "" {
-		d, e := os.MkdirTemp("", "boxer-captures-")
-		if e != nil {
-			fail("capture directory: " + e.Error())
-			return
-		}
-		inst.dir = d
-	}
-	path := filepath.Join(inst.dir, id+ext)
-	if e := os.WriteFile(path, out, 0o600); e != nil {
-		fail("write: " + e.Error())
+	f, e := seal(inst.dir, out)
+	if e != nil {
+		fail("seal: " + e.Error())
 		return
 	}
+	j.file = f
 	sum := blake3.Sum256(out)
 	j.info.Digest = hex.EncodeToString(sum[:])
 	j.info.SpansDigest = r.SpansDigest
 	j.info.Bytes = int64(len(out))
-	j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted, Path: path, MediaType: mediaType, Bytes: int64(len(out))}
+	j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted, MediaType: mediaType, Bytes: int64(len(out))}
+}
+
+// seal writes b into a new sealed file under dir (sealed's default when
+// empty).
+func seal(dir string, b []byte) (f *sealed.File, err error) {
+	if dir == "" {
+		dir = sealed.BaseDirPath()
+	}
+	f, err = sealed.CreateIn(dir)
+	if err != nil {
+		return
+	}
+	w, err := f.Writer()
+	if err == nil {
+		_, err = w.Write(b)
+		if cerr := w.Close(); err == nil {
+			err = cerr
+		}
+	}
+	if err != nil {
+		_ = f.Close()
+		f = nil
+	}
+	return
 }
 
 // sortedByPhase orders obligations scope first, then transform, keeping the

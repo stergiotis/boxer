@@ -1249,13 +1249,6 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// the ExportSvgWindow opcode. The SvgExportPlugin drains it in
 	// on_end_pass this same frame, so the captured shapes match what
 	// the user just saw.
-	{
-		open := make(map[WindowKeyT]bool, len(snapshot))
-		for _, w := range snapshot {
-			open[w.key] = !w.closeReq
-		}
-		inst.runCaptures(ids, open)
-	}
 	if opsBusy(snapshot) {
 		c.RequestRepaintAfter(opsRepaintIntervalSecs)
 	}

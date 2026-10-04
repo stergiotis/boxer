@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"image/png"
-	"os"
 	"testing"
 	"time"
 
@@ -182,8 +181,7 @@ func TestACaptureIsScopedAndLabelledByItsWindows(t *testing.T) {
 	require.Equal(t, "completed", out.Phase, out.Reason)
 	res, err := r.cli.Read(ctx, g.Handle, out.Job)
 	require.NoError(t, err)
-	b, err := os.ReadFile(res.Path)
-	require.NoError(t, err)
+	b := res.Data
 	img, err := png.Decode(bytes.NewReader(b))
 	require.NoError(t, err)
 	assert.Equal(t, 1, img.Bounds().Dx(), "the crop, one point at one pixel per point")

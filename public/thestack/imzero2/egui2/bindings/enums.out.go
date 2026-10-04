@@ -191,7 +191,7 @@ const (
 // IdlFingerprint is the IDL these bindings were generated from, as
 // ir.Fingerprint digests it; the Rust client's generated enums carry the same
 // value from the same generation (ADR-0278 SD6, proposed).
-const IdlFingerprint uint64 = 0x75a5ca1643ace4f2
+const IdlFingerprint uint64 = 0xfe3c28de78eff82a
 const (
 	AtomsMethodIdBuild AtomsMethodIdE = 0
 

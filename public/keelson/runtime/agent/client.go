@@ -418,9 +418,11 @@ func (inst *Client) Place(ctx context.Context, handle string, key string, instan
 // content the model may not see comes back as a DataHandle in place of
 // Text.
 type ReadResult struct {
-	MediaType  string
-	Text       string
-	Path       string
+	MediaType string
+	Text      string
+	Path      string
+	// Data is a capture's bytes (ADR-0281 §SD6).
+	Data       []byte
 	Untrusted  bool
 	Source     string
 	DataHandle string
@@ -437,7 +439,7 @@ func (inst *Client) Read(ctx context.Context, handle string, ref string) (res Re
 		err = &RefusedError{Reason: rep.Reason}
 		return
 	}
-	res = ReadResult{MediaType: rep.MediaType, Text: rep.Text, Path: rep.Path, Untrusted: rep.Untrusted, Source: rep.Source,
+	res = ReadResult{MediaType: rep.MediaType, Text: rep.Text, Path: rep.Path, Data: rep.Data, Untrusted: rep.Untrusted, Source: rep.Source,
 		DataHandle: rep.DataHandle, Confined: rep.Confined}
 	return
 }

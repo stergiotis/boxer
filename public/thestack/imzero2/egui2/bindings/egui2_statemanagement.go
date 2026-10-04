@@ -985,7 +985,7 @@ func (inst *StateManager) Sync() {
 	if captureWanted {
 		var r CaptureResultValue
 		var status uint8
-		r.RequestId, status, r.Width, r.Height, r.Reason, r.Rgba, r.RefusedUploads, r.UnknownTextures = inst.fetcher.CollectFetchCaptureResult()
+		r.RequestId, status, r.Width, r.Height, r.Reason, r.Data, r.RefusedUploads, r.UnknownTextures = inst.fetcher.CollectFetchCaptureResult()
 		r.Status = CaptureStatusE(status)
 		inst.captureResult, inst.captureResultOk = r, r.Status != CaptureStatusNone
 	}
@@ -1001,15 +1001,15 @@ const (
 	CaptureStatusUnsupported CaptureStatusE = 3
 )
 
-// CaptureResultValue is one fetchCaptureResult reply: the pixels of a
-// captureReplay, RGBA, Width × Height, top-left origin.
+// CaptureResultValue is one fetchCaptureResult reply: a captureReplay's
+// pixels — RGBA, Width × Height, top-left origin — or its SVG document.
 type CaptureResultValue struct {
 	RequestId       uint64
 	Status          CaptureStatusE
 	Width           uint32
 	Height          uint32
 	Reason          string
-	Rgba            []byte
+	Data            []byte
 	RefusedUploads  uint64
 	UnknownTextures uint64
 }

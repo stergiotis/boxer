@@ -24,7 +24,7 @@ status: draft
 | Atoms | BuilderFactory | No | 0 | 0 | 20 | Retained |
 | Button | BuilderFactory | Yes | 0 | 1 | 9 | Immediate, Retained |
 | CaptureAvailableSize | Procedural | No | 0 | 0 | - | - |
-| CaptureReplay | Procedural | No | 2 | 0 | - | - |
+| CaptureReplay | Procedural | No | 3 | 0 | - | - |
 | CaptureUiAvailableRect | Procedural | No | 1 | 0 | - | - |
 | CaptureUiRect | Procedural | No | 1 | 0 | - | - |
 | Checkbox | BuilderFactory | Yes | 2 | 0 | 1 | Immediate |
@@ -2623,6 +2623,7 @@ Block
 | Name | Kind | Type |
 |------|------|------|
 | requestId | plain | u64 |
+| format | plain | u8 |
 | stream | plain | u8h |
 
 ---
@@ -3112,7 +3113,7 @@ Block
 | width | u32 |
 | height | u32 |
 | reason | s |
-| rgba | u8h |
+| data | u8h |
 | refusedUploads | u64 |
 | unknownTextures | u64 |
 
