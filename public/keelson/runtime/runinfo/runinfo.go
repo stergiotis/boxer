@@ -1,6 +1,8 @@
 package runinfo
 
 import (
+	"encoding/hex"
+	"io"
 	"os"
 	goruntime "runtime"
 	"sync"
@@ -8,6 +10,7 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/rs/zerolog"
+	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -49,6 +52,12 @@ type Inst struct {
 	VcsModified  bool
 	VcsBuildInfo string
 	ModulePath   string
+	// BuildId identifies the build that runs: a digest of the executable
+	// (ADR-0277 §SD8). The VCS revision does not identify a build from a
+	// modified tree; the digest does, and under reproducible builds it is
+	// the same for the same source. Empty when the executable cannot be
+	// read.
+	BuildId string
 }
 
 var (
@@ -100,6 +109,7 @@ func Init() (inst *Inst, err error) {
 		VcsModified:  modified,
 		VcsBuildInfo: vcs.BuildVersionInfo(),
 		ModulePath:   vcs.ModuleInfo(),
+		BuildId:      buildId(),
 	}
 	singleton = inst
 	return
@@ -148,4 +158,24 @@ func Reset() {
 func TagLogger(base zerolog.Logger, inst *Inst) (out zerolog.Logger) {
 	out = base.With().Str("run_id", inst.RunId).Logger()
 	return
+}
+
+// buildId is the digest of the running executable: 128 bits of BLAKE3, hex.
+// "" when the executable cannot be found or read, which a run records as an
+// unknown build rather than failing to start.
+func buildId() (id string) {
+	path, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	h := blake3.New(32, nil)
+	if _, err = io.Copy(h, f); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil)[:16])
 }

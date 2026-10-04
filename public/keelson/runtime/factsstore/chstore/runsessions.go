@@ -99,13 +99,12 @@ func (inst *Store) LastHeartbeatForRun(ctx context.Context, runId string) (ts ti
 
 func composeLastHeartbeatSql(table, runId string) (sql string) {
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		tsCol  = "`ts:ts:z64:47::0:`"
+		symLR = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		tsCol = "`ts:ts:z64:47::0:`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindRuntimeHeartbeat.GetId().Value()),
-		fmt.Sprintf("has(%s, %d)", symLMR, vocab.MembRuntimeRun.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeRun.GetId().Value()),
 		runIdPredicate(runId),
 	}
 	sql = fmt.Sprintf(`
@@ -182,6 +181,7 @@ type columnExprsRun struct {
 	vcsBuildInfo string
 	pid          string
 	vcsModified  string
+	buildId      string
 }
 
 func buildRunColumnExprs() (e columnExprsRun) {
@@ -207,6 +207,7 @@ func buildRunColumnExprs() (e columnExprsRun) {
 	e.goVersion = pickLcrString(symValue, symLR, symLRCard, vocab.MembRunGoVersion.GetId().Value())
 	e.vcsRevision = pickLcrString(symValue, symLR, symLRCard, vocab.MembRunVcsRevision.GetId().Value())
 	e.modulePath = pickLcrString(symValue, symLR, symLRCard, vocab.MembRunModulePath.GetId().Value())
+	e.buildId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRunBuildId.GetId().Value())
 	e.vcsBuildInfo = pickLcrString(strValue, strLR, strLRCard, vocab.MembRunVcsBuildInfo.GetId().Value())
 	e.pid = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembRunPid.GetId().Value(), "0")
 	e.vcsModified = pickLcrNumeric(boolValue, boolLR, boolLRCard, vocab.MembRunVcsModified.GetId().Value(), "false")
@@ -230,8 +231,6 @@ func buildLifecycleColumnExprs() (e columnExprsLifecycle) {
 		symValue  = "`tv:symbol:value:val:s:124::I:0::data`"
 		symLR     = "`tv:symbol:lr:lr:u64:1247:::0::data`"
 		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
-		symLMR    = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		symMRHP   = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
 		strValue  = "`tv:stringArray:value:val:sh:4::8:0::data`"
 		strLR     = "`tv:stringArray:lr:lr:u64:1247:::0::data`"
 		strLRCard = "`tv:stringArray:lrcard:lrcard:u64:4E:::0::data`"
@@ -243,10 +242,8 @@ func buildLifecycleColumnExprs() (e columnExprsLifecycle) {
 	)
 	e.id = idCol
 	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", tsCol)
-	e.appId = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
-		vocab.MembRuntimeApp.GetId().Value(), symMRHP, symLMR)
-	e.runId = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
-		vocab.MembRuntimeRun.GetId().Value(), symMRHP, symLMR)
+	e.appId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeApp.GetId().Value())
+	e.runId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeRun.GetId().Value())
 	e.phase = pickLcrString(symValue, symLR, symLRCard, vocab.MembLifecyclePhase.GetId().Value())
 	e.stopReason = pickLcrString(strValue, strLR, strLRCard, vocab.MembLifecycleStopReason.GetId().Value())
 	e.tileKey = pickLcrNumeric(u64Value, u64LR, u64LRCard, vocab.MembLifecycleTileKey.GetId().Value(), "0")
@@ -265,41 +262,37 @@ func pickLcrNumeric(valueArr, lrArr, lrCardArr string, membershipId uint64, zero
 	return
 }
 
-// runIdPredicate is the "single positional arrayElement" predicate the
-// ADR amendment names: locate the MembRuntimeRun mixed-membership on
-// the symbol-LMR array, read the parallel mrhp entry, compare to the
-// requested run_id.
+// runIdPredicate compares a row's run id — the value of its MembRuntimeRun
+// attribute on the symbol section's plain channel — to the requested one.
 func runIdPredicate(runId string) (expr string) {
-	const (
-		symLMR  = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		symMRHP = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
-	)
-	expr = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s) = %s",
-		vocab.MembRuntimeRun.GetId().Value(), symMRHP, symLMR, quoteSqlString(runId))
-	return
+	return symbolEquals(vocab.MembRuntimeRun.GetId().Value(), runId)
 }
 
 // appIdPredicate is the parallel predicate for MembRuntimeApp; used by
 // the optional LifecycleFilter.AppId narrowing.
 func appIdPredicate(appId app.AppIdT) (expr string) {
+	return symbolEquals(vocab.MembRuntimeApp.GetId().Value(), string(appId))
+}
+
+// symbolEquals is "the row's symbol attribute under membershipId equals
+// value", on the plain channel.
+func symbolEquals(membershipId uint64, value string) (expr string) {
 	const (
-		symLMR  = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		symMRHP = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
+		symValue  = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLR     = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
 	)
-	expr = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s) = %s",
-		vocab.MembRuntimeApp.GetId().Value(), symMRHP, symLMR, quoteSqlString(string(appId)))
-	return
+	return pickLcrString(symValue, symLR, symLRCard, membershipId) + " = " + quoteSqlString(value)
 }
 
 func composeLookupRunStartSql(table, runId string) (sql string) {
 	e := buildRunColumnExprs()
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
+		symLR = "`tv:symbol:lr:lr:u64:1247:::0::data`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindRuntimeRun.GetId().Value()),
-		fmt.Sprintf("has(%s, %d)", symLMR, vocab.MembRuntimeRun.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeRun.GetId().Value()),
 		runIdPredicate(runId),
 	}
 	sql = fmt.Sprintf(`
@@ -312,14 +305,15 @@ SELECT
   %s AS module_path,
   %s AS vcs_build_info,
   %s AS pid,
-  %s AS vcs_modified
+  %s AS vcs_modified,
+  %s AS build_id
 FROM %s
 WHERE %s
 ORDER BY %s ASC
 LIMIT 1
 FORMAT TabSeparated`,
 		e.id, e.tsSec, e.hostname, e.goVersion, e.vcsRevision,
-		e.modulePath, e.vcsBuildInfo, e.pid, e.vcsModified,
+		e.modulePath, e.vcsBuildInfo, e.pid, e.vcsModified, e.buildId,
 		table,
 		strings.Join(whereParts, " AND "),
 		e.id)
@@ -329,18 +323,17 @@ FORMAT TabSeparated`,
 func composeLifecyclesByRunSql(table string, filter LifecycleFilter, limit uint32) (sql string) {
 	e := buildLifecycleColumnExprs()
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		tsCol  = "`ts:ts:z64:47::0:`"
+		symLR = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		tsCol = "`ts:ts:z64:47::0:`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindAppLifecycle.GetId().Value()),
-		fmt.Sprintf("has(%s, %d)", symLMR, vocab.MembRuntimeRun.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeRun.GetId().Value()),
 		runIdPredicate(filter.RunId),
 	}
 	if filter.AppId != "" {
 		whereParts = append(whereParts,
-			fmt.Sprintf("has(%s, %d)", symLMR, vocab.MembRuntimeApp.GetId().Value()),
+			fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeApp.GetId().Value()),
 			appIdPredicate(filter.AppId))
 	}
 	sql = fmt.Sprintf(`
@@ -380,8 +373,8 @@ func parseLookupRunStartRow(raw []byte) (row factsstore.RuntimeStartRow, found b
 		line = line[:newlineIdx]
 	}
 	parts := strings.Split(line, "\t")
-	if len(parts) != 9 {
-		err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: lookup run start: expected 9 columns")
+	if len(parts) != 10 {
+		err = eb.Build().Int("got", len(parts)).Str("line", line).Errorf("chstore: lookup run start: expected 10 columns")
 		return
 	}
 	_, perr := strconv.ParseUint(parts[0], 10, 64)
@@ -408,6 +401,7 @@ func parseLookupRunStartRow(raw []byte) (row factsstore.RuntimeStartRow, found b
 		VcsBuildInfo: unescapeTabSeparated(parts[6]),
 		Pid:          int(pid),
 		VcsModified:  parts[8] == "true" || parts[8] == "1",
+		BuildId:      unescapeTabSeparated(parts[9]),
 	}
 	found = true
 	return

@@ -23,6 +23,7 @@ func TestStore_LookupRunStart_RoundTrip_LiveCH(t *testing.T) {
 		VcsRevision:  "abc123def4",
 		VcsModified:  true,
 		VcsBuildInfo: "vcs.time=2026-05-13T00:00:00Z",
+		BuildId:      "0123456789abcdef0123456789abcdef",
 		ModulePath:   "github.com/example/pebble2impl",
 		Ts:           time.Now().UTC().Truncate(time.Second),
 	}
@@ -38,6 +39,7 @@ func TestStore_LookupRunStart_RoundTrip_LiveCH(t *testing.T) {
 	assert.Equal(t, want.VcsRevision, got.VcsRevision)
 	assert.Equal(t, want.VcsModified, got.VcsModified)
 	assert.Equal(t, want.VcsBuildInfo, got.VcsBuildInfo)
+	assert.Equal(t, want.BuildId, got.BuildId, "the build a run executed reads back (ADR-0277 §SD8)")
 	assert.Equal(t, want.ModulePath, got.ModulePath)
 	assert.WithinDuration(t, want.Ts, got.Ts, time.Second)
 }

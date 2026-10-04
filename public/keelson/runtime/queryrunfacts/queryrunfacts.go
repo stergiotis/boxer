@@ -98,6 +98,14 @@ type Stamp struct {
 	SentFp     string `json:"sent_fp,omitempty"`
 	ChainFp    string `json:"chain_fp,omitempty"`
 	EnvFp      string `json:"env_fp,omitempty"`
+	// Task, TaskEpoch and TaskCall name the agent task whose work the run
+	// was and the dispatcher's call that caused it (ADR-0277 §SD7), from
+	// the on-behalf-of context of the call; empty for the person's own run.
+	// The captured row carries them on the trail's Delegation slots, so it
+	// joins the action record on (task, call).
+	Task      string `json:"task,omitempty"`
+	TaskEpoch uint64 `json:"task_epoch,omitempty"`
+	TaskCall  string `json:"task_call,omitempty"`
 }
 
 // ParseStamp decodes a log_comment stamp. ok is false when the comment
@@ -158,12 +166,10 @@ func EncodeEntity(ent *dml.InEntityFacts, row Row) {
 	}
 	if hasStamp {
 		if st.App != "" {
-			sym.BeginAttribute(st.App).AddMembershipMixedLowCardRef(
-				vocab.MembRuntimeApp.GetId().Value(), []byte(st.App)).EndAttribute()
+			sym.BeginAttribute(st.App).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
 		}
 		if st.RunId != "" {
-			sym.BeginAttribute(st.RunId).AddMembershipMixedLowCardRef(
-				vocab.MembRuntimeRun.GetId().Value(), []byte(st.RunId)).EndAttribute()
+			sym.BeginAttribute(st.RunId).AddMembershipLowCardRef(vocab.MembRuntimeRun.GetId().Value()).EndAttribute()
 		}
 		if st.Lane != "" {
 			sym.BeginAttribute(st.Lane).AddMembershipLowCardRef(vocab.MembQueryRunLane.GetId().Value()).EndAttribute()
@@ -194,6 +200,14 @@ func EncodeEntity(ent *dml.InEntityFacts, row Row) {
 				str.BeginAttributeSingle(fp.value).AddMembershipLowCardRef(fp.memb).EndAttribute()
 			}
 		}
+		// The Delegation component's slots (ADR-0277 §SD1), hand-written
+		// here as the rest of the row is; trail.Delegation reads them back.
+		if st.Task != "" {
+			str.BeginAttributeSingle(st.Task).AddMembershipLowCardRef(vocab.MembTrailTask.GetId().Value()).EndAttribute()
+			if st.TaskCall != "" {
+				str.BeginAttributeSingle(st.TaskCall).AddMembershipLowCardRef(vocab.MembTrailCall.GetId().Value()).EndAttribute()
+			}
+		}
 	}
 	str.EndSection()
 
@@ -207,6 +221,10 @@ func EncodeEntity(ent *dml.InEntityFacts, row Row) {
 	if hasStamp && st.Instance != 0 {
 		u64.BeginAttributeSingle(st.Instance).
 			AddMembershipLowCardRef(vocab.MembLifecycleTileKey.GetId().Value()).EndAttribute()
+	}
+	if hasStamp && st.Task != "" {
+		u64.BeginAttributeSingle(st.TaskEpoch).
+			AddMembershipLowCardRef(vocab.MembTrailTaskEpoch.GetId().Value()).EndAttribute()
 	}
 	for _, c := range []struct {
 		value uint64

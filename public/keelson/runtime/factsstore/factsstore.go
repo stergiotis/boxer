@@ -101,7 +101,10 @@ type RuntimeStartRow struct {
 	VcsModified  bool
 	VcsBuildInfo string
 	ModulePath   string
-	Ts           time.Time
+	// BuildId is the digest of the executable the run executes (ADR-0277
+	// §SD8); empty when it could not be read, and on rows written before it.
+	BuildId string
+	Ts      time.Time
 }
 
 // HeartbeatRow records one runtime liveness tick. Maps to a

@@ -98,9 +98,10 @@ func TestComposeHistoryAuthoredArity(t *testing.T) {
 	// The kind test is the exception, and deliberately: has() takes a
 	// literal, and it is the term that prunes.
 	require.Contains(t, sql, fmt.Sprintf("has(%s, %d)", hSymLr, vocab.MembKindQueryRun.GetId().Value()))
-	// The app and run stamps ride the mixed channel; everything else is the
-	// ordinary one-membership-per-attribute one.
-	require.Contains(t, sql, mixedChannel)
+	// Every column of the row model rides the ordinary
+	// one-membership-per-attribute channel, the app and run stamps included
+	// (ADR-0277 §SD8); only the profile events, read elsewhere, are mixed.
+	require.NotContains(t, sql, mixedChannel)
 	require.Contains(t, sql, plainChannel)
 }
 

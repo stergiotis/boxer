@@ -38,8 +38,6 @@ const appTrailCap = uint32(10000)
 // runsessions.go and recentlogs.go spell.
 const (
 	atSymLR     = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-	atSymLMR    = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-	atSymMRHP   = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
 	atSymValue  = "`tv:symbol:value:val:s:124::I:0::data`"
 	atSymLRCard = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
 	atU64Value  = "`tv:u64Array:value:val:u64h:4:::0::data`"
@@ -63,10 +61,8 @@ type appTrailExprs struct {
 }
 
 func buildAppTrailExprs() (e appTrailExprs) {
-	e.appId = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
-		vocab.MembRuntimeApp.GetId().Value(), atSymMRHP, atSymLMR)
-	e.runId = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
-		vocab.MembRuntimeRun.GetId().Value(), atSymMRHP, atSymLMR)
+	e.appId = pickLcrString(atSymValue, atSymLR, atSymLRCard, vocab.MembRuntimeApp.GetId().Value())
+	e.runId = pickLcrString(atSymValue, atSymLR, atSymLRCard, vocab.MembRuntimeRun.GetId().Value())
 	e.instanceKey = pickLcrNumeric(atU64Value, atU64LR, atU64LRCard, vocab.MembLifecycleTileKey.GetId().Value(), "0")
 	e.tsSec = fmt.Sprintf("toUnixTimestamp(%s)", atTsCol)
 	return
@@ -76,7 +72,7 @@ func buildAppTrailExprs() (e appTrailExprs) {
 func appTrailWhere(kind uint64, since time.Time) string {
 	parts := []string{
 		fmt.Sprintf("has(%s, %d)", atSymLR, kind),
-		fmt.Sprintf("has(%s, %d)", atSymLMR, vocab.MembRuntimeApp.GetId().Value()),
+		fmt.Sprintf("has(%s, %d)", atSymLR, vocab.MembRuntimeApp.GetId().Value()),
 	}
 	if !since.IsZero() {
 		parts = append(parts, fmt.Sprintf("%s >= toDateTime(%d, 'UTC')", atTsCol, since.Unix()))

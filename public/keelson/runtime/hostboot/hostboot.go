@@ -338,6 +338,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			VcsRevision:  runInst.VcsRevision,
 			VcsModified:  runInst.VcsModified,
 			VcsBuildInfo: runInst.VcsBuildInfo,
+			BuildId:      runInst.BuildId,
 			ModulePath:   runInst.ModulePath,
 			Ts:           runInst.StartedAt,
 		})

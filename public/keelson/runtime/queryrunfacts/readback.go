@@ -130,7 +130,6 @@ const (
 	hSymLr = "`symbol:lr`"
 
 	// The parameter and value lanes a selector projects through.
-	hSymMrhp  = "`symbol:mrhp`"
 	hU64Mrhp  = "`u64Array:mrhp`"
 	hU64Value = "`u64Array:value`"
 	hU64Len   = "`u64Array:len`"
@@ -183,16 +182,6 @@ func getScalar(section string, memb string) (expr string) {
 // through LW_GET_LIST even where the value is a scalar counter.
 func getListFirst(section string, memb string) (expr string) {
 	return fmt.Sprintf("arrayElement(LW_GET_LIST('%s', '%s', '%s'), 1)", section, memb, plainChannel)
-}
-
-// mixedFirstParam yields the high-card parameter of the first attribute
-// carrying memb on the mixed channel — the stamped app id, the run id.
-//
-// It selects with LW_SEL rather than LW_SEL_ATTRS because the parameter
-// lane is co-indexed with the membership lane, not with the attributes.
-func mixedFirstParam(section string, memb string, paramLane string) (expr string) {
-	return fmt.Sprintf("arrayElement(LW_CO_GATHER(%s, LW_SEL('%s', '%s', '%s')), 1)",
-		paramLane, section, memb, mixedChannel)
 }
 
 // membershipIds resolves the names above for [prepare], over the runtime
@@ -284,8 +273,8 @@ LIMIT %d`,
 		sym(vocab.MembQueryRunEventType),
 		sym(vocab.MembQueryRunQueryKind),
 		sym(vocab.MembQueryRunLane),
-		mixedFirstParam("symbol", membName(vocab.MembRuntimeApp), hSymMrhp),
-		mixedFirstParam("symbol", membName(vocab.MembRuntimeRun), hSymMrhp),
+		sym(vocab.MembRuntimeApp),
+		sym(vocab.MembRuntimeRun),
 		u64(vocab.MembQueryRunDurationMs),
 		u64(vocab.MembQueryRunReadRows),
 		u64(vocab.MembQueryRunReadBytes),

@@ -85,8 +85,6 @@ type recentLogsColumnExprs struct {
 func buildColumnExprs() (e recentLogsColumnExprs) {
 	const (
 		symLR      = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-		symLMR     = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		symMRHP    = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
 		symValue   = "`tv:symbol:value:val:s:124::I:0::data`"
 		symLRCard  = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
 		strLR      = "`tv:stringArray:lr:lr:u64:1247:::0::data`"
@@ -110,8 +108,7 @@ func buildColumnExprs() (e recentLogsColumnExprs) {
 	// AppId is a Mixed-Low-Card-Ref membership: the mrhp array (high-
 	// card parameter) is parallel to lmr (same length, same order), so
 	// arrayFirst zips cleanly.
-	e.appId = fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
-		vocab.MembRuntimeApp.GetId().Value(), symMRHP, symLMR)
+	e.appId = pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeApp.GetId().Value())
 	// Envelope LCR fields: value[] is parallel to *card[] (one entry
 	// per attribute), but lr[] is a SUBSET array (only LCR attrs). We
 	// map an LCR id → position in lr → position in value via cumulative
@@ -147,9 +144,8 @@ func pickLcrString(valueArr, lrArr, lrCardArr string, membershipId uint64) (expr
 func composeRecentLogsSql(table string, filter LogFilter, limit uint32) (sql string) {
 	e := buildColumnExprs()
 	const (
-		symLR  = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-		symLMR = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		tsCol  = "`ts:ts:z64:47::0:`"
+		symLR = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		tsCol = "`ts:ts:z64:47::0:`"
 	)
 	whereParts := []string{
 		fmt.Sprintf("has(%s, %d)", symLR, vocab.MembKindLog.GetId().Value()),
@@ -158,7 +154,7 @@ func composeRecentLogsSql(table string, filter LogFilter, limit uint32) (sql str
 		// has(lmr, MembRuntimeApp.id) gates rows that carry SOME app
 		// mixed-membership; the value comparison restricts to ours.
 		whereParts = append(whereParts,
-			fmt.Sprintf("has(%s, %d)", symLMR, vocab.MembRuntimeApp.GetId().Value()),
+			fmt.Sprintf("has(%s, %d)", symLR, vocab.MembRuntimeApp.GetId().Value()),
 			fmt.Sprintf("(%s) = %s", e.appId, quoteSqlString(string(filter.AppId))))
 	}
 	if !filter.Since.IsZero() {
