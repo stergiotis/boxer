@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,13 +23,17 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 )
 
-// fakeModel answers "a<n>" to the n-th call and records what it saw.
+// fakeModel answers "a<n>" to the n-th call and records what it saw. The
+// app's title job calls it beside a turn, so the record is locked.
 type fakeModel struct {
+	mu    sync.Mutex
 	calls int
 	seen  []openaichat.CompletionRequest
 }
 
 func (f *fakeModel) Complete(_ context.Context, req openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls++
 	f.seen = append(f.seen, req)
 	return openaichat.CompletionResponse{Content: "a" + string(rune('0'+f.calls)), FinishReason: "stop", InputTokens: 10, OutputTokens: 5}, nil
