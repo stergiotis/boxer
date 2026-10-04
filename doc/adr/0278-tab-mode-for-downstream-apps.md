@@ -197,7 +197,8 @@ Two checks, both run by the gate's `tab` step for each package named with
 
 - **compile gate** — the tab binary builds for wasip1 as `bundle` builds it,
   which compiles exactly the apps it links, those it reaches transitively
-  included;
+  included; a failure names the packages the compiler reported, most often a
+  dependency of one app rather than the app;
 - **tab report** — for each linked app, the bus subjects its manifest declares
   that the tab's configured services do not serve, with the manifest's reason.
   Apps register at initialisation, so only the binary knows what it links: it
@@ -225,7 +226,7 @@ commands come with the module pin.
 - **M3 — The content-addressed host.** ✓ SD5: digest file, CI workflow, fetch
   and cache.
 - **M4 — Gates.** ✓ SD7.
-- **M5 — Adoption text.** SD8, verified against a consumer repository.
+- **M5 — Adoption text.** ✓ SD8, verified against a consumer repository.
 
 ## Surfaces — Tier 1
 
@@ -316,7 +317,13 @@ their layout is unchanged.
 
 ## Status
 
-Proposed 2026-10-04. Awaiting owner review.
+Proposed 2026-10-04. Awaiting owner review. M1–M5 were built the same day.
+Two consumer shapes were exercised when M5 was: a repository consuming boxer
+through a Go workspace, whose tab binary the gate refused for two apps (an
+embedded key-value store that maps memory, an in-memory audio file) and passed
+without them, and a fresh module pinning a pushed boxer commit, which bundled
+from the module cache with the host fetched from GitHub Pages; an app of each
+ran in a browser tab.
 
 ## References
 

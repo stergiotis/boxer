@@ -83,7 +83,7 @@ func bundle(ctx *cli.Context) (err error) {
 	if err != nil {
 		return
 	}
-	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm"), true); err != nil {
+	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm"), true, os.Stderr); err != nil {
 		return
 	}
 	if err = placeHost(ctx.String("host"), ctx.String("hostFrom"), boxerDir, mainDir, filepath.Join(out, "imzero2_browser.wasm")); err != nil {
@@ -129,8 +129,9 @@ func goListDir(subject string, args ...string) (dir string, err error) {
 
 // buildGoModule builds pkg as a wasip1 reactor with the shipped-binary flags,
 // the module's own tags and its go.mod toolchain, and, with optimize, shrinks
-// it with wasm-opt when that is installed.
-func buildGoModule(mainDir string, pkg string, dst string, optimize bool) (err error) {
+// it with wasm-opt when that is installed. The go command's output goes to
+// diag.
+func buildGoModule(mainDir string, pkg string, dst string, optimize bool, diag io.Writer) (err error) {
 	args := append([]string{"build"}, goBuildFlags...)
 	args = append(args, "-buildmode=c-shared", "-ldflags=-s -w", "-tags", readTags(mainDir), "-o", dst, pkg)
 	env := append(append(os.Environ(), goBuildEnv...), "GOOS=wasip1", "GOARCH=wasm") //boxer:lint disable=CS011 reason="forwards the ambient process environment into the go build of the tab module"
@@ -143,7 +144,7 @@ func buildGoModule(mainDir string, pkg string, dst string, optimize bool) (err e
 	if err != nil {
 		return eh.Errorf("bundle: go: %w", err)
 	}
-	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
+	cmd.Stdout, cmd.Stderr = diag, diag
 	log.Info().Str("pkg", pkg).Msg("bundle: the Go tab host (wasip1 reactor)")
 	if err = cmd.Run(); err != nil {
 		return eb.Build().Str("pkg", pkg).Errorf("bundle: go build: %w", err)

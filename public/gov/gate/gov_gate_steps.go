@@ -371,8 +371,14 @@ func (inst *StepTab) Run(ctx context.Context, cfg Config, w io.Writer) (status S
 			pkg = filepath.Join(root, pkg)
 		}
 		_, _ = fmt.Fprintf(w, "%s: wasip1 build\n", p)
-		if cErr := tabhost.CheckCompiles(pkg); cErr != nil {
+		if failing, output, cErr := tabhost.CheckCompiles(pkg); cErr != nil {
 			_, _ = fmt.Fprintf(w, "%s: does not compile for wasip1: %v\n", p, cErr)
+			for _, f := range failing {
+				_, _ = fmt.Fprintf(w, "  fails: %s\n", f)
+			}
+			if len(failing) == 0 {
+				_, _ = fmt.Fprint(w, output)
+			}
 			status = StatusFail
 			continue
 		}
