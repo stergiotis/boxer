@@ -4,6 +4,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -279,9 +280,95 @@ func arrangeRects(cmd ArrangeE, work Rect, items []arrangeItem, p arrangeParams)
 // Arrange queues a whole-desktop arrangement for the next Frame. Safe off
 // the render thread; a second call before that Frame replaces the first.
 func (inst *Inst) Arrange(cmd ArrangeE) {
+	_ = inst.ArrangeWindows(cmd, nil)
+}
+
+// ArrangeWindows queues cmd over the windows keys names, or over every
+// window when keys is empty, for the next Frame. Windows left out stay
+// where they are; the named ones are laid out in the work area as if they
+// were the only ones. A key that names no open window refuses the whole
+// request, so nothing moves on a partly wrong list. Safe off the render
+// thread; a second call before that Frame replaces the first.
+func (inst *Inst) ArrangeWindows(cmd ArrangeE, keys []WindowKeyT) (err error) {
+	if cmd == ArrangeNone || int(cmd) > len(ArrangeCommands) {
+		err = eb.Build().Uint8("cmd", uint8(cmd)).Errorf("windowhost: unknown arrangement")
+		return
+	}
 	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, k := range keys {
+		if inst.openWindowLocked(k) == nil {
+			err = eb.Build().Uint64("key", uint64(k)).Errorf("windowhost: no open window with this key")
+			return
+		}
+	}
 	inst.pendingArrange = cmd
-	inst.mu.Unlock()
+	inst.pendingArrangeKeys = slices.Clone(keys)
+	return
+}
+
+// Raise brings the window key names to the front on the next Frame. Safe
+// off the render thread.
+func (inst *Inst) Raise(key WindowKeyT) (err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.openWindowLocked(key) == nil {
+		err = eb.Build().Uint64("key", uint64(key)).Errorf("windowhost: no open window with this key")
+		return
+	}
+	inst.pendingRaise = key
+	return
+}
+
+// Place sets the outer rect of the window key names on the next Frame, as
+// a one-frame placement (ADR-0275 §SD3): the window is movable and
+// resizable again afterwards, and egui sizes it to its content on an axis
+// the content does not fill. Placing ends the window's maximization and
+// any arrangement in progress, whose next pass would move it again. Safe
+// off the render thread.
+func (inst *Inst) Place(key WindowKeyT, r Rect) (err error) {
+	if !r.valid() {
+		err = eb.Build().Float32("w", r.W()).Float32("h", r.H()).Errorf("windowhost: a placement needs a positive size")
+		return
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.openWindowLocked(key) == nil {
+		err = eb.Build().Uint64("key", uint64(key)).Errorf("windowhost: no open window with this key")
+		return
+	}
+	if inst.pendingPlaces == nil {
+		inst.pendingPlaces = make(map[WindowKeyT]Rect, 1)
+	}
+	inst.pendingPlaces[key] = r
+	return
+}
+
+// openWindowLocked returns the open, not closing, window key names, or nil.
+// inst.mu must be held.
+func (inst *Inst) openWindowLocked(key WindowKeyT) *window {
+	for _, w := range inst.windows {
+		if w.key == key && !w.closeReq {
+			return w
+		}
+	}
+	return nil
+}
+
+// applyPlaces marks each window with a queued placement for it. A
+// placement ends an arrangement in progress. Render-thread only.
+func (inst *Inst) applyPlaces(places map[WindowKeyT]Rect, snapshot []*window) {
+	if len(places) == 0 {
+		return
+	}
+	inst.arranging = nil
+	for _, w := range snapshot {
+		if r, ok := places[w.key]; ok {
+			w.place = r
+			w.placePending = true
+			w.maximized = false
+		}
+	}
 }
 
 // minArrangePasses is the least number of re-runs an arrangement may take
@@ -300,18 +387,28 @@ const needSlack = 0.5
 // need a frame later, and places again with the needs as minimums until
 // nothing grows or the passes run out. Render-thread only.
 type arrangeRun struct {
-	cmd    ArrangeE
+	cmd ArrangeE
+	// keys limits the run to these windows; nil is every window.
+	keys   map[WindowKeyT]bool
 	placed map[WindowKeyT]Rect
 	mins   map[WindowKeyT][2]float32
 	passes int
 }
 
-// stepArrange starts the arrangement cmd (when not ArrangeNone) or advances
-// the one in progress.
-func (inst *Inst) stepArrange(cmd ArrangeE, snapshot []*window) {
+// stepArrange starts the arrangement cmd over keys (when cmd is not
+// ArrangeNone; empty keys is every window) or advances the one in progress.
+func (inst *Inst) stepArrange(cmd ArrangeE, keys []WindowKeyT, snapshot []*window) {
 	sm := c.CurrentApplicationState.StateManager
 	if cmd != ArrangeNone {
+		var only map[WindowKeyT]bool
+		if len(keys) > 0 {
+			only = make(map[WindowKeyT]bool, len(keys))
+			for _, k := range keys {
+				only[k] = true
+			}
+		}
 		inst.arranging = &arrangeRun{
+			keys:   only,
 			cmd:    cmd,
 			placed: make(map[WindowKeyT]Rect, len(snapshot)),
 			mins:   make(map[WindowKeyT][2]float32, len(snapshot)),
@@ -374,6 +471,9 @@ func (inst *Inst) planArrange(snapshot []*window) {
 	items := make([]arrangeItem, 0, len(snapshot))
 	ws := make([]*window, 0, len(snapshot))
 	for _, w := range snapshot {
+		if run.keys != nil && !run.keys[w.key] {
+			continue
+		}
 		g, has := sm.GetWindowGeom(w.focusHandle)
 		if !has || w.closeReq {
 			continue

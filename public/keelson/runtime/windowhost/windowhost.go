@@ -243,6 +243,12 @@ type Inst struct {
 	// pendingArrange queues one whole-desktop arrangement (Arrange) for the
 	// next Frame. Written under mu, consumed by Frame like pendingRaise.
 	pendingArrange ArrangeE
+	// pendingArrangeKeys limits pendingArrange to these windows; empty is
+	// every window (ArrangeWindows).
+	pendingArrangeKeys []WindowKeyT
+	// pendingPlaces queues one-frame placements by window key (Place).
+	// Written under mu, consumed by Frame.
+	pendingPlaces map[WindowKeyT]Rect
 	// arranging is the arrangement in progress across frames (stepArrange);
 	// nil when none. Render-thread only.
 	arranging *arrangeRun
@@ -1110,8 +1116,10 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	copy(snapshot, inst.windows)
 	raiseKey := inst.pendingRaise
 	inst.pendingRaise = 0
-	arrangeCmd := inst.pendingArrange
-	inst.pendingArrange = ArrangeNone
+	arrangeCmd, arrangeKeys := inst.pendingArrange, inst.pendingArrangeKeys
+	inst.pendingArrange, inst.pendingArrangeKeys = ArrangeNone, nil
+	places := inst.pendingPlaces
+	inst.pendingPlaces = nil
 	inst.mu.Unlock()
 
 	if len(snapshot) == 0 {
@@ -1149,7 +1157,8 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		}
 		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
 	}
-	inst.stepArrange(arrangeCmd, snapshot)
+	inst.stepArrange(arrangeCmd, arrangeKeys, snapshot)
+	inst.applyPlaces(places, snapshot)
 	inst.snapshotGeometry(snapshot)
 	for _, w := range snapshot {
 		title := w.manifest.WindowTitle()
