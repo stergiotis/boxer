@@ -100,3 +100,51 @@ func TestArrangeWithoutAWorkAreaPlacesNothing(t *testing.T) {
 	_, ok := arrangeRects(ArrangeTile, Rect{}, arrangeFixture(3), defaultArrangeParams)
 	assert.Equal(t, []bool{false, false, false}, ok)
 }
+
+// fitSpans gives every span at least its minimum and shares the rest as
+// equally as the minimums allow.
+func TestFitSpansHonoursMinimumsAndSharesTheRest(t *testing.T) {
+	offs, sizes := fitSpans(1000, 0, []float32{0, 600, 0})
+	assert.InDelta(t, 600, sizes[1], 1e-3)
+	assert.InDelta(t, 200, sizes[0], 1e-3)
+	assert.InDelta(t, 200, sizes[2], 1e-3)
+	assert.InDelta(t, 1000, offs[2]+sizes[2], 1e-3)
+}
+
+// Minimums that do not fit keep their size and overlap evenly, ending
+// inside the line; a minimum longer than the line is cut to it.
+func TestFitSpansOverlapsEvenlyWhenMinimumsDoNotFit(t *testing.T) {
+	offs, sizes := fitSpans(1000, 4, []float32{500, 500, 500})
+	for i := range sizes {
+		assert.InDelta(t, 500, sizes[i], 1e-3)
+		assert.GreaterOrEqual(t, offs[i], float32(4))
+		assert.LessOrEqual(t, offs[i]+sizes[i], float32(996)+1e-3)
+	}
+	assert.InDelta(t, offs[1]-offs[0], offs[2]-offs[1], 1e-3)
+	_, sizes = fitSpans(1000, 4, []float32{5000})
+	assert.InDelta(t, 992, sizes[0], 1e-3)
+}
+
+// A window with a wide minimum gets its width under side by side and tile;
+// the arrangement still partitions the work area when the minimums fit.
+func TestArrangeRespectsWindowMinimums(t *testing.T) {
+	for _, cmd := range []ArrangeE{ArrangeTile, ArrangeColumns, ArrangeRows, ArrangeCascade} {
+		items := arrangeFixture(3)
+		items[1].minW, items[1].minH = 700, 300
+		out, ok := arrangeRects(cmd, arrangeWork, items, defaultArrangeParams)
+		for i := range out {
+			require.True(t, ok[i])
+			assert.True(t, inside(out[i], arrangeWork), "%s item %d: %+v", cmd, i, out[i])
+		}
+		assert.GreaterOrEqual(t, out[1].W(), float32(700), cmd.String())
+		assert.GreaterOrEqual(t, out[1].H(), float32(300), cmd.String())
+		if cmd == ArrangeCascade {
+			continue
+		}
+		for i := range out {
+			for j := i + 1; j < len(out); j++ {
+				assert.False(t, overlap(out[i], out[j]), "%s items %d,%d overlap", cmd, i, j)
+			}
+		}
+	}
+}

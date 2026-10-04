@@ -189,10 +189,15 @@ type UiRectValue struct {
 
 // WindowGeomValue is one row of the R27 window drain: an egui::Window's
 // outer rect as laid out last frame, in logical points with a viewport
-// top-left origin, its stacking rank (larger is further front, 0 unknown)
-// and whether its body was collapsed.
+// top-left origin, its stacking rank (larger is further front, 0 unknown),
+// whether its body was collapsed, and the outer size its content needed as
+// laid out (NeedW/NeedH). Need exceeds the rect where the content overflowed
+// the body — after a WindowPlace, by how much the placed size fell short.
+// It is not an intrinsic minimum: content that stretches to fill the body
+// needs exactly what it was given.
 type WindowGeomValue struct {
 	MinX, MinY, MaxX, MaxY float32
+	NeedW, NeedH           float32
 	Z                      uint32
 	Collapsed              bool
 }
@@ -860,11 +865,12 @@ func (inst *StateManager) Sync() {
 		}
 	}
 	{
-		ids, minX, minY, maxX, maxY, z, collapsed, wMinX, wMinY, wMaxX, wMaxY := fetcher.CollectFetchR27Windows()
+		ids, minX, minY, maxX, maxY, z, collapsed, needW, needH, wMinX, wMinY, wMaxX, wMaxY := fetcher.CollectFetchR27Windows()
 		clear(inst.r27Windows)
 		for i, id := range ids {
 			inst.r27Windows[id] = WindowGeomValue{
 				MinX: minX[i], MinY: minY[i], MaxX: maxX[i], MaxY: maxY[i],
+				NeedW: needW[i], NeedH: needH[i],
 				Z: z[i], Collapsed: collapsed[i] != 0,
 			}
 		}

@@ -578,12 +578,17 @@ impl<R: std::io::BufRead, W: std::io::Write> egui_table::TableDelegate
 }
 
 /// One row of the fetchR27Windows drain: a window's outer rect as egui
-/// laid it out this frame, and whether its body was collapsed.
+/// laid it out this frame, whether its body was collapsed, and the outer
+/// size its content needed at that layout (`need`). `need` exceeds the
+/// rect where the content overflowed the body — after a windowPlace, by
+/// how much the placed size fell short. It is not an intrinsic minimum:
+/// content that stretches to fill the body needs exactly what it got.
 #[derive(Clone, Copy, Debug)]
 pub struct WindowGeomRow {
     pub id: u64,
     pub rect: egui::Rect,
     pub collapsed: bool,
+    pub need: egui::Vec2,
 }
 
 pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
@@ -4626,6 +4631,8 @@ self.apply_widget(w,u,f,Some(i));
                 self.io.write_plain_u32h(len, z)?;
                 self.io
                     .write_plain_u8h(len, self.r27_windows.iter().map(|r| u8::from(r.collapsed)))?;
+                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.x))?;
+                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.y))?;
                 self.r27_windows.clear();
                 let w = self.r27_work_rect;
                 self.io.write_plain_f32(w.min.x)?;
@@ -9954,15 +9961,24 @@ egui::Window::new(label).id(i);
                 // Top of the content area; the band above it is the title
                 // bar. NaN when the body did not run (collapsed).
                 let mut content_top = f32::NAN;
+                // How far the content, as laid out this frame, claims more
+                // than the body was given. egui grows the window by that much
+                // on the next frame, so after a windowPlace it is what the
+                // placed size fell short by.
+                let mut content_overflow = egui::Vec2::ZERO;
                 let retr = if open_binding_id != 0 {
                     w.open(&mut window_open).show(c, |ui| {
                         content_top = ui.max_rect().top();
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                        content_overflow =
+                            (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
                     })
                 } else {
                     w.show(c, |ui| {
                         content_top = ui.max_rect().top();
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                        content_overflow =
+                            (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
                     })
                 };
                 if open_binding_id != 0 && was_open != window_open {
@@ -10020,6 +10036,7 @@ egui::Window::new(label).id(i);
                         id: i.value(),
                         rect: wrect,
                         collapsed: inner.inner.is_none(),
+                        need: wrect.size() + content_overflow,
                     });
                     if inner.inner.is_none() {
                         // collapsed

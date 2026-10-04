@@ -162,15 +162,22 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 				// Top of the content area; the band above it is the title
 				// bar. NaN when the body did not run (collapsed).
 				let mut content_top = f32::NAN;
+				// How far the content, as laid out this frame, claims more
+				// than the body was given. egui grows the window by that much
+				// on the next frame, so after a windowPlace it is what the
+				// placed size fell short by.
+				let mut content_overflow = egui::Vec2::ZERO;
 				let retr = if open_binding_id != 0 {
 					{{Instance}}.open(&mut window_open).show(c, |ui| {
 						content_top = ui.max_rect().top();
 						let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						content_overflow = (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
 					})
 				} else {
 					{{Instance}}.show(c, |ui| {
 						content_top = ui.max_rect().top();
 						let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						content_overflow = (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
 					})
 				};
 				if open_binding_id != 0 && was_open != window_open {
@@ -232,6 +239,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
                         id: {{Id}}.value(),
                         rect: wrect,
                         collapsed: inner.inner.is_none(),
+                        need: wrect.size() + content_overflow,
                     });
                     if inner.inner.is_none() {
                         // collapsed

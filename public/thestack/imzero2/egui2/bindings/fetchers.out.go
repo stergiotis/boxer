@@ -268,7 +268,7 @@ func (inst *Fetcher) CollectFetchR26KeyCaptures() (ids []uint64, codes []uint8, 
 	mods = inst.iterateU8h()
 	return
 }
-func (inst *Fetcher) FetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
+func (inst *Fetcher) FetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, needW []float32, needH []float32, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
 	inst.invoke(FuncProcIdFetchR27Windows)
 	ids = inst.readU64h()
 	minX = inst.readF32h()
@@ -277,6 +277,8 @@ func (inst *Fetcher) FetchR27Windows() (ids []uint64, minX []float32, minY []flo
 	maxY = inst.readF32h()
 	z = inst.readU32h()
 	collapsed = inst.readU8h()
+	needW = inst.readF32h()
+	needH = inst.readF32h()
 	workMinX = inst.readF32()
 	workMinY = inst.readF32()
 	workMaxX = inst.readF32()
@@ -286,7 +288,7 @@ func (inst *Fetcher) FetchR27Windows() (ids []uint64, minX []float32, minY []flo
 func (inst *Fetcher) IssueFetchR27Windows() {
 	inst.invoke(FuncProcIdFetchR27Windows)
 }
-func (inst *Fetcher) CollectFetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
+func (inst *Fetcher) CollectFetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, needW []float32, needH []float32, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
 	ids = inst.readU64h()
 	minX = inst.readF32h()
 	minY = inst.readF32h()
@@ -294,6 +296,8 @@ func (inst *Fetcher) CollectFetchR27Windows() (ids []uint64, minX []float32, min
 	maxY = inst.readF32h()
 	z = inst.readU32h()
 	collapsed = inst.readU8h()
+	needW = inst.readF32h()
+	needH = inst.readF32h()
 	workMinX = inst.readF32()
 	workMinY = inst.readF32()
 	workMaxX = inst.readF32()

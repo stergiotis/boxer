@@ -239,6 +239,9 @@ type Inst struct {
 	// pendingArrange queues one whole-desktop arrangement (Arrange) for the
 	// next Frame. Written under mu, consumed by Frame like pendingRaise.
 	pendingArrange ArrangeE
+	// arranging is the arrangement in progress across frames (stepArrange);
+	// nil when none. Render-thread only.
+	arranging *arrangeRun
 
 	// mountState shares Mount/Unmount lifecycle across windows that point at
 	// the same AppI instance (singleton-registered apps). Keyed by the AppI
@@ -1131,9 +1134,7 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		}
 		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
 	}
-	if arrangeCmd != ArrangeNone {
-		inst.planArrange(arrangeCmd, snapshot)
-	}
+	inst.stepArrange(arrangeCmd, snapshot)
 	for _, w := range snapshot {
 		title := w.manifest.WindowTitle()
 		if title == "" {
