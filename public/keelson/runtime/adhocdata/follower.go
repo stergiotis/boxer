@@ -175,6 +175,9 @@ type Follower struct {
 	bound    map[string]string   // alias → handle currently bound
 	revision map[string]uint64   // alias → last revision seen of the bound handle; 0 = unknown
 	pending  map[string]struct{} // aliases with no live dataset
+	// why says, per pending alias, what the last answer about it was; an
+	// alias not asked about yet has none.
+	why map[string]string
 
 	// Mailbox from the arriving side to the caller's thread: hints from
 	// the bus and verdicts from the worker, each in arrival order. Order
@@ -297,6 +300,7 @@ func newFollowerWith(resolver resolverI, logger zerolog.Logger) (f *Follower) {
 		bound:    make(map[string]string),
 		revision: make(map[string]uint64),
 		pending:  make(map[string]struct{}),
+		why:      make(map[string]string),
 		dirty:    make(map[string]struct{}),
 
 		retracted: make(map[string]struct{}),
@@ -462,6 +466,7 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 func (f *Follower) bindAlias(target TargetI, alias string, handle string, revision uint64) (bound bool) {
 	f.mu.Lock()
 	delete(f.pending, alias)
+	delete(f.why, alias)
 	f.pendingDirty = true
 	f.mu.Unlock()
 	if bErr := target.BindDataset(alias, handle); bErr != nil {
@@ -499,6 +504,7 @@ func (f *Follower) unbindHandle(target TargetI, handle string) (changed bool) {
 		delete(f.bound, alias)
 		delete(f.revision, alias)
 		f.pending[alias] = struct{}{}
+		f.why[alias] = WaitWithdrawn
 		f.pendingDirty = true
 		f.mu.Unlock()
 		changed = true
@@ -512,13 +518,16 @@ func (f *Follower) unbindHandle(target TargetI, handle string) (changed bool) {
 // debug, unlike the open-time miss.
 func (f *Follower) reconcile(pending []string, bound map[string]string) {
 	var out []verdict
+	why := make(map[string]string, len(pending))
 	for _, alias := range pending {
 		handle, rev, _, err := f.resolver.resolveVerify(alias, "")
 		if err != nil {
 			f.log.Debug().Err(err).Str("alias", alias).Msg("adhocdata: dataset alias still unresolved")
+			why[alias] = WaitUnanswered + ": " + err.Error()
 			continue
 		}
 		if handle == "" {
+			why[alias] = WaitNoLive
 			continue
 		}
 		out = append(out, verdict{alias: alias, handle: handle, revision: rev})
@@ -534,6 +543,11 @@ func (f *Follower) reconcile(pending []string, bound map[string]string) {
 	}
 	f.mu.Lock()
 	f.verdicts = append(f.verdicts, out...)
+	for alias, w := range why {
+		if _, waiting := f.pending[alias]; waiting {
+			f.why[alias] = w
+		}
+	}
 	f.inFlight = false
 	f.mu.Unlock()
 }
@@ -551,6 +565,33 @@ func (f *Follower) Close() {
 	if unsub != nil {
 		unsub()
 	}
+}
+
+// Why a pending alias waits, as [Follower.Waiting] reports it.
+const (
+	// WaitNotAsked: the alias was added and the service not asked yet.
+	WaitNotAsked = "not asked yet; the next round resolves it"
+	// WaitNoLive: the service answered that nothing is live under it.
+	WaitNoLive = "no dataset is live under the alias; it binds when one is published"
+	// WaitWithdrawn: its dataset was retracted.
+	WaitWithdrawn = "its dataset was withdrawn; it binds when one is published again"
+	// WaitUnanswered prefixes a resolve that failed in transport.
+	WaitUnanswered = "the dataset service did not answer"
+)
+
+// Waiting is the pending aliases, each with why it waits.
+func (f *Follower) Waiting() (w map[string]string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	w = make(map[string]string, len(f.pending))
+	for alias := range f.pending {
+		why := f.why[alias]
+		if why == "" {
+			why = WaitNotAsked
+		}
+		w[alias] = why
+	}
+	return
 }
 
 // Pending is the sorted set of aliases without a live dataset — what the

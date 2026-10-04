@@ -75,6 +75,7 @@ func effectOf(l LevelE) app.OperationEffectE {
 
 func TestReachOfDestinations(t *testing.T) {
 	assert.Equal(t, ReachHost, ReachOf("keelson:apps"))
+	assert.Equal(t, ReachHost, ReachOf("git:/home/p/repo"), "a local repository is this host's")
 	assert.Equal(t, ReachData, ReachOf("clickhouse:localhost:8123"))
 	assert.Equal(t, ReachNetwork, ReachOf("http:basemap"))
 	assert.Equal(t, ReachNetwork, ReachOf("llm"))

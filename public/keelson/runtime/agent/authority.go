@@ -20,7 +20,8 @@ import (
 type ReachE uint8
 
 const (
-	// ReachHost: the tables of this host, keelson:<table>.
+	// ReachHost: what this host holds — its tables, keelson:<table>, and
+	// its local git repositories, git:<path>.
 	ReachHost ReachE = 0
 	// ReachData: the data endpoints the apps query, clickhouse:<host>.
 	ReachData ReachE = 1
@@ -47,7 +48,7 @@ func (inst ReachE) String() (s string) {
 // name is never admitted under a narrower ceiling.
 func ReachOf(destination string) (r ReachE) {
 	switch {
-	case strings.HasPrefix(destination, "keelson:"):
+	case strings.HasPrefix(destination, "keelson:"), strings.HasPrefix(destination, "git:"):
 		return ReachHost
 	case strings.HasPrefix(destination, "clickhouse:"):
 		return ReachData

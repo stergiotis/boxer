@@ -162,17 +162,30 @@ func TestFollowerFollowsAnAddedAlias(t *testing.T) {
 	assert.Equal(t, []string{"items"}, f.Pending())
 	assert.Zero(t, r.questions(), "Follow asks nothing on the caller's thread")
 
+	assert.Equal(t, map[string]string{"items": WaitNotAsked}, f.Waiting())
 	_, changed := settle(t, f, target)
 	assert.True(t, changed, "the new pending alias is reported")
 	assert.Equal(t, 1, r.questions(), "the next Sync asks for it at once, without waiting for the tick")
 	assert.Empty(t, target.bound, "nothing is live under it yet")
+	assert.Equal(t, map[string]string{"items": WaitNoLive}, f.Waiting(), "the answer says why it waits")
 
 	r.publish("items", "adhoc_h1000000000000000")
 	f.onEvent(Event{Op: EventOpPublished, Alias: "items", Handle: "adhoc_h1000000000000000", Revision: 1})
 	bound, _ := settle(t, f, target)
 	assert.True(t, bound)
 	assert.Equal(t, map[string]string{"items": "adhoc_h1000000000000000"}, target.bound)
+	assert.Empty(t, f.Waiting())
 	assert.False(t, f.Follow("items"), "already bound")
+
+	r.retract("items", "adhoc_h1000000000000000")
+	f.onEvent(Event{Op: EventOpRetracted, Alias: "items", Handle: "adhoc_h1000000000000000"})
+	f.Sync(target)
+	assert.Equal(t, WaitWithdrawn, f.Waiting()["items"])
+
+	r.setFailing(true)
+	due(f)
+	settle(t, f, target)
+	assert.Contains(t, f.Waiting()["items"], WaitUnanswered)
 }
 
 // TestNewDeferredFollower: no bus builds nothing; with one, the follower

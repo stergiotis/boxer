@@ -23,6 +23,7 @@ package play
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
@@ -39,6 +40,7 @@ const (
 	opBindDataset  = "bind_dataset"
 
 	opsResDatasets = "datasets"
+	opsResFollowed = "followed_datasets"
 )
 
 // BindDatasetArgs is bind_dataset's argument.
@@ -50,6 +52,7 @@ type BindDatasetArgs struct {
 type BindDatasetResult struct {
 	Alias       string `desc:"the alias"`
 	Bound       bool   `desc:"true when a live dataset is bound under it already; else the window binds the newest one as soon as it resolves, or once one is published"`
+	Waiting     string `json:",omitzero" desc:"why it is not bound yet; list_datasets reports it again after the window asks"`
 	ReadWith    string `desc:"the table expression that reads it"`
 	Destination string `desc:"what the grant must list for a run reading it"`
 }
@@ -70,6 +73,7 @@ type DatasetInfo struct {
 	Confined    bool         `json:",omitzero" desc:"true for a sealed dataset: reading it makes the window confined; its columns are listed when it is asked for by alias"`
 	Columns     []ColumnInfo `json:",omitzero" desc:"its columns, when the grant lists it"`
 	Error       string       `json:",omitzero" desc:"why its columns could not be read"`
+	Waiting     string       `json:",omitzero" desc:"set while the alias is followed but not bound: why it waits; a run naming it fails until it binds"`
 }
 
 // DatasetList is list_datasets' result.
@@ -90,10 +94,16 @@ func addDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 	s.Resource(opsResDatasets, "the dataset aliases bound and those waiting for a dataset", func(inst *PlayLauncher) any {
 		return inst.datasetDigest()
 	})
+	// The aliases followed, bound or not: only bind_dataset changes the
+	// set — a bind landing later moves an alias within it — so binding
+	// several in a row never conflicts with the window's own progress.
+	s.Resource(opsResFollowed, "the dataset aliases the window follows, bound or waiting", func(inst *PlayLauncher) any {
+		return inst.followedDigest()
+	})
 	appops.Command(s, app.OperationSpec{Name: opBindDataset, Version: 1,
 		Summary: "bind an ad-hoc dataset alias in this window, so the buffer reads the dataset with keelson('<alias>')",
-		Effect:  app.OperationEffectDocument, Writes: []string{opsResDatasets}, Agents: true,
-		Follows: []string{"the window resolves the alias off the frame and binds the newest live dataset under it; list_datasets lists it once bound",
+		Effect:  app.OperationEffectDocument, Writes: []string{opsResFollowed}, Agents: true,
+		Follows: []string{"the window resolves the alias off the frame and binds the newest live dataset under it; list_datasets lists it, with why it waits until it is bound",
 			"until a dataset is live under the alias the window says it waits for it, and binds one when it is published",
 			"the binding follows republishes and retracts for the life of the window; binding runs nothing",
 			"a run reading it needs keelson:<alias> in the grant"}},
@@ -111,17 +121,25 @@ func addDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			case sn.client == nil:
 				return DatasetList{}, app.RefuseOperation("the window has no endpoint")
 			}
-			return listDatasets(sn.client, call.OnBehalfOf, in.Alias)
+			return listDatasets(sn.client, call.OnBehalfOf, in.Alias, sn.waiting)
 		})
 }
 
-func listDatasets(client *Client, obo *app.OnBehalfOf, only string) (out DatasetList, err error) {
+func listDatasets(client *Client, obo *app.OnBehalfOf, only string, waiting map[string]string) (out DatasetList, err error) {
 	aliases := client.DatasetAliases()
 	if only != "" {
+		if why, ok := waiting[only]; ok {
+			out.Datasets = []DatasetInfo{waitingDataset(only, why, obo)}
+			return
+		}
 		if !slices.Contains(aliases, only) {
-			return out, app.RefuseOperation("no dataset " + only + " is bound in this window; list_datasets without an alias lists them")
+			return out, app.RefuseOperation("no dataset " + only + " is bound in this window; list_datasets without an alias lists them, bind_dataset binds one")
 		}
 		aliases = []string{only}
+	} else {
+		for _, alias := range slices.Sorted(maps.Keys(waiting)) {
+			out.Datasets = append(out.Datasets, waitingDataset(alias, waiting[alias], obo))
+		}
 	}
 	if len(aliases) > datasetMaxListed {
 		aliases, out.Truncated = aliases[:datasetMaxListed], true
@@ -139,6 +157,13 @@ func listDatasets(client *Client, obo *app.OnBehalfOf, only string) (out Dataset
 		}
 		out.Datasets = append(out.Datasets, d)
 	}
+	return
+}
+
+// waitingDataset is a followed alias not bound yet.
+func waitingDataset(alias string, why string, obo *app.OnBehalfOf) (d DatasetInfo) {
+	d = DatasetInfo{Alias: alias, Destination: DestinationKeelson(alias), Waiting: why}
+	d.Granted = obo == nil || slices.Contains(obo.Destinations, d.Destination)
 	return
 }
 
@@ -190,7 +215,26 @@ func (inst *PlayLauncher) bindDatasetAlias(alias string) (out BindDatasetResult,
 		}
 	}
 	inst.follower.Follow(alias)
+	out.Waiting = inst.follower.Waiting()[alias]
 	return
+}
+
+// followedDigest is the aliases followed, bound or waiting, compared across
+// frames.
+func (inst *PlayLauncher) followedDigest() (digest string) {
+	if inst.inner == nil || inst.inner.client == nil {
+		return ""
+	}
+	set := make(map[string]struct{})
+	for _, a := range inst.inner.client.DatasetAliases() {
+		set[a] = struct{}{}
+	}
+	if inst.follower != nil {
+		for _, a := range inst.follower.Pending() {
+			set[a] = struct{}{}
+		}
+	}
+	return strings.Join(slices.Sorted(maps.Keys(set)), ",")
 }
 
 // datasetDigest is the bound aliases and the pending ones, compared across

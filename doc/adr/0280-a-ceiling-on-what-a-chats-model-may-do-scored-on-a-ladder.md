@@ -287,7 +287,15 @@ that tells it the limit.
 
 ## Updates
 
-None.
+### 2026-10-04 — a local git repository is the host's reach
+
+`ReachOf` took every destination class it did not know as the network, so
+the first app to name a new class — Git Pulse's `rescan`, which asks the
+grant for `git:<absolute path>` when a task set the repository — was refused
+under the default ceiling (data endpoints) whatever the person granted. A
+repository on this host's disk is what the host holds, like its
+`keelson:<table>` tables, so `git:<path>` is host reach. The rule for a
+class not listed is unchanged: the widest.
 
 ## References
 

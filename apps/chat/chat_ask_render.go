@@ -55,7 +55,9 @@ func (inst *App) renderAsk(o *openAsk) {
 					rt.Small().Weak()
 				}
 			}
-			for range c.HorizontalTop().KeepIter() {
+			// Right-aligned, Answer at the edge and Skip beside it: a
+			// right-to-left row places its first child rightmost.
+			for range c.UiWithLayout().MainDirRightToLeft().CrossAlignMin().KeepIter() {
 				if c.Button(inst.ids.PrepareStr("answer"), atomsAnswer).Kind(c.ButtonKindPrimary).SendResp().HasPrimaryClicked() {
 					o.submit()
 				}

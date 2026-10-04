@@ -1596,8 +1596,8 @@ does: each pass in order with its outcome, time and error, and the statement
 exactly as it would be sent. `list_datasets` names the ad-hoc datasets this
 window has bound, which the model reads with `keelson('<alias>')`; a grant
 names one as `keelson:<alias>`. `bind_dataset` binds an alias another window
-published — the window waits for it when nothing is published under it yet —
-and runs nothing.
+published — the window waits for it when nothing is published under it yet,
+and `list_datasets` lists a waiting alias with why — and runs nothing.
 
 ### Experiments
 
