@@ -97,3 +97,23 @@ Deferred:
 - keyboard window cycling;
 - persisting geometry across runs and replaying open windows (ADR-0148's deferrals, which this report makes possible);
 - an IDL op to close a menu after a command.
+
+## Updates
+
+### 2026-10-04 — the arrangements have an integration lane, and placement fixes extent only where content fills it
+
+`TestSceneWindowArrangements`
+([windowhost_arrange_scene_integration_test.go](../../public/keelson/runtime/windowhost/windowhost_arrange_scene_integration_test.go),
+integration lane) launches three windows on a headless host, runs each Window command, and asserts on the window rects in the accessibility tree:
+
+- Cascade: windows step evenly down and to the right.
+- Tile: no window lies over another, and together they span the work area.
+- Side by side and Stacked: leading edges align and spacing is even.
+- Gather into view: a window dragged under the status bar comes back above it.
+
+This replaces the hand check named in *Verification plan*.
+
+Writing it showed a limit SD3 did not state. A `Window` sizes itself by its content on an axis the content does not fill (egui's `Resize`, which `Window` drives without its own resizing). So a placement fixes a window's position, and its extent only where the content fills it. Under Side by side, a window with short content ends shorter than its column. The arrangement still holds: no overlap is added, and the window stays inside its cell. Filling the cell would need the window body to claim its whole rect, which changes how every app's window sizes. That is not decided here.
+
+egui also keeps a window inside the viewport but not inside the work area, so the only thing Gather into view has to repair is a window under the menu or status bar, or one larger than the work area.
+
