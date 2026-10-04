@@ -139,7 +139,8 @@ its own (SD5).
   the reason until dismissed, once per conversation, so a deployment
   below `durable` is visible rather than silent; the Keep badge's hover
   keeps it after.
-- **Keep this conversation**, a toggle beside New conversation, on by
+- **Keep this conversation**, an option in the Settings panel
+  ([ADR-0280](./0280-a-ceiling-on-what-a-chats-model-may-do-scored-on-a-ladder.md) §SD5), on by
   default. Off, the conversation's turns go on `llm.complete` and no
   text is recorded: the audit rows of [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — counts, sizes,
   digests, the conversation and turn ids — are written either way. It is
@@ -207,7 +208,9 @@ through the host:
   (`BOXER_AGENT_COORDINATORS`); the manifest's `runtime.agent` grant alone
   lets it ask for nothing. A window of a registered chat starts with Apps
   on, since the registration is the intent Apps serves; the person can
-  untick it before the first send. A conversation started without Apps is
+  turn it off in the Settings panel before the first send. What the
+  model may then do is bounded by the panel's ceiling, which the host
+  enforces ([ADR-0280](./0280-a-ceiling-on-what-a-chats-model-may-do-scored-on-a-ladder.md)). A conversation started without Apps is
   marked "no apps" in the bar — its model has no tools and says so when
   asked to open a window — and the empty window says the same before the
   first send.

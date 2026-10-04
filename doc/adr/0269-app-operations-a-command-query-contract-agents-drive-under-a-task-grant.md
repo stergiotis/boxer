@@ -991,6 +991,26 @@ its `Origin`. The act chain and the rule stay unrecorded.
 
 `agent/agentfacts` is gone; the store is `runtime/trail`.
 
+### 2026-10-04 — a ceiling above the grant, and pace
+
+[ADR-0280](./0280-a-ceiling-on-what-a-chats-model-may-do-scored-on-a-ladder.md)
+adds a bound to §SD6's dispatcher. A coordinator may send a **ceiling** — the
+highest mode, the highest effect, whether the model may open windows and
+arrange the desktop, how far its work may reach, and whether it may work
+unpaced — with a grant request and, for a task, through
+`runtime.agent.authority`. The dispatcher refuses a request above it before
+the person is asked, and a call, a launch, a window verb or a destination
+above it whatever the grant holds; a window's mode is its grant's and no
+higher than the ceiling's. Moving the ceiling binds at once.
+
+Unless the ceiling lets a task work unpaced, the dispatcher holds each of its
+visible changes — an operation with an effect, a window opened, raised,
+placed or arranged — until a set time after the previous one
+(`BOXER_AGENT_PACE`). It is a wait, not a refusal.
+
+A coordinator that sends no ceiling is bounded by its grant alone and is not
+paced, as before.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.
