@@ -101,7 +101,8 @@ Window state becomes keelson data that any app can read under ADR-0253's per-tab
 ## Verification plan
 
 - Unit tests in `agent` cover the refusals: arrange without desktop act, and raise or place without act on the window. They also cover a record per accepted call. Tests in `providersgui` cover the new columns and the desktop table against a fake host.
-- A chat scene drives the coordinator through a scripted model: it reads `keelson('windows')`, arranges, and reads again. Chat already has scripted-model scenes. It lives in the integration lane beside ADR-0275's `TestSceneWindowArrangements`.
+- [chat-coordinator-windows.scene.md](../../apps/chat/scenes/chat-coordinator-windows.scene.md) drives the coordinator through a scripted model on a headless host under a test grant: it reads `keelson('windows')`, asks for the desktop, arranges the windows in columns, and reads `keelson('desktop')` and `keelson('windows')` again. It is a scene document, run by `scripts/dev/scene.sh`, not a lane that runs on every change; the geometry of the arrangements themselves is ADR-0275's `TestSceneWindowArrangements`.
+- `TestArrangeWindowsAsksForTheDesktop` in the chat package covers the tool flow without a host: arrange refused with the request that lifts it, granted, and completed.
 
 ## Status
 
@@ -111,4 +112,4 @@ Proposed 2026-10-04.
 - **M2 — The windowhost API (SD5).**
 - **M3 — The agent verbs and desktop mode (SD3, SD4), and `agent_tasks`.** ✓ `keelson('agent_grants')` gains a `desktop` column.
 - **M4 — The chat's `query_windows` tool and grants (SD2).** ✓ With `arrange_windows`, `raise_window`, `place_window`, and `desktop` on `request_access`.
-- **M5 — The scripted chat scene.**
+- **M5 — The scripted chat scene.** ✓
