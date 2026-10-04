@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-04
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0276: Agents read windows from keelson and arrange them under a task grant
 
@@ -106,7 +104,7 @@ Window state becomes keelson data that any app can read under ADR-0253's per-tab
 
 ## Status
 
-Proposed 2026-10-04.
+Accepted 2026-10-04.
 
 - **M1 — The keelson tables (SD1).** ✓ Without `agent_tasks`, which needs the agent service and comes with M3. The viewport size is not in `keelson('desktop')`: no host report carries it, and the work area is what arrangements use.
 - **M2 — The windowhost API (SD5).**
